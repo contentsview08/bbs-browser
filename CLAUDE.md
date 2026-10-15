@@ -22,7 +22,7 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 
 ## 開発環境
 
-普段の開発は Windows ネイティブ(WebView2 で確認する)。WSL から作業するときは、`/mnt/c/...` に
+普段の開発は Windows ネイティブ(WebView2 で確認する)。Node は mise(`mise.toml`)、Rust は rustup(`rust-toolchain.toml`)で版を固定している。WSL から作業するときは、`/mnt/c/...` に
 Linux 用の node_modules を作らないこと(Windows 側で `npm install` し直しになる)。
 
 ```

@@ -1,0 +1,4 @@
+# このリポジトリで使う Rust の版。rustup が自動で合わせる
+[toolchain]
+channel = "1.99.0"
+profile = "minimal"

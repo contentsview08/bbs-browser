@@ -18,13 +18,19 @@ apps/desktop/          Tauri アプリ(React + Vite)
 
 ## 開発環境(Windows)
 
-PowerShell で一度だけ入れる。
+Rust と Node はユーザー領域に入れ、版はリポジトリで固定する(`rust-toolchain.toml` / `mise.toml`)。
+システム全体に入るのは MSVC(Build Tools)だけ。PowerShell で一度だけ、この順に入れる。
 
 ```powershell
 winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 winget install --id Rustlang.Rustup
-winget install --id OpenJS.NodeJS.LTS
-winget install --id Git.Git
+winget install --id jdx.mise
+```
+
+mise の shims をユーザーの PATH に足す(一度だけ。足したらターミナルを開き直す)。
+
+```powershell
+[Environment]::SetEnvironmentVariable('Path', "$env:LOCALAPPDATA\mise\shims;" + [Environment]::GetEnvironmentVariable('Path', 'User'), 'User')
 ```
 
 WebView2 は Windows 10/11 に最初から入っている。
@@ -32,6 +38,8 @@ WebView2 は Windows 10/11 に最初から入っている。
 ## 起動
 
 ```powershell
+mise trust       # 初回だけ。このリポジトリの mise.toml を信頼する
+mise install     # Node を入れる
 npm install
 npm run dev      # 初回は Rust のビルドで数分かかる
 ```

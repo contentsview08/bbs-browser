@@ -17,6 +17,7 @@ import {
 import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
+import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
@@ -608,7 +609,7 @@ export default function App() {
           />
         ) : (
           <main className="flex-1 flex items-center justify-center bg-c-base">
-            <div className="text-c-text-muted text-sm">{activeTab ? '読み込み中...' : 'スレッドを選択してください'}</div>
+            {activeTab ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">スレッドを選択してください</div>}
           </main>
         )}
       </div>

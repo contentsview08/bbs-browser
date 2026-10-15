@@ -11,6 +11,7 @@ import {
 } from '../ui/settings'
 import { NG_TARGETS, isValidPattern, newRule, type NgTarget } from '../utils/ng'
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 
 interface Props {
   settings: AppSettings
@@ -303,6 +304,32 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           ]}
           onChange={(v) => update('anchorPopup', v)}
         />
+      </Section>
+      <Section title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={s.imageSaveDir}
+            onChange={(e) => update('imageSaveDir', e.target.value)}
+            placeholder="ダウンロードフォルダ"
+            className={`${INPUT} flex-1`}
+          />
+          <button
+            type="button"
+            className={BTN}
+            onClick={async () => {
+              const dir = await openDialog({ directory: true, title: '画像の保存先を選ぶ' })
+              if (typeof dir === 'string') update('imageSaveDir', dir)
+            }}
+          >
+            フォルダを選ぶ
+          </button>
+          {s.imageSaveDir && (
+            <button type="button" className={ICON_BTN} title="ダウンロードフォルダに戻す" onClick={() => update('imageSaveDir', '')}>
+              <span className="material-symbols-outlined text-base">restart_alt</span>
+            </button>
+          )}
+        </div>
       </Section>
       <Section title="本文">
         <Toggle

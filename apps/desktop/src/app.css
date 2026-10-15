@@ -121,7 +121,7 @@ body,
   }
 }
 .flash-new {
-  animation: flash-new-slow 3.2s ease-out;
+  animation: flash-new-slow 2s ease-out;
 }
 
 /* タブ(Chrome 風)。開いているタブはスレのヘッダーと同じ色にして、境界線なしでつなげる。

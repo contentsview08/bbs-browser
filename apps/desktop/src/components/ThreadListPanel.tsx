@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import ThreadCard from './ThreadCard'
+import LoadingCenter from './LoadingCenter'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
@@ -279,11 +280,13 @@ export default function ThreadListPanel(props: Props) {
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col">
           {visible.length === 0 ? (
-            <div className="p-8 text-center text-c-text-muted text-sm">
-              {props.loading ? '読み込み中...' : props.emptyText}
-            </div>
+            props.loading ? (
+              <LoadingCenter />
+            ) : (
+              <div className="p-8 text-center text-c-text-muted text-sm">{props.emptyText}</div>
+            )
           ) : (
             <div
               className="flex flex-col"

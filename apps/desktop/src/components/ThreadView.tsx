@@ -13,6 +13,7 @@ import PostPopup, { type PopupEntry } from './PostPopup'
 import Lightbox from './Lightbox'
 import Minimap from './Minimap'
 import AnchorTree from './AnchorTree'
+import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
@@ -77,10 +78,10 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
-const FLASH_MS = 3200
+const FLASH_MS = 2000
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
-/** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら閉じる */
+/** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら(その 1 枚を)閉じる */
 const HOVER_ESCAPE_PX = 60
 
 /**
@@ -651,7 +652,7 @@ export default function ThreadView(props: Props) {
 
         <div ref={listRef} className="flex-1 flex flex-col" style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)' }}>
           {log.posts.length === 0 ? (
-            <div className="text-c-text-muted text-sm">{props.loading ? '読み込み中...' : '投稿がありません'}</div>
+            props.loading ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">投稿がありません</div>
           ) : (
             <>
               {log.posts.map((p, i) => {
@@ -728,13 +729,20 @@ export default function ThreadView(props: Props) {
         headerBottom={popupFrame?.headerBottom ?? 0}
         onCloseTop={() => setPopups((ps) => ps.slice(0, -1))}
         onCloseAll={closeAll}
+        onCloseAt={(i) => setPopups((ps) => ps.slice(0, i))}
         onPopupEnter={() => {
+          // 一度中に入ったら、外を押す(一段ずつ閉じる)かスクロールする(全部閉じる)まで残す
           hover.current.entered = true
+          hover.current.active = false
         }}
         onOverlayMove={(x, y) => {
           const h = hover.current
-          if (!h.active) return
-          if (h.entered || Math.hypot(x - h.x, y - h.y) > HOVER_ESCAPE_PX) closeAll()
+          // ホバーで開いて、まだ中に入っていないうちに離れたら、その 1 枚だけ閉じる
+          if (!h.active || h.entered) return
+          if (Math.hypot(x - h.x, y - h.y) > HOVER_ESCAPE_PX) {
+            h.active = false
+            setPopups((ps) => ps.slice(0, -1))
+          }
         }}
       />
 
@@ -742,6 +750,7 @@ export default function ThreadView(props: Props) {
         <Lightbox
           urls={lightbox.urls}
           index={lightbox.index}
+          saveDir={settings.imageSaveDir}
           onIndex={(index) => setLightbox((l) => l && { ...l, index })}
           onClose={() => setLightbox(undefined)}
           onOpenExternal={props.onUrl}

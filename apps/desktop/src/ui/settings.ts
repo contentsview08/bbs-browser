@@ -65,6 +65,8 @@ export interface AppSettings {
   aaAutoDetect: boolean
   /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
   showMinimap: boolean
+  /** 画像の保存先フォルダ。空ならダウンロードフォルダ */
+  imageSaveDir: string
   // 自動更新
   /** 開いているスレを自動で更新する間隔(秒)。0 なら自動更新しない */
   autoRefreshSec: number
@@ -102,6 +104,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showThumbnails: true,
   aaAutoDetect: true,
   showMinimap: true,
+  imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
   ngRules: [],

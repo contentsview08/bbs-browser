@@ -22,6 +22,8 @@ interface Props {
   headerBottom: number
   onCloseTop: () => void
   onCloseAll: () => void
+  /** 見出しの × を押した。そのポップアップ(と、その上に重なっているもの)を閉じる */
+  onCloseAt: (index: number) => void
   /** ポップアップの外(背面の幕の上)でマウスが動いた。ホバーで開いたものを閉じる判断に使う */
   onOverlayMove?: (x: number, y: number) => void
   onPopupEnter?: () => void
@@ -34,6 +36,7 @@ function PopupWindow(props: {
   containerRect?: DOMRect
   headerBottom: number
   onEnter?: () => void
+  onClose: () => void
 }) {
   const { entry, containerRect } = props
   const ref = useRef<HTMLDivElement>(null)
@@ -48,8 +51,8 @@ function PopupWindow(props: {
     const minTop = Math.max(props.headerBottom, containerRect?.top ?? 0) + 4
     const maxBottom = containerRect?.bottom ?? window.innerHeight
     const spaceAbove = entry.triggerY - minTop - 4
-    // 重なっても外側を押して閉じられるよう、スレ表示の高さの 7 割までにする
-    const limit = (maxBottom - minTop) * 0.7
+    // 重なっても外側を押して閉じられるよう、スレ表示の高さの 8 割までにする
+    const limit = (maxBottom - minTop) * 0.8
     const height = Math.min(el.scrollHeight, limit)
     // 上に収まるなら開いた場所の真上に、収まらなければヘッダーのすぐ下から出す
     const fitsAbove = height <= spaceAbove
@@ -75,8 +78,16 @@ function PopupWindow(props: {
       onWheel={(e) => e.stopPropagation()}
       onMouseEnter={props.onEnter}
     >
-      <div className="px-4 py-2 border-b border-c-border sticky top-0 bg-c-surface z-10">
-        <span className="text-sm font-bold text-c-text-strong">{entry.title}</span>
+      <div className="flex items-center gap-2 pl-4 pr-2 py-1.5 border-b border-c-border sticky top-0 bg-c-surface z-10">
+        <span className="flex-1 min-w-0 truncate text-sm font-bold text-c-text-strong">{entry.title}</span>
+        <button
+          type="button"
+          onClick={props.onClose}
+          className="flex-shrink-0 p-1 rounded-full text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2"
+          title="このポップアップを閉じる"
+        >
+          <span className="material-symbols-outlined text-lg leading-none">close</span>
+        </button>
       </div>
       <div className="p-3">{entry.content}</div>
     </div>
@@ -104,6 +115,7 @@ export default function PostPopup(props: Props) {
           containerRect={props.containerRect}
           headerBottom={props.headerBottom}
           onEnter={props.onPopupEnter}
+          onClose={() => props.onCloseAt(i)}
         />
       ))}
     </div>,

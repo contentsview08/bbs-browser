@@ -15,7 +15,7 @@ import {
   type ThreadSummary,
 } from '@bbs-browser/connectors'
 import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
-import SettingsDialog from './components/SettingsDialog'
+import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import NewThreadDialog from './components/NewThreadDialog'
 import Sidebar from './components/Sidebar'
@@ -42,7 +42,7 @@ async function resolve(url: string) {
   return r
 }
 
-type Loading = 'boards' | 'threads' | 'posts'
+type Loading = 'threads' | 'posts'
 
 /** 開いているスレ 1 つぶん */
 interface Tab {
@@ -71,8 +71,6 @@ export default function App() {
   const [store, setStore] = useState<LogStore>()
   const [settings, updateSetting, settingsLoaded] = useSettings(store)
   const [sites, setSites] = useState<SiteConfig[]>([])
-  const [site, setSite] = useState<SiteConfig>()
-  const [boards, setBoards] = useState<Board[]>([])
   const [favorites, setFavorites] = useState<Board[]>()
   const [board, setBoard] = useState<Board>()
   const [threads, setThreads] = useState<ThreadSummary[]>([])
@@ -83,7 +81,8 @@ export default function App() {
   const [refreshingAll, setRefreshingAll] = useState(false)
   const [loading, setLoading] = useState(new Set<Loading>())
   const [error, setError] = useState<string>()
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  /** 開いている設定画面の分類。undefined なら閉じている */
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>()
   const [newThreadOpen, setNewThreadOpen] = useState(false)
 
   // 非同期の処理の途中で最新の値を見るための控え
@@ -115,27 +114,21 @@ export default function App() {
       const [list, favs] = await Promise.all([s.listSites(), s.listFavorites()])
       setStore(s)
       setSites(list)
-      setSite(list[0])
       setFavorites(favs)
     })
   }, [])
 
-  const refreshBoards = (s: LogStore, target: SiteConfig) =>
-    run('boards', async () => {
-      const list = await connectorOf(target.connectorId).listBoards(target, ctx)
-      await s.replaceBoards(target.menuUrl, list)
-      setBoards(list)
-    })
-
-  // サイトを切り替えたら、保存してある板一覧をすぐ出す。なければ取りに行く
-  useEffect(() => {
-    if (!store || !site) return
-    void run('boards', async () => {
-      const cached = await store.getBoards(site.menuUrl)
-      setBoards(cached)
-      if (cached.length === 0) await refreshBoards(store, site)
-    })
-  }, [store, site])
+  /** BBS メニューの板一覧(設定画面の板選びで使う)。保存してあるものを返し、なければ・refresh なら取りに行く */
+  const loadBoards = async (target: SiteConfig, refresh: boolean): Promise<Board[]> => {
+    if (!store) return []
+    if (!refresh) {
+      const cached = await store.getBoards(target.menuUrl)
+      if (cached.length > 0) return cached
+    }
+    const list = await connectorOf(target.connectorId).listBoards(target, ctx)
+    await store.replaceBoards(target.menuUrl, list)
+    return list
+  }
 
   // 既読状態は「いま開いている板」のものだけを持つ。別の板のスレを読んでいても混ざらないように
   const boardRef = useRef<Board | undefined>(undefined)
@@ -491,7 +484,6 @@ export default function App() {
     const s: SiteConfig = { connectorId: '2ch-compat', name: name || host, menuUrl }
     await store.addSite(s)
     setSites(await store.listSites())
-    setSite(s)
   }
 
   const removeSite = (menuUrl: string) =>
@@ -500,10 +492,6 @@ export default function App() {
       await store.removeSite(menuUrl)
       const list = await store.listSites()
       setSites(list)
-      if (site?.menuUrl === menuUrl) {
-        setSite(list[0])
-        if (list.length === 0) setBoards([])
-      }
     })
 
   // ── NG ──
@@ -530,21 +518,16 @@ export default function App() {
       <AddressBar currentUrl={currentUrl} onOpen={(url) => void openUrlInApp(url)} />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
-        sites={sites}
-        site={site}
-        onSelectSite={setSite}
-        boards={boards}
         favorites={favorites ?? []}
         activeBoardUrl={board?.url}
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
-        onRefreshBoards={() => store && site && refreshBoards(store, site)}
         collapsed={settings.sidebarCollapsed}
         onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         historyActive={history !== undefined}
         onOpenHistory={openHistory}
-        onOpenSettings={() => setSettingsOpen(true)}
-        loading={loading.has('boards')}
+        onOpenSettings={() => setSettingsTab('display')}
+        onManageBoards={() => setSettingsTab('boards')}
       />
 
       {settingsLoaded && (
@@ -555,7 +538,7 @@ export default function App() {
           stateOf={stateOf}
           activeId={activeId}
           loading={loading.has('threads')}
-          emptyText={history ? '閲覧履歴はありません' : board ? 'スレッドがありません' : '左の一覧から板を選んでください'}
+          emptyText={history ? '閲覧履歴はありません' : board ? 'スレッドがありません' : '左のお気に入りから板を選んでください'}
           onOpen={(t) => void openThread(t)}
           onRefresh={history ? openHistory : board ? () => openBoard(board) : undefined}
           width={settings.threadPanelWidth}
@@ -627,8 +610,11 @@ export default function App() {
         />
       )}
 
-      {settingsOpen && (
+      {settingsTab && (
         <SettingsDialog
+          initialTab={settingsTab}
+          loadBoards={loadBoards}
+          onToggleFavorite={(b) => void toggleFavorite(b)}
           settings={settings}
           update={updateSetting}
           favorites={favorites ?? []}
@@ -643,7 +629,7 @@ export default function App() {
           }
           onAddSite={addSite}
           onRemoveSite={removeSite}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => setSettingsTab(undefined)}
         />
       )}
 

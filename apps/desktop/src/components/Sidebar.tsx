@@ -1,128 +1,72 @@
-// 左端のサイドバー: 閲覧履歴・お気に入り板・サイトの板一覧(カテゴリ別)・設定。
-// 見た目は web 版の MenuBar.tsx に合わせている。しまうとアイコンだけの細い帯になる。
+// 左端のサイドバー: 閲覧履歴・お気に入り板(開閉できる)・設定。
+// 見た目は web 版の MenuBar.tsx に合わせている。しまうとアイコンだけの帯になる。
+// 板の登録や BBS メニュー(5ch の板一覧など)から選ぶのは、設定画面の「板とサイト」で行う。
 
-import { useMemo, useState } from 'react'
-import type { Board, SiteConfig } from '@bbs-browser/connectors'
+import { useState } from 'react'
+import type { Board } from '@bbs-browser/connectors'
 
 interface Props {
-  sites: SiteConfig[]
-  site?: SiteConfig
-  onSelectSite: (s: SiteConfig) => void
-  boards: Board[]
   favorites: Board[]
   activeBoardUrl?: string
   onOpenBoard: (b: Board) => void
   onToggleFavorite: (b: Board) => void
-  onRefreshBoards: () => void
   historyActive: boolean
   onOpenHistory: () => void
   onOpenSettings: () => void
-  loading: boolean
+  /** 設定画面の「板とサイト」を開く(板を足したいとき) */
+  onManageBoards: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
 }
 
-const STRIP_BTN =
-  'w-10 h-10 flex items-center justify-center rounded-[var(--btn-radius)] text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 transition-colors'
+const ICON_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg flex-shrink-0'
+const SECTION = 'w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-c-text-strong hover:bg-c-surface2'
 
-/** しまったときの細い帯。履歴と設定はそのまま開き、お気に入りと板一覧は広げて見せる */
-function Strip(props: Props) {
+/** しまったときの帯のボタン。アイコンの下に小さく名前を出す */
+function StripButton(props: { icon: string; label: string; active?: boolean; onClick: () => void }) {
   return (
-    <aside className="w-12 flex-shrink-0 flex flex-col items-center gap-1 py-2 bg-c-surface border-r border-c-border">
-      <button type="button" onClick={props.onToggleCollapsed} className={STRIP_BTN} title="サイドバーを広げる">
-        <span className="material-symbols-outlined text-xl">left_panel_open</span>
-      </button>
-      <div className="w-8 my-1 border-t border-c-border" />
-      <button
-        type="button"
-        onClick={props.onOpenHistory}
-        className={`${STRIP_BTN} ${props.historyActive ? 'text-c-accent' : ''}`}
-        title="閲覧履歴"
-      >
-        <span className={`material-symbols-outlined text-xl ${props.historyActive ? 'fill' : ''}`}>schedule</span>
-      </button>
-      <button type="button" onClick={props.onToggleCollapsed} className={STRIP_BTN} title="お気に入り">
-        <span className="material-symbols-outlined text-xl">star</span>
-      </button>
-      <button type="button" onClick={props.onToggleCollapsed} className={STRIP_BTN} title="板一覧">
-        <span className="material-symbols-outlined text-xl">list_alt</span>
-      </button>
+    <button
+      type="button"
+      onClick={props.onClick}
+      title={props.label}
+      className={`w-14 py-2 flex flex-col items-center gap-0.5 rounded-[var(--btn-radius)] transition-colors hover:bg-c-surface2 ${
+        props.active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-strong'
+      }`}
+    >
+      <span className={`material-symbols-outlined text-2xl ${props.active ? 'fill' : ''}`}>{props.icon}</span>
+      <span className="text-[10px] leading-none">{props.label}</span>
+    </button>
+  )
+}
+
+/** しまったときの帯。履歴と設定はそのまま開き、お気に入りは広げて見せる */
+function Strip(props: Props & { onOpenFavorites: () => void }) {
+  return (
+    <aside className="w-[72px] flex-shrink-0 flex flex-col items-center gap-1 py-2 bg-c-surface border-r border-c-border">
+      <StripButton icon="left_panel_open" label="開く" onClick={props.onToggleCollapsed} />
+      <div className="w-10 my-1 border-t border-c-border" />
+      <StripButton icon="schedule" label="履歴" active={props.historyActive} onClick={props.onOpenHistory} />
+      <StripButton icon="star" label="お気に入り" onClick={props.onOpenFavorites} />
       <div className="flex-1" />
-      <button type="button" onClick={props.onOpenSettings} className={STRIP_BTN} title="設定">
-        <span className="material-symbols-outlined text-xl">settings</span>
-      </button>
+      <StripButton icon="settings" label="設定" onClick={props.onOpenSettings} />
     </aside>
   )
 }
 
-const ICON_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg flex-shrink-0'
-const INPUT =
-  'w-full bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
-const SECTION = 'w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-c-text-strong hover:bg-c-surface2'
-
-function BoardRow(props: { board: Board; active: boolean; favorite: boolean; onOpen: () => void; onToggleFavorite: () => void }) {
-  return (
-    <div
-      className={`group flex items-center pl-6 pr-2 transition-colors hover:bg-c-surface2 ${props.active ? 'active-board' : ''}`}
-    >
-      <button
-        type="button"
-        onClick={props.onOpen}
-        className={`flex-1 min-w-0 text-left py-1.5 text-sm truncate ${props.active ? 'text-c-text-strong' : 'text-c-text-body'}`}
-      >
-        {props.board.name}
-      </button>
-      <button
-        type="button"
-        onClick={props.onToggleFavorite}
-        className={`p-0.5 flex-shrink-0 transition-opacity ${props.favorite ? 'text-c-heat-warm' : 'text-c-text-muted opacity-0 group-hover:opacity-100'}`}
-        title={props.favorite ? 'お気に入りから外す' : 'お気に入りに追加'}
-      >
-        <span className={`material-symbols-outlined text-base leading-none ${props.favorite ? 'fill' : ''}`}>star</span>
-      </button>
-    </div>
-  )
-}
-
 export default function Sidebar(props: Props) {
-  if (props.collapsed) return <Strip {...props} />
-  return <Expanded {...props} />
-}
+  const [favoritesOpen, setFavoritesOpen] = useState(true)
 
-function Expanded(props: Props) {
-  const [filter, setFilter] = useState('')
-  const [openCats, setOpenCats] = useState<Set<string>>(new Set())
-  const favoriteUrls = useMemo(() => new Set(props.favorites.map((b) => b.url)), [props.favorites])
-
-  const grouped = useMemo(() => {
-    const q = filter.trim()
-    const map = new Map<string, Board[]>()
-    for (const b of props.boards) {
-      if (q && !b.name.includes(q)) continue
-      const cat = b.category ?? '(未分類)'
-      map.set(cat, [...(map.get(cat) ?? []), b])
-    }
-    return [...map]
-  }, [props.boards, filter])
-
-  const toggle = (cat: string) =>
-    setOpenCats((s) => {
-      const next = new Set(s)
-      if (next.has(cat)) next.delete(cat)
-      else next.add(cat)
-      return next
-    })
-
-  const row = (b: Board) => (
-    <BoardRow
-      key={b.url}
-      board={b}
-      active={b.url === props.activeBoardUrl && !props.historyActive}
-      favorite={favoriteUrls.has(b.url)}
-      onOpen={() => props.onOpenBoard(b)}
-      onToggleFavorite={() => props.onToggleFavorite(b)}
-    />
-  )
+  if (props.collapsed) {
+    return (
+      <Strip
+        {...props}
+        onOpenFavorites={() => {
+          setFavoritesOpen(true)
+          props.onToggleCollapsed()
+        }}
+      />
+    )
+  }
 
   return (
     <aside className="w-64 flex-shrink-0 flex flex-col bg-c-surface border-r border-c-border">
@@ -134,74 +78,56 @@ function Expanded(props: Props) {
       </div>
 
       <nav className="flex-1 overflow-y-auto custom-scrollbar py-1">
-        <button
-          type="button"
-          onClick={props.onOpenHistory}
-          className={`${SECTION} ${props.historyActive ? 'active-board' : ''}`}
-        >
+        <button type="button" onClick={props.onOpenHistory} className={`${SECTION} ${props.historyActive ? 'active-board' : ''}`}>
           <span className={`material-symbols-outlined text-xl flex-shrink-0 ${props.historyActive ? 'fill' : ''}`}>schedule</span>
           <span className="text-base font-medium flex-1 text-left">閲覧履歴</span>
         </button>
 
-        <div className={SECTION + ' cursor-default hover:bg-transparent'}>
-          <span className="material-symbols-outlined text-xl flex-shrink-0">star</span>
+        <button type="button" onClick={() => setFavoritesOpen((v) => !v)} className={SECTION}>
+          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${favoritesOpen ? 'fill' : ''}`}>star</span>
           <span className="text-base font-medium flex-1 text-left">お気に入り</span>
-        </div>
-        {props.favorites.length === 0 ? (
-          <div className="px-6 py-1.5 text-xs text-c-text-muted">板の ★ で追加できます</div>
-        ) : (
-          props.favorites.map(row)
-        )}
-
-        <div className="my-2 border-t border-c-border" />
-
-        <div className="px-3 pb-2 space-y-2">
-          <div className="flex items-center gap-1">
-            <select
-              value={props.site?.menuUrl ?? ''}
-              onChange={(e) => {
-                const s = props.sites.find((x) => x.menuUrl === e.target.value)
-                if (s) props.onSelectSite(s)
-              }}
-              className="flex-1 min-w-0 bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-strong py-1.5 focus:ring-c-accent focus:border-c-accent"
-            >
-              {props.sites.map((s) => (
-                <option key={s.menuUrl} value={s.menuUrl}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={props.onRefreshBoards} className={ICON_BTN} title="板一覧を更新">
-              <span className={`material-symbols-outlined text-lg ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
-            </button>
-          </div>
-          <input type="text" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="板を絞り込む" className={INPUT} />
-        </div>
-
-        {grouped.map(([cat, list]) => {
-          const open = filter.trim() !== '' || openCats.has(cat)
-          return (
-            <div key={cat}>
-              <button
-                type="button"
-                onClick={() => toggle(cat)}
-                className="w-full flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-c-text-muted hover:text-c-text-body transition-colors"
-              >
-                <span className="flex-1 text-left truncate">{cat}</span>
-                <span
-                  className="material-symbols-outlined text-base transition-transform flex-shrink-0"
-                  style={{ transform: open ? 'rotate(180deg)' : undefined }}
+          <span
+            className="material-symbols-outlined text-base transition-transform flex-shrink-0"
+            style={{ transform: favoritesOpen ? 'rotate(180deg)' : undefined }}
+          >
+            expand_more
+          </span>
+        </button>
+        {favoritesOpen && (
+          <div className="menu-reveal pb-1">
+            {props.favorites.map((b) => {
+              const active = b.url === props.activeBoardUrl && !props.historyActive
+              return (
+                <div
+                  key={b.url}
+                  className={`group flex items-center pl-11 pr-2 transition-colors hover:bg-c-surface2 ${active ? 'active-board' : ''}`}
                 >
-                  expand_more
-                </span>
-              </button>
-              {open && list.map(row)}
-            </div>
-          )
-        })}
-        {grouped.length === 0 && (
-          <div className="px-4 py-6 text-center text-xs text-c-text-muted">
-            {props.loading ? '読み込み中...' : '板がありません'}
+                  <button
+                    type="button"
+                    onClick={() => props.onOpenBoard(b)}
+                    className={`flex-1 min-w-0 text-left py-1.5 text-sm truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}
+                  >
+                    {b.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => props.onToggleFavorite(b)}
+                    className="p-0.5 flex-shrink-0 text-c-text-muted opacity-0 group-hover:opacity-100 hover:text-c-text-strong"
+                    title="お気に入りから外す"
+                  >
+                    <span className="material-symbols-outlined text-base leading-none">close</span>
+                  </button>
+                </div>
+              )
+            })}
+            <button
+              type="button"
+              onClick={props.onManageBoards}
+              className="w-full flex items-center gap-1.5 pl-11 pr-2 py-1.5 text-xs text-c-text-muted hover:text-c-accent transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">add</span>
+              板を追加
+            </button>
           </div>
         )}
       </nav>

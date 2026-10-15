@@ -61,8 +61,7 @@ export default function Sidebar(props: Props) {
       className="relative flex-shrink-0 overflow-hidden bg-c-surface transition-[width] duration-200 ease-out"
       style={{ width: collapsed ? COLLAPSED : EXPANDED }}
     >
-      {/* 右の境界線は、アドレスバーと並ぶ一番上の行には引かない(タイトルバーとしてひと続きに見せる) */}
-      <span className="absolute right-0 top-10 bottom-0 w-px bg-c-border pointer-events-none" />
+      <span className="absolute right-0 top-0 bottom-0 w-px bg-c-border pointer-events-none" />
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
         {/* 一番上の行。アドレスバーと同じ高さで、つかむとウィンドウを動かせる。境界線は引かない */}
         <div data-tauri-drag-region className="h-10 flex-shrink-0 flex items-center select-none">

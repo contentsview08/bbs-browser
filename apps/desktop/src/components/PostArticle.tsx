@@ -21,6 +21,8 @@ export interface PostHandlers extends BodyHandlers {
   onAddNg: (rule: NgRule) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
+  /** >>番号 を付けてすぐ書き込む(「草」ボタン)。書き込めないときは undefined */
+  onQuickReply?: (no: number, text: string) => void
 }
 
 interface Props {
@@ -43,14 +45,25 @@ interface Props {
 
 const HEAD_TEXT = 'text-xs'
 
+interface MenuItem {
+  label: string
+  icon: string
+  onClick: () => void
+}
+
+const TOOL_BTN =
+  'h-7 min-w-7 px-1.5 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
+
 /**
- * レスの ⋯ メニュー。レスのヘッダー行ははみ出しを隠す設定なので、メニューは body の直下に出し、
+ * 押すとメニューを出すボタン。レスのヘッダー行などははみ出しを隠す設定なので、メニューは body の直下に出し、
  * ボタンの位置から場所を決める(ポップアップの中のレスでも使えるよう、ポップアップより手前に出す)
  */
-function ActionMenu({ items }: { items: { label: string; icon: string; onClick: () => void }[] }) {
+function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onOpenChange: (open: boolean) => void }) {
   const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number }>()
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const { onOpenChange } = props
+  useEffect(() => onOpenChange(pos !== undefined), [pos, onOpenChange])
   useEffect(() => {
     if (!pos) return
     const close = (e: PointerEvent) => {
@@ -72,7 +85,7 @@ function ActionMenu({ items }: { items: { label: string; icon: string; onClick: 
     const right = window.innerWidth - rect.right
     // 下に入りきらなければ上に開く
     const below = window.innerHeight - rect.bottom
-    setPos(below < 260 ? { bottom: window.innerHeight - rect.top + 4, right } : { top: rect.bottom + 4, right })
+    setPos(below < 300 ? { bottom: window.innerHeight - rect.top + 4, right } : { top: rect.bottom + 4, right })
   }
 
   return (
@@ -84,20 +97,20 @@ function ActionMenu({ items }: { items: { label: string; icon: string; onClick: 
           e.stopPropagation()
           toggle()
         }}
-        className={`flex-shrink-0 px-1 text-c-text-muted hover:text-c-text-strong transition-opacity ${pos ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-        title="メニュー"
+        className={`${TOOL_BTN} ${pos ? 'text-c-text-strong bg-c-surface3' : ''}`}
+        title={props.title}
       >
-        <span className="material-symbols-outlined text-base leading-none">more_horiz</span>
+        <span className="material-symbols-outlined text-lg leading-none">{props.icon}</span>
       </button>
       {pos &&
         createPortal(
           <div
             ref={menuRef}
-            className="fixed w-52 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm"
+            className="fixed w-56 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm"
             style={pos}
             onClick={(e) => e.stopPropagation()}
           >
-            {items.map((it) => (
+            {props.items.map((it) => (
               <button
                 key={it.label}
                 type="button"
@@ -121,6 +134,10 @@ function ActionMenu({ items }: { items: { label: string; icon: string; onClick: 
 function PostArticle(props: Props) {
   const { post, anchorCount, idCount, handlers } = props
   const [revealed, setRevealed] = useState(false)
+  const articleRef = useRef<HTMLElement>(null)
+  const [ngOpen, setNgOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const menuOpen = ngOpen || moreOpen
   const [aaOverride, setAaOverride] = useState<boolean | null>(null)
 
   const frame = {
@@ -163,14 +180,7 @@ function PostArticle(props: Props) {
     .filter(Boolean)
     .join(' ')
 
-  const actions = [
-    { label: 'ヘッダ含めてコピー', icon: 'content_copy', onClick: () => copy(`${header}\n${post.body}`) },
-    { label: '本文のみコピー', icon: 'content_copy', onClick: () => copy(post.body) },
-    {
-      label: isAA ? '文字列として表示' : 'AAとして表示',
-      icon: isAA ? 'notes' : 'grid_on',
-      onClick: () => setAaOverride(!isAA),
-    },
+  const ngActions: MenuItem[] = [
     ...(post.id
       ? [
           {
@@ -183,9 +193,49 @@ function PostArticle(props: Props) {
       : []),
     ...(post.name ? [{ label: 'NGNameに追加', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }] : []),
   ]
+  const reply = handlers.onReply
+  const quick = handlers.onQuickReply
+  const actions: MenuItem[] = [
+    ...(reply ? [{ label: '返信', icon: 'reply', onClick: () => reply(post.no) }] : []),
+    ...(quick ? [{ label: '草(すぐ書き込む)', icon: 'grass', onClick: () => quick(post.no, '草') }] : []),
+    ...(hasConnections
+      ? [{ label: 'アンカーツリーを表示', icon: 'account_tree', onClick: () => handlers.onBody(post.no, articleRef.current!) }]
+      : []),
+    { label: 'ヘッダ含めてコピー', icon: 'content_copy', onClick: () => copy(`${header}\n${post.body}`) },
+    { label: '本文のみコピー', icon: 'content_copy', onClick: () => copy(post.body) },
+    {
+      label: isAA ? '文字列として表示' : 'AAとして表示',
+      icon: isAA ? 'notes' : 'grid_on',
+      onClick: () => setAaOverride(!isAA),
+    },
+    ...ngActions,
+  ]
 
   return (
-    <article id={`post-${post.no}`} data-no={post.no} className={frameClass} style={frame}>
+    <article ref={articleRef} id={`post-${post.no}`} data-no={post.no} className={`relative ${frameClass}`} style={frame}>
+      {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする */}
+      <div
+        className={`absolute top-0.5 right-3 z-10 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
+          menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {reply && (
+          <button type="button" className={TOOL_BTN} title="返信" onClick={() => reply(post.no)}>
+            <span className="material-symbols-outlined text-lg leading-none">reply</span>
+          </button>
+        )}
+        {quick && (
+          <button type="button" className={`${TOOL_BTN} text-sm font-bold`} title="草(このレスにすぐ書き込む)" onClick={() => quick(post.no, '草')}>
+            草
+          </button>
+        )}
+        <button type="button" className={TOOL_BTN} title="本文をコピー" onClick={() => copy(post.body)}>
+          <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
+        </button>
+        {ngActions.length > 0 && <MenuButton icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} />}
+        <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
+      </div>
       <div className="flex items-center mb-2 flex-nowrap overflow-hidden gap-3">
         <button
           type="button"
@@ -230,18 +280,6 @@ function PostArticle(props: Props) {
             →あなた宛
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-        {handlers.onReply && (
-          <button
-            type="button"
-            className="flex-shrink-0 text-xs text-c-text-muted bg-c-surface2 px-1.5 py-0.5 rounded hover:bg-c-surface3 hover:text-c-text-body transition-colors opacity-0 group-hover:opacity-100"
-            onClick={() => handlers.onReply!(post.no)}
-          >
-            返信
-          </button>
-        )}
-        <ActionMenu items={actions} />
-        </div>
       </div>
 
       <div

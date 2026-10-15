@@ -107,7 +107,7 @@ body,
   border-radius: 10px;
 }
 
-/* 新着のレスの光り方。web 版(1.2 秒)より長く、しばらく色を保ってからゆっくり消す。
+/* 新着のレスの光り方。しばらく色を保ってから消す。
    長さは ThreadView.tsx の FLASH_MS と揃える */
 @keyframes flash-new-slow {
   0% {
@@ -121,7 +121,7 @@ body,
   }
 }
 .flash-new {
-  animation: flash-new-slow 2s ease-out;
+  animation: flash-new-slow 1s ease-out;
 }
 
 /* タブ(Chrome 風)。開いているタブはスレのヘッダーと同じ色にして、境界線なしでつなげる。

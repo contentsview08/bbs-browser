@@ -18,6 +18,21 @@ interface Props {
 const NAV = 'absolute top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white bg-black/40 rounded-full'
 const TOOL = 'p-2 text-white/80 hover:text-white rounded-full hover:bg-white/10'
 
+/**
+ * object-contain で描いた画像の、実際に絵がある範囲に入っているか。
+ * 画像の要素は画面いっぱいの枠なので、絵の周りの余白を押したときは閉じたい
+ */
+function hitsImage(img: HTMLImageElement, x: number, y: number): boolean {
+  const box = img.getBoundingClientRect()
+  if (!img.naturalWidth || !img.naturalHeight) return true
+  const scale = Math.min(box.width / img.naturalWidth, box.height / img.naturalHeight)
+  const w = img.naturalWidth * scale
+  const h = img.naturalHeight * scale
+  const left = box.left + (box.width - w) / 2
+  const top = box.top + (box.height - h) / 2
+  return x >= left && x <= left + w && y >= top && y <= top + h
+}
+
 type SaveState = { status: 'saving' } | { status: 'saved'; path: string } | { status: 'error'; message: string }
 
 export default function Lightbox({ urls, index, saveDir, onIndex, onClose, onOpenExternal }: Props) {
@@ -55,7 +70,10 @@ export default function Lightbox({ urls, index, saveDir, onIndex, onClose, onOpe
         alt=""
         referrerPolicy="no-referrer"
         className="w-[92vw] h-[86vh] object-contain lightbox-open-rise"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          // 絵の上なら閉じない。絵の周りの余白なら、背景と同じく閉じる
+          if (hitsImage(e.currentTarget, e.clientX, e.clientY)) e.stopPropagation()
+        }}
       />
       <div className="absolute top-3 right-3 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
         <span className="text-white/70 text-sm tabular-nums mr-2">

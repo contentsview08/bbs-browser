@@ -78,7 +78,7 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
-const FLASH_MS = 2000
+const FLASH_MS = 1000
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら(その 1 枚を)閉じる */
@@ -195,6 +195,32 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (searchActive) searchRef.current?.focus()
   }, [searchActive])
+
+  // 「草」などのすぐ書き込む操作の結果。スレ表示の下に少しのあいだ出す
+  const [quickMessage, setQuickMessage] = useState<{ ok: boolean; text: string }>()
+  const quickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(quickTimer.current), [])
+  const quickPost = async (body: string) => {
+    if (!props.onSubmitPost) return
+    const show = (ok: boolean, text: string) => {
+      setQuickMessage({ ok, text })
+      clearTimeout(quickTimer.current)
+      quickTimer.current = setTimeout(() => setQuickMessage(undefined), ok ? 2500 : 6000)
+    }
+    show(true, '書き込み中…')
+    try {
+      const r = await props.onSubmitPost({ name: props.postName, mail: props.postMail, body })
+      if (r.status === 'ok') show(true, `書き込みました: ${body.replace(/\n/g, ' ')}`)
+      else if (r.status === 'auth') show(false, '認証が必要です。書き込み欄から一度書き込んで、認証を済ませてください')
+      else show(false, r.message)
+    } catch (e) {
+      show(false, e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // ハンドラーは作り置きしているので、いつも最新の名前・メールで送れるよう控えを通して呼ぶ
+  const quickPostRef = useRef(quickPost)
+  quickPostRef.current = quickPost
 
   const { ownNos } = props
   const replyRef = useRef<ReplyFormHandle>(null)
@@ -429,6 +455,7 @@ export default function ThreadView(props: Props) {
               replyRef.current?.insert(`>>${no}\n`)
             }
           : undefined,
+        onQuickReply: canReply ? (no, text) => void quickPostRef.current(`>>${no}\n${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
@@ -722,6 +749,21 @@ export default function ThreadView(props: Props) {
         </>
       )}
       </div>
+
+      {quickMessage && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9700] flex items-center gap-2 px-4 py-2 rounded-full shadow-lg text-sm border"
+          style={{
+            background: 'var(--c-surface)',
+            borderColor: quickMessage.ok ? 'var(--c-border)' : 'var(--c-accent-self)',
+          }}
+        >
+          <span className={`material-symbols-outlined text-lg ${quickMessage.ok ? 'text-c-accent' : 'text-c-heat-very-hot'}`}>
+            {quickMessage.ok ? 'check_circle' : 'error'}
+          </span>
+          <span className="max-w-[60vw] truncate text-c-text-body">{quickMessage.text}</span>
+        </div>
+      )}
 
       <PostPopup
         popups={popups}

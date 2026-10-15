@@ -13,6 +13,9 @@ import PostPopup, { type PopupEntry } from './PostPopup'
 import Lightbox from './Lightbox'
 import Minimap from './Minimap'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
+import PullSpinner from './PullSpinner'
+import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
+import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { anchorsIn, countAnchors, countIds } from '../utils/postBody'
 import type { NgRule } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
@@ -35,7 +38,8 @@ interface Props {
   settings: AppSettings
   isNg: (p: Post) => boolean
   onRead: (no: number) => void
-  onRefresh: () => void
+  /** 更新。Promise を返せば、引っぱって更新のくるくるが終わるまで待つ */
+  onRefresh: () => Promise<unknown> | void
   onOpenInBrowser: () => void
   onUrl: (url: string) => void
   onAddNg: (rule: NgRule) => void
@@ -138,6 +142,24 @@ export default function ThreadView(props: Props) {
     x: 0,
     y: 0,
   })
+
+  // 端でさらにホイールを回すと更新する(web 版と同じ)。上端と下端で別々に持つ
+  const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1 })
+  const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1 })
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = ref.current
+    if (!el) return
+    if (e.deltaY < 0 && el.scrollTop < 1) {
+      topPull.pull(-e.deltaY)
+      bottomPull.reset()
+    } else if (e.deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 5) {
+      bottomPull.pull(e.deltaY)
+      topPull.reset()
+    } else {
+      topPull.reset()
+      bottomPull.reset()
+    }
+  }
 
   const { ownNos } = props
   const replyRef = useRef<ReplyFormHandle>(null)
@@ -367,9 +389,24 @@ export default function ThreadView(props: Props) {
     <main
       className={`flex-1 min-w-0 min-h-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'} bg-[var(--c-thread-view-bg)] overflow-hidden`}
     >
-      <div ref={viewRef} className="flex-1 min-h-0 min-w-0 flex">
+      <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
+      <div
+        ref={topPull.indicatorRef}
+        className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
+        style={{ top: headerHeight, opacity: 0, transform: `translateY(${PULL_HIDDEN_Y}px)` }}
+      >
+        <PullSpinner iconRef={topPull.iconRef} />
+      </div>
+      <div
+        ref={bottomPull.indicatorRef}
+        className="absolute left-0 right-0 bottom-0 flex justify-center pointer-events-none z-20"
+        style={{ opacity: 0, transform: `translateY(${-PULL_HIDDEN_Y}px)` }}
+      >
+        <PullSpinner iconRef={bottomPull.iconRef} />
+      </div>
       <div
         ref={ref}
+        onWheel={onWheel}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
         <div ref={headerRef} className="sticky top-0 z-10 frosted-glass border-b border-c-border flex-shrink-0">

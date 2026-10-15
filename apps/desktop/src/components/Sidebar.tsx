@@ -22,19 +22,18 @@ interface Props {
 const ICON_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg flex-shrink-0'
 const SECTION = 'w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-c-text-strong hover:bg-c-surface2'
 
-/** しまったときの帯のボタン。アイコンの下に小さく名前を出す */
+/** しまったときの帯のボタン。名前はマウスを乗せたときの吹き出しにだけ出す */
 function StripButton(props: { icon: string; label: string; active?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
       title={props.label}
-      className={`w-14 py-2 flex flex-col items-center gap-0.5 rounded-[var(--btn-radius)] transition-colors hover:bg-c-surface2 ${
+      className={`w-12 h-12 flex items-center justify-center rounded-[var(--btn-radius)] transition-colors hover:bg-c-surface2 ${
         props.active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-strong'
       }`}
     >
       <span className={`material-symbols-outlined text-2xl ${props.active ? 'fill' : ''}`}>{props.icon}</span>
-      <span className="text-[10px] leading-none">{props.label}</span>
     </button>
   )
 }
@@ -42,7 +41,7 @@ function StripButton(props: { icon: string; label: string; active?: boolean; onC
 /** しまったときの帯。履歴と設定はそのまま開き、お気に入りは広げて見せる */
 function Strip(props: Props & { onOpenFavorites: () => void }) {
   return (
-    <aside className="w-[72px] flex-shrink-0 flex flex-col items-center gap-1 py-2 bg-c-surface border-r border-c-border">
+    <aside className="w-16 flex-shrink-0 flex flex-col items-center gap-1 py-2 bg-c-surface border-r border-c-border">
       <StripButton icon="left_panel_open" label="開く" onClick={props.onToggleCollapsed} />
       <div className="w-10 my-1 border-t border-c-border" />
       <StripButton icon="schedule" label="履歴" active={props.historyActive} onClick={props.onOpenHistory} />

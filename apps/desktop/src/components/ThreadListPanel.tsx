@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import ThreadCard from './ThreadCard'
+import PullSpinner from './PullSpinner'
+import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
+import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
 
@@ -27,7 +30,7 @@ interface Props {
   loading: boolean
   emptyText: string
   onOpen: (t: ThreadSummary) => void
-  onRefresh?: () => void
+  onRefresh?: () => Promise<unknown> | void
   width: number
   onResize: (width: number) => void
   /** ヘッダー右端に置く追加のボタン(表示スタイルメニューなど) */
@@ -54,6 +57,18 @@ export default function ThreadListPanel(props: Props) {
   const [query, setQuery] = useState('')
   const [width, setWidth] = useState(props.width)
   const searchRef = useRef<HTMLInputElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [headerHeight, setHeaderHeight] = useState(0)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => setHeaderHeight(el.offsetHeight))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  // 一番上でさらにホイールを回すと一覧を更新する(web 版と同じ)
+  const pull = useWheelPullRefresh({ onRefresh: () => props.onRefresh?.(), sign: 1 })
 
   useEffect(() => setWidth(props.width), [props.width])
   useEffect(() => {
@@ -104,15 +119,28 @@ export default function ThreadListPanel(props: Props) {
   return (
     <section
       style={{ width, background: 'var(--c-panel-bg, var(--c-surface2))' }}
-      className="flex-shrink-0 flex flex-col relative border-r border-c-border"
+      className="flex-shrink-0 flex flex-col relative overflow-hidden border-r border-c-border"
     >
       <div
         className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-c-accent/30 transition-colors z-20"
         onMouseDown={onResizeStart}
       />
 
-      <div className="h-full overflow-y-auto custom-scrollbar flex flex-col">
-        <div className="sticky top-0 z-10 frosted-glass flex-shrink-0">
+      <div
+        ref={pull.indicatorRef}
+        className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
+        style={{ top: headerHeight, opacity: 0, transform: `translateY(${PULL_HIDDEN_Y}px)` }}
+      >
+        <PullSpinner iconRef={pull.iconRef} />
+      </div>
+      <div
+        ref={scrollRef}
+        className="h-full overflow-y-auto custom-scrollbar flex flex-col"
+        onWheel={(e) => {
+          if (props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
+        }}
+      >
+        <div ref={headerRef} className="sticky top-0 z-10 frosted-glass flex-shrink-0">
           <div className="p-4">
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-0 h-11">

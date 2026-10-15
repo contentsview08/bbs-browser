@@ -44,8 +44,10 @@ export interface AppSettings {
   replyHeight: number
   replyWidth: number
   // 起動
-  /** 起動時に開く板の URL。空なら何も開かない */
+  /** 起動時に開く板の URL。'@last' なら前回開いていた板、空なら何も開かない */
   startupBoardUrl: string
+  /** 前回開いていた板(startupBoardUrl が '@last' のときに使う) */
+  lastBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
   // タブ
@@ -86,7 +88,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   replyLayout: 'bottom',
   replyHeight: 170,
   replyWidth: 380,
-  startupBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
+  startupBoardUrl: '@last',
+  lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   openInNewTab: true,
   openTabs: [],

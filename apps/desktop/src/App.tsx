@@ -138,10 +138,14 @@ export default function App() {
     if (boardRef.current?.url === boardUrl) setStates(st)
   }
 
+  const lastBoardUrl = useRef(settings.lastBoardUrl)
+  lastBoardUrl.current = settings.lastBoardUrl
   const openBoard = (b: Board) =>
     run('threads', async () => {
       if (!store) return
       setBoard(b)
+      // 「起動時に前回の板を開く」ために覚えておく
+      if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
       setHistory(undefined)
       setThreads([])
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
@@ -434,7 +438,7 @@ export default function App() {
   useEffect(() => {
     if (startupDone.current || !settingsLoaded || !favorites) return
     startupDone.current = true
-    const url = settings.startupBoardUrl
+    const url = settings.startupBoardUrl === '@last' ? settings.lastBoardUrl : settings.startupBoardUrl
     if (!url) return
     const fav = favorites.find((b) => b.url === url)
     if (fav) void openBoard(fav)

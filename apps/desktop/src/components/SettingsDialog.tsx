@@ -94,11 +94,9 @@ function Toggle(props: { checked: boolean; onChange: (v: boolean) => void; label
         role="switch"
         aria-checked={props.checked}
         onClick={() => props.onChange(!props.checked)}
-        className={`relative mt-0.5 w-9 h-5 rounded-full flex-shrink-0 transition-colors ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}
+        className={`relative mt-0.5 w-11 h-6 rounded-full flex-shrink-0 transition-all shadow-inner ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}
       >
-        <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${props.checked ? 'translate-x-4' : 'translate-x-0.5'}`}
-        />
+        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm ${props.checked ? 'right-1' : 'left-1'}`} />
       </button>
       <span>
         <span className="text-sm text-c-text-body">{props.label}</span>
@@ -187,12 +185,13 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           note="オフにすると、いま見ているタブを置き換えます"
         />
       </Section>
-      <Section title="起動時に開く板" note="お気に入りの板から選べます">
+      <Section title="起動時に開く板" note="前回開いていた板か、お気に入りの板から選べます">
         <select
           value={s.startupBoardUrl}
           onChange={(e) => update('startupBoardUrl', e.target.value)}
           className={`${INPUT} w-72`}
         >
+          <option value="@last">前回開いていた板</option>
           <option value="">開かない</option>
           {favorites.map((b) => (
             <option key={b.url} value={b.url}>

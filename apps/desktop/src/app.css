@@ -11,3 +11,9 @@ body,
 .retro-font {
   font-family: inherit;
 }
+
+/* 2chクラシックの枠線(#545454)は専ブラの密な画面ではうるさいので、薄い灰色にする */
+[data-scheme='2ch-classic'] {
+  --c-border: #d0d0d0;
+  --c-border-strong: #a8a8a8;
+}

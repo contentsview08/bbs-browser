@@ -1,0 +1,13 @@
+/* 専ブラ側の上書き。index.css と theme/ は web 版の複製なので、変えたいことはここに書く */
+
+/* 設定で選んだフォント(src/ui/settings.ts が --app-font を入れる) */
+html,
+body,
+#root {
+  font-family: var(--app-font, 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif);
+}
+
+/* web 版はトップページ用にドット絵フォントを持っているが、専ブラでは使わない */
+.retro-font {
+  font-family: inherit;
+}

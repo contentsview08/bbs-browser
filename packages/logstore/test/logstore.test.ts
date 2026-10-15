@@ -5,7 +5,7 @@ import type { Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, type SqlDb } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -134,5 +134,26 @@ describe('設定', () => {
     await store.setSetting('fontSize', 4)
     await store.setSetting('scheme', '2ch-classic')
     expect(await store.getSettings()).toEqual({ scheme: '2ch-classic', fontSize: 4 })
+  })
+})
+
+describe('お気に入り板', () => {
+  it('初期状態でエッヂが入っていて、足したり外したりできる', async () => {
+    expect((await store.listFavorites()).map((b) => b.name)).toEqual(['エッヂ'])
+    const prog = { connectorId: '2ch-compat', url: 'https://medaka.5ch.io/prog/', name: 'プログラマー' }
+    await store.addFavorite(prog)
+    await store.addFavorite(prog)
+    expect((await store.listFavorites()).map((b) => b.name)).toEqual(['エッヂ', 'プログラマー'])
+    await store.removeFavorite('https://bbs.eddibb.cc/liveedge/')
+    expect(await store.listFavorites()).toEqual([prog])
+  })
+
+  it('サイトを消すと、そのサイトの板一覧のキャッシュも消える', async () => {
+    const menu = 'https://bbs.example/bbsmenu.html'
+    await store.addSite({ connectorId: '2ch-compat', name: 'x', menuUrl: menu })
+    await store.replaceBoards(menu, [{ connectorId: '2ch-compat', url: 'https://bbs.example/a/', name: 'a' }])
+    await store.removeSite(menu)
+    expect((await store.listSites()).map((s) => s.name)).toEqual(['5ch'])
+    expect(await store.getBoards(menu)).toEqual([])
   })
 })

@@ -89,6 +89,32 @@ export class LogStore {
     )
   }
 
+  async removeSite(menuUrl: string): Promise<void> {
+    await this.db.execute('DELETE FROM boards WHERE site_menu_url = $1', [menuUrl])
+    await this.db.execute('DELETE FROM sites WHERE menu_url = $1', [menuUrl])
+  }
+
+  // ── お気に入り板 ──
+
+  async listFavorites(): Promise<Board[]> {
+    const rows = await this.db.select<{ url: string; connector_id: string; name: string }>(
+      'SELECT url, connector_id, name FROM favorite_boards ORDER BY sort, name',
+    )
+    return rows.map((r) => ({ url: r.url, connectorId: r.connector_id, name: r.name }))
+  }
+
+  async addFavorite(board: Board): Promise<void> {
+    await this.db.execute(
+      `INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort)
+       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))`,
+      [board.url, board.connectorId, board.name],
+    )
+  }
+
+  async removeFavorite(url: string): Promise<void> {
+    await this.db.execute('DELETE FROM favorite_boards WHERE url = $1', [url])
+  }
+
   async getBoards(menuUrl: string): Promise<Board[]> {
     const rows = await this.db.select<{ url: string; connector_id: string; name: string; category: string | null }>(
       'SELECT url, connector_id, name, category FROM boards WHERE site_menu_url = $1 ORDER BY sort',

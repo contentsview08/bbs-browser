@@ -6,6 +6,7 @@ import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import ThreadCard from './ThreadCard'
 import { momentum, rankMomentum } from '../utils/thread'
+import type { ThreadSort } from '../ui/settings'
 
 type SortMode = 'momentum' | 'newest'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -31,13 +32,21 @@ interface Props {
   onResize: (width: number) => void
   /** ヘッダー右端に置く追加のボタン(表示スタイルメニューなど) */
   actions?: ReactNode
+  /** 最初の並び順(設定) */
+  defaultSort: ThreadSort
+  /** スレタイの NG に当たるスレは出さない */
+  isNg: (t: ThreadSummary) => boolean
+  /** 板を開いているときだけ ★ を出す */
+  favorite?: { active: boolean; onToggle: () => void }
 }
 
 const TAB = 'relative flex items-center justify-center gap-1 py-2.5 transition-colors whitespace-nowrap'
 
 export default function ThreadListPanel(props: Props) {
   const { threads, stateOf } = props
-  const [sort, setSort] = useState<SortState>(null)
+  const [sort, setSort] = useState<SortState>(
+    props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' },
+  )
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
@@ -54,6 +63,7 @@ export default function ThreadListPanel(props: Props) {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     let list = threads.filter((t) => {
+      if (props.isNg(t)) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
       if (unreadOnly) {
         const s = stateOf(t)
@@ -68,7 +78,7 @@ export default function ThreadListPanel(props: Props) {
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
     return list
-  }, [threads, stateOf, query, unreadOnly, sort])
+  }, [threads, stateOf, query, unreadOnly, sort, props.isNg])
 
   // 右端のハンドルをドラッグして幅を変える。離したときに保存する
   const onResizeStart = (e: React.MouseEvent) => {
@@ -102,7 +112,7 @@ export default function ThreadListPanel(props: Props) {
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-0 h-11">
                 <h2
-                  className={`absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong text-2xl retro-font transition-opacity duration-200 ${
+                  className={`absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong text-xl transition-opacity duration-200 ${
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
                 >
@@ -131,6 +141,16 @@ export default function ThreadListPanel(props: Props) {
                 >
                   <span className="material-symbols-outlined text-lg">search</span>
                 </button>
+                {props.favorite && (
+                  <button
+                    type="button"
+                    onClick={props.favorite.onToggle}
+                    className={`p-1.5 rounded-lg transition-colors ${props.favorite.active ? 'text-c-heat-warm' : 'text-c-text-muted hover:text-c-text-strong'}`}
+                    title={props.favorite.active ? 'お気に入りから外す' : 'お気に入りに追加'}
+                  >
+                    <span className={`material-symbols-outlined text-lg ${props.favorite.active ? 'fill' : ''}`}>star</span>
+                  </button>
+                )}
                 {props.actions}
                 {props.onRefresh && (
                   <button

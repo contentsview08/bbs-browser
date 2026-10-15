@@ -10,7 +10,7 @@ import type {
   HttpResponse,
   ThreadSummary,
 } from '../types'
-import { parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSubjectTxt } from './parse'
+import { parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
 
 /** dat 差分取得の続き */
 interface DatCursor {
@@ -39,6 +39,15 @@ function datUrl(thread: ThreadSummary): string {
   return `${thread.boardUrl}dat/${thread.key}.dat`
 }
 
+/** dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する) */
+function createdAtOf(key: string): Date | undefined {
+  return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
+}
+
+/** スレの URL(…/test/read.cgi/板/番号/)と板の URL(…/板/)を見分ける */
+const THREAD_URL = /^(https?:\/\/[^/]+)\/test\/read\.cgi\/([^/?#]+)\/(\d+)/
+const BOARD_URL = /^(https?:\/\/[^/]+)\/([^/?#]+)\/?(?:subject\.txt)?(?:[?#].*)?$/
+
 /** 最後の改行までを切り出す(書き込み途中の行を読まないため) */
 function completeLines(body: Uint8Array): Uint8Array {
   const last = body.lastIndexOf(LF)
@@ -51,7 +60,34 @@ export const twoChConnector: Connector = {
   capabilities: { post: false, images: false, incremental: true },
 
   canHandle(url) {
-    return /\/test\/read\.cgi\/[^/]+\/\d+/.test(url) || /\/subject\.txt$/.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
+    return THREAD_URL.test(url) || BOARD_URL.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
+  },
+
+  async resolveUrl(url, ctx) {
+    const t = THREAD_URL.exec(url.trim())
+    const b = t ? null : BOARD_URL.exec(url.trim())
+    const [origin, dir] = t ? [t[1], t[2]] : b ? [b[1], b[2]] : []
+    if (!origin || !dir || dir === 'test') return null
+    const boardUrl = `${origin}/${dir}/`
+
+    // 板名は SETTING.TXT の BBS_TITLE。取れなければディレクトリ名で代用する
+    let name = dir
+    try {
+      const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
+      if (res.status >= 200 && res.status < 300) {
+        name = parseSettingTxt(ctx.decode(res.body, encodingOf(res))).BBS_TITLE || dir
+      }
+    } catch {
+      // 板名が分からなくても開けるので握りつぶす
+    }
+
+    const board: Board = { connectorId: ID, url: boardUrl, name }
+    if (!t) return { board }
+    const key = t[3]
+    return {
+      board,
+      thread: { connectorId: ID, boardUrl, key, title: '', postCount: 0, order: 0, createdAt: createdAtOf(key) },
+    }
   },
 
   async listBoards(site, ctx) {
@@ -74,8 +110,7 @@ export const twoChConnector: Connector = {
         title: e.title,
         postCount: e.postCount,
         order,
-        // dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する)
-        createdAt: /^\d{10}$/.test(e.key) ? new Date(Number(e.key) * 1000) : undefined,
+        createdAt: createdAtOf(e.key),
       }),
     )
   },

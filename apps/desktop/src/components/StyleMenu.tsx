@@ -2,7 +2,7 @@
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
 import { useEffect, useRef, useState } from 'react'
-import { COLOR_SCHEMES, type DisplaySettings, type FontSize, type ListDensity, type DesignPattern, type UpdateSetting } from '../ui/settings'
+import { COLOR_SCHEMES, type AppSettings, type FontSize, type ListDensity, type DesignPattern, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -17,7 +17,7 @@ const BORDER_STYLES: { key: DesignPattern; name: string }[] = [
 const MENU_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2 text-c-text-body hover:bg-c-surface2 transition-colors'
 const GROUP_LABEL = 'px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tracking-wide'
 
-export default function StyleMenu({ settings, update }: { settings: DisplaySettings; update: UpdateSetting }) {
+export default function StyleMenu({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 

@@ -115,3 +115,43 @@ describe('fetchPosts の差分取得', () => {
     expect(next.posts[1].body).toBe('あぼーん')
   })
 })
+
+describe('resolveUrl', () => {
+  // SETTING.TXT だけを返す偽サーバー
+  const ctx: ConnectorContext = {
+    decode: (bytes, enc) => new TextDecoder(enc).decode(bytes),
+    http: {
+      async get(url): Promise<HttpResponse> {
+        if (url === 'https://bbs.eddibb.cc/liveedge/SETTING.TXT') {
+          const body = new TextEncoder().encode('liveedge@liveedge\nBBS_TITLE=エッヂ\nBBS_NONAME_NAME=エッヂの名無し\n')
+          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body }
+        }
+        return { status: 404, headers: {}, body: new Uint8Array() }
+      },
+    },
+  }
+
+  it('板の URL(末尾スラッシュなしでも)から板名つきで板を返す', async () => {
+    for (const url of ['https://bbs.eddibb.cc/liveedge', 'https://bbs.eddibb.cc/liveedge/']) {
+      expect(await twoChConnector.resolveUrl(url, ctx)).toEqual({
+        board: { connectorId: '2ch-compat', url: 'https://bbs.eddibb.cc/liveedge/', name: 'エッヂ' },
+      })
+    }
+  })
+
+  it('スレの URL なら板とスレを返す', async () => {
+    const r = await twoChConnector.resolveUrl('https://bbs.eddibb.cc/test/read.cgi/liveedge/1792065954/l50', ctx)
+    expect(r?.board.url).toBe('https://bbs.eddibb.cc/liveedge/')
+    expect(r?.thread).toMatchObject({ key: '1792065954', boardUrl: 'https://bbs.eddibb.cc/liveedge/' })
+    expect(r?.thread?.createdAt?.getTime()).toBe(1792065954 * 1000)
+  })
+
+  it('SETTING.TXT が取れなければディレクトリ名を板名にする', async () => {
+    const r = await twoChConnector.resolveUrl('https://medaka.5ch.io/prog/', ctx)
+    expect(r?.board.name).toBe('prog')
+  })
+
+  it('板でもスレでもない URL は null', async () => {
+    expect(await twoChConnector.resolveUrl('https://example.com/a/b/c.html', ctx)).toBeNull()
+  })
+})

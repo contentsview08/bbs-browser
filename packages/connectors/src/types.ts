@@ -82,6 +82,11 @@ export interface FetchPostsResult {
   title?: string
 }
 
+export interface ResolvedUrl {
+  board: Board
+  thread?: ThreadSummary
+}
+
 export interface ConnectorCapabilities {
   post: boolean
   images: boolean
@@ -94,6 +99,11 @@ export interface Connector {
   capabilities: ConnectorCapabilities
   /** URL を貼られたとき、どのコネクタで開くかを決める */
   canHandle(url: string): boolean
+  /**
+   * 板やスレの URL から板(スレの URL ならスレも)を割り出す。扱えない URL なら null。
+   * bbsmenu を公開していない板を、URL で直接登録するために使う
+   */
+  resolveUrl(url: string, ctx: ConnectorContext): Promise<ResolvedUrl | null>
   listBoards(site: SiteConfig, ctx: ConnectorContext): Promise<Board[]>
   listThreads(board: Board, ctx: ConnectorContext): Promise<ThreadSummary[]>
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>

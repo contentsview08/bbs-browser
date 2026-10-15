@@ -54,37 +54,62 @@ export function heatClass(count: number): string {
   return ''
 }
 
-export function renderBody(
-  text: string,
-  handlers: { onAnchor: (no: number) => void; onUrl: (url: string) => void },
-): ReactNode[] {
+/** 画像として扱う URL(拡張子で判定) */
+const IMAGE_URL = /\.(?:jpe?g|png|gif|webp|avif)(?:[?#][^\s]*)?$/i
+
+function normalizeUrl(raw: string): string {
+  return raw.startsWith('ttp') ? `h${raw}` : raw
+}
+
+export function imageUrlsIn(text: string): string[] {
+  const urls: string[] = []
+  for (const m of text.matchAll(TOKEN)) {
+    if (m[3]) {
+      const url = normalizeUrl(m[3])
+      if (IMAGE_URL.test(url)) urls.push(url)
+    }
+  }
+  return urls
+}
+
+export interface BodyHandlers {
+  /** アンカーを押した(via='click')、またはマウスを乗せた(via='hover') */
+  onAnchor: (nos: number[], el: HTMLElement, via: 'click' | 'hover') => void
+  /** アンカーからマウスが離れた(ホバーで開く前に離れたら取り消す) */
+  onAnchorLeave?: () => void
+  onUrl: (url: string) => void
+}
+
+export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
   const parts: ReactNode[] = []
   let last = 0
   for (const m of text.matchAll(TOKEN)) {
     const start = m.index
     if (start > last) parts.push(text.slice(last, start))
     if (m[1]) {
-      const no = Number(m[1])
+      const nos = expand(Number(m[1]), m[2] ? Number(m[2]) : undefined)
       parts.push(
-        <button
+        <span
           key={start}
-          type="button"
-          className="text-c-link hover:underline"
+          role="button"
+          className="text-c-link hover:underline cursor-pointer"
           onClick={(e) => {
             e.stopPropagation()
-            handlers.onAnchor(no)
+            handlers.onAnchor(nos, e.currentTarget, 'click')
           }}
+          onMouseEnter={(e) => handlers.onAnchor(nos, e.currentTarget, 'hover')}
+          onMouseLeave={handlers.onAnchorLeave}
         >
           {m[0]}
-        </button>,
+        </span>,
       )
     } else {
-      const url = m[3].startsWith('ttp') ? `h${m[3]}` : m[3]
+      const url = normalizeUrl(m[3])
       parts.push(
         <a
           key={start}
           href={url}
-          className="text-c-link hover:underline break-all"
+          className={`hover:underline break-all ${IMAGE_URL.test(url) ? 'text-c-link-image' : 'text-c-link'}`}
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()

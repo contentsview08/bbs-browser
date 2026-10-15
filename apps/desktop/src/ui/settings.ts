@@ -53,6 +53,8 @@ export interface AppSettings {
   // スレ一覧
   threadSort: ThreadSort
   // タブ
+  /** タブを使う。false ならタブ列を出さず、スレを開くたびに置き換える */
+  tabsEnabled: boolean
   /** スレ一覧から開くとき、新しいタブで開く(false なら今のタブを置き換える) */
   openInNewTab: boolean
   openTabs: SavedTab[]
@@ -98,6 +100,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startupBoardUrl: '@last',
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
+  tabsEnabled: true,
   openInNewTab: true,
   openTabs: [],
   activeTab: '',

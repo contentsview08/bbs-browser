@@ -66,6 +66,9 @@ function PopupWindow(props: {
       overflowY: 'auto',
       zIndex: 9001 + props.stackIndex,
       opacity: props.isTop ? 1 : 0.97,
+      // 一番上以外は押せないようにする。下のポップアップの上を押しても、背面の幕に届いて一番上だけが閉じる
+      // (押せるままだと、下のポップアップの中のアンカーなどが反応して、新しいポップアップが開いてしまう)
+      pointerEvents: props.isTop ? 'auto' : 'none',
     })
   }, [entry, containerRect, props.headerBottom, props.stackIndex, props.isTop])
 

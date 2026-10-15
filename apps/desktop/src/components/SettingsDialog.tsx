@@ -256,6 +256,12 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
       </Section>
       <Section title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
+          checked={s.tabsEnabled}
+          onChange={(v) => update('tabsEnabled', v)}
+          label="タブを使う"
+          note="オフにすると、タブ列を出さず、スレを開くたびに今のスレを置き換えます(開いているスレ以外のタブは閉じます)"
+        />
+        <Toggle
           checked={s.openInNewTab}
           onChange={(v) => update('openInNewTab', v)}
           label="スレ一覧から開くときは新しいタブで開く"

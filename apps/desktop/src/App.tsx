@@ -27,6 +27,7 @@ import ThreadView, { type ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
 import { useSettings, type SavedTab } from './ui/settings'
+import { useNarrow } from './hooks/useNarrow'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule } from './utils/ng'
 
 const connectorOf = (id: string) => {
@@ -85,6 +86,9 @@ export default function App() {
   /** 開いている設定画面の分類。undefined なら閉じている */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>()
   const [newThreadOpen, setNewThreadOpen] = useState(false)
+  // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
+  const narrow = useNarrow()
+  const [listOpen, setListOpen] = useState(false)
 
   // 非同期の処理の途中で最新の値を見るための控え
   const tabsRef = useRef(tabs)
@@ -144,6 +148,7 @@ export default function App() {
   const openBoard = (b: Board) =>
     run('threads', async () => {
       if (!store) return
+      setListOpen(true) // 縦長のとき、選んだ板のスレ一覧を引き出して見せる
       setBoard(b)
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
@@ -156,6 +161,7 @@ export default function App() {
 
   const openHistory = () =>
     run('threads', async () => {
+      setListOpen(true)
       if (store) setHistory(await store.history())
     })
 
@@ -230,7 +236,8 @@ export default function App() {
         if (existing.log) await fetchThread(store, existing.thread)
         return
       }
-      const inNew = opts.newTab ?? settings.openInNewTab
+      // タブを使わないときは、いつも今のスレを置き換える
+      const inNew = settings.tabsEnabled && (opts.newTab ?? settings.openInNewTab)
       const current = activeId
       setTabs((ts) => {
         const i = ts.findIndex((x) => x.id === current)
@@ -454,6 +461,11 @@ export default function App() {
     else void openUrlInApp(url)
   }, [settingsLoaded, favorites, settings.startupBoardUrl])
 
+  // タブを使わなくしたら、開いているスレ以外のタブを閉じる(戻したタブも 1 つにする)
+  useEffect(() => {
+    if (!settings.tabsEnabled && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
+  }, [settings.tabsEnabled, tabs.length, activeId])
+
   // 期限の切れた一時 NG を片づける
   useEffect(() => {
     if (!settingsLoaded) return
@@ -542,10 +554,24 @@ export default function App() {
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-      <AddressBar currentUrl={currentUrl} onOpen={(url) => void openUrlInApp(url)} />
-      <div className="flex-1 min-h-0 flex">
+      <AddressBar
+        currentUrl={currentUrl}
+        onOpen={(url) => void openUrlInApp(url)}
+        onToggleList={narrow ? () => setListOpen((v) => !v) : undefined}
+        listOpen={listOpen}
+      />
+      <div className="relative flex-1 min-h-0 flex">
 
+      {/* 縦長のときは、スレ一覧を左から引き出す。外を押したら引っ込める */}
+      {narrow && listOpen && <div className="absolute inset-0 z-20 bg-black/30" onClick={() => setListOpen(false)} />}
       {settingsLoaded && (
+        <div
+          className={
+            narrow
+              ? `absolute inset-y-0 left-0 z-30 flex max-w-[90%] transition-transform duration-200 ease-out ${listOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`
+              : 'contents'
+          }
+        >
         <ThreadListPanel
           key={history ? 'history' : board?.url}
           title={history ? '閲覧履歴' : (board?.name ?? '板を選択')}
@@ -554,7 +580,10 @@ export default function App() {
           activeId={activeId}
           loading={loading.has('threads')}
           emptyText={history ? '閲覧履歴はありません' : board ? 'スレッドがありません' : '左のお気に入りから板を選んでください'}
-          onOpen={(t) => void openThread(t)}
+          onOpen={(t) => {
+            setListOpen(false)
+            void openThread(t)
+          }}
           onRefresh={history ? openHistory : board ? () => openBoard(board) : undefined}
           width={settings.threadPanelWidth}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
@@ -565,9 +594,11 @@ export default function App() {
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />
+        </div>
       )}
 
       <div className="flex-1 min-w-0 flex flex-col">
+        {settings.tabsEnabled && (
         <TabBar
           tabs={tabs.map((t) => ({
             id: t.id,
@@ -583,6 +614,7 @@ export default function App() {
           refreshingAll={refreshingAll}
           onDeleteLogs={(ids) => void deleteLogs(ids)}
         />
+        )}
 
         {activeTab?.log ? (
           <ThreadView

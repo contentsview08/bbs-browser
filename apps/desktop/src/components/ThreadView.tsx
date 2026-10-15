@@ -77,6 +77,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'video', label: '動画', icon: 'play_circle' },
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
+/** 未読の頭を置く位置(見えている範囲の上からの割合)。上の 3 割には既読のレスを残す */
+const UNREAD_AT = 0.3
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
@@ -296,6 +298,21 @@ export default function ThreadView(props: Props) {
     root.scrollTo({ top, behavior })
   }, [])
 
+  /**
+   * 未読の頭を、見えている範囲の上から UNREAD_AT の位置に置く。
+   * 上には既読のレスが少し見え、その下の「ここから未読」の線から下が未読、とひと目で分かるように
+   */
+  const scrollToUnread = useCallback((no: number, behavior: ScrollBehavior = 'instant') => {
+    const root = ref.current
+    // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる
+    const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)?.parentElement
+    if (!root || !el) return
+    const headerH = headerOffset()
+    const visible = root.clientHeight - headerH
+    const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - visible * UNREAD_AT
+    root.scrollTo({ top, behavior })
+  }, [])
+
   // 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
   const reportRead = useCallback(() => {
     const root = ref.current
@@ -332,7 +349,7 @@ export default function ThreadView(props: Props) {
       root.scrollTop += savedEl.getBoundingClientRect().top - viewTop - saved.offset
     } else if (settings.openPosition === 'bottom') root.scrollTop = root.scrollHeight
     else if (settings.openPosition === 'unread' && unreadFrom > 1) {
-      if (byNo.has(unreadFrom)) scrollToPost(unreadFrom)
+      if (byNo.has(unreadFrom)) scrollToUnread(unreadFrom)
       else {
         root.scrollTop = root.scrollHeight
         pendingUnread.current = true
@@ -341,7 +358,7 @@ export default function ThreadView(props: Props) {
     // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
     prevCount.current = log.posts.length
     reportRead()
-  }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToPost])
+  }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToUnread])
 
   // 画面から外れるときに、読んでいた位置を渡す
   useEffect(() => () => {
@@ -361,14 +378,14 @@ export default function ThreadView(props: Props) {
     if (pendingUnread.current) {
       pendingUnread.current = false
       if (byNo.has(unreadFrom)) {
-        scrollToPost(unreadFrom)
+        scrollToUnread(unreadFrom)
         reportRead()
         return
       }
     }
     // lastMax はまだ前回の描画の値なので、その次が新着の頭
-    if (settings.autoScrollOnNew && atBottom.current) scrollToPost(lastMax.current + 1, 'smooth')
-  }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToPost, reportRead])
+    if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, 'smooth')
+  }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
 
   useEffect(() => {
     const root = ref.current

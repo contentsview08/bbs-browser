@@ -1,0 +1,325 @@
+/* hono-bbs-merge packages/web/src/theme/theme.css から複製(2026-10-15、コミット cc33290 + 作業中の変更)。
+   見た目を web 版とそろえるため、中身は手を加えずに保つ。変えるときは web 版と見比べること */
+/* =============================================================
+ * カラースキーム設定ファイル
+ *
+ * 4つのカラースキーム(ダーク2種+ライト1種+2chクラシック)をCSS変数として
+ * 定義します。<html data-scheme="..."> の値で切り替わります(App.tsx の
+ * ThemeProvider が設定)。ダーク/ライトの判定(Tailwindの dark: バリアント用に
+ * <html> へ付与する .dark クラス)は App.tsx 側で「indigo/amber-teal はダーク、
+ * それ以外(light/2ch-classic)はライト」として別途管理します。
+ *
+ * (旧 indigo-light/amber-teal-light の2種は、単一の light スキームに統合済み。
+ * settingsStore.ts のマイグレーション(v3)で自動的に light へ引き継がれる)
+ *
+ * CSS変数一覧:
+ *   --c-base           : ページ背景色
+ *   --c-header-footer  : ヘッダー/フッター(すりガラス演出、.frosted-glass)の下地色。
+ *                         コンテンツ(--c-base)との境界を分かりやすくするため、ダーク系
+ *                         スキームでは--c-surfaceと同じ値(1段明るい)にする。ライト系は
+ *                         元々コントラストが付きやすいため--c-baseのまま(変更なし)
+ *   --c-surface        : パネル背景色(1段目)
+ *   --c-surface2       : カード等の背景色(2段目)
+ *   --c-surface3       : 選択中カードなど、さらに一段明るい背景色(3段目)
+ *   --c-border         : 通常のボーダー色
+ *   --c-border-strong  : やや強調したボーダー色(選択枠など)
+ *   --c-text-strong    : 見出し・強調テキスト
+ *   --c-text-body      : 本文テキスト
+ *   --c-text-muted     : 補助・控えめなテキスト
+ *   --c-text-emphasis  : 最大限に目立たせたいテキスト(新着/未読スレのタイトル等)。
+ *                         ダーク系スキームでは純白、ライト系スキームでは純黒に近い値。
+ *   --c-accent         : アクセントカラー(操作: ボタン・タブ・リンク等)
+ *   --c-accent-hover   : アクセントカラー(ホバー)
+ *   --c-accent-text    : アクセントカラー背景の上に乗せる文字色
+ *   --c-accent-wash    : アクセントカラーを薄く敷いた背景(バッジ等)
+ *   --c-accent-self      : 「自分」用の差し色(未読・自分の投稿・自分へのアンカー)。
+ *                          操作色(c-accent)とは別系統にすることで、「操作可能なもの」と
+ *                          「自分に関係のあるもの」を色で区別する
+ *   --c-accent-self-wash : self色を薄く敷いた背景(バッジ等)
+ *   --c-accent-self-text : self色背景の上に乗せる文字色
+ *   --c-link           : 本文中のURL・アンカー(>>1)リンク色
+ *   --c-link-image     : 画像URL。目立たせたくないため個別の固定値は持たず、
+ *                         ファイル末尾で--c-text-mutedと--c-thread-view-bg(背景)を
+ *                         color-mixして自動算出する(ダーク系は暗く、ライト系は
+ *                         明るく=背景との差が縮まり目立たなくなる)
+ *   --c-link-twitter   : X/TwitterのURL
+ *   --c-link-youtube   : YouTubeのURL
+ *   --c-poster-name    : 投稿者名
+ *   --c-heat-warm/hot/very-hot : 暖色ランプ(ID の投稿回数・レスの被アンカー数の
+ *                         両方が同じこのランプを参照する。投稿回数と被アンカー数を
+ *                         別変数化しない)
+ *   --c-thread-view-bg : スレッド表示画面(レス一覧+書き込みUI)自体の背景色。
+ *                         ダーク系は--c-baseのまま、ライトだけ純白にする
+ *                         (ライトはheader/footerが--c-base=--c-thread-view-bgと
+ *                         同色でも枠線でコントラストが付くため、この画面だけ白に
+ *                         していいという明示的な要望による)。2chクラシックだけ
+ *                         実物の見た目に合わせた独自の値(#efefef)にする
+ *   --c-panel-bg        : スレッド一覧・板一覧・ホーム画面・Welcomeページの
+ *                         お約束欄など、文字を載せる「パネル」面用の背景色
+ *                         (.retro-panel、index.css参照)。既定は--c-surface2の
+ *                         エイリアスなので他スキームでは見た目が変わらないが、
+ *                         2chクラシックだけ独自の値(薄灰色)で上書きする
+ *                         (2chクラシックの--c-baseは板一覧ページ背景用の
+ *                         レンガ/木目タイルの下地色=茶色なので、文字を載せる
+ *                         面にまで--c-baseを流用すると読みにくくなるため)
+ *   --c-thread-read-title : スレッド一覧(ThreadCard.tsx、高密度/一覧表示)で既読の
+ *                         スレタイに使う色(太字は未読のみ、既読は通常太さのまま)。
+ *                         ダーク系スキームは白に近い薄い青(水色)、ライトスキームは
+ *                         黒と見分けが付く程度にはっきりした青にする。2chクラシックは
+ *                         --thread-list-title-color(黒固定)で上書きされ、
+ *                         この変数のフォールバックまで到達しないため未設定
+ * ============================================================= */
+
+/* data-scheme が未設定の場合のフォールバックとしてindigoを:rootにも適用する
+   (別ブロックにすると:rootとの詳細度が同点になり、後勝ちでindigo以外の
+   スキームを上書きしてしまうため、同じセレクタブロックにまとめる) */
+:root, [data-scheme="indigo"] {
+  --c-base: #0c0e13;
+  --c-header-footer: var(--c-surface);
+  --c-surface: #12151b;
+  --c-surface2: #191d26;
+  --c-surface3: #212633;
+  --c-border: #242933;
+  --c-border-strong: #333a47;
+  --c-text-strong: #eef0f5;
+  --c-text-body: #c7cbd6;
+  --c-text-muted: #656b7a;
+  --c-text-emphasis: #ffffff;
+  --c-accent: #7566e6;
+  --c-accent-hover: #8f83ea;
+  --c-accent-text: #f5f3ff;
+  --c-accent-wash: rgba(117, 102, 230, 0.14);
+  --c-accent-self: #e0729a;
+  --c-accent-self-wash: rgba(224, 114, 154, 0.15);
+  --c-accent-self-text: #2b0a17;
+  --c-link: #57a6ff;
+  --c-link-twitter: #4fc3f7;
+  --c-link-youtube: #ef5da8;
+  /* ダーク系スキームは、暗い背景に馴染むよう元より暗く落とした色にする
+     (目立ちすぎるとのフィードバックにより変更) */
+  --c-poster-name: #3f7d6c;
+  --c-heat-warm: #f2b84b;
+  --c-heat-hot: #f2914b;
+  --c-heat-very-hot: #ef5350;
+  --c-thread-view-bg: var(--c-base);
+  --c-thread-read-title: #cfe2ff;
+}
+
+[data-scheme="amber-teal"] {
+  --c-base: #14171f;
+  --c-header-footer: var(--c-surface);
+  --c-surface: #171b26;
+  --c-surface2: #1e2433;
+  --c-surface3: #262e40;
+  --c-border: #2a3247;
+  --c-border-strong: #3a4560;
+  --c-text-strong: #f2ece2;
+  --c-text-body: #d7d2c8;
+  --c-text-muted: #9a9488;
+  --c-text-emphasis: #ffffff;
+  --c-accent: #e0993f;
+  --c-accent-hover: #eaad5e;
+  --c-accent-text: #2b1804;
+  --c-accent-wash: rgba(224, 153, 63, 0.16);
+  --c-accent-self: #7c93e8;
+  --c-accent-self-wash: rgba(124, 147, 232, 0.15);
+  --c-accent-self-text: #0d1430;
+  --c-link: #5eb8ff;
+  --c-link-twitter: #5eb8ff;
+  --c-link-youtube: #e2506e;
+  /* ダーク系スキームは、暗い背景に馴染むよう元より暗く落とした色にする
+     (目立ちすぎるとのフィードバックにより変更) */
+  --c-poster-name: #356f61;
+  --c-heat-warm: #e0993f;
+  --c-heat-hot: #e2506e;
+  --c-heat-very-hot: #c23b3b;
+  --c-thread-view-bg: var(--c-base);
+  --c-thread-read-title: #cfe2ff;
+}
+
+/* 「ライト」: indigo-light/amber-teal-light の2種を統合した単一のライトスキーム。
+   --c-baseを純白ではなくごく薄い暖色寄りのグレーにして、画面全体が真っ白に
+   光って見える(=長時間見ていると目がちかちかする)のを避けつつ、カード類
+   (--c-surface)は純白にすることでベースとの階調差だけで十分なコントラストを
+   付ける。寒色(青寄り)グレーだと画面全体が冷たく無機質な印象になるため、
+   ベース・グレー系トークン(surface2/3・border・text)は全て赤>緑>青の順に
+   ごくわずかに暖色側へ寄せて統一する。
+   アクセントは主張の強い紫/オレンジではなく、彩度を抑えた青系(--c-accent)+
+   別系統の落ち着いた赤系(--c-accent-self)にして、常時表示されるUIとして
+   刺激が少ない配色にする。 */
+[data-scheme="light"] {
+  --c-base: #fbf9f7;
+  --c-header-footer: var(--c-base);
+  --c-surface: #ffffff;
+  --c-surface2: #f1efec;
+  --c-surface3: #e6e3de;
+  --c-border: #e7e4df;
+  --c-border-strong: #cac6bf;
+  --c-text-strong: #201f1e;
+  --c-text-body: #46443f;
+  --c-text-muted: #86837c;
+  --c-text-emphasis: #000000;
+  --c-accent: #3d6b96;
+  --c-accent-hover: #4d7dab;
+  --c-accent-text: #ffffff;
+  --c-accent-wash: rgba(61, 107, 150, 0.08);
+  --c-accent-self: #b8536b;
+  --c-accent-self-wash: rgba(184, 83, 107, 0.08);
+  --c-accent-self-text: #ffffff;
+  --c-link: #2f6fd6;
+  --c-link-twitter: #0f8fbf;
+  --c-link-youtube: #d13d78;
+  /* ライトスキームは、明るい背景に馴染むよう元より明るく淡い色にする
+     (目立ちすぎるとのフィードバックにより変更) */
+  --c-poster-name: #7fab99;
+  --c-heat-warm: #c97f1f;
+  --c-heat-hot: #d1642f;
+  --c-heat-very-hot: #c23b3b;
+  --c-thread-view-bg: #ffffff;
+  --c-thread-read-title: #2350a0;
+}
+
+/* 「2chクラシック」: 実際の2ch風UIのスクリーンショットから抽出した実測値を使う、
+   再現重視のレトロ配色。他4スキームと違い意匠上の裁量は最小限にし、
+   参考画像に無い部分(scrollbar等)だけ既存の配色思想を踏襲する。
+   --thread-title-color/--thread-list-title-color/--thread-list-title-decoration は
+   このスキーム専用の追加変数(他スキームでは未設定→各コンポーネント側のフォール
+   バック値が使われる。MainBoardPage.tsx/MobileTopBar.tsx/ThreadCard.tsx参照) */
+[data-scheme="2ch-classic"] {
+  /* 板一覧ページの背景。本来はレンガ/木目調のタイル画像だが、画像アセットを
+     用意していないため単色でフォールバックする */
+  --c-base: #c5ad99;
+  /* ヘッダー/フッターは--c-baseから独立させ、明るいグレー(rgb(239,239,239)=
+     スレッド詳細ページの--c-thread-view-bgと同色)の不透明バーにする。
+     板一覧ページの背景(レンガ)と対比が付き、スレッド詳細ページの本文とは
+     継ぎ目が無く馴染む */
+  --c-header-footer: rgb(239, 239, 239);
+  --c-surface: #ffffff;
+  --c-surface2: #f0f0f0;
+  --c-surface3: #e0e0e0;
+  --c-border: #545454;
+  --c-border-strong: #333333;
+  --c-text-strong: #171d17;
+  --c-text-body: #000000;
+  --c-text-muted: #595959;
+  --c-text-emphasis: #000000;
+  /* 操作用アクセントカラー(ボタン・タブ・アイコン・選択状態等)は、リンク色
+     (--c-link)と同じ青にする。緑を試したがタブ/アイコンの選択状態が
+     全体的に見づらかったため、リンクと統一する方針にした */
+  --c-accent: var(--c-link);
+  --c-accent-hover: #3333ff;
+  --c-accent-text: #ffffff;
+  --c-accent-wash: rgba(0, 0, 255, 0.08);
+  --c-accent-self: #ff0000;
+  --c-accent-self-wash: rgba(255, 0, 0, 0.08);
+  --c-accent-self-text: #ffffff;
+  --c-link: #0000ff;
+  --c-link-twitter: #0000ff;
+  --c-link-youtube: #0000ff;
+  --c-poster-name: #008000;
+  --c-heat-warm: #cc6600;
+  --c-heat-hot: #e64d00;
+  --c-heat-very-hot: #ff0000;
+  /* スレッド詳細ページ自体の背景(レス一覧+書き込みUI) */
+  --c-thread-view-bg: #efefef;
+  /* スレッド一覧・板一覧・ホーム画面・Welcomeページのお約束欄など、文字を載せる
+     パネル面の背景(.retro-panel参照)。--c-thread-view-bg(#efefef)をベースに、
+     少し暗めの薄灰色にする(--c-base=#c5ad99の茶色をそのまま文字面に流用すると
+     読みにくいため専用の値)。最初は#ddddddにしたが、上に乗る.retro-box系の
+     ボタン・タイル(--c-surface2=#f0f0f0/--c-surface3=#e0e0e0)と近すぎて
+     見分けが付きにくいとのフィードバックのため、もう一段はっきり暗くする
+     (#dddddd→#c8c8c8→さらにこの値、と2段階で暗くした) */
+  --c-panel-bg: #b0b0b0;
+  /* スレッド詳細ページのタイトル見出し: 赤・太字 */
+  --thread-title-color: #ff0000;
+  /* 板のスレッド一覧(一覧表示モード)のスレタイ: 黒(本文と同じ色)。
+     下線ありのリンク調も試したが読みづらいとのことで無しにした */
+  --thread-list-title-color: #000000;
+  --thread-list-title-decoration: none;
+  /* レスとレスの区切り線(PostArticle.tsx参照)。通常の--c-border(#545454)は
+     濃すぎるとのフィードバックのため、薄っすら見える程度の淡いグレーにする
+     (スレッド一覧の枠線と同じ値で揃える) */
+  --post-divider-color: #d5d5d5;
+}
+
+/* --c-link-image(本文中の画像URLリンクの色)は全スキーム共通の1本の式で算出する。
+   --c-text-mutedを、そのスキームの--c-thread-view-bg(スレッド表示画面自体の背景色。
+   ダーク系スキームでは暗い色、ライト系スキームでは明るい色)方向にさらに混ぜることで、
+   ダーク系スキームではより暗く、ライト系スキームではより明るく(=背景との差が縮まり
+   目立たなくなる)なる。スキームごとに個別の値を持たせる必要が無いので:rootに1つだけ
+   置く(各data-scheme側で--c-text-muted/--c-thread-view-bgが上書きされていれば
+   自動的にそのスキームの値で再計算される) */
+:root {
+  --c-link-image: color-mix(in srgb, var(--c-text-muted) 55%, var(--c-thread-view-bg) 45%);
+}
+
+/* --c-panel-bg(.retro-panel、index.css参照)も同じ理由で:rootに1つだけ置く既定の
+   エイリアス。既定では--c-surface2そのものなので他スキームの見た目は変わらないが、
+   2chクラシックだけ後述のスキームブロックで独自の値に上書きする */
+:root {
+  --c-panel-bg: var(--c-surface2);
+}
+
+/* アンカー(>>n)・本文中URLは、他スキームではhover時だけ下線が付く(hover:underline)
+   が、2chクラシックでは常時下線を付ける(参考画像の見た目に合わせる)。
+   コンポーネント側に分岐を書かず、既存のTailwindユーティリティクラスに
+   スキーム側から上書きを掛ける */
+[data-scheme="2ch-classic"] .text-c-link {
+  text-decoration: underline;
+}
+
+/* 板一覧ページ背景をレンガ/木目調のタイル画像にする(--c-baseの単色の上に重ねる。
+   画像取得に失敗した場合は--c-baseの単色#c5ad99がそのまま見える)。bg-c-baseを
+   使っている要素全部が対象になるが、勢いバッジ・画像/動画プレースホルダー等の
+   小さいUI部品にまで模様が入り込むと煩雑になるため、.no-tile-bgを付けた要素は
+   除外する(HomeThreadCard.tsx/TopPage.tsx参照)。
+   模様は「うっすら見える程度」にしたいので、--c-baseと同色の半透明レイヤーを
+   画像の上に重ねて薄める(2枚とも先に書いた方が手前に描画される) */
+[data-scheme="2ch-classic"] .bg-c-base:not(.no-tile-bg) {
+  background-image:
+    linear-gradient(rgba(197, 173, 153, 0.5), rgba(197, 173, 153, 0.5)),
+    url('/texture/ba.gif');
+  background-repeat: repeat;
+}
+
+/* ヘッダー/フッターのすりガラス(ぼかし+半透明)は、実物の2ch風UIには無い演出
+   なので2chクラシックだけ無効にし、不透明な単色バーに戻す */
+[data-scheme="2ch-classic"] .frosted-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--c-header-footer);
+}
+
+/* ヘッダー/フッター(frosted-glassの領域)内のアイコンは黒系にする。ただし
+   選択中タブ等、アクセントカラー(text-c-accent)が付いたボタンのアイコンは
+   より詳細度の高いセレクタでアクセントカラー(青)に戻す */
+[data-scheme="2ch-classic"] .frosted-glass .material-symbols-outlined {
+  color: #1a1a1a;
+}
+[data-scheme="2ch-classic"] .frosted-glass .text-c-accent .material-symbols-outlined {
+  color: var(--c-accent);
+}
+
+/* スレッド作成ボタン(ThreadListPanel.tsx/NewThreadPage.tsx)・書き込む
+   ボタン(ReplyForm.tsx)は、他のアクセントカラーの操作ボタンとは別に、
+   2chクラシックだけ濃い灰色+白文字にする(PC・スマホ共通) */
+[data-scheme="2ch-classic"] .btn-thread-create {
+  background-color: #595959;
+  color: #ffffff;
+}
+
+/* スクロールバー(スキーム非依存。--c-text-muted/--c-accent は各スキームで
+   上書きされた値をそのまま参照する) */
+:root {
+  --c-scrollbar-thumb: color-mix(in srgb, var(--c-text-muted) 45%, transparent);
+  --c-scrollbar-thumb-hover: color-mix(in srgb, var(--c-accent) 55%, transparent);
+  --c-scrollbar-track: transparent;
+}
+
+/* 2chクラシックは半透明の馴染ませ方(45%/55%の混色)ではなく、はっきりした
+   不透明の灰色スクロールバーにする */
+[data-scheme="2ch-classic"] {
+  --c-scrollbar-thumb: #aaaaaa;
+  --c-scrollbar-thumb-hover: #888888;
+  --c-scrollbar-track: var(--c-surface2);
+}

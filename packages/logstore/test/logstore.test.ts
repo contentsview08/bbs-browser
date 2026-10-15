@@ -4,13 +4,16 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, type SqlDb } from '../src/index'
 
-const migration = readFileSync(new URL('../migrations/001_init.sql', import.meta.url), 'utf-8')
+// アプリと同じ順番で全マイグレーションを流す
+const migrations = ['001_init.sql', '002_settings.sql'].map((f) =>
+  readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
+)
 const SQL = await initSqlJs()
 
 /** sql.js を SqlDb に合わせる。$1 は SQLite の番号つき変数 ?1 に読み替える */
 function sqljs(): SqlDb {
   const db = new SQL.Database()
-  db.exec(migration)
+  for (const m of migrations) db.exec(m)
   const conv = (sql: string) => sql.replace(/\$(\d+)/g, '?$1')
   return {
     async execute(sql, params = []) {
@@ -122,5 +125,14 @@ describe('スレのログ', () => {
     expect(h.readAt).toBe(2000)
     expect(h.thread).toMatchObject({ boardUrl: thread.boardUrl, key: thread.key, connectorId: '2ch-compat' })
     expect(h.thread.createdAt?.getTime()).toBe(thread.createdAt?.getTime())
+  })
+})
+
+describe('設定', () => {
+  it('JSON で保存して読み戻せる', async () => {
+    await store.setSetting('scheme', 'light')
+    await store.setSetting('fontSize', 4)
+    await store.setSetting('scheme', '2ch-classic')
+    expect(await store.getSettings()).toEqual({ scheme: '2ch-classic', fontSize: 4 })
   })
 })

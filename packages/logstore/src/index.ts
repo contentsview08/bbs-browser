@@ -109,6 +109,17 @@ export class LogStore {
     }
   }
 
+  // ── 設定 ──
+
+  async getSettings(): Promise<Record<string, unknown>> {
+    const rows = await this.db.select<{ key: string; value: string }>('SELECT key, value FROM settings')
+    return Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value) as unknown]))
+  }
+
+  async setSetting(key: string, value: unknown): Promise<void> {
+    await this.db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', [key, JSON.stringify(value)])
+  }
+
   // ── スレ ──
 
   /** スレ一覧に未読数を出すため、板の中で開いたことのあるスレの状態をまとめて返す */

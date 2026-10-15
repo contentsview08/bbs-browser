@@ -1,151 +1,334 @@
-/* 仮の見た目。hono-bbs のデザインを移植するときに置き換える */
-:root {
-  --bg: #fafafa;
-  --fg: #222;
-  --muted: #777;
-  --line: #ddd;
-  --active: #e6efff;
-  font-family: 'Segoe UI', 'Yu Gothic UI', 'Noto Sans CJK JP', sans-serif;
-  font-size: 14px;
-  color: var(--fg);
-  background: var(--bg);
+/* hono-bbs-merge packages/web/src/index.css から複製(2026-10-15、コミット cc33290 + 作業中の変更)。
+   Google Fonts の読み込みだけ外し、フォントは main.tsx で npm パッケージから同梱している */
+
+
+@import './theme/theme.css';
+@import './theme/patterns.css';
+
+/* AA(アスキーアート)用フォント。'MS Pゴシック'とほぼ同じ文字送り幅になるよう
+   IPA Pゴシック+monapoから作られた自己ホスト済みフォント。OSにインストールされて
+   いなくても全端末で同じ見た目になる (public/fonts/ に配置、CDN非依存)。 */
+@font-face {
+  font-family: 'aahub_light';
+  src: url('/fonts/aahub_light.woff2') format('woff2'),
+       url('/fonts/aahub_light.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1b1b1d;
-    --fg: #ddd;
-    --muted: #999;
-    --line: #333;
-    --active: #2a3550;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--c-accent);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  }
+
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  /* アイコンの「アクティブ」状態(選択中タブ、登録済みのお気に入り、勢いの上位段階等) */
+  .material-symbols-outlined.fill {
+    font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
   }
 }
 
+/* グローバルスクロールバー（全要素に適用） */
 * {
-  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-scrollbar-thumb) var(--c-scrollbar-track);
 }
 
-body {
-  margin: 0;
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--c-scrollbar-track);
+  border-radius: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--c-scrollbar-thumb);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--c-scrollbar-thumb-hover);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: 220px 360px 1fr;
-  grid-template-rows: auto 1fr;
-  height: 100vh;
+@layer components {
+  /* custom-scrollbar はグローバルと同じ設定を継承 */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: var(--c-scrollbar-track);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--c-scrollbar-thumb);
+    border-radius: 10px;
+    transition: background 0.2s ease;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--c-scrollbar-thumb-hover);
+  }
+
+  /* 横スクロールのタブ・チップ列などでスクロールバー自体を非表示にする */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .active-nav {
+    background-color: color-mix(in srgb, var(--c-accent) 10%, transparent);
+    border-left: 4px solid var(--c-accent);
+    color: white;
+  }
+
+  .active-board {
+    background-color: color-mix(in srgb, var(--c-accent) 10%, transparent);
+    border-left: 4px solid var(--c-accent);
+  }
+
+  /* 絵文字を明示的に絵文字フォントで描画するクラス */
+  .emoji {
+    font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', 'Twemoji Mozilla', sans-serif;
+  }
 }
 
-.toolbar {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
+/* AAアスキーアート用フォント
+ * 'aahub_light' はIPA Pゴシック+monapoから作られた自己ホスト済みフォントで、
+ * 'MS Pゴシック'とほぼ同じ文字送り幅を持つ(上のindex.css冒頭の@font-face参照)。
+ * OS依存の'MS Pゴシック'/Mona系より先に置くことで、Windowsの有無に関わらず
+ * 全端末が同じフォント・同じ文字送り幅でAAを見られるようにする。 */
+.aa-font {
+  font-family: aahub_light,'ＭＳ Ｐゴシック','MS PGothic',RobotoJAA,Monapo,'IPA モナー Pゴシック',IPAMonaPGothic,Mona,'梅Pゴシック',Textar,sans-serif !important;
+  line-height: 1.15 !important;
+  letter-spacing: 0 !important;
+  /* Android Chrome実機はビューポート幅から「読みやすいように」行の一部だけを自動拡大する
+   * ことがあり(PCのdevtoolsモバイルエミュレーションでは再現されない)、等幅グリッドが
+   * 崩れてAAが乱れる原因になる。AAだけはこの自動拡大を無効化して等幅を保証する。 */
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
 }
 
-.status {
-  color: var(--muted);
+/* 一覧更新で新しく取得できた要素を描画時に一瞬光らせる演出(未読=自分用の差し色) */
+@keyframes flash-new {
+  0% { background-color: color-mix(in srgb, var(--c-accent-self) 35%, transparent); }
+  100% { background-color: transparent; }
+}
+.flash-new {
+  animation: flash-new 1.2s ease-out;
 }
 
-.error {
-  color: #d33;
+/* メニューバーのラベル/アコーディオン中身が現れるときの演出。グラデーションのマスクが
+ * 上から下へ抜けていくことで文字が上から降りてくるように見える、ごく短い(一瞬の)アニメーション */
+@keyframes menu-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(-3px);
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 0%);
+    mask-image: linear-gradient(to bottom, black 0%, transparent 0%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    -webkit-mask-image: linear-gradient(to bottom, black 100%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 100%, transparent 100%);
+  }
+}
+.menu-reveal {
+  animation: menu-reveal 180ms ease-out;
 }
 
-.pane {
-  overflow: auto;
-  border-right: 1px solid var(--line);
+/* 画像ビューワの←→切り替え時の演出。進む方向から軽くスライドインしつつ
+ * フェードインする(全画面幅を使ったスワイプ追従ではなく、切り替わったことが
+ * わかる程度の控えめな動きにとどめる) */
+@keyframes lightbox-slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes lightbox-slide-in-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.lightbox-slide-in-right {
+  animation: lightbox-slide-in-right 200ms ease-out;
+}
+.lightbox-slide-in-left {
+  animation: lightbox-slide-in-left 200ms ease-out;
 }
 
-.boards input {
-  width: calc(100% - 12px);
-  margin: 6px;
+/* 画像ビューワを開いた瞬間だけの演出。←→切り替えの横スライドとは別物で、
+ * 画面の奥から浮き上がってくるように、少し小さく・少し下にずらした状態から
+ * 等倍・定位置までスケール+フェードインする */
+@keyframes lightbox-open-rise {
+  from { opacity: 0; transform: scale(0.85) translateY(28px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.lightbox-open-rise {
+  animation: lightbox-open-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.boards summary {
-  padding: 2px 6px;
-  cursor: pointer;
-  color: var(--muted);
+/* lightbox-open-riseと同じ「画面の奥から浮き上がってくる」演出の、ポップアップ等
+ * 小さめのUI向けの控えめ版(拡大縮小・移動量を抑えている)。レス抽出ポップアップ等で使う */
+@keyframes rise-in {
+  from { opacity: 0; transform: scale(0.94) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.rise-in {
+  animation: rise-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.item {
-  padding: 3px 10px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* ヘッダー/フッターのすりガラス演出(ホーム画面・スレッド一覧・スレッド表示画面)。
+ * --c-base 等はテーマトークンが16進数文字列で定義されているため、Tailwindの
+ * bg-c-base/40 のような不透明度修飾子は効かない(rgb()関数の想定形式と合わずrgba(0,0,0,0)に
+ * なる)。color-mix() で明示的に半透明化する。
+ * --c-base ではなく --c-header-footer を使う: ダーク系スキームでは--c-surfaceと同じ
+ * (1段明るい)値になっており、スクロールしてきたコンテンツ(--c-base)とヘッダー/フッターの
+ * 境界がほんの少し明るい色差で分かるようにしている(ライト系は元々--c-baseのまま=変更なし)。 */
+.frosted-glass {
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  background: color-mix(in srgb, var(--c-header-footer) 40%, transparent);
 }
 
-.item:hover,
-.item.active {
-  background: var(--active);
+/* トップページ(WelcomePage、「/」)専用の「00年代手打ち個人サイト風」装飾。
+ * local-output/design/toppage.html を参考にしたWin95風の立体ベベル枠を、
+ * 固定色ではなくテーマトークンから作る。--c-surface3/--c-border-strongのような
+ * 既存トークンをそのまま左上/右下に振り分ける方式は使わない: ダーク系スキームでは
+ * 「一段明るい面」を表すトークンほど明るく、ライト系スキームでは逆に暗くなる
+ * (elevationの方向がスキームで反転する)ため、決め打ちで振り分けると片方の
+ * スキーム群でしかベベルの明暗が正しい向きにならない。代わりにcolor-mix()で
+ * 背景色を直接white/blackに混ぜ、「必ず背景より明るい面」「必ず背景より暗い面」を
+ * その場で作ることで、どのスキームでも向きが崩れないようにする。 */
+.retro-box {
+  background: var(--c-surface2);
+  border-style: solid;
+  border-width: 2px;
+  border-top-color: color-mix(in srgb, var(--c-surface2) 60%, white 40%);
+  border-left-color: color-mix(in srgb, var(--c-surface2) 60%, white 40%);
+  border-right-color: color-mix(in srgb, var(--c-surface2) 65%, black 35%);
+  border-bottom-color: color-mix(in srgb, var(--c-surface2) 65%, black 35%);
+}
+/* .retro-boxの「文章パネル」版(スレッド一覧・板一覧・ホーム画面のコンテンツ・
+ * Welcomeページのお約束欄など、文字を載せる面用)。既定では.retro-boxと全く同じ
+ * (--c-surface2)だが、2chクラシックだけ--c-panel-bgを上書きする(theme.css参照)。
+ * 2chクラシックの--c-baseは板一覧ページ背景用のレンガ/木目タイルの下地色(茶色)
+ * なので、文字を載せる面に.retro-box-inset(--c-base直接使用)をそのまま使うと
+ * 茶色い面に文字が乗ってしまい読みにくい、という指摘があったため専用の変数を
+ * 用意した。他スキームでは--c-surface2のエイリアスなので見た目は変わらない */
+.retro-panel {
+  background: var(--c-panel-bg, var(--c-surface2));
+  border-style: solid;
+  border-width: 2px;
+  border-top-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 60%, white 40%);
+  border-left-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 60%, white 40%);
+  border-right-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 65%, black 35%);
+  border-bottom-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 65%, black 35%);
+}
+/* .retro-panelの凹み版(Welcomeページのお約束欄等、文字を載せる面だが「奥まった」
+ * 見た目にしたい箇所用)。ベベルの明暗を.retro-box-insetと同じ向きに反転させる */
+.retro-panel-inset {
+  background: var(--c-panel-bg, var(--c-surface2));
+  border-style: solid;
+  border-width: 2px;
+  border-top-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 65%, black 35%);
+  border-left-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 65%, black 35%);
+  border-right-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 60%, white 40%);
+  border-bottom-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 60%, white 40%);
+}
+/* .retro-boxの凹み版(入力欄等、「奥まった」見た目にしたい箇所用)。
+ * ベベルの明暗を反転させ、背景も一段暗い/奥まった印象の--c-baseにする */
+.retro-box-inset {
+  background: var(--c-base);
+  border-style: solid;
+  border-width: 2px;
+  border-top-color: color-mix(in srgb, var(--c-base) 65%, black 35%);
+  border-left-color: color-mix(in srgb, var(--c-base) 65%, black 35%);
+  border-right-color: color-mix(in srgb, var(--c-base) 60%, white 40%);
+  border-bottom-color: color-mix(in srgb, var(--c-base) 60%, white 40%);
+}
+/* 看板画像などの枠の外側四隅に置く四角いドット飾り(.retro-box-inset等と組み合わせて
+ * 使う想定。位置(top/left/right/bottom)は呼び出し側がinline styleで枠から少し
+ * 離して指定し、このクラス自体はposition:absoluteと見た目だけを持つ)。
+ * リアルなねじ穴風(グラデーション+溝)にしたら気持ち悪いとのことだったので、
+ * 平面的な正方形ドットだけにする。.retro-box系と同じ理由で固定色は使わず、
+ * --c-borderからのcolor-mix()でどのスキームでも馴染むようにする */
+.retro-screw {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  background: color-mix(in srgb, var(--c-border-strong) 70%, var(--c-text-muted) 30%);
 }
 
-.count {
-  display: inline-block;
-  min-width: 3em;
-  text-align: right;
-  color: var(--muted);
+@keyframes retro-blink {
+  to { visibility: hidden; }
+}
+.retro-blink {
+  animation: retro-blink 1s steps(2, start) infinite;
+}
+/* ドット絵風フォント。font-familyは継承するので、これを付けた要素の配下は
+ * 明示的に別フォントを指定していない限り全部この見た目になる(アイコンフォント
+ * (.material-symbols-outlined)は自分自身に直接font-familyを指定した既存ルールが
+ * 効くため、継承では上書きされず影響を受けない) */
+.retro-font {
+  font-family: 'DotGothic16', 'MS Pゴシック', 'MS PGothic', sans-serif;
 }
 
-.posts {
-  padding: 0 16px 40px;
+/* 「ブラウザを150%ぐらいに拡大したときがちょうど良い」というフィードバックのための
+ * 一括拡大。text-*クラス1つ1つを手で大きくする代わりに、ページ全体をzoomする
+ * (transform: scale()と違い、zoomはレイアウトサイズ自体が変わるため、拡大後も
+ * クリック領域や折り返し計算・スクロール量が実際の見た目どおりに機能する)。
+ * zoomは「その要素が親から見て1.5倍のサイズを要求する」ようになる(transformと違い
+ * レイアウトの外寸そのものが変わる)ため、無条件に効かせると実ビューポート幅は
+ * そのままのスマホでは「中身だけ1.5倍」になって収まらず、横あふれで表示が崩れる。
+ * Tailwindのsmブレークポイント(640px)以上、PC/タブレット幅でだけ効かせる */
+@media (min-width: 640px) {
+  .retro-scale {
+    zoom: 1.5;
+  }
 }
 
-.posts h1 {
-  font-size: 16px;
+/* お知らせサイネージ(電車の車内表示風)。コンテンツを2つ並べて複製し、
+ * ちょうど半分(-50%)だけ動かして止めることで、1周目と2周目の継ぎ目が
+ * 見えない無限ループにする(2つ目の複製に入れ替わった瞬間には元の位置に
+ * 戻っているため、ループの境目がわからない)。
+ * animation-timing-function/durationはここではデフォルト値だけ置き、
+ * 実際にはWelcomePage.tsx側がお知らせ文の文字数に応じてinline styleで
+ * 上書きする(steps(N)にして、電光掲示板のようになめらかではなく
+ * 文字ぶんずつカクカク動くようにする)。 */
+@keyframes retro-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.retro-marquee-track {
+  display: inline-flex;
+  width: max-content;
+  animation-name: retro-marquee;
+  animation-timing-function: steps(20);
+  animation-duration: 6s;
+  animation-iteration-count: infinite;
 }
 
-.post {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.post-head {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.post-head .name {
-  color: #2a8a2a;
-}
-
-.post-body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 4px 0 0 1em;
-}
-
-.pane-title {
-  padding: 6px 10px;
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-}
-
-/* 一度開いたスレ */
-.item.visited {
-  font-weight: 600;
-}
-
-.item.archived {
-  opacity: 0.6;
-}
-
-.unread {
-  color: #e06c00;
-  font-weight: 700;
-}
-
-.archived-tag {
-  margin-left: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.new-line {
-  margin: 8px 0;
-  border-top: 2px solid #e06c00;
-  color: #e06c00;
-  font-size: 12px;
-}

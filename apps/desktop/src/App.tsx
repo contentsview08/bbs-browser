@@ -1,14 +1,18 @@
-// 骨組み: 板一覧 / スレ一覧(または履歴)/ レスの 3 ペイン。
+// 画面全体: サイドバー(板一覧)/ スレ一覧パネル / スレ表示 の 3 カラム。
+// データの流れはここに集め、見た目は components/ の各部品(web 版から移植)に任せる。
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
-// 見た目は仮。hono-bbs の web のデザインは、この骨組みが固まってから移植する。
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { findConnector, type Board, type SiteConfig, type ThreadSummary } from '@bbs-browser/connectors'
 import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
+import Sidebar from './components/Sidebar'
+import StyleMenu from './components/StyleMenu'
+import ThreadListPanel, { threadId } from './components/ThreadListPanel'
+import ThreadView from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
-
-const threadId = (t: ThreadSummary) => `${t.boardUrl}${t.key}`
+import { useDisplaySettings } from './ui/settings'
 
 const connectorOf = (id: string) => {
   const c = findConnector(id)
@@ -16,39 +20,44 @@ const connectorOf = (id: string) => {
   return c
 }
 
+type Loading = 'boards' | 'threads' | 'posts'
+
 export default function App() {
   const [store, setStore] = useState<LogStore>()
+  const [settings, updateSetting] = useDisplaySettings(store)
   const [sites, setSites] = useState<SiteConfig[]>([])
   const [site, setSite] = useState<SiteConfig>()
   const [boards, setBoards] = useState<Board[]>([])
-  const [boardFilter, setBoardFilter] = useState('')
   const [board, setBoard] = useState<Board>()
   const [threads, setThreads] = useState<ThreadSummary[]>([])
   const [states, setStates] = useState(new Map<string, ThreadState>())
   const [history, setHistory] = useState<HistoryEntry[]>()
   const [thread, setThread] = useState<ThreadSummary>()
   const [log, setLog] = useState<ThreadLog>()
-  /** 開いた時点の「最初の未読」。ここに「ここから新着」の線を引く */
   const [unreadFrom, setUnreadFrom] = useState(1)
-  const [lastStatus, setLastStatus] = useState('')
+  const [loading, setLoading] = useState(new Set<Loading>())
   const [error, setError] = useState<string>()
-  const [busy, setBusy] = useState(false)
 
-  const run = async (fn: () => Promise<void>) => {
-    setBusy(true)
+  const run = async (kind: Loading | null, fn: () => Promise<void>) => {
+    if (kind) setLoading((s) => new Set(s).add(kind))
     setError(undefined)
     try {
       await fn()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setBusy(false)
+      if (kind)
+        setLoading((s) => {
+          const next = new Set(s)
+          next.delete(kind)
+          return next
+        })
     }
   }
 
   // 起動: DB を開いてサイト一覧を読む
   useEffect(() => {
-    void run(async () => {
+    void run(null, async () => {
       const s = await openLogStore()
       const list = await s.listSites()
       setStore(s)
@@ -58,7 +67,7 @@ export default function App() {
   }, [])
 
   const refreshBoards = (s: LogStore, target: SiteConfig) =>
-    run(async () => {
+    run('boards', async () => {
       const list = await connectorOf(target.connectorId).listBoards(target, ctx)
       await s.replaceBoards(target.menuUrl, list)
       setBoards(list)
@@ -67,7 +76,7 @@ export default function App() {
   // サイトを切り替えたら、保存してある板一覧をすぐ出す。なければ取りに行く
   useEffect(() => {
     if (!store || !site) return
-    void run(async () => {
+    void run('boards', async () => {
       const cached = await store.getBoards(site.menuUrl)
       setBoards(cached)
       if (cached.length === 0) await refreshBoards(store, site)
@@ -75,34 +84,35 @@ export default function App() {
   }, [store, site])
 
   const openBoard = (b: Board) =>
-    run(async () => {
+    run('threads', async () => {
       if (!store) return
       setBoard(b)
       setHistory(undefined)
+      setThreads([])
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
       setThreads(list)
       setStates(st)
     })
 
-  const showHistory = () =>
-    run(async () => {
+  const openHistory = () =>
+    run('threads', async () => {
       if (store) setHistory(await store.history())
     })
 
   const openThread = (t: ThreadSummary) =>
-    run(async () => {
+    run('posts', async () => {
       if (!store) return
       // 手元のログを先に出す(通信に失敗しても読める)
       const local = await store.loadThread(t)
       setThread(t)
-      setLog(local ?? undefined)
+      setLog(local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' })
       setUnreadFrom((local?.readNo ?? 0) + 1)
 
       const r = await connectorOf(t.connectorId).fetchPosts(t, local?.cursor ?? null, ctx)
       await store.saveFetch(t, r)
-      setLastStatus(r.status)
       setLog((await store.loadThread(t)) ?? undefined)
       if (board?.url === t.boardUrl) setStates(await store.getThreadStates(t.boardUrl))
+      if (history) setHistory(await store.history())
     })
 
   const markRead = useCallback(
@@ -116,7 +126,7 @@ export default function App() {
   )
 
   const addSite = () =>
-    run(async () => {
+    run(null, async () => {
       const menuUrl = prompt('bbsmenu の URL(.html か .json)')?.trim()
       if (!store || !menuUrl) return
       const s: SiteConfig = { connectorId: '2ch-compat', name: new URL(menuUrl).host, menuUrl }
@@ -125,171 +135,70 @@ export default function App() {
       setSite(s)
     })
 
-  const grouped = useMemo(() => {
-    const q = boardFilter.trim()
-    const map = new Map<string, Board[]>()
-    for (const b of boards) {
-      if (q && !b.name.includes(q)) continue
-      const cat = b.category ?? ''
-      map.set(cat, [...(map.get(cat) ?? []), b])
-    }
-    return [...map]
-  }, [boards, boardFilter])
+  const historyStates = new Map(history?.map((h) => [threadId(h.thread), h as ThreadState]))
+  const stateOf = history
+    ? (t: ThreadSummary) => historyStates.get(threadId(t))
+    : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
 
   return (
-    <div className="layout">
-      <header className="toolbar">
-        <select value={site?.menuUrl ?? ''} onChange={(e) => setSite(sites.find((s) => s.menuUrl === e.target.value))}>
-          {sites.map((s) => (
-            <option key={s.menuUrl} value={s.menuUrl}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <button onClick={addSite}>サイトを追加</button>
-        {store && site && <button onClick={() => refreshBoards(store, site)}>板一覧を更新</button>}
-        <button onClick={showHistory}>履歴</button>
-        {board && !history && <button onClick={() => openBoard(board)}>スレ一覧を更新</button>}
-        {thread && <button onClick={() => openThread(thread)}>レスを更新</button>}
-        <span className="status">{busy ? '読み込み中…' : lastStatus}</span>
-        {error && <span className="error">{error}</span>}
-      </header>
+    <div className="flex h-full w-full overflow-hidden bg-c-base text-c-text-body">
+      <Sidebar
+        sites={sites}
+        site={site}
+        onSelectSite={setSite}
+        onAddSite={addSite}
+        boards={boards}
+        activeBoardUrl={board?.url}
+        onOpenBoard={openBoard}
+        onRefreshBoards={() => store && site && refreshBoards(store, site)}
+        historyActive={history !== undefined}
+        onOpenHistory={openHistory}
+        loading={loading.has('boards')}
+      />
 
-      <nav className="pane boards">
-        <input placeholder="板を絞り込む" value={boardFilter} onChange={(e) => setBoardFilter(e.target.value)} />
-        {grouped.map(([cat, list]) => (
-          <details key={cat} open={!!boardFilter}>
-            <summary>{cat || '(未分類)'}</summary>
-            {list.map((b) => (
-              <div key={b.url} className={b.url === board?.url ? 'item active' : 'item'} onClick={() => openBoard(b)}>
-                {b.name}
-              </div>
-            ))}
-          </details>
-        ))}
-      </nav>
-
-      <section className="pane threads">
-        {history ? (
-          <>
-            <div className="pane-title">履歴</div>
-            {history.map((h) => (
-              <ThreadRow
-                key={threadId(h.thread)}
-                thread={h.thread}
-                active={thread !== undefined && threadId(thread) === threadId(h.thread)}
-                state={h}
-                onOpen={openThread}
-              />
-            ))}
-          </>
-        ) : (
-          threads.map((t) => (
-            <ThreadRow
-              key={t.key}
-              thread={t}
-              active={t.key === thread?.key && t.boardUrl === thread.boardUrl}
-              state={states.get(t.key)}
-              onOpen={openThread}
-            />
-          ))
-        )}
-      </section>
+      <ThreadListPanel
+        title={history ? '閲覧履歴' : (board?.name ?? '板を選択')}
+        threads={history ? history.map((h) => h.thread) : threads}
+        stateOf={stateOf}
+        activeId={thread && threadId(thread)}
+        loading={loading.has('threads')}
+        emptyText={history ? '閲覧履歴はありません' : board ? 'スレッドがありません' : '左の一覧から板を選んでください'}
+        onOpen={openThread}
+        onRefresh={history ? openHistory : board ? () => openBoard(board) : undefined}
+        width={settings.threadPanelWidth}
+        onResize={(w) => updateSetting('threadPanelWidth', w)}
+        actions={<StyleMenu settings={settings} update={updateSetting} />}
+      />
 
       {thread && log ? (
-        <PostList key={threadId(thread)} log={log} unreadFrom={unreadFrom} onRead={markRead} />
+        <ThreadView
+          key={threadId(thread)}
+          log={log}
+          unreadFrom={unreadFrom}
+          loading={loading.has('posts')}
+          onRead={markRead}
+          onRefresh={() => openThread(thread)}
+          onOpenInBrowser={() => void openUrl(connectorOf(thread.connectorId).threadWebUrl(thread))}
+          onUrl={(url) => void openUrl(url)}
+        />
       ) : (
-        <main className="pane posts" />
+        <main className="flex-1 flex items-center justify-center bg-c-base">
+          <div className="text-c-text-muted text-sm">スレッドを選択してください</div>
+        </main>
+      )}
+
+      {error && (
+        <div
+          className="fixed bottom-4 right-4 z-50 max-w-md flex items-start gap-2 px-4 py-3 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl text-sm"
+          role="alert"
+        >
+          <span className="material-symbols-outlined text-lg text-c-heat-very-hot">error</span>
+          <span className="flex-1 text-c-text-body break-all">{error}</span>
+          <button type="button" onClick={() => setError(undefined)} className="text-c-text-muted hover:text-c-text-strong">
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
       )}
     </div>
-  )
-}
-
-function ThreadRow(props: {
-  thread: ThreadSummary
-  active: boolean
-  state?: ThreadState
-  onOpen: (t: ThreadSummary) => void
-}) {
-  const { thread: t, state } = props
-  // subject.txt のレス数と既読位置の差が未読数。履歴では手元のレス数を使う
-  const unread = state ? Math.max(0, t.postCount - state.readNo) : 0
-  const cls = ['item', props.active && 'active', state && 'visited', state?.status === 'archived' && 'archived']
-  return (
-    <div className={cls.filter(Boolean).join(' ')} onClick={() => props.onOpen(t)}>
-      <span className="count">{t.postCount}</span> {unread > 0 && <span className="unread">+{unread}</span>} {t.title}
-    </div>
-  )
-}
-
-/** レス一覧。開いたら最初の未読へ移動し、スクロールに合わせて既読位置を知らせる */
-function PostList(props: { log: ThreadLog; unreadFrom: number; onRead: (no: number) => void }) {
-  const { log, unreadFrom, onRead } = props
-  const ref = useRef<HTMLElement>(null)
-  const positioned = useRef(false)
-  const sent = useRef(log.readNo)
-
-  // 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
-  const reportRead = useCallback(() => {
-    const root = ref.current
-    if (!root) return
-    const bottom = root.getBoundingClientRect().bottom
-    let last = 0
-    for (const el of root.querySelectorAll<HTMLElement>('[data-no]')) {
-      if (el.getBoundingClientRect().top >= bottom) break
-      last = Number(el.dataset.no)
-    }
-    if (last > sent.current) {
-      sent.current = last
-      onRead(last)
-    }
-  }, [onRead])
-
-  // 最初にレスが出たときだけ位置を合わせる(差分の追加で飛ばないように)
-  useLayoutEffect(() => {
-    const root = ref.current
-    if (!root || positioned.current || log.posts.length === 0) return
-    positioned.current = true
-    const target = root.querySelector<HTMLElement>(`[data-no="${unreadFrom}"]`)
-    if (target && unreadFrom > 1)
-      root.scrollTop += target.getBoundingClientRect().top - root.getBoundingClientRect().top - 8
-    else if (unreadFrom > 1) root.scrollTop = root.scrollHeight
-    reportRead()
-  }, [log, unreadFrom, reportRead])
-
-  useEffect(() => {
-    const root = ref.current
-    if (!root) return
-    let timer: ReturnType<typeof setTimeout>
-    const onScroll = () => {
-      clearTimeout(timer)
-      timer = setTimeout(reportRead, 300)
-    }
-    root.addEventListener('scroll', onScroll)
-    return () => {
-      root.removeEventListener('scroll', onScroll)
-      clearTimeout(timer)
-    }
-  }, [reportRead])
-
-  return (
-    <main className="pane posts" ref={ref}>
-      <h1>
-        {log.title}
-        {log.status === 'archived' && <span className="archived-tag">dat 落ち</span>}
-      </h1>
-      {log.posts.map((p) => (
-        <div key={p.no}>
-          {p.no === unreadFrom && unreadFrom > 1 && <div className="new-line">ここから新着</div>}
-          <article className="post" data-no={p.no}>
-            <div className="post-head">
-              <b>{p.no}</b> <span className="name">{p.name}</span> {p.mail && <span>[{p.mail}]</span>} {p.date}{' '}
-              {p.id && <span className="id">ID:{p.id}</span>}
-            </div>
-            <div className="post-body">{p.body}</div>
-          </article>
-        </div>
-      ))}
-    </main>
   )
 }

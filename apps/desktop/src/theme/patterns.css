@@ -1,0 +1,181 @@
+/* hono-bbs-merge packages/web/src/theme/patterns.css から複製(2026-10-15、コミット cc33290 + 作業中の変更)。
+   見た目を web 版とそろえるため、中身は手を加えずに保つ。変えるときは web 版と見比べること */
+/* =============================================================
+ * デザインパターン設定ファイル
+ *
+ * カラースキームとは独立した、互いにも独立な2つの軸をCSS変数として定義する。
+ * <html data-pattern="..."> <html data-density="..."> の値で切り替わる
+ * (App.tsx の ThemeProvider が設定)。4カラースキーム×2枠線スタイル×3デザインの
+ * 全24通りが独立に組み合わせられる(以前はdense=デザインパターンの1値として
+ * 枠線スタイルと排他になっており、「高密度かつトーナルカード」ができなかった。
+ * settingsStore.tsのマイグレーション(v4)で分離した)。
+ *
+ * 【枠線スタイル(data-pattern): 'tonal' | 'bordered'】
+ * カード/チップ/ボタン等の「見た目」(背景・枠線・角丸)を決める。
+ * トーナルカード(背景の濃淡で階層を作る)/枠線リスト(輪郭線だけで区切る)の2種。
+ *
+ * 【デザイン(data-density): 'panel' | 'list' | 'dense'】
+ * スレッド一覧の表示形式+余白の詰め方を決める。パネル表示(ホームと同じ
+ * カードUI、HomeThreadCardで表示)/一覧表示(ThreadCardの通常余白)/高密度
+ * (一覧表示+余白を切り詰め、専ブラ風にする。local-output/design/simple_design_*.jpg
+ * 参照)。パネル表示かどうかの構造上の分岐(ThreadCard/HomeThreadCardどちらを
+ * 描画するか)はJS側(ThreadListPanel.tsx/MobileBoardPage.tsx)がdensity==='panel'を
+ * 見て判断するので、CSS変数としては'list'と'panel'は同じ値でよい
+ * (denseだけが下記の値を上書きする)。
+ *
+ * コンポーネント側(ThreadCard/PostArticle/Minimap等)はここで定義した
+ * card系・chip系・btn-radius・list-gap系・post-*系の変数だけを参照し、
+ * パターン/デザインごとの分岐は一切書かない。
+ *
+ * --list-gap-thread/--list-gap-post : スレッド一覧/レス一覧の項目間の隙間
+ * --list-padding-thread/--list-padding-post : 同、リスト全体の外側余白
+ *   (post側はヘッダー/フッターの動的なオフセット(inline style)とは別に
+ *   加算される基本パディング分だけを指す。モバイルの横方向paddingはミニマップの
+ *   スペース確保という機能上の理由があるため対象外にしている)
+ * --post-padding-x/--post-padding-y : レス1件(PostArticle)自体の内側余白。
+ *   区切り線が表示される投稿(showTopDivider時)の上側だけは、既存の
+ *   pt-2(Tailwindクラス)がこのpaddingTopの代わりに効く(PostArticle.tsx参照)ため、
+ *   このpaddingTopでは触らない
+ * --post-quote-bar-width/--post-quote-bar-width-own : 本文の左に敷く
+ *   アクセントの縦線(自分の投稿だけ太く色を変える)の太さ
+ * --post-quote-padding/--post-quote-padding-own : 本文の左paddingそのもの
+ *   (線の太さと連動させず独立させている)。どちらも0にすると本文が
+ *   ヘッダーと同じ位置から始まる
+ * --thread-card-padding-left/-right/-y・--thread-card-title-gap :
+ *   ThreadCard(板のスレッド一覧、一覧表示/高密度時のみ)自体の内側余白と、
+ *   メタ行⇔タイトル行の間隔
+ * --thread-card-radius : ThreadCardの角丸。検索欄やダイアログ等にも広く使われる
+ *   --card-radius(パネル表示のHomeThreadCardはこちらを直接参照)とは別に、
+ *   一覧表示/高密度のThreadCardは枠線スタイル(トーナル/枠線)に関わらず常に
+ *   角丸無し(0px)にする
+ * --header-height : 画面上部の固定ヘッダーバー(MobileTopBar/MainBoardPageの
+ *   PC版ヘッダー)の高さ。両者ともTailwindのh-20(80px)だったため一つの
+ *   デフォルト値で共通化できる
+ * --header-tab-padding-y : ヘッダー直下のフィルタ/タブ行(ボタン)の上下padding。
+ *   PC(py-2.5=10px)とモバイル(py-3=12px)で元の値が異なるため、panel/listでは
+ *   var() のデフォルト値(各コンポーネント側で個別指定)に任せてこの変数自体は
+ *   定義しない。denseデザインだけがここで値を上書きし、両コンテキストとも
+ *   同じ縮小値になる
+ * ============================================================= */
+
+/* ---------- 枠線スタイル(data-pattern): カード/チップ/ボタンの見た目 ---------- */
+
+:root, [data-pattern="tonal"] {
+  /* surface2そのままだと(特にライト系スキームで)明るすぎて上に乗る文字が
+     見づらくなるため、黒寄りに少し暗くする(ダーク/ライトどちらのスキームでも
+     常に「元よりわずかに暗い」方向になるようblackへ混ぜる) */
+  --card-bg: color-mix(in srgb, var(--c-surface2) 85%, black 15%);
+  --card-border-color: transparent;
+  --card-border-width: 1px;
+  --card-radius: 10px;
+  --card-selected-bg: var(--c-surface3);
+  --card-selected-border-color: transparent;
+  --chip-bg: var(--c-accent-wash);
+  --chip-border-color: transparent;
+  --chip-radius: 20px;
+  --btn-radius: 9px;
+  --minimap-radius: 8px;
+}
+
+[data-pattern="bordered"] {
+  --card-bg: transparent;
+  --card-border-color: var(--c-border);
+  --card-radius: 7px;
+  --card-selected-bg: transparent;
+  --card-selected-border-color: var(--c-accent);
+  --chip-bg: transparent;
+  --chip-border-color: var(--c-accent);
+  --chip-radius: 5px;
+  --btn-radius: 6px;
+  --minimap-radius: 6px;
+}
+
+/* ---------- デザイン(data-density): スレッド一覧の表示形式+余白 ---------- */
+
+:root, [data-density="list"] {
+  /* 既存のTailwindユーティリティ(gap-1.5/p-6/space-y-3等)と同じ値を
+     デフォルトにしておくことで、panel/listの見た目は変更前と完全に同じになる */
+  --list-gap-thread: 6px;
+  --list-padding-thread: 8px;
+  --list-gap-post: 12px;
+  --list-padding-post: 24px;
+  --post-padding-x: 8px;
+  --post-padding-y: 4px;
+  --post-quote-bar-width: 2px;
+  --post-quote-bar-width-own: 3px;
+  --post-quote-padding: 16px;
+  --post-quote-padding-own: 13px;
+
+  /* 元のTailwindクラス(pl-7/pr-3/py-2/mt-1.5)と同じ値 */
+  --thread-card-padding-left: 28px;
+  --thread-card-padding-right: 12px;
+  --thread-card-padding-y: 8px;
+  --thread-card-title-gap: 6px;
+  /* ThreadCardは一覧表示/高密度でしか使わない(パネル表示はHomeThreadCardを使い、
+     こちらは--card-radiusをそのまま参照するので影響しない)。枠線スタイル
+     (トーナル/枠線)に関わらず常に角丸無しにする */
+  --thread-card-radius: 0px;
+
+  /* 元のh-20(80px)と同じ値。--header-tab-padding-yはここでは定義しない
+     (コメント参照。PC/モバイルで元の値が異なるため個別のvar()デフォルトに任せる) */
+  --header-height: 80px;
+}
+
+/* 「高密度」: 余白を切り詰めた、専ブラ(2chまとめアプリ)のスレッド一覧・
+   スレッド表示画面を参考にしたデザイン(local-output/design/simple_design_*.jpg参照)。
+   カラーテーマ・枠線スタイルには影響しない(余白系の変数だけを上書きする) */
+[data-density="dense"] {
+  --list-gap-thread: 0px;
+  --list-padding-thread: 0px;
+  --list-gap-post: 0px;
+  --list-padding-post: 8px;
+  --post-padding-x: 6px;
+  --post-padding-y: 3px;
+  --post-quote-bar-width: 0px;
+  --post-quote-bar-width-own: 0px;
+  --post-quote-padding: 0px;
+  --post-quote-padding-own: 0px;
+
+  /* 横方向(pl-7/pr-3相当)はデフォルトのまま据え置き、縦方向だけ半分にする */
+  --thread-card-padding-y: 4px;
+  --thread-card-title-gap: 3px;
+
+  /* ヘッダー(板名/スレタイ/タブの帯)の余白もある程度狭くする */
+  --header-height: 60px;
+  --header-tab-padding-y: 6px;
+}
+
+/* ---------- スキームとの組み合わせ ---------- */
+
+/* ライトスキームのスレッド一覧アイテム等は、トーナル/枠線どちらのパターンでも
+   常に純白にする(トーナルは上のblack 15%混ぜだと少しグレーがかって見えるため、
+   枠線パターンは既定のtransparentだと--c-baseの色が透けて見えるため。
+   ライトスキームは元々コントラストが付きやすく、暗くする必要が無い) */
+[data-pattern="tonal"][data-scheme="light"],
+[data-pattern="bordered"][data-scheme="light"] {
+  --card-bg: #ffffff;
+}
+
+/* 2chクラシックは角丸無し+選択色(薄緑)を両パターン共通の実物の2ch風の見た目にするが、
+   トーナル/枠線のデザインパターン切り替え自体はちゃんと機能させる(以前は
+   data-patternを無視して常に枠線固定+2px幅になっていた) */
+[data-scheme="2ch-classic"] {
+  --card-radius: 0px;
+  --card-selected-bg: #b3e6b3;
+}
+
+[data-pattern="bordered"][data-scheme="2ch-classic"] {
+  --card-bg: #ffffff;
+  /* 通常の--c-border(#545454)だと濃すぎて主張が強いとのフィードバックのため、
+     薄っすら見える程度の淡いグレーにする */
+  --card-border-color: #d5d5d5;
+  --card-border-width: 1px;
+  --card-selected-border-color: #545454;
+}
+
+[data-pattern="tonal"][data-scheme="2ch-classic"] {
+  --card-bg: #eef5ee;
+  --card-border-color: transparent;
+  --card-border-width: 1px;
+  --card-selected-border-color: transparent;
+}

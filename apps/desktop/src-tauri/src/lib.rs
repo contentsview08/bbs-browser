@@ -5,18 +5,27 @@ const DB_URL: &str = "sqlite:bbs-browser.db";
 
 fn migrations() -> Vec<Migration> {
     // SQL は packages/logstore にあり、vitest のテストでも同じファイルを使う
-    vec![Migration {
-        version: 1,
-        description: "init",
-        sql: include_str!("../../../../packages/logstore/migrations/001_init.sql"),
-        kind: MigrationKind::Up,
-    }]
+    vec![
+        Migration {
+            version: 1,
+            description: "init",
+            sql: include_str!("../../../../packages/logstore/migrations/001_init.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "settings",
+            sql: include_str!("../../../../packages/logstore/migrations/002_settings.sql"),
+            kind: MigrationKind::Up,
+        },
+    ]
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations())

@@ -11,7 +11,7 @@ packages/connectors/   コネクタ(純 TS。Tauri にも DOM にも依存しな
   src/twoch/           2ch 互換コネクタ(bbsmenu / subject.txt / dat、差分取得つき)
 packages/logstore/     ログの保存(SQLite)。既読位置・Cursor・レス・板一覧のキャッシュ
   migrations/          スキーマ。Rust のマイグレーションと vitest の両方がこのファイルを読む
-apps/desktop/          Tauri アプリ(React + Vite)
+apps/desktop/          Tauri アプリ(React + Vite + Tailwind。見た目は hono-bbs の web 版から移植)
   src/host/            ConnectorContext と LogStore の Tauri 版(plugin-http / plugin-sql)
   src-tauri/           Rust 側。公式プラグインの登録とマイグレーションだけ
 ```

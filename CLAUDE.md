@@ -23,6 +23,11 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - UI はコネクタの `capabilities` を見て機能を出し分ける。
 - 本文はコネクタの段階でプレーンテキストにする。UI で `innerHTML` / `dangerouslySetInnerHTML` を使わない。
 - 2ch 互換の User-Agent は `Monazilla/1.00 (bbs-browser/x.y.z)`。
+- 見た目は hono-bbs の web 版(`~/git/koizumib/hono-bbs-merge/packages/web`)から移植している。
+  `apps/desktop/src/theme/*.css` と `src/index.css` は web 版の複製なので、中身を勝手に変えない。
+  色は `c-*` の Tailwind クラス(CSS 変数)だけを使い、固定色や `slate-*` を新しく書かない。
+  表示設定は `<html>` の `data-scheme` / `data-pattern` / `data-density` で切り替わる(`src/ui/settings.ts`)。
+- フォントは npm パッケージで同梱する(Google Fonts は使わない。通信なしでも同じ見た目にするため)。
 
 ## 開発環境
 
@@ -38,6 +43,6 @@ npm run typecheck
 
 ## 今後
 
-1. hono-bbs の web(`~/git/koizumib/hono-bbs-merge/packages/web`)のデザインを移植
+1. web 版から残りを移植(アンカーのポップアップ、ミニマップ、画像サムネイル、NG)
 2. 書き込み(2ch 互換は bbs.cgi。5ch は Cookie・認証の仕様が変わりやすいので要確認)
 3. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)

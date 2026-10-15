@@ -216,32 +216,32 @@ export default function ThreadListPanel(props: Props) {
           </div>
 
           {selectable && (
-            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-c-border text-xs">
-              <span className="text-c-text-muted">{selected.size > 0 ? `${selected.size} 件選択中` : 'チェックで選んでまとめて消せます'}</span>
-              <button
-                type="button"
-                className="ml-auto text-c-text-muted hover:text-c-text-strong"
-                onClick={() => setSelected(new Set(visible.map(threadId)))}
-              >
-                すべて選択
-              </button>
+            <div className="flex items-center gap-2 px-2 py-1.5 border-b border-c-border text-xs">
+              {/* 一番左のチェックボックスで、すべて選ぶ・すべて外す。一部だけのときは「－」 */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  ref={(el) => {
+                    if (el) el.indeterminate = selected.size > 0 && selected.size < visible.length
+                  }}
+                  checked={visible.length > 0 && selected.size === visible.length}
+                  onChange={(e) => setSelected(e.target.checked ? new Set(visible.map(threadId)) : new Set())}
+                  className="rounded"
+                />
+                <span className="text-c-text-muted">{selected.size > 0 ? `${selected.size} 件選択中` : 'すべて選択'}</span>
+              </label>
               {selected.size > 0 && (
-                <>
-                  <button type="button" className="text-c-text-muted hover:text-c-text-strong" onClick={() => setSelected(new Set())}>
-                    解除
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
-                    onClick={() => {
-                      props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
-                      setSelected(new Set())
-                    }}
-                  >
-                    <span className="material-symbols-outlined text-sm">delete</span>
-                    ログを削除
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
+                  onClick={() => {
+                    props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
+                    setSelected(new Set())
+                  }}
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                  ログを削除
+                </button>
               )}
             </div>
           )}

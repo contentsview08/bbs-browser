@@ -1,15 +1,53 @@
-// 書き込み・スレ立ての結果(エラーや認証待ち)の表示。書き込み欄とスレ立ての画面で共通
+// 書き込み・スレ立ての結果(エラーや認証待ち)の表示。書き込み欄とスレ立ての画面で共通。
+// うまくいかなかったときは、サーバーが返したページをそのまま見られる(5ch の確認画面やエラーの中身を確かめるため)
 
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { PostResult } from '@bbs-browser/connectors'
 
+/** サーバーが返したページを、そのまま表示する。スクリプトは動かさない(sandbox) */
+function ServerResponse({ html, onClose }: { html: string; onClose: () => void }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
+      <div
+        className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between pl-4 pr-2 py-2 border-b border-c-border">
+          <span className="text-sm font-bold text-c-text-strong">サーバーの返答</span>
+          <button type="button" onClick={onClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+        <iframe title="サーバーの返答" sandbox="" srcDoc={html} className="flex-1 w-full bg-white rounded-b-[var(--card-radius)]" />
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function PostResultBox({ result, onOpenUrl }: { result: PostResult; onOpenUrl: (url: string) => void }) {
+  const [showHtml, setShowHtml] = useState(false)
   if (result.status === 'ok') return <p className="mb-2 text-xs text-c-accent">{result.message}</p>
+  const html = result.html
   return (
     <div
       className="mb-2 px-3 py-2 text-sm rounded-[var(--card-radius)] border"
       style={{ borderColor: 'var(--c-accent-self)', background: 'var(--c-accent-self-wash)' }}
     >
-      <p className="text-c-text-body whitespace-pre-wrap break-all">{result.message}</p>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 text-c-text-body whitespace-pre-wrap break-all">{result.message}</p>
+        {html && (
+          <button
+            type="button"
+            onClick={() => setShowHtml(true)}
+            className="flex-shrink-0 text-xs text-c-text-muted hover:text-c-accent underline"
+          >
+            サーバーの返答を見る
+          </button>
+        )}
+      </div>
+      {showHtml && html && <ServerResponse html={html} onClose={() => setShowHtml(false)} />}
       {result.status === 'auth' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {result.code && (

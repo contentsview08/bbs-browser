@@ -11,7 +11,7 @@ import type {
   PostResult,
   ThreadSummary,
 } from '../types'
-import { parseBbsCgiResponse, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
+import { parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
 import { encodeShiftJisForm } from '../sjis'
 
 /** dat 差分取得の続き */
@@ -43,7 +43,8 @@ function datUrl(thread: ThreadSummary): string {
 
 /**
  * bbs.cgi へ送って応答を読み分ける(書き込みとスレ立てで共通)。
- * 5ch の「書き込み確認」は、受け取った Cookie を持ってもう一度送れば通る。それでも確認なら諦める
+ * 5ch の初めての書き込みでは「書き込み確認」が返る。確認画面のフォームの隠し項目と送り先を引き継ぎ、
+ * 受け取った Cookie を持って送り直せば通る。それでも確認が続くなら諦めて、ページをそのまま返す
  */
 async function sendBbsCgi(
   origin: string,
@@ -51,22 +52,31 @@ async function sendBbsCgi(
   referer: string,
   ctx: ConnectorContext,
 ): Promise<PostResult> {
-  const url = `${origin}/test/bbs.cgi`
-  const body = encodeShiftJisForm(fields)
-  const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer }
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await ctx.http.post(url, body, { headers })
-    const r = parseBbsCgiResponse(ctx.decode(res.body, encodingOf(res)))
-    if (r.status === 'confirm') continue
+  let url = `${origin}/test/bbs.cgi`
+  let current = fields
+  let lastHtml = ''
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await ctx.http.post(url, encodeShiftJisForm(current), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer },
+    })
+    const html = ctx.decode(res.body, encodingOf(res))
+    lastHtml = html
+    const r = parseBbsCgiResponse(html)
+    if (r.status === 'confirm') {
+      const form = parseConfirmForm(html)
+      current = { ...current, ...form.hidden }
+      if (form.action) url = new URL(form.action, url).href
+      continue
+    }
     if (r.status === 'ok') {
       // eddist は書き込んだレスの番号を x-resnum で返す
       const n = Number(res.headers['x-resnum'])
       return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
     }
-    if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}` }
-    return r
+    if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}`, html }
+    return { ...r, html }
   }
-  return { status: 'error', message: '書き込みの確認画面が繰り返し返されました' }
+  return { status: 'error', message: '書き込みの確認画面が繰り返し返されました', html: lastHtml }
 }
 
 function threadWebUrl(thread: ThreadSummary): string {
@@ -75,9 +85,17 @@ function threadWebUrl(thread: ThreadSummary): string {
   return `${u.origin}/test/read.cgi/${board}/${thread.key}/`
 }
 
-/** dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する) */
-function createdAtOf(key: string): Date | undefined {
-  return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
+/** これより先の日時は、スレが立った時刻としては信用しない */
+const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する)。
+ * 5ch のお知らせスレ(9240230830 など)は番号がわざと未来になっていて、勢いの計算が狂うので、未来の日時は「不明」にする
+ */
+function createdAtOf(key: string, now = Date.now()): Date | undefined {
+  if (!/^\d{10}$/.test(key)) return undefined
+  const date = new Date(Number(key) * 1000)
+  return date.getTime() > now + FUTURE_TOLERANCE_MS ? undefined : date
 }
 
 /** スレの URL(…/test/read.cgi/板/番号/)と板の URL(…/板/)を見分ける */

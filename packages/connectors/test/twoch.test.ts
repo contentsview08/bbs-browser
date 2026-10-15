@@ -161,3 +161,25 @@ describe('resolveUrl', () => {
     expect(await twoChConnector.resolveUrl('https://example.com/a/b/c.html', ctx)).toBeNull()
   })
 })
+
+describe('スレが立った日時', () => {
+  it('5ch のお知らせスレのような未来の dat 番号は「不明」にする(勢いの計算が狂わないように)', async () => {
+    const subject = '9240230830.dat<>★ UPLIFT プレミアム・サービスのお知らせ (2)\n1789358916.dat<>普通のスレ (10)\n'
+    const ctx: ConnectorContext = {
+      decode: (b, e) => new TextDecoder(e).decode(b),
+      http: {
+        get: async (): Promise<HttpResponse> => ({
+          status: 200,
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+          body: new TextEncoder().encode(subject),
+        }),
+        post: async () => {
+          throw new Error('この試験では書き込まない')
+        },
+      },
+    }
+    const [notice, normal] = await twoChConnector.listThreads({ connectorId: '2ch-compat', url: 'https://mevius.5ch.io/x/', name: 'x' }, ctx)
+    expect(notice.createdAt).toBeUndefined()
+    expect(normal.createdAt?.getTime()).toBe(1789358916 * 1000)
+  })
+})

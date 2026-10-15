@@ -560,7 +560,8 @@ export default function App() {
         onToggleList={narrow ? () => setListOpen((v) => !v) : undefined}
         listOpen={listOpen}
       />
-      <div className="relative flex-1 min-h-0 flex">
+      {/* overflow-hidden: しまったスレ一覧がサイドバーの上にはみ出して見えないように */}
+      <div className="relative flex-1 min-h-0 flex overflow-hidden">
 
       {/* 縦長のときは、スレ一覧を左から引き出す。外を押したら引っ込める */}
       {narrow && listOpen && <div className="absolute inset-0 z-20 bg-black/30" onClick={() => setListOpen(false)} />}
@@ -568,7 +569,8 @@ export default function App() {
         <div
           className={
             narrow
-              ? `absolute inset-y-0 left-0 z-30 flex max-w-[90%] transition-transform duration-200 ease-out ${listOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`
+              ? // 箱の幅は中身(スレ一覧)に合わせる。箱を狭く絞ると、しまったときに中身が残って見える
+                `absolute inset-y-0 left-0 z-30 flex w-max transition-[transform,visibility] duration-200 ease-out ${listOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full invisible'}`
               : 'contents'
           }
         >
@@ -585,7 +587,8 @@ export default function App() {
             void openThread(t)
           }}
           onRefresh={history ? openHistory : board ? () => openBoard(board) : undefined}
-          width={settings.threadPanelWidth}
+          // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
+          width={narrow ? Math.min(settings.threadPanelWidth, Math.floor(window.innerWidth * 0.85)) : settings.threadPanelWidth}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={history ? 'subject' : settings.threadSort}
           isNg={isNgThread}

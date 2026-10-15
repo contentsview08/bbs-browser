@@ -102,8 +102,9 @@ export interface NewThreadInput extends PostInput {
 export type PostResult =
   | { status: 'ok'; message: string; /** サーバーが教えてくれたときだけ */ resNumber?: number }
   /** 認証が要る。url をブラウザで開き、code を入れてから書き込み直す */
-  | { status: 'auth'; message: string; url?: string; code?: string }
-  | { status: 'error'; message: string }
+  | { status: 'auth'; message: string; url?: string; code?: string; html?: string }
+  /** html はサーバーが返したページそのもの(原因を調べるときに、そのまま見られるように) */
+  | { status: 'error'; message: string; html?: string }
 
 export interface ConnectorCapabilities {
   post: boolean

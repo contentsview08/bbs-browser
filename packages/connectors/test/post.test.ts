@@ -146,11 +146,39 @@ describe('createPost', () => {
     expect(sent).toHaveLength(1)
   })
 
-  it('5ch の書き込み確認は 1 回だけ送り直す', async () => {
-    const confirm = '<html><!-- 2ch_X:cookie --><head><title>確認</title></head><body>確認</body></html>'
+  it('5ch の書き込み確認は、フォームの隠し項目と送り先を引き継いで送り直す', async () => {
+    const confirm = `<html><!-- 2ch_X:cookie --><head><title>■ 書き込み確認 ■</title></head><body>
+      <form method=POST action="../test/bbs.cgi?guid=ON">
+        <input type=hidden name=subject value="">
+        <input type="hidden" value="akari" name="yuki">
+        <input TYPE=hidden NAME=MESSAGE VALUE="a">
+        <input type=submit value="上記全てを承諾して書き込む" name="submit">
+      </form></body></html>`
     const { ctx, sent } = fake([{ html: confirm }, { html: EDDIST_OK }])
     expect((await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)).status).toBe('ok')
     expect(sent).toHaveLength(2)
+    expect(sent[1].url).toBe('https://bbs.eddibb.cc/test/bbs.cgi?guid=ON')
+    expect(decodeForm(sent[1].body)).toMatchObject({
+      yuki: 'akari',
+      MESSAGE: 'a',
+      key: '1792065954',
+      submit: '上記全てを承諾して書き込む',
+    })
+  })
+
+  it('確認画面が繰り返されたら、そのページを返す(原因を見られるように)', async () => {
+    const confirm = '<html><!-- 2ch_X:cookie --><head><title>確認</title></head><body>確認</body></html>'
+    const { ctx, sent } = fake([{ html: confirm }, { html: confirm }, { html: confirm }])
+    const r = await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
+    expect(r.status).toBe('error')
+    expect(sent).toHaveLength(3)
+    expect(r.status === 'error' && r.html).toContain('2ch_X:cookie')
+  })
+
+  it('エラーのときもページを返す', async () => {
+    const { ctx } = fake([{ html: eddistError('NGワードが含まれています', 'NgWordDetected') }])
+    const r = await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
+    expect(r.status === 'error' && r.html).toContain('ＥＲＲＯＲ')
   })
 })
 

@@ -133,3 +133,29 @@ export function parseBbsCgiResponse(html: string): PostResult | { status: 'confi
   }
   return { status: 'error', message: message || title || '書き込めませんでした' }
 }
+
+/** タグの属性を読む(クォートあり・なし、並び順はばらばら) */
+function attrsOf(tag: string): Record<string, string> {
+  const attrs: Record<string, string> = {}
+  for (const m of tag.matchAll(/([a-zA-Z_:][-\w:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+    attrs[m[1].toLowerCase()] = decodeEntities(m[2] ?? m[3] ?? m[4] ?? '')
+  }
+  return attrs
+}
+
+/**
+ * 5ch の「書き込み確認」のフォームから、送り直すときに含める隠し項目(hidden・名前つきの送信ボタン)と送り先を読む。
+ * 隠し項目を付けずに同じ内容を送り直すと、確認画面が繰り返されることがある
+ */
+export function parseConfirmForm(html: string): { action?: string; hidden: Record<string, string> } {
+  const form = /<form\b[^>]*>/i.exec(html)
+  const action = form ? attrsOf(form[0]).action : undefined
+  const hidden: Record<string, string> = {}
+  for (const m of html.matchAll(/<input\b[^>]*>/gi)) {
+    const a = attrsOf(m[0])
+    const type = (a.type ?? '').toLowerCase()
+    // 隠し項目に加えて、名前つきの送信ボタン(「上記全てを承諾して書き込む」)の値も、ブラウザで押したときと同じく送る
+    if ((type === 'hidden' || type === 'submit') && a.name) hidden[a.name] = a.value ?? ''
+  }
+  return { action: action || undefined, hidden }
+}

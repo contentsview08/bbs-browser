@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "sql:default",
+    "sql:allow-execute",
     {
       "identifier": "http:default",
       "allow": [{ "url": "https://*:*/*" }, { "url": "http://*:*/*" }, { "url": "https://*/*" }, { "url": "http://*/*" }]

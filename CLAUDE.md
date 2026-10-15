@@ -10,6 +10,10 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - `packages/connectors` — コネクタ。純 TS で、Tauri・DOM・グローバルの `fetch` に依存させない。
   通信と文字コード変換はホストが渡す `ConnectorContext` 経由で行う(テストで偽サーバーを差し込めるように、
   また将来の外部コネクタをサンドボックスに入れられるように)。
+- `packages/logstore` — ログの保存。SQL は `SqlDb` 越しに実行し、アプリでは tauri-plugin-sql、テストでは sql.js を使う。
+  tauri-plugin-sql は接続プールなのでトランザクションに頼らない。途中で落ちても次の取得で直る順番で書く
+  (reset は cursor を先に NULL に、updated はレスを書いてから cursor を進める)。
+  スキーマを変えるときは `migrations/` に新しい番号のファイルを足し、`src-tauri/src/lib.rs` にも登録する。
 - `apps/desktop` — Tauri アプリ。`src/host/tauriContext.ts` が `ConnectorContext` の実装。
   Rust 側は公式プラグインの登録だけにとどめ、必要になるまで独自の Rust コードは書かない。
 
@@ -34,7 +38,6 @@ npm run typecheck
 
 ## 今後
 
-1. ログの保存(plugin-sql で SQLite。既読位置・Cursor・レス)
-2. hono-bbs の web(`~/git/koizumib/hono-bbs-merge/packages/web`)のデザインを移植
-3. 書き込み(2ch 互換は bbs.cgi。5ch は Cookie・認証の仕様が変わりやすいので要確認)
-4. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)
+1. hono-bbs の web(`~/git/koizumib/hono-bbs-merge/packages/web`)のデザインを移植
+2. 書き込み(2ch 互換は bbs.cgi。5ch は Cookie・認証の仕様が変わりやすいので要確認)
+3. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)

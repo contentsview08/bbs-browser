@@ -9,12 +9,15 @@
 packages/connectors/   コネクタ(純 TS。Tauri にも DOM にも依存しない)
   src/types.ts         Connector / ConnectorContext の定義
   src/twoch/           2ch 互換コネクタ(bbsmenu / subject.txt / dat、差分取得つき)
+packages/logstore/     ログの保存(SQLite)。既読位置・Cursor・レス・板一覧のキャッシュ
+  migrations/          スキーマ。Rust のマイグレーションと vitest の両方がこのファイルを読む
 apps/desktop/          Tauri アプリ(React + Vite)
-  src/host/            ConnectorContext の Tauri 版(plugin-http で通信)
-  src-tauri/           Rust 側。いまは公式プラグインの登録だけ
+  src/host/            ConnectorContext と LogStore の Tauri 版(plugin-http / plugin-sql)
+  src-tauri/           Rust 側。公式プラグインの登録とマイグレーションだけ
 ```
 
 コネクタは `fetch` を直接呼ばず、ホストから渡される `ctx.http` / `ctx.decode` だけを使う。
+ログの DB は `%APPDATA%\io.github.yumekui8.bbs-browser\bbs-browser.db`。
 
 ## 開発環境(Windows)
 

@@ -285,8 +285,52 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
 }
 
 function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' | 'update' | 'favorites'>) {
+  const [keyword, setKeyword] = useState('')
+  const addKeyword = () => {
+    const k = keyword.trim()
+    if (!k || s.keywords.includes(k)) return
+    update('keywords', [...s.keywords, k])
+    setKeyword('')
+  }
   return (
     <>
+      <Section
+        title="キーワード"
+        note="スレタイに含むスレを、スレ一覧の上にキーワードの帯をつけてまとめます。上に並んでいるキーワードほど先に出ます"
+      >
+        <form
+          className="flex gap-2 mb-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            addKeyword()
+          }}
+        >
+          <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例: 実況" className={`${INPUT} flex-1`} />
+          <button type="submit" className={BTN} disabled={!keyword.trim()}>
+            追加
+          </button>
+        </form>
+        <div className="flex flex-wrap gap-2">
+          {s.keywords.map((k) => (
+            <span
+              key={k}
+              className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-sm text-c-accent border border-c-accent rounded-[var(--chip-radius)]"
+              style={{ background: 'var(--c-accent-wash)' }}
+            >
+              {k}
+              <button
+                type="button"
+                className="p-0.5 rounded-full hover:bg-c-surface2"
+                title="外す"
+                onClick={() => update('keywords', s.keywords.filter((x) => x !== k))}
+              >
+                <span className="material-symbols-outlined text-sm leading-none">close</span>
+              </button>
+            </span>
+          ))}
+          {s.keywords.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
+        </div>
+      </Section>
       <Section title="最初の並び順" note="板を開いたときの並び順です。スレ一覧のタブでその場で変えられます">
         <Choice
           value={s.threadSort}

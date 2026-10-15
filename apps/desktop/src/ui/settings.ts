@@ -56,6 +56,8 @@ export interface AppSettings {
   lastBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
+  /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
+  keywords: string[]
   // タブ
   /** タブを使う。false ならタブ列を出さず、スレを開くたびに置き換える */
   tabsEnabled: boolean
@@ -116,6 +118,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startupBoardUrl: '@last',
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
+  keywords: [],
   tabsEnabled: true,
   openInNewTab: true,
   openTabs: [],

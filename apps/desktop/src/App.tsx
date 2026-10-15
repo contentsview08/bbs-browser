@@ -617,6 +617,7 @@ export default function App() {
           favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
           onNgThread={(title) => setNgDraft({ target: 'threadTitle', pattern: title })}
+          keywords={history ? undefined : settings.keywords}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />

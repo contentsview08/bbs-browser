@@ -11,6 +11,7 @@ import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
+import { normalizeForSearch } from '../utils/postBody'
 
 type SortMode = 'momentum' | 'newest'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -22,6 +23,20 @@ function cycleSort(s: SortState, mode: SortMode): SortState {
 }
 
 export const threadId = (t: ThreadSummary) => `${t.boardUrl}${t.key}`
+
+/** スレ一覧に差し込む帯(キーワードの見出しなど) */
+function Band(props: { icon: string; label: string; count: number; accent?: boolean }) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold ${props.accent ? 'text-c-accent' : 'text-c-text-muted'}`}
+      style={{ background: props.accent ? 'var(--c-accent-wash)' : 'var(--c-surface2)' }}
+    >
+      <span className="material-symbols-outlined text-sm leading-none">{props.icon}</span>
+      <span className="flex-1 min-w-0 truncate">{props.label}</span>
+      <span className="font-normal tabular-nums">{props.count}</span>
+    </div>
+  )
+}
 
 interface Props {
   title: string
@@ -40,6 +55,8 @@ interface Props {
   defaultSort: ThreadSort
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
+  /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
+  keywords?: string[]
   /** スレタイを NG に追加する画面を開く */
   onNgThread?: (title: string) => void
   /** 渡されたときだけ、チェックボックスで選んでまとめてログを消せる(閲覧履歴) */
@@ -110,6 +127,25 @@ export default function ThreadListPanel(props: Props) {
     return list
   }, [threads, stateOf, query, unreadOnly, sort, props.isNg, momenta])
 
+  /**
+   * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
+   * 複数のキーワードに当たるスレは、先に登録したキーワードの方に入れる
+   */
+  const keywordGroups = useMemo(() => {
+    const keywords = (props.keywords ?? []).map((k) => k.trim()).filter(Boolean)
+    if (keywords.length === 0) return undefined
+    const taken = new Set<string>()
+    const groups: { keyword: string; threads: ThreadSummary[] }[] = []
+    for (const keyword of keywords) {
+      const k = normalizeForSearch(keyword)
+      const hits = visible.filter((t) => !taken.has(threadId(t)) && normalizeForSearch(t.title).includes(k))
+      hits.forEach((t) => taken.add(threadId(t)))
+      if (hits.length > 0) groups.push({ keyword, threads: hits })
+    }
+    if (groups.length === 0) return undefined
+    return { groups, rest: visible.filter((t) => !taken.has(threadId(t))) }
+  }, [visible, props.keywords])
+
   // 右端のハンドルをドラッグして幅を変える。離したときに保存する
   const onResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -127,6 +163,43 @@ export default function ThreadListPanel(props: Props) {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
+  }
+
+  const renderThread = (t: ThreadSummary) => {
+    const id = threadId(t)
+    const card = (
+      <ThreadCard
+        key={id}
+        thread={t}
+        state={stateOf(t)}
+        isActive={props.activeId === id}
+        momentum={momenta.get(id) ?? 0}
+        momentumRank={ranks.get(id) ?? 0}
+        onClick={() => props.onOpen(t)}
+        onNg={props.onNgThread ? () => props.onNgThread!(t.title) : undefined}
+      />
+    )
+    if (!selectable) return card
+    return (
+      <div key={id} className="flex items-stretch">
+        <label className="flex items-center px-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selected.has(id)}
+            onChange={(e) =>
+              setSelected((s) => {
+                const next = new Set(s)
+                if (e.target.checked) next.add(id)
+                else next.delete(id)
+                return next
+              })
+            }
+            className="rounded"
+          />
+        </label>
+        <div className="flex-1 min-w-0">{card}</div>
+      </div>
+    )
   }
 
   return (
@@ -300,42 +373,20 @@ export default function ThreadListPanel(props: Props) {
               className="flex flex-col"
               style={{ padding: 'var(--list-padding-thread)', gap: 'var(--list-gap-thread)' }}
             >
-              {visible.map((t) => {
-                const id = threadId(t)
-                const card = (
-                  <ThreadCard
-                    key={id}
-                    thread={t}
-                    state={stateOf(t)}
-                    isActive={props.activeId === id}
-                    momentum={momenta.get(id) ?? 0}
-                    momentumRank={ranks.get(id) ?? 0}
-                    onClick={() => props.onOpen(t)}
-                    onNg={props.onNgThread ? () => props.onNgThread!(t.title) : undefined}
-                  />
-                )
-                if (!selectable) return card
-                return (
-                  <div key={id} className="flex items-stretch">
-                    <label className="flex items-center px-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(id)}
-                        onChange={(e) =>
-                          setSelected((s) => {
-                            const next = new Set(s)
-                            if (e.target.checked) next.add(id)
-                            else next.delete(id)
-                            return next
-                          })
-                        }
-                        className="rounded"
-                      />
-                    </label>
-                    <div className="flex-1 min-w-0">{card}</div>
-                  </div>
-                )
-              })}
+              {keywordGroups ? (
+                <>
+                  {keywordGroups.groups.map((g) => (
+                    <div key={g.keyword} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
+                      <Band icon="sell" label={g.keyword} count={g.threads.length} accent />
+                      {g.threads.map(renderThread)}
+                    </div>
+                  ))}
+                  {keywordGroups.rest.length > 0 && <Band icon="list" label="その他のスレ" count={keywordGroups.rest.length} />}
+                  {keywordGroups.rest.map(renderThread)}
+                </>
+              ) : (
+                visible.map(renderThread)
+              )}
             </div>
           )}
         </div>

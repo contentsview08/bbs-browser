@@ -7,6 +7,7 @@ import type { Post } from '@bbs-browser/connectors'
 import { anchorsIn, heatClass, imageUrlsIn, looksLikeAA, renderBody, type BodyHandlers } from '../utils/postBody'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { NgMode } from '../ui/settings'
+import Identicon from './Identicon'
 
 export interface PostHandlers extends BodyHandlers {
   /** レス番号を押した(このレスへの返信を出す) */
@@ -17,7 +18,7 @@ export interface PostHandlers extends BodyHandlers {
   onName: (name: string, el: HTMLElement) => void
   /** 本文を押した(アンカーツリーを出す。つながりがなければ何もしない) */
   onBody: (no: number, el: HTMLElement) => void
-  onImage: (urls: string[], index: number) => void
+  onImage: (urls: string[], index: number, post: Post) => void
   onAddNg: (rule: NgRule) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
@@ -34,6 +35,7 @@ interface Props {
   ngMode: NgMode
   showThumbnails: boolean
   aaAutoDetect: boolean
+  showIdenticon?: boolean
   /** 自動更新などで新しく届いたレス。一瞬光らせる */
   flash?: boolean
   /** 自分の書き込み */
@@ -237,6 +239,24 @@ function PostArticle(props: Props) {
         <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
       </div>
       <div className="flex items-center mb-2 flex-nowrap overflow-hidden gap-3">
+        {/* ID のアイコン(web 版と同じく、右下にその ID の書き込み数を重ねる) */}
+        {props.showIdenticon && post.id && (
+          <button
+            type="button"
+            className="relative flex-shrink-0 hover:opacity-80 mr-1"
+            onClick={(e) => handlers.onId(post.id!, e.currentTarget)}
+            title={`ID:${post.id} (${idCount})`}
+          >
+            <Identicon seed={post.id} size={22} />
+            {idCount >= 2 && (
+              <span
+                className={`absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(idCount) || 'text-c-text-muted'}`}
+              >
+                {idCount}
+              </span>
+            )}
+          </button>
+        )}
         <button
           type="button"
           className={`font-bold text-sm flex items-center gap-1 ${numHeat || 'text-c-text-muted'} ${anchorCount > 0 ? 'hover:opacity-80' : 'cursor-default'}`}
@@ -310,7 +330,7 @@ function PostArticle(props: Props) {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handlers.onImage(images, i)
+                  handlers.onImage(images, i, post)
                 }}
                 className="w-20 h-20 bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
               >

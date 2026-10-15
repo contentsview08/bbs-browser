@@ -63,6 +63,8 @@ export interface AppSettings {
   anchorPopup: AnchorPopup
   showThumbnails: boolean
   aaAutoDetect: boolean
+  /** レスの番号の左に、ID から作るアイコン(GitHub 風の Identicon)を出す */
+  showIdenticon: boolean
   /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
   showMinimap: boolean
   /** 画像の保存先フォルダ。空ならダウンロードフォルダ */
@@ -100,10 +102,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openTabs: [],
   activeTab: '',
   openPosition: 'unread',
-  anchorPopup: 'hover',
+  anchorPopup: 'click',
   showThumbnails: true,
   aaAutoDetect: true,
   showMinimap: true,
+  showIdenticon: false,
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,

@@ -299,8 +299,8 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
         <Choice
           value={s.anchorPopup}
           options={[
-            { key: 'hover', name: 'マウスを乗せたら出す' },
             { key: 'click', name: '押したら出す' },
+            { key: 'hover', name: 'マウスを乗せたら出す' },
           ]}
           onChange={(v) => update('anchorPopup', v)}
         />
@@ -337,6 +337,12 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           onChange={(v) => update('showThumbnails', v)}
           label="画像のサムネイルを出す"
           note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
+        />
+        <Toggle
+          checked={s.showIdenticon}
+          onChange={(v) => update('showIdenticon', v)}
+          label="ID のアイコンを出す"
+          note="ID から作る GitHub 風の模様を、レス番号の左に出します(同じ ID はいつも同じ模様)。右下の数字はその ID の書き込み数です"
         />
         <Toggle
           checked={s.showMinimap}

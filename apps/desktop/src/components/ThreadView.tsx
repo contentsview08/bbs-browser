@@ -161,7 +161,7 @@ export default function ThreadView(props: Props) {
   const lastMax = useRef(0)
   const [popups, setPopups] = useState<PopupEntry[]>([])
   const [popupFrame, setPopupFrame] = useState<{ rect: DOMRect; headerBottom: number }>()
-  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number }>()
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number; post: Post }>()
   const popupSeq = useRef(0)
   const hover = useRef<{ timer?: ReturnType<typeof setTimeout>; active: boolean; entered: boolean; x: number; y: number }>({
     active: false,
@@ -447,7 +447,7 @@ export default function ThreadView(props: Props) {
           openContent(`>>${no} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el)
         },
         onUrl: props.onUrl,
-        onImage: (urls, index) => setLightbox({ urls, index }),
+        onImage: (urls, index, post) => setLightbox({ urls, index, post }),
         onAddNg: props.onAddNg,
         onReply: canReply
           ? (no) => {
@@ -481,6 +481,7 @@ export default function ThreadView(props: Props) {
               ngMode="aborn"
               showThumbnails={settings.showThumbnails}
               aaAutoDetect={settings.aaAutoDetect}
+              showIdenticon={settings.showIdenticon}
               isOwn={ownNos.has(p.no)}
               isReplyToOwn={replyToOwn.has(p.no)}
               handlers={handlers}
@@ -507,6 +508,7 @@ export default function ThreadView(props: Props) {
             ngMode="aborn"
             showThumbnails={settings.showThumbnails}
             aaAutoDetect={settings.aaAutoDetect}
+            showIdenticon={settings.showIdenticon}
             isOwn={ownNos.has(p.no)}
             isReplyToOwn={replyToOwn.has(p.no)}
             handlers={handlers}
@@ -696,6 +698,7 @@ export default function ThreadView(props: Props) {
                       ngMode={settings.ngMode}
                       showThumbnails={settings.showThumbnails}
                       aaAutoDetect={settings.aaAutoDetect}
+                      showIdenticon={settings.showIdenticon}
                       flash={flashNos.has(p.no)}
                       isOwn={ownNos.has(p.no)}
                       isReplyToOwn={replyToOwn.has(p.no)}
@@ -792,6 +795,7 @@ export default function ThreadView(props: Props) {
         <Lightbox
           urls={lightbox.urls}
           index={lightbox.index}
+          post={lightbox.post}
           saveDir={settings.imageSaveDir}
           onIndex={(index) => setLightbox((l) => l && { ...l, index })}
           onClose={() => setLightbox(undefined)}

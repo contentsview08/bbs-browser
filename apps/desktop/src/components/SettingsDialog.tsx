@@ -24,12 +24,14 @@ interface Props {
   /** BBS メニューの板一覧。refresh なら取り直す(なければ保存してあるものを返す) */
   loadBoards: (site: SiteConfig, refresh: boolean) => Promise<Board[]>
   onToggleFavorite: (board: Board) => void
+  /** 板一覧でダブルクリックした板を開く(設定は閉じる) */
+  onOpenBoard: (board: Board) => void
   /** 最初に開く分類 */
   initialTab?: SettingsTab
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'refresh' | 'ng' | 'boards' | 'about'
+export type SettingsTab = 'display' | 'threads' | 'posts' | 'refresh' | 'ng' | 'boardlist' | 'boards' | 'about'
 type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string }[] = [
@@ -38,6 +40,7 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'posts', name: 'レス表示', icon: 'forum' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
   { key: 'ng', name: 'NG', icon: 'block' },
+  { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
 ]
@@ -435,75 +438,136 @@ function NgTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   )
 }
 
-/** BBS メニューから板を選ぶ。名前で絞り込み、☆で登録・解除する */
-function BoardPicker(props: {
-  site: SiteConfig
+/**
+ * 板一覧。BBS メニューを切り替え、カテゴリごとに開閉して板を探す。
+ * ☆ でお気に入りに登録・解除し、ダブルクリックでその板を開く
+ */
+function BoardListTab(props: {
+  sites: SiteConfig[]
+  initialSite?: string
   favorites: Board[]
   loadBoards: Props['loadBoards']
   onToggleFavorite: Props['onToggleFavorite']
+  onOpenBoard: Props['onOpenBoard']
 }) {
+  const [siteUrl, setSiteUrl] = useState(props.initialSite ?? props.sites[0]?.menuUrl)
+  const site = props.sites.find((s) => s.menuUrl === siteUrl)
   const [boards, setBoards] = useState<Board[]>()
   const [query, setQuery] = useState('')
+  const [openCats, setOpenCats] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
   const favoriteUrls = useMemo(() => new Set(props.favorites.map((b) => b.url)), [props.favorites])
 
   const load = async (refresh: boolean) => {
+    if (!site) return
     setBusy(true)
     setMessage(undefined)
     try {
-      setBoards(await props.loadBoards(props.site, refresh))
+      setBoards(await props.loadBoards(site, refresh))
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
   }
-  // 開いたときは保存してある板一覧を出す(なければ取りに行く)
+  // BBS メニューを切り替えたら、保存してある板一覧を出す(なければ取りに行く)
   useEffect(() => {
+    setBoards(undefined)
     void load(false)
-    // 開いたときに一度だけ読む
-  }, [])
+  }, [siteUrl])
 
-  const q = query.trim()
-  const shown = (boards ?? []).filter((b) => !q || b.name.includes(q) || (b.category ?? '').includes(q))
+  const grouped = useMemo(() => {
+    const q = query.trim()
+    const map = new Map<string, Board[]>()
+    for (const b of boards ?? []) {
+      if (q && !b.name.includes(q) && !(b.category ?? '').includes(q)) continue
+      const cat = b.category ?? '(未分類)'
+      map.set(cat, [...(map.get(cat) ?? []), b])
+    }
+    return [...map]
+  }, [boards, query])
+
+  const toggleCat = (cat: string) =>
+    setOpenCats((s) => {
+      const next = new Set(s)
+      if (next.has(cat)) next.delete(cat)
+      else next.add(cat)
+      return next
+    })
+
+  if (props.sites.length === 0) {
+    return <p className="text-sm text-c-text-muted">BBS メニューが登録されていません。「板とサイト」から追加してください</p>
+  }
 
   return (
-    <div className="px-3 pb-3">
-      <div className="flex gap-2 mb-2">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="板の名前やカテゴリで絞り込む"
-          autoFocus
-          className={`${INPUT} flex-1`}
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <Choice
+          value={siteUrl ?? ''}
+          options={props.sites.map((s) => ({ key: s.menuUrl, name: s.name }))}
+          onChange={setSiteUrl}
         />
-        <button type="button" className={ICON_BTN} title="板一覧を取り直す" onClick={() => void load(true)}>
+        <button type="button" className={`${ICON_BTN} ml-auto`} title="板一覧を取り直す" onClick={() => void load(true)}>
           <span className={`material-symbols-outlined text-lg ${busy ? 'animate-spin' : ''}`}>refresh</span>
         </button>
       </div>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="板の名前やカテゴリで絞り込む"
+        className={`${INPUT} w-full mb-1`}
+      />
+      <p className="text-xs text-c-text-muted mb-2">☆ でお気に入りに登録・解除、ダブルクリックでその板を開きます</p>
       {message && <p className="text-sm text-c-heat-very-hot mb-2">{message}</p>}
-      <div className="max-h-72 overflow-y-auto custom-scrollbar border border-c-border rounded-[var(--card-radius)] divide-y divide-c-border">
-        {shown.slice(0, 300).map((b) => {
-          const fav = favoriteUrls.has(b.url)
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-c-border rounded-[var(--card-radius)]">
+        {!boards && busy && <p className="px-3 py-2 text-sm text-c-text-muted">読み込み中...</p>}
+        {grouped.map(([cat, list]) => {
+          const open = query.trim() !== '' || openCats.has(cat)
           return (
-            <button
-              key={b.url}
-              type="button"
-              onClick={() => props.onToggleFavorite(b)}
-              className="w-full flex items-center gap-3 px-3 py-1.5 text-sm text-left hover:bg-c-surface2"
-            >
-              <span className={`material-symbols-outlined text-lg ${fav ? 'fill text-c-heat-warm' : 'text-c-text-muted'}`}>star</span>
-              <span className="text-c-text-body">{b.name}</span>
-              <span className="ml-auto text-xs text-c-text-muted truncate">{b.category}</span>
-            </button>
+            <div key={cat} className="border-b border-c-border last:border-b-0">
+              <button
+                type="button"
+                onClick={() => toggleCat(cat)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-c-text-strong hover:bg-c-surface2"
+              >
+                <span
+                  className="material-symbols-outlined text-base transition-transform"
+                  style={{ transform: open ? 'rotate(90deg)' : undefined }}
+                >
+                  chevron_right
+                </span>
+                <span className="flex-1 text-left">{cat}</span>
+                <span className="text-xs font-normal text-c-text-muted">{list.length}</span>
+              </button>
+              {open &&
+                list.map((b) => {
+                  const fav = favoriteUrls.has(b.url)
+                  return (
+                    <div
+                      key={b.url}
+                      onDoubleClick={() => props.onOpenBoard(b)}
+                      className="flex items-center gap-2 pl-8 pr-3 py-1 text-sm cursor-default select-none hover:bg-c-surface2"
+                      title="ダブルクリックで開く"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => props.onToggleFavorite(b)}
+                        className={fav ? 'text-c-heat-warm' : 'text-c-text-muted hover:text-c-text-strong'}
+                        title={fav ? 'お気に入りから外す' : 'お気に入りに追加'}
+                      >
+                        <span className={`material-symbols-outlined text-lg leading-none ${fav ? 'fill' : ''}`}>star</span>
+                      </button>
+                      <span className="text-c-text-body">{b.name}</span>
+                    </div>
+                  )
+                })}
+            </div>
           )
         })}
-        {boards && shown.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">見つかりません</p>}
-        {!boards && busy && <p className="px-3 py-2 text-sm text-c-text-muted">読み込み中...</p>}
+        {boards && grouped.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">見つかりません</p>}
       </div>
-      {shown.length > 300 && <p className="mt-1 text-xs text-c-text-muted">先頭の 300 件だけ出しています。絞り込んでください</p>}
     </div>
   )
 }
@@ -511,13 +575,12 @@ function BoardPicker(props: {
 function BoardsTab(
   props: Pick<
     Props,
-    'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite' | 'loadBoards' | 'onToggleFavorite'
-  >,
+    'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite'
+  > & { onShowBoardList: (menuUrl: string) => void },
 ) {
   const [favUrl, setFavUrl] = useState('')
   const [siteName, setSiteName] = useState('')
   const [siteUrl, setSiteUrl] = useState('')
-  const [picking, setPicking] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
 
@@ -535,7 +598,7 @@ function BoardsTab(
 
   return (
     <>
-      <Section title="お気に入り板" note="サイドバーの「お気に入り」に並ぶ板です。下の BBS メニューから選ぶか、板の URL を貼って登録します">
+      <Section title="お気に入り板" note="サイドバーの「お気に入り」に並ぶ板です。「板一覧」で ☆ を押すか、板の URL を貼って登録します">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {props.favorites.map((b) => (
             <div key={b.url} className="flex items-center gap-3 px-3 py-2 text-sm">
@@ -572,7 +635,7 @@ function BoardsTab(
         </form>
       </Section>
 
-      <Section title="BBS メニュー" note="掲示板の板一覧(bbsmenu.html か bbsmenu.json)です。「板を選ぶ」から、お気に入りに登録する板を探せます">
+      <Section title="BBS メニュー" note="掲示板の板一覧(bbsmenu.html か bbsmenu.json)です。「板一覧を見る」から、お気に入りに登録する板を探せます">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {props.sites.map((s) => (
             <div key={s.menuUrl}>
@@ -581,20 +644,15 @@ function BoardsTab(
                 <span className="flex-1 min-w-0 truncate text-xs text-c-text-muted">{s.menuUrl}</span>
                 <button
                   type="button"
-                  onClick={() => setPicking((p) => (p === s.menuUrl ? undefined : s.menuUrl))}
-                  className={`px-2 py-0.5 text-xs border rounded-[var(--btn-radius)] transition-colors ${
-                    picking === s.menuUrl ? 'border-c-accent text-c-accent' : 'border-c-border text-c-text-body hover:border-c-border-strong'
-                  }`}
+                  onClick={() => props.onShowBoardList(s.menuUrl)}
+                  className="px-2 py-0.5 text-xs border border-c-border rounded-[var(--btn-radius)] text-c-text-body hover:border-c-accent hover:text-c-accent transition-colors"
                 >
-                  板を選ぶ
+                  板一覧を見る
                 </button>
                 <button type="button" className={ICON_BTN} title="削除" onClick={() => props.onRemoveSite(s.menuUrl)}>
                   <span className="material-symbols-outlined text-base">delete</span>
                 </button>
               </div>
-              {picking === s.menuUrl && (
-                <BoardPicker site={s} favorites={props.favorites} loadBoards={props.loadBoards} onToggleFavorite={props.onToggleFavorite} />
-              )}
             </div>
           ))}
           {props.sites.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">まだありません</p>}
@@ -641,6 +699,8 @@ function AboutTab() {
 
 export default function SettingsDialog(props: Props) {
   const [tab, setTab] = useState<Tab>(props.initialTab ?? 'display')
+  /** 「板とサイト」から板一覧へ移るときに、どの BBS メニューを出すか */
+  const [listSite, setListSite] = useState<string>()
 
   return (
     <div className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
@@ -671,13 +731,34 @@ export default function SettingsDialog(props: Props) {
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5">
+          <div
+            className={`flex-1 min-h-0 px-6 py-5 ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}
+          >
             {tab === 'display' && <DisplayTab {...props} />}
             {tab === 'threads' && <ThreadsTab {...props} />}
             {tab === 'posts' && <PostsTab {...props} />}
             {tab === 'refresh' && <RefreshTab {...props} />}
             {tab === 'ng' && <NgTab {...props} />}
-            {tab === 'boards' && <BoardsTab {...props} />}
+            {tab === 'boardlist' && (
+              <BoardListTab
+                key={listSite}
+                sites={props.sites}
+                initialSite={listSite}
+                favorites={props.favorites}
+                loadBoards={props.loadBoards}
+                onToggleFavorite={props.onToggleFavorite}
+                onOpenBoard={props.onOpenBoard}
+              />
+            )}
+            {tab === 'boards' && (
+              <BoardsTab
+                {...props}
+                onShowBoardList={(menuUrl) => {
+                  setListSite(menuUrl)
+                  setTab('boardlist')
+                }}
+              />
+            )}
             {tab === 'about' && <AboutTab />}
           </div>
         </div>

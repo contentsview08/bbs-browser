@@ -132,6 +132,9 @@ export default function ThreadView(props: Props) {
   /** レス一覧とミニマップの領域。ポップアップの幅をこれに合わせる */
   const viewRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
+  const headerInScroll = settings.replyLayout === 'bottom'
+  /** スクロール位置の計算で差し引くヘッダーの高さ(ヘッダーがスクロール領域の外にあれば 0) */
+  const headerOffset = () => (ref.current?.contains(headerRef.current) ? (headerRef.current?.offsetHeight ?? 0) : 0)
   const listRef = useRef<HTMLDivElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
   useEffect(() => {
@@ -140,7 +143,8 @@ export default function ThreadView(props: Props) {
     const observer = new ResizeObserver(() => setHeaderHeight(el.offsetHeight))
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+    // 書き込み欄の位置を変えるとヘッダーが作り直されるので、見張り直す
+  }, [headerInScroll])
   const positioned = useRef(false)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
@@ -253,7 +257,7 @@ export default function ThreadView(props: Props) {
     const root = ref.current
     const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)
     if (!root || !el) return
-    const headerH = headerRef.current?.offsetHeight ?? 0
+    const headerH = headerOffset()
     const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - 8
     root.scrollTo({ top, behavior })
   }, [])
@@ -263,7 +267,7 @@ export default function ThreadView(props: Props) {
     const root = ref.current
     if (!root) return
     const bottom = root.getBoundingClientRect().bottom
-    const viewTop = root.getBoundingClientRect().top + (headerRef.current?.offsetHeight ?? 0)
+    const viewTop = root.getBoundingClientRect().top + headerOffset()
     let last = 0
     let top: ScrollPosition | undefined
     for (const el of root.querySelectorAll<HTMLElement>(':scope [data-no]')) {
@@ -290,7 +294,7 @@ export default function ThreadView(props: Props) {
     const saved = props.initialPosition
     const savedEl = saved && root.querySelector<HTMLElement>(`[data-no="${saved.no}"]`)
     if (saved && savedEl) {
-      const viewTop = root.getBoundingClientRect().top + (headerRef.current?.offsetHeight ?? 0)
+      const viewTop = root.getBoundingClientRect().top + headerOffset()
       root.scrollTop += savedEl.getBoundingClientRect().top - viewTop - saved.offset
     } else if (settings.openPosition === 'bottom') root.scrollTop = root.scrollHeight
     else if (settings.openPosition === 'unread' && unreadFrom > 1) {
@@ -444,15 +448,148 @@ export default function ThreadView(props: Props) {
 
   const mainHandlers = useMemo(() => handlersFor(0), [handlersFor])
 
-  return (
-    <main
-      className={`flex-1 min-w-0 min-h-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'} bg-[var(--c-thread-view-bg)] overflow-hidden`}
+  // スレタイ・絞り込みの帯。書き込み欄が下のときはスクロール領域の中に置いて(すりガラス越しにレスが透ける)、
+  // 右のときはスクロール領域の外に出して横いっぱいに置く(書き込み欄はその下に並ぶ)
+  const headerBlock = (
+    <div
+      ref={headerRef}
+      className={`${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : 'bg-[var(--c-thread-view-bg)]'} border-b border-c-border flex-shrink-0`}
     >
+        <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
+          <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onBlur={() => {
+                if (!query.trim()) setSearchActive(false)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setQuery('')
+                  setSearchActive(false)
+                }
+              }}
+              placeholder="レス検索..."
+              className={`absolute inset-y-0 right-0 z-10 bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0 transition-[left,opacity] duration-300 ease-out ${
+                searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
+              }`}
+            />
+            <h2
+              className="font-bold truncate text-base cursor-pointer hover:text-c-accent transition-colors"
+              style={{ color: 'var(--thread-title-color, var(--c-text-strong))' }}
+              onClick={() => {
+                if (ref.current) ref.current.scrollTop = 0
+              }}
+              title="クリックで先頭へスクロール"
+            >
+              {log.title}
+            </h2>
+            {log.status === 'archived' && (
+              <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-c-surface3 text-c-text-muted">
+                dat落ち
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 ml-4">
+            <button
+              type="button"
+              onClick={() => setSearchActive((v) => !v)}
+              className={`${ICON_BTN} ${searchActive || query ? 'text-c-accent' : ''}`}
+              title="レス検索"
+            >
+              <span className="material-symbols-outlined text-xl">search</span>
+            </button>
+            {settings.autoRefreshSec > 0 && (
+              <span className="flex items-center gap-1 text-xs text-c-accent" title="自動更新中">
+                <span className="material-symbols-outlined text-base">autorenew</span>
+                {settings.autoRefreshSec}秒
+              </span>
+            )}
+            <span className="text-xs text-c-text-muted tabular-nums">{log.posts.length} レス</span>
+            <button
+              type="button"
+              className={ICON_BTN}
+              title="いちばん下へ"
+              onClick={() => ref.current?.scrollTo({ top: ref.current.scrollHeight })}
+            >
+              <span className="material-symbols-outlined text-xl">vertical_align_bottom</span>
+            </button>
+            {props.onSubmitPost && (
+              <button
+                type="button"
+                className={ICON_BTN}
+                title={replyLayout === 'bottom' ? '書き込み欄を右に置く' : '書き込み欄を下に置く'}
+                onClick={() => props.onChangeReplyLayout(replyLayout === 'bottom' ? 'right' : 'bottom')}
+              >
+                <span className="material-symbols-outlined text-xl">{replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda'}</span>
+              </button>
+            )}
+            <button type="button" className={ICON_BTN} title="ログを削除して閉じる (Delete)" onClick={props.onDeleteLog}>
+              <span className="material-symbols-outlined text-xl">delete</span>
+            </button>
+            <button type="button" className={ICON_BTN} title="ブラウザで開く" onClick={props.onOpenInBrowser}>
+              <span className="material-symbols-outlined text-xl">open_in_new</span>
+            </button>
+            <button type="button" className={ICON_BTN} title="更新" onClick={props.onRefresh} disabled={props.loading}>
+              <span className={`material-symbols-outlined text-xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
+            </button>
+          </div>
+        </header>
+        <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
+          {FILTERS.map(({ key, label, icon }) => {
+            const active = filters.has(key)
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() =>
+                  setFilters((f) => {
+                    const next = new Set(f)
+                    if (next.has(key)) next.delete(key)
+                    else next.add(key)
+                    return next
+                  })
+                }
+                className={`relative shrink-0 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                  active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
+                }`}
+                style={{ paddingTop: 10, paddingBottom: 10 }}
+              >
+                <span className="material-symbols-outlined text-xl leading-none">{icon}</span>
+                {label}
+                {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setFilters(new Set())}
+            className={`relative shrink-0 transition-colors ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+            style={{ paddingTop: 10, paddingBottom: 10 }}
+          >
+            すべて
+            {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+          </button>
+          {visibleNos && (
+            <span className="ml-auto shrink-0 text-xs text-c-text-muted tabular-nums">
+              {visibleNos.size} / {log.posts.length} レス
+            </span>
+          )}
+        </div>
+      </div>
+  )
+
+  return (
+    <main className="flex-1 min-w-0 min-h-0 flex flex-col bg-[var(--c-thread-view-bg)] overflow-hidden">
+      {!headerInScroll && headerBlock}
+      <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
       <div
         ref={topPull.indicatorRef}
         className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
-        style={{ top: headerHeight, opacity: 0, transform: `translateY(${PULL_HIDDEN_Y}px)` }}
+        style={{ top: headerInScroll ? headerHeight : 0, opacity: 0, transform: `translateY(${PULL_HIDDEN_Y}px)` }}
       >
         <PullSpinner iconRef={topPull.iconRef} />
       </div>
@@ -468,131 +605,7 @@ export default function ThreadView(props: Props) {
         onWheel={onWheel}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
-        <div ref={headerRef} className="sticky top-0 z-10 frosted-glass border-b border-c-border flex-shrink-0">
-          <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
-            <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
-              <input
-                ref={searchRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onBlur={() => {
-                  if (!query.trim()) setSearchActive(false)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setQuery('')
-                    setSearchActive(false)
-                  }
-                }}
-                placeholder="レス検索..."
-                className={`absolute inset-y-0 right-0 z-10 bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0 transition-[left,opacity] duration-300 ease-out ${
-                  searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
-                }`}
-              />
-              <h2
-                className="font-bold truncate text-base cursor-pointer hover:text-c-accent transition-colors"
-                style={{ color: 'var(--thread-title-color, var(--c-text-strong))' }}
-                onClick={() => {
-                  if (ref.current) ref.current.scrollTop = 0
-                }}
-                title="クリックで先頭へスクロール"
-              >
-                {log.title}
-              </h2>
-              {log.status === 'archived' && (
-                <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-c-surface3 text-c-text-muted">
-                  dat落ち
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 ml-4">
-              <button
-                type="button"
-                onClick={() => setSearchActive((v) => !v)}
-                className={`${ICON_BTN} ${searchActive || query ? 'text-c-accent' : ''}`}
-                title="レス検索"
-              >
-                <span className="material-symbols-outlined text-xl">search</span>
-              </button>
-              {settings.autoRefreshSec > 0 && (
-                <span className="flex items-center gap-1 text-xs text-c-accent" title="自動更新中">
-                  <span className="material-symbols-outlined text-base">autorenew</span>
-                  {settings.autoRefreshSec}秒
-                </span>
-              )}
-              <span className="text-xs text-c-text-muted tabular-nums">{log.posts.length} レス</span>
-              <button
-                type="button"
-                className={ICON_BTN}
-                title="いちばん下へ"
-                onClick={() => ref.current?.scrollTo({ top: ref.current.scrollHeight })}
-              >
-                <span className="material-symbols-outlined text-xl">vertical_align_bottom</span>
-              </button>
-              {props.onSubmitPost && (
-                <button
-                  type="button"
-                  className={ICON_BTN}
-                  title={replyLayout === 'bottom' ? '書き込み欄を右に置く' : '書き込み欄を下に置く'}
-                  onClick={() => props.onChangeReplyLayout(replyLayout === 'bottom' ? 'right' : 'bottom')}
-                >
-                  <span className="material-symbols-outlined text-xl">{replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda'}</span>
-                </button>
-              )}
-              <button type="button" className={ICON_BTN} title="ログを削除して閉じる (Delete)" onClick={props.onDeleteLog}>
-                <span className="material-symbols-outlined text-xl">delete</span>
-              </button>
-              <button type="button" className={ICON_BTN} title="ブラウザで開く" onClick={props.onOpenInBrowser}>
-                <span className="material-symbols-outlined text-xl">open_in_new</span>
-              </button>
-              <button type="button" className={ICON_BTN} title="更新" onClick={props.onRefresh} disabled={props.loading}>
-                <span className={`material-symbols-outlined text-xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
-              </button>
-            </div>
-          </header>
-          <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
-            {FILTERS.map(({ key, label, icon }) => {
-              const active = filters.has(key)
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() =>
-                    setFilters((f) => {
-                      const next = new Set(f)
-                      if (next.has(key)) next.delete(key)
-                      else next.add(key)
-                      return next
-                    })
-                  }
-                  className={`relative shrink-0 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-                    active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
-                  }`}
-                  style={{ paddingTop: 10, paddingBottom: 10 }}
-                >
-                  <span className="material-symbols-outlined text-xl leading-none">{icon}</span>
-                  {label}
-                  {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-                </button>
-              )
-            })}
-            <button
-              type="button"
-              onClick={() => setFilters(new Set())}
-              className={`relative shrink-0 transition-colors ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-              style={{ paddingTop: 10, paddingBottom: 10 }}
-            >
-              すべて
-              {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-            </button>
-            {visibleNos && (
-              <span className="ml-auto shrink-0 text-xs text-c-text-muted tabular-nums">
-                {visibleNos.size} / {log.posts.length} レス
-              </span>
-            )}
-          </div>
-        </div>
+        {headerInScroll && headerBlock}
 
         <div ref={listRef} className="flex-1 flex flex-col" style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)' }}>
           {log.posts.length === 0 ? (
@@ -635,7 +648,7 @@ export default function ThreadView(props: Props) {
           ownNos={ownNos}
           replyToOwn={replyToOwn}
           unreadFrom={unreadFrom}
-          topOffset={headerHeight}
+          topOffset={headerInScroll ? headerHeight : 0}
           onJump={scrollToPost}
         />
       )}
@@ -665,6 +678,7 @@ export default function ThreadView(props: Props) {
           </div>
         </>
       )}
+      </div>
 
       <PostPopup
         popups={popups}

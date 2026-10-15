@@ -531,7 +531,7 @@ export default function App() {
         historyActive={history !== undefined}
         onOpenHistory={openHistory}
         onOpenSettings={() => setSettingsTab('display')}
-        onManageBoards={() => setSettingsTab('boards')}
+        onManageBoards={() => setSettingsTab('boardlist')}
       />
 
       {settingsLoaded && (
@@ -619,6 +619,10 @@ export default function App() {
           initialTab={settingsTab}
           loadBoards={loadBoards}
           onToggleFavorite={(b) => void toggleFavorite(b)}
+          onOpenBoard={(b) => {
+            setSettingsTab(undefined)
+            void openBoard(b)
+          }}
           settings={settings}
           update={updateSetting}
           favorites={favorites ?? []}

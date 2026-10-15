@@ -2,6 +2,7 @@
 // 返信・削除・通報など、web 版の API に依存する機能は外している。
 
 import { memo, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { anchorsIn, heatClass, imageUrlsIn, looksLikeAA, renderBody, type BodyHandlers } from '../utils/postBody'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
@@ -42,46 +43,78 @@ interface Props {
 
 const HEAD_TEXT = 'text-xs'
 
+/**
+ * レスの ⋯ メニュー。レスのヘッダー行ははみ出しを隠す設定なので、メニューは body の直下に出し、
+ * ボタンの位置から場所を決める(ポップアップの中のレスでも使えるよう、ポップアップより手前に出す)
+ */
 function ActionMenu({ items }: { items: { label: string; icon: string; onClick: () => void }[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number }>()
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!open) return
+    if (!pos) return
     const close = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!menuRef.current?.contains(t) && !buttonRef.current?.contains(t)) setPos(undefined)
     }
+    const closeOnScroll = () => setPos(undefined)
     document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [open])
+    window.addEventListener('wheel', closeOnScroll, { passive: true })
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      window.removeEventListener('wheel', closeOnScroll)
+    }
+  }, [pos])
+
+  const toggle = () => {
+    if (pos) return setPos(undefined)
+    const rect = buttonRef.current!.getBoundingClientRect()
+    const right = window.innerWidth - rect.right
+    // 下に入りきらなければ上に開く
+    const below = window.innerHeight - rect.bottom
+    setPos(below < 260 ? { bottom: window.innerHeight - rect.top + 4, right } : { top: rect.bottom + 4, right })
+  }
+
   return (
-    <div className="relative flex-shrink-0" ref={ref}>
+    <>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="px-1 text-c-text-muted hover:text-c-text-strong opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={(e) => {
+          e.stopPropagation()
+          toggle()
+        }}
+        className={`flex-shrink-0 px-1 text-c-text-muted hover:text-c-text-strong transition-opacity ${pos ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         title="メニュー"
       >
         <span className="material-symbols-outlined text-base leading-none">more_horiz</span>
       </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-52 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-30 text-sm">
-          {items.map((it) => (
-            <button
-              key={it.label}
-              type="button"
-              onClick={() => {
-                it.onClick()
-                setOpen(false)
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors"
-            >
-              <span className="material-symbols-outlined text-base">{it.icon}</span>
-              <span className="flex-1 text-left">{it.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-52 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm"
+            style={pos}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {items.map((it) => (
+              <button
+                key={it.label}
+                type="button"
+                onClick={() => {
+                  it.onClick()
+                  setPos(undefined)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors"
+              >
+                <span className="material-symbols-outlined text-base">{it.icon}</span>
+                <span className="flex-1 text-left">{it.label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

@@ -5,6 +5,7 @@ import type { Board, SiteConfig } from '@bbs-browser/connectors'
 import {
   COLOR_SCHEMES,
   FONT_FAMILIES,
+  PANELS,
   type AppSettings,
   type FontSize,
   type UpdateSetting,
@@ -210,7 +211,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           あのイーハトーヴォのすきとおった風、0123456789 ABCabc
         </p>
       </Section>
-      <Section title="背景画像" note="画面全体に薄く重ねます。選んだ画像はアプリのフォルダにコピーして使います">
+      <Section title="背景画像" note="パネルの後ろに置きます。下の「パネルの不透明度」でパネルを透かすと見えます。選んだ画像はアプリのフォルダにコピーして使います">
         <div className="flex items-center gap-3">
           <div
             className="w-24 h-16 flex-shrink-0 rounded-[var(--card-radius)] border border-c-border bg-c-surface2 bg-cover bg-center"
@@ -242,7 +243,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
               <input
                 type="range"
                 min={0}
-                max={60}
+                max={100}
                 value={Math.round(s.backgroundOpacity * 100)}
                 onChange={(e) => update('backgroundOpacity', Number(e.target.value) / 100)}
                 className="flex-1"
@@ -252,6 +253,36 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
             </label>
           </div>
         </div>
+      </Section>
+      <Section title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
+        <div className="space-y-1.5">
+          {PANELS.map((p) => {
+            const v = s.panelAlpha[p.key] ?? 1
+            return (
+              <label key={p.key} className="flex items-center gap-3 text-sm text-c-text-body">
+                <span className="w-56 flex-shrink-0 truncate">{p.name}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(v * 100)}
+                  onChange={(e) => update('panelAlpha', { ...s.panelAlpha, [p.key]: Number(e.target.value) / 100 })}
+                  className="flex-1"
+                />
+                <span className="w-10 text-right tabular-nums text-c-text-muted">{Math.round(v * 100)}%</span>
+              </label>
+            )
+          })}
+        </div>
+        <button
+          type="button"
+          className="mt-2 text-xs text-c-text-muted hover:text-c-accent"
+          onClick={() =>
+            update('panelAlpha', { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 })
+          }
+        >
+          すべて 100% に戻す
+        </button>
       </Section>
       <Section title="文字サイズ">
         <Choice

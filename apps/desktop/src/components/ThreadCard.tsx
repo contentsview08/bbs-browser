@@ -38,10 +38,8 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
   return (
     <div
       onClick={onClick}
-      className={`group cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
-        isActive
-          ? 'bg-[var(--card-selected-bg)] border-[var(--card-selected-border-color)]'
-          : 'bg-[var(--card-bg)] border-[var(--card-border-color)] hover:bg-c-surface2'
+      className={`group card-thread cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
+        isActive ? 'card-selected border-[var(--card-selected-border-color)]' : 'border-[var(--card-border-color)]'
       }`}
       style={{
         borderStyle: 'solid',

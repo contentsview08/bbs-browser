@@ -80,7 +80,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   )
 
   return (
-    <div className="h-full w-full flex flex-col bg-c-surface px-4 py-3 overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} />}
 
       <div className={`flex items-center gap-2 mb-2 ${right ? 'flex-wrap' : ''}`}>

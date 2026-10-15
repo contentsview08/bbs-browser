@@ -82,7 +82,7 @@ export default function TabBar(props: Props) {
     : []
 
   return (
-    <div className="flex-shrink-0 flex items-end pt-1.5" style={{ background: 'var(--tabbar-bg)' }}>
+    <div className="flex-shrink-0 flex items-end pt-1.5 bg-panel-tabbar">
       <div
         ref={stripRef}
         className="flex-1 min-w-0 flex items-end overflow-x-auto no-scrollbar px-2"
@@ -106,9 +106,9 @@ export default function TabBar(props: Props) {
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY })
               }}
               title={t.title}
-              style={{ width: tabWidth, background: active ? 'var(--tab-active-bg)' : undefined }}
+              style={{ width: tabWidth, background: active ? 'var(--tab-active-fill)' : undefined }}
               className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 rounded-t-lg cursor-pointer select-none text-xs transition-colors ${
-                active ? 'z-10 text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-bg)_50%,transparent)]'
+                active ? 'z-10 text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'
               } ${t.archived ? 'opacity-60' : ''}`}
             >
               {active && (
@@ -116,11 +116,11 @@ export default function TabBar(props: Props) {
                   {/* タブの下の両端の、スレ表示へ流れ込む内側の曲線 */}
                   <span
                     className="absolute bottom-0 -left-2 w-2 h-2 pointer-events-none"
-                    style={{ background: 'radial-gradient(circle at 0 0, transparent 8px, var(--tab-active-bg) 8.5px)' }}
+                    style={{ background: 'radial-gradient(circle at 0 0, transparent 8px, var(--tab-active-fill) 8.5px)' }}
                   />
                   <span
                     className="absolute bottom-0 -right-2 w-2 h-2 pointer-events-none"
-                    style={{ background: 'radial-gradient(circle at 100% 0, transparent 8px, var(--tab-active-bg) 8.5px)' }}
+                    style={{ background: 'radial-gradient(circle at 100% 0, transparent 8px, var(--tab-active-fill) 8.5px)' }}
                   />
                 </>
               )}

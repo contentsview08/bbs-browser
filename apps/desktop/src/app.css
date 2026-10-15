@@ -133,3 +133,42 @@ body,
 :root.dark {
   --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 70%, black 30%);
 }
+
+/* ---------- パネルごとの不透明度 ----------
+   背景画像を後ろに置き、各パネルの背景色だけを --alpha-* の割合で透かす(文字は透かさない)。
+   --alpha-* は src/ui/settings.ts が <html> に入れる(0〜1) */
+.bg-panel-addressbar {
+  background: color-mix(in srgb, var(--c-surface) calc(var(--alpha-address-bar, 1) * 100%), transparent);
+}
+.bg-panel-sidebar {
+  background: color-mix(in srgb, var(--c-surface) calc(var(--alpha-sidebar, 1) * 100%), transparent);
+}
+.bg-panel-tabbar {
+  background: color-mix(in srgb, var(--tabbar-bg) calc(var(--alpha-tabs, 1) * 100%), transparent);
+}
+.bg-panel-list {
+  background: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) calc(var(--alpha-thread-list, 1) * 100%), transparent);
+}
+.bg-panel-view {
+  background: color-mix(in srgb, var(--c-thread-view-bg) calc(var(--alpha-thread-view, 1) * 100%), transparent);
+}
+.bg-panel-reply {
+  background: color-mix(in srgb, var(--c-surface) calc(var(--alpha-reply-form, 1) * 100%), transparent);
+}
+/* 開いているタブとスレのヘッダーは、同じ色・同じ透け方にしてつなげる */
+:root {
+  --tab-active-fill: color-mix(in srgb, var(--tab-active-bg) calc(var(--alpha-thread-header, 1) * 100%), transparent);
+}
+.bg-panel-thread-header {
+  background: var(--tab-active-fill);
+}
+/* スレ一覧のカードも、スレ一覧と同じ割合で透かす */
+.card-thread {
+  background: color-mix(in srgb, var(--card-bg) calc(var(--alpha-thread-list, 1) * 100%), transparent);
+}
+.card-thread:hover {
+  background: color-mix(in srgb, var(--c-surface2) calc(var(--alpha-thread-list, 1) * 100%), transparent);
+}
+.card-thread.card-selected {
+  background: color-mix(in srgb, var(--card-selected-bg) calc(var(--alpha-thread-list, 1) * 100%), transparent);
+}

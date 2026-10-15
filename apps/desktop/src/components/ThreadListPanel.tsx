@@ -204,8 +204,8 @@ export default function ThreadListPanel(props: Props) {
 
   return (
     <section
-      style={{ width, background: 'var(--c-panel-bg, var(--c-surface2))' }}
-      className="flex-shrink-0 flex flex-col relative overflow-hidden border-r border-c-border"
+      style={{ width }}
+      className="flex-shrink-0 flex flex-col relative overflow-hidden border-r border-c-border bg-panel-list"
     >
       <div
         className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-c-accent/30 transition-colors z-20"

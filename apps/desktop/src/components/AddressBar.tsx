@@ -19,7 +19,7 @@ export default function AddressBar({ currentUrl, onOpen, onToggleList, listOpen 
   const [draft, setDraft] = useState<string>()
 
   return (
-    <div data-tauri-drag-region className="flex-shrink-0 h-10 flex items-center bg-c-surface border-b border-c-border select-none">
+    <div data-tauri-drag-region className="flex-shrink-0 h-10 flex items-center bg-panel-addressbar border-b border-c-border select-none">
       <div data-tauri-drag-region className="flex-1 min-w-0 flex items-center gap-2 px-3">
         {onToggleList && (
           <button

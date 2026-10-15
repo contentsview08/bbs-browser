@@ -30,6 +30,19 @@ export interface SavedTab {
   createdAt?: number
 }
 
+/** 不透明度を変えられるパネル */
+export type PanelKey = 'addressBar' | 'sidebar' | 'tabs' | 'threadList' | 'threadHeader' | 'threadView' | 'replyForm'
+
+export const PANELS: { key: PanelKey; name: string; cssVar: string }[] = [
+  { key: 'addressBar', name: '一番上の帯(URL バー)', cssVar: '--alpha-address-bar' },
+  { key: 'sidebar', name: 'サイドバー', cssVar: '--alpha-sidebar' },
+  { key: 'tabs', name: 'タブ', cssVar: '--alpha-tabs' },
+  { key: 'threadList', name: 'スレ一覧', cssVar: '--alpha-thread-list' },
+  { key: 'threadHeader', name: 'スレのヘッダー(開いているタブも)', cssVar: '--alpha-thread-header' },
+  { key: 'threadView', name: 'スレ表示', cssVar: '--alpha-thread-view' },
+  { key: 'replyForm', name: '書き込み欄', cssVar: '--alpha-reply-form' },
+]
+
 export interface AppSettings {
   // 表示
   scheme: ColorScheme
@@ -41,8 +54,10 @@ export interface AppSettings {
   threadPanelWidth: number
   /** 背景画像(アプリのデータフォルダにコピーしたもののパス)。空なら出さない */
   backgroundImage: string
-  /** 背景画像の濃さ(0〜1)。画面の上に重ねるので、小さめにする */
+  /** 背景画像の濃さ(0〜1)。画像はパネルの後ろに置くので、パネルを透かしたところに見える */
   backgroundOpacity: number
+  /** パネルごとの不透明度(0〜1)。背景色だけを透かす */
+  panelAlpha: Record<PanelKey, number>
   /** サイドバーをしまって、アイコンだけの細い帯にする */
   sidebarCollapsed: boolean
   replyLayout: ReplyLayout
@@ -110,7 +125,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customFont: '',
   threadPanelWidth: 420,
   backgroundImage: '',
-  backgroundOpacity: 0.15,
+  backgroundOpacity: 1,
+  panelAlpha: { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 },
   sidebarCollapsed: false,
   replyLayout: 'bottom',
   replyHeight: 170,
@@ -178,6 +194,7 @@ function apply(s: AppSettings) {
       ? `'${s.customFont.replace(/'/g, "\\'")}', ${FONT_FAMILIES[0].css}`
       : preset.css
   root.style.setProperty('--app-font', css)
+  for (const p of PANELS) root.style.setProperty(p.cssVar, String(s.panelAlpha[p.key] ?? 1))
 }
 
 export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void

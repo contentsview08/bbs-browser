@@ -582,7 +582,7 @@ export default function ThreadView(props: Props) {
   const headerBlock = (
     <div
       ref={headerRef}
-      className={`${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : 'bg-[var(--tab-active-bg)]'} border-b border-c-border flex-shrink-0`}
+      className={`${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
     >
         <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
           <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
@@ -711,7 +711,7 @@ export default function ThreadView(props: Props) {
   )
 
   return (
-    <main className="flex-1 min-w-0 min-h-0 flex flex-col bg-[var(--c-thread-view-bg)] overflow-hidden">
+    <main className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden">
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">

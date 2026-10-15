@@ -561,7 +561,18 @@ export default function App() {
     : (board?.url ?? '')
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-c-base text-c-text-body">
+    // isolate: 背景画像(-z-10)を、この枠の背景の上・パネルの下に置くため
+    <div className="relative isolate flex h-full w-full overflow-hidden bg-c-base text-c-text-body">
+      {/* 背景画像。パネルの後ろに置き、パネルを透かしたところに見える */}
+      {settings.backgroundImage && settings.backgroundOpacity > 0 && (
+        <div
+          className="absolute inset-0 -z-10 pointer-events-none bg-cover bg-center"
+          style={{
+            backgroundImage: `url("${backgroundImageUrl(settings.backgroundImage)}")`,
+            opacity: settings.backgroundOpacity,
+          }}
+        />
+      )}
       <Sidebar
         favorites={favorites ?? []}
         activeBoardUrl={board?.url}
@@ -669,7 +680,7 @@ export default function App() {
             nonameName={boardInfos.get(activeTab.thread.boardUrl)?.nonameName}
           />
         ) : (
-          <main className="flex-1 flex items-center justify-center bg-c-base">
+          <main className="flex-1 flex items-center justify-center bg-panel-view">
             {activeTab ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">スレッドを選択してください</div>}
           </main>
         )}
@@ -714,17 +725,6 @@ export default function App() {
           onAddSite={addSite}
           onRemoveSite={removeSite}
           onClose={() => setSettingsTab(undefined)}
-        />
-      )}
-
-      {/* 背景画像。画面の上に薄く重ね、マウスの操作は下に通す。ポップアップや設定画面よりは下 */}
-      {settings.backgroundImage && settings.backgroundOpacity > 0 && (
-        <div
-          className="fixed inset-0 z-[50] pointer-events-none bg-cover bg-center"
-          style={{
-            backgroundImage: `url("${backgroundImageUrl(settings.backgroundImage)}")`,
-            opacity: settings.backgroundOpacity,
-          }}
         />
       )}
 

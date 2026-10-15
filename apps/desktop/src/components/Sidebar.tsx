@@ -58,7 +58,7 @@ export default function Sidebar(props: Props) {
 
   return (
     <aside
-      className="relative flex-shrink-0 overflow-hidden bg-c-surface transition-[width] duration-200 ease-out"
+      className="relative flex-shrink-0 overflow-hidden bg-panel-sidebar transition-[width] duration-200 ease-out"
       style={{ width: collapsed ? COLLAPSED : EXPANDED }}
     >
       <span className="absolute right-0 top-0 bottom-0 w-px bg-c-border pointer-events-none" />

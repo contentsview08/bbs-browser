@@ -16,6 +16,8 @@ export type ThreadSort = 'subject' | 'momentum' | 'newest'
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 export type AnchorPopup = 'hover' | 'click'
 export type NgMode = 'aborn' | 'hide'
+/** 書き込み欄の置き場所: bottom はレスの下、right はレスの右 */
+export type ReplyLayout = 'bottom' | 'right'
 
 /** 次の起動で開き直すためのタブの控え(ThreadSummary の日付は数値にする) */
 export interface SavedTab {
@@ -35,6 +37,12 @@ export interface AppSettings {
   fontSize: FontSize
   fontFamily: FontFamily
   threadPanelWidth: number
+  /** サイドバーをしまって、アイコンだけの細い帯にする */
+  sidebarCollapsed: boolean
+  replyLayout: ReplyLayout
+  /** 書き込み欄の高さ(下に置くとき)と幅(右に置くとき) */
+  replyHeight: number
+  replyWidth: number
   // 起動
   /** 起動時に開く板の URL。空なら何も開かない */
   startupBoardUrl: string
@@ -74,6 +82,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 3,
   fontFamily: 'noto',
   threadPanelWidth: 420,
+  sidebarCollapsed: false,
+  replyLayout: 'bottom',
+  replyHeight: 170,
+  replyWidth: 380,
   startupBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   openInNewTab: true,

@@ -16,6 +16,7 @@ import {
 } from '@bbs-browser/connectors'
 import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
 import SettingsDialog from './components/SettingsDialog'
+import AddressBar from './components/AddressBar'
 import NewThreadDialog from './components/NewThreadDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
@@ -253,6 +254,22 @@ export default function App() {
     }
   }
 
+  /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
+  const deleteLogs = (ids: string[]) =>
+    run(null, async () => {
+      if (!store) return
+      const targets = tabsRef.current.filter((t) => ids.includes(t.id))
+      closeTabs(ids)
+      for (const t of targets) {
+        // 取りに行っている最中なら終わるのを待つ(消したあとに書き戻されないように)
+        await inflight.current.get(t.id)?.catch(() => undefined)
+        await store.deleteThread(t.thread)
+      }
+      const boardUrl = boardRef.current?.url
+      if (boardUrl) await reloadStates(store, boardUrl)
+      if (history) setHistory(await store.history())
+    })
+
   const refreshThread = () =>
     run('posts', async () => {
       if (store && activeTab) await fetchThread(store, activeTab.thread)
@@ -282,10 +299,20 @@ export default function App() {
   }, [activeId, settings.autoRefreshSec])
 
   // キー操作: Ctrl+W で閉じる、Ctrl+Tab / Ctrl+PageDown で次、Ctrl+Shift+Tab / Ctrl+PageUp で前
-  const keyRef = useRef({ closeTabs, selectTab, activeId })
-  keyRef.current = { closeTabs, selectTab, activeId }
+  // Delete で開いているスレのログを消してタブを閉じる(文字を入力しているときは除く)
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
+      if (e.key === 'Delete' && !typing && !e.ctrlKey && !e.altKey) {
+        const { activeId, deleteLogs } = keyRef.current
+        if (activeId) {
+          e.preventDefault()
+          void deleteLogs([activeId])
+        }
+        return
+      }
       if (!e.ctrlKey) return
       const { closeTabs, selectTab, activeId } = keyRef.current
       const ids = tabsRef.current.map((t) => t.id)
@@ -494,8 +521,14 @@ export default function App() {
     : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
 
+  const currentUrl = activeTab
+    ? connectorOf(activeTab.thread.connectorId).threadWebUrl(activeTab.thread)
+    : (board?.url ?? '')
+
   return (
-    <div className="flex h-full w-full overflow-hidden bg-c-base text-c-text-body">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-c-base text-c-text-body">
+      <AddressBar currentUrl={currentUrl} onOpen={(url) => void openUrlInApp(url)} />
+      <div className="flex-1 min-h-0 flex">
       <Sidebar
         sites={sites}
         site={site}
@@ -506,7 +539,8 @@ export default function App() {
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
         onRefreshBoards={() => store && site && refreshBoards(store, site)}
-        onOpenUrl={openUrlInApp}
+        collapsed={settings.sidebarCollapsed}
+        onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         historyActive={history !== undefined}
         onOpenHistory={openHistory}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -548,6 +582,7 @@ export default function App() {
           onClose={closeTabs}
           onRefreshAll={() => void refreshAll()}
           refreshingAll={refreshingAll}
+          onDeleteLogs={(ids) => void deleteLogs(ids)}
         />
 
         {activeTab?.log ? (
@@ -569,12 +604,16 @@ export default function App() {
             onSubmitPost={connectorOf(activeTab.thread.connectorId).createPost ? submitPost : undefined}
             postName={settings.postName}
             postMail={settings.postMail}
+            onChangeReplyLayout={(layout) => updateSetting('replyLayout', layout)}
+            onResizeReply={(key, size) => updateSetting(key, size)}
+            onDeleteLog={() => void deleteLogs([activeTab.id])}
           />
         ) : (
           <main className="flex-1 flex items-center justify-center bg-c-base">
             <div className="text-c-text-muted text-sm">{activeTab ? '読み込み中...' : 'スレッドを選択してください'}</div>
           </main>
         )}
+      </div>
       </div>
 
       {newThreadOpen && board && (

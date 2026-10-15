@@ -167,3 +167,19 @@ describe('自分の書き込み', () => {
     expect(await store.getOwnPosts(thread)).toEqual([5, 12])
   })
 })
+
+describe('ログの削除', () => {
+  it('レス・既読位置・自分の書き込みを消し、ほかのスレは残す', async () => {
+    const other = { ...thread, key: '1' }
+    await store.saveFetch(thread, { status: 'updated', posts: [post(1), post(2)], cursor: { bytes: 100 } })
+    await store.saveFetch(other, { status: 'updated', posts: [post(1)], cursor: { bytes: 50 } })
+    await store.markRead(thread, 2)
+    await store.addOwnPost(thread, 2)
+
+    await store.deleteThread(thread)
+    expect(await store.loadThread(thread)).toBeNull()
+    expect(await store.getOwnPosts(thread)).toEqual([])
+    expect(await store.history()).toEqual([])
+    expect((await store.loadThread(other))?.posts).toHaveLength(1)
+  })
+})

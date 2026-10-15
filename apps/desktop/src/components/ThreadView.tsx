@@ -1,7 +1,9 @@
 // スレ表示。web 版の MainBoardPage.tsx(ThreadView 部分)の見た目を移植。
 // - 開いたら設定どおりの位置(最初の未読/先頭/末尾)へ移動し、スクロールに合わせて既読位置を知らせる
 // - アンカー・返信・ID はポップアップで出す(ホバーかクリックかは設定で選ぶ)
-// - 自動更新などで新着が届いたら光らせ、いちばん下を見ていれば新着まで追いかける
+// - 新着が届いたら光らせる。いちばん下を見ていたら、新着の頭が見えるところまで送る
+//   (前回最後まで読んでいたスレを開いたときは、届いた新着の頭へ移る。末尾までは飛ばない)
+// - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Post, PostInput, PostResult } from '@bbs-browser/connectors'
@@ -13,7 +15,7 @@ import Minimap from './Minimap'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import { anchorsIn, countAnchors, countIds } from '../utils/postBody'
 import type { NgRule } from '../utils/ng'
-import type { AppSettings } from '../ui/settings'
+import type { AppSettings, ReplyLayout } from '../ui/settings'
 
 /** 読んでいた位置。画面のいちばん上に見えていたレスと、ヘッダーの下端からのずれ */
 export interface ScrollPosition {
@@ -43,6 +45,10 @@ interface Props {
   onSubmitPost?: (input: PostInput) => Promise<PostResult>
   postName: string
   postMail: string
+  onChangeReplyLayout: (layout: ReplyLayout) => void
+  onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
+  /** ログを消してタブを閉じる */
+  onDeleteLog: () => void
 }
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
@@ -50,6 +56,39 @@ const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colo
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら閉じる */
 const HOVER_ESCAPE_PX = 60
+
+/**
+ * 書き込み欄との境界。ドラッグ中は親に大きさを知らせ、離したときに保存してもらう。
+ * 下に置くときは上下に、右に置くときは左右に動かす(書き込み欄側が伸び縮みする)
+ */
+function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: number) => void; onEnd: (size: number) => void }) {
+  const vertical = props.layout === 'bottom'
+  return (
+    <div
+      className={`flex-shrink-0 bg-c-border hover:bg-c-accent transition-colors ${vertical ? 'h-1 cursor-row-resize' : 'w-1 cursor-col-resize'}`}
+      onMouseDown={(e) => {
+        e.preventDefault()
+        const start = vertical ? e.clientY : e.clientX
+        const startSize = props.size
+        let latest = startSize
+        const onMove = (ev: MouseEvent) => {
+          const delta = (vertical ? ev.clientY : ev.clientX) - start
+          latest = Math.min(vertical ? 600 : 900, Math.max(vertical ? 90 : 240, startSize - delta))
+          props.onChange(latest)
+        }
+        const onUp = () => {
+          window.removeEventListener('mousemove', onMove)
+          window.removeEventListener('mouseup', onUp)
+          document.body.style.userSelect = ''
+          props.onEnd(latest)
+        }
+        document.body.style.userSelect = 'none'
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+      }}
+    />
+  )
+}
 
 function Divider({ label, self }: { label: string; self?: boolean }) {
   const color = self ? 'var(--c-accent-self)' : 'var(--c-border)'
@@ -68,6 +107,8 @@ function Divider({ label, self }: { label: string; self?: boolean }) {
 export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, isNg, onRead } = props
   const ref = useRef<HTMLDivElement>(null)
+  /** レス一覧とミニマップの領域。ポップアップの幅をこれに合わせる */
+  const viewRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
@@ -81,6 +122,8 @@ export default function ThreadView(props: Props) {
   const positioned = useRef(false)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
+  /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
+  const pendingUnread = useRef(false)
   const position = useRef<ScrollPosition | undefined>(props.initialPosition)
   const onSavePosition = useRef(props.onSavePosition)
   onSavePosition.current = props.onSavePosition
@@ -98,6 +141,12 @@ export default function ThreadView(props: Props) {
 
   const { ownNos } = props
   const replyRef = useRef<ReplyFormHandle>(null)
+  const replyLayout = settings.replyLayout
+  const sizeKey = replyLayout === 'bottom' ? 'replyHeight' : 'replyWidth'
+  // ドラッグ中は手元で大きさを持ち、離したときに設定へ保存する
+  const savedSize = settings[sizeKey]
+  const [replySize, setReplySize] = useState(savedSize)
+  useEffect(() => setReplySize(savedSize), [savedSize])
   const canReply = props.onSubmitPost !== undefined && log.status !== 'archived'
   const anchorCounts = useMemo(() => countAnchors(log.posts), [log.posts])
   /** 自分の書き込みへのアンカーを含むレス */
@@ -120,6 +169,8 @@ export default function ThreadView(props: Props) {
     return map
   }, [log.posts])
 
+  const prevCount = useRef(log.posts.length)
+
   // 前回の描画より後ろの番号は「新着」として光らせる(最初の表示では光らせない)
   const flashFrom = positioned.current ? lastMax.current + 1 : Infinity
   useEffect(() => {
@@ -127,12 +178,13 @@ export default function ThreadView(props: Props) {
   }, [log.posts])
 
   /** レスの頭がヘッダーの下に来るようにスクロールする */
-  const scrollToPost = useCallback((no: number) => {
+  const scrollToPost = useCallback((no: number, behavior: ScrollBehavior = 'instant') => {
     const root = ref.current
     const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)
     if (!root || !el) return
     const headerH = headerRef.current?.offsetHeight ?? 0
-    root.scrollTop += el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - 8
+    const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - 8
+    root.scrollTo({ top, behavior })
   }, [])
 
   // 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
@@ -171,8 +223,13 @@ export default function ThreadView(props: Props) {
     } else if (settings.openPosition === 'bottom') root.scrollTop = root.scrollHeight
     else if (settings.openPosition === 'unread' && unreadFrom > 1) {
       if (byNo.has(unreadFrom)) scrollToPost(unreadFrom)
-      else root.scrollTop = root.scrollHeight
+      else {
+        root.scrollTop = root.scrollHeight
+        pendingUnread.current = true
+      }
     }
+    // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
+    prevCount.current = log.posts.length
     reportRead()
   }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToPost])
 
@@ -181,15 +238,23 @@ export default function ThreadView(props: Props) {
     if (position.current) onSavePosition.current(position.current)
   }, [])
 
-  // いちばん下を見ていたら、届いた新着まで追いかける
-  const prevCount = useRef(log.posts.length)
+  // 新着が届いたとき: 開いた直後なら未読の頭へ移る。いちばん下を見ていたら新着の頭まで送る
   useLayoutEffect(() => {
     const root = ref.current
     const grew = log.posts.length > prevCount.current
     prevCount.current = log.posts.length
     if (!root || !grew || !positioned.current) return
-    if (settings.autoScrollOnNew && atBottom.current) root.scrollTo({ top: root.scrollHeight, behavior: 'smooth' })
-  }, [log.posts.length, settings.autoScrollOnNew])
+    if (pendingUnread.current) {
+      pendingUnread.current = false
+      if (byNo.has(unreadFrom)) {
+        scrollToPost(unreadFrom)
+        reportRead()
+        return
+      }
+    }
+    // lastMax はまだ前回の描画の値なので、その次が新着の頭
+    if (settings.autoScrollOnNew && atBottom.current) scrollToPost(lastMax.current + 1, 'smooth')
+  }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToPost, reportRead])
 
   useEffect(() => {
     const root = ref.current
@@ -219,9 +284,9 @@ export default function ThreadView(props: Props) {
     (level: number): PostHandlers => {
       const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) => {
         const rect = el.getBoundingClientRect()
-        if (ref.current)
+        if (viewRef.current)
           setPopupFrame({
-            rect: ref.current.getBoundingClientRect(),
+            rect: viewRef.current.getBoundingClientRect(),
             headerBottom: headerRef.current?.getBoundingClientRect().bottom ?? 0,
           })
         hover.current = { active: viaHover, entered: false, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
@@ -299,8 +364,10 @@ export default function ThreadView(props: Props) {
   const mainHandlers = useMemo(() => handlersFor(0), [handlersFor])
 
   return (
-    <main className="flex-1 min-w-0 flex flex-col bg-[var(--c-thread-view-bg)] overflow-hidden">
-      <div className="flex-1 min-h-0 flex">
+    <main
+      className={`flex-1 min-w-0 min-h-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'} bg-[var(--c-thread-view-bg)] overflow-hidden`}
+    >
+      <div ref={viewRef} className="flex-1 min-h-0 min-w-0 flex">
       <div
         ref={ref}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
@@ -339,6 +406,19 @@ export default function ThreadView(props: Props) {
                 onClick={() => ref.current?.scrollTo({ top: ref.current.scrollHeight })}
               >
                 <span className="material-symbols-outlined text-xl">vertical_align_bottom</span>
+              </button>
+              {props.onSubmitPost && (
+                <button
+                  type="button"
+                  className={ICON_BTN}
+                  title={replyLayout === 'bottom' ? '書き込み欄を右に置く' : '書き込み欄を下に置く'}
+                  onClick={() => props.onChangeReplyLayout(replyLayout === 'bottom' ? 'right' : 'bottom')}
+                >
+                  <span className="material-symbols-outlined text-xl">{replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda'}</span>
+                </button>
+              )}
+              <button type="button" className={ICON_BTN} title="ログを削除して閉じる (Delete)" onClick={props.onDeleteLog}>
+                <span className="material-symbols-outlined text-xl">delete</span>
               </button>
               <button type="button" className={ICON_BTN} title="ブラウザで開く" onClick={props.onOpenInBrowser}>
                 <span className="material-symbols-outlined text-xl">open_in_new</span>
@@ -398,14 +478,28 @@ export default function ThreadView(props: Props) {
       </div>
 
       {props.onSubmitPost && (
-        <ReplyForm
-          ref={replyRef}
-          disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
-          initialName={props.postName}
-          initialMail={props.postMail}
-          onSubmit={props.onSubmitPost}
-          onOpenUrl={props.onUrl}
-        />
+        <>
+          <Splitter
+            layout={replyLayout}
+            size={replySize}
+            onChange={setReplySize}
+            onEnd={(size) => props.onResizeReply(sizeKey, size)}
+          />
+          <div
+            className="flex-shrink-0 min-h-0 min-w-0"
+            style={replyLayout === 'bottom' ? { height: replySize } : { width: replySize }}
+          >
+            <ReplyForm
+              ref={replyRef}
+              layout={replyLayout}
+              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
+              initialName={props.postName}
+              initialMail={props.postMail}
+              onSubmit={props.onSubmitPost}
+              onOpenUrl={props.onUrl}
+            />
+          </div>
+        </>
       )}
 
       <PostPopup

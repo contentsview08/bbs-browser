@@ -18,6 +18,7 @@ interface Props {
   onClose: (ids: string[]) => void
   onRefreshAll: () => void
   refreshingAll: boolean
+  onDeleteLogs: (ids: string[]) => void
 }
 
 export default function TabBar(props: Props) {
@@ -48,6 +49,7 @@ export default function TabBar(props: Props) {
         { label: '他のタブを閉じる', ids: ids.filter((id) => id !== menu.id) },
         { label: '右側のタブを閉じる', ids: ids.slice(ids.indexOf(menu.id) + 1) },
         { label: 'すべて閉じる', ids },
+        { label: 'ログを削除して閉じる (Delete)', ids: [menu.id], deleteLog: true },
       ]
     : []
 
@@ -123,7 +125,8 @@ export default function TabBar(props: Props) {
               type="button"
               disabled={m.ids.length === 0}
               onClick={() => {
-                props.onClose(m.ids)
+                if ('deleteLog' in m) props.onDeleteLogs(m.ids)
+                else props.onClose(m.ids)
                 setMenu(undefined)
               }}
               className="w-full text-left px-3 py-1.5 text-c-text-body hover:bg-c-surface2 disabled:opacity-40"

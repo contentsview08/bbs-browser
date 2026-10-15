@@ -1,5 +1,5 @@
-// 左端のサイドバー: URL を開く・お気に入り板・閲覧履歴・サイトの板一覧(カテゴリ別)・設定。
-// 見た目は web 版の MenuBar.tsx(展開時)に合わせている。
+// 左端のサイドバー: 閲覧履歴・お気に入り板・サイトの板一覧(カテゴリ別)・設定。
+// 見た目は web 版の MenuBar.tsx に合わせている。しまうとアイコンだけの細い帯になる。
 
 import { useMemo, useState } from 'react'
 import type { Board, SiteConfig } from '@bbs-browser/connectors'
@@ -14,11 +14,45 @@ interface Props {
   onOpenBoard: (b: Board) => void
   onToggleFavorite: (b: Board) => void
   onRefreshBoards: () => void
-  onOpenUrl: (url: string) => void
   historyActive: boolean
   onOpenHistory: () => void
   onOpenSettings: () => void
   loading: boolean
+  collapsed: boolean
+  onToggleCollapsed: () => void
+}
+
+const STRIP_BTN =
+  'w-10 h-10 flex items-center justify-center rounded-[var(--btn-radius)] text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 transition-colors'
+
+/** しまったときの細い帯。履歴と設定はそのまま開き、お気に入りと板一覧は広げて見せる */
+function Strip(props: Props) {
+  return (
+    <aside className="w-12 flex-shrink-0 flex flex-col items-center gap-1 py-2 bg-c-surface border-r border-c-border">
+      <button type="button" onClick={props.onToggleCollapsed} className={STRIP_BTN} title="サイドバーを広げる">
+        <span className="material-symbols-outlined text-xl">left_panel_open</span>
+      </button>
+      <div className="w-8 my-1 border-t border-c-border" />
+      <button
+        type="button"
+        onClick={props.onOpenHistory}
+        className={`${STRIP_BTN} ${props.historyActive ? 'text-c-accent' : ''}`}
+        title="閲覧履歴"
+      >
+        <span className={`material-symbols-outlined text-xl ${props.historyActive ? 'fill' : ''}`}>schedule</span>
+      </button>
+      <button type="button" onClick={props.onToggleCollapsed} className={STRIP_BTN} title="お気に入り">
+        <span className="material-symbols-outlined text-xl">star</span>
+      </button>
+      <button type="button" onClick={props.onToggleCollapsed} className={STRIP_BTN} title="板一覧">
+        <span className="material-symbols-outlined text-xl">list_alt</span>
+      </button>
+      <div className="flex-1" />
+      <button type="button" onClick={props.onOpenSettings} className={STRIP_BTN} title="設定">
+        <span className="material-symbols-outlined text-xl">settings</span>
+      </button>
+    </aside>
+  )
 }
 
 const ICON_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg flex-shrink-0'
@@ -51,8 +85,12 @@ function BoardRow(props: { board: Board; active: boolean; favorite: boolean; onO
 }
 
 export default function Sidebar(props: Props) {
+  if (props.collapsed) return <Strip {...props} />
+  return <Expanded {...props} />
+}
+
+function Expanded(props: Props) {
   const [filter, setFilter] = useState('')
-  const [url, setUrl] = useState('')
   const [openCats, setOpenCats] = useState<Set<string>>(new Set())
   const favoriteUrls = useMemo(() => new Set(props.favorites.map((b) => b.url)), [props.favorites])
 
@@ -88,22 +126,11 @@ export default function Sidebar(props: Props) {
 
   return (
     <aside className="w-64 flex-shrink-0 flex flex-col bg-c-surface border-r border-c-border">
-      <div className="p-3 border-b border-c-border">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (url.trim()) props.onOpenUrl(url.trim())
-            setUrl('')
-          }}
-        >
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="板・スレの URL を開く"
-            className={INPUT}
-          />
-        </form>
+      <div className="flex items-center justify-between pl-4 pr-2 py-1.5 border-b border-c-border">
+        <span className="text-sm font-bold text-c-text-strong">bbs-browser</span>
+        <button type="button" onClick={props.onToggleCollapsed} className={ICON_BTN} title="サイドバーをしまう">
+          <span className="material-symbols-outlined text-xl">left_panel_close</span>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto custom-scrollbar py-1">

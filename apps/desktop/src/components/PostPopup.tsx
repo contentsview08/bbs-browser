@@ -42,8 +42,9 @@ function PopupWindow(props: {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const left = containerRect ? containerRect.left + 16 : 32
-    const width = containerRect ? containerRect.width - 32 : Math.min(640, window.innerWidth - 64)
+    // スレ表示の領域とぴったり同じ幅にする
+    const left = containerRect ? containerRect.left : 32
+    const width = containerRect ? containerRect.width : Math.min(640, window.innerWidth - 64)
     const minTop = Math.max(props.headerBottom, containerRect?.top ?? 0) + 4
     const maxBottom = containerRect?.bottom ?? window.innerHeight
     const spaceAbove = entry.triggerY - minTop - 4

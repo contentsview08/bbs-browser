@@ -1,9 +1,11 @@
-// 書き込み欄。スレ表示の下に置く。見た目は web 版の ReplyForm.tsx(下部レイアウト)に寄せている。
+// 書き込み欄。スレ表示の下か右に置く(web 版の ReplyForm.tsx と同じ 2 通り)。
+// 大きさは親が決め、本文の欄が残りいっぱいに広がる。
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import type { PostInput, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
+import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
   /** 本文のカーソル位置に文字を入れる(>>12 の挿入など) */
@@ -11,6 +13,7 @@ export interface ReplyFormHandle {
 }
 
 interface Props {
+  layout: ReplyLayout
   disabled?: string
   initialName: string
   initialMail: string
@@ -60,25 +63,47 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     }
   }
 
+  const right = props.layout === 'right'
+  const sendButton = (
+    <button
+      type="button"
+      onClick={() => void submit()}
+      disabled={sending || !body.trim() || !!props.disabled}
+      className={`btn-thread-create px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
+    >
+      <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
+        {sending ? 'progress_activity' : 'send'}
+      </span>
+      書き込む
+    </button>
+  )
+
   return (
-    <div className="flex-shrink-0 border-t border-c-border bg-c-surface px-4 py-3">
+    <div className="h-full w-full flex flex-col bg-c-surface px-4 py-3 overflow-hidden">
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} />}
 
-      <div className="flex items-center gap-2 mb-2">
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} w-40`} />
-        <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={`${INPUT} w-40`} />
+      <div className={`flex items-center gap-2 mb-2 ${right ? 'flex-wrap' : ''}`}>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="名前"
+          className={`${INPUT} ${right ? 'flex-1 min-w-0' : 'w-40'}`}
+        />
+        <input
+          type="text"
+          value={mail}
+          onChange={(e) => setMail(e.target.value)}
+          placeholder="メール"
+          className={`${INPUT} ${right ? 'flex-1 min-w-0' : 'w-40'}`}
+        />
         <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
-          <input
-            type="checkbox"
-            checked={sage}
-            onChange={(e) => setMail(e.target.checked ? 'sage' : '')}
-            className="rounded"
-          />
+          <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage
         </label>
-        <span className="ml-auto text-[10px] text-c-text-muted">Ctrl+Enter で書き込む</span>
+        {!right && <span className="ml-auto text-[10px] text-c-text-muted">Ctrl+Enter で書き込む</span>}
       </div>
-      <div className="flex items-end gap-2">
+      <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>
         <textarea
           ref={textRef}
           value={body}
@@ -89,22 +114,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
               void submit()
             }
           }}
-          placeholder={props.disabled ?? '本文'}
+          placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}
           disabled={!!props.disabled}
-          rows={Math.min(8, Math.max(2, body.split('\n').length))}
-          className={`${INPUT} flex-1 resize-none leading-relaxed`}
+          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed`}
         />
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={sending || !body.trim() || !!props.disabled}
-          className="btn-thread-create px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 flex items-center gap-1"
-        >
-          <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
-            {sending ? 'progress_activity' : 'send'}
-          </span>
-          書き込む
-        </button>
+        {sendButton}
       </div>
     </div>
   )

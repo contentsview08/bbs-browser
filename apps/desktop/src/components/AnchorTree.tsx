@@ -10,6 +10,8 @@ const STEP = 18
 const ELBOW_Y = 14
 
 const LINE = 'var(--c-border-strong)'
+/** 曲がり角の丸み */
+const RADIUS = 6
 
 export default function AnchorTree(props: {
   rows: TreeRow[]
@@ -29,25 +31,33 @@ export default function AnchorTree(props: {
                   <span key={i} className="absolute top-0 bottom-0" style={{ left: i * STEP + STEP / 2, borderLeft: `1px solid ${LINE}` }} />
                 ) : null,
               )}
-              {/* 親からの線: 最後の子なら途中まで(└)、まだ兄弟がいれば下まで(├) */}
+              {/* まだ兄弟がいれば、縦線を下まで伸ばす(├) */}
+              {!r.last && (
+                <span
+                  className="absolute top-0 bottom-0"
+                  style={{ left: (r.depth - 1) * STEP + STEP / 2, borderLeft: `1px solid ${LINE}` }}
+                />
+              )}
+              {/* 親からの線を、角を丸めて横に曲げる(└) */}
               <span
                 className="absolute top-0"
                 style={{
                   left: (r.depth - 1) * STEP + STEP / 2,
-                  height: r.last ? ELBOW_Y : '100%',
+                  width: STEP / 2,
+                  height: ELBOW_Y + 1,
                   borderLeft: `1px solid ${LINE}`,
+                  borderBottom: `1px solid ${LINE}`,
+                  borderBottomLeftRadius: RADIUS,
                 }}
-              />
-              <span
-                className="absolute"
-                style={{ left: (r.depth - 1) * STEP + STEP / 2, top: ELBOW_Y, width: STEP / 2, borderTop: `1px solid ${LINE}` }}
               />
             </div>
           )}
           <div
-            className="flex-1 min-w-0 rounded-[var(--card-radius)]"
-            style={r.no === props.focus ? { background: 'var(--c-accent-wash)', boxShadow: 'inset 2px 0 0 var(--c-accent)' } : undefined}
+            className="relative flex-1 min-w-0 rounded-[var(--card-radius)]"
+            style={r.no === props.focus ? { background: 'var(--c-accent-wash)' } : undefined}
           >
+            {/* 押したレスの目印。枠の角丸に沿って曲がらないよう、独立したまっすぐな線にする */}
+            {r.no === props.focus && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-c-accent" />}
             {props.renderPost(r.no)}
             {r.alsoTo.length > 0 && (
               <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>

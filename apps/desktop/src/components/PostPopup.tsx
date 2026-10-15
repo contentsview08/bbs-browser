@@ -48,7 +48,9 @@ function PopupWindow(props: {
     const minTop = Math.max(props.headerBottom, containerRect?.top ?? 0) + 4
     const maxBottom = containerRect?.bottom ?? window.innerHeight
     const spaceAbove = entry.triggerY - minTop - 4
-    const height = el.scrollHeight
+    // 重なっても外側を押して閉じられるよう、スレ表示の高さの 7 割までにする
+    const limit = (maxBottom - minTop) * 0.7
+    const height = Math.min(el.scrollHeight, limit)
     // 上に収まるなら開いた場所の真上に、収まらなければヘッダーのすぐ下から出す
     const fitsAbove = height <= spaceAbove
     setStyle({
@@ -57,7 +59,7 @@ function PopupWindow(props: {
       left,
       width,
       top: fitsAbove ? entry.triggerY - height - 4 : minTop,
-      maxHeight: fitsAbove ? spaceAbove : (maxBottom - minTop) * 0.95,
+      maxHeight: fitsAbove ? Math.min(spaceAbove, limit) : limit,
       overflowY: 'auto',
       zIndex: 9001 + props.stackIndex,
       opacity: props.isTop ? 1 : 0.97,

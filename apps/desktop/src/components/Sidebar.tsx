@@ -41,7 +41,7 @@ function StripButton(props: { icon: string; label: string; active?: boolean; onC
 /** しまったときの帯。履歴と設定はそのまま開き、お気に入りは広げて見せる */
 function Strip(props: Props & { onOpenFavorites: () => void }) {
   return (
-    <aside className="w-16 flex-shrink-0 flex flex-col items-center gap-1 pb-2 bg-c-surface border-r border-c-border">
+    <div className="w-16 h-full flex flex-col items-center gap-1 pb-2">
       <div data-tauri-drag-region className="h-10 w-full flex-shrink-0 flex items-center justify-center border-b border-c-border">
         <button
           type="button"
@@ -56,27 +56,40 @@ function Strip(props: Props & { onOpenFavorites: () => void }) {
       <div className="flex-1" />
       <StripButton icon="schedule" label="閲覧履歴" active={props.historyActive} onClick={props.onOpenHistory} />
       <StripButton icon="settings" label="設定" onClick={props.onOpenSettings} />
-    </aside>
+    </div>
   )
 }
 
 export default function Sidebar(props: Props) {
   const [favoritesOpen, setFavoritesOpen] = useState(true)
 
-  if (props.collapsed) {
-    return (
-      <Strip
-        {...props}
-        onOpenFavorites={() => {
-          setFavoritesOpen(true)
-          props.onToggleCollapsed()
-        }}
-      />
-    )
-  }
-
+  // 外枠の幅だけを動かして開閉する。中身は開いた後の幅で描いておき、外枠で切り取って見せる
   return (
-    <aside className="w-64 flex-shrink-0 flex flex-col bg-c-surface border-r border-c-border">
+    <aside
+      className="flex-shrink-0 overflow-hidden bg-c-surface border-r border-c-border transition-[width] duration-200 ease-out"
+      style={{ width: props.collapsed ? 64 : 256 }}
+    >
+      {props.collapsed ? (
+        <Strip
+          {...props}
+          onOpenFavorites={() => {
+            setFavoritesOpen(true)
+            props.onToggleCollapsed()
+          }}
+        />
+      ) : (
+        <Expanded {...props} favoritesOpen={favoritesOpen} setFavoritesOpen={setFavoritesOpen} />
+      )}
+    </aside>
+  )
+}
+
+function Expanded(
+  props: Props & { favoritesOpen: boolean; setFavoritesOpen: (f: (v: boolean) => boolean) => void },
+) {
+  const { favoritesOpen, setFavoritesOpen } = props
+  return (
+    <div className="w-64 h-full flex flex-col">
       <div data-tauri-drag-region className="h-10 flex-shrink-0 flex items-center justify-between pl-4 pr-2 border-b border-c-border select-none">
         <span data-tauri-drag-region className="text-sm font-bold text-c-text-strong">
           bbs-browser
@@ -156,6 +169,6 @@ export default function Sidebar(props: Props) {
           <span className="ml-3 text-sm">設定</span>
         </button>
       </div>
-    </aside>
+    </div>
   )
 }

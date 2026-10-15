@@ -93,3 +93,16 @@ body,
 [data-pattern][data-scheme='soft-light'] {
   --card-bg: #f9f7f4;
 }
+
+/* スレ一覧のスクロールバーは、つかみやすいように太くする(つまみの周りに透明な余白を取る) */
+.thick-scrollbar {
+  scrollbar-width: auto;
+}
+.thick-scrollbar::-webkit-scrollbar {
+  width: 12px;
+}
+.thick-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 10px;
+}

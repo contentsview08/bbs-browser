@@ -39,6 +39,8 @@ interface Props {
   defaultSort: ThreadSort
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
+  /** 渡されたときだけ、チェックボックスで選んでまとめてログを消せる(閲覧履歴) */
+  onDeleteLogs?: (threads: ThreadSummary[]) => void
   /** スレを立てられる板のときだけ渡す */
   onNewThread?: () => void
   /** 板を開いているときだけ ★ を出す */
@@ -56,6 +58,8 @@ export default function ThreadListPanel(props: Props) {
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
   const [width, setWidth] = useState(props.width)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const selectable = props.onDeleteLogs !== undefined
   const searchRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
@@ -135,7 +139,7 @@ export default function ThreadListPanel(props: Props) {
       </div>
       <div
         ref={scrollRef}
-        className="h-full overflow-y-auto custom-scrollbar flex flex-col"
+        className="h-full overflow-y-auto custom-scrollbar thick-scrollbar flex flex-col"
         onWheel={(e) => {
           if (props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
@@ -210,6 +214,36 @@ export default function ThreadListPanel(props: Props) {
             </div>
           </div>
 
+          {selectable && (
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-c-border text-xs">
+              <span className="text-c-text-muted">{selected.size > 0 ? `${selected.size} 件選択中` : 'チェックで選んでまとめて消せます'}</span>
+              <button
+                type="button"
+                className="ml-auto text-c-text-muted hover:text-c-text-strong"
+                onClick={() => setSelected(new Set(visible.map(threadId)))}
+              >
+                すべて選択
+              </button>
+              {selected.size > 0 && (
+                <>
+                  <button type="button" className="text-c-text-muted hover:text-c-text-strong" onClick={() => setSelected(new Set())}>
+                    解除
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
+                    onClick={() => {
+                      props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
+                      setSelected(new Set())
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-sm">delete</span>
+                    ログを削除
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-3 px-4 border-b border-c-border text-sm font-medium">
             <button
               type="button"
@@ -257,7 +291,7 @@ export default function ThreadListPanel(props: Props) {
             >
               {visible.map((t) => {
                 const id = threadId(t)
-                return (
+                const card = (
                   <ThreadCard
                     key={id}
                     thread={t}
@@ -266,6 +300,27 @@ export default function ThreadListPanel(props: Props) {
                     momentumRank={ranks.get(id) ?? 0}
                     onClick={() => props.onOpen(t)}
                   />
+                )
+                if (!selectable) return card
+                return (
+                  <div key={id} className="flex items-stretch">
+                    <label className="flex items-center px-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(id)}
+                        onChange={(e) =>
+                          setSelected((s) => {
+                            const next = new Set(s)
+                            if (e.target.checked) next.add(id)
+                            else next.delete(id)
+                            return next
+                          })
+                        }
+                        className="rounded"
+                      />
+                    </label>
+                    <div className="flex-1 min-w-0">{card}</div>
+                  </div>
                 )
               })}
             </div>

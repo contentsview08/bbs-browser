@@ -252,15 +252,18 @@ export default function App() {
   }
 
   /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
-  const deleteLogs = (ids: string[]) =>
+  const deleteLogs = (ids: string[], extra: ThreadSummary[] = []) =>
     run(null, async () => {
       if (!store) return
-      const targets = tabsRef.current.filter((t) => ids.includes(t.id))
-      closeTabs(ids)
-      for (const t of targets) {
+      // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
+      const targets = new Map<string, ThreadSummary>()
+      for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
+      for (const t of extra) targets.set(threadId(t), t)
+      closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)))
+      for (const [id, thread] of targets) {
         // 取りに行っている最中なら終わるのを待つ(消したあとに書き戻されないように)
-        await inflight.current.get(t.id)?.catch(() => undefined)
-        await store.deleteThread(t.thread)
+        await inflight.current.get(id)?.catch(() => undefined)
+        await store.deleteThread(thread)
       }
       const boardUrl = boardRef.current?.url
       if (boardUrl) await reloadStates(store, boardUrl)
@@ -321,7 +324,8 @@ export default function App() {
       }
       if (e.key.toLowerCase() === 'w') {
         e.preventDefault()
-        if (activeId) closeTabs([activeId])
+        if (e.shiftKey) closeTabs(ids)
+        else if (activeId) closeTabs([activeId])
       } else if (e.key === 'Tab') step(e.shiftKey ? -1 : 1)
       else if (e.key === 'PageDown') step(1)
       else if (e.key === 'PageUp') step(-1)
@@ -552,6 +556,7 @@ export default function App() {
           defaultSort={history ? 'subject' : settings.threadSort}
           isNg={isNgThread}
           favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
+          onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />

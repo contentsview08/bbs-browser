@@ -14,8 +14,18 @@ import { anchorsIn, countAnchors, countIds } from '../utils/postBody'
 import type { NgRule } from '../utils/ng'
 import type { AppSettings } from '../ui/settings'
 
+/** 読んでいた位置。画面のいちばん上に見えていたレスと、ヘッダーの下端からのずれ */
+export interface ScrollPosition {
+  no: number
+  offset: number
+}
+
 interface Props {
   log: ThreadLog
+  /** タブを切り替えて戻ってきたときの位置。あれば「開いたときの位置」の設定より優先する */
+  initialPosition?: ScrollPosition
+  /** 画面から外れる(タブを切り替える)ときに、読んでいた位置を渡す */
+  onSavePosition: (pos: ScrollPosition) => void
   /** 開いた時点の「最初の未読」のレス番号。ここに「ここから未読」の線を引く */
   unreadFrom: number
   loading: boolean
@@ -61,6 +71,9 @@ export default function ThreadView(props: Props) {
   const positioned = useRef(false)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
+  const position = useRef<ScrollPosition | undefined>(props.initialPosition)
+  const onSavePosition = useRef(props.onSavePosition)
+  onSavePosition.current = props.onSavePosition
   const lastMax = useRef(0)
   const [popups, setPopups] = useState<PopupEntry[]>([])
   const [popupFrame, setPopupFrame] = useState<{ rect: DOMRect; headerBottom: number }>()
@@ -117,11 +130,17 @@ export default function ThreadView(props: Props) {
     const root = ref.current
     if (!root) return
     const bottom = root.getBoundingClientRect().bottom
+    const viewTop = root.getBoundingClientRect().top + (headerRef.current?.offsetHeight ?? 0)
     let last = 0
+    let top: ScrollPosition | undefined
     for (const el of root.querySelectorAll<HTMLElement>(':scope [data-no]')) {
-      if (el.getBoundingClientRect().top >= bottom) break
+      const rect = el.getBoundingClientRect()
+      if (rect.top >= bottom) break
       last = Number(el.dataset.no)
+      // ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
+      if (!top && rect.bottom > viewTop) top = { no: last, offset: rect.top - viewTop }
     }
+    if (top) position.current = top
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < 40
     if (last > sent.current) {
       sent.current = last
@@ -134,13 +153,23 @@ export default function ThreadView(props: Props) {
     const root = ref.current
     if (!root || positioned.current || log.posts.length === 0) return
     positioned.current = true
-    if (settings.openPosition === 'bottom') root.scrollTop = root.scrollHeight
+    const saved = props.initialPosition
+    const savedEl = saved && root.querySelector<HTMLElement>(`[data-no="${saved.no}"]`)
+    if (saved && savedEl) {
+      const viewTop = root.getBoundingClientRect().top + (headerRef.current?.offsetHeight ?? 0)
+      root.scrollTop += savedEl.getBoundingClientRect().top - viewTop - saved.offset
+    } else if (settings.openPosition === 'bottom') root.scrollTop = root.scrollHeight
     else if (settings.openPosition === 'unread' && unreadFrom > 1) {
       if (byNo.has(unreadFrom)) scrollToPost(unreadFrom)
       else root.scrollTop = root.scrollHeight
     }
     reportRead()
   }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToPost])
+
+  // 画面から外れるときに、読んでいた位置を渡す
+  useEffect(() => () => {
+    if (position.current) onSavePosition.current(position.current)
+  }, [])
 
   // いちばん下を見ていたら、届いた新着まで追いかける
   const prevCount = useRef(log.posts.length)
@@ -229,7 +258,6 @@ export default function ThreadView(props: Props) {
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, props.onUrl, props.onAddNg],
   )
 

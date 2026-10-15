@@ -17,6 +17,16 @@ export type OpenPosition = 'unread' | 'top' | 'bottom'
 export type AnchorPopup = 'hover' | 'click'
 export type NgMode = 'aborn' | 'hide'
 
+/** 次の起動で開き直すためのタブの控え(ThreadSummary の日付は数値にする) */
+export interface SavedTab {
+  connectorId: string
+  boardUrl: string
+  key: string
+  title: string
+  postCount: number
+  createdAt?: number
+}
+
 export interface AppSettings {
   // 表示
   scheme: ColorScheme
@@ -30,6 +40,12 @@ export interface AppSettings {
   startupBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
+  // タブ
+  /** スレ一覧から開くとき、新しいタブで開く(false なら今のタブを置き換える) */
+  openInNewTab: boolean
+  openTabs: SavedTab[]
+  /** 開いていたタブ(threadId) */
+  activeTab: string
   // レス表示
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
@@ -58,6 +74,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   threadPanelWidth: 420,
   startupBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
+  openInNewTab: true,
+  openTabs: [],
+  activeTab: '',
   openPosition: 'unread',
   anchorPopup: 'hover',
   showThumbnails: true,

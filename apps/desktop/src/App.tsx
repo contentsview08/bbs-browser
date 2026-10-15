@@ -1,4 +1,4 @@
-// 画面全体: サイドバー(板一覧)/ スレ一覧パネル / スレ表示 の 3 カラム。
+// 画面全体: サイドバー(板一覧)/ スレ一覧パネル / タブとスレ表示 の 3 カラム。
 // データの流れはここに集め、見た目は components/ の各部品(web 版から移植)に任せる。
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
 
@@ -17,11 +17,12 @@ import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browse
 import SettingsDialog from './components/SettingsDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
+import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId } from './components/ThreadListPanel'
-import ThreadView from './components/ThreadView'
+import ThreadView, { type ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
-import { useSettings } from './ui/settings'
+import { useSettings, type SavedTab } from './ui/settings'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule } from './utils/ng'
 
 const connectorOf = (id: string) => {
@@ -40,6 +41,29 @@ async function resolve(url: string) {
 
 type Loading = 'boards' | 'threads' | 'posts'
 
+/** 開いているスレ 1 つぶん */
+interface Tab {
+  id: string
+  thread: ThreadSummary
+  /** まだ読み込んでいなければ undefined(起動時に戻したタブは、選ぶまで読み込まない) */
+  log?: ThreadLog
+  /** 開いた時点の「最初の未読」。「ここから未読」の線を引く位置 */
+  unreadFrom: number
+  readNo: number
+  ownNos: Set<number>
+  /** 別のタブへ移ったときに覚えておく、読んでいた位置 */
+  scroll?: ScrollPosition
+  loading: boolean
+}
+
+function newTab(thread: ThreadSummary): Tab {
+  return { id: threadId(thread), thread, unreadFrom: 1, readNo: 0, ownNos: new Set(), loading: false }
+}
+
+function fromSaved(s: SavedTab): ThreadSummary {
+  return { ...s, order: 0, createdAt: s.createdAt === undefined ? undefined : new Date(s.createdAt) }
+}
+
 export default function App() {
   const [store, setStore] = useState<LogStore>()
   const [settings, updateSetting, settingsLoaded] = useSettings(store)
@@ -51,13 +75,17 @@ export default function App() {
   const [threads, setThreads] = useState<ThreadSummary[]>([])
   const [states, setStates] = useState(new Map<string, ThreadState>())
   const [history, setHistory] = useState<HistoryEntry[]>()
-  const [thread, setThread] = useState<ThreadSummary>()
-  const [log, setLog] = useState<ThreadLog>()
-  const [unreadFrom, setUnreadFrom] = useState(1)
-  const [ownNos, setOwnNos] = useState(new Set<number>())
+  const [tabs, setTabs] = useState<Tab[]>([])
+  const [activeId, setActiveId] = useState<string>()
+  const [refreshingAll, setRefreshingAll] = useState(false)
   const [loading, setLoading] = useState(new Set<Loading>())
   const [error, setError] = useState<string>()
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // 非同期の処理の途中で最新の値を見るための控え
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+  const activeTab = tabs.find((t) => t.id === activeId)
 
   const run = async (kind: Loading | null, fn: () => Promise<void>) => {
     if (kind) setLoading((s) => new Set(s).add(kind))
@@ -129,60 +157,192 @@ export default function App() {
       if (store) setHistory(await store.history())
     })
 
-  /** スレを取りに行って保存し、表示を差し替える(開いたときと更新のときの共通部分) */
-  const fetching = useRef(false)
-  const fetchThread = async (s: LogStore, t: ThreadSummary, cursor: unknown) => {
-    fetching.current = true
+  // ── タブ ──
+
+  const patchTab = (id: string, patch: Partial<Tab>) =>
+    setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+
+  /**
+   * スレを取りに行って保存し、そのタブの表示を差し替える。
+   * 同じスレを取りに行っている最中なら、それを待つ。force なら、待ったあとでもう一度取りに行く
+   * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
+   */
+  const inflight = useRef(new Map<string, Promise<void>>())
+  const fetchThread = async (s: LogStore, t: ThreadSummary, opts: { force?: boolean } = {}) => {
+    const id = threadId(t)
+    const running = inflight.current.get(id)
+    if (running) {
+      await running
+      if (!opts.force) return
+    }
+    const job = (async () => {
+      patchTab(id, { loading: true })
+      try {
+        const cursor = (await s.loadThread(t))?.cursor ?? null
+        const r = await connectorOf(t.connectorId).fetchPosts(t, cursor, ctx)
+        await s.saveFetch(t, r)
+        const saved = await s.loadThread(t)
+        if (saved) patchTab(id, { log: saved })
+        await reloadStates(s, t.boardUrl)
+      } finally {
+        patchTab(id, { loading: false })
+      }
+    })()
+    inflight.current.set(id, job)
     try {
-      const r = await connectorOf(t.connectorId).fetchPosts(t, cursor, ctx)
-      await s.saveFetch(t, r)
-      const saved = await s.loadThread(t)
-      // 取りに行っている間に別のスレへ移っていたら、表示は差し替えない
-      if (saved && currentThread.current === threadId(t)) setLog(saved)
-      await reloadStates(s, t.boardUrl)
+      await job
     } finally {
-      fetching.current = false
+      if (inflight.current.get(id) === job) inflight.current.delete(id)
     }
   }
 
-  const currentThread = useRef<string | undefined>(undefined)
-  const openThread = (t: ThreadSummary) =>
+  /** タブにログを読み込み(手元のものをすぐ出す)、差分を取りに行く */
+  const loadTab = async (s: LogStore, t: ThreadSummary) => {
+    const id = threadId(t)
+    const [local, own] = await Promise.all([s.loadThread(t), s.getOwnPosts(t)])
+    patchTab(id, {
+      log: local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' },
+      unreadFrom: (local?.readNo ?? 0) + 1,
+      readNo: local?.readNo ?? 0,
+      ownNos: new Set(own),
+    })
+    await fetchThread(s, t)
+  }
+
+  const selectTab = (id: string) => {
+    setActiveId(id)
+    const tab = tabsRef.current.find((t) => t.id === id)
+    if (store && tab && !tab.log) void run('posts', () => loadTab(store, tab.thread))
+  }
+
+  const openThread = (t: ThreadSummary, opts: { newTab?: boolean } = {}) =>
     run('posts', async () => {
       if (!store) return
-      currentThread.current = threadId(t)
-      // 手元のログを先に出す(通信に失敗しても読める)
-      const local = await store.loadThread(t)
-      setThread(t)
-      setLog(local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' })
-      setUnreadFrom((local?.readNo ?? 0) + 1)
-      setOwnNos(new Set(await store.getOwnPosts(t)))
-      await fetchThread(store, t, local?.cursor ?? null)
+      const id = threadId(t)
+      const existing = tabsRef.current.find((x) => x.id === id)
+      if (existing) {
+        selectTab(id)
+        return
+      }
+      const inNew = opts.newTab ?? settings.openInNewTab
+      const current = activeId
+      setTabs((ts) => {
+        const i = ts.findIndex((x) => x.id === current)
+        if (i < 0) return [...ts, newTab(t)]
+        if (!inNew) return ts.map((x, j) => (j === i ? newTab(t) : x))
+        return [...ts.slice(0, i + 1), newTab(t), ...ts.slice(i + 1)]
+      })
+      setActiveId(id)
+      await loadTab(store, t)
       if (history) setHistory(await store.history())
     })
 
+  const closeTabs = (ids: string[]) => {
+    const ts = tabsRef.current
+    const rest = ts.filter((t) => !ids.includes(t.id))
+    setTabs(rest)
+    if (activeId && ids.includes(activeId)) {
+      // 閉じたタブの右隣(なければ左隣)へ移る
+      const idx = ts.findIndex((t) => t.id === activeId)
+      const next = rest[Math.min(idx, rest.length - 1)]
+      if (next) selectTab(next.id)
+      else setActiveId(undefined)
+    }
+  }
+
   const refreshThread = () =>
     run('posts', async () => {
-      if (!store || !thread || fetching.current) return
-      const local = await store.loadThread(thread)
-      await fetchThread(store, thread, local?.cursor ?? null)
+      if (store && activeTab) await fetchThread(store, activeTab.thread)
     })
 
-  // 自動更新。前の取得が終わっていなければその回は飛ばす
+  const refreshAll = () =>
+    run(null, async () => {
+      if (!store) return
+      setRefreshingAll(true)
+      try {
+        for (const t of tabsRef.current) {
+          if (t.log) await fetchThread(store, t.thread)
+          else await loadTab(store, t.thread)
+        }
+      } finally {
+        setRefreshingAll(false)
+      }
+    })
+
+  // 自動更新(開いているタブだけ)。前の取得が終わっていなければその回は飛ばす
   const refreshRef = useRef(refreshThread)
   refreshRef.current = refreshThread
   useEffect(() => {
-    if (!thread || settings.autoRefreshSec <= 0) return
+    if (!activeId || settings.autoRefreshSec <= 0) return
     const id = setInterval(() => void refreshRef.current(), settings.autoRefreshSec * 1000)
     return () => clearInterval(id)
-  }, [thread, settings.autoRefreshSec])
+  }, [activeId, settings.autoRefreshSec])
+
+  // キー操作: Ctrl+W で閉じる、Ctrl+Tab / Ctrl+PageDown で次、Ctrl+Shift+Tab / Ctrl+PageUp で前
+  const keyRef = useRef({ closeTabs, selectTab, activeId })
+  keyRef.current = { closeTabs, selectTab, activeId }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey) return
+      const { closeTabs, selectTab, activeId } = keyRef.current
+      const ids = tabsRef.current.map((t) => t.id)
+      const i = activeId ? ids.indexOf(activeId) : -1
+      const step = (d: number) => {
+        if (ids.length === 0) return
+        e.preventDefault()
+        selectTab(ids[(i + d + ids.length) % ids.length])
+      }
+      if (e.key.toLowerCase() === 'w') {
+        e.preventDefault()
+        if (activeId) closeTabs([activeId])
+      } else if (e.key === 'Tab') step(e.shiftKey ? -1 : 1)
+      else if (e.key === 'PageDown') step(1)
+      else if (e.key === 'PageUp') step(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // 開いていたタブを次の起動で戻す。戻したタブは、選んだときに読み込む
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current || !settingsLoaded || !store) return
+    restored.current = true
+    const ts = settings.openTabs.map((s) => newTab(fromSaved(s)))
+    setTabs(ts)
+    const active = ts.find((t) => t.id === settings.activeTab) ?? ts[0]
+    if (active) {
+      setActiveId(active.id)
+      void run('posts', () => loadTab(store, active.thread))
+    }
+  }, [settingsLoaded, store])
+
+  const savedTabs = JSON.stringify(
+    tabs.map(
+      (t): SavedTab => ({
+        connectorId: t.thread.connectorId,
+        boardUrl: t.thread.boardUrl,
+        key: t.thread.key,
+        title: t.log?.title || t.thread.title,
+        postCount: t.thread.postCount,
+        createdAt: t.thread.createdAt?.getTime(),
+      }),
+    ),
+  )
+  useEffect(() => {
+    if (restored.current) updateSetting('openTabs', JSON.parse(savedTabs) as SavedTab[])
+  }, [savedTabs])
+  useEffect(() => {
+    if (restored.current) updateSetting('activeTab', activeId ?? '')
+  }, [activeId])
 
   /**
    * 書き込み。成功したら差分を取り直し、書き込んだレスを「自分の書き込み」として覚える。
    * レス番号はサーバーが教えてくれればそれを、なければ新着の中から本文が同じものを探す
    */
   const submitPost = async (input: PostInput): Promise<PostResult> => {
-    if (!store || !thread) return { status: 'error', message: 'スレを開いていません' }
-    const t = thread
+    if (!store || !activeTab) return { status: 'error', message: 'スレを開いていません' }
+    const t = activeTab.thread
     const connector = connectorOf(t.connectorId)
     if (!connector.createPost) return { status: 'error', message: 'この掲示板には書き込めません' }
     const r = await connector.createPost(t, input, ctx)
@@ -191,7 +351,7 @@ export default function App() {
     if (input.name !== settings.postName) updateSetting('postName', input.name)
     if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
     const before = (await store.loadThread(t))?.postCount ?? 0
-    await fetchThread(store, t, (await store.loadThread(t))?.cursor ?? null)
+    await fetchThread(store, t, { force: true })
     const after = await store.loadThread(t)
     const normalize = (s: string) => s.replace(/\s+/g, '')
     const no =
@@ -202,7 +362,7 @@ export default function App() {
         .find((p) => normalize(p.body) === normalize(input.body))?.no
     if (no) {
       await store.addOwnPost(t, no)
-      if (currentThread.current === threadId(t)) setOwnNos(new Set(await store.getOwnPosts(t)))
+      patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
     }
     return r
   }
@@ -233,12 +393,15 @@ export default function App() {
     if (kept.length !== settings.ngRules.length) updateSetting('ngRules', kept)
   }, [settingsLoaded])
 
+  const activeThread = activeTab?.thread
   const markRead = useCallback(
     (no: number) => {
-      if (!store || !thread) return
-      void store.markRead(thread, no).then(() => reloadStates(store, thread.boardUrl))
+      if (!store || !activeThread) return
+      const id = threadId(activeThread)
+      setTabs((ts) => ts.map((t) => (t.id === id && no > t.readNo ? { ...t, readNo: no } : t)))
+      void store.markRead(activeThread, no).then(() => reloadStates(store, activeThread.boardUrl))
     },
-    [store, thread],
+    [store, activeThread],
   )
 
   // ── お気に入り・サイト ──
@@ -321,10 +484,10 @@ export default function App() {
           title={history ? '閲覧履歴' : (board?.name ?? '板を選択')}
           threads={history ? history.map((h) => h.thread) : threads}
           stateOf={stateOf}
-          activeId={thread && threadId(thread)}
+          activeId={activeId}
           loading={loading.has('threads')}
           emptyText={history ? '閲覧履歴はありません' : board ? 'スレッドがありません' : '左の一覧から板を選んでください'}
-          onOpen={openThread}
+          onOpen={(t) => void openThread(t)}
           onRefresh={history ? openHistory : board ? () => openBoard(board) : undefined}
           width={settings.threadPanelWidth}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
@@ -335,29 +498,48 @@ export default function App() {
         />
       )}
 
-      {thread && log ? (
-        <ThreadView
-          key={threadId(thread)}
-          log={log}
-          unreadFrom={unreadFrom}
-          loading={loading.has('posts')}
-          settings={settings}
-          isNg={isNgPost}
-          onRead={markRead}
-          onRefresh={refreshThread}
-          onOpenInBrowser={() => void openUrl(connectorOf(thread.connectorId).threadWebUrl(thread))}
-          onUrl={(url) => void openUrl(url)}
-          onAddNg={addNg}
-          ownNos={ownNos}
-          onSubmitPost={connectorOf(thread.connectorId).createPost ? submitPost : undefined}
-          postName={settings.postName}
-          postMail={settings.postMail}
+      <div className="flex-1 min-w-0 flex flex-col">
+        <TabBar
+          tabs={tabs.map((t) => ({
+            id: t.id,
+            title: t.log?.title || t.thread.title,
+            unread: t.log ? Math.max(0, t.log.postCount - t.readNo) : 0,
+            loading: t.loading,
+            archived: t.log?.status === 'archived',
+          }))}
+          activeId={activeId}
+          onSelect={selectTab}
+          onClose={closeTabs}
+          onRefreshAll={() => void refreshAll()}
+          refreshingAll={refreshingAll}
         />
-      ) : (
-        <main className="flex-1 flex items-center justify-center bg-c-base">
-          <div className="text-c-text-muted text-sm">スレッドを選択してください</div>
-        </main>
-      )}
+
+        {activeTab?.log ? (
+          <ThreadView
+            key={activeTab.id}
+            log={activeTab.log}
+            initialPosition={activeTab.scroll}
+            onSavePosition={(pos) => patchTab(activeTab.id, { scroll: pos })}
+            unreadFrom={activeTab.unreadFrom}
+            loading={activeTab.loading}
+            settings={settings}
+            isNg={isNgPost}
+            onRead={markRead}
+            onRefresh={() => void refreshThread()}
+            onOpenInBrowser={() => void openUrl(connectorOf(activeTab.thread.connectorId).threadWebUrl(activeTab.thread))}
+            onUrl={(url) => void openUrl(url)}
+            onAddNg={addNg}
+            ownNos={activeTab.ownNos}
+            onSubmitPost={connectorOf(activeTab.thread.connectorId).createPost ? submitPost : undefined}
+            postName={settings.postName}
+            postMail={settings.postMail}
+          />
+        ) : (
+          <main className="flex-1 flex items-center justify-center bg-c-base">
+            <div className="text-c-text-muted text-sm">{activeTab ? '読み込み中...' : 'スレッドを選択してください'}</div>
+          </main>
+        )}
+      </div>
 
       {settingsOpen && (
         <SettingsDialog

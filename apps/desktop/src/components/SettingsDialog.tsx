@@ -173,6 +173,14 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           onChange={(v) => update('threadSort', v)}
         />
       </Section>
+      <Section title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+        <Toggle
+          checked={s.openInNewTab}
+          onChange={(v) => update('openInNewTab', v)}
+          label="スレ一覧から開くときは新しいタブで開く"
+          note="オフにすると、いま見ているタブを置き換えます"
+        />
+      </Section>
       <Section title="起動時に開く板" note="お気に入りの板から選べます">
         <select
           value={s.startupBoardUrl}

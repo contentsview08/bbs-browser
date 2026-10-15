@@ -1,0 +1,118 @@
+/* 仮の見た目。hono-bbs のデザインを移植するときに置き換える */
+:root {
+  --bg: #fafafa;
+  --fg: #222;
+  --muted: #777;
+  --line: #ddd;
+  --active: #e6efff;
+  font-family: 'Segoe UI', 'Yu Gothic UI', 'Noto Sans CJK JP', sans-serif;
+  font-size: 14px;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1b1d;
+    --fg: #ddd;
+    --muted: #999;
+    --line: #333;
+    --active: #2a3550;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px 360px 1fr;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+
+.toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.status {
+  color: var(--muted);
+}
+
+.error {
+  color: #d33;
+}
+
+.pane {
+  overflow: auto;
+  border-right: 1px solid var(--line);
+}
+
+.boards input {
+  width: calc(100% - 12px);
+  margin: 6px;
+}
+
+.boards summary {
+  padding: 2px 6px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.item {
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item:hover,
+.item.active {
+  background: var(--active);
+}
+
+.count {
+  display: inline-block;
+  min-width: 3em;
+  text-align: right;
+  color: var(--muted);
+}
+
+.posts {
+  padding: 0 16px 40px;
+}
+
+.posts h1 {
+  font-size: 16px;
+}
+
+.post {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.post-head {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.post-head .name {
+  color: #2a8a2a;
+}
+
+.post-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 4px 0 0 1em;
+}

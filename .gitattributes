@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+# テスト用の Shift_JIS データは改行コードも含めてバイト単位で比べるので、変換させない
+packages/connectors/test/fixtures/** binary
+*.ico binary
+*.png binary

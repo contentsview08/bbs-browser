@@ -1,0 +1,15 @@
+{
+  "name": "bbs-browser",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run tauri -w @bbs-browser/desktop -- dev",
+    "build": "npm run tauri -w @bbs-browser/desktop -- build",
+    "test": "npm test -w @bbs-browser/connectors",
+    "typecheck": "npm run typecheck -w @bbs-browser/connectors && npx -w @bbs-browser/desktop tsc --noEmit"
+  }
+}

@@ -518,9 +518,7 @@ export default function App() {
     : (board?.url ?? '')
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-c-base text-c-text-body">
-      <AddressBar currentUrl={currentUrl} onOpen={(url) => void openUrlInApp(url)} />
-      <div className="flex-1 min-h-0 flex">
+    <div className="flex h-full w-full overflow-hidden bg-c-base text-c-text-body">
       <Sidebar
         favorites={favorites ?? []}
         activeBoardUrl={board?.url}
@@ -533,6 +531,10 @@ export default function App() {
         onOpenSettings={() => setSettingsTab('display')}
         onManageBoards={() => setSettingsTab('boardlist')}
       />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+      <AddressBar currentUrl={currentUrl} onOpen={(url) => void openUrlInApp(url)} />
+      <div className="flex-1 min-h-0 flex">
 
       {settingsLoaded && (
         <ThreadListPanel
@@ -600,6 +602,7 @@ export default function App() {
             <div className="text-c-text-muted text-sm">{activeTab ? '読み込み中...' : 'スレッドを選択してください'}</div>
           </main>
         )}
+      </div>
       </div>
       </div>
 

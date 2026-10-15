@@ -1,4 +1,4 @@
-// 左端のサイドバー: 閲覧履歴・お気に入り板(開閉できる)・設定。
+// 左端のサイドバー: お気に入り板(開閉できる)、下に閲覧履歴と設定。
 // 見た目は web 版の MenuBar.tsx に合わせている。しまうとアイコンだけの帯になる。
 // 板の登録や BBS メニュー(5ch の板一覧など)から選ぶのは、設定画面の「板とサイト」で行う。
 
@@ -41,12 +41,20 @@ function StripButton(props: { icon: string; label: string; active?: boolean; onC
 /** しまったときの帯。履歴と設定はそのまま開き、お気に入りは広げて見せる */
 function Strip(props: Props & { onOpenFavorites: () => void }) {
   return (
-    <aside className="w-16 flex-shrink-0 flex flex-col items-center gap-1 py-2 bg-c-surface border-r border-c-border">
-      <StripButton icon="left_panel_open" label="開く" onClick={props.onToggleCollapsed} />
-      <div className="w-10 my-1 border-t border-c-border" />
-      <StripButton icon="schedule" label="履歴" active={props.historyActive} onClick={props.onOpenHistory} />
-      <StripButton icon="star" label="お気に入り" onClick={props.onOpenFavorites} />
+    <aside className="w-16 flex-shrink-0 flex flex-col items-center gap-1 pb-2 bg-c-surface border-r border-c-border">
+      <div data-tauri-drag-region className="h-10 w-full flex-shrink-0 flex items-center justify-center border-b border-c-border">
+        <button
+          type="button"
+          onClick={props.onToggleCollapsed}
+          className="p-1.5 text-c-text-muted hover:text-c-text-strong rounded-lg"
+          title="サイドバーを広げる"
+        >
+          <span className="material-symbols-outlined text-xl">left_panel_open</span>
+        </button>
+      </div>
+      <StripButton icon="star" label="お気に入り板" onClick={props.onOpenFavorites} />
       <div className="flex-1" />
+      <StripButton icon="schedule" label="閲覧履歴" active={props.historyActive} onClick={props.onOpenHistory} />
       <StripButton icon="settings" label="設定" onClick={props.onOpenSettings} />
     </aside>
   )
@@ -69,22 +77,19 @@ export default function Sidebar(props: Props) {
 
   return (
     <aside className="w-64 flex-shrink-0 flex flex-col bg-c-surface border-r border-c-border">
-      <div className="flex items-center justify-between pl-4 pr-2 py-1.5 border-b border-c-border">
-        <span className="text-sm font-bold text-c-text-strong">bbs-browser</span>
+      <div data-tauri-drag-region className="h-10 flex-shrink-0 flex items-center justify-between pl-4 pr-2 border-b border-c-border select-none">
+        <span data-tauri-drag-region className="text-sm font-bold text-c-text-strong">
+          bbs-browser
+        </span>
         <button type="button" onClick={props.onToggleCollapsed} className={ICON_BTN} title="サイドバーをしまう">
           <span className="material-symbols-outlined text-xl">left_panel_close</span>
         </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto custom-scrollbar py-1">
-        <button type="button" onClick={props.onOpenHistory} className={`${SECTION} ${props.historyActive ? 'active-board' : ''}`}>
-          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${props.historyActive ? 'fill' : ''}`}>schedule</span>
-          <span className="text-base font-medium flex-1 text-left">閲覧履歴</span>
-        </button>
-
         <button type="button" onClick={() => setFavoritesOpen((v) => !v)} className={SECTION}>
           <span className={`material-symbols-outlined text-xl flex-shrink-0 ${favoritesOpen ? 'fill' : ''}`}>star</span>
-          <span className="text-base font-medium flex-1 text-left">お気に入り</span>
+          <span className="text-base font-medium flex-1 text-left">お気に入り板</span>
           <span
             className="material-symbols-outlined text-base transition-transform flex-shrink-0"
             style={{ transform: favoritesOpen ? 'rotate(180deg)' : undefined }}
@@ -131,7 +136,17 @@ export default function Sidebar(props: Props) {
         )}
       </nav>
 
-      <div className="border-t border-c-border p-2">
+      <div className="border-t border-c-border p-2 space-y-1">
+        <button
+          type="button"
+          onClick={props.onOpenHistory}
+          className={`w-full flex items-center px-3 py-2 transition-colors rounded-[var(--btn-radius)] hover:bg-c-surface2 ${
+            props.historyActive ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-strong'
+          }`}
+        >
+          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${props.historyActive ? 'fill' : ''}`}>schedule</span>
+          <span className="ml-3 text-sm">閲覧履歴</span>
+        </button>
         <button
           type="button"
           onClick={props.onOpenSettings}

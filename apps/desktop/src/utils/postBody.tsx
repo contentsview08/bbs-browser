@@ -178,3 +178,46 @@ export function normalizeForSearch(text: string): string {
     .toLowerCase()
     .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
 }
+
+/** ツリー表示の 1 行 */
+export interface TreeRow {
+  no: number
+  depth: number
+  /** 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか) */
+  rails: boolean[]
+  /** 兄弟の中で最後か(最後なら └、そうでなければ ├) */
+  last: boolean
+  /** 親のほかにもアンカーを付けている先 */
+  alsoTo: number[]
+}
+
+/**
+ * アンカーツリーを、線でつないで描くための行の並びにする。
+ * 親は「自分がアンカーを付けた先のうち、いちばん前のレス」。どこにも付けていないレスが根になる。
+ * 前にあるレスにしか親を取らないので、輪にはならない
+ */
+export function anchorTreeRows(start: number, posts: Post[]): TreeRow[] {
+  const nos = anchorTree(start, posts)
+  const inTree = new Set(nos)
+  const byNo = new Map(posts.map((p) => [p.no, p]))
+  const parent = new Map<number, number>()
+  const alsoTo = new Map<number, number[]>()
+  const children = new Map<number, number[]>()
+  for (const no of nos) {
+    const targets = [...new Set(anchorsIn(byNo.get(no)?.body ?? ''))].filter((n) => inTree.has(n) && n < no).sort((a, b) => a - b)
+    if (targets.length === 0) continue
+    parent.set(no, targets[0])
+    alsoTo.set(no, targets.slice(1))
+    children.set(targets[0], [...(children.get(targets[0]) ?? []), no])
+  }
+
+  const rows: TreeRow[] = []
+  const walk = (no: number, depth: number, rails: boolean[], last: boolean) => {
+    rows.push({ no, depth, rails, last, alsoTo: alsoTo.get(no) ?? [] })
+    const kids = (children.get(no) ?? []).sort((a, b) => a - b)
+    kids.forEach((k, i) => walk(k, depth + 1, depth === 0 ? [] : [...rails, !last], i === kids.length - 1))
+  }
+  const roots = nos.filter((n) => !parent.has(n))
+  roots.forEach((r, i) => walk(r, 0, [], i === roots.length - 1))
+  return rows
+}

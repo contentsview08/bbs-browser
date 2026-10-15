@@ -1,10 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "メインウィンドウの権限。掲示板はどこにあるか分からないので、http/https の通信はすべて許可する",
+  "description": "メインウィンドウの権限。掲示板はどこにあるか分からないので、http/https の通信はすべて許可する。ウィンドウ枠はアプリで描くので、最小化・最大化・閉じる・ドラッグを許可する",
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
     "opener:default",
     "sql:default",
     "sql:allow-execute",

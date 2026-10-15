@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { NgRule } from '../utils/ng'
 
-export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic'
+export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light'
 export type DesignPattern = 'tonal' | 'bordered'
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
@@ -84,7 +84,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pattern: 'tonal',
   density: 'dense',
   fontSize: 3,
-  fontFamily: 'noto',
+  fontFamily: 'system',
   customFont: '',
   threadPanelWidth: 420,
   sidebarCollapsed: false,
@@ -115,15 +115,19 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'amber-teal', name: 'アンバー×ティール', accent: '#e0993f', border: '#2a3247' },
   { key: 'light', name: 'ライト', accent: '#3d6b96', border: '#e7e4df' },
   { key: '2ch-classic', name: '2chクラシック', accent: '#0000ff', border: '#545454' },
+  // 専ブラで足した、コントラストを抑えた配色(app.css)
+  { key: 'soft-dark', name: 'やさしいダーク', accent: '#8b93d9', border: '#343a44' },
+  { key: 'soft-light', name: 'やさしいライト', accent: '#4f6f8f', border: '#dcd8d1' },
 ]
 
 export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
   { key: 'noto', name: 'Noto Sans JP', css: "'Noto Sans JP Variable', 'Noto Sans JP', sans-serif" },
-  { key: 'biz-ud', name: 'BIZ UDPゴシック', css: "'BIZ UDPGothic', sans-serif" },
-  { key: 'system', name: 'システム標準', css: "'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', sans-serif" },
+  { key: 'biz-ud', name: 'BIZ UDPゴシック(同梱)', css: "'BIZ UDPGothic', sans-serif" },
+  // Windows に入っている BIZ UDPゴシックは画面表示向けの調整(ヒンティング)が効いていて、小さい字もガタつきにくい
+  { key: 'system', name: 'Windows 標準(BIZ UDPゴシック)', css: "'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', sans-serif" },
 ]
 
-const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal'])
+const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark'])
 
 const FONT_SIZES = [13, 14, 16, 18, 20]
 

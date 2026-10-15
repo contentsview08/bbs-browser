@@ -5,19 +5,21 @@
 //   (前回最後まで読んでいたスレを開いたときは、届いた新着の頭へ移る。末尾までは飛ばない)
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Post, PostInput, PostResult } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
 import Lightbox from './Lightbox'
 import Minimap from './Minimap'
+import AnchorTree from './AnchorTree'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
+  anchorTreeRows,
   anchorsIn,
   countAnchors,
   countIds,
@@ -358,7 +360,9 @@ export default function ThreadView(props: Props) {
   // handlersFor と renderPosts は互いを使う(ポップアップの中のレスにも、1 段深いハンドラを渡す)
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
-      const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) => {
+      const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) =>
+        openContent(title, renderPosts(posts, level + 1), el, viaHover)
+      const openContent = (title: string, content: ReactNode, el: HTMLElement, viaHover = false) => {
         const rect = el.getBoundingClientRect()
         if (viewRef.current)
           setPopupFrame({
@@ -371,7 +375,7 @@ export default function ThreadView(props: Props) {
           title,
           triggerY: rect.top,
           level,
-          content: renderPosts(posts, level + 1),
+          content,
         }
         setPopups((ps) => [...ps.slice(0, level), entry])
       }
@@ -404,7 +408,7 @@ export default function ThreadView(props: Props) {
         onBody: (no, el) => {
           const tree = anchorTree(no, log.posts)
           if (tree.length <= 1) return
-          open(`>>${no} のアンカーツリー (${tree.length})`, tree.map((n) => byNo.get(n)!), el, false)
+          openContent(`>>${no} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el)
         },
         onUrl: props.onUrl,
         onImage: (urls, index) => setLightbox({ urls, index }),
@@ -420,6 +424,35 @@ export default function ThreadView(props: Props) {
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, props.onUrl, props.onAddNg],
   )
+
+  /** アンカーツリーを線でつないで描く(ポップアップの中身) */
+  function renderTree(start: number, level: number) {
+    const handlers = handlersFor(level)
+    return (
+      <AnchorTree
+        rows={anchorTreeRows(start, log.posts)}
+        focus={start}
+        renderPost={(no) => {
+          const p = byNo.get(no)!
+          return (
+            <PostArticle
+              post={p}
+              anchorCount={anchorCounts.get(p.no) ?? 0}
+              idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
+              showTopDivider={false}
+              ng={isNg(p)}
+              ngMode="aborn"
+              showThumbnails={settings.showThumbnails}
+              aaAutoDetect={settings.aaAutoDetect}
+              isOwn={ownNos.has(p.no)}
+              isReplyToOwn={replyToOwn.has(p.no)}
+              handlers={handlers}
+            />
+          )
+        }}
+      />
+    )
+  }
 
   function renderPosts(posts: Post[], level: number) {
     if (posts.length === 0) return <p className="text-c-text-muted text-sm text-center py-4">レスが見つかりません</p>

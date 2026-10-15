@@ -154,7 +154,8 @@ function PostArticle(props: Props) {
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
   const hasConnections = anchorCount > 0 || anchorsIn(post.body).some((n) => n !== post.no)
   const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(post.body))
-  const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-strong'
+  // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする
+  const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
   const images = props.showThumbnails ? imageUrlsIn(post.body) : []
 
   const copy = (text: string) => void navigator.clipboard.writeText(text)

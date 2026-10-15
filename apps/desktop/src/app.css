@@ -22,3 +22,74 @@ body,
 [data-scheme='2ch-classic'] {
   --c-thread-read-title: #1a4fa0;
 }
+
+/* ---------- 専ブラで足した配色 ----------
+   長い時間読むことを前提に、背景と文字の差を web 版の配色より抑えたもの。
+   変数の意味は theme/theme.css の先頭の説明と同じ */
+
+/* やさしいダーク: 背景を真っ黒から少し持ち上げ、文字も真っ白にしない */
+[data-scheme='soft-dark'] {
+  --c-base: #1b1d22;
+  --c-header-footer: var(--c-surface);
+  --c-surface: #202329;
+  --c-surface2: #262a31;
+  --c-surface3: #2e333b;
+  --c-border: #343a44;
+  --c-border-strong: #434a56;
+  --c-text-strong: #d4d7dd;
+  --c-text-body: #b4b9c2;
+  --c-text-muted: #7d8491;
+  --c-text-emphasis: #e6e8ec;
+  --c-accent: #8b93d9;
+  --c-accent-hover: #9ba2e0;
+  --c-accent-text: #15172a;
+  --c-accent-wash: rgba(139, 147, 217, 0.14);
+  --c-accent-self: #d08aa3;
+  --c-accent-self-wash: rgba(208, 138, 163, 0.15);
+  --c-accent-self-text: #2b0a17;
+  --c-link: #7fb0e8;
+  --c-link-twitter: #7fc6e6;
+  --c-link-youtube: #e07aa8;
+  --c-poster-name: #5f9c8a;
+  --c-heat-warm: #d9b062;
+  --c-heat-hot: #d9925f;
+  --c-heat-very-hot: #d96a66;
+  --c-thread-view-bg: var(--c-base);
+  --c-thread-read-title: #a9c4e8;
+}
+
+/* やさしいライト: 真っ白をやめて生成り色にし、文字も真っ黒にしない */
+[data-scheme='soft-light'] {
+  --c-base: #f0ede8;
+  --c-header-footer: var(--c-base);
+  --c-surface: #f7f5f1;
+  --c-surface2: #e9e6e0;
+  --c-surface3: #dfdbd4;
+  --c-border: #dcd8d1;
+  --c-border-strong: #c4bfb6;
+  --c-text-strong: #2e2c29;
+  --c-text-body: #45423d;
+  --c-text-muted: #85817a;
+  --c-text-emphasis: #1f1d1b;
+  --c-accent: #4f6f8f;
+  --c-accent-hover: #5d7ea0;
+  --c-accent-text: #ffffff;
+  --c-accent-wash: rgba(79, 111, 143, 0.1);
+  --c-accent-self: #a85c6f;
+  --c-accent-self-wash: rgba(168, 92, 111, 0.1);
+  --c-accent-self-text: #ffffff;
+  --c-link: #3a6aa8;
+  --c-link-twitter: #2a7ea0;
+  --c-link-youtube: #b44a74;
+  --c-poster-name: #5f8f7d;
+  --c-heat-warm: #b57a2a;
+  --c-heat-hot: #bb6236;
+  --c-heat-very-hot: #b04242;
+  --c-thread-view-bg: #f4f2ee;
+  --c-thread-read-title: #3a5f96;
+}
+
+/* やさしいライトのカードは、トーナルでも枠線でも背景より少しだけ明るい面にする */
+[data-pattern][data-scheme='soft-light'] {
+  --card-bg: #f9f7f4;
+}

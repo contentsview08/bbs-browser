@@ -16,7 +16,16 @@ import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
-import { anchorsIn, countAnchors, countIds } from '../utils/postBody'
+import {
+  anchorTree,
+  anchorsIn,
+  countAnchors,
+  countIds,
+  hasLink,
+  hasYoutube,
+  imageUrlsIn,
+  normalizeForSearch,
+} from '../utils/postBody'
 import type { NgRule } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
 
@@ -56,6 +65,15 @@ interface Props {
 }
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
+
+/** レスの絞り込み(web 版と同じ 4 種。選んだもののどれかに当たれば出す) */
+type PostFilter = 'popular' | 'image' | 'video' | 'link'
+const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
+  { key: 'popular', label: '人気レス', icon: 'local_fire_department' },
+  { key: 'image', label: '画像', icon: 'image' },
+  { key: 'video', label: '動画', icon: 'play_circle' },
+  { key: 'link', label: 'リンク', icon: 'link' },
+]
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら閉じる */
@@ -161,6 +179,14 @@ export default function ThreadView(props: Props) {
     }
   }
 
+  const [filters, setFilters] = useState<Set<PostFilter>>(new Set())
+  const [searchActive, setSearchActive] = useState(false)
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (searchActive) searchRef.current?.focus()
+  }, [searchActive])
+
   const { ownNos } = props
   const replyRef = useRef<ReplyFormHandle>(null)
   const replyLayout = settings.replyLayout
@@ -179,6 +205,29 @@ export default function ThreadView(props: Props) {
     return set
   }, [log.posts, ownNos])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
+  /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
+  const visibleNos = useMemo(() => {
+    const q = normalizeForSearch(query.trim())
+    if (filters.size === 0 && !q) return undefined
+    const set = new Set<number>()
+    for (const p of log.posts) {
+      if (filters.size > 0) {
+        const hit =
+          (filters.has('popular') && (anchorCounts.get(p.no) ?? 0) >= 3) ||
+          (filters.has('image') && imageUrlsIn(p.body).length > 0) ||
+          (filters.has('video') && hasYoutube(p.body)) ||
+          (filters.has('link') && hasLink(p.body))
+        if (!hit) continue
+      }
+      if (q && !normalizeForSearch(`${p.no} ${p.name} ${p.body}`).includes(q)) continue
+      set.add(p.no)
+    }
+    return set
+  }, [log.posts, filters, query, anchorCounts])
+  const visiblePosts = useMemo(
+    () => (visibleNos ? log.posts.filter((p) => visibleNos.has(p.no)) : log.posts),
+    [log.posts, visibleNos],
+  )
   const byNo = useMemo(() => new Map(log.posts.map((p) => [p.no, p])), [log.posts])
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
   const replies = useMemo(() => {
@@ -218,6 +267,7 @@ export default function ThreadView(props: Props) {
     let last = 0
     let top: ScrollPosition | undefined
     for (const el of root.querySelectorAll<HTMLElement>(':scope [data-no]')) {
+      if (el.offsetParent === null) continue // 絞り込みで隠しているレス
       const rect = el.getBoundingClientRect()
       if (rect.top >= bottom) break
       last = Number(el.dataset.no)
@@ -343,6 +393,15 @@ export default function ThreadView(props: Props) {
           const list = log.posts.filter((p) => p.id === id)
           open(`ID:${id} (${list.length})`, list, el, false)
         },
+        onName: (name, el) => {
+          const list = log.posts.filter((p) => p.name === name)
+          open(`${name} (${list.length})`, list, el, false)
+        },
+        onBody: (no, el) => {
+          const tree = anchorTree(no, log.posts)
+          if (tree.length <= 1) return
+          open(`>>${no} のアンカーツリー (${tree.length})`, tree.map((n) => byNo.get(n)!), el, false)
+        },
         onUrl: props.onUrl,
         onImage: (urls, index) => setLightbox({ urls, index }),
         onAddNg: props.onAddNg,
@@ -411,7 +470,26 @@ export default function ThreadView(props: Props) {
       >
         <div ref={headerRef} className="sticky top-0 z-10 frosted-glass border-b border-c-border flex-shrink-0">
           <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
-            <div className="min-w-0 flex-1 flex items-center gap-2">
+            <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onBlur={() => {
+                  if (!query.trim()) setSearchActive(false)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setQuery('')
+                    setSearchActive(false)
+                  }
+                }}
+                placeholder="レス検索..."
+                className={`absolute inset-y-0 right-0 z-10 bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0 transition-[left,opacity] duration-300 ease-out ${
+                  searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
+                }`}
+              />
               <h2
                 className="font-bold truncate text-base cursor-pointer hover:text-c-accent transition-colors"
                 style={{ color: 'var(--thread-title-color, var(--c-text-strong))' }}
@@ -429,6 +507,14 @@ export default function ThreadView(props: Props) {
               )}
             </div>
             <div className="flex items-center gap-2 ml-4">
+              <button
+                type="button"
+                onClick={() => setSearchActive((v) => !v)}
+                className={`${ICON_BTN} ${searchActive || query ? 'text-c-accent' : ''}`}
+                title="レス検索"
+              >
+                <span className="material-symbols-outlined text-xl">search</span>
+              </button>
               {settings.autoRefreshSec > 0 && (
                 <span className="flex items-center gap-1 text-xs text-c-accent" title="自動更新中">
                   <span className="material-symbols-outlined text-base">autorenew</span>
@@ -465,6 +551,47 @@ export default function ThreadView(props: Props) {
               </button>
             </div>
           </header>
+          <div className="flex items-center gap-4 px-4 overflow-x-auto no-scrollbar text-sm font-medium">
+            {FILTERS.map(({ key, label, icon }) => {
+              const active = filters.has(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() =>
+                    setFilters((f) => {
+                      const next = new Set(f)
+                      if (next.has(key)) next.delete(key)
+                      else next.add(key)
+                      return next
+                    })
+                  }
+                  className={`relative shrink-0 flex items-center gap-1 transition-colors whitespace-nowrap ${
+                    active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
+                  }`}
+                  style={{ paddingTop: 'var(--header-tab-padding-y, 10px)', paddingBottom: 'var(--header-tab-padding-y, 10px)' }}
+                >
+                  <span className="material-symbols-outlined text-base leading-none">{icon}</span>
+                  {label}
+                  {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => setFilters(new Set())}
+              className={`relative shrink-0 transition-colors ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+              style={{ paddingTop: 'var(--header-tab-padding-y, 10px)', paddingBottom: 'var(--header-tab-padding-y, 10px)' }}
+            >
+              すべて
+              {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+            </button>
+            {visibleNos && (
+              <span className="ml-auto shrink-0 text-xs text-c-text-muted tabular-nums">
+                {visibleNos.size} / {log.posts.length} レス
+              </span>
+            )}
+          </div>
         </div>
 
         <div ref={listRef} className="flex-1 flex flex-col" style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)' }}>
@@ -475,8 +602,8 @@ export default function ThreadView(props: Props) {
               {log.posts.map((p, i) => {
                 const firstUnread = p.no === unreadFrom && unreadFrom > 1
                 return (
-                  <div key={p.no}>
-                    {firstUnread && <Divider label="ここから未読" self />}
+                  <div key={p.no} hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
+                    {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     <PostArticle
                       post={p}
                       anchorCount={anchorCounts.get(p.no) ?? 0}
@@ -501,7 +628,7 @@ export default function ThreadView(props: Props) {
       </div>
       {settings.showMinimap && log.posts.length > 0 && (
         <Minimap
-          posts={log.posts}
+          posts={visiblePosts}
           scrollRef={ref}
           listRef={listRef}
           anchorCounts={anchorCounts}

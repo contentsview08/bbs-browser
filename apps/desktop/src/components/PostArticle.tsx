@@ -3,7 +3,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react'
 import type { Post } from '@bbs-browser/connectors'
-import { heatClass, imageUrlsIn, looksLikeAA, renderBody, type BodyHandlers } from '../utils/postBody'
+import { anchorsIn, heatClass, imageUrlsIn, looksLikeAA, renderBody, type BodyHandlers } from '../utils/postBody'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { NgMode } from '../ui/settings'
 
@@ -12,6 +12,10 @@ export interface PostHandlers extends BodyHandlers {
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
   onId: (id: string, el: HTMLElement) => void
+  /** 名前を押した(同じ名前の書き込みを出す) */
+  onName: (name: string, el: HTMLElement) => void
+  /** 本文を押した(アンカーツリーを出す。つながりがなければ何もしない) */
+  onBody: (no: number, el: HTMLElement) => void
   onImage: (urls: string[], index: number) => void
   onAddNg: (rule: NgRule) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
@@ -114,6 +118,8 @@ function PostArticle(props: Props) {
   }
 
   const numHeat = heatClass(anchorCount)
+  // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
+  const hasConnections = anchorCount > 0 || anchorsIn(post.body).some((n) => n !== post.no)
   const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(post.body))
   const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-strong'
   const images = props.showThumbnails ? imageUrlsIn(post.body) : []
@@ -156,7 +162,14 @@ function PostArticle(props: Props) {
           <span style={props.isOwn ? { color: 'var(--c-accent-self)' } : undefined}>{post.no}</span>
           {anchorCount > 0 && <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>}
         </button>
-        <span className={`font-bold text-c-poster-name ${HEAD_TEXT} min-w-0 truncate`}>{post.name}</span>
+        <button
+          type="button"
+          className={`font-bold text-c-poster-name ${HEAD_TEXT} min-w-0 truncate hover:opacity-80`}
+          onClick={(e) => handlers.onName(post.name, e.currentTarget)}
+          title="同じ名前の書き込みを表示"
+        >
+          {post.name}
+        </button>
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
         <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
         {post.id && (
@@ -198,6 +211,12 @@ function PostArticle(props: Props) {
       </div>
 
       <div
+        className={hasConnections ? 'cursor-pointer' : ''}
+        onClick={(e) => {
+          // 文字を選んでいるとき(コピーしようとしているとき)は開かない
+          if (!hasConnections || window.getSelection()?.toString().trim()) return
+          handlers.onBody(post.no, e.currentTarget)
+        }}
         style={{
           paddingLeft: props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
           borderLeftWidth: props.isOwn ? 'var(--post-quote-bar-width-own)' : 'var(--post-quote-bar-width)',
@@ -217,7 +236,10 @@ function PostArticle(props: Props) {
               <button
                 key={url + i}
                 type="button"
-                onClick={() => handlers.onImage(images, i)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handlers.onImage(images, i)
+                }}
                 className="w-20 h-20 bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
               >
                 <img

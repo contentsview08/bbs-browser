@@ -133,3 +133,48 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
   if (last < text.length) parts.push(text.slice(last))
   return parts
 }
+
+/**
+ * アンカーツリー: start からアンカーを前後(付けた先・付けられた元)にたどって、つながるレスの番号を全部集める。
+ * web 版の buildAnchorTree と同じ。start だけなら長さ 1 になる
+ */
+export function anchorTree(start: number, posts: Post[]): number[] {
+  const exists = new Set(posts.map((p) => p.no))
+  const to = new Map<number, number[]>()
+  const from = new Map<number, number[]>()
+  for (const p of posts) {
+    const nums = anchorsIn(p.body).filter((n) => exists.has(n) && n !== p.no)
+    to.set(p.no, nums)
+    for (const n of nums) from.set(n, [...(from.get(n) ?? []), p.no])
+  }
+  const seen = new Set([start])
+  const queue = [start]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const n of [...(to.get(cur) ?? []), ...(from.get(cur) ?? [])]) {
+      if (!seen.has(n)) {
+        seen.add(n)
+        queue.push(n)
+      }
+    }
+  }
+  return [...seen].sort((a, b) => a - b)
+}
+
+/** リンク(画像・動画以外の URL)があるか */
+export function hasLink(text: string): boolean {
+  for (const m of text.matchAll(TOKEN)) {
+    if (!m[3]) continue
+    const url = normalizeUrl(m[3])
+    if (!IMAGE_URL.test(url) && !YOUTUBE_URL.test(url)) return true
+  }
+  return false
+}
+
+/** 検索用に揃える: 全角半角(NFKC)・大文字小文字・カタカナとひらがなの違いを無視する */
+export function normalizeForSearch(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
+}

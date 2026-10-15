@@ -43,6 +43,7 @@ export default function Minimap(props: Props) {
       const rootTop = root.getBoundingClientRect().top
       const next = new Map<number, number>()
       for (const el of root.querySelectorAll<HTMLElement>(':scope [data-no]')) {
+        if (el.offsetParent === null) continue // 絞り込みで隠しているレス
         const top = el.getBoundingClientRect().top - rootTop + root.scrollTop
         next.set(Number(el.dataset.no), (top / root.scrollHeight) * 100)
       }

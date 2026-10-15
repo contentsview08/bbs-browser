@@ -82,14 +82,17 @@ export default function TabBar(props: Props) {
     : []
 
   return (
-    <div className="flex-shrink-0 flex items-stretch bg-c-surface border-b border-c-border">
+    <div className="flex-shrink-0 flex items-end pt-1.5" style={{ background: 'var(--tabbar-bg)' }}>
       <div
         ref={stripRef}
-        className="flex-1 min-w-0 flex overflow-x-auto no-scrollbar"
+        className="flex-1 min-w-0 flex items-end overflow-x-auto no-scrollbar px-2"
         onMouseLeave={() => setFrozenWidth(undefined)}
       >
-        {props.tabs.map((t) => {
+        {props.tabs.map((t, i) => {
           const active = t.id === props.activeId
+          // 区切り線は、自分と右隣のどちらも開いていないときだけ出す(Chrome と同じ)
+          const next = props.tabs[i + 1]
+          const separator = !active && next !== undefined && next.id !== props.activeId
           return (
             <div
               key={t.id}
@@ -103,14 +106,25 @@ export default function TabBar(props: Props) {
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY })
               }}
               title={t.title}
-              style={{ width: tabWidth }}
-              className={`group relative flex-shrink-0 flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 border-r border-c-border cursor-pointer select-none text-xs transition-colors ${
-                active
-                  ? 'bg-[var(--c-thread-view-bg)] text-c-text-strong'
-                  : 'text-c-text-muted hover:bg-c-surface2 hover:text-c-text-body'
+              style={{ width: tabWidth, background: active ? 'var(--tab-active-bg)' : undefined }}
+              className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 rounded-t-lg cursor-pointer select-none text-xs transition-colors ${
+                active ? 'z-10 text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-bg)_50%,transparent)]'
               } ${t.archived ? 'opacity-60' : ''}`}
             >
-              {active && <span className="absolute top-0 left-0 right-0 h-[2px] bg-c-accent" />}
+              {active && (
+                <>
+                  {/* タブの下の両端の、スレ表示へ流れ込む内側の曲線 */}
+                  <span
+                    className="absolute bottom-0 -left-2 w-2 h-2 pointer-events-none"
+                    style={{ background: 'radial-gradient(circle at 0 0, transparent 8px, var(--tab-active-bg) 8.5px)' }}
+                  />
+                  <span
+                    className="absolute bottom-0 -right-2 w-2 h-2 pointer-events-none"
+                    style={{ background: 'radial-gradient(circle at 100% 0, transparent 8px, var(--tab-active-bg) 8.5px)' }}
+                  />
+                </>
+              )}
+              {separator && <span className="absolute right-0 top-2 bottom-2 w-px bg-c-border pointer-events-none" />}
               {t.loading && <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>}
               <span className="flex-1 min-w-0 truncate">{t.title || '(読み込み中)'}</span>
               {t.unread > 0 && (
@@ -127,7 +141,7 @@ export default function TabBar(props: Props) {
                   e.stopPropagation()
                   closeByPointer(t.id)
                 }}
-                className={`flex-shrink-0 p-0.5 rounded hover:bg-c-surface3 ${active ? '' : 'opacity-0 group-hover:opacity-100'}`}
+                className={`flex-shrink-0 p-0.5 rounded-full hover:bg-c-surface3 ${active ? '' : 'opacity-0 group-hover:opacity-100'}`}
                 title="閉じる (Ctrl+W)"
               >
                 <span className="material-symbols-outlined text-sm leading-none">close</span>
@@ -140,7 +154,7 @@ export default function TabBar(props: Props) {
         type="button"
         onClick={props.onRefreshAll}
         disabled={props.refreshingAll}
-        className="flex-shrink-0 px-2.5 text-c-text-muted hover:text-c-text-strong border-l border-c-border"
+        className="flex-shrink-0 h-8 px-2.5 mr-1 rounded-t-lg text-c-text-muted hover:text-c-text-strong"
         title="すべてのタブを更新"
       >
         <span className={`material-symbols-outlined text-lg ${props.refreshingAll ? 'animate-spin' : ''}`}>sync</span>

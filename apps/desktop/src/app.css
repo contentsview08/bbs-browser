@@ -106,3 +106,30 @@ body,
   background-clip: padding-box;
   border-radius: 10px;
 }
+
+/* 新着のレスの光り方。web 版(1.2 秒)より長く、しばらく色を保ってからゆっくり消す。
+   長さは ThreadView.tsx の FLASH_MS と揃える */
+@keyframes flash-new-slow {
+  0% {
+    background-color: color-mix(in srgb, var(--c-accent-self) 30%, transparent);
+  }
+  45% {
+    background-color: color-mix(in srgb, var(--c-accent-self) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.flash-new {
+  animation: flash-new-slow 3.2s ease-out;
+}
+
+/* タブ(Chrome 風)。開いているタブはスレのヘッダーと同じ色にして、境界線なしでつなげる。
+   ヘッダーのすりガラス(.frosted-glass)はスレ表示の背景の上に --c-header-footer を 40% 重ねた色なので、それに合わせる */
+:root {
+  --tab-active-bg: color-mix(in srgb, var(--c-header-footer) 40%, var(--c-thread-view-bg) 60%);
+  --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 90%, black 10%);
+}
+:root.dark {
+  --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 70%, black 30%);
+}

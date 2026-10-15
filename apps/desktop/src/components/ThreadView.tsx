@@ -76,6 +76,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'video', label: '動画', icon: 'play_circle' },
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
+/** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
+const FLASH_MS = 3200
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら閉じる */
@@ -248,8 +250,11 @@ export default function ThreadView(props: Props) {
 
   const prevCount = useRef(log.posts.length)
 
-  // 前回の描画より後ろの番号は「新着」として光らせる(最初の表示では光らせない)
-  const flashFrom = positioned.current ? lastMax.current + 1 : Infinity
+  // 新着として光らせるレス。届いたときに番号を控え、FLASH_MS 後に消す
+  // (描画のたびに「前回より後ろ」を計算し直すと、既読の保存などで描き直された時点で光が途中で切れていた)
+  const [flashNos, setFlashNos] = useState<Set<number>>(new Set())
+  const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(flashTimer.current), [])
   useEffect(() => {
     lastMax.current = log.posts.at(-1)?.no ?? 0
   }, [log.posts])
@@ -322,6 +327,10 @@ export default function ThreadView(props: Props) {
     const grew = log.posts.length > prevCount.current
     prevCount.current = log.posts.length
     if (!root || !grew || !positioned.current) return
+    const fresh = log.posts.filter((p) => p.no > lastMax.current).map((p) => p.no)
+    setFlashNos(new Set(fresh))
+    clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlashNos(new Set()), FLASH_MS)
     if (pendingUnread.current) {
       pendingUnread.current = false
       if (byNo.has(unreadFrom)) {
@@ -486,7 +495,7 @@ export default function ThreadView(props: Props) {
   const headerBlock = (
     <div
       ref={headerRef}
-      className={`${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : 'bg-[var(--c-thread-view-bg)]'} border-b border-c-border flex-shrink-0`}
+      className={`${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : 'bg-[var(--tab-active-bg)]'} border-b border-c-border flex-shrink-0`}
     >
         <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
           <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
@@ -659,7 +668,7 @@ export default function ThreadView(props: Props) {
                       ngMode={settings.ngMode}
                       showThumbnails={settings.showThumbnails}
                       aaAutoDetect={settings.aaAutoDetect}
-                      flash={p.no >= flashFrom}
+                      flash={flashNos.has(p.no)}
                       isOwn={ownNos.has(p.no)}
                       isReplyToOwn={replyToOwn.has(p.no)}
                       handlers={mainHandlers}

@@ -183,7 +183,9 @@ export default function App() {
         const r = await connectorOf(t.connectorId).fetchPosts(t, cursor, ctx)
         await s.saveFetch(t, r)
         const saved = await s.loadThread(t)
-        if (saved) patchTab(id, { log: saved })
+        // 「ここから未読」は、取り直すたびにその時点の既読位置の次へ引き直す
+        // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)
+        if (saved) setTabs((ts) => ts.map((x) => (x.id === id ? { ...x, log: saved, unreadFrom: x.readNo + 1 } : x)))
         await reloadStates(s, t.boardUrl)
       } finally {
         patchTab(id, { loading: false })
@@ -222,7 +224,9 @@ export default function App() {
       const id = threadId(t)
       const existing = tabsRef.current.find((x) => x.id === id)
       if (existing) {
+        // もう開いているスレは、そのタブに移って差分を取りに行く(スレ一覧で新着があるのを見て押したとき)
         selectTab(id)
+        if (existing.log) await fetchThread(store, existing.thread)
         return
       }
       const inNew = opts.newTab ?? settings.openInNewTab

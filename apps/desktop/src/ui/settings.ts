@@ -39,6 +39,10 @@ export interface AppSettings {
   fontFamily: FontFamily
   customFont: string
   threadPanelWidth: number
+  /** 背景画像(アプリのデータフォルダにコピーしたもののパス)。空なら出さない */
+  backgroundImage: string
+  /** 背景画像の濃さ(0〜1)。画面の上に重ねるので、小さめにする */
+  backgroundOpacity: number
   /** サイドバーをしまって、アイコンだけの細い帯にする */
   sidebarCollapsed: boolean
   replyLayout: ReplyLayout
@@ -93,6 +97,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontFamily: 'system',
   customFont: '',
   threadPanelWidth: 420,
+  backgroundImage: '',
+  backgroundOpacity: 0.15,
   sidebarCollapsed: false,
   replyLayout: 'bottom',
   replyHeight: 170,

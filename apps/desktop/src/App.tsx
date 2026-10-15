@@ -28,6 +28,7 @@ import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
 import { useSettings, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
+import { backgroundImageUrl } from './host/backgroundImage'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule } from './utils/ng'
 
 const connectorOf = (id: string) => {
@@ -529,6 +530,8 @@ export default function App() {
   )
 
   const historyStates = new Map(history?.map((h) => [threadId(h.thread), h as ThreadState]))
+  // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
+  const historyThreads = useMemo(() => history?.map((h) => h.thread), [history])
   const stateOf = history
     ? (t: ThreadSummary) => historyStates.get(threadId(t))
     : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
@@ -577,7 +580,7 @@ export default function App() {
         <ThreadListPanel
           key={history ? 'history' : board?.url}
           title={history ? '閲覧履歴' : (board?.name ?? '板を選択')}
-          threads={history ? history.map((h) => h.thread) : threads}
+          threads={historyThreads ?? threads}
           stateOf={stateOf}
           activeId={activeId}
           loading={loading.has('threads')}
@@ -686,6 +689,17 @@ export default function App() {
           onAddSite={addSite}
           onRemoveSite={removeSite}
           onClose={() => setSettingsTab(undefined)}
+        />
+      )}
+
+      {/* 背景画像。画面の上に薄く重ね、マウスの操作は下に通す。ポップアップや設定画面よりは下 */}
+      {settings.backgroundImage && settings.backgroundOpacity > 0 && (
+        <div
+          className="fixed inset-0 z-[50] pointer-events-none bg-cover bg-center"
+          style={{
+            backgroundImage: `url("${backgroundImageUrl(settings.backgroundImage)}")`,
+            opacity: settings.backgroundOpacity,
+          }}
         />
       )}
 

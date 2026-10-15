@@ -2,6 +2,7 @@
 // - 小さい画像も画面いっぱいの枠に収まるまで引き伸ばして見せ、ワンクリックで保存できる
 // - そのレスの中の画像を、ホイール・←→・左右のボタンで切り替える(最後まで行ったら最初に戻る)
 // - 画像の下側に本文のパネルを重ねる(web 版のスマホ表示と同じ)。画像を押すとパネルを隠す。絵の外を押したら閉じる
+// - Ctrl+ホイールでマウスの位置を中心に拡大・縮小し、拡大中はつかんで動かせる。ダブルクリックで等倍と 2.5 倍を切り替える
 
 import { useEffect, useRef, useState } from 'react'
 import type { Post } from '@bbs-browser/connectors'
@@ -42,11 +43,40 @@ type SaveState = { status: 'saving' } | { status: 'saved'; path: string } | { st
 
 /** ホイール 1 回の操作で何枚も飛ばないよう、切り替えたあとこの間は次を受け付けない */
 const WHEEL_COOLDOWN_MS = 250
+const MAX_SCALE = 8
+/** これだけ動いたらドラッグとみなす(押しただけのときは本文パネルの出し入れ) */
+const DRAG_PX = 4
+
+interface Zoom {
+  scale: number
+  x: number
+  y: number
+}
+const NO_ZOOM: Zoom = { scale: 1, x: 0, y: 0 }
+
+/**
+ * (cx, cy) を中心に、倍率を next にする。画像は画面の真ん中に置いて transform で動かしているので、
+ * 指している点が拡大の前後で同じ場所に留まるよう、ずらし量を計算し直す
+ */
+function zoomAt(z: Zoom, next: number, cx: number, cy: number): Zoom {
+  const scale = Math.min(MAX_SCALE, Math.max(1, next))
+  if (scale === 1) return NO_ZOOM
+  const px = cx - window.innerWidth / 2
+  const py = cy - window.innerHeight / 2
+  const k = scale / z.scale
+  return { scale, x: px - (px - z.x) * k, y: py - (py - z.y) * k }
+}
 
 export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose, onOpenExternal }: Props) {
   const url = urls[index]
   const [save, setSave] = useState<SaveState>()
   const [panelOpen, setPanelOpen] = useState(true)
+  const [zoom, setZoom] = useState<Zoom>(NO_ZOOM)
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const dragged = useRef(false)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const lastWheel = useRef(0)
   const many = urls.length > 1
   // 最後まで行ったら最初に、最初より前は最後に戻る
@@ -62,8 +92,58 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
     return () => window.removeEventListener('keydown', onKey)
   }, [index, urls.length, many, onIndex, onClose])
 
-  // 画像を切り替えたら、保存の結果表示は消す
-  useEffect(() => setSave(undefined), [url])
+  // 画像を切り替えたら、保存の結果表示と拡大を戻す
+  useEffect(() => {
+    setSave(undefined)
+    setZoom(NO_ZOOM)
+  }, [url])
+
+  // ホイール: Ctrl つきなら拡大・縮小、なしなら画像の切り替え。
+  // Ctrl+ホイールは WebView の画面の拡大と取り合いにならないよう、既定の動きを止める(passive: false が要る)
+  const stepRef = useRef(step)
+  stepRef.current = step
+  useEffect(() => {
+    const el = overlayRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return // 本文パネルの中は、パネルのスクロール
+      if (e.ctrlKey) {
+        e.preventDefault()
+        const z = zoomRef.current
+        setZoom(zoomAt(z, z.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY))
+        return
+      }
+      if (!many || e.deltaY === 0) return
+      const now = Date.now()
+      if (now - lastWheel.current < WHEEL_COOLDOWN_MS) return
+      lastWheel.current = now
+      stepRef.current(e.deltaY > 0 ? 1 : -1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [many])
+
+  /** 拡大しているときは、つかんで動かす */
+  const onImageMouseDown = (e: React.MouseEvent) => {
+    dragged.current = false
+    if (zoomRef.current.scale === 1 || e.button !== 0) return
+    e.preventDefault()
+    const sx = e.clientX
+    const sy = e.clientY
+    const start = zoomRef.current
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - sx
+      const dy = ev.clientY - sy
+      if (Math.abs(dx) + Math.abs(dy) > DRAG_PX) dragged.current = true
+      setZoom({ ...start, x: start.x + dx, y: start.y + dy })
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   const doSave = async () => {
     setSave({ status: 'saving' })
@@ -75,36 +155,40 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
   }
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center" onClick={onClose}>
+    <div ref={overlayRef} className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
       {/* 枠いっぱいに収める(小さい画像は引き伸ばす) */}
       <img
         key={url}
         src={url}
         alt=""
         referrerPolicy="no-referrer"
-        className="w-[92vw] h-[86vh] object-contain lightbox-open-rise"
+        draggable={false}
+        className={`w-[92vw] h-[86vh] object-contain lightbox-open-rise select-none ${zoom.scale > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})` }}
+        onMouseDown={onImageMouseDown}
         onClick={(e) => {
-          // 絵の上なら本文のパネルを出し入れする。絵の周りの余白なら、背景と同じく閉じる
+          // 動かしたあとは何もしない。絵の上なら本文のパネルを出し入れし、絵の周りの余白なら背景と同じく閉じる
+          if (dragged.current) {
+            e.stopPropagation()
+            return
+          }
           if (!hitsImage(e.currentTarget, e.clientX, e.clientY)) return
           e.stopPropagation()
           setPanelOpen((v) => !v)
         }}
-        onWheel={(e) => {
-          if (!many || e.deltaY === 0) return
-          const now = Date.now()
-          if (now - lastWheel.current < WHEEL_COOLDOWN_MS) return
-          lastWheel.current = now
-          step(e.deltaY > 0 ? 1 : -1)
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          setZoom((z) => (z.scale > 1 ? NO_ZOOM : zoomAt(z, 2.5, e.clientX, e.clientY)))
         }}
       />
 
       {/* 本文のパネル。画像の下側に半透明で重ねる */}
       {panelOpen && (
         <div
+          ref={panelRef}
           className="absolute left-1/2 -translate-x-1/2 bottom-4 w-[min(92vw,900px)] max-h-[34vh] overflow-y-auto custom-scrollbar rounded-xl px-5 py-3 text-white backdrop-blur-md"
           style={{ background: 'rgba(0, 0, 0, 0.62)' }}
           onClick={(e) => e.stopPropagation()}
-          onWheel={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-3 text-xs text-white/70 mb-1.5">
             <span className="font-bold text-white">{post.no}</span>
@@ -116,6 +200,11 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
         </div>
       )}
       <div className="absolute top-3 right-3 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        {zoom.scale > 1 && (
+          <button type="button" className="text-white/70 hover:text-white text-sm tabular-nums mr-1" title="等倍に戻す" onClick={() => setZoom(NO_ZOOM)}>
+            {Math.round(zoom.scale * 100)}%
+          </button>
+        )}
         <span className="text-white/70 text-sm tabular-nums mr-2">
           {index + 1} / {urls.length}
         </span>

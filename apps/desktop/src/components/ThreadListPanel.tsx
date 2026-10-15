@@ -80,7 +80,13 @@ export default function ThreadListPanel(props: Props) {
     if (searchActive) searchRef.current?.focus()
   }, [searchActive])
 
-  const ranks = useMemo(() => rankMomentum(threads, threadId), [threads])
+  // 勢いは「今の時刻」で決まるので、スレ一覧を取ったときに一度だけ計算して控える。
+  // 描き直しのたびに計算し直すと、スレを更新しただけ(既読が変わっただけ)で勢いの近いスレの順番が入れ替わってしまう
+  const momenta = useMemo(() => {
+    const now = Date.now()
+    return new Map(threads.map((t) => [threadId(t), momentum(t, now)]))
+  }, [threads])
+  const ranks = useMemo(() => rankMomentum(momenta), [momenta])
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -96,11 +102,11 @@ export default function ThreadListPanel(props: Props) {
     if (sort) {
       const sign = sort.dir === 'desc' ? -1 : 1
       const value = (t: ThreadSummary) =>
-        sort.mode === 'momentum' ? momentum(t) : (t.createdAt?.getTime() ?? 0)
+        sort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
     return list
-  }, [threads, stateOf, query, unreadOnly, sort, props.isNg])
+  }, [threads, stateOf, query, unreadOnly, sort, props.isNg, momenta])
 
   // 右端のハンドルをドラッグして幅を変える。離したときに保存する
   const onResizeStart = (e: React.MouseEvent) => {
@@ -300,6 +306,7 @@ export default function ThreadListPanel(props: Props) {
                     thread={t}
                     state={stateOf(t)}
                     isActive={props.activeId === id}
+                    momentum={momenta.get(id) ?? 0}
                     momentumRank={ranks.get(id) ?? 0}
                     onClick={() => props.onOpen(t)}
                   />

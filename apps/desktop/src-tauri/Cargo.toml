@@ -13,7 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# protocol-asset: 背景画像(アプリのデータフォルダにコピーしたもの)を画面から読むため
+tauri = { version = "2", features = ["protocol-asset"] }
 # unsafe-headers: User-Agent などを JS から設定するため / cookies: 書き込み対応に備えて
 tauri-plugin-http = { version = "2", features = ["unsafe-headers", "cookies"] }
 # 画像の保存先フォルダを選ぶ

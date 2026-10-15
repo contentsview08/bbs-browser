@@ -12,6 +12,7 @@ import {
 import { NG_TARGETS, isValidPattern, newRule, type NgTarget } from '../utils/ng'
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 
 interface Props {
   settings: AppSettings
@@ -208,6 +209,49 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
         <p className="mt-3 p-3 text-base text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
           あのイーハトーヴォのすきとおった風、0123456789 ABCabc
         </p>
+      </Section>
+      <Section title="背景画像" note="画面全体に薄く重ねます。選んだ画像はアプリのフォルダにコピーして使います">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-24 h-16 flex-shrink-0 rounded-[var(--card-radius)] border border-c-border bg-c-surface2 bg-cover bg-center"
+            style={s.backgroundImage ? { backgroundImage: `url("${backgroundImageUrl(s.backgroundImage)}")` } : undefined}
+          />
+          <div className="flex-1 space-y-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={BTN}
+                onClick={async () => {
+                  const file = await openDialog({
+                    title: '背景画像を選ぶ',
+                    filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }],
+                  })
+                  if (typeof file === 'string') update('backgroundImage', await importBackgroundImage(file))
+                }}
+              >
+                画像を選ぶ
+              </button>
+              {s.backgroundImage && (
+                <button type="button" className="px-3 py-1.5 text-sm text-c-text-muted hover:text-c-text-strong" onClick={() => update('backgroundImage', '')}>
+                  外す
+                </button>
+              )}
+            </div>
+            <label className="flex items-center gap-3 text-sm text-c-text-body">
+              <span className="w-12 flex-shrink-0">濃さ</span>
+              <input
+                type="range"
+                min={0}
+                max={60}
+                value={Math.round(s.backgroundOpacity * 100)}
+                onChange={(e) => update('backgroundOpacity', Number(e.target.value) / 100)}
+                className="flex-1"
+                disabled={!s.backgroundImage}
+              />
+              <span className="w-10 text-right tabular-nums text-c-text-muted">{Math.round(s.backgroundOpacity * 100)}%</span>
+            </label>
+          </div>
+        </div>
       </Section>
       <Section title="文字サイズ">
         <Choice

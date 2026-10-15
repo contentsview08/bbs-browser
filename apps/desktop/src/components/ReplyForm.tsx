@@ -5,6 +5,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import type { PostInput, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
+import EmojiPicker from './EmojiPicker'
 import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
@@ -32,19 +33,19 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [result, setResult] = useState<PostResult>()
   const textRef = useRef<HTMLTextAreaElement>(null)
 
-  useImperativeHandle(ref, () => ({
-    insert(text) {
-      const el = textRef.current
-      if (!el) return setBody((b) => b + text)
-      const start = el.selectionStart
-      const next = body.slice(0, start) + text + body.slice(el.selectionEnd)
-      setBody(next)
-      requestAnimationFrame(() => {
-        el.focus()
-        el.selectionStart = el.selectionEnd = start + text.length
-      })
-    },
-  }))
+  /** 本文のカーソルの位置に文字を入れる */
+  const insert = (text: string) => {
+    const el = textRef.current
+    if (!el) return setBody((b) => b + text)
+    const start = el.selectionStart
+    const next = body.slice(0, start) + text + body.slice(el.selectionEnd)
+    setBody(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.selectionStart = el.selectionEnd = start + text.length
+    })
+  }
+  useImperativeHandle(ref, () => ({ insert }))
 
   const sage = mail.trim().toLowerCase() === 'sage'
 
@@ -101,6 +102,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage
         </label>
+        <EmojiPicker onPick={insert} disabled={!!props.disabled} />
         {!right && <span className="ml-auto text-[10px] text-c-text-muted">Ctrl+Enter で書き込む</span>}
       </div>
       <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>

@@ -215,6 +215,15 @@ function PostArticle(props: Props) {
 
   return (
     <article ref={articleRef} id={`post-${post.no}`} data-no={post.no} className={`relative ${frameClass}`} style={frame}>
+      {/* 自分の書き込み(濃い線)と、自分へのアンカーを含むレス(薄い線)の目印。
+          高密度表示では web 版の設定で本文の縦線が 0 になるので、表示の密度に関係なく見えるよう別に引く */}
+      {(props.isOwn || props.isReplyToOwn) && (
+        <span
+          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full pointer-events-none"
+          style={{ background: 'var(--c-accent-self)', opacity: props.isOwn ? 1 : 0.45 }}
+          title={props.isOwn ? '自分の書き込み' : '自分へのレス'}
+        />
+      )}
       {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする */}
       <div
         className={`absolute top-0.5 right-3 z-10 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${

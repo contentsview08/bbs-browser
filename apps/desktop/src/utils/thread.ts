@@ -13,12 +13,12 @@ export function momentum(t: ThreadSummary, now = Date.now()): number {
 
 /**
  * 板の中での勢いの相対順位(0=最下位〜1=最上位)。過疎板でも一番勢いのあるスレが赤くなるよう、
- * 絶対値ではなく順位で色を付ける
+ * 絶対値ではなく順位で色を付ける。values は momentum の結果(キーごと)
  */
-export function rankMomentum(threads: ThreadSummary[], key: (t: ThreadSummary) => string): Map<string, number> {
-  const sorted = [...threads].sort((a, b) => momentum(a) - momentum(b))
+export function rankMomentum(values: Map<string, number>): Map<string, number> {
+  const sorted = [...values].sort((a, b) => a[1] - b[1])
   const n = sorted.length
-  return new Map(sorted.map((t, i) => [key(t), n <= 1 ? 1 : i / (n - 1)]))
+  return new Map(sorted.map(([key], i) => [key, n <= 1 ? 1 : i / (n - 1)]))
 }
 
 export function formatMomentum(value: number): string {

@@ -4,19 +4,20 @@
 
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
-import { formatMomentum, momentum, relativeTime } from '../utils/thread'
+import { formatMomentum, relativeTime } from '../utils/thread'
 
 interface Props {
   thread: ThreadSummary
   state?: ThreadState
   isActive: boolean
+  /** 勢い(スレ一覧を取ったときの時刻で計算したもの) */
+  momentum: number
   /** 板の中での勢いの相対順位(0〜1)。rankMomentum 参照 */
   momentumRank: number
   onClick: () => void
 }
 
-export default function ThreadCard({ thread, state, isActive, momentumRank, onClick }: Props) {
-  const m = momentum(thread)
+export default function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onClick }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9

@@ -132,6 +132,33 @@ async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<S
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// 背景画像を、アプリのデータフォルダにコピーしてそのパスを返す。
+/// 画面からはアセット(このフォルダの中だけ読める)で読むので、元のファイルを動かしても表示が崩れない。
+/// 名前に時刻を入れて、画像を替えたときに古いものが表示に残らないようにし、前のコピーは消す
+#[tauri::command]
+fn set_background_image(app: tauri::AppHandle, source: String) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with("background-") {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    let ext = Path::new(&source)
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_else(|| "png".into());
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or_default();
+    let dest = dir.join(format!("background-{stamp}.{ext}"));
+    std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -143,7 +170,7 @@ pub fn run() {
                 .add_migrations(DB_URL, migrations())
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![list_system_fonts, save_image])
+        .invoke_handler(tauri::generate_handler![list_system_fonts, save_image, set_background_image])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

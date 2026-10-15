@@ -4,7 +4,19 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
-import { anchorsIn, heatClass, imageUrlsIn, looksLikeAA, renderBody, type BodyHandlers } from '../utils/postBody'
+import {
+  anchorsIn,
+  displayBody,
+  displayName,
+  heatClass,
+  imageUrlsIn,
+  linkUrlsIn,
+  looksLikeAA,
+  renderBody,
+  type BodyHandlers,
+  type DisplayOptions,
+} from '../utils/postBody'
+import LinkPreview from './LinkPreview'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { NgMode } from '../ui/settings'
 import Identicon from './Identicon'
@@ -36,6 +48,11 @@ interface Props {
   showThumbnails: boolean
   aaAutoDetect: boolean
   showIdenticon?: boolean
+  showLinkPreview?: boolean
+  /** 名無しの省略・空行の扱い */
+  display?: DisplayOptions
+  /** スレ主(>>1 と同じ ID)の書き込み */
+  isOp?: boolean
   /** 自動更新などで新しく届いたレス。一瞬光らせる */
   flash?: boolean
   /** 自分の書き込み */
@@ -169,13 +186,17 @@ function PostArticle(props: Props) {
     )
   }
 
+  const body = props.display ? displayBody(post.body, props.display) : post.body
+  const name = props.display ? displayName(post.name, props.display) : post.name
   const numHeat = heatClass(anchorCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
   const hasConnections = anchorCount > 0 || anchorsIn(post.body).some((n) => n !== post.no)
-  const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(post.body))
+  const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(body))
   // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする
   const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
   const images = props.showThumbnails ? imageUrlsIn(post.body) : []
+  // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
+  const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
 
   const copy = (text: string) => void navigator.clipboard.writeText(text)
   const header = [post.no, post.name, post.mail && `[${post.mail}]`, post.date, post.id && `ID:${post.id}`]
@@ -275,14 +296,25 @@ function PostArticle(props: Props) {
           <span style={props.isOwn ? { color: 'var(--c-accent-self)' } : undefined}>{post.no}</span>
           {anchorCount > 0 && <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>}
         </button>
-        <button
-          type="button"
-          className={`font-bold text-c-poster-name ${HEAD_TEXT} min-w-0 truncate hover:opacity-80`}
-          onClick={(e) => handlers.onName(post.name, e.currentTarget)}
-          title="同じ名前の書き込みを表示"
-        >
-          {post.name}
-        </button>
+        {name && (
+          <button
+            type="button"
+            className={`font-bold text-c-poster-name ${HEAD_TEXT} min-w-0 truncate hover:opacity-80`}
+            onClick={(e) => handlers.onName(post.name, e.currentTarget)}
+            title="同じ名前の書き込みを表示"
+          >
+            {name}
+          </button>
+        )}
+        {props.isOp && (
+          <span
+            className="flex-shrink-0 text-[10px] font-bold px-1.5 py-px rounded"
+            style={{ color: 'var(--c-accent)', background: 'var(--c-accent-wash)', border: '1px solid var(--c-accent)' }}
+            title="スレ主(>>1 と同じ ID)"
+          >
+            主
+          </span>
+        )}
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
         <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
         {post.id && (
@@ -328,9 +360,16 @@ function PostArticle(props: Props) {
         <p
           className={`text-base ${bodyClass} ${isAA ? 'aa-font whitespace-pre overflow-x-auto' : 'whitespace-pre-wrap break-words leading-relaxed'}`}
         >
-          {renderBody(post.body, handlers)}
+          {renderBody(body, handlers)}
         </p>
 
+        {links.length > 0 && (
+          <div className="mt-2 flex flex-col gap-2">
+            {links.slice(0, 3).map((url, i) => (
+              <LinkPreview key={url} url={url} onOpen={handlers.onUrl} more={i === 2 ? links.length - 3 : undefined} />
+            ))}
+          </div>
+        )}
         {images.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {images.map((url, i) => (

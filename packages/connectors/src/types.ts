@@ -84,6 +84,13 @@ export interface FetchPostsResult {
   title?: string
 }
 
+/** 板の設定(2ch 互換なら SETTING.TXT から) */
+export interface BoardInfo {
+  title?: string
+  /** 名前を空にして書き込んだときの名前(「名無しさん」など) */
+  nonameName?: string
+}
+
 export interface ResolvedUrl {
   board: Board
   thread?: ThreadSummary
@@ -123,6 +130,8 @@ export interface Connector {
    * bbsmenu を公開していない板を、URL で直接登録するために使う
    */
   resolveUrl(url: string, ctx: ConnectorContext): Promise<ResolvedUrl | null>
+  /** 板の設定を取る(名無しの名前など)。取れなければ空のまま返す */
+  boardInfo?(board: Board, ctx: ConnectorContext): Promise<BoardInfo>
   listBoards(site: SiteConfig, ctx: ConnectorContext): Promise<Board[]>
   listThreads(board: Board, ctx: ConnectorContext): Promise<ThreadSummary[]>
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>

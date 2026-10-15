@@ -65,6 +65,8 @@ interface Props {
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
+  /** 板の既定の名前(名無しの省略に使う) */
+  nonameName?: string
 }
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
@@ -242,6 +244,17 @@ export default function ThreadView(props: Props) {
     return set
   }, [log.posts, ownNos])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
+  // レスの見せ方(名無しの省略・空行の扱い)と、スレ主の ID
+  const display = useMemo(
+    () => ({
+      nonameName: props.nonameName,
+      omitNoname: settings.omitNoname,
+      collapseBlankLines: settings.collapseBlankLines,
+      trimTrailingBlank: settings.trimTrailingBlank,
+    }),
+    [props.nonameName, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank],
+  )
+  const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
   const visibleNos = useMemo(() => {
     const q = normalizeForSearch(query.trim())
@@ -261,6 +274,12 @@ export default function ThreadView(props: Props) {
     }
     return set
   }, [log.posts, filters, query, anchorCounts])
+  // reportRead(作り置き)から、いまの絞り込みの状態と最後のレス番号を見るための控え
+  const filteringRef = useRef(false)
+  filteringRef.current = visibleNos !== undefined
+  const lastNoRef = useRef(0)
+  lastNoRef.current = log.posts.at(-1)?.no ?? 0
+
   const visiblePosts = useMemo(
     () => (visibleNos ? log.posts.filter((p) => visibleNos.has(p.no)) : log.posts),
     [log.posts, visibleNos],
@@ -304,9 +323,19 @@ export default function ThreadView(props: Props) {
    */
   const scrollToUnread = useCallback((no: number, behavior: ScrollBehavior = 'instant') => {
     const root = ref.current
+    if (!root) return
+    // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
+    // その後ろで見えている最初のレスへ送る。なければ一番下に留まる
+    const target = [...root.querySelectorAll<HTMLElement>(':scope [data-no]')].find(
+      (e) => Number(e.dataset.no) >= no && e.offsetParent !== null,
+    )
+    if (!target) {
+      root.scrollTo({ top: root.scrollHeight, behavior })
+      return
+    }
     // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる
-    const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)?.parentElement
-    if (!root || !el) return
+    const el = target.parentElement
+    if (!el) return
     const headerH = headerOffset()
     const visible = root.clientHeight - headerH
     const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - visible * UNREAD_AT
@@ -331,6 +360,8 @@ export default function ThreadView(props: Props) {
     }
     if (top) position.current = top
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < 40
+    // 絞り込み中に一番下まで来たら、隠れているレスも含めて全部読んだことにする
+    if (filteringRef.current && atBottom.current) last = Math.max(last, lastNoRef.current)
     if (last > sent.current) {
       sent.current = last
       onRead(last)
@@ -476,7 +507,7 @@ export default function ThreadView(props: Props) {
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, props.onUrl, props.onAddNg],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -499,6 +530,9 @@ export default function ThreadView(props: Props) {
               showThumbnails={settings.showThumbnails}
               aaAutoDetect={settings.aaAutoDetect}
               showIdenticon={settings.showIdenticon}
+              showLinkPreview={settings.showLinkPreview}
+              display={display}
+              isOp={opId !== undefined && p.id === opId}
               isOwn={ownNos.has(p.no)}
               isReplyToOwn={replyToOwn.has(p.no)}
               handlers={handlers}
@@ -526,6 +560,9 @@ export default function ThreadView(props: Props) {
             showThumbnails={settings.showThumbnails}
             aaAutoDetect={settings.aaAutoDetect}
             showIdenticon={settings.showIdenticon}
+            showLinkPreview={settings.showLinkPreview}
+            display={display}
+            isOp={opId !== undefined && p.id === opId}
             isOwn={ownNos.has(p.no)}
             isReplyToOwn={replyToOwn.has(p.no)}
             handlers={handlers}
@@ -716,6 +753,9 @@ export default function ThreadView(props: Props) {
                       showThumbnails={settings.showThumbnails}
                       aaAutoDetect={settings.aaAutoDetect}
                       showIdenticon={settings.showIdenticon}
+                      showLinkPreview={settings.showLinkPreview}
+                      display={display}
+                      isOp={opId !== undefined && p.id === opId}
                       flash={flashNos.has(p.no)}
                       isOwn={ownNos.has(p.no)}
                       isReplyToOwn={replyToOwn.has(p.no)}

@@ -61,15 +61,70 @@ function normalizeUrl(raw: string): string {
   return raw.startsWith('ttp') ? `h${raw}` : raw
 }
 
+/**
+ * 拡張子がなくても画像だと分かる(または画像に読み替えられる)サイトの決まり。
+ * 読み替えた先が画像でなかったときは、サムネイルの読み込みに失敗して出ないだけなので、試しに読んでよい
+ */
+const IMAGE_RULES: { test: RegExp; to: (m: RegExpExecArray) => string }[] = [
+  // imgur の画像ページ(imgur.com/abcd123)は、i.imgur.com/abcd123.jpg で画像そのものが取れる
+  { test: /^https?:\/\/(?:i\.|m\.)?imgur\.com\/([A-Za-z0-9]{5,8})$/, to: (m) => `https://i.imgur.com/${m[1]}.jpg` },
+  // X(Twitter)の画像は ?format=jpg のように拡張子を後ろに付ける
+  { test: /^https?:\/\/pbs\.twimg\.com\/media\/[^?\s]+\?(?:.*&)?format=(?:jpg|jpeg|png|webp)/, to: (m) => m[0] },
+]
+
+/** 画像として出す URL に読み替える。画像でなければ undefined */
+export function toImageUrl(url: string): string | undefined {
+  if (IMAGE_URL.test(url)) return url
+  for (const rule of IMAGE_RULES) {
+    const m = rule.test.exec(url)
+    if (m) return rule.to(m)
+  }
+  return undefined
+}
+
 export function imageUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (m[3]) {
-      const url = normalizeUrl(m[3])
-      if (IMAGE_URL.test(url)) urls.push(url)
+      const img = toImageUrl(normalizeUrl(m[3]))
+      if (img) urls.push(img)
     }
   }
   return urls
+}
+
+/** 画像でも動画でもないリンク(埋め込みのカードを出す候補) */
+export function linkUrlsIn(text: string): string[] {
+  const urls: string[] = []
+  for (const m of text.matchAll(TOKEN)) {
+    if (!m[3]) continue
+    const url = normalizeUrl(m[3])
+    if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !urls.includes(url)) urls.push(url)
+  }
+  return urls
+}
+
+/** レスの見せ方の設定(スレ表示のオン・オフ) */
+export interface DisplayOptions {
+  /** 板の既定の名前(SETTING.TXT の BBS_NONAME_NAME) */
+  nonameName?: string
+  omitNoname: boolean
+  collapseBlankLines: boolean
+  trimTrailingBlank: boolean
+}
+
+/** 本文の見せ方: 3 行以上続く空行は 1 行にまとめ、文末の空行は消す */
+export function displayBody(body: string, o: DisplayOptions): string {
+  let s = body
+  if (o.collapseBlankLines) s = s.replace(/\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}/g, '\n\n')
+  if (o.trimTrailingBlank) s = s.replace(/[\s\u3000]+$/, '')
+  return s
+}
+
+/** 名前の見せ方: 板の既定の名前で始まるなら、その部分を省く(後ろのトリップなどは残す) */
+export function displayName(name: string, o: DisplayOptions): string {
+  if (!o.omitNoname || !o.nonameName || !name.startsWith(o.nonameName)) return name
+  return name.slice(o.nonameName.length).trim()
 }
 
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i
@@ -117,7 +172,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
         <a
           key={start}
           href={url}
-          className={`hover:underline break-all ${IMAGE_URL.test(url) ? 'text-c-link-image' : 'text-c-link'}`}
+          className={`hover:underline break-all ${toImageUrl(url) ? 'text-c-link-image' : 'text-c-link'}`}
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()
@@ -163,12 +218,7 @@ export function anchorTree(start: number, posts: Post[]): number[] {
 
 /** リンク(画像・動画以外の URL)があるか */
 export function hasLink(text: string): boolean {
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[3]) continue
-    const url = normalizeUrl(m[3])
-    if (!IMAGE_URL.test(url) && !YOUTUBE_URL.test(url)) return true
-  }
-  return false
+  return linkUrlsIn(text).length > 0
 }
 
 /** 検索用に揃える: 全角半角(NFKC)・大文字小文字・カタカナとひらがなの違いを無視する */

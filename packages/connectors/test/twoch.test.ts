@@ -152,6 +152,11 @@ describe('resolveUrl', () => {
     expect(r?.thread?.createdAt?.getTime()).toBe(1792065954 * 1000)
   })
 
+  it('板の設定(名無しの名前)を読む', async () => {
+    const board = { connectorId: '2ch-compat', url: 'https://bbs.eddibb.cc/liveedge/', name: 'エッヂ' }
+    expect(await twoChConnector.boardInfo!(board, ctx)).toEqual({ title: 'エッヂ', nonameName: 'エッヂの名無し' })
+  })
+
   it('SETTING.TXT が取れなければディレクトリ名を板名にする', async () => {
     const r = await twoChConnector.resolveUrl('https://medaka.5ch.io/prog/', ctx)
     expect(r?.board.name).toBe('prog')

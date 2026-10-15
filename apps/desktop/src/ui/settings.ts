@@ -69,6 +69,16 @@ export interface AppSettings {
   anchorPopup: AnchorPopup
   showThumbnails: boolean
   aaAutoDetect: boolean
+  /** 画像でも動画でもないリンクに、埋め込みのカード(タイトル・説明・画像)を出す */
+  showLinkPreview: boolean
+  /** 名前が板の既定の名前(名無し)なら省く */
+  omitNoname: boolean
+  /** 3 行以上続く空行を 1 行にまとめる */
+  collapseBlankLines: boolean
+  /** 本文の最後の空行を消す */
+  trimTrailingBlank: boolean
+  /** >>1 と同じ ID のレスに「主」の印を付ける */
+  highlightOp: boolean
   /** レスの番号の左に、ID から作るアイコン(GitHub 風の Identicon)を出す */
   showIdenticon: boolean
   /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
@@ -116,6 +126,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aaAutoDetect: true,
   showMinimap: true,
   showIdenticon: false,
+  showLinkPreview: true,
+  omitNoname: true,
+  collapseBlankLines: true,
+  trimTrailingBlank: true,
+  highlightOp: true,
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,

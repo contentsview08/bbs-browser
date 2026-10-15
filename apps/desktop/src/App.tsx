@@ -8,6 +8,7 @@ import {
   builtinConnectors,
   findConnector,
   type Board,
+  type BoardInfo,
   type NewThreadInput,
   type PostInput,
   type PostResult,
@@ -82,6 +83,9 @@ export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeId, setActiveId] = useState<string>()
   const [refreshingAll, setRefreshingAll] = useState(false)
+  /** 板ごとの設定(名無しの名前など)。板ごとに一度だけ取る */
+  const [boardInfos, setBoardInfos] = useState(new Map<string, BoardInfo>())
+  const boardInfoAsked = useRef(new Set<string>())
   const [loading, setLoading] = useState(new Set<Loading>())
   const [error, setError] = useState<string>()
   /** 開いている設定画面の分類。undefined なら閉じている */
@@ -467,6 +471,18 @@ export default function App() {
     if (!settings.tabsEnabled && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
   }, [settings.tabsEnabled, tabs.length, activeId])
 
+  // 開いているスレの板の設定を、まだ取っていなければ取る(名無しの省略に使う)
+  useEffect(() => {
+    const t = activeTab?.thread
+    if (!t || boardInfoAsked.current.has(t.boardUrl)) return
+    boardInfoAsked.current.add(t.boardUrl)
+    const connector = findConnector(t.connectorId)
+    if (!connector?.boardInfo) return
+    void connector
+      .boardInfo({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx)
+      .then((info) => setBoardInfos((m) => new Map(m).set(t.boardUrl, info)))
+  }, [activeTab?.thread])
+
   // 期限の切れた一時 NG を片づける
   useEffect(() => {
     if (!settingsLoaded) return
@@ -644,6 +660,7 @@ export default function App() {
             onChangeReplyLayout={(layout) => updateSetting('replyLayout', layout)}
             onResizeReply={(key, size) => updateSetting(key, size)}
             onDeleteLog={() => void deleteLogs([activeTab.id])}
+            nonameName={boardInfos.get(activeTab.thread.boardUrl)?.nonameName}
           />
         ) : (
           <main className="flex-1 flex items-center justify-center bg-c-base">

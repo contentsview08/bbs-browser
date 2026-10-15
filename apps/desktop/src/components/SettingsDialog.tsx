@@ -381,7 +381,33 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           )}
         </div>
       </Section>
+      <Section title="レスの見せ方">
+        <Toggle
+          checked={s.omitNoname}
+          onChange={(v) => update('omitNoname', v)}
+          label="名無しの名前を省く"
+          note="名前が板の既定の名前(「名無しさん」など)なら省きます。後ろのトリップなどは残します"
+        />
+        <Toggle
+          checked={s.collapseBlankLines}
+          onChange={(v) => update('collapseBlankLines', v)}
+          label="3 行以上続く空行を 1 行にまとめる"
+        />
+        <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
+        <Toggle
+          checked={s.highlightOp}
+          onChange={(v) => update('highlightOp', v)}
+          label="スレ主を強調する"
+          note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
+        />
+      </Section>
       <Section title="本文">
+        <Toggle
+          checked={s.showLinkPreview}
+          onChange={(v) => update('showLinkPreview', v)}
+          label="リンクの埋め込みを出す"
+          note="画像でも動画でもないリンクに、ページのタイトル・説明・画像のカードを出します(画面に見えたときにページを取りに行きます)"
+        />
         <Toggle
           checked={s.showThumbnails}
           onChange={(v) => update('showThumbnails', v)}

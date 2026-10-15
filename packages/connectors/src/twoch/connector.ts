@@ -3,6 +3,7 @@
 
 import type {
   Board,
+  BoardInfo,
   Connector,
   ConnectorContext,
   Encoding,
@@ -79,6 +80,18 @@ async function sendBbsCgi(
   return { status: 'error', message: '書き込みの確認画面が繰り返し返されました', html: lastHtml }
 }
 
+/** SETTING.TXT を読む。取れなくても困らない情報なので、失敗したら空で返す */
+async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<BoardInfo> {
+  try {
+    const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
+    if (res.status < 200 || res.status >= 300) return {}
+    const s = parseSettingTxt(ctx.decode(res.body, encodingOf(res)))
+    return { title: s.BBS_TITLE || undefined, nonameName: s.BBS_NONAME_NAME || undefined }
+  } catch {
+    return {}
+  }
+}
+
 function threadWebUrl(thread: ThreadSummary): string {
   const u = new URL(thread.boardUrl)
   const board = u.pathname.replace(/\//g, '')
@@ -117,6 +130,10 @@ export const twoChConnector: Connector = {
     return THREAD_URL.test(url) || BOARD_URL.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
   },
 
+  async boardInfo(board, ctx) {
+    return readSettingTxt(board.url, ctx)
+  },
+
   async resolveUrl(url, ctx) {
     const t = THREAD_URL.exec(url.trim())
     const b = t ? null : BOARD_URL.exec(url.trim())
@@ -125,15 +142,7 @@ export const twoChConnector: Connector = {
     const boardUrl = `${origin}/${dir}/`
 
     // 板名は SETTING.TXT の BBS_TITLE。取れなければディレクトリ名で代用する
-    let name = dir
-    try {
-      const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
-      if (res.status >= 200 && res.status < 300) {
-        name = parseSettingTxt(ctx.decode(res.body, encodingOf(res))).BBS_TITLE || dir
-      }
-    } catch {
-      // 板名が分からなくても開けるので握りつぶす
-    }
+    const name = (await readSettingTxt(boardUrl, ctx)).title || dir
 
     const board: Board = { connectorId: ID, url: boardUrl, name }
     if (!t) return { board }

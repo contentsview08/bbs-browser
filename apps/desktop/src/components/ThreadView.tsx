@@ -55,6 +55,8 @@ interface Props {
   onOpenInBrowser: () => void
   onUrl: (url: string) => void
   onAddNg: (rule: NgRule) => void
+  /** NG の画面を、元の文字を入れた状態で開く */
+  onNgDraft: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
   /** 自分の書き込みのレス番号 */
   ownNos: Set<number>
   /** 書き込み。コネクタが書き込みに対応していなければ undefined */
@@ -497,6 +499,7 @@ export default function ThreadView(props: Props) {
         onUrl: props.onUrl,
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),
         onAddNg: props.onAddNg,
+        onNgDraft: props.onNgDraft,
         onReply: canReply
           ? (no) => {
               setPopups([])

@@ -34,6 +34,8 @@ export interface PostHandlers extends BodyHandlers {
   onAddNg: (rule: NgRule) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
+  /** NG の画面を、元の文字を入れた状態で開く */
+  onNgDraft?: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
   /** >>番号 を付けてすぐ書き込む(「草」ボタン)。書き込めないときは undefined */
   onQuickReply?: (no: number, text: string) => void
 }
@@ -215,6 +217,9 @@ function PostArticle(props: Props) {
         ]
       : []),
     ...(post.name ? [{ label: 'NGNameに追加', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }] : []),
+    ...(handlers.onNgDraft
+      ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body) }]
+      : []),
   ]
   const reply = handlers.onReply
   const quick = handlers.onQuickReply

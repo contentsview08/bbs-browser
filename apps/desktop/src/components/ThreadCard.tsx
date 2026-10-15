@@ -15,9 +15,11 @@ interface Props {
   /** 板の中での勢いの相対順位(0〜1)。rankMomentum 参照 */
   momentumRank: number
   onClick: () => void
+  /** マウスを乗せたときに右上に出す NG ボタン。押すとスレタイを入れた NG の画面を開く */
+  onNg?: () => void
 }
 
-export default function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onClick }: Props) {
+export default function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onClick, onNg }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -36,7 +38,7 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
   return (
     <div
       onClick={onClick}
-      className={`cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
+      className={`group cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
         isActive
           ? 'bg-[var(--card-selected-bg)] border-[var(--card-selected-border-color)]'
           : 'bg-[var(--card-bg)] border-[var(--card-border-color)] hover:bg-c-surface2'
@@ -56,6 +58,22 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
           style={{ background: unreadCount > 0 ? 'var(--c-accent-self)' : 'var(--c-thread-read-title, var(--c-accent))' }}
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
         />
+      )}
+      {onNg && (
+        <div className="absolute top-1 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onNg()
+            }}
+            className="flex items-center gap-0.5 h-6 px-1.5 text-[11px] bg-c-surface border border-c-border rounded-md shadow-sm text-c-text-muted hover:text-c-text-strong"
+            title="スレタイを NG に追加"
+          >
+            <span className="material-symbols-outlined text-sm leading-none">block</span>
+            NG
+          </button>
+        </div>
       )}
       {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
       <div className="flex items-center gap-3 text-[10px] text-c-text-muted">

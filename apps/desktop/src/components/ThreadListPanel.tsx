@@ -40,6 +40,8 @@ interface Props {
   defaultSort: ThreadSort
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
+  /** スレタイを NG に追加する画面を開く */
+  onNgThread?: (title: string) => void
   /** 渡されたときだけ、チェックボックスで選んでまとめてログを消せる(閲覧履歴) */
   onDeleteLogs?: (threads: ThreadSummary[]) => void
   /** スレを立てられる板のときだけ渡す */
@@ -309,6 +311,7 @@ export default function ThreadListPanel(props: Props) {
                     momentum={momenta.get(id) ?? 0}
                     momentumRank={ranks.get(id) ?? 0}
                     onClick={() => props.onOpen(t)}
+                    onNg={props.onNgThread ? () => props.onNgThread!(t.title) : undefined}
                   />
                 )
                 if (!selectable) return card

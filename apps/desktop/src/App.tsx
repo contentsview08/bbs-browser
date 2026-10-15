@@ -20,6 +20,7 @@ import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
+import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
 import TabBar from './components/TabBar'
@@ -91,6 +92,8 @@ export default function App() {
   /** 開いている設定画面の分類。undefined なら閉じている */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>()
   const [newThreadOpen, setNewThreadOpen] = useState(false)
+  /** NG を登録する画面(元の文字を入れて開く) */
+  const [ngDraft, setNgDraft] = useState<NgDraft>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
   const narrow = useNarrow()
   const [listOpen, setListOpen] = useState(false)
@@ -613,6 +616,7 @@ export default function App() {
           isNg={isNgThread}
           favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
+          onNgThread={(title) => setNgDraft({ target: 'threadTitle', pattern: title })}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />
@@ -653,6 +657,7 @@ export default function App() {
             onOpenInBrowser={() => void openUrl(connectorOf(activeTab.thread.connectorId).threadWebUrl(activeTab.thread))}
             onUrl={(url) => void openUrl(url)}
             onAddNg={addNg}
+            onNgDraft={(target, text) => setNgDraft({ target, pattern: text })}
             ownNos={activeTab.ownNos}
             onSubmitPost={connectorOf(activeTab.thread.connectorId).createPost ? submitPost : undefined}
             postName={settings.postName}
@@ -670,6 +675,8 @@ export default function App() {
       </div>
       </div>
       </div>
+
+      {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 
       {newThreadOpen && board && (
         <NewThreadDialog

@@ -9,6 +9,7 @@ import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
 import Lightbox from './Lightbox'
+import Minimap from './Minimap'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import { anchorsIn, countAnchors, countIds } from '../utils/postBody'
 import type { NgRule } from '../utils/ng'
@@ -68,6 +69,15 @@ export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, isNg, onRead } = props
   const ref = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const [headerHeight, setHeaderHeight] = useState(0)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => setHeaderHeight(el.offsetHeight))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   const positioned = useRef(false)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
@@ -290,7 +300,11 @@ export default function ThreadView(props: Props) {
 
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-[var(--c-thread-view-bg)] overflow-hidden">
-      <div ref={ref} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col">
+      <div className="flex-1 min-h-0 flex">
+      <div
+        ref={ref}
+        className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
+      >
         <div ref={headerRef} className="sticky top-0 z-10 frosted-glass border-b border-c-border flex-shrink-0">
           <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
             <div className="min-w-0 flex-1 flex items-center gap-2">
@@ -336,7 +350,7 @@ export default function ThreadView(props: Props) {
           </header>
         </div>
 
-        <div className="flex-1 flex flex-col" style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)' }}>
+        <div ref={listRef} className="flex-1 flex flex-col" style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)' }}>
           {log.posts.length === 0 ? (
             <div className="text-c-text-muted text-sm">{props.loading ? '読み込み中...' : '投稿がありません'}</div>
           ) : (
@@ -367,6 +381,20 @@ export default function ThreadView(props: Props) {
             </>
           )}
         </div>
+      </div>
+      {settings.showMinimap && log.posts.length > 0 && (
+        <Minimap
+          posts={log.posts}
+          scrollRef={ref}
+          listRef={listRef}
+          anchorCounts={anchorCounts}
+          ownNos={ownNos}
+          replyToOwn={replyToOwn}
+          unreadFrom={unreadFrom}
+          topOffset={headerHeight}
+          onJump={scrollToPost}
+        />
+      )}
       </div>
 
       {props.onSubmitPost && (

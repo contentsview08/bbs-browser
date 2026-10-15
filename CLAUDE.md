@@ -50,5 +50,5 @@ npm run typecheck
 1. アカウント: BE・UPLIFT・どんぐりなど、サイトごとのログイン。ログイン機構(hono-bbs のアカウント)は作らない。
    Cookie は plugin-http の cookies 機能(有効化済み)で持つ。パスワードなどの資格情報は settings 表に入れず、
    OS の資格情報ストア(Windows 資格情報マネージャー等)に置く
-2. web 版から残りを移植(ミニマップ、OGP のリンクプレビュー)
+2. web 版から残りを移植(OGP のリンクプレビュー)
 3. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)

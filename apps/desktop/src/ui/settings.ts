@@ -51,6 +51,8 @@ export interface AppSettings {
   anchorPopup: AnchorPopup
   showThumbnails: boolean
   aaAutoDetect: boolean
+  /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
+  showMinimap: boolean
   // 自動更新
   /** 開いているスレを自動で更新する間隔(秒)。0 なら自動更新しない */
   autoRefreshSec: number
@@ -81,6 +83,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anchorPopup: 'hover',
   showThumbnails: true,
   aaAutoDetect: true,
+  showMinimap: true,
   autoRefreshSec: 0,
   autoScrollOnNew: true,
   ngRules: [],

@@ -36,6 +36,8 @@ interface Props {
   defaultSort: ThreadSort
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
+  /** スレを立てられる板のときだけ渡す */
+  onNewThread?: () => void
   /** 板を開いているときだけ ★ を出す */
   favorite?: { active: boolean; onToggle: () => void }
 }
@@ -141,6 +143,16 @@ export default function ThreadListPanel(props: Props) {
                 >
                   <span className="material-symbols-outlined text-lg">search</span>
                 </button>
+                {props.onNewThread && (
+                  <button
+                    type="button"
+                    onClick={props.onNewThread}
+                    className="p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg"
+                    title="スレを立てる"
+                  >
+                    <span className="material-symbols-outlined text-lg">edit_square</span>
+                  </button>
+                )}
                 {props.favorite && (
                   <button
                     type="button"

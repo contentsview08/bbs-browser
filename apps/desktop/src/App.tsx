@@ -8,6 +8,7 @@ import {
   builtinConnectors,
   findConnector,
   type Board,
+  type NewThreadInput,
   type PostInput,
   type PostResult,
   type SiteConfig,
@@ -15,6 +16,7 @@ import {
 } from '@bbs-browser/connectors'
 import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
 import SettingsDialog from './components/SettingsDialog'
+import NewThreadDialog from './components/NewThreadDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
 import TabBar from './components/TabBar'
@@ -81,6 +83,7 @@ export default function App() {
   const [loading, setLoading] = useState(new Set<Loading>())
   const [error, setError] = useState<string>()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [newThreadOpen, setNewThreadOpen] = useState(false)
 
   // 非同期の処理の途中で最新の値を見るための控え
   const tabsRef = useRef(tabs)
@@ -367,6 +370,38 @@ export default function App() {
     return r
   }
 
+  /**
+   * スレ立て。成功したらスレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く。
+   * サーバーの一覧に載るまで少しかかることがあるので、見つからなければ間を置いて探し直す
+   */
+  const createThread = async (input: NewThreadInput): Promise<PostResult> => {
+    if (!store || !board) return { status: 'error', message: '板を開いていません' }
+    const b = board
+    const connector = connectorOf(b.connectorId)
+    if (!connector.createThread) return { status: 'error', message: 'この掲示板ではスレを立てられません' }
+    const r = await connector.createThread(b, input, ctx)
+    if (r.status !== 'ok') return r
+
+    if (input.name !== settings.postName) updateSetting('postName', input.name)
+    if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
+    const normalize = (s: string) => s.replace(/\s+/g, '')
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((ok) => setTimeout(ok, 1500))
+      const list = await connector.listThreads(b, ctx)
+      if (boardRef.current?.url === b.url) setThreads(list)
+      const found = list
+        .filter((t) => normalize(t.title) === normalize(input.title))
+        .sort((x, y) => (y.createdAt?.getTime() ?? 0) - (x.createdAt?.getTime() ?? 0))[0]
+      if (found) {
+        await store.addOwnPost(found, 1)
+        setNewThreadOpen(false)
+        await openThread(found, { newTab: true })
+        return r
+      }
+    }
+    return { status: 'ok', message: `${r.message}(スレ一覧ではまだ見つかりません。少し待ってから一覧を更新してください)` }
+  }
+
   const openUrlInApp = (url: string) =>
     run(null, async () => {
       const r = await resolve(url)
@@ -494,6 +529,7 @@ export default function App() {
           defaultSort={history ? 'subject' : settings.threadSort}
           isNg={isNgThread}
           favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
+          onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />
       )}
@@ -540,6 +576,17 @@ export default function App() {
           </main>
         )}
       </div>
+
+      {newThreadOpen && board && (
+        <NewThreadDialog
+          boardName={board.name}
+          initialName={settings.postName}
+          initialMail={settings.postMail}
+          onSubmit={createThread}
+          onOpenUrl={(url) => void openUrl(url)}
+          onClose={() => setNewThreadOpen(false)}
+        />
+      )}
 
       {settingsOpen && (
         <SettingsDialog

@@ -41,6 +41,34 @@ function datUrl(thread: ThreadSummary): string {
   return `${thread.boardUrl}dat/${thread.key}.dat`
 }
 
+/**
+ * bbs.cgi へ送って応答を読み分ける(書き込みとスレ立てで共通)。
+ * 5ch の「書き込み確認」は、受け取った Cookie を持ってもう一度送れば通る。それでも確認なら諦める
+ */
+async function sendBbsCgi(
+  origin: string,
+  fields: Record<string, string>,
+  referer: string,
+  ctx: ConnectorContext,
+): Promise<PostResult> {
+  const url = `${origin}/test/bbs.cgi`
+  const body = encodeShiftJisForm(fields)
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await ctx.http.post(url, body, { headers })
+    const r = parseBbsCgiResponse(ctx.decode(res.body, encodingOf(res)))
+    if (r.status === 'confirm') continue
+    if (r.status === 'ok') {
+      // eddist は書き込んだレスの番号を x-resnum で返す
+      const n = Number(res.headers['x-resnum'])
+      return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
+    }
+    if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}` }
+    return r
+  }
+  return { status: 'error', message: '書き込みの確認画面が繰り返し返されました' }
+}
+
 function threadWebUrl(thread: ThreadSummary): string {
   const u = new URL(thread.boardUrl)
   const board = u.pathname.replace(/\//g, '')
@@ -168,38 +196,41 @@ export const twoChConnector: Connector = {
     }
   },
 
-  async createPost(thread, input, ctx): Promise<PostResult> {
+  async createPost(thread, input, ctx) {
     const board = new URL(thread.boardUrl)
-    const url = `${board.origin}/test/bbs.cgi`
-    const body = encodeShiftJisForm({
-      bbs: board.pathname.replace(/\//g, ''),
-      key: thread.key,
-      time: String(Math.floor(Date.now() / 1000)),
-      FROM: input.name,
-      mail: input.mail,
-      MESSAGE: input.body,
-      submit: '書き込む',
-    })
-    const headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
+    return sendBbsCgi(
+      board.origin,
+      {
+        bbs: board.pathname.replace(/\//g, ''),
+        key: thread.key,
+        time: String(Math.floor(Date.now() / 1000)),
+        FROM: input.name,
+        mail: input.mail,
+        MESSAGE: input.body,
+        submit: '書き込む',
+      },
       // 5ch はスレの URL を Referer に求める
-      Referer: threadWebUrl(thread),
-    }
+      threadWebUrl(thread),
+      ctx,
+    )
+  },
 
-    // 5ch の「書き込み確認」は、受け取った Cookie を持ってもう一度送れば通る。それでも確認なら諦める
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await ctx.http.post(url, body, { headers })
-      const r = parseBbsCgiResponse(ctx.decode(res.body, encodingOf(res)))
-      if (r.status === 'confirm') continue
-      if (r.status === 'ok') {
-        // eddist は書き込んだレスの番号を x-resnum で返す
-        const n = Number(res.headers['x-resnum'])
-        return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
-      }
-      if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}` }
-      return r
-    }
-    return { status: 'error', message: '書き込みの確認画面が繰り返し返されました' }
+  async createThread(board, input, ctx) {
+    const u = new URL(board.url)
+    return sendBbsCgi(
+      u.origin,
+      {
+        bbs: u.pathname.replace(/\//g, ''),
+        subject: input.title,
+        time: String(Math.floor(Date.now() / 1000)),
+        FROM: input.name,
+        mail: input.mail,
+        MESSAGE: input.body,
+        submit: '新規スレッド作成',
+      },
+      board.url,
+      ctx,
+    )
   },
 
   threadWebUrl,

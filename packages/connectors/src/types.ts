@@ -95,6 +95,10 @@ export interface PostInput {
   body: string
 }
 
+export interface NewThreadInput extends PostInput {
+  title: string
+}
+
 export type PostResult =
   | { status: 'ok'; message: string; /** サーバーが教えてくれたときだけ */ resNumber?: number }
   /** 認証が要る。url をブラウザで開き、code を入れてから書き込み直す */
@@ -123,6 +127,11 @@ export interface Connector {
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>
   /** 書き込む。capabilities.post が true のコネクタだけが持つ */
   createPost?(thread: ThreadSummary, input: PostInput, ctx: ConnectorContext): Promise<PostResult>
+  /**
+   * スレを立てる。成功しても新しいスレのキーは返らないことが多いので、
+   * ホストがスレ一覧を取り直してスレタイで探す
+   */
+  createThread?(board: Board, input: NewThreadInput, ctx: ConnectorContext): Promise<PostResult>
   /** ブラウザで開くための URL */
   threadWebUrl(thread: ThreadSummary): string
 }

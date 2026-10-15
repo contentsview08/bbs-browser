@@ -3,6 +3,7 @@
 
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import type { PostInput, PostResult } from '@bbs-browser/connectors'
+import PostResultBox from './PostResultBox'
 
 export interface ReplyFormHandle {
   /** 本文のカーソル位置に文字を入れる(>>12 の挿入など) */
@@ -61,43 +62,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   return (
     <div className="flex-shrink-0 border-t border-c-border bg-c-surface px-4 py-3">
-      {result && result.status !== 'ok' && (
-        <div
-          className="mb-2 px-3 py-2 text-sm rounded-[var(--card-radius)] border"
-          style={{ borderColor: 'var(--c-accent-self)', background: 'var(--c-accent-self-wash)' }}
-        >
-          <p className="text-c-text-body whitespace-pre-wrap break-all">{result.message}</p>
-          {result.status === 'auth' && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {result.code && (
-                <>
-                  <span className="text-xs text-c-text-muted">認証コード</span>
-                  <span className="font-mono font-bold text-base text-c-text-strong tracking-widest">{result.code}</span>
-                  <button
-                    type="button"
-                    className="p-1 text-c-text-muted hover:text-c-text-strong"
-                    title="コピー"
-                    onClick={() => void navigator.clipboard.writeText(result.code!)}
-                  >
-                    <span className="material-symbols-outlined text-base">content_copy</span>
-                  </button>
-                </>
-              )}
-              {result.url && (
-                <button
-                  type="button"
-                  onClick={() => props.onOpenUrl(result.url!)}
-                  className="px-3 py-1 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover"
-                >
-                  認証ページを開く
-                </button>
-              )}
-              <span className="text-xs text-c-text-muted">認証が済んだら、もう一度「書き込む」を押してください</span>
-            </div>
-          )}
-        </div>
-      )}
-      {result?.status === 'ok' && <p className="mb-2 text-xs text-c-accent">{result.message}</p>}
+      {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} />}
 
       <div className="flex items-center gap-2 mb-2">
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} w-40`} />

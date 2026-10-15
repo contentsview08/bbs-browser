@@ -72,6 +72,14 @@ export function imageUrlsIn(text: string): string[] {
   return urls
 }
 
+const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i
+
+/** 本文に YouTube の URL があるか(ミニマップの動画の印に使う) */
+export function hasYoutube(text: string): boolean {
+  for (const m of text.matchAll(TOKEN)) if (m[3] && YOUTUBE_URL.test(normalizeUrl(m[3]))) return true
+  return false
+}
+
 export interface BodyHandlers {
   /** アンカーを押した(via='click')、またはマウスを乗せた(via='hover') */
   onAnchor: (nos: number[], el: HTMLElement, via: 'click' | 'hover') => void

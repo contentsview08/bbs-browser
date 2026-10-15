@@ -153,3 +153,28 @@ describe('createPost', () => {
     expect(sent).toHaveLength(2)
   })
 })
+
+describe('createThread', () => {
+  it('bbs.cgi にスレタイと「新規スレッド作成」を送る(key は送らない)', async () => {
+    const sent: { body: string; headers: Record<string, string> }[] = []
+    const ctx: ConnectorContext = {
+      decode: (b, e) => new TextDecoder(e).decode(b),
+      http: {
+        get: async () => {
+          throw new Error('get は使わない')
+        },
+        async post(_url, body, opts): Promise<HttpResponse> {
+          sent.push({ body, headers: opts?.headers ?? {} })
+          return { status: 200, headers: { 'content-type': 'text/html; charset=x-sjis' }, body: sjisBytes(EDDIST_OK) }
+        },
+      },
+    }
+    const board = { connectorId: '2ch-compat', url: 'https://bbs.eddibb.cc/liveedge/', name: 'エッヂ' }
+    const r = await twoChConnector.createThread!(board, { title: '【実況】テスト', name: '', mail: '', body: '立てた' }, ctx)
+    expect(r.status).toBe('ok')
+    const form = decodeForm(sent[0].body)
+    expect(form).toMatchObject({ bbs: 'liveedge', subject: '【実況】テスト', MESSAGE: '立てた', submit: '新規スレッド作成' })
+    expect(form.key).toBeUndefined()
+    expect(sent[0].headers.Referer).toBe('https://bbs.eddibb.cc/liveedge/')
+  })
+})

@@ -231,6 +231,12 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
         />
         <Toggle
+          checked={s.showMinimap}
+          onChange={(v) => update('showMinimap', v)}
+          label="ミニマップを出す"
+          note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
+        />
+        <Toggle
           checked={s.aaAutoDetect}
           onChange={(v) => update('aaAutoDetect', v)}
           label="AA を自動で見分ける"

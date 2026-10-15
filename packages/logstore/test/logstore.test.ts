@@ -5,7 +5,7 @@ import type { Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, type SqlDb } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -155,5 +155,15 @@ describe('お気に入り板', () => {
     await store.removeSite(menu)
     expect((await store.listSites()).map((s) => s.name)).toEqual(['5ch'])
     expect(await store.getBoards(menu)).toEqual([])
+  })
+})
+
+describe('自分の書き込み', () => {
+  it('スレごとに番号を覚える', async () => {
+    await store.addOwnPost(thread, 12)
+    await store.addOwnPost(thread, 5)
+    await store.addOwnPost(thread, 12)
+    await store.addOwnPost({ ...thread, key: '1' }, 3)
+    expect(await store.getOwnPosts(thread)).toEqual([5, 12])
   })
 })

@@ -226,6 +226,25 @@ export class LogStore {
     )
   }
 
+  // ── 自分の書き込み ──
+
+  async addOwnPost(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
+    await this.db.execute('INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES ($1, $2, $3, $4)', [
+      thread.boardUrl,
+      thread.key,
+      no,
+      now,
+    ])
+  }
+
+  async getOwnPosts(thread: ThreadSummary): Promise<number[]> {
+    const rows = await this.db.select<{ no: number }>(
+      'SELECT no FROM own_posts WHERE board_url = $1 AND key = $2 ORDER BY no',
+      [thread.boardUrl, thread.key],
+    )
+    return rows.map((r) => r.no)
+  }
+
   /** 既読位置は戻さない(読み返しても未読が増えないように) */
   async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
     await this.db.execute(

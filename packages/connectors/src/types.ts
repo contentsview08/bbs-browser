@@ -19,6 +19,8 @@ export interface HttpRequestOptions {
 export interface ConnectorContext {
   http: {
     get(url: string, opts?: HttpRequestOptions): Promise<HttpResponse>
+    /** body はエンコード済みの文字列(フォームなら ASCII だけになっている) */
+    post(url: string, body: string, opts?: HttpRequestOptions): Promise<HttpResponse>
   }
   decode(bytes: Uint8Array, encoding: Encoding): string
 }
@@ -87,6 +89,18 @@ export interface ResolvedUrl {
   thread?: ThreadSummary
 }
 
+export interface PostInput {
+  name: string
+  mail: string
+  body: string
+}
+
+export type PostResult =
+  | { status: 'ok'; message: string; /** サーバーが教えてくれたときだけ */ resNumber?: number }
+  /** 認証が要る。url をブラウザで開き、code を入れてから書き込み直す */
+  | { status: 'auth'; message: string; url?: string; code?: string }
+  | { status: 'error'; message: string }
+
 export interface ConnectorCapabilities {
   post: boolean
   images: boolean
@@ -107,6 +121,8 @@ export interface Connector {
   listBoards(site: SiteConfig, ctx: ConnectorContext): Promise<Board[]>
   listThreads(board: Board, ctx: ConnectorContext): Promise<ThreadSummary[]>
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>
+  /** 書き込む。capabilities.post が true のコネクタだけが持つ */
+  createPost?(thread: ThreadSummary, input: PostInput, ctx: ConnectorContext): Promise<PostResult>
   /** ブラウザで開くための URL */
   threadWebUrl(thread: ThreadSummary): string
 }

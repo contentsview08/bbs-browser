@@ -25,6 +25,9 @@ function fakeServer(initial: Uint8Array) {
         }
         return { status: 200, headers: base, body: state.body }
       },
+      post: async () => {
+        throw new Error('この試験では書き込まない')
+      },
     },
   }
   const update = (body: Uint8Array, lastModified: string) => Object.assign(state, { body, lastModified })
@@ -127,6 +130,9 @@ describe('resolveUrl', () => {
           return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body }
         }
         return { status: 404, headers: {}, body: new Uint8Array() }
+      },
+      post: async () => {
+        throw new Error('この試験では書き込まない')
       },
     },
   }

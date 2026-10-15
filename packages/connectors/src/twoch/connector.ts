@@ -8,9 +8,11 @@ import type {
   Encoding,
   FetchPostsResult,
   HttpResponse,
+  PostResult,
   ThreadSummary,
 } from '../types'
-import { parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
+import { parseBbsCgiResponse, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
+import { encodeShiftJisForm } from '../sjis'
 
 /** dat 差分取得の続き */
 interface DatCursor {
@@ -39,6 +41,12 @@ function datUrl(thread: ThreadSummary): string {
   return `${thread.boardUrl}dat/${thread.key}.dat`
 }
 
+function threadWebUrl(thread: ThreadSummary): string {
+  const u = new URL(thread.boardUrl)
+  const board = u.pathname.replace(/\//g, '')
+  return `${u.origin}/test/read.cgi/${board}/${thread.key}/`
+}
+
 /** dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する) */
 function createdAtOf(key: string): Date | undefined {
   return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
@@ -57,7 +65,7 @@ function completeLines(body: Uint8Array): Uint8Array {
 export const twoChConnector: Connector = {
   id: ID,
   name: '2ch 互換',
-  capabilities: { post: false, images: false, incremental: true },
+  capabilities: { post: true, images: false, incremental: true },
 
   canHandle(url) {
     return THREAD_URL.test(url) || BOARD_URL.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
@@ -160,9 +168,39 @@ export const twoChConnector: Connector = {
     }
   },
 
-  threadWebUrl(thread) {
-    const u = new URL(thread.boardUrl)
-    const board = u.pathname.replace(/\//g, '')
-    return `${u.origin}/test/read.cgi/${board}/${thread.key}/`
+  async createPost(thread, input, ctx): Promise<PostResult> {
+    const board = new URL(thread.boardUrl)
+    const url = `${board.origin}/test/bbs.cgi`
+    const body = encodeShiftJisForm({
+      bbs: board.pathname.replace(/\//g, ''),
+      key: thread.key,
+      time: String(Math.floor(Date.now() / 1000)),
+      FROM: input.name,
+      mail: input.mail,
+      MESSAGE: input.body,
+      submit: '書き込む',
+    })
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      // 5ch はスレの URL を Referer に求める
+      Referer: threadWebUrl(thread),
+    }
+
+    // 5ch の「書き込み確認」は、受け取った Cookie を持ってもう一度送れば通る。それでも確認なら諦める
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await ctx.http.post(url, body, { headers })
+      const r = parseBbsCgiResponse(ctx.decode(res.body, encodingOf(res)))
+      if (r.status === 'confirm') continue
+      if (r.status === 'ok') {
+        // eddist は書き込んだレスの番号を x-resnum で返す
+        const n = Number(res.headers['x-resnum'])
+        return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
+      }
+      if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}` }
+      return r
+    }
+    return { status: 'error', message: '書き込みの確認画面が繰り返し返されました' }
   },
+
+  threadWebUrl,
 }

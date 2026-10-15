@@ -3,6 +3,7 @@ import type { Connector } from './types'
 
 export * from './types'
 export { htmlToText, decodeEntities } from './html'
+export { encodeShiftJisForm } from './sjis'
 export { twoChConnector }
 
 /** 組み込みコネクタ。外部コネクタを読み込めるようにしたら、ここに足していく */

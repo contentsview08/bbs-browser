@@ -1,7 +1,7 @@
 // 2ch 互換形式(bbsmenu / subject.txt / dat)のパーサー。通信はしない純粋な関数だけを置く。
 
 import { decodeEntities, htmlToText } from '../html'
-import type { Post } from '../types'
+import type { Post, PostResult } from '../types'
 
 export interface MenuBoard {
   url: string
@@ -108,4 +108,28 @@ export function parseDat(text: string, startNo = 1): { posts: Post[]; title?: st
     if (r.title && !title) title = r.title
   })
   return { posts, title }
+}
+
+/**
+ * bbs.cgi の応答を読み分ける。
+ * - `<!-- 2ch_X:true -->` や「書きこみました」は成功
+ * - `2ch_X:cookie` は 5ch の「書き込み確認」(Cookie を受け取ったのでもう一度送れば通る)
+ * - 本文に認証ページの URL があれば認証待ち(eddist: 「認証コード'xxx'を用いて…/auth-code」)
+ * - それ以外はエラー。本文のテキストをそのまま理由として返す
+ */
+export function parseBbsCgiResponse(html: string): PostResult | { status: 'confirm'; message: string } {
+  const kind = /2ch_X:(\w+)/.exec(html)?.[1]
+  const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').trim()
+  const bodyHtml = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
+  const message = htmlToText(bodyHtml.replace(/\r?\n/g, '')).replace(/\n{2,}/g, '\n').trim()
+
+  if (kind === 'true' || (!kind && title.includes('書きこみました'))) return { status: 'ok', message: message || title }
+  if (kind === 'cookie') return { status: 'confirm', message }
+
+  const url = /https?:\/\/[^\s<>"']+/.exec(message)?.[0]
+  if (url && /auth|認証|ユーザー登録/.test(message)) {
+    const code = /認証コード'([^']+)'|再認証コード'([^']+)'/.exec(message)
+    return { status: 'auth', message, url, code: code?.[1] ?? code?.[2] }
+  }
+  return { status: 'error', message: message || title || '書き込めませんでした' }
 }

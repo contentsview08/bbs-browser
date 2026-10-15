@@ -44,6 +44,9 @@ export interface AppSettings {
   ngRules: NgRule[]
   /** aborn: 「あぼーん」と出す / hide: 何も出さない(透明あぼーん) */
   ngMode: NgMode
+  // 書き込み(最後に使った名前とメールを覚えておく)
+  postName: string
+  postMail: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -63,6 +66,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoScrollOnNew: true,
   ngRules: [],
   ngMode: 'aborn',
+  postName: '',
+  postMail: '',
 }
 
 export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; border: string }[] = [

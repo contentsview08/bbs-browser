@@ -4,11 +4,12 @@
 // - 自動更新などで新着が届いたら光らせ、いちばん下を見ていれば新着まで追いかける
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Post } from '@bbs-browser/connectors'
+import type { Post, PostInput, PostResult } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
 import Lightbox from './Lightbox'
+import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import { anchorsIn, countAnchors, countIds } from '../utils/postBody'
 import type { NgRule } from '../utils/ng'
 import type { AppSettings } from '../ui/settings'
@@ -25,6 +26,12 @@ interface Props {
   onOpenInBrowser: () => void
   onUrl: (url: string) => void
   onAddNg: (rule: NgRule) => void
+  /** 自分の書き込みのレス番号 */
+  ownNos: Set<number>
+  /** 書き込み。コネクタが書き込みに対応していなければ undefined */
+  onSubmitPost?: (input: PostInput) => Promise<PostResult>
+  postName: string
+  postMail: string
 }
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
@@ -66,7 +73,17 @@ export default function ThreadView(props: Props) {
     y: 0,
   })
 
+  const { ownNos } = props
+  const replyRef = useRef<ReplyFormHandle>(null)
+  const canReply = props.onSubmitPost !== undefined && log.status !== 'archived'
   const anchorCounts = useMemo(() => countAnchors(log.posts), [log.posts])
+  /** 自分の書き込みへのアンカーを含むレス */
+  const replyToOwn = useMemo(() => {
+    const set = new Set<number>()
+    if (ownNos.size === 0) return set
+    for (const p of log.posts) if (anchorsIn(p.body).some((n) => ownNos.has(n) && n !== p.no)) set.add(p.no)
+    return set
+  }, [log.posts, ownNos])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
   const byNo = useMemo(() => new Map(log.posts.map((p) => [p.no, p])), [log.posts])
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
@@ -203,11 +220,17 @@ export default function ThreadView(props: Props) {
         onUrl: props.onUrl,
         onImage: (urls, index) => setLightbox({ urls, index }),
         onAddNg: props.onAddNg,
+        onReply: canReply
+          ? (no) => {
+              setPopups([])
+              replyRef.current?.insert(`>>${no}\n`)
+            }
+          : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, props.onUrl, props.onAddNg],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, props.onUrl, props.onAddNg],
   )
 
   function renderPosts(posts: Post[], level: number) {
@@ -226,6 +249,8 @@ export default function ThreadView(props: Props) {
             ngMode="aborn"
             showThumbnails={settings.showThumbnails}
             aaAutoDetect={settings.aaAutoDetect}
+            isOwn={ownNos.has(p.no)}
+            isReplyToOwn={replyToOwn.has(p.no)}
             handlers={handlers}
           />
         ))}
@@ -237,7 +262,7 @@ export default function ThreadView(props: Props) {
 
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-[var(--c-thread-view-bg)] overflow-hidden">
-      <div ref={ref} className="h-full overflow-y-auto custom-scrollbar flex flex-col">
+      <div ref={ref} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col">
         <div ref={headerRef} className="sticky top-0 z-10 frosted-glass border-b border-c-border flex-shrink-0">
           <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
             <div className="min-w-0 flex-1 flex items-center gap-2">
@@ -303,6 +328,8 @@ export default function ThreadView(props: Props) {
                       showThumbnails={settings.showThumbnails}
                       aaAutoDetect={settings.aaAutoDetect}
                       flash={p.no >= flashFrom}
+                      isOwn={ownNos.has(p.no)}
+                      isReplyToOwn={replyToOwn.has(p.no)}
                       handlers={mainHandlers}
                     />
                   </div>
@@ -313,6 +340,17 @@ export default function ThreadView(props: Props) {
           )}
         </div>
       </div>
+
+      {props.onSubmitPost && (
+        <ReplyForm
+          ref={replyRef}
+          disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
+          initialName={props.postName}
+          initialMail={props.postMail}
+          onSubmit={props.onSubmitPost}
+          onOpenUrl={props.onUrl}
+        />
+      )}
 
       <PostPopup
         popups={popups}

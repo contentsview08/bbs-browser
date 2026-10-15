@@ -23,6 +23,10 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - UI はコネクタの `capabilities` を見て機能を出し分ける。
 - 本文はコネクタの段階でプレーンテキストにする。UI で `innerHTML` / `dangerouslySetInnerHTML` を使わない。
 - 2ch 互換の User-Agent は `Monazilla/1.00 (bbs-browser/x.y.z)`。
+- 書き込みは `POST /test/bbs.cgi`(Shift_JIS の URL エンコード。`packages/connectors/src/sjis.ts`)。
+  eddist(eddibb)は初回に認証コードを返し、ブラウザで `/auth-code` を済ませると `edge-token` Cookie で通るようになる。
+  Cookie は plugin-http が持ち、アプリの正常終了時に app_cache_dir の `.cookies` へ保存される(Ctrl+C で止めると消える)。
+  本番の板への試し書き込みはしない。応答の解析は eddist のソースにある文面をテストに写して確かめる。
 - 見た目は hono-bbs の web 版(`~/git/koizumib/hono-bbs-merge/packages/web`)から移植している。
   `apps/desktop/src/theme/*.css` と `src/index.css` は web 版の複製なので、中身を勝手に変えない。
   色は `c-*` の Tailwind クラス(CSS 変数)だけを使い、固定色や `slate-*` を新しく書かない。
@@ -43,9 +47,8 @@ npm run typecheck
 
 ## 今後
 
-1. 書き込み(2ch 互換は bbs.cgi。5ch は Cookie・認証の仕様が変わりやすいので要確認)
-2. アカウント: BE・UPLIFT・どんぐりなど、サイトごとのログイン。ログイン機構(hono-bbs のアカウント)は作らない。
+1. アカウント: BE・UPLIFT・どんぐりなど、サイトごとのログイン。ログイン機構(hono-bbs のアカウント)は作らない。
    Cookie は plugin-http の cookies 機能(有効化済み)で持つ。パスワードなどの資格情報は settings 表に入れず、
    OS の資格情報ストア(Windows 資格情報マネージャー等)に置く
-3. web 版から残りを移植(ミニマップ、OGP のリンクプレビュー)
-4. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)
+2. web 版から残りを移植(ミニマップ、OGP のリンクプレビュー)
+3. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)

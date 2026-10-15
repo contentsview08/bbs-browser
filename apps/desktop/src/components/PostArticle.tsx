@@ -14,6 +14,8 @@ export interface PostHandlers extends BodyHandlers {
   onId: (id: string, el: HTMLElement) => void
   onImage: (urls: string[], index: number) => void
   onAddNg: (rule: NgRule) => void
+  /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
+  onReply?: (no: number) => void
 }
 
 interface Props {
@@ -27,6 +29,10 @@ interface Props {
   aaAutoDetect: boolean
   /** 自動更新などで新しく届いたレス。一瞬光らせる */
   flash?: boolean
+  /** 自分の書き込み */
+  isOwn?: boolean
+  /** 自分の書き込みへのアンカーを含む */
+  isReplyToOwn?: boolean
   handlers: PostHandlers
 }
 
@@ -44,7 +50,7 @@ function ActionMenu({ items }: { items: { label: string; icon: string; onClick: 
     return () => document.removeEventListener('pointerdown', close)
   }, [open])
   return (
-    <div className="relative ml-auto flex-shrink-0" ref={ref}>
+    <div className="relative flex-shrink-0" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -147,7 +153,7 @@ function PostArticle(props: Props) {
           onClick={anchorCount > 0 ? (e) => handlers.onReplies(post.no, e.currentTarget) : undefined}
           title={anchorCount > 0 ? 'このレスへの返信を表示' : undefined}
         >
-          <span>{post.no}</span>
+          <span style={props.isOwn ? { color: 'var(--c-accent-self)' } : undefined}>{post.no}</span>
           {anchorCount > 0 && <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>}
         </button>
         <span className={`font-bold text-c-poster-name ${HEAD_TEXT} min-w-0 truncate`}>{post.name}</span>
@@ -164,15 +170,39 @@ function PostArticle(props: Props) {
             {idCount >= 2 && <span className="text-xs">({idCount})</span>}
           </button>
         )}
+        {props.isReplyToOwn && (
+          <span
+            className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
+            style={{
+              color: 'var(--c-accent-self)',
+              background: 'var(--c-accent-self-wash)',
+              border: '1px solid var(--c-accent-self)',
+              borderRadius: 'var(--chip-radius)',
+            }}
+          >
+            →あなた宛
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+        {handlers.onReply && (
+          <button
+            type="button"
+            className="flex-shrink-0 text-xs text-c-text-muted bg-c-surface2 px-1.5 py-0.5 rounded hover:bg-c-surface3 hover:text-c-text-body transition-colors opacity-0 group-hover:opacity-100"
+            onClick={() => handlers.onReply!(post.no)}
+          >
+            返信
+          </button>
+        )}
         <ActionMenu items={actions} />
+        </div>
       </div>
 
       <div
         style={{
-          paddingLeft: 'var(--post-quote-padding)',
-          borderLeftWidth: 'var(--post-quote-bar-width)',
+          paddingLeft: props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
+          borderLeftWidth: props.isOwn ? 'var(--post-quote-bar-width-own)' : 'var(--post-quote-bar-width)',
           borderLeftStyle: 'solid',
-          borderLeftColor: 'var(--c-border)',
+          borderLeftColor: props.isOwn ? 'var(--c-accent-self)' : 'var(--c-border)',
         }}
       >
         <p

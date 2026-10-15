@@ -8,6 +8,8 @@ import {
   builtinConnectors,
   findConnector,
   type Board,
+  type PostInput,
+  type PostResult,
   type SiteConfig,
   type ThreadSummary,
 } from '@bbs-browser/connectors'
@@ -52,6 +54,7 @@ export default function App() {
   const [thread, setThread] = useState<ThreadSummary>()
   const [log, setLog] = useState<ThreadLog>()
   const [unreadFrom, setUnreadFrom] = useState(1)
+  const [ownNos, setOwnNos] = useState(new Set<number>())
   const [loading, setLoading] = useState(new Set<Loading>())
   const [error, setError] = useState<string>()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -152,6 +155,7 @@ export default function App() {
       setThread(t)
       setLog(local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' })
       setUnreadFrom((local?.readNo ?? 0) + 1)
+      setOwnNos(new Set(await store.getOwnPosts(t)))
       await fetchThread(store, t, local?.cursor ?? null)
       if (history) setHistory(await store.history())
     })
@@ -171,6 +175,37 @@ export default function App() {
     const id = setInterval(() => void refreshRef.current(), settings.autoRefreshSec * 1000)
     return () => clearInterval(id)
   }, [thread, settings.autoRefreshSec])
+
+  /**
+   * 書き込み。成功したら差分を取り直し、書き込んだレスを「自分の書き込み」として覚える。
+   * レス番号はサーバーが教えてくれればそれを、なければ新着の中から本文が同じものを探す
+   */
+  const submitPost = async (input: PostInput): Promise<PostResult> => {
+    if (!store || !thread) return { status: 'error', message: 'スレを開いていません' }
+    const t = thread
+    const connector = connectorOf(t.connectorId)
+    if (!connector.createPost) return { status: 'error', message: 'この掲示板には書き込めません' }
+    const r = await connector.createPost(t, input, ctx)
+    if (r.status !== 'ok') return r
+
+    if (input.name !== settings.postName) updateSetting('postName', input.name)
+    if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
+    const before = (await store.loadThread(t))?.postCount ?? 0
+    await fetchThread(store, t, (await store.loadThread(t))?.cursor ?? null)
+    const after = await store.loadThread(t)
+    const normalize = (s: string) => s.replace(/\s+/g, '')
+    const no =
+      r.resNumber ??
+      after?.posts
+        .filter((p) => p.no > before)
+        .reverse()
+        .find((p) => normalize(p.body) === normalize(input.body))?.no
+    if (no) {
+      await store.addOwnPost(t, no)
+      if (currentThread.current === threadId(t)) setOwnNos(new Set(await store.getOwnPosts(t)))
+    }
+    return r
+  }
 
   const openUrlInApp = (url: string) =>
     run(null, async () => {
@@ -313,6 +348,10 @@ export default function App() {
           onOpenInBrowser={() => void openUrl(connectorOf(thread.connectorId).threadWebUrl(thread))}
           onUrl={(url) => void openUrl(url)}
           onAddNg={addNg}
+          ownNos={ownNos}
+          onSubmitPost={connectorOf(thread.connectorId).createPost ? submitPost : undefined}
+          postName={settings.postName}
+          postMail={settings.postMail}
         />
       ) : (
         <main className="flex-1 flex items-center justify-center bg-c-base">

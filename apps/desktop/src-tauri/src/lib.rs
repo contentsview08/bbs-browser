@@ -24,6 +24,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/003_favorite_boards.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "own_posts",
+            sql: include_str!("../../../../packages/logstore/migrations/004_own_posts.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

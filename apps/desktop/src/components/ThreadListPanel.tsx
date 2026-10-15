@@ -59,6 +59,10 @@ interface Props {
   keywords?: string[]
   /** スレタイを NG に追加する画面を開く */
   onNgThread?: (title: string) => void
+  /** スレのログ(閲覧履歴)を消す */
+  onDeleteThreadLog?: (t: ThreadSummary) => void
+  /** スレのブラウザ用の URL(コピーに使う) */
+  threadUrl?: (t: ThreadSummary) => string
   /** 渡されたときだけ、チェックボックスで選んでまとめてログを消せる(閲覧履歴) */
   onDeleteLogs?: (threads: ThreadSummary[]) => void
   /** スレを立てられる板のときだけ渡す */
@@ -177,6 +181,8 @@ export default function ThreadListPanel(props: Props) {
         momentumRank={ranks.get(id) ?? 0}
         onClick={() => props.onOpen(t)}
         onNg={props.onNgThread ? () => props.onNgThread!(t.title) : undefined}
+    onCopy={() => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title)}
+    onDeleteLog={props.onDeleteThreadLog ? () => props.onDeleteThreadLog!(t) : undefined}
       />
     )
     if (!selectable) return card

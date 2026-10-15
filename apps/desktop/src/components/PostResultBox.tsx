@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { PostResult } from '@bbs-browser/connectors'
+import type { PostConfirm, PostResult } from '@bbs-browser/connectors'
 
 /** サーバーが返したページを、そのまま表示する。スクリプトは動かさない(sandbox) */
 function ServerResponse({ html, onClose }: { html: string; onClose: () => void }) {
@@ -26,7 +26,16 @@ function ServerResponse({ html, onClose }: { html: string; onClose: () => void }
   )
 }
 
-export default function PostResultBox({ result, onOpenUrl }: { result: PostResult; onOpenUrl: (url: string) => void }) {
+export default function PostResultBox({
+  result,
+  onOpenUrl,
+  onConfirm,
+}: {
+  result: PostResult
+  onOpenUrl: (url: string) => void
+  /** 書き込み確認で「上記全てを承諾して書き込む」を押した */
+  onConfirm?: (confirm: PostConfirm) => void
+}) {
   const [showHtml, setShowHtml] = useState(false)
   if (result.status === 'ok') return <p className="mb-2 text-xs text-c-accent">{result.message}</p>
   const html = result.html
@@ -36,7 +45,12 @@ export default function PostResultBox({ result, onOpenUrl }: { result: PostResul
       style={{ borderColor: 'var(--c-accent-self)', background: 'var(--c-accent-self-wash)' }}
     >
       <div className="flex items-start gap-2">
-        <p className="flex-1 text-c-text-body whitespace-pre-wrap break-all">{result.message}</p>
+        <p
+          className={`flex-1 text-c-text-body whitespace-pre-wrap break-all ${result.status === 'confirm' ? 'max-h-40 overflow-y-auto custom-scrollbar text-xs' : ''}`}
+        >
+          {result.status === 'confirm' && <span className="block mb-1 text-sm font-bold text-c-text-strong">書き込み確認</span>}
+          {result.message}
+        </p>
         {html && (
           <button
             type="button"
@@ -48,6 +62,18 @@ export default function PostResultBox({ result, onOpenUrl }: { result: PostResul
         )}
       </div>
       {showHtml && html && <ServerResponse html={html} onClose={() => setShowHtml(false)} />}
+      {result.status === 'confirm' && onConfirm && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onConfirm(result.confirm)}
+            className="px-3 py-1 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover"
+          >
+            上記全てを承諾して書き込む
+          </button>
+          <span className="text-xs text-c-text-muted">初めて書き込むときに、利用規約などへの承諾を求められています</span>
+        </div>
+      )}
       {result.status === 'auth' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {result.code && (

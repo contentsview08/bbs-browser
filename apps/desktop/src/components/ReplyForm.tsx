@@ -3,7 +3,7 @@
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
-import type { PostInput, PostResult } from '@bbs-browser/connectors'
+import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import EmojiPicker from './EmojiPicker'
 import type { ReplyLayout } from '../ui/settings'
@@ -19,6 +19,8 @@ interface Props {
   initialName: string
   initialMail: string
   onSubmit: (input: PostInput) => Promise<PostResult>
+  /** 書き込み確認で承諾した。元の書き込みの内容も渡す(自分の書き込みを見分けるため) */
+  onConfirm: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
 }
 
@@ -48,6 +50,21 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   useImperativeHandle(ref, () => ({ insert }))
 
   const sage = mail.trim().toLowerCase() === 'sage'
+
+  /** 書き込み確認で承諾したときも、ふつうの書き込みと同じく結果を出し、成功したら本文を空にする */
+  const confirm = async (c: PostConfirm) => {
+    setSending(true)
+    setResult(undefined)
+    try {
+      const r = await props.onConfirm(c, { name, mail, body })
+      setResult(r)
+      if (r.status === 'ok') setBody('')
+    } catch (e) {
+      setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setSending(false)
+    }
+  }
 
   const submit = async () => {
     if (!body.trim() || sending || props.disabled) return
@@ -81,7 +98,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
-      {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} />}
+      {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
 
       <div className={`flex items-center gap-2 mb-2 ${right ? 'flex-wrap' : ''}`}>
         <input

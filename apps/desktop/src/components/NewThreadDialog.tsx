@@ -2,7 +2,7 @@
 // 成功したら親がスレ一覧を取り直し、新しいスレをタブで開く。
 
 import { useState } from 'react'
-import type { NewThreadInput, PostResult } from '@bbs-browser/connectors'
+import type { NewThreadInput, PostConfirm, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   initialName: string
   initialMail: string
   onSubmit: (input: NewThreadInput) => Promise<PostResult>
+  onConfirm: (confirm: PostConfirm, input: NewThreadInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
   onClose: () => void
 }
@@ -58,7 +59,23 @@ export default function NewThreadDialog(props: Props) {
         </div>
 
         <div className="px-5 py-4 space-y-3">
-          {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} />}
+          {result && (
+            <PostResultBox
+              result={result}
+              onOpenUrl={props.onOpenUrl}
+              onConfirm={async (c) => {
+                setSending(true)
+                setResult(undefined)
+                try {
+                  setResult(await props.onConfirm(c, { title: title.trim(), name, mail, body }))
+                } catch (e) {
+                  setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
+                } finally {
+                  setSending(false)
+                }
+              }}
+            />
+          )}
           <input
             type="text"
             value={title}

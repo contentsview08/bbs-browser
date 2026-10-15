@@ -106,12 +106,23 @@ export interface NewThreadInput extends PostInput {
   title: string
 }
 
+/** 書き込み確認(5ch の「上記全てを承諾して書き込む」)で、承諾したときに送るもの */
+export interface PostConfirm {
+  /** 送り先 */
+  url: string
+  /** 元の書き込みの内容に、確認画面のフォームの項目を重ねたもの */
+  fields: Record<string, string>
+  referer: string
+}
+
 export type PostResult =
   | { status: 'ok'; message: string; /** サーバーが教えてくれたときだけ */ resNumber?: number }
   /** 認証が要る。url をブラウザで開き、code を入れてから書き込み直す */
   | { status: 'auth'; message: string; url?: string; code?: string; html?: string }
   /** html はサーバーが返したページそのもの(原因を調べるときに、そのまま見られるように) */
   | { status: 'error'; message: string; html?: string }
+  /** 書き込み確認。内容(message・html)を見せ、承諾されたら confirm を submitConfirm に渡す */
+  | { status: 'confirm'; message: string; html: string; confirm: PostConfirm }
 
 export interface ConnectorCapabilities {
   post: boolean
@@ -142,6 +153,8 @@ export interface Connector {
    * ホストがスレ一覧を取り直してスレタイで探す
    */
   createThread?(board: Board, input: NewThreadInput, ctx: ConnectorContext): Promise<PostResult>
+  /** 書き込み確認で承諾したときに送り直す(createPost / createThread が confirm を返したときだけ使う) */
+  submitConfirm?(confirm: PostConfirm, ctx: ConnectorContext): Promise<PostResult>
   /** ブラウザで開くための URL */
   threadWebUrl(thread: ThreadSummary): string
 }

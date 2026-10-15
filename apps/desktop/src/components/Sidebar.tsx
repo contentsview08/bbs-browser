@@ -37,14 +37,14 @@ function Row(props: {
       type="button"
       onClick={props.onClick}
       title={props.label}
-      className={`w-full h-11 flex items-center transition-colors hover:bg-c-surface2 ${
+      className={`w-full h-12 flex items-center transition-colors hover:bg-c-surface2 ${
         props.active ? 'text-c-accent' : 'text-c-text-strong'
       }`}
     >
       <span className="w-16 flex-shrink-0 flex items-center justify-center">
         <span className={`material-symbols-outlined text-2xl ${props.filled ? 'fill' : ''}`}>{props.icon}</span>
       </span>
-      <span className="flex-1 min-w-0 text-left text-sm font-medium truncate">{props.label}</span>
+      <span className="flex-1 min-w-0 text-left text-lg font-medium truncate">{props.label}</span>
       {props.trailing}
     </button>
   )
@@ -75,7 +75,7 @@ export default function Sidebar(props: Props) {
               <span className="material-symbols-outlined text-xl">{collapsed ? 'left_panel_open' : 'left_panel_close'}</span>
             </button>
           </span>
-          <span data-tauri-drag-region className="text-sm font-bold text-c-text-strong">
+          <span data-tauri-drag-region className="text-base font-bold text-c-text-strong">
             bbs-browser
           </span>
         </div>
@@ -112,7 +112,7 @@ export default function Sidebar(props: Props) {
                     <button
                       type="button"
                       onClick={() => props.onOpenBoard(b)}
-                      className={`flex-1 min-w-0 text-left py-1.5 text-sm truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}
+                      className={`flex-1 min-w-0 text-left py-1.5 text-[1.0625rem] truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}
                     >
                       {b.name}
                     </button>
@@ -130,7 +130,7 @@ export default function Sidebar(props: Props) {
               <button
                 type="button"
                 onClick={props.onManageBoards}
-                className="w-full flex items-center gap-1.5 pl-16 pr-2 py-1.5 text-xs text-c-text-muted hover:text-c-accent transition-colors"
+                className="w-full flex items-center gap-1.5 pl-16 pr-2 py-1.5 text-sm text-c-text-muted hover:text-c-accent transition-colors"
               >
                 <span className="material-symbols-outlined text-sm">add</span>
                 板を追加

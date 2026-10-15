@@ -6,7 +6,7 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Post, PostInput, PostResult } from '@bbs-browser/connectors'
+import type { Post, PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
@@ -61,6 +61,7 @@ interface Props {
   ownNos: Set<number>
   /** 書き込み。コネクタが書き込みに対応していなければ undefined */
   onSubmitPost?: (input: PostInput) => Promise<PostResult>
+  onConfirmPost: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   postName: string
   postMail: string
   onChangeReplyLayout: (layout: ReplyLayout) => void
@@ -218,6 +219,7 @@ export default function ThreadView(props: Props) {
       const r = await props.onSubmitPost({ name: props.postName, mail: props.postMail, body })
       if (r.status === 'ok') show(true, `書き込みました: ${body.replace(/\n/g, ' ')}`)
       else if (r.status === 'auth') show(false, '認証が必要です。書き込み欄から一度書き込んで、認証を済ませてください')
+      else if (r.status === 'confirm') show(false, '書き込み確認が出ました。書き込み欄から一度書き込んで、承諾してください')
       else show(false, r.message)
     } catch (e) {
       show(false, e instanceof Error ? e.message : String(e))
@@ -806,6 +808,7 @@ export default function ThreadView(props: Props) {
               initialName={props.postName}
               initialMail={props.postMail}
               onSubmit={props.onSubmitPost}
+              onConfirm={props.onConfirmPost}
               onOpenUrl={props.onUrl}
             />
           </div>

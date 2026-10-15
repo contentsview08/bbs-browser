@@ -10,6 +10,7 @@ import {
   type Board,
   type BoardInfo,
   type NewThreadInput,
+  type PostConfirm,
   type PostInput,
   type PostResult,
   type SiteConfig,
@@ -396,9 +397,21 @@ export default function App() {
     const t = activeTab.thread
     const connector = connectorOf(t.connectorId)
     if (!connector.createPost) return { status: 'error', message: 'この掲示板には書き込めません' }
-    const r = await connector.createPost(t, input, ctx)
-    if (r.status !== 'ok') return r
+    return afterPost(t, input, await connector.createPost(t, input, ctx))
+  }
 
+  /** 書き込み確認で承諾したとき。成功したら、ふつうの書き込みと同じ後始末をする */
+  const confirmPost = async (confirm: PostConfirm, input: PostInput): Promise<PostResult> => {
+    if (!store || !activeTab) return { status: 'error', message: 'スレを開いていません' }
+    const t = activeTab.thread
+    const connector = connectorOf(t.connectorId)
+    if (!connector.submitConfirm) return { status: 'error', message: 'この掲示板では承諾して書き込めません' }
+    return afterPost(t, input, await connector.submitConfirm(confirm, ctx))
+  }
+
+  /** 書き込みが通ったら、差分を取り直し、書き込んだレスを「自分の書き込み」として覚える */
+  const afterPost = async (t: ThreadSummary, input: PostInput, r: PostResult): Promise<PostResult> => {
+    if (!store || r.status !== 'ok') return r
     if (input.name !== settings.postName) updateSetting('postName', input.name)
     if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
     const before = (await store.loadThread(t))?.postCount ?? 0
@@ -427,8 +440,21 @@ export default function App() {
     const b = board
     const connector = connectorOf(b.connectorId)
     if (!connector.createThread) return { status: 'error', message: 'この掲示板ではスレを立てられません' }
-    const r = await connector.createThread(b, input, ctx)
-    if (r.status !== 'ok') return r
+    return afterThread(b, input, await connector.createThread(b, input, ctx))
+  }
+
+  /** スレ立ての書き込み確認で承諾したとき */
+  const confirmThread = async (confirm: PostConfirm, input: NewThreadInput): Promise<PostResult> => {
+    if (!store || !board) return { status: 'error', message: '板を開いていません' }
+    const connector = connectorOf(board.connectorId)
+    if (!connector.submitConfirm) return { status: 'error', message: 'この掲示板では承諾して書き込めません' }
+    return afterThread(board, input, await connector.submitConfirm(confirm, ctx))
+  }
+
+  /** スレが立ったら、スレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く */
+  const afterThread = async (b: Board, input: NewThreadInput, r: PostResult): Promise<PostResult> => {
+    if (!store || r.status !== 'ok') return r
+    const connector = connectorOf(b.connectorId)
 
     if (input.name !== settings.postName) updateSetting('postName', input.name)
     if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
@@ -628,6 +654,8 @@ export default function App() {
           favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
           onNgThread={(title) => setNgDraft({ target: 'threadTitle', pattern: title })}
+          onDeleteThreadLog={(t) => void deleteLogs([], [t])}
+          threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={history ? undefined : settings.keywords}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
@@ -672,6 +700,7 @@ export default function App() {
             onNgDraft={(target, text) => setNgDraft({ target, pattern: text })}
             ownNos={activeTab.ownNos}
             onSubmitPost={connectorOf(activeTab.thread.connectorId).createPost ? submitPost : undefined}
+            onConfirmPost={confirmPost}
             postName={settings.postName}
             postMail={settings.postMail}
             onChangeReplyLayout={(layout) => updateSetting('replyLayout', layout)}
@@ -696,6 +725,7 @@ export default function App() {
           initialName={settings.postName}
           initialMail={settings.postMail}
           onSubmit={createThread}
+          onConfirm={confirmThread}
           onOpenUrl={(url) => void openUrl(url)}
           onClose={() => setNewThreadOpen(false)}
         />

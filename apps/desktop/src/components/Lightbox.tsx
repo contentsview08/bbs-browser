@@ -5,6 +5,7 @@
 // - Ctrl+ホイールでマウスの位置を中心に拡大・縮小し、拡大中はつかんで動かせる。ダブルクリックで等倍と 2.5 倍を切り替える
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { saveImage } from '../host/saveImage'
@@ -154,7 +155,9 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
     }
   }
 
-  return (
+  // body の直下に出す。アプリの枠は背景画像のために重なりの基準を独立させている(isolate)ので、
+  // 枠の中に置くと、最前面に出しているレスのポップアップより下に描かれてしまう
+  return createPortal(
     <div ref={overlayRef} className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
       {/* 枠いっぱいに収める(小さい画像は引き伸ばす) */}
       <img
@@ -273,6 +276,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
           <span className="material-symbols-outlined text-3xl">chevron_right</span>
         </button>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

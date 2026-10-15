@@ -15,11 +15,16 @@ interface Props {
   /** 板の中での勢いの相対順位(0〜1)。rankMomentum 参照 */
   momentumRank: number
   onClick: () => void
-  /** マウスを乗せたときに右上に出す NG ボタン。押すとスレタイを入れた NG の画面を開く */
+  /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
   onNg?: () => void
+  onCopy?: () => void
+  /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
+  onDeleteLog?: () => void
 }
 
-export default function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onClick, onNg }: Props) {
+const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
+
+export default function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onClick, onNg, onCopy, onDeleteLog }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -57,20 +62,27 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
         />
       )}
-      {onNg && (
-        <div className="absolute top-1 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onNg()
-            }}
-            className="flex items-center gap-0.5 h-6 px-1.5 text-[11px] bg-c-surface border border-c-border rounded-md shadow-sm text-c-text-muted hover:text-c-text-strong"
-            title="スレタイを NG に追加"
-          >
-            <span className="material-symbols-outlined text-sm leading-none">block</span>
-            NG
-          </button>
+      {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す */}
+      {(onNg || onCopy || (onDeleteLog && state)) && (
+        <div
+          className="absolute -top-3.5 right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {onCopy && (
+            <button type="button" onClick={onCopy} className={TOOL} title="スレタイと URL をコピー">
+              <span className="material-symbols-outlined text-base leading-none">content_copy</span>
+            </button>
+          )}
+          {onNg && (
+            <button type="button" onClick={onNg} className={TOOL} title="スレタイを NG に追加">
+              <span className="material-symbols-outlined text-base leading-none">block</span>
+            </button>
+          )}
+          {onDeleteLog && state && (
+            <button type="button" onClick={onDeleteLog} className={`${TOOL} hover:text-c-heat-very-hot`} title="このスレのログ(閲覧履歴)を削除">
+              <span className="material-symbols-outlined text-base leading-none">delete</span>
+            </button>
+          )}
         </div>
       )}
       {/* メタ行: 立った時間 →(右端)勢い・レス数 */}

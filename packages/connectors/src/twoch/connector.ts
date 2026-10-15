@@ -43,41 +43,36 @@ function datUrl(thread: ThreadSummary): string {
 }
 
 /**
- * bbs.cgi へ送って応答を読み分ける(書き込みとスレ立てで共通)。
- * 5ch の初めての書き込みでは「書き込み確認」が返る。確認画面のフォームの隠し項目と送り先を引き継ぎ、
- * 受け取った Cookie を持って送り直せば通る。それでも確認が続くなら諦めて、ページをそのまま返す
+ * bbs.cgi へ送って応答を読み分ける(書き込み・スレ立て・書き込み確認の承諾で共通)。
+ * 5ch の初めての書き込みでは「書き込み確認」が返る。利用規約への承諾なので勝手には送り直さず、
+ * 確認画面のフォームの項目と送り先を添えて返す。承諾されたら submitConfirm で送る
  */
-async function sendBbsCgi(
-  origin: string,
-  fields: Record<string, string>,
-  referer: string,
-  ctx: ConnectorContext,
-): Promise<PostResult> {
-  let url = `${origin}/test/bbs.cgi`
-  let current = fields
-  let lastHtml = ''
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await ctx.http.post(url, encodeShiftJisForm(current), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer },
-    })
-    const html = ctx.decode(res.body, encodingOf(res))
-    lastHtml = html
-    const r = parseBbsCgiResponse(html)
-    if (r.status === 'confirm') {
-      const form = parseConfirmForm(html)
-      current = { ...current, ...form.hidden }
-      if (form.action) url = new URL(form.action, url).href
-      continue
+async function sendBbsCgi(url: string, fields: Record<string, string>, referer: string, ctx: ConnectorContext): Promise<PostResult> {
+  const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer },
+  })
+  const html = ctx.decode(res.body, encodingOf(res))
+  const r = parseBbsCgiResponse(html)
+  if (r.status === 'confirm') {
+    const form = parseConfirmForm(html)
+    return {
+      status: 'confirm',
+      message: r.message,
+      html,
+      confirm: {
+        url: form.action ? new URL(form.action, url).href : url,
+        fields: { ...fields, ...form.hidden },
+        referer,
+      },
     }
-    if (r.status === 'ok') {
-      // eddist は書き込んだレスの番号を x-resnum で返す
-      const n = Number(res.headers['x-resnum'])
-      return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
-    }
-    if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}`, html }
-    return { ...r, html }
   }
-  return { status: 'error', message: '書き込みの確認画面が繰り返し返されました', html: lastHtml }
+  if (r.status === 'ok') {
+    // eddist は書き込んだレスの番号を x-resnum で返す
+    const n = Number(res.headers['x-resnum'])
+    return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
+  }
+  if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}`, html }
+  return { ...r, html }
 }
 
 /** SETTING.TXT を読む。取れなくても困らない情報なので、失敗したら空で返す */
@@ -226,7 +221,7 @@ export const twoChConnector: Connector = {
   async createPost(thread, input, ctx) {
     const board = new URL(thread.boardUrl)
     return sendBbsCgi(
-      board.origin,
+      `${board.origin}/test/bbs.cgi`,
       {
         bbs: board.pathname.replace(/\//g, ''),
         key: thread.key,
@@ -245,7 +240,7 @@ export const twoChConnector: Connector = {
   async createThread(board, input, ctx) {
     const u = new URL(board.url)
     return sendBbsCgi(
-      u.origin,
+      `${u.origin}/test/bbs.cgi`,
       {
         bbs: u.pathname.replace(/\//g, ''),
         subject: input.title,
@@ -258,6 +253,10 @@ export const twoChConnector: Connector = {
       board.url,
       ctx,
     )
+  },
+
+  submitConfirm(confirm, ctx) {
+    return sendBbsCgi(confirm.url, confirm.fields, confirm.referer, ctx)
   },
 
   threadWebUrl,

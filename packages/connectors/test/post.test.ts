@@ -146,8 +146,9 @@ describe('createPost', () => {
     expect(sent).toHaveLength(1)
   })
 
-  it('5ch の書き込み確認は、フォームの隠し項目と送り先を引き継いで送り直す', async () => {
-    const confirm = `<html><!-- 2ch_X:cookie --><head><title>■ 書き込み確認 ■</title></head><body>
+  it('5ch の書き込み確認は、勝手に送り直さず、承諾したときに送るものを添えて返す', async () => {
+    const confirm = `<html><head><title>■ 書き込み確認 ■</title></head><body>
+      書き込みに関して様々なログ情報が記録されています。
       <form method=POST action="../test/bbs.cgi?guid=ON">
         <input type=hidden name=subject value="">
         <input type="hidden" value="akari" name="yuki">
@@ -155,24 +156,25 @@ describe('createPost', () => {
         <input type=submit value="上記全てを承諾して書き込む" name="submit">
       </form></body></html>`
     const { ctx, sent } = fake([{ html: confirm }, { html: EDDIST_OK }])
-    expect((await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)).status).toBe('ok')
-    expect(sent).toHaveLength(2)
+    const r = await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
+    expect(sent).toHaveLength(1)
+    expect(r.status).toBe('confirm')
+    if (r.status !== 'confirm') return
+    expect(r.message).toContain('ログ情報が記録されています')
+    expect(r.confirm.url).toBe('https://bbs.eddibb.cc/test/bbs.cgi?guid=ON')
+    expect(r.confirm.fields).toMatchObject({ yuki: 'akari', MESSAGE: 'a', key: '1792065954', submit: '上記全てを承諾して書き込む' })
+
+    // 承諾したら、その内容で送る
+    const done = await twoChConnector.submitConfirm!(r.confirm, ctx)
+    expect(done.status).toBe('ok')
     expect(sent[1].url).toBe('https://bbs.eddibb.cc/test/bbs.cgi?guid=ON')
-    expect(decodeForm(sent[1].body)).toMatchObject({
-      yuki: 'akari',
-      MESSAGE: 'a',
-      key: '1792065954',
-      submit: '上記全てを承諾して書き込む',
-    })
+    expect(decodeForm(sent[1].body)).toMatchObject({ yuki: 'akari', submit: '上記全てを承諾して書き込む' })
+    expect(sent[1].headers.Referer).toBe('https://bbs.eddibb.cc/test/read.cgi/liveedge/1792065954/')
   })
 
-  it('確認画面が繰り返されたら、そのページを返す(原因を見られるように)', async () => {
-    const confirm = '<html><!-- 2ch_X:cookie --><head><title>確認</title></head><body>確認</body></html>'
-    const { ctx, sent } = fake([{ html: confirm }, { html: confirm }, { html: confirm }])
-    const r = await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
-    expect(r.status).toBe('error')
-    expect(sent).toHaveLength(3)
-    expect(r.status === 'error' && r.html).toContain('2ch_X:cookie')
+  it('目印(2ch_X:cookie)があれば、文面がなくても書き込み確認とみなす', async () => {
+    const { ctx } = fake([{ html: '<html><!-- 2ch_X:cookie --><head><title>確認</title></head><body>確認</body></html>' }])
+    expect((await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)).status).toBe('confirm')
   })
 
   it('エラーのときもページを返す', async () => {

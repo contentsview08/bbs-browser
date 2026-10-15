@@ -551,7 +551,7 @@ export default function ThreadView(props: Props) {
               </button>
             </div>
           </header>
-          <div className="flex items-center gap-4 px-4 overflow-x-auto no-scrollbar text-sm font-medium">
+          <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
             {FILTERS.map(({ key, label, icon }) => {
               const active = filters.has(key)
               return (
@@ -566,12 +566,12 @@ export default function ThreadView(props: Props) {
                       return next
                     })
                   }
-                  className={`relative shrink-0 flex items-center gap-1 transition-colors whitespace-nowrap ${
+                  className={`relative shrink-0 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
                     active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
                   }`}
-                  style={{ paddingTop: 'var(--header-tab-padding-y, 10px)', paddingBottom: 'var(--header-tab-padding-y, 10px)' }}
+                  style={{ paddingTop: 10, paddingBottom: 10 }}
                 >
-                  <span className="material-symbols-outlined text-base leading-none">{icon}</span>
+                  <span className="material-symbols-outlined text-xl leading-none">{icon}</span>
                   {label}
                   {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
                 </button>
@@ -581,7 +581,7 @@ export default function ThreadView(props: Props) {
               type="button"
               onClick={() => setFilters(new Set())}
               className={`relative shrink-0 transition-colors ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-              style={{ paddingTop: 'var(--header-tab-padding-y, 10px)', paddingBottom: 'var(--header-tab-padding-y, 10px)' }}
+              style={{ paddingTop: 10, paddingBottom: 10 }}
             >
               すべて
               {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}

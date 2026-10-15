@@ -19,5 +19,7 @@ tauri-plugin-http = { version = "2", features = ["unsafe-headers", "cookies"] }
 # 本文中の URL を既定のブラウザで開く
 tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+# OS に入っているフォントの一覧(設定のフォント選び)
+fontdb = "0.24"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

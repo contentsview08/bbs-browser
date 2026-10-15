@@ -15,7 +15,7 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   (reset は cursor を先に NULL に、updated はレスを書いてから cursor を進める)。
   スキーマを変えるときは `migrations/` に新しい番号のファイルを足し、`src-tauri/src/lib.rs` にも登録する。
 - `apps/desktop` — Tauri アプリ。`src/host/tauriContext.ts` が `ConnectorContext` の実装。
-  Rust 側は公式プラグインの登録だけにとどめ、必要になるまで独自の Rust コードは書かない。
+  Rust 側は公式プラグインの登録が中心。WebView でできないこと(OS のフォント一覧など)だけ、`src-tauri/src/lib.rs` に小さな命令として書く。
 
 ## 設計の決まりごと
 

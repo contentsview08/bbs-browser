@@ -11,7 +11,8 @@ export type DesignPattern = 'tonal' | 'bordered'
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
 export type FontSize = 1 | 2 | 3 | 4 | 5
-export type FontFamily = 'noto' | 'biz-ud' | 'system'
+/** custom は OS に入っているフォントから選んだもの(customFont に名前を持つ) */
+export type FontFamily = 'noto' | 'biz-ud' | 'system' | 'custom'
 export type ThreadSort = 'subject' | 'momentum' | 'newest'
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 export type AnchorPopup = 'hover' | 'click'
@@ -36,6 +37,7 @@ export interface AppSettings {
   density: ListDensity
   fontSize: FontSize
   fontFamily: FontFamily
+  customFont: string
   threadPanelWidth: number
   /** サイドバーをしまって、アイコンだけの細い帯にする */
   sidebarCollapsed: boolean
@@ -83,6 +85,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   density: 'dense',
   fontSize: 3,
   fontFamily: 'noto',
+  customFont: '',
   threadPanelWidth: 420,
   sidebarCollapsed: false,
   replyLayout: 'bottom',
@@ -114,7 +117,7 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: '2ch-classic', name: '2chクラシック', accent: '#0000ff', border: '#545454' },
 ]
 
-export const FONT_FAMILIES: { key: FontFamily; name: string; css: string }[] = [
+export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
   { key: 'noto', name: 'Noto Sans JP', css: "'Noto Sans JP Variable', 'Noto Sans JP', sans-serif" },
   { key: 'biz-ud', name: 'BIZ UDPゴシック', css: "'BIZ UDPGothic', sans-serif" },
   { key: 'system', name: 'システム標準', css: "'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', sans-serif" },
@@ -131,8 +134,13 @@ function apply(s: AppSettings) {
   root.setAttribute('data-pattern', s.pattern)
   root.setAttribute('data-density', s.density)
   root.style.fontSize = `${FONT_SIZES[s.fontSize - 1]}px`
-  const font = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
-  root.style.setProperty('--app-font', font.css)
+  const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
+  // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く
+  const css =
+    s.fontFamily === 'custom' && s.customFont
+      ? `'${s.customFont.replace(/'/g, "\\'")}', ${FONT_FAMILIES[0].css}`
+      : preset.css
+  root.style.setProperty('--app-font', css)
 }
 
 export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void

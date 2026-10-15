@@ -10,6 +10,7 @@ import {
   type UpdateSetting,
 } from '../ui/settings'
 import { NG_TARGETS, isValidPattern, newRule, type NgTarget } from '../utils/ng'
+import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 
 interface Props {
   settings: AppSettings
@@ -106,6 +107,65 @@ function Toggle(props: { checked: boolean; onChange: (v: boolean) => void; label
   )
 }
 
+/** OS に入っているフォントから選ぶ。各行をそのフォント自体で描くので、見た目を比べられる */
+function SystemFontPicker({ value, onPick }: { value: string; onPick: (family: string) => void }) {
+  const [fonts, setFonts] = useState<SystemFont[]>()
+  const [query, setQuery] = useState('')
+  const [japaneseOnly, setJapaneseOnly] = useState(true)
+  const [message, setMessage] = useState<string>()
+
+  useEffect(() => {
+    loadSystemFonts().then(setFonts, (e: unknown) => setMessage(e instanceof Error ? e.message : String(e)))
+  }, [])
+
+  const q = query.trim().toLowerCase()
+  const shown = (fonts ?? []).filter(
+    (f) =>
+      (!japaneseOnly || f.localName) &&
+      (!q || f.family.toLowerCase().includes(q) || (f.localName ?? '').toLowerCase().includes(q)),
+  )
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-3 mb-2">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="フォント名で絞り込む"
+          className={`${INPUT} flex-1`}
+        />
+        <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none whitespace-nowrap">
+          <input type="checkbox" checked={japaneseOnly} onChange={(e) => setJapaneseOnly(e.target.checked)} className="rounded" />
+          日本語フォントだけ
+        </label>
+      </div>
+      {message && <p className="text-sm text-c-heat-very-hot mb-2">{message}</p>}
+      <div className="max-h-64 overflow-y-auto custom-scrollbar border border-c-border rounded-[var(--card-radius)] divide-y divide-c-border">
+        {!fonts && !message && <p className="px-3 py-2 text-sm text-c-text-muted">フォントを探しています...</p>}
+        {shown.map((f) => {
+          const active = f.family === value
+          return (
+            <button
+              key={f.family}
+              type="button"
+              onClick={() => onPick(f.family)}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-c-surface2 ${active ? 'bg-[var(--c-accent-wash)]' : ''}`}
+            >
+              <span className="flex-1 min-w-0 truncate text-base text-c-text-body" style={{ fontFamily: `'${f.family}'` }}>
+                {f.localName ?? f.family} あア亜 Aa1
+              </span>
+              <span className="text-xs text-c-text-muted truncate max-w-[40%]">{f.family}</span>
+              {active && <span className="material-symbols-outlined text-base text-c-accent">check</span>}
+            </button>
+          )
+        })}
+        {fonts && shown.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">見つかりません</p>}
+      </div>
+    </div>
+  )
+}
+
 function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   return (
     <>
@@ -127,7 +187,20 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
         </div>
       </Section>
       <Section title="フォント">
-        <Choice value={s.fontFamily} options={FONT_FAMILIES} onChange={(v) => update('fontFamily', v)} />
+        <Choice
+          value={s.fontFamily}
+          options={[...FONT_FAMILIES, { key: 'custom' as const, name: s.customFont ? `OS のフォント(${s.customFont})` : 'OS のフォント' }]}
+          onChange={(v) => update('fontFamily', v)}
+        />
+        {s.fontFamily === 'custom' && (
+          <SystemFontPicker
+            value={s.customFont}
+            onPick={(family) => {
+              update('customFont', family)
+              update('fontFamily', 'custom')
+            }}
+          />
+        )}
         <p className="mt-3 p-3 text-base text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
           あのイーハトーヴォのすきとおった風、0123456789 ABCabc
         </p>

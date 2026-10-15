@@ -17,3 +17,8 @@ body,
   --c-border: #d0d0d0;
   --c-border-strong: #a8a8a8;
 }
+
+/* 2chクラシックはスレ一覧のスレタイを黒に固定しているので、既読のスレタイの色だけ別に持たせる */
+[data-scheme='2ch-classic'] {
+  --c-thread-read-title: #1a4fa0;
+}

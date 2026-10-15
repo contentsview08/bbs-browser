@@ -28,8 +28,8 @@ export default function ThreadCard({ thread, state, isActive, momentumRank, onCl
           : 'text-c-text-muted'
 
   const unreadCount = state ? Math.max(0, thread.postCount - state.readNo) : 0
-  // 一度も開いていないスレも「未読」として太字にする(web 版と同じ)
-  const hasUnread = !state || state.readNo < thread.postCount
+  // 一度でも開いたスレ(ログがある)は、左に線を引き、スレタイに色を付ける。太字は使わない(目が疲れるので)
+  const visited = state !== undefined
   const archived = state?.status === 'archived'
 
   return (
@@ -49,15 +49,15 @@ export default function ThreadCard({ thread, state, isActive, momentumRank, onCl
         paddingBottom: 'var(--thread-card-padding-y)',
       }}
     >
+      {visited && (
+        <span
+          className="absolute left-0 top-0 bottom-0 w-[3px]"
+          style={{ background: unreadCount > 0 ? 'var(--c-accent-self)' : 'var(--c-thread-read-title, var(--c-accent))' }}
+          title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
+        />
+      )}
       {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
       <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
-        {state && (
-          <span
-            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            style={{ background: 'var(--c-accent-self)' }}
-            title="ログあり"
-          />
-        )}
         {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
         {archived && <span className="whitespace-nowrap">dat落ち</span>}
         <div className="flex items-center gap-5 ml-auto">
@@ -74,11 +74,11 @@ export default function ThreadCard({ thread, state, isActive, momentumRank, onCl
       {/* タイトル行 */}
       <div className="flex items-center gap-2.5 min-w-0" style={{ marginTop: 'var(--thread-card-title-gap)' }}>
         <h3
-          className={`flex-1 min-w-0 text-base leading-tight line-clamp-2 ${hasUnread ? 'font-bold' : 'font-medium'}`}
+          className="flex-1 min-w-0 text-base leading-tight line-clamp-2 font-normal"
           style={{
-            color: hasUnread
-              ? 'var(--thread-list-title-color, var(--c-text-emphasis))'
-              : 'var(--thread-list-title-color, var(--c-thread-read-title, var(--c-text-body)))',
+            color: visited
+              ? 'var(--c-thread-read-title, var(--c-text-body))'
+              : 'var(--thread-list-title-color, var(--c-text-strong))',
             textDecoration: 'var(--thread-list-title-decoration, none)',
           }}
         >

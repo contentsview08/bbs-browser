@@ -57,6 +57,7 @@ import { isReloadKey } from './utils/keymap'
 import { findNextThreads } from './utils/nextThread'
 import { favIncreases, keywordHits } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
+import { isAppVisible } from './utils/visibility'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
@@ -479,7 +480,9 @@ export default function App() {
   const hasKeywords = settings.keywords.some((k) => k.trim())
   useEffect(() => {
     if (!store || settings.keywordWatchMin <= 0 || !hasKeywords || !favorites?.length) return
-    const check = () => void checkKeywordThreads().catch(() => undefined)
+    const check = () => {
+      if (isAppVisible()) void checkKeywordThreads().catch(() => undefined)
+    }
     const first = setTimeout(check, 15_000)
     const timer = setInterval(check, settings.keywordWatchMin * 60_000)
     return () => {
@@ -509,7 +512,10 @@ export default function App() {
   const hasFavThreads = favThreads.length > 0
   useEffect(() => {
     if (!store || settings.favCheckMin <= 0 || !hasFavThreads) return
-    const check = () => void checkFavThreads(store, false).catch(() => undefined)
+    // アプリが見えていないあいだは確かめない
+    const check = () => {
+      if (isAppVisible()) void checkFavThreads(store, false).catch(() => undefined)
+    }
     const first = setTimeout(check, 5000)
     const timer = setInterval(check, settings.favCheckMin * 60_000)
     return () => {
@@ -746,12 +752,24 @@ export default function App() {
       }
     })
 
-  // 自動更新(開いているタブだけ)。前の取得が終わっていなければその回は飛ばす
-  const refreshRef = useRef(refreshThread)
-  refreshRef.current = refreshThread
+  /**
+   * 自動更新(開いているタブだけ)。手での更新とは分け、クールダウンは始めない。
+   * 次のときは取りに行かない(サーバーに無駄な読み込みを送り続けないため):
+   * - アプリが見えていない(最小化など)
+   * - dat 落ち・1000 到達で、もう増えないスレ
+   * 前の取得が終わっていなければ、fetchThread がその回を飛ばす
+   */
+  const autoRefresh = () => {
+    const t = activeTab
+    if (!store || !t?.log || !isAppVisible()) return
+    if (t.log.status === 'archived' || (t.log.posts.at(-1)?.no ?? 0) >= 1000) return
+    void fetchThread(store, t.thread).catch(() => undefined)
+  }
+  const autoRefreshRef = useRef(autoRefresh)
+  autoRefreshRef.current = autoRefresh
   useEffect(() => {
     if (!activeId || settings.autoRefreshSec <= 0) return
-    const id = setInterval(() => void refreshRef.current(), settings.autoRefreshSec * 1000)
+    const id = setInterval(() => autoRefreshRef.current(), settings.autoRefreshSec * 1000)
     return () => clearInterval(id)
   }, [activeId, settings.autoRefreshSec])
 

@@ -272,6 +272,8 @@ export default function App() {
   const boardRef = useRef<Board | undefined>(undefined)
   boardRef.current = board
 
+  /** いま出している板で「新」の印を付ける境目の時刻(前回その板の一覧を取った時刻)。初めての板なら undefined */
+  const [newSince, setNewSince] = useState<number>()
   const lastBoardUrl = useRef(settings.lastBoardUrl)
   lastBoardUrl.current = settings.lastBoardUrl
   const openBoard = (b: Board) =>
@@ -284,6 +286,9 @@ export default function App() {
       setHistory(undefined)
       setFavView(false)
       setThreads([])
+      // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える
+      setNewSince(settingsRef.current.boardVisits[b.url])
+      updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
       setThreads(list)
       setStates(st)
@@ -1184,6 +1189,7 @@ export default function App() {
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           pullToRefresh={settings.pullToRefreshList}
+          newSince={!favView && !history ? newSince : undefined}
           favoriteIds={favIds}
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}

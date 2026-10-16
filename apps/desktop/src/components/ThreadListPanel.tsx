@@ -84,6 +84,8 @@ interface Props {
   onToggleFavoriteThread?: (t: ThreadSummary) => void
   /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出し、引っぱっても数えない) */
   refreshReadyAt?: number
+  /** この時刻より後に立ったスレに「新」の印を付ける(前回その板の一覧を取った時刻) */
+  newSince?: number
   /** 一番上でさらにホイールを回したら更新する(設定) */
   pullToRefresh: boolean
   /** 板を開いているときだけ ★ を出す */
@@ -305,6 +307,7 @@ export default function ThreadListPanel(props: Props) {
         onCopy={onCopyCard}
         onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
         isFavorite={props.favoriteIds?.has(id) ?? false}
+        isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
       />
     )

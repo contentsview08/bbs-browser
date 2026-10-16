@@ -90,6 +90,8 @@ export interface AppSettings {
   boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
   keywords: string[]
+  /** 板ごとの、最後にスレ一覧を取った時刻(ms)。それより後に立ったスレに「新」の印を付ける */
+  boardVisits: Record<string, number>
   /** スレ一覧の一番上で、さらにホイールを上に回したら更新する */
   pullToRefreshList: boolean
   // タブ
@@ -187,6 +189,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   boardMeta: {},
   keywords: [],
   pullToRefreshList: true,
+  boardVisits: {},
   tabsEnabled: true,
   openInNewTab: true,
   openTabs: [],

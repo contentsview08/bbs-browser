@@ -22,6 +22,8 @@ interface Props {
   onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
+  /** 前回この板の一覧を見たあとに立ったスレ(「新」の印を出す) */
+  isNew?: boolean
   /** お気に入りのスレか(スレタイの頭に ★ を出す) */
   isFavorite?: boolean
   /** お気に入りのスレに足す・外す */
@@ -30,7 +32,7 @@ interface Props {
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
-function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite }: Props) {
+function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -103,6 +105,15 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       )}
       {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
       <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
+        {isNew && (
+          <span
+            className="flex-shrink-0 px-1 rounded text-[10px] font-bold leading-[14px]"
+            style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+            title="前回この板を見たあとに立ったスレ"
+          >
+            新
+          </span>
+        )}
         {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
         {archived && <span className="whitespace-nowrap">dat落ち</span>}
         <div className="flex items-center gap-5 ml-auto">

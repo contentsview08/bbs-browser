@@ -124,6 +124,21 @@ export type PostResult =
   /** 書き込み確認。内容(message・html)を見せ、承諾されたら confirm を submitConfirm に渡す */
   | { status: 'confirm'; message: string; html: string; confirm: PostConfirm }
 
+/** サイトのアカウント(5ch の BE など)。ログインするとサーバーが Cookie を渡し、以後の書き込みに自動で付く */
+export interface AccountKind {
+  id: string
+  name: string
+  /** どのサイトで使うものか(画面に出す説明) */
+  site: string
+  /** 登録の案内などの URL */
+  registerUrl?: string
+}
+
+export interface LoginResult {
+  ok: boolean
+  message: string
+}
+
 export interface ConnectorCapabilities {
   post: boolean
   images: boolean
@@ -157,4 +172,11 @@ export interface Connector {
   submitConfirm?(confirm: PostConfirm, ctx: ConnectorContext): Promise<PostResult>
   /** ブラウザで開くための URL */
   threadWebUrl(thread: ThreadSummary): string
+  /** ログインできるアカウントの種類 */
+  accounts?: AccountKind[]
+  /**
+   * アカウントにログインする。Cookie は通信の仕組み(ホストの Cookie の保存場所)が受け取り、
+   * 以後そのサイトへの書き込みに自動で付く
+   */
+  login?(accountId: string, credential: { user: string; password: string }, ctx: ConnectorContext): Promise<LoginResult>
 }

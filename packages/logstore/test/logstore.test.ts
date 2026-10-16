@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -293,5 +293,16 @@ describe('お気に入りのスレ', () => {
     ])
     await store.removeFavoriteThread(other)
     expect(await store.listFavoriteThreads()).toHaveLength(1)
+  })
+})
+
+describe('アカウント', () => {
+  it('覚えて、書き換えて、消す', async () => {
+    const be = { connectorId: '2ch-compat', accountId: 'be', user: 'a@example.com', password: 'p', autoLogin: true }
+    await store.setAccount(be)
+    await store.setAccount({ ...be, password: 'q', autoLogin: false })
+    expect(await store.listAccounts()).toEqual([{ ...be, password: 'q', autoLogin: false }])
+    await store.deleteAccount('2ch-compat', 'be')
+    expect(await store.listAccounts()).toEqual([])
   })
 })

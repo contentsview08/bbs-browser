@@ -111,6 +111,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/010_favorite_threads.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "accounts",
+            sql: include_str!("../../../../packages/logstore/migrations/011_accounts.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

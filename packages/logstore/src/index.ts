@@ -79,6 +79,15 @@ export interface FavoriteThreadEntry extends ThreadState {
   thread: ThreadSummary
 }
 
+/** サイトのアカウント(5ch の BE など) */
+export interface AccountRecord {
+  connectorId: string
+  accountId: string
+  user: string
+  password: string
+  autoLogin: boolean
+}
+
 /** 書き込み履歴の 1 件 */
 export interface PostHistoryEntry {
   id: number
@@ -420,6 +429,37 @@ export class LogStore {
 
   async removeFavoriteThread(thread: ThreadSummary): Promise<void> {
     await this.db.execute('DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', [thread.boardUrl, thread.key])
+  }
+
+  // ── アカウント ──
+
+  async listAccounts(): Promise<AccountRecord[]> {
+    const rows = await this.db.select<{
+      connector_id: string
+      account_id: string
+      user: string
+      password: string
+      auto_login: number
+    }>('SELECT connector_id, account_id, user, password, auto_login FROM accounts ORDER BY connector_id, account_id')
+    return rows.map((r) => ({
+      connectorId: r.connector_id,
+      accountId: r.account_id,
+      user: r.user,
+      password: r.password,
+      autoLogin: r.auto_login !== 0,
+    }))
+  }
+
+  async setAccount(a: AccountRecord, now = Date.now()): Promise<void> {
+    await this.db.execute(
+      `INSERT OR REPLACE INTO accounts (connector_id, account_id, user, password, auto_login, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [a.connectorId, a.accountId, a.user, a.password, a.autoLogin ? 1 : 0, now],
+    )
+  }
+
+  async deleteAccount(connectorId: string, accountId: string): Promise<void> {
+    await this.db.execute('DELETE FROM accounts WHERE connector_id = $1 AND account_id = $2', [connectorId, accountId])
   }
 
   // ── バックアップ ──

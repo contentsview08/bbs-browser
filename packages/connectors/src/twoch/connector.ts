@@ -9,6 +9,7 @@ import type {
   Encoding,
   FetchPostsResult,
   HttpResponse,
+  LoginResult,
   PostResult,
   ThreadSummary,
 } from '../types'
@@ -114,6 +115,23 @@ const BOARD_URL = /^(https?:\/\/[^/]+)\/([^/?#]+)\/?(?:subject\.txt)?(?:[?#].*)?
 function completeLines(body: Uint8Array): Uint8Array {
   const last = body.lastIndexOf(LF)
   return last < 0 ? body.subarray(0, 0) : body.subarray(0, last + 1)
+}
+
+/**
+ * 5ch の BE のログイン画面(https://be.5ch.io/ のフォーム)。2026-10 時点で mail・pass・login を /log に送る作り。
+ * 成功すると DMDM・MDMD の Cookie が .5ch.io に渡り、以後 5ch の板への書き込みに自動で付く
+ */
+const BE_LOGIN_URL = 'https://be.5ch.io/log'
+
+/**
+ * BE にログインできたかを、返ってきたページで見分ける。
+ * ログイン画面(パスワードの欄)がまた出ていれば失敗、出ていなければ成功とみなす
+ */
+export function beLoginSucceeded(status: number, html: string): LoginResult {
+  if (status >= 400) return { ok: false, message: `BE のサーバーが応答しません(HTTP ${status})` }
+  if (/<input[^>]+name=["']?pass["'\s>]/i.test(html))
+    return { ok: false, message: 'ログインできませんでした。メールアドレスとパスワードを確かめてください' }
+  return { ok: true, message: 'BE にログインしました' }
 }
 
 export const twoChConnector: Connector = {
@@ -257,6 +275,17 @@ export const twoChConnector: Connector = {
 
   submitConfirm(confirm, ctx) {
     return sendBbsCgi(confirm.url, confirm.fields, confirm.referer, ctx)
+  },
+
+  accounts: [{ id: 'be', name: 'BE', site: '5ch', registerUrl: 'https://be.5ch.io/' }],
+
+  async login(accountId, credential, ctx) {
+    if (accountId !== 'be') return { ok: false, message: `知らないアカウントです(${accountId})` }
+    const body = new URLSearchParams({ mail: credential.user, pass: credential.password, login: '' }).toString()
+    const res = await ctx.http.post(BE_LOGIN_URL, body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://be.5ch.io/' },
+    })
+    return beLoginSucceeded(res.status, ctx.decode(res.body, encodingOf(res)))
   },
 
   threadWebUrl,

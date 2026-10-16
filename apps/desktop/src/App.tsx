@@ -10,6 +10,7 @@ import {
   type Board,
   type BoardInfo,
   type NewThreadInput,
+  type LoginResult,
   type PostConfirm,
   type PostInput,
   type PostResult,
@@ -18,6 +19,7 @@ import {
 } from '@bbs-browser/connectors'
 import {
   applyFetch,
+  type AccountRecord,
   type FavoriteThreadEntry,
   type HistoryEntry,
   type LogStore,
@@ -119,6 +121,41 @@ export default function App() {
     run(null, async () => {
       if (store) setUploads(await store.listUploads())
     })
+  // ── アカウント(5ch の BE など) ──
+  const [accounts, setAccounts] = useState<AccountRecord[]>([])
+  /** ログインの結果(connectorId:accountId → 結果)。設定画面に出す */
+  const [loginStatus, setLoginStatus] = useState(new Map<string, LoginResult>())
+  const loginWith = async (a: AccountRecord): Promise<LoginResult> => {
+    const connector = connectorOf(a.connectorId)
+    let r: LoginResult
+    try {
+      r = connector.login
+        ? await connector.login(a.accountId, { user: a.user, password: a.password }, ctx)
+        : { ok: false, message: 'このサイトにはログインできません' }
+    } catch (e) {
+      r = { ok: false, message: `ログインできませんでした(${e instanceof Error ? e.message : String(e)})` }
+    }
+    setLoginStatus((m) => new Map(m).set(`${a.connectorId}:${a.accountId}`, r))
+    return r
+  }
+  /** 設定画面から: 保存してログインする */
+  const saveAndLogin = async (a: AccountRecord): Promise<LoginResult> => {
+    if (!store) return { ok: false, message: 'DB を開いていません' }
+    await store.setAccount(a)
+    setAccounts(await store.listAccounts())
+    return loginWith(a)
+  }
+  const deleteAccount = async (connectorId: string, accountId: string) => {
+    if (!store) return
+    await store.deleteAccount(connectorId, accountId)
+    setAccounts(await store.listAccounts())
+    setLoginStatus((m) => {
+      const next = new Map(m)
+      next.delete(`${connectorId}:${accountId}`)
+      return next
+    })
+  }
+
   /** 書き込み履歴(開いているときだけ中身を持つ) */
   const [postHistory, setPostHistory] = useState<PostHistoryEntry[]>()
   const openPostHistory = () =>
@@ -172,6 +209,14 @@ export default function App() {
       setSites(list)
       setFavorites(favs)
       setFavThreads(favThreadList)
+      // アカウントは裏でログインしておく(失敗したら通知だけ出し、起動は止めない)
+      const accountList = await s.listAccounts()
+      setAccounts(accountList)
+      for (const a of accountList.filter((x) => x.autoLogin)) {
+        void loginWith(a).then((r) => {
+          if (!r.ok) notify({ icon: 'error', title: `${a.accountId.toUpperCase()} にログインできませんでした`, body: r.message })
+        })
+      }
     })
   }, [])
 
@@ -1157,6 +1202,10 @@ export default function App() {
           }
           onAddSite={addSite}
           onRemoveSite={removeSite}
+          accounts={accounts}
+          loginStatus={loginStatus}
+          onLogin={saveAndLogin}
+          onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}
           onClose={() => setSettingsTab(undefined)}

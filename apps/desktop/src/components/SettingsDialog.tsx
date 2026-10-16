@@ -1,7 +1,8 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Board, SiteConfig } from '@bbs-browser/connectors'
+import { builtinConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
+import type { AccountRecord } from '@bbs-browser/logstore'
 import {
   COLOR_SCHEMES,
   DEFAULT_SETTINGS,
@@ -36,6 +37,12 @@ interface Props {
   onToggleFavorite: (board: Board) => void
   /** 板一覧でダブルクリックした板を開く(設定は閉じる) */
   onOpenBoard: (board: Board) => void
+  /** サイトのアカウント(保存してあるもの)と、ログインの状態 */
+  accounts: AccountRecord[]
+  loginStatus: Map<string, LoginResult>
+  /** 保存してログインする */
+  onLogin: (a: AccountRecord) => Promise<LoginResult>
+  onDeleteAccount: (connectorId: string, accountId: string) => void
   /** DB 全体(ログ・設定・NG・履歴)を書き出す。保存先を選ばなかったら false */
   onBackupDb: () => Promise<boolean>
   /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */
@@ -45,7 +52,7 @@ interface Props {
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'ng' | 'boardlist' | 'boards' | 'backup' | 'about'
+export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'ng' | 'boardlist' | 'boards' | 'accounts' | 'backup' | 'about'
 type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string }[] = [
@@ -58,6 +65,7 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns' },
+  { key: 'accounts', name: 'アカウント', icon: 'badge' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
 ]
@@ -823,6 +831,126 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   )
 }
 
+/** アカウント 1 つぶんの欄(メールアドレス・パスワード・自動ログイン・ログイン) */
+function AccountForm(props: {
+  connectorId: string
+  kind: AccountKind
+  saved?: AccountRecord
+  status?: LoginResult
+  onLogin: (a: AccountRecord) => Promise<LoginResult>
+  onDelete: () => void
+}) {
+  const [user, setUser] = useState(props.saved?.user ?? '')
+  const [password, setPassword] = useState(props.saved?.password ?? '')
+  const [autoLogin, setAutoLogin] = useState(props.saved?.autoLogin ?? true)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<LoginResult | undefined>(props.status)
+  const ready = user.trim() !== '' && password !== '' && !busy
+
+  return (
+    <div className="p-4 border border-c-border rounded-[var(--card-radius)] space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-c-text-strong">{props.kind.name}</span>
+        <span className="text-xs text-c-text-muted">{props.kind.site}</span>
+        {result && (
+          <span className={`ml-auto text-xs ${result.ok ? 'text-c-accent' : 'text-c-heat-very-hot'}`}>
+            <span className="material-symbols-outlined text-sm align-[-3px] mr-0.5">{result.ok ? 'check_circle' : 'error'}</span>
+            {result.message}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="email"
+          value={user}
+          onChange={(e) => setUser(e.target.value)}
+          placeholder="メールアドレス"
+          autoComplete="off"
+          className={`${INPUT} flex-1 min-w-[200px]`}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="パスワード"
+          autoComplete="off"
+          className={`${INPUT} flex-1 min-w-[160px]`}
+        />
+      </div>
+      <Toggle checked={autoLogin} onChange={setAutoLogin} label="起動したときに自動でログインする" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className={BTN}
+          disabled={!ready}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              setResult(await props.onLogin({ connectorId: props.connectorId, accountId: props.kind.id, user: user.trim(), password, autoLogin }))
+            } catch (e) {
+              setResult({ ok: false, message: e instanceof Error ? e.message : String(e) })
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {busy ? 'ログイン中…' : '保存してログイン'}
+        </button>
+        {props.saved && (
+          <button
+            type="button"
+            onClick={() => {
+              props.onDelete()
+              setUser('')
+              setPassword('')
+              setResult(undefined)
+            }}
+            className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:border-c-border-strong"
+          >
+            保存したものを消す
+          </button>
+        )}
+        {props.kind.registerUrl && (
+          <button type="button" onClick={() => void openUrl(props.kind.registerUrl!)} className="ml-auto text-xs text-c-text-muted hover:text-c-accent underline">
+            登録・確認のページを開く
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** サイトのアカウント。コネクタが申告したものだけ並べる */
+function AccountsTab(props: Pick<Props, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount'>) {
+  const kinds = builtinConnectors.flatMap((c) => (c.accounts ?? []).map((kind) => ({ connectorId: c.id, kind })))
+  const key = (connectorId: string, accountId: string) => `${connectorId}:${accountId}`
+  return (
+    <>
+      <Section
+        title="アカウント"
+        note="ログインすると、そのサイトに書き込むときに自動で使われます(5ch の BE なら、BE に対応した板でアイコンやポイントが付きます)。パスワードはこのアプリの DB にそのまま保存します。設定の書き出し(JSON)には入りませんが、まるごとバックアップのファイルには入ります"
+      >
+        <div className="space-y-3">
+          {kinds.map(({ connectorId, kind }) => (
+            <AccountForm
+              key={key(connectorId, kind.id)}
+              connectorId={connectorId}
+              kind={kind}
+              saved={props.accounts.find((a) => a.connectorId === connectorId && a.accountId === kind.id)}
+              status={props.loginStatus.get(key(connectorId, kind.id))}
+              onLogin={props.onLogin}
+              onDelete={() => props.onDeleteAccount(connectorId, kind.id)}
+            />
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-c-text-muted">
+          ログインで受け取った Cookie は、ふだんの通信の Cookie と一緒に保存されます。保存したものを消しても、受け取った Cookie はその期限まで残ります。
+        </p>
+      </Section>
+    </>
+  )
+}
+
 /** 設定・NG の書き出しと読み込み、DB 全体のバックアップと復元 */
 function BackupTab({ settings: s, update, onBackupDb, onRestoreDb }: Pick<Props, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
@@ -893,7 +1021,7 @@ function BackupTab({ settings: s, update, onBackupDb, onRestoreDb }: Pick<Props,
       </Section>
       <Section
         title="まるごとバックアップ"
-        note="ログ・既読・お気に入り・書き込み履歴・設定・NG を含む DB 全体を 1 つのファイルに書き出します。使っている最中でもそのまま書き出せます"
+        note="ログ・既読・お気に入り・書き込み履歴・設定・NG を含む DB 全体を 1 つのファイルに書き出します。使っている最中でもそのまま書き出せます。アカウントのパスワードも入るので、ファイルの置き場所に気をつけてください"
       >
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={BTN} disabled={busy} onClick={() => act(async () => ((await onBackupDb()) ? 'バックアップを書き出しました' : undefined))}>
@@ -1423,6 +1551,7 @@ export default function SettingsDialog(props: Props) {
                 }}
               />
             )}
+            {tab === 'accounts' && <AccountsTab {...props} />}
             {tab === 'backup' && <BackupTab {...props} />}
             {tab === 'about' && <AboutTab />}
           </div>

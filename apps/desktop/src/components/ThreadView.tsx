@@ -419,8 +419,8 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (!props.active || lightbox || popups.length > 0) return
     const onKey = (e: KeyboardEvent) => {
-      // F5・Ctrl+R はアプリ全体で止めてある(defaultPrevented)が、更新に割り当てていれば使う
-      if (e.defaultPrevented && !isReloadKey(e)) return
+      // F5・Ctrl+R はアプリ全体で扱う(App.tsx)ので、ここでは見ない
+      if (e.defaultPrevented || isReloadKey(e)) return
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
       const action = actionFor(keymap, keyString(e))

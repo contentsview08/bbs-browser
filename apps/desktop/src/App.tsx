@@ -643,14 +643,22 @@ export default function App() {
     setTabPreview(undefined)
     if (id) keyRef.current.selectTab(id)
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs }
+  /** F5 で更新するもの。開いているスレ、なければいま出しているスレ一覧 */
+  const reload = () => {
+    if (activeTab?.log) return void refreshThread()
+    const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board) : undefined
+    if (list) void manualListRefresh(list)()
+  }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // F5・Ctrl+R で WebView がページごと読み直すと、開いていたものが全部消えるので止める
-      // (スレ表示では「スレを更新」に割り当ててある)
+      // F5・Ctrl+R: 画面ごと読み直すのではなく(WebView2 のショートカットは Rust 側で切ってある)、
+      // スレを開いていればそのスレを、開いていなければスレ一覧を更新する(どちらもクールダウンあり)。どちらもなければ何もしない
       if (isReloadKey(e)) {
         e.preventDefault()
+        if (e.repeat) return // 押し続けても続けて更新しない
+        keyRef.current.reload()
         return
       }
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')

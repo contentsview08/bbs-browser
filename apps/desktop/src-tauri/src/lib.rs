@@ -292,6 +292,23 @@ fn apply_pending_restore(app: &tauri::AppHandle) {
     let _ = std::fs::rename(&pending, dir.join(DB_FILE));
 }
 
+/// WebView2 の「ブラウザのショートカット」(F5・Ctrl+R の読み直し、Ctrl+F の検索窓、Ctrl+P の印刷など)を切る。
+/// F5 で画面ごと読み直すと、開いていたものが消え、連打でサーバーにも負担がかかる。
+/// ページ側で keydown を止めても効かないことがあるので、WebView2 の設定で切る(F5 はアプリがスレの更新に使う)
+#[cfg(windows)]
+fn disable_browser_accelerator_keys(app: &tauri::App) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+    use windows_core::Interface;
+    let Some(window) = app.get_webview_window("main") else { return };
+    let _ = window.with_webview(|webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else { return };
+        let Ok(settings) = core.Settings() else { return };
+        if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+            let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -306,6 +323,8 @@ pub fn run() {
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
         .setup(|app| {
             apply_pending_restore(app.handle());
+            #[cfg(windows)]
+            disable_browser_accelerator_keys(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

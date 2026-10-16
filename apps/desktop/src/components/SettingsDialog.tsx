@@ -850,6 +850,7 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
       <Section title="決まっているキー" note="ここは変えられません">
         <ul className="text-sm text-c-text-body space-y-1">
           <li><span className="font-mono text-xs">Esc</span> … 一番上のポップアップを閉じる。なければ絞り込みを解く</li>
+          <li><span className="font-mono text-xs">F5 / Ctrl+R</span> … 開いているスレを更新。スレを開いていなければスレ一覧を更新</li>
           <li><span className="font-mono text-xs">Ctrl+Tab / Ctrl+Shift+Tab</span>(Ctrl+PageDown / PageUp)… タブを切り替える</li>
           <li><span className="font-mono text-xs">Ctrl+W / Ctrl+Shift+W</span> … タブを閉じる / すべて閉じる</li>
           <li><span className="font-mono text-xs">Delete</span> … 選んだタブのログを消す</li>

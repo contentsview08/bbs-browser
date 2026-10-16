@@ -37,7 +37,7 @@ describe('actionFor', () => {
   it('既定の割り当て', () => {
     expect(actionFor(DEFAULT_KEYMAP, 'J')).toBe('nextPost')
     expect(actionFor(DEFAULT_KEYMAP, 'Shift+G')).toBe('bottom')
-    expect(actionFor(DEFAULT_KEYMAP, 'F5')).toBe('refresh')
+    expect(actionFor(DEFAULT_KEYMAP, 'R')).toBe('refresh')
     expect(actionFor(DEFAULT_KEYMAP, 'X')).toBeUndefined()
   })
 

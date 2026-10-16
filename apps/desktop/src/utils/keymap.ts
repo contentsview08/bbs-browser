@@ -37,8 +37,8 @@ export const DEFAULT_KEYMAP: Keymap = {
   top: ['Home', 'G'],
   bottom: ['End', 'Shift+G'],
   unread: ['U'],
-  // F5 は WebView がページごと読み直してしまうので、更新に当てて止める
-  refresh: ['R', 'F5'],
+  // F5・Ctrl+R はアプリ全体で決め打ち(開いているスレ、なければスレ一覧を更新する。App.tsx)
+  refresh: ['R'],
   search: ['/', 'Ctrl+F'],
   reply: ['W'],
 }

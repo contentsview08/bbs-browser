@@ -229,6 +229,26 @@ export default function ThreadView(props: Props) {
     if (searchActive) searchRef.current?.focus()
   }, [searchActive])
 
+  // Esc：ポップアップが出ていれば一番上を 1 層だけ閉じ、出ていなければ絞り込みを解いてすべて表示する。
+  // 入力欄の中の Esc(検索欄・ダイアログなど)と、画像を大きく見ているとき(Lightbox が閉じる)は手を出さない
+  useEffect(() => {
+    if (!props.active || lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (popups.length > 0) {
+        e.preventDefault()
+        setPopups((ps) => ps.slice(0, -1))
+      } else if (filters.size > 0) {
+        e.preventDefault()
+        setFilters(new Set())
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props.active, lightbox, popups.length, filters.size])
+
   // 「草」などのすぐ書き込む操作の結果。スレ表示の下に少しのあいだ出す
   const [quickMessage, setQuickMessage] = useState<{ ok: boolean; text: string }>()
   const quickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)

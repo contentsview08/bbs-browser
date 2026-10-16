@@ -132,7 +132,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     </button>
   )
 
-  /** 画像と絵文字のボタン(右端が絵文字)。本文の欄の上(名前とメールの行の右端)に置く */
+  /** 画像と絵文字のボタン(右端が絵文字)。本文の欄の上(名前とメールの行の右端＝本文の欄の右端)に置く */
   const mediaButtons = (
     <>
       {props.uploader && (
@@ -175,6 +175,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       )}
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
 
+      {/* 名前・メールの行と本文の欄を一つの列にまとめ、書き込むボタンはその右(右レイアウトでは下)に置く。
+          こうすると絵文字・画像のボタンの右端が本文の欄の右端とそろう */}
+      <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col">
       <div className={`flex items-center gap-2 mb-2 ${right ? 'flex-wrap' : ''}`}>
         <input
           type="text"
@@ -196,7 +200,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         </label>
         <div className="ml-auto flex items-center gap-0.5">{mediaButtons}</div>
       </div>
-      <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>
         <div className="relative flex-1 min-h-0 flex">
         <textarea
           ref={textRef}
@@ -228,6 +231,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed`}
         />
         </div>
+      </div>
         {sendButton}
       </div>
       {hasPreview && (

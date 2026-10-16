@@ -1,10 +1,27 @@
 /* 専ブラ側の上書き。index.css と theme/ は web 版の複製なので、変えたいことはここに書く */
 
+/* 顔文字用の予備フォント(scripts/build_kaomoji_font.py で Noto Sans から作る)。
+   日本語フォントには、文字に重ねる記号(U+1DC4 など)やギリシャ文字の拡張(ὢ)がなく、
+   `･᷄` のような「日本語フォントにしかない文字 + 重ねる記号」の組は、どのフォントでも描けずに豆腐になる。
+   この予備フォントは両方を持っているので、本文のフォントの後ろに置いておけば、描けない組だけこれで描かれる */
+@font-face {
+  font-family: 'BBS Kaomoji Fallback';
+  src: url('./assets/fonts/BBSKaomojiFallback.woff') format('woff');
+  font-display: swap;
+  unicode-range: U+0020-04FF, U+1AB0-1AFF, U+1D00-1FFF, U+2000-206F, U+20D0-20FF, U+30FB, U+FF65;
+}
+
 /* 設定で選んだフォント(src/ui/settings.ts が --app-font を入れる) */
 html,
 body,
 #root {
-  font-family: var(--app-font, 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif);
+  font-family: var(--app-font, 'Noto Sans JP Variable', 'Noto Sans JP', 'BBS Kaomoji Fallback', sans-serif);
+}
+
+/* AA 用のフォント(index.css の .aa-font)にも、同じ予備フォントを足す。並びは web 版と同じ */
+.aa-font {
+  font-family: aahub_light, 'ＭＳ Ｐゴシック', 'MS PGothic', RobotoJAA, Monapo, 'IPA モナー Pゴシック', IPAMonaPGothic, Mona, '梅Pゴシック', Textar,
+    'BBS Kaomoji Fallback', sans-serif !important;
 }
 
 /* web 版はトップページ用にドット絵フォントを持っているが、専ブラでは使わない */

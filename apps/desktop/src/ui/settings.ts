@@ -215,11 +215,21 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'soft-light', name: 'やさしいライト', accent: '#4f6f8f', border: '#dcd8d1' },
 ]
 
+/**
+ * 顔文字用の予備フォント(app.css)。日本語フォントで描けない「文字 + 重ねる記号」の組(･᷄ など)を描く。
+ * どのフォントでも、日本語フォントのすぐ後ろ(sans-serif の前)に置く
+ */
+const KAOMOJI_FALLBACK = "'BBS Kaomoji Fallback'"
+
 export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
-  { key: 'noto', name: 'Noto Sans JP', css: "'Noto Sans JP Variable', 'Noto Sans JP', sans-serif" },
-  { key: 'biz-ud', name: 'BIZ UDPゴシック(同梱)', css: "'BIZ UDPGothic', sans-serif" },
+  { key: 'noto', name: 'Noto Sans JP', css: `'Noto Sans JP Variable', 'Noto Sans JP', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'biz-ud', name: 'BIZ UDPゴシック(同梱)', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, sans-serif` },
   // Windows に入っている BIZ UDPゴシックは画面表示向けの調整(ヒンティング)が効いていて、小さい字もガタつきにくい
-  { key: 'system', name: 'Windows 標準(BIZ UDPゴシック)', css: "'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', sans-serif" },
+  {
+    key: 'system',
+    name: 'Windows 標準(BIZ UDPゴシック)',
+    css: `'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', ${KAOMOJI_FALLBACK}, sans-serif`,
+  },
 ]
 
 const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark'])

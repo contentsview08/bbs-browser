@@ -172,3 +172,31 @@ body,
 .card-thread.card-selected {
   background: color-mix(in srgb, var(--card-selected-bg) calc(var(--alpha-thread-list, 1) * 100%), transparent);
 }
+
+/* チェックボックスを配色に合わせる(@tailwindcss/forms の見た目を上書き)。
+   チェックしたときの色は color(currentColor)なので、差し色にする */
+input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 4px;
+  border: 1.5px solid var(--c-border-strong);
+  background-color: var(--c-surface2);
+  color: var(--c-accent);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+input[type='checkbox']:hover {
+  border-color: var(--c-accent);
+}
+input[type='checkbox']:focus {
+  outline: none;
+  box-shadow: none;
+}
+input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+input[type='checkbox']:checked,
+input[type='checkbox']:indeterminate {
+  border-color: var(--c-accent);
+}

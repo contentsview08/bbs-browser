@@ -412,8 +412,10 @@ export default function App() {
   /** 書き込みが通ったら、差分を取り直し、書き込んだレスを「自分の書き込み」として覚える */
   const afterPost = async (t: ThreadSummary, input: PostInput, r: PostResult): Promise<PostResult> => {
     if (!store || r.status !== 'ok') return r
-    if (input.name !== settings.postName) updateSetting('postName', input.name)
-    if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
+    // 板ごとの既定値がある欄は、アプリ全体の「最後に使った値」を書き換えない
+    const meta = settings.boardMeta[t.boardUrl]
+    if (meta?.defaultName === undefined && input.name !== settings.postName) updateSetting('postName', input.name)
+    if (meta?.defaultMail === undefined && input.mail !== settings.postMail) updateSetting('postMail', input.mail)
     const before = (await store.loadThread(t))?.postCount ?? 0
     await fetchThread(store, t, { force: true })
     const after = await store.loadThread(t)
@@ -605,6 +607,7 @@ export default function App() {
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
         collapsed={settings.sidebarCollapsed}
+        boardMeta={settings.boardMeta}
         onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         historyActive={history !== undefined}
         onOpenHistory={openHistory}
@@ -635,7 +638,7 @@ export default function App() {
         >
         <ThreadListPanel
           key={history ? 'history' : board?.url}
-          title={history ? '閲覧履歴' : (board?.name ?? '板を選択')}
+          title={history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={historyThreads ?? threads}
           stateOf={stateOf}
           activeId={activeId}
@@ -672,6 +675,8 @@ export default function App() {
             unread: t.log ? Math.max(0, t.log.postCount - t.readNo) : 0,
             loading: t.loading,
             archived: t.log?.status === 'archived',
+            boardUrl: t.thread.boardUrl,
+            icon: settings.boardMeta[t.thread.boardUrl]?.icon,
           }))}
           activeId={activeId}
           onSelect={selectTab}
@@ -701,8 +706,8 @@ export default function App() {
             ownNos={activeTab.ownNos}
             onSubmitPost={connectorOf(activeTab.thread.connectorId).createPost ? submitPost : undefined}
             onConfirmPost={confirmPost}
-            postName={settings.postName}
-            postMail={settings.postMail}
+            postName={settings.boardMeta[activeTab.thread.boardUrl]?.defaultName ?? settings.postName}
+            postMail={settings.boardMeta[activeTab.thread.boardUrl]?.defaultMail ?? settings.postMail}
             onChangeReplyLayout={(layout) => updateSetting('replyLayout', layout)}
             onResizeReply={(key, size) => updateSetting(key, size)}
             onDeleteLog={() => void deleteLogs([activeTab.id])}
@@ -721,9 +726,9 @@ export default function App() {
 
       {newThreadOpen && board && (
         <NewThreadDialog
-          boardName={board.name}
-          initialName={settings.postName}
-          initialMail={settings.postMail}
+          boardName={settings.boardMeta[board.url]?.alias || board.name}
+          initialName={settings.boardMeta[board.url]?.defaultName ?? settings.postName}
+          initialMail={settings.boardMeta[board.url]?.defaultMail ?? settings.postMail}
           onSubmit={createThread}
           onConfirm={confirmThread}
           onOpenUrl={(url) => void openUrl(url)}

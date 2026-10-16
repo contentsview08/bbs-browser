@@ -30,6 +30,17 @@ export interface SavedTab {
   createdAt?: number
 }
 
+/** 板ごとの情報(お気に入り板の編集画面で設定する)。どれも空なら既定のまま */
+export interface BoardMeta {
+  /** 板名の代わりに出す名前 */
+  alias?: string
+  /** ファビコンの上書き(画像の URL) */
+  icon?: string
+  /** その板での名前欄・メール欄の既定値 */
+  defaultName?: string
+  defaultMail?: string
+}
+
 /** 不透明度を変えられるパネル */
 export type PanelKey = 'addressBar' | 'sidebar' | 'tabs' | 'threadList' | 'threadHeader' | 'threadView' | 'replyForm'
 
@@ -71,6 +82,8 @@ export interface AppSettings {
   lastBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
+  /** 板ごとの情報(板の URL → 別名・ファビコン・名前とメールの既定値) */
+  boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
   keywords: string[]
   // タブ
@@ -134,6 +147,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startupBoardUrl: '@last',
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
+  boardMeta: {},
   keywords: [],
   tabsEnabled: true,
   openInNewTab: true,

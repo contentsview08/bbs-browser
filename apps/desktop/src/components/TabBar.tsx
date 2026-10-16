@@ -3,6 +3,7 @@
 // (右のタブが 1 つぶん詰まって、次のタブの × がマウスの下に来るので、× を続けて押せる)。
 
 import { useEffect, useRef, useState } from 'react'
+import BoardIcon from './BoardIcon'
 
 export interface TabItem {
   id: string
@@ -11,6 +12,9 @@ export interface TabItem {
   unread: number
   loading: boolean
   archived: boolean
+  boardUrl: string
+  /** ファビコンの上書き(板の設定) */
+  icon?: string
 }
 
 interface Props {
@@ -125,7 +129,11 @@ export default function TabBar(props: Props) {
                 </>
               )}
               {separator && <span className="absolute right-0 top-2 bottom-2 w-px bg-c-border pointer-events-none" />}
-              {t.loading && <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>}
+              {t.loading ? (
+                <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+              ) : (
+                <BoardIcon boardUrl={t.boardUrl} override={t.icon} size={14} />
+              )}
               <span className="flex-1 min-w-0 truncate">{t.title || '(読み込み中)'}</span>
               {t.unread > 0 && (
                 <span

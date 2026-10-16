@@ -129,6 +129,19 @@ export function displayName(name: string, o: DisplayOptions): string {
 
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i
 
+/** 本文の YouTube の動画の ID(書き込み欄のサムネイルに使う) */
+export function youtubeIdsIn(text: string): string[] {
+  const ids: string[] = []
+  for (const m of text.matchAll(TOKEN)) {
+    if (!m[3]) continue
+    const url = normalizeUrl(m[3])
+    if (!YOUTUBE_URL.test(url)) continue
+    const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
 /** 本文に YouTube の URL があるか(ミニマップの動画の印に使う) */
 export function hasYoutube(text: string): boolean {
   for (const m of text.matchAll(TOKEN)) if (m[3] && YOUTUBE_URL.test(normalizeUrl(m[3]))) return true

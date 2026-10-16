@@ -5,6 +5,8 @@
 
 import { useState, type ReactNode } from 'react'
 import type { Board } from '@bbs-browser/connectors'
+import BoardIcon from './BoardIcon'
+import type { BoardMeta } from '../ui/settings'
 
 interface Props {
   favorites: Board[]
@@ -18,6 +20,8 @@ interface Props {
   onManageBoards: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** 板ごとの別名・ファビコン */
+  boardMeta: Record<string, BoardMeta>
 }
 
 const COLLAPSED = 64
@@ -107,14 +111,15 @@ export default function Sidebar(props: Props) {
                 return (
                   <div
                     key={b.url}
-                    className={`group flex items-center pl-16 pr-2 transition-colors hover:bg-c-surface2 ${active ? 'active-board' : ''}`}
+                    className={`group flex items-center pl-10 pr-2 transition-colors hover:bg-c-surface2 ${active ? 'active-board' : ''}`}
                   >
                     <button
                       type="button"
                       onClick={() => props.onOpenBoard(b)}
-                      className={`flex-1 min-w-0 text-left py-1.5 text-[1.0625rem] truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}
+                      className={`flex-1 min-w-0 flex items-center gap-2 text-left py-1.5 text-[1.0625rem] ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}
                     >
-                      {b.name}
+                      <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} />
+                      <span className="truncate">{props.boardMeta[b.url]?.alias || b.name}</span>
                     </button>
                     <button
                       type="button"

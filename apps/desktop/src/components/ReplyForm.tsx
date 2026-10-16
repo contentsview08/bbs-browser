@@ -6,6 +6,7 @@ import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import EmojiPicker from './EmojiPicker'
+import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
 import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
@@ -82,6 +83,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }
 
   const right = props.layout === 'right'
+  // 本文に入れた画像・動画のリンクは、下にサムネイルを出す(web 版と同じ)
+  const previewImages = imageUrlsIn(body)
+  const previewVideos = youtubeIdsIn(body)
+  const hasPreview = previewImages.length + previewVideos.length > 0
   const sendButton = (
     <button
       type="button"
@@ -139,6 +144,28 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         />
         {sendButton}
       </div>
+      {hasPreview && (
+        <div className="flex-shrink-0 mt-2 flex gap-2 overflow-x-auto no-scrollbar">
+          {previewImages.map((url) => (
+            <img
+              key={url}
+              src={url}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+              }}
+            />
+          ))}
+          {previewVideos.map((id) => (
+            <div key={id} className="relative h-14 w-20 flex-shrink-0 rounded overflow-hidden border-2" style={{ borderColor: '#ff0000' }}>
+              <img src={`https://img.youtube.com/vi/${id}/default.jpg`} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+              <span className="absolute bottom-0.5 right-0.5 bg-black/80 text-white text-[8px] px-0.5 rounded leading-none">▶</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 })

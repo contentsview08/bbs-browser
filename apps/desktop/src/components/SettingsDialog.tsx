@@ -14,6 +14,8 @@ import { isValidPattern, newRule, todayDateString, type NgTarget } from '../util
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
+import BoardIcon from './BoardIcon'
+import type { BoardMeta } from '../ui/settings'
 
 interface Props {
   settings: AppSettings
@@ -778,12 +780,51 @@ function BoardListTab(props: {
   )
 }
 
+/** お気に入り板 1 つぶんの情報の編集欄。入力はすぐに反映・保存し、空にすれば既定に戻る */
+function BoardMetaEditor({ board, meta, onChange }: { board: Board; meta: BoardMeta; onChange: (m: BoardMeta) => void }) {
+  const field = (key: keyof BoardMeta, label: string, placeholder: string, note?: string) => (
+    <label className="block">
+      <span className="block text-xs text-c-text-muted mb-1">{label}</span>
+      <input
+        type="text"
+        value={meta[key] ?? ''}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const next = { ...meta, [key]: e.target.value || undefined }
+          onChange(next)
+        }}
+        className={`${INPUT} w-full`}
+      />
+      {note && <span className="block text-[10px] text-c-text-muted mt-0.5">{note}</span>}
+    </label>
+  )
+  return (
+    <div className="px-3 pb-3 pt-1 grid grid-cols-2 gap-3 bg-c-surface2">
+      {field('alias', '別名(板名の代わりに出す名前)', board.name)}
+      <div>
+        {field('icon', 'ファビコン(画像の URL)', '自動(板のページから探す)')}
+      </div>
+      {field('defaultName', 'この板での名前欄の既定値', 'ふだんの名前のまま')}
+      {field('defaultMail', 'この板でのメール欄の既定値', 'ふだんのメールのまま', 'sage にしておきたい板など')}
+    </div>
+  )
+}
+
 function BoardsTab(
   props: Pick<
     Props,
-    'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite'
+    'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite' | 'settings' | 'update'
   > & { onShowBoardList: (menuUrl: string) => void },
 ) {
+  const [editing, setEditing] = useState<string>()
+  const metaOf = (url: string) => props.settings.boardMeta[url] ?? {}
+  const setMeta = (url: string, m: BoardMeta) => {
+    const next = { ...props.settings.boardMeta }
+    // 全部空になったら消す
+    if (Object.values(m).some((v) => v !== undefined)) next[url] = m
+    else delete next[url]
+    props.update('boardMeta', next)
+  }
   const [favUrl, setFavUrl] = useState('')
   const [siteName, setSiteName] = useState('')
   const [siteUrl, setSiteUrl] = useState('')
@@ -807,12 +848,26 @@ function BoardsTab(
       <Section title="お気に入り板" note="サイドバーの「お気に入り」に並ぶ板です。「板一覧」で ☆ を押すか、板の URL を貼って登録します">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {props.favorites.map((b) => (
-            <div key={b.url} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <span className="text-c-text-strong">{b.name}</span>
-              <span className="flex-1 min-w-0 truncate text-xs text-c-text-muted">{b.url}</span>
-              <button type="button" className={ICON_BTN} title="外す" onClick={() => props.onRemoveFavorite(b.url)}>
-                <span className="material-symbols-outlined text-base">delete</span>
-              </button>
+            <div key={b.url}>
+              <div className="flex items-center gap-3 px-3 py-2 text-sm">
+                <BoardIcon boardUrl={b.url} override={metaOf(b.url).icon} />
+                <span className="text-c-text-strong">{metaOf(b.url).alias || b.name}</span>
+                {metaOf(b.url).alias && <span className="text-xs text-c-text-muted">({b.name})</span>}
+                <span className="flex-1 min-w-0 truncate text-xs text-c-text-muted">{b.url}</span>
+                <button
+                  type="button"
+                  onClick={() => setEditing((e) => (e === b.url ? undefined : b.url))}
+                  className={`px-2 py-0.5 text-xs border rounded-[var(--btn-radius)] transition-colors ${
+                    editing === b.url ? 'border-c-accent text-c-accent' : 'border-c-border text-c-text-body hover:border-c-accent hover:text-c-accent'
+                  }`}
+                >
+                  編集
+                </button>
+                <button type="button" className={ICON_BTN} title="外す" onClick={() => props.onRemoveFavorite(b.url)}>
+                  <span className="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
+              {editing === b.url && <BoardMetaEditor board={b} meta={metaOf(b.url)} onChange={(m) => setMeta(b.url, m)} />}
             </div>
           ))}
           {props.favorites.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">まだありません</p>}

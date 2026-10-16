@@ -7,6 +7,7 @@ import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors
 import PostResultBox from './PostResultBox'
 import EmojiPicker from './EmojiPicker'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
+import { useCountdown } from '../hooks/useCountdown'
 import { uploadToCatbox, type UploadOptions } from '../host/uploader'
 import type { ReplyLayout } from '../ui/settings'
 
@@ -28,6 +29,9 @@ interface Props {
   onOpenUrl: (url: string) => void
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
   uploader?: UploadOptions
+  /** 書き込んだあとのクールダウンが明ける時刻と、その長さ。明けるまで書き込むボタンを押せなくし、残りを出す */
+  readyAt?: number
+  cooldownMs?: number
   /** 下のサムネイルを押した(画像ビューアーで開く) */
   onImage?: (urls: string[], index: number) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
@@ -102,8 +106,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     }
   }
 
+  const cooldown = useCountdown(props.readyAt, props.cooldownMs ?? 0)
+  const cooling = cooldown.left > 0
   const submit = async () => {
-    if (!body.trim() || sending || props.disabled) return
+    if (!body.trim() || sending || props.disabled || cooling) return
     setSending(true)
     setResult(undefined)
     try {
@@ -122,17 +128,25 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const previewImages = imageUrlsIn(body)
   const previewVideos = youtubeIdsIn(body)
   const hasPreview = previewImages.length + previewVideos.length > 0
+  // クールダウン中は押せなくし、残りの秒数と、減っていく帯を出す(続けて書き込めないことが分かるように)
   const sendButton = (
     <button
       type="button"
       onClick={() => void submit()}
-      disabled={sending || !body.trim() || !!props.disabled}
-      className={`btn-thread-create px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
+      disabled={sending || !body.trim() || !!props.disabled || cooling}
+      title={cooling ? `続けて書き込まないよう、あと ${Math.ceil(cooldown.left / 1000)} 秒あけています(設定 → 書き込み で変えられます)` : 'Ctrl+Enter でも書き込めます'}
+      className={`btn-thread-create relative overflow-hidden px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
     >
-      <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
-        {sending ? 'progress_activity' : 'send'}
+      {cooling && (
+        <span
+          className="absolute inset-y-0 left-0 bg-black/25 pointer-events-none"
+          style={{ width: `${cooldown.ratio * 100}%` }}
+        />
+      )}
+      <span className={`relative material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
+        {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
       </span>
-      書き込む
+      <span className="relative tabular-nums">{cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '書き込む'}</span>
     </button>
   )
 

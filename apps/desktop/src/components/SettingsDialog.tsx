@@ -608,6 +608,16 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   }
   return (
     <>
+      <Section
+        title="続けて書き込まない"
+        note="書き込んだあと、この秒数は書き込むボタンを押せなくし、残りを出します(連投で規制されないように)。どのスレでも同じです"
+      >
+        <Choice
+          value={s.postCooldownSec}
+          options={[0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'あけない' : `${n} 秒` }))}
+          onChange={(v) => update('postCooldownSec', v)}
+        />
+      </Section>
       <Section title="定型文" note="レスの操作バーや ⋯ から、そのレスへのアンカーを付けて、押すとすぐ書き込みます">
         <form
           className="flex gap-2 mb-2"

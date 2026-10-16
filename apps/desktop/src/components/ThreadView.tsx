@@ -15,6 +15,8 @@ import AnchorTree from './AnchorTree'
 import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
+import RefreshButton from './RefreshButton'
+import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
@@ -75,6 +77,11 @@ interface Props {
   /** 次スレの候補を探す(板のスレ一覧を取り直して似たスレタイを並べる)。できない掲示板では undefined */
   onFindNext?: () => Promise<NextThreadCandidate[]>
   onOpenThread: (t: ThreadSummary) => void
+  /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出す) */
+  refreshReadyAt?: number
+  /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
+  postReadyAt?: number
+  postCooldownMs: number
   /** お気に入りのスレか、と足す・外す */
   isFavorite: boolean
   onToggleFavorite: () => void
@@ -178,9 +185,12 @@ export default function ThreadView(props: Props) {
   })
 
   // 端でさらにホイールを回すと更新する(web 版と同じ)。上端と下端で別々に持つ
-  // 続けて引っぱっても取りに行かないよう、一度更新したら 5 秒あける(更新ボタンなども App 側で 5 秒あける)
-  const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1, cooldownMs: 5000 })
-  const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1, cooldownMs: 5000 })
+  // 手で更新したあとのクールダウン中(App が決める)は、引っぱっても数えない
+  const refreshReadyRef = useRef(props.refreshReadyAt)
+  refreshReadyRef.current = props.refreshReadyAt
+  const canRefresh = () => Date.now() >= (refreshReadyRef.current ?? 0)
+  const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1, canRefresh })
+  const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1, canRefresh })
   const onScrollPull = () => {
     topPull.noteScroll()
     bottomPull.noteScroll()
@@ -621,9 +631,13 @@ export default function ThreadView(props: Props) {
             <button type="button" className={ICON_BTN} title="ブラウザで開く" onClick={props.onOpenInBrowser}>
               <span className="material-symbols-outlined text-xl">open_in_new</span>
             </button>
-            <button type="button" className={ICON_BTN} title="更新" onClick={props.onRefresh} disabled={props.loading}>
-              <span className={`material-symbols-outlined text-xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
-            </button>
+            <RefreshButton
+              className={ICON_BTN}
+              onClick={() => void props.onRefresh()}
+              loading={props.loading}
+              readyAt={props.refreshReadyAt}
+              cooldownMs={REFRESH_COOLDOWN_MS}
+            />
           </div>
         </header>
         <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
@@ -796,6 +810,8 @@ export default function ThreadView(props: Props) {
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
               onUploaded={props.onUploaded}
+              readyAt={props.postReadyAt}
+              cooldownMs={props.postCooldownMs}
               onImage={(urls, index) => setLightbox({ urls, index })}
               uploader={
                 settings.uploaderEnabled

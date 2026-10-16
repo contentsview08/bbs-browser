@@ -26,6 +26,8 @@ interface UseWheelPullRefreshOptions {
   armDelayMs?: number
   /** 一度更新したら、これだけたつまでは引っぱっても更新しない(取得のしすぎを防ぐ) */
   cooldownMs?: number
+  /** いま更新できるか(クールダウン中なら false)。false のあいだは引っぱっても数えない */
+  canRefresh?: () => boolean
 }
 
 /**
@@ -41,6 +43,7 @@ export function useWheelPullRefresh({
   sign = 1,
   armDelayMs = 500,
   cooldownMs = 0,
+  canRefresh,
 }: UseWheelPullRefreshOptions) {
   const lastScrollRef = useRef(0)
   const lastCommitRef = useRef(0)
@@ -115,7 +118,7 @@ export function useWheelPullRefresh({
     if (committingRef.current || deltaAbs <= 0) return
     const now = Date.now()
     // 端に着いたばかり(スクロールの勢いが残っている)か、更新したばかりなら数えない
-    if (now - lastScrollRef.current < armDelayMs || now - lastCommitRef.current < cooldownMs) {
+    if (now - lastScrollRef.current < armDelayMs || now - lastCommitRef.current < cooldownMs || (canRefresh && !canRefresh())) {
       accumRef.current = 0
       return
     }

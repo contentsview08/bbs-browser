@@ -53,12 +53,10 @@ import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { isReloadKey } from './utils/keymap'
 import { findNextThreads } from './utils/nextThread'
+import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
-
-/** 手でスレを更新するとき、同じスレはこれだけあける */
-const REFRESH_COOLDOWN_MS = 5000
 
 const connectorOf = (id: string) => {
   const c = findConnector(id)
@@ -401,8 +399,6 @@ export default function App() {
    * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
    */
   const inflight = useRef(new Map<string, Promise<void>>())
-  /** スレごとの、最後に取りに行った時刻(手で続けて更新したときに、取りに行かないため) */
-  const lastFetchAt = useRef(new Map<string, number>())
   const fetchThread = async (
     s: LogStore,
     t: ThreadSummary,
@@ -416,7 +412,6 @@ export default function App() {
       if (!opts.force) return
     }
     const job = (async () => {
-      lastFetchAt.current.set(id, Date.now())
       patchTab(id, { loading: true })
       try {
         // 手元のログ(タブで開いていればそれ、なければ DB)に、取ってきた差分を当てはめる。
@@ -575,10 +570,33 @@ export default function App() {
   const refreshThread = () =>
     run('posts', async () => {
       if (!store || !activeTab) return
-      const last = lastFetchAt.current.get(activeTab.id) ?? 0
-      if (Date.now() - last < REFRESH_COOLDOWN_MS) return
+      const now = Date.now()
+      if (now < (activeTab.refreshReadyAt ?? 0)) return
+      // 明ける時刻をタブに持たせ、更新ボタンに残りを出す
+      patchTab(activeTab.id, { refreshReadyAt: now + REFRESH_COOLDOWN_MS })
       await fetchThread(store, activeTab.thread)
     })
+
+  // ── 書き込みとスレ一覧のクールダウン ──
+
+  /** 書き込んだあとのクールダウンが明ける時刻(どのスレでも同じ。続けて書き込まないように) */
+  const [postReadyAt, setPostReadyAt] = useState<number>()
+  const postCooldownMs = settings.postCooldownSec * 1000
+  /** クールダウン中なら、断る理由を返す */
+  const postBlocked = (): PostResult | undefined => {
+    const left = (postReadyAt ?? 0) - Date.now()
+    if (left <= 0) return undefined
+    return { status: 'error', message: `続けて書き込まないよう、あと ${Math.ceil(left / 1000)} 秒あけています` }
+  }
+  /** スレ一覧を手で更新したあとのクールダウンが明ける時刻 */
+  const [listReadyAt, setListReadyAt] = useState<number>()
+  /** スレ一覧を手で更新する(更新ボタン・引っぱって更新)。クールダウン中は取りに行かない */
+  const manualListRefresh = (refresh: () => Promise<void> | void) => () => {
+    const now = Date.now()
+    if (now < (listReadyAt ?? 0)) return
+    setListReadyAt(now + LIST_REFRESH_COOLDOWN_MS)
+    return refresh()
+  }
 
   const refreshAll = () =>
     run(null, async () => {
@@ -692,6 +710,8 @@ export default function App() {
    */
   const submitPost = async (input: PostInput): Promise<PostResult> => {
     if (!store || !activeTab) return { status: 'error', message: 'スレを開いていません' }
+    const blocked = postBlocked()
+    if (blocked) return blocked
     const t = activeTab.thread
     const connector = connectorOf(t.connectorId)
     if (!connector.createPost) return { status: 'error', message: 'この掲示板には書き込めません' }
@@ -710,6 +730,7 @@ export default function App() {
   /** 書き込みが通ったら、差分を取り直し、書き込んだレスを「自分の書き込み」として覚える */
   const afterPost = async (t: ThreadSummary, input: PostInput, r: PostResult): Promise<PostResult> => {
     if (!store || r.status !== 'ok') return r
+    if (postCooldownMs > 0) setPostReadyAt(Date.now() + postCooldownMs)
     // 板ごとの既定値がある欄は、アプリ全体の「最後に使った値」を書き換えない
     const meta = settings.boardMeta[t.boardUrl]
     if (meta?.defaultName === undefined && input.name !== settings.postName) updateSetting('postName', input.name)
@@ -739,6 +760,8 @@ export default function App() {
    */
   const createThread = async (input: NewThreadInput): Promise<PostResult> => {
     if (!store || !board) return { status: 'error', message: '板を開いていません' }
+    const blocked = postBlocked()
+    if (blocked) return blocked
     const b = board
     const connector = connectorOf(b.connectorId)
     if (!connector.createThread) return { status: 'error', message: 'この掲示板ではスレを立てられません' }
@@ -756,6 +779,7 @@ export default function App() {
   /** スレが立ったら、スレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く */
   const afterThread = async (b: Board, input: NewThreadInput, r: PostResult): Promise<PostResult> => {
     if (!store || r.status !== 'ok') return r
+    if (postCooldownMs > 0) setPostReadyAt(Date.now() + postCooldownMs)
     const connector = connectorOf(b.connectorId)
 
     if (input.name !== settings.postName) updateSetting('postName', input.name)
@@ -1053,7 +1077,16 @@ export default function App() {
             setListOpen(false)
             void openThread(t)
           }}
-          onRefresh={favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board) : undefined}
+          onRefresh={
+            favView
+              ? manualListRefresh(refreshFavThreads)
+              : history
+                ? manualListRefresh(refreshHistory)
+                : board
+                  ? manualListRefresh(() => openBoard(board))
+                  : undefined
+          }
+          refreshReadyAt={listReadyAt}
           // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
           width={narrow ? Math.min(settings.threadPanelWidth, Math.floor(window.innerWidth * 0.85)) : settings.threadPanelWidth}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
@@ -1128,6 +1161,8 @@ export default function App() {
                   nonameName={boardInfos.get(t.thread.boardUrl)?.nonameName}
                   jumpTo={jump?.tabId === id ? jump : undefined}
                   favorite={favIds.has(id)}
+                  postReadyAt={postReadyAt}
+                  postCooldownMs={postCooldownMs}
                   ev={stableTabEvents}
                 />
               </div>
@@ -1190,6 +1225,8 @@ export default function App() {
           onConfirm={confirmThread}
           onOpenUrl={(url) => void openUrl(url)}
           onClose={() => setNewThreadOpen(false)}
+          readyAt={postReadyAt}
+          cooldownMs={postCooldownMs}
         />
       )}
 

@@ -22,6 +22,8 @@ export interface Tab {
   /** 別のタブへ移ったときに覚えておく、読んでいた位置 */
   scroll?: ScrollPosition
   loading: boolean
+  /** 手で更新したあとのクールダウンが明ける時刻 */
+  refreshReadyAt?: number
 }
 
 /** アプリ側の処理。どれも関数そのものは変わらない(描き直しても同じもの) */
@@ -56,10 +58,13 @@ interface Props {
   jumpTo?: { no: number; seq: number }
   /** お気に入りのスレか */
   favorite: boolean
+  /** 書き込んだあとのクールダウンが明ける時刻(どのタブでも同じ) */
+  postReadyAt?: number
+  postCooldownMs: number
   ev: TabEvents
 }
 
-function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, ev }: Props) {
+function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, postReadyAt, postCooldownMs, ev }: Props) {
   const { id, thread } = tab
   const onSavePosition = useCallback((pos: ScrollPosition) => ev.savePosition(id, pos), [ev, id])
   const onRead = useCallback((no: number) => ev.markRead(thread, no), [ev, thread])
@@ -102,6 +107,9 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, ev
       onFindNext={onFindNext}
       onOpenThread={ev.openThread}
       isFavorite={favorite}
+      refreshReadyAt={tab.refreshReadyAt}
+      postReadyAt={postReadyAt}
+      postCooldownMs={postCooldownMs}
       onToggleFavorite={onToggleFavorite}
     />
   )

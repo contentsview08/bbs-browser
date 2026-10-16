@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import type { NewThreadInput, PostConfirm, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
+import { useCountdown } from '../hooks/useCountdown'
 
 interface Props {
   boardName: string
@@ -13,6 +14,9 @@ interface Props {
   onConfirm: (confirm: PostConfirm, input: NewThreadInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
   onClose: () => void
+  /** 書き込んだあとのクールダウンが明ける時刻と、その長さ */
+  readyAt?: number
+  cooldownMs: number
 }
 
 const INPUT =
@@ -25,7 +29,9 @@ export default function NewThreadDialog(props: Props) {
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<PostResult>()
-  const ready = title.trim() !== '' && body.trim() !== '' && !sending
+  const cooldown = useCountdown(props.readyAt, props.cooldownMs)
+  const cooling = cooldown.left > 0
+  const ready = title.trim() !== '' && body.trim() !== '' && !sending && !cooling
 
   const submit = async () => {
     if (!ready) return
@@ -104,7 +110,9 @@ export default function NewThreadDialog(props: Props) {
         </div>
 
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
-          <span className="text-[10px] text-c-text-muted">Ctrl+Enter で立てる</span>
+          <span className="text-[10px] text-c-text-muted">
+            {cooling ? `続けて書き込まないよう、あと ${Math.ceil(cooldown.left / 1000)} 秒あけています` : 'Ctrl+Enter で立てる'}
+          </span>
           <button
             type="button"
             onClick={() => void submit()}
@@ -112,9 +120,9 @@ export default function NewThreadDialog(props: Props) {
             className="btn-thread-create px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 flex items-center gap-1"
           >
             <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
-              {sending ? 'progress_activity' : 'edit_square'}
+              {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'edit_square'}
             </span>
-            スレを立てる
+            <span className="tabular-nums">{cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : 'スレを立てる'}</span>
           </button>
         </div>
       </div>

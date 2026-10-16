@@ -8,6 +8,8 @@ import ThreadCard from './ThreadCard'
 import LoadingCenter from './LoadingCenter'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
+import RefreshButton from './RefreshButton'
+import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
@@ -76,6 +78,8 @@ interface Props {
   /** お気に入りのスレ(threadId の集まり)と、足す・外す */
   favoriteIds?: Set<string>
   onToggleFavoriteThread?: (t: ThreadSummary) => void
+  /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出し、引っぱっても数えない) */
+  refreshReadyAt?: number
   /** 一番上でさらにホイールを回したら更新する(設定) */
   pullToRefresh: boolean
   /** 板を開いているときだけ ★ を出す */
@@ -107,13 +111,17 @@ export default function ThreadListPanel(props: Props) {
     return () => observer.disconnect()
   }, [])
   // 一番上でさらにホイールを回すと一覧を更新する(web 版と同じ)
-  // スレ一覧の更新は板全体を取り直すので、スレ表示より引っぱる量を多くし、続けて更新しないよう 10 秒あける
+  // スレ一覧の更新は板全体を取り直すので、スレ表示より引っぱる量を多くする。
+  // 続けて更新しないよう、手で更新したあとのクールダウン中(App が決める)は数えない
+  const refreshReadyRef = useRef(props.refreshReadyAt)
+  refreshReadyRef.current = props.refreshReadyAt
   const pull = useWheelPullRefresh({
     onRefresh: () => props.onRefresh?.(),
     sign: 1,
-    revealThreshold: 500,
-    commitThreshold: 1000,
-    cooldownMs: 10_000,
+    // スレ表示(200 / 400)の 1.7 倍
+    revealThreshold: 340,
+    commitThreshold: 680,
+    canRefresh: () => Date.now() >= (refreshReadyRef.current ?? 0),
   })
 
   useEffect(() => setWidth(props.width), [props.width])
@@ -346,15 +354,14 @@ export default function ThreadListPanel(props: Props) {
                 )}
                 {props.actions}
                 {props.onRefresh && (
-                  <button
-                    type="button"
-                    onClick={props.onRefresh}
-                    disabled={props.loading}
+                  <RefreshButton
+                    onClick={() => void props.onRefresh?.()}
+                    loading={props.loading}
+                    readyAt={props.refreshReadyAt}
+                    cooldownMs={LIST_REFRESH_COOLDOWN_MS}
+                    size={18}
                     className="p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg"
-                    title="スレッド一覧を更新"
-                  >
-                    <span className={`material-symbols-outlined text-lg ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
-                  </button>
+                  />
                 )}
               </div>
             </div>

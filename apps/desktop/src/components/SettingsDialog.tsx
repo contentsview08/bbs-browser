@@ -707,6 +707,16 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('autoRefreshSec', v)}
         />
       </Section>
+      <Section
+        title="お気に入りのスレの新着"
+        note="お気に入りのスレがある板のスレ一覧だけを取りに行き、新着の数を確かめます(本文は取りません)。本文はお気に入りのスレの一覧で更新したときに取ります"
+      >
+        <Choice
+          value={s.favCheckMin}
+          options={[0, 3, 5, 10, 30].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 分ごと` }))}
+          onChange={(v) => update('favCheckMin', v)}
+        />
+      </Section>
       <Section title="新着">
         <Toggle
           checked={s.autoScrollOnNew}

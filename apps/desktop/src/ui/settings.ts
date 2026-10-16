@@ -123,6 +123,8 @@ export interface AppSettings {
   autoRefreshSec: number
   /** いちばん下を見ているときに新着が来たら、新着まで自動でスクロールする */
   autoScrollOnNew: boolean
+  /** お気に入りのスレの新着の数を確かめる間隔(分)。0 なら確かめない(スレ一覧だけ取るので軽い) */
+  favCheckMin: number
   /** 自分宛てのレスが届いたら、右下に通知を出す */
   notifyReplies: boolean
   // NG
@@ -192,6 +194,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoRefreshSec: 0,
   autoScrollOnNew: true,
   notifyReplies: true,
+  favCheckMin: 5,
   ngRules: [],
   ngMode: 'aborn',
   uploaderEnabled: false,

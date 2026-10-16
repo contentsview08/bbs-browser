@@ -73,6 +73,9 @@ interface Props {
   onDeleteLogs?: (threads: ThreadSummary[]) => void
   /** スレを立てられる板のときだけ渡す */
   onNewThread?: () => void
+  /** お気に入りのスレ(threadId の集まり)と、足す・外す */
+  favoriteIds?: Set<string>
+  onToggleFavoriteThread?: (t: ThreadSummary) => void
   /** 板を開いているときだけ ★ を出す */
   favorite?: { active: boolean; onToggle: () => void }
 }
@@ -210,6 +213,7 @@ export default function ThreadListPanel(props: Props) {
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
   )
   const onDeleteCard = useEvent((t: ThreadSummary) => props.onDeleteThreadLog?.(t))
+  const onFavoriteCard = useEvent((t: ThreadSummary) => props.onToggleFavoriteThread?.(t))
 
   const renderThread = (t: ThreadSummary) => {
     const id = threadId(t)
@@ -225,6 +229,8 @@ export default function ThreadListPanel(props: Props) {
         onNg={props.onNgThread ? onNgCard : undefined}
         onCopy={onCopyCard}
         onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
+        isFavorite={props.favoriteIds?.has(id) ?? false}
+        onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
       />
     )
     if (!selectable) return card

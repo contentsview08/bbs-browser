@@ -74,6 +74,11 @@ export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, resu
   }
 }
 
+/** お気に入りのスレ。ログがあれば、その既読・レス数・dat 落ちも付ける(なければ 0 と active) */
+export interface FavoriteThreadEntry extends ThreadState {
+  thread: ThreadSummary
+}
+
 /** 書き込み履歴の 1 件 */
 export interface PostHistoryEntry {
   id: number
@@ -365,6 +370,56 @@ export class LogStore {
       [thread.boardUrl, thread.key],
     )
     return rows.map((r) => r.no)
+  }
+
+  // ── お気に入りのスレ ──
+
+  /** 並べた順(足した順。あとで並べ替えられるよう sort で持つ) */
+  async listFavoriteThreads(): Promise<FavoriteThreadEntry[]> {
+    const rows = await this.db.select<{
+      board_url: string
+      key: string
+      connector_id: string
+      title: string
+      created_at: number | null
+      post_count: number | null
+      read_no: number | null
+      status: 'active' | 'archived' | null
+      log_title: string | null
+    }>(
+      `SELECT f.board_url, f.key, f.connector_id, f.title, f.created_at,
+              t.post_count, t.read_no, t.status, t.title AS log_title
+       FROM favorite_threads AS f
+       LEFT JOIN threads AS t ON t.board_url = f.board_url AND t.key = f.key
+       ORDER BY f.sort`,
+    )
+    return rows.map((r) => ({
+      thread: {
+        connectorId: r.connector_id,
+        boardUrl: r.board_url,
+        key: r.key,
+        // ログのスレタイがあればそちら(URL から開いて足したスレは、足したときのスレタイが空のことがある)
+        title: r.log_title || r.title,
+        postCount: r.post_count ?? 0,
+        order: 0,
+        createdAt: r.created_at === null ? undefined : new Date(r.created_at),
+      },
+      postCount: r.post_count ?? 0,
+      readNo: r.read_no ?? 0,
+      status: r.status ?? 'active',
+    }))
+  }
+
+  async addFavoriteThread(thread: ThreadSummary, now = Date.now()): Promise<void> {
+    await this.db.execute(
+      `INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at)
+       VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), $6)`,
+      [thread.boardUrl, thread.key, thread.connectorId, thread.title, nn(thread.createdAt?.getTime()), now],
+    )
+  }
+
+  async removeFavoriteThread(thread: ThreadSummary): Promise<void> {
+    await this.db.execute('DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', [thread.boardUrl, thread.key])
   }
 
   // ── バックアップ ──

@@ -22,11 +22,15 @@ interface Props {
   onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
+  /** お気に入りのスレか(スレタイの頭に ★ を出す) */
+  isFavorite?: boolean
+  /** お気に入りのスレに足す・外す */
+  onToggleFavorite?: (t: ThreadSummary) => void
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
-function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog }: Props) {
+function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -65,11 +69,21 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         />
       )}
       {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す */}
-      {(onNg || onCopy || (onDeleteLog && state)) && (
+      {(onNg || onCopy || onToggleFavorite || (onDeleteLog && state)) && (
         <div
           className="absolute -top-3.5 right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
+          {onToggleFavorite && (
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(thread)}
+              className={`${TOOL} ${isFavorite ? 'text-c-heat-warm' : ''}`}
+              title={isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す'}
+            >
+              <span className={`material-symbols-outlined text-base leading-none ${isFavorite ? 'fill' : ''}`}>star</span>
+            </button>
+          )}
           {onCopy && (
             <button type="button" onClick={() => onCopy(thread)} className={TOOL} title="スレタイと URL をコピー">
               <span className="material-symbols-outlined text-base leading-none">content_copy</span>
@@ -113,6 +127,11 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
             textDecoration: 'var(--thread-list-title-decoration, none)',
           }}
         >
+          {isFavorite && (
+            <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-c-heat-warm" title="お気に入りのスレ">
+              star
+            </span>
+          )}
           {thread.title}
         </h3>
         {unreadCount > 0 && (

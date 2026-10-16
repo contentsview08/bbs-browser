@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -269,5 +269,29 @@ describe('書き込み履歴', () => {
     expect(list[0].thread).toMatchObject({ boardUrl: thread.boardUrl, key: thread.key, title: thread.title })
     await store.deletePostHistory(list[0].id)
     expect(await store.listPostHistory()).toHaveLength(1)
+  })
+})
+
+describe('お気に入りのスレ', () => {
+  it('足した順に並べ、ログがあれば既読とレス数を付け、ログを消しても残る', async () => {
+    const other = { ...thread, key: '1', title: 'ほかのスレ' }
+    await store.addFavoriteThread(thread)
+    await store.addFavoriteThread(other)
+    await store.addFavoriteThread(thread)
+    await store.saveFetch(thread, { status: 'updated', posts: [post(1), post(2)], cursor: { bytes: 100 }, title: 'dat のスレタイ' })
+    await store.markRead(thread, 1)
+    let list = await store.listFavoriteThreads()
+    expect(list.map((f) => [f.thread.key, f.thread.title, f.postCount, f.readNo])).toEqual([
+      [thread.key, 'dat のスレタイ', 2, 1],
+      ['1', 'ほかのスレ', 0, 0],
+    ])
+    await store.deleteThread(thread)
+    list = await store.listFavoriteThreads()
+    expect(list.map((f) => [f.thread.key, f.postCount])).toEqual([
+      [thread.key, 0],
+      ['1', 0],
+    ])
+    await store.removeFavoriteThread(other)
+    expect(await store.listFavoriteThreads()).toHaveLength(1)
   })
 })

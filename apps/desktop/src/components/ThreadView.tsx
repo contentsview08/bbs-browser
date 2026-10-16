@@ -75,6 +75,9 @@ interface Props {
   /** 次スレの候補を探す(板のスレ一覧を取り直して似たスレタイを並べる)。できない掲示板では undefined */
   onFindNext?: () => Promise<NextThreadCandidate[]>
   onOpenThread: (t: ThreadSummary) => void
+  /** お気に入りのスレか、と足す・外す */
+  isFavorite: boolean
+  onToggleFavorite: () => void
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
@@ -586,6 +589,14 @@ export default function ThreadView(props: Props) {
                 <span className="material-symbols-outlined text-xl">{replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda'}</span>
               </button>
             )}
+            <button
+              type="button"
+              className={`${ICON_BTN} ${props.isFavorite ? 'text-c-heat-warm' : ''}`}
+              title={props.isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す'}
+              onClick={props.onToggleFavorite}
+            >
+              <span className={`material-symbols-outlined text-xl ${props.isFavorite ? 'fill' : ''}`}>star</span>
+            </button>
             {props.onFindNext && (
               <button
                 type="button"

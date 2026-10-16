@@ -18,6 +18,7 @@ import {
 } from '@bbs-browser/connectors'
 import {
   applyFetch,
+  type FavoriteThreadEntry,
   type HistoryEntry,
   type LogStore,
   type PostHistoryEntry,
@@ -166,10 +167,11 @@ export default function App() {
       initOgp(s)
       void reloadRecent(s)
       void s.listUploads(1).then((u) => setHasUploads(u.length > 0))
-      const [list, favs] = await Promise.all([s.listSites(), s.listFavorites()])
+      const [list, favs, favThreadList] = await Promise.all([s.listSites(), s.listFavorites(), s.listFavoriteThreads()])
       setStore(s)
       setSites(list)
       setFavorites(favs)
+      setFavThreads(favThreadList)
     })
   }, [])
 
@@ -199,6 +201,7 @@ export default function App() {
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
       setHistory(undefined)
+      setFavView(false)
       setThreads([])
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
       setThreads(list)
@@ -246,9 +249,98 @@ export default function App() {
   const openHistory = () =>
     run('threads', async () => {
       setListOpen(true)
+      setFavView(false)
       if (store) setHistory(await store.history())
       setHistoryVersion((v) => v + 1)
     })
+
+  // ── お気に入りのスレ ──
+
+  /** お気に入りのスレ。サイドバーの新着の数と ☆ の印に使うので、いつも読み込んでおく */
+  const [favThreads, setFavThreads] = useState<FavoriteThreadEntry[]>([])
+  /** スレ一覧に、お気に入りのスレを出しているか */
+  const [favView, setFavView] = useState(false)
+  /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
+  const [favCounts, setFavCounts] = useState(new Map<string, number>())
+  const favCountsRef = useRef(favCounts)
+  favCountsRef.current = favCounts
+  const [favVersion, setFavVersion] = useState(0)
+  const favIds = useMemo(() => new Set(favThreads.map((f) => threadId(f.thread))), [favThreads])
+  const reloadFavThreads = async (s: LogStore) => setFavThreads(await s.listFavoriteThreads())
+  /** 手元の既読・レス数が変わったら、お気に入りの行にも写す(未読の数がずれないように) */
+  const patchFav = (t: ThreadSummary, patch: (f: FavoriteThreadEntry) => FavoriteThreadEntry) => {
+    const id = threadId(t)
+    setFavThreads((list) => (list.some((f) => threadId(f.thread) === id) ? list.map((f) => (threadId(f.thread) === id ? patch(f) : f)) : list))
+  }
+
+  const toggleFavoriteThread = (t: ThreadSummary) => {
+    if (!store) return
+    const on = favIds.has(threadId(t))
+    void run(null, async () => {
+      await (on ? store.removeFavoriteThread(t) : store.addFavoriteThread(t))
+      await reloadFavThreads(store)
+    })
+  }
+
+  /**
+   * お気に入りのスレの新着を確かめる。閲覧履歴と同じく、板ごとにスレ一覧(subject.txt)を 1 回だけ取り、
+   * 載っていればそのレス数を新しい数にする(本文は取りに行かないので軽い)。
+   * fetchDats(まとめて更新)のときは、新着のあるスレと、一覧に載っていない(dat 落ちかもしれない)スレの本文も取る
+   */
+  const checkFavThreads = async (s: LogStore, fetchDats: boolean) => {
+    const list = await s.listFavoriteThreads()
+    const byBoard = new Map<string, FavoriteThreadEntry[]>()
+    for (const f of list) byBoard.set(f.thread.boardUrl, [...(byBoard.get(f.thread.boardUrl) ?? []), f])
+    const counts = new Map(favCountsRef.current)
+    for (const [boardUrl, entries] of byBoard) {
+      const connectorId = entries[0].thread.connectorId
+      let subject: Map<string, ThreadSummary>
+      try {
+        const threads = await connectorOf(connectorId).listThreads({ connectorId, url: boardUrl, name: '' }, ctx)
+        subject = new Map(threads.map((t) => [t.key, t]))
+      } catch {
+        continue // 板ごと取れなかったら、この板は今回は見送る
+      }
+      for (const f of entries) {
+        const live = subject.get(f.thread.key)
+        if (live) counts.set(threadId(f.thread), live.postCount)
+        if (!fetchDats || f.status === 'archived') continue
+        if (!live || live.postCount > f.postCount) await fetchThread(s, f.thread).catch(() => undefined)
+      }
+      setFavCounts(new Map(counts))
+    }
+    await reloadFavThreads(s)
+  }
+
+  /** まとめて更新(スレ一覧の更新ボタン・引っぱって更新) */
+  const refreshFavThreads = () =>
+    run('threads', async () => {
+      if (!store) return
+      await checkFavThreads(store, true)
+      setFavVersion((v) => v + 1)
+    })
+
+  const openFavThreads = () =>
+    run('threads', async () => {
+      setListOpen(true)
+      setHistory(undefined)
+      setFavView(true)
+      if (store) await reloadFavThreads(store)
+      setFavVersion((v) => v + 1)
+    })
+
+  // 数分おきに、お気に入りのスレの新着の数だけを確かめる(起動してしばらくしたら一度)
+  const hasFavThreads = favThreads.length > 0
+  useEffect(() => {
+    if (!store || settings.favCheckMin <= 0 || !hasFavThreads) return
+    const check = () => void checkFavThreads(store, false).catch(() => undefined)
+    const first = setTimeout(check, 5000)
+    const timer = setInterval(check, settings.favCheckMin * 60_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    }
+  }, [store, settings.favCheckMin, hasFavThreads])
 
   // ── タブ ──
 
@@ -298,6 +390,7 @@ export default function App() {
         )
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
         if (changed && before && settingsRef.current.notifyReplies) await notifyReplies(s, t, saved, before.postCount)
+        if (changed) patchFav(t, (f) => ({ ...f, postCount: saved.postCount, status: saved.status, thread: { ...f.thread, postCount: saved.postCount } }))
         // スレ一覧の印(レス数・dat 落ち)は、このスレの 1 行だけ書き換える(板全体を読み直さない)
         if (changed && boardRef.current?.url === t.boardUrl)
           setStates((m) => {
@@ -685,6 +778,7 @@ export default function App() {
         if (!cur || no <= cur.readNo) return m
         return new Map(m).set(t.key, { ...cur, readNo: no })
       })
+    patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
     void store.markRead(t, no)
   })
 
@@ -772,6 +866,7 @@ export default function App() {
       return findNextThreads({ key: t.key, title, createdAt: t.createdAt }, list)
     }),
     openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
+    toggleFavoriteThread: useEvent((t: ThreadSummary) => toggleFavoriteThread(t)),
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const tabEventsRef = useRef(tabEvents)
@@ -788,9 +883,27 @@ export default function App() {
       }),
     [history, historyCounts],
   )
-  const stateOf = history
-    ? (t: ThreadSummary) => historyStates.get(threadId(t))
-    : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
+  // お気に入りのスレ。ログのないスレ(足しただけでまだ開いていない)には状態を付けない(既読の線を出さない)
+  const favStates = new Map(favThreads.filter((f) => f.postCount > 0).map((f) => [threadId(f.thread), f as ThreadState]))
+  const favListThreads = useMemo(
+    () =>
+      favThreads.map((f) => {
+        const n = favCounts.get(threadId(f.thread))
+        return n !== undefined && n > f.thread.postCount ? { ...f.thread, postCount: n } : f.thread
+      }),
+    [favThreads, favCounts],
+  )
+  /** サイドバーに出す、お気に入りのスレの新着の合計 */
+  const favNewTotal = favThreads.reduce((sum, f) => {
+    if (f.postCount === 0) return sum
+    const n = favCounts.get(threadId(f.thread)) ?? f.postCount
+    return sum + Math.max(0, n - f.readNo)
+  }, 0)
+  const stateOf = favView
+    ? (t: ThreadSummary) => favStates.get(threadId(t))
+    : history
+      ? (t: ThreadSummary) => historyStates.get(threadId(t))
+      : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
 
   const currentUrl = activeTab
@@ -834,6 +947,9 @@ export default function App() {
         onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         historyActive={history !== undefined}
         onOpenHistory={openHistory}
+        favThreadsActive={favView}
+        favThreadsNew={favNewTotal}
+        onOpenFavThreads={() => void openFavThreads()}
         onOpenSettings={() => setSettingsTab('display')}
         onManageBoards={() => setSettingsTab('boardlist')}
       />
@@ -860,31 +976,41 @@ export default function App() {
           }
         >
         <ThreadListPanel
-          key={history ? 'history' : board?.url}
-          title={history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
-          threads={historyThreads ?? threads}
+          key={favView ? 'favorites' : history ? 'history' : board?.url}
+          title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
+          threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}
           activeId={activeId}
           loading={loading.has('threads')}
-          emptyText={history ? '閲覧履歴はありません' : board ? 'スレッドがありません' : '左のお気に入りから板を選んでください'}
+          emptyText={
+            favView
+              ? 'お気に入りのスレはありません(スレの ☆ で足せます)'
+              : history
+                ? '閲覧履歴はありません'
+                : board
+                  ? 'スレッドがありません'
+                  : '左のお気に入りから板を選んでください'
+          }
           onOpen={(t) => {
             setListOpen(false)
             void openThread(t)
           }}
-          onRefresh={history ? refreshHistory : board ? () => openBoard(board) : undefined}
+          onRefresh={favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board) : undefined}
           // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
           width={narrow ? Math.min(settings.threadPanelWidth, Math.floor(window.innerWidth * 0.85)) : settings.threadPanelWidth}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
-          defaultSort={history ? 'subject' : settings.threadSort}
+          defaultSort={favView || history ? 'subject' : settings.threadSort}
           isNg={isNgThread}
-          favorite={!history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
+          favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
+          favoriteIds={favIds}
+          onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
           onNgThread={(title) => setNgDraft({ target: 'threadTitle', pattern: title })}
           onDeleteThreadLog={(t) => void deleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
-          keywords={history ? undefined : settings.keywords}
-          snapshotKey={history ? historyVersion : undefined}
-          onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
+          keywords={favView || history ? undefined : settings.keywords}
+          snapshotKey={favView ? favVersion : history ? historyVersion : undefined}
+          onNewThread={!favView && !history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />
         </div>
@@ -942,6 +1068,7 @@ export default function App() {
                   isNg={isNgPost}
                   nonameName={boardInfos.get(t.thread.boardUrl)?.nonameName}
                   jumpTo={jump?.tabId === id ? jump : undefined}
+                  favorite={favIds.has(id)}
                   ev={stableTabEvents}
                 />
               </div>

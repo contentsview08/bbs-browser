@@ -19,6 +19,10 @@ interface Props {
   historyActive: boolean
   /** 閲覧履歴の一覧(スレ一覧のところ)を開く */
   onOpenHistory: () => void
+  /** お気に入りのスレの一覧をスレ一覧に出しているか、新着の合計、開く */
+  favThreadsActive: boolean
+  favThreadsNew: number
+  onOpenFavThreads: () => void
   /** 直近の閲覧履歴(10 件ほど) */
   recentHistory: ThreadSummary[]
   onOpenThread: (t: ThreadSummary) => void
@@ -51,6 +55,8 @@ function Row(props: {
   filled?: boolean
   onClick: () => void
   trailing?: ReactNode
+  /** アイコンの右上に出す数(新着など)。しまっていても見える */
+  badge?: number
 }) {
   return (
     <button
@@ -62,7 +68,17 @@ function Row(props: {
       }`}
     >
       <span className="w-[63px] flex-shrink-0 flex items-center justify-center">
-        <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`}>{props.icon}</span>
+        <span className="relative">
+          <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`}>{props.icon}</span>
+          {props.badge !== undefined && props.badge > 0 && (
+            <span
+              className="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-[18px] text-center"
+              style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+            >
+              {props.badge > 999 ? '999+' : props.badge}
+            </span>
+          )}
+        </span>
       </span>
       <span className="flex-1 min-w-0 text-left text-lg font-medium truncate">{props.label}</span>
       {props.trailing}
@@ -215,7 +231,7 @@ export default function Sidebar(props: Props) {
           {favoritesOpen && (
             <div className="menu-reveal pb-1">
               {props.favorites.map((b, i) => {
-                const active = b.url === props.activeBoardUrl && !props.historyActive
+                const active = b.url === props.activeBoardUrl && !props.historyActive && !props.favThreadsActive
                 const dragging = drag?.url === b.url
                 return (
                   <div
@@ -290,6 +306,14 @@ export default function Sidebar(props: Props) {
               />
             </div>
           )}
+          <Row
+            icon="bookmark"
+            label="お気に入りのスレ"
+            active={props.favThreadsActive}
+            filled={props.favThreadsActive}
+            badge={props.favThreadsNew}
+            onClick={props.onOpenFavThreads}
+          />
           <Row
             icon="schedule"
             label="閲覧履歴"

@@ -44,6 +44,7 @@ export interface TabEvents {
   /** 次スレの候補を探す。スレタイはログのもの(URL から開いたスレは一覧のスレタイが空のため) */
   findNext: (t: ThreadSummary, title: string) => Promise<NextThreadCandidate[]>
   openThread: (t: ThreadSummary) => void
+  toggleFavoriteThread: (t: ThreadSummary) => void
 }
 
 interface Props {
@@ -53,10 +54,12 @@ interface Props {
   isNg: (p: Post) => boolean
   nonameName?: string
   jumpTo?: { no: number; seq: number }
+  /** お気に入りのスレか */
+  favorite: boolean
   ev: TabEvents
 }
 
-function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, ev }: Props) {
+function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, ev }: Props) {
   const { id, thread } = tab
   const onSavePosition = useCallback((pos: ScrollPosition) => ev.savePosition(id, pos), [ev, id])
   const onRead = useCallback((no: number) => ev.markRead(thread, no), [ev, thread])
@@ -64,6 +67,8 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, ev }: Props)
   const onDeleteLog = useCallback(() => ev.deleteLog(id), [ev, id])
   const title = tab.log.title || thread.title
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
+  // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
+  const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
 
   return (
@@ -96,6 +101,8 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, ev }: Props)
       onUploaded={ev.uploaded}
       onFindNext={onFindNext}
       onOpenThread={ev.openThread}
+      isFavorite={favorite}
+      onToggleFavorite={onToggleFavorite}
     />
   )
 }

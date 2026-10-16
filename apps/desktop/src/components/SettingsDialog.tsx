@@ -1,10 +1,10 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
-import { DEFAULT_KEYMAP, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Board, SiteConfig } from '@bbs-browser/connectors'
 import {
   COLOR_SCHEMES,
+  DEFAULT_SETTINGS,
   FONT_FAMILIES,
   PANELS,
   type AppSettings,
@@ -18,6 +18,9 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
+import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
+import { openJson, saveJson } from '../host/backup'
+import { DEFAULT_KEYMAP, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
 interface Props {
   settings: AppSettings
@@ -33,12 +36,16 @@ interface Props {
   onToggleFavorite: (board: Board) => void
   /** 板一覧でダブルクリックした板を開く(設定は閉じる) */
   onOpenBoard: (board: Board) => void
+  /** DB 全体(ログ・設定・NG・履歴)を書き出す。保存先を選ばなかったら false */
+  onBackupDb: () => Promise<boolean>
+  /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */
+  onRestoreDb: () => Promise<boolean>
   /** 最初に開く分類 */
   initialTab?: SettingsTab
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'ng' | 'boardlist' | 'boards' | 'about'
+export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'ng' | 'boardlist' | 'boards' | 'backup' | 'about'
 type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string }[] = [
@@ -51,6 +58,7 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns' },
+  { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
 ]
 
@@ -805,6 +813,119 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   )
 }
 
+/** 設定・NG の書き出しと読み込み、DB 全体のバックアップと復元 */
+function BackupTab({ settings: s, update, onBackupDb, onRestoreDb }: Pick<Props, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb'>) {
+  const [message, setMessage] = useState<{ ok: boolean; text: string }>()
+  const [busy, setBusy] = useState(false)
+  const [confirmRestore, setConfirmRestore] = useState(false)
+
+  const act = async (fn: () => Promise<string | undefined>) => {
+    setBusy(true)
+    setMessage(undefined)
+    try {
+      const text = await fn()
+      if (text) setMessage({ ok: true, text })
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 選んだファイルを、設定か NG かを見分けて読み込む */
+  const importFile = (expect: 'settings' | 'ng') =>
+    act(async () => {
+      const text = await openJson()
+      if (text === undefined) return undefined
+      const parsed = parseBackup(text)
+      if (parsed.kind === 'error') throw new Error(parsed.error)
+      if (parsed.kind !== expect) throw new Error(expect === 'settings' ? '設定のファイルではありません(NG のファイルです)' : 'NG のファイルではありません(設定のファイルです)')
+      if (parsed.kind === 'settings') {
+        const values = importableSettings(parsed, DEFAULT_SETTINGS)
+        for (const [k, v] of Object.entries(values)) update(k as keyof AppSettings, v as never)
+        return `設定を読み込みました(${Object.keys(values).length} 項目)`
+      }
+      const { rules, added } = mergeNgRules(s.ngRules, parsed.rules, () => crypto.randomUUID())
+      update('ngRules', rules)
+      return `NG を ${added} 件足しました(同じものは足していません)`
+    })
+
+  return (
+    <>
+      {message && (
+        <p className={`mb-4 text-sm ${message.ok ? 'text-c-accent' : 'text-c-heat-very-hot'}`}>
+          <span className="material-symbols-outlined text-base align-[-3px] mr-1">{message.ok ? 'check_circle' : 'error'}</span>
+          {message.text}
+        </p>
+      )}
+      <Section
+        title="設定"
+        note="表示・スレ一覧・キー操作などの設定を JSON に書き出します。catbox のアカウント、開いていたタブ、背景画像、画像の保存先は入れません"
+      >
+        <div className="flex gap-2">
+          <button type="button" className={BTN} disabled={busy} onClick={() => act(async () => ((await saveJson('settings', settingsFile(s))) ? '書き出しました' : undefined))}>
+            書き出す
+          </button>
+          <button type="button" className={BTN} disabled={busy} onClick={() => importFile('settings')}>
+            読み込む
+          </button>
+        </div>
+      </Section>
+      <Section title="NG" note={`NG(いま ${s.ngRules.length} 件)を JSON に書き出します。読み込むと、いまの NG に足します(同じものは重ねません)`}>
+        <div className="flex gap-2">
+          <button type="button" className={BTN} disabled={busy} onClick={() => act(async () => ((await saveJson('ng', ngFile(s.ngRules))) ? '書き出しました' : undefined))}>
+            書き出す
+          </button>
+          <button type="button" className={BTN} disabled={busy} onClick={() => importFile('ng')}>
+            読み込む
+          </button>
+        </div>
+      </Section>
+      <Section
+        title="まるごとバックアップ"
+        note="ログ・既読・お気に入り・書き込み履歴・設定・NG を含む DB 全体を 1 つのファイルに書き出します。使っている最中でもそのまま書き出せます"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={BTN} disabled={busy} onClick={() => act(async () => ((await onBackupDb()) ? 'バックアップを書き出しました' : undefined))}>
+            バックアップを書き出す
+          </button>
+          {!confirmRestore ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmRestore(true)}
+              className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:border-c-border-strong"
+            >
+              バックアップから戻す…
+            </button>
+          ) : (
+            <span className="flex flex-wrap items-center gap-2 text-sm text-c-text-body">
+              いまの状態をバックアップの時点に戻し、アプリを起動し直します。いまの DB は消さずに別の名前で残します。
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  act(async () => {
+                    const chosen = await onRestoreDb()
+                    if (!chosen) setConfirmRestore(false)
+                    return undefined
+                  })
+                }
+                className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-heat-very-hot text-white hover:opacity-90"
+              >
+                ファイルを選んで戻す
+              </button>
+              <button type="button" onClick={() => setConfirmRestore(false)} className="text-xs text-c-text-muted hover:text-c-text-strong underline">
+                やめる
+              </button>
+            </span>
+          )}
+        </div>
+      </Section>
+    </>
+  )
+}
+
 const NG_TABS: { key: NgTarget; name: string; placeholder: string; note: string }[] = [
   { key: 'content', name: 'NG ワード', placeholder: '本文に含まれる言葉', note: '本文に含むレスを NG にします(部分一致)' },
   { key: 'posterName', name: 'NG ネーム', placeholder: '名前', note: '名前に含むレスを NG にします(部分一致)' },
@@ -1292,6 +1413,7 @@ export default function SettingsDialog(props: Props) {
                 }}
               />
             )}
+            {tab === 'backup' && <BackupTab {...props} />}
             {tab === 'about' && <AboutTab />}
           </div>
         </div>

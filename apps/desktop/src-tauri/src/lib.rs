@@ -189,6 +189,97 @@ fn set_background_image(app: tauri::AppHandle, source: String) -> Result<String,
     Ok(dest.to_string_lossy().into_owned())
 }
 
+// ── バックアップ ──
+
+/// DB のファイル名(DB_URL の sqlite: の後ろ)。tauri-plugin-sql はアプリの設定フォルダに置く
+const DB_FILE: &str = "bbs-browser.db";
+/// 復元を頼まれた DB の置き場。次に起動したとき、DB を開く前に入れ替える
+const RESTORE_FILE: &str = "restore-pending.db";
+
+fn has_extension(path: &Path, exts: &[&str]) -> bool {
+    path.extension()
+        .map(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))
+        .unwrap_or(false)
+}
+
+/// 設定や NG の書き出し。ダイアログで選んだ場所に書く(.json だけ)
+#[tauri::command]
+fn write_json_file(path: String, contents: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !has_extension(&path, &["json"]) {
+        return Err("書き出せるのは .json だけです".into());
+    }
+    std::fs::write(&path, contents).map_err(|e| e.to_string())
+}
+
+/// 設定や NG の読み込み(.json だけ、20MB まで)
+#[tauri::command]
+fn read_json_file(path: String) -> Result<String, String> {
+    let path = PathBuf::from(path);
+    if !has_extension(&path, &["json"]) {
+        return Err("読み込めるのは .json だけです".into());
+    }
+    let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+    if size > 20 * 1024 * 1024 {
+        return Err("ファイルが大きすぎます".into());
+    }
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+/// DB のバックアップ先を空ける。SQLite の VACUUM INTO は書き出し先が既にあると失敗するので、
+/// ダイアログで上書きを選んだときは先に消す(.db だけ)
+#[tauri::command]
+fn prepare_db_backup(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !has_extension(&path, &["db", "sqlite", "sqlite3"]) {
+        return Err("バックアップの名前は .db で終わるようにしてください".into());
+    }
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// DB の復元を頼む。選んだファイルが SQLite かを確かめてから置き場にコピーし、アプリを起動し直す
+/// (開いている DB はその場では入れ替えられないため、次の起動のはじめに入れ替える)
+#[tauri::command]
+fn schedule_db_restore(app: tauri::AppHandle, source: String) -> Result<(), String> {
+    let mut head = [0u8; 16];
+    {
+        use std::io::Read;
+        let mut f = std::fs::File::open(&source).map_err(|e| e.to_string())?;
+        f.read_exact(&mut head).map_err(|_| "SQLite のファイルではありません".to_string())?;
+    }
+    if &head != b"SQLite format 3\0" {
+        return Err("SQLite のファイルではありません".into());
+    }
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::copy(&source, dir.join(RESTORE_FILE)).map_err(|e| e.to_string())?;
+    app.restart();
+}
+
+/// 復元を頼まれていたら、DB を開く前に入れ替える。
+/// いまの DB は消さずに「bbs-browser.before-restore-時刻.db」として残す(-wal / -shm も一緒に)
+fn apply_pending_restore(app: &tauri::AppHandle) {
+    let Ok(dir) = app.path().app_config_dir() else { return };
+    let pending = dir.join(RESTORE_FILE);
+    if !pending.exists() {
+        return;
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default();
+    for suffix in ["", "-wal", "-shm"] {
+        let current = dir.join(format!("{DB_FILE}{suffix}"));
+        if current.exists() {
+            let _ = std::fs::rename(&current, dir.join(format!("bbs-browser.before-restore-{stamp}.db{suffix}")));
+        }
+    }
+    let _ = std::fs::rename(&pending, dir.join(DB_FILE));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -200,7 +291,20 @@ pub fn run() {
                 .add_migrations(DB_URL, migrations())
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![list_system_fonts, save_image, set_background_image])
+        // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
+        .setup(|app| {
+            apply_pending_restore(app.handle());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            list_system_fonts,
+            save_image,
+            set_background_image,
+            write_json_file,
+            read_json_file,
+            prepare_db_backup,
+            schedule_db_restore
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

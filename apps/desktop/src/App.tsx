@@ -49,6 +49,7 @@ import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { isReloadKey } from './utils/keymap'
+import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
@@ -1020,6 +1021,8 @@ export default function App() {
           }
           onAddSite={addSite}
           onRemoveSite={removeSite}
+          onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
+          onRestoreDb={restoreDatabase}
           onClose={() => setSettingsTab(undefined)}
         />
       )}

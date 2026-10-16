@@ -367,6 +367,16 @@ export class LogStore {
     return rows.map((r) => r.no)
   }
 
+  // ── バックアップ ──
+
+  /**
+   * DB 全体を path に書き出す(SQLite の VACUUM INTO)。使っている最中でも壊れない写しになる。
+   * path に既にファイルがあると失敗するので、呼ぶ側で空けておく
+   */
+  async backupTo(path: string): Promise<void> {
+    await this.db.execute('VACUUM INTO $1', [path])
+  }
+
   // ── 書き込み履歴 ──
 
   async addPostHistory(

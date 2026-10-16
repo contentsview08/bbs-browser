@@ -29,6 +29,8 @@ export interface UploadOptions {
   stripMetadata: boolean
   /** 長い辺がこれを超える画像は縮小する(px)。0 なら縮小しない */
   maxDimension: number
+  /** catbox のアカウント(userhash)。あればアカウントで上げる(あとでサーバー上でも消せる) */
+  userhash?: string
 }
 
 /**
@@ -61,10 +63,27 @@ export async function uploadToCatbox(file: File, options: UploadOptions): Promis
   const body = await prepare(file, options)
   const form = new FormData()
   form.append('reqtype', 'fileupload')
+  if (options.userhash) form.append('userhash', options.userhash)
   form.append('fileToUpload', body, file.name || 'image')
   const res = await fetch(ENDPOINT, { method: 'POST', body: form, headers: { 'User-Agent': USER_AGENT } })
   const text = (await res.text()).trim()
   // 成功すると、本文にファイルの URL だけが返る。それ以外はエラーの文面
   if (res.ok && /^https:\/\/files\.catbox\.moe\/\S+$/.test(text)) return text
   throw new Error(`アップロードできませんでした: ${text || `HTTP ${res.status}`}`)
+}
+
+/**
+ * アカウントで上げたファイルを、サーバー上から消す。消せるのは、そのアカウント(userhash)で上げたものだけ。
+ * catbox の API は、ファイル名(files.catbox.moe/ の後ろ)を受け取る
+ */
+export async function deleteFromCatbox(url: string, userhash: string): Promise<void> {
+  const name = /^https:\/\/files\.catbox\.moe\/([^/?#]+)$/.exec(url)?.[1]
+  if (!name) throw new Error('catbox のファイルではありません')
+  const form = new FormData()
+  form.append('reqtype', 'deletefiles')
+  form.append('userhash', userhash)
+  form.append('files', name)
+  const res = await fetch(ENDPOINT, { method: 'POST', body: form, headers: { 'User-Agent': USER_AGENT } })
+  const text = (await res.text()).trim()
+  if (!res.ok || !/success/i.test(text)) throw new Error(`消せませんでした: ${text || `HTTP ${res.status}`}`)
 }

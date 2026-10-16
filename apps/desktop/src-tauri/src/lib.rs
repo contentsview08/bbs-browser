@@ -87,6 +87,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/006_uploads.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "upload_account",
+            sql: include_str!("../../../../packages/logstore/migrations/007_upload_account.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

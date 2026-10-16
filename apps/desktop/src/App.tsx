@@ -36,6 +36,7 @@ import { useSettings, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
+import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule } from './utils/ng'
 
 const connectorOf = (id: string) => {
@@ -878,13 +879,14 @@ export default function App() {
         <UploadHistoryDialog
           uploads={uploads}
           onOpen={(url) => void openUrl(url)}
-          onRemove={(url) =>
-            void run(null, async () => {
-              if (!store) return
-              await store.removeUpload(url)
-              setUploads(await store.listUploads())
-            })
-          }
+          canDelete={settings.catboxUserhash.trim() !== ''}
+          onDelete={async (url) => {
+            if (!store) return
+            // サーバー上で消せてから、履歴からも外す
+            await deleteFromCatbox(url, settings.catboxUserhash.trim())
+            await store.removeUpload(url)
+            setUploads(await store.listUploads())
+          }}
           onClose={() => setUploads(undefined)}
         />
       )}

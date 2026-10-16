@@ -5,7 +5,7 @@ import type { Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, type SqlDb } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -203,10 +203,15 @@ describe('お気に入り板の並べ替えとファビコン', () => {
 
 describe('アップロード履歴', () => {
   it('新しい順に並べ、消せる', async () => {
-    await store.addUpload({ url: 'https://files.catbox.moe/a.png', name: 'a.png', size: 10 }, 1000)
-    await store.addUpload({ url: 'https://files.catbox.moe/b.jpg', name: 'b.jpg', size: 20 }, 2000)
-    expect((await store.listUploads()).map((u) => u.name)).toEqual(['b.jpg', 'a.png'])
+    await store.addUpload({ url: 'https://files.catbox.moe/a.png', name: 'a.png', size: 10, withAccount: false }, 1000)
+    await store.addUpload({ url: 'https://files.catbox.moe/b.jpg', name: 'b.jpg', size: 20, withAccount: true }, 2000)
+    expect((await store.listUploads()).map((u) => [u.name, u.withAccount])).toEqual([
+      ['b.jpg', true],
+      ['a.png', false],
+    ])
     await store.removeUpload('https://files.catbox.moe/b.jpg')
-    expect(await store.listUploads()).toEqual([{ url: 'https://files.catbox.moe/a.png', name: 'a.png', size: 10, uploadedAt: 1000 }])
+    expect(await store.listUploads()).toEqual([
+      { url: 'https://files.catbox.moe/a.png', name: 'a.png', size: 10, uploadedAt: 1000, withAccount: false },
+    ])
   })
 })

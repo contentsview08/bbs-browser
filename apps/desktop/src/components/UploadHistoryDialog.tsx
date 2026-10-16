@@ -1,5 +1,6 @@
-// 画像のアップロード履歴。サムネイル・URL のコピー・開く・履歴から消す。
-// 匿名で上げた catbox のファイルはサーバー上では消せないので、「消す」はアプリの履歴から消すだけ
+// 画像のアップロード履歴。サムネイル・URL のコピー・開く・削除。
+// 削除できるのは、catbox のアカウント(userhash)で上げたものだけ(サーバー上のファイルを消してから履歴からも外す)。
+// 匿名で上げたものはサーバー上では消せないので、削除ボタンを出さない
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -14,11 +15,16 @@ function formatSize(bytes: number): string {
 
 export default function UploadHistoryDialog(props: {
   uploads: UploadRecord[]
-  onRemove: (url: string) => void
+  /** アカウント(userhash)を登録しているか。していなければ、どれも消せない */
+  canDelete: boolean
+  /** サーバー上のファイルを消して、履歴からも外す */
+  onDelete: (url: string) => Promise<void>
   onOpen: (url: string) => void
   onClose: () => void
 }) {
   const [copied, setCopied] = useState<string>()
+  const [deleting, setDeleting] = useState<string>()
+  const [error, setError] = useState<string>()
 
   return createPortal(
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
@@ -35,8 +41,11 @@ export default function UploadHistoryDialog(props: {
           </button>
         </div>
         <p className="px-5 py-2 text-xs text-c-text-muted border-b border-c-border">
-          ここから消しても、アプリの履歴から消えるだけです。匿名で上げた catbox のファイルは、サーバー上では消せません。
+          {props.canDelete
+            ? '削除すると、catbox 上のファイルも消えます。消せるのは、アカウント(userhash)で上げたものだけです(匿名で上げたものは消せません)。'
+            : '削除するには、設定 → 書き込み で catbox のアカウント(userhash)を登録してください。匿名で上げたファイルは消せません。'}
         </p>
+        {error && <p className="px-5 py-2 text-xs text-c-heat-very-hot border-b border-c-border">{error}</p>}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
           {props.uploads.length === 0 ? (
             <p className="text-sm text-c-text-muted">まだありません</p>
@@ -70,9 +79,33 @@ export default function UploadHistoryDialog(props: {
                     <button type="button" className={TOOL} title="ブラウザで開く" onClick={() => props.onOpen(u.url)}>
                       <span className="material-symbols-outlined text-base leading-none">open_in_new</span>
                     </button>
-                    <button type="button" className={`${TOOL} hover:text-c-heat-very-hot`} title="履歴から消す" onClick={() => props.onRemove(u.url)}>
-                      <span className="material-symbols-outlined text-base leading-none">delete</span>
-                    </button>
+                    {props.canDelete && u.withAccount ? (
+                      <button
+                        type="button"
+                        className={`${TOOL} hover:text-c-heat-very-hot`}
+                        title="catbox から削除"
+                        disabled={deleting === u.url}
+                        onClick={async () => {
+                          setDeleting(u.url)
+                          setError(undefined)
+                          try {
+                            await props.onDelete(u.url)
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : String(e))
+                          } finally {
+                            setDeleting(undefined)
+                          }
+                        }}
+                      >
+                        <span className={`material-symbols-outlined text-base leading-none ${deleting === u.url ? 'animate-spin' : ''}`}>
+                          {deleting === u.url ? 'progress_activity' : 'delete'}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="px-1 text-[10px] text-c-text-muted" title="匿名で上げたファイルは消せません">
+                        {u.withAccount ? '' : '匿名'}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

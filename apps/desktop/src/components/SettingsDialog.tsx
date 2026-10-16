@@ -531,6 +531,27 @@ const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
   { key: 'tree', name: 'アンカーツリー', icon: 'account_tree' },
 ]
 
+/** userhash の入力欄。ふだんは伏せて、目のボタンで見られるようにする */
+function UserhashInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type={shown ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="登録しない(匿名で上げる)"
+        autoComplete="off"
+        spellCheck={false}
+        className={`${INPUT} flex-1 font-mono`}
+      />
+      <button type="button" className={ICON_BTN} title={shown ? '伏せる' : '見る'} onClick={() => setShown((v) => !v)}>
+        <span className="material-symbols-outlined text-base">{shown ? 'visibility_off' : 'visibility'}</span>
+      </button>
+    </div>
+  )
+}
+
 function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   const [phrase, setPhrase] = useState('')
   const addPhrase = () => {
@@ -636,10 +657,18 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
             アップローダーの負担を減らすため、ほどほどの大きさにしてから上げます(JPEG・PNG・WebP)。まとめて貼られても 1 枚ずつ、一度に 10 枚まで上げます
           </p>
         </div>
+        <div className="mt-3">
+          <p className="text-sm text-c-text-body mb-1.5">catbox のアカウント(userhash)</p>
+          <UserhashInput value={s.catboxUserhash} onChange={(v) => update('catboxUserhash', v)} />
+          <p className="text-[10px] text-c-text-muted mt-1 leading-relaxed">
+            catbox.moe でアカウントを作り、アカウントの管理画面にある userhash を貼ってください。登録すると、そのアカウントで上げ、アップロード履歴から catbox
+            上のファイルも消せるようになります(消せるのは登録してから上げたものだけ)。userhash はこのパソコンの中に保存し、catbox に送るときだけ使います
+          </p>
+        </div>
         <div className="mt-3 p-3 text-xs leading-relaxed text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
           <p className="font-bold text-c-text-strong mb-1">使う前に</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>上げたファイルは誰でも見られます。匿名なので、あとから消せません(2 年間アクセスがなければ消えます)</li>
+            <li>上げたファイルは誰でも見られます。匿名で上げたものはあとから消せません(2 年間アクセスがなければ消えます)</li>
             <li>catbox は EXIF を残したまま公開します。スマホの写真は撮った場所が分かることがあります(上の設定で消せます)</li>
             <li>児童ポルノ・マルウェア・アニメやドラマの丸ごとの配信・ひどいグロなどは禁止です。責任は上げた人にあります</li>
             <li>このアプリから上げられるのは 50MB まで(GIF は 20MB)。利用規約: catbox.moe/legal.php</li>

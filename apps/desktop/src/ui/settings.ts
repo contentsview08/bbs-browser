@@ -135,6 +135,8 @@ export interface AppSettings {
   uploadStripMetadata: boolean
   /** 上げる前に、長い辺がこれを超える画像を縮小する(px)。0 なら縮小しない */
   uploadMaxDimension: number
+  /** catbox のアカウント(userhash)。あればアカウントで上げ、アップロード履歴からサーバー上のファイルも消せる */
+  catboxUserhash: string
   /** 定型文。操作バーや ⋯ から、そのレスへのアンカーを付けてすぐ書き込む */
   quickPhrases: string[]
   /**
@@ -192,6 +194,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uploaderEnabled: false,
   uploadStripMetadata: true,
   uploadMaxDimension: 2560,
+  catboxUserhash: '',
   quickPhrases: ['草'],
   postToolbar: ['reply', 'phrase:草', 'copy', 'ng'],
   postName: '',

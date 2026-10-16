@@ -18,6 +18,8 @@ export interface UploadRecord {
   name: string
   size: number
   uploadedAt: number
+  /** catbox のアカウント(userhash)で上げたか。アカウントで上げたものだけ、サーバー上でも消せる */
+  withAccount: boolean
 }
 
 export interface ThreadState {
@@ -129,23 +131,21 @@ export class LogStore {
   // ── 画像のアップロード履歴 ──
 
   async addUpload(u: Omit<UploadRecord, 'uploadedAt'>, now = Date.now()): Promise<void> {
-    await this.db.execute('INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at) VALUES ($1, $2, $3, $4)', [
-      u.url,
-      u.name,
-      u.size,
-      now,
-    ])
+    await this.db.execute(
+      'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account) VALUES ($1, $2, $3, $4, $5)',
+      [u.url, u.name, u.size, now, u.withAccount ? 1 : 0],
+    )
   }
 
   async listUploads(limit = 200): Promise<UploadRecord[]> {
-    const rows = await this.db.select<{ url: string; name: string; size: number; uploaded_at: number }>(
-      'SELECT url, name, size, uploaded_at FROM uploads ORDER BY uploaded_at DESC LIMIT $1',
+    const rows = await this.db.select<{ url: string; name: string; size: number; uploaded_at: number; with_account: number }>(
+      'SELECT url, name, size, uploaded_at, with_account FROM uploads ORDER BY uploaded_at DESC LIMIT $1',
       [limit],
     )
-    return rows.map((r) => ({ url: r.url, name: r.name, size: r.size, uploadedAt: r.uploaded_at }))
+    return rows.map((r) => ({ url: r.url, name: r.name, size: r.size, uploadedAt: r.uploaded_at, withAccount: r.with_account === 1 }))
   }
 
-  /** アプリの履歴から消す(サーバー上のファイルは消えない) */
+  /** 履歴から消す(サーバー上のファイルを消すのは呼ぶ側) */
   async removeUpload(url: string): Promise<void> {
     await this.db.execute('DELETE FROM uploads WHERE url = $1', [url])
   }

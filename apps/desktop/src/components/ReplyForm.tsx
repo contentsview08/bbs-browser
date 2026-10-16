@@ -27,7 +27,7 @@ interface Props {
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
   uploader?: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number }) => void
+  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
 }
 
 const INPUT =
@@ -70,7 +70,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       try {
         const url = await uploadToCatbox(file, props.uploader)
         insert(`${url}\n`)
-        props.onUploaded?.({ url, name: file.name || 'image', size: file.size })
+        props.onUploaded?.({ url, name: file.name || 'image', size: file.size, withAccount: !!props.uploader.userhash })
       } catch (e) {
         setUploadError(e instanceof Error ? e.message : String(e))
       } finally {

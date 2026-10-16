@@ -69,7 +69,7 @@ interface Props {
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded: (u: { url: string; name: string; size: number }) => void
+  onUploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
   jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
@@ -865,7 +865,11 @@ export default function ThreadView(props: Props) {
               onUploaded={props.onUploaded}
               uploader={
                 settings.uploaderEnabled
-                  ? { stripMetadata: settings.uploadStripMetadata, maxDimension: settings.uploadMaxDimension }
+                  ? {
+                      stripMetadata: settings.uploadStripMetadata,
+                      maxDimension: settings.uploadMaxDimension,
+                      userhash: settings.catboxUserhash.trim() || undefined,
+                    }
                   : undefined
               }
               onOpenUrl={props.onUrl}

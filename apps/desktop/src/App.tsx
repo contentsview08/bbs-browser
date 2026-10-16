@@ -16,7 +16,15 @@ import {
   type SiteConfig,
   type ThreadSummary,
 } from '@bbs-browser/connectors'
-import { applyFetch, type HistoryEntry, type LogStore, type ThreadLog, type ThreadState, type UploadRecord } from '@bbs-browser/logstore'
+import {
+  applyFetch,
+  type HistoryEntry,
+  type LogStore,
+  type PostHistoryEntry,
+  type ThreadLog,
+  type ThreadState,
+  type UploadRecord,
+} from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications, { type AppNotification } from './components/Notifications'
@@ -25,6 +33,7 @@ import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import UploadHistoryDialog from './components/UploadHistoryDialog'
+import PostHistoryDialog from './components/PostHistoryDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
 import TabBar from './components/TabBar'
@@ -106,6 +115,12 @@ export default function App() {
   const openUploads = () =>
     run(null, async () => {
       if (store) setUploads(await store.listUploads())
+    })
+  /** 書き込み履歴(開いているときだけ中身を持つ) */
+  const [postHistory, setPostHistory] = useState<PostHistoryEntry[]>()
+  const openPostHistory = () =>
+    run(null, async () => {
+      if (store) setPostHistory(await store.listPostHistory())
     })
   /** アプリ内の通知(右下) */
   const [notifications, setNotifications] = useState<AppNotification[]>([])
@@ -560,6 +575,8 @@ export default function App() {
       await store.addOwnPost(t, no)
       patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
     }
+    // 書き込み履歴には、番号が分からなくても書いた内容を残す。URL から開いたスレはスレタイが空なので、ログのものを使う
+    await store.addPostHistory({ ...t, title: after?.title || t.title }, { no, name: input.name, mail: input.mail, body: input.body })
     return r
   }
 
@@ -600,6 +617,7 @@ export default function App() {
         .sort((x, y) => (y.createdAt?.getTime() ?? 0) - (x.createdAt?.getTime() ?? 0))[0]
       if (found) {
         await store.addOwnPost(found, 1)
+        await store.addPostHistory(found, { no: 1, name: input.name, mail: input.mail, body: input.body })
         setNewThreadOpen(false)
         await openThread(found, { newTab: true })
         return r
@@ -798,6 +816,7 @@ export default function App() {
         onDeleteHistory={(t) => void deleteLogs([], [t])}
         showStripNames={settings.showStripNames}
         onOpenUploads={settings.uploaderEnabled || hasUploads ? () => void openUploads() : undefined}
+        onOpenPostHistory={() => void openPostHistory()}
         activeBoardUrl={board?.url}
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
@@ -928,6 +947,24 @@ export default function App() {
       </div>
       </div>
 
+      {postHistory && (
+        <PostHistoryDialog
+          entries={postHistory}
+          onOpen={(e) => {
+            setPostHistory(undefined)
+            // スレを開いてから、番号が分かっていればそのレスへ飛ぶ(開いたときの位置合わせのあとに)
+            void openThread(e.thread).then(() => {
+              if (e.no !== undefined) setJump({ tabId: threadId(e.thread), no: e.no, seq: Date.now() })
+            })
+          }}
+          onDelete={async (id) => {
+            if (!store) return
+            await store.deletePostHistory(id)
+            setPostHistory(await store.listPostHistory())
+          }}
+          onClose={() => setPostHistory(undefined)}
+        />
+      )}
       {uploads && (
         <UploadHistoryDialog
           uploads={uploads}

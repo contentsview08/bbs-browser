@@ -74,6 +74,19 @@ export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, resu
   }
 }
 
+/** 書き込み履歴の 1 件 */
+export interface PostHistoryEntry {
+  id: number
+  /** 開き直せるよう ThreadSummary の形にしたスレ */
+  thread: ThreadSummary
+  /** レス番号。分からなかったときは undefined */
+  no?: number
+  name: string
+  mail: string
+  body: string
+  postedAt: number
+}
+
 /** 履歴に出すスレ。開き直せるよう ThreadSummary の形で返す */
 export interface HistoryEntry extends ThreadState {
   thread: ThreadSummary
@@ -352,6 +365,49 @@ export class LogStore {
       [thread.boardUrl, thread.key],
     )
     return rows.map((r) => r.no)
+  }
+
+  // ── 書き込み履歴 ──
+
+  async addPostHistory(
+    thread: ThreadSummary,
+    post: { no?: number; name: string; mail: string; body: string },
+    now = Date.now(),
+  ): Promise<void> {
+    await this.db.execute(
+      `INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [thread.connectorId, thread.boardUrl, thread.key, thread.title, nn(post.no), post.name, post.mail, post.body, now],
+    )
+  }
+
+  /** 新しい順 */
+  async listPostHistory(limit = 1000): Promise<PostHistoryEntry[]> {
+    const rows = await this.db.select<{
+      id: number
+      connector_id: string
+      board_url: string
+      key: string
+      thread_title: string
+      no: number | null
+      name: string
+      mail: string
+      body: string
+      posted_at: number
+    }>('SELECT * FROM post_history ORDER BY posted_at DESC, id DESC LIMIT $1', [limit])
+    return rows.map((r) => ({
+      id: r.id,
+      thread: { connectorId: r.connector_id, boardUrl: r.board_url, key: r.key, title: r.thread_title, postCount: 0, order: 0 },
+      no: r.no ?? undefined,
+      name: r.name,
+      mail: r.mail,
+      body: r.body,
+      postedAt: r.posted_at,
+    }))
+  }
+
+  async deletePostHistory(id: number): Promise<void> {
+    await this.db.execute('DELETE FROM post_history WHERE id = $1', [id])
   }
 
   /** スレのログ(レス・既読位置・自分の書き込みの印)をまとめて消す */

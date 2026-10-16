@@ -26,6 +26,8 @@ interface Props {
   onOpenSettings: () => void
   /** 画像のアップロード履歴を開く。アップロードを使っていなければ undefined(行を出さない) */
   onOpenUploads?: () => void
+  /** 書き込み履歴を開く */
+  onOpenPostHistory: () => void
   /** 設定画面の板一覧を開く(板を足したいとき) */
   onManageBoards: () => void
   collapsed: boolean
@@ -327,6 +329,7 @@ export default function Sidebar(props: Props) {
               />
             </div>
           )}
+          <Row icon="edit_note" label="書き込み履歴" onClick={props.onOpenPostHistory} />
           {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" onClick={props.onOpenUploads} />}
         </nav>
 

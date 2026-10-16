@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -252,5 +252,22 @@ describe('リンクのプレビュー', () => {
     await store.pruneOgp(1500)
     expect(await store.getOgp('https://a.example/')).toBeNull()
     expect(await store.getOgp('https://b.example/')).not.toBeNull()
+  })
+})
+
+describe('書き込み履歴', () => {
+  it('新しい順に返し、スレのログを消しても残る', async () => {
+    await store.saveFetch(thread, { status: 'updated', posts: [post(1)], cursor: { bytes: 10 } })
+    await store.addPostHistory(thread, { no: 2, name: '', mail: 'sage', body: '一つ目' }, 1000)
+    await store.addPostHistory(thread, { name: '名前', mail: '', body: '番号が分からなかった' }, 2000)
+    await store.deleteThread(thread)
+    const list = await store.listPostHistory()
+    expect(list.map((e) => [e.no, e.body])).toEqual([
+      [undefined, '番号が分からなかった'],
+      [2, '一つ目'],
+    ])
+    expect(list[0].thread).toMatchObject({ boardUrl: thread.boardUrl, key: thread.key, title: thread.title })
+    await store.deletePostHistory(list[0].id)
+    expect(await store.listPostHistory()).toHaveLength(1)
   })
 })

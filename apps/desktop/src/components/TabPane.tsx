@@ -75,6 +75,8 @@ interface Props {
   /** 板の書き込みの上限と、その掲示板での数え方 */
   postLimits?: PostLimits
   postByteLength?: (text: string) => number
+  /** 本文からアイコンを取り出す(コネクタのもの) */
+  splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
 }
 
@@ -91,6 +93,7 @@ function TabPane({
   postAccounts,
   postLimits,
   postByteLength,
+  splitPostIcon,
   ev,
 }: Props) {
   const { id, thread } = tab
@@ -144,6 +147,7 @@ function TabPane({
       threadUrl={ev.threadUrl(thread)}
       postLimits={postLimits}
       postByteLength={postByteLength}
+      splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}
       onToggleFavorite={onToggleFavorite}

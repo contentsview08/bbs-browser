@@ -176,6 +176,11 @@ export interface Connector {
   capabilities: ConnectorCapabilities
   /** URL を貼られたとき、どのコネクタで開くかを決める */
   canHandle(url: string): boolean
+  /**
+   * 本文からアイコン(5ch の BE アイコンなど)を取り出す。掲示板ごとの書き方なので、コネクタが受け持つ。
+   * 返す body はアイコンの部分を除いた本文
+   */
+  splitPostIcon?(body: string): { icon?: string; body: string }
   /** このコネクタで開けるスレの URL か(本文のリンクを押したとき、ブラウザではなくアプリで開くため) */
   isThreadUrl?(url: string): boolean
   /**

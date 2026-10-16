@@ -199,6 +199,16 @@ export function beLoginSucceeded(status: number, html: string): LoginResult {
   return { ok: true, message: 'BE にログインしました' }
 }
 
+/**
+ * BE のアイコン。5ch では BE でログインして書き込むと、本文の 1 行目に「sssp://img.5ch.io/ico/nida.gif」のような
+ * アイコンの場所が入る(sssp は https の読み替え)。1 行目にあれば、その画像の URL と、その行を除いた本文を返す
+ */
+export function splitBeIcon(body: string): { icon?: string; body: string } {
+  const m = /^\s*sssp:\/\/([^\s/]+\/\S+\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)/i.exec(body)
+  if (!m) return { body }
+  return { icon: `https://${m[1]}`, body: body.slice(m[0].length) }
+}
+
 export const twoChConnector: Connector = {
   id: ID,
   name: '2ch 互換',
@@ -213,6 +223,8 @@ export const twoChConnector: Connector = {
   isThreadUrl(url) {
     return twoChConnector.canHandle(url) && THREAD_URL.test(url)
   },
+
+  splitPostIcon: splitBeIcon,
 
   async boardInfo(board, ctx) {
     return readSettingTxt(board.url, ctx)

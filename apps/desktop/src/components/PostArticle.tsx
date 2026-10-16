@@ -14,7 +14,6 @@ import {
   youtubeLinksIn,
   looksLikeAA,
   renderBody,
-  splitBeIcon,
   videoFileUrlsIn,
   type BodyHandlers,
   type DisplayOptions,
@@ -197,7 +196,7 @@ function PostArticle(props: Props) {
   }
 
   // BE のアイコン(本文の 1 行目の sssp://)は絵にして、本文からは除く
-  const { icon: beIcon, body: rawBody } = splitBeIcon(post.body)
+  const { icon: beIcon, body: rawBody } = props.display?.splitIcon?.(post.body) ?? { body: post.body }
   const body = props.display ? displayBody(rawBody, props.display) : rawBody
   const name = props.display ? displayName(post.name, props.display) : post.name
   const numHeat = heatClass(anchorCount)

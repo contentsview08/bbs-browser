@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ConnectorContext, HttpResponse } from '../src/types'
-import { twoChConnector } from '../src/twoch/connector'
+import { splitBeIcon, twoChConnector } from '../src/twoch/connector'
 
 // be.5ch.io のログイン画面のフォーム(2026-10 に取ったものから、フォームの部分だけ写した)
 const LOGIN_FORM = `<form class="form-signin" method="post" action="/log">
@@ -93,5 +93,20 @@ describe('書き込みで BE を使うか', () => {
     const { ctx, sent } = recorder('<title>書きこみました</title>')
     await twoChConnector.submitConfirm!({ url: 'https://mi.5ch.io/test/bbs.cgi', fields: {}, referer: '', excludeCookies: ['DMDM', 'MDMD'] }, ctx)
     expect(sent[0].exclude).toEqual(['DMDM', 'MDMD'])
+  })
+})
+
+describe('splitBeIcon: BE のアイコン', () => {
+  it('1 行目の sssp:// を https:// の画像にし、その行を本文から除く', () => {
+    expect(splitBeIcon('sssp://img.5ch.io/ico/nida.gif\n本文です')).toEqual({ icon: 'https://img.5ch.io/ico/nida.gif', body: '本文です' })
+  })
+
+  it('アイコンだけのレス', () => {
+    expect(splitBeIcon('sssp://img.5ch.net/ico/u_giko_ebi.gif')).toEqual({ icon: 'https://img.5ch.net/ico/u_giko_ebi.gif', body: '' })
+  })
+
+  it('1 行目でなければ、本文のまま', () => {
+    expect(splitBeIcon('本文\nsssp://img.5ch.io/ico/nida.gif')).toEqual({ body: '本文\nsssp://img.5ch.io/ico/nida.gif' })
+    expect(splitBeIcon('sssp://img.5ch.io/ico/nida.gif ほかの文字')).toEqual({ body: 'sssp://img.5ch.io/ico/nida.gif ほかの文字' })
   })
 })

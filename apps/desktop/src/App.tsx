@@ -1446,6 +1446,7 @@ export default function App() {
                   postAccounts={postAccountsOf(t.thread.connectorId, t.thread.boardUrl)}
                   postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
                   postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
+                  splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />
               </div>

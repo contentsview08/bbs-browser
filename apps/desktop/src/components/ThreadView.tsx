@@ -87,6 +87,8 @@ interface Props {
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
   postReadyAt?: number
   postCooldownMs: number
+  /** 本文からアイコン(BE アイコンなど)を取り出す。掲示板ごとの書き方なのでコネクタのもの */
+  splitPostIcon?: (body: string) => { icon?: string; body: string }
   /** 板の書き込みの上限と、その掲示板での数え方(書き込み欄に長さを出す) */
   postLimits?: PostLimits
   postByteLength?: (text: string) => number
@@ -310,8 +312,9 @@ export default function ThreadView(props: Props) {
       omitNoname: settings.omitNoname,
       collapseBlankLines: settings.collapseBlankLines,
       trimTrailingBlank: settings.trimTrailingBlank,
+      splitIcon: props.splitPostIcon,
     }),
-    [props.nonameName, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank],
+    [props.nonameName, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */

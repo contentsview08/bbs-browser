@@ -146,16 +146,11 @@ export interface DisplayOptions {
   omitNoname: boolean
   collapseBlankLines: boolean
   trimTrailingBlank: boolean
-}
-
-/**
- * BE のアイコン。5ch では BE でログインして書き込むと、本文の 1 行目に「sssp://img.5ch.io/ico/nida.gif」のような
- * アイコンの場所が入る(sssp は https の読み替え)。1 行目にあれば、その画像の URL と、その行を除いた本文を返す
- */
-export function splitBeIcon(body: string): { icon?: string; body: string } {
-  const m = /^\s*sssp:\/\/([^\s/]+\/\S+\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)/i.exec(body)
-  if (!m) return { body }
-  return { icon: `https://${m[1]}`, body: body.slice(m[0].length) }
+  /**
+   * 本文からアイコン(5ch の BE アイコンなど)を取り出す。掲示板ごとの書き方なので、コネクタが持っている。
+   * 返す body はアイコンの部分を除いた本文
+   */
+  splitIcon?: (body: string) => { icon?: string; body: string }
 }
 
 /** 本文の見せ方: 3 行以上続く空行は 1 行にまとめ、文末の空行は消す */

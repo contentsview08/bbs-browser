@@ -133,6 +133,15 @@ export interface AppSettings {
   uploaderEnabled: boolean
   /** 上げる前に、画像を描き直して EXIF(撮影場所など)を取り除く */
   uploadStripMetadata: boolean
+  /** 上げる前に、長い辺がこれを超える画像を縮小する(px)。0 なら縮小しない */
+  uploadMaxDimension: number
+  /** 定型文。操作バーや ⋯ から、そのレスへのアンカーを付けてすぐ書き込む */
+  quickPhrases: string[]
+  /**
+   * レスの操作バーに並べるもの(左から順)。'reply' | 'copy' | 'ng' | 'tree' | 'phrase:定型文'。
+   * ⋯ はいつも一番右に出す
+   */
+  postToolbar: string[]
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -182,6 +191,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ngMode: 'aborn',
   uploaderEnabled: false,
   uploadStripMetadata: true,
+  uploadMaxDimension: 2560,
+  quickPhrases: ['草'],
+  postToolbar: ['reply', 'phrase:草', 'copy', 'ng'],
   postName: '',
   postMail: '',
 }

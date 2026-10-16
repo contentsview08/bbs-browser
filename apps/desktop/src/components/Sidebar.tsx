@@ -1,4 +1,5 @@
-// 左端のサイドバー: お気に入り板(開閉・並べ替えできる)、下に閲覧履歴(開閉できる)と設定。
+// 左端のサイドバー: お気に入り板(開閉・並べ替えできる)、その下に閲覧履歴(開閉できる)、一番下に設定。
+// しまっているときは、0.5 秒マウスを乗せると一時的に開き、離れると閉じる。
 // 見た目は web 版の MenuBar.tsx に合わせている。
 // しまったときも開いたときも、アイコン(板のファビコンも)は左の 64px の列の同じ位置に置き、名前はその右に足すだけにする。
 // 外枠の幅だけを動かして開閉するので、アイコンはそのままで、名前が右から現れるように見える。
@@ -76,10 +77,16 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
+/** しまっているときに、これだけマウスを乗せたら一時的に開く */
+const PEEK_DELAY_MS = 500
+
 export default function Sidebar(props: Props) {
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const { collapsed } = props
+  // しまっているときに、マウスを乗せて一時的に開いているか。開いている間は画面の上に重ねる(ほかを押しのけない)
+  const [peek, setPeek] = useState(false)
+  const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const collapsed = props.collapsed && !peek
   const nameOf = (b: Board) => props.boardMeta[b.url]?.alias || b.name
   // しまったときに板名を出すなら、アイコンの下に名前が入るぶん行を高くする
   const stripNames = collapsed && props.showStripNames
@@ -125,9 +132,22 @@ export default function Sidebar(props: Props) {
   }
 
   return (
+    // 外枠は、しまっているあいだ帯の幅のまま。一時的に開いた中身は、その上に重ねて広げる
+    <div className="relative flex-shrink-0 transition-[width] duration-200 ease-out" style={{ width: props.collapsed ? COLLAPSED : EXPANDED }}>
     <aside
-      className="relative flex-shrink-0 overflow-hidden bg-panel-sidebar transition-[width] duration-200 ease-out"
+      className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar transition-[width] duration-200 ease-out ${
+        peek ? 'z-40 shadow-2xl' : ''
+      }`}
       style={{ width: collapsed ? COLLAPSED : EXPANDED }}
+      onMouseEnter={() => {
+        if (!props.collapsed) return
+        clearTimeout(peekTimer.current)
+        peekTimer.current = setTimeout(() => setPeek(true), PEEK_DELAY_MS)
+      }}
+      onMouseLeave={() => {
+        clearTimeout(peekTimer.current)
+        setPeek(false)
+      }}
     >
       <span className="absolute right-0 top-0 bottom-0 w-px bg-c-border pointer-events-none" />
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
@@ -136,7 +156,11 @@ export default function Sidebar(props: Props) {
           <span data-tauri-drag-region className="w-16 flex-shrink-0 flex items-center justify-center">
             <button
               type="button"
-              onClick={props.onToggleCollapsed}
+              onClick={() => {
+                // 一時的に開いているときに押したら、開いたままにする
+                setPeek(false)
+                props.onToggleCollapsed()
+              }}
               className="p-1.5 text-c-text-muted hover:text-c-text-strong rounded-lg"
               title={collapsed ? 'サイドバーを広げる' : 'サイドバーをしまう'}
             >
@@ -217,9 +241,6 @@ export default function Sidebar(props: Props) {
               )}
             </div>
           )}
-        </nav>
-
-        <div className="py-1 border-t border-c-border">
           <Row
             icon="schedule"
             label="閲覧履歴"
@@ -263,9 +284,13 @@ export default function Sidebar(props: Props) {
               </button>
             </div>
           )}
+        </nav>
+
+        <div className="py-1 border-t border-c-border">
           <Row icon="settings" label="設定" onClick={props.onOpenSettings} />
         </div>
       </div>
     </aside>
+    </div>
   )
 }

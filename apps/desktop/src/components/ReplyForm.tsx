@@ -7,7 +7,7 @@ import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors
 import PostResultBox from './PostResultBox'
 import EmojiPicker from './EmojiPicker'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
-import { uploadToCatbox } from '../host/uploader'
+import { uploadToCatbox, type UploadOptions } from '../host/uploader'
 import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
@@ -25,7 +25,7 @@ interface Props {
   onConfirm: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
-  uploader?: { stripMetadata: boolean }
+  uploader?: UploadOptions
 }
 
 const INPUT =
@@ -57,9 +57,12 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(0)
   const [uploadError, setUploadError] = useState<string>()
-  const upload = async (files: File[]) => {
+  /** 一度に上げられる数。アップローダーに負担をかけないよう、まとめて貼られても 1 枚ずつ順番に上げる */
+  const MAX_FILES = 10
+  const upload = async (all: File[]) => {
     if (!props.uploader) return
-    setUploadError(undefined)
+    setUploadError(all.length > MAX_FILES ? `一度に上げられるのは ${MAX_FILES} 枚までです(先頭の ${MAX_FILES} 枚だけ上げます)` : undefined)
+    const files = all.slice(0, MAX_FILES)
     for (const file of files) {
       setUploading((n) => n + 1)
       try {

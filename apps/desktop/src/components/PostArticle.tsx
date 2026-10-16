@@ -55,6 +55,9 @@ interface Props {
   display?: DisplayOptions
   /** スレ主(>>1 と同じ ID)の書き込み */
   isOp?: boolean
+  /** 操作バーに並べるもの(設定の postToolbar)と、定型文 */
+  toolbar?: string[]
+  phrases?: string[]
   /** 自動更新などで新しく届いたレス。一瞬光らせる */
   flash?: boolean
   /** 自分の書き込み */
@@ -221,11 +224,14 @@ function PostArticle(props: Props) {
       ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body) }]
       : []),
   ]
+  const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng']
   const reply = handlers.onReply
   const quick = handlers.onQuickReply
   const actions: MenuItem[] = [
     ...(reply ? [{ label: '返信', icon: 'reply', onClick: () => reply(post.no) }] : []),
-    ...(quick ? [{ label: '草(すぐ書き込む)', icon: 'grass', onClick: () => quick(post.no, '草') }] : []),
+    ...(quick
+      ? (props.phrases ?? []).map((text) => ({ label: `「${text}」とすぐ書き込む`, icon: 'bolt', onClick: () => quick(post.no, text) }))
+      : []),
     ...(hasConnections
       ? [{ label: 'アンカーツリーを表示', icon: 'account_tree', onClick: () => handlers.onBody(post.no, articleRef.current!) }]
       : []),
@@ -257,20 +263,43 @@ function PostArticle(props: Props) {
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {reply && (
-          <button type="button" className={TOOL_BTN} title="返信" onClick={() => reply(post.no)}>
-            <span className="material-symbols-outlined text-lg leading-none">reply</span>
-          </button>
-        )}
-        {quick && (
-          <button type="button" className={`${TOOL_BTN} text-sm font-bold`} title="草(このレスにすぐ書き込む)" onClick={() => quick(post.no, '草')}>
-            草
-          </button>
-        )}
-        <button type="button" className={TOOL_BTN} title="本文をコピー" onClick={() => copy(post.body)}>
-          <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
-        </button>
-        {ngActions.length > 0 && <MenuButton icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} />}
+        {toolbarItems.map((item) => {
+          if (item === 'reply' && reply)
+            return (
+              <button key={item} type="button" className={TOOL_BTN} title="返信" onClick={() => reply(post.no)}>
+                <span className="material-symbols-outlined text-lg leading-none">reply</span>
+              </button>
+            )
+          if (item === 'copy')
+            return (
+              <button key={item} type="button" className={TOOL_BTN} title="本文をコピー" onClick={() => copy(post.body)}>
+                <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
+              </button>
+            )
+          if (item === 'ng' && ngActions.length > 0)
+            return <MenuButton key={item} icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} />
+          if (item === 'tree' && hasConnections)
+            return (
+              <button key={item} type="button" className={TOOL_BTN} title="アンカーツリー" onClick={() => handlers.onBody(post.no, articleRef.current!)}>
+                <span className="material-symbols-outlined text-lg leading-none">account_tree</span>
+              </button>
+            )
+          if (item.startsWith('phrase:') && quick) {
+            const text = item.slice('phrase:'.length)
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`${TOOL_BTN} text-sm font-bold max-w-[6rem]`}
+                title={`「${text}」とすぐ書き込む`}
+                onClick={() => quick(post.no, text)}
+              >
+                <span className="truncate">{text}</span>
+              </button>
+            )
+          }
+          return null
+        })}
         <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
       </div>
       <div className="flex items-center mb-2 flex-nowrap overflow-hidden gap-3">

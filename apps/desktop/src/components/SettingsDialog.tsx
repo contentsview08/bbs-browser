@@ -523,9 +523,97 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   )
 }
 
+/** 操作バーに並べられるもの(定型文はこのほかに 1 つずつ) */
+const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
+  { key: 'reply', name: '返信', icon: 'reply' },
+  { key: 'copy', name: 'コピー', icon: 'content_copy' },
+  { key: 'ng', name: 'NG に追加', icon: 'block' },
+  { key: 'tree', name: 'アンカーツリー', icon: 'account_tree' },
+]
+
 function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+  const [phrase, setPhrase] = useState('')
+  const addPhrase = () => {
+    const p = phrase.trim()
+    if (!p || s.quickPhrases.includes(p)) return
+    update('quickPhrases', [...s.quickPhrases, p])
+    setPhrase('')
+  }
+  const removePhrase = (p: string) => {
+    update('quickPhrases', s.quickPhrases.filter((x) => x !== p))
+    update('postToolbar', s.postToolbar.filter((x) => x !== `phrase:${p}`))
+  }
+  // 並べられるもの全部(いま並べているものを先に、並びのとおりに)
+  const all = [
+    ...TOOLBAR_ITEMS,
+    ...s.quickPhrases.map((p) => ({ key: `phrase:${p}`, name: `定型文「${p}」`, icon: 'bolt' })),
+  ]
+  const shown = s.postToolbar.filter((k) => all.some((a) => a.key === k))
+  const ordered = [...shown.map((k) => all.find((a) => a.key === k)!), ...all.filter((a) => !shown.includes(a.key))]
+  const move = (key: string, d: number) => {
+    const i = shown.indexOf(key)
+    const j = i + d
+    if (i < 0 || j < 0 || j >= shown.length) return
+    const next = [...shown]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    update('postToolbar', next)
+  }
   return (
     <>
+      <Section title="定型文" note="レスの操作バーや ⋯ から、そのレスへのアンカーを付けて、押すとすぐ書き込みます">
+        <form
+          className="flex gap-2 mb-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            addPhrase()
+          }}
+        >
+          <input type="text" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="例: ワロタ" className={`${INPUT} flex-1`} />
+          <button type="submit" className={BTN} disabled={!phrase.trim()}>
+            追加
+          </button>
+        </form>
+        <div className="flex flex-wrap gap-2">
+          {s.quickPhrases.map((p) => (
+            <span key={p} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-sm text-c-text-body border border-c-border rounded-[var(--chip-radius)]">
+              {p}
+              <button type="button" className="p-0.5 rounded-full hover:bg-c-surface2" title="外す" onClick={() => removePhrase(p)}>
+                <span className="material-symbols-outlined text-sm leading-none">close</span>
+              </button>
+            </span>
+          ))}
+          {s.quickPhrases.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
+        </div>
+      </Section>
+
+      <Section title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
+          {ordered.map((item) => {
+            const on = shown.includes(item.key)
+            return (
+              <div key={item.key} className="flex items-center gap-3 px-3 py-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={(e) => update('postToolbar', e.target.checked ? [...shown, item.key] : shown.filter((k) => k !== item.key))}
+                />
+                <span className="material-symbols-outlined text-base text-c-text-muted">{item.icon}</span>
+                <span className={`flex-1 ${on ? 'text-c-text-body' : 'text-c-text-muted'}`}>{item.name}</span>
+                {on && (
+                  <>
+                    <button type="button" className={ICON_BTN} title="左へ" onClick={() => move(item.key, -1)}>
+                      <span className="material-symbols-outlined text-base">arrow_upward</span>
+                    </button>
+                    <button type="button" className={ICON_BTN} title="右へ" onClick={() => move(item.key, 1)}>
+                      <span className="material-symbols-outlined text-base">arrow_downward</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Section>
       <Section
         title="画像のアップロード(catbox.moe)"
         note="書き込み欄のボタン・貼り付け・ドラッグで画像や動画を catbox.moe に上げ、本文に URL を入れます"
@@ -537,6 +625,17 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           label="上げる前に、画像の位置情報など(EXIF)を消す"
           note="JPEG・PNG・WebP は描き直して取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます"
         />
+        <div className="mt-3">
+          <p className="text-sm text-c-text-body mb-1.5">大きい画像を縮小してから上げる(長い辺)</p>
+          <Choice
+            value={s.uploadMaxDimension}
+            options={[0, 1280, 1920, 2560, 4096].map((n) => ({ key: n, name: n === 0 ? '縮小しない' : `${n}px まで` }))}
+            onChange={(v) => update('uploadMaxDimension', v)}
+          />
+          <p className="text-[10px] text-c-text-muted mt-1">
+            アップローダーの負担を減らすため、ほどほどの大きさにしてから上げます(JPEG・PNG・WebP)。まとめて貼られても 1 枚ずつ、一度に 10 枚まで上げます
+          </p>
+        </div>
         <div className="mt-3 p-3 text-xs leading-relaxed text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
           <p className="font-bold text-c-text-strong mb-1">使う前に</p>
           <ul className="list-disc pl-4 space-y-0.5">

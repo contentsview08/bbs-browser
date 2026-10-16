@@ -24,20 +24,41 @@ export function checkUpload(file: File): string | undefined {
   return undefined
 }
 
-/** 画像を描き直して、EXIF などの付いていない同じ形式の画像にする */
-async function stripMetadata(file: File): Promise<Blob> {
+export interface UploadOptions {
+  /** 描き直して EXIF(撮影場所など)を取り除く */
+  stripMetadata: boolean
+  /** 長い辺がこれを超える画像は縮小する(px)。0 なら縮小しない */
+  maxDimension: number
+}
+
+/**
+ * 画像を描き直す。EXIF などは描き直すと付かなくなり、大きすぎる画像はついでに縮める。
+ * 描き直す必要がなければ(EXIF を残してよく、縮める必要もない)元のファイルのまま返す
+ */
+async function prepare(file: File, o: UploadOptions): Promise<Blob> {
+  if (!REENCODE.has(file.type)) return file
   const bitmap = await createImageBitmap(file)
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0)
+  const long = Math.max(bitmap.width, bitmap.height)
+  const scale = o.maxDimension > 0 && long > o.maxDimension ? o.maxDimension / long : 1
+  if (!o.stripMetadata && scale === 1) {
+    bitmap.close()
+    return file
+  }
+  const w = Math.round(bitmap.width * scale)
+  const h = Math.round(bitmap.height * scale)
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx = canvas.getContext('2d')!
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, 0, 0, w, h)
   bitmap.close()
-  return canvas.convertToBlob({ type: file.type, quality: 0.92 })
+  return canvas.convertToBlob({ type: file.type, quality: 0.9 })
 }
 
 /** 上げて、ファイルの URL を返す */
-export async function uploadToCatbox(file: File, options: { stripMetadata: boolean }): Promise<string> {
+export async function uploadToCatbox(file: File, options: UploadOptions): Promise<string> {
   const problem = checkUpload(file)
   if (problem) throw new Error(problem)
-  const body = options.stripMetadata && REENCODE.has(file.type) ? await stripMetadata(file) : file
+  const body = await prepare(file, options)
   const form = new FormData()
   form.append('reqtype', 'fileupload')
   form.append('fileToUpload', body, file.name || 'image')

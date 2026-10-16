@@ -545,6 +545,8 @@ export default function ThreadView(props: Props) {
               showIdenticon={settings.showIdenticon}
               showLinkPreview={settings.showLinkPreview}
               display={display}
+              toolbar={settings.postToolbar}
+              phrases={settings.quickPhrases}
               isOp={opId !== undefined && p.id === opId}
               isOwn={ownNos.has(p.no)}
               isReplyToOwn={replyToOwn.has(p.no)}
@@ -575,6 +577,8 @@ export default function ThreadView(props: Props) {
             showIdenticon={settings.showIdenticon}
             showLinkPreview={settings.showLinkPreview}
             display={display}
+            toolbar={settings.postToolbar}
+            phrases={settings.quickPhrases}
             isOp={opId !== undefined && p.id === opId}
             isOwn={ownNos.has(p.no)}
             isReplyToOwn={replyToOwn.has(p.no)}
@@ -768,6 +772,8 @@ export default function ThreadView(props: Props) {
                       showIdenticon={settings.showIdenticon}
                       showLinkPreview={settings.showLinkPreview}
                       display={display}
+                      toolbar={settings.postToolbar}
+                      phrases={settings.quickPhrases}
                       isOp={opId !== undefined && p.id === opId}
                       flash={flashNos.has(p.no)}
                       isOwn={ownNos.has(p.no)}
@@ -817,7 +823,11 @@ export default function ThreadView(props: Props) {
               initialMail={props.postMail}
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
-              uploader={settings.uploaderEnabled ? { stripMetadata: settings.uploadStripMetadata } : undefined}
+              uploader={
+                settings.uploaderEnabled
+                  ? { stripMetadata: settings.uploadStripMetadata, maxDimension: settings.uploadMaxDimension }
+                  : undefined
+              }
               onOpenUrl={props.onUrl}
             />
           </div>

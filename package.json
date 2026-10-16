@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "npm run tauri -w @bbs-browser/desktop -- dev",
     "build": "npm run tauri -w @bbs-browser/desktop -- build",
-    "test": "npm test -w @bbs-browser/connectors -w @bbs-browser/logstore",
+    "test": "npm test -w @bbs-browser/connectors -w @bbs-browser/logstore -w @bbs-browser/desktop",
     "typecheck": "npm run typecheck -w @bbs-browser/connectors -w @bbs-browser/logstore && npx -w @bbs-browser/desktop tsc --noEmit"
   }
 }

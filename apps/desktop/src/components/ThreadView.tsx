@@ -1,11 +1,10 @@
 // スレ表示。web 版の MainBoardPage.tsx(ThreadView 部分)の見た目を移植。
-// - 開いたら設定どおりの位置(最初の未読/先頭/末尾)へ移動し、スクロールに合わせて既読位置を知らせる
+// - 開いたときの位置・既読・新着の追いかけなど、スクロールまわりは hooks/useThreadScroll.ts にまとめてある
 // - アンカー・返信・ID はポップアップで出す(ホバーかクリックかは設定で選ぶ)
-// - 新着が届いたら光らせる。いちばん下を見ていたら、新着の頭が見えるところまで送る
-//   (前回最後まで読んでいたスレを開いたときは、届いた新着の頭へ移る。末尾までは飛ばない)
+// - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Post, PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
@@ -17,6 +16,8 @@ import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
+import { useThreadScroll } from '../hooks/useThreadScroll'
+import type { ScrollPosition } from '../utils/threadScroll'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
@@ -32,15 +33,11 @@ import {
 import type { NgRule, NgTarget } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
 
-/** 読んでいた位置。画面のいちばん上に見えていたレスと、ヘッダーの下端からのずれ */
-export interface ScrollPosition {
-  no: number
-  offset: number
-  /** 一番下まで見ていた。戻すときはレスの位置ではなく一番下へ戻す(レスの高さの見積もりでずれないように) */
-  bottom?: boolean
-}
+export type { ScrollPosition } from '../utils/threadScroll'
 
 interface Props {
+  /** スレを見分ける値(タブの id)。覚えておいたレスの高さの持ち主 */
+  threadKey: string
   log: ThreadLog
   /** 開いているタブか。見えていないタブ(残しておいたもの)では、ポップアップを閉じる */
   active: boolean
@@ -90,21 +87,6 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'video', label: '動画', icon: 'play_circle' },
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
-/** 未読の頭を置く位置(見えている範囲の上からの割合)。上の 3 割には既読のレスを残す */
-const UNREAD_AT = 0.3
-/** 一番下からこれだけ以内なら「いちばん下を見ている」とみなす(新着を追いかける) */
-const BOTTOM_PX = 80
-/** 一番下へ飛ぶのにかける時間 */
-const JUMP_MS = 300
-/** 着いたあと、行き先がこれだけ動かなくなるまで追いかける(画面の外で省いていたレスが描かれて高さが変わるため) */
-const SETTLE_MS = 250
-/** 追いかけるのは長くてもここまで */
-const FOLLOW_MAX_MS = 1500
-/** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
-const FLASH_MS = 1000
-/** 新着を若い番号から順に出すときの 1 件ごとのずらし。件数が多いときは全体で STAGGER_TOTAL_MS に収める */
-const STAGGER_MS = 35
-const STAGGER_TOTAL_MS = 450
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら(その 1 枚を)閉じる */
@@ -143,45 +125,6 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
   )
 }
 
-/**
- * 決めた時間で、素早く(終わりだけゆっくり)スクロールする。ms が 0 ならその場で移る。
- * ブラウザのなめらかなスクロールは、距離が長いと遅く、途中で別のスクロールに割り込まれると止まるので使わない。
- * 行き先は関数で受け取り、動いている間に中身が増えても、毎回その時点の行き先へ向かう。
- * 着いたあとも、画面の外で省いていたレス(.post-cv)が本当の高さで描かれて行き先がずれるので、
- * 行き先が SETTLE_MS 動かなくなるまで追いかける。そのあいだにホイールやクリック、キーを押したらやめる
- */
-function animateScroll(root: HTMLElement, target: () => number, ms = JUMP_MS) {
-  const clamped = () => Math.max(0, Math.min(target(), root.scrollHeight - root.clientHeight))
-  const from = root.scrollTop
-  const start = performance.now()
-  let stopped = false
-  const stop = () => {
-    stopped = true
-    root.removeEventListener('wheel', stop)
-    root.removeEventListener('pointerdown', stop)
-    window.removeEventListener('keydown', stop)
-  }
-  root.addEventListener('wheel', stop, { passive: true })
-  root.addEventListener('pointerdown', stop)
-  window.addEventListener('keydown', stop)
-  if (ms <= 0) root.scrollTop = clamped()
-  let last = NaN
-  let stableSince = start
-  const step = (now: number) => {
-    if (stopped) return
-    const to = clamped()
-    const t = ms <= 0 ? 1 : Math.min(1, (now - start) / ms)
-    root.scrollTop = t < 1 ? from + (to - from) * (1 - (1 - t) ** 3) : to
-    if (t >= 1 && Math.abs(to - last) >= 1) {
-      last = to
-      stableSince = now
-    }
-    if (t < 1 || (now - stableSince < SETTLE_MS && now - start < FOLLOW_MAX_MS)) requestAnimationFrame(step)
-    else stop()
-  }
-  requestAnimationFrame(step)
-}
-
 function Divider({ label, self }: { label: string; self?: boolean }) {
   const color = self ? 'var(--c-accent-self)' : 'var(--c-border)'
   return (
@@ -203,7 +146,6 @@ export default function ThreadView(props: Props) {
   const viewRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const headerInScroll = settings.replyLayout === 'bottom'
-  /** スクロール位置の計算で差し引くヘッダーの高さ(ヘッダーがスクロール領域の外にあれば 0) */
   const headerOffset = () => (ref.current?.contains(headerRef.current) ? (headerRef.current?.offsetHeight ?? 0) : 0)
   const listRef = useRef<HTMLDivElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
@@ -215,19 +157,6 @@ export default function ThreadView(props: Props) {
     return () => observer.disconnect()
     // 書き込み欄の位置を変えるとヘッダーが作り直されるので、見張り直す
   }, [headerInScroll])
-  const positioned = useRef(false)
-  /** 開いてから、まだ本人がスクロールの操作(ホイール・クリック・キー)をしていないか */
-  const untouched = useRef(true)
-  /** 開いてから、まだ新着を受け取っていない(次に届くのは開いたときの取得の分) */
-  const firstGrowth = useRef(true)
-  const sent = useRef(log.readNo)
-  const atBottom = useRef(false)
-  /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
-  const pendingUnread = useRef(false)
-  const position = useRef<ScrollPosition | undefined>(props.initialPosition)
-  const onSavePosition = useRef(props.onSavePosition)
-  onSavePosition.current = props.onSavePosition
-  const lastMax = useRef(0)
   const [popups, setPopups] = useState<PopupEntry[]>([])
   const [popupFrame, setPopupFrame] = useState<{ rect: DOMRect; headerBottom: number }>()
   const [lightbox, setLightbox] = useState<{ urls: string[]; index: number; post?: Post }>()
@@ -360,9 +289,6 @@ export default function ThreadView(props: Props) {
     }
     return set
   }, [log.posts, filters, query, anchorCounts])
-  // reportRead(作り置き)から、いまの絞り込みの状態と最後のレス番号を見るための控え
-  const lastNoRef = useRef(0)
-  lastNoRef.current = log.posts.at(-1)?.no ?? 0
 
   const visiblePosts = useMemo(
     () => (visibleNos ? log.posts.filter((p) => visibleNos.has(p.no)) : log.posts),
@@ -380,113 +306,23 @@ export default function ThreadView(props: Props) {
     return map
   }, [log.posts])
 
-  const prevCount = useRef(log.posts.length)
-
-  // 新着として光らせるレス。届いたときに番号と、出てくるまでの遅れ(ms)を控え、光り終わったら消す
-  // (描画のたびに「前回より後ろ」を計算し直すと、既読の保存などで描き直された時点で光が途中で切れていた)
-  const [flashNos, setFlashNos] = useState<Map<number, number>>(new Map())
-  const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(flashTimer.current), [])
-  useEffect(() => {
-    lastMax.current = log.posts.at(-1)?.no ?? 0
-  }, [log.posts])
-
-  /** レスの頭がヘッダーの下に来るようにスクロールする */
-  const scrollToPost = useCallback((no: number, behavior: ScrollBehavior = 'instant') => {
-    const root = ref.current
-    const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)
-    if (!root || !el) return
-    const headerH = headerOffset()
-    const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - 8
-    root.scrollTo({ top, behavior })
-  }, [])
-
-  /**
-   * 未読の頭を、見えている範囲の上から UNREAD_AT の位置に置く。
-   * 上には既読のレスが少し見え、その下の「ここから未読」の線から下が未読、とひと目で分かるように
-   */
-  const scrollToUnread = useCallback((no: number, behavior: 'instant' | 'animate' = 'instant') => {
-    const root = ref.current
-    if (!root) return
-    // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
-    // その後ろで見えている最初のレスへ送る。なければ一番下に留まる
-    // 枠(.post-cv)の hidden を見て探す(中身の offsetParent を調べると、省いた計算をやり直させてしまう)
-    const target = [...root.querySelectorAll<HTMLElement>(':scope .post-cv')]
-      .find((w) => !w.hidden && Number(w.dataset.post) >= no)
-    const ms = behavior === 'animate' ? JUMP_MS : 0
-    if (!target) {
-      animateScroll(root, () => root.scrollHeight, ms)
-      return
-    }
-    // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる。
-    // 上のレスが描かれて高さが変わっても合うよう、行き先は毎回測り直す
-    const el = target
-    const headerH = headerOffset()
-    const visible = root.clientHeight - headerH
-    animateScroll(
-      root,
-      () => root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - visible * UNREAD_AT,
-      ms,
-    )
-  }, [])
-
-  // 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
-  const reportRead = useCallback(() => {
-    const root = ref.current
-    if (!root) return
-    const bottom = root.getBoundingClientRect().bottom
-    const viewTop = root.getBoundingClientRect().top + headerOffset()
-    let last = 0
-    let top: ScrollPosition | undefined
-    // レスの中身ではなく、レスを包む枠(.post-cv)を測る。中身を測ると、画面の外で省いた計算をやり直させてしまう
-    for (const el of root.querySelectorAll<HTMLElement>(':scope .post-cv')) {
-      if (el.hidden) continue // 絞り込みで隠しているレス
-      const rect = el.getBoundingClientRect()
-      if (rect.top >= bottom) break
-      // 番号は枠に持たせてある(NG で中身を描かないレスも数えるため)
-      const no = Number(el.dataset.post)
-      if (!no) continue
-      last = no
-      // ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
-      if (!top && rect.bottom > viewTop) top = { no: last, offset: rect.top - viewTop }
-    }
-    atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX
-    if (top) position.current = { ...top, bottom: atBottom.current }
-    // 一番下まで来たら、絞り込みや NG で隠れているレスも含めて全部読んだことにする
-    if (atBottom.current) last = Math.max(last, lastNoRef.current)
-    if (last > sent.current) {
-      sent.current = last
-      onRead(last)
-    }
-  }, [onRead])
-
-  // 最初にレスが出たときだけ、設定どおりの位置へ移動する
-  useLayoutEffect(() => {
-    const root = ref.current
-    if (!root || positioned.current || log.posts.length === 0) return
-    positioned.current = true
-    const saved = props.initialPosition
-    const savedEl = saved && root.querySelector<HTMLElement>(`[data-no="${saved.no}"]`)
-    if (saved?.bottom) animateScroll(root, () => root.scrollHeight, 0)
-    else if (saved && savedEl) {
-      // 行き先は毎回測り直す(大きさが決まる前や、上のレスが描かれて高さが変わっても合うように)
-      animateScroll(
-        root,
-        () => root.scrollTop + savedEl.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - saved.offset,
-        0,
-      )
-    } else if (settings.openPosition === 'bottom') animateScroll(root, () => root.scrollHeight, 0)
-    else if (settings.openPosition === 'unread' && unreadFrom > 1) {
-      if (byNo.has(unreadFrom)) scrollToUnread(unreadFrom)
-      else {
-        animateScroll(root, () => root.scrollHeight, 0)
-        pendingUnread.current = true
-      }
-    }
-    // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
-    prevCount.current = log.posts.length
-    reportRead()
-  }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToUnread])
+  const { scrollToPost, jumpToBottom, showJump, flashNos, intrinsicHeight } = useThreadScroll({
+    rootRef: ref,
+    listRef,
+    headerRef,
+    threadKey: props.threadKey,
+    log,
+    byNo,
+    unreadFrom,
+    active: props.active,
+    initialPosition: props.initialPosition,
+    onSavePosition: props.onSavePosition,
+    onRead,
+    openPosition: settings.openPosition,
+    autoScrollOnNew: settings.autoScrollOnNew,
+    showThumbnails: settings.showThumbnails,
+    jumpTo: props.jumpTo,
+  })
 
   // 見えなくなったら(別のタブに移ったら)、開いていたポップアップと画像を閉じる
   useEffect(() => {
@@ -494,125 +330,6 @@ export default function ThreadView(props: Props) {
     setPopups([])
     setLightbox(undefined)
   }, [props.active])
-
-  // 通知などから指定されたレスへ飛ぶ(開いたときの位置合わせのあとに)
-  useEffect(() => {
-    if (props.jumpTo && byNo.has(props.jumpTo.no)) scrollToUnread(props.jumpTo.no, 'animate')
-    // seq が変わったときだけ飛ぶ
-  }, [props.jumpTo?.seq, byNo.size > 0])
-
-  // 画面から外れるときに、読んでいた位置を渡す
-  useEffect(() => () => {
-    if (position.current) onSavePosition.current(position.current)
-  }, [])
-
-  // 新着が届いたとき: 開いた直後なら未読の頭へ移る。いちばん下を見ていたら新着の頭まで送る
-  useLayoutEffect(() => {
-    const root = ref.current
-    const grew = log.posts.length > prevCount.current
-    prevCount.current = log.posts.length
-    if (!root || !grew || !positioned.current) return
-    const fresh = log.posts.filter((p) => p.no > lastMax.current).map((p) => p.no)
-    const step = Math.min(STAGGER_MS, STAGGER_TOTAL_MS / Math.max(1, fresh.length - 1))
-    setFlashNos(new Map(fresh.map((no, i) => [no, Math.round(i * step)])))
-    clearTimeout(flashTimer.current)
-    flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
-    // 開いてから本人がまだ触っていなければ(開いたときの取得の分)、動かして見せずにすぐ移る。
-    // 開いた場所からもう一度動くと遅く感じ、位置合わせが間に合わなかったときは一番上から動いてしまうため
-    const opening = untouched.current && firstGrowth.current
-    firstGrowth.current = false
-    if (pendingUnread.current) {
-      pendingUnread.current = false
-      if (byNo.has(unreadFrom)) {
-        scrollToUnread(unreadFrom)
-        reportRead()
-        return
-      }
-    }
-    // lastMax はまだ前回の描画の値なので、その次が新着の頭
-    // 開いた直後は、それまでのレスを読み終えていれば(位置が一番下からずれていても)新着の頭へ移る。
-    // 読んでいる途中は、設定どおり一番下を見ているときだけ追いかける
-    const readThrough = sent.current >= lastMax.current
-    if (opening ? readThrough : settings.autoScrollOnNew && atBottom.current)
-      scrollToUnread(lastMax.current + 1, opening ? 'instant' : 'animate')
-  }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
-
-  // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す。
-  // スクロールしたときだけでなく、開いたとき・新着が届いたとき・大きさが変わったときにも判定する
-  const [showJump, setShowJump] = useState(false)
-  const updateJump = useCallback(() => {
-    const root = ref.current
-    if (root) setShowJump(root.scrollHeight - root.scrollTop - root.clientHeight > root.clientHeight)
-  }, [])
-  useLayoutEffect(updateJump, [log.posts.length, updateJump])
-  // 中身の高さが変わったとき(新着が届いた・レスが描かれた)は、スクロールしなくても既読を進める。
-  // 1 画面に収まるスレや、届いた新着がそのまま見えているときは、スクロールが起きないため。
-  // 裏に残しているタブでは進めない(見ていないので)
-  const activeRef = useRef(props.active)
-  activeRef.current = props.active
-  useEffect(() => {
-    const root = ref.current
-    if (!root) return
-    let timer: ReturnType<typeof setTimeout>
-    const observer = new ResizeObserver(() => {
-      updateJump()
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        if (activeRef.current) reportRead()
-      }, 300)
-    })
-    observer.observe(root)
-    if (listRef.current) observer.observe(listRef.current)
-    return () => {
-      observer.disconnect()
-      clearTimeout(timer)
-    }
-  }, [updateJump, reportRead])
-  // 裏のタブから表に戻したときも、見えている分を既読にする
-  useEffect(() => {
-    if (props.active && positioned.current) reportRead()
-  }, [props.active, reportRead])
-  const jumpToBottom = () => {
-    const root = ref.current
-    if (root) animateScroll(root, () => root.scrollHeight)
-  }
-
-  useEffect(() => {
-    const root = ref.current
-    if (!root) return
-    let timer: ReturnType<typeof setTimeout>
-    const onScroll = () => {
-      const rest = root.scrollHeight - root.scrollTop - root.clientHeight
-      atBottom.current = rest < BOTTOM_PX
-      setShowJump(rest > root.clientHeight)
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        if (activeRef.current) reportRead()
-      }, 300)
-    }
-    root.addEventListener('scroll', onScroll)
-    return () => {
-      root.removeEventListener('scroll', onScroll)
-      clearTimeout(timer)
-    }
-  }, [reportRead])
-
-  // 本人がスレ表示を触ったら、それ以降の新着へは動かして見せる
-  useEffect(() => {
-    const root = ref.current
-    if (!root) return
-    const touch = () => {
-      untouched.current = false
-    }
-    root.addEventListener('wheel', touch, { passive: true })
-    root.addEventListener('pointerdown', touch)
-    root.addEventListener('keydown', touch)
-    return () => {
-      root.removeEventListener('wheel', touch)
-      root.removeEventListener('pointerdown', touch)
-      root.removeEventListener('keydown', touch)
-    }
-  }, [])
 
   // ── ポップアップ ──
 
@@ -936,7 +653,13 @@ export default function ThreadView(props: Props) {
                   <div
                     key={p.no}
                     className={`post-cv ${enterDelay !== undefined ? 'post-enter' : ''}`}
-                    style={enterDelay !== undefined ? ({ '--enter-delay': `${enterDelay}ms` } as CSSProperties) : undefined}
+                    style={
+                      {
+                        // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
+                        containIntrinsicSize: `auto ${intrinsicHeight(p)}px`,
+                        ...(enterDelay !== undefined && { '--enter-delay': `${enterDelay}ms` }),
+                      } as CSSProperties
+                    }
                     data-post={p.no}
                     hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}

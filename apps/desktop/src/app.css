@@ -242,5 +242,6 @@ input[type='checkbox']:indeterminate {
    大きさは、一度描いたら覚えておいた値(auto)、まだ描いていなければ 90px と見積もる */
 .post-cv {
   content-visibility: auto;
+  /* 仮の高さは ThreadView がレスごとに style で入れる。これは入れ忘れたときの値 */
   contain-intrinsic-size: auto 90px;
 }

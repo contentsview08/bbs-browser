@@ -62,6 +62,7 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, ev }: Props)
 
   return (
     <ThreadView
+      threadKey={id}
       log={tab.log}
       active={active}
       initialPosition={tab.scroll}

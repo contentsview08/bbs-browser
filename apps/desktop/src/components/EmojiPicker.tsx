@@ -1,7 +1,8 @@
-// 絵文字を選んで書き込み欄に入れる。ボタンの上に一覧を出す(書き込み欄は画面の下にあるので)。
+// 絵文字を選んで書き込み欄に入れる。一覧はボタンの上(入らなければ下)に、右端をボタンにそろえて出し、
+// 画面の端からはみ出さないよう、出したあとに大きさを測って内側へ寄せる。
 // 2ch 互換の板は Shift_JIS なので、絵文字は送るときに &#数字; になる(sjis.ts)
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 const GROUPS: { icon: string; name: string; emojis: string }[] = [
@@ -36,7 +37,9 @@ function splitEmojis(text: string): string[] {
 }
 
 export default function EmojiPicker({ onPick, disabled }: { onPick: (emoji: string) => void; disabled?: boolean }) {
-  const [pos, setPos] = useState<{ left: number; bottom: number }>()
+  // 開いているときはボタンの位置を持つ。一覧の置き場所は測ってから place に決める
+  const [pos, setPos] = useState<DOMRect>()
+  const [place, setPlace] = useState<{ left: number; top: number }>()
   const [group, setGroup] = useState(0)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -53,10 +56,31 @@ export default function EmojiPicker({ onPick, disabled }: { onPick: (emoji: stri
 
   const toggle = () => {
     if (pos) return setPos(undefined)
-    const rect = buttonRef.current!.getBoundingClientRect()
-    const width = 320
-    setPos({ left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), bottom: window.innerHeight - rect.top + 6 })
+    setPlace(undefined)
+    setPos(buttonRef.current!.getBoundingClientRect())
   }
+
+  useLayoutEffect(() => {
+    if (!pos || !panelRef.current) return
+    const { width, height } = panelRef.current.getBoundingClientRect()
+    const M = 8
+    const GAP = 6
+    const clamp = (v: number, max: number) => Math.max(M, Math.min(v, max - M))
+    const left = clamp(pos.right - width, window.innerWidth - width)
+    const above = pos.top - GAP - height
+    const below = pos.bottom + GAP
+    const top =
+      above >= M || pos.top > window.innerHeight - pos.bottom ? above : below // 入らなければ広い側へ
+    setPlace({ left, top: clamp(top, window.innerHeight - height) })
+  }, [pos])
+
+  // ウィンドウの大きさが変わったら閉じる(位置がずれるので)
+  useEffect(() => {
+    if (!pos) return
+    const close = () => setPos(undefined)
+    window.addEventListener('resize', close)
+    return () => window.removeEventListener('resize', close)
+  }, [pos])
 
   return (
     <>
@@ -75,7 +99,7 @@ export default function EmojiPicker({ onPick, disabled }: { onPick: (emoji: stri
           <div
             ref={panelRef}
             className="fixed z-[9800] w-80 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl"
-            style={pos}
+            style={place ?? { left: 0, top: 0, visibility: 'hidden' }}
           >
             <div className="flex border-b border-c-border">
               {GROUPS.map((g, i) => (

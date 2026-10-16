@@ -59,6 +59,9 @@ import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
+/** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
+const TAB_REPEAT_SETTLE_MS = 200
+
 const connectorOf = (id: string) => {
   const c = findConnector(id)
   if (!c) throw new Error(`コネクタ ${id} がありません`)
@@ -629,6 +632,17 @@ export default function App() {
     const ids = tabsRef.current.map((t) => t.id).filter((id) => selectedTabs.has(id) || id === activeId)
     return ids.length > 0 ? ids : activeId ? [activeId] : []
   }
+  // 押し続けて切り替えている途中の、選んでいる印の付いたタブ(まだスレ表示は切り替えていない)
+  const [tabPreview, setTabPreview] = useState<string>()
+  const tabPreviewRef = useRef<string | undefined>(undefined)
+  const tabCommitTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const commitTabPreview = () => {
+    clearTimeout(tabCommitTimer.current)
+    const id = tabPreviewRef.current
+    tabPreviewRef.current = undefined
+    setTabPreview(undefined)
+    if (id) keyRef.current.selectTab(id)
+  }
   const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs })
   keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs }
   useEffect(() => {
@@ -653,11 +667,23 @@ export default function App() {
       if (!e.ctrlKey) return
       const { closeTabs, selectTab, activeId, targetTabs, setSelectedTabs } = keyRef.current
       const ids = tabsRef.current.map((t) => t.id)
-      const i = activeId ? ids.indexOf(activeId) : -1
+      // 押し続けているあいだは、選んでいる印(tabPreview)から数える
+      const from = tabPreviewRef.current ?? activeId
+      const i = from ? ids.indexOf(from) : -1
+      /**
+       * Ctrl+Tab などでタブを切り替える。1 回押しただけならすぐ切り替える。
+       * 押し続けた(キーの自動の連打)ときは、タブ列の印だけを動かし、スレ表示の切り替えは
+       * 指を離すか連打が止まるまで待って 1 回だけにする(1 回ごとに描き直しや読み込みが走って固まるため)
+       */
       const step = (d: number) => {
         if (ids.length === 0) return
         e.preventDefault()
-        selectTab(ids[(i + d + ids.length) % ids.length])
+        const next = ids[(i + d + ids.length) % ids.length]
+        if (!e.repeat && tabPreviewRef.current === undefined) return selectTab(next)
+        tabPreviewRef.current = next
+        setTabPreview(next)
+        clearTimeout(tabCommitTimer.current)
+        tabCommitTimer.current = setTimeout(commitTabPreview, TAB_REPEAT_SETTLE_MS)
       }
       if (e.key.toLowerCase() === 'w') {
         e.preventDefault()
@@ -668,8 +694,16 @@ export default function App() {
       else if (e.key === 'PageDown') step(1)
       else if (e.key === 'PageUp') step(-1)
     }
+    // Ctrl を離したら、選んでいたタブにすぐ切り替える
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control' && tabPreviewRef.current !== undefined) commitTabPreview()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
+    }
   }, [])
 
   // 開いていたタブを次の起動で戻す。戻したタブは、選んだときに読み込む
@@ -1129,7 +1163,7 @@ export default function App() {
             boardUrl: t.thread.boardUrl,
             icon: settings.boardMeta[t.thread.boardUrl]?.icon,
           }))}
-          activeId={activeId}
+          activeId={tabPreview ?? activeId}
           onSelect={selectTab}
           onClose={closeTabs}
           onRefreshAll={() => void refreshAll()}

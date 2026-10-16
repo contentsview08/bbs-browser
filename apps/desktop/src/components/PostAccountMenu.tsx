@@ -1,8 +1,10 @@
 // 書き込むときに使うアカウント(5ch の BE など)を選ぶ。書き込み欄とスレ立ての画面の「sage」の右に置く。
 // 使うアカウントは札で見せ(BE 付きで書き込むことが分かるように)、︙ を押すとオン・オフを選べる。
-// その板で使えるアカウントがないときは何も出さない
+// その板で使えるアカウントがないときは何も出さない。
+// メニューは書き込み欄の外(画面のいちばん上の層)に出す。書き込み欄ははみ出しを隠すので、中に出すと切れてしまう
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export interface PostAccountOption {
   id: string
@@ -21,13 +23,33 @@ export default function PostAccountMenu(props: {
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // メニューの置き場所。開いてから大きさを測り、ボタンの上(入らなければ下)の、画面に収まるところに置く
+  const [place, setPlace] = useState<{ left: number; top: number }>()
   useEffect(() => {
     if (!open) return
     const close = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!ref.current?.contains(t) && !panelRef.current?.contains(t)) setOpen(false)
     }
+    const closeOnResize = () => setOpen(false)
     document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
+    window.addEventListener('resize', closeOnResize)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      window.removeEventListener('resize', closeOnResize)
+    }
+  }, [open])
+  useLayoutEffect(() => {
+    if (!open) return setPlace(undefined)
+    const button = ref.current?.getBoundingClientRect()
+    const panel = panelRef.current?.getBoundingClientRect()
+    if (!button || !panel) return
+    const M = 8
+    const left = Math.max(M, Math.min(button.left, window.innerWidth - panel.width - M))
+    const above = button.top - 6 - panel.height
+    const top = above >= M ? above : Math.min(button.bottom + 6, window.innerHeight - panel.height - M)
+    setPlace({ left, top })
   }, [open])
 
   if (props.options.length === 0) return null
@@ -54,8 +76,13 @@ export default function PostAccountMenu(props: {
       >
         <span className="material-symbols-outlined text-lg leading-none">more_vert</span>
       </button>
-      {open && (
-        <div className="absolute left-0 bottom-full mb-1.5 w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-40 text-sm">
+      {open &&
+        createPortal(
+        <div
+          ref={panelRef}
+          className="fixed w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm"
+          style={place ?? { left: 0, top: 0, visibility: 'hidden' }}
+        >
           <p className="px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tracking-wide">書き込むときに使うアカウント</p>
           {props.options.map((o) =>
             o.registered ? (
@@ -81,8 +108,9 @@ export default function PostAccountMenu(props: {
               </button>
             ),
           )}
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </div>
   )
 }

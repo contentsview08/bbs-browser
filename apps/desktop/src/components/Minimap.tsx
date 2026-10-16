@@ -2,6 +2,8 @@
 // スレ全体を縦に縮めて、人気レス(横棒)・自分のレス(ひし形)・自分への返信(枠だけのひし形)・
 // 画像(四角)・動画(三角)の位置と、「ここから未読」の位置を示す。つまみをドラッグしてスクロールでき、
 // 印を押すとそのレスへ、何もないところを押すとその割合の位置へ飛ぶ。
+// 印は重ならないよう 3 つの列に分ける(左: 自分のレスと返信、真ん中: 人気レスの帯、右: 画像と動画)。
+// いま見ている位置のつまみは強調色で目立たせ、未読の範囲はうっすら色を付け、乗せた高さのレス番号を出す。
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
@@ -45,7 +47,8 @@ export default function Minimap(props: Props) {
       // レスの中身ではなく枠(.post-cv)を測る(画面の外で省いた計算をやり直させないように)
       for (const el of root.querySelectorAll<HTMLElement>(':scope .post-cv')) {
         if (el.hidden) continue // 絞り込みで隠しているレス
-        const no = Number(el.querySelector<HTMLElement>('[data-no]')?.dataset.no)
+        // 番号は枠に持たせてある(NG で中身を描かないレスも数えるため)
+        const no = Number(el.dataset.post)
         if (!no) continue
         const top = el.getBoundingClientRect().top - rootTop + root.scrollTop
         next.set(no, (top / root.scrollHeight) * 100)
@@ -72,7 +75,8 @@ export default function Minimap(props: Props) {
     if (!root || !thumb) return
     const update = () => {
       const { scrollHeight, clientHeight, scrollTop } = root
-      thumb.style.height = `${(clientHeight / scrollHeight) * 100}%`
+      // 長いスレでもつかめるよう、つまみは 14px より小さくしない
+      thumb.style.height = `max(14px, ${(clientHeight / scrollHeight) * 100}%)`
       thumb.style.top = `${(scrollTop / scrollHeight) * 100}%`
     }
     root.addEventListener('scroll', update)
@@ -147,107 +151,171 @@ export default function Minimap(props: Props) {
     props.onJump(no)
   }
 
+  // マウスを乗せた高さ(%)と、そのあたりのレス番号。押すとどこへ飛ぶか分かるように出す
+  const [hover, setHover] = useState<{ at: number; no?: number }>()
+  const onTrackMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const at = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
+    // その高さより上にある最後のレス
+    let no: number | undefined
+    posts.forEach((p, i) => {
+      if (pct(p.no, i) <= at) no = p.no
+    })
+    setHover({ at, no })
+  }
+
   return (
-    <div className="flex-shrink-0 py-2 pr-1.5 pl-0.5" style={{ paddingTop: props.topOffset + 8 }}>
+    <div className="flex-shrink-0 py-2 pr-2 pl-1" style={{ paddingTop: props.topOffset + 8 }}>
       <div
-        className="relative w-[21px] h-full cursor-pointer"
+        className="relative w-[24px] h-full cursor-pointer"
         style={{
           background: 'var(--c-surface2)',
           border: '1px solid var(--c-border)',
           borderRadius: 'var(--minimap-radius)',
         }}
         onClick={onTrackClick}
+        onMouseMove={onTrackMove}
+        onMouseLeave={() => setHover(undefined)}
       >
+        {/* 未読の範囲(「ここから未読」から下)は、うっすら色を付ける */}
         {unreadAt !== undefined && (
-          <div
-            className="absolute left-0 right-0 h-[2px] pointer-events-none z-[9]"
-            style={{ top: `${unreadAt}%`, background: 'var(--c-accent-self)', opacity: 0.7 }}
-            title="ここから未読"
-          />
+          <>
+            <div
+              className="absolute left-0 right-0 bottom-0 pointer-events-none"
+              style={{
+                top: `${unreadAt}%`,
+                background: 'color-mix(in srgb, var(--c-accent-self) 12%, transparent)',
+                borderRadius: '0 0 var(--minimap-radius) var(--minimap-radius)',
+              }}
+            />
+            <div
+              className="absolute left-0 right-0 h-[2px] pointer-events-none z-[9]"
+              style={{ top: `${unreadAt}%`, background: 'var(--c-accent-self)' }}
+              title="ここから未読"
+            />
+            <div
+              className="absolute -left-[5px] pointer-events-none z-[9]"
+              style={{
+                top: `calc(${unreadAt}% - 4px)`,
+                width: 0,
+                height: 0,
+                borderTop: '5px solid transparent',
+                borderBottom: '5px solid transparent',
+                borderLeft: '5px solid var(--c-accent-self)',
+              }}
+            />
+          </>
         )}
 
-        {markers.reply.map((m) => (
-          <button
-            key={`reply-${m.no}`}
-            type="button"
-            onClick={jump(m.no)}
-            className="absolute left-1/2 w-2.5 h-2.5 hover:opacity-80 transition-opacity z-[11] rounded-[1px]"
-            style={{
-              top: `${m.at}%`,
-              transform: 'translateX(-50%) translateY(-50%) rotate(45deg)',
-              border: '1.5px solid var(--c-accent-self)',
-            }}
-            title={`自分への返信: ${m.no}`}
-          />
-        ))}
-
-        {markers.own.map((m) => (
-          <button
-            key={`own-${m.no}`}
-            type="button"
-            onClick={jump(m.no)}
-            className="absolute left-1/2 w-2.5 h-2.5 hover:opacity-80 transition-opacity z-[12] rounded-[1px]"
-            style={{
-              top: `${m.at}%`,
-              transform: 'translateX(-50%) translateY(-50%) rotate(45deg)',
-              background: 'var(--c-accent-self)',
-            }}
-            title={`自分のレス: ${m.no}`}
-          />
-        ))}
-
+        {/* 真ん中: 人気レス(被アンカー 3 件以上)の帯。多いほど暖かい色 */}
         {markers.heat.map((m) => (
           <button
             key={`heat-${m.no}`}
             type="button"
             onClick={jump(m.no)}
-            className="absolute left-0 right-0 h-1.5 hover:h-2 transition-all z-[10]"
+            className="absolute left-[5px] right-[5px] h-[5px] -translate-y-1/2 rounded-full hover:scale-y-150 transition-transform z-[10]"
             style={{ top: `${m.at}%`, background: heatColor(m.count) }}
-            title={`${m.no}: ${m.count}件のアンカー`}
+            title={`>>${m.no}: ${m.count} 件のアンカー`}
           />
         ))}
 
+        {/* 左: 自分への返信(枠だけのひし形)と自分のレス(塗ったひし形) */}
+        {markers.reply.map((m) => (
+          <button
+            key={`reply-${m.no}`}
+            type="button"
+            onClick={jump(m.no)}
+            className="absolute left-[2px] w-2 h-2 hover:scale-125 transition-transform z-[11] rounded-[1px]"
+            style={{
+              top: `${m.at}%`,
+              transform: 'translateY(-50%) rotate(45deg)',
+              border: '1.5px solid var(--c-accent-self)',
+              background: 'var(--c-surface2)',
+            }}
+            title={`自分への返信: >>${m.no}`}
+          />
+        ))}
+        {markers.own.map((m) => (
+          <button
+            key={`own-${m.no}`}
+            type="button"
+            onClick={jump(m.no)}
+            className="absolute left-[2px] w-2 h-2 hover:scale-125 transition-transform z-[12] rounded-[1px]"
+            style={{
+              top: `${m.at}%`,
+              transform: 'translateY(-50%) rotate(45deg)',
+              background: 'var(--c-accent-self)',
+            }}
+            title={`自分のレス: >>${m.no}`}
+          />
+        ))}
+
+        {/* 右: 画像(四角)と動画(三角) */}
         {markers.media.map((m) =>
           m.type === 'image' ? (
             <button
               key={`media-${m.no}`}
               type="button"
               onClick={jump(m.no)}
-              className="absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-[1px] hover:scale-150 transition-transform z-[10]"
+              className="absolute right-[3px] w-[5px] h-[5px] -translate-y-1/2 rounded-[1px] hover:scale-150 transition-transform z-[10]"
               style={{ top: `${m.at}%`, background: 'var(--c-text-muted)' }}
-              title={`${m.no}: 画像あり`}
+              title={`>>${m.no}: 画像あり`}
             />
           ) : (
             <button
               key={`media-${m.no}`}
               type="button"
               onClick={jump(m.no)}
-              className="absolute left-1/2 -translate-x-1/2 hover:scale-150 transition-transform z-[10]"
+              className="absolute right-[2px] -translate-y-1/2 hover:scale-150 transition-transform z-[10]"
               style={{
                 top: `${m.at}%`,
                 width: 0,
                 height: 0,
-                borderLeft: '3px solid transparent',
-                borderRight: '3px solid transparent',
-                borderBottom: '5px solid var(--c-text-muted)',
+                borderTop: '3.5px solid transparent',
+                borderBottom: '3.5px solid transparent',
+                borderLeft: '6px solid var(--c-text-muted)',
               }}
-              title={`${m.no}: 動画あり`}
+              title={`>>${m.no}: 動画あり`}
             />
           ),
         )}
 
+        {/* 乗せた高さの目安線と、そのあたりのレス番号 */}
+        {hover && (
+          <div className="absolute left-0 right-0 pointer-events-none z-[30]" style={{ top: `${hover.at}%` }}>
+            <div className="h-px" style={{ background: 'var(--c-text-body)', opacity: 0.6 }} />
+            {hover.no !== undefined && (
+              <span
+                className="absolute right-full mr-2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums whitespace-nowrap shadow"
+                style={{ background: 'var(--c-surface)', color: 'var(--c-text-strong)', border: '1px solid var(--c-border)' }}
+              >
+                &gt;&gt;{hover.no}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* いま見ている位置のつまみ。強調色の枠で目立たせ、少し横にはみ出させる。真ん中の線がつかむところ */}
         <div
           ref={thumbRef}
-          className="absolute left-0 right-0 rounded"
+          className="absolute -left-[3px] -right-[3px] flex items-center justify-center"
           style={{
-            background: 'color-mix(in srgb, var(--c-text-muted) 25%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--c-text-muted) 45%, transparent)',
-            cursor: 'ns-resize',
+            background: 'color-mix(in srgb, var(--c-accent) 18%, transparent)',
+            border: '2px solid var(--c-accent)',
+            borderRadius: 'calc(var(--minimap-radius) + 2px)',
+            boxShadow: '0 0 0 1px color-mix(in srgb, var(--c-accent) 25%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25)',
+            cursor: 'grab',
             zIndex: 20,
           }}
           onMouseDown={onThumbMouseDown}
           onClick={(e) => e.stopPropagation()}
-        />
+          title="いま見ている位置(ドラッグで動かせます)"
+        >
+          <span className="flex flex-col gap-[2px] pointer-events-none">
+            <span className="block w-2.5 h-px" style={{ background: 'var(--c-accent)' }} />
+            <span className="block w-2.5 h-px" style={{ background: 'var(--c-accent)' }} />
+          </span>
+        </div>
       </div>
     </div>
   )

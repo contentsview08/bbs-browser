@@ -26,6 +26,8 @@ interface Props {
   onOpenUrl: (url: string) => void
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
   uploader?: UploadOptions
+  /** 下のサムネイルを押した(画像ビューアーで開く) */
+  onImage?: (urls: string[], index: number) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
 }
@@ -236,13 +238,14 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       </div>
       {hasPreview && (
         <div className="flex-shrink-0 mt-2 flex gap-2 overflow-x-auto no-scrollbar">
-          {previewImages.map((url) => (
+          {previewImages.map((url, i) => (
             <img
               key={url}
               src={url}
               alt=""
               referrerPolicy="no-referrer"
-              className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2"
+              onClick={() => props.onImage?.(previewImages, i)}
+              className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2 cursor-pointer hover:border-c-border-strong"
               onError={(e) => {
                 e.currentTarget.style.display = 'none'
               }}

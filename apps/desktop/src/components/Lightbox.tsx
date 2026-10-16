@@ -13,8 +13,8 @@ import { saveImage } from '../host/saveImage'
 interface Props {
   urls: string[]
   index: number
-  /** 画像の載っていたレス(本文のパネルに出す) */
-  post: Post
+  /** 画像の載っていたレス(本文のパネルに出す)。書き込み欄の画像など、レスでないときは undefined */
+  post?: Post
   /** 保存先フォルダ(空ならダウンロードフォルダ) */
   saveDir: string
   onIndex: (i: number) => void
@@ -186,7 +186,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
       />
 
       {/* 本文のパネル。画像の下側に半透明で重ねる */}
-      {panelOpen && (
+      {panelOpen && post && (
         <div
           ref={panelRef}
           className="absolute left-1/2 -translate-x-1/2 bottom-4 w-[min(92vw,900px)] max-h-[34vh] overflow-y-auto custom-scrollbar rounded-xl px-5 py-3 text-white backdrop-blur-md"

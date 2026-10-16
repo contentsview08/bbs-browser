@@ -5,7 +5,7 @@
 //   (前回最後まで読んでいたスレを開いたときは、届いた新着の頭へ移る。末尾までは飛ばない)
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Post, PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
@@ -100,6 +100,9 @@ const SETTLE_MS = 250
 const FOLLOW_MAX_MS = 1500
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
+/** 新着を若い番号から順に出すときの 1 件ごとのずらし。件数が多いときは全体で STAGGER_TOTAL_MS に収める */
+const STAGGER_MS = 35
+const STAGGER_TOTAL_MS = 450
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら(その 1 枚を)閉じる */
@@ -223,7 +226,7 @@ export default function ThreadView(props: Props) {
   const lastMax = useRef(0)
   const [popups, setPopups] = useState<PopupEntry[]>([])
   const [popupFrame, setPopupFrame] = useState<{ rect: DOMRect; headerBottom: number }>()
-  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number; post: Post }>()
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number; post?: Post }>()
   const popupSeq = useRef(0)
   const hover = useRef<{ timer?: ReturnType<typeof setTimeout>; active: boolean; entered: boolean; x: number; y: number }>({
     active: false,
@@ -375,9 +378,9 @@ export default function ThreadView(props: Props) {
 
   const prevCount = useRef(log.posts.length)
 
-  // 新着として光らせるレス。届いたときに番号を控え、FLASH_MS 後に消す
+  // 新着として光らせるレス。届いたときに番号と、出てくるまでの遅れ(ms)を控え、光り終わったら消す
   // (描画のたびに「前回より後ろ」を計算し直すと、既読の保存などで描き直された時点で光が途中で切れていた)
-  const [flashNos, setFlashNos] = useState<Set<number>>(new Set())
+  const [flashNos, setFlashNos] = useState<Map<number, number>>(new Map())
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(flashTimer.current), [])
   useEffect(() => {
@@ -505,9 +508,10 @@ export default function ThreadView(props: Props) {
     prevCount.current = log.posts.length
     if (!root || !grew || !positioned.current) return
     const fresh = log.posts.filter((p) => p.no > lastMax.current).map((p) => p.no)
-    setFlashNos(new Set(fresh))
+    const step = Math.min(STAGGER_MS, STAGGER_TOTAL_MS / Math.max(1, fresh.length - 1))
+    setFlashNos(new Map(fresh.map((no, i) => [no, Math.round(i * step)])))
     clearTimeout(flashTimer.current)
-    flashTimer.current = setTimeout(() => setFlashNos(new Set()), FLASH_MS)
+    flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
     // 開いてから本人がまだ触っていなければ(開いたときの取得の分)、動かして見せずにすぐ移る。
     // 開いた場所からもう一度動くと遅く感じ、位置合わせが間に合わなかったときは一番上から動いてしまうため
     const opening = untouched.current
@@ -917,8 +921,14 @@ export default function ThreadView(props: Props) {
             <>
               {log.posts.map((p, i) => {
                 const firstUnread = p.no === unreadFrom && unreadFrom > 1
+                const enterDelay = flashNos.get(p.no)
                 return (
-                  <div key={p.no} className="post-cv" data-post={p.no} hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
+                  <div
+                    key={p.no}
+                    className={`post-cv ${enterDelay !== undefined ? 'post-enter' : ''}`}
+                    style={enterDelay !== undefined ? ({ '--enter-delay': `${enterDelay}ms` } as CSSProperties) : undefined}
+                    data-post={p.no}
+                    hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     <PostArticle
                       post={p}
@@ -984,6 +994,7 @@ export default function ThreadView(props: Props) {
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
               onUploaded={props.onUploaded}
+              onImage={(urls, index) => setLightbox({ urls, index })}
               uploader={
                 settings.uploaderEnabled
                   ? {

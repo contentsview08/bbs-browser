@@ -122,6 +122,28 @@ body,
 }
 .flash-new {
   animation: flash-new-slow 1s ease-out;
+  animation-delay: var(--enter-delay, 0ms);
+  animation-fill-mode: backwards;
+}
+
+/* 新着のレスが、若い番号から順に素早く出てくる。ずらす時間は ThreadView.tsx が --enter-delay に入れる */
+@keyframes post-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.post-enter {
+  animation: post-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) var(--enter-delay, 0ms) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .post-enter {
+    animation: none;
+  }
 }
 
 /* タブ(Chrome 風)。開いているタブはスレのヘッダーと同じ色にして、境界線なしでつなげる。

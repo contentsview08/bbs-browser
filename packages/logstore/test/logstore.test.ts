@@ -5,7 +5,7 @@ import type { Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, type SqlDb } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -181,5 +181,22 @@ describe('ログの削除', () => {
     expect(await store.getOwnPosts(thread)).toEqual([])
     expect(await store.history()).toEqual([])
     expect((await store.loadThread(other))?.posts).toHaveLength(1)
+  })
+})
+
+describe('お気に入り板の並べ替えとファビコン', () => {
+  it('渡した並びにする', async () => {
+    const a = { connectorId: '2ch-compat', url: 'https://a.example/a/', name: 'あ' }
+    const b = { connectorId: '2ch-compat', url: 'https://b.example/b/', name: 'い' }
+    await store.addFavorite(a)
+    await store.addFavorite(b)
+    await store.reorderFavorites([b.url, 'https://bbs.eddibb.cc/liveedge/', a.url])
+    expect((await store.listFavorites()).map((f) => f.name)).toEqual(['い', 'エッヂ', 'あ'])
+  })
+
+  it('ファビコンを保存して読み戻す', async () => {
+    expect(await store.getFavicon('https://bbs.eddibb.cc/liveedge/')).toBeNull()
+    await store.setFavicon('https://bbs.eddibb.cc/liveedge/', 'data:image/x-icon;base64,AAAA', 1000)
+    expect(await store.getFavicon('https://bbs.eddibb.cc/liveedge/')).toEqual({ data: 'data:image/x-icon;base64,AAAA', fetchedAt: 1000 })
   })
 })

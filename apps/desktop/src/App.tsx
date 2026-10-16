@@ -34,6 +34,7 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { useSettings, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
 import { backgroundImageUrl } from './host/backgroundImage'
+import { initFavicons } from './host/favicon'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule } from './utils/ng'
 
 const connectorOf = (id: string) => {
@@ -100,6 +101,9 @@ export default function App() {
   /** 開いている設定画面の分類。undefined なら閉じている */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>()
   const [newThreadOpen, setNewThreadOpen] = useState(false)
+  /** サイドバーに出す直近の閲覧履歴 */
+  const [recentHistory, setRecentHistory] = useState<ThreadSummary[]>([])
+  const reloadRecent = async (s: LogStore) => setRecentHistory((await s.history(10)).map((h) => h.thread))
   /** アプリ内の通知(右下) */
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const notifySeq = useRef(0)
@@ -138,6 +142,8 @@ export default function App() {
   useEffect(() => {
     void run(null, async () => {
       const s = await openLogStore()
+      initFavicons(s)
+      void reloadRecent(s)
       const [list, favs] = await Promise.all([s.listSites(), s.listFavorites()])
       setStore(s)
       setSites(list)
@@ -292,6 +298,7 @@ export default function App() {
       setActiveId(id)
       await loadTab(store, t)
       if (history) setHistory(await store.history())
+      await reloadRecent(store)
     })
 
   const closeTabs = (ids: string[]) => {
@@ -324,6 +331,7 @@ export default function App() {
       const boardUrl = boardRef.current?.url
       if (boardUrl) await reloadStates(store, boardUrl)
       if (history) setHistory(await store.history())
+      await reloadRecent(store)
     })
 
   const refreshThread = () =>
@@ -646,6 +654,18 @@ export default function App() {
       )}
       <Sidebar
         favorites={favorites ?? []}
+        onReorderFavorites={(urls) =>
+          void run(null, async () => {
+            if (!store || !favorites) return
+            // 先に並べ替えて見せてから保存する
+            setFavorites(urls.map((u) => favorites.find((f) => f.url === u)!).filter(Boolean))
+            await store.reorderFavorites(urls)
+          })
+        }
+        recentHistory={recentHistory}
+        onOpenThread={(t) => void openThread(t)}
+        onDeleteHistory={(t) => void deleteLogs([], [t])}
+        showStripNames={settings.showStripNames}
         activeBoardUrl={board?.url}
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}

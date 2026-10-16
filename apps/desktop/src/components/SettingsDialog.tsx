@@ -256,6 +256,14 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           </div>
         </div>
       </Section>
+      <Section title="サイドバー">
+        <Toggle
+          checked={s.showStripNames}
+          onChange={(v) => update('showStripNames', v)}
+          label="しまったサイドバーに板名を出す"
+          note="お気に入り板のアイコンの下に、板名を小さく出します(別名があれば別名)"
+        />
+      </Section>
       <Section title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
         <div className="space-y-1.5">
           {PANELS.map((p) => {

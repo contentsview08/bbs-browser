@@ -1,22 +1,21 @@
-// 板のファビコン。上書き(設定)があればそれ、なければ板のページから探す。読めなければ汎用のアイコン
+// 板のファビコン。上書き(設定)があればそれ、なければ板のページから探す。読めなければ汎用のアイコン。
+// 画像は DB にキャッシュしてある(host/favicon.ts)
 
 import { useEffect, useState } from 'react'
-import { detectFavicon } from '../host/favicon'
+import { faviconFor } from '../host/favicon'
 
 export default function BoardIcon({ boardUrl, override, size = 16 }: { boardUrl: string; override?: string; size?: number }) {
-  const [src, setSrc] = useState(override)
+  const [src, setSrc] = useState<string>()
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     setFailed(false)
-    if (override) {
-      setSrc(override)
-      return
-    }
     let alive = true
     setSrc(undefined)
-    void detectFavicon(boardUrl).then((url) => {
-      if (alive) setSrc(url)
+    void faviconFor(boardUrl, override).then((data) => {
+      if (!alive) return
+      if (data) setSrc(data)
+      else setFailed(true)
     })
     return () => {
       alive = false

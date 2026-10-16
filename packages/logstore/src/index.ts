@@ -111,6 +111,24 @@ export class LogStore {
     )
   }
 
+  /** お気に入り板を、渡した URL の並びにする */
+  async reorderFavorites(urls: string[]): Promise<void> {
+    for (const [i, url] of urls.entries()) {
+      await this.db.execute('UPDATE favorite_boards SET sort = $1 WHERE url = $2', [i, url])
+    }
+  }
+
+  // ── ファビコンのキャッシュ ──
+
+  async getFavicon(key: string): Promise<{ data: string; fetchedAt: number } | null> {
+    const [row] = await this.db.select<{ data: string; fetched_at: number }>('SELECT data, fetched_at FROM favicons WHERE key = $1', [key])
+    return row ? { data: row.data, fetchedAt: row.fetched_at } : null
+  }
+
+  async setFavicon(key: string, data: string, now = Date.now()): Promise<void> {
+    await this.db.execute('INSERT OR REPLACE INTO favicons (key, data, fetched_at) VALUES ($1, $2, $3)', [key, data, now])
+  }
+
   async removeFavorite(url: string): Promise<void> {
     await this.db.execute('DELETE FROM favorite_boards WHERE url = $1', [url])
   }

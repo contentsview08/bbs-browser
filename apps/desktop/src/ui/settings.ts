@@ -71,6 +71,8 @@ export interface AppSettings {
   panelAlpha: Record<PanelKey, number>
   /** サイドバーをしまって、アイコンだけの細い帯にする */
   sidebarCollapsed: boolean
+  /** しまった帯で、板のアイコンの下に板名(別名があれば別名)を小さく出す */
+  showStripNames: boolean
   replyLayout: ReplyLayout
   /** 書き込み欄の高さ(下に置くとき)と幅(右に置くとき) */
   replyHeight: number
@@ -143,6 +145,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundOpacity: 1,
   panelAlpha: { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 },
   sidebarCollapsed: false,
+  showStripNames: false,
   replyLayout: 'bottom',
   replyHeight: 170,
   replyWidth: 380,

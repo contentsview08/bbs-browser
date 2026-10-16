@@ -18,6 +18,7 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { useThreadScroll } from '../hooks/useThreadScroll'
 import type { ScrollPosition } from '../utils/threadScroll'
+import { actionFor, isReloadKey, keyString, resolveKeymap } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
@@ -306,7 +307,7 @@ export default function ThreadView(props: Props) {
     return map
   }, [log.posts])
 
-  const { scrollToPost, jumpToBottom, showJump, flashNos, intrinsicHeight } = useThreadScroll({
+  const { scrollToPost, scrollToUnread, jumpToBottom, jumpToTop, stepPost, page, showJump, flashNos, intrinsicHeight } = useThreadScroll({
     rootRef: ref,
     listRef,
     headerRef,
@@ -323,6 +324,34 @@ export default function ThreadView(props: Props) {
     showThumbnails: settings.showThumbnails,
     jumpTo: props.jumpTo,
   })
+
+  // キー操作(設定で割り当てを変えられる)。開いているタブで、入力欄にいないときだけ。
+  // ポップアップや画像を見ているときは、後ろのスレ表示を動かさない
+  const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
+  useEffect(() => {
+    if (!props.active || lightbox || popups.length > 0) return
+    const onKey = (e: KeyboardEvent) => {
+      // F5・Ctrl+R はアプリ全体で止めてある(defaultPrevented)が、更新に割り当てていれば使う
+      if (e.defaultPrevented && !isReloadKey(e)) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      const action = actionFor(keymap, keyString(e))
+      if (!action) return
+      e.preventDefault()
+      if (action === 'nextPost') stepPost(1)
+      else if (action === 'prevPost') stepPost(-1)
+      else if (action === 'pageDown') page(1)
+      else if (action === 'pageUp') page(-1)
+      else if (action === 'top') jumpToTop()
+      else if (action === 'bottom') jumpToBottom()
+      else if (action === 'unread') scrollToUnread(unreadFrom, 'animate')
+      else if (action === 'refresh') void props.onRefresh()
+      else if (action === 'search') setSearchActive(true)
+      else if (action === 'reply') replyRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props.active, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
 
   // 見えなくなったら(別のタブに移ったら)、開いていたポップアップと画像を閉じる
   useEffect(() => {

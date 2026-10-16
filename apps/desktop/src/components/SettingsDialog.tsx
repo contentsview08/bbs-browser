@@ -1,5 +1,6 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
+import { DEFAULT_KEYMAP, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Board, SiteConfig } from '@bbs-browser/connectors'
 import {
@@ -37,7 +38,7 @@ interface Props {
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'ng' | 'boardlist' | 'boards' | 'about'
+export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'ng' | 'boardlist' | 'boards' | 'about'
 type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string }[] = [
@@ -46,6 +47,7 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'posts', name: 'レス表示', icon: 'forum' },
   { key: 'write', name: '書き込み', icon: 'edit' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
+  { key: 'keys', name: 'キー操作', icon: 'keyboard' },
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns' },
@@ -714,6 +716,95 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
   )
 }
 
+/**
+ * キー操作の割り当て。操作ごとにキーを並べ、× で外し、「+」を押してから押したキーを足す。
+ * 同じキーをほかの操作に使っていたら、そちらから外して付け替える
+ */
+function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+  const keymap = resolveKeymap(s.keymap)
+  // キーを待っている操作
+  const [waiting, setWaiting] = useState<KeyAction>()
+
+  const save = (next: Keymap) => {
+    // 既定と同じものは保存しない(あとで既定が変わったときに追いつけるように)
+    const changed: Partial<Keymap> = {}
+    for (const { key } of KEY_ACTIONS) if (next[key].join('\n') !== DEFAULT_KEYMAP[key].join('\n')) changed[key] = next[key]
+    update('keymap', changed)
+  }
+
+  useEffect(() => {
+    if (!waiting) return
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') return setWaiting(undefined)
+      const k = keyString(e)
+      if (!k) return
+      const next = { ...keymap }
+      for (const { key } of KEY_ACTIONS) next[key] = next[key].filter((x) => x !== k)
+      next[waiting] = [...next[waiting], k]
+      save(next)
+      setWaiting(undefined)
+    }
+    // 開いているスレのキー操作より先に受け取る
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [waiting, keymap])
+
+  return (
+    <>
+      <Section
+        title="スレ表示のキー操作"
+        note="スレ表示で、入力欄にカーソルがないときに使えます。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)"
+      >
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
+          {KEY_ACTIONS.map(({ key, name }) => (
+            <div key={key} className="flex items-center gap-3 px-3 py-2">
+              <span className="w-32 flex-shrink-0 text-sm text-c-text-body">{name}</span>
+              <div className="flex-1 flex flex-wrap items-center gap-1.5">
+                {keymap[key].map((k) => (
+                  <span key={k} className="inline-flex items-center gap-0.5 pl-2 pr-0.5 py-0.5 text-xs font-mono rounded border border-c-border bg-c-surface2 text-c-text-strong">
+                    {keyLabel(k)}
+                    <button
+                      type="button"
+                      className={ICON_BTN}
+                      title="外す"
+                      onClick={() => save({ ...keymap, [key]: keymap[key].filter((x) => x !== k) })}
+                    >
+                      <span className="material-symbols-outlined text-sm leading-none">close</span>
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setWaiting(waiting === key ? undefined : key)}
+                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                    waiting === key ? 'border-c-accent text-c-accent animate-pulse' : 'border-dashed border-c-border text-c-text-muted hover:text-c-text-strong'
+                  }`}
+                >
+                  {waiting === key ? 'キーを押してください' : '+'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => update('keymap', {})} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
+          すべて既定に戻す
+        </button>
+      </Section>
+      <Section title="決まっているキー" note="ここは変えられません">
+        <ul className="text-sm text-c-text-body space-y-1">
+          <li><span className="font-mono text-xs">Esc</span> … 一番上のポップアップを閉じる。なければ絞り込みを解く</li>
+          <li><span className="font-mono text-xs">Ctrl+Tab / Ctrl+Shift+Tab</span>(Ctrl+PageDown / PageUp)… タブを切り替える</li>
+          <li><span className="font-mono text-xs">Ctrl+W / Ctrl+Shift+W</span> … タブを閉じる / すべて閉じる</li>
+          <li><span className="font-mono text-xs">Delete</span> … 選んだタブのログを消す</li>
+          <li><span className="font-mono text-xs">Ctrl+Enter</span> … 書き込む(書き込み欄で)</li>
+        </ul>
+      </Section>
+    </>
+  )
+}
+
 const NG_TABS: { key: NgTarget; name: string; placeholder: string; note: string }[] = [
   { key: 'content', name: 'NG ワード', placeholder: '本文に含まれる言葉', note: '本文に含むレスを NG にします(部分一致)' },
   { key: 'posterName', name: 'NG ネーム', placeholder: '名前', note: '名前に含むレスを NG にします(部分一致)' },
@@ -1179,6 +1270,7 @@ export default function SettingsDialog(props: Props) {
             {tab === 'posts' && <PostsTab {...props} />}
             {tab === 'write' && <WriteTab {...props} />}
             {tab === 'refresh' && <RefreshTab {...props} />}
+            {tab === 'keys' && <KeysTab {...props} />}
             {tab === 'ng' && <NgTab {...props} />}
             {tab === 'boardlist' && (
               <BoardListTab

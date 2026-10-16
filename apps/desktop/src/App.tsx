@@ -39,6 +39,7 @@ import { useEvent } from './hooks/useEvent'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
+import { isReloadKey } from './utils/keymap'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
@@ -445,6 +446,12 @@ export default function App() {
   keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // F5・Ctrl+R で WebView がページごと読み直すと、開いていたものが全部消えるので止める
+      // (スレ表示では「スレを更新」に割り当ててある)
+      if (isReloadKey(e)) {
+        e.preventDefault()
+        return
+      }
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
       if (e.key === 'Delete' && !typing && !e.ctrlKey && !e.altKey) {
         const { deleteLogs, targetTabs, setSelectedTabs } = keyRef.current

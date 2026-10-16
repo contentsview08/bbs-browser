@@ -36,6 +36,10 @@ const FLASH_MS = 1000
 /** 新着を若い番号から順に出すときの 1 件ごとのずらしと、全体の長さの上限(app.css の .post-enter) */
 const STAGGER_MS = 35
 const STAGGER_TOTAL_MS = 450
+/** キー操作で動かすときの時間 */
+const STEP_MS = 120
+/** 1 画面ぶん送るとき、前の画面と重ねて残す高さ */
+const PAGE_OVERLAP_PX = 48
 /** スクロールが止まってから既読を知らせるまでの待ち */
 const READ_DELAY_MS = 300
 
@@ -220,6 +224,39 @@ export function useThreadScroll(o: Options) {
     if (root) animateScroll(root, () => root.scrollHeight)
   }, [rootRef])
 
+  const jumpToTop = useCallback(() => {
+    const root = rootRef.current
+    if (root) animateScroll(root, () => 0)
+  }, [rootRef])
+
+  /** 次(dir=1)・前(dir=-1)のレスの頭を、ヘッダーのすぐ下に合わせる(キー操作) */
+  const stepPost = useCallback(
+    (dir: 1 | -1) => {
+      const root = rootRef.current
+      if (!root) return
+      const viewTop = root.getBoundingClientRect().top + headerOffset()
+      const frames = [...postFrames(root)].filter((w) => !w.hidden)
+      const target =
+        dir > 0
+          ? frames.find((w) => w.getBoundingClientRect().top > viewTop + 2)
+          : frames.findLast((w) => w.getBoundingClientRect().top < viewTop - 2)
+      if (!target) return dir > 0 ? jumpToBottom() : jumpToTop()
+      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop, STEP_MS)
+    },
+    [rootRef, headerOffset, jumpToBottom, jumpToTop],
+  )
+
+  /** 1 画面ぶん下(dir=1)・上(dir=-1)へ。少し重ねて、続きが分かるようにする(キー操作) */
+  const page = useCallback(
+    (dir: 1 | -1) => {
+      const root = rootRef.current
+      if (!root) return
+      const to = root.scrollTop + dir * Math.max(40, root.clientHeight - headerOffset() - PAGE_OVERLAP_PX)
+      animateScroll(root, () => to, STEP_MS)
+    },
+    [rootRef, headerOffset],
+  )
+
   // ── 読んだところ ──
 
   /** どこまで読んだかを測って知らせ、読んでいた位置を覚える */
@@ -399,5 +436,5 @@ export function useThreadScroll(o: Options) {
     if (o.active && positioned.current) reportRead()
   }, [o.active, reportRead])
 
-  return { scrollToPost, scrollToUnread, jumpToBottom, showJump, flashNos, intrinsicHeight }
+  return { scrollToPost, scrollToUnread, jumpToBottom, jumpToTop, stepPost, page, showJump, flashNos, intrinsicHeight }
 }

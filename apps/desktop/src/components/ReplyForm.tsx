@@ -13,6 +13,8 @@ import type { ReplyLayout } from '../ui/settings'
 export interface ReplyFormHandle {
   /** 本文のカーソル位置に文字を入れる(>>12 の挿入など) */
   insert: (text: string) => void
+  /** 本文の欄にカーソルを置く */
+  focus: () => void
 }
 
 interface Props {
@@ -55,7 +57,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       el.selectionStart = el.selectionEnd = start + text.length
     })
   }
-  useImperativeHandle(ref, () => ({ insert }))
+  useImperativeHandle(ref, () => ({ insert, focus: () => textRef.current?.focus() }))
 
   // ── 画像のアップロード(ボタン・貼り付け・ドラッグ) ──
   const fileRef = useRef<HTMLInputElement>(null)

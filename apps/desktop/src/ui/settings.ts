@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { NgRule } from '../utils/ng'
+import type { Keymap } from '../utils/keymap'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light'
 export type DesignPattern = 'tonal' | 'bordered'
@@ -144,6 +145,8 @@ export interface AppSettings {
    * ⋯ はいつも一番右に出す
    */
   postToolbar: string[]
+  /** キー操作の割り当て(変えたものだけ。足りない操作は既定の割り当てを使う) */
+  keymap: Partial<Keymap>
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -197,6 +200,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   catboxUserhash: '',
   quickPhrases: ['草'],
   postToolbar: ['reply', 'phrase:草', 'copy', 'ng'],
+  keymap: {},
   postName: '',
   postMail: '',
 }

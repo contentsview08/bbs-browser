@@ -298,10 +298,13 @@ export class LogStore {
   /** スレのログ(レス・既読位置・自分の書き込みの印)をまとめて消す */
   async deleteThread(thread: ThreadSummary): Promise<void> {
     const where = [thread.boardUrl, thread.key]
-    // 先に threads を消す。途中で落ちても「ログのないスレ」になるだけで、次に開けば取り直す
+    // 先に threads を消す。途中で落ちても「ログのないスレ」になるだけで、次に開けば取り直す。
+    // 残りの 2 つは互いに関係しないので、待ち合わせずに同時に流す
     await this.db.execute('DELETE FROM threads WHERE board_url = $1 AND key = $2', where)
-    await this.db.execute('DELETE FROM posts WHERE board_url = $1 AND key = $2', where)
-    await this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2', where)
+    await Promise.all([
+      this.db.execute('DELETE FROM posts WHERE board_url = $1 AND key = $2', where),
+      this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2', where),
+    ])
   }
 
   /** 既読位置は戻さない(読み返しても未読が増えないように) */

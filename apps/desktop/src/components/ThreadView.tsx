@@ -29,7 +29,7 @@ import {
   imageUrlsIn,
   normalizeForSearch,
 } from '../utils/postBody'
-import type { NgRule } from '../utils/ng'
+import type { NgRule, NgTarget } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
 
 /** 読んでいた位置。画面のいちばん上に見えていたレスと、ヘッダーの下端からのずれ */
@@ -40,6 +40,8 @@ export interface ScrollPosition {
 
 interface Props {
   log: ThreadLog
+  /** 開いているタブか。見えていないタブ(残しておいたもの)では、ポップアップを閉じる */
+  active: boolean
   /** タブを切り替えて戻ってきたときの位置。あれば「開いたときの位置」の設定より優先する */
   initialPosition?: ScrollPosition
   /** 画面から外れる(タブを切り替える)ときに、読んでいた位置を渡す */
@@ -56,7 +58,7 @@ interface Props {
   onUrl: (url: string) => void
   onAddNg: (rule: NgRule) => void
   /** NG の画面を、元の文字を入れた状態で開く */
-  onNgDraft: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
+  onNgDraft: (target: NgTarget, text: string) => void
   /** 自分の書き込みのレス番号 */
   ownNos: Set<number>
   /** 書き込み。コネクタが書き込みに対応していなければ undefined */
@@ -354,9 +356,10 @@ export default function ThreadView(props: Props) {
     if (!root) return
     // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
     // その後ろで見えている最初のレスへ送る。なければ一番下に留まる
-    const target = [...root.querySelectorAll<HTMLElement>(':scope [data-no]')].find(
-      (e) => Number(e.dataset.no) >= no && e.offsetParent !== null,
-    )
+    // 枠(.post-cv)の hidden を見て探す(中身の offsetParent を調べると、省いた計算をやり直させてしまう)
+    const target = [...root.querySelectorAll<HTMLElement>(':scope .post-cv')]
+      .find((w) => !w.hidden && Number(w.querySelector<HTMLElement>('[data-no]')?.dataset.no) >= no)
+      ?.querySelector<HTMLElement>('[data-no]')
     if (!target) {
       if (behavior === 'animate') animateScroll(root, () => root.scrollHeight - root.clientHeight)
       else root.scrollTo({ top: root.scrollHeight, behavior })
@@ -380,11 +383,14 @@ export default function ThreadView(props: Props) {
     const viewTop = root.getBoundingClientRect().top + headerOffset()
     let last = 0
     let top: ScrollPosition | undefined
-    for (const el of root.querySelectorAll<HTMLElement>(':scope [data-no]')) {
-      if (el.offsetParent === null) continue // 絞り込みで隠しているレス
+    // レスの中身ではなく、レスを包む枠(.post-cv)を測る。中身を測ると、画面の外で省いた計算をやり直させてしまう
+    for (const el of root.querySelectorAll<HTMLElement>(':scope .post-cv')) {
+      if (el.hidden) continue // 絞り込みで隠しているレス
       const rect = el.getBoundingClientRect()
       if (rect.top >= bottom) break
-      last = Number(el.dataset.no)
+      const no = Number(el.querySelector<HTMLElement>('[data-no]')?.dataset.no)
+      if (!no) continue
+      last = no
       // ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
       if (!top && rect.bottom > viewTop) top = { no: last, offset: rect.top - viewTop }
     }
@@ -420,6 +426,13 @@ export default function ThreadView(props: Props) {
     prevCount.current = log.posts.length
     reportRead()
   }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToUnread])
+
+  // 見えなくなったら(別のタブに移ったら)、開いていたポップアップと画像を閉じる
+  useEffect(() => {
+    if (props.active) return
+    setPopups([])
+    setLightbox(undefined)
+  }, [props.active])
 
   // 通知などから指定されたレスへ飛ぶ(開いたときの位置合わせのあとに)
   useEffect(() => {
@@ -797,7 +810,7 @@ export default function ThreadView(props: Props) {
               {log.posts.map((p, i) => {
                 const firstUnread = p.no === unreadFrom && unreadFrom > 1
                 return (
-                  <div key={p.no} hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
+                  <div key={p.no} className="post-cv" hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     <PostArticle
                       post={p}

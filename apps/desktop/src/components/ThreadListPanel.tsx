@@ -12,6 +12,7 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
+import { useEvent } from '../hooks/useEvent'
 
 type SortMode = 'momentum' | 'newest'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -202,6 +203,14 @@ export default function ThreadListPanel(props: Props) {
     window.addEventListener('mouseup', onUp)
   }
 
+  // カードに渡す関数は、どのカードにも同じもの(memo で描き直さずに済むように)
+  const onOpenCard = useEvent((t: ThreadSummary) => props.onOpen(t))
+  const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t.title))
+  const onCopyCard = useEvent(
+    (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
+  )
+  const onDeleteCard = useEvent((t: ThreadSummary) => props.onDeleteThreadLog?.(t))
+
   const renderThread = (t: ThreadSummary) => {
     const id = threadId(t)
     const card = (
@@ -212,10 +221,10 @@ export default function ThreadListPanel(props: Props) {
         isActive={props.activeId === id}
         momentum={momenta.get(id) ?? 0}
         momentumRank={ranks.get(id) ?? 0}
-        onClick={() => props.onOpen(t)}
-        onNg={props.onNgThread ? () => props.onNgThread!(t.title) : undefined}
-    onCopy={() => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title)}
-    onDeleteLog={props.onDeleteThreadLog ? () => props.onDeleteThreadLog!(t) : undefined}
+        onOpen={onOpenCard}
+        onNg={props.onNgThread ? onNgCard : undefined}
+        onCopy={onCopyCard}
+        onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
       />
     )
     if (!selectable) return card

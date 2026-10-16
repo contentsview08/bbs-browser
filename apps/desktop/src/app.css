@@ -215,3 +215,10 @@ input[type='checkbox']:indeterminate {
 .toast-in {
   animation: toast-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* スレ表示のレス 1 件ぶんの枠。画面の外にあるレスは、配置と描画の計算を省く(content-visibility)。
+   大きさは、一度描いたら覚えておいた値(auto)、まだ描いていなければ 90px と見積もる */
+.post-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 90px;
+}

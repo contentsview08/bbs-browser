@@ -42,10 +42,13 @@ export default function Minimap(props: Props) {
       if (root.scrollHeight === 0) return
       const rootTop = root.getBoundingClientRect().top
       const next = new Map<number, number>()
-      for (const el of root.querySelectorAll<HTMLElement>(':scope [data-no]')) {
-        if (el.offsetParent === null) continue // 絞り込みで隠しているレス
+      // レスの中身ではなく枠(.post-cv)を測る(画面の外で省いた計算をやり直させないように)
+      for (const el of root.querySelectorAll<HTMLElement>(':scope .post-cv')) {
+        if (el.hidden) continue // 絞り込みで隠しているレス
+        const no = Number(el.querySelector<HTMLElement>('[data-no]')?.dataset.no)
+        if (!no) continue
         const top = el.getBoundingClientRect().top - rootTop + root.scrollTop
-        next.set(Number(el.dataset.no), (top / root.scrollHeight) * 100)
+        next.set(no, (top / root.scrollHeight) * 100)
       }
       setPcts(next)
     }

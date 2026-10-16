@@ -29,15 +29,17 @@ import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId } from './components/ThreadListPanel'
-import ThreadView, { type ScrollPosition } from './components/ThreadView'
+import TabPane, { type Tab, type TabEvents } from './components/TabPane'
+import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
-import { useSettings, type SavedTab } from './ui/settings'
+import { useSettings, type ReplyLayout, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
+import { useEvent } from './hooks/useEvent'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { deleteFromCatbox } from './host/uploader'
-import { postMatcher, pruneExpired, threadMatcher, type NgRule } from './utils/ng'
+import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 const connectorOf = (id: string) => {
   const c = findConnector(id)
@@ -55,23 +57,24 @@ async function resolve(url: string) {
 
 type Loading = 'threads' | 'posts'
 
-/** 開いているスレ 1 つぶん */
-interface Tab {
-  id: string
-  thread: ThreadSummary
-  /** まだ読み込んでいなければ undefined(起動時に戻したタブは、選ぶまで読み込まない) */
-  log?: ThreadLog
-  /** 開いた時点の「最初の未読」。「ここから未読」の線を引く位置 */
-  unreadFrom: number
-  readNo: number
-  ownNos: Set<number>
-  /** 別のタブへ移ったときに覚えておく、読んでいた位置 */
-  scroll?: ScrollPosition
-  loading: boolean
-}
+/** スレ表示を残しておくタブの数(切り替えを軽くするため。多すぎると覚えておくぶん重くなる) */
+const KEEP_TABS = 5
 
 function newTab(thread: ThreadSummary): Tab {
   return { id: threadId(thread), thread, unreadFrom: 1, readNo: 0, ownNos: new Set(), loading: false }
+}
+
+/**
+ * 読み直した既読状態のうち、中身が変わっていないものは前と同じものを使い回す。
+ * 同じものなら、スレ一覧のカードは描き直さずに済む(memo)
+ */
+function keepSame(prev: Map<string, ThreadState>, next: Map<string, ThreadState>): Map<string, ThreadState> {
+  const out = new Map<string, ThreadState>()
+  for (const [k, v] of next) {
+    const p = prev.get(k)
+    out.set(k, p && p.postCount === v.postCount && p.readNo === v.readNo && p.status === v.status ? p : v)
+  }
+  return out
 }
 
 function fromSaved(s: SavedTab): ThreadSummary {
@@ -180,7 +183,7 @@ export default function App() {
   boardRef.current = board
   const reloadStates = async (s: LogStore, boardUrl: string) => {
     const st = await s.getThreadStates(boardUrl)
-    if (boardRef.current?.url === boardUrl) setStates(st)
+    if (boardRef.current?.url === boardUrl) setStates((prev) => keepSame(prev, st))
   }
 
   const lastBoardUrl = useRef(settings.lastBoardUrl)
@@ -375,24 +378,35 @@ export default function App() {
   }
 
   /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
-  const deleteLogs = (ids: string[], extra: ThreadSummary[] = []) =>
-    run(null, async () => {
-      if (!store) return
-      // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
-      const targets = new Map<string, ThreadSummary>()
-      for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
-      for (const t of extra) targets.set(threadId(t), t)
-      closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)))
-      for (const [id, thread] of targets) {
-        // 取りに行っている最中なら終わるのを待つ(消したあとに書き戻されないように)
-        await inflight.current.get(id)?.catch(() => undefined)
-        await store.deleteThread(thread)
-      }
+  const deleteLogs = (ids: string[], extra: ThreadSummary[] = []) => {
+    if (!store) return
+    // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
+    const targets = new Map<string, ThreadSummary>()
+    for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
+    for (const t of extra) targets.set(threadId(t), t)
+    // 先に画面から消す(DB の処理を待たない)
+    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)))
+    const gone = (t: ThreadSummary) => targets.has(threadId(t))
+    setRecentHistory((list) => list.filter((t) => !gone(t)))
+    setHistory((list) => list?.filter((h) => !gone(h.thread)))
+    setStates((m) => {
       const boardUrl = boardRef.current?.url
-      if (boardUrl) await reloadStates(store, boardUrl)
-      if (history) setHistory(await store.history())
-      await reloadRecent(store)
+      const keys = [...targets.values()].filter((t) => t.boardUrl === boardUrl).map((t) => t.key)
+      if (keys.length === 0) return m
+      const next = new Map(m)
+      keys.forEach((k) => next.delete(k))
+      return next
     })
+    // DB は裏で消す。取りに行っている最中のスレは、終わるのを待ってから(消したあとに書き戻されないように)
+    void run(null, async () => {
+      await Promise.all(
+        [...targets].map(async ([id, thread]) => {
+          await inflight.current.get(id)?.catch(() => undefined)
+          await store.deleteThread(thread)
+        }),
+      )
+    })
+  }
 
   const refreshThread = () =>
     run('posts', async () => {
@@ -632,28 +646,35 @@ export default function App() {
     if (kept.length !== settings.ngRules.length) updateSetting('ngRules', kept)
   }, [settingsLoaded])
 
-  const activeThread = activeTab?.thread
-  const markRead = useCallback(
-    (no: number) => {
-      if (!store || !activeThread) return
-      const id = threadId(activeThread)
-      setTabs((ts) => ts.map((t) => (t.id === id && no > t.readNo ? { ...t, readNo: no } : t)))
-      void store.markRead(activeThread, no).then(() => reloadStates(store, activeThread.boardUrl))
-    },
-    [store, activeThread],
-  )
+  /**
+   * 既読位置を進める。スクロールのたびに呼ばれるので、DB は書くだけにして読み直さず、
+   * 手元の状態(タブとスレ一覧)を 1 件だけ書き換える
+   */
+  const markRead = useEvent((t: ThreadSummary, no: number) => {
+    if (!store) return
+    const id = threadId(t)
+    setTabs((ts) => ts.map((x) => (x.id === id && no > x.readNo ? { ...x, readNo: no } : x)))
+    if (boardRef.current?.url === t.boardUrl)
+      setStates((m) => {
+        const cur = m.get(t.key)
+        if (!cur || no <= cur.readNo) return m
+        return new Map(m).set(t.key, { ...cur, readNo: no })
+      })
+    void store.markRead(t, no)
+  })
 
   // ── お気に入り・サイト ──
 
   const reloadFavorites = async (s: LogStore) => setFavorites(await s.listFavorites())
 
-  const toggleFavorite = (b: Board) =>
-    run(null, async () => {
-      if (!store) return
-      if (favorites?.some((f) => f.url === b.url)) await store.removeFavorite(b.url)
-      else await store.addFavorite({ connectorId: b.connectorId, url: b.url, name: b.name })
-      await reloadFavorites(store)
-    })
+  const toggleFavorite = (b: Board) => {
+    if (!store) return
+    const on = favorites?.some((f) => f.url === b.url)
+    const board = { connectorId: b.connectorId, url: b.url, name: b.name }
+    // 先に画面を変えてから、DB は裏で書く
+    setFavorites((list) => (on ? list?.filter((f) => f.url !== b.url) : [...(list ?? []), board]))
+    void run(null, () => (on ? store.removeFavorite(b.url) : store.addFavorite(board)))
+  }
 
   const addFavoriteUrl = async (url: string) => {
     if (!store) return
@@ -686,6 +707,40 @@ export default function App() {
     (rule: NgRule) => updateSetting('ngRules', [...settings.ngRules, rule]),
     [settings.ngRules, updateSetting],
   )
+
+  // 最近開いたタブ(KEEP_TABS 個まで)はスレ表示を残しておく。開いているタブを先頭に、閉じたタブは外す
+  const [keptIds, setKeptIds] = useState<string[]>([])
+  useEffect(() => {
+    if (!activeId) return
+    setKeptIds((prev) => [activeId, ...prev.filter((x) => x !== activeId)].slice(0, KEEP_TABS))
+  }, [activeId])
+  const aliveIds = new Set(tabs.map((t) => t.id))
+  const shownIds = (activeId && !keptIds.includes(activeId) ? [activeId, ...keptIds] : keptIds)
+    .filter((id) => aliveIds.has(id))
+    .slice(0, KEEP_TABS)
+
+  const tabEvents: TabEvents = {
+    savePosition: useEvent((id: string, pos: ScrollPosition) => patchTab(id, { scroll: pos })),
+    markRead,
+    refresh: useEvent(() => void refreshThread()),
+    openInBrowser: useEvent((t: ThreadSummary) => void openUrl(connectorOf(t.connectorId).threadWebUrl(t))),
+    openUrl: useEvent((url: string) => void openUrl(url)),
+    addNg: useEvent((rule: NgRule) => addNg(rule)),
+    ngDraft: useEvent((target: NgTarget, text: string) => setNgDraft({ target, pattern: text })),
+    canPost: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).createPost !== undefined),
+    submitPost: useEvent((input: PostInput) => submitPost(input)),
+    confirmPost: useEvent((c: PostConfirm, input: PostInput) => confirmPost(c, input)),
+    changeReplyLayout: useEvent((layout: ReplyLayout) => updateSetting('replyLayout', layout)),
+    resizeReply: useEvent((key: 'replyHeight' | 'replyWidth', size: number) => updateSetting(key, size)),
+    deleteLog: useEvent((id: string) => deleteLogs([id])),
+    uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
+      setHasUploads(true)
+      void store?.addUpload(u)
+    }),
+  }
+  // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
+  const tabEventsRef = useRef(tabEvents)
+  const stableTabEvents = tabEventsRef.current
 
   const historyStates = new Map(history?.map((h) => [threadId(h.thread), h as ThreadState]))
   // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
@@ -835,42 +890,32 @@ export default function App() {
         />
         )}
 
-        {activeTab?.log ? (
-          <ThreadView
-            key={activeTab.id}
-            log={activeTab.log}
-            initialPosition={activeTab.scroll}
-            onSavePosition={(pos) => patchTab(activeTab.id, { scroll: pos })}
-            unreadFrom={activeTab.unreadFrom}
-            loading={activeTab.loading}
-            settings={settings}
-            isNg={isNgPost}
-            onRead={markRead}
-            onRefresh={() => void refreshThread()}
-            onOpenInBrowser={() => void openUrl(connectorOf(activeTab.thread.connectorId).threadWebUrl(activeTab.thread))}
-            onUrl={(url) => void openUrl(url)}
-            onAddNg={addNg}
-            onNgDraft={(target, text) => setNgDraft({ target, pattern: text })}
-            ownNos={activeTab.ownNos}
-            onSubmitPost={connectorOf(activeTab.thread.connectorId).createPost ? submitPost : undefined}
-            onConfirmPost={confirmPost}
-            postName={settings.boardMeta[activeTab.thread.boardUrl]?.defaultName ?? settings.postName}
-            postMail={settings.boardMeta[activeTab.thread.boardUrl]?.defaultMail ?? settings.postMail}
-            onChangeReplyLayout={(layout) => updateSetting('replyLayout', layout)}
-            onResizeReply={(key, size) => updateSetting(key, size)}
-            onDeleteLog={() => void deleteLogs([activeTab.id])}
-            nonameName={boardInfos.get(activeTab.thread.boardUrl)?.nonameName}
-            jumpTo={jump?.tabId === activeTab.id ? jump : undefined}
-            onUploaded={(u) => {
-              setHasUploads(true)
-              void store?.addUpload(u)
-            }}
-          />
-        ) : (
-          <main className="flex-1 flex items-center justify-center bg-panel-view">
-            {activeTab ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">スレッドを選択してください</div>}
-          </main>
-        )}
+        {/* 最近開いたタブのスレ表示は残しておき、切り替えは見せる・隠すだけにする(作り直さない) */}
+        <div className="relative flex-1 min-h-0 flex">
+          {shownIds.map((id) => {
+            const t = tabs.find((x) => x.id === id)
+            if (!t?.log) return null
+            const isActive = id === activeId
+            return (
+              <div key={id} className={`absolute inset-0 flex ${isActive ? '' : 'invisible pointer-events-none'}`}>
+                <TabPane
+                  tab={t as Tab & { log: ThreadLog }}
+                  active={isActive}
+                  settings={settings}
+                  isNg={isNgPost}
+                  nonameName={boardInfos.get(t.thread.boardUrl)?.nonameName}
+                  jumpTo={jump?.tabId === id ? jump : undefined}
+                  ev={stableTabEvents}
+                />
+              </div>
+            )
+          })}
+          {!activeTab?.log && (
+            <main className="absolute inset-0 flex items-center justify-center bg-panel-view">
+              {activeTab ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">スレッドを選択してください</div>}
+            </main>
+          )}
+        </div>
       </div>
       </div>
       </div>

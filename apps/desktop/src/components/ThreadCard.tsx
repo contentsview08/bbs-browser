@@ -2,6 +2,7 @@
 // サムネイルと作成者 ID は 2ch 互換の subject.txt からは取れないので外し、
 // 既読情報は localStorage の履歴ではなく LogStore の ThreadState から受け取る。
 
+import { memo } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
@@ -14,17 +15,18 @@ interface Props {
   momentum: number
   /** 板の中での勢いの相対順位(0〜1)。rankMomentum 参照 */
   momentumRank: number
-  onClick: () => void
+  /** どのカードにも同じ関数を渡し、押されたスレを引数で受け取る(カードを memo で描き直さずに済むように) */
+  onOpen: (t: ThreadSummary) => void
   /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
-  onNg?: () => void
-  onCopy?: () => void
+  onNg?: (t: ThreadSummary) => void
+  onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
-  onDeleteLog?: () => void
+  onDeleteLog?: (t: ThreadSummary) => void
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
-export default function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onClick, onNg, onCopy, onDeleteLog }: Props) {
+function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -42,7 +44,7 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
 
   return (
     <div
-      onClick={onClick}
+      onClick={() => onOpen(thread)}
       className={`group card-thread cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
         isActive ? 'card-selected border-[var(--card-selected-border-color)]' : 'border-[var(--card-border-color)]'
       }`}
@@ -69,17 +71,17 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
           onClick={(e) => e.stopPropagation()}
         >
           {onCopy && (
-            <button type="button" onClick={onCopy} className={TOOL} title="スレタイと URL をコピー">
+            <button type="button" onClick={() => onCopy(thread)} className={TOOL} title="スレタイと URL をコピー">
               <span className="material-symbols-outlined text-base leading-none">content_copy</span>
             </button>
           )}
           {onNg && (
-            <button type="button" onClick={onNg} className={TOOL} title="スレタイを NG に追加">
+            <button type="button" onClick={() => onNg(thread)} className={TOOL} title="スレタイを NG に追加">
               <span className="material-symbols-outlined text-base leading-none">block</span>
             </button>
           )}
           {onDeleteLog && state && (
-            <button type="button" onClick={onDeleteLog} className={`${TOOL} hover:text-c-heat-very-hot`} title="このスレのログ(閲覧履歴)を削除">
+            <button type="button" onClick={() => onDeleteLog(thread)} className={`${TOOL} hover:text-c-heat-very-hot`} title="このスレのログ(閲覧履歴)を削除">
               <span className="material-symbols-outlined text-base leading-none">delete</span>
             </button>
           )}
@@ -125,3 +127,5 @@ export default function ThreadCard({ thread, state, isActive, momentum: m, momen
     </div>
   )
 }
+
+export default memo(ThreadCard)

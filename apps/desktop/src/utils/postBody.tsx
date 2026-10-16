@@ -4,6 +4,23 @@
 import type { ReactNode } from 'react'
 import type { Post } from '@bbs-browser/connectors'
 
+/**
+ * 同じ本文を何度も解析しないよう、結果を本文ごとに覚えておく(レスの描き直しやタブの作り直しのたびに解析しない)。
+ * 多くなりすぎたら捨てて覚え直す
+ */
+function memoByText<T>(fn: (text: string) => T): (text: string) => T {
+  const cache = new Map<string, T>()
+  return (text) => {
+    let v = cache.get(text)
+    if (v === undefined) {
+      if (cache.size > 20_000) cache.clear()
+      v = fn(text)
+      cache.set(text, v)
+    }
+    return v
+  }
+}
+
 /** >>1, >>1-3, ＞＞1、URL(2ch 流の ttp:// も) */
 const TOKEN = /(?:>>|＞＞)(\d{1,5})(?:-(\d{1,5}))?|(h?ttps?:\/\/[^\s<>"、。「」]+)/g
 
@@ -15,13 +32,13 @@ function expand(from: number, to: number | undefined): number[] {
   return Array.from({ length: to - from + 1 }, (_, i) => from + i)
 }
 
-export function anchorsIn(text: string): number[] {
+export const anchorsIn = memoByText(function anchorsIn(text: string): number[] {
   const nums: number[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (m[1]) nums.push(...expand(Number(m[1]), m[2] ? Number(m[2]) : undefined))
   }
   return nums
-}
+})
 
 /** レス番号 → そのレスへのアンカーの数(自分自身へのアンカーは数えない) */
 export function countAnchors(posts: Post[]): Map<number, number> {
@@ -82,7 +99,7 @@ export function toImageUrl(url: string): string | undefined {
   return undefined
 }
 
-export function imageUrlsIn(text: string): string[] {
+export const imageUrlsIn = memoByText(function imageUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (m[3]) {
@@ -91,10 +108,10 @@ export function imageUrlsIn(text: string): string[] {
     }
   }
   return urls
-}
+})
 
 /** 画像でも動画でもないリンク(埋め込みのカードを出す候補) */
-export function linkUrlsIn(text: string): string[] {
+export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (!m[3]) continue
@@ -102,7 +119,7 @@ export function linkUrlsIn(text: string): string[] {
     if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !urls.includes(url)) urls.push(url)
   }
   return urls
-}
+})
 
 /** レスの見せ方の設定(スレ表示のオン・オフ) */
 export interface DisplayOptions {
@@ -130,7 +147,7 @@ export function displayName(name: string, o: DisplayOptions): string {
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i
 
 /** 本文の YouTube の動画(ID と元の URL)。サムネイルに使う */
-export function youtubeLinksIn(text: string): { id: string; url: string }[] {
+export const youtubeLinksIn = memoByText(function youtubeLinksIn(text: string): { id: string; url: string }[] {
   const links: { id: string; url: string }[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (!m[3]) continue
@@ -140,7 +157,7 @@ export function youtubeLinksIn(text: string): { id: string; url: string }[] {
     if (id && !links.some((l) => l.id === id)) links.push({ id, url })
   }
   return links
-}
+})
 
 /** 本文の YouTube の動画の ID(書き込み欄のサムネイルに使う) */
 export function youtubeIdsIn(text: string): string[] {

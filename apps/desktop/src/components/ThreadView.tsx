@@ -98,8 +98,6 @@ const JUMP_MS = 300
 const SETTLE_MS = 250
 /** 追いかけるのは長くてもここまで */
 const FOLLOW_MAX_MS = 1500
-/** 開いてからこの時間内に届いた新着(開いたときの取得の分)へは、動かして見せずにすぐ移る */
-const OPEN_FETCH_MS = 5000
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
@@ -213,9 +211,8 @@ export default function ThreadView(props: Props) {
     // 書き込み欄の位置を変えるとヘッダーが作り直されるので、見張り直す
   }, [headerInScroll])
   const positioned = useRef(false)
-  /** 開いた時刻と、開いたときの取得の新着をまだ受け取っていないか */
-  const openedAt = useRef(0)
-  const openFetch = useRef(true)
+  /** 開いてから、まだ本人がスクロールの操作(ホイール・クリック・キー)をしていないか */
+  const untouched = useRef(true)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
   /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
@@ -467,8 +464,12 @@ export default function ThreadView(props: Props) {
     const saved = props.initialPosition
     const savedEl = saved && root.querySelector<HTMLElement>(`[data-no="${saved.no}"]`)
     if (saved && savedEl) {
-      const viewTop = root.getBoundingClientRect().top + headerOffset()
-      root.scrollTop += savedEl.getBoundingClientRect().top - viewTop - saved.offset
+      // 行き先は毎回測り直す(大きさが決まる前や、上のレスが描かれて高さが変わっても合うように)
+      animateScroll(
+        root,
+        () => root.scrollTop + savedEl.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - saved.offset,
+        0,
+      )
     } else if (settings.openPosition === 'bottom') animateScroll(root, () => root.scrollHeight, 0)
     else if (settings.openPosition === 'unread' && unreadFrom > 1) {
       if (byNo.has(unreadFrom)) scrollToUnread(unreadFrom)
@@ -477,7 +478,6 @@ export default function ThreadView(props: Props) {
         pendingUnread.current = true
       }
     }
-    openedAt.current = performance.now()
     // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
     prevCount.current = log.posts.length
     reportRead()
@@ -511,9 +511,9 @@ export default function ThreadView(props: Props) {
     setFlashNos(new Set(fresh))
     clearTimeout(flashTimer.current)
     flashTimer.current = setTimeout(() => setFlashNos(new Set()), FLASH_MS)
-    // 開いたときの取得で届いた分は、前の位置からもう一度動いて見せると遅く感じるので、すぐ移る
-    const opening = openFetch.current && performance.now() - openedAt.current < OPEN_FETCH_MS
-    openFetch.current = false
+    // 開いてから本人がまだ触っていなければ(開いたときの取得の分)、動かして見せずにすぐ移る。
+    // 開いた場所からもう一度動くと遅く感じ、位置合わせが間に合わなかったときは一番上から動いてしまうため
+    const opening = untouched.current
     if (pendingUnread.current) {
       pendingUnread.current = false
       if (byNo.has(unreadFrom)) {
@@ -564,6 +564,23 @@ export default function ThreadView(props: Props) {
       clearTimeout(timer)
     }
   }, [reportRead])
+
+  // 本人がスレ表示を触ったら、それ以降の新着へは動かして見せる
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    const touch = () => {
+      untouched.current = false
+    }
+    root.addEventListener('wheel', touch, { passive: true })
+    root.addEventListener('pointerdown', touch)
+    root.addEventListener('keydown', touch)
+    return () => {
+      root.removeEventListener('wheel', touch)
+      root.removeEventListener('pointerdown', touch)
+      root.removeEventListener('keydown', touch)
+    }
+  }, [])
 
   // ── ポップアップ ──
 

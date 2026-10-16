@@ -120,6 +120,8 @@ export interface AppSettings {
   autoRefreshSec: number
   /** いちばん下を見ているときに新着が来たら、新着まで自動でスクロールする */
   autoScrollOnNew: boolean
+  /** 自分宛てのレスが届いたら、右下に通知を出す */
+  notifyReplies: boolean
   // NG
   ngRules: NgRule[]
   /** aborn: 「あぼーん」と出す / hide: 何も出さない(透明あぼーん) */
@@ -167,6 +169,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
+  notifyReplies: true,
   ngRules: [],
   ngMode: 'aborn',
   postName: '',

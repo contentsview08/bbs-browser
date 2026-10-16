@@ -19,6 +19,8 @@ import {
 import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
+import Notifications, { type AppNotification } from './components/Notifications'
+import { anchorsIn } from './utils/postBody'
 import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
@@ -76,6 +78,9 @@ function fromSaved(s: SavedTab): ThreadSummary {
 export default function App() {
   const [store, setStore] = useState<LogStore>()
   const [settings, updateSetting, settingsLoaded] = useSettings(store)
+  // 非同期の処理(取得の後始末など)から、いまの設定を見るための控え
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
   const [sites, setSites] = useState<SiteConfig[]>([])
   const [favorites, setFavorites] = useState<Board[]>()
   const [board, setBoard] = useState<Board>()
@@ -95,6 +100,12 @@ export default function App() {
   /** 開いている設定画面の分類。undefined なら閉じている */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>()
   const [newThreadOpen, setNewThreadOpen] = useState(false)
+  /** アプリ内の通知(右下) */
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const notifySeq = useRef(0)
+  const notify = (n: Omit<AppNotification, 'id'>) => setNotifications((ns) => [...ns, { ...n, id: ++notifySeq.current }])
+  /** 通知から、そのタブのそのレスへ飛ぶ */
+  const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
@@ -197,13 +208,16 @@ export default function App() {
     const job = (async () => {
       patchTab(id, { loading: true })
       try {
-        const cursor = (await s.loadThread(t))?.cursor ?? null
+        const before = await s.loadThread(t)
+        const cursor = before?.cursor ?? null
         const r = await connectorOf(t.connectorId).fetchPosts(t, cursor, ctx)
         await s.saveFetch(t, r)
         const saved = await s.loadThread(t)
         // 「ここから未読」は、取り直すたびにその時点の既読位置の次へ引き直す
         // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)
         if (saved) setTabs((ts) => ts.map((x) => (x.id === id ? { ...x, log: saved, unreadFrom: x.readNo + 1 } : x)))
+        // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
+        if (saved && before && settingsRef.current.notifyReplies) await notifyReplies(s, t, saved, before.postCount)
         await reloadStates(s, t.boardUrl)
       } finally {
         patchTab(id, { loading: false })
@@ -215,6 +229,25 @@ export default function App() {
     } finally {
       if (inflight.current.get(id) === job) inflight.current.delete(id)
     }
+  }
+
+  /** 新着の中に、自分の書き込みへのアンカーがあれば通知する。たくさんあるときは 3 件までにしてまとめる */
+  const notifyReplies = async (s: LogStore, t: ThreadSummary, log: ThreadLog, beforeCount: number) => {
+    const own = new Set(await s.getOwnPosts(t))
+    if (own.size === 0) return
+    const replies = log.posts.filter((p) => p.no > beforeCount && !own.has(p.no) && anchorsIn(p.body).some((n) => own.has(n)))
+    const id = threadId(t)
+    replies.slice(0, 3).forEach((p, i) =>
+      notify({
+        icon: 'alternate_email',
+        title: `あなた宛てのレス: ${log.title}`,
+        body: `${p.no}: ${p.body}${i === 2 && replies.length > 3 ? `\n(ほか ${replies.length - 3} 件)` : ''}`,
+        onClick: () => {
+          selectTab(id)
+          setJump({ tabId: id, no: p.no, seq: Date.now() })
+        },
+      }),
+    )
   }
 
   /** タブにログを読み込み(手元のものをすぐ出す)、差分を取りに行く */
@@ -737,6 +770,7 @@ export default function App() {
             onResizeReply={(key, size) => updateSetting(key, size)}
             onDeleteLog={() => void deleteLogs([activeTab.id])}
             nonameName={boardInfos.get(activeTab.thread.boardUrl)?.nonameName}
+            jumpTo={jump?.tabId === activeTab.id ? jump : undefined}
           />
         ) : (
           <main className="flex-1 flex items-center justify-center bg-panel-view">
@@ -746,6 +780,8 @@ export default function App() {
       </div>
       </div>
       </div>
+
+      <Notifications items={notifications} onClose={(id) => setNotifications((ns) => ns.filter((n) => n.id !== id))} />
 
       {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 

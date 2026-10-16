@@ -530,6 +530,12 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('autoScrollOnNew', v)}
           label="いちばん下を見ているときは、新着まで自動でスクロールする"
         />
+        <Toggle
+          checked={s.notifyReplies}
+          onChange={(v) => update('notifyReplies', v)}
+          label="自分宛てのレスが届いたら通知する"
+          note="画面の右下に出します。押すとそのレスへ飛びます。自動更新は開いているタブだけなので、裏のタブは更新したときに知らせます"
+        />
       </Section>
     </>
   )

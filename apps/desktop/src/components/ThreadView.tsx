@@ -68,6 +68,8 @@ interface Props {
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
+  /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
+  jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
   nonameName?: string
 }
@@ -394,6 +396,12 @@ export default function ThreadView(props: Props) {
     prevCount.current = log.posts.length
     reportRead()
   }, [log, unreadFrom, byNo, settings.openPosition, reportRead, scrollToUnread])
+
+  // 通知などから指定されたレスへ飛ぶ(開いたときの位置合わせのあとに)
+  useEffect(() => {
+    if (props.jumpTo && byNo.has(props.jumpTo.no)) scrollToUnread(props.jumpTo.no, 'smooth')
+    // seq が変わったときだけ飛ぶ
+  }, [props.jumpTo?.seq, byNo.size > 0])
 
   // 画面から外れるときに、読んでいた位置を渡す
   useEffect(() => () => {

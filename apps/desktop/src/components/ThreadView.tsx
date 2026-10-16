@@ -180,6 +180,10 @@ export default function ThreadView(props: Props) {
   // 端でさらにホイールを回すと更新する(web 版と同じ)。上端と下端で別々に持つ
   const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1 })
   const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1 })
+  const onScrollPull = () => {
+    topPull.noteScroll()
+    bottomPull.noteScroll()
+  }
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const el = ref.current
     if (!el) return
@@ -699,6 +703,7 @@ export default function ThreadView(props: Props) {
       <div
         ref={ref}
         onWheel={onWheel}
+        onScroll={onScrollPull}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
         {headerInScroll && headerBlock}

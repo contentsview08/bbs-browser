@@ -1047,6 +1047,7 @@ export default function App() {
           defaultSort={favView || history ? 'subject' : settings.threadSort}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
+          pullToRefresh={settings.pullToRefreshList}
           favoriteIds={favIds}
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}

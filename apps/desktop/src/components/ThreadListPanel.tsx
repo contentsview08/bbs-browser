@@ -76,6 +76,8 @@ interface Props {
   /** お気に入りのスレ(threadId の集まり)と、足す・外す */
   favoriteIds?: Set<string>
   onToggleFavoriteThread?: (t: ThreadSummary) => void
+  /** 一番上でさらにホイールを回したら更新する(設定) */
+  pullToRefresh: boolean
   /** 板を開いているときだけ ★ を出す */
   favorite?: { active: boolean; onToggle: () => void }
 }
@@ -105,7 +107,14 @@ export default function ThreadListPanel(props: Props) {
     return () => observer.disconnect()
   }, [])
   // 一番上でさらにホイールを回すと一覧を更新する(web 版と同じ)
-  const pull = useWheelPullRefresh({ onRefresh: () => props.onRefresh?.(), sign: 1 })
+  // スレ一覧の更新は板全体を取り直すので、スレ表示より引っぱる量を多くし、続けて更新しないよう 10 秒あける
+  const pull = useWheelPullRefresh({
+    onRefresh: () => props.onRefresh?.(),
+    sign: 1,
+    revealThreshold: 500,
+    commitThreshold: 1000,
+    cooldownMs: 10_000,
+  })
 
   useEffect(() => setWidth(props.width), [props.width])
   useEffect(() => {
@@ -276,8 +285,9 @@ export default function ThreadListPanel(props: Props) {
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto custom-scrollbar thick-scrollbar flex flex-col"
+        onScroll={pull.noteScroll}
         onWheel={(e) => {
-          if (props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
+          if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
       >
         <div ref={headerRef} className="sticky top-0 z-10 frosted-glass flex-shrink-0">

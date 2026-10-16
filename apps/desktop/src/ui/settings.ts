@@ -89,6 +89,8 @@ export interface AppSettings {
   boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
   keywords: string[]
+  /** スレ一覧の一番上で、さらにホイールを上に回したら更新する */
+  pullToRefreshList: boolean
   // タブ
   /** タブを使う。false ならタブ列を出さず、スレを開くたびに置き換える */
   tabsEnabled: boolean
@@ -175,6 +177,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   threadSort: 'subject',
   boardMeta: {},
   keywords: [],
+  pullToRefreshList: true,
   tabsEnabled: true,
   openInNewTab: true,
   openTabs: [],

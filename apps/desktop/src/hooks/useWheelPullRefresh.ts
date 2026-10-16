@@ -1,4 +1,5 @@
-// hono-bbs-merge packages/web/src/hooks/useWheelPullRefresh.ts から複製
+// hono-bbs-merge packages/web/src/hooks/useWheelPullRefresh.ts から複製。
+// 専ブラでは、端に着いた勢いで更新してしまい、取得が増えすぎたので、armDelayMs と cooldownMs を足した
 import { useRef } from 'react'
 import {
   PULL_HIDDEN_Y,
@@ -18,6 +19,13 @@ interface UseWheelPullRefreshOptions {
   commitThreshold?: number
   /** 上端用(下向きに現れる)なら1、下端用(上向きに現れる)なら-1 */
   sign?: 1 | -1
+  /**
+   * 端に着いてから(最後に noteScroll を呼んでから)これだけたつまでのホイールは数えない。
+   * スクロールして端に着いた、その同じ操作の勢いで更新しないように
+   */
+  armDelayMs?: number
+  /** 一度更新したら、これだけたつまでは引っぱっても更新しない(取得のしすぎを防ぐ) */
+  cooldownMs?: number
 }
 
 /**
@@ -31,7 +39,11 @@ export function useWheelPullRefresh({
   revealThreshold = 200,
   commitThreshold = 400,
   sign = 1,
+  armDelayMs = 500,
+  cooldownMs = 0,
 }: UseWheelPullRefreshOptions) {
+  const lastScrollRef = useRef(0)
+  const lastCommitRef = useRef(0)
   const indicatorRef = useRef<HTMLDivElement>(null)
   const iconRef = useRef<HTMLSpanElement>(null)
   const accumRef = useRef(0)
@@ -69,6 +81,7 @@ export function useWheelPullRefresh({
   function commit() {
     if (committingRef.current) return
     committingRef.current = true
+    lastCommitRef.current = Date.now()
     clearResetTimer()
     const ind = indicatorRef.current
     const icon = iconRef.current
@@ -100,6 +113,12 @@ export function useWheelPullRefresh({
   /** このホイールイベント分の「引っ張り量」(常に正の値)を積み増す */
   function pull(deltaAbs: number) {
     if (committingRef.current || deltaAbs <= 0) return
+    const now = Date.now()
+    // 端に着いたばかり(スクロールの勢いが残っている)か、更新したばかりなら数えない
+    if (now - lastScrollRef.current < armDelayMs || now - lastCommitRef.current < cooldownMs) {
+      accumRef.current = 0
+      return
+    }
     accumRef.current = Math.max(0, accumRef.current + deltaAbs)
 
     // revealThreshold未満は「たまたま少し多くスクロールしただけ」の可能性が高いので
@@ -127,5 +146,10 @@ export function useWheelPullRefresh({
     }
   }
 
-  return { indicatorRef, iconRef, pull, reset: collapse }
+  /** スクロールしたときに呼ぶ(端に着いた時刻を覚え、着いたばかりの勢いを数えないため) */
+  function noteScroll() {
+    lastScrollRef.current = Date.now()
+  }
+
+  return { indicatorRef, iconRef, pull, reset: collapse, noteScroll }
 }

@@ -15,7 +15,7 @@ import type {
   ThreadSummary,
 } from '../types'
 import { parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
-import { encodeShiftJisForm } from '../sjis'
+import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 
 /** dat 差分取得の続き */
 interface DatCursor {
@@ -103,7 +103,20 @@ async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<
     const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
     if (res.status < 200 || res.status >= 300) return {}
     const s = parseSettingTxt(ctx.decode(res.body, encodingOf(res)))
-    return { title: s.BBS_TITLE || undefined, nonameName: s.BBS_NONAME_NAME || undefined }
+    const num = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : undefined)
+    const lineNumber = num(s.BBS_LINE_NUMBER)
+    return {
+      title: s.BBS_TITLE || undefined,
+      nonameName: s.BBS_NONAME_NAME || undefined,
+      limits: {
+        messageBytes: num(s.BBS_MESSAGE_COUNT),
+        // 5ch(2ch 互換)の本文の行数の上限は BBS_LINE_NUMBER の 2 倍
+        lines: lineNumber === undefined ? undefined : lineNumber * 2,
+        nameBytes: num(s.BBS_NAME_COUNT),
+        mailBytes: num(s.BBS_MAIL_COUNT),
+        subjectBytes: num(s.BBS_SUBJECT_COUNT),
+      },
+    }
   } catch {
     return {}
   }
@@ -330,6 +343,8 @@ export const twoChConnector: Connector = {
   submitConfirm(confirm, ctx) {
     return sendBbsCgi(confirm.url, confirm.fields, confirm.referer, ctx, confirm.excludeCookies)
   },
+
+  postByteLength: shiftJisByteLength,
 
   accounts: [{ id: 'be', name: 'BE', site: '5ch', registerUrl: 'https://be.5ch.io/', hosts: ['5ch.io', '5ch.net', 'bbspink.com'] }],
 

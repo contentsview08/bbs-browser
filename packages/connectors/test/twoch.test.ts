@@ -126,7 +126,7 @@ describe('resolveUrl', () => {
     http: {
       async get(url): Promise<HttpResponse> {
         if (url === 'https://bbs.eddibb.cc/liveedge/SETTING.TXT') {
-          const body = new TextEncoder().encode('liveedge@liveedge\nBBS_TITLE=エッヂ\nBBS_NONAME_NAME=エッヂの名無し\n')
+          const body = new TextEncoder().encode('liveedge@liveedge\nBBS_TITLE=エッヂ\nBBS_NONAME_NAME=エッヂの名無し\nBBS_LINE_NUMBER=16\nBBS_MESSAGE_COUNT=9192\nBBS_SUBJECT_COUNT=192\n')
           return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body }
         }
         return { status: 404, headers: {}, body: new Uint8Array() }
@@ -152,9 +152,14 @@ describe('resolveUrl', () => {
     expect(r?.thread?.createdAt?.getTime()).toBe(1792065954 * 1000)
   })
 
-  it('板の設定(名無しの名前)を読む', async () => {
+  it('板の設定(名無しの名前と書き込みの上限)を読む', async () => {
     const board = { connectorId: '2ch-compat', url: 'https://bbs.eddibb.cc/liveedge/', name: 'エッヂ' }
-    expect(await twoChConnector.boardInfo!(board, ctx)).toEqual({ title: 'エッヂ', nonameName: 'エッヂの名無し' })
+    expect(await twoChConnector.boardInfo!(board, ctx)).toEqual({
+      title: 'エッヂ',
+      nonameName: 'エッヂの名無し',
+      // 行数の上限は BBS_LINE_NUMBER の 2 倍。書かれていないものは undefined
+      limits: { messageBytes: 9192, lines: 32, nameBytes: undefined, mailBytes: undefined, subjectBytes: 192 },
+    })
   })
 
   it('SETTING.TXT が取れなければディレクトリ名を板名にする', async () => {

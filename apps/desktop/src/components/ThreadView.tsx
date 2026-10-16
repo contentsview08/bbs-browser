@@ -5,7 +5,7 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Post, PostConfirm, PostInput, PostResult, ThreadSummary } from '@bbs-browser/connectors'
+import type { Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
@@ -85,6 +85,9 @@ interface Props {
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
   postReadyAt?: number
   postCooldownMs: number
+  /** 板の書き込みの上限と、その掲示板での数え方(書き込み欄に長さを出す) */
+  postLimits?: PostLimits
+  postByteLength?: (text: string) => number
   /** 書き込みの下書き(このスレの書きかけ) */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
@@ -839,6 +842,8 @@ export default function ThreadView(props: Props) {
               cooldownMs={props.postCooldownMs}
               accounts={props.postAccounts}
               draft={props.draft}
+              limits={props.postLimits}
+              byteLength={props.postByteLength}
               onToggleAccount={props.onTogglePostAccount}
               onOpenAccountSettings={props.onOpenAccountSettings}
               onImage={(urls, index) => setLightbox({ urls, index })}

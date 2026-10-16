@@ -37,6 +37,16 @@ function encodeChar(ch: string): number[] {
   return [...`&#${code};`].map((c) => c.charCodeAt(0))
 }
 
+/**
+ * Shift_JIS で送ったときのバイト数(書き込む前に長すぎないか確かめる目安)。
+ * 表にない文字(絵文字など)は &#数字; の長さで、改行はブラウザと同じく CR LF の 2 バイトで数える
+ */
+export function shiftJisByteLength(text: string): number {
+  let n = 0
+  for (const ch of text) n += ch === '\n' ? 2 : encodeChar(ch).length
+  return n
+}
+
 const UNRESERVED = /[A-Za-z0-9*\-._]/
 
 /** application/x-www-form-urlencoded の 1 つの値(Shift_JIS)。空白は + にする */

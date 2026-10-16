@@ -903,17 +903,24 @@ export default function App() {
     if (!settings.tabsEnabled && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
   }, [settings.tabsEnabled, tabs.length, activeId])
 
-  // 開いているスレの板の設定を、まだ取っていなければ取る(名無しの省略に使う)
+  // 開いているスレの板と、スレ一覧に出している板の設定を、まだ取っていなければ取る
+  // (名無しの省略と、書き込みの長さの上限に使う)
   useEffect(() => {
-    const t = activeTab?.thread
-    if (!t || boardInfoAsked.current.has(t.boardUrl)) return
-    boardInfoAsked.current.add(t.boardUrl)
-    const connector = findConnector(t.connectorId)
-    if (!connector?.boardInfo) return
-    void connector
-      .boardInfo({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx)
-      .then((info) => setBoardInfos((m) => new Map(m).set(t.boardUrl, info)))
-  }, [activeTab?.thread])
+    const targets = [
+      activeTab && { connectorId: activeTab.thread.connectorId, url: activeTab.thread.boardUrl },
+      board && { connectorId: board.connectorId, url: board.url },
+    ]
+    for (const b of targets) {
+      if (!b || boardInfoAsked.current.has(b.url)) continue
+      boardInfoAsked.current.add(b.url)
+      const connector = findConnector(b.connectorId)
+      if (!connector?.boardInfo) continue
+      void connector
+        .boardInfo({ connectorId: b.connectorId, url: b.url, name: '' }, ctx)
+        .then((info) => setBoardInfos((m) => new Map(m).set(b.url, info)))
+        .catch(() => undefined)
+    }
+  }, [activeTab?.thread, board])
 
   // 期限の切れた一時 NG を片づける
   useEffect(() => {
@@ -1251,6 +1258,8 @@ export default function App() {
                   postReadyAt={postReadyAt}
                   postCooldownMs={postCooldownMs}
                   postAccounts={postAccountsOf(t.thread.connectorId, t.thread.boardUrl)}
+                  postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
+                  postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
                   ev={stableTabEvents}
                 />
               </div>
@@ -1327,6 +1336,8 @@ export default function App() {
           }
           onUploaded={stableTabEvents.uploaded}
           accounts={postAccountsOf(board.connectorId, board.url)}
+          limits={boardInfos.get(board.url)?.limits}
+          byteLength={findConnector(board.connectorId)?.postByteLength}
           onToggleAccount={stableTabEvents.togglePostAccount}
           onOpenAccountSettings={() => {
             setNewThreadOpen(false)

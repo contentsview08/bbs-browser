@@ -3,10 +3,11 @@
 // 書き込み欄と同じく、画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字が使える。
 
 import { useRef, useState } from 'react'
-import type { NewThreadInput, PostConfirm, PostResult } from '@bbs-browser/connectors'
+import type { NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { useCountdown } from '../hooks/useCountdown'
 import { useMediaInput } from '../hooks/useMediaInput'
+import { measurePost } from '../utils/postLimit'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { UploadOptions } from '../host/uploader'
 
@@ -25,6 +26,9 @@ interface Props {
   uploader?: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  /** 板の書き込みの上限と、その掲示板での数え方 */
+  limits?: PostLimits
+  byteLength?: (text: string) => number
   /** この板で使えるアカウント(BE など)と、使うかどうか */
   accounts: PostAccountOption[]
   onToggleAccount: (id: string, on: boolean) => void
@@ -59,8 +63,11 @@ export default function NewThreadDialog(props: Props) {
   const cooling = cooldown.left > 0
   const ready = title.trim() !== '' && body.trim() !== '' && !sending && !cooling
 
+  // 書き込みの長さ。板の上限を超えていたら、送る前に止める
+  const measure = props.byteLength ? measurePost({ body, name, mail, subject: title }, props.limits, props.byteLength) : undefined
   const submit = async () => {
     if (!ready) return
+    if (measure && measure.over.length > 0) return setResult({ status: 'error', message: measure.over.join(' / ') })
     setSending(true)
     setResult(undefined)
     try {
@@ -144,6 +151,16 @@ export default function NewThreadDialog(props: Props) {
             rows={10}
             className={`${INPUT} resize-y leading-relaxed`}
           />
+          {measure && (
+            <p
+              className={`-mt-2 text-right text-[10px] tabular-nums ${measure.over.length > 0 ? 'text-c-heat-very-hot font-bold' : 'text-c-text-muted'}`}
+              title={measure.over.join('\n') || '書き込みの長さ(目安)'}
+            >
+              {measure.messageBytes}
+              {props.limits?.messageBytes !== undefined && ` / ${props.limits.messageBytes}`} バイト
+              {props.limits?.lines !== undefined && ` ・ ${measure.lines} / ${props.limits.lines} 行`}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">

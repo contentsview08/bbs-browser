@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodeShiftJisComponent, encodeShiftJisForm } from '../src/sjis'
+import { encodeShiftJisComponent, encodeShiftJisForm, shiftJisByteLength } from '../src/sjis'
 import { parseBbsCgiResponse } from '../src/twoch/parse'
 import { twoChConnector } from '../src/twoch/connector'
 import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types'
@@ -206,5 +206,15 @@ describe('createThread', () => {
     expect(form).toMatchObject({ bbs: 'liveedge', subject: '【実況】テスト', MESSAGE: '立てた', submit: '新規スレッド作成' })
     expect(form.key).toBeUndefined()
     expect(sent[0].headers.Referer).toBe('https://bbs.eddibb.cc/liveedge/')
+  })
+})
+
+describe('shiftJisByteLength: 書き込みのバイト数', () => {
+  it('半角は 1、全角は 2、改行は 2、表にない文字は &#数字; の長さ', () => {
+    expect(shiftJisByteLength('abc')).toBe(3)
+    expect(shiftJisByteLength('あいう')).toBe(6)
+    expect(shiftJisByteLength('ｱ')).toBe(1)
+    expect(shiftJisByteLength('a\nb')).toBe(4)
+    expect(shiftJisByteLength('😀')).toBe('&#128512;'.length)
   })
 })

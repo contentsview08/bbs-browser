@@ -2,7 +2,7 @@
 // アプリ側の処理は、関数そのものが変わらない ev(useEvent)で受け取り、ここでこのタブ向けに結びつける
 
 import { memo, useCallback, useMemo } from 'react'
-import type { Post, PostConfirm, PostInput, PostResult, ThreadSummary } from '@bbs-browser/connectors'
+import type { Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import ThreadView, { type ScrollPosition } from './ThreadView'
 import type { NgRule, NgTarget } from '../utils/ng'
@@ -70,10 +70,27 @@ interface Props {
   postCooldownMs: number
   /** この板で使えるアカウント */
   postAccounts?: PostAccountOption[]
+  /** 板の書き込みの上限と、その掲示板での数え方 */
+  postLimits?: PostLimits
+  postByteLength?: (text: string) => number
   ev: TabEvents
 }
 
-function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, postReadyAt, postCooldownMs, postAccounts, ev }: Props) {
+function TabPane({
+  tab,
+  active,
+  settings,
+  isNg,
+  nonameName,
+  jumpTo,
+  favorite,
+  postReadyAt,
+  postCooldownMs,
+  postAccounts,
+  postLimits,
+  postByteLength,
+  ev,
+}: Props) {
   const { id, thread } = tab
   const onSavePosition = useCallback((pos: ScrollPosition) => ev.savePosition(id, pos), [ev, id])
   const onRead = useCallback((no: number) => ev.markRead(thread, no), [ev, thread])
@@ -122,6 +139,8 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, po
       postCooldownMs={postCooldownMs}
       postAccounts={postAccounts}
       draft={draft}
+      postLimits={postLimits}
+      postByteLength={postByteLength}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}
       onToggleFavorite={onToggleFavorite}

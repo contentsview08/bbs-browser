@@ -3,12 +3,13 @@
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
+import type { PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
 import { useCountdown } from '../hooks/useCountdown'
 import type { UploadOptions } from '../host/uploader'
 import { useMediaInput } from '../hooks/useMediaInput'
+import { measurePost } from '../utils/postLimit'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { ReplyLayout } from '../ui/settings'
 
@@ -42,6 +43,9 @@ interface Props {
    * タブを閉じても・アプリを閉じても、書きかけが残るように
    */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
+  /** 板の書き込みの上限と、その掲示板での数え方。本文の欄の右下に長さを出し、超えていたら書き込まない */
+  limits?: PostLimits
+  byteLength?: (text: string) => number
   /** この板で使えるアカウント(BE など)と、使うかどうか。sage の右の ︙ で選ぶ */
   accounts?: PostAccountOption[]
   onToggleAccount?: (id: string, on: boolean) => void
@@ -135,8 +139,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   const cooldown = useCountdown(props.readyAt, props.cooldownMs ?? 0)
   const cooling = cooldown.left > 0
+  // 書き込みの長さ。板の上限を超えていたら、送る前に止める
+  const measure = props.byteLength ? measurePost({ body, name, mail }, props.limits, props.byteLength) : undefined
   const submit = async () => {
     if (!body.trim() || sending || props.disabled || cooling) return
+    if (measure && measure.over.length > 0) return setResult({ status: 'error', message: measure.over.join(' / ') })
     setSending(true)
     setResult(undefined)
     try {
@@ -231,8 +238,20 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}
           disabled={!!props.disabled}
-          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed`}
+          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed pb-6`}
         />
+          {measure && (measure.over.length > 0 || measure.messageBytes > 0) && (
+            <span
+              className={`absolute right-2 bottom-1.5 px-1 rounded text-[10px] tabular-nums pointer-events-none bg-c-surface2 ${
+                measure.over.length > 0 ? 'text-c-heat-very-hot font-bold' : 'text-c-text-muted'
+              }`}
+              title={measure.over.join('\n') || '書き込みの長さ(目安)'}
+            >
+              {measure.messageBytes}
+              {props.limits?.messageBytes !== undefined && ` / ${props.limits.messageBytes}`} バイト
+              {props.limits?.lines !== undefined && ` ・ ${measure.lines} / ${props.limits.lines} 行`}
+            </span>
+          )}
         </div>
       </div>
         {sendButton}

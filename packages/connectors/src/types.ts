@@ -96,6 +96,18 @@ export interface BoardInfo {
   title?: string
   /** 名前を空にして書き込んだときの名前(「名無しさん」など) */
   nonameName?: string
+  /** 書き込みの上限(分かるものだけ)。書き込む前の確かめに使う */
+  limits?: PostLimits
+}
+
+/** 書き込みの上限。バイト数はコネクタの postByteLength で数えた値と比べる */
+export interface PostLimits {
+  messageBytes?: number
+  /** 本文の行数 */
+  lines?: number
+  nameBytes?: number
+  mailBytes?: number
+  subjectBytes?: number
 }
 
 export interface ResolvedUrl {
@@ -185,6 +197,11 @@ export interface Connector {
   submitConfirm?(confirm: PostConfirm, ctx: ConnectorContext): Promise<PostResult>
   /** ブラウザで開くための URL */
   threadWebUrl(thread: ThreadSummary): string
+  /**
+   * 書き込みのバイト数を、その掲示板に送るときの数え方で数える(Shift_JIS なら全角は 2 バイト など)。
+   * BoardInfo.limits と比べて、書き込む前に長すぎないか確かめる
+   */
+  postByteLength?(text: string): number
   /** ログインできるアカウントの種類 */
   accounts?: AccountKind[]
   /**

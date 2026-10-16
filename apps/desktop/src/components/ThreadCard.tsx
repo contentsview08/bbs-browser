@@ -105,15 +105,6 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       )}
       {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
       <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
-        {isNew && (
-          <span
-            className="flex-shrink-0 px-1 rounded text-[10px] font-bold leading-[14px]"
-            style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
-            title="前回この板を見たあとに立ったスレ"
-          >
-            新
-          </span>
-        )}
         {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
         {archived && <span className="whitespace-nowrap">dat落ち</span>}
         <div className="flex items-center gap-5 ml-auto">
@@ -138,6 +129,16 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
             textDecoration: 'var(--thread-list-title-decoration, none)',
           }}
         >
+          {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
+          {isNew && (
+            <span
+              className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
+              style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+              title="前回この板を見たあとに立ったスレ"
+            >
+              新
+            </span>
+          )}
           {isFavorite && (
             <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-c-heat-warm" title="お気に入りのスレ">
               star

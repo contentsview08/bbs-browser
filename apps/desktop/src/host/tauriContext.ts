@@ -32,10 +32,31 @@ async function post(url: string, body: string, opts?: HttpRequestOptions): Promi
   return { status: res.status, headers: res.headers, body: new Uint8Array(res.body) }
 }
 
+/**
+ * 同じ URL を同時に、またはすぐ続けて取りに行かないよう、条件なしの GET の結果を少しのあいだ使い回す。
+ * 板があるかの確かめ → 板を開く、のように、すぐ続けて同じスレ一覧や板の設定を取ることがあるため。
+ * Range や If-Modified-Since を付けた GET(差分の取得)は使い回さない
+ */
+const REUSE_MS = 3000
+const recent = new Map<string, { at: number; res: Promise<HttpResponse> }>()
+function get(url: string, opts?: HttpRequestOptions): Promise<HttpResponse> {
+  if (opts?.headers && Object.keys(opts.headers).length > 0) return request(url, { method: 'GET' }, opts)
+  const now = Date.now()
+  const hit = recent.get(url)
+  if (hit && now - hit.at < REUSE_MS) return hit.res
+  const res = request(url, { method: 'GET' }, opts)
+  recent.set(url, { at: now, res })
+  // 失敗したものは使い回さない
+  res.catch(() => recent.delete(url))
+  // 古いものを捨てる
+  for (const [k, v] of recent) if (now - v.at >= REUSE_MS) recent.delete(k)
+  return res
+}
+
 export const tauriContext: ConnectorContext = {
   decode: (bytes, encoding) => new TextDecoder(encoding).decode(bytes),
   http: {
-    get: (url, opts) => request(url, { method: 'GET' }, opts),
+    get,
     post,
   },
 }

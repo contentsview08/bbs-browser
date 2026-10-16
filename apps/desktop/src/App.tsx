@@ -62,6 +62,9 @@ import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
+/** お気に入りのスレの確認とキーワードの見張りで、少し前に取ったスレ一覧を使い回す長さ */
+const WATCH_LIST_REUSE_MS = 60_000
+
 /** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
 const TAB_REPEAT_SETTLE_MS = 200
 
@@ -291,6 +294,18 @@ export default function App() {
   const boardRef = useRef<Board | undefined>(undefined)
   boardRef.current = board
 
+  /**
+   * 板ごとの、少し前に取ったスレ一覧。お気に入りのスレの確認とキーワードの見張り(裏の処理)だけが使い回す
+   * (同じ板のスレ一覧を、裏の処理どうしや、手で開いた直後に、何度も取りに行かないため)。手で開く・更新するときは、いつも取り直す
+   */
+  const recentLists = useRef(new Map<string, { at: number; list: ThreadSummary[] }>())
+  const listForWatch = async (b: Board): Promise<ThreadSummary[]> => {
+    const hit = recentLists.current.get(b.url)
+    if (hit && Date.now() - hit.at < WATCH_LIST_REUSE_MS) return hit.list
+    const list = await connectorOf(b.connectorId).listThreads(b, ctx)
+    recentLists.current.set(b.url, { at: Date.now(), list })
+    return list
+  }
   /** いま出している板で「新」の印を付ける境目の時刻(前回その板の一覧を取った時刻)。初めての板なら undefined */
   const [newSince, setNewSince] = useState<number>()
   const lastBoardUrl = useRef(settings.lastBoardUrl)
@@ -309,6 +324,7 @@ export default function App() {
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
+      recentLists.current.set(b.url, { at: Date.now(), list })
       setThreads(list)
       setStates(st)
     })
@@ -402,7 +418,10 @@ export default function App() {
       const connectorId = entries[0].thread.connectorId
       let subject: Map<string, ThreadSummary>
       try {
-        const threads = await connectorOf(connectorId).listThreads({ connectorId, url: boardUrl, name: '' }, ctx)
+        // 裏で確かめるときは、少し前に取った一覧を使い回す(まとめて更新は取り直す)
+        const b = { connectorId, url: boardUrl, name: '' }
+        const threads = fetchDats ? await connectorOf(connectorId).listThreads(b, ctx) : await listForWatch(b)
+        if (fetchDats) recentLists.current.set(boardUrl, { at: Date.now(), list: threads })
         subject = new Map(threads.map((t) => [t.key, t]))
       } catch {
         continue // 板ごと取れなかったら、この板は今回は見送る
@@ -453,7 +472,7 @@ export default function App() {
       const now = Date.now()
       let list: ThreadSummary[]
       try {
-        list = await connectorOf(b.connectorId).listThreads(b, ctx)
+        list = await listForWatch(b)
       } catch {
         continue
       }

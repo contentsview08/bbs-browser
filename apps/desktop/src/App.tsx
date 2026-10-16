@@ -994,7 +994,8 @@ export default function App() {
 
   return (
     // isolate: 背景画像(-z-10)を、この枠の背景の上・パネルの下に置くため
-    <div className="relative isolate flex h-full w-full overflow-hidden bg-c-base text-c-text-body">
+    // 一番上にアドレスバーの帯をウィンドウの幅いっぱいに置き、その下にサイドバーと本体を並べる
+    <div className="relative isolate flex flex-col h-full w-full overflow-hidden bg-c-base text-c-text-body">
       {/* 背景画像。パネルの後ろに置き、パネルを透かしたところに見える */}
       {settings.backgroundImage && settings.backgroundOpacity > 0 && (
         <div
@@ -1005,6 +1006,15 @@ export default function App() {
           }}
         />
       )}
+      <AddressBar
+        currentUrl={currentUrl}
+        onOpen={(url) => void openUrlInApp(url)}
+        onToggleList={narrow ? () => setListOpen((v) => !v) : undefined}
+        listOpen={listOpen}
+        sidebarCollapsed={settings.sidebarCollapsed}
+        onToggleSidebar={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
+      />
+      <div className="flex-1 min-h-0 flex">
       <Sidebar
         favorites={favorites ?? []}
         onReorderFavorites={(urls) =>
@@ -1026,7 +1036,6 @@ export default function App() {
         onToggleFavorite={toggleFavorite}
         collapsed={settings.sidebarCollapsed}
         boardMeta={settings.boardMeta}
-        onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         historyActive={history !== undefined}
         onOpenHistory={openHistory}
         favThreadsActive={favView}
@@ -1037,12 +1046,6 @@ export default function App() {
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-      <AddressBar
-        currentUrl={currentUrl}
-        onOpen={(url) => void openUrlInApp(url)}
-        onToggleList={narrow ? () => setListOpen((v) => !v) : undefined}
-        listOpen={listOpen}
-      />
       {/* overflow-hidden: しまったスレ一覧がサイドバーの上にはみ出して見えないように */}
       <div className="relative flex-1 min-h-0 flex overflow-hidden">
 
@@ -1174,6 +1177,7 @@ export default function App() {
             </main>
           )}
         </div>
+      </div>
       </div>
       </div>
       </div>

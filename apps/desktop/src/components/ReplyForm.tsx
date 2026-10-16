@@ -2,7 +2,7 @@
 // 大きさは親が決め、本文の欄が残りいっぱいに広がる。
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
@@ -37,6 +37,11 @@ interface Props {
   onImage?: (urls: string[], index: number) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  /**
+   * 書きかけの本文を覚えておく所(スレごと)。開いたときに読み、書くのが止まったら保存し、書き込めたら消す。
+   * タブを閉じても・アプリを閉じても、書きかけが残るように
+   */
+  draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(BE など)と、使うかどうか。sage の右の ︙ で選ぶ */
   accounts?: PostAccountOption[]
   onToggleAccount?: (id: string, on: boolean) => void
@@ -54,13 +59,53 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [result, setResult] = useState<PostResult>()
   const textRef = useRef<HTMLTextAreaElement>(null)
 
+  // ── 下書き ──
+  const draftRef = useRef(props.draft)
+  draftRef.current = props.draft
+  const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const pendingDraft = useRef<string | undefined>(undefined)
+  /** 書くのが止まって少ししたら保存する(1 文字ごとに DB へ書かないように) */
+  const saveDraftLater = (next: string) => {
+    pendingDraft.current = next
+    clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      pendingDraft.current = undefined
+      draftRef.current?.save(next)
+    }, 400)
+  }
+  // 開いたら、覚えておいた書きかけを戻す(もう何か書いていたら、そちらを優先する)
+  useEffect(() => {
+    let alive = true
+    void props.draft?.load().then((saved) => {
+      if (alive && saved) setBody((b) => (b === '' ? saved : b))
+    })
+    return () => {
+      alive = false
+      // 保存し損ねた書きかけは、閉じるときに保存する
+      clearTimeout(draftTimer.current)
+      if (pendingDraft.current !== undefined) draftRef.current?.save(pendingDraft.current)
+    }
+  }, [])
+  /** 書き込めたら、本文も下書きも消す */
+  const clearBody = () => {
+    setBody('')
+    clearTimeout(draftTimer.current)
+    pendingDraft.current = undefined
+    draftRef.current?.save('')
+  }
+  /** 本文を変える(下書きにも残す) */
+  const changeBody = (next: string) => {
+    setBody(next)
+    saveDraftLater(next)
+  }
+
   /** 本文のカーソルの位置に文字を入れる */
   const insert = (text: string) => {
     const el = textRef.current
-    if (!el) return setBody((b) => b + text)
+    if (!el) return changeBody(body + text)
     const start = el.selectionStart
     const next = body.slice(0, start) + text + body.slice(el.selectionEnd)
-    setBody(next)
+    changeBody(next)
     requestAnimationFrame(() => {
       el.focus()
       el.selectionStart = el.selectionEnd = start + text.length
@@ -80,7 +125,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     try {
       const r = await props.onConfirm(c, { name, mail, body })
       setResult(r)
-      if (r.status === 'ok') setBody('')
+      if (r.status === 'ok') clearBody()
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -97,7 +142,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     try {
       const r = await props.onSubmit({ name, mail, body })
       setResult(r)
-      if (r.status === 'ok') setBody('')
+      if (r.status === 'ok') clearBody()
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -176,7 +221,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         <textarea
           ref={textRef}
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => changeBody(e.target.value)}
           {...media.textareaProps}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {

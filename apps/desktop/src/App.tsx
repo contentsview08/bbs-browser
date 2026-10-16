@@ -1027,6 +1027,8 @@ export default function App() {
     toggleFavoriteThread: useEvent((t: ThreadSummary) => toggleFavoriteThread(t)),
     togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
     openAccountSettings: useEvent(() => setSettingsTab('accounts')),
+    loadDraft: useEvent(async (t: ThreadSummary) => store?.getDraft(t)),
+    saveDraft: useEvent((t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(() => undefined)),
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const tabEventsRef = useRef(tabEvents)

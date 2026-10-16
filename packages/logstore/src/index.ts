@@ -437,6 +437,30 @@ export class LogStore {
     await this.db.execute('DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', [thread.boardUrl, thread.key])
   }
 
+  // ── 書き込みの下書き ──
+
+  async getDraft(thread: ThreadSummary): Promise<string | undefined> {
+    const [row] = await this.db.select<{ body: string }>('SELECT body FROM drafts WHERE board_url = $1 AND key = $2', [
+      thread.boardUrl,
+      thread.key,
+    ])
+    return row?.body
+  }
+
+  /** 空なら消す(書き込めたときや、本文を全部消したとき) */
+  async setDraft(thread: ThreadSummary, body: string, now = Date.now()): Promise<void> {
+    if (body.trim() === '') {
+      await this.db.execute('DELETE FROM drafts WHERE board_url = $1 AND key = $2', [thread.boardUrl, thread.key])
+      return
+    }
+    await this.db.execute('INSERT OR REPLACE INTO drafts (board_url, key, body, updated_at) VALUES ($1, $2, $3, $4)', [
+      thread.boardUrl,
+      thread.key,
+      body,
+      now,
+    ])
+  }
+
   // ── アカウント ──
 
   async listAccounts(): Promise<AccountRecord[]> {

@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql', '012_drafts.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -310,5 +310,18 @@ describe('アカウント', () => {
     expect(await store.listAccounts()).toEqual([{ ...be, password: 'q', autoLogin: false }])
     await store.deleteAccount('2ch-compat', 'be')
     expect(await store.listAccounts()).toEqual([])
+  })
+})
+
+describe('書き込みの下書き', () => {
+  it('スレごとに覚え、空にしたら消す', async () => {
+    await store.setDraft(thread, '書きかけ')
+    await store.setDraft({ ...thread, key: '1' }, 'ほかのスレ')
+    expect(await store.getDraft(thread)).toBe('書きかけ')
+    await store.setDraft(thread, '書き足した')
+    expect(await store.getDraft(thread)).toBe('書き足した')
+    await store.setDraft(thread, '  ')
+    expect(await store.getDraft(thread)).toBeUndefined()
+    expect(await store.getDraft({ ...thread, key: '1' })).toBe('ほかのスレ')
   })
 })

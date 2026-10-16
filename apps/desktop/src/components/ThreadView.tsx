@@ -85,6 +85,8 @@ interface Props {
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
   postReadyAt?: number
   postCooldownMs: number
+  /** 書き込みの下書き(このスレの書きかけ) */
+  draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
   postAccounts?: PostAccountOption[]
   onTogglePostAccount?: (id: string, on: boolean) => void
@@ -836,6 +838,7 @@ export default function ThreadView(props: Props) {
               readyAt={props.postReadyAt}
               cooldownMs={props.postCooldownMs}
               accounts={props.postAccounts}
+              draft={props.draft}
               onToggleAccount={props.onTogglePostAccount}
               onOpenAccountSettings={props.onOpenAccountSettings}
               onImage={(urls, index) => setLightbox({ urls, index })}

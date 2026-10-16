@@ -1,7 +1,7 @@
 // タブ 1 つぶんのスレ表示。中身(そのタブのログや状態)・設定・開いているかが変わったときだけ描き直す(memo)。
 // アプリ側の処理は、関数そのものが変わらない ev(useEvent)で受け取り、ここでこのタブ向けに結びつける
 
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import type { Post, PostConfirm, PostInput, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import ThreadView, { type ScrollPosition } from './ThreadView'
@@ -50,6 +50,9 @@ export interface TabEvents {
   toggleFavoriteThread: (t: ThreadSummary) => void
   /** 書き込むときに使うアカウントのオン・オフ(どの板でも同じ) */
   togglePostAccount: (id: string, on: boolean) => void
+  /** 書き込みの下書きを読む・保存する(空なら消す) */
+  loadDraft: (t: ThreadSummary) => Promise<string | undefined>
+  saveDraft: (t: ThreadSummary, body: string) => void
   openAccountSettings: () => void
 }
 
@@ -77,6 +80,7 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, po
   const onOpenInBrowser = useCallback(() => ev.openInBrowser(thread), [ev, thread])
   const onDeleteLog = useCallback(() => ev.deleteLog(id), [ev, id])
   const title = tab.log.title || thread.title
+  const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body) }), [ev, thread])
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
@@ -117,6 +121,7 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, po
       postReadyAt={postReadyAt}
       postCooldownMs={postCooldownMs}
       postAccounts={postAccounts}
+      draft={draft}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}
       onToggleFavorite={onToggleFavorite}

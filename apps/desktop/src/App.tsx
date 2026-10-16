@@ -16,7 +16,7 @@ import {
   type SiteConfig,
   type ThreadSummary,
 } from '@bbs-browser/connectors'
-import type { HistoryEntry, LogStore, ThreadLog, ThreadState } from '@bbs-browser/logstore'
+import type { HistoryEntry, LogStore, ThreadLog, ThreadState, UploadRecord } from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications, { type AppNotification } from './components/Notifications'
@@ -24,6 +24,7 @@ import { anchorsIn } from './utils/postBody'
 import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
+import UploadHistoryDialog from './components/UploadHistoryDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu from './components/StyleMenu'
 import TabBar from './components/TabBar'
@@ -104,6 +105,13 @@ export default function App() {
   /** サイドバーに出す直近の閲覧履歴 */
   const [recentHistory, setRecentHistory] = useState<ThreadSummary[]>([])
   const reloadRecent = async (s: LogStore) => setRecentHistory((await s.history(10)).map((h) => h.thread))
+  /** 画像のアップロード履歴(開いているときだけ中身を持つ) */
+  const [uploads, setUploads] = useState<UploadRecord[]>()
+  const [hasUploads, setHasUploads] = useState(false)
+  const openUploads = () =>
+    run(null, async () => {
+      if (store) setUploads(await store.listUploads())
+    })
   /** アプリ内の通知(右下) */
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const notifySeq = useRef(0)
@@ -144,6 +152,7 @@ export default function App() {
       const s = await openLogStore()
       initFavicons(s)
       void reloadRecent(s)
+      void s.listUploads(1).then((u) => setHasUploads(u.length > 0))
       const [list, favs] = await Promise.all([s.listSites(), s.listFavorites()])
       setStore(s)
       setSites(list)
@@ -682,6 +691,7 @@ export default function App() {
         onOpenThread={(t) => void openThread(t)}
         onDeleteHistory={(t) => void deleteLogs([], [t])}
         showStripNames={settings.showStripNames}
+        onOpenUploads={settings.uploaderEnabled || hasUploads ? () => void openUploads() : undefined}
         activeBoardUrl={board?.url}
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
@@ -807,6 +817,10 @@ export default function App() {
             onDeleteLog={() => void deleteLogs([activeTab.id])}
             nonameName={boardInfos.get(activeTab.thread.boardUrl)?.nonameName}
             jumpTo={jump?.tabId === activeTab.id ? jump : undefined}
+            onUploaded={(u) => {
+              setHasUploads(true)
+              void store?.addUpload(u)
+            }}
           />
         ) : (
           <main className="flex-1 flex items-center justify-center bg-panel-view">
@@ -816,6 +830,21 @@ export default function App() {
       </div>
       </div>
       </div>
+
+      {uploads && (
+        <UploadHistoryDialog
+          uploads={uploads}
+          onOpen={(url) => void openUrl(url)}
+          onRemove={(url) =>
+            void run(null, async () => {
+              if (!store) return
+              await store.removeUpload(url)
+              setUploads(await store.listUploads())
+            })
+          }
+          onClose={() => setUploads(undefined)}
+        />
+      )}
 
       <Notifications items={notifications} onClose={(id) => setNotifications((ns) => ns.filter((n) => n.id !== id))} />
 

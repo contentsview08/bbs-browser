@@ -68,6 +68,8 @@ interface Props {
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
+  /** 上げ終わった画像(アップロード履歴に残す) */
+  onUploaded: (u: { url: string; name: string; size: number }) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
   jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
@@ -86,6 +88,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
 ]
 /** 未読の頭を置く位置(見えている範囲の上からの割合)。上の 3 割には既読のレスを残す */
 const UNREAD_AT = 0.3
+/** 一番下へ飛ぶのにかける時間 */
+const JUMP_MS = 300
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
@@ -430,11 +434,29 @@ export default function ThreadView(props: Props) {
     if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, 'smooth')
   }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
 
+  // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す
+  const [showJump, setShowJump] = useState(false)
+  const jumpToBottom = () => {
+    const root = ref.current
+    if (!root) return
+    // ブラウザのなめらかなスクロールは距離が長いと遅いので、時間を決めて自前で動かす(素早く、終わりだけゆっくり)
+    const from = root.scrollTop
+    const start = performance.now()
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / JUMP_MS)
+      const to = root.scrollHeight - root.clientHeight
+      root.scrollTop = from + (to - from) * (1 - (1 - t) ** 3)
+      if (t < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }
+
   useEffect(() => {
     const root = ref.current
     if (!root) return
     let timer: ReturnType<typeof setTimeout>
     const onScroll = () => {
+      setShowJump(root.scrollHeight - root.scrollTop - root.clientHeight > root.clientHeight)
       clearTimeout(timer)
       timer = setTimeout(reportRead, 300)
     }
@@ -652,14 +674,6 @@ export default function ThreadView(props: Props) {
               </span>
             )}
             
-            <button
-              type="button"
-              className={ICON_BTN}
-              title="いちばん下へ"
-              onClick={() => ref.current?.scrollTo({ top: ref.current.scrollHeight })}
-            >
-              <span className="material-symbols-outlined text-xl">vertical_align_bottom</span>
-            </button>
             {props.onSubmitPost && (
               <button
                 type="button"
@@ -730,6 +744,18 @@ export default function ThreadView(props: Props) {
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
+      <button
+        type="button"
+        onClick={jumpToBottom}
+        title="いちばん下へ"
+        className={`absolute bottom-5 z-20 w-11 h-11 flex items-center justify-center rounded-full bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
+          showJump ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
+        }`}
+        // ミニマップを出しているときは、その左に置く
+        style={{ right: settings.showMinimap ? 44 : 20 }}
+      >
+        <span className="material-symbols-outlined text-2xl">keyboard_double_arrow_down</span>
+      </button>
       <div
         ref={topPull.indicatorRef}
         className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
@@ -824,6 +850,7 @@ export default function ThreadView(props: Props) {
               initialMail={props.postMail}
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
+              onUploaded={props.onUploaded}
               uploader={
                 settings.uploaderEnabled
                   ? { stripMetadata: settings.uploadStripMetadata, maxDimension: settings.uploadMaxDimension }

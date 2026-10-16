@@ -24,6 +24,8 @@ interface Props {
   onOpenThread: (t: ThreadSummary) => void
   onDeleteHistory: (t: ThreadSummary) => void
   onOpenSettings: () => void
+  /** 画像のアップロード履歴を開く。アップロードを使っていなければ undefined(行を出さない) */
+  onOpenUploads?: () => void
   /** 設定画面の板一覧を開く(板を足したいとき) */
   onManageBoards: () => void
   collapsed: boolean
@@ -53,12 +55,12 @@ function Row(props: {
       type="button"
       onClick={props.onClick}
       title={props.label}
-      className={`w-full h-12 flex items-center transition-colors hover:bg-c-surface2 ${
+      className={`w-full h-14 flex items-center transition-colors hover:bg-c-surface2 ${
         props.active ? 'text-c-accent' : 'text-c-text-strong'
       }`}
     >
       <span className="w-16 flex-shrink-0 flex items-center justify-center">
-        <span className={`material-symbols-outlined text-2xl ${props.filled ? 'fill' : ''}`}>{props.icon}</span>
+        <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`}>{props.icon}</span>
       </span>
       <span className="flex-1 min-w-0 text-left text-lg font-medium truncate">{props.label}</span>
       {props.trailing}
@@ -88,9 +90,12 @@ export default function Sidebar(props: Props) {
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const collapsed = props.collapsed && !peek
   const nameOf = (b: Board) => props.boardMeta[b.url]?.alias || b.name
-  // しまったときに板名を出すなら、アイコンの下に名前が入るぶん行を高くする
+  // 板名を出す設定なら、アイコンの下に名前が入るぶん行を高くする。
+  // 開いたときも高さを変えない(変えるとファビコンの縦の位置がずれる)。小さな板名は、開いたら薄く消すだけ
   const stripNames = collapsed && props.showStripNames
-  const rowH = stripNames ? 52 : 36
+  const rowH = props.showStripNames ? 56 : 42
+  /** ファビコンの大きさ。開閉で変えない */
+  const ICON = 24
 
   // ── お気に入り板の並べ替え(つかんで上下に動かす) ──
   const [drag, setDrag] = useState<{ url: string; from: number; dy: number; over: number }>()
@@ -203,13 +208,31 @@ export default function Sidebar(props: Props) {
                       transition: dragging ? 'none' : 'transform 150ms ease-out',
                     }}
                     className={`group relative flex items-center cursor-pointer select-none transition-colors hover:bg-c-surface2 ${
-                      active ? 'active-board' : ''
-                    } ${dragging ? 'z-10 bg-c-surface2 shadow-lg' : ''}`}
+                      dragging ? 'z-10 bg-c-surface2 shadow-lg' : ''
+                    }`}
                   >
+                    {/* 選んでいる板の印。中身を押さないよう、重ねて描く(ファビコンが右へずれないように) */}
+                    {active && (
+                      <span
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          background: 'color-mix(in srgb, var(--c-accent) 10%, transparent)',
+                          boxShadow: 'inset 4px 0 0 var(--c-accent)',
+                        }}
+                      />
+                    )}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
                     <span className="w-16 flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
-                      <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={stripNames ? 20 : 18} />
-                      {stripNames && <span className="w-14 text-center text-[9px] leading-tight text-c-text-muted truncate">{nameOf(b)}</span>}
+                      <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
+                      {props.showStripNames && (
+                        <span
+                          className={`w-14 text-center text-[9px] leading-tight text-c-text-muted truncate transition-opacity duration-200 ${
+                            stripNames ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        >
+                          {nameOf(b)}
+                        </span>
+                      )}
                     </span>
                     <span className={`flex-1 min-w-0 text-[1.0625rem] truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
                       {nameOf(b)}
@@ -284,6 +307,7 @@ export default function Sidebar(props: Props) {
               </button>
             </div>
           )}
+          {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" onClick={props.onOpenUploads} />}
         </nav>
 
         <div className="py-1 border-t border-c-border">

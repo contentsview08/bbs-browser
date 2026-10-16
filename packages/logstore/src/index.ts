@@ -12,6 +12,14 @@ export interface SqlDb {
   select<T>(sql: string, params?: unknown[]): Promise<T[]>
 }
 
+/** アップロードした画像 1 枚ぶん */
+export interface UploadRecord {
+  url: string
+  name: string
+  size: number
+  uploadedAt: number
+}
+
 export interface ThreadState {
   /** 手元に保存してあるレス数 */
   postCount: number
@@ -116,6 +124,30 @@ export class LogStore {
     for (const [i, url] of urls.entries()) {
       await this.db.execute('UPDATE favorite_boards SET sort = $1 WHERE url = $2', [i, url])
     }
+  }
+
+  // ── 画像のアップロード履歴 ──
+
+  async addUpload(u: Omit<UploadRecord, 'uploadedAt'>, now = Date.now()): Promise<void> {
+    await this.db.execute('INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at) VALUES ($1, $2, $3, $4)', [
+      u.url,
+      u.name,
+      u.size,
+      now,
+    ])
+  }
+
+  async listUploads(limit = 200): Promise<UploadRecord[]> {
+    const rows = await this.db.select<{ url: string; name: string; size: number; uploaded_at: number }>(
+      'SELECT url, name, size, uploaded_at FROM uploads ORDER BY uploaded_at DESC LIMIT $1',
+      [limit],
+    )
+    return rows.map((r) => ({ url: r.url, name: r.name, size: r.size, uploadedAt: r.uploaded_at }))
+  }
+
+  /** アプリの履歴から消す(サーバー上のファイルは消えない) */
+  async removeUpload(url: string): Promise<void> {
+    await this.db.execute('DELETE FROM uploads WHERE url = $1', [url])
   }
 
   // ── ファビコンのキャッシュ ──

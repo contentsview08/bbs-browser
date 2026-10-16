@@ -32,6 +32,10 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   色は `c-*` の Tailwind クラス(CSS 変数)だけを使い、固定色や `slate-*` を新しく書かない。
   表示設定は `<html>` の `data-scheme` / `data-pattern` / `data-density` で切り替わる(`src/ui/settings.ts`)。
 - フォントは npm パッケージで同梱する(Google Fonts は使わない。通信なしでも同じ見た目にするため)。
+- スレ表示のスクロール(開いたときの位置・既読・新着の追いかけ)は `src/hooks/useThreadScroll.ts` にまとめ、
+  どこへ動かすか・どこまで読んだかの判断は `src/utils/threadScroll.ts` の関数に分けてテストする(`apps/desktop/test/`)。
+  画面の外のレスは content-visibility で省いているので、仮の高さ(覚えておいた高さか本文からの見積もり)を style で渡す。
+- 残しておくタブのスレ表示は、並び順を変えない(要素が付け替えられるとスクロール位置が一番上に戻る)。
 
 ## 開発環境
 
@@ -41,7 +45,7 @@ Linux 用の node_modules を作らないこと(Windows 側で `npm install` し
 ```
 npm install
 npm run dev        # tauri dev
-npm test           # コネクタのテスト(vitest)
+npm test           # コネクタ・logstore・desktop のテスト(vitest)
 npm run typecheck
 ```
 
@@ -49,6 +53,8 @@ npm run typecheck
 
 1. アカウント: BE・UPLIFT・どんぐりなど、サイトごとのログイン。ログイン機構(hono-bbs のアカウント)は作らない。
    Cookie は plugin-http の cookies 機能(有効化済み)で持つ。パスワードなどの資格情報は settings 表に入れず、
-   OS の資格情報ストア(Windows 資格情報マネージャー等)に置く
-2. web 版から残りを移植(OGP のリンクプレビュー)
-3. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)
+   OS の資格情報ストア(Windows 資格情報マネージャー等)に置く。使える機能はサイトごとに違うので、サイトごとの設定画面を作る
+2. スレ単位のお気に入り(新着をまとめて確かめる)。画面への出し方はユーザーと相談中
+3. 自動 NG(連投・コピペ)は保留。判断用の軽量 LLM を内蔵する案と合わせて考える
+4. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)
+5. 配布(インストーラー・自動更新)

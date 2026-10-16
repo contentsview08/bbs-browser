@@ -4,7 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
@@ -350,7 +350,19 @@ export default function ThreadView(props: Props) {
     return map
   }, [log.posts])
 
-  const { scrollToPost, scrollToUnread, jumpToBottom, jumpToTop, stepPost, page, showJump, flashNos, intrinsicHeight } = useThreadScroll({
+  const {
+    scrollToPost,
+    scrollToUnread,
+    jumpToBottom,
+    jumpToTop,
+    stepPost,
+    page,
+    showJump,
+    flashNos,
+    intrinsicHeight,
+    getPosition,
+    restorePosition,
+  } = useThreadScroll({
     rootRef: ref,
     listRef,
     headerRef,
@@ -469,6 +481,29 @@ export default function ThreadView(props: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [props.active, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
+
+  // 絞り込み(人気レス・画像・検索など)を始めたときの位置を覚え、解いたらそこへ戻す。
+  // 絞り込んだ一覧の一番下まで見てから解いたときは、全体の一番下へ(読み進めた続きから読めるように)。
+  // 何もしないと、レスの高さが大きく変わってスクロールの位置だけが残り、一番上の方へ飛んでしまう
+  const filtering = visibleNos !== undefined
+  const beforeFilter = useRef<ScrollPosition | undefined>(undefined)
+  /** 絞り込んだ一覧がスクロールできる長さか(1 画面に収まるときは「一番下まで見た」と数えない) */
+  const filteredScrollable = useRef(false)
+  useLayoutEffect(() => {
+    const root = ref.current
+    if (filtering && root) filteredScrollable.current = root.scrollHeight - root.clientHeight > 80
+  }, [visibleNos])
+  useLayoutEffect(() => {
+    if (filtering) {
+      beforeFilter.current ??= getPosition()
+      return
+    }
+    const before = beforeFilter.current
+    beforeFilter.current = undefined
+    if (!before) return
+    const readToEnd = filteredScrollable.current && getPosition()?.bottom
+    restorePosition(readToEnd ? { ...before, bottom: true } : before)
+  }, [filtering])
 
   // 見えなくなったら(別のタブに移ったら)、開いていたポップアップと画像を閉じる
   useEffect(() => {

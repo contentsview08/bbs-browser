@@ -229,6 +229,22 @@ export function useThreadScroll(o: Options) {
     if (root) animateScroll(root, () => 0)
   }, [rootRef])
 
+  /** いま読んでいる位置(一番上に見えているレスと、一番下にいるか) */
+  const getPosition = useCallback((): ScrollPosition | undefined => position.current && { ...position.current, bottom: atBottom.current }, [])
+
+  /** 覚えておいた位置へすぐ戻す(一番下にいたなら一番下へ)。絞り込みを解いたときなどに使う */
+  const restorePosition = useCallback(
+    (pos: ScrollPosition) => {
+      const root = rootRef.current
+      if (!root) return
+      if (pos.bottom) return animateScroll(root, () => root.scrollHeight, 0)
+      const el = root.querySelector<HTMLElement>(`[data-post="${pos.no}"]`)
+      if (!el) return
+      animateScroll(root, () => root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - pos.offset, 0)
+    },
+    [rootRef, headerOffset],
+  )
+
   /** 次(dir=1)・前(dir=-1)のレスの頭を、ヘッダーのすぐ下に合わせる(キー操作) */
   const stepPost = useCallback(
     (dir: 1 | -1) => {
@@ -445,5 +461,17 @@ export function useThreadScroll(o: Options) {
     if (o.active && positioned.current) reportRead()
   }, [o.active, reportRead])
 
-  return { scrollToPost, scrollToUnread, jumpToBottom, jumpToTop, stepPost, page, showJump, flashNos, intrinsicHeight }
+  return {
+    scrollToPost,
+    scrollToUnread,
+    jumpToBottom,
+    jumpToTop,
+    stepPost,
+    page,
+    showJump,
+    flashNos,
+    intrinsicHeight,
+    getPosition,
+    restorePosition,
+  }
 }

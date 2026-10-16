@@ -438,8 +438,13 @@ export default function ThreadView(props: Props) {
       id: 'refresh',
       label: '更新',
       icon: 'refresh',
-      disabled: props.loading || Date.now() < (props.refreshReadyAt ?? 0),
-      onClick: () => void props.onRefresh(),
+      disabled: props.loading,
+      // 押せるかは押した時点で決める(描いた時刻で決めると、クールダウンが明けても描き直すまで押せない)
+      onClick: () => {
+        const left = (props.refreshReadyAt ?? 0) - Date.now()
+        if (left > 0) return showQuick(false, `続けて取りに行かないよう、あと ${Math.ceil(left / 1000)} 秒で更新できます`)
+        void props.onRefresh()
+      },
       // 帯に置いたときは、クールダウンの残りが見えるボタンにする
       render: () => (
         <RefreshButton

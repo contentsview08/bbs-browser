@@ -274,7 +274,8 @@ export default function ThreadListPanel(props: Props) {
             id: 'refresh',
             label: 'スレッド一覧を更新',
             icon: 'refresh',
-            disabled: props.loading || Date.now() < (props.refreshReadyAt ?? 0),
+            // 押せるかは押した時点で決める(クールダウン中なら App が取りに行かない。残りは帯の更新ボタンに出る)
+            disabled: props.loading,
             onClick: () => void props.onRefresh?.(),
             render: () => (
               <RefreshButton

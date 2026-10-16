@@ -1,0 +1,3 @@
+TOP=https://jbbs.shitaraba.net/computer/351/
+BBS_TITLE=テスト板
+BBS_NONAME_NAME=名無しさん

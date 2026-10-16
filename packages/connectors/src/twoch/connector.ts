@@ -181,6 +181,8 @@ export const twoChConnector: Connector = {
   capabilities: { post: true, images: false, incremental: true },
 
   canHandle(url) {
+    // したらばは専用のコネクタで読む
+    if (/^https?:\/\/jbbs\.(?:shitaraba\.net|livedoor\.jp)\//.test(url)) return false
     return THREAD_URL.test(url) || BOARD_URL.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
   },
 

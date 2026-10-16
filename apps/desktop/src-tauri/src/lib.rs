@@ -93,6 +93,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/007_upload_account.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "ogp_cache",
+            sql: include_str!("../../../../packages/logstore/migrations/008_ogp.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

@@ -38,6 +38,7 @@ import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
+import { initOgp } from './host/ogp'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
@@ -144,6 +145,7 @@ export default function App() {
     void run(null, async () => {
       const s = await openLogStore()
       initFavicons(s)
+      initOgp(s)
       void reloadRecent(s)
       void s.listUploads(1).then((u) => setHasUploads(u.length > 0))
       const [list, favs] = await Promise.all([s.listSites(), s.listFavorites()])

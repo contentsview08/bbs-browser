@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -239,5 +239,18 @@ describe('アップロード履歴', () => {
     expect(await store.listUploads()).toEqual([
       { url: 'https://files.catbox.moe/a.png', name: 'a.png', size: 10, uploadedAt: 1000, withAccount: false },
     ])
+  })
+})
+
+describe('リンクのプレビュー', () => {
+  it('覚えて、取れなかったページも null として覚え、古いものは捨てる', async () => {
+    await store.setOgp('https://a.example/', '{"title":"A"}', 1000)
+    await store.setOgp('https://b.example/', null, 2000)
+    expect(await store.getOgp('https://a.example/')).toEqual({ data: '{"title":"A"}', fetchedAt: 1000 })
+    expect(await store.getOgp('https://b.example/')).toEqual({ data: null, fetchedAt: 2000 })
+    expect(await store.getOgp('https://c.example/')).toBeNull()
+    await store.pruneOgp(1500)
+    expect(await store.getOgp('https://a.example/')).toBeNull()
+    expect(await store.getOgp('https://b.example/')).not.toBeNull()
   })
 })

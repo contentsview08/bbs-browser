@@ -200,6 +200,26 @@ export class LogStore {
     await this.db.execute('INSERT OR REPLACE INTO favicons (key, data, fetched_at) VALUES ($1, $2, $3)', [key, data, now])
   }
 
+  // ── リンクのプレビュー(OGP) ──
+
+  /** 覚えておいたプレビュー。data が null のものは「何も取れなかった」ページ */
+  async getOgp(url: string): Promise<{ data: string | null; fetchedAt: number } | null> {
+    const [row] = await this.db.select<{ data: string | null; fetched_at: number }>(
+      'SELECT data, fetched_at FROM ogp_cache WHERE url = $1',
+      [url],
+    )
+    return row ? { data: row.data, fetchedAt: row.fetched_at } : null
+  }
+
+  async setOgp(url: string, data: string | null, now = Date.now()): Promise<void> {
+    await this.db.execute('INSERT OR REPLACE INTO ogp_cache (url, data, fetched_at) VALUES ($1, $2, $3)', [url, data, now])
+  }
+
+  /** 古いプレビューを捨てる(増え続けないように) */
+  async pruneOgp(olderThan: number): Promise<void> {
+    await this.db.execute('DELETE FROM ogp_cache WHERE fetched_at < $1', [olderThan])
+  }
+
   async removeFavorite(url: string): Promise<void> {
     await this.db.execute('DELETE FROM favorite_boards WHERE url = $1', [url])
   }

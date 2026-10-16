@@ -817,6 +817,7 @@ export default function ThreadView(props: Props) {
               initialMail={props.postMail}
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
+              uploader={settings.uploaderEnabled ? { stripMetadata: settings.uploadStripMetadata } : undefined}
               onOpenUrl={props.onUrl}
             />
           </div>

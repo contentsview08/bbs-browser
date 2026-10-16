@@ -7,6 +7,7 @@ import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors
 import PostResultBox from './PostResultBox'
 import EmojiPicker from './EmojiPicker'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
+import { uploadToCatbox } from '../host/uploader'
 import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
@@ -23,6 +24,8 @@ interface Props {
   /** 書き込み確認で承諾した。元の書き込みの内容も渡す(自分の書き込みを見分けるため) */
   onConfirm: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
+  /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
+  uploader?: { stripMetadata: boolean }
 }
 
 const INPUT =
@@ -49,6 +52,27 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     })
   }
   useImperativeHandle(ref, () => ({ insert }))
+
+  // ── 画像のアップロード(ボタン・貼り付け・ドラッグ) ──
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(0)
+  const [uploadError, setUploadError] = useState<string>()
+  const upload = async (files: File[]) => {
+    if (!props.uploader) return
+    setUploadError(undefined)
+    for (const file of files) {
+      setUploading((n) => n + 1)
+      try {
+        insert(`${await uploadToCatbox(file, props.uploader)}\n`)
+      } catch (e) {
+        setUploadError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
+  }
+  /** 貼り付け・ドラッグされたもののうち、画像と動画のファイルだけを上げる */
+  const mediaFiles = (list: FileList | null | undefined) => [...(list ?? [])].filter((f) => /^(image|video)\//.test(f.type))
 
   const sage = mail.trim().toLowerCase() === 'sage'
 
@@ -103,6 +127,12 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
+      {uploadError && (
+        <p className="mb-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
+          <span className="material-symbols-outlined text-sm">error</span>
+          {uploadError}
+        </p>
+      )}
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
 
       <div className={`flex items-center gap-2 mb-2 ${right ? 'flex-wrap' : ''}`}>
@@ -125,6 +155,32 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           sage
         </label>
         <EmojiPicker onPick={insert} disabled={!!props.disabled} />
+        {props.uploader && (
+          <>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={!!props.disabled}
+              className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40"
+              title="画像をアップロード(catbox.moe)。書き込み欄に貼り付け・ドラッグしても上げられます"
+            >
+              <span className={`material-symbols-outlined text-lg leading-none ${uploading > 0 ? 'animate-spin' : ''}`}>
+                {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
+              </span>
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                void upload(mediaFiles(e.target.files))
+                e.target.value = ''
+              }}
+            />
+          </>
+        )}
         {!right && <span className="ml-auto text-[10px] text-c-text-muted">Ctrl+Enter で書き込む</span>}
       </div>
       <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>
@@ -132,6 +188,21 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           ref={textRef}
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onPaste={(e) => {
+            const files = props.uploader ? mediaFiles(e.clipboardData.files) : []
+            if (files.length === 0) return
+            e.preventDefault()
+            void upload(files)
+          }}
+          onDragOver={(e) => {
+            if (props.uploader && [...e.dataTransfer.items].some((i) => i.kind === 'file')) e.preventDefault()
+          }}
+          onDrop={(e) => {
+            const files = props.uploader ? mediaFiles(e.dataTransfer.files) : []
+            if (files.length === 0) return
+            e.preventDefault()
+            void upload(files)
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()

@@ -128,6 +128,11 @@ export interface AppSettings {
   ngRules: NgRule[]
   /** aborn: 「あぼーん」と出す / hide: 何も出さない(透明あぼーん) */
   ngMode: NgMode
+  // 画像のアップロード(catbox.moe)
+  /** 書き込み欄から画像をアップロードできるようにする(上げた画像は公開され、匿名なら消せない) */
+  uploaderEnabled: boolean
+  /** 上げる前に、画像を描き直して EXIF(撮影場所など)を取り除く */
+  uploadStripMetadata: boolean
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -175,6 +180,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyReplies: true,
   ngRules: [],
   ngMode: 'aborn',
+  uploaderEnabled: false,
+  uploadStripMetadata: true,
   postName: '',
   postMail: '',
 }

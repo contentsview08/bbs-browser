@@ -36,13 +36,14 @@ interface Props {
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'refresh' | 'ng' | 'boardlist' | 'boards' | 'about'
+export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'ng' | 'boardlist' | 'boards' | 'about'
 type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'display', name: '表示', icon: 'palette' },
   { key: 'threads', name: 'スレッド一覧', icon: 'view_list' },
   { key: 'posts', name: 'レス表示', icon: 'forum' },
+  { key: 'write', name: '書き込み', icon: 'edit' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
@@ -517,6 +518,34 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           label="AA を自動で見分ける"
           note="空白が続く本文を AA 用のフォントで表示します。レスの ⋯ から個別に切り替えられます"
         />
+      </Section>
+    </>
+  )
+}
+
+function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+  return (
+    <>
+      <Section
+        title="画像のアップロード(catbox.moe)"
+        note="書き込み欄のボタン・貼り付け・ドラッグで画像や動画を catbox.moe に上げ、本文に URL を入れます"
+      >
+        <Toggle checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} label="画像のアップロードを使う" />
+        <Toggle
+          checked={s.uploadStripMetadata}
+          onChange={(v) => update('uploadStripMetadata', v)}
+          label="上げる前に、画像の位置情報など(EXIF)を消す"
+          note="JPEG・PNG・WebP は描き直して取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます"
+        />
+        <div className="mt-3 p-3 text-xs leading-relaxed text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
+          <p className="font-bold text-c-text-strong mb-1">使う前に</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>上げたファイルは誰でも見られます。匿名なので、あとから消せません(2 年間アクセスがなければ消えます)</li>
+            <li>catbox は EXIF を残したまま公開します。スマホの写真は撮った場所が分かることがあります(上の設定で消せます)</li>
+            <li>児童ポルノ・マルウェア・アニメやドラマの丸ごとの配信・ひどいグロなどは禁止です。責任は上げた人にあります</li>
+            <li>このアプリから上げられるのは 50MB まで(GIF は 20MB)。利用規約: catbox.moe/legal.php</li>
+          </ul>
+        </div>
       </Section>
     </>
   )
@@ -1012,6 +1041,7 @@ export default function SettingsDialog(props: Props) {
             {tab === 'display' && <DisplayTab {...props} />}
             {tab === 'threads' && <ThreadsTab {...props} />}
             {tab === 'posts' && <PostsTab {...props} />}
+            {tab === 'write' && <WriteTab {...props} />}
             {tab === 'refresh' && <RefreshTab {...props} />}
             {tab === 'ng' && <NgTab {...props} />}
             {tab === 'boardlist' && (

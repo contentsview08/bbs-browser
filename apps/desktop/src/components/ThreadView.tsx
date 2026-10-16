@@ -16,6 +16,7 @@ import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
 import RefreshButton from './RefreshButton'
+import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
 import { resolvePlacements } from '../utils/toolbar'
@@ -187,7 +188,9 @@ export default function ThreadView(props: Props) {
   }, [headerInScroll])
   const [popups, setPopups] = useState<PopupEntry[]>([])
   const [popupFrame, setPopupFrame] = useState<{ rect: DOMRect; headerBottom: number }>()
-  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number; post?: Post }>()
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number; post?: Post; posts?: Post[] }>()
+  /** 画像一覧を開いているか */
+  const [galleryOpen, setGalleryOpen] = useState(false)
   const popupSeq = useRef(0)
   const hover = useRef<{ timer?: ReturnType<typeof setTimeout>; active: boolean; entered: boolean; x: number; y: number }>({
     active: false,
@@ -401,6 +404,7 @@ export default function ThreadView(props: Props) {
           },
         ]
       : []),
+    { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
     { id: 'delete', label: 'ログを削除して閉じる (Delete)', icon: 'delete', onClick: props.onDeleteLog },
     { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
     {
@@ -456,6 +460,7 @@ export default function ThreadView(props: Props) {
     if (props.active) return
     setPopups([])
     setLightbox(undefined)
+    setGalleryOpen(false)
   }, [props.active])
 
   // ── ポップアップ ──
@@ -901,11 +906,21 @@ export default function ThreadView(props: Props) {
         }}
       />
 
+      {galleryOpen && (
+        <MediaGallery
+          // NG のレスは除く(見えていないレスの画像は出さない)
+          items={collectMedia(log.posts.filter((p) => !isNg(p)))}
+          saveDir={settings.imageSaveDir}
+          onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}
+          onClose={() => setGalleryOpen(false)}
+        />
+      )}
       {lightbox && (
         <Lightbox
           urls={lightbox.urls}
           index={lightbox.index}
           post={lightbox.post}
+          posts={lightbox.posts}
           saveDir={settings.imageSaveDir}
           onIndex={(index) => setLightbox((l) => l && { ...l, index })}
           onClose={() => setLightbox(undefined)}

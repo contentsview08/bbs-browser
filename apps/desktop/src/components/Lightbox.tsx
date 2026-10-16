@@ -18,6 +18,8 @@ interface Props {
   index: number
   /** 画像の載っていたレス(本文のパネルに出す)。書き込み欄の画像など、レスでないときは undefined */
   post?: Post
+  /** 画像ごとのレス(画像一覧から開いたとき、urls と同じ順)。あれば post より優先する */
+  posts?: Post[]
   /** 保存先フォルダ(空ならダウンロードフォルダ) */
   saveDir: string
   onIndex: (i: number) => void
@@ -71,8 +73,9 @@ function zoomAt(z: Zoom, next: number, cx: number, cy: number): Zoom {
   return { scale, x: px - (px - z.x) * k, y: py - (py - z.y) * k }
 }
 
-export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose, onOpenExternal }: Props) {
+export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex, onClose, onOpenExternal }: Props) {
   const url = urls[index]
+  const post = posts?.[index] ?? onlyPost
   const video = isVideoFileUrl(url)
   const youtube = youtubeEmbedUrl(url)
   /** 動画を再生できなかった(HEVC の .mov など、WebView が扱えない形式) */

@@ -5,7 +5,7 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Post, PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
+import type { Post, PostConfirm, PostInput, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
@@ -14,6 +14,8 @@ import Minimap from './Minimap'
 import AnchorTree from './AnchorTree'
 import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
+import NextThreadBox from './NextThreadBox'
+import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { useThreadScroll } from '../hooks/useThreadScroll'
@@ -70,6 +72,9 @@ interface Props {
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
+  /** 次スレの候補を探す(板のスレ一覧を取り直して似たスレタイを並べる)。できない掲示板では undefined */
+  onFindNext?: () => Promise<NextThreadCandidate[]>
+  onOpenThread: (t: ThreadSummary) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
@@ -325,6 +330,10 @@ export default function ThreadView(props: Props) {
     jumpTo: props.jumpTo,
   })
 
+  // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す。ヘッダーのボタンでも出せる
+  const ended = log.status === 'archived' || (log.posts.at(-1)?.no ?? 0) >= 1000
+  const [showNext, setShowNext] = useState(false)
+
   // キー操作(設定で割り当てを変えられる)。開いているタブで、入力欄にいないときだけ。
   // ポップアップや画像を見ているときは、後ろのスレ表示を動かさない
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
@@ -577,6 +586,19 @@ export default function ThreadView(props: Props) {
                 <span className="material-symbols-outlined text-xl">{replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda'}</span>
               </button>
             )}
+            {props.onFindNext && (
+              <button
+                type="button"
+                className={`${ICON_BTN} ${ended ? 'text-c-accent' : ''}`}
+                title="次スレを探す"
+                onClick={() => {
+                  setShowNext(true)
+                  jumpToBottom()
+                }}
+              >
+                <span className="material-symbols-outlined text-xl">skip_next</span>
+              </button>
+            )}
             <button type="button" className={ICON_BTN} title="ログを削除して閉じる (Delete)" onClick={props.onDeleteLog}>
               <span className="material-symbols-outlined text-xl">delete</span>
             </button>
@@ -716,6 +738,7 @@ export default function ThreadView(props: Props) {
                 )
               })}
               <Divider label="-END-" />
+              {props.onFindNext && (ended || showNext) && <NextThreadBox find={props.onFindNext} onOpen={props.onOpenThread} />}
             </>
           )}
         </div>

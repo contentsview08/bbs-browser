@@ -7,6 +7,7 @@ import type { ThreadLog } from '@bbs-browser/logstore'
 import ThreadView, { type ScrollPosition } from './ThreadView'
 import type { NgRule, NgTarget } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
+import type { NextThreadCandidate } from '../utils/nextThread'
 
 /** 開いているスレ 1 つぶん */
 export interface Tab {
@@ -40,6 +41,9 @@ export interface TabEvents {
   resizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
   deleteLog: (id: string) => void
   uploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  /** 次スレの候補を探す。スレタイはログのもの(URL から開いたスレは一覧のスレタイが空のため) */
+  findNext: (t: ThreadSummary, title: string) => Promise<NextThreadCandidate[]>
+  openThread: (t: ThreadSummary) => void
 }
 
 interface Props {
@@ -58,6 +62,8 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, ev }: Props)
   const onRead = useCallback((no: number) => ev.markRead(thread, no), [ev, thread])
   const onOpenInBrowser = useCallback(() => ev.openInBrowser(thread), [ev, thread])
   const onDeleteLog = useCallback(() => ev.deleteLog(id), [ev, id])
+  const title = tab.log.title || thread.title
+  const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
 
   return (
@@ -88,6 +94,8 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, ev }: Props)
       nonameName={nonameName}
       jumpTo={jumpTo}
       onUploaded={ev.uploaded}
+      onFindNext={onFindNext}
+      onOpenThread={ev.openThread}
     />
   )
 }

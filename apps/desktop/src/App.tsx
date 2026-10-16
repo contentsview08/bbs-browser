@@ -49,6 +49,7 @@ import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { isReloadKey } from './utils/keymap'
+import { findNextThreads } from './utils/nextThread'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
@@ -764,6 +765,13 @@ export default function App() {
       setHasUploads(true)
       void store?.addUpload(u)
     }),
+    findNext: useEvent(async (t: ThreadSummary, title: string) => {
+      const list = await connectorOf(t.connectorId).listThreads({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx)
+      // その板を開いていれば、取り直したスレ一覧も見せる
+      if (boardRef.current?.url === t.boardUrl) setThreads(list)
+      return findNextThreads({ key: t.key, title, createdAt: t.createdAt }, list)
+    }),
+    openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const tabEventsRef = useRef(tabEvents)

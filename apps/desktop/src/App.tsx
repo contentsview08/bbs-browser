@@ -58,6 +58,7 @@ import { findNextThreads } from './utils/nextThread'
 import { favIncreases, keywordHits } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
+import { backgroundError, onBackgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
@@ -224,6 +225,14 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const notifySeq = useRef(0)
   const notify = (n: Omit<AppNotification, 'id'>) => setNotifications((ns) => [...ns, { ...n, id: ++notifySeq.current }])
+  // 裏の処理(既読・下書き・設定の保存など)が失敗したら、種類ごとに 1 回だけ知らせる
+  useEffect(
+    () =>
+      onBackgroundError((what, e) =>
+        notify({ icon: 'error', title: `${what}に失敗しました`, body: e instanceof Error ? e.message : String(e) }),
+      ),
+    [],
+  )
   /** 通知から、そのタブのそのレスへ飛ぶ */
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
   /** NG を登録する画面(元の文字を入れて開く) */
@@ -254,14 +263,21 @@ export default function App() {
     }
   }
 
-  // 起動: DB を開いてサイト一覧とお気に入りを読む
+  // 起動: DB を開いてサイト一覧とお気に入りを読む。
+  // 開発中(StrictMode)は effect が 2 回走るので、1 回だけにする(DB を 2 回開き、BE に 2 回ログインしないように)
+  const started = useRef(false)
   useEffect(() => {
+    if (started.current) return
+    started.current = true
     void run(null, async () => {
       const s = await openLogStore()
       initFavicons(s)
       initOgp(s)
       void reloadRecent(s)
-      void s.listUploads(1).then((u) => setHasUploads(u.length > 0))
+      void s
+        .listUploads(1)
+        .then((u) => setHasUploads(u.length > 0))
+        .catch(backgroundError('アップロード履歴の読み込み'))
       const [list, favs, favThreadList] = await Promise.all([s.listSites(), s.listFavorites(), s.listFavoriteThreads()])
       setStore(s)
       setSites(list)
@@ -445,7 +461,7 @@ export default function App() {
       )
       if (added.length === 1) {
         const f = byId.get(added[0].id)!
-        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => void openThread(f.thread) })
+        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => latest.current.openThread(f.thread) })
       } else if (added.length > 1) {
         notify({
           icon: 'bookmark',
@@ -454,7 +470,7 @@ export default function App() {
             .slice(0, 3)
             .map((a) => `+${a.added} ${a.title}`)
             .join('\n') + (added.length > 3 ? `\n(ほか ${added.length - 3} 件)` : ''),
-          onClick: () => void openFavThreads(),
+          onClick: () => latest.current.openFavThreads(),
         })
       }
     }
@@ -486,7 +502,7 @@ export default function App() {
           icon: 'sell',
           title: `${boardName} に「${h.keyword}」のスレが立ちました`,
           body: h.thread.title,
-          onClick: () => void openThread(h.thread),
+          onClick: () => latest.current.openThread(h.thread),
         })
       if (hits.length > 3) notify({ icon: 'sell', title: `${boardName} にキーワードのスレがほかに ${hits.length - 3} 件立ちました` })
     }
@@ -494,13 +510,29 @@ export default function App() {
   }
   /** NG のスレタイに当たるスレは知らせない(作り置きの関数から、いまの NG を見るための控え) */
   const isNgThreadRef = useRef<(t: ThreadSummary) => boolean>(() => false)
+  /**
+   * 定期的な見張りと、あとで押される通知から呼ぶ関数は、いつもいまのものを使う
+   * (見張りを始めたときの関数を持ち続けると、そのころの状態(開いていたタブなど)で動いてしまうため)
+   */
+  const latest = useRef({
+    openThread: (t: ThreadSummary) => void openThread(t),
+    openFavThreads: () => void openFavThreads(),
+    checkFavThreads,
+    checkKeywordThreads,
+  })
+  latest.current = {
+    openThread: (t: ThreadSummary) => void openThread(t),
+    openFavThreads: () => void openFavThreads(),
+    checkFavThreads,
+    checkKeywordThreads,
+  }
   const favoritesRef = useRef(favorites)
   favoritesRef.current = favorites
   const hasKeywords = settings.keywords.some((k) => k.trim())
   useEffect(() => {
     if (!store || settings.keywordWatchMin <= 0 || !hasKeywords || !favorites?.length) return
     const check = () => {
-      if (isAppVisible()) void checkKeywordThreads().catch(() => undefined)
+      if (isAppVisible()) void latest.current.checkKeywordThreads().catch(() => undefined)
     }
     const first = setTimeout(check, 15_000)
     const timer = setInterval(check, settings.keywordWatchMin * 60_000)
@@ -533,7 +565,7 @@ export default function App() {
     if (!store || settings.favCheckMin <= 0 || !hasFavThreads) return
     // アプリが見えていないあいだは確かめない
     const check = () => {
-      if (isAppVisible()) void checkFavThreads(store, false).catch(() => undefined)
+      if (isAppVisible()) void latest.current.checkFavThreads(store, false).catch(() => undefined)
     }
     const first = setTimeout(check, 5000)
     const timer = setInterval(check, settings.favCheckMin * 60_000)
@@ -1080,7 +1112,7 @@ export default function App() {
         return new Map(m).set(t.key, { ...cur, readNo: no })
       })
     patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
-    void store.markRead(t, no)
+    void store.markRead(t, no).catch(backgroundError('既読の保存'))
   })
 
   // ── お気に入り・サイト ──
@@ -1159,7 +1191,7 @@ export default function App() {
     deleteLog: useEvent((id: string) => deleteLogs([id])),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
       setHasUploads(true)
-      void store?.addUpload(u)
+      void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
     }),
     findNext: useEvent(async (t: ThreadSummary, title: string) => {
       const list = await connectorOf(t.connectorId).listThreads({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx)
@@ -1173,7 +1205,7 @@ export default function App() {
     openAccountSettings: useEvent(() => setSettingsTab('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
     loadDraft: useEvent(async (t: ThreadSummary) => store?.getDraft(t)),
-    saveDraft: useEvent((t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(() => undefined)),
+    saveDraft: useEvent((t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(backgroundError('下書きの保存'))),
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const tabEventsRef = useRef(tabEvents)

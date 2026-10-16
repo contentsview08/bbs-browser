@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
+import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout } from '../utils/toolbar'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light'
@@ -342,7 +343,7 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
   const update = useCallback<UpdateSetting>(
     (key, value) => {
       setSettings((s) => ({ ...s, [key]: value }))
-      void store?.setSetting(key, value)
+      void store?.setSetting(key, value).catch(backgroundError('設定の保存'))
     },
     [store],
   )

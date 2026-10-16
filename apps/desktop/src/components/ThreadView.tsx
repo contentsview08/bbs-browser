@@ -94,6 +94,12 @@ const UNREAD_AT = 0.3
 const BOTTOM_PX = 80
 /** 一番下へ飛ぶのにかける時間 */
 const JUMP_MS = 300
+/** 着いたあと、行き先がこれだけ動かなくなるまで追いかける(画面の外で省いていたレスが描かれて高さが変わるため) */
+const SETTLE_MS = 250
+/** 追いかけるのは長くてもここまで */
+const FOLLOW_MAX_MS = 1500
+/** 開いてからこの時間内に届いた新着(開いたときの取得の分)へは、動かして見せずにすぐ移る */
+const OPEN_FETCH_MS = 5000
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
@@ -135,17 +141,40 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
 }
 
 /**
- * 決めた時間で、素早く(終わりだけゆっくり)スクロールする。
+ * 決めた時間で、素早く(終わりだけゆっくり)スクロールする。ms が 0 ならその場で移る。
  * ブラウザのなめらかなスクロールは、距離が長いと遅く、途中で別のスクロールに割り込まれると止まるので使わない。
- * 行き先は関数で受け取り、動いている間に中身が増えても、毎回その時点の行き先へ向かう
+ * 行き先は関数で受け取り、動いている間に中身が増えても、毎回その時点の行き先へ向かう。
+ * 着いたあとも、画面の外で省いていたレス(.post-cv)が本当の高さで描かれて行き先がずれるので、
+ * 行き先が SETTLE_MS 動かなくなるまで追いかける。そのあいだにホイールやクリック、キーを押したらやめる
  */
 function animateScroll(root: HTMLElement, target: () => number, ms = JUMP_MS) {
+  const clamped = () => Math.max(0, Math.min(target(), root.scrollHeight - root.clientHeight))
   const from = root.scrollTop
   const start = performance.now()
+  let stopped = false
+  const stop = () => {
+    stopped = true
+    root.removeEventListener('wheel', stop)
+    root.removeEventListener('pointerdown', stop)
+    window.removeEventListener('keydown', stop)
+  }
+  root.addEventListener('wheel', stop, { passive: true })
+  root.addEventListener('pointerdown', stop)
+  window.addEventListener('keydown', stop)
+  if (ms <= 0) root.scrollTop = clamped()
+  let last = NaN
+  let stableSince = start
   const step = (now: number) => {
-    const t = Math.min(1, (now - start) / ms)
-    root.scrollTop = from + (target() - from) * (1 - (1 - t) ** 3)
-    if (t < 1) requestAnimationFrame(step)
+    if (stopped) return
+    const to = clamped()
+    const t = ms <= 0 ? 1 : Math.min(1, (now - start) / ms)
+    root.scrollTop = t < 1 ? from + (to - from) * (1 - (1 - t) ** 3) : to
+    if (t >= 1 && Math.abs(to - last) >= 1) {
+      last = to
+      stableSince = now
+    }
+    if (t < 1 || (now - stableSince < SETTLE_MS && now - start < FOLLOW_MAX_MS)) requestAnimationFrame(step)
+    else stop()
   }
   requestAnimationFrame(step)
 }
@@ -184,6 +213,9 @@ export default function ThreadView(props: Props) {
     // 書き込み欄の位置を変えるとヘッダーが作り直されるので、見張り直す
   }, [headerInScroll])
   const positioned = useRef(false)
+  /** 開いた時刻と、開いたときの取得の新着をまだ受け取っていないか */
+  const openedAt = useRef(0)
+  const openFetch = useRef(true)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
   /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
@@ -371,7 +403,7 @@ export default function ThreadView(props: Props) {
    * 未読の頭を、見えている範囲の上から UNREAD_AT の位置に置く。
    * 上には既読のレスが少し見え、その下の「ここから未読」の線から下が未読、とひと目で分かるように
    */
-  const scrollToUnread = useCallback((no: number, behavior: ScrollBehavior | 'animate' = 'instant') => {
+  const scrollToUnread = useCallback((no: number, behavior: 'instant' | 'animate' = 'instant') => {
     const root = ref.current
     if (!root) return
     // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
@@ -380,19 +412,22 @@ export default function ThreadView(props: Props) {
     const target = [...root.querySelectorAll<HTMLElement>(':scope .post-cv')]
       .find((w) => !w.hidden && Number(w.querySelector<HTMLElement>('[data-no]')?.dataset.no) >= no)
       ?.querySelector<HTMLElement>('[data-no]')
+    const ms = behavior === 'animate' ? JUMP_MS : 0
     if (!target) {
-      if (behavior === 'animate') animateScroll(root, () => root.scrollHeight - root.clientHeight)
-      else root.scrollTo({ top: root.scrollHeight, behavior })
+      animateScroll(root, () => root.scrollHeight, ms)
       return
     }
-    // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる
+    // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる。
+    // 上のレスが描かれて高さが変わっても合うよう、行き先は毎回測り直す
     const el = target.parentElement
     if (!el) return
     const headerH = headerOffset()
     const visible = root.clientHeight - headerH
-    const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - visible * UNREAD_AT
-    if (behavior === 'animate') animateScroll(root, () => Math.min(top, root.scrollHeight - root.clientHeight))
-    else root.scrollTo({ top, behavior })
+    animateScroll(
+      root,
+      () => root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - visible * UNREAD_AT,
+      ms,
+    )
   }, [])
 
   // 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
@@ -434,14 +469,15 @@ export default function ThreadView(props: Props) {
     if (saved && savedEl) {
       const viewTop = root.getBoundingClientRect().top + headerOffset()
       root.scrollTop += savedEl.getBoundingClientRect().top - viewTop - saved.offset
-    } else if (settings.openPosition === 'bottom') root.scrollTop = root.scrollHeight
+    } else if (settings.openPosition === 'bottom') animateScroll(root, () => root.scrollHeight, 0)
     else if (settings.openPosition === 'unread' && unreadFrom > 1) {
       if (byNo.has(unreadFrom)) scrollToUnread(unreadFrom)
       else {
-        root.scrollTop = root.scrollHeight
+        animateScroll(root, () => root.scrollHeight, 0)
         pendingUnread.current = true
       }
     }
+    openedAt.current = performance.now()
     // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
     prevCount.current = log.posts.length
     reportRead()
@@ -456,7 +492,7 @@ export default function ThreadView(props: Props) {
 
   // 通知などから指定されたレスへ飛ぶ(開いたときの位置合わせのあとに)
   useEffect(() => {
-    if (props.jumpTo && byNo.has(props.jumpTo.no)) scrollToUnread(props.jumpTo.no, 'smooth')
+    if (props.jumpTo && byNo.has(props.jumpTo.no)) scrollToUnread(props.jumpTo.no, 'animate')
     // seq が変わったときだけ飛ぶ
   }, [props.jumpTo?.seq, byNo.size > 0])
 
@@ -475,6 +511,9 @@ export default function ThreadView(props: Props) {
     setFlashNos(new Set(fresh))
     clearTimeout(flashTimer.current)
     flashTimer.current = setTimeout(() => setFlashNos(new Set()), FLASH_MS)
+    // 開いたときの取得で届いた分は、前の位置からもう一度動いて見せると遅く感じるので、すぐ移る
+    const opening = openFetch.current && performance.now() - openedAt.current < OPEN_FETCH_MS
+    openFetch.current = false
     if (pendingUnread.current) {
       pendingUnread.current = false
       if (byNo.has(unreadFrom)) {
@@ -484,7 +523,7 @@ export default function ThreadView(props: Props) {
       }
     }
     // lastMax はまだ前回の描画の値なので、その次が新着の頭
-    if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, 'animate')
+    if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, opening ? 'instant' : 'animate')
   }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
 
   // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す。
@@ -505,7 +544,7 @@ export default function ThreadView(props: Props) {
   }, [updateJump])
   const jumpToBottom = () => {
     const root = ref.current
-    if (root) animateScroll(root, () => root.scrollHeight - root.clientHeight)
+    if (root) animateScroll(root, () => root.scrollHeight)
   }
 
   useEffect(() => {

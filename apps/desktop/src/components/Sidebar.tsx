@@ -35,6 +35,7 @@ interface Props {
   /** 設定画面の板一覧を開く(板を足したいとき) */
   onManageBoards: () => void
   collapsed: boolean
+  onToggleCollapsed: () => void
   /** 板ごとの別名・ファビコン */
   boardMeta: Record<string, BoardMeta>
   /** しまったときに、板のアイコンの下に板名を小さく出す */
@@ -198,6 +199,25 @@ export default function Sidebar(props: Props) {
     >
       <span className="absolute right-0 top-0 bottom-0 w-px bg-c-border pointer-events-none" />
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
+        {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
+        <div className="h-10 flex-shrink-0 flex items-center select-none">
+          <span className="w-[63px] flex-shrink-0 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                // 一時的に開いているときに押したら、開いたままにする
+                setPeek(false)
+                props.onToggleCollapsed()
+              }}
+              className="p-1.5 text-c-text-muted hover:text-c-text-strong rounded-lg"
+              title={collapsed ? 'サイドバーを広げる' : 'サイドバーをしまう'}
+            >
+              <span className="material-symbols-outlined text-xl">{collapsed ? 'left_panel_open' : 'left_panel_close'}</span>
+            </button>
+          </span>
+          <span className="text-base font-bold text-c-text-strong">bbs-browser</span>
+        </div>
+
         <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar">
           <Row
             icon="star"

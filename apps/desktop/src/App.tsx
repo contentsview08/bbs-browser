@@ -1011,8 +1011,6 @@ export default function App() {
         onOpen={(url) => void openUrlInApp(url)}
         onToggleList={narrow ? () => setListOpen((v) => !v) : undefined}
         listOpen={listOpen}
-        sidebarCollapsed={settings.sidebarCollapsed}
-        onToggleSidebar={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
@@ -1035,6 +1033,7 @@ export default function App() {
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
         collapsed={settings.sidebarCollapsed}
+        onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         boardMeta={settings.boardMeta}
         historyActive={history !== undefined}
         onOpenHistory={openHistory}

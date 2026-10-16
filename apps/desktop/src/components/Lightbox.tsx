@@ -191,7 +191,10 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
           // 再生できない形式。ブラウザ(ふつうは再生できる)で開けるようにする
           <div className="flex flex-col items-center gap-3 text-white/80 text-sm" onClick={(e) => e.stopPropagation()}>
             <span className="material-symbols-outlined text-5xl">videocam_off</span>
-            この動画はアプリでは再生できない形式です(iPhone の .mov など)
+            この動画を再生できませんでした
+            <span className="text-xs text-white/60 text-center">
+              配信元がアプリからの再生を断っているか、アプリでは再生できない形式(iPhone の .mov など)です
+            </span>
             <button type="button" onClick={() => onOpenExternal(url)} className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-white">
               ブラウザで開く
             </button>

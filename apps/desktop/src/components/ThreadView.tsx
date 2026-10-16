@@ -127,6 +127,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'video', label: '動画', icon: 'play_circle' },
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
+/** 新着の札を出しておく時間 */
+const NEW_TOAST_MS = 2500
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら(その 1 枚を)閉じる */
@@ -497,6 +499,43 @@ export default function ThreadView(props: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [props.active, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
 
+  // ── 新着の札 ──
+  // 新着が届いて、その頭が画面の外(下にある・絞り込みで隠れている)なら、下から「新着 +N」を少しのあいだ出す。
+  // 自動で新着の頭まで送ったときは見えているので出さない(送り終わるのを待ってから確かめる)
+  const [newToast, setNewToast] = useState<{ count: number; first: number; seq: number }>()
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
+  useEffect(() => {
+    if (flashNos.size === 0 || !props.active) return
+    const first = Math.min(...flashNos.keys())
+    const count = flashNos.size
+    const check = setTimeout(() => {
+      const root = ref.current
+      const el = root?.querySelector<HTMLElement>(`[data-post="${first}"]`)
+      if (!root) return
+      const box = root.getBoundingClientRect()
+      const r = el?.getBoundingClientRect()
+      const visible = !!el && !el.hidden && !!r && r.top < box.bottom - 8 && r.bottom > box.top
+      if (visible) return
+      setNewToast({ count, first, seq: Date.now() })
+      clearTimeout(toastTimer.current)
+      toastTimer.current = setTimeout(() => setNewToast(undefined), NEW_TOAST_MS)
+    }, 450)
+    return () => clearTimeout(check)
+  }, [flashNos, props.active])
+  /** 札を押したら、絞り込みを解いて新着の頭へ */
+  const jumpToNew = () => {
+    if (!newToast) return
+    const first = newToast.first
+    setNewToast(undefined)
+    if (filters.size > 0 || query) {
+      setFilters(new Set())
+      setQuery('')
+      setSearchActive(false)
+    }
+    requestAnimationFrame(() => scrollToUnread(first, 'animate'))
+  }
+
   // 開いているタブのあいだだけ、既読をすぐ知らせる関数を App に預ける
   useEffect(() => {
     if (!props.active || !props.registerReadFlush) return
@@ -799,6 +838,20 @@ export default function ThreadView(props: Props) {
       >
         <span className="material-symbols-outlined text-2xl">keyboard_double_arrow_down</span>
       </button>
+      {/* 新着が届いたのに画面の外(下・絞り込みで隠れている)にあるとき、下から少しのあいだ出す札。押すと新着の頭へ */}
+      {newToast && (
+        <button
+          key={newToast.seq}
+          type="button"
+          onClick={jumpToNew}
+          className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-4 py-2 rounded-full shadow-lg text-sm font-bold toast-in hover:brightness-110"
+          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+          title="新着の頭へ飛ぶ"
+        >
+          <span className="material-symbols-outlined text-lg leading-none">arrow_downward</span>
+          新着 +{newToast.count}
+        </button>
+      )}
       <div
         ref={topPull.indicatorRef}
         className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"

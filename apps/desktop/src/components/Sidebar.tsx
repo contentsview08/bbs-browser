@@ -4,7 +4,7 @@
 // しまったときも開いたときも、アイコン(板のファビコンも)は左の列(64px から右端の線 1px を除いた 63px)の真ん中に置き、名前はその右に足すだけにする。
 // 外枠の幅だけを動かして開閉するので、アイコンはそのままで、名前が右から現れるように見える。
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Board, ThreadSummary } from '@bbs-browser/connectors'
 import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
@@ -129,6 +129,25 @@ export default function Sidebar(props: Props) {
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(false)
   // しまっているときに、マウスを乗せて一時的に開いているか。開いている間は画面の上に重ねる(ほかを押しのけない)
+  // 並びの上・下に、まだ続きがあるか(端をぼかして見せる)
+  const navRef = useRef<HTMLElement>(null)
+  const [more, setMore] = useState({ up: false, down: false })
+  const updateMore = () => {
+    const el = navRef.current
+    if (!el) return
+    const up = el.scrollTop > 2
+    const down = el.scrollTop + el.clientHeight < el.scrollHeight - 2
+    setMore((m) => (m.up === up && m.down === down ? m : { up, down }))
+  }
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const observer = new ResizeObserver(updateMore)
+    observer.observe(el)
+    for (const child of el.children) observer.observe(child)
+    updateMore()
+    return () => observer.disconnect()
+  })
   const [peek, setPeek] = useState(false)
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const collapsed = props.collapsed && !peek
@@ -218,7 +237,12 @@ export default function Sidebar(props: Props) {
           <span className="text-base font-bold text-c-text-strong">bbs-browser</span>
         </div>
 
-        <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar">
+        {/* お気に入りや履歴が増えて入りきらないときはスクロールする。スクロールバーは出さず(アイコンがずれるので)、
+            上や下に続きがあるときは、その端をぼかして分かるようにする */}
+        <div className="relative flex-1 min-h-0 flex flex-col">
+        {more.up && <div className="absolute top-0 inset-x-0 h-6 z-10 pointer-events-none" style={{ background: 'linear-gradient(var(--c-shadow-fade), transparent)' }} />}
+        {more.down && <div className="absolute bottom-0 inset-x-0 h-6 z-10 pointer-events-none" style={{ background: 'linear-gradient(transparent, var(--c-shadow-fade))' }} />}
+        <nav ref={navRef} onScroll={updateMore} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar">
           <Row
             icon="star"
             label="お気に入り板"
@@ -354,6 +378,7 @@ export default function Sidebar(props: Props) {
           <Row icon="edit_note" label="書き込み履歴" onClick={props.onOpenPostHistory} />
           {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" onClick={props.onOpenUploads} />}
         </nav>
+        </div>
 
         <div className="py-1 border-t border-c-border">
           <Row icon="settings" label="設定" onClick={props.onOpenSettings} />

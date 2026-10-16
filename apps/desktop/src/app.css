@@ -262,3 +262,18 @@ input[type='checkbox']:indeterminate {
   /* 仮の高さは ThreadView がレスごとに style で入れる。これは入れ忘れたときの値 */
   contain-intrinsic-size: auto 90px;
 }
+
+/* 並びの続きがあることを示す、端のぼかしの色(サイドバー) */
+:root {
+  --c-shadow-fade: color-mix(in srgb, var(--c-base) 85%, transparent);
+}
+
+/* ふだんはスクロールバーを隠し、マウスを乗せたときだけ細く出す(設定の分類の並び)。
+   スクロールできることに気づけるように。幅は場所を取らないよう細くする */
+.hover-scrollbar {
+  scrollbar-width: none;
+}
+.hover-scrollbar:hover {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-scrollbar-thumb) transparent;
+}

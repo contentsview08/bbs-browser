@@ -1567,6 +1567,8 @@ export default function SettingsDialog(props: Props) {
       >
         <nav className="w-52 flex-shrink-0 flex flex-col bg-c-surface2 border-r border-c-border py-3">
           <h2 className="px-5 pb-3 text-lg font-bold text-c-text-strong">設定</h2>
+          {/* 分類が多くて入りきらないときは、この並びだけスクロールする(下の「高度な設定」は動かさない) */}
+          <div className="flex-1 min-h-0 overflow-y-auto hover-scrollbar">
           {TABS.filter((t) => props.settings.showAdvanced || !t.advanced).map((t) => (
             <button
               key={t.key}
@@ -1580,8 +1582,9 @@ export default function SettingsDialog(props: Props) {
               {t.name}
             </button>
           ))}
+          </div>
           {/* 高度な設定。オフ(はじめ)のときは、よく使う設定だけを見せる */}
-          <label className="mt-auto mx-3 px-2 py-2 flex items-start gap-2 rounded-lg cursor-pointer hover:bg-c-surface3 select-none">
+          <label className="flex-shrink-0 mt-2 mx-3 px-2 py-2 flex items-start gap-2 rounded-lg cursor-pointer hover:bg-c-surface3 select-none">
             <input
               type="checkbox"
               checked={props.settings.showAdvanced}

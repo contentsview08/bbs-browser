@@ -59,6 +59,10 @@ export const PANELS: { key: PanelKey; name: string; cssVar: string }[] = [
 export interface AppSettings {
   // 表示
   scheme: ColorScheme
+  /** OS のダーク・ライトに合わせてテーマを切り替える。そのときは scheme ではなく下の 2 つを使う */
+  followOsTheme: boolean
+  darkScheme: ColorScheme
+  lightScheme: ColorScheme
   pattern: DesignPattern
   density: ListDensity
   fontSize: FontSize
@@ -169,6 +173,9 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
+  followOsTheme: false,
+  darkScheme: 'soft-dark',
+  lightScheme: 'soft-light',
   pattern: 'tonal',
   density: 'dense',
   fontSize: 3,
@@ -258,10 +265,33 @@ const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark'])
 
 const FONT_SIZES = [13, 14, 16, 18, 20]
 
+/** 暗い配色か(OS のダーク・ライトに合わせるとき、どちら用かを見分ける) */
+export function isDarkScheme(scheme: ColorScheme): boolean {
+  return DARK_SCHEMES.has(scheme)
+}
+
+/** OS がダークモードか */
+const osDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
+
+/** いま使うテーマ。OS に合わせるなら、OS のダーク・ライトで選んでおいた方 */
+export function effectiveScheme(s: AppSettings): ColorScheme {
+  if (!s.followOsTheme) return s.scheme
+  return osDark() ? s.darkScheme : s.lightScheme
+}
+
+/**
+ * テーマを選んだときに変える設定。OS に合わせているときは、暗い配色ならダーク用に、明るい配色ならライト用にする
+ */
+export function pickScheme(s: AppSettings, key: ColorScheme): Partial<AppSettings> {
+  if (!s.followOsTheme) return { scheme: key }
+  return isDarkScheme(key) ? { darkScheme: key } : { lightScheme: key }
+}
+
 function apply(s: AppSettings) {
   const root = document.documentElement
-  root.setAttribute('data-scheme', s.scheme)
-  root.classList.toggle('dark', DARK_SCHEMES.has(s.scheme))
+  const scheme = effectiveScheme(s)
+  root.setAttribute('data-scheme', scheme)
+  root.classList.toggle('dark', DARK_SCHEMES.has(scheme))
   root.setAttribute('data-pattern', s.pattern)
   root.setAttribute('data-density', s.density)
   root.style.fontSize = `${FONT_SIZES[s.fontSize - 1]}px`
@@ -291,6 +321,14 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
   }, [store])
 
   useEffect(() => apply(settings), [settings])
+  // OS のダーク・ライトが切り替わったら、合わせて塗り直す
+  useEffect(() => {
+    if (!settings.followOsTheme) return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => apply(settings)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [settings])
 
   const update = useCallback<UpdateSetting>(
     (key, value) => {

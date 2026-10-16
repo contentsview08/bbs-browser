@@ -2,7 +2,7 @@
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
 import { useEffect, useRef, useState } from 'react'
-import { COLOR_SCHEMES, type AppSettings, type FontSize, type ListDensity, type DesignPattern, type UpdateSetting } from '../ui/settings'
+import { COLOR_SCHEMES, pickScheme, type AppSettings, type FontSize, type ListDensity, type DesignPattern, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -24,13 +24,20 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
     <>
       <p className={GROUP_LABEL}>テーマ</p>
       {COLOR_SCHEMES.map((s) => (
-        <button key={s.key} type="button" onClick={() => update('scheme', s.key)} className={MENU_ITEM}>
+        <button
+          key={s.key}
+          type="button"
+          onClick={() => {
+            for (const [k, v] of Object.entries(pickScheme(settings, s.key))) update(k as keyof AppSettings, v as never)
+          }}
+          className={MENU_ITEM}
+        >
           <span
             className="w-4 h-4 rounded-full flex-shrink-0"
             style={{ background: s.accent, boxShadow: `inset 0 0 0 1px ${s.border}` }}
           />
           <span className="flex-1 text-left truncate">{s.name}</span>
-          {settings.scheme === s.key && check}
+          {(settings.followOsTheme ? s.key === settings.darkScheme || s.key === settings.lightScheme : settings.scheme === s.key) && check}
         </button>
       ))}
 

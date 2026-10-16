@@ -6,6 +6,8 @@ import type { AccountRecord } from '@bbs-browser/logstore'
 import {
   COLOR_SCHEMES,
   DEFAULT_SETTINGS,
+  isDarkScheme,
+  pickScheme,
   FONT_FAMILIES,
   PANELS,
   type AppSettings,
@@ -209,20 +211,37 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
   return (
     <>
       <Section title="テーマ">
-        <div className="grid grid-cols-2 gap-2">
-          {COLOR_SCHEMES.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => update('scheme', c.key)}
-              className={`flex items-center gap-2.5 px-3 py-2 text-sm border rounded-[var(--card-radius)] transition-colors ${
-                s.scheme === c.key ? 'border-c-accent text-c-text-strong' : 'border-c-border text-c-text-body hover:border-c-border-strong'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: c.accent, boxShadow: `inset 0 0 0 1px ${c.border}` }} />
-              {c.name}
-            </button>
-          ))}
+        <Toggle
+          checked={s.followOsTheme}
+          onChange={(v) => update('followOsTheme', v)}
+          label="OS のダーク・ライトに合わせる"
+          note="オンのときは、暗い配色と明るい配色を 1 つずつ選びます。Windows の設定を切り替えると、その場で切り替わります"
+        />
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {COLOR_SCHEMES.map((c) => {
+            const chosen = s.followOsTheme ? c.key === s.darkScheme || c.key === s.lightScheme : s.scheme === c.key
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => {
+                  for (const [k, v] of Object.entries(pickScheme(s, c.key))) update(k as keyof AppSettings, v as never)
+                }}
+                className={`flex items-center gap-2.5 px-3 py-2 text-sm border rounded-[var(--card-radius)] transition-colors ${
+                  chosen ? 'border-c-accent text-c-text-strong' : 'border-c-border text-c-text-body hover:border-c-border-strong'
+                }`}
+              >
+                <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: c.accent, boxShadow: `inset 0 0 0 1px ${c.border}` }} />
+                <span className="flex-1 text-left">{c.name}</span>
+                {s.followOsTheme && (
+                  <span className="text-[10px] text-c-text-muted">
+                    {isDarkScheme(c.key) ? 'ダーク' : 'ライト'}
+                    {chosen && 'で使う'}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </Section>
       <Section advanced title="フォント">

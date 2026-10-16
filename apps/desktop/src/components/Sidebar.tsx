@@ -68,6 +68,31 @@ function Row(props: {
   )
 }
 
+/**
+ * 小さめの行(板を追加・閲覧履歴のスレ・すべて見る)。開いても閉じても同じ高さで、アイコンは左の 64px の列に置く。
+ * しまっているときはアイコンだけが見え、開くと名前が右に出る(行の数も高さも変わらないので、下のアイコンがずれない)
+ */
+function SmallRow(props: {
+  icon: ReactNode
+  label: string
+  title?: string
+  muted?: boolean
+  onClick: () => void
+  trailing?: ReactNode
+}) {
+  return (
+    <div className="group flex items-center h-9 pr-2 hover:bg-c-surface2 transition-colors">
+      <button type="button" onClick={props.onClick} className="flex-1 min-w-0 h-full flex items-center text-left" title={props.title ?? props.label}>
+        <span className="w-16 flex-shrink-0 flex items-center justify-center">{props.icon}</span>
+        <span className={`flex-1 min-w-0 text-sm truncate ${props.muted ? 'text-c-text-muted group-hover:text-c-accent' : 'text-c-text-body'}`}>
+          {props.label}
+        </span>
+      </button>
+      {props.trailing}
+    </div>
+  )
+}
+
 function Chevron({ open }: { open: boolean }) {
   return (
     <span
@@ -252,16 +277,12 @@ export default function Sidebar(props: Props) {
                   </div>
                 )
               })}
-              {!collapsed && (
-                <button
-                  type="button"
-                  onClick={props.onManageBoards}
-                  className="w-full flex items-center gap-1.5 pl-16 pr-2 py-1.5 text-sm text-c-text-muted hover:text-c-accent transition-colors"
-                >
-                  <span className="material-symbols-outlined text-sm">add</span>
-                  板を追加
-                </button>
-              )}
+              <SmallRow
+                icon={<span className="material-symbols-outlined text-xl text-c-text-muted group-hover:text-c-accent">add</span>}
+                label="板を追加"
+                muted
+                onClick={props.onManageBoards}
+              />
             </div>
           )}
           <Row
@@ -269,42 +290,38 @@ export default function Sidebar(props: Props) {
             label="閲覧履歴"
             active={props.historyActive}
             filled={props.historyActive || historyOpen}
-            // しまっているときは、履歴の一覧(スレ一覧のところ)を開く
-            onClick={() => (collapsed ? props.onOpenHistory() : setHistoryOpen((v) => !v))}
+            onClick={() => setHistoryOpen((v) => !v)}
             trailing={<Chevron open={historyOpen} />}
           />
-          {historyOpen && !collapsed && (
-            <div className="menu-reveal max-h-[40vh] overflow-y-auto custom-scrollbar pb-1">
-              {props.recentHistory.length === 0 && <p className="pl-16 pr-2 py-1.5 text-sm text-c-text-muted">閲覧履歴はありません</p>}
+          {historyOpen && (
+            <div className="menu-reveal pb-1">
               {props.recentHistory.map((t) => (
-                <div key={`${t.boardUrl}${t.key}`} className="group flex items-center pl-4 pr-2 hover:bg-c-surface2 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => props.onOpenThread(t)}
-                    className="flex-1 min-w-0 flex items-center gap-2 py-1.5 text-left"
-                    title={t.title}
-                  >
-                    <BoardIcon boardUrl={t.boardUrl} override={props.boardMeta[t.boardUrl]?.icon} size={14} />
-                    <span className="flex-1 min-w-0 text-sm text-c-text-body truncate">{t.title}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => props.onDeleteHistory(t)}
-                    className="p-0.5 flex-shrink-0 text-c-text-muted opacity-0 group-hover:opacity-100 hover:text-c-heat-very-hot"
-                    title="この閲覧履歴(ログ)を削除"
-                  >
-                    <span className="material-symbols-outlined text-base leading-none">delete</span>
-                  </button>
-                </div>
+                <SmallRow
+                  key={`${t.boardUrl}${t.key}`}
+                  // しまっているときは、スレの板のファビコンが並ぶ
+                  icon={<BoardIcon boardUrl={t.boardUrl} override={props.boardMeta[t.boardUrl]?.icon} size={20} />}
+                  label={t.title}
+                  onClick={() => props.onOpenThread(t)}
+                  trailing={
+                    !collapsed && (
+                      <button
+                        type="button"
+                        onClick={() => props.onDeleteHistory(t)}
+                        className="p-0.5 flex-shrink-0 text-c-text-muted opacity-0 group-hover:opacity-100 hover:text-c-heat-very-hot"
+                        title="この閲覧履歴(ログ)を削除"
+                      >
+                        <span className="material-symbols-outlined text-base leading-none">delete</span>
+                      </button>
+                    )
+                  }
+                />
               ))}
-              <button
-                type="button"
+              <SmallRow
+                icon={<span className="material-symbols-outlined text-xl text-c-text-muted group-hover:text-c-accent">list</span>}
+                label={props.recentHistory.length === 0 ? '閲覧履歴はありません(一覧を開く)' : 'すべて見る'}
+                muted
                 onClick={props.onOpenHistory}
-                className="w-full flex items-center gap-1.5 pl-16 pr-2 py-1.5 text-sm text-c-text-muted hover:text-c-accent transition-colors"
-              >
-                <span className="material-symbols-outlined text-sm">list</span>
-                すべて見る
-              </button>
+              />
             </div>
           )}
           {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" onClick={props.onOpenUploads} />}

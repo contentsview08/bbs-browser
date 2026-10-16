@@ -13,6 +13,7 @@ import {
 import { isValidPattern, newRule, todayDateString, type NgTarget } from '../utils/ng'
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
@@ -661,7 +662,14 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           <p className="text-sm text-c-text-body mb-1.5">catbox のアカウント(userhash)</p>
           <UserhashInput value={s.catboxUserhash} onChange={(v) => update('catboxUserhash', v)} />
           <p className="text-[10px] text-c-text-muted mt-1 leading-relaxed">
-            catbox.moe でアカウントを作り、アカウントの管理画面にある userhash を貼ってください。登録すると、そのアカウントで上げ、アップロード履歴から catbox
+            <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://catbox.moe/user/register.php')}>
+              catbox.moe でアカウントを作り
+            </button>
+            、
+            <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://catbox.moe/user/login.php')}>
+              ログイン
+            </button>
+            したあとのアカウントの画面にある userhash を貼ってください。登録すると、そのアカウントで上げ、アップロード履歴から catbox
             上のファイルも消せるようになります(消せるのは登録してから上げたものだけ)。userhash はこのパソコンの中に保存し、catbox に送るときだけ使います
           </p>
         </div>

@@ -467,8 +467,22 @@ export default function ThreadView(props: Props) {
     if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, 'animate')
   }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
 
-  // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す
+  // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す。
+  // スクロールしたときだけでなく、開いたとき・新着が届いたとき・大きさが変わったときにも判定する
   const [showJump, setShowJump] = useState(false)
+  const updateJump = useCallback(() => {
+    const root = ref.current
+    if (root) setShowJump(root.scrollHeight - root.scrollTop - root.clientHeight > root.clientHeight)
+  }, [])
+  useLayoutEffect(updateJump, [log.posts.length, updateJump])
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    const observer = new ResizeObserver(updateJump)
+    observer.observe(root)
+    if (listRef.current) observer.observe(listRef.current)
+    return () => observer.disconnect()
+  }, [updateJump])
   const jumpToBottom = () => {
     const root = ref.current
     if (root) animateScroll(root, () => root.scrollHeight - root.clientHeight)

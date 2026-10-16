@@ -132,7 +132,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     </button>
   )
 
-  /** 画像と絵文字のボタン(右端が絵文字)。書き込み欄が下なら本文の欄の右上に、右なら名前とメールの行に置く */
+  /** 画像と絵文字のボタン(右端が絵文字)。本文の欄の上(名前とメールの行の右端)に置く */
   const mediaButtons = (
     <>
       {props.uploader && (
@@ -194,12 +194,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage
         </label>
-        {right && mediaButtons}
-        {!right && <span className="ml-auto text-[10px] text-c-text-muted">Ctrl+Enter で書き込む</span>}
+        <div className="ml-auto flex items-center gap-0.5">{mediaButtons}</div>
       </div>
       <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>
         <div className="relative flex-1 min-h-0 flex">
-        {!right && <div className="absolute top-1 right-2 z-10 flex items-center gap-0.5">{mediaButtons}</div>}
         <textarea
           ref={textRef}
           value={body}
@@ -227,7 +225,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}
           disabled={!!props.disabled}
-          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed ${right ? '' : 'pr-20'}`}
+          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed`}
         />
         </div>
         {sendButton}

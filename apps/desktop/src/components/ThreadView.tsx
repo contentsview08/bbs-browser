@@ -16,6 +16,8 @@ import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
 import RefreshButton from './RefreshButton'
+import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
+import { resolvePlacements } from '../utils/toolbar'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -352,6 +354,65 @@ export default function ThreadView(props: Props) {
   const ended = log.status === 'archived' || (log.posts.at(-1)?.no ?? 0) >= 1000
   const [showNext, setShowNext] = useState(false)
 
+  // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
+  const placements = useMemo(() => resolvePlacements('thread', settings.barLayout), [settings.barLayout])
+  const barActions: BarAction[] = [
+    { id: 'search', label: 'レス検索', icon: 'search', active: searchActive || !!query, onClick: () => setSearchActive((v) => !v) },
+    {
+      id: 'favorite',
+      label: props.isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す',
+      icon: 'star',
+      active: props.isFavorite,
+      activeColor: 'var(--c-heat-warm)',
+      fillWhenActive: true,
+      onClick: props.onToggleFavorite,
+    },
+    ...(props.onFindNext
+      ? [
+          {
+            id: 'findNext',
+            label: '次スレを探す',
+            icon: 'skip_next',
+            active: ended,
+            onClick: () => {
+              setShowNext(true)
+              jumpToBottom()
+            },
+          },
+        ]
+      : []),
+    ...(props.onSubmitPost
+      ? [
+          {
+            id: 'replyLayout',
+            label: replyLayout === 'bottom' ? '書き込み欄を右に置く' : '書き込み欄を下に置く',
+            icon: replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda',
+            onClick: () => props.onChangeReplyLayout(replyLayout === 'bottom' ? 'right' : 'bottom'),
+          },
+        ]
+      : []),
+    { id: 'delete', label: 'ログを削除して閉じる (Delete)', icon: 'delete', onClick: props.onDeleteLog },
+    { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
+    {
+      id: 'refresh',
+      label: '更新',
+      icon: 'refresh',
+      disabled: props.loading || Date.now() < (props.refreshReadyAt ?? 0),
+      onClick: () => void props.onRefresh(),
+      // 帯に置いたときは、クールダウンの残りが見えるボタンにする
+      render: () => (
+        <RefreshButton
+          className={ICON_BTN}
+          onClick={() => void props.onRefresh()}
+          loading={props.loading}
+          readyAt={props.refreshReadyAt}
+          cooldownMs={REFRESH_COOLDOWN_MS}
+        />
+      ),
+    },
+  ]
+  const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
+
   // キー操作(設定で割り当てを変えられる)。開いているタブで、入力欄にいないときだけ。
   // ポップアップや画像を見ているときは、後ろのスレ表示を動かさない
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
@@ -579,65 +640,14 @@ export default function ThreadView(props: Props) {
             )}
           </div>
           <div className="flex items-center gap-2 ml-4">
-            <button
-              type="button"
-              onClick={() => setSearchActive((v) => !v)}
-              className={`${ICON_BTN} ${searchActive || query ? 'text-c-accent' : ''}`}
-              title="レス検索"
-            >
-              <span className="material-symbols-outlined text-xl">search</span>
-            </button>
             {settings.autoRefreshSec > 0 && (
               <span className="flex items-center gap-1 text-xs text-c-accent" title="自動更新中">
                 <span className="material-symbols-outlined text-base">autorenew</span>
                 {settings.autoRefreshSec}秒
               </span>
             )}
-            
-            {props.onSubmitPost && (
-              <button
-                type="button"
-                className={ICON_BTN}
-                title={replyLayout === 'bottom' ? '書き込み欄を右に置く' : '書き込み欄を下に置く'}
-                onClick={() => props.onChangeReplyLayout(replyLayout === 'bottom' ? 'right' : 'bottom')}
-              >
-                <span className="material-symbols-outlined text-xl">{replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda'}</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className={`${ICON_BTN} ${props.isFavorite ? 'text-c-heat-warm' : ''}`}
-              title={props.isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す'}
-              onClick={props.onToggleFavorite}
-            >
-              <span className={`material-symbols-outlined text-xl ${props.isFavorite ? 'fill' : ''}`}>star</span>
-            </button>
-            {props.onFindNext && (
-              <button
-                type="button"
-                className={`${ICON_BTN} ${ended ? 'text-c-accent' : ''}`}
-                title="次スレを探す"
-                onClick={() => {
-                  setShowNext(true)
-                  jumpToBottom()
-                }}
-              >
-                <span className="material-symbols-outlined text-xl">skip_next</span>
-              </button>
-            )}
-            <button type="button" className={ICON_BTN} title="ログを削除して閉じる (Delete)" onClick={props.onDeleteLog}>
-              <span className="material-symbols-outlined text-xl">delete</span>
-            </button>
-            <button type="button" className={ICON_BTN} title="ブラウザで開く" onClick={props.onOpenInBrowser}>
-              <span className="material-symbols-outlined text-xl">open_in_new</span>
-            </button>
-            <RefreshButton
-              className={ICON_BTN}
-              onClick={() => void props.onRefresh()}
-              loading={props.loading}
-              readyAt={props.refreshReadyAt}
-              cooldownMs={REFRESH_COOLDOWN_MS}
-            />
+            <ActionButtons actions={barActions} placements={placements} where="header" btnClass={ICON_BTN} iconClass="text-xl" />
+            <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
         <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
@@ -688,6 +698,7 @@ export default function ThreadView(props: Props) {
     <main className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden">
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col">
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
       <button
         type="button"
@@ -786,6 +797,13 @@ export default function ThreadView(props: Props) {
           topOffset={headerInScroll ? headerHeight : 0}
           onJump={scrollToPost}
         />
+      )}
+      </div>
+      {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
+      {hasFooter && (
+        <div className="flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border bg-panel-thread-header">
+          <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
+        </div>
       )}
       </div>
 

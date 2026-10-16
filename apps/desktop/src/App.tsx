@@ -38,7 +38,8 @@ import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import UploadHistoryDialog from './components/UploadHistoryDialog'
 import PostHistoryDialog from './components/PostHistoryDialog'
 import Sidebar from './components/Sidebar'
-import StyleMenu from './components/StyleMenu'
+import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
+import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId } from './components/ThreadListPanel'
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
@@ -987,6 +988,7 @@ export default function App() {
       ? (t: ThreadSummary) => historyStates.get(threadId(t))
       : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
+  const listPlacements = useMemo(() => resolvePlacements('list', settings.barLayout), [settings.barLayout])
 
   const currentUrl = activeTab
     ? connectorOf(activeTab.thread.connectorId).threadWebUrl(activeTab.thread)
@@ -1105,7 +1107,11 @@ export default function App() {
           keywords={favView || history ? undefined : settings.keywords}
           snapshotKey={favView ? favVersion : history ? historyVersion : undefined}
           onNewThread={!favView && !history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
-          actions={<StyleMenu settings={settings} update={updateSetting} />}
+          style={{
+            button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,
+            items: <StyleMenuItems settings={settings} update={updateSetting} />,
+          }}
+          placements={listPlacements}
         />
         </div>
       )}

@@ -1,6 +1,6 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { builtinConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import {
@@ -21,6 +21,7 @@ import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
 import { openJson, saveJson } from '../host/backup'
+import { BAR_ACTIONS, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
 interface Props {
@@ -52,19 +53,20 @@ interface Props {
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'ng' | 'boardlist' | 'boards' | 'accounts' | 'backup' | 'about'
+export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'toolbars' | 'ng' | 'boardlist' | 'boards' | 'accounts' | 'backup' | 'about'
 type Tab = SettingsTab
 
-const TABS: { key: Tab; name: string; icon: string }[] = [
+const TABS: { key: Tab; name: string; icon: string; advanced?: boolean }[] = [
   { key: 'display', name: '表示', icon: 'palette' },
   { key: 'threads', name: 'スレッド一覧', icon: 'view_list' },
   { key: 'posts', name: 'レス表示', icon: 'forum' },
   { key: 'write', name: '書き込み', icon: 'edit' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
-  { key: 'keys', name: 'キー操作', icon: 'keyboard' },
+  { key: 'keys', name: 'キー操作', icon: 'keyboard', advanced: true },
+  { key: 'toolbars', name: 'ボタンの配置', icon: 'toolbar', advanced: true },
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
-  { key: 'boards', name: '板とサイト', icon: 'dns' },
+  { key: 'boards', name: '板とサイト', icon: 'dns', advanced: true },
   { key: 'accounts', name: 'アカウント', icon: 'badge' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
@@ -76,10 +78,19 @@ const BTN =
   'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50'
 const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colors rounded'
 
-function Section({ title, children, note }: { title: string; children: ReactNode; note?: string }) {
+/** 高度な設定を見せるか(設定画面の左下のチェック) */
+const AdvancedContext = createContext(false)
+
+/** 設定のまとまり。advanced なら、高度な設定を見せるときだけ出す */
+function Section({ title, children, note, advanced }: { title: string; children: ReactNode; note?: string; advanced?: boolean }) {
+  const showAdvanced = useContext(AdvancedContext)
+  if (advanced && !showAdvanced) return null
   return (
     <section className="mb-8">
-      <h3 className="text-sm font-bold text-c-text-strong mb-1">{title}</h3>
+      <h3 className="text-sm font-bold text-c-text-strong mb-1 flex items-center gap-2">
+        {title}
+        {advanced && <span className="text-[10px] font-normal px-1.5 rounded border border-c-border text-c-text-muted">高度</span>}
+      </h3>
       {note && <p className="text-xs text-c-text-muted mb-2">{note}</p>}
       <div className="mt-2">{children}</div>
     </section>
@@ -214,7 +225,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           ))}
         </div>
       </Section>
-      <Section title="フォント">
+      <Section advanced title="フォント">
         <Choice
           value={s.fontFamily}
           options={[...FONT_FAMILIES, { key: 'custom' as const, name: s.customFont ? `OS のフォント(${s.customFont})` : 'OS のフォント' }]}
@@ -233,7 +244,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           あのイーハトーヴォのすきとおった風、0123456789 ABCabc
         </p>
       </Section>
-      <Section title="背景画像" note="パネルの後ろに置きます。下の「パネルの不透明度」でパネルを透かすと見えます。選んだ画像はアプリのフォルダにコピーして使います">
+      <Section advanced title="背景画像" note="パネルの後ろに置きます。下の「パネルの不透明度」でパネルを透かすと見えます。選んだ画像はアプリのフォルダにコピーして使います">
         <div className="flex items-center gap-3">
           <div
             className="w-24 h-16 flex-shrink-0 rounded-[var(--card-radius)] border border-c-border bg-c-surface2 bg-cover bg-center"
@@ -276,7 +287,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           </div>
         </div>
       </Section>
-      <Section title="サイドバー">
+      <Section advanced title="サイドバー">
         <Toggle
           checked={s.showStripNames}
           onChange={(v) => update('showStripNames', v)}
@@ -284,7 +295,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           note="お気に入り板のアイコンの下に、板名を小さく出します(別名があれば別名)"
         />
       </Section>
-      <Section title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
+      <Section advanced title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
         <div className="space-y-1.5">
           {PANELS.map((p) => {
             const v = s.panelAlpha[p.key] ?? 1
@@ -331,7 +342,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('density', v)}
         />
       </Section>
-      <Section title="枠線スタイル">
+      <Section advanced title="枠線スタイル">
         <Choice
           value={s.pattern}
           options={[
@@ -355,7 +366,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
   }
   return (
     <>
-      <Section title="更新">
+      <Section advanced title="更新">
         <Toggle
           checked={s.pullToRefreshList}
           onChange={(v) => update('pullToRefreshList', v)}
@@ -411,7 +422,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           onChange={(v) => update('threadSort', v)}
         />
       </Section>
-      <Section title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+      <Section advanced title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
           checked={s.tabsEnabled}
           onChange={(v) => update('tabsEnabled', v)}
@@ -425,7 +436,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           note="オフにすると、いま見ているタブを置き換えます"
         />
       </Section>
-      <Section title="起動時に開く板" note="前回開いていた板か、お気に入りの板から選べます">
+      <Section advanced title="起動時に開く板" note="前回開いていた板か、お気に入りの板から選べます">
         <select
           value={s.startupBoardUrl}
           onChange={(e) => update('startupBoardUrl', e.target.value)}
@@ -468,7 +479,7 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           onChange={(v) => update('anchorPopup', v)}
         />
       </Section>
-      <Section title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
+      <Section advanced title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -609,7 +620,7 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   return (
     <>
       <Section
-        title="続けて書き込まない"
+        advanced title="続けて書き込まない"
         note="書き込んだあと、この秒数は書き込むボタンを押せなくし、残りを出します(連投で規制されないように)。どのスレでも同じです"
       >
         <Choice
@@ -644,7 +655,7 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
         </div>
       </Section>
 
-      <Section title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">
+      <Section advanced title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
           {ordered.map((item) => {
             const on = shown.includes(item.key)
@@ -673,7 +684,7 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
         </div>
       </Section>
       <Section
-        title="画像のアップロード(catbox.moe)"
+        advanced title="画像のアップロード(catbox.moe)"
         note="書き込み欄のボタン・貼り付け・ドラッグで画像や動画を catbox.moe に上げ、本文に URL を入れます"
       >
         <Toggle checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} label="画像のアップロードを使う" />
@@ -734,7 +745,7 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
         />
       </Section>
       <Section
-        title="お気に入りのスレの新着"
+        advanced title="お気に入りのスレの新着"
         note="お気に入りのスレがある板のスレ一覧だけを取りに行き、新着の数を確かめます(本文は取りません)。本文はお気に入りのスレの一覧で更新したときに取ります"
       >
         <Choice
@@ -1078,6 +1089,44 @@ function BackupTab({ settings: s, update, onBackupDb, onRestoreDb }: Pick<Props,
           )}
         </div>
       </Section>
+    </>
+  )
+}
+
+/** スレ表示とスレ一覧の操作ボタンを、ヘッダー・フッター・︙ の中だけ、のどこに置くか */
+function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+  const set = (area: BarArea, id: string, placement: Placement) => {
+    const cur = s.barLayout[area] ?? {}
+    update('barLayout', { ...s.barLayout, [area]: { ...cur, [id]: placement } })
+  }
+  const PLACES: { key: Placement; name: string }[] = [
+    { key: 'header', name: 'ヘッダー' },
+    { key: 'footer', name: 'フッター' },
+    { key: 'menu', name: '︙ の中だけ' },
+  ]
+  const area = (key: BarArea, title: string) => {
+    const placements = resolvePlacements(key, s.barLayout)
+    return (
+      <Section title={title} note="どのボタンも、ヘッダーの右端の ︙ を押すと出てきます。よく使うものだけヘッダーかフッターに並べてください">
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
+          {BAR_ACTIONS[key].map((a) => (
+            <div key={a.id} className="flex items-center gap-3 px-3 py-2">
+              <span className="material-symbols-outlined text-lg text-c-text-muted">{a.icon}</span>
+              <span className="w-36 flex-shrink-0 text-sm text-c-text-body">{a.name}</span>
+              <Choice value={placements[a.id]} options={PLACES} onChange={(v) => set(key, a.id, v)} />
+            </div>
+          ))}
+        </div>
+      </Section>
+    )
+  }
+  return (
+    <>
+      {area('thread', 'スレ表示')}
+      {area('list', 'スレッド一覧')}
+      <button type="button" onClick={() => update('barLayout', {})} className="text-xs text-c-text-muted hover:text-c-accent underline">
+        すべて既定に戻す
+      </button>
     </>
   )
 }
@@ -1516,9 +1565,9 @@ export default function SettingsDialog(props: Props) {
         className="w-full max-w-4xl h-full max-h-[720px] flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <nav className="w-52 flex-shrink-0 bg-c-surface2 border-r border-c-border py-3">
+        <nav className="w-52 flex-shrink-0 flex flex-col bg-c-surface2 border-r border-c-border py-3">
           <h2 className="px-5 pb-3 text-lg font-bold text-c-text-strong">設定</h2>
-          {TABS.map((t) => (
+          {TABS.filter((t) => props.settings.showAdvanced || !t.advanced).map((t) => (
             <button
               key={t.key}
               type="button"
@@ -1531,6 +1580,22 @@ export default function SettingsDialog(props: Props) {
               {t.name}
             </button>
           ))}
+          {/* 高度な設定。オフ(はじめ)のときは、よく使う設定だけを見せる */}
+          <label className="mt-auto mx-3 px-2 py-2 flex items-start gap-2 rounded-lg cursor-pointer hover:bg-c-surface3 select-none">
+            <input
+              type="checkbox"
+              checked={props.settings.showAdvanced}
+              onChange={(e) => {
+                props.update('showAdvanced', e.target.checked)
+                if (!e.target.checked && TABS.find((t) => t.key === tab)?.advanced) setTab('display')
+              }}
+              className="mt-0.5 rounded"
+            />
+            <span className="text-xs text-c-text-body">
+              高度な設定を表示
+              <span className="block text-[10px] text-c-text-muted">細かい見た目・キー操作・ボタンの配置など</span>
+            </span>
+          </label>
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 border-b border-c-border">
@@ -1539,6 +1604,7 @@ export default function SettingsDialog(props: Props) {
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
           </div>
+          <AdvancedContext.Provider value={props.settings.showAdvanced}>
           <div
             className={`flex-1 min-h-0 px-6 py-5 ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}
           >
@@ -1548,6 +1614,7 @@ export default function SettingsDialog(props: Props) {
             {tab === 'write' && <WriteTab {...props} />}
             {tab === 'refresh' && <RefreshTab {...props} />}
             {tab === 'keys' && <KeysTab {...props} />}
+            {tab === 'toolbars' && <ToolbarsTab {...props} />}
             {tab === 'ng' && <NgTab {...props} />}
             {tab === 'boardlist' && (
               <BoardListTab
@@ -1573,6 +1640,7 @@ export default function SettingsDialog(props: Props) {
             {tab === 'backup' && <BackupTab {...props} />}
             {tab === 'about' && <AboutTab />}
           </div>
+          </AdvancedContext.Provider>
         </div>
       </div>
     </div>

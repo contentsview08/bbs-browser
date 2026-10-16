@@ -9,6 +9,8 @@ import LoadingCenter from './LoadingCenter'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
+import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
+import type { Placement } from '../utils/toolbar'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
@@ -52,8 +54,10 @@ interface Props {
   onRefresh?: () => Promise<unknown> | void
   width: number
   onResize: (width: number) => void
-  /** ヘッダー右端に置く追加のボタン(表示スタイルメニューなど) */
-  actions?: ReactNode
+  /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
+  style?: { button: (up: boolean) => ReactNode; items: ReactNode }
+  /** 操作ボタンの置き場所(設定) */
+  placements: Record<string, Placement>
   /** 最初の並び順(設定) */
   defaultSort: ThreadSort
   /** スレタイの NG に当たるスレは出さない */
@@ -86,6 +90,7 @@ interface Props {
   favorite?: { active: boolean; onToggle: () => void }
 }
 
+const LIST_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
 const TAB = 'relative flex items-center justify-center gap-1 py-2.5 transition-colors whitespace-nowrap'
 
 export default function ThreadListPanel(props: Props) {
@@ -232,6 +237,59 @@ export default function ThreadListPanel(props: Props) {
   const onDeleteCard = useEvent((t: ThreadSummary) => props.onDeleteThreadLog?.(t))
   const onFavoriteCard = useEvent((t: ThreadSummary) => props.onToggleFavoriteThread?.(t))
 
+  // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
+  const placements = props.placements
+  const barActions: BarAction[] = [
+    { id: 'search', label: 'スレッド検索', icon: 'search', active: searchActive, onClick: () => setSearchActive((v) => !v) },
+    ...(props.onNewThread ? [{ id: 'newThread', label: 'スレを立てる', icon: 'edit_square', onClick: props.onNewThread }] : []),
+    ...(props.favorite
+      ? [
+          {
+            id: 'favorite',
+            label: props.favorite.active ? 'お気に入り板から外す' : 'お気に入り板に追加',
+            icon: 'star',
+            active: props.favorite.active,
+            activeColor: 'var(--c-heat-warm)',
+            fillWhenActive: true,
+            onClick: props.favorite.onToggle,
+          },
+        ]
+      : []),
+    ...(props.style
+      ? [
+          {
+            id: 'style',
+            label: '表示スタイル',
+            icon: 'palette',
+            render: (where: 'header' | 'footer') => props.style!.button(where === 'footer'),
+            submenu: props.style.items,
+          },
+        ]
+      : []),
+    ...(props.onRefresh
+      ? [
+          {
+            id: 'refresh',
+            label: 'スレッド一覧を更新',
+            icon: 'refresh',
+            disabled: props.loading || Date.now() < (props.refreshReadyAt ?? 0),
+            onClick: () => void props.onRefresh?.(),
+            render: () => (
+              <RefreshButton
+                onClick={() => void props.onRefresh?.()}
+                loading={props.loading}
+                readyAt={props.refreshReadyAt}
+                cooldownMs={LIST_REFRESH_COOLDOWN_MS}
+                size={18}
+                className={LIST_BTN}
+              />
+            ),
+          },
+        ]
+      : []),
+  ]
+  const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
+
   const renderThread = (t: ThreadSummary) => {
     const id = threadId(t)
     const card = (
@@ -292,7 +350,7 @@ export default function ThreadListPanel(props: Props) {
       </div>
       <div
         ref={scrollRef}
-        className="h-full overflow-y-auto custom-scrollbar thick-scrollbar flex flex-col"
+        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar thick-scrollbar flex flex-col"
         onScroll={pull.noteScroll}
         onWheel={(e) => {
           if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
@@ -324,45 +382,8 @@ export default function ThreadListPanel(props: Props) {
                 />
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setSearchActive((v) => !v)}
-                  className={`p-1.5 rounded-lg transition-colors ${searchActive ? 'text-c-accent bg-c-accent/10' : 'text-c-text-muted hover:text-c-text-strong'}`}
-                  title="スレッド検索"
-                >
-                  <span className="material-symbols-outlined text-lg">search</span>
-                </button>
-                {props.onNewThread && (
-                  <button
-                    type="button"
-                    onClick={props.onNewThread}
-                    className="p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg"
-                    title="スレを立てる"
-                  >
-                    <span className="material-symbols-outlined text-lg">edit_square</span>
-                  </button>
-                )}
-                {props.favorite && (
-                  <button
-                    type="button"
-                    onClick={props.favorite.onToggle}
-                    className={`p-1.5 rounded-lg transition-colors ${props.favorite.active ? 'text-c-heat-warm' : 'text-c-text-muted hover:text-c-text-strong'}`}
-                    title={props.favorite.active ? 'お気に入りから外す' : 'お気に入りに追加'}
-                  >
-                    <span className={`material-symbols-outlined text-lg ${props.favorite.active ? 'fill' : ''}`}>star</span>
-                  </button>
-                )}
-                {props.actions}
-                {props.onRefresh && (
-                  <RefreshButton
-                    onClick={() => void props.onRefresh?.()}
-                    loading={props.loading}
-                    readyAt={props.refreshReadyAt}
-                    cooldownMs={LIST_REFRESH_COOLDOWN_MS}
-                    size={18}
-                    className="p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg"
-                  />
-                )}
+                <ActionButtons actions={barActions} placements={placements} where="header" btnClass={LIST_BTN} iconClass="text-lg" />
+                <MoreMenu actions={barActions} btnClass={LIST_BTN} iconClass="text-lg" />
               </div>
             </div>
           </div>
@@ -470,6 +491,12 @@ export default function ThreadListPanel(props: Props) {
           )}
         </div>
       </div>
+      {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
+      {hasFooter && (
+        <div className="flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border">
+          <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={LIST_BTN} iconClass="text-lg" />
+        </div>
+      )}
     </section>
   )
 }

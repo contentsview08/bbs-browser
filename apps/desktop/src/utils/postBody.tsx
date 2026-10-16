@@ -129,17 +129,22 @@ export function displayName(name: string, o: DisplayOptions): string {
 
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i
 
-/** 本文の YouTube の動画の ID(書き込み欄のサムネイルに使う) */
-export function youtubeIdsIn(text: string): string[] {
-  const ids: string[] = []
+/** 本文の YouTube の動画(ID と元の URL)。サムネイルに使う */
+export function youtubeLinksIn(text: string): { id: string; url: string }[] {
+  const links: { id: string; url: string }[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (!m[3]) continue
     const url = normalizeUrl(m[3])
     if (!YOUTUBE_URL.test(url)) continue
     const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
-    if (id && !ids.includes(id)) ids.push(id)
+    if (id && !links.some((l) => l.id === id)) links.push({ id, url })
   }
-  return ids
+  return links
+}
+
+/** 本文の YouTube の動画の ID(書き込み欄のサムネイルに使う) */
+export function youtubeIdsIn(text: string): string[] {
+  return youtubeLinksIn(text).map((l) => l.id)
 }
 
 /** 本文に YouTube の URL があるか(ミニマップの動画の印に使う) */
@@ -185,7 +190,9 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
         <a
           key={start}
           href={url}
-          className={`hover:underline break-all ${toImageUrl(url) ? 'text-c-link-image' : 'text-c-link'}`}
+          className={`hover:underline break-all ${
+            toImageUrl(url) ? 'text-c-link-image' : YOUTUBE_URL.test(url) ? 'text-[#ff3344]' : 'text-c-link'
+          }`}
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()

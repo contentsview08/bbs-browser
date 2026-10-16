@@ -187,6 +187,22 @@ export default function App() {
       setStates(st)
     })
 
+  /**
+   * 閲覧履歴のスレを、上から 1 つずつ順番に取り直す(まとめて取りに行かない)。
+   * 1 つ取るたびに一覧を描き直して、どこまで取れたか・どのスレに新着があるかを見せる
+   */
+  const refreshHistory = () =>
+    run('threads', async () => {
+      if (!store) return
+      const list = await store.history()
+      setHistory(list)
+      for (const h of list) {
+        await fetchThread(store, h.thread).catch(() => undefined)
+        setHistory(await store.history())
+      }
+      await reloadRecent(store)
+    })
+
   const openHistory = () =>
     run('threads', async () => {
       setListOpen(true)
@@ -711,7 +727,7 @@ export default function App() {
             setListOpen(false)
             void openThread(t)
           }}
-          onRefresh={history ? openHistory : board ? () => openBoard(board) : undefined}
+          onRefresh={history ? refreshHistory : board ? () => openBoard(board) : undefined}
           // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
           width={narrow ? Math.min(settings.threadPanelWidth, Math.floor(window.innerWidth * 0.85)) : settings.threadPanelWidth}
           onResize={(w) => updateSetting('threadPanelWidth', w)}

@@ -110,6 +110,15 @@ export default function ThreadListPanel(props: Props) {
     return new Map(threads.map((t) => [threadId(t), momentum(t, now)]))
   }, [threads])
   const ranks = useMemo(() => rankMomentum(momenta), [momenta])
+  /** この板の未読レスの合計(ログのあるスレの、まだ読んでいないレスの数を足したもの) */
+  const unreadTotal = useMemo(
+    () =>
+      threads.reduce((sum, t) => {
+        const st = stateOf(t)
+        return st && !props.isNg(t) ? sum + Math.max(0, t.postCount - st.readNo) : sum
+      }, 0),
+    [threads, stateOf, props.isNg],
+  )
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -341,6 +350,14 @@ export default function ThreadListPanel(props: Props) {
             >
               <span className="material-symbols-outlined text-base leading-none">mark_email_unread</span>
               未読
+              {unreadTotal > 0 && (
+                <span
+                  className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                  style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+                >
+                  +{unreadTotal}
+                </span>
+              )}
               {unreadOnly && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
             </button>
             {[

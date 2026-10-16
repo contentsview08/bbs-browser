@@ -628,6 +628,7 @@ export default function ThreadView(props: Props) {
               title="クリックで先頭へスクロール"
             >
               {log.title}
+              <span className="ml-1.5 text-sm font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
             </h2>
             {log.status === 'archived' && (
               <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-c-surface3 text-c-text-muted">
@@ -650,7 +651,7 @@ export default function ThreadView(props: Props) {
                 {settings.autoRefreshSec}秒
               </span>
             )}
-            <span className="text-xs text-c-text-muted tabular-nums">{log.posts.length} レス</span>
+            
             <button
               type="button"
               className={ICON_BTN}

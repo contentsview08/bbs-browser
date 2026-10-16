@@ -11,6 +11,7 @@ import {
   heatClass,
   imageUrlsIn,
   linkUrlsIn,
+  youtubeLinksIn,
   looksLikeAA,
   renderBody,
   type BodyHandlers,
@@ -200,6 +201,7 @@ function PostArticle(props: Props) {
   // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする
   const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
   const images = props.showThumbnails ? imageUrlsIn(post.body) : []
+  const videos = props.showThumbnails ? youtubeLinksIn(post.body) : []
   // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
   const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
 
@@ -404,7 +406,7 @@ function PostArticle(props: Props) {
             ))}
           </div>
         )}
-        {images.length > 0 && (
+        {images.length + videos.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {images.map((url, i) => (
               <button
@@ -426,6 +428,29 @@ function PostArticle(props: Props) {
                     e.currentTarget.style.display = 'none'
                   }}
                 />
+              </button>
+            ))}
+            {/* YouTube は赤い枠と ▶ で見分ける(web 版と同じ)。押すとブラウザで開く */}
+            {videos.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handlers.onUrl(v.url)
+                }}
+                className="relative w-20 h-20 rounded overflow-hidden flex-shrink-0 hover:opacity-90 transition-opacity"
+                style={{ border: '2px solid #ff0000', background: '#000' }}
+                title="YouTube で開く"
+              >
+                <img
+                  src={`https://img.youtube.com/vi/${v.id}/mqdefault.jpg`}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] px-1 rounded leading-none pointer-events-none">▶</span>
               </button>
             ))}
           </div>

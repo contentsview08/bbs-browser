@@ -57,6 +57,9 @@ import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
+/** 手でスレを更新するとき、同じスレはこれだけあける */
+const REFRESH_COOLDOWN_MS = 5000
+
 const connectorOf = (id: string) => {
   const c = findConnector(id)
   if (!c) throw new Error(`コネクタ ${id} がありません`)
@@ -398,6 +401,8 @@ export default function App() {
    * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
    */
   const inflight = useRef(new Map<string, Promise<void>>())
+  /** スレごとの、最後に取りに行った時刻(手で続けて更新したときに、取りに行かないため) */
+  const lastFetchAt = useRef(new Map<string, number>())
   const fetchThread = async (
     s: LogStore,
     t: ThreadSummary,
@@ -411,6 +416,7 @@ export default function App() {
       if (!opts.force) return
     }
     const job = (async () => {
+      lastFetchAt.current.set(id, Date.now())
       patchTab(id, { loading: true })
       try {
         // 手元のログ(タブで開いていればそれ、なければ DB)に、取ってきた差分を当てはめる。
@@ -562,9 +568,16 @@ export default function App() {
     })
   }
 
+  /**
+   * 開いているスレを手で更新する(更新ボタン・R キー・引っぱって更新)。
+   * 続けて押してもサーバーに何度も取りに行かないよう、同じスレは REFRESH_COOLDOWN_MS あける(自動更新は別)
+   */
   const refreshThread = () =>
     run('posts', async () => {
-      if (store && activeTab) await fetchThread(store, activeTab.thread)
+      if (!store || !activeTab) return
+      const last = lastFetchAt.current.get(activeTab.id) ?? 0
+      if (Date.now() - last < REFRESH_COOLDOWN_MS) return
+      await fetchThread(store, activeTab.thread)
     })
 
   const refreshAll = () =>

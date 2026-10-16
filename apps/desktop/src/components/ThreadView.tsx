@@ -178,8 +178,9 @@ export default function ThreadView(props: Props) {
   })
 
   // 端でさらにホイールを回すと更新する(web 版と同じ)。上端と下端で別々に持つ
-  const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1 })
-  const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1 })
+  // 続けて引っぱっても取りに行かないよう、一度更新したら 5 秒あける(更新ボタンなども App 側で 5 秒あける)
+  const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1, cooldownMs: 5000 })
+  const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1, cooldownMs: 5000 })
   const onScrollPull = () => {
     topPull.noteScroll()
     bottomPull.noteScroll()

@@ -36,6 +36,8 @@ import type { AppSettings, ReplyLayout } from '../ui/settings'
 export interface ScrollPosition {
   no: number
   offset: number
+  /** 一番下まで見ていた。戻すときはレスの位置ではなく一番下へ戻す(レスの高さの見積もりでずれないように) */
+  bottom?: boolean
 }
 
 interface Props {
@@ -216,6 +218,8 @@ export default function ThreadView(props: Props) {
   const positioned = useRef(false)
   /** 開いてから、まだ本人がスクロールの操作(ホイール・クリック・キー)をしていないか */
   const untouched = useRef(true)
+  /** 開いてから、まだ新着を受け取っていない(次に届くのは開いたときの取得の分) */
+  const firstGrowth = useRef(true)
   const sent = useRef(log.readNo)
   const atBottom = useRef(false)
   /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
@@ -446,8 +450,8 @@ export default function ThreadView(props: Props) {
       // ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
       if (!top && rect.bottom > viewTop) top = { no: last, offset: rect.top - viewTop }
     }
-    if (top) position.current = top
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX
+    if (top) position.current = { ...top, bottom: atBottom.current }
     // 一番下まで来たら、絞り込みや NG で隠れているレスも含めて全部読んだことにする
     if (atBottom.current) last = Math.max(last, lastNoRef.current)
     if (last > sent.current) {
@@ -463,7 +467,8 @@ export default function ThreadView(props: Props) {
     positioned.current = true
     const saved = props.initialPosition
     const savedEl = saved && root.querySelector<HTMLElement>(`[data-no="${saved.no}"]`)
-    if (saved && savedEl) {
+    if (saved?.bottom) animateScroll(root, () => root.scrollHeight, 0)
+    else if (saved && savedEl) {
       // 行き先は毎回測り直す(大きさが決まる前や、上のレスが描かれて高さが変わっても合うように)
       animateScroll(
         root,
@@ -514,7 +519,8 @@ export default function ThreadView(props: Props) {
     flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
     // 開いてから本人がまだ触っていなければ(開いたときの取得の分)、動かして見せずにすぐ移る。
     // 開いた場所からもう一度動くと遅く感じ、位置合わせが間に合わなかったときは一番上から動いてしまうため
-    const opening = untouched.current
+    const opening = untouched.current && firstGrowth.current
+    firstGrowth.current = false
     if (pendingUnread.current) {
       pendingUnread.current = false
       if (byNo.has(unreadFrom)) {
@@ -524,7 +530,11 @@ export default function ThreadView(props: Props) {
       }
     }
     // lastMax はまだ前回の描画の値なので、その次が新着の頭
-    if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, opening ? 'instant' : 'animate')
+    // 開いた直後は、それまでのレスを読み終えていれば(位置が一番下からずれていても)新着の頭へ移る。
+    // 読んでいる途中は、設定どおり一番下を見ているときだけ追いかける
+    const readThrough = sent.current >= lastMax.current
+    if (opening ? readThrough : settings.autoScrollOnNew && atBottom.current)
+      scrollToUnread(lastMax.current + 1, opening ? 'instant' : 'animate')
   }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
 
   // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す。

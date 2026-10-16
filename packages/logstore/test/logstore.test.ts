@@ -138,6 +138,8 @@ describe('applyFetch: 取得結果を手元のログに当てはめる', () => {
       { status: 'updated', posts: [post(4, '書き直し'), post(5)], cursor: { bytes: 260 } },
       { status: 'reset', posts: [post(1), post(2, 'あぼーん'), post(3)], cursor: { bytes: 120 } },
       { status: 'archived', posts: [], cursor: { bytes: 120 } },
+      // 過去ログから取れた(レスは保存し、dat 落ちのまま)
+      { status: 'reset', posts: [post(1), post(2), post(3), post(4)], cursor: { bytes: 300 }, archived: true },
     ]
     let mine: ThreadLog | null = null
     for (const r of steps) {

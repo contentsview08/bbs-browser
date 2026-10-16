@@ -22,6 +22,18 @@ interface DatCursor {
   bytes: number
   postCount: number
   lastModified?: string
+  /** 過去ログから取った(中身はもう変わらないので、次からは取りに行かない) */
+  kako?: boolean
+}
+
+/**
+ * dat 落ちしたスレの過去ログの dat。5ch(と bbspink)では、板/oyster/キーの頭 4 桁/キー.dat に置かれ、
+ * 2026-10 時点ではログインなしで取れる。過去ログの置き場がない掲示板では undefined
+ */
+function kakoDatUrl(thread: ThreadSummary): string | undefined {
+  const host = new URL(thread.boardUrl).hostname
+  if (!/(?:^|\.)(?:5ch\.io|5ch\.net|bbspink\.com)$/.test(host)) return undefined
+  return `${thread.boardUrl}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
 }
 
 const ID = '2ch-compat'
@@ -195,9 +207,33 @@ export const twoChConnector: Connector = {
     const url = datUrl(thread)
     const cursor = rawCursor as DatCursor | null
 
+    // 過去ログから取ったスレは、もう変わらないので取りに行かない
+    if (cursor?.kako) return { status: 'notModified', posts: [], cursor, archived: true }
+
+    /** dat 落ちしたとき。過去ログがあればそこから全部取り、なければ dat 落ちとだけ返す */
+    const archived = async (): Promise<FetchPostsResult> => {
+      const kako = kakoDatUrl(thread)
+      if (kako) {
+        const res = await ctx.http.get(kako)
+        if (res.status === 200 && res.body.length > 0) {
+          const body = completeLines(res.body)
+          const { posts, title } = parseDat(ctx.decode(body, encodingOf(res)))
+          if (posts.length > 0)
+            return {
+              status: cursor ? 'reset' : 'updated',
+              posts,
+              title,
+              archived: true,
+              cursor: { bytes: body.length, postCount: posts.length, kako: true } satisfies DatCursor,
+            }
+        }
+      }
+      return { status: 'archived', posts: [], cursor }
+    }
+
     const fetchAll = async (): Promise<FetchPostsResult> => {
       const res = await ctx.http.get(url)
-      if (res.status === 404 || res.status === 302) return { status: 'archived', posts: [], cursor }
+      if (res.status === 404 || res.status === 302) return archived()
       ensureOk(res, url)
       const body = completeLines(res.body)
       const { posts, title } = parseDat(ctx.decode(body, encodingOf(res)))
@@ -217,7 +253,7 @@ export const twoChConnector: Connector = {
     const res = await ctx.http.get(url, { headers })
 
     if (res.status === 304) return { status: 'notModified', posts: [], cursor }
-    if (res.status === 404 || res.status === 302) return { status: 'archived', posts: [], cursor }
+    if (res.status === 404 || res.status === 302) return archived()
     // 416 はファイルが縮んだ(あぼーん等)、200 はサーバーが Range を無視した
     if (res.status === 416 || res.status === 200) return fetchAll()
     if (res.status !== 206) ensureOk(res, url)

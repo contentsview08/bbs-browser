@@ -70,7 +70,7 @@ export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, resu
     posts,
     cursor: result.cursor,
     postCount: posts.length,
-    status: 'active',
+    status: result.archived ? 'archived' : 'active',
   }
 }
 
@@ -355,10 +355,10 @@ export class LogStore {
          cursor = $1,
          title = COALESCE($2, title),
          post_count = (SELECT COUNT(*) FROM posts WHERE board_url = $3 AND key = $4),
-         status = 'active',
+         status = $8,
          fetched_at = $5
        WHERE board_url = $6 AND key = $7`,
-      [JSON.stringify(result.cursor), nn(result.title), ...where, now, ...where],
+      [JSON.stringify(result.cursor), nn(result.title), ...where, now, ...where, result.archived ? 'archived' : 'active'],
     )
   }
 

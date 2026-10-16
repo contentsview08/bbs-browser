@@ -82,6 +82,11 @@ export interface FetchPostsResult {
   cursor: Cursor
   /** dat の 1 行目などから分かったスレタイ */
   title?: string
+  /**
+   * dat 落ちしたが、過去ログ(5ch の oyster など)からレスを取れた。status は 'updated' / 'reset' で、
+   * レスは保存し、スレは dat 落ちとして扱う
+   */
+  archived?: boolean
 }
 
 /** 板の設定(2ch 互換なら SETTING.TXT から) */

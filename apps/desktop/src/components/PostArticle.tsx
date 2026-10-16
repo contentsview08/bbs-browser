@@ -15,6 +15,7 @@ import {
   looksLikeAA,
   renderBody,
   splitBeIcon,
+  videoFileUrlsIn,
   type BodyHandlers,
   type DisplayOptions,
 } from '../utils/postBody'
@@ -205,6 +206,9 @@ function PostArticle(props: Props) {
   const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
   const images = props.showThumbnails ? imageUrlsIn(post.body) : []
   const videos = props.showThumbnails ? youtubeLinksIn(post.body) : []
+  // 動画のファイル(mp4 など)は、画像と一緒にビューアーで順に見られるよう、画像の後ろにつなげて渡す
+  const videoFiles = props.showThumbnails ? videoFileUrlsIn(post.body) : []
+  const media = videoFiles.length > 0 ? [...images, ...videoFiles] : images
   // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
   const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
 
@@ -422,7 +426,7 @@ function PostArticle(props: Props) {
             ))}
           </div>
         )}
-        {images.length + videos.length > 0 && (
+        {images.length + videos.length + videoFiles.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {images.map((url, i) => (
               <button
@@ -430,7 +434,7 @@ function PostArticle(props: Props) {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handlers.onImage(images, i, post)
+                  handlers.onImage(media, i, post)
                 }}
                 className="w-20 h-20 bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
               >
@@ -444,6 +448,25 @@ function PostArticle(props: Props) {
                     e.currentTarget.style.display = 'none'
                   }}
                 />
+              </button>
+            ))}
+            {/* 動画のファイルは、最初のコマをサムネイルにして ▶ を付ける。押すとビューアーで再生する。
+                最初のコマに要る分(metadata)だけ読み、本体は押すまで取りに行かない */}
+            {videoFiles.map((url, j) => (
+              <button
+                key={url}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handlers.onImage(media, images.length + j, post)
+                }}
+                className="relative w-20 h-20 bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
+                title="動画を再生する"
+              >
+                <video src={`${url}#t=0.1`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
+                <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="material-symbols-outlined fill text-3xl text-white/90 drop-shadow">play_circle</span>
+                </span>
               </button>
             ))}
             {/* YouTube は赤い枠と ▶ で見分ける(web 版と同じ)。押すとブラウザで開く */}

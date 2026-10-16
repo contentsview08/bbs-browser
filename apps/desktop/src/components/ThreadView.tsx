@@ -31,7 +31,7 @@ import {
   countAnchors,
   countIds,
   hasLink,
-  hasYoutube,
+  hasVideo,
   imageUrlsIn,
   normalizeForSearch,
 } from '../utils/postBody'
@@ -304,7 +304,7 @@ export default function ThreadView(props: Props) {
         const hit =
           (filters.has('popular') && (anchorCounts.get(p.no) ?? 0) >= 3) ||
           (filters.has('image') && imageUrlsIn(p.body).length > 0) ||
-          (filters.has('video') && hasYoutube(p.body)) ||
+          (filters.has('video') && hasVideo(p.body)) ||
           (filters.has('link') && hasLink(p.body))
         if (!hit) continue
       }

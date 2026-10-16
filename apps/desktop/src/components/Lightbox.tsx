@@ -3,12 +3,14 @@
 // - そのレスの中の画像を、ホイール・←→・左右のボタンで切り替える(最後まで行ったら最初に戻る)
 // - 画像の下側に本文のパネルを重ねる(web 版のスマホ表示と同じ)。画像を押すとパネルを隠す。絵の外を押したら閉じる
 // - Ctrl+ホイールでマウスの位置を中心に拡大・縮小し、拡大中はつかんで動かせる。ダブルクリックで等倍と 2.5 倍を切り替える
+// - 動画のファイル(mp4 など)は、その場で再生する(拡大はしない)。再生できない形式なら、ブラウザで開くボタンを出す
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { saveImage } from '../host/saveImage'
+import { isVideoFileUrl } from '../utils/postBody'
 
 interface Props {
   urls: string[]
@@ -70,6 +72,9 @@ function zoomAt(z: Zoom, next: number, cx: number, cy: number): Zoom {
 
 export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose, onOpenExternal }: Props) {
   const url = urls[index]
+  const video = isVideoFileUrl(url)
+  /** 動画を再生できなかった(HEVC の .mov など、WebView が扱えない形式) */
+  const [videoError, setVideoError] = useState(false)
   const [save, setSave] = useState<SaveState>()
   const [panelOpen, setPanelOpen] = useState(true)
   const [zoom, setZoom] = useState<Zoom>(NO_ZOOM)
@@ -78,6 +83,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
   const dragged = useRef(false)
   const overlayRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const lastWheel = useRef(0)
   const many = urls.length > 1
   // 最後まで行ったら最初に、最初より前は最後に戻る
@@ -97,6 +103,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
   useEffect(() => {
     setSave(undefined)
     setZoom(NO_ZOOM)
+    setVideoError(false)
   }, [url])
 
   // ホイール: Ctrl つきなら拡大・縮小、なしなら画像の切り替え。
@@ -110,6 +117,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
       if (panelRef.current?.contains(e.target as Node)) return // 本文パネルの中は、パネルのスクロール
       if (e.ctrlKey) {
         e.preventDefault()
+        if (videoRef.current) return // 動画は拡大しない
         const z = zoomRef.current
         setZoom(zoomAt(z, z.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY))
         return
@@ -159,7 +167,32 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
   // 枠の中に置くと、最前面に出しているレスのポップアップより下に描かれてしまう
   return createPortal(
     <div ref={overlayRef} className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
-      {/* 枠いっぱいに収める(小さい画像は引き伸ばす) */}
+      {video ? (
+        videoError ? (
+          // 再生できない形式。ブラウザ(ふつうは再生できる)で開けるようにする
+          <div className="flex flex-col items-center gap-3 text-white/80 text-sm" onClick={(e) => e.stopPropagation()}>
+            <span className="material-symbols-outlined text-5xl">videocam_off</span>
+            この動画はアプリでは再生できない形式です(iPhone の .mov など)
+            <button type="button" onClick={() => onOpenExternal(url)} className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-white">
+              ブラウザで開く
+            </button>
+          </div>
+        ) : (
+          // 動画は拡大しない。枠に収まる大きさで出し、すぐ再生する(操作は動画の下のバー)
+          <video
+            ref={videoRef}
+            key={url}
+            src={url}
+            controls
+            autoPlay
+            playsInline
+            className="max-w-[92vw] max-h-[86vh] lightbox-open-rise bg-black"
+            onClick={(e) => e.stopPropagation()}
+            onError={() => setVideoError(true)}
+          />
+        )
+      ) : (
+      /* 枠いっぱいに収める(小さい画像は引き伸ばす) */
       <img
         key={url}
         src={url}
@@ -184,6 +217,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
           setZoom((z) => (z.scale > 1 ? NO_ZOOM : zoomAt(z, 2.5, e.clientX, e.clientY)))
         }}
       />
+      )}
 
       {/* 本文のパネル。画像の下側に半透明で重ねる */}
       {panelOpen && post && (

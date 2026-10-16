@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
-import { hasYoutube, imageUrlsIn } from '../utils/postBody'
+import { hasVideo, imageUrlsIn } from '../utils/postBody'
 
 interface Props {
   posts: Post[]
@@ -102,7 +102,7 @@ export default function Minimap(props: Props) {
       if (props.ownNos.has(p.no)) own.push({ no: p.no, at })
       if (props.replyToOwn.has(p.no)) reply.push({ no: p.no, at })
       if (imageUrlsIn(p.body).length > 0) media.push({ no: p.no, at, type: 'image' })
-      else if (hasYoutube(p.body)) media.push({ no: p.no, at, type: 'video' })
+      else if (hasVideo(p.body)) media.push({ no: p.no, at, type: 'video' })
     })
     return { heat, own, reply, media }
     // pct は pcts と posts から決まるので、依存はこれで足りる

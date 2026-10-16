@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitBeIcon } from '../src/utils/postBody'
+import { hasVideo, linkUrlsIn, splitBeIcon, videoFileUrlsIn } from '../src/utils/postBody'
 
 describe('splitBeIcon: BE のアイコン', () => {
   it('1 行目の sssp:// を https:// の画像にし、その行を本文から除く', () => {
@@ -13,5 +13,15 @@ describe('splitBeIcon: BE のアイコン', () => {
   it('1 行目でなければ、本文のまま', () => {
     expect(splitBeIcon('本文\nsssp://img.5ch.io/ico/nida.gif')).toEqual({ body: '本文\nsssp://img.5ch.io/ico/nida.gif' })
     expect(splitBeIcon('sssp://img.5ch.io/ico/nida.gif ほかの文字')).toEqual({ body: 'sssp://img.5ch.io/ico/nida.gif ほかの文字' })
+  })
+})
+
+describe('videoFileUrlsIn: 動画のファイル', () => {
+  it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
+    const body = 'これ https://example.com/a.mp4 と https://example.com/b.webm?x=1 と https://example.com/page'
+    expect(videoFileUrlsIn(body)).toEqual(['https://example.com/a.mp4', 'https://example.com/b.webm?x=1'])
+    expect(linkUrlsIn(body)).toEqual(['https://example.com/page'])
+    expect(hasVideo(body)).toBe(true)
+    expect(hasVideo('https://example.com/a.jpg')).toBe(false)
   })
 })

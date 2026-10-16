@@ -110,13 +110,31 @@ export const imageUrlsIn = memoByText(function imageUrlsIn(text: string): string
   return urls
 })
 
+/** 動画のファイル(mp4 など)の URL。WebView でそのまま再生できる形式 */
+const VIDEO_FILE_URL = /\.(?:mp4|m4v|webm|mov)(?:[?#][^\s]*)?$/i
+
+export function isVideoFileUrl(url: string): boolean {
+  return VIDEO_FILE_URL.test(url)
+}
+
+/** 本文の中の動画ファイルの URL(サムネイルを出し、押すとビューアーで再生する) */
+export const videoFileUrlsIn = memoByText(function videoFileUrlsIn(text: string): string[] {
+  const urls: string[] = []
+  for (const m of text.matchAll(TOKEN)) {
+    if (!m[3]) continue
+    const url = normalizeUrl(m[3])
+    if (isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
+  }
+  return urls
+})
+
 /** 画像でも動画でもないリンク(埋め込みのカードを出す候補) */
 export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
     if (!m[3]) continue
     const url = normalizeUrl(m[3])
-    if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !urls.includes(url)) urls.push(url)
+    if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
   }
   return urls
 })
@@ -178,6 +196,11 @@ export function youtubeIdsIn(text: string): string[] {
 export function hasYoutube(text: string): boolean {
   for (const m of text.matchAll(TOKEN)) if (m[3] && YOUTUBE_URL.test(normalizeUrl(m[3]))) return true
   return false
+}
+
+/** 動画(YouTube か動画のファイル)を含むか。「動画」の絞り込みと縮図に使う */
+export function hasVideo(text: string): boolean {
+  return hasYoutube(text) || videoFileUrlsIn(text).length > 0
 }
 
 export interface BodyHandlers {

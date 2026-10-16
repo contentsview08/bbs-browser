@@ -16,6 +16,7 @@ import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
 import RefreshButton from './RefreshButton'
+import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
 import { resolvePlacements } from '../utils/toolbar'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
@@ -84,6 +85,10 @@ interface Props {
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
   postReadyAt?: number
   postCooldownMs: number
+  /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
+  postAccounts?: PostAccountOption[]
+  onTogglePostAccount?: (id: string, on: boolean) => void
+  onOpenAccountSettings?: () => void
   /** お気に入りのスレか、と足す・外す */
   isFavorite: boolean
   onToggleFavorite: () => void
@@ -830,6 +835,9 @@ export default function ThreadView(props: Props) {
               onUploaded={props.onUploaded}
               readyAt={props.postReadyAt}
               cooldownMs={props.postCooldownMs}
+              accounts={props.postAccounts}
+              onToggleAccount={props.onTogglePostAccount}
+              onOpenAccountSettings={props.onOpenAccountSettings}
               onImage={(urls, index) => setLightbox({ urls, index })}
               uploader={
                 settings.uploaderEnabled

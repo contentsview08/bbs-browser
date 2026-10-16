@@ -8,6 +8,7 @@ import ThreadView, { type ScrollPosition } from './ThreadView'
 import type { NgRule, NgTarget } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
 import type { NextThreadCandidate } from '../utils/nextThread'
+import type { PostAccountOption } from './PostAccountMenu'
 
 /** 開いているスレ 1 つぶん */
 export interface Tab {
@@ -47,6 +48,9 @@ export interface TabEvents {
   findNext: (t: ThreadSummary, title: string) => Promise<NextThreadCandidate[]>
   openThread: (t: ThreadSummary) => void
   toggleFavoriteThread: (t: ThreadSummary) => void
+  /** 書き込むときに使うアカウントのオン・オフ(どの板でも同じ) */
+  togglePostAccount: (id: string, on: boolean) => void
+  openAccountSettings: () => void
 }
 
 interface Props {
@@ -61,10 +65,12 @@ interface Props {
   /** 書き込んだあとのクールダウンが明ける時刻(どのタブでも同じ) */
   postReadyAt?: number
   postCooldownMs: number
+  /** この板で使えるアカウント */
+  postAccounts?: PostAccountOption[]
   ev: TabEvents
 }
 
-function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, postReadyAt, postCooldownMs, ev }: Props) {
+function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, postReadyAt, postCooldownMs, postAccounts, ev }: Props) {
   const { id, thread } = tab
   const onSavePosition = useCallback((pos: ScrollPosition) => ev.savePosition(id, pos), [ev, id])
   const onRead = useCallback((no: number) => ev.markRead(thread, no), [ev, thread])
@@ -110,6 +116,9 @@ function TabPane({ tab, active, settings, isNg, nonameName, jumpTo, favorite, po
       refreshReadyAt={tab.refreshReadyAt}
       postReadyAt={postReadyAt}
       postCooldownMs={postCooldownMs}
+      postAccounts={postAccounts}
+      onTogglePostAccount={ev.togglePostAccount}
+      onOpenAccountSettings={ev.openAccountSettings}
       onToggleFavorite={onToggleFavorite}
     />
   )

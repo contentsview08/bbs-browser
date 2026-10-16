@@ -9,6 +9,7 @@ import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
 import { useCountdown } from '../hooks/useCountdown'
 import type { UploadOptions } from '../host/uploader'
 import { useMediaInput } from '../hooks/useMediaInput'
+import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
@@ -36,6 +37,10 @@ interface Props {
   onImage?: (urls: string[], index: number) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  /** この板で使えるアカウント(BE など)と、使うかどうか。sage の右の ︙ で選ぶ */
+  accounts?: PostAccountOption[]
+  onToggleAccount?: (id: string, on: boolean) => void
+  onOpenAccountSettings?: () => void
 }
 
 const INPUT =
@@ -162,6 +167,9 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage
         </label>
+        {props.accounts && props.onToggleAccount && (
+          <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
+        )}
         <div className="ml-auto flex items-center gap-0.5">{media.buttons}</div>
       </div>
         <div className="relative flex-1 min-h-0 flex">

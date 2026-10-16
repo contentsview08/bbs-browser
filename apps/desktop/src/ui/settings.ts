@@ -143,6 +143,8 @@ export interface AppSettings {
   uploadMaxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げ、アップロード履歴からサーバー上のファイルも消せる */
   catboxUserhash: string
+  /** 書き込むときにアカウント(BE など)を使うか。アカウントの id → 使うか。書いていなければ使う(登録してあれば) */
+  postAccounts: Record<string, boolean>
   /** 書き込んだあと、続けて書き込めないようにあける秒数。0 ならあけない */
   postCooldownSec: number
   /** 定型文。操作バーや ⋯ から、そのレスへのアンカーを付けてすぐ書き込む */
@@ -212,6 +214,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uploadMaxDimension: 2560,
   catboxUserhash: '',
   postCooldownSec: 10,
+  postAccounts: {},
   quickPhrases: ['草'],
   postToolbar: ['reply', 'phrase:草', 'copy', 'ng'],
   keymap: {},

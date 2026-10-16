@@ -50,3 +50,48 @@ describe('BE のログイン', () => {
     expect(sent).toHaveLength(0)
   })
 })
+
+describe('書き込みで BE を使うか', () => {
+  const thread = {
+    connectorId: '2ch-compat',
+    boardUrl: 'https://mi.5ch.io/news4vip/',
+    key: '1792148654',
+    title: '',
+    postCount: 0,
+    order: 0,
+  }
+  function recorder(html: string) {
+    const sent: { url: string; exclude: string[] }[] = []
+    const ctx: ConnectorContext = {
+      decode: (b) => new TextDecoder('utf-8').decode(b),
+      http: {
+        get: async () => {
+          throw new Error('get は使わない')
+        },
+        async post(url, _body, opts): Promise<HttpResponse> {
+          sent.push({ url, exclude: opts?.excludeCookies ?? [] })
+          return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' }, body: new TextEncoder().encode(html) }
+        },
+      },
+    }
+    return { ctx, sent }
+  }
+
+  it('BE を使うと言わなければ、BE の Cookie を外して送る', async () => {
+    const { ctx, sent } = recorder('<title>書きこみました</title>')
+    await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
+    expect(sent[0].exclude).toEqual(['DMDM', 'MDMD'])
+  })
+
+  it('BE を使うなら外さない', async () => {
+    const { ctx, sent } = recorder('<title>書きこみました</title>')
+    await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a', accounts: ['be'] }, ctx)
+    expect(sent[0].exclude).toEqual([])
+  })
+
+  it('書き込み確認を承諾して送り直すときも、元の書き込みと同じ Cookie にする', async () => {
+    const { ctx, sent } = recorder('<title>書きこみました</title>')
+    await twoChConnector.submitConfirm!({ url: 'https://mi.5ch.io/test/bbs.cgi', fields: {}, referer: '', excludeCookies: ['DMDM', 'MDMD'] }, ctx)
+    expect(sent[0].exclude).toEqual(['DMDM', 'MDMD'])
+  })
+})

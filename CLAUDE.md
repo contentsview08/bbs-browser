@@ -25,7 +25,10 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - 2ch 互換の User-Agent は `Monazilla/1.00 (bbs-browser/x.y.z)`。
 - 書き込みは `POST /test/bbs.cgi`(Shift_JIS の URL エンコード。`packages/connectors/src/sjis.ts`)。
   eddist(eddibb)は初回に認証コードを返し、ブラウザで `/auth-code` を済ませると `edge-token` Cookie で通るようになる。
-  Cookie は plugin-http が持ち、アプリの正常終了時に app_cache_dir の `.cookies` へ保存される(Ctrl+C で止めると消える)。
+  書き込み(と BE などのログイン)の POST は、plugin-http ではなく自前の通信(`src-tauri/src/post_http.rs` の `http_post`)で送る。
+  Cookie もそこが持ち、app_data_dir の `post-cookies.json` に毎回保存する。書き込みごとに Cookie を外せるようにするため
+  (BE を使わない書き込みでは DMDM・MDMD を外す)。plugin-http の Cookie 置き場はアプリから中身を触れず、
+  Cookie ヘッダーを手で付けると置き場の Cookie が付かなくなる(reqwest の決まり)ので使えない。読む通信(GET)は plugin-http のまま。
   本番の板への試し書き込みはしない。応答の解析は eddist のソースにある文面をテストに写して確かめる。
 - 見た目は hono-bbs の web 版(`~/git/koizumib/hono-bbs-merge/packages/web`)から移植している。
   `apps/desktop/src/theme/*.css` と `src/index.css` は web 版の複製なので、中身を勝手に変えない。
@@ -51,10 +54,8 @@ npm run typecheck
 
 ## 今後
 
-1. アカウント: BE は作った(コネクタの accounts / login。ログインは plugin-http で行い、受け取った Cookie は
-   いつもの Cookie の保存場所に入って書き込みに自動で付く。手で Cookie ヘッダーを付けると reqwest が保存場所の
-   Cookie を付けなくなるので付けない)。パスワードは accounts 表にそのまま置く(Linux に資格情報ストアがあるとは限らないため)。
-   UPLIFT・どんぐりは保留
+1. アカウント: BE は作った(コネクタの accounts / login。書き込み欄の sage の右の ︙ で、書き込みごとに使うか選べる)。
+   パスワードは accounts 表にそのまま置く(Linux に資格情報ストアがあるとは限らないため)。UPLIFT・どんぐりは保留
 2. 実機で BE のログインを確かめる(成功の見分けは「ログイン画面がまた出たか」だけで、本物のアカウントでは試していない)
 3. 自動 NG(連投・コピペ)は保留。判断用の軽量 LLM を内蔵する案と合わせて考える
 4. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)

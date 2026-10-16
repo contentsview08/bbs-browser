@@ -14,6 +14,8 @@ export interface HttpResponse {
 
 export interface HttpRequestOptions {
   headers?: Record<string, string>
+  /** 付けない Cookie の名前(POST だけ。BE を使わない書き込みで、BE の Cookie を外すときなど) */
+  excludeCookies?: string[]
 }
 
 export interface ConnectorContext {
@@ -105,6 +107,8 @@ export interface PostInput {
   name: string
   mail: string
   body: string
+  /** この書き込みで使うアカウント(AccountKind の id)。入っていないアカウントの Cookie は付けない */
+  accounts?: string[]
 }
 
 export interface NewThreadInput extends PostInput {
@@ -118,6 +122,8 @@ export interface PostConfirm {
   /** 元の書き込みの内容に、確認画面のフォームの項目を重ねたもの */
   fields: Record<string, string>
   referer: string
+  /** 元の書き込みで外した Cookie(承諾して送り直すときも同じにする) */
+  excludeCookies?: string[]
 }
 
 export type PostResult =
@@ -137,6 +143,8 @@ export interface AccountKind {
   site: string
   /** 登録の案内などの URL */
   registerUrl?: string
+  /** このアカウントを使える板のホスト(この名前か、その下の名前。例: 5ch.io) */
+  hosts: string[]
 }
 
 export interface LoginResult {

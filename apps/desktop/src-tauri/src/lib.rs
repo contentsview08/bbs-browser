@@ -5,6 +5,8 @@ use tauri::Manager;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod post_http;
+
 /// OS に入っているフォント 1 ファミリーぶん
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -323,6 +325,7 @@ pub fn run() {
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
         .setup(|app| {
             apply_pending_restore(app.handle());
+            app.manage(post_http::PostCookies::load(app.handle()));
             #[cfg(windows)]
             disable_browser_accelerator_keys(app);
             Ok(())
@@ -334,7 +337,8 @@ pub fn run() {
             write_json_file,
             read_json_file,
             prepare_db_backup,
-            schedule_db_restore
+            schedule_db_restore,
+            post_http::http_post
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

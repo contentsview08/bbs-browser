@@ -37,6 +37,7 @@ import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import UploadHistoryDialog from './components/UploadHistoryDialog'
 import PostHistoryDialog from './components/PostHistoryDialog'
+import type { PostAccountOption } from './components/PostAccountMenu'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
 import { resolvePlacements } from './utils/toolbar'
@@ -143,6 +144,36 @@ export default function App() {
     setLoginStatus((m) => new Map(m).set(`${a.connectorId}:${a.accountId}`, r))
     return r
   }
+  /**
+   * 板の URL → その板で使えるアカウント(書き込み欄の ︙ で選ぶもの)。
+   * 同じ板には同じ配列を返す(タブのスレ表示を描き直さずに済むように)
+   */
+  const postAccountsOf = useMemo(() => {
+    const cache = new Map<string, PostAccountOption[]>()
+    return (connectorId: string, boardUrl: string): PostAccountOption[] => {
+      const host = new URL(boardUrl).hostname
+      const key = `${connectorId}\n${host}`
+      let list = cache.get(key)
+      if (!list) {
+        list = (findConnector(connectorId)?.accounts ?? [])
+          .filter((k) => k.hosts.some((h) => host === h || host.endsWith(`.${h}`)))
+          .map((k) => ({
+            id: k.id,
+            name: k.name,
+            registered: accounts.some((a) => a.connectorId === connectorId && a.accountId === k.id),
+            on: settings.postAccounts[k.id] !== false,
+          }))
+        cache.set(key, list)
+      }
+      return list
+    }
+  }, [accounts, settings.postAccounts])
+  /** この板への書き込みで使うアカウントの id */
+  const postAccountIds = (connectorId: string, boardUrl: string) =>
+    postAccountsOf(connectorId, boardUrl)
+      .filter((o) => o.registered && o.on)
+      .map((o) => o.id)
+
   /** 設定画面から: 保存してログインする */
   const saveAndLogin = async (a: AccountRecord): Promise<LoginResult> => {
     if (!store) return { ok: false, message: 'DB を開いていません' }
@@ -758,7 +789,8 @@ export default function App() {
     const t = activeTab.thread
     const connector = connectorOf(t.connectorId)
     if (!connector.createPost) return { status: 'error', message: 'この掲示板には書き込めません' }
-    return afterPost(t, input, await connector.createPost(t, input, ctx))
+    const withAccounts = { ...input, accounts: postAccountIds(t.connectorId, t.boardUrl) }
+    return afterPost(t, input, await connector.createPost(t, withAccounts, ctx))
   }
 
   /** 書き込み確認で承諾したとき。成功したら、ふつうの書き込みと同じ後始末をする */
@@ -808,7 +840,8 @@ export default function App() {
     const b = board
     const connector = connectorOf(b.connectorId)
     if (!connector.createThread) return { status: 'error', message: 'この掲示板ではスレを立てられません' }
-    return afterThread(b, input, await connector.createThread(b, input, ctx))
+    const withAccounts = { ...input, accounts: postAccountIds(b.connectorId, b.url) }
+    return afterThread(b, input, await connector.createThread(b, withAccounts, ctx))
   }
 
   /** スレ立ての書き込み確認で承諾したとき */
@@ -992,6 +1025,8 @@ export default function App() {
     }),
     openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
     toggleFavoriteThread: useEvent((t: ThreadSummary) => toggleFavoriteThread(t)),
+    togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
+    openAccountSettings: useEvent(() => setSettingsTab('accounts')),
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const tabEventsRef = useRef(tabEvents)
@@ -1213,6 +1248,7 @@ export default function App() {
                   favorite={favIds.has(id)}
                   postReadyAt={postReadyAt}
                   postCooldownMs={postCooldownMs}
+                  postAccounts={postAccountsOf(t.thread.connectorId, t.thread.boardUrl)}
                   ev={stableTabEvents}
                 />
               </div>
@@ -1288,6 +1324,12 @@ export default function App() {
               : undefined
           }
           onUploaded={stableTabEvents.uploaded}
+          accounts={postAccountsOf(board.connectorId, board.url)}
+          onToggleAccount={stableTabEvents.togglePostAccount}
+          onOpenAccountSettings={() => {
+            setNewThreadOpen(false)
+            setSettingsTab('accounts')
+          }}
         />
       )}
 

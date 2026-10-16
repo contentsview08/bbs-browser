@@ -31,3 +31,5 @@ serde = { version = "1", features = ["derive"] }
 webview2-com = "0.39"
 windows-core = "0.62"
 serde_json = "1"
+# 書き込みの Cookie を自分で持つ(post_http.rs)。plugin-http が使っているものと同じ版
+cookie_store = "0.22"

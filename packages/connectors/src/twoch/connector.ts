@@ -10,6 +10,7 @@ import type {
   FetchPostsResult,
   HttpResponse,
   LoginResult,
+  PostInput,
   PostResult,
   ThreadSummary,
 } from '../types'
@@ -60,9 +61,16 @@ function datUrl(thread: ThreadSummary): string {
  * 5ch の初めての書き込みでは「書き込み確認」が返る。利用規約への承諾なので勝手には送り直さず、
  * 確認画面のフォームの項目と送り先を添えて返す。承諾されたら submitConfirm で送る
  */
-async function sendBbsCgi(url: string, fields: Record<string, string>, referer: string, ctx: ConnectorContext): Promise<PostResult> {
+async function sendBbsCgi(
+  url: string,
+  fields: Record<string, string>,
+  referer: string,
+  ctx: ConnectorContext,
+  excludeCookies: string[] = [],
+): Promise<PostResult> {
   const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer },
+    excludeCookies,
   })
   const html = ctx.decode(res.body, encodingOf(res))
   const r = parseBbsCgiResponse(html)
@@ -76,6 +84,7 @@ async function sendBbsCgi(url: string, fields: Record<string, string>, referer: 
         url: form.action ? new URL(form.action, url).href : url,
         fields: { ...fields, ...form.hidden },
         referer,
+        excludeCookies,
       },
     }
   }
@@ -134,6 +143,13 @@ function completeLines(body: Uint8Array): Uint8Array {
  * 成功すると DMDM・MDMD の Cookie が .5ch.io に渡り、以後 5ch の板への書き込みに自動で付く
  */
 const BE_LOGIN_URL = 'https://be.5ch.io/log'
+/** BE にログインしたときに受け取る Cookie。BE を使わない書き込みでは外す */
+const BE_COOKIES = ['DMDM', 'MDMD']
+
+/** 書き込みで外す Cookie。BE を使うと言われていなければ、BE の Cookie を外す */
+function excludedCookies(input: PostInput): string[] {
+  return input.accounts?.includes('be') ? [] : BE_COOKIES
+}
 
 /**
  * BE にログインできたかを、返ってきたページで見分ける。
@@ -288,6 +304,7 @@ export const twoChConnector: Connector = {
       // 5ch はスレの URL を Referer に求める
       threadWebUrl(thread),
       ctx,
+      excludedCookies(input),
     )
   },
 
@@ -306,14 +323,15 @@ export const twoChConnector: Connector = {
       },
       board.url,
       ctx,
+      excludedCookies(input),
     )
   },
 
   submitConfirm(confirm, ctx) {
-    return sendBbsCgi(confirm.url, confirm.fields, confirm.referer, ctx)
+    return sendBbsCgi(confirm.url, confirm.fields, confirm.referer, ctx, confirm.excludeCookies)
   },
 
-  accounts: [{ id: 'be', name: 'BE', site: '5ch', registerUrl: 'https://be.5ch.io/' }],
+  accounts: [{ id: 'be', name: 'BE', site: '5ch', registerUrl: 'https://be.5ch.io/', hosts: ['5ch.io', '5ch.net', 'bbspink.com'] }],
 
   async login(accountId, credential, ctx) {
     if (accountId !== 'be') return { ok: false, message: `知らないアカウントです(${accountId})` }

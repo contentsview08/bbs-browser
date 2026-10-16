@@ -7,6 +7,7 @@ import type { NewThreadInput, PostConfirm, PostResult } from '@bbs-browser/conne
 import PostResultBox from './PostResultBox'
 import { useCountdown } from '../hooks/useCountdown'
 import { useMediaInput } from '../hooks/useMediaInput'
+import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { UploadOptions } from '../host/uploader'
 
 interface Props {
@@ -24,6 +25,10 @@ interface Props {
   uploader?: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  /** この板で使えるアカウント(BE など)と、使うかどうか */
+  accounts: PostAccountOption[]
+  onToggleAccount: (id: string, on: boolean) => void
+  onOpenAccountSettings: () => void
 }
 
 const INPUT =
@@ -114,6 +119,7 @@ export default function NewThreadDialog(props: Props) {
           <div className="flex items-center gap-2">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={INPUT} />
             <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={INPUT} />
+            <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={props.onOpenAccountSettings} />
             {/* 画像と絵文字のボタン。本文の欄の右端にそろえる */}
             <div className="flex-shrink-0 flex items-center gap-0.5">{media.buttons}</div>
           </div>

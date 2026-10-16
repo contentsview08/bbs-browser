@@ -23,6 +23,7 @@ import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
 import { openJson, saveJson } from '../host/backup'
+import { pickOpenPath } from '../host/dialog'
 import { BAR_ACTIONS, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
@@ -275,11 +276,8 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
                 type="button"
                 className={BTN}
                 onClick={async () => {
-                  const file = await openDialog({
-                    title: '背景画像を選ぶ',
-                    filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }],
-                  })
-                  if (typeof file === 'string') update('backgroundImage', await importBackgroundImage(file))
+                  const file = await pickOpenPath('画像', ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])
+                  if (file) update('backgroundImage', await importBackgroundImage(file))
                 }}
               >
                 画像を選ぶ

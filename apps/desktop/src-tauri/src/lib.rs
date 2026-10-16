@@ -5,7 +5,10 @@ use tauri::Manager;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod chosen_paths;
 mod post_http;
+
+use chosen_paths::ChosenPaths;
 
 /// OS に入っているフォント 1 ファミリーぶん
 #[derive(serde::Serialize)]
@@ -186,7 +189,8 @@ async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<S
 /// 画面からはアセット(このフォルダの中だけ読める)で読むので、元のファイルを動かしても表示が崩れない。
 /// 名前に時刻を入れて、画像を替えたときに古いものが表示に残らないようにし、前のコピーは消す
 #[tauri::command]
-fn set_background_image(app: tauri::AppHandle, source: String) -> Result<String, String> {
+fn set_background_image(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, source: String) -> Result<String, String> {
+    let source = chosen.take(&source)?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -224,8 +228,8 @@ fn has_extension(path: &Path, exts: &[&str]) -> bool {
 
 /// 設定や NG の書き出し。ダイアログで選んだ場所に書く(.json だけ)
 #[tauri::command]
-fn write_json_file(path: String, contents: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
+fn write_json_file(chosen: tauri::State<'_, ChosenPaths>, path: String, contents: String) -> Result<(), String> {
+    let path = chosen.take(&path)?;
     if !has_extension(&path, &["json"]) {
         return Err("書き出せるのは .json だけです".into());
     }
@@ -234,8 +238,8 @@ fn write_json_file(path: String, contents: String) -> Result<(), String> {
 
 /// スレの書き出し。ダイアログで選んだ場所に書く(.html と .txt だけ)
 #[tauri::command]
-fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
+fn write_text_file(chosen: tauri::State<'_, ChosenPaths>, path: String, contents: String) -> Result<(), String> {
+    let path = chosen.take(&path)?;
     if !has_extension(&path, &["html", "htm", "txt"]) {
         return Err("書き出せるのは .html か .txt だけです".into());
     }
@@ -244,8 +248,8 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
 
 /// 設定や NG の読み込み(.json だけ、20MB まで)
 #[tauri::command]
-fn read_json_file(path: String) -> Result<String, String> {
-    let path = PathBuf::from(path);
+fn read_json_file(chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result<String, String> {
+    let path = chosen.take(&path)?;
     if !has_extension(&path, &["json"]) {
         return Err("読み込めるのは .json だけです".into());
     }
@@ -259,8 +263,8 @@ fn read_json_file(path: String) -> Result<String, String> {
 /// DB のバックアップ先を空ける。SQLite の VACUUM INTO は書き出し先が既にあると失敗するので、
 /// ダイアログで上書きを選んだときは先に消す(.db だけ)
 #[tauri::command]
-fn prepare_db_backup(path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
+fn prepare_db_backup(chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result<(), String> {
+    let path = chosen.take(&path)?;
     if !has_extension(&path, &["db", "sqlite", "sqlite3"]) {
         return Err("バックアップの名前は .db で終わるようにしてください".into());
     }
@@ -273,7 +277,8 @@ fn prepare_db_backup(path: String) -> Result<(), String> {
 /// DB の復元を頼む。選んだファイルが SQLite かを確かめてから置き場にコピーし、アプリを起動し直す
 /// (開いている DB はその場では入れ替えられないため、次の起動のはじめに入れ替える)
 #[tauri::command]
-fn schedule_db_restore(app: tauri::AppHandle, source: String) -> Result<(), String> {
+fn schedule_db_restore(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, source: String) -> Result<(), String> {
+    let source = chosen.take(&source)?;
     let mut head = [0u8; 16];
     {
         use std::io::Read;
@@ -342,6 +347,7 @@ pub fn run() {
         .setup(|app| {
             apply_pending_restore(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
+            app.manage(ChosenPaths::default());
             #[cfg(windows)]
             disable_browser_accelerator_keys(app);
             Ok(())
@@ -355,7 +361,9 @@ pub fn run() {
             read_json_file,
             prepare_db_backup,
             schedule_db_restore,
-            post_http::http_post
+            post_http::http_post,
+            chosen_paths::pick_save_path,
+            chosen_paths::pick_open_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

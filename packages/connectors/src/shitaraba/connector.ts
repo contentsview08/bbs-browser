@@ -86,7 +86,17 @@ export const shitarabaConnector: Connector = {
     const bbs = t?.[2] ?? b?.[2]
     if (!dir || !bbs) return null
     const boardUrl = boardUrlOf(dir, bbs)
-    const setting = await readSetting(boardUrl, ctx)
+    // 板が本当にあるかを、板の設定が取れるかで確かめる(ない板は 404 の HTML が返る)
+    let res: HttpResponse
+    try {
+      res = await ctx.http.get(`${ORIGIN}/bbs/api/setting.cgi/${dir}/${bbs}/`)
+    } catch (e) {
+      throw new Error(`したらばに届きません(${e instanceof Error ? e.message : String(e)})`)
+    }
+    if (res.status === 404) throw new Error('したらばの板が見つかりません(HTTP 404)')
+    if (res.status !== 200) throw new Error(`したらばの板を開けません(HTTP ${res.status})`)
+    const setting = parseShitarabaSetting(decode(res, ctx))
+    if (!setting.BBS && !setting.TOP) throw new Error('したらばの板ではないようです(板の設定が読めません)')
     const board: Board = { connectorId: ID, url: boardUrl, name: setting.BBS_TITLE || `${dir}/${bbs}` }
     if (!t) return { board }
     return {
@@ -107,8 +117,12 @@ export const shitarabaConnector: Connector = {
 
   async listThreads(board, ctx) {
     const res = await ctx.http.get(`${board.url}subject.txt`)
+    if (res.status === 404) throw new Error(`したらばの板が見つかりません(HTTP 404): ${board.url}`)
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${board.url}subject.txt`)
-    return parseShitarabaSubject(decode(res, ctx)).map((e, i) => ({
+    const text = decode(res, ctx)
+    const first = text.split('\n').find((l) => l.trim() !== '')
+    if (first !== undefined && !/^\d+\.cgi,/.test(first)) throw new Error(`スレ一覧を読めませんでした: ${board.url}`)
+    return parseShitarabaSubject(text).map((e, i) => ({
       connectorId: ID,
       boardUrl: board.url,
       key: e.key,

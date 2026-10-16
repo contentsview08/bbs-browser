@@ -71,10 +71,27 @@ const connectorOf = (id: string) => {
 }
 
 /** URL を扱えるコネクタで、板(とスレ)に読み替える */
+/**
+ * URL から板(とスレ)を割り出す。開けないときは、理由を付けて投げる(右下にエラーとして出る)。
+ * - どのコネクタも扱わない URL: 対応していない URL
+ * - 形は合うが、板が見つからない・掲示板の板ではない: コネクタが調べた理由
+ */
 async function resolve(url: string) {
-  const connector = builtinConnectors.find((c) => c.canHandle(url))
-  const r = connector ? await connector.resolveUrl(url, ctx) : null
-  if (!r) throw new Error(`開けない URL です: ${url}`)
+  const trimmed = url.trim()
+  try {
+    new URL(trimmed)
+  } catch {
+    throw new Error(`URL として読めません: ${trimmed}`)
+  }
+  const connector = builtinConnectors.find((c) => c.canHandle(trimmed))
+  if (!connector) throw new Error(`対応していない URL です: ${trimmed}`)
+  let r: Awaited<ReturnType<typeof connector.resolveUrl>>
+  try {
+    r = await connector.resolveUrl(trimmed, ctx)
+  } catch (e) {
+    throw new Error(`開けない URL です: ${trimmed}\n${e instanceof Error ? e.message : String(e)}`)
+  }
+  if (!r) throw new Error(`開けない URL です: ${trimmed}\n板やスレの URL の形ではありません`)
   return r
 }
 
@@ -598,6 +615,10 @@ export default function App() {
       ownNos: new Set(own),
     })
     await fetchThread(s, t, { keepUnread: true })
+    // 手元にもサーバーにもレスがなければ、ないスレ(番号の間違い・とうに消えたスレ)として知らせる
+    const after = await s.loadThread(t)
+    if (!after || (after.posts.length === 0 && after.status === 'archived'))
+      notify({ icon: 'error', title: 'スレが見つかりませんでした', body: `${t.title || t.key}\ndat 落ちして過去ログもないか、ない番号のスレです` })
   }
 
   const selectTab = (id: string) => {
@@ -1466,7 +1487,7 @@ export default function App() {
           role="alert"
         >
           <span className="material-symbols-outlined text-lg text-c-heat-very-hot">error</span>
-          <span className="flex-1 text-c-text-body break-all">{error}</span>
+          <span className="flex-1 text-c-text-body break-all whitespace-pre-wrap">{error}</span>
           <button type="button" onClick={() => setError(undefined)} className="text-c-text-muted hover:text-c-text-strong">
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

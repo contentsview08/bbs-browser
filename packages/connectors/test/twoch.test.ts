@@ -125,6 +125,10 @@ describe('resolveUrl', () => {
     decode: (bytes, enc) => new TextDecoder(enc).decode(bytes),
     http: {
       async get(url): Promise<HttpResponse> {
+        if (url === 'https://bbs.eddibb.cc/liveedge/subject.txt' || url === 'https://medaka.5ch.io/prog/subject.txt')
+          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1792065954.dat<>スレ (1)\n') }
+        if (url === 'https://example.com/foo/subject.txt')
+          return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<!doctype html><html></html>') }
         if (url === 'https://bbs.eddibb.cc/liveedge/SETTING.TXT') {
           const body = new TextEncoder().encode('liveedge@liveedge\nBBS_TITLE=エッヂ\nBBS_NONAME_NAME=エッヂの名無し\nBBS_LINE_NUMBER=16\nBBS_MESSAGE_COUNT=9192\nBBS_SUBJECT_COUNT=192\n')
           return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body }
@@ -169,6 +173,11 @@ describe('resolveUrl', () => {
 
   it('板でもスレでもない URL は null', async () => {
     expect(await twoChConnector.resolveUrl('https://example.com/a/b/c.html', ctx)).toBeNull()
+  })
+
+  it('形は板の URL でも、ない板・スレ一覧でないものは理由を付けて断る', async () => {
+    await expect(twoChConnector.resolveUrl('https://mi.5ch.io/nosuchboard/', ctx)).rejects.toThrow('板が見つかりません')
+    await expect(twoChConnector.resolveUrl('https://example.com/foo/', ctx)).rejects.toThrow('掲示板の板ではないようです')
   })
 })
 

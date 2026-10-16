@@ -97,6 +97,30 @@ async function sendBbsCgi(
   return { ...r, html }
 }
 
+/** subject.txt の中身がスレ一覧の形か(空の板もある)。エラーのページなどを、空のスレ一覧と取り違えないため */
+function looksLikeSubject(text: string): boolean {
+  const first = text.split('\n').find((l) => l.trim() !== '')
+  return first === undefined || /^\d+\.(?:dat|cgi)<>/.test(first)
+}
+
+/**
+ * 板が本当にあるかを、スレ一覧(subject.txt)を取って確かめる。なければ理由を付けて投げる
+ * (形だけ板の URL に見えるものを、空の板として開いてしまわないように)
+ */
+async function ensureBoard(boardUrl: string, ctx: ConnectorContext): Promise<void> {
+  const url = `${boardUrl}subject.txt`
+  let res: HttpResponse
+  try {
+    res = await ctx.http.get(url)
+  } catch (e) {
+    throw new Error(`板に届きません(${e instanceof Error ? e.message : String(e)})`)
+  }
+  if (res.status === 404) throw new Error('板が見つかりません(HTTP 404)')
+  if (res.status < 200 || res.status >= 300) throw new Error(`板を開けません(HTTP ${res.status})`)
+  if (!looksLikeSubject(ctx.decode(res.body, encodingOf(res))))
+    throw new Error('掲示板の板ではないようです(スレ一覧の形ではありません)')
+}
+
 /** SETTING.TXT を読む。取れなくても困らない情報なので、失敗したら空で返す */
 async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<BoardInfo> {
   try {
@@ -196,6 +220,7 @@ export const twoChConnector: Connector = {
     const [origin, dir] = t ? [t[1], t[2]] : b ? [b[1], b[2]] : []
     if (!origin || !dir || dir === 'test') return null
     const boardUrl = `${origin}/${dir}/`
+    await ensureBoard(boardUrl, ctx)
 
     // 板名は SETTING.TXT の BBS_TITLE。取れなければディレクトリ名で代用する
     const name = (await readSettingTxt(boardUrl, ctx)).title || dir
@@ -220,8 +245,11 @@ export const twoChConnector: Connector = {
   async listThreads(board, ctx) {
     const url = `${board.url}subject.txt`
     const res = await ctx.http.get(url)
+    if (res.status === 404) throw new Error(`板が見つかりません(HTTP 404): ${board.url}`)
     ensureOk(res, url)
-    return parseSubjectTxt(ctx.decode(res.body, encodingOf(res))).map(
+    const text = ctx.decode(res.body, encodingOf(res))
+    if (!looksLikeSubject(text)) throw new Error(`スレ一覧を読めませんでした(掲示板の板ではないかもしれません): ${board.url}`)
+    return parseSubjectTxt(text).map(
       (e, order): ThreadSummary => ({
         connectorId: ID,
         boardUrl: board.url,

@@ -108,3 +108,10 @@ describe('EUC-JP の書き込み', () => {
     expect(e.message).toContain('本文がありません')
   })
 })
+
+describe('したらばの板の確かめ', () => {
+  it('ない板は理由を付けて断る', async () => {
+    const { ctx } = fake({})
+    await expect(shitarabaConnector.resolveUrl('https://jbbs.shitaraba.net/computer/99999999/', ctx)).rejects.toThrow('板が見つかりません')
+  })
+})

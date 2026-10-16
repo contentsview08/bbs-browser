@@ -187,6 +187,23 @@ export const youtubeLinksIn = memoByText(function youtubeLinksIn(text: string): 
   return links
 })
 
+/**
+ * YouTube の URL を、埋め込みのプレーヤーの URL にする。YouTube でなければ undefined。
+ * 再生を始める位置(t=90、t=1m30s、start=90)があれば、そこから再生する
+ */
+export function youtubeEmbedUrl(url: string): string | undefined {
+  if (!YOUTUBE_URL.test(url)) return undefined
+  const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+  if (!id) return undefined
+  const t = /[?&#](?:t|start)=([\dhms]+)/.exec(url)?.[1]
+  let start = 0
+  if (t) {
+    if (/^\d+$/.test(t)) start = Number(t)
+    else for (const [, n, u] of t.matchAll(/(\d+)([hms])/g)) start += Number(n) * (u === 'h' ? 3600 : u === 'm' ? 60 : 1)
+  }
+  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0${start > 0 ? `&start=${start}` : ''}`
+}
+
 /** 本文の YouTube の動画の ID(書き込み欄のサムネイルに使う) */
 export function youtubeIdsIn(text: string): string[] {
   return youtubeLinksIn(text).map((l) => l.id)

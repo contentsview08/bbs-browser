@@ -208,7 +208,8 @@ function PostArticle(props: Props) {
   const videos = props.showThumbnails ? youtubeLinksIn(post.body) : []
   // 動画のファイル(mp4 など)は、画像と一緒にビューアーで順に見られるよう、画像の後ろにつなげて渡す
   const videoFiles = props.showThumbnails ? videoFileUrlsIn(post.body) : []
-  const media = videoFiles.length > 0 ? [...images, ...videoFiles] : images
+  // YouTube もビューアーの中で再生するので、いちばん後ろにつなげる
+  const media = videoFiles.length + videos.length > 0 ? [...images, ...videoFiles, ...videos.map((v) => v.url)] : images
   // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
   const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
 
@@ -469,18 +470,18 @@ function PostArticle(props: Props) {
                 </span>
               </button>
             ))}
-            {/* YouTube は赤い枠と ▶ で見分ける(web 版と同じ)。押すとブラウザで開く */}
-            {videos.map((v) => (
+            {/* YouTube は赤い枠と ▶ で見分ける(web 版と同じ)。押すとビューアーの中で再生する */}
+            {videos.map((v, k) => (
               <button
                 key={v.id}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handlers.onUrl(v.url)
+                  handlers.onImage(media, images.length + videoFiles.length + k, post)
                 }}
                 className="relative w-20 h-20 rounded overflow-hidden flex-shrink-0 hover:opacity-90 transition-opacity"
                 style={{ border: '2px solid #ff0000', background: '#000' }}
-                title="YouTube で開く"
+                title="YouTube を再生する"
               >
                 <img
                   src={`https://img.youtube.com/vi/${v.id}/mqdefault.jpg`}

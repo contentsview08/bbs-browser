@@ -4,13 +4,14 @@
 // - 画像の下側に本文のパネルを重ねる(web 版のスマホ表示と同じ)。画像を押すとパネルを隠す。絵の外を押したら閉じる
 // - Ctrl+ホイールでマウスの位置を中心に拡大・縮小し、拡大中はつかんで動かせる。ダブルクリックで等倍と 2.5 倍を切り替える
 // - 動画のファイル(mp4 など)は、その場で再生する(拡大はしない)。再生できない形式なら、ブラウザで開くボタンを出す
+// - YouTube は埋め込みのプレーヤーで再生する
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { saveImage } from '../host/saveImage'
-import { isVideoFileUrl } from '../utils/postBody'
+import { isVideoFileUrl, youtubeEmbedUrl } from '../utils/postBody'
 
 interface Props {
   urls: string[]
@@ -73,6 +74,7 @@ function zoomAt(z: Zoom, next: number, cx: number, cy: number): Zoom {
 export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose, onOpenExternal }: Props) {
   const url = urls[index]
   const video = isVideoFileUrl(url)
+  const youtube = youtubeEmbedUrl(url)
   /** 動画を再生できなかった(HEVC の .mov など、WebView が扱えない形式) */
   const [videoError, setVideoError] = useState(false)
   const [save, setSave] = useState<SaveState>()
@@ -167,7 +169,21 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
   // 枠の中に置くと、最前面に出しているレスのポップアップより下に描かれてしまう
   return createPortal(
     <div ref={overlayRef} className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
-      {video ? (
+      {youtube ? (
+        // YouTube は埋め込みのプレーヤーで再生する。16:9 で、枠に収まる大きさにする。
+        // 埋め込みを断っている動画は、プレーヤーの中に YouTube の案内が出る(右上の「ブラウザで開く」で見られる)
+        <iframe
+          key={url}
+          src={youtube}
+          title="YouTube"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          className="lightbox-open-rise bg-black border-0"
+          style={{ width: 'min(92vw, calc(86vh * 16 / 9))', aspectRatio: '16 / 9' }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : video ? (
         videoError ? (
           // 再生できない形式。ブラウザ(ふつうは再生できる)で開けるようにする
           <div className="flex flex-col items-center gap-3 text-white/80 text-sm" onClick={(e) => e.stopPropagation()}>
@@ -219,8 +235,8 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
       />
       )}
 
-      {/* 本文のパネル。画像の下側に半透明で重ねる */}
-      {panelOpen && post && (
+      {/* 本文のパネル。画像の下側に半透明で重ねる(動画と YouTube は、操作バーに重なるので出さない) */}
+      {panelOpen && post && !video && !youtube && (
         <div
           ref={panelRef}
           className="absolute left-1/2 -translate-x-1/2 bottom-4 w-[min(92vw,900px)] max-h-[34vh] overflow-y-auto custom-scrollbar rounded-xl px-5 py-3 text-white backdrop-blur-md"
@@ -245,6 +261,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
         <span className="text-white/70 text-sm tabular-nums mr-2">
           {index + 1} / {urls.length}
         </span>
+        {!youtube && (
         <button
           type="button"
           className={TOOL}
@@ -256,6 +273,7 @@ export default function Lightbox({ urls, index, post, saveDir, onIndex, onClose,
             {save?.status === 'saving' ? 'progress_activity' : 'download'}
           </span>
         </button>
+        )}
         <button type="button" className={TOOL} title="ブラウザで開く" onClick={() => onOpenExternal(url)}>
           <span className="material-symbols-outlined text-2xl">open_in_new</span>
         </button>

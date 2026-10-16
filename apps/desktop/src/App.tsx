@@ -715,9 +715,12 @@ export default function App() {
     setKeptIds((prev) => [activeId, ...prev.filter((x) => x !== activeId)].slice(0, KEEP_TABS))
   }, [activeId])
   const aliveIds = new Set(tabs.map((t) => t.id))
+  // どれを残すかは最近開いた順で決めるが、並べる順は id で固定する。
+  // 並びが変わると React が要素を付け替え、付け替えられたスレ表示はスクロール位置が一番上に戻ってしまうため
   const shownIds = (activeId && !keptIds.includes(activeId) ? [activeId, ...keptIds] : keptIds)
     .filter((id) => aliveIds.has(id))
     .slice(0, KEEP_TABS)
+    .sort()
 
   const tabEvents: TabEvents = {
     savePosition: useEvent((id: string, pos: ScrollPosition) => patchTab(id, { scroll: pos })),

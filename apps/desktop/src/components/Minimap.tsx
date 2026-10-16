@@ -59,10 +59,17 @@ export default function Minimap(props: Props) {
     let raf = requestAnimationFrame(() => {
       raf = requestAnimationFrame(measure)
     })
-    const observer = new ResizeObserver(measure)
+    // 大きさが変わり続けているあいだ(サイドバーの開閉・ウィンドウの大きさを変えている途中)は測らず、
+    // 落ち着いてから 1 回だけ測る(全部のレスの位置を測るので、毎コマやると重い)
+    let timer: ReturnType<typeof setTimeout>
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer)
+      timer = setTimeout(measure, 150)
+    })
     observer.observe(root)
     if (listRef.current) observer.observe(listRef.current)
     return () => {
+      clearTimeout(timer)
       cancelAnimationFrame(raf)
       observer.disconnect()
     }

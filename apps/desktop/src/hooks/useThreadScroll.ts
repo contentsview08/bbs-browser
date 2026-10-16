@@ -403,11 +403,19 @@ export function useThreadScroll(o: Options) {
       setShowJump(rest > root.clientHeight)
       later()
     }
+    // 幅を覚え直すと全部のレスの仮の高さを描き直すので、大きさが変わり続けているあいだは待ち、落ち着いてから 1 回だけ
+    let widthTimer: ReturnType<typeof setTimeout>
     const observer = new ResizeObserver(() => {
       updateJump()
       if (list) {
-        setWidth(list.clientWidth)
-        metrics.current.fontSize = parseFloat(getComputedStyle(list).fontSize) || 16
+        const apply = () => {
+          setWidth(list.clientWidth)
+          metrics.current.fontSize = parseFloat(getComputedStyle(list).fontSize) || 16
+        }
+        clearTimeout(widthTimer)
+        // まだ幅を知らない(開いたばかり)ときはすぐ覚える
+        if (widthRef.current === 0) apply()
+        else widthTimer = setTimeout(apply, 150)
       }
       later()
     })
@@ -424,6 +432,7 @@ export function useThreadScroll(o: Options) {
     return () => {
       observer.disconnect()
       clearTimeout(timer)
+      clearTimeout(widthTimer)
       root.removeEventListener('scroll', onScroll)
       root.removeEventListener('wheel', touch)
       root.removeEventListener('pointerdown', touch)

@@ -199,11 +199,13 @@ export default function Sidebar(props: Props) {
   }
 
   return (
-    // 外枠は、しまっているあいだ帯の幅のまま。一時的に開いた中身は、その上に重ねて広げる
-    <div className="relative flex-shrink-0 transition-[width] duration-200 ease-out" style={{ width: props.collapsed ? COLLAPSED : EXPANDED }}>
+    // 外枠は、しまっているあいだ帯の幅のまま。一時的に開いた中身は、その上に重ねて広げる。
+    // 外枠の幅はアニメーションさせずに 1 回で切り替え、中身(aside)だけを本体の上に重ねて伸び縮みさせる
+    // (外枠の幅を少しずつ変えると、右の本体の配置とスレ表示の測り直しが 1 コマごとに走ってカクつくため)
+    <div className="relative flex-shrink-0" style={{ width: props.collapsed ? COLLAPSED : EXPANDED }}>
     <aside
       className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar transition-[width] duration-200 ease-out ${
-        peek ? 'z-40 shadow-2xl' : ''
+        peek ? 'z-40 shadow-2xl' : 'z-30'
       }`}
       style={{ width: collapsed ? COLLAPSED : EXPANDED }}
       onMouseEnter={() => {

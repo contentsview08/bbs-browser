@@ -350,6 +350,22 @@ function PostArticle(props: Props) {
             {name}
           </button>
         )}
+        {/* NG のレスを押して中身を出しているときは、NG だと分かる札を出す。札を押すとあぼーんに戻す */}
+        {props.ng && revealed && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setRevealed(false)
+            }}
+            className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-px rounded hover:opacity-80 transition-opacity"
+            style={{ color: 'var(--c-heat-very-hot)', border: '1px solid var(--c-heat-very-hot)' }}
+            title="NG のレスです。押すとあぼーんに戻します"
+          >
+            <span className="material-symbols-outlined text-xs leading-none">block</span>
+            NG
+          </button>
+        )}
         {props.isOp && (
           <span
             className="flex-shrink-0 text-[10px] font-bold px-1.5 py-px rounded"

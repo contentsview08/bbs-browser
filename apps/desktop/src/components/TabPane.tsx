@@ -56,6 +56,8 @@ export interface TabEvents {
   openAccountSettings: () => void
   /** スレのブラウザ用の URL */
   threadUrl: (t: ThreadSummary) => string
+  /** 開いているタブの「既読をすぐ知らせる」関数を預かる(更新の直前に呼ぶ) */
+  registerReadFlush: (flush: (() => void) | undefined) => void
 }
 
 interface Props {
@@ -145,6 +147,7 @@ function TabPane({
       postAccounts={postAccounts}
       draft={draft}
       threadUrl={ev.threadUrl(thread)}
+      registerReadFlush={ev.registerReadFlush}
       postLimits={postLimits}
       postByteLength={postByteLength}
       splitPostIcon={splitPostIcon}

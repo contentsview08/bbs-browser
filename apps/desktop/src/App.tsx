@@ -487,7 +487,15 @@ export default function App() {
         )
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
         if (changed && before && settingsRef.current.notifyReplies) await notifyReplies(s, t, saved, before.postCount)
-        if (changed) patchFav(t, (f) => ({ ...f, postCount: saved.postCount, status: saved.status, thread: { ...f.thread, postCount: saved.postCount } }))
+        if (changed) {
+          patchFav(t, (f) => ({ ...f, postCount: saved.postCount, status: saved.status, thread: { ...f.thread, postCount: saved.postCount } }))
+          // 閲覧履歴の一覧の行も、取ってきたレス数と dat 落ちを写す
+          setHistory((list) =>
+            list?.map((h) =>
+              threadId(h.thread) === id ? { ...h, postCount: saved.postCount, status: saved.status, thread: { ...h.thread, postCount: saved.postCount } } : h,
+            ),
+          )
+        }
         // スレ一覧の印(レス数・dat 落ち)は、このスレの 1 行だけ書き換える(板全体を読み直さない)
         if (changed && boardRef.current?.url === t.boardUrl)
           setStates((m) => {
@@ -622,11 +630,15 @@ export default function App() {
    * 開いているスレを手で更新する(更新ボタン・R キー・引っぱって更新)。
    * 続けて押してもサーバーに何度も取りに行かないよう、同じスレは REFRESH_COOLDOWN_MS あける(自動更新は別)
    */
+  /** 開いているタブの「いま見えているところまでの既読をすぐ知らせる」関数(スレ表示が預ける) */
+  const readFlush = useRef<(() => void) | undefined>(undefined)
   const refreshThread = () =>
     run('posts', async () => {
       if (!store || !activeTab) return
       const now = Date.now()
       if (now < (activeTab.refreshReadyAt ?? 0)) return
+      // 既読の記録が間に合っていないと、「ここから未読」を古い位置で引き直してしまうので、先に記録する
+      readFlush.current?.()
       // 明ける時刻をタブに持たせ、更新ボタンに残りを出す
       patchTab(activeTab.id, { refreshReadyAt: now + REFRESH_COOLDOWN_MS })
       await fetchThread(store, activeTab.thread)
@@ -678,6 +690,7 @@ export default function App() {
     const t = activeTab
     if (!store || !t?.log || !isAppVisible()) return
     if (t.log.status === 'archived' || (t.log.posts.at(-1)?.no ?? 0) >= 1000) return
+    readFlush.current?.()
     void fetchThread(store, t.thread).catch(() => undefined)
   }
   const autoRefreshRef = useRef(autoRefresh)
@@ -991,6 +1004,8 @@ export default function App() {
         return new Map(m).set(t.key, { ...cur, readNo: no })
       })
     patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
+    // 閲覧履歴の一覧を出しているときは、その行の既読も進める(開いた時点のまま残り、未読の印が消えなかった)
+    setHistory((list) => list?.map((h) => (threadId(h.thread) === id && no > h.readNo ? { ...h, readNo: no } : h)))
     void store.markRead(t, no).catch(backgroundError('既読の保存'))
   })
 
@@ -1093,6 +1108,9 @@ export default function App() {
     togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
     openAccountSettings: useEvent(() => setSettingsTab('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
+    registerReadFlush: useEvent((flush: (() => void) | undefined) => {
+      readFlush.current = flush
+    }),
     loadDraft: useEvent(async (t: ThreadSummary) => store?.getDraft(t)),
     saveDraft: useEvent((t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(backgroundError('下書きの保存'))),
   }

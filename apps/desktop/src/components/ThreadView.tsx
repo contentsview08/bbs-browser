@@ -94,6 +94,12 @@ interface Props {
   postByteLength?: (text: string) => number
   /** スレのブラウザ用の URL(保存するファイルに書く) */
   threadUrl: string
+  /**
+   * 「いま見えているところまでの既読をすぐ知らせる」関数を App に渡す。
+   * 更新の直前に呼んでもらい、既読の記録(スクロールが止まって少し後)が間に合わないまま
+   * 「ここから未読」を古い位置で引き直さないようにする
+   */
+  registerReadFlush?: (flush: (() => void) | undefined) => void
   /** 書き込みの下書き(このスレの書きかけ) */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
@@ -365,6 +371,7 @@ export default function ThreadView(props: Props) {
     intrinsicHeight,
     getPosition,
     restorePosition,
+    flushRead,
   } = useThreadScroll({
     rootRef: ref,
     listRef,
@@ -489,6 +496,13 @@ export default function ThreadView(props: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [props.active, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
+
+  // 開いているタブのあいだだけ、既読をすぐ知らせる関数を App に預ける
+  useEffect(() => {
+    if (!props.active || !props.registerReadFlush) return
+    props.registerReadFlush(flushRead)
+    return () => props.registerReadFlush?.(undefined)
+  }, [props.active, props.registerReadFlush, flushRead])
 
   // 絞り込み(人気レス・画像・検索など)を始めたときの位置を覚え、解いたらそこへ戻す。
   // 絞り込んだ一覧の一番下まで見てから解いたときは、全体の一番下へ(読み進めた続きから読めるように)。

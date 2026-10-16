@@ -473,5 +473,7 @@ export function useThreadScroll(o: Options) {
     intrinsicHeight,
     getPosition,
     restorePosition,
+    /** いま見えているところまでの既読を、待たずにすぐ知らせる(更新の直前など) */
+    flushRead: reportRead,
   }
 }

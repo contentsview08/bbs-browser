@@ -54,6 +54,8 @@ export interface TabEvents {
   loadDraft: (t: ThreadSummary) => Promise<string | undefined>
   saveDraft: (t: ThreadSummary, body: string) => void
   openAccountSettings: () => void
+  /** スレのブラウザ用の URL */
+  threadUrl: (t: ThreadSummary) => string
 }
 
 interface Props {
@@ -139,6 +141,7 @@ function TabPane({
       postCooldownMs={postCooldownMs}
       postAccounts={postAccounts}
       draft={draft}
+      threadUrl={ev.threadUrl(thread)}
       postLimits={postLimits}
       postByteLength={postByteLength}
       onTogglePostAccount={ev.togglePostAccount}

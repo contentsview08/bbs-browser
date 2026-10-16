@@ -232,6 +232,16 @@ fn write_json_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|e| e.to_string())
 }
 
+/// スレの書き出し。ダイアログで選んだ場所に書く(.html と .txt だけ)
+#[tauri::command]
+fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !has_extension(&path, &["html", "htm", "txt"]) {
+        return Err("書き出せるのは .html か .txt だけです".into());
+    }
+    std::fs::write(&path, contents).map_err(|e| e.to_string())
+}
+
 /// 設定や NG の読み込み(.json だけ、20MB まで)
 #[tauri::command]
 fn read_json_file(path: String) -> Result<String, String> {
@@ -341,6 +351,7 @@ pub fn run() {
             save_image,
             set_background_image,
             write_json_file,
+            write_text_file,
             read_json_file,
             prepare_db_backup,
             schedule_db_restore,

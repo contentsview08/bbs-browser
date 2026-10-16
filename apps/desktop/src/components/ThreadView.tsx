@@ -16,6 +16,7 @@ import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
 import RefreshButton from './RefreshButton'
+import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
@@ -89,6 +90,8 @@ interface Props {
   /** 板の書き込みの上限と、その掲示板での数え方(書き込み欄に長さを出す) */
   postLimits?: PostLimits
   postByteLength?: (text: string) => number
+  /** スレのブラウザ用の URL(保存するファイルに書く) */
+  threadUrl: string
   /** 書き込みの下書き(このスレの書きかけ) */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
@@ -257,13 +260,15 @@ export default function ThreadView(props: Props) {
   const [quickMessage, setQuickMessage] = useState<{ ok: boolean; text: string }>()
   const quickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(quickTimer.current), [])
+  /** スレ表示の下に、少しのあいだ結果を出す */
+  const showQuick = (ok: boolean, text: string) => {
+    setQuickMessage({ ok, text })
+    clearTimeout(quickTimer.current)
+    quickTimer.current = setTimeout(() => setQuickMessage(undefined), ok ? 2500 : 6000)
+  }
   const quickPost = async (body: string) => {
     if (!props.onSubmitPost) return
-    const show = (ok: boolean, text: string) => {
-      setQuickMessage({ ok, text })
-      clearTimeout(quickTimer.current)
-      quickTimer.current = setTimeout(() => setQuickMessage(undefined), ok ? 2500 : 6000)
-    }
+    const show = showQuick
     show(true, '書き込み中…')
     try {
       const r = await props.onSubmitPost({ name: props.postName, mail: props.postMail, body })
@@ -407,6 +412,16 @@ export default function ThreadView(props: Props) {
     { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
     { id: 'delete', label: 'ログを削除して閉じる (Delete)', icon: 'delete', onClick: props.onDeleteLog },
     { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
+    {
+      id: 'save',
+      label: 'スレを保存(HTML・テキスト)',
+      icon: 'save',
+      onClick: () =>
+        void saveThread({ title: log.title, url: props.threadUrl, posts: log.posts, savedAt: new Date() }).then(
+          (path) => path && showQuick(true, `保存しました: ${path}`),
+          (e: unknown) => showQuick(false, `保存できませんでした: ${e instanceof Error ? e.message : String(e)}`),
+        ),
+    },
     {
       id: 'refresh',
       label: '更新',

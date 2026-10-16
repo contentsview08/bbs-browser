@@ -22,6 +22,7 @@ export const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'replyLayout', name: '書き込み欄の位置', icon: 'view_sidebar', placement: 'header' },
   { id: 'delete', name: 'ログを削除して閉じる', icon: 'delete', placement: 'header' },
   { id: 'openBrowser', name: 'ブラウザで開く', icon: 'open_in_new', placement: 'menu' },
+  { id: 'save', name: 'スレを保存', icon: 'save', placement: 'menu' },
   { id: 'refresh', name: '更新', icon: 'refresh', placement: 'header' },
 ]
 

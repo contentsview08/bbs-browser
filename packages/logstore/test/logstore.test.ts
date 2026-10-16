@@ -140,6 +140,9 @@ describe('applyFetch: 取得結果を手元のログに当てはめる', () => {
       { status: 'archived', posts: [], cursor: { bytes: 120 } },
       // 過去ログから取れた(レスは保存し、dat 落ちのまま)
       { status: 'reset', posts: [post(1), post(2), post(3), post(4)], cursor: { bytes: 300 }, archived: true },
+      // 一度 active に戻っても(古い版で取ったときなど)、過去ログの「変わらない」で dat 落ちに直る
+      { status: 'reset', posts: [post(1), post(2), post(3), post(4)], cursor: { bytes: 300 } },
+      { status: 'notModified', posts: [], cursor: { bytes: 300 }, archived: true },
     ]
     let mine: ThreadLog | null = null
     for (const r of steps) {
@@ -148,6 +151,7 @@ describe('applyFetch: 取得結果を手元のログに当てはめる', () => {
       const fromDb = (await store.loadThread(thread))!
       expect(mine).toEqual(fromDb)
     }
+    expect(mine?.status).toBe('archived')
   })
 
   it('変わらなかったときは同じものを返す(描き直さずに済むように)', () => {

@@ -49,7 +49,9 @@ export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, resu
     readNo: 0,
     status: 'active',
   }
-  if (result.status === 'notModified') return base
+  // 変わらなくても、dat 落ちと分かったら(過去ログから取ったスレ)印だけは付ける
+  if (result.status === 'notModified')
+    return result.archived && base.status !== 'archived' ? { ...base, status: 'archived' } : base
   if (result.status === 'archived') return base.status === 'archived' ? base : { ...base, status: 'archived' }
   let posts: Post[]
   if (result.status === 'reset') posts = [...result.posts].sort((a, b) => a.no - b.no)
@@ -326,7 +328,11 @@ export class LogStore {
     )
 
     if (result.status === 'notModified') {
-      await this.db.execute('UPDATE threads SET fetched_at = $1 WHERE board_url = $2 AND key = $3', [now, ...where])
+      // 過去ログから取ったスレは、変わらなくても dat 落ちの印を付け直す(前に取ったときに付け損ねていても直るように)
+      await this.db.execute(
+        `UPDATE threads SET fetched_at = $1, status = CASE WHEN $2 = 1 THEN 'archived' ELSE status END WHERE board_url = $3 AND key = $4`,
+        [now, result.archived ? 1 : 0, ...where],
+      )
       return
     }
     if (result.status === 'archived') {

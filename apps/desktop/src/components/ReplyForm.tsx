@@ -5,10 +5,10 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import type { PostConfirm, PostInput, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
-import EmojiPicker from './EmojiPicker'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
 import { useCountdown } from '../hooks/useCountdown'
-import { uploadToCatbox, type UploadOptions } from '../host/uploader'
+import type { UploadOptions } from '../host/uploader'
+import { useMediaInput } from '../hooks/useMediaInput'
 import type { ReplyLayout } from '../ui/settings'
 
 export interface ReplyFormHandle {
@@ -63,31 +63,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }
   useImperativeHandle(ref, () => ({ insert, focus: () => textRef.current?.focus() }))
 
-  // ── 画像のアップロード(ボタン・貼り付け・ドラッグ) ──
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(0)
-  const [uploadError, setUploadError] = useState<string>()
-  /** 一度に上げられる数。アップローダーに負担をかけないよう、まとめて貼られても 1 枚ずつ順番に上げる */
-  const MAX_FILES = 10
-  const upload = async (all: File[]) => {
-    if (!props.uploader) return
-    setUploadError(all.length > MAX_FILES ? `一度に上げられるのは ${MAX_FILES} 枚までです(先頭の ${MAX_FILES} 枚だけ上げます)` : undefined)
-    const files = all.slice(0, MAX_FILES)
-    for (const file of files) {
-      setUploading((n) => n + 1)
-      try {
-        const url = await uploadToCatbox(file, props.uploader)
-        insert(`${url}\n`)
-        props.onUploaded?.({ url, name: file.name || 'image', size: file.size, withAccount: !!props.uploader.userhash })
-      } catch (e) {
-        setUploadError(e instanceof Error ? e.message : String(e))
-      } finally {
-        setUploading((n) => n - 1)
-      }
-    }
-  }
-  /** 貼り付け・ドラッグされたもののうち、画像と動画のファイルだけを上げる */
-  const mediaFiles = (list: FileList | null | undefined) => [...(list ?? [])].filter((f) => /^(image|video)\//.test(f.type))
+  // 画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字
+  const media = useMediaInput({ uploader: props.uploader, insert, onUploaded: props.onUploaded, disabled: !!props.disabled })
 
   const sage = mail.trim().toLowerCase() === 'sage'
 
@@ -151,44 +128,13 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   )
 
   /** 画像と絵文字のボタン(右端が絵文字)。本文の欄の上(名前とメールの行の右端＝本文の欄の右端)に置く */
-  const mediaButtons = (
-    <>
-      {props.uploader && (
-        <>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={!!props.disabled}
-            className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40"
-            title="画像をアップロード(catbox.moe)。書き込み欄に貼り付け・ドラッグしても上げられます"
-          >
-            <span className={`material-symbols-outlined text-lg leading-none ${uploading > 0 ? 'animate-spin' : ''}`}>
-              {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
-            </span>
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*,video/*"
-            multiple
-            hidden
-            onChange={(e) => {
-              void upload(mediaFiles(e.target.files))
-              e.target.value = ''
-            }}
-          />
-        </>
-      )}
-      <EmojiPicker onPick={insert} disabled={!!props.disabled} />
-    </>
-  )
 
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
-      {uploadError && (
+      {media.error && (
         <p className="mb-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
           <span className="material-symbols-outlined text-sm">error</span>
-          {uploadError}
+          {media.error}
         </p>
       )}
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
@@ -216,28 +162,14 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage
         </label>
-        <div className="ml-auto flex items-center gap-0.5">{mediaButtons}</div>
+        <div className="ml-auto flex items-center gap-0.5">{media.buttons}</div>
       </div>
         <div className="relative flex-1 min-h-0 flex">
         <textarea
           ref={textRef}
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          onPaste={(e) => {
-            const files = props.uploader ? mediaFiles(e.clipboardData.files) : []
-            if (files.length === 0) return
-            e.preventDefault()
-            void upload(files)
-          }}
-          onDragOver={(e) => {
-            if (props.uploader && [...e.dataTransfer.items].some((i) => i.kind === 'file')) e.preventDefault()
-          }}
-          onDrop={(e) => {
-            const files = props.uploader ? mediaFiles(e.dataTransfer.files) : []
-            if (files.length === 0) return
-            e.preventDefault()
-            void upload(files)
-          }}
+          {...media.textareaProps}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()

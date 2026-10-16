@@ -1278,6 +1278,16 @@ export default function App() {
           onClose={() => setNewThreadOpen(false)}
           readyAt={postReadyAt}
           cooldownMs={postCooldownMs}
+          uploader={
+            settings.uploaderEnabled
+              ? {
+                  stripMetadata: settings.uploadStripMetadata,
+                  maxDimension: settings.uploadMaxDimension,
+                  userhash: settings.catboxUserhash.trim() || undefined,
+                }
+              : undefined
+          }
+          onUploaded={stableTabEvents.uploaded}
         />
       )}
 

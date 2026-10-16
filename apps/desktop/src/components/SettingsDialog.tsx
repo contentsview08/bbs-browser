@@ -773,6 +773,25 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('favCheckMin', v)}
         />
       </Section>
+      <Section title="通知">
+        <Toggle
+          checked={s.notifyFavThreads}
+          onChange={(v) => update('notifyFavThreads', v)}
+          label="お気に入りのスレに新着があったら知らせる"
+          note="上の間隔で新着の数を確かめたときに、増えていたら右下に出します"
+        />
+        <div className="mt-3">
+          <p className="text-sm text-c-text-body mb-1.5">キーワードに合うスレが立ったら知らせる</p>
+          <p className="text-xs text-c-text-muted mb-2">
+            お気に入り板のスレ一覧をこの間隔で見に行き、スレッド一覧のキーワード(設定 → スレッド一覧)を含むスレが新しく立っていたら知らせます
+          </p>
+          <Choice
+            value={s.keywordWatchMin}
+            options={[0, 5, 10, 30, 60].map((n) => ({ key: n, name: n === 0 ? '知らせない' : `${n} 分ごと` }))}
+            onChange={(v) => update('keywordWatchMin', v)}
+          />
+        </div>
+      </Section>
       <Section title="新着">
         <Toggle
           checked={s.autoScrollOnNew}

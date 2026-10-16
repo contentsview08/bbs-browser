@@ -134,6 +134,12 @@ export interface AppSettings {
   autoScrollOnNew: boolean
   /** お気に入りのスレの新着の数を確かめる間隔(分)。0 なら確かめない(スレ一覧だけ取るので軽い) */
   favCheckMin: number
+  /** お気に入りのスレに新着があったら、右下に知らせる */
+  notifyFavThreads: boolean
+  /** お気に入り板のスレ一覧を見に行き、キーワードに合うスレが立ったら知らせる間隔(分)。0 なら見に行かない */
+  keywordWatchMin: number
+  /** 板ごとの、キーワードのスレを最後に確かめた時刻(ms)。それより後に立ったスレを知らせる */
+  keywordWatchSince: Record<string, number>
   /** 自分宛てのレスが届いたら、右下に通知を出す */
   notifyReplies: boolean
   // NG
@@ -217,6 +223,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoScrollOnNew: true,
   notifyReplies: true,
   favCheckMin: 5,
+  notifyFavThreads: true,
+  keywordWatchMin: 10,
+  keywordWatchSince: {},
   ngRules: [],
   ngMode: 'aborn',
   uploaderEnabled: false,

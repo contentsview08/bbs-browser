@@ -55,6 +55,7 @@ import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { isReloadKey } from './utils/keymap'
 import { findNextThreads } from './utils/nextThread'
+import { favIncreases, keywordHits } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
@@ -375,6 +376,7 @@ export default function App() {
    */
   const checkFavThreads = async (s: LogStore, fetchDats: boolean) => {
     const list = await s.listFavoriteThreads()
+    const before = new Map(favCountsRef.current)
     const byBoard = new Map<string, FavoriteThreadEntry[]>()
     for (const f of list) byBoard.set(f.thread.boardUrl, [...(byBoard.get(f.thread.boardUrl) ?? []), f])
     const counts = new Map(favCountsRef.current)
@@ -396,7 +398,78 @@ export default function App() {
       setFavCounts(new Map(counts))
     }
     await reloadFavThreads(s)
+    // 裏で確かめたときだけ、新着を知らせる(まとめて更新は、本人が一覧を見ているので知らせない)
+    if (!fetchDats && settingsRef.current.notifyFavThreads) {
+      const byId = new Map(list.map((f) => [threadId(f.thread), f]))
+      const added = favIncreases(
+        list.filter((f) => f.postCount > 0).map((f) => ({ id: threadId(f.thread), title: f.thread.title, readNo: f.readNo, localCount: f.postCount })),
+        before,
+        counts,
+      )
+      if (added.length === 1) {
+        const f = byId.get(added[0].id)!
+        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => void openThread(f.thread) })
+      } else if (added.length > 1) {
+        notify({
+          icon: 'bookmark',
+          title: `お気に入りのスレ ${added.length} 件に新着`,
+          body: added
+            .slice(0, 3)
+            .map((a) => `+${a.added} ${a.title}`)
+            .join('\n') + (added.length > 3 ? `\n(ほか ${added.length - 3} 件)` : ''),
+          onClick: () => void openFavThreads(),
+        })
+      }
+    }
   }
+
+  /**
+   * お気に入り板のスレ一覧を見に行き、キーワードに合うスレが新しく立っていたら知らせる。
+   * 板ごとに前回確かめた時刻を覚え、それより後に立ったスレだけを見る(初めての板は、境目を覚えるだけ)
+   */
+  const checkKeywordThreads = async () => {
+    const keywords = settingsRef.current.keywords
+    if (!keywords.some((k) => k.trim())) return
+    const since = { ...settingsRef.current.keywordWatchSince }
+    for (const b of favoritesRef.current ?? []) {
+      const now = Date.now()
+      let list: ThreadSummary[]
+      try {
+        list = await connectorOf(b.connectorId).listThreads(b, ctx)
+      } catch {
+        continue
+      }
+      const prev = since[b.url]
+      since[b.url] = now
+      if (prev === undefined) continue
+      const hits = keywordHits(list, keywords, prev).filter((h) => !isNgThreadRef.current(h.thread))
+      const boardName = settingsRef.current.boardMeta[b.url]?.alias || b.name
+      for (const h of hits.slice(0, 3))
+        notify({
+          icon: 'sell',
+          title: `${boardName} に「${h.keyword}」のスレが立ちました`,
+          body: h.thread.title,
+          onClick: () => void openThread(h.thread),
+        })
+      if (hits.length > 3) notify({ icon: 'sell', title: `${boardName} にキーワードのスレがほかに ${hits.length - 3} 件立ちました` })
+    }
+    updateSetting('keywordWatchSince', since)
+  }
+  /** NG のスレタイに当たるスレは知らせない(作り置きの関数から、いまの NG を見るための控え) */
+  const isNgThreadRef = useRef<(t: ThreadSummary) => boolean>(() => false)
+  const favoritesRef = useRef(favorites)
+  favoritesRef.current = favorites
+  const hasKeywords = settings.keywords.some((k) => k.trim())
+  useEffect(() => {
+    if (!store || settings.keywordWatchMin <= 0 || !hasKeywords || !favorites?.length) return
+    const check = () => void checkKeywordThreads().catch(() => undefined)
+    const first = setTimeout(check, 15_000)
+    const timer = setInterval(check, settings.keywordWatchMin * 60_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    }
+  }, [store, settings.keywordWatchMin, hasKeywords, favorites?.length])
 
   /** まとめて更新(スレ一覧の更新ボタン・引っぱって更新) */
   const refreshFavThreads = () =>
@@ -992,6 +1065,7 @@ export default function App() {
 
   const isNgPost = useMemo(() => postMatcher(settings.ngRules), [settings.ngRules])
   const isNgThread = useMemo(() => threadMatcher(settings.ngRules), [settings.ngRules])
+  isNgThreadRef.current = isNgThread
   const addNg = useCallback(
     (rule: NgRule) => updateSetting('ngRules', [...settings.ngRules, rule]),
     [settings.ngRules, updateSetting],

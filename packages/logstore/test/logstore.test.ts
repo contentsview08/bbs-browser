@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import initSqlJs from 'sql.js'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Post, ThreadSummary } from '@bbs-browser/connectors'
-import { LogStore, type SqlDb } from '../src/index'
+import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connectors'
+import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
 const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql'].map((f) =>
@@ -125,6 +125,32 @@ describe('スレのログ', () => {
     expect(h.readAt).toBe(2000)
     expect(h.thread).toMatchObject({ boardUrl: thread.boardUrl, key: thread.key, connectorId: '2ch-compat' })
     expect(h.thread.createdAt?.getTime()).toBe(thread.createdAt?.getTime())
+  })
+})
+
+describe('applyFetch: 取得結果を手元のログに当てはめる', () => {
+  it('DB に書いて読み直したものと同じになる', async () => {
+    const steps: FetchPostsResult[] = [
+      { status: 'updated', posts: [post(1), post(2)], cursor: { bytes: 100 }, title: 'dat のスレタイ' },
+      { status: 'notModified', posts: [], cursor: { bytes: 100 } },
+      { status: 'updated', posts: [post(3), post(4)], cursor: { bytes: 200 } },
+      // 同じ番号が来たら置き換える
+      { status: 'updated', posts: [post(4, '書き直し'), post(5)], cursor: { bytes: 260 } },
+      { status: 'reset', posts: [post(1), post(2, 'あぼーん'), post(3)], cursor: { bytes: 120 } },
+      { status: 'archived', posts: [], cursor: { bytes: 120 } },
+    ]
+    let mine: ThreadLog | null = null
+    for (const r of steps) {
+      await store.saveFetch(thread, r)
+      mine = applyFetch(mine, thread, r)
+      const fromDb = (await store.loadThread(thread))!
+      expect(mine).toEqual(fromDb)
+    }
+  })
+
+  it('変わらなかったときは同じものを返す(描き直さずに済むように)', () => {
+    const before = applyFetch(null, thread, { status: 'updated', posts: [post(1)], cursor: { bytes: 10 } })
+    expect(applyFetch(before, thread, { status: 'notModified', posts: [], cursor: { bytes: 10 } })).toBe(before)
   })
 })
 

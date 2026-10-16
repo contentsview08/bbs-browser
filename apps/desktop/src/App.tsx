@@ -16,7 +16,7 @@ import {
   type SiteConfig,
   type ThreadSummary,
 } from '@bbs-browser/connectors'
-import type { HistoryEntry, LogStore, ThreadLog, ThreadState, UploadRecord } from '@bbs-browser/logstore'
+import { applyFetch, type HistoryEntry, type LogStore, type ThreadLog, type ThreadState, type UploadRecord } from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications, { type AppNotification } from './components/Notifications'
@@ -62,19 +62,6 @@ const KEEP_TABS = 5
 
 function newTab(thread: ThreadSummary): Tab {
   return { id: threadId(thread), thread, unreadFrom: 1, readNo: 0, ownNos: new Set(), loading: false }
-}
-
-/**
- * 読み直した既読状態のうち、中身が変わっていないものは前と同じものを使い回す。
- * 同じものなら、スレ一覧のカードは描き直さずに済む(memo)
- */
-function keepSame(prev: Map<string, ThreadState>, next: Map<string, ThreadState>): Map<string, ThreadState> {
-  const out = new Map<string, ThreadState>()
-  for (const [k, v] of next) {
-    const p = prev.get(k)
-    out.set(k, p && p.postCount === v.postCount && p.readNo === v.readNo && p.status === v.status ? p : v)
-  }
-  return out
 }
 
 function fromSaved(s: SavedTab): ThreadSummary {
@@ -181,10 +168,6 @@ export default function App() {
   // 既読状態は「いま開いている板」のものだけを持つ。別の板のスレを読んでいても混ざらないように
   const boardRef = useRef<Board | undefined>(undefined)
   boardRef.current = board
-  const reloadStates = async (s: LogStore, boardUrl: string) => {
-    const st = await s.getThreadStates(boardUrl)
-    if (boardRef.current?.url === boardUrl) setStates((prev) => keepSame(prev, st))
-  }
 
   const lastBoardUrl = useRef(settings.lastBoardUrl)
   lastBoardUrl.current = settings.lastBoardUrl
@@ -273,21 +256,34 @@ export default function App() {
     const job = (async () => {
       patchTab(id, { loading: true })
       try {
-        const before = await s.loadThread(t)
-        const cursor = before?.cursor ?? null
-        const r = await connectorOf(t.connectorId).fetchPosts(t, cursor, ctx)
+        // 手元のログ(タブで開いていればそれ、なければ DB)に、取ってきた差分を当てはめる。
+        // 取得のたびにスレ全体を DB から読み直さないため(1000 レスのスレほど効く)
+        const inTab = tabsRef.current.find((x) => x.id === id)?.log
+        const before = inTab && inTab.cursor !== null ? inTab : await s.loadThread(t)
+        const r = await connectorOf(t.connectorId).fetchPosts(t, before?.cursor ?? null, ctx)
         await s.saveFetch(t, r)
-        const saved = await s.loadThread(t)
+        const saved = applyFetch(before, t, r)
+        const changed = saved !== before
         // 「ここから未読」は、更新したときにその時点の既読位置の次へ引き直す
         // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)。
-        // 開いたときの取得では動かさない(開いた直後に画面に見えたレスが既読になり、線が下へずれてしまうため)
-        if (saved)
-          setTabs((ts) =>
-            ts.map((x) => (x.id === id ? { ...x, log: saved, unreadFrom: opts.keepUnread ? x.unreadFrom : x.readNo + 1 } : x)),
-          )
+        // 開いたときの取得では動かさない(開いた直後に画面に見えたレスが既読になり、線が下へずれてしまうため)。
+        // 変わらなかったときはログを差し替えない(スレ表示を描き直さない)
+        setTabs((ts) =>
+          ts.map((x) => {
+            if (x.id !== id) return x
+            const unreadFrom = opts.keepUnread ? x.unreadFrom : x.readNo + 1
+            if (!changed && x.log && unreadFrom === x.unreadFrom) return x
+            return { ...x, log: changed || !x.log ? saved : x.log, unreadFrom }
+          }),
+        )
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
-        if (saved && before && settingsRef.current.notifyReplies) await notifyReplies(s, t, saved, before.postCount)
-        await reloadStates(s, t.boardUrl)
+        if (changed && before && settingsRef.current.notifyReplies) await notifyReplies(s, t, saved, before.postCount)
+        // スレ一覧の印(レス数・dat 落ち)は、このスレの 1 行だけ書き換える(板全体を読み直さない)
+        if (changed && boardRef.current?.url === t.boardUrl)
+          setStates((m) => {
+            const cur = m.get(t.key)
+            return new Map(m).set(t.key, { postCount: saved.postCount, readNo: cur?.readNo ?? saved.readNo, status: saved.status })
+          })
       } finally {
         patchTab(id, { loading: false })
       }

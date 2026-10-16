@@ -35,6 +35,45 @@ export interface ThreadLog extends ThreadState {
   cursor: Cursor | null
 }
 
+/**
+ * 取得の結果を、手元にあるログに当てはめた後のログを返す(DB を読み直さずに済ませるため)。
+ * saveFetch が DB に書くのと同じ結果になる。
+ * 変わらなかったとき('notModified')は before をそのまま返す(呼び出し側は同じものなら描き直さなくてよい)
+ */
+export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, result: FetchPostsResult): ThreadLog {
+  const base: ThreadLog = before ?? {
+    title: result.title ?? thread.title,
+    posts: [],
+    cursor: null,
+    postCount: 0,
+    readNo: 0,
+    status: 'active',
+  }
+  if (result.status === 'notModified') return base
+  if (result.status === 'archived') return base.status === 'archived' ? base : { ...base, status: 'archived' }
+  let posts: Post[]
+  if (result.status === 'reset') posts = [...result.posts].sort((a, b) => a.no - b.no)
+  else {
+    // 同じ番号は新しいほうで置き換える(INSERT OR REPLACE と同じ)。ふつうは後ろに足すだけで済む
+    const lastNo = base.posts.at(-1)?.no ?? 0
+    if (result.posts.every((p, i) => p.no > lastNo && (i === 0 || p.no > result.posts[i - 1].no)))
+      posts = base.posts.concat(result.posts)
+    else {
+      const byNo = new Map(base.posts.map((p) => [p.no, p]))
+      for (const p of result.posts) byNo.set(p.no, p)
+      posts = [...byNo.values()].sort((a, b) => a.no - b.no)
+    }
+  }
+  return {
+    ...base,
+    title: result.title ?? base.title,
+    posts,
+    cursor: result.cursor,
+    postCount: posts.length,
+    status: 'active',
+  }
+}
+
 /** 履歴に出すスレ。開き直せるよう ThreadSummary の形で返す */
 export interface HistoryEntry extends ThreadState {
   thread: ThreadSummary

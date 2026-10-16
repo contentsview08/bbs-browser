@@ -7,6 +7,8 @@ import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { imageUrlsIn, videoFileUrlsIn, youtubeLinksIn } from '../utils/postBody'
 import { saveImage } from '../host/saveImage'
+import { isAutoLoadable } from '../utils/safeUrl'
+import LocalAddressMark from './LocalAddressMark'
 
 export type MediaKind = 'image' | 'video' | 'youtube'
 
@@ -147,7 +149,9 @@ export default function MediaGallery(props: {
                   style={m.kind === 'youtube' ? { borderColor: '#ff0000', borderWidth: 2 } : undefined}
                   title={`>>${m.post.no}`}
                 >
-                  {m.kind === 'video' ? (
+                  {!isAutoLoadable(m.thumb ?? m.url) ? (
+                    <LocalAddressMark />
+                  ) : m.kind === 'video' ? (
                     <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none bg-black" />
                   ) : (
                     <img

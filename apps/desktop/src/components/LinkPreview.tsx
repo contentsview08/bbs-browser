@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchOgp } from '../host/ogp'
 import type { Ogp } from '../utils/ogp'
+import { isAutoLoadable } from '../utils/safeUrl'
 
 export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen: (url: string) => void; more?: number }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -11,7 +12,8 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
 
   useEffect(() => {
     const el = ref.current
-    if (!el) return
+    // 家の中のアドレスは、表示しただけでは読みに行かない
+    if (!el || !isAutoLoadable(url)) return
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return
       observer.disconnect()
@@ -22,8 +24,8 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
     return () => observer.disconnect()
   }, [url])
 
-  // 何も取れなかったときは出さない(リンクの文字そのものは本文にある)
-  if (typeof state === 'object' && !state.ogp) return null
+  // 何も取れなかったとき・家の中のアドレスのときは出さない(リンクの文字そのものは本文にある)
+  if ((typeof state === 'object' && !state.ogp) || !isAutoLoadable(url)) return null
   const ogp = typeof state === 'object' ? state.ogp : undefined
   const host = (() => {
     try {
@@ -54,7 +56,7 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
           </>
         )}
       </div>
-      {ogp?.image && (
+      {ogp?.image && isAutoLoadable(ogp.image) && (
         <div className="w-28 h-full flex-shrink-0 bg-c-surface3">
           <img
             src={ogp.image}

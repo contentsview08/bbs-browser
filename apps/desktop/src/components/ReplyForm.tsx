@@ -10,6 +10,7 @@ import { useCountdown } from '../hooks/useCountdown'
 import type { UploadOptions } from '../host/uploader'
 import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
+import { isAutoLoadable } from '../utils/safeUrl'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { ReplyLayout } from '../ui/settings'
 
@@ -160,6 +161,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const right = props.layout === 'right'
   // 本文に入れた画像・動画のリンクは、下にサムネイルを出す(web 版と同じ)
   const previewImages = imageUrlsIn(body)
+  // 家の中のアドレスの画像は、書いただけでは読みに行かない
+  const loadableImages = previewImages.filter(isAutoLoadable)
   const previewVideos = youtubeIdsIn(body)
   const hasPreview = previewImages.length + previewVideos.length > 0
   // クールダウン中は押せなくし、残りの秒数と、減っていく帯を出す(続けて書き込めないことが分かるように)
@@ -258,13 +261,13 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       </div>
       {hasPreview && (
         <div className="flex-shrink-0 mt-2 flex gap-2 overflow-x-auto no-scrollbar">
-          {previewImages.map((url, i) => (
+          {loadableImages.map((url, i) => (
             <img
               key={url}
               src={url}
               alt=""
               referrerPolicy="no-referrer"
-              onClick={() => props.onImage?.(previewImages, i)}
+              onClick={() => props.onImage?.(loadableImages, i)}
               className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2 cursor-pointer hover:border-c-border-strong"
               onError={(e) => {
                 e.currentTarget.style.display = 'none'

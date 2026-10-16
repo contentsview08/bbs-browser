@@ -7,6 +7,7 @@
 import { fetch } from '@tauri-apps/plugin-http'
 import type { LogStore } from '@bbs-browser/logstore'
 import { charsetOfHtml, parseOgp, type Ogp } from '../utils/ogp'
+import { isAutoLoadable } from '../utils/safeUrl'
 
 // 掲示板向けの Monazilla ではなく、ふつうのブラウザに近い名乗りにする(OGP を返さないサイトがあるため)
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) bbs-browser/0.1.0'
@@ -113,6 +114,8 @@ async function load(url: string): Promise<Ogp | null> {
 
 /** 取れなかったとき(HTML でない、何も書かれていない、通信に失敗した)は null */
 export function fetchOgp(url: string): Promise<Ogp | null> {
+  // 家の中のアドレスは読みに行かない(画面側でも止めているが、念のためここでも)
+  if (!isAutoLoadable(url)) return Promise.resolve(null)
   let p = memory.get(url)
   if (!p) {
     p = load(url).catch(() => null)

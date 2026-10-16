@@ -20,6 +20,8 @@ import {
   type DisplayOptions,
 } from '../utils/postBody'
 import LinkPreview from './LinkPreview'
+import LocalAddressMark from './LocalAddressMark'
+import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { NgMode } from '../ui/settings'
 import Identicon from './Identicon'
@@ -455,16 +457,21 @@ function PostArticle(props: Props) {
                 }}
                 className="w-20 h-20 bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
               >
-                <img
-                  src={url}
-                  alt=""
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
+                {/* 家の中のアドレスは、表示しただけでは読みに行かない(押せば開く) */}
+                {isAutoLoadable(url) ? (
+                  <img
+                    src={url}
+                    alt=""
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  <LocalAddressMark />
+                )}
               </button>
             ))}
             {/* 動画のファイルは、最初のコマをサムネイルにして ▶ を付ける。押すとビューアーで再生する。
@@ -480,7 +487,11 @@ function PostArticle(props: Props) {
                 className="relative w-20 h-20 bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
                 title="動画を再生する"
               >
-                <video src={`${url}#t=0.1`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
+                {isAutoLoadable(url) ? (
+                  <video src={`${url}#t=0.1`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
+                ) : (
+                  <LocalAddressMark />
+                )}
                 <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <span className="material-symbols-outlined fill text-3xl text-white/90 drop-shadow">play_circle</span>
                 </span>

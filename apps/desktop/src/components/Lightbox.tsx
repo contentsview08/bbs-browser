@@ -12,6 +12,7 @@ import type { Post } from '@bbs-browser/connectors'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { saveImage } from '../host/saveImage'
 import { isVideoFileUrl, youtubeEmbedUrl } from '../utils/postBody'
+import { isAutoLoadable } from '../utils/safeUrl'
 
 interface Props {
   urls: string[]
@@ -77,6 +78,9 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
   const url = urls[index]
   const post = posts?.[index] ?? onlyPost
   const video = isVideoFileUrl(url)
+  // 家の中のアドレスは、ビューアーでも「読み込む」を押すまで読みに行かない(ホイールで切り替えて来たときも)
+  const [allowLocal, setAllowLocal] = useState<string>()
+  const blocked = !isAutoLoadable(url) && allowLocal !== url
   const youtube = youtubeEmbedUrl(url)
   /** 動画を再生できなかった(HEVC の .mov など、WebView が扱えない形式) */
   const [videoError, setVideoError] = useState(false)
@@ -172,7 +176,16 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
   // 枠の中に置くと、最前面に出しているレスのポップアップより下に描かれてしまう
   return createPortal(
     <div ref={overlayRef} className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
-      {youtube ? (
+      {blocked ? (
+        <div className="flex flex-col items-center gap-3 text-white/80 text-sm text-center" onClick={(e) => e.stopPropagation()}>
+          <span className="material-symbols-outlined text-5xl">lan</span>
+          家の中のネットワーク(または自分の PC)のアドレスです
+          <span className="text-xs text-white/60 break-all max-w-[80vw]">{url}</span>
+          <button type="button" onClick={() => setAllowLocal(url)} className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-white">
+            読み込む
+          </button>
+        </div>
+      ) : youtube ? (
         // YouTube は埋め込みのプレーヤーで再生する。16:9 で、枠に収まる大きさにする。
         // 埋め込みを断っている動画は、プレーヤーの中に YouTube の案内が出る(右上の「ブラウザで開く」で見られる)
         <iframe

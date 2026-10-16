@@ -176,6 +176,8 @@ export interface Connector {
   capabilities: ConnectorCapabilities
   /** URL を貼られたとき、どのコネクタで開くかを決める */
   canHandle(url: string): boolean
+  /** このコネクタで開けるスレの URL か(本文のリンクを押したとき、ブラウザではなくアプリで開くため) */
+  isThreadUrl?(url: string): boolean
   /**
    * 板やスレの URL から板(スレの URL ならスレも)を割り出す。扱えない URL なら null。
    * bbsmenu を公開していない板を、URL で直接登録するために使う

@@ -115,3 +115,13 @@ describe('したらばの板の確かめ', () => {
     await expect(shitarabaConnector.resolveUrl('https://jbbs.shitaraba.net/computer/99999999/', ctx)).rejects.toThrow('板が見つかりません')
   })
 })
+
+describe('スレの URL か', () => {
+  it('スレの URL だけを、アプリで開くスレとみなす', () => {
+    expect(shitarabaConnector.isThreadUrl!('https://jbbs.shitaraba.net/bbs/read.cgi/computer/351/1600000000/')).toBe(true)
+    expect(shitarabaConnector.isThreadUrl!('https://jbbs.shitaraba.net/computer/351/')).toBe(false)
+    expect(twoChConnector.isThreadUrl!('https://mi.5ch.io/test/read.cgi/news4vip/1792148654/l50')).toBe(true)
+    expect(twoChConnector.isThreadUrl!('https://mi.5ch.io/news4vip/')).toBe(false)
+    expect(twoChConnector.isThreadUrl!('https://jbbs.shitaraba.net/bbs/read.cgi/computer/351/1600000000/')).toBe(false)
+  })
+})

@@ -79,6 +79,10 @@ export const shitarabaConnector: Connector = {
     return HOST.test(url)
   },
 
+  isThreadUrl(url) {
+    return THREAD_URL.test(url)
+  },
+
   async resolveUrl(url, ctx) {
     const t = THREAD_URL.exec(url)
     const b = t ? undefined : BOARD_URL.exec(url)

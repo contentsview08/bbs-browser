@@ -210,6 +210,10 @@ export const twoChConnector: Connector = {
     return THREAD_URL.test(url) || BOARD_URL.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
   },
 
+  isThreadUrl(url) {
+    return twoChConnector.canHandle(url) && THREAD_URL.test(url)
+  },
+
   async boardInfo(board, ctx) {
     return readSettingTxt(board.url, ctx)
   },

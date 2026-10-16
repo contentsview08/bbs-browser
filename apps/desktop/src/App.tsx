@@ -1047,6 +1047,21 @@ export default function App() {
     return { status: 'ok', message: `${r.message}(スレ一覧ではまだ見つかりません。少し待ってから一覧を更新してください)` }
   }
 
+  /**
+   * 本文のリンクを開く。アプリで読めるスレの URL なら新しいタブで開き(スレ一覧はそのまま)、
+   * それ以外や、開けなかったときはブラウザで開く
+   */
+  const openLink = async (url: string) => {
+    if (!builtinConnectors.some((c) => c.isThreadUrl?.(url))) return openUrl(url)
+    try {
+      const r = await resolve(url)
+      if (r.thread) return await openThread(r.thread, { newTab: true })
+    } catch {
+      // 開けなければブラウザで
+    }
+    return openUrl(url)
+  }
+
   const openUrlInApp = (url: string) =>
     run(null, async () => {
       const r = await resolve(url)
@@ -1180,7 +1195,7 @@ export default function App() {
     markRead,
     refresh: useEvent(() => void refreshThread()),
     openInBrowser: useEvent((t: ThreadSummary) => void openUrl(connectorOf(t.connectorId).threadWebUrl(t))),
-    openUrl: useEvent((url: string) => void openUrl(url)),
+    openUrl: useEvent((url: string) => void openLink(url)),
     addNg: useEvent((rule: NgRule) => addNg(rule)),
     ngDraft: useEvent((target: NgTarget, text: string) => setNgDraft({ target, pattern: text })),
     canPost: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).createPost !== undefined),

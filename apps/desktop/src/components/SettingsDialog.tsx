@@ -360,7 +360,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           checked={s.pullToRefreshList}
           onChange={(v) => update('pullToRefreshList', v)}
           label="一番上でさらにホイールを上に回したら、スレ一覧を更新する"
-          note="一番上に着いてから少し待って、さらに大きく回したときだけ更新します。一度更新したら 10 秒はしません。切っても、更新ボタンでは更新できます"
+          note="一番上に着いてから少し待って、さらに大きく回したときだけ更新します。一度更新したら 5 秒はしません。切っても、更新ボタンでは更新できます"
         />
       </Section>
       <Section

@@ -1,6 +1,7 @@
 // スレのタブ。× か中クリックで閉じ、右クリックでまとめて閉じるメニューを出す。
 // 幅は Chrome と同じ考え方: すべて同じ幅にし、× で閉じたあとはマウスがタブ列にある間だけ幅を固定する
 // (右のタブが 1 つぶん詰まって、次のタブの × がマウスの下に来るので、× を続けて押せる)。
+// Ctrl+クリックで選択に足し外し、Shift+クリックで範囲を選ぶ。つかんで左右に動かすと並べ替える。
 
 import { useEffect, useRef, useState } from 'react'
 import BoardIcon from './BoardIcon'
@@ -25,7 +26,15 @@ interface Props {
   onRefreshAll: () => void
   refreshingAll: boolean
   onDeleteLogs: (ids: string[]) => void
+  /** Ctrl/Shift+クリックで選んだタブ(開いているタブは含めない) */
+  selectedIds: Set<string>
+  onSelectionChange: (ids: Set<string>) => void
+  /** つかんで動かしたタブを、index の位置へ移す */
+  onReorder: (id: string, index: number) => void
 }
+
+/** これだけ動かしたらドラッグとみなす */
+const DRAG_PX = 4
 
 const MAX_WIDTH = 220
 const MIN_WIDTH = 72
@@ -39,6 +48,12 @@ export default function TabBar(props: Props) {
   /** × で閉じている間の固定幅。マウスがタブ列から出たら undefined に戻して整え直す */
   const [frozenWidth, setFrozenWidth] = useState<number>()
   const hasTabs = props.tabs.length > 0
+  /** Shift+クリックの起点(最後に押したタブ) */
+  const anchorRef = useRef<string>(undefined)
+  /** つかんで動かしているタブ。dx は動かした量、over は落とす位置 */
+  const [drag, setDrag] = useState<{ id: string; from: number; dx: number; over: number }>()
+  /** ドラッグを終えた直後のクリックは無視する */
+  const justDragged = useRef(false)
 
   useEffect(() => {
     const el = stripRef.current
@@ -58,6 +73,67 @@ export default function TabBar(props: Props) {
     props.onClose([id])
   }
 
+  /** タブを押したとき: Ctrl は選択に足し外し、Shift は範囲、ふつうは選択を解いて開く */
+  const onTabClick = (e: React.MouseEvent, id: string) => {
+    if (justDragged.current) {
+      justDragged.current = false
+      return
+    }
+    const ids = props.tabs.map((t) => t.id)
+    if (e.ctrlKey || e.metaKey) {
+      const next = new Set(props.selectedIds)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      anchorRef.current = id
+      props.onSelectionChange(next)
+      return
+    }
+    if (e.shiftKey) {
+      const from = ids.indexOf(anchorRef.current ?? props.activeId ?? id)
+      const to = ids.indexOf(id)
+      const [a, b] = from < 0 ? [to, to] : [Math.min(from, to), Math.max(from, to)]
+      props.onSelectionChange(new Set(ids.slice(a, b + 1)))
+      return
+    }
+    anchorRef.current = id
+    props.onSelectionChange(new Set())
+    props.onSelect(id)
+  }
+
+  /** つかんで動かす。同じ幅のタブなので、何個ぶん動いたかは幅で割って決める */
+  const onTabMouseDown = (e: React.MouseEvent, id: string, index: number) => {
+    if (e.button !== 0) return
+    const startX = e.clientX
+    let moved = false
+    let latest = { id, from: index, dx: 0, over: index }
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX
+      if (!moved && Math.abs(dx) < DRAG_PX) return
+      moved = true
+      const over = Math.max(0, Math.min(props.tabs.length - 1, index + Math.round(dx / tabWidth)))
+      latest = { id, from: index, dx, over }
+      setDrag(latest)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setDrag(undefined)
+      if (!moved) return
+      justDragged.current = true
+      if (latest.over !== latest.from) props.onReorder(id, latest.over)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  /** ドラッグ中に、ほかのタブをどれだけずらすか(つかんだタブの行き先を空ける) */
+  const shiftOf = (i: number): number => {
+    if (!drag) return 0
+    if (drag.from < drag.over && i > drag.from && i <= drag.over) return -tabWidth
+    if (drag.from > drag.over && i >= drag.over && i < drag.from) return tabWidth
+    return 0
+  }
+
   // 選んだタブが見えるように横にスクロールする
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -75,14 +151,25 @@ export default function TabBar(props: Props) {
   if (props.tabs.length === 0) return null
 
   const ids = props.tabs.map((t) => t.id)
+  // 右クリックしたタブが選択の中にあれば、選んだタブ(と開いているタブ)にまとめて効かせる
+  const group =
+    menu && props.selectedIds.has(menu.id)
+      ? ids.filter((id) => props.selectedIds.has(id) || id === props.activeId)
+      : undefined
   const menuItems = menu
-    ? [
-        { label: '閉じる', ids: [menu.id] },
-        { label: '他のタブを閉じる', ids: ids.filter((id) => id !== menu.id) },
-        { label: '右側のタブを閉じる', ids: ids.slice(ids.indexOf(menu.id) + 1) },
-        { label: 'すべて閉じる', ids },
-        { label: 'ログを削除して閉じる (Delete)', ids: [menu.id], deleteLog: true },
-      ]
+    ? group && group.length > 1
+      ? [
+          { label: `選んだ ${group.length} 個のタブを閉じる (Ctrl+W)`, ids: group },
+          { label: `選んだ ${group.length} 個のタブのログを削除 (Delete)`, ids: group, deleteLog: true },
+          { label: 'すべて閉じる', ids },
+        ]
+      : [
+          { label: '閉じる', ids: [menu.id] },
+          { label: '他のタブを閉じる', ids: ids.filter((id) => id !== menu.id) },
+          { label: '右側のタブを閉じる', ids: ids.slice(ids.indexOf(menu.id) + 1) },
+          { label: 'すべて閉じる', ids },
+          { label: 'ログを削除して閉じる (Delete)', ids: [menu.id], deleteLog: true },
+        ]
     : []
 
   return (
@@ -97,11 +184,14 @@ export default function TabBar(props: Props) {
           // 区切り線は、自分と右隣のどちらも開いていないときだけ出す(Chrome と同じ)
           const next = props.tabs[i + 1]
           const separator = !active && next !== undefined && next.id !== props.activeId
+          const selected = !active && props.selectedIds.has(t.id)
+          const dragging = drag?.id === t.id
           return (
             <div
               key={t.id}
               ref={active ? activeRef : undefined}
-              onClick={() => props.onSelect(t.id)}
+              onClick={(e) => onTabClick(e, t.id)}
+              onMouseDown={(e) => onTabMouseDown(e, t.id, i)}
               onAuxClick={(e) => {
                 if (e.button === 1) closeByPointer(t.id)
               }}
@@ -110,10 +200,20 @@ export default function TabBar(props: Props) {
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY })
               }}
               title={t.title}
-              style={{ width: tabWidth, background: active ? 'var(--tab-active-fill)' : undefined }}
-              className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 rounded-t-lg cursor-pointer select-none text-xs transition-colors ${
-                active ? 'z-10 text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'
-              } ${t.archived ? 'opacity-60' : ''}`}
+              style={{
+                width: tabWidth,
+                background: active
+                  ? 'var(--tab-active-fill)'
+                  : selected
+                    ? 'color-mix(in srgb, var(--tab-active-fill) 70%, transparent)'
+                    : undefined,
+                // つかんだタブはマウスについて動かし、ほかのタブはなめらかにずらして場所を空ける
+                transform: `translateX(${dragging ? drag.dx : shiftOf(i)}px)`,
+                transition: dragging ? 'none' : 'transform 150ms ease-out, background-color 150ms',
+              }}
+              className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 rounded-t-lg cursor-pointer select-none text-xs ${
+                active || selected ? 'text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'
+              } ${active ? 'z-10' : ''} ${dragging ? 'z-30 shadow-lg' : ''} ${t.archived ? 'opacity-60' : ''}`}
             >
               {active && (
                 <>
@@ -145,6 +245,7 @@ export default function TabBar(props: Props) {
               )}
               <button
                 type="button"
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation()
                   closeByPointer(t.id)

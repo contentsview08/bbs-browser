@@ -84,6 +84,8 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEntry[]>()
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeId, setActiveId] = useState<string>()
+  /** Ctrl/Shift+クリックで選んだタブ */
+  const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set())
   const [refreshingAll, setRefreshingAll] = useState(false)
   /** 板ごとの設定(名無しの名前など)。板ごとに一度だけ取る */
   const [boardInfos, setBoardInfos] = useState(new Map<string, BoardInfo>())
@@ -321,21 +323,28 @@ export default function App() {
 
   // キー操作: Ctrl+W で閉じる、Ctrl+Tab / Ctrl+PageDown で次、Ctrl+Shift+Tab / Ctrl+PageUp で前
   // Delete で開いているスレのログを消してタブを閉じる(文字を入力しているときは除く)
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs }
+  /** キー操作の対象: 選んでいるタブがあれば、それと開いているタブ。なければ開いているタブだけ */
+  const targetTabs = () => {
+    const ids = tabsRef.current.map((t) => t.id).filter((id) => selectedTabs.has(id) || id === activeId)
+    return ids.length > 0 ? ids : activeId ? [activeId] : []
+  }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
       if (e.key === 'Delete' && !typing && !e.ctrlKey && !e.altKey) {
-        const { activeId, deleteLogs } = keyRef.current
-        if (activeId) {
+        const { deleteLogs, targetTabs, setSelectedTabs } = keyRef.current
+        const targets = targetTabs()
+        if (targets.length > 0) {
           e.preventDefault()
-          void deleteLogs([activeId])
+          setSelectedTabs(new Set())
+          void deleteLogs(targets)
         }
         return
       }
       if (!e.ctrlKey) return
-      const { closeTabs, selectTab, activeId } = keyRef.current
+      const { closeTabs, selectTab, activeId, targetTabs, setSelectedTabs } = keyRef.current
       const ids = tabsRef.current.map((t) => t.id)
       const i = activeId ? ids.indexOf(activeId) : -1
       const step = (d: number) => {
@@ -345,8 +354,9 @@ export default function App() {
       }
       if (e.key.toLowerCase() === 'w') {
         e.preventDefault()
+        setSelectedTabs(new Set())
         if (e.shiftKey) closeTabs(ids)
-        else if (activeId) closeTabs([activeId])
+        else closeTabs(targetTabs())
       } else if (e.key === 'Tab') step(e.shiftKey ? -1 : 1)
       else if (e.key === 'PageDown') step(1)
       else if (e.key === 'PageUp') step(-1)
@@ -683,7 +693,22 @@ export default function App() {
           onClose={closeTabs}
           onRefreshAll={() => void refreshAll()}
           refreshingAll={refreshingAll}
-          onDeleteLogs={(ids) => void deleteLogs(ids)}
+          onDeleteLogs={(ids) => {
+            setSelectedTabs(new Set())
+            void deleteLogs(ids)
+          }}
+          selectedIds={selectedTabs}
+          onSelectionChange={setSelectedTabs}
+          onReorder={(id, index) =>
+            setTabs((ts) => {
+              const from = ts.findIndex((t) => t.id === id)
+              if (from < 0) return ts
+              const next = [...ts]
+              const [moved] = next.splice(from, 1)
+              next.splice(index, 0, moved)
+              return next
+            })
+          }
         />
         )}
 

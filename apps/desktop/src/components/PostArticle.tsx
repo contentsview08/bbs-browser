@@ -14,6 +14,7 @@ import {
   youtubeLinksIn,
   looksLikeAA,
   renderBody,
+  splitBeIcon,
   type BodyHandlers,
   type DisplayOptions,
 } from '../utils/postBody'
@@ -192,7 +193,9 @@ function PostArticle(props: Props) {
     )
   }
 
-  const body = props.display ? displayBody(post.body, props.display) : post.body
+  // BE のアイコン(本文の 1 行目の sssp://)は絵にして、本文からは除く
+  const { icon: beIcon, body: rawBody } = splitBeIcon(post.body)
+  const body = props.display ? displayBody(rawBody, props.display) : rawBody
   const name = props.display ? displayName(post.name, props.display) : post.name
   const numHeat = heatClass(anchorCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
@@ -393,6 +396,19 @@ function PostArticle(props: Props) {
           borderLeftColor: props.isOwn ? 'var(--c-accent-self)' : 'var(--c-border)',
         }}
       >
+        {/* BE のアイコンは、画像のサムネイルの設定に関係なく出す(5ch の書き込みの一部なので) */}
+        {beIcon && (
+          <img
+            src={beIcon}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="block mb-1 max-h-12 max-w-[96px] object-contain"
+            title="BE のアイコン"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+            }}
+          />
+        )}
         <p
           className={`text-base ${bodyClass} ${isAA ? 'aa-font whitespace-pre overflow-x-auto' : 'whitespace-pre-wrap break-words leading-relaxed'}`}
         >

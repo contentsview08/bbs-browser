@@ -354,8 +354,6 @@ export default function ThreadView(props: Props) {
     return set
   }, [log.posts, filters, query, anchorCounts])
   // reportRead(作り置き)から、いまの絞り込みの状態と最後のレス番号を見るための控え
-  const filteringRef = useRef(false)
-  filteringRef.current = visibleNos !== undefined
   const lastNoRef = useRef(0)
   lastNoRef.current = log.posts.at(-1)?.no ?? 0
 
@@ -407,8 +405,7 @@ export default function ThreadView(props: Props) {
     // その後ろで見えている最初のレスへ送る。なければ一番下に留まる
     // 枠(.post-cv)の hidden を見て探す(中身の offsetParent を調べると、省いた計算をやり直させてしまう)
     const target = [...root.querySelectorAll<HTMLElement>(':scope .post-cv')]
-      .find((w) => !w.hidden && Number(w.querySelector<HTMLElement>('[data-no]')?.dataset.no) >= no)
-      ?.querySelector<HTMLElement>('[data-no]')
+      .find((w) => !w.hidden && Number(w.dataset.post) >= no)
     const ms = behavior === 'animate' ? JUMP_MS : 0
     if (!target) {
       animateScroll(root, () => root.scrollHeight, ms)
@@ -416,8 +413,7 @@ export default function ThreadView(props: Props) {
     }
     // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる。
     // 上のレスが描かれて高さが変わっても合うよう、行き先は毎回測り直す
-    const el = target.parentElement
-    if (!el) return
+    const el = target
     const headerH = headerOffset()
     const visible = root.clientHeight - headerH
     animateScroll(
@@ -440,7 +436,8 @@ export default function ThreadView(props: Props) {
       if (el.hidden) continue // 絞り込みで隠しているレス
       const rect = el.getBoundingClientRect()
       if (rect.top >= bottom) break
-      const no = Number(el.querySelector<HTMLElement>('[data-no]')?.dataset.no)
+      // 番号は枠に持たせてある(NG で中身を描かないレスも数えるため)
+      const no = Number(el.dataset.post)
       if (!no) continue
       last = no
       // ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
@@ -448,8 +445,8 @@ export default function ThreadView(props: Props) {
     }
     if (top) position.current = top
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX
-    // 絞り込み中に一番下まで来たら、隠れているレスも含めて全部読んだことにする
-    if (filteringRef.current && atBottom.current) last = Math.max(last, lastNoRef.current)
+    // 一番下まで来たら、絞り込みや NG で隠れているレスも含めて全部読んだことにする
+    if (atBottom.current) last = Math.max(last, lastNoRef.current)
     if (last > sent.current) {
       sent.current = last
       onRead(last)
@@ -534,14 +531,33 @@ export default function ThreadView(props: Props) {
     if (root) setShowJump(root.scrollHeight - root.scrollTop - root.clientHeight > root.clientHeight)
   }, [])
   useLayoutEffect(updateJump, [log.posts.length, updateJump])
+  // 中身の高さが変わったとき(新着が届いた・レスが描かれた)は、スクロールしなくても既読を進める。
+  // 1 画面に収まるスレや、届いた新着がそのまま見えているときは、スクロールが起きないため。
+  // 裏に残しているタブでは進めない(見ていないので)
+  const activeRef = useRef(props.active)
+  activeRef.current = props.active
   useEffect(() => {
     const root = ref.current
     if (!root) return
-    const observer = new ResizeObserver(updateJump)
+    let timer: ReturnType<typeof setTimeout>
+    const observer = new ResizeObserver(() => {
+      updateJump()
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (activeRef.current) reportRead()
+      }, 300)
+    })
     observer.observe(root)
     if (listRef.current) observer.observe(listRef.current)
-    return () => observer.disconnect()
-  }, [updateJump])
+    return () => {
+      observer.disconnect()
+      clearTimeout(timer)
+    }
+  }, [updateJump, reportRead])
+  // 裏のタブから表に戻したときも、見えている分を既読にする
+  useEffect(() => {
+    if (props.active && positioned.current) reportRead()
+  }, [props.active, reportRead])
   const jumpToBottom = () => {
     const root = ref.current
     if (root) animateScroll(root, () => root.scrollHeight)
@@ -556,7 +572,9 @@ export default function ThreadView(props: Props) {
       atBottom.current = rest < BOTTOM_PX
       setShowJump(rest > root.clientHeight)
       clearTimeout(timer)
-      timer = setTimeout(reportRead, 300)
+      timer = setTimeout(() => {
+        if (activeRef.current) reportRead()
+      }, 300)
     }
     root.addEventListener('scroll', onScroll)
     return () => {
@@ -900,7 +918,7 @@ export default function ThreadView(props: Props) {
               {log.posts.map((p, i) => {
                 const firstUnread = p.no === unreadFrom && unreadFrom > 1
                 return (
-                  <div key={p.no} className="post-cv" hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
+                  <div key={p.no} className="post-cv" data-post={p.no} hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     <PostArticle
                       post={p}

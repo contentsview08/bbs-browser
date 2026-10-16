@@ -10,7 +10,6 @@ import {
   type Board,
   type BoardInfo,
   type NewThreadInput,
-  type LoginResult,
   type PostConfirm,
   type PostInput,
   type PostResult,
@@ -19,7 +18,6 @@ import {
 } from '@bbs-browser/connectors'
 import {
   applyFetch,
-  type AccountRecord,
   type FavoriteThreadEntry,
   type HistoryEntry,
   type LogStore,
@@ -30,14 +28,13 @@ import {
 } from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
-import Notifications, { type AppNotification } from './components/Notifications'
+import Notifications from './components/Notifications'
 import { anchorsIn } from './utils/postBody'
 import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import UploadHistoryDialog from './components/UploadHistoryDialog'
 import PostHistoryDialog from './components/PostHistoryDialog'
-import type { PostAccountOption } from './components/PostAccountMenu'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
 import { resolvePlacements } from './utils/toolbar'
@@ -50,21 +47,22 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { useSettings, type ReplyLayout, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
+import { useAccounts } from './hooks/useAccounts'
+import { useNotifications } from './hooks/useNotifications'
+import { useWatchLists } from './hooks/useWatchLists'
+import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { isReloadKey } from './utils/keymap'
 import { findNextThreads } from './utils/nextThread'
-import { favIncreases, keywordHits } from './utils/watch'
+import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
-import { backgroundError, onBackgroundError } from './utils/backgroundError'
+import { backgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
-
-/** お気に入りのスレの確認とキーワードの見張りで、少し前に取ったスレ一覧を使い回す長さ */
-const WATCH_LIST_REUSE_MS = 60_000
 
 /** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
 const TAB_REPEAT_SETTLE_MS = 200
@@ -150,70 +148,11 @@ export default function App() {
     run(null, async () => {
       if (store) setUploads(await store.listUploads())
     })
-  // ── アカウント(5ch の BE など) ──
-  const [accounts, setAccounts] = useState<AccountRecord[]>([])
-  /** ログインの結果(connectorId:accountId → 結果)。設定画面に出す */
-  const [loginStatus, setLoginStatus] = useState(new Map<string, LoginResult>())
-  const loginWith = async (a: AccountRecord): Promise<LoginResult> => {
-    const connector = connectorOf(a.connectorId)
-    let r: LoginResult
-    try {
-      r = connector.login
-        ? await connector.login(a.accountId, { user: a.user, password: a.password }, ctx)
-        : { ok: false, message: 'このサイトにはログインできません' }
-    } catch (e) {
-      r = { ok: false, message: `ログインできませんでした(${e instanceof Error ? e.message : String(e)})` }
-    }
-    setLoginStatus((m) => new Map(m).set(`${a.connectorId}:${a.accountId}`, r))
-    return r
-  }
-  /**
-   * 板の URL → その板で使えるアカウント(書き込み欄の ︙ で選ぶもの)。
-   * 同じ板には同じ配列を返す(タブのスレ表示を描き直さずに済むように)
-   */
-  const postAccountsOf = useMemo(() => {
-    const cache = new Map<string, PostAccountOption[]>()
-    return (connectorId: string, boardUrl: string): PostAccountOption[] => {
-      const host = new URL(boardUrl).hostname
-      const key = `${connectorId}\n${host}`
-      let list = cache.get(key)
-      if (!list) {
-        list = (findConnector(connectorId)?.accounts ?? [])
-          .filter((k) => k.hosts.some((h) => host === h || host.endsWith(`.${h}`)))
-          .map((k) => ({
-            id: k.id,
-            name: k.name,
-            registered: accounts.some((a) => a.connectorId === connectorId && a.accountId === k.id),
-            on: settings.postAccounts[k.id] !== false,
-          }))
-        cache.set(key, list)
-      }
-      return list
-    }
-  }, [accounts, settings.postAccounts])
-  /** この板への書き込みで使うアカウントの id */
-  const postAccountIds = (connectorId: string, boardUrl: string) =>
-    postAccountsOf(connectorId, boardUrl)
-      .filter((o) => o.registered && o.on)
-      .map((o) => o.id)
-
-  /** 設定画面から: 保存してログインする */
-  const saveAndLogin = async (a: AccountRecord): Promise<LoginResult> => {
-    if (!store) return { ok: false, message: 'DB を開いていません' }
-    await store.setAccount(a)
-    setAccounts(await store.listAccounts())
-    return loginWith(a)
-  }
-  const deleteAccount = async (connectorId: string, accountId: string) => {
-    if (!store) return
-    await store.deleteAccount(connectorId, accountId)
-    setAccounts(await store.listAccounts())
-    setLoginStatus((m) => {
-      const next = new Map(m)
-      next.delete(`${connectorId}:${accountId}`)
-      return next
-    })
-  }
+  // アカウント(5ch の BE など)
+  const { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, deleteAccount, postAccountsOf, postAccountIds } = useAccounts(
+    store,
+    settings.postAccounts,
+  )
 
   /** 書き込み履歴(開いているときだけ中身を持つ) */
   const [postHistory, setPostHistory] = useState<PostHistoryEntry[]>()
@@ -221,18 +160,8 @@ export default function App() {
     run(null, async () => {
       if (store) setPostHistory(await store.listPostHistory())
     })
-  /** アプリ内の通知(右下) */
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const notifySeq = useRef(0)
-  const notify = (n: Omit<AppNotification, 'id'>) => setNotifications((ns) => [...ns, { ...n, id: ++notifySeq.current }])
-  // 裏の処理(既読・下書き・設定の保存など)が失敗したら、種類ごとに 1 回だけ知らせる
-  useEffect(
-    () =>
-      onBackgroundError((what, e) =>
-        notify({ icon: 'error', title: `${what}に失敗しました`, body: e instanceof Error ? e.message : String(e) }),
-      ),
-    [],
-  )
+  /** アプリ内の通知(右下)。裏の処理の失敗もここに出る */
+  const { notifications, notify, dismiss } = useNotifications()
   /** 通知から、そのタブのそのレスへ飛ぶ */
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
   /** NG を登録する画面(元の文字を入れて開く) */
@@ -284,13 +213,9 @@ export default function App() {
       setFavorites(favs)
       setFavThreads(favThreadList)
       // アカウントは裏でログインしておく(失敗したら通知だけ出し、起動は止めない)
-      const accountList = await s.listAccounts()
-      setAccounts(accountList)
-      for (const a of accountList.filter((x) => x.autoLogin)) {
-        void loginWith(a).then((r) => {
-          if (!r.ok) notify({ icon: 'error', title: `${a.accountId.toUpperCase()} にログインできませんでした`, body: r.message })
-        })
-      }
+      await loadAndAutoLogin(s, (a, r) =>
+        notify({ icon: 'error', title: `${a.accountId.toUpperCase()} にログインできませんでした`, body: r.message }),
+      )
     })
   }, [])
 
@@ -310,18 +235,8 @@ export default function App() {
   const boardRef = useRef<Board | undefined>(undefined)
   boardRef.current = board
 
-  /**
-   * 板ごとの、少し前に取ったスレ一覧。お気に入りのスレの確認とキーワードの見張り(裏の処理)だけが使い回す
-   * (同じ板のスレ一覧を、裏の処理どうしや、手で開いた直後に、何度も取りに行かないため)。手で開く・更新するときは、いつも取り直す
-   */
-  const recentLists = useRef(new Map<string, { at: number; list: ThreadSummary[] }>())
-  const listForWatch = async (b: Board): Promise<ThreadSummary[]> => {
-    const hit = recentLists.current.get(b.url)
-    if (hit && Date.now() - hit.at < WATCH_LIST_REUSE_MS) return hit.list
-    const list = await connectorOf(b.connectorId).listThreads(b, ctx)
-    recentLists.current.set(b.url, { at: Date.now(), list })
-    return list
-  }
+  // 裏の処理(お気に入りのスレの確認・キーワードの見張り)が使うスレ一覧の使い回し
+  const { remember: rememberList, listForWatch } = useWatchLists()
   /** いま出している板で「新」の印を付ける境目の時刻(前回その板の一覧を取った時刻)。初めての板なら undefined */
   const [newSince, setNewSince] = useState<number>()
   const lastBoardUrl = useRef(settings.lastBoardUrl)
@@ -340,7 +255,7 @@ export default function App() {
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
-      recentLists.current.set(b.url, { at: Date.now(), list })
+      rememberList(b.url, list)
       setThreads(list)
       setStates(st)
     })
@@ -437,7 +352,7 @@ export default function App() {
         // 裏で確かめるときは、少し前に取った一覧を使い回す(まとめて更新は取り直す)
         const b = { connectorId, url: boardUrl, name: '' }
         const threads = fetchDats ? await connectorOf(connectorId).listThreads(b, ctx) : await listForWatch(b)
-        if (fetchDats) recentLists.current.set(boardUrl, { at: Date.now(), list: threads })
+        if (fetchDats) rememberList(boardUrl, threads)
         subject = new Map(threads.map((t) => [t.key, t]))
       } catch {
         continue // 板ごと取れなかったら、この板は今回は見送る
@@ -477,40 +392,6 @@ export default function App() {
   }
 
   /**
-   * お気に入り板のスレ一覧を見に行き、キーワードに合うスレが新しく立っていたら知らせる。
-   * 板ごとに前回確かめた時刻を覚え、それより後に立ったスレだけを見る(初めての板は、境目を覚えるだけ)
-   */
-  const checkKeywordThreads = async () => {
-    const keywords = settingsRef.current.keywords
-    if (!keywords.some((k) => k.trim())) return
-    const since = { ...settingsRef.current.keywordWatchSince }
-    for (const b of favoritesRef.current ?? []) {
-      const now = Date.now()
-      let list: ThreadSummary[]
-      try {
-        list = await listForWatch(b)
-      } catch {
-        continue
-      }
-      const prev = since[b.url]
-      since[b.url] = now
-      if (prev === undefined) continue
-      const hits = keywordHits(list, keywords, prev).filter((h) => !isNgThreadRef.current(h.thread))
-      const boardName = settingsRef.current.boardMeta[b.url]?.alias || b.name
-      for (const h of hits.slice(0, 3))
-        notify({
-          icon: 'sell',
-          title: `${boardName} に「${h.keyword}」のスレが立ちました`,
-          body: h.thread.title,
-          onClick: () => latest.current.openThread(h.thread),
-        })
-      if (hits.length > 3) notify({ icon: 'sell', title: `${boardName} にキーワードのスレがほかに ${hits.length - 3} 件立ちました` })
-    }
-    updateSetting('keywordWatchSince', since)
-  }
-  /** NG のスレタイに当たるスレは知らせない(作り置きの関数から、いまの NG を見るための控え) */
-  const isNgThreadRef = useRef<(t: ThreadSummary) => boolean>(() => false)
-  /**
    * 定期的な見張りと、あとで押される通知から呼ぶ関数は、いつもいまのものを使う
    * (見張りを始めたときの関数を持ち続けると、そのころの状態(開いていたタブなど)で動いてしまうため)
    */
@@ -518,29 +399,12 @@ export default function App() {
     openThread: (t: ThreadSummary) => void openThread(t),
     openFavThreads: () => void openFavThreads(),
     checkFavThreads,
-    checkKeywordThreads,
   })
   latest.current = {
     openThread: (t: ThreadSummary) => void openThread(t),
     openFavThreads: () => void openFavThreads(),
     checkFavThreads,
-    checkKeywordThreads,
   }
-  const favoritesRef = useRef(favorites)
-  favoritesRef.current = favorites
-  const hasKeywords = settings.keywords.some((k) => k.trim())
-  useEffect(() => {
-    if (!store || settings.keywordWatchMin <= 0 || !hasKeywords || !favorites?.length) return
-    const check = () => {
-      if (isAppVisible()) void latest.current.checkKeywordThreads().catch(() => undefined)
-    }
-    const first = setTimeout(check, 15_000)
-    const timer = setInterval(check, settings.keywordWatchMin * 60_000)
-    return () => {
-      clearTimeout(first)
-      clearInterval(timer)
-    }
-  }, [store, settings.keywordWatchMin, hasKeywords, favorites?.length])
 
   /** まとめて更新(スレ一覧の更新ボタン・引っぱって更新) */
   const refreshFavThreads = () =>
@@ -1170,7 +1034,17 @@ export default function App() {
 
   const isNgPost = useMemo(() => postMatcher(settings.ngRules), [settings.ngRules])
   const isNgThread = useMemo(() => threadMatcher(settings.ngRules), [settings.ngRules])
-  isNgThreadRef.current = isNgThread
+  // キーワードに合うスレが立ったら知らせる(お気に入り板を見張る)
+  useKeywordWatch({
+    enabled: !!store,
+    settings,
+    updateSetting,
+    favorites,
+    listForWatch,
+    isNgThread,
+    notify,
+    openThread: (t) => latest.current.openThread(t),
+  })
   const addNg = useCallback(
     (rule: NgRule) => updateSetting('ngRules', [...settings.ngRules, rule]),
     [settings.ngRules, updateSetting],
@@ -1497,7 +1371,7 @@ export default function App() {
         />
       )}
 
-      <Notifications items={notifications} onClose={(id) => setNotifications((ns) => ns.filter((n) => n.id !== id))} />
+      <Notifications items={notifications} onClose={dismiss} />
 
       {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 

@@ -88,6 +88,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
 ]
 /** 未読の頭を置く位置(見えている範囲の上からの割合)。上の 3 割には既読のレスを残す */
 const UNREAD_AT = 0.3
+/** 一番下からこれだけ以内なら「いちばん下を見ている」とみなす(新着を追いかける) */
+const BOTTOM_PX = 80
 /** 一番下へ飛ぶのにかける時間 */
 const JUMP_MS = 300
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
@@ -128,6 +130,22 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
       }}
     />
   )
+}
+
+/**
+ * 決めた時間で、素早く(終わりだけゆっくり)スクロールする。
+ * ブラウザのなめらかなスクロールは、距離が長いと遅く、途中で別のスクロールに割り込まれると止まるので使わない。
+ * 行き先は関数で受け取り、動いている間に中身が増えても、毎回その時点の行き先へ向かう
+ */
+function animateScroll(root: HTMLElement, target: () => number, ms = JUMP_MS) {
+  const from = root.scrollTop
+  const start = performance.now()
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / ms)
+    root.scrollTop = from + (target() - from) * (1 - (1 - t) ** 3)
+    if (t < 1) requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
 }
 
 function Divider({ label, self }: { label: string; self?: boolean }) {
@@ -331,7 +349,7 @@ export default function ThreadView(props: Props) {
    * 未読の頭を、見えている範囲の上から UNREAD_AT の位置に置く。
    * 上には既読のレスが少し見え、その下の「ここから未読」の線から下が未読、とひと目で分かるように
    */
-  const scrollToUnread = useCallback((no: number, behavior: ScrollBehavior = 'instant') => {
+  const scrollToUnread = useCallback((no: number, behavior: ScrollBehavior | 'animate' = 'instant') => {
     const root = ref.current
     if (!root) return
     // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
@@ -340,7 +358,8 @@ export default function ThreadView(props: Props) {
       (e) => Number(e.dataset.no) >= no && e.offsetParent !== null,
     )
     if (!target) {
-      root.scrollTo({ top: root.scrollHeight, behavior })
+      if (behavior === 'animate') animateScroll(root, () => root.scrollHeight - root.clientHeight)
+      else root.scrollTo({ top: root.scrollHeight, behavior })
       return
     }
     // 「ここから未読」の線はレスの直前にあるので、線ごと(レスを包む要素)の位置で合わせる
@@ -349,7 +368,8 @@ export default function ThreadView(props: Props) {
     const headerH = headerOffset()
     const visible = root.clientHeight - headerH
     const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - visible * UNREAD_AT
-    root.scrollTo({ top, behavior })
+    if (behavior === 'animate') animateScroll(root, () => Math.min(top, root.scrollHeight - root.clientHeight))
+    else root.scrollTo({ top, behavior })
   }, [])
 
   // 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
@@ -369,7 +389,7 @@ export default function ThreadView(props: Props) {
       if (!top && rect.bottom > viewTop) top = { no: last, offset: rect.top - viewTop }
     }
     if (top) position.current = top
-    atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < 40
+    atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX
     // 絞り込み中に一番下まで来たら、隠れているレスも含めて全部読んだことにする
     if (filteringRef.current && atBottom.current) last = Math.max(last, lastNoRef.current)
     if (last > sent.current) {
@@ -431,24 +451,14 @@ export default function ThreadView(props: Props) {
       }
     }
     // lastMax はまだ前回の描画の値なので、その次が新着の頭
-    if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, 'smooth')
+    if (settings.autoScrollOnNew && atBottom.current) scrollToUnread(lastMax.current + 1, 'animate')
   }, [log.posts.length, byNo, unreadFrom, settings.autoScrollOnNew, scrollToUnread, reportRead])
 
   // 一番下へ飛ぶ丸いボタン。一番下から 1 画面ぶん以上離れているときだけ出す
   const [showJump, setShowJump] = useState(false)
   const jumpToBottom = () => {
     const root = ref.current
-    if (!root) return
-    // ブラウザのなめらかなスクロールは距離が長いと遅いので、時間を決めて自前で動かす(素早く、終わりだけゆっくり)
-    const from = root.scrollTop
-    const start = performance.now()
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / JUMP_MS)
-      const to = root.scrollHeight - root.clientHeight
-      root.scrollTop = from + (to - from) * (1 - (1 - t) ** 3)
-      if (t < 1) requestAnimationFrame(step)
-    }
-    requestAnimationFrame(step)
+    if (root) animateScroll(root, () => root.scrollHeight - root.clientHeight)
   }
 
   useEffect(() => {
@@ -456,7 +466,9 @@ export default function ThreadView(props: Props) {
     if (!root) return
     let timer: ReturnType<typeof setTimeout>
     const onScroll = () => {
-      setShowJump(root.scrollHeight - root.scrollTop - root.clientHeight > root.clientHeight)
+      const rest = root.scrollHeight - root.scrollTop - root.clientHeight
+      atBottom.current = rest < BOTTOM_PX
+      setShowJump(rest > root.clientHeight)
       clearTimeout(timer)
       timer = setTimeout(reportRead, 300)
     }

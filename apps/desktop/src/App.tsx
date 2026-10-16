@@ -94,6 +94,8 @@ export default function App() {
   /** Ctrl/Shift+クリックで選んだタブ */
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set())
   const [refreshingAll, setRefreshingAll] = useState(false)
+  /** 閲覧履歴を取り直した回数(「未読」で絞り込んだ顔ぶれを控え直すきっかけ) */
+  const [historyVersion, setHistoryVersion] = useState(0)
   /** 板ごとの設定(名無しの名前など)。板ごとに一度だけ取る */
   const [boardInfos, setBoardInfos] = useState(new Map<string, BoardInfo>())
   const boardInfoAsked = useRef(new Set<string>())
@@ -196,19 +198,41 @@ export default function App() {
       setStates(st)
     })
 
+  /** 閲覧履歴の更新で、スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
+  const [historyCounts, setHistoryCounts] = useState(new Map<string, number>())
+
   /**
-   * 閲覧履歴のスレを、上から 1 つずつ順番に取り直す(まとめて取りに行かない)。
-   * 1 つ取るたびに一覧を描き直して、どこまで取れたか・どのスレに新着があるかを見せる
+   * 閲覧履歴の更新。dat を 1 つずつ取りに行くとサーバーの負担が大きいので、
+   * 板ごとにスレ一覧(subject.txt)を 1 回だけ取り、載っていればそのレス数を新しい数として使う。
+   * 載っていないスレだけ、dat 落ちかもしれないので dat を見に行く(落ちていれば dat 落ちに、残っていれば新着を取る)
    */
   const refreshHistory = () =>
     run('threads', async () => {
       if (!store) return
       const list = await store.history()
       setHistory(list)
-      for (const h of list) {
-        await fetchThread(store, h.thread).catch(() => undefined)
+      const byBoard = new Map<string, HistoryEntry[]>()
+      for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
+      const counts = new Map(historyCounts)
+      for (const [boardUrl, entries] of byBoard) {
+        const connectorId = entries[0].thread.connectorId
+        let subject: Map<string, ThreadSummary> | undefined
+        try {
+          const threads = await connectorOf(connectorId).listThreads({ connectorId, url: boardUrl, name: '' }, ctx)
+          subject = new Map(threads.map((t) => [t.key, t]))
+        } catch {
+          subject = undefined // 板ごと取れなかったら、この板は今回は見送る
+        }
+        if (!subject) continue
+        for (const h of entries) {
+          const live = subject.get(h.thread.key)
+          if (live) counts.set(threadId(h.thread), live.postCount)
+          else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
+        }
+        setHistoryCounts(new Map(counts))
         setHistory(await store.history())
       }
+      setHistoryVersion((v) => v + 1)
       await reloadRecent(store)
     })
 
@@ -216,6 +240,7 @@ export default function App() {
     run('threads', async () => {
       setListOpen(true)
       if (store) setHistory(await store.history())
+      setHistoryVersion((v) => v + 1)
     })
 
   // ── タブ ──
@@ -229,7 +254,12 @@ export default function App() {
    * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
    */
   const inflight = useRef(new Map<string, Promise<void>>())
-  const fetchThread = async (s: LogStore, t: ThreadSummary, opts: { force?: boolean } = {}) => {
+  const fetchThread = async (
+    s: LogStore,
+    t: ThreadSummary,
+    // keepUnread: 「ここから未読」を動かさない(開いたときの取得。線は更新したときだけ引き直す)
+    opts: { force?: boolean; keepUnread?: boolean } = {},
+  ) => {
     const id = threadId(t)
     const running = inflight.current.get(id)
     if (running) {
@@ -244,9 +274,13 @@ export default function App() {
         const r = await connectorOf(t.connectorId).fetchPosts(t, cursor, ctx)
         await s.saveFetch(t, r)
         const saved = await s.loadThread(t)
-        // 「ここから未読」は、取り直すたびにその時点の既読位置の次へ引き直す
-        // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)
-        if (saved) setTabs((ts) => ts.map((x) => (x.id === id ? { ...x, log: saved, unreadFrom: x.readNo + 1 } : x)))
+        // 「ここから未読」は、更新したときにその時点の既読位置の次へ引き直す
+        // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)。
+        // 開いたときの取得では動かさない(開いた直後に画面に見えたレスが既読になり、線が下へずれてしまうため)
+        if (saved)
+          setTabs((ts) =>
+            ts.map((x) => (x.id === id ? { ...x, log: saved, unreadFrom: opts.keepUnread ? x.unreadFrom : x.readNo + 1 } : x)),
+          )
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
         if (saved && before && settingsRef.current.notifyReplies) await notifyReplies(s, t, saved, before.postCount)
         await reloadStates(s, t.boardUrl)
@@ -291,7 +325,7 @@ export default function App() {
       readNo: local?.readNo ?? 0,
       ownNos: new Set(own),
     })
-    await fetchThread(s, t)
+    await fetchThread(s, t, { keepUnread: true })
   }
 
   const selectTab = (id: string) => {
@@ -654,7 +688,15 @@ export default function App() {
 
   const historyStates = new Map(history?.map((h) => [threadId(h.thread), h as ThreadState]))
   // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
-  const historyThreads = useMemo(() => history?.map((h) => h.thread), [history])
+  // スレ一覧から分かったレス数があれば、それを使う(手元のレス数より多いぶんが未読として出る)
+  const historyThreads = useMemo(
+    () =>
+      history?.map((h) => {
+        const n = historyCounts.get(threadId(h.thread))
+        return n !== undefined && n > h.thread.postCount ? { ...h.thread, postCount: n } : h.thread
+      }),
+    [history, historyCounts],
+  )
   const stateOf = history
     ? (t: ThreadSummary) => historyStates.get(threadId(t))
     : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
@@ -749,6 +791,7 @@ export default function App() {
           onDeleteThreadLog={(t) => void deleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={history ? undefined : settings.keywords}
+          snapshotKey={history ? historyVersion : undefined}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           actions={<StyleMenu settings={settings} update={updateSetting} />}
         />

@@ -55,6 +55,11 @@ interface Props {
   defaultSort: ThreadSort
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
+  /**
+   * 「未読」で絞り込んだスレの顔ぶれを控え直すきっかけ。これが変わるまでは、読み終えたスレも並べ続ける。
+   * 渡さなければ、スレ一覧(threads)を取り直したときに控え直す
+   */
+  snapshotKey?: unknown
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
   keywords?: string[]
   /** スレタイを NG に追加する画面を開く */
@@ -120,15 +125,34 @@ export default function ThreadListPanel(props: Props) {
     [threads, stateOf, props.isNg],
   )
 
+  // 「未読」を押した時点(と、一覧を取り直した時点)の未読のスレを控える。
+  // 読むたびに絞り込み直すと、読み終えたスレが急に一覧から消えてしまうので
+  const [unreadSnapshot, setUnreadSnapshot] = useState<Set<string>>()
+  const stateOfRef = useRef(stateOf)
+  stateOfRef.current = stateOf
+  const snapshotKey = props.snapshotKey ?? threads
+  useEffect(() => {
+    if (!unreadOnly) return setUnreadSnapshot(undefined)
+    const of = stateOfRef.current
+    setUnreadSnapshot(
+      new Set(
+        threads
+          .filter((t) => {
+            const s = of(t)
+            return s !== undefined && s.readNo < t.postCount
+          })
+          .map(threadId),
+      ),
+    )
+    // threads は snapshotKey を渡さないときのきっかけとして入っている
+  }, [unreadOnly, snapshotKey])
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     let list = threads.filter((t) => {
       if (props.isNg(t)) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
-      if (unreadOnly) {
-        const s = stateOf(t)
-        return s !== undefined && s.readNo < t.postCount
-      }
+      if (unreadOnly) return unreadSnapshot?.has(threadId(t)) ?? false
       return true
     })
     if (sort) {
@@ -138,7 +162,7 @@ export default function ThreadListPanel(props: Props) {
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
     return list
-  }, [threads, stateOf, query, unreadOnly, sort, props.isNg, momenta])
+  }, [threads, query, unreadOnly, unreadSnapshot, sort, props.isNg, momenta])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。

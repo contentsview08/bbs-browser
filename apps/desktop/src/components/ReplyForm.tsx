@@ -132,6 +132,39 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     </button>
   )
 
+  /** 画像と絵文字のボタン(右端が絵文字)。書き込み欄が下なら本文の欄の右上に、右なら名前とメールの行に置く */
+  const mediaButtons = (
+    <>
+      {props.uploader && (
+        <>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={!!props.disabled}
+            className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40"
+            title="画像をアップロード(catbox.moe)。書き込み欄に貼り付け・ドラッグしても上げられます"
+          >
+            <span className={`material-symbols-outlined text-lg leading-none ${uploading > 0 ? 'animate-spin' : ''}`}>
+              {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
+            </span>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              void upload(mediaFiles(e.target.files))
+              e.target.value = ''
+            }}
+          />
+        </>
+      )}
+      <EmojiPicker onPick={insert} disabled={!!props.disabled} />
+    </>
+  )
+
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
       {uploadError && (
@@ -161,36 +194,12 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
           sage
         </label>
-        <EmojiPicker onPick={insert} disabled={!!props.disabled} />
-        {props.uploader && (
-          <>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={!!props.disabled}
-              className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40"
-              title="画像をアップロード(catbox.moe)。書き込み欄に貼り付け・ドラッグしても上げられます"
-            >
-              <span className={`material-symbols-outlined text-lg leading-none ${uploading > 0 ? 'animate-spin' : ''}`}>
-                {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
-              </span>
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                void upload(mediaFiles(e.target.files))
-                e.target.value = ''
-              }}
-            />
-          </>
-        )}
+        {right && mediaButtons}
         {!right && <span className="ml-auto text-[10px] text-c-text-muted">Ctrl+Enter で書き込む</span>}
       </div>
       <div className={`flex-1 min-h-0 flex gap-2 ${right ? 'flex-col' : ''}`}>
+        <div className="relative flex-1 min-h-0 flex">
+        {!right && <div className="absolute top-1 right-2 z-10 flex items-center gap-0.5">{mediaButtons}</div>}
         <textarea
           ref={textRef}
           value={body}
@@ -218,8 +227,9 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}
           disabled={!!props.disabled}
-          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed`}
+          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed ${right ? '' : 'pr-20'}`}
         />
+        </div>
         {sendButton}
       </div>
       {hasPreview && (

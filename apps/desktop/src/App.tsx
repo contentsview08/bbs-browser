@@ -898,7 +898,8 @@ export default function App() {
             title: t.log?.title || t.thread.title,
             unread: t.log ? Math.max(0, t.log.postCount - t.readNo) : 0,
             loading: t.loading,
-            archived: t.log?.status === 'archived',
+            ended:
+              t.log?.status === 'archived' ? 'archived' : (t.log?.posts.at(-1)?.no ?? 0) >= 1000 ? 'full' : undefined,
             boardUrl: t.thread.boardUrl,
             icon: settings.boardMeta[t.thread.boardUrl]?.icon,
           }))}

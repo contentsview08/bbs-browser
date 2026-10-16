@@ -12,11 +12,18 @@ export interface TabItem {
   /** 未読のレス数 */
   unread: number
   loading: boolean
-  archived: boolean
+  /** 終わったスレ。archived: dat 落ち / full: 1000 まで行って書き込めない */
+  ended?: 'archived' | 'full'
   boardUrl: string
   /** ファビコンの上書き(板の設定) */
   icon?: string
 }
+
+/** 終わったスレの印 */
+const ENDED = {
+  archived: { mark: '落', name: 'dat 落ちしたスレ(もう書き込めません)', color: 'var(--c-heat-very-hot)' },
+  full: { mark: '満', name: '1000 まで埋まったスレ(もう書き込めません)', color: 'var(--c-heat-hot)' },
+} as const
 
 interface Props {
   tabs: TabItem[]
@@ -199,7 +206,7 @@ export default function TabBar(props: Props) {
                 e.preventDefault()
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY })
               }}
-              title={t.title}
+              title={t.ended ? `${t.title}(${ENDED[t.ended].name})` : t.title}
               style={{
                 width: tabWidth,
                 background: active
@@ -213,8 +220,15 @@ export default function TabBar(props: Props) {
               }}
               className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 rounded-t-lg cursor-pointer select-none text-xs ${
                 active || selected ? 'text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'
-              } ${active ? 'z-10' : ''} ${dragging ? 'z-30 shadow-lg' : ''} ${t.archived ? 'opacity-60' : ''}`}
+              } ${active ? 'z-10' : ''} ${dragging ? 'z-30 shadow-lg' : ''}`}
             >
+              {/* 終わったスレは、タブの下端に色の線を引く(dat 落ちは赤、1000 到達は橙) */}
+              {t.ended && (
+                <span
+                  className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full pointer-events-none"
+                  style={{ background: ENDED[t.ended].color }}
+                />
+              )}
               {active && (
                 <>
                   {/* タブの下の両端の、スレ表示へ流れ込む内側の曲線 */}
@@ -231,10 +245,19 @@ export default function TabBar(props: Props) {
               {separator && <span className="absolute right-0 top-2 bottom-2 w-px bg-c-border pointer-events-none" />}
               {t.loading ? (
                 <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+              ) : t.ended ? (
+                // ファビコンの場所に「落」「満」の印を出し、ひと目で分かるようにする
+                <span
+                  className="flex-shrink-0 w-[14px] h-[14px] rounded-sm flex items-center justify-center text-[10px] font-bold leading-none text-white"
+                  style={{ background: ENDED[t.ended].color }}
+                  title={ENDED[t.ended].name}
+                >
+                  {ENDED[t.ended].mark}
+                </span>
               ) : (
                 <BoardIcon boardUrl={t.boardUrl} override={t.icon} size={14} />
               )}
-              <span className="flex-1 min-w-0 truncate">{t.title || '(読み込み中)'}</span>
+              <span className={`flex-1 min-w-0 truncate ${t.ended ? 'opacity-60' : ''}`}>{t.title || '(読み込み中)'}</span>
               {t.unread > 0 && (
                 <span
                   className="flex-shrink-0 font-bold text-[9px] px-1 rounded"

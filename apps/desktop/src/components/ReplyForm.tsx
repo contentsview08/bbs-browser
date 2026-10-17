@@ -191,6 +191,13 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   /** 画像と絵文字のボタン(右端が絵文字)。本文の欄の上(名前とメールの行の右端＝本文の欄の右端)に置く */
 
+  /** 入力欄で Esc を押したら、書き込み欄をしまう(書きかけは下書きに残る)。日本語の変換中の Esc は変換の取り消しなので見ない */
+  const collapseOnEsc = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Escape' || e.nativeEvent.isComposing || !props.onCollapse) return
+    e.preventDefault()
+    props.onCollapse()
+  }
+
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
       {media.error && (
@@ -210,6 +217,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onKeyDown={collapseOnEsc}
           placeholder="名前"
           className={`${INPUT} ${right ? 'flex-1 min-w-0' : 'w-40'}`}
         />
@@ -217,6 +225,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           type="text"
           value={mail}
           onChange={(e) => setMail(e.target.value)}
+          onKeyDown={collapseOnEsc}
           placeholder="メール"
           className={`${INPUT} ${right ? 'flex-1 min-w-0' : 'w-40'}`}
         />
@@ -251,7 +260,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()
               void submit()
-            }
+            } else collapseOnEsc(e)
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}
           disabled={!!props.disabled}

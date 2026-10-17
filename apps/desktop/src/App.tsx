@@ -168,6 +168,8 @@ export default function App() {
   const [ngDraft, setNgDraft] = useState<NgDraft>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
   const narrow = useNarrow()
+  /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
+  const single = settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
   const [listOpen, setListOpen] = useState(false)
 
   // 非同期の処理の途中で最新の値を見るための控え
@@ -559,6 +561,8 @@ export default function App() {
   const openThread = (t: ThreadSummary, opts: { newTab?: boolean } = {}) =>
     run('posts', async () => {
       if (!store) return
+      // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
+      setListOpen(false)
       const id = threadId(t)
       const existing = tabsRef.current.find((x) => x.id === id)
       if (existing) {
@@ -1175,8 +1179,8 @@ export default function App() {
       <AddressBar
         currentUrl={currentUrl}
         onOpen={(url) => void openUrlInApp(url)}
-        onToggleList={narrow ? () => setListOpen((v) => !v) : undefined}
-        listOpen={listOpen}
+        onToggleList={single ? () => setListOpen((v) => !v) : undefined}
+        listOpen={listOpen || !activeTab}
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
@@ -1215,13 +1219,15 @@ export default function App() {
       <div className="relative flex-1 min-h-0 flex overflow-hidden">
 
       {/* 縦長のときは、スレ一覧を左から引き出す。外を押したら引っ込める */}
-      {narrow && listOpen && <div className="absolute inset-0 z-20 bg-black/30" onClick={() => setListOpen(false)} />}
       {settingsLoaded && (
         <div
           className={
-            narrow
-              ? // 箱の幅は中身(スレ一覧)に合わせる。箱を狭く絞ると、しまったときに中身が残って見える
-                `absolute inset-y-0 left-0 z-30 flex w-max transition-[transform,visibility] duration-200 ease-out ${listOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full invisible'}`
+            single
+              ? // 1 画面: スレ一覧を画面いっぱい(読みやすい幅で真ん中)に出す。スレを開いていなければ、いつも一覧を出す。
+                // しまうときも消さずに隠すだけにする(スクロールの位置を残すため)
+                `absolute inset-0 z-30 flex justify-center bg-panel-view transition-[opacity,visibility] duration-150 ${
+                  listOpen || !activeTab ? 'opacity-100' : 'opacity-0 invisible pointer-events-none'
+                }`
               : 'contents'
           }
         >
@@ -1256,7 +1262,8 @@ export default function App() {
           }
           refreshReadyAt={listReadyAt}
           // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
-          width={narrow ? Math.min(settings.threadPanelWidth, Math.floor(window.innerWidth * 0.85)) : settings.threadPanelWidth}
+          width={settings.threadPanelWidth}
+          fill={single}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={favView || history ? 'subject' : settings.threadSort}
           isNg={isNgThread}

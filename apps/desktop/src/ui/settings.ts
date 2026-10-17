@@ -97,6 +97,11 @@ export interface AppSettings {
   keywords: string[]
   /** 板ごとの、最後にスレ一覧を取った時刻(ms)。それより後に立ったスレに「新」の印を付ける */
   boardVisits: Record<string, number>
+  /**
+   * 画面の分け方。split: スレ一覧とスレ表示を並べる / single: どちらか一方だけを画面いっぱいに出す /
+   * auto: ウィンドウが狭い・縦長のときだけ single
+   */
+  paneMode: PaneMode
   /** スレ一覧の一番上で、さらにホイールを上に回したら更新する */
   pullToRefreshList: boolean
   // タブ
@@ -205,6 +210,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   boardMeta: {},
   keywords: [],
   pullToRefreshList: true,
+  paneMode: 'auto',
   boardVisits: {},
   tabsEnabled: true,
   openInNewTab: true,
@@ -317,6 +323,8 @@ function apply(s: AppSettings) {
   root.style.setProperty('--app-font', css)
   for (const p of PANELS) root.style.setProperty(p.cssVar, String(s.panelAlpha[p.key] ?? 1))
 }
+
+export type PaneMode = 'split' | 'single' | 'auto'
 
 export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
 

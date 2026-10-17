@@ -304,6 +304,20 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           </div>
         </div>
       </Section>
+      <Section
+        title="画面の分け方"
+        note="1 画面にすると、スレ一覧とスレ表示のどちらか一方を画面いっぱいに出します。スレを押すとスレ表示に、上の帯の左のボタンで一覧に戻ります"
+      >
+        <Choice
+          value={s.paneMode}
+          options={[
+            { key: 'auto' as const, name: '自動(狭いときだけ 1 画面)' },
+            { key: 'split' as const, name: '2 画面' },
+            { key: 'single' as const, name: '1 画面' },
+          ]}
+          onChange={(v) => update('paneMode', v)}
+        />
+      </Section>
       <Section advanced title="サイドバー">
         <Toggle
           checked={s.showStripNames}

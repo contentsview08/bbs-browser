@@ -54,6 +54,8 @@ interface Props {
   onRefresh?: () => Promise<unknown> | void
   width: number
   onResize: (width: number) => void
+  /** 1 画面のとき: 決まった幅ではなく、画面いっぱい(読みやすい幅まで)に広げる。幅を変えるつまみも出さない */
+  fill?: boolean
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** 操作ボタンの置き場所(設定) */
@@ -92,6 +94,8 @@ interface Props {
   favorite?: { active: boolean; onToggle: () => void }
 }
 
+/** 1 画面のとき、スレ一覧を広げる幅の上限(これより広いと 1 行が長くて読みにくい) */
+const FILL_MAX_WIDTH = 820
 const LIST_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
 const TAB = 'relative flex items-center justify-center gap-1 py-2.5 transition-colors whitespace-nowrap'
 
@@ -337,13 +341,15 @@ export default function ThreadListPanel(props: Props) {
 
   return (
     <section
-      style={{ width }}
-      className="flex-shrink-0 flex flex-col relative overflow-hidden border-r border-c-border bg-panel-list"
+      style={props.fill ? { width: '100%', maxWidth: FILL_MAX_WIDTH } : { width }}
+      className={`flex-shrink-0 flex flex-col relative overflow-hidden bg-panel-list ${props.fill ? 'border-x' : 'border-r'} border-c-border`}
     >
-      <div
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-c-accent/30 transition-colors z-20"
-        onMouseDown={onResizeStart}
-      />
+      {!props.fill && (
+        <div
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-c-accent/30 transition-colors z-20"
+          onMouseDown={onResizeStart}
+        />
+      )}
 
       <div
         ref={pull.indicatorRef}

@@ -7,6 +7,7 @@ import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
 import Identicon from './Identicon'
+import { isAutoLoadable } from '../utils/safeUrl'
 
 interface Props {
   thread: ThreadSummary
@@ -91,6 +92,23 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   /** スレタイの色: 開いたことのあるスレは既読の色、新着があれば強く、まだ開いていないスレはふつうの強さ */
   const titleColor = visited ? (unreadCount > 0 ? 'var(--c-text-strong)' : 'var(--c-thread-read-title, var(--c-text-body))') : 'var(--thread-list-title-color, var(--c-text-strong))'
 
+  /** スレの画像のサムネイル(ふたば・4chan のカタログ)。size は一辺(px) */
+  const thumbImg = (size: number, cls = 'rounded-md') =>
+    thread.thumb &&
+    isAutoLoadable(thread.thumb) && (
+      <img
+        src={thread.thumb}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        className={`flex-shrink-0 object-cover bg-c-surface2 ${cls}`}
+        style={{ width: size, height: size }}
+        onError={(e) => {
+          e.currentTarget.style.visibility = 'hidden'
+        }}
+      />
+    )
+
   /** スレタイの後ろの、立てた人の BE 番号(「… [123456789]」の形の板だけ) */
   const beNo = variant === 'line' ? /[[［](\d{6,12})[\]］]\s*$/.exec(thread.title)?.[1] : undefined
 
@@ -100,7 +118,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       <div className="thread-row flex gap-2 min-w-0">
         {checkbox}
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
-        <span className="flex-shrink-0 text-base leading-none text-c-text-muted select-none">#</span>
+        {thumbImg(24, 'rounded') || <span className="flex-shrink-0 text-base leading-none text-c-text-muted select-none">#</span>}
         <span className="thread-row-title flex-1 min-w-0 text-sm" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
           {newBadge}
           {favStar}
@@ -132,11 +150,12 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       // スレタイの後ろに立てた人の BE 番号が付く板(嫌儲など。「… [123456789]」)だけ、その番号の模様を出す
       <div className="flex items-center gap-3 min-w-0">
         {checkbox}
-        {beNo && (
+        {thumbImg(40, 'rounded-xl') ||
+          (beNo && (
           <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の BE:${beNo}`}>
             <Identicon seed={`be:${beNo}`} size={40} />
           </span>
-        )}
+          ))}
         <div className="flex-1 min-w-0">
           <div className="truncate text-sm font-bold" style={{ color: titleColor }}>
             {newBadge}
@@ -161,6 +180,8 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       </div>
     ) : (
         <div className="flex items-center gap-3">
+          {/* スレの画像(ふたば・4chan のカタログ)があれば左に出す */}
+          {thumbImg(48)}
           {onSelect && (
             <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
               <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />

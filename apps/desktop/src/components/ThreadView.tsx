@@ -142,6 +142,12 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 /** 選んだレスへ送るときのスクロールの時間 */
 const CURSOR_SCROLL_MS = 160
+/**
+ * スレを開いたときに、最初に中身まで作るレスの数(開く位置の前後)と、そのあと手の空いたときに 1 回で作り足す数。
+ * 全部を一度に作ると、1000 レスのスレで開くまでに時間がかかるので、見える所から先に作る
+ */
+const FIRST_RENDER = 80
+const RENDER_CHUNK = 150
 /** Esc の 2 回押しとみなす間隔 */
 const DOUBLE_ESC_MS = 500
 /** J・K で選んだレスを、画面の上下からこの割合だけ離しておく */
@@ -419,6 +425,49 @@ export default function ThreadView(props: Props) {
     [props.nonameName, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
+  // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
+  /** 中身を作るレスの範囲 [lo, hi)(log.posts の位置)。hi が Infinity なら末尾まで(新着もすぐ作る) */
+  const [renderWin, setRenderWin] = useState(() => {
+    const posts = log.posts
+    const n = posts.length
+    const at = (no: number) => posts.findIndex((p) => p.no >= no)
+    const pos = props.initialPosition
+    // 開く位置(utils/threadScroll.ts の openTarget と同じ順で決める)
+    const anchor =
+      pos?.bottom || (!pos && settings.openPosition === 'bottom')
+        ? n - 1
+        : pos
+          ? at(pos.no)
+          : settings.openPosition === 'unread' && unreadFrom > 1
+            ? (() => {
+                const i = at(unreadFrom)
+                return i < 0 ? n - 1 : i
+              })()
+            : 0
+    const a = anchor < 0 ? n - 1 : anchor
+    const lo = Math.max(0, a - FIRST_RENDER / 2)
+    const hi = Math.min(n, a + FIRST_RENDER / 2)
+    return { lo, hi: hi >= n ? Infinity : hi }
+  })
+  // 手の空いたときに、上下へ少しずつ作り足す(全部作り終えたら止まる)
+  useEffect(() => {
+    const n = log.posts.length
+    if (renderWin.lo <= 0 && renderWin.hi === Infinity) return
+    const grow = () =>
+      setRenderWin((w) => {
+        const hi = w.hi === Infinity ? Infinity : w.hi + RENDER_CHUNK
+        return { lo: Math.max(0, w.lo - RENDER_CHUNK), hi: hi >= n ? Infinity : hi }
+      })
+    const idle = window.requestIdleCallback
+    if (idle) {
+      const id = idle(grow, { timeout: 300 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const t = setTimeout(grow, 30)
+    return () => clearTimeout(t)
+  }, [renderWin, log.posts.length])
+  const isRendered = (i: number) => i >= renderWin.lo && i < renderWin.hi
+
   /** レスの見た目のスタイル(設定) */
   const variant: PostVariant = settings.postStyle ?? 'card'
   /** Discord 風: 直前に見えているレスと同じ ID(続けて書いた)か */
@@ -1390,10 +1439,13 @@ export default function ThreadView(props: Props) {
                       {
                         // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
                         containIntrinsicSize: `auto ${intrinsicHeight(p)}px`,
+                        // まだ中身を作っていないレスは、仮の高さの箱にしておく(画面に入っても高さがつぶれないように)
+                        ...(!isRendered(i) && { minHeight: intrinsicHeight(p) }),
                         ...(enterDelay !== undefined && { '--enter-delay': `${enterDelay}ms` }),
                       } as CSSProperties
                     }
                     data-post={p.no}
+                    data-placeholder={isRendered(i) ? undefined : ''}
                     hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
@@ -1410,32 +1462,34 @@ export default function ThreadView(props: Props) {
                         />
                       </>
                     )}
-                    <PostArticle
-                      post={p}
-                      anchorCount={anchorCounts.get(p.no) ?? 0}
-                      idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-                      showTopDivider={i > 0 && !firstUnread && variant === 'card'}
-                      variant={variant}
-                      // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
-                      continued={
-                        (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
-                      }
-                      replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
-                      ng={isNg(p)}
-                      ngMode={settings.ngMode}
-                      showThumbnails={settings.showThumbnails}
-                      aaAutoDetect={settings.aaAutoDetect}
-                      showIdenticon={settings.showIdenticon}
-                      showLinkPreview={settings.showLinkPreview}
-                      display={display}
-                      toolbar={settings.postToolbar}
-                      phrases={settings.quickPhrases}
-                      isOp={opId !== undefined && p.id === opId}
-                      flash={flashNos.has(p.no)}
-                      isOwn={ownNos.has(p.no)}
-                      isReplyToOwn={replyToOwn.has(p.no)}
-                      handlers={mainHandlers}
-                    />
+                    {isRendered(i) && (
+                      <PostArticle
+                        post={p}
+                        anchorCount={anchorCounts.get(p.no) ?? 0}
+                        idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
+                        showTopDivider={i > 0 && !firstUnread && variant === 'card'}
+                        variant={variant}
+                        // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
+                        continued={
+                          (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
+                        }
+                        replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
+                        ng={isNg(p)}
+                        ngMode={settings.ngMode}
+                        showThumbnails={settings.showThumbnails}
+                        aaAutoDetect={settings.aaAutoDetect}
+                        showIdenticon={settings.showIdenticon}
+                        showLinkPreview={settings.showLinkPreview}
+                        display={display}
+                        toolbar={settings.postToolbar}
+                        phrases={settings.quickPhrases}
+                        isOp={opId !== undefined && p.id === opId}
+                        flash={flashNos.has(p.no)}
+                        isOwn={ownNos.has(p.no)}
+                        isReplyToOwn={replyToOwn.has(p.no)}
+                        handlers={mainHandlers}
+                      />
+                    )}
                   </div>
                 )
               })}

@@ -82,6 +82,8 @@ export interface PostRect {
   bottom: number
   /** 絞り込みで隠しているレス */
   hidden: boolean
+  /** まだ中身を作っていない(仮の高さの箱)。高さは覚えない */
+  placeholder?: boolean
 }
 
 /**

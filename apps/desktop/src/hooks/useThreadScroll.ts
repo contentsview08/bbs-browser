@@ -170,11 +170,12 @@ export function useThreadScroll(o: Options) {
   )
 
   /** 画面の近くにある(描かれている)レスの高さを覚える */
-  const rememberHeights = (rects: { no: number; top: number; bottom: number; hidden: boolean }[], from: number, to: number) => {
+  const rememberHeights = (rects: { no: number; top: number; bottom: number; hidden: boolean; placeholder?: boolean }[], from: number, to: number) => {
     const w = widthRef.current
     if (w <= 0) return
     for (const r of rects) {
-      if (r.hidden || r.bottom < from || r.top > to) continue
+      // まだ中身を作っていないレス(仮の高さの箱)は覚えない
+      if (r.hidden || r.placeholder || r.bottom < from || r.top > to) continue
       heights.set(latest.current.threadKey, w, r.no, Math.round(r.bottom - r.top))
     }
   }
@@ -300,7 +301,7 @@ export function useThreadScroll(o: Options) {
     // 画面より 1 画面ぶん下までで止める(その先は既読にも高さを覚えるのにも要らない)
     for (const el of postFrames(root)) {
       const r = el.getBoundingClientRect()
-      rects.push({ no: Number(el.dataset.post), top: r.top, bottom: r.bottom, hidden: el.hidden })
+      rects.push({ no: Number(el.dataset.post), top: r.top, bottom: r.bottom, hidden: el.hidden, placeholder: el.dataset.placeholder !== undefined })
       if (r.top >= box.bottom + box.height) break
     }
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX

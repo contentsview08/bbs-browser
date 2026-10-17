@@ -470,14 +470,19 @@ function PostArticle(props: Props) {
     </div>
   )
 
+  /** 本文(LINE 風はレスの行)を押したら、アンカーツリーを出す。文字を選んでいるとき(コピーしようとしているとき)は開かない */
+  const openTree = (e: React.MouseEvent<HTMLElement>) => {
+    if (!hasConnections || window.getSelection()?.toString().trim()) return
+    // 名前・ID・リンクなどのボタンを押したときは、そちらだけ(LINE 風は頭もレスの行の中にあるため)
+    if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
+    handlers.onBody(post.no, e.currentTarget)
+  }
+
   const bodyBlock = (
         <div
           className={hasConnections ? 'cursor-pointer' : ''}
-          onClick={(e) => {
-            // 文字を選んでいるとき(コピーしようとしているとき)は開かない
-            if (!hasConnections || window.getSelection()?.toString().trim()) return
-            handlers.onBody(post.no, e.currentTarget)
-          }}
+          // LINE 風は、吹き出しの外(レスの行全体)を押しても開けるよう、行の方で受ける(lineLayout)
+          onClick={variant === 'line' ? undefined : openTree}
           style={{
             // 専ブラ風は本文を字下げし、Discord 風は頭の位置から。どちらも本文の左の縦線は引かない(自分の印は別に出る)
             paddingLeft:
@@ -626,7 +631,7 @@ function PostArticle(props: Props) {
   )
   // LINE 風のときだけ組み立てる
   const lineLayout = () => (
-    <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''} ${hasConnections ? 'cursor-pointer' : ''}`} onClick={openTree}>
       {!right && (
         <div className="w-9 flex-shrink-0">
           {props.continued ? null : beIcon ? (

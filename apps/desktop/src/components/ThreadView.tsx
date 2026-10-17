@@ -39,6 +39,7 @@ import {
   countAnchors,
   makeAnchorResolver,
   quoteLinksOf,
+  quotedText,
   targetsOfPost,
   countIds,
   hasLink,
@@ -449,6 +450,20 @@ export default function ThreadView(props: Props) {
   const resolveAnchor = useMemo(() => makeAnchorResolver(log.posts, props.anchorTarget), [log.posts, props.anchorTarget])
   /** 画面に出す番号と、返信で付けるアンカーの番号(板の本当の番号があればそれ) */
   const refOf = (no: number) => byNo.get(no)?.ref ?? no
+  /**
+   * 返信で書き込み欄に入れる文。ふつうは「>>番号」(選んだ文があれば、そのあとに「>選んだ文」)。
+   * 文章で引用する掲示板(ふたば)は番号を付けず、「>選んだ文」、選んでいなければ「>そのレスの最初の行」
+   * (画像だけのレスは画像のファイル名)を入れる。ふたばの引用元へのリンクは、この文から元のレスを探す
+   */
+  const replyText = (no: number, quote?: string) => {
+    const quoted = (text: string) => `${text.split('\n').map((l) => `>${l}`).join('\n')}\n`
+    if (!props.textQuotes) return `>>${refOf(no)}\n${quote ? quoted(quote) : ''}`
+    if (quote) return quoted(quote)
+    const lines = (byNo.get(no)?.body ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
+    const text = lines.find((l) => !/^https?:\/\//.test(l) && quotedText(l) === undefined)
+    const image = lines.find((l) => /^https?:\/\//.test(l))?.split('/').at(-1)
+    return quoted(text ?? image ?? `No.${refOf(no)}`)
+  }
   /** 文章で引用する掲示板(ふたば)の、引用の行から引用元へのつながり */
   const quoteLinks = useMemo(() => (props.textQuotes ? quoteLinksOf(log.posts) : undefined), [props.textQuotes, log.posts])
   /** レスに渡す、そのレスの引用のつながり(文章で引用しない掲示板は undefined) */
@@ -855,7 +870,7 @@ export default function ThreadView(props: Props) {
         // そのレスの本文の一部を選んでいたら、選んだ所を「>」を付けて引用する(引用して返信)
         const quote = selectedTextIn(el)
         setPopups([])
-        withReplyRef.current((r) => r.insert(`>>${refOf(p.no)}\n${quote ? `${quote.split('\n').map((l) => `>${l}`).join('\n')}\n` : ''}`))
+        withReplyRef.current((r) => r.insert(replyText(p.no, quote)))
         return true
       }
       default:
@@ -901,7 +916,7 @@ export default function ThreadView(props: Props) {
       if (cursorNo !== undefined) return actOnCursor('replyToPost')
       const no = getPosition()?.no
       if (!canReply || no === undefined) return
-      withReplyRef.current((h) => h.insert(`>>${refOf(no)}\n`))
+      withReplyRef.current((h) => h.insert(replyText(no)))
     },
     favorite: () => props.onToggleFavorite?.(),
     gallery: () => setGalleryOpen(true),
@@ -1216,11 +1231,11 @@ export default function ThreadView(props: Props) {
         onReply: canReply
           ? (no) => {
               setPopups([])
-              withReplyRef.current((h) => h.insert(`>>${refOf(no)}\n`))
+              withReplyRef.current((h) => h.insert(replyText(no)))
             }
           : undefined,
         toNo: resolveAnchor,
-        onQuickReply: canReply ? (no, text) => void quickPostRef.current(`>>${refOf(no)}\n${text}`) : undefined,
+        onQuickReply: canReply ? (no, text) => void quickPostRef.current(`${replyText(no)}${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される

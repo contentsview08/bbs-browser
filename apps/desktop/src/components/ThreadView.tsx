@@ -26,6 +26,7 @@ import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
+import { followDelta, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 import type { ScrollPosition } from '../utils/threadScroll'
 import { createKeyReader, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
@@ -191,6 +192,12 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
  * レスの中で Tab で回るもの。本文(リンク・アンカー・画像・カード)を先に、レスの頭(番号・名前・ID)を後に並べる。
  * マウスを乗せたときに出る操作バーは入れない
  */
+/** 要素の縦の位置(画面の座標) */
+function spanOf(el: HTMLElement): Span {
+  const r = el.getBoundingClientRect()
+  return { top: r.top, bottom: r.bottom }
+}
+
 function tabItems(post: HTMLElement): HTMLElement[] {
   const all = [...post.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
     (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
@@ -299,7 +306,7 @@ export default function ThreadView(props: Props) {
         // 閉じるものも絞り込みもないときに Esc を 2 回(素早く)押したら、選んでいるレスの印を消す(見た目だけ)。
         // 選んでいた場所は覚えていて、次に J・K などを押すとそこから続ける
         const now = Date.now()
-        if (now - lastEsc.current < DOUBLE_ESC_MS) {
+        if (isDoublePress(lastEsc.current, now, DOUBLE_ESC_MS)) {
           e.preventDefault()
           setCursorHidden(true)
           lastEsc.current = 0
@@ -619,7 +626,7 @@ export default function ThreadView(props: Props) {
   // 新着が届いた・開き直した(「ここから未読」が変わった)ら、読んだところより前で選んでいたレスは忘れる
   // (次の J は新着の頭から始まる)。読んだところの最後のレスを選んでいた(一番下まで読んでいた)なら、そのまま残す。
   // 残しておけば、新着がなくても選んでいる所は動かず、新着があれば J でそのまま新着の頭へ進む
-  useEffect(() => setCursorNo((c) => (c !== undefined && c >= unreadFrom - 1 ? c : undefined)), [unreadFrom])
+  useEffect(() => setCursorNo((c) => keepCursorOnNew(c, unreadFrom)), [unreadFrom])
   /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
   /** 選んでいるレスの枠(見えているもの)。なければ undefined */
@@ -645,10 +652,7 @@ export default function ThreadView(props: Props) {
     const box = root.getBoundingClientRect()
     const viewTop = box.top + (headerRef.current?.offsetHeight ?? 0)
     const frames = [...root.querySelectorAll<HTMLElement>('.post-cv')].filter((f) => !f.hidden)
-    const seen = frames.filter((f) => {
-      const r = f.getBoundingClientRect()
-      return r.bottom > viewTop + 4 && r.top < box.bottom - 4
-    })
+    const seen = frames.filter((f) => isSeen(spanOf(f), { top: viewTop, bottom: box.bottom }))
     return { root, frames, seen, viewTop, box }
   }
   /** 先頭へ・末尾へ・未読へ 飛んだあとに、選ぶレスを飛んだ先に合わせる(描き終わってから測る) */
@@ -673,68 +677,46 @@ export default function ThreadView(props: Props) {
     const { frames, seen, viewTop } = visibleFrames()
     const cur = frames.find((f) => Number(f.dataset.post) === cursorNo)
     const y = (cur && seen.includes(cur) ? Math.max(cur.getBoundingClientRect().top, viewTop) : viewTop) + 1
+    // 送る前の位置で測る(page はなめらかに送り始めるだけなので、ここではまだ動いていない)
+    const spans = frames.map(spanOf)
     const moved = page(dir, half)
-    if (frames.length === 0) return
-    const at = y + moved
-    const hit =
-      moved === 0
-        ? dir > 0
-          ? frames.at(-1)
-          : frames[0]
-        : frames.find((f) => {
-            const r = f.getBoundingClientRect()
-            return r.top <= at && at < r.bottom
-          })
-    const pick = hit ?? (dir > 0 ? frames.at(-1) : frames[0])
-    if (pick) setCursorNo(Number(pick.dataset.post))
+    const i = pickAfterPage(spans, y, moved, dir)
+    if (i !== undefined) setCursorNo(Number(frames[i].dataset.post))
   }
   const moveCursor = (d: 1 | -1) => {
     releaseFocus()
     const { root, frames, seen, viewTop, box } = visibleFrames()
     if (!root || !box || frames.length === 0) return
+    const view = { top: viewTop, bottom: box.bottom }
     const i = frames.findIndex((f) => Number(f.dataset.post) === cursorNo)
-    // 選んでいるレスが画面から大きく離れていたら(マウスでスクロールした など)、いま見えている所から選び直す:
-    // J は見えている一番上、K は見えている一番下。
-    // 少しはみ出しているだけ(押し続けて、送るのが追いついていない)なら、そのまま続ける
-    // (見えているかだけで決めると、押し続けたときに画面の中をぐるぐる回ってしまう)
-    const room = box.bottom - viewTop
-    const near = (f: HTMLElement) => {
-      const r = f.getBoundingClientRect()
-      return r.bottom > viewTop - room && r.top < box.bottom + room
-    }
-    const onScreen = i >= 0 && (seen.includes(frames[i]) || near(frames[i]))
-    // Esc 2 回で印を隠していたら、最初の 1 回は動かさずに、隠す前に選んでいたレスを出し直す(そこから続ける)
-    if (cursorHidden) {
-      setCursorHidden(false)
-      if (onScreen) return
-    }
     // まだ選んでいないとき(新着が届いた・開き直した直後)に J を押したら、「ここから未読」のレスから始める(新着から読む)。
-    // 見えていなくても、まだ画面より下にある(一番下まで読んでいて、更新で下に届いた)ならそこへ送る。
-    // もう画面より上へ読み過ぎていたら、見えている一番上から
-    const unreadFrame =
+    // 見えていなくても、まだ画面より下にある(一番下まで読んでいて、更新で下に届いた)ならそこへ送る
+    const unreadAt =
       cursorNo === undefined && d > 0 && unreadFrom > 1
-        ? frames.find((f) => Number(f.dataset.post) >= unreadFrom && f.getBoundingClientRect().bottom > viewTop + 4)
-        : undefined
-    const target = onScreen
-      ? frames[Math.min(frames.length - 1, Math.max(0, i + d))]
-      : (unreadFrame ?? (d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])
+        ? frames.findIndex((f) => Number(f.dataset.post) >= unreadFrom && f.getBoundingClientRect().bottom > viewTop + 4)
+        : -1
+    // 決め方は utils/cursor.ts(画面から離れていたら選び直す、Esc 2 回で隠していたら出し直す など)
+    const next = stepCursor({
+      count: frames.length,
+      current: i,
+      onScreen: i >= 0 && isNear(spanOf(frames[i]), view),
+      hidden: cursorHidden,
+      d,
+      seen: seen.map((f) => frames.indexOf(f)),
+      startAt: unreadAt >= 0 ? unreadAt : undefined,
+    })
+    setCursorHidden(false)
+    if (next === undefined || next === 'stay') return
+    const target = frames[next]
     setCursorNo(Number(target.dataset.post))
-    // 選んだレスが外に出るときだけ、そのレスが見える所まで(なめらかに)送る。
+    // 選んだレスが外に出るときだけ、余白を残して(なめらかに)送る。押し続けている間はアニメーションさせない。
     // 行き先はレスの位置から毎回測る(画面の外で省いていたレスが描かれて高さが変わっても、ずれないように)
-    // 端に寄せきらず、画面の上下に少し余白(CURSOR_MARGIN)を残した所で送り始める(vim の scrolloff)。
-    // こうすると、押し続けたときに選ぶレスが画面の下の方にとどまり、画面がレスの分ずつ続けて流れる。
-    // 押し続けている間(キーの自動の連打)はアニメーションさせない(連打のたびに動き出しの速い所からやり直して、ガクガクするため)
-    const r = target.getBoundingClientRect()
-    const margin = Math.min(room * CURSOR_MARGIN, Math.max(0, room - r.height) / 2)
-    const ms = keyRepeat.current ? 0 : CURSOR_SCROLL_MS
-    // 余白は進む向きの側だけ見る(下へ進むのに上の余白で戻したりしない)。はみ出していれば向きに関係なく見える所まで
-    const topLimit = viewTop + (d < 0 ? margin : 0)
-    const bottomLimit = box.bottom - (d > 0 ? margin : 0)
-    if (r.height > room || r.top < topLimit)
-      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop - (r.height > room ? 4 : topLimit - viewTop), ms)
-    else if (r.bottom > bottomLimit)
-      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom + (box.bottom - bottomLimit), ms)
+    const delta = followDelta(spanOf(target), view, d, CURSOR_MARGIN)
+    if (delta === 0) return
+    const anchor = target.getBoundingClientRect().top - delta
+    animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - anchor, keyRepeat.current ? 0 : CURSOR_SCROLL_MS)
   }
+
   /**
    * 選んでいるレス 1 つへの操作(本文とポップアップで共通)。h はそのレスに渡しているハンドラ(ポップアップなら 1 段深いもの)。
    * Enter: 画像・動画があればビューアー、なければ返信、それもなければアンカーツリー
@@ -940,21 +922,13 @@ export default function ThreadView(props: Props) {
       e.preventDefault()
       const view = box.clientHeight - headH
       const dir = action === 'pageDown' || action === 'halfDown' ? 1 : -1
-      const before = box.scrollTop
-      box.scrollTop += dir * (action.startsWith('half') ? view / 2 : view - 40)
-      const moved = box.scrollTop - before
-      // 選んでいたレスの高さ(なければ見出しのすぐ下)にあるレスを選ぶ。端なら端のレス
+      // 選んでいたレスの高さ(なければ見出しのすぐ下)を保って、送った先のレスを選ぶ。端なら端のレス(utils/cursor.ts)
       const b = box.getBoundingClientRect()
       const y = (cur ? Math.max(cur.getBoundingClientRect().top, b.top + headH) : b.top + headH) + 1
-      const hit =
-        moved === 0
-          ? dir > 0
-            ? posts[posts.length - 1]
-            : posts[0]
-          : (posts.find((p) => {
-              const r = p.getBoundingClientRect()
-              return r.top <= y && y < r.bottom
-            }) ?? (dir > 0 ? posts[posts.length - 1] : posts[0]))
+      const spans = posts.map(spanOf)
+      const before = box.scrollTop
+      box.scrollTop += dir * (action.startsWith('half') ? view / 2 : view - 40)
+      const hit = posts[pickAfterPage(spans, y, box.scrollTop - before, dir) ?? 0]
       cur?.classList.remove('popup-cursor')
       hit.classList.add('popup-cursor')
       return

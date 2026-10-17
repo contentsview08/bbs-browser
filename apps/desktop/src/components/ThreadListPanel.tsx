@@ -19,6 +19,7 @@ import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 import { animateScroll } from '../hooks/useThreadScroll'
+import { followDelta, isDoublePress, isNear, isSeen, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 
 type SortMode = 'momentum' | 'newest'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -140,7 +141,7 @@ export default function ThreadListPanel(props: Props) {
   const lastEsc = useRef(0)
   const escNothing = useEvent(() => {
     const now = Date.now()
-    if (now - lastEsc.current < DOUBLE_ESC_MS) {
+    if (isDoublePress(lastEsc.current, now, DOUBLE_ESC_MS)) {
       setCursorHidden(true)
       lastEsc.current = 0
     } else lastEsc.current = now
@@ -342,25 +343,17 @@ export default function ThreadListPanel(props: Props) {
     const b = box.getBoundingClientRect()
     const viewTop = b.top + headerHeight
     const cards = [...box.querySelectorAll<HTMLElement>('[data-thread-id]')]
-    const seen = cards.filter((c) => {
-      const r = c.getBoundingClientRect()
-      return r.bottom > viewTop + 4 && r.top < b.bottom - 4
-    })
+    const seen = cards.filter((c) => isSeen(spanOf(c), { top: viewTop, bottom: b.bottom }))
     return { box, b, viewTop, cards, seen }
   }
-  /** 選んだカードが外に出るときだけ、上下に余白(CURSOR_MARGIN)を残して送る(スレ表示の J・K と同じ) */
+  /** 選んだカードが外に出るときだけ、上下に余白(CURSOR_MARGIN)を残して送る(スレ表示の J・K と同じ。utils/cursor.ts) */
   const followCard = (el: HTMLElement, d: 1 | -1) => {
     const g = cardGeometry()
     if (!g) return
-    const { box, b, viewTop } = g
-    const room = b.bottom - viewTop
-    const r = el.getBoundingClientRect()
-    const margin = Math.min(room * CURSOR_MARGIN, Math.max(0, room - r.height) / 2)
-    const topLimit = viewTop + (d < 0 ? margin : 0)
-    const bottomLimit = b.bottom - (d > 0 ? margin : 0)
-    const ms = keyRepeat.current ? 0 : CURSOR_SCROLL_MS
-    if (r.top < topLimit) animateScroll(box, () => box.scrollTop + el.getBoundingClientRect().top - topLimit, ms)
-    else if (r.bottom > bottomLimit) animateScroll(box, () => box.scrollTop + el.getBoundingClientRect().bottom - bottomLimit, ms)
+    const delta = followDelta(spanOf(el), { top: g.viewTop, bottom: g.b.bottom }, d, CURSOR_MARGIN)
+    if (delta === 0) return
+    const anchor = el.getBoundingClientRect().top - delta
+    animateScroll(g.box, () => g.box.scrollTop + el.getBoundingClientRect().top - anchor, keyRepeat.current ? 0 : CURSOR_SCROLL_MS)
   }
   /**
    * 選んでいるスレを 1 つ動かす。選んでいるスレが画面から大きく離れていたら(スクロールした)、見えている所から選び直す
@@ -370,18 +363,18 @@ export default function ThreadListPanel(props: Props) {
     const g = cardGeometry()
     if (!g || g.cards.length === 0) return
     const { b, viewTop, cards, seen } = g
-    const room = b.bottom - viewTop
     const i = cards.findIndex((c) => c.dataset.threadId === cursorId)
-    const near = (c: HTMLElement) => {
-      const r = c.getBoundingClientRect()
-      return r.bottom > viewTop - room && r.top < b.bottom + room
-    }
-    const onScreen = i >= 0 && (seen.includes(cards[i]) || near(cards[i]))
-    if (cursorHidden) {
-      setCursorHidden(false)
-      if (onScreen) return
-    }
-    const target = onScreen ? cards[Math.min(cards.length - 1, Math.max(0, i + d))] : ((d > 0 ? seen[0] : seen.at(-1)) ?? cards[0])
+    const next = stepCursor({
+      count: cards.length,
+      current: i,
+      onScreen: i >= 0 && isNear(spanOf(cards[i]), { top: viewTop, bottom: b.bottom }),
+      hidden: cursorHidden,
+      d,
+      seen: seen.map((c) => cards.indexOf(c)),
+    })
+    setCursorHidden(false)
+    if (next === undefined || next === 'stay') return
+    const target = cards[next]
     setCursorId(target.dataset.threadId)
     followCard(target, d)
   }
@@ -394,22 +387,13 @@ export default function ThreadListPanel(props: Props) {
     const view = b.bottom - viewTop
     const cur = cards.find((c) => c.dataset.threadId === cursorId)
     const y = (cur && seen.includes(cur) ? Math.max(cur.getBoundingClientRect().top, viewTop) : viewTop) + 1
+    const spans = cards.map(spanOf)
     const before = box.scrollTop
     box.scrollTop += dir * (half ? view / 2 : view - 40)
-    const moved = box.scrollTop - before
-    if (cards.length === 0) return
-    const hit =
-      moved === 0
-        ? dir > 0
-          ? cards.at(-1)
-          : cards[0]
-        : cards.find((c) => {
-            const r = c.getBoundingClientRect()
-            return r.top <= y && y < r.bottom
-          })
-    const pick = hit ?? (dir > 0 ? cards.at(-1) : cards[0])
-    if (pick) setCursorId(pick.dataset.threadId)
+    const i = pickAfterPage(spans, y, box.scrollTop - before, dir)
+    if (i !== undefined) setCursorId(cards[i].dataset.threadId)
   }
+
 
   // 右端のハンドルをドラッグして幅を変える。離したときに保存する
   const onResizeStart = (e: React.MouseEvent) => {
@@ -736,4 +720,10 @@ export default function ThreadListPanel(props: Props) {
       )}
     </section>
   )
+}
+
+/** 要素の縦の位置(画面の座標) */
+function spanOf(el: HTMLElement): Span {
+  const r = el.getBoundingClientRect()
+  return { top: r.top, bottom: r.bottom }
 }

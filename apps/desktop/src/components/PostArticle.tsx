@@ -447,7 +447,9 @@ function PostArticle(props: Props) {
             <Identicon seed={props.replyPreview.id} size={16} />
           </span>
         ) : (
-          <span className="flex-shrink-0 block w-4 h-4 rounded-full bg-c-surface3" />
+          <span className="flex-shrink-0 flex w-4 h-4 rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" title="ID のないレス">
+            <span className="material-symbols-outlined fill text-[12px] leading-none">person</span>
+          </span>
         )}
         <span className="truncate">{props.replyPreview.text}</span>
       </button>

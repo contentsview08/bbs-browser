@@ -69,21 +69,36 @@ function parsePostHtml(html: string, no: number, origin: string): Post | undefin
  * スレがない(消えた)ページなら undefined
  */
 export function parseThreadHtml(html: string, origin: string): Post[] | undefined {
+  return parseThreadPage(html, origin)?.posts
+}
+
+/** スレのページを読む(レスと、そうだねの数)。スレがない(消えた)ページなら undefined */
+export function parseThreadPage(html: string, origin: string): { posts: Post[]; votes: Record<string, number> } | undefined {
   const start = html.indexOf('class="thre"')
   if (start < 0) return undefined
   const thre = html.slice(start)
   // スレを立てた人の部分は、最初の返信の表が始まるまで
   const firstReply = thre.search(/<table border=0><tr><td class=rts>/i)
-  const op = parsePostHtml(firstReply < 0 ? thre : thre.slice(0, firstReply), 1, origin)
+  const opHtml = firstReply < 0 ? thre : thre.slice(0, firstReply)
+  const op = parsePostHtml(opHtml, 1, origin)
   if (!op) return undefined
   const posts: Post[] = [op]
+  const votes: Record<string, number> = {}
+  const vote = (html: string, ref: number | undefined) => {
+    // 「そうだねx18」(まだないレスは「+」)
+    const n = Number(/class=sod[^>]*>そうだねx(\d+)</.exec(html)?.[1] ?? 0)
+    if (ref !== undefined && n > 0) votes[ref] = n
+  }
+  vote(opHtml, op.ref)
   for (const cell of thre.split(/<td class=rtd>/i).slice(1)) {
     const td = cell.slice(0, cell.search(/<\/td>/i))
     const rsc = Number(/class="rsc">(\d+)</.exec(td)?.[1])
     const p = parsePostHtml(td, Number.isFinite(rsc) ? rsc + 1 : posts.length + 1, origin)
-    if (p) posts.push(p)
+    if (!p) continue
+    posts.push(p)
+    vote(td, p.ref)
   }
-  return posts
+  return { posts, votes }
 }
 
 interface JsonRes {
@@ -97,8 +112,11 @@ interface JsonRes {
 }
 
 /** スレの JSON の返信を、番号の順に読む(何番目の返信か + 1 を no にする) */
-export function parseThreadJson(text: string, origin: string): { posts: Post[]; old: boolean } {
-  const d = JSON.parse(text) as { res?: Record<string, JsonRes>; old?: number }
+export function parseThreadJson(text: string, origin: string): { posts: Post[]; old: boolean; votes: Record<string, number> } {
+  const d = JSON.parse(text) as { res?: Record<string, JsonRes>; old?: number; sd?: Record<string, string | number> }
+  // そうだねの数(スレ全体の分。番号 → 数)
+  const votes: Record<string, number> = {}
+  for (const [ref, n] of Object.entries(d.sd ?? {})) if (Number(n) > 0) votes[ref] = Number(n)
   const posts: Post[] = []
   for (const [ref, r] of Object.entries(d.res ?? {})) {
     if (typeof r.rsc !== 'number') continue
@@ -114,7 +132,7 @@ export function parseThreadJson(text: string, origin: string): { posts: Post[]; 
     })
   }
   posts.sort((a, b) => a.no - b.no)
-  return { posts, old: d.old === 1 }
+  return { posts, old: d.old === 1, votes }
 }
 
 /** ページの <title>(板名) */

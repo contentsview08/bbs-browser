@@ -7,7 +7,7 @@
 // - スレは時間が来ると消える(ページが 404)。消えたら dat 落ちと同じに扱う。スレの数の上限(1000)はない
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, ThreadSummary } from '../types'
-import { parseCatalog, parseThreadHtml, parseThreadJson, titleOf } from './parse'
+import { parseCatalog, parseThreadJson, parseThreadPage, titleOf } from './parse'
 
 const ID = 'futaba'
 
@@ -50,6 +50,7 @@ export const futabaConnector: Connector = {
   name: 'ふたば☆ちゃんねる',
   capabilities: { post: false, images: true, incremental: true },
   anchorTarget: 'ref',
+  voteLabel: 'そうだね',
 
   canHandle(url) {
     return HOST.test(url)
@@ -119,12 +120,14 @@ export const futabaConnector: Connector = {
       const res = await ctx.http.get(threadWebUrl(thread))
       if (res.status === 404) return { status: 'archived', posts: [], cursor }
       if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${threadWebUrl(thread)}`)
-      const posts = parseThreadHtml(sjis(res.body, ctx), origin)
-      if (!posts) return { status: 'archived', posts: [], cursor }
+      const page = parseThreadPage(sjis(res.body, ctx), origin)
+      if (!page) return { status: 'archived', posts: [], cursor }
+      const { posts, votes } = page
       const last = posts.at(-1)!
       return {
         status: 'updated',
         posts,
+        votes,
         cursor: { lastRef: last.ref ?? 0, lastNo: last.no } satisfies RawCursor,
         ...(!thread.title && { title: titleFromOp(posts[0].body) }),
       }
@@ -142,9 +145,10 @@ export const futabaConnector: Connector = {
       return { status: 'archived', posts: [], cursor }
     }
     const fresh = parsed.posts.filter((p) => (p.ref ?? 0) > cursor.lastRef)
-    if (fresh.length === 0) return { status: 'notModified', posts: [], cursor }
+    // そうだねは前のレスにも増えるので、新しいレスがなくても返す
+    if (fresh.length === 0) return { status: 'notModified', posts: [], cursor, votes: parsed.votes }
     const last = fresh.at(-1)!
-    return { status: 'updated', posts: fresh, cursor: { lastRef: last.ref ?? cursor.lastRef, lastNo: last.no } satisfies RawCursor }
+    return { status: 'updated', posts: fresh, votes: parsed.votes, cursor: { lastRef: last.ref ?? cursor.lastRef, lastNo: last.no } satisfies RawCursor }
   },
 
   threadWebUrl,

@@ -77,6 +77,9 @@ interface Props {
   replyPreview?: { no: number; text: string; id?: string }
   /** LINE 風: 自分の書き込みも左にそろえる(アンカーツリーの中) */
   alignLeft?: boolean
+  /** ほかの人からの評価の数と呼び名(ふたばの「そうだね」)。0 や なしなら出さない */
+  votes?: number
+  voteLabel?: string
 }
 
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
@@ -337,6 +340,12 @@ function PostArticle(props: Props) {
         {idCount >= 2 && <span className="text-xs">({idCount})</span>}
       </button>
     )
+  /** 評価の数(ふたばの「そうだね×18」)。多いほど目立つ色に */
+  const voteChip = !!props.votes && props.votes > 0 && (
+    <span className={`flex-shrink-0 text-[11px] font-bold tabular-nums ${heatClass(props.votes) || 'text-mark-hot'}`} title={`${props.voteLabel ?? '評価'} ${props.votes}`}>
+      {props.voteLabel ?? '+'}×{props.votes}
+    </span>
+  )
   const toOwnChip = props.isReplyToOwn && (
     <span
       className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
@@ -386,6 +395,7 @@ function PostArticle(props: Props) {
         <span className="text-c-text-muted">：</span>
         <span className="text-c-text-muted text-xs whitespace-nowrap">{post.date}</span>
         {idBtn}
+        {voteChip}
         {opChip}
         {ngChip}
         {toOwnChip}
@@ -401,6 +411,7 @@ function PostArticle(props: Props) {
           <span className="flex-shrink-0 text-xs">{numBtn('#')}</span>
           <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
           {idBtn}
+          {voteChip}
           {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
         </div>
@@ -416,6 +427,7 @@ function PostArticle(props: Props) {
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
         <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
         {idBtn}
+        {voteChip}
         {toOwnChip}
       </div>
     )
@@ -645,6 +657,7 @@ function PostArticle(props: Props) {
             {opChip}
             {ngChip}
             {idBtn}
+            {voteChip}
             {post.mail && <span className="text-c-text-muted">[{post.mail}]</span>}
             {toOwnChip}
           </div>

@@ -25,6 +25,8 @@ export interface Tab {
   loading: boolean
   /** 手で更新したあとのクールダウンが明ける時刻 */
   refreshReadyAt?: number
+  /** レスの評価の数(ふたばのそうだね)。キーはレスの画面の番号(ref があれば ref) */
+  votes?: Map<number, number>
 }
 
 /** アプリ側の処理。どれも関数そのものは変わらない(描き直しても同じもの) */
@@ -92,6 +94,8 @@ interface Props {
   maxPosts?: number
   /** 本文の >>番号 が指すもの(コネクタの anchorTarget) */
   anchorTarget?: 'no' | 'ref'
+  /** レスの評価の呼び名(コネクタの voteLabel) */
+  voteLabel?: string
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -114,6 +118,7 @@ function TabPane({
   postByteLength,
   maxPosts,
   anchorTarget,
+  voteLabel,
   splitPostIcon,
   ev,
 }: Props) {
@@ -177,6 +182,8 @@ function TabPane({
       postByteLength={postByteLength}
       maxPosts={maxPosts}
       anchorTarget={anchorTarget}
+      votes={tab.votes}
+      voteLabel={voteLabel}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

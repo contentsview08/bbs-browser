@@ -559,12 +559,14 @@ export default function App() {
         // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)。
         // 開いたときの取得では動かさない(開いた直後に画面に見えたレスが既読になり、線が下へずれてしまうため)。
         // 変わらなかったときはログを差し替えない(スレ表示を描き直さない)
+        // レスの評価(ふたばのそうだね)は、新しいレスがなくても増えるので、届いたら写す
+        const votes = r.votes && new Map(Object.entries(r.votes).map(([k, v]) => [Number(k), v] as const))
         setTabs((ts) =>
           ts.map((x) => {
             if (x.id !== id) return x
             const unreadFrom = opts.keepUnread ? x.unreadFrom : x.readNo + 1
-            if (!changed && x.log && unreadFrom === x.unreadFrom) return x
-            return { ...x, log: changed || !x.log ? saved : x.log, unreadFrom }
+            if (!changed && x.log && unreadFrom === x.unreadFrom && !votes) return x
+            return { ...x, log: changed || !x.log ? saved : x.log, unreadFrom, ...(votes && { votes: new Map([...(x.votes ?? []), ...votes]) }) }
           }),
         )
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
@@ -1652,6 +1654,7 @@ export default function App() {
                   postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
                   maxPosts={findConnector(t.thread.connectorId)?.maxPosts}
                   anchorTarget={findConnector(t.thread.connectorId)?.anchorTarget}
+                  voteLabel={findConnector(t.thread.connectorId)?.voteLabel}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />

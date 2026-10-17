@@ -35,14 +35,15 @@ const CATALOG = `<html><body><table border=1 align=center id='cattable'><tr>
 <td><a href='res/1002.htm' target='_blank'></a><br><small>画像のないスレ</small><br><font size=2>0</font></td>
 </tr></table></body></html>`
 
-const PAGE = `<html><body><div class="thre" data-res="1000">画像ファイル名：<a href="/b/src/1792224836232.jpg" target='_blank'>1792224836232.jpg</a>-(196364 B)<br><a href="/b/src/1792224836232.jpg" target='_blank'><img src='/b/thumb/1792224836232s.jpg'></a><span class="csb">無念</span>Name<span class="cnm">としあき</span><span class="cnw">26/10/17(土)17:13:56</span><span class="cno">No.1000</span>
+const PAGE = `<html><body><div class="thre" data-res="1000">画像ファイル名：<a href="/b/src/1792224836232.jpg" target='_blank'>1792224836232.jpg</a>-(196364 B)<br><a href="/b/src/1792224836232.jpg" target='_blank'><img src='/b/thumb/1792224836232s.jpg'></a><span class="csb">無念</span>Name<span class="cnm">としあき</span><span class="cnw">26/10/17(土)17:13:56</span><span class="cno">No.1000</span><a href="javascript:void(0);" onclick="sd(1000);return(false);" class=sod id=sd1000>そうだねx3</a>
 <blockquote>スレを立てた人の本文<br>二行目</blockquote>
-<table border=0><tr><td class=rts>…</td><td class=rtd><span id="delcheck1003" class="rsc">1</span><span class="csb">無念</span>Name<span class="cnm"><a href="mailto:sage">としあき</a></span><span class="cnw">26/10/17(土)17:15:10 ID:abcd1234</span><span class="cno">No.1003</span><blockquote><font color="#789922">&gt;スレを立てた人の本文</font><br>そうだね</blockquote></td></tr></table>
+<table border=0><tr><td class=rts>…</td><td class=rtd><span id="delcheck1003" class="rsc">1</span><span class="csb">無念</span>Name<span class="cnm"><a href="mailto:sage">としあき</a></span><span class="cnw">26/10/17(土)17:15:10 ID:abcd1234</span><span class="cno">No.1003</span><a href="javascript:void(0);" onclick="sd(1003);return(false);" class=sod id=sd1003>+</a><blockquote><font color="#789922">&gt;スレを立てた人の本文</font><br>そうだね</blockquote></td></tr></table>
 <table border=0><tr><td class=rts>…</td><td class=rtd><span id="delcheck1007" class="rsc">2</span><span class="csb">無念</span>Name<span class="cnm">としあき</span><span class="cnw">26/10/17(土)17:17:30</span><span class="cno">No.1007</span><blockquote>&gt;1003<br>そうかな</blockquote></td></tr></table>
 </div></body></html>`
 
 const JSON_NEW = JSON.stringify({
   old: 0,
+  sd: { '1000': '4', '1007': '1' },
   res: {
     '1007': { now: '26/10/17(土)17:17:30', name: 'としあき', email: '', com: '&gt;1003<br>そうかな', src: '', rsc: 2 },
     '1010': { now: '26/10/17(土)17:20:00', name: 'としあき', email: '', com: '新しい返信', src: '/b/src/1792225000000.png', rsc: 3 },
@@ -84,6 +85,8 @@ describe('ふたばのコネクタ', () => {
     expect(r.posts[0].body).toBe('https://may.2chan.net/b/src/1792224836232.jpg\nスレを立てた人の本文\n二行目')
     expect(r.posts[1]).toMatchObject({ name: 'としあき', mail: 'sage', id: 'abcd1234', date: '26/10/17(土)17:15:10', body: '>スレを立てた人の本文\nそうだね' })
     expect(r.cursor).toEqual({ lastRef: 1007, lastNo: 3 })
+    // そうだね(まだないレスは入れない)
+    expect(r.votes).toEqual({ '1000': 3 })
   })
 
   it('そのあとは JSON で、最後の番号より新しい返信だけ', async () => {
@@ -93,6 +96,7 @@ describe('ふたばのコネクタ', () => {
     expect(r.status).toBe('updated')
     expect(r.posts.map((p) => [p.no, p.ref, p.body])).toEqual([[4, 1010, 'https://may.2chan.net/b/src/1792225000000.png\n新しい返信']])
     expect(r.cursor).toEqual({ lastRef: 1010, lastNo: 4 })
+    expect(r.votes).toEqual({ '1000': 4, '1007': 1 })
   })
 
   it('新しい返信がなければ notModified、スレが消えていたら archived', async () => {

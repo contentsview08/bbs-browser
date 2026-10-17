@@ -99,6 +99,9 @@ interface Props {
   onHeaderHeight?: (height: number) => void
   /** 本文の >>番号 が指すもの(コネクタの anchorTarget)。'ref' なら板の本当の番号 */
   anchorTarget?: 'no' | 'ref'
+  /** レスの評価の数と呼び名(ふたばのそうだね)。キーはレスの画面の番号 */
+  votes?: Map<number, number>
+  voteLabel?: string
   /** 1 つのスレのレスの上限(2ch は 1000)。上限のない掲示板は undefined */
   maxPosts?: number
   onOpenThread: (t: ThreadSummary) => void
@@ -1226,6 +1229,8 @@ export default function ThreadView(props: Props) {
           return (
             <PostArticle
               post={p}
+              votes={props.votes?.get(p.ref ?? p.no)}
+              voteLabel={props.voteLabel}
               anchorCount={anchorCounts.get(p.no) ?? 0}
               idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
               showTopDivider={false}
@@ -1260,6 +1265,8 @@ export default function ThreadView(props: Props) {
           <PostArticle
             key={p.no}
             post={p}
+            votes={props.votes?.get(p.ref ?? p.no)}
+            voteLabel={props.voteLabel}
             anchorCount={anchorCounts.get(p.no) ?? 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
             showTopDivider={i > 0 && variant === 'card'}
@@ -1540,6 +1547,8 @@ export default function ThreadView(props: Props) {
                     {isRendered(i) && (
                       <PostArticle
                         post={p}
+                        votes={props.votes?.get(p.ref ?? p.no)}
+                        voteLabel={props.voteLabel}
                         anchorCount={anchorCounts.get(p.no) ?? 0}
                         idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
                         showTopDivider={i > 0 && !firstUnread && variant === 'card'}

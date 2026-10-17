@@ -102,6 +102,11 @@ export interface FetchPostsResult {
    * レスは保存し、スレは dat 落ちとして扱う
    */
   archived?: boolean
+  /**
+   * レスごとの、ほかの人からの評価の数(ふたばの「そうだね」)。キーはレスの画面の番号(ref があれば ref、なければ no)。
+   * 数はそのときのスレ全体の分(取るたびに増えることがあるので、新しいレスがなくても返してよい)
+   */
+  votes?: Record<string, number>
 }
 
 /** 板の設定(2ch 互換なら SETTING.TXT から) */
@@ -189,6 +194,8 @@ export interface Connector {
   capabilities: ConnectorCapabilities
   /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
   maxPosts?: number
+  /** レスの評価(FetchPostsResult.votes)の呼び名。ふたばは「そうだね」。評価のない掲示板は付けない */
+  voteLabel?: string
   /** 本文の >>番号 が指すもの。'no': スレの中の番号(2ch) / 'ref': 板の本当の番号(Post.ref。4chan など)。既定は 'no' */
   anchorTarget?: 'no' | 'ref'
   /** URL を貼られたとき、どのコネクタで開くかを決める */

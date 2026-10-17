@@ -960,6 +960,19 @@ export default function App() {
   }
   const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) })
   keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) }
+  // マウスで押したボタン・リンクには、フォーカスを移さない。フォーカスがボタンに残ると、Space・Enter がそのボタンを押す動きに
+  // 取られて、キー操作(J・K など)が効かないことがあるため。押した動き(click)はそのまま起きる。
+  // ダイアログの中は Tab で回るので、ふつうどおりフォーカスを移す
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      const el = (e.target as HTMLElement | null)?.closest?.('button, a[href], [role="button"]')
+      if (!el || el.closest('[data-modal]')) return
+      e.preventDefault()
+    }
+    window.addEventListener('mousedown', onDown, true)
+    return () => window.removeEventListener('mousedown', onDown, true)
+  }, [])
   // マウスの戻る・進むボタン(横のボタン)。WebView がページの戻る・進むをしないよう、押したときに止める
   useEffect(() => {
     const onDown = (e: MouseEvent) => {

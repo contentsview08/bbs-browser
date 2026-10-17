@@ -183,7 +183,9 @@ export default function ThreadListPanel(props: Props) {
     if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
-    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    // ボタンやリンクにフォーカスがあっても、キー操作は効かせる。Enter だけは、そのボタンを押すのに使う
+    if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
     const el = scrollRef.current
     if (!el) return
     // 割り当てがなくても、PageUp・PageDown・Home・End はスクロールに使う

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
-import PostArticle, { type PostHandlers } from './PostArticle'
+import PostArticle, { type PostHandlers, type PostVariant } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
 import Lightbox from './Lightbox'
 import Minimap from './Minimap'
@@ -412,6 +412,23 @@ export default function ThreadView(props: Props) {
     [props.nonameName, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
+  /** レスの見た目のスタイル(設定) */
+  const variant: PostVariant = settings.postStyle ?? 'card'
+  /** Discord 風: 直前に見えているレスと同じ ID(続けて書いた)か */
+  const continuedFrom = (i: number) => {
+    const p = log.posts[i]
+    const prev = log.posts[i - 1]
+    if (!p?.id || !prev || prev.id !== p.id || isNg(prev)) return false
+    return visibleNos === undefined || (visibleNos.has(prev.no) && visibleNos.has(p.no))
+  }
+  /** Discord 風: 本文がアンカーで始まっていれば、その引用元の番号と本文の頭 */
+  const replyPreviewOf = (p: Post) => {
+    if (!/^\s*(?:>>|＞＞)\d/.test(p.body)) return undefined
+    const no = anchorsIn(p.body)[0]
+    const src = no === undefined || no === p.no ? undefined : byNo.get(no)
+    if (!src) return undefined
+    return { no, text: isNg(src) ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80) }
+  }
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
   const matchesFilter = useCallback(
     (p: Post, key: PostFilter) =>
@@ -1097,6 +1114,7 @@ export default function ThreadView(props: Props) {
               anchorCount={anchorCounts.get(p.no) ?? 0}
               idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
               showTopDivider={false}
+              variant={variant}
               ng={isNg(p)}
               ngMode="aborn"
               showThumbnails={settings.showThumbnails}
@@ -1128,7 +1146,8 @@ export default function ThreadView(props: Props) {
             post={p}
             anchorCount={anchorCounts.get(p.no) ?? 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-            showTopDivider={i > 0}
+            showTopDivider={i > 0 && variant === 'card'}
+            variant={variant}
             ng={isNg(p)}
             ngMode="aborn"
             showThumbnails={settings.showThumbnails}
@@ -1366,7 +1385,10 @@ export default function ThreadView(props: Props) {
                       post={p}
                       anchorCount={anchorCounts.get(p.no) ?? 0}
                       idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-                      showTopDivider={i > 0 && !firstUnread}
+                      showTopDivider={i > 0 && !firstUnread && variant === 'card'}
+                      variant={variant}
+                      continued={variant === 'discord' && !firstUnread && continuedFrom(i)}
+                      replyPreview={variant === 'discord' ? replyPreviewOf(p) : undefined}
                       ng={isNg(p)}
                       ngMode={settings.ngMode}
                       showThumbnails={settings.showThumbnails}

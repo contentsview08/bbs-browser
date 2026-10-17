@@ -11,6 +11,13 @@ import type { BarLayout } from '../utils/toolbar'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light'
 export type DesignPattern = 'tonal' | 'bordered'
+/** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
+export type PostStyle = 'card' | 'discord' | 'classic'
+export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
+  { key: 'card', name: 'カード', note: 'レスを区切り線で並べる、いままでの見た目' },
+  { key: 'discord', name: 'Discord 風', note: '丸い ID のアイコンと平らな並び。同じ人の連投をまとめ、返信元を上に出す' },
+  { key: 'classic', name: '専ブラ風', note: '「12 ：名前：日付 ID」を 1 行にした、昔ながらの 2ch の見た目' },
+]
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
 export type FontSize = 1 | 2 | 3 | 4 | 5
@@ -64,7 +71,9 @@ export interface AppSettings {
   followOsTheme: boolean
   darkScheme: ColorScheme
   lightScheme: ColorScheme
+  /** 前の「枠線スタイル」。いまは postStyle から決める(残っている保存値は使わない) */
   pattern: DesignPattern
+  postStyle: PostStyle
   density: ListDensity
   fontSize: FontSize
   fontFamily: FontFamily
@@ -195,6 +204,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   darkScheme: 'soft-dark',
   lightScheme: 'soft-light',
   pattern: 'tonal',
+  postStyle: 'card',
   density: 'dense',
   fontSize: 3,
   fontFamily: 'system',
@@ -321,7 +331,9 @@ function apply(s: AppSettings) {
   const scheme = effectiveScheme(s)
   root.setAttribute('data-scheme', scheme)
   root.classList.toggle('dark', DARK_SCHEMES.has(scheme))
-  root.setAttribute('data-pattern', s.pattern)
+  // カード・Discord 風はトーナル(面の濃淡)、専ブラ風は枠線(色の面なし)の部品の見た目にする
+  root.setAttribute('data-pattern', s.postStyle === 'classic' ? 'bordered' : 'tonal')
+  root.setAttribute('data-post-style', s.postStyle)
   root.setAttribute('data-density', s.density)
   root.style.fontSize = `${FONT_SIZES[s.fontSize - 1]}px`
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]

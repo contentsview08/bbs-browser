@@ -270,6 +270,21 @@ input[type='checkbox']:focus {
   outline: none;
   box-shadow: none;
 }
+/* ---------- レスの見た目のスタイル(設定の「レスの見た目」。PostArticle の variant) ---------- */
+/* Discord 風: 囲みのない平らな並び。マウスを乗せた行だけ、うっすら色を付ける */
+article.post-discord {
+  border-radius: 6px;
+  transition: background-color 0.1s;
+}
+article.post-discord:hover {
+  background-color: color-mix(in srgb, var(--c-text-body) 5%, transparent);
+}
+/* 専ブラ風: レスとレスの間を少しだけ空ける(区切り線は引かない) */
+[data-post-style='classic'] article[data-variant='classic'] {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
 /* ポップアップの中で J・K で選んでいるレス(ThreadView.tsx の popupKey)。本文の選んでいるレスと同じ見た目 */
 article.popup-cursor {
   position: relative;

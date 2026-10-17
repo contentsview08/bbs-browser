@@ -2,16 +2,11 @@
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
 import { useEffect, useRef, useState } from 'react'
-import { COLOR_SCHEMES, pickScheme, type AppSettings, type FontSize, type ListDensity, type DesignPattern, type UpdateSetting } from '../ui/settings'
+import { COLOR_SCHEMES, POST_STYLES, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
   { key: 'dense', name: '高密度', icon: 'density_small' },
-]
-
-const BORDER_STYLES: { key: DesignPattern; name: string }[] = [
-  { key: 'tonal', name: 'トーナルカード' },
-  { key: 'bordered', name: '枠線' },
 ]
 
 const MENU_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2 text-c-text-body hover:bg-c-surface2 transition-colors'
@@ -54,11 +49,11 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
 
       <div className="my-1 border-t border-c-border" />
 
-      <p className={GROUP_LABEL}>枠線スタイル</p>
-      {BORDER_STYLES.map((b) => (
-        <button key={b.key} type="button" onClick={() => update('pattern', b.key)} className={MENU_ITEM}>
+      <p className={GROUP_LABEL}>レスの見た目</p>
+      {POST_STYLES.map((b) => (
+        <button key={b.key} type="button" onClick={() => update('postStyle', b.key)} className={MENU_ITEM} title={b.note}>
           <span className="flex-1 text-left truncate">{b.name}</span>
-          {settings.pattern === b.key && check}
+          {settings.postStyle === b.key && check}
         </button>
       ))}
 

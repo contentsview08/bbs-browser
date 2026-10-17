@@ -4,7 +4,7 @@ import { useRef, createContext, useContext, useEffect, useMemo, useState, type R
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { builtinConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
-import {
+import { POST_STYLES,
   COLOR_SCHEMES,
   DEFAULT_SETTINGS,
   isDarkScheme,
@@ -374,15 +374,8 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('density', v)}
         />
       </Section>
-      <Section advanced title="枠線スタイル">
-        <Choice
-          value={s.pattern}
-          options={[
-            { key: 'tonal', name: 'トーナルカード' },
-            { key: 'bordered', name: '枠線' },
-          ]}
-          onChange={(v) => update('pattern', v)}
-        />
+      <Section title="レスの見た目" note={POST_STYLES.find((p) => p.key === s.postStyle)?.note}>
+        <Choice value={s.postStyle} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
       </Section>
     </>
   )

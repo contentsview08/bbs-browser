@@ -1596,6 +1596,7 @@ export default function App() {
           fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={favView || history ? 'subject' : settings.threadSort}
+          tabs={settings.listTabs}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           pullToRefresh={settings.pullToRefreshList}

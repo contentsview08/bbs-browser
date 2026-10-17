@@ -24,7 +24,16 @@ export type ListDensity = 'list' | 'dense'
 export type FontSize = 1 | 2 | 3 | 4 | 5
 /** custom は OS に入っているフォントから選んだもの(customFont に名前を持つ) */
 export type FontFamily = 'noto' | 'biz-ud' | 'system' | 'custom'
-export type ThreadSort = 'subject' | 'momentum' | 'newest'
+export type ThreadSort = 'subject' | 'momentum' | 'newest' | 'count'
+/** スレ一覧の上のタブ。unread・visited は絞り込み(押すとその条件のスレだけ)、ほかは並べ替え */
+export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count'
+export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
+  { key: 'unread', name: '未読', icon: 'mark_email_unread', note: 'ログがあり、新着レスのあるスレだけを出す' },
+  { key: 'visited', name: '閲覧済み', icon: 'history', note: '一度でも開いた(ログのある)スレだけを出す' },
+  { key: 'momentum', name: '勢い順', icon: 'local_fire_department', note: '勢い(1 日あたりのレス数)の多い順に並べる' },
+  { key: 'newest', name: '新しい順', icon: 'schedule', note: '立った時刻の新しい順に並べる' },
+  { key: 'count', name: 'レス数順', icon: 'format_list_numbered', note: 'レス数の多い順に並べる' },
+]
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 export type AnchorPopup = 'hover' | 'click'
 export type NgMode = 'aborn' | 'hide'
@@ -111,6 +120,8 @@ export interface AppSettings {
   lastBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
+  /** スレ一覧の上に出すタブと、その並び(左から) */
+  listTabs: ListTabKey[]
   /** 板ごとの情報(板の URL → 別名・ファビコン・名前とメールの既定値) */
   boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
@@ -240,6 +251,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startupBoardUrl: '@last',
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
+  listTabs: ['unread', 'momentum', 'newest'],
   boardMeta: {},
   keywords: [],
   pullToRefreshList: true,

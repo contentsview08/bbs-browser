@@ -130,7 +130,7 @@ export const FIXED_KEYS: { keys: string; name: string }[] = [
   { keys: 'Ctrl+E', name: 'キーを受け取る方を、スレ一覧とスレ表示で入れ替える' },
   { keys: 'Esc', name: 'ポップアップを閉じる・絞り込みを外す・書き込み欄をしまう' },
   { keys: '1〜4・5', name: 'スレ表示：人気・画像・動画・リンクで絞り込む・すべて' },
-  { keys: '1・2・3', name: 'スレ一覧：未読だけ・勢い順・新しい順' },
+  { keys: '1・2・3…', name: 'スレ一覧：上のタブを左から順に押す(タブは設定で選べる)' },
   { keys: 'Ctrl+Enter', name: '書き込む(書き込み欄で)' },
   { keys: 'Ctrl+Tab・Ctrl+Shift+Tab', name: '次・前のタブ(Ctrl を離すまで選ぶだけ)' },
   { keys: 'Ctrl+PageDown・Ctrl+PageUp', name: '次・前のタブ' },

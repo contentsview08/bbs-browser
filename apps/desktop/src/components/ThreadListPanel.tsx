@@ -14,7 +14,7 @@ import type { Placement } from '../utils/toolbar'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
-import type { ThreadSort } from '../ui/settings'
+import { LIST_TABS, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -24,7 +24,7 @@ import DragEdge from './DragEdge'
 import PeekPopup from './PeekPopup'
 import { followDelta, isDoublePress, isNear, isSeen, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 
-type SortMode = 'momentum' | 'newest'
+type SortMode = 'momentum' | 'newest' | 'count'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
 
 /** 同じタブを押すたびに 降順 → 昇順 → 解除(subject.txt の並び) と巡る */
@@ -82,6 +82,8 @@ interface Props {
   placements: Record<string, Placement>
   /** 最初の並び順(設定) */
   defaultSort: ThreadSort
+  /** 上に出すタブと、その並び(設定の listTabs) */
+  tabs?: ListTabKey[]
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
   /**
@@ -133,6 +135,16 @@ export default function ThreadListPanel(props: Props) {
   const defaultSort: SortState = props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' }
   const [sort, setSort] = useState<SortState>(defaultSort)
   const [unreadOnly, setUnreadOnly] = useState(false)
+  /** 閲覧済み(ログのある)スレだけを出す */
+  const [visitedOnly, setVisitedOnly] = useState(false)
+  /** 上に出すタブ(設定の並び) */
+  const tabs = props.tabs ?? ['unread', 'momentum', 'newest']
+  /** タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び */
+  const pressTab = (key: ListTabKey) => {
+    if (key === 'unread') setUnreadOnly((v) => !v)
+    else if (key === 'visited') setVisitedOnly((v) => !v)
+    else setSort((s) => cycleSort(s, key))
+  }
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
 
@@ -142,8 +154,9 @@ export default function ThreadListPanel(props: Props) {
   /** 外すものがあれば外して true。なければ何もしないで false */
   const resetView = useEvent((): boolean => {
     const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)
-    if (!unreadOnly && !sorted && !query && !searchActive) return false
+    if (!unreadOnly && !visitedOnly && !sorted && !query && !searchActive) return false
     setUnreadOnly(false)
+    setVisitedOnly(false)
     setSort(defaultSort)
     setQuery('')
     setSearchActive(false)
@@ -192,11 +205,12 @@ export default function ThreadListPanel(props: Props) {
     const fallback: Record<string, string> = { PageDown: 'pageDown', PageUp: 'pageUp', Home: 'top', End: 'bottom' }
     const action = (props.keymap && readKey.current(props.keymap, e)) ?? fallback[e.key]
     if (!action) {
-      // 数字キー: 1 で未読だけ、2 で勢い順、3 で新しい順(押すたびに上の帯のボタンと同じく切り替わる)
-      if (e.ctrlKey || e.altKey || e.metaKey || !/^[1-3]$/.test(e.key)) return
+      // 数字キー: 上のタブの左から 1・2・3…(押すたびに、タブを押したのと同じく切り替わる)
+      if (e.ctrlKey || e.altKey || e.metaKey || !/^[1-9]$/.test(e.key)) return
+      const tab = tabs[Number(e.key) - 1]
+      if (!tab) return
       e.preventDefault()
-      if (e.key === '1') setUnreadOnly((v) => !v)
-      else setSort((s) => cycleSort(s, e.key === '2' ? 'momentum' : 'newest'))
+      pressTab(tab)
       return
     }
     const cur = ordered.find((x) => threadId(x) === cursorId)
@@ -318,17 +332,18 @@ export default function ThreadListPanel(props: Props) {
     let list = threads.filter((t) => {
       if (props.isNg(t)) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
-      if (unreadOnly) return unreadSnapshot?.has(threadId(t)) ?? false
+      if (unreadOnly && !(unreadSnapshot?.has(threadId(t)) ?? false)) return false
+      if (visitedOnly && stateOf(t) === undefined) return false
       return true
     })
     if (sort) {
       const sign = sort.dir === 'desc' ? -1 : 1
       const value = (t: ThreadSummary) =>
-        sort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : (t.createdAt?.getTime() ?? 0)
+        sort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : sort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
     return list
-  }, [threads, query, unreadOnly, unreadSnapshot, sort, props.isNg, momenta])
+  }, [threads, query, unreadOnly, visitedOnly, unreadSnapshot, sort, props.isNg, momenta, stateOf])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
@@ -694,43 +709,34 @@ export default function ThreadListPanel(props: Props) {
                 />
               </label>
             )}
-            <div className="flex-1 grid grid-cols-3">
-              <button
-                type="button"
-                onClick={() => setUnreadOnly((v) => !v)}
-                className={`${TAB} ${unreadOnly ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-                title="ログがあり、新着レスのあるスレだけを出す(1 キー)"
-              >
-                <span className="material-symbols-outlined text-base leading-none">mark_email_unread</span>
-                未読
-                {unreadTotal > 0 && (
-                  <span
-                    className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                    style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
-                  >
-                    +{unreadTotal}
-                  </span>
-                )}
-                {unreadOnly && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-              </button>
-              {[
-                { mode: 'momentum' as const, label: '勢い順', icon: 'local_fire_department' },
-                { mode: 'newest' as const, label: '新しい順', icon: 'schedule' },
-              ].map(({ mode, label, icon }) => {
-                const active = sort?.mode === mode
+            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}>
+              {tabs.map((key, i) => {
+                const def = LIST_TABS.find((t) => t.key === key)!
+                const filter = key === 'unread' || key === 'visited'
+                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : sort?.mode === key
                 return (
                   <button
-                    key={mode}
+                    key={key}
                     type="button"
-                    onClick={() => setSort((s) => cycleSort(s, mode))}
-                    title={`${label}に並べる。押すたびに 逆順 → 元の並び(${mode === 'momentum' ? 2 : 3} キー)`}
+                    onClick={() => pressTab(key)}
                     className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+                    title={`${def.note}${filter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
                   >
-                    <span className="material-symbols-outlined text-base leading-none">{icon}</span>
-                    {label}
-                    <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
-                      {active && sort.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
-                    </span>
+                    <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
+                    <span className="truncate">{def.name}</span>
+                    {key === 'unread' && unreadTotal > 0 && (
+                      <span
+                        className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                        style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
+                      >
+                        +{unreadTotal}
+                      </span>
+                    )}
+                    {!filter && (
+                      <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
+                        {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                      </span>
+                    )}
                     {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
                   </button>
                 )

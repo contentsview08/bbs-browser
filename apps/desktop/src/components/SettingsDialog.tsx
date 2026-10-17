@@ -11,6 +11,8 @@ import { POST_STYLES,
   pickScheme,
   FONT_FAMILIES,
   PANELS,
+  LIST_TABS,
+  type ListTabKey,
   type AppSettings,
   type FontSize,
   type UpdateSetting,
@@ -126,6 +128,50 @@ function Choice<T extends string | number>(props: {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** スレ一覧のタブを選んで並べる。出すものを上に、出さないものを下に並べる */
+function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]) => void }) {
+  const shown = props.value.filter((k) => LIST_TABS.some((t) => t.key === k))
+  const rest = LIST_TABS.map((t) => t.key).filter((k) => !shown.includes(k))
+  const move = (i: number, d: -1 | 1) => {
+    const next = [...shown]
+    ;[next[i], next[i + d]] = [next[i + d], next[i]]
+    props.onChange(next)
+  }
+  const row = (key: ListTabKey, on: boolean, i: number) => {
+    const def = LIST_TABS.find((t) => t.key === key)!
+    return (
+      <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border border-c-border ${on ? '' : 'opacity-60'}`}>
+        <input
+          type="checkbox"
+          checked={on}
+          className="accent-[var(--c-accent)]"
+          onChange={() => props.onChange(on ? shown.filter((k) => k !== key) : [...shown, key])}
+          aria-label={`${def.name}を出す`}
+        />
+        <span className="material-symbols-outlined text-base text-c-text-muted">{def.icon}</span>
+        <span className="text-sm text-c-text-strong w-20">{def.name}</span>
+        <span className="flex-1 min-w-0 text-xs text-c-text-muted truncate">{def.note}</span>
+        {on && (
+          <>
+            <button type="button" disabled={i === 0} onClick={() => move(i, -1)} title="左へ" className="p-0.5 rounded hover:bg-c-surface2 disabled:opacity-30">
+              <span className="material-symbols-outlined text-base leading-none">arrow_upward</span>
+            </button>
+            <button type="button" disabled={i === shown.length - 1} onClick={() => move(i, 1)} title="右へ" className="p-0.5 rounded hover:bg-c-surface2 disabled:opacity-30">
+              <span className="material-symbols-outlined text-base leading-none">arrow_downward</span>
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {shown.map((k, i) => row(k, true, i))}
+      {rest.map((k) => row(k, false, -1))}
     </div>
   )
 }
@@ -443,9 +489,13 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
             { key: 'subject', name: 'サーバーの順(更新順)' },
             { key: 'momentum', name: '勢い順' },
             { key: 'newest', name: '新しい順' },
+            { key: 'count', name: 'レス数順' },
           ]}
           onChange={(v) => update('threadSort', v)}
         />
+      </Section>
+      <Section title="スレ一覧のタブ" note="スレ一覧の上に出すタブと、その並び(上が左)です。数字キーの 1・2・3… は左から順に当たります">
+        <ListTabsEditor value={s.listTabs} onChange={(v) => update('listTabs', v)} />
       </Section>
       <Section title="ログの削除">
         <Toggle

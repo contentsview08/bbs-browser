@@ -491,11 +491,13 @@ article.post-discord:hover {
 }
 
 /* 選んでいるレス(J・K・クリック)に重ねる色。ふつうは強調色をごく薄く。
-   強調色が黄色・橙の配色(アンバー×ティール)は、薄くても面で敷くとチカチカするので、色のない明るさだけにする(下の線は強調色のまま) */
+   強調色が黄色・橙の配色(アンバー×ティール)は、薄くても面で敷くとチカチカするので、色のない明るさだけにする(下の線は強調色のまま)。
+   Discord ダークも、青い面だとアンカーやリンクの青い文字と重なって読みにくいので、色のない明るさにする */
 :root {
   --c-cursor-tint: color-mix(in srgb, var(--c-accent) 7%, transparent);
 }
-:root[data-scheme='amber-teal'] {
+:root[data-scheme='amber-teal'],
+:root[data-scheme='discord-dark'] {
   --c-cursor-tint: color-mix(in srgb, var(--c-text-strong) 5%, transparent);
 }
 

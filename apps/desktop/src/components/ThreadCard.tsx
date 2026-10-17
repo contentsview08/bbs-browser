@@ -142,8 +142,12 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
               {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
               {isNew && (
                 <span
-                  className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
-                  style={{ background: 'var(--c-mark-new)', color: '#fff' }}
+                  className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[13px] align-[2px] border"
+                  style={{
+                    color: 'var(--c-accent)',
+                    background: 'var(--c-accent-wash)',
+                    borderColor: 'color-mix(in srgb, var(--c-accent) 45%, transparent)',
+                  }}
                   title="前回この板を見たあとに立ったスレ"
                 >
                   新

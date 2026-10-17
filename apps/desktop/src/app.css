@@ -126,12 +126,21 @@ body,
 
 /* 新着のレスの光り方。しばらく色を保ってから消す。
    長さは ThreadView.tsx の FLASH_MS と揃える */
+/* 光る色はテーマの強調色(ダークは藤色、ライトは青)。未読の札などの色(--c-accent-self)とは分け、
+   テーマから浮かないようにする。配色ごとに変えたいときは --c-flash-new を上書きする */
+:root {
+  --c-flash-new: var(--c-accent);
+}
+/* ライトの強調色は灰みの青で光が見えにくいので、はっきりした青(未読の札と同じ色)で光らせる */
+:root[data-scheme='soft-light'] {
+  --c-flash-new: var(--c-accent-self);
+}
 @keyframes flash-new-slow {
   0% {
-    background-color: color-mix(in srgb, var(--c-accent-self) 30%, transparent);
+    background-color: color-mix(in srgb, var(--c-flash-new) 24%, transparent);
   }
   45% {
-    background-color: color-mix(in srgb, var(--c-accent-self) 22%, transparent);
+    background-color: color-mix(in srgb, var(--c-flash-new) 16%, transparent);
   }
   100% {
     background-color: transparent;

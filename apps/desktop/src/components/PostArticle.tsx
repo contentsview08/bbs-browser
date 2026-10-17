@@ -598,7 +598,8 @@ function PostArticle(props: Props) {
       <span className="truncate">{props.replyPreview.text}</span>
     </button>
   )
-  const lineLayout = (
+  // LINE 風のときだけ組み立てる
+  const lineLayout = () => (
     <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''}`}>
       {!right && (
         <div className="w-9 flex-shrink-0">
@@ -713,7 +714,7 @@ function PostArticle(props: Props) {
         <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
       </div>
       {variant === 'line' ? (
-        lineLayout
+        lineLayout()
       ) : variant === 'discord' ? (
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>

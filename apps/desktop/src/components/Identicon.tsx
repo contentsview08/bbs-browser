@@ -1,4 +1,7 @@
-// hono-bbs-merge packages/web/src/components/ui/Identicon.tsx から複製(import の場所だけ変えた)
+// hono-bbs-merge packages/web/src/components/ui/Identicon.tsx から複製し、描き方を変えた。
+// 元は 5x5 のマスを 1 つずつ div で塗っていた(1 つのアイコンで 26 個の要素)。Discord 風・LINE 風では全部のレスに
+// アイコンを出すので、1000 レスのスレだと要素が 2 万を超えて、スレを開くのが目に見えて遅くなった。
+// いまは模様を SVG の絵(data URL)にして、要素 1 つの背景に敷く。絵は seed ごとに 1 回だけ作って使い回す
 import { useMemo } from 'react'
 import { generateIdenticon } from '../utils/identicon'
 
@@ -14,31 +17,37 @@ interface IdenticonProps {
   title?: string
 }
 
-/**
- * GitHub風のIdenticonをCSSグリッドだけで描画する(画像化はしない)。
- * utils/identicon.ts で計算した5x5の対称パターンを、1マスずつdivで塗り分ける。
- */
-export default function Identicon({ seed, size = 24, rounded = true, className = '', title }: IdenticonProps) {
-  const { pattern, color } = useMemo(() => generateIdenticon(seed), [seed])
+/** seed ごとの模様の絵(背景に敷く url(...))。多くなりすぎたら捨てて作り直す */
+const cache = new Map<string, string>()
 
+function patternImage(seed: string): string {
+  let url = cache.get(seed)
+  if (url !== undefined) return url
+  const { pattern, color } = generateIdenticon(seed)
+  const rects = pattern.flatMap((row, i) => row.map((filled, j) => (filled ? `<rect x="${j}" y="${i}" width="1" height="1"/>` : ''))).join('')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 5" shape-rendering="crispEdges"><g fill="${color}">${rects}</g></svg>`
+  url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+  if (cache.size > 5000) cache.clear()
+  cache.set(seed, url)
+  return url
+}
+
+/** GitHub 風の Identicon。utils/identicon.ts で計算した 5x5 の対称パターンを、1 枚の絵として描く */
+export default function Identicon({ seed, size = 24, rounded = true, className = '', title }: IdenticonProps) {
+  const image = useMemo(() => patternImage(seed), [seed])
   return (
     <div
-      className={`grid flex-shrink-0 ${rounded ? 'rounded-full' : ''} overflow-hidden ${className}`}
+      className={`flex-shrink-0 ${rounded ? 'rounded-full' : ''} ${className}`}
       style={{
         width: size,
         height: size,
-        gridTemplateColumns: 'repeat(5, 1fr)',
-        gridTemplateRows: 'repeat(5, 1fr)',
-        background: 'var(--c-surface2)',
+        backgroundColor: 'var(--c-surface2)',
+        backgroundImage: image,
+        backgroundSize: '100% 100%',
+        backgroundRepeat: 'no-repeat',
       }}
       title={title}
       aria-hidden="true"
-    >
-      {pattern.flatMap((row, i) =>
-        row.map((filled, j) => (
-          <div key={`${i}-${j}`} style={{ background: filled ? color : 'transparent' }} />
-        )),
-      )}
-    </div>
+    />
   )
 }

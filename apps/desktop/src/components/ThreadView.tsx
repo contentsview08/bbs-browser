@@ -1175,7 +1175,7 @@ export default function ThreadView(props: Props) {
                     {/* 選んでいるレスの印。下辺にまっすぐな線を引く(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
                     {keysOn && p.no === cursorNo && (
                       <span
-                        className="absolute bottom-0 h-[2px] bg-c-accent rounded-full pointer-events-none z-[1]"
+                        className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none z-[1]"
                         style={{ left: 'var(--card-radius)', right: 'var(--card-radius)' }}
                       />
                     )}

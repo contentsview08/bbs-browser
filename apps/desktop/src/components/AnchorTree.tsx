@@ -10,7 +10,7 @@ const STEP = 18
 const ELBOW_Y = 14
 
 const LINE = 'var(--c-border-strong)'
-/** 曲がり角の丸み */
+/** 線の太さは Discord 風・LINE 風のツリーと同じ 2px。曲がり角の丸み */
 const RADIUS = 6
 
 /** Discord 風: 大きいアイコンの半分(アイコンの真ん中の位置) */
@@ -36,14 +36,14 @@ export default function AnchorTree(props: {
               {/* 上の段から続く縦線 */}
               {r.rails.map((on, i) =>
                 on ? (
-                  <span key={i} className="absolute top-0 bottom-0" style={{ left: i * STEP + STEP / 2, borderLeft: `1px solid ${LINE}` }} />
+                  <span key={i} className="absolute top-0 bottom-0" style={{ left: i * STEP + STEP / 2, borderLeft: `2px solid ${LINE}` }} />
                 ) : null,
               )}
               {/* まだ兄弟がいれば、縦線を下まで伸ばす(├) */}
               {!r.last && (
                 <span
                   className="absolute top-0 bottom-0"
-                  style={{ left: (r.depth - 1) * STEP + STEP / 2, borderLeft: `1px solid ${LINE}` }}
+                  style={{ left: (r.depth - 1) * STEP + STEP / 2, borderLeft: `2px solid ${LINE}` }}
                 />
               )}
               {/* 親からの線を、角を丸めて横に曲げる(└) */}
@@ -53,8 +53,8 @@ export default function AnchorTree(props: {
                   left: (r.depth - 1) * STEP + STEP / 2,
                   width: STEP / 2,
                   height: ELBOW_Y + 1,
-                  borderLeft: `1px solid ${LINE}`,
-                  borderBottom: `1px solid ${LINE}`,
+                  borderLeft: `2px solid ${LINE}`,
+                  borderBottom: `2px solid ${LINE}`,
                   borderBottomLeftRadius: RADIUS,
                 }}
               />

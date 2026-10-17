@@ -397,6 +397,18 @@ export default function App() {
   const [favView, setFavView] = useState(false)
   /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
   const [favCounts, setFavCounts] = useState(new Map<string, number>())
+  /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
+  const [listCounts, setListCounts] = useState(new Map<string, number>())
+  useEffect(() => {
+    if (threads.length === 0) return
+    setListCounts((m) => {
+      const next = new Map(m)
+      for (const t of threads) next.set(threadId(t), t.postCount)
+      return next
+    })
+  }, [threads])
+  /** 一覧・お気に入りスレ・履歴の取り直しで分かったレス数のうち、一番新しいもの(多いもの) */
+  const knownCount = (id: string) => Math.max(listCounts.get(id) ?? 0, favCounts.get(id) ?? 0, historyCounts.get(id) ?? 0)
   const favCountsRef = useRef(favCounts)
   favCountsRef.current = favCounts
   const [favVersion, setFavVersion] = useState(0)
@@ -1639,7 +1651,8 @@ export default function App() {
           tabs={tabs.map((t) => ({
             id: t.id,
             title: t.log?.title || t.thread.title,
-            unread: t.log ? Math.max(0, t.log.postCount - t.readNo) : 0,
+            // ログのレス数に加えて、スレ一覧などの取り直しで分かった新着も数える(タブを開き直さなくても +n が出る)
+            unread: t.log ? Math.max(0, Math.max(t.log.postCount, knownCount(t.id)) - t.readNo) : 0,
             loading: t.loading,
             ended:
               t.log?.status === 'archived' ? 'archived' : t.log && isFull(t.thread, t.log.posts) ? 'full' : undefined,

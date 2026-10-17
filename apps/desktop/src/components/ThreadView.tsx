@@ -1160,9 +1160,7 @@ export default function ThreadView(props: Props) {
                 return (
                   <div
                     key={p.no}
-                    className={`post-cv ${enterDelay !== undefined ? 'post-enter' : ''} ${
-                      keysOn && p.no === cursorNo ? 'outline outline-2 -outline-offset-2 outline-c-accent rounded-[var(--card-radius)]' : ''
-                    }`}
+                    className={`post-cv relative ${enterDelay !== undefined ? 'post-enter' : ''}`}
                     onPointerDown={() => setCursorNo(p.no)}
                     style={
                       {
@@ -1174,6 +1172,13 @@ export default function ThreadView(props: Props) {
                     data-post={p.no}
                     hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
+                    {/* 選んでいるレスの印。下辺にまっすぐな線を引く(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+                    {keysOn && p.no === cursorNo && (
+                      <span
+                        className="absolute bottom-0 h-[2px] bg-c-accent rounded-full pointer-events-none z-[1]"
+                        style={{ left: 'var(--card-radius)', right: 'var(--card-radius)' }}
+                      />
+                    )}
                     <PostArticle
                       post={p}
                       anchorCount={anchorCounts.get(p.no) ?? 0}

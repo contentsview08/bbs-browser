@@ -556,9 +556,10 @@ export default function ThreadView(props: Props) {
   const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
   const [cursorNo, setCursorNo] = useState<number>()
-  // 新着が届いた・開き直した(「ここから未読」が変わった)ら、前に選んでいたレスは忘れる。
-  // 次の J・K は、いま見えている所(未読の頭へ送ったならそこ)から始まる
-  useEffect(() => setCursorNo(undefined), [unreadFrom])
+  // 新着が届いた・開き直した(「ここから未読」が変わった)ら、読んだところより前で選んでいたレスは忘れる
+  // (次の J は新着の頭から始まる)。読んだところの最後のレスを選んでいた(一番下まで読んでいた)なら、そのまま残す。
+  // 残しておけば、新着がなくても選んでいる所は動かず、新着があれば J でそのまま新着の頭へ進む
+  useEffect(() => setCursorNo((c) => (c !== undefined && c >= unreadFrom - 1 ? c : undefined)), [unreadFrom])
   /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
   /** 選んでいるレスの枠(見えているもの)。なければ undefined */

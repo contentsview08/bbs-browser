@@ -89,7 +89,8 @@ export const DEFAULT_KEYMAP: Keymap = {
   pageUp: ['Shift+Space', 'PageUp'],
   halfDown: ['D'],
   halfUp: ['U'],
-  top: ['Home', 'G'],
+  // vim と同じく g を 2 回で先頭(1 回では動かない)
+  top: ['Home', 'G G'],
   bottom: ['End', 'Shift+G'],
   unread: ['N'],
   // F5・Ctrl+R はアプリ全体で決め打ち(キーを受け取っている方を更新する。App.tsx)
@@ -158,6 +159,26 @@ export function keyString(e: { key: string; ctrlKey: boolean; shiftKey: boolean;
   if (e.shiftKey && shiftMatters) parts.push('Shift')
   parts.push(base)
   return parts.join('+')
+}
+
+/** 2 つ続けて押すキー(「G G」)とみなす間隔 */
+const SEQUENCE_MS = 600
+
+/**
+ * キーを読んで、割り当てた操作を返すもの。「G G」のように 2 つ続けて押すキーも見分ける
+ * (直前のキーと合わせた組に割り当てがあればそれ、なければ今のキー 1 つの割り当て)。受け取る所ごとに 1 つ作る
+ */
+export function createKeyReader() {
+  let prev: { key: string; at: number } | undefined
+  return (keymap: Keymap, e: { key: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }): KeyAction | undefined => {
+    const key = keyString(e)
+    if (!key) return undefined
+    const now = Date.now()
+    const pair = prev && now - prev.at < SEQUENCE_MS ? actionFor(keymap, `${prev.key} ${key}`) : undefined
+    // 組になったら、次の 1 つ目からやり直す(G を 3 回押しても、2 回目と 3 回目で組にしない)
+    prev = pair ? undefined : { key, at: now }
+    return pair ?? actionFor(keymap, key)
+  }
 }
 
 /** 押したキーに割り当てた操作。なければ undefined */

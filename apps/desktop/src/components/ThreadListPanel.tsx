@@ -16,7 +16,7 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
-import { modalOpen, actionFor, isReloadKey, keyString, type Keymap } from '../utils/keymap'
+import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 
 type SortMode = 'momentum' | 'newest'
@@ -145,6 +145,8 @@ export default function ThreadListPanel(props: Props) {
   // 次/前のレス(J・K)→ 次/前のスレを選ぶ、Enter で開く、1 画面分(Space・PageDown)、先頭・末尾(Home・G・End・Shift+G)、
   // 半画面(D・U)、更新(R)、検索(/)、スレ立て(書き込み欄へ の W・E)、選んでいるスレの ☆(S)と URL のコピー(Y)。
   // スレ表示だけの操作(未読へ・画像一覧 など)と、アプリ全体の操作(App.tsx が受ける)はここでは受けない
+  /** キーを読むもの(「G G」を見分ける) */
+  const readKey = useRef(createKeyReader())
   const onListKey = useEvent((e: KeyboardEvent) => {
     if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
     if (e.defaultPrevented || isReloadKey(e)) return
@@ -154,7 +156,7 @@ export default function ThreadListPanel(props: Props) {
     if (!el) return
     // 割り当てがなくても、PageUp・PageDown・Home・End はスクロールに使う
     const fallback: Record<string, string> = { PageDown: 'pageDown', PageUp: 'pageUp', Home: 'top', End: 'bottom' }
-    const action = (props.keymap && actionFor(props.keymap, keyString(e))) ?? fallback[e.key]
+    const action = (props.keymap && readKey.current(props.keymap, e)) ?? fallback[e.key]
     if (!action) {
       // 数字キー: 1 で未読だけ、2 で勢い順、3 で新しい順(押すたびに上の帯のボタンと同じく切り替わる)
       if (e.ctrlKey || e.altKey || e.metaKey || !/^[1-3]$/.test(e.key)) return

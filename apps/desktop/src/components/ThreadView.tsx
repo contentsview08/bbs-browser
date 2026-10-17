@@ -27,7 +27,7 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
 import type { ScrollPosition } from '../utils/threadScroll'
-import { modalOpen, actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from '../utils/keymap'
+import { createKeyReader, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
@@ -583,6 +583,8 @@ export default function ThreadView(props: Props) {
   const [cursorHidden, setCursorHidden] = useState(false)
   /** 最後に Esc を押した時刻(2 回押しを見分ける) */
   const lastEsc = useRef(0)
+  /** キーを読むもの(「G G」のような 2 つ続きのキーを見分けるため、直前のキーを覚えている) */
+  const readKey = useRef(createKeyReader())
   /** いまのキーが、押し続けたときの自動の連打か */
   const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
@@ -826,7 +828,7 @@ export default function ThreadView(props: Props) {
       }
       // ボタンやリンクの上の Enter は、そのボタンを押すのに使う
       if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
-      const action = actionFor(keymap, keyString(e))
+      const action = readKey.current(keymap, e)
       if (!action) {
         // 数字キー: 1〜4 で絞り込み(人気・画像・動画・リンク)を付け外し、5 で全部表示(割り当てに使っていなければ)
         const n = !e.ctrlKey && !e.altKey && !e.metaKey && /^[1-5]$/.test(e.key) ? Number(e.key) : 0
@@ -885,7 +887,7 @@ export default function ThreadView(props: Props) {
       return
     }
     if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
-    const action = actionFor(keymap, keyString(e))
+    const action = readKey.current(keymap, e)
     if (!action) return
     if (action === 'nextPost' || action === 'prevPost') {
       e.preventDefault()
@@ -1008,9 +1010,13 @@ export default function ThreadView(props: Props) {
   // handlersFor と renderPosts は互いを使う(ポップアップの中のレスにも、1 段深いハンドラを渡す)
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
-      const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) =>
-        openContent(title, renderPosts(posts, level + 1), el, viaHover)
-      const openContent = (title: string, content: ReactNode, el: HTMLElement, viaHover = false) => {
+      // 開いたレス(el を含むレス)が一覧の中にあれば、そこを見せる(ID のレス など)
+      const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) => {
+        // el はレスの中のボタンか、キー操作のときはレスの枠
+        const from = Number((el.closest<HTMLElement>('article[data-no]') ?? el.querySelector<HTMLElement>('article[data-no]'))?.dataset.no)
+        openContent(title, renderPosts(posts, level + 1), el, viaHover, posts.some((p) => p.no === from) ? from : undefined)
+      }
+      const openContent = (title: string, content: ReactNode, el: HTMLElement, viaHover = false, focusNo?: number) => {
         const rect = el.getBoundingClientRect()
         if (viewRef.current)
           setPopupFrame({
@@ -1024,6 +1030,7 @@ export default function ThreadView(props: Props) {
           triggerY: rect.top,
           level,
           content,
+          focusNo,
         }
         setPopups((ps) => [...ps.slice(0, level), entry])
       }
@@ -1056,7 +1063,7 @@ export default function ThreadView(props: Props) {
         onBody: (no, el) => {
           const tree = anchorTree(no, log.posts)
           if (tree.length <= 1) return
-          openContent(`>>${no} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el)
+          openContent(`>>${no} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el, false, no)
         },
         onUrl: props.onUrl,
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),

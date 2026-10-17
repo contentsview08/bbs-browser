@@ -12,6 +12,8 @@ export interface PopupEntry {
   /** 何段目から開いたか(0 は本文から)。ホバーで開いたものは、別の場所に乗せ替えると閉じる */
   level: number
   content: ReactNode
+  /** 開いたときに見せたいレス(アンカーツリーの起点、ID のレスを開いたレス)。そこまで中をスクロールし、選んだ状態にする */
+  focusNo?: number
 }
 
 interface Props {
@@ -71,6 +73,21 @@ function PopupWindow(props: {
       pointerEvents: props.isTop ? 'auto' : 'none',
     })
   }, [entry, containerRect, props.headerBottom, props.stackIndex, props.isTop])
+
+  // 見せたいレスがあれば、出したあとに 1 回だけ、そのレスが真ん中あたりに来るよう中をスクロールし、選んだ状態にする
+  // (長いアンカーツリーで、起点のレスが下に隠れないように。選んだ状態にしておくと、J・K がそこから続く)
+  const focused = useRef(false)
+  useLayoutEffect(() => {
+    const box = ref.current
+    if (focused.current || !box || style.visibility !== 'visible' || entry.focusNo === undefined) return
+    focused.current = true
+    const post = box.querySelector<HTMLElement>(`article[data-no="${entry.focusNo}"]`)
+    if (!post) return
+    post.classList.add('popup-cursor')
+    const r = post.getBoundingClientRect()
+    const b = box.getBoundingClientRect()
+    box.scrollTop += r.top - b.top - Math.max(0, (b.height - r.height) / 2)
+  }, [style, entry.focusNo])
 
   return (
     <div

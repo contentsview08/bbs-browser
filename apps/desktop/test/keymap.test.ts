@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_KEYMAP, actionFor, keyString, resolveKeymap } from '../src/utils/keymap'
+import { DEFAULT_KEYMAP, actionFor, createKeyReader, keyString, resolveKeymap } from '../src/utils/keymap'
 
 const k = (key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}) => ({
   key,
@@ -54,5 +54,16 @@ describe('actionFor', () => {
     expect(actionFor(km, 'Q')).toBe('nextPost')
     expect(actionFor(km, 'J')).toBeUndefined()
     expect(actionFor(km, 'K')).toBe('prevPost')
+  })
+})
+
+describe('createKeyReader: 2 つ続けて押すキー', () => {
+  it('G を 2 回で先頭へ。1 回では何もしない。3 回目は組にしない', () => {
+    const read = createKeyReader()
+    expect(read(DEFAULT_KEYMAP, k('g'))).toBeUndefined()
+    expect(read(DEFAULT_KEYMAP, k('g'))).toBe('top')
+    expect(read(DEFAULT_KEYMAP, k('g'))).toBeUndefined()
+    expect(read(DEFAULT_KEYMAP, k('G', { shift: true }))).toBe('bottom')
+    expect(read(DEFAULT_KEYMAP, k('j'))).toBe('nextPost')
   })
 })

@@ -47,6 +47,7 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { useSettings, type ReplyLayout, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
+import { useNavHistory } from './hooks/useNavHistory'
 import { useAccounts } from './hooks/useAccounts'
 import { useNotifications } from './hooks/useNotifications'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -63,6 +64,15 @@ import { backgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
+
+/** 戻る・進むで行き来する場所 */
+type ListTarget = { kind: 'board'; board: Board } | { kind: 'history' } | { kind: 'fav' }
+type NavValue = { type: 'list'; list: ListTarget } | { type: 'thread'; thread: ThreadSummary }
+const listEntry = (list: ListTarget) => ({
+  key: list.kind === 'board' ? `board:${list.board.url}` : list.kind,
+  value: { type: 'list', list } as NavValue,
+})
+const threadEntry = (thread: ThreadSummary) => ({ key: `thread:${threadId(thread)}`, value: { type: 'thread', thread } as NavValue })
 
 /** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
 const TAB_REPEAT_SETTLE_MS = 200
@@ -171,6 +181,28 @@ export default function App() {
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
   const single = settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
   const [listOpen, setListOpen] = useState(false)
+
+  // ── 戻る・進む ──
+  // 見たもの(スレ一覧・スレ)を見た順に覚え、上の帯の ← →・マウスの戻る/進むボタン・Alt+← → で行き来する
+  const nav = useNavHistory<NavValue>((v) => applyNav(v))
+  /** 覚えておいた場所へ戻す(戻る・進むのとき) */
+  const applyNav = (v: NavValue) => {
+    if (v.type === 'thread') {
+      const open = tabsRef.current.find((t) => t.id === threadId(v.thread))
+      if (open) {
+        selectTab(open.id)
+        setListOpen(false)
+      } else void openThread(v.thread) // 閉じたタブのスレは開き直す
+      return
+    }
+    const cur = currentListTarget()
+    const same =
+      cur?.kind === v.list.kind && (v.list.kind !== 'board' || (cur.kind === 'board' && cur.board.url === v.list.board.url))
+    if (same) setListOpen(true)
+    else if (v.list.kind === 'board') void openBoard(v.list.board)
+    else if (v.list.kind === 'history') void openHistory()
+    else void openFavThreads()
+  }
   /** 1 画面のとき、スレ表示を(スレ一覧の上に)出しているか。開いているスレがあって、一覧に戻っていないとき */
   const threadShown = (activeId !== undefined) && !listOpen
 
@@ -245,10 +277,12 @@ export default function App() {
   const [newSince, setNewSince] = useState<number>()
   const lastBoardUrl = useRef(settings.lastBoardUrl)
   lastBoardUrl.current = settings.lastBoardUrl
-  const openBoard = (b: Board) =>
+  /** 板のスレ一覧を開く。record が false(一覧の更新)なら、戻る・進むの履歴には覚えない */
+  const openBoard = (b: Board, record = true) =>
     run('threads', async () => {
       if (!store) return
-      setListOpen(true) // 縦長のとき、選んだ板のスレ一覧を引き出して見せる
+      if (record) nav.push(listEntry({ kind: 'board', board: b }))
+      setListOpen(true) // 1 画面のとき、選んだ板のスレ一覧を見せる
       setBoard(b)
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
@@ -304,11 +338,16 @@ export default function App() {
 
   const openHistory = () =>
     run('threads', async () => {
+      nav.push(listEntry({ kind: 'history' }))
       setListOpen(true)
       setFavView(false)
       if (store) setHistory(await store.history())
       setHistoryVersion((v) => v + 1)
     })
+
+  /** いまスレ一覧に出しているもの(戻る・進むで覚える) */
+  const currentListTarget = (): ListTarget | undefined =>
+    favView ? { kind: 'fav' } : history ? { kind: 'history' } : board ? { kind: 'board', board } : undefined
 
   // ── お気に入りのスレ ──
 
@@ -420,6 +459,7 @@ export default function App() {
 
   const openFavThreads = () =>
     run('threads', async () => {
+      nav.push(listEntry({ kind: 'fav' }))
       setListOpen(true)
       setHistory(undefined)
       setFavView(true)
@@ -557,6 +597,7 @@ export default function App() {
   const selectTab = (id: string) => {
     setActiveId(id)
     const tab = tabsRef.current.find((t) => t.id === id)
+    if (tab) nav.push(threadEntry(tab.thread))
     if (store && tab && !tab.log) void run('posts', () => loadTab(store, tab.thread))
   }
 
@@ -565,6 +606,7 @@ export default function App() {
       if (!store) return
       // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
       setListOpen(false)
+      nav.push(threadEntry(t))
       const id = threadId(t)
       const existing = tabsRef.current.find((x) => x.id === id)
       if (existing) {
@@ -728,15 +770,40 @@ export default function App() {
   /** F5 で更新するもの。開いているスレ、なければいま出しているスレ一覧 */
   const reload = () => {
     if (activeTab?.log) return void refreshThread()
-    const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board) : undefined
+    const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board, false) : undefined
     if (list) void manualListRefresh(list)()
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: nav.back, forward: nav.forward })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: nav.back, forward: nav.forward }
+  // マウスの戻る・進むボタン(横のボタン)。WebView がページの戻る・進むをしないよう、押したときに止める
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (e.button === 3 || e.button === 4) e.preventDefault()
+    }
+    const onUp = (e: MouseEvent) => {
+      if (e.button !== 3 && e.button !== 4) return
+      e.preventDefault()
+      if (e.button === 3) keyRef.current.back()
+      else keyRef.current.forward()
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // F5・Ctrl+R: 画面ごと読み直すのではなく(WebView2 のショートカットは Rust 側で切ってある)、
       // スレを開いていればそのスレを、開いていなければスレ一覧を更新する(どちらもクールダウンあり)。どちらもなければ何もしない
+      // Alt+← →: 戻る・進む
+      if (e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault()
+        if (e.key === 'ArrowLeft') keyRef.current.back()
+        else keyRef.current.forward()
+        return
+      }
       if (isReloadKey(e)) {
         e.preventDefault()
         if (e.repeat) return // 押し続けても続けて更新しない
@@ -1099,7 +1166,11 @@ export default function App() {
     changeReplyLayout: useEvent((layout: ReplyLayout) => updateSetting('replyLayout', layout)),
     resizeReply: useEvent((key: 'replyHeight' | 'replyWidth', size: number) => updateSetting(key, size)),
     setReplyCollapsed: useEvent((collapsed: boolean) => updateSetting('replyCollapsed', collapsed)),
-    backToList: useEvent(() => setListOpen(true)),
+    backToList: useEvent(() => {
+      setListOpen(true)
+      const cur = currentListTarget()
+      if (cur) nav.push(listEntry(cur))
+    }),
     deleteLog: useEvent((id: string) => deleteLogs([id])),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
       setHasUploads(true)
@@ -1182,7 +1253,10 @@ export default function App() {
       <AddressBar
         currentUrl={currentUrl}
         onOpen={(url) => void openUrlInApp(url)}
-        onBackToThread={single && listOpen && activeTab ? () => setListOpen(false) : undefined}
+        onBack={nav.back}
+        onForward={nav.forward}
+        canBack={nav.canBack}
+        canForward={nav.canForward}
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
@@ -1250,7 +1324,7 @@ export default function App() {
               : history
                 ? manualListRefresh(refreshHistory)
                 : board
-                  ? manualListRefresh(() => openBoard(board))
+                  ? manualListRefresh(() => openBoard(board, false))
                   : undefined
           }
           refreshReadyAt={listReadyAt}

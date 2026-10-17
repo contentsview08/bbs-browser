@@ -9,14 +9,17 @@ import WindowControls from './WindowControls'
 interface Props {
   currentUrl: string
   onOpen: (url: string) => void
-  /**
-   * 1 画面でスレ一覧を出しているときだけ渡す。開いていたスレに戻るボタンを左に出す
-   * (1 画面ではタブの帯もスレ表示と一緒に隠れるため。一覧へ戻るボタンはスレ表示のスレタイの左にある)
-   */
-  onBackToThread?: () => void
+  /** 戻る・進む(見たスレ一覧・スレを行き来する) */
+  onBack: () => void
+  onForward: () => void
+  canBack: boolean
+  canForward: boolean
 }
 
-export default function AddressBar({ currentUrl, onOpen, onBackToThread }: Props) {
+const NAV_BTN =
+  'flex-shrink-0 p-1.5 rounded-lg text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-c-text-muted'
+
+export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canBack, canForward }: Props) {
   // 書き換えている間だけ自分で値を持つ。確定するか、外へ出たら現在の URL に戻す
   const [draft, setDraft] = useState<string>()
 
@@ -28,17 +31,13 @@ export default function AddressBar({ currentUrl, onOpen, onBackToThread }: Props
       className="flex-shrink-0 h-10 grid grid-cols-[1fr_minmax(0,48rem)_1fr] items-center gap-2 bg-panel-addressbar border-b border-c-border select-none"
     >
       <div data-tauri-drag-region className="min-w-0 h-full flex items-center px-3">
-        {onBackToThread && (
-          <button
-            type="button"
-            onClick={onBackToThread}
-            className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-sm text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 transition-colors"
-            title="開いていたスレに戻る"
-          >
-            <span className="material-symbols-outlined text-xl">forum</span>
-            <span className="hidden sm:inline">スレに戻る</span>
-          </button>
-        )}
+        {/* 戻る・進む(マウスの戻る/進むボタン、Alt+← → でも) */}
+        <button type="button" onClick={onBack} disabled={!canBack} className={NAV_BTN} title="戻る (Alt+←)">
+          <span className="material-symbols-outlined text-xl">arrow_back</span>
+        </button>
+        <button type="button" onClick={onForward} disabled={!canForward} className={NAV_BTN} title="進む (Alt+→)">
+          <span className="material-symbols-outlined text-xl">arrow_forward</span>
+        </button>
       </div>
       <form
         className="min-w-0 flex items-center gap-2 px-3 bg-c-surface2 border border-c-border rounded-full focus-within:border-c-accent transition-colors"

@@ -7,6 +7,8 @@
 // - スレは時間が来ると消える(ページが 404)。消えたら dat 落ちと同じに扱う。スレの数の上限(1000)はない
 // - 書き込みは、スレのページのフォーム(id="fm"、板/futaba.php?guid=on へ POST)。隠し欄の hash は時刻入りでページごとに変わるので、
 //   書き込む直前にページを取り直して写す。文字だけ(textonly=on)を Shift_JIS のフォームで送る。
+//   ページを見たときに渡される Cookie(posttime など)がないと「cookieを有効にしてもう一度送信してください」で断られるので、
+//   書き込みは読む通信と同じ Cookie の置き場で送る(sameCookiesAsGet)
 //   本番での試し書きはしていない(フォームの形だけ確かめた)。本来は JavaScript が埋める欄(pthb・pthc・baseform など)があり、
 //   空のままでは断られるかもしれない。断られたら、返ってきたページ(PostResult の html)を見て直す
 
@@ -182,6 +184,8 @@ export const futabaConnector: Connector = {
     const url = new URL(form.action, threadWebUrl(thread)).href
     const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread) },
+      // ページを見たときに渡された Cookie(posttime など)が要る。ないと「cookieを有効にして…」で断られる
+      sameCookiesAsGet: true,
     })
     const html = sjis(res.body, ctx)
     const r = parsePostResult(html)

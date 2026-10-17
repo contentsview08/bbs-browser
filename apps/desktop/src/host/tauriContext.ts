@@ -23,6 +23,8 @@ async function request(url: string, init: RequestInit, opts?: HttpRequestOptions
  * Cookie もそこが持ち、書き込みごとに一部(BE の Cookie など)を外して送れるようにするため
  */
 async function post(url: string, body: string, opts?: HttpRequestOptions): Promise<HttpResponse> {
+  // 読む通信と同じ Cookie の置き場で送る(ふたば: ページを見たときに渡された Cookie を、書き込みに付ける)
+  if (opts?.sameCookiesAsGet) return request(url, { method: 'POST', body }, opts)
   const res = await invoke<{ status: number; headers: Record<string, string>; body: number[] }>('http_post', {
     url,
     body,

@@ -9,7 +9,7 @@ const utf8 = (s: string) => new TextEncoder().encode(s)
 
 function fake(routes: Record<string, { status?: number; body?: string }>, postReply?: string) {
   const got: { url: string; headers?: Record<string, string> }[] = []
-  const posted: { url: string; body: string; headers?: Record<string, string> }[] = []
+  const posted: { url: string; body: string; headers?: Record<string, string>; sameCookiesAsGet?: boolean }[] = []
   const ctx: ConnectorContext = {
     decode: (b) => new TextDecoder('utf-8').decode(b),
     http: {
@@ -21,7 +21,7 @@ function fake(routes: Record<string, { status?: number; body?: string }>, postRe
       },
       post: async (url, body, opts) => {
         if (postReply === undefined) throw new Error('書き込まない')
-        posted.push({ url, body, headers: opts?.headers })
+        posted.push({ url, body, headers: opts?.headers, sameCookiesAsGet: opts?.sameCookiesAsGet })
         return { status: 200, headers: {}, body: utf8(postReply) }
       },
     },
@@ -132,6 +132,7 @@ describe('ふたばのコネクタ', () => {
     expect(sent.get('email')).toBe('sage')
     expect(sent.get('com')).toBe('abc')
     expect(posted[0].headers?.Referer).toBe(`${BOARD}res/1000.htm`)
+    expect(posted[0].sameCookiesAsGet).toBe(true)
   })
 
   it('断られたら、返ってきたページの文字を知らせる', async () => {

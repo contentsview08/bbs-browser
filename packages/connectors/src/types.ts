@@ -16,6 +16,11 @@ export interface HttpRequestOptions {
   headers?: Record<string, string>
   /** 付けない Cookie の名前(POST だけ。BE を使わない書き込みで、BE の Cookie を外すときなど) */
   excludeCookies?: string[]
+  /**
+   * POST を、読む通信(GET)と同じ Cookie の置き場で送る。ふつうの POST は書き込み用の別の置き場を使うが、
+   * ページを見たときに渡された Cookie が書き込みに要る掲示板(ふたば)で使う。excludeCookies は効かない
+   */
+  sameCookiesAsGet?: boolean
 }
 
 export interface ConnectorContext {

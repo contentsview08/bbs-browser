@@ -75,6 +75,8 @@ interface Props {
   continued?: boolean
   /** Discord 風・LINE 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
   replyPreview?: { no: number; text: string; id?: string }
+  /** LINE 風: 自分の書き込みも左にそろえる(アンカーツリーの中) */
+  alignLeft?: boolean
 }
 
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
@@ -569,8 +571,10 @@ function PostArticle(props: Props) {
   // 吹き出しで並べる。ほかの人は左にアイコンと名前、自分の書き込みは右に緑の吹き出し(アイコンなし)。
   // 番号と時刻は吹き出しの横に小さく。返信は吹き出しの中の上に、返信元を引用の形で出す
   const time = /(\d{1,2}:\d{2})(?::\d{2})?/.exec(post.date)?.[1] ?? post.date
+  // 自分の書き込みは右に寄せる。ただしアンカーツリーの中では、線でアイコンをつなぐため左にそろえる(緑の吹き出しはそのまま)
+  const right = props.isOwn && !props.alignLeft
   const lineSide = (
-    <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${props.isOwn ? 'items-end' : 'items-start'}`}>
+    <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${right ? 'items-end' : 'items-start'}`}>
       <span className="text-[11px]">{numBtn('#')}</span>
       <span title={post.date}>{time}</span>
     </div>
@@ -595,14 +599,14 @@ function PostArticle(props: Props) {
     </button>
   )
   const lineLayout = (
-    <div className={`flex gap-2 items-start ${props.isOwn ? 'flex-row-reverse' : ''}`}>
-      {!props.isOwn && (
+    <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''}`}>
+      {!right && (
         <div className="w-9 flex-shrink-0">{props.continued ? null : identiconBtn(36, true) || <span className="block w-9 h-9 rounded-full bg-c-surface3" />}</div>
       )}
-      <div className={`flex-1 min-w-0 flex flex-col ${props.isOwn ? 'items-end' : 'items-start'}`}>
+      <div className={`flex-1 min-w-0 flex flex-col ${right ? 'items-end' : 'items-start'}`}>
         {!props.continued && (
-          <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${props.isOwn ? 'flex-row-reverse' : ''}`}>
-            {!props.isOwn && nameBtn('text-xs')}
+          <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : ''}`}>
+            {!right && nameBtn('text-xs')}
             {opChip}
             {ngChip}
             {idBtn}
@@ -610,7 +614,7 @@ function PostArticle(props: Props) {
             {toOwnChip}
           </div>
         )}
-        <div className={`flex items-end gap-1.5 max-w-full ${props.isOwn ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-end gap-1.5 max-w-full ${right ? 'flex-row-reverse' : ''}`}>
           <div className={`line-bubble min-w-0 ${props.isOwn ? 'line-bubble-own' : ''} ${isAA ? 'max-w-full' : 'max-w-[min(85%,42rem)]'}`}>
             {lineQuote}
             {bodyBlock}

@@ -1162,6 +1162,7 @@ export default function ThreadView(props: Props) {
               idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
               showTopDivider={false}
               variant={variant}
+              alignLeft
               ng={isNg(p)}
               ngMode="aborn"
               showThumbnails={settings.showThumbnails}

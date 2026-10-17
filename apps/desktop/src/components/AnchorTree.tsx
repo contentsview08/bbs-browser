@@ -13,8 +13,6 @@ const LINE = 'var(--c-border-strong)'
 /** 曲がり角の丸み */
 const RADIUS = 6
 
-/** Discord 風: 1 段の幅(大きいアイコン 36px + 隙間 12px。子のアイコンが親のアイコンの右にそろう) */
-const D_STEP = 48
 /** Discord 風: 大きいアイコンの半分(アイコンの真ん中の位置) */
 const D_HALF = 18
 
@@ -26,7 +24,9 @@ export default function AnchorTree(props: {
   /** Discord 風: 線をアイコン同士をつなぐ形にする */
   variant?: 'card' | 'discord' | 'classic' | 'line'
 }) {
-  if (props.variant === 'discord') return <DiscordTree {...props} />
+  // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
+  if (props.variant === 'discord') return <IconTree {...props} step={48} />
+  if (props.variant === 'line') return <IconTree {...props} step={44} />
   return (
     <div className="flex flex-col">
       {props.rows.map((r) => (
@@ -78,10 +78,11 @@ export default function AnchorTree(props: {
 }
 
 /**
- * Discord 風のアンカーツリー。親のアイコンの下から縦線を下ろし、子のアイコンの真ん中の高さで右へ曲げて、子のアイコンにつなぐ。
+ * Discord 風・LINE 風のアンカーツリー。親のアイコンの下から縦線を下ろし、子のアイコンの真ん中の高さで右へ曲げて、子のアイコンにつなぐ。
  * 段の幅をアイコン 1 つ分にして、子のアイコンが親の本文の始まりにそろうようにする
  */
-function DiscordTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode }) {
+function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode; step: number }) {
+  const D_STEP = props.step
   const line = (key: string, style: CSSProperties) => (
     <span key={key} aria-hidden className="absolute pointer-events-none" style={{ borderColor: LINE, borderStyle: 'solid', borderWidth: 0, ...style }} />
   )

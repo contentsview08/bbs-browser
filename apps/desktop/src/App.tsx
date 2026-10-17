@@ -1306,6 +1306,7 @@ export default function App() {
         <div className={single ? 'flex-1 min-w-0 flex justify-center bg-panel-view' : 'contents'}>
         <ThreadListPanel
           key={favView ? 'favorites' : history ? 'history' : board?.url}
+          active={!single || !threadShown}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}

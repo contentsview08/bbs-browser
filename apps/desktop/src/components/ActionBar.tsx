@@ -73,7 +73,10 @@ export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
     const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setOpen(false)
+      }
     }
     document.addEventListener('pointerdown', close)
     window.addEventListener('keydown', esc)

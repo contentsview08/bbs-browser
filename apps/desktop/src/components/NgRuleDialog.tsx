@@ -31,7 +31,10 @@ export default function NgRuleDialog(props: { draft: NgDraft; onSubmit: (rule: N
         className="w-full max-w-lg bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') props.onClose()
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            props.onClose()
+          }
         }}
       >
         <div className="flex items-center justify-between pl-5 pr-2 py-2.5 border-b border-c-border">

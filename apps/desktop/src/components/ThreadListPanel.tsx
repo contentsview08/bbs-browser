@@ -59,6 +59,8 @@ interface Props {
    * full: 画面の幅いっぱい(狭くて自動で 1 画面になったとき) / centered: 読みやすい幅までで真ん中に(設定で 1 画面にしたとき)
    */
   fill?: 'full' | 'centered'
+  /** 見えていて、キー操作(Esc)を受け取るか。1 画面でスレ表示を出しているときは false */
+  active?: boolean
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** 操作ボタンの置き場所(設定) */
@@ -104,12 +106,36 @@ const TAB = 'relative flex items-center justify-center gap-1 py-2.5 transition-c
 
 export default function ThreadListPanel(props: Props) {
   const { threads, stateOf } = props
-  const [sort, setSort] = useState<SortState>(
-    props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' },
-  )
+  const defaultSort: SortState = props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' }
+  const [sort, setSort] = useState<SortState>(defaultSort)
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
+
+  // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
+  // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
+  // スレ表示の受け取りと順番が決まらないので、ほかの受け取りが済んでから(マイクロタスクで)見る
+  const resetView = useEvent(() => {
+    const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)
+    if (!unreadOnly && !sorted && !query && !searchActive) return
+    setUnreadOnly(false)
+    setSort(defaultSort)
+    setQuery('')
+    setSearchActive(false)
+  })
+  useEffect(() => {
+    if (props.active === false) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      queueMicrotask(() => {
+        if (!e.defaultPrevented) resetView()
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props.active, resetView])
   const [width, setWidth] = useState(props.width)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectable = props.onDeleteLogs !== undefined

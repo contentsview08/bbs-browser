@@ -85,7 +85,10 @@ export default function NewThreadDialog(props: Props) {
         className="w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') props.onClose()
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            props.onClose()
+          }
         }}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-c-border">

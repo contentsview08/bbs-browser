@@ -39,7 +39,10 @@ export default function PostHistoryDialog(props: {
         className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') props.onClose()
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            props.onClose()
+          }
         }}
       >
         <div className="flex items-center gap-3 pl-5 pr-2 py-2.5 border-b border-c-border">

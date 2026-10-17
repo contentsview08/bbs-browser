@@ -100,8 +100,10 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      else if (e.key === 'ArrowRight' && many) onIndex((index + 1) % urls.length)
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+      } else if (e.key === 'ArrowRight' && many) onIndex((index + 1) % urls.length)
       else if (e.key === 'ArrowLeft' && many) onIndex((index - 1 + urls.length) % urls.length)
     }
     window.addEventListener('keydown', onKey)

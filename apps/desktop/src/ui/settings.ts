@@ -9,7 +9,7 @@ import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout } from '../utils/toolbar'
 
-export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light'
+export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
 export type DesignPattern = 'tonal' | 'bordered'
 /** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
 export type PostStyle = 'card' | 'discord' | 'classic' | 'line'
@@ -277,6 +277,10 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   // 専ブラで足した、コントラストを抑えた配色(app.css)。web 版のライト('light')は見にくいので外し、これをライトとする
   { key: 'soft-dark', name: 'ダーク', accent: '#8b93d9', border: '#343a44' },
   { key: 'soft-light', name: 'ライト', accent: '#4f6f8f', border: '#d2cdc5' },
+  // レスの見た目のスタイル(Discord 風・LINE 風)と組み合わせる配色と、夜用の真っ黒
+  { key: 'discord-dark', name: 'Discord ダーク', accent: '#5865f2', border: '#3f4147' },
+  { key: 'line-light', name: 'LINE ライト', accent: '#06c755', border: '#dfe2e7' },
+  { key: 'oled', name: '真っ黒', accent: '#7aa2ff', border: '#222222' },
 ]
 
 /**
@@ -296,7 +300,7 @@ export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; 
   },
 ]
 
-const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark'])
+const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled'])
 
 const FONT_SIZES = [13, 14, 16, 18, 20]
 

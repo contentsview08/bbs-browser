@@ -558,16 +558,49 @@ export default function ThreadView(props: Props) {
    * 選んでいるレスを 1 つ動かす。画面は、選んだレスが外に出るときだけ最小限動かす(スレ一覧の J・K と同じ)。
    * まだ選んでいなければ、画面に見えている一番上のレスから始める
    */
-  const moveCursor = (d: 1 | -1) => {
+  /**
+   * レスの中のリンク・画像のボタンに残ったフォーカスを外す。残っていると、Enter がそのボタンを押してしまい、
+   * 前に選んでいたレスの画像が開く(ビューアーを閉じたあとや、レスを押したあとに残る)
+   */
+  const releaseFocus = () => {
+    const a = document.activeElement
+    if (a instanceof HTMLElement && ref.current?.contains(a)) a.blur()
+  }
+  /** 見えているレスの枠(ヘッダーの下から画面の下まで)。上から順 */
+  const visibleFrames = () => {
     const root = ref.current
-    if (!root) return
+    if (!root) return { root: undefined, frames: [] as HTMLElement[], seen: [] as HTMLElement[], viewTop: 0, box: undefined }
     const box = root.getBoundingClientRect()
     const viewTop = box.top + (headerRef.current?.offsetHeight ?? 0)
     const frames = [...root.querySelectorAll<HTMLElement>('.post-cv')].filter((f) => !f.hidden)
-    if (frames.length === 0) return
+    const seen = frames.filter((f) => {
+      const r = f.getBoundingClientRect()
+      return r.bottom > viewTop + 4 && r.top < box.bottom - 4
+    })
+    return { root, frames, seen, viewTop, box }
+  }
+  /** 先頭へ・末尾へ・未読へ 飛んだあとに、選ぶレスを飛んだ先に合わせる(描き終わってから測る) */
+  const selectAfterJump = (pick: 'first' | 'last' | number) =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        releaseFocus()
+        if (typeof pick === 'number') return setCursorNo(pick)
+        const { frames } = visibleFrames()
+        const f = pick === 'first' ? frames[0] : frames.at(-1)
+        if (f) setCursorNo(Number(f.dataset.post))
+      }),
+    )
+  const moveCursor = (d: 1 | -1) => {
+    releaseFocus()
+    const { root, frames, seen, viewTop, box } = visibleFrames()
+    if (!root || !box || frames.length === 0) return
     const i = frames.findIndex((f) => Number(f.dataset.post) === cursorNo)
-    const target =
-      i < 0 ? (frames.find((f) => f.getBoundingClientRect().bottom > viewTop + 4) ?? frames[0]) : frames[Math.min(frames.length - 1, Math.max(0, i + d))]
+    // 選んでいるレスが画面の外(先頭・末尾へ飛んだ、スクロールした)なら、いま見えている所から選び直す:
+    // J は見えている一番上、K は見えている一番下
+    const onScreen = i >= 0 && seen.includes(frames[i])
+    const target = onScreen
+      ? frames[Math.min(frames.length - 1, Math.max(0, i + d))]
+      : ((d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])
     setCursorNo(Number(target.dataset.post))
     const r = target.getBoundingClientRect()
     const room = box.bottom - viewTop
@@ -579,6 +612,7 @@ export default function ThreadView(props: Props) {
     const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
     const el = cursorFrame()
     if (!p || !el) return
+    releaseFocus()
     const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
     if (media.length > 0) return setLightbox({ urls: media, index: 0, post: p })
     if ((replies.get(p.no)?.length ?? 0) > 0) mainHandlers.onReplies?.(p.no, el)
@@ -609,9 +643,18 @@ export default function ThreadView(props: Props) {
     pageUp: () => page(-1),
     halfDown: () => page(1, true),
     halfUp: () => page(-1, true),
-    top: jumpToTop,
-    bottom: jumpToBottom,
-    unread: () => scrollToUnread(unreadFrom, 'animate'),
+    top: () => {
+      jumpToTop()
+      selectAfterJump('first')
+    },
+    bottom: () => {
+      jumpToBottom()
+      selectAfterJump('last')
+    },
+    unread: () => {
+      scrollToUnread(unreadFrom, 'animate')
+      if (unreadFrom > 1 && byNo.has(unreadFrom)) selectAfterJump(unreadFrom)
+    },
     refresh: () => void props.onRefresh(),
     search: () => setSearchActive(true),
     reply: () => withReplyRef.current((h) => h.focus()),

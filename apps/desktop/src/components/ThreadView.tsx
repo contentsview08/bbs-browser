@@ -640,8 +640,13 @@ export default function ThreadView(props: Props) {
       return r.bottom > viewTop - room && r.top < box.bottom + room
     }
     const onScreen = i >= 0 && (seen.includes(frames[i]) || near(frames[i]))
-    // まだ選んでいないときに J を押したら、「ここから未読」のレスが見えていればそこから始める(新着から読む)
-    const unreadFrame = cursorNo === undefined && d > 0 && unreadFrom > 1 ? seen.find((f) => Number(f.dataset.post) >= unreadFrom) : undefined
+    // まだ選んでいないとき(新着が届いた・開き直した直後)に J を押したら、「ここから未読」のレスから始める(新着から読む)。
+    // 見えていなくても、まだ画面より下にある(一番下まで読んでいて、更新で下に届いた)ならそこへ送る。
+    // もう画面より上へ読み過ぎていたら、見えている一番上から
+    const unreadFrame =
+      cursorNo === undefined && d > 0 && unreadFrom > 1
+        ? frames.find((f) => Number(f.dataset.post) >= unreadFrom && f.getBoundingClientRect().bottom > viewTop + 4)
+        : undefined
     const target = onScreen
       ? frames[Math.min(frames.length - 1, Math.max(0, i + d))]
       : (unreadFrame ?? (d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])

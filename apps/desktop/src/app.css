@@ -517,6 +517,10 @@ article.post-discord:hover {
 :root[data-scheme='discord-dark'] {
   --c-cursor-tint: color-mix(in srgb, var(--c-text-strong) 5%, transparent);
 }
+/* LINE ライト × LINE 風: トークの青灰色の背景の上で、選んだレスは緑ではなく白っぽく明るくする */
+:root[data-scheme='line-light'][data-post-style='line'] {
+  --c-cursor-tint: color-mix(in srgb, #ffffff 55%, transparent);
+}
 
 /* ポップアップの中で J・K で選んでいるレス(ThreadView.tsx の popupKey)。本文の選んでいるレスと同じ見た目 */
 article.popup-cursor {

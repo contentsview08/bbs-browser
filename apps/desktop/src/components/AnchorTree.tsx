@@ -117,7 +117,8 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
             <div className="flex-shrink-0" style={{ width: r.depth * D_STEP }} />
             <div
               className="relative flex-1 min-w-0 rounded-[var(--card-radius)]"
-              style={r.no === props.focus ? { background: 'var(--c-accent-wash)' } : undefined}
+              // 押したレスは、選んでいるレスと同じ色(強調色の面は字が読みにくい)
+              style={r.no === props.focus ? { background: 'var(--c-cursor-tint)' } : undefined}
             >
               {props.renderPost(r.no)}
               {/* 「>>n にも」は本文の始まり(アイコンの右)にそろえる(アイコンの列に置くと線と重なるため) */}

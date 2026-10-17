@@ -79,7 +79,8 @@ interface Props {
   continued?: boolean
   /** Discord 風・LINE 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
   replyPreview?: { no: number; text: string; id?: string }
-  /** LINE 風: 自分の書き込みも左にそろえる(アンカーツリーの中) */
+  /** アンカーツリーの中のレス。LINE 風は自分の書き込みも左にそろえ、どのスタイルでも左端の縦の印(自分・自分宛て)を出さない
+   *  (ツリーの線と重なって見にくいため。つながりはツリーの線で分かる) */
   alignLeft?: boolean
   /** ほかの人からの評価の数と呼び名(ふたばの「そうだね」)。0 や なしなら出さない */
   votes?: number
@@ -734,7 +735,7 @@ function PostArticle(props: Props) {
     >
       {/* 自分の書き込み(濃い線)と、自分へのアンカーを含むレス(薄い線)の目印。
           高密度表示では web 版の設定で本文の縦線が 0 になるので、表示の密度に関係なく見えるよう別に引く */}
-      {(props.isOwn || props.isReplyToOwn) && (
+      {(props.isOwn || props.isReplyToOwn) && !props.alignLeft && (
         <span
           className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full pointer-events-none"
           style={{ background: 'var(--c-own)', opacity: props.isOwn ? 1 : 0.45 }}

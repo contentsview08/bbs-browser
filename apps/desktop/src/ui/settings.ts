@@ -278,7 +278,7 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'soft-dark', name: 'ダーク', accent: '#8b93d9', border: '#343a44' },
   { key: 'soft-light', name: 'ライト', accent: '#4f6f8f', border: '#d2cdc5' },
   // レスの見た目のスタイル(Discord 風・LINE 風)と組み合わせる配色と、夜用の真っ黒
-  { key: 'discord-dark', name: 'Discord ダーク', accent: '#5865f2', border: '#3f4147' },
+  { key: 'discord-dark', name: 'Discord ダーク', accent: '#5865f2', border: '#29292d' },
   { key: 'line-light', name: 'LINE ライト', accent: '#06c755', border: '#dfe2e7' },
   { key: 'oled', name: '真っ黒', accent: '#7aa2ff', border: '#222222' },
 ]

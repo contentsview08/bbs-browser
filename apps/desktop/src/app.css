@@ -114,42 +114,45 @@ body,
   --tabbar-bg: #d3dae3;
 }
 
-/* Discord ダーク: Discord と同じ灰色の面と、青紫(ブラープル)の強調色。未読は Discord の赤い札 */
+/* Discord ダーク: いまの Discord のダーク(2025 年の作り直しのあと)から色を取った。
+   チャット欄 #1a1a1e、サーバーとチャンネルの並び #121214、選んだチャンネル #2c2c30、埋め込み #242429、入力欄 #222327。
+   強調色はブラープル(#5865f2)、未読は Discord の赤い札 */
 [data-scheme='discord-dark'] {
-  --c-base: #313338;
-  --c-header-footer: #2b2d31;
-  --c-chrome: #1e1f22;
-  --c-surface: #2b2d31;
-  --c-surface2: #383a40;
-  --c-surface3: #404249;
-  --c-border: #3f4147;
-  --c-border-strong: #4e5058;
-  --c-text-strong: #f2f3f5;
-  --c-text-body: #dbdee1;
-  --c-text-muted: #949ba4;
+  --c-base: #1a1a1e;
+  --c-header-footer: #1a1a1e;
+  --c-chrome: #121214;
+  --c-panel-bg: #121214;
+  --c-surface: #202024;
+  --c-surface2: #242429;
+  --c-surface3: #2c2c30;
+  --c-border: #29292d;
+  --c-border-strong: #3b3b41;
+  --c-text-strong: #fbfbfb;
+  --c-text-body: #e3e3e6;
+  --c-text-muted: #81828a;
   --c-text-emphasis: #ffffff;
   --c-accent: #5865f2;
   --c-accent-hover: #6d78f5;
   --c-accent-text: #ffffff;
-  --c-accent-wash: rgba(88, 101, 242, 0.16);
+  --c-accent-wash: rgba(88, 101, 242, 0.22);
   --c-accent-self: #f23f43;
   --c-accent-self-wash: rgba(242, 63, 67, 0.14);
   --c-accent-self-text: #ffffff;
-  --c-link: #00a8fc;
-  --c-link-twitter: #00a8fc;
+  --c-link: #4d96ee;
+  --c-link-twitter: #4d96ee;
   --c-link-youtube: #f47fff;
-  --c-poster-name: #c9cdfb;
+  --c-poster-name: #a9bbff;
   --c-heat-warm: #f0b232;
   --c-heat-hot: #f57731;
   --c-heat-very-hot: #f23f43;
-  --c-thread-view-bg: #313338;
-  --c-thread-read-title: #949ba4;
+  --c-thread-view-bg: #1a1a1e;
+  --c-thread-read-title: #81828a;
 }
-/* 自分の書き込みは強調色(赤だと失敗に見えるので、未読の赤と分ける)。タブの帯は一番暗い面 */
+/* 自分の書き込みは強調色(赤だと失敗に見えるので、未読の赤と分ける)。タブの帯はチャンネルの並びと同じ一番暗い面 */
 html:root[data-scheme='discord-dark'] {
   --c-own: #5865f2;
-  --c-own-wash: rgba(88, 101, 242, 0.16);
-  --tabbar-bg: #1e1f22;
+  --c-own-wash: rgba(88, 101, 242, 0.22);
+  --tabbar-bg: #121214;
 }
 
 /* LINE ライト: 白い面と LINE の緑。文字に使う強調色は、白の上で読める濃さの緑にする */

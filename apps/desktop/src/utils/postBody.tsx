@@ -24,9 +24,10 @@ function memoByText<T>(fn: (text: string) => T): (text: string) => T {
 /** >>1, >>1-3, ＞＞1、URL(2ch 流の ttp:// も) */
 // URL は見えない文字(ゼロ幅スペース、U+2060 のワードジョイナーなど)で切る。URL の直後に入れて書かれることがある。
 // アンカーは >>1 のほか、>1、>>1-3、>>1,2,5、>>1-3,8 も拾う(m[1] に番号の並びが入る)。
+// 番号は 10 桁まで拾う(4chan などは板全体の通し番号)。どのレスを指すかは AnchorResolver で決める(2ch は 5 桁まで)。
 // > 1 つのものは、「2>1」のような式を拾わないよう、前が英数字や記号のときは除く。
 // 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[3])
-const TOKEN = /(?:>>|＞＞|(?<![\w>＞=-])[>＞])(\d{1,5}(?:-\d{1,5})?(?:[,，]\d{1,5}(?:-\d{1,5})?)*)(?!\d)|(h?ttps?:\/\/[^\s<>"、。「」\u200b-\u200f\u2060-\u2064\ufeff]+)|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)/g
+const TOKEN = /(?:>>|＞＞|(?<![\w>＞=-])[>＞])(\d{1,10}(?:-\d{1,10})?(?:[,，]\d{1,10}(?:-\d{1,10})?)*)(?!\d)|(h?ttps?:\/\/[^\s<>"、。「」\u200b-\u200f\u2060-\u2064\ufeff]+)|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)/g
 
 /** 範囲アンカーは広げすぎない(>>1-1000 で全レスに数が付くのを防ぐ) */
 const MAX_RANGE = 10
@@ -57,11 +58,38 @@ export const anchorsIn = memoByText(function anchorsIn(text: string): number[] {
   return nums
 })
 
+/**
+ * アンカーの番号を、スレの中のレス(Post.no)に読み替えるもの。指すレスがなければ undefined。
+ * 掲示板ごとに違う: 2ch はアンカーの番号がそのまま no(5 桁まで)、4chan などは板の本当の番号(Post.ref)
+ */
+export type AnchorResolver = (n: number) => number | undefined
+
+/** 2ch など: アンカーの番号がそのままスレの中の番号。6 桁以上は、昔からアンカーとして扱わない */
+export const sameNo: AnchorResolver = (n) => (n <= 99999 ? n : undefined)
+
+/** スレのレスから、アンカーの読み替えを作る。target が 'ref' なら板の本当の番号(Post.ref)から no へ */
+export function makeAnchorResolver(posts: Post[], target: 'no' | 'ref' = 'no'): AnchorResolver {
+  if (target !== 'ref') return sameNo
+  const map = new Map<number, number>()
+  for (const p of posts) if (p.ref !== undefined) map.set(p.ref, p.no)
+  return (n) => map.get(n)
+}
+
+/** 本文のアンカーが指すレスの番号(no)。読み替えられないものは除く */
+export function anchorTargets(text: string, resolve: AnchorResolver = sameNo): number[] {
+  const out: number[] = []
+  for (const n of anchorsIn(text)) {
+    const no = resolve(n)
+    if (no !== undefined) out.push(no)
+  }
+  return out
+}
+
 /** レス番号 → そのレスへのアンカーの数(自分自身へのアンカーは数えない) */
-export function countAnchors(posts: Post[]): Map<number, number> {
+export function countAnchors(posts: Post[], resolve: AnchorResolver = sameNo): Map<number, number> {
   const counts = new Map<number, number>()
   for (const p of posts) {
-    for (const n of new Set(anchorsIn(p.body))) {
+    for (const n of new Set(anchorTargets(p.body, resolve))) {
       if (n !== p.no) counts.set(n, (counts.get(n) ?? 0) + 1)
     }
   }
@@ -243,6 +271,8 @@ export interface BodyHandlers {
   onUrl: (url: string) => void
   /** 本文の中の「ID:xxxx」を押した */
   onId?: (id: string, el: HTMLElement) => void
+  /** アンカーの番号をスレの中の番号に読み替える(なければ 2ch と同じ)。どのレスも指さないアンカーは、ただの文字にする */
+  toNo?: AnchorResolver
 }
 
 export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
@@ -252,7 +282,13 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
     const start = m.index
     if (start > last) parts.push(text.slice(last, start))
     if (m[1]) {
-      const nos = expandList(m[1])
+      const resolve = handlers.toNo ?? sameNo
+      const nos = expandList(m[1]).map(resolve).filter((n): n is number => n !== undefined)
+      if (nos.length === 0) {
+        parts.push(m[0])
+        last = start + m[0].length
+        continue
+      }
       parts.push(
         <span
           key={start}
@@ -327,12 +363,12 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
  * アンカーツリー: start からアンカーを前後(付けた先・付けられた元)にたどって、つながるレスの番号を全部集める。
  * web 版の buildAnchorTree と同じ。start だけなら長さ 1 になる
  */
-export function anchorTree(start: number, posts: Post[]): number[] {
+export function anchorTree(start: number, posts: Post[], resolve: AnchorResolver = sameNo): number[] {
   const exists = new Set(posts.map((p) => p.no))
   const to = new Map<number, number[]>()
   const from = new Map<number, number[]>()
   for (const p of posts) {
-    const nums = anchorsIn(p.body).filter((n) => exists.has(n) && n !== p.no)
+    const nums = anchorTargets(p.body, resolve).filter((n) => exists.has(n) && n !== p.no)
     to.set(p.no, nums)
     for (const n of nums) from.set(n, [...(from.get(n) ?? []), p.no])
   }
@@ -380,15 +416,15 @@ export interface TreeRow {
  * 親は「自分がアンカーを付けた先のうち、いちばん前のレス」。どこにも付けていないレスが根になる。
  * 前にあるレスにしか親を取らないので、輪にはならない
  */
-export function anchorTreeRows(start: number, posts: Post[]): TreeRow[] {
-  const nos = anchorTree(start, posts)
+export function anchorTreeRows(start: number, posts: Post[], resolve: AnchorResolver = sameNo): TreeRow[] {
+  const nos = anchorTree(start, posts, resolve)
   const inTree = new Set(nos)
   const byNo = new Map(posts.map((p) => [p.no, p]))
   const parent = new Map<number, number>()
   const alsoTo = new Map<number, number[]>()
   const children = new Map<number, number[]>()
   for (const no of nos) {
-    const targets = [...new Set(anchorsIn(byNo.get(no)?.body ?? ''))].filter((n) => inTree.has(n) && n < no).sort((a, b) => a - b)
+    const targets = [...new Set(anchorTargets(byNo.get(no)?.body ?? '', resolve))].filter((n) => inTree.has(n) && n < no).sort((a, b) => a - b)
     if (targets.length === 0) continue
     parent.set(no, targets[0])
     alsoTo.set(no, targets.slice(1))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { anchorsIn, hasVideo, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
 
 describe('videoFileUrlsIn: 動画のファイル', () => {
   it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
@@ -40,5 +40,22 @@ describe('anchorsIn: アンカー', () => {
     expect(anchorsIn('2>1 なので')).toEqual([])
     expect(anchorsIn('a=>3')).toEqual([])
     expect(anchorsIn('>>5、10年前')).toEqual([5])
+  })
+})
+
+describe('アンカーの読み替え(AnchorResolver)', () => {
+  const post = (no: number, body: string, ref?: number) => ({ no, name: '', mail: '', date: '', body, ...(ref !== undefined && { ref }) })
+  it('2ch: 番号がそのまま。6 桁以上はアンカーにしない', () => {
+    expect(anchorTargets('>>12 >>123456')).toEqual([12])
+  })
+  it('4chan など: 板の本当の番号(ref)から、スレの中の番号(no)に読み替える', () => {
+    const posts = [post(1, 'OP', 98765400), post(2, '>>98765400 そうだね', 98765411), post(3, '>>98765411 >>11111111', 98765422)]
+    const resolve = makeAnchorResolver(posts, 'ref')
+    expect(anchorTargets(posts[2].body, resolve)).toEqual([2])
+    expect(countAnchors(posts, resolve).get(1)).toBe(1)
+    expect(anchorTree(1, posts, resolve)).toEqual([1, 2, 3])
+  })
+  it('ref を使わない掲示板では、ref があっても番号のまま', () => {
+    expect(makeAnchorResolver([post(1, '', 555)], 'no')(3)).toBe(3)
   })
 })

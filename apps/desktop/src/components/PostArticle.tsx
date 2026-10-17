@@ -5,7 +5,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import {
-  anchorsIn,
+  anchorTargets,
   displayBody,
   displayName,
   heatClass,
@@ -214,7 +214,7 @@ function PostArticle(props: Props) {
   const name = props.display ? displayName(post.name, props.display) : post.name
   const numHeat = heatClass(anchorCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
-  const hasConnections = anchorCount > 0 || anchorsIn(post.body).some((n) => n !== post.no)
+  const hasConnections = anchorCount > 0 || anchorTargets(post.body, handlers.toNo).some((n) => n !== post.no)
   const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(body))
   // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする
   const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
@@ -228,7 +228,7 @@ function PostArticle(props: Props) {
   const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
 
   const copy = (text: string) => void navigator.clipboard.writeText(text)
-  const header = [post.no, post.name, post.mail && `[${post.mail}]`, post.date, post.id && `ID:${post.id}`]
+  const header = [post.ref ?? post.no, post.name, post.mail && `[${post.mail}]`, post.date, post.id && `ID:${post.id}`]
     .filter(Boolean)
     .join(' ')
 
@@ -282,7 +282,8 @@ function PostArticle(props: Props) {
     >
       <span style={props.isOwn ? { color: 'var(--c-own)' } : undefined}>
         {prefix}
-        {post.no}
+        {/* 板の本当の番号があればそれを出す(ふたば・4chan は板全体の通し番号) */}
+        {post.ref ?? post.no}
       </span>
       {anchorCount > 0 && <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>}
     </button>

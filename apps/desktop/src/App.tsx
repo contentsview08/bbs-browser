@@ -30,7 +30,7 @@ import {
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
-import { anchorsIn, isAppThreadUrl } from './utils/postBody'
+import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
 import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
@@ -597,7 +597,8 @@ export default function App() {
   const notifyReplies = async (s: LogStore, t: ThreadSummary, log: ThreadLog, beforeCount: number) => {
     const own = new Set(await s.getOwnPosts(t))
     if (own.size === 0) return
-    const replies = log.posts.filter((p) => p.no > beforeCount && !own.has(p.no) && anchorsIn(p.body).some((n) => own.has(n)))
+    const resolve = makeAnchorResolver(log.posts, findConnector(t.connectorId)?.anchorTarget)
+    const replies = log.posts.filter((p) => p.no > beforeCount && !own.has(p.no) && anchorTargets(p.body, resolve).some((n) => own.has(n)))
     const id = threadId(t)
     replies.slice(0, 3).forEach((p, i) =>
       notify({
@@ -1574,6 +1575,7 @@ export default function App() {
                   postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
                   postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
                   maxPosts={findConnector(t.thread.connectorId)?.maxPosts}
+                  anchorTarget={findConnector(t.thread.connectorId)?.anchorTarget}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />

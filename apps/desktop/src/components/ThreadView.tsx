@@ -33,8 +33,9 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
   anchorTreeRows,
-  anchorsIn,
+  anchorTargets,
   countAnchors,
+  makeAnchorResolver,
   countIds,
   hasLink,
   hasVideo,
@@ -92,6 +93,8 @@ interface Props {
   onFindNext?: () => Promise<NextThreadCandidate[]>
   /** このスレの板のスレ一覧を開く */
   onOpenBoard?: () => void
+  /** 本文の >>番号 が指すもの(コネクタの anchorTarget)。'ref' なら板の本当の番号 */
+  anchorTarget?: 'no' | 'ref'
   /** 1 つのスレのレスの上限(2ch は 1000)。上限のない掲示板は undefined */
   maxPosts?: number
   onOpenThread: (t: ThreadSummary) => void
@@ -406,14 +409,18 @@ export default function ThreadView(props: Props) {
     pendingReply.current = undefined
     fn(replyRef.current)
   })
-  const anchorCounts = useMemo(() => countAnchors(log.posts), [log.posts])
+  /** アンカーの番号をスレの中の番号に読み替えるもの(2ch はそのまま、4chan などは板の本当の番号から) */
+  const resolveAnchor = useMemo(() => makeAnchorResolver(log.posts, props.anchorTarget), [log.posts, props.anchorTarget])
+  /** 画面に出す番号と、返信で付けるアンカーの番号(板の本当の番号があればそれ) */
+  const refOf = (no: number) => byNo.get(no)?.ref ?? no
+  const anchorCounts = useMemo(() => countAnchors(log.posts, resolveAnchor), [log.posts, resolveAnchor])
   /** 自分の書き込みへのアンカーを含むレス */
   const replyToOwn = useMemo(() => {
     const set = new Set<number>()
     if (ownNos.size === 0) return set
-    for (const p of log.posts) if (anchorsIn(p.body).some((n) => ownNos.has(n) && n !== p.no)) set.add(p.no)
+    for (const p of log.posts) if (anchorTargets(p.body, resolveAnchor).some((n) => ownNos.has(n) && n !== p.no)) set.add(p.no)
     return set
-  }, [log.posts, ownNos])
+  }, [log.posts, ownNos, resolveAnchor])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
   // レスの見せ方(名無しの省略・空行の扱い)と、スレ主の ID
   const display = useMemo(
@@ -525,25 +532,25 @@ export default function ThreadView(props: Props) {
     if (variant !== 'discord' && variant !== 'line') return m
     for (const p of log.posts) {
       if (!/^\s*(?:>>|＞＞)\d/.test(p.body)) continue
-      const no = anchorsIn(p.body)[0]
+      const no = anchorTargets(p.body, resolveAnchor)[0]
       const src = no === undefined || no === p.no ? undefined : byNo.get(no)
       if (!src) continue
       const ng = isNg(src)
       m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : src.id })
     }
     return m
-  }, [variant, log.posts, byNo, isNg])
+  }, [variant, log.posts, byNo, isNg, resolveAnchor])
   const replyPreviewOf = (p: Post) => replyPreviews.get(p.no)
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
   const replies = useMemo(() => {
     const map = new Map<number, number[]>()
     for (const p of log.posts) {
-      for (const n of new Set(anchorsIn(p.body))) {
+      for (const n of new Set(anchorTargets(p.body, resolveAnchor))) {
         if (n !== p.no) map.set(n, [...(map.get(n) ?? []), p.no])
       }
     }
     return map
-  }, [log.posts])
+  }, [log.posts, resolveAnchor])
 
   const {
     scrollToPost,
@@ -780,12 +787,12 @@ export default function ThreadView(props: Props) {
         const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
         if (media.length > 0) setLightbox({ urls: media, index: 0, post: p })
         else if ((replies.get(p.no)?.length ?? 0) > 0) h.onReplies?.(p.no, el)
-        else if (anchorTree(p.no, log.posts).length > 1) h.onBody?.(p.no, el)
+        else if (anchorTree(p.no, log.posts, resolveAnchor).length > 1) h.onBody?.(p.no, el)
         else showQuick(false, `>>${p.no} には画像も返信もアンカーもありません`)
         return true
       }
       case 'anchorTree':
-        if (anchorTree(p.no, log.posts).length > 1) h.onBody?.(p.no, el)
+        if (anchorTree(p.no, log.posts, resolveAnchor).length > 1) h.onBody?.(p.no, el)
         else showQuick(false, `>>${p.no} にはつながるレスがありません`)
         return true
       case 'copyPost':
@@ -800,7 +807,7 @@ export default function ThreadView(props: Props) {
       case 'replyToPost':
         if (!canReply) return true
         setPopups([])
-        withReplyRef.current((r) => r.insert(`>>${p.no}\n`))
+        withReplyRef.current((r) => r.insert(`>>${refOf(p.no)}\n`))
         return true
       default:
         return false
@@ -845,7 +852,7 @@ export default function ThreadView(props: Props) {
       if (cursorNo !== undefined) return actOnCursor('replyToPost')
       const no = getPosition()?.no
       if (!canReply || no === undefined) return
-      withReplyRef.current((h) => h.insert(`>>${no}\n`))
+      withReplyRef.current((h) => h.insert(`>>${refOf(no)}\n`))
     },
     favorite: () => props.onToggleFavorite?.(),
     gallery: () => setGalleryOpen(true),
@@ -1125,7 +1132,7 @@ export default function ThreadView(props: Props) {
       return {
         onAnchor: (nos, el, via) => {
           const posts = nos.map((n) => byNo.get(n)).filter((p): p is Post => p !== undefined)
-          const title = `>>${nos.length > 1 ? `${nos[0]}-${nos.at(-1)}` : nos[0]}`
+          const title = `>>${nos.length > 1 ? `${refOf(nos[0])}-${refOf(nos.at(-1)!)}` : refOf(nos[0])}`
           if (via === 'click') {
             clearTimeout(hover.current.timer)
             open(title, posts, el, false)
@@ -1138,7 +1145,7 @@ export default function ThreadView(props: Props) {
         onAnchorLeave: () => clearTimeout(hover.current.timer),
         onReplies: (no, el) => {
           const list = (replies.get(no) ?? []).map((n) => byNo.get(n)!).filter(Boolean)
-          open(`>>${no} への返信 (${list.length})`, list, el, false)
+          open(`>>${refOf(no)} への返信 (${list.length})`, list, el, false)
         },
         onId: (id, el) => {
           const list = log.posts.filter((p) => p.id === id)
@@ -1149,9 +1156,9 @@ export default function ThreadView(props: Props) {
           open(`${name} (${list.length})`, list, el, false)
         },
         onBody: (no, el) => {
-          const tree = anchorTree(no, log.posts)
+          const tree = anchorTree(no, log.posts, resolveAnchor)
           if (tree.length <= 1) return
-          openContent(`>>${no} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el, false, no)
+          openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el, false, no)
         },
         onUrl: props.onUrl,
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),
@@ -1160,14 +1167,15 @@ export default function ThreadView(props: Props) {
         onReply: canReply
           ? (no) => {
               setPopups([])
-              withReplyRef.current((h) => h.insert(`>>${no}\n`))
+              withReplyRef.current((h) => h.insert(`>>${refOf(no)}\n`))
             }
           : undefined,
-        onQuickReply: canReply ? (no, text) => void quickPostRef.current(`>>${no}\n${text}`) : undefined,
+        toNo: resolveAnchor,
+        onQuickReply: canReply ? (no, text) => void quickPostRef.current(`>>${refOf(no)}\n${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1175,7 +1183,7 @@ export default function ThreadView(props: Props) {
     const handlers = handlersFor(level)
     return (
       <AnchorTree
-        rows={anchorTreeRows(start, log.posts)}
+        rows={anchorTreeRows(start, log.posts, resolveAnchor)}
         focus={start}
         variant={variant}
         renderPost={(no) => {

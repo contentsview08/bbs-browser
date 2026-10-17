@@ -88,6 +88,8 @@ interface Props {
   postByteLength?: (text: string) => number
   /** 1 つのスレのレスの上限(コネクタの maxPosts) */
   maxPosts?: number
+  /** 本文の >>番号 が指すもの(コネクタの anchorTarget) */
+  anchorTarget?: 'no' | 'ref'
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -109,6 +111,7 @@ function TabPane({
   postLimits,
   postByteLength,
   maxPosts,
+  anchorTarget,
   splitPostIcon,
   ev,
 }: Props) {
@@ -170,6 +173,7 @@ function TabPane({
       postLimits={postLimits}
       postByteLength={postByteLength}
       maxPosts={maxPosts}
+      anchorTarget={anchorTarget}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

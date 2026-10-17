@@ -1171,7 +1171,14 @@ export default function App() {
       const cur = currentListTarget()
       if (cur) nav.push(listEntry(cur))
     }),
-    deleteLog: useEvent((id: string) => deleteLogs([id])),
+    // スレ表示の削除ボタン。1 画面のときは、消したあとスレ一覧に戻る(タブの × や Delete キーは、隣のタブに移る)
+    deleteLog: useEvent((id: string) => {
+      void deleteLogs([id])
+      if (!single) return
+      setListOpen(true)
+      const cur = currentListTarget()
+      if (cur) nav.push(listEntry(cur))
+    }),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
       setHasUploads(true)
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))

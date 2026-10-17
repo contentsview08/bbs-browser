@@ -245,19 +245,26 @@ export function useThreadScroll(o: Options) {
     [rootRef, headerOffset],
   )
 
-  /** 次(dir=1)・前(dir=-1)のレスの頭を、ヘッダーのすぐ下に合わせる(キー操作) */
+  /** 次(dir=1)・前(dir=-1)のレスの頭を、ヘッダーのすぐ下に合わせる(キー操作)。合わせたレスの番号を返す */
   const stepPost = useCallback(
-    (dir: 1 | -1) => {
+    (dir: 1 | -1): number | undefined => {
       const root = rootRef.current
-      if (!root) return
+      if (!root) return undefined
       const viewTop = root.getBoundingClientRect().top + headerOffset()
       const frames = [...postFrames(root)].filter((w) => !w.hidden)
       const target =
         dir > 0
           ? frames.find((w) => w.getBoundingClientRect().top > viewTop + 2)
           : frames.findLast((w) => w.getBoundingClientRect().top < viewTop - 2)
-      if (!target) return dir > 0 ? jumpToBottom() : jumpToTop()
+      if (!target) {
+        // もう先がなければ、端まで送る(選ぶレスは端のレス)
+        if (dir > 0) jumpToBottom()
+        else jumpToTop()
+        const edge = dir > 0 ? frames.at(-1) : frames[0]
+        return edge ? Number(edge.dataset.post) : undefined
+      }
       animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop, STEP_MS)
+      return Number(target.dataset.post)
     },
     [rootRef, headerOffset, jumpToBottom, jumpToTop],
   )

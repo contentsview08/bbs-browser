@@ -36,8 +36,8 @@ export type KeyAction =
 
 /** where: 'view' はスレ表示・スレ一覧の、キーを受け取っている方で効く。'app' はどこでも効く */
 export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' }[] = [
-  { key: 'nextPost', name: '次のレスへ(スレ一覧では次のスレを選ぶ)', where: 'view' },
-  { key: 'prevPost', name: '前のレスへ(スレ一覧では前のスレを選ぶ)', where: 'view' },
+  { key: 'nextPost', name: '次のレスを選ぶ(スレ一覧では次のスレ)', where: 'view' },
+  { key: 'prevPost', name: '前のレスを選ぶ(スレ一覧では前のスレ)', where: 'view' },
   { key: 'pageDown', name: '1 画面下へ', where: 'view' },
   { key: 'pageUp', name: '1 画面上へ', where: 'view' },
   { key: 'halfDown', name: '半画面下へ', where: 'view' },
@@ -48,7 +48,7 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'refresh', name: '更新', where: 'view' },
   { key: 'search', name: '検索', where: 'view' },
   { key: 'reply', name: '書き込み欄へ(スレ一覧ではスレ立て)', where: 'view' },
-  { key: 'replyToPost', name: 'いま見ているレスに返信', where: 'view' },
+  { key: 'replyToPost', name: '選んでいるレス(J・K で送った・押した)に返信', where: 'view' },
   { key: 'favorite', name: 'お気に入りのスレに足す・外す(スレ一覧では選んでいるスレ)', where: 'view' },
   { key: 'gallery', name: '画像一覧', where: 'view' },
   { key: 'copyUrl', name: 'スレの URL をコピー(スレ一覧では選んでいるスレ)', where: 'view' },

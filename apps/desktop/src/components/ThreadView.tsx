@@ -546,11 +546,13 @@ export default function ThreadView(props: Props) {
   ]
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
+  /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
+  const [cursorNo, setCursorNo] = useState<number>()
   /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
   threadKeyActions.current = {
-    nextPost: () => stepPost(1),
-    prevPost: () => stepPost(-1),
+    nextPost: () => setCursorNo(stepPost(1) ?? cursorNo),
+    prevPost: () => setCursorNo(stepPost(-1) ?? cursorNo),
     pageDown: () => page(1),
     pageUp: () => page(-1),
     halfDown: () => page(1, true),
@@ -561,9 +563,9 @@ export default function ThreadView(props: Props) {
     refresh: () => void props.onRefresh(),
     search: () => setSearchActive(true),
     reply: () => withReplyRef.current((h) => h.focus()),
-    // いま一番上に見えているレスへの返信を書き込み欄に入れる(J・K で送ってから押す)
+    // 選んでいるレス(J・K で送った・押した)への返信を書き込み欄に入れる。選んでいなければ一番上に見えているレス
     replyToPost: () => {
-      const no = getPosition()?.no
+      const no = cursorNo ?? getPosition()?.no
       if (!canReply || no === undefined) return
       withReplyRef.current((h) => h.insert(`>>${no}\n`))
     },
@@ -1034,7 +1036,10 @@ export default function ThreadView(props: Props) {
                 return (
                   <div
                     key={p.no}
-                    className={`post-cv ${enterDelay !== undefined ? 'post-enter' : ''}`}
+                    className={`post-cv ${enterDelay !== undefined ? 'post-enter' : ''} ${
+                      keysOn && p.no === cursorNo ? 'outline outline-2 -outline-offset-2 outline-c-accent rounded-[var(--card-radius)]' : ''
+                    }`}
+                    onPointerDown={() => setCursorNo(p.no)}
                     style={
                       {
                         // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)

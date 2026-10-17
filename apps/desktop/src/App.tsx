@@ -1099,6 +1099,7 @@ export default function App() {
     changeReplyLayout: useEvent((layout: ReplyLayout) => updateSetting('replyLayout', layout)),
     resizeReply: useEvent((key: 'replyHeight' | 'replyWidth', size: number) => updateSetting(key, size)),
     setReplyCollapsed: useEvent((collapsed: boolean) => updateSetting('replyCollapsed', collapsed)),
+    backToList: useEvent(() => setListOpen(true)),
     deleteLog: useEvent((id: string) => deleteLogs([id])),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
       setHasUploads(true)
@@ -1181,8 +1182,7 @@ export default function App() {
       <AddressBar
         currentUrl={currentUrl}
         onOpen={(url) => void openUrlInApp(url)}
-        onToggleList={single ? () => setListOpen((v) => !v) : undefined}
-        listOpen={listOpen || !activeTab}
+        onBackToThread={single && listOpen && activeTab ? () => setListOpen(false) : undefined}
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
@@ -1350,6 +1350,7 @@ export default function App() {
                   postReadyAt={postReadyAt}
                   postCooldownMs={postCooldownMs}
                   postAccounts={postAccountsOf(t.thread.connectorId, t.thread.boardUrl)}
+                  showBackToList={single}
                   postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
                   postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}

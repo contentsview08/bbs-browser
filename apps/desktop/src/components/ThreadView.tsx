@@ -77,6 +77,8 @@ interface Props {
   postMail: string
   onChangeReplyLayout: (layout: ReplyLayout) => void
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
+  /** 1 画面のとき、スレ一覧に戻る(スレタイの左にボタンを出す) */
+  onBackToList?: () => void
   /** 書き込み欄をしまう・出す(設定に覚える) */
   onSetReplyCollapsed: (collapsed: boolean) => void
   /** ログを消してタブを閉じる */
@@ -802,6 +804,16 @@ export default function ThreadView(props: Props) {
                 searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
               }`}
             />
+            {props.onBackToList && (
+              <button
+                type="button"
+                onClick={props.onBackToList}
+                className="flex-shrink-0 -ml-2 p-1.5 rounded-lg text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 transition-colors"
+                title="スレ一覧に戻る"
+              >
+                <span className="material-symbols-outlined text-xl leading-none">arrow_back</span>
+              </button>
+            )}
             <h2
               className="font-bold truncate text-base cursor-pointer hover:text-c-accent transition-colors"
               style={{ color: 'var(--thread-title-color, var(--c-text-strong))' }}

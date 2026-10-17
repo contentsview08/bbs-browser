@@ -37,6 +37,8 @@ export type KeyAction =
   | 'zoomIn'
   | 'zoomOut'
   | 'help'
+  | 'patrol'
+  | 'palette'
 
 /** where: 'view' はスレ表示・スレ一覧の、キーを受け取っている方で効く。'app' はどこでも効く */
 export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' }[] = [
@@ -71,6 +73,8 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'toggleSidebar', name: 'サイドバーを広げる・しまう', where: 'app' },
   { key: 'zoomIn', name: '文字を大きく', where: 'app' },
   { key: 'zoomOut', name: '文字を小さく', where: 'app' },
+  { key: 'patrol', name: '未読の巡回(未読のあるタブ・お気に入りのスレへ順に移り、新着の頭から読む)', where: 'app' },
+  { key: 'palette', name: 'コマンドパレット(板・スレ・操作を名前で探す)', where: 'app' },
   { key: 'help', name: 'キー操作の一覧', where: 'app' },
 ]
 
@@ -113,6 +117,8 @@ export const DEFAULT_KEYMAP: Keymap = {
   zoomIn: ['Ctrl+=', 'Ctrl++', 'Ctrl+;'],
   zoomOut: ['Ctrl+-'],
   help: ['?'],
+  patrol: ['Shift+U'],
+  palette: ['Ctrl+K', ':'],
 }
 
 /** 割り当ては変えられない、決め打ちのキー(キー操作の一覧と設定の画面に出す) */

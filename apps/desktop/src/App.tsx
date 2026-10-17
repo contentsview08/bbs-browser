@@ -45,7 +45,8 @@ import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
-import { useSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
+import { COLOR_SCHEMES, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
+import CommandPalette, { type PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
 import { useViewState } from './hooks/useViewState'
@@ -57,7 +58,7 @@ import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
-import { modalOpen, actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
+import { KEY_ACTIONS, modalOpen, actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
 import ConfirmDialog from './components/ConfirmDialog'
 import KeyHelp from './components/KeyHelp'
 import { findNextThreads } from './utils/nextThread'
@@ -190,6 +191,8 @@ export default function App() {
   const [ngDraft, setNgDraft] = useState<NgDraft>()
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
+  /** コマンドパレット(Ctrl+K・:) */
+  const [paletteOpen, setPaletteOpen] = useState(false)
   /** Shift+Delete で消そうとしているタブ(確かめるダイアログを出している間) */
   const [deleteConfirm, setDeleteConfirm] = useState<string[]>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
@@ -829,6 +832,68 @@ export default function App() {
     }
     if (activeId !== undefined) setFocusPane(listFocused ? 'thread' : 'list')
   }
+  /**
+   * 未読の巡回: 未読のあるタブ → 未読のあるお気に入りのスレ の順に、いま見ているものの次へ移り、新着の頭から読む。
+   * 新しく取りには行かない(タブは手元の未読、お気に入りのスレは見張りで分かったレス数で決める)
+   */
+  const patrol = () => {
+    const list: { id: string; open: () => void }[] = []
+    for (const t of tabsRef.current) {
+      if (!t.log || t.log.posts.length <= t.readNo) continue
+      const id = t.id
+      const from = t.readNo + 1
+      list.push({
+        id,
+        open: () => {
+          selectTab(id)
+          setJump({ tabId: id, no: from, seq: Date.now() })
+        },
+      })
+    }
+    for (const f of favThreads) {
+      const id = threadId(f.thread)
+      if (f.postCount === 0 || list.some((x) => x.id === id)) continue
+      if ((favCounts.get(id) ?? f.postCount) <= f.readNo) continue
+      list.push({ id, open: () => void openThread(f.thread) })
+    }
+    if (list.length === 0) return notify({ icon: 'done_all', title: '未読のスレはありません', body: '開いているタブとお気に入りのスレは、全部読んであります' })
+    const i = list.findIndex((x) => x.id === activeId)
+    list[(i + 1) % list.length].open()
+  }
+
+  /** コマンドパレットに並べるもの。開いたときに、いまの板・タブ・お気に入りから作る */
+  const paletteItems = (): PaletteItem[] => {
+    const set = (patch: Partial<AppSettings>) => {
+      for (const [k, v] of Object.entries(patch)) updateSetting(k as keyof AppSettings, v as never)
+    }
+    return [
+      ...tabsRef.current.map((t) => ({ group: 'タブ', label: t.log?.title || t.thread.title, icon: 'tab', run: () => selectTab(t.id) })),
+      ...(favorites ?? []).map((b) => ({
+        group: '板',
+        label: settings.boardMeta[b.url]?.alias || b.name,
+        keywords: `${b.name} ${b.url}`,
+        icon: 'forum',
+        run: () => void openBoard(b),
+      })),
+      ...favThreads.map((f) => ({ group: 'お気に入りのスレ', label: f.thread.title, icon: 'star', run: () => void openThread(f.thread) })),
+      ...recentHistory.map((t) => ({ group: '最近見たスレ', label: t.title, icon: 'history', run: () => void openThread(t) })),
+      { group: '開く', label: '閲覧履歴', icon: 'history', run: () => void openHistory() },
+      { group: '開く', label: 'お気に入りのスレ', icon: 'bookmarks', run: () => void openFavThreads() },
+      { group: '開く', label: '設定', icon: 'settings', run: () => setSettingsTab('display') },
+      ...KEY_ACTIONS.filter((a) => a.where === 'app' && a.key !== 'palette').map((a) => ({
+        group: '操作',
+        label: a.name,
+        keywords: keymap[a.key].join(' '),
+        icon: 'bolt',
+        run: () => appKey(a.key),
+      })),
+      ...COLOR_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickScheme(settings, c.key)) })),
+      ...POST_STYLES.map((p) => ({ group: 'レスの見た目', label: p.name, keywords: p.note, icon: 'style', run: () => updateSetting('postStyle', p.key) })),
+      { group: '表示の密度', label: '一覧表示', icon: 'view_list', run: () => updateSetting('density', 'list') },
+      { group: '表示の密度', label: '高密度', icon: 'density_small', run: () => updateSetting('density', 'dense') },
+    ]
+  }
+
   /** アプリ全体のキー操作(どちらにキーが向いていても効く。割り当ては設定で変えられる) */
   const appKey = (action: KeyAction): boolean => {
     const ids = tabsRef.current.map((t) => t.id)
@@ -870,6 +935,12 @@ export default function App() {
         return true
       case 'help':
         setKeyHelpOpen(true)
+        return true
+      case 'patrol':
+        patrol()
+        return true
+      case 'palette':
+        setPaletteOpen(true)
         return true
       default:
         return false
@@ -1650,6 +1721,7 @@ export default function App() {
           }}
         />
       )}
+      {paletteOpen && <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} />}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
       {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 

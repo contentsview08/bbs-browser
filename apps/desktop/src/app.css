@@ -227,6 +227,13 @@ html:root[data-scheme='oled'] {
   --tabbar-bg: #000000;
 }
 
+/* LINE ライトのカード(スレ一覧のタイル)は白にし、細い枠線で白い背景と分ける(灰色の面だと、画面が灰色っぽくなる) */
+[data-pattern][data-scheme='line-light'] {
+  --card-bg: #ffffff;
+  --card-border-color: #e4e7ec;
+  --card-selected-bg: #eef7f1;
+}
+
 /* やさしいライトのカードは、トーナルでも枠線でも背景より少しだけ明るい面にする */
 [data-pattern][data-scheme='soft-light'] {
   --card-bg: #f9f7f4;

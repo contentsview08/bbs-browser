@@ -326,6 +326,15 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (searchActive) searchRef.current?.focus()
   }, [searchActive])
+  /** 外した検索の言葉。次に検索を開いたとき(Ctrl+F・/)に戻す */
+  const lastQuery = useRef('')
+  /** 検索を外す(言葉は覚えておく) */
+  const clearSearch = useRef(() => {})
+  clearSearch.current = () => {
+    if (query) lastQuery.current = query
+    setQuery('')
+    setSearchActive(false)
+  }
 
   /** キー操作を受け取るか。開いているタブで、2 画面ならスレ表示の方を触っているとき */
   const keysOn = props.active && props.keyFocus !== false
@@ -351,6 +360,8 @@ export default function ThreadView(props: Props) {
         if (isDoublePress(lastEsc.current, now, DOUBLE_ESC_MS)) {
           e.preventDefault()
           setCursorHidden(true)
+          // 検索もいっしょに外す(言葉は覚えておき、Ctrl+F でまた同じ言葉で探せる)
+          clearSearch.current()
           lastEsc.current = 0
         } else lastEsc.current = now
       }
@@ -932,7 +943,15 @@ export default function ThreadView(props: Props) {
       if (unreadFrom > 1 && byNo.has(unreadFrom)) selectAfterJump(unreadFrom)
     },
     refresh: () => void props.onRefresh(),
-    search: () => setSearchActive(true),
+    // 検索を開く。外したばかりの言葉があれば戻して、すぐその言葉で探す(打ち直すときのために、言葉は選んだ状態にする)
+    search: () => {
+      if (!query && lastQuery.current) setQuery(lastQuery.current)
+      setSearchActive(true)
+      requestAnimationFrame(() => {
+        searchRef.current?.focus()
+        searchRef.current?.select()
+      })
+    },
     reply: () => withReplyRef.current((h) => h.focus()),
     // 選んでいるレス(J・K で送った・押した)への返信を書き込み欄に入れる。選んでいなければ一番上に見えているレス
     replyToPost: () => {
@@ -1392,8 +1411,7 @@ export default function ThreadView(props: Props) {
                 // Esc: 検索を外して欄から抜け、スレ表示のキー操作に戻る(日本語の変換中の Esc は変換の取り消し)
                 if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
                   e.preventDefault()
-                  setQuery('')
-                  setSearchActive(false)
+                  clearSearch.current()
                   e.currentTarget.blur()
                 }
               }}

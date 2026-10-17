@@ -28,9 +28,10 @@ export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canB
   return (
     <div
       data-tauri-drag-region
-      className="flex-shrink-0 h-10 grid grid-cols-[1fr_minmax(0,48rem)_1fr] items-center gap-2 bg-panel-addressbar border-b border-c-border select-none"
+      className="flex-shrink-0 h-10 grid grid-cols-[minmax(max-content,1fr)_minmax(0,48rem)_minmax(max-content,1fr)] items-center gap-2 bg-panel-addressbar border-b border-c-border select-none"
     >
-      <div data-tauri-drag-region className="min-w-0 h-full flex items-center px-3">
+      {/* 左右の列は、中身(ボタン)の幅より狭くしない(縮むと、はみ出したボタンに URL 欄が重なって押せなくなる) */}
+      <div data-tauri-drag-region className="h-full flex items-center gap-0.5 px-2">
         {/* 戻る・進む(マウスの戻る/進むボタン、Alt+← → でも) */}
         <button type="button" onClick={onBack} disabled={!canBack} className={NAV_BTN} title="戻る (Alt+←)">
           <span className="material-symbols-outlined text-xl">arrow_back</span>

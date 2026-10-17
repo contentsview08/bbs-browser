@@ -640,6 +640,59 @@ function PostArticle(props: Props) {
         </div>
   )
 
+  /**
+   * マウスを乗せたレスに出す操作バー(返信・定型文・コピー・NG・︙)。at は置き場所の class。
+   * ふつうはレスの右上、LINE 風は吹き出しのすぐ下(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)
+   */
+  const toolbarAt = (at: string) => (
+      <div
+        data-post-toolbar
+        className={`absolute ${at} z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
+          menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {toolbarItems.map((item) => {
+          if (item === 'reply' && reply)
+            return (
+              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="返信" onClick={() => reply(post.no)}>
+                <span className="material-symbols-outlined text-lg leading-none">reply</span>
+              </button>
+            )
+          if (item === 'copy')
+            return (
+              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="本文をコピー" onClick={() => copy(post.body)}>
+                <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
+              </button>
+            )
+          if (item === 'ng' && ngActions.length > 0)
+            return <MenuButton key={item} icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} hoverClass="hover:!text-mark-danger" />
+          if (item === 'tree' && hasConnections)
+            return (
+              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-hot`} title="アンカーツリー" onClick={() => handlers.onBody(post.no, articleRef.current!)}>
+                <span className="material-symbols-outlined text-lg leading-none">account_tree</span>
+              </button>
+            )
+          if (item.startsWith('phrase:') && quick) {
+            const text = item.slice('phrase:'.length)
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`${TOOL_BTN} hover:!text-mark-new text-sm font-bold max-w-[6rem]`}
+                title={`「${text}」とすぐ書き込む`}
+                onClick={() => quick(post.no, text)}
+              >
+                <span className="truncate">{text}</span>
+              </button>
+            )
+          }
+          return null
+        })}
+        <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
+      </div>
+  )
+
   // ── LINE 風 ──
   // 吹き出しで並べる。ほかの人は左にアイコンと名前、自分の書き込みは右に緑の吹き出し(アイコンなし)。
   // 番号と時刻は吹き出しの横に小さく。返信は吹き出しの中の上に、返信元を引用の形で出す
@@ -712,7 +765,9 @@ function PostArticle(props: Props) {
           </div>
         )}
         <div className={`flex items-end gap-1.5 max-w-full ${right ? 'flex-row-reverse' : ''}`}>
-          <div className={`line-bubble min-w-0 ${props.isOwn ? 'line-bubble-own' : ''} ${isAA ? 'max-w-full' : 'max-w-[min(85%,42rem)]'}`}>
+          <div className={`line-bubble relative min-w-0 ${props.isOwn ? 'line-bubble-own' : ''} ${isAA ? 'max-w-full' : 'max-w-[min(85%,42rem)]'}`}>
+            {/* 操作バーは吹き出しのすぐ下に(自分の吹き出しは右端、相手の吹き出しは左端にそろえる) */}
+            {(hovered || menuOpen) && toolbarAt(`top-full mt-1 ${right ? 'right-0' : 'left-0'}`)}
             {lineQuote}
             {bodyBlock}
           </div>
@@ -745,54 +800,7 @@ function PostArticle(props: Props) {
       )}
       {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする。
           マウスを乗せている間だけ作る(全部のレスに最初から作ると、要素がレスの 4 割ほど増えてスレを開くのが遅くなる) */}
-      {(hovered || menuOpen) && (
-        <div
-          data-post-toolbar
-          className={`absolute top-0.5 right-3 z-10 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
-            menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {toolbarItems.map((item) => {
-            if (item === 'reply' && reply)
-              return (
-                <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="返信" onClick={() => reply(post.no)}>
-                  <span className="material-symbols-outlined text-lg leading-none">reply</span>
-                </button>
-              )
-            if (item === 'copy')
-              return (
-                <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="本文をコピー" onClick={() => copy(post.body)}>
-                  <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
-                </button>
-              )
-            if (item === 'ng' && ngActions.length > 0)
-              return <MenuButton key={item} icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} hoverClass="hover:!text-mark-danger" />
-            if (item === 'tree' && hasConnections)
-              return (
-                <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-hot`} title="アンカーツリー" onClick={() => handlers.onBody(post.no, articleRef.current!)}>
-                  <span className="material-symbols-outlined text-lg leading-none">account_tree</span>
-                </button>
-              )
-            if (item.startsWith('phrase:') && quick) {
-              const text = item.slice('phrase:'.length)
-              return (
-                <button
-                  key={item}
-                  type="button"
-                  className={`${TOOL_BTN} hover:!text-mark-new text-sm font-bold max-w-[6rem]`}
-                  title={`「${text}」とすぐ書き込む`}
-                  onClick={() => quick(post.no, text)}
-                >
-                  <span className="truncate">{text}</span>
-                </button>
-              )
-            }
-            return null
-          })}
-          <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
-        </div>
-      )}
+      {variant !== 'line' && (hovered || menuOpen) && toolbarAt('top-0.5 right-3')}
       {variant === 'line' ? (
         lineLayout()
       ) : variant === 'discord' ? (

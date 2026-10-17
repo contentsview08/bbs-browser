@@ -837,7 +837,7 @@ export default function App() {
     const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board, false) : undefined
     if (list) void manualListRefresh(list)()
   }
-  /** Ctrl+E: キー操作を受け取る方を、スレ一覧とスレ表示で入れ替える(1 画面なら見せる方を入れ替える) */
+  /** Ctrl+E(設定で変えられる): キー操作を受け取る方を、スレ一覧とスレ表示で入れ替える(1 画面なら見せる方を入れ替える) */
   const toggleFocus = () => {
     // 入力欄にいたら抜ける(そのままだと J・K などが入力欄に入ってしまう)
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
@@ -958,6 +958,9 @@ export default function App() {
       case 'palette':
         setPaletteOpen(true)
         return true
+      case 'switchPane':
+        toggleFocus()
+        return true
       default:
         return false
     }
@@ -1013,12 +1016,6 @@ export default function App() {
         e.preventDefault()
         if (e.key === 'ArrowLeft') keyRef.current.back()
         else keyRef.current.forward()
-        return
-      }
-      // Ctrl+E: スレ一覧とスレ表示の、キー操作を受け取る方を入れ替える
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'e') {
-        e.preventDefault()
-        keyRef.current.toggleFocus()
         return
       }
       if (isReloadKey(e)) {

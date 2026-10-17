@@ -27,6 +27,7 @@ export type KeyAction =
   | 'findNext'
   | 'peek'
   // アプリ全体(どちらにキーが向いていても効く)
+  | 'switchPane'
   | 'nextTab'
   | 'prevTab'
   | 'back'
@@ -65,6 +66,7 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'copyUrl', name: 'スレの URL をコピー(スレ一覧では選んでいるスレ)', where: 'view' },
   { key: 'findNext', name: '次スレを探す', where: 'view' },
   { key: 'peek', name: 'スレを開かずに中身をのぞく(スレ一覧で。中身が一緒に届く掲示板だけ)', where: 'view' },
+  { key: 'switchPane', name: 'キーを受け取る方を、スレ一覧とスレ表示で入れ替える(1 画面なら見せる方を入れ替える)', where: 'app' },
   { key: 'nextTab', name: '次のタブ', where: 'app' },
   { key: 'prevTab', name: '前のタブ', where: 'app' },
   { key: 'back', name: '戻る', where: 'app' },
@@ -109,6 +111,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   copyUrl: ['Y'],
   findNext: ['Shift+N'],
   peek: ['P'],
+  switchPane: ['Ctrl+E'],
   nextTab: ['Shift+J'],
   prevTab: ['Shift+K'],
   back: ['Shift+H'],
@@ -127,7 +130,6 @@ export const DEFAULT_KEYMAP: Keymap = {
 /** 割り当ては変えられない、決め打ちのキー(キー操作の一覧と設定の画面に出す) */
 export const FIXED_KEYS: { keys: string; name: string }[] = [
   { keys: 'F5・Ctrl+R', name: '更新(キーを受け取っている方)' },
-  { keys: 'Ctrl+E', name: 'キーを受け取る方を、スレ一覧とスレ表示で入れ替える' },
   { keys: 'Esc', name: 'ポップアップを閉じる・絞り込みを外す・書き込み欄をしまう' },
   { keys: '1〜4・5', name: 'スレ表示：人気・画像・動画・リンクで絞り込む・すべて' },
   { keys: '1・2・3…', name: 'スレ一覧：上のタブを左から順に押す(タブは設定で選べる)' },

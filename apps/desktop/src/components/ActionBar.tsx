@@ -63,8 +63,11 @@ export function ActionButtons(props: {
 /** 右端の ︙。押すとすべての操作をメニューで出す。up ならメニューを上に開く(フッターに置いたとき) */
 export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
   const [open, setOpen] = useState(false)
-  // ︙ の中で開いている、操作の中身(テーマの選び方など)
-  const [sub, setSub] = useState<BarAction>()
+  // ︙ の中で開いている、操作の中身(テーマの選び方など)。
+  // 操作そのものを控えると、押した時点の中身(選ばれている印など)のまま変わらなくなるので、id だけ控えて毎回いまの操作から引く
+  const [subId, setSubId] = useState<string>()
+  const sub = subId === undefined ? undefined : props.actions.find((a) => a.id === subId)
+  const setSub = (a: BarAction | undefined) => setSubId(a?.id)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

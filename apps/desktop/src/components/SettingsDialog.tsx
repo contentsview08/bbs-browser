@@ -905,6 +905,8 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   const keymap = resolveKeymap(s.keymap)
   // キーを待っている操作
   const [waiting, setWaiting] = useState<KeyAction>()
+  /** 直前の割り当てで、ほかの操作から外したキー(気づけるように知らせる) */
+  const [moved, setMoved] = useState<string>()
 
   const save = (next: Keymap) => {
     // 既定と同じものは保存しない(あとで既定が変わったときに追いつけるように)
@@ -922,8 +924,10 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
       const k = keyString(e)
       if (!k) return
       const next = { ...keymap }
+      const from = KEY_ACTIONS.filter(({ key }) => key !== waiting && next[key].includes(k))
       for (const { key } of KEY_ACTIONS) next[key] = next[key].filter((x) => x !== k)
       next[waiting] = [...next[waiting], k]
+      setMoved(from.length > 0 ? `${keyLabel(k)} は「${from.map((a) => a.name).join('」「')}」から外して、こちらに付け替えました` : undefined)
       save(next)
       setWaiting(undefined)
     }
@@ -934,13 +938,22 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
 
   return (
     <>
+      {moved && (
+        <p className="mb-3 px-3 py-2 text-xs rounded-lg border border-c-border bg-c-surface2 text-c-text-body flex items-center gap-2">
+          <span className="material-symbols-outlined text-base text-c-accent">swap_horiz</span>
+          <span className="flex-1">{moved}</span>
+          <button type="button" onClick={() => setMoved(undefined)} className="p-0.5 rounded-full hover:bg-c-surface3" title="閉じる">
+            <span className="material-symbols-outlined text-sm leading-none">close</span>
+          </button>
+        </p>
+      )}
       {(['view', 'app'] as const).map((where) => (
       <Section
         key={where}
         title={where === 'view' ? 'スレ表示・スレ一覧のキー操作' : 'アプリ全体のキー操作'}
         note={
           where === 'view'
-            ? 'キーを受け取っている方(2 画面なら上に線が出ている方。Ctrl+E で入れ替え)で効きます。入力欄にカーソルがあるときは効きません。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)'
+            ? 'キーを受け取っている方(2 画面なら上に線が出ている方。既定では Ctrl+E で入れ替え)で効きます。入力欄にカーソルがあるときは効きません。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)'
             : 'スレ一覧・スレ表示のどちらを触っていても効きます。入力欄の中では Ctrl 付きのキーだけ効きます'
         }
       >

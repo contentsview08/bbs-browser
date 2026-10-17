@@ -176,7 +176,7 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
 }
 
 function Divider({ label, self }: { label: string; self?: boolean }) {
-  const color = self ? 'var(--c-accent-self)' : 'var(--c-border)'
+  const color = self ? 'var(--c-unread)' : 'var(--c-border)'
   return (
     <div
       className={`flex items-center gap-3 py-1 select-none ${self ? '' : 'text-c-text-muted'}`}
@@ -1115,7 +1115,7 @@ export default function ThreadView(props: Props) {
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9700] flex items-center gap-2 px-4 py-2 rounded-full shadow-lg text-sm border"
           style={{
             background: 'var(--c-surface)',
-            borderColor: quickMessage.ok ? 'var(--c-border)' : 'var(--c-accent-self)',
+            borderColor: quickMessage.ok ? 'var(--c-border)' : 'var(--c-error)',
           }}
         >
           <span className={`material-symbols-outlined text-lg ${quickMessage.ok ? 'text-c-accent' : 'text-c-heat-very-hot'}`}>

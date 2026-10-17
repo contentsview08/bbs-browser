@@ -191,13 +191,13 @@ export default function Minimap(props: Props) {
               className="absolute left-0 right-0 bottom-0 pointer-events-none"
               style={{
                 top: `${unreadAt}%`,
-                background: 'color-mix(in srgb, var(--c-accent-self) 12%, transparent)',
+                background: 'color-mix(in srgb, var(--c-unread) 12%, transparent)',
                 borderRadius: '0 0 var(--minimap-radius) var(--minimap-radius)',
               }}
             />
             <div
               className="absolute left-0 right-0 h-[2px] pointer-events-none z-[9]"
-              style={{ top: `${unreadAt}%`, background: 'var(--c-accent-self)' }}
+              style={{ top: `${unreadAt}%`, background: 'var(--c-unread)' }}
               title="ここから未読"
             />
             <div
@@ -208,7 +208,7 @@ export default function Minimap(props: Props) {
                 height: 0,
                 borderTop: '5px solid transparent',
                 borderBottom: '5px solid transparent',
-                borderLeft: '5px solid var(--c-accent-self)',
+                borderLeft: '5px solid var(--c-unread)',
               }}
             />
           </>
@@ -236,7 +236,7 @@ export default function Minimap(props: Props) {
             style={{
               top: `${m.at}%`,
               transform: 'translateY(-50%) rotate(45deg)',
-              border: '1.5px solid var(--c-accent-self)',
+              border: '1.5px solid var(--c-own)',
               background: 'var(--c-surface2)',
             }}
             title={`自分への返信: >>${m.no}`}
@@ -251,7 +251,7 @@ export default function Minimap(props: Props) {
             style={{
               top: `${m.at}%`,
               transform: 'translateY(-50%) rotate(45deg)',
-              background: 'var(--c-accent-self)',
+              background: 'var(--c-own)',
             }}
             title={`自分のレス: >>${m.no}`}
           />

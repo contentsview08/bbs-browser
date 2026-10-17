@@ -77,7 +77,7 @@ function Row(props: {
           {props.badge !== undefined && props.badge > 0 && (
             <span
               className="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-[18px] text-center"
-              style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+              style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
             >
               {props.badge > 999 ? '999+' : props.badge}
             </span>

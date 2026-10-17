@@ -261,7 +261,7 @@ export default function TabBar(props: Props) {
               {t.unread > 0 && (
                 <span
                   className="flex-shrink-0 font-bold text-[9px] px-1 rounded"
-                  style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+                  style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
                 >
                   +{t.unread}
                 </span>

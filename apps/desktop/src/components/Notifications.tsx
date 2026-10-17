@@ -13,6 +13,8 @@ export interface AppNotification {
 
 /** 出しておく時間 */
 const SHOW_MS = 6000
+/** 失敗を知らせるアイコン(赤で出す)。ほかは未読・新着の色 */
+const ERROR_ICONS = new Set(['error', 'warning', 'report'])
 
 function Toast({ n, onClose }: { n: AppNotification; onClose: () => void }) {
   const [hover, setHover] = useState(false)
@@ -35,7 +37,7 @@ function Toast({ n, onClose }: { n: AppNotification; onClose: () => void }) {
         onClose()
       }}
     >
-      <span className="material-symbols-outlined text-xl" style={{ color: 'var(--c-accent-self)' }}>
+      <span className="material-symbols-outlined text-xl" style={{ color: ERROR_ICONS.has(n.icon) ? 'var(--c-error)' : 'var(--c-unread)' }}>
         {n.icon}
       </span>
       <div className="flex-1 min-w-0">

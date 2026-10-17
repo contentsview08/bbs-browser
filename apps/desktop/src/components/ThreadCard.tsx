@@ -69,7 +69,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       {visited && (
         <span
           className="absolute left-0 top-0 bottom-0 w-[3px]"
-          style={{ background: unreadCount > 0 ? 'var(--c-accent-self)' : 'var(--c-thread-read-title, var(--c-accent))' }}
+          style={{ background: unreadCount > 0 ? 'var(--c-unread)' : 'var(--c-thread-read-title, var(--c-accent))' }}
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
         />
       )}
@@ -159,7 +159,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
             {unreadCount > 0 && (
               <span
                 className="flex-shrink-0 font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+                style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
               >
                 +{unreadCount}
               </span>

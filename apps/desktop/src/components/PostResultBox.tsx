@@ -39,10 +39,15 @@ export default function PostResultBox({
   const [showHtml, setShowHtml] = useState(false)
   if (result.status === 'ok') return <p className="mb-2 text-xs text-c-accent">{result.message}</p>
   const html = result.html
+  // 失敗は赤、書き込み確認(Cookie の承諾など)は強調色の枠にする
   return (
     <div
       className="mb-2 px-3 py-2 text-sm rounded-[var(--card-radius)] border"
-      style={{ borderColor: 'var(--c-accent-self)', background: 'var(--c-accent-self-wash)' }}
+      style={
+        result.status === 'confirm'
+          ? { borderColor: 'var(--c-accent)', background: 'var(--c-accent-wash)' }
+          : { borderColor: 'var(--c-error)', background: 'var(--c-error-wash)' }
+      }
     >
       <div className="flex items-start gap-2">
         <p

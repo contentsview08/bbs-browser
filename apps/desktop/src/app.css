@@ -92,7 +92,7 @@ body,
   --c-accent-hover: #5d7ea0;
   --c-accent-text: #ffffff;
   --c-accent-wash: rgba(79, 111, 143, 0.1);
-  --c-accent-self: #2f74c0; /* 新着・未読・自分の書き込み。ライトは青にする */
+  --c-accent-self: #2f74c0; /* 未読・自分の書き込み(--c-unread・--c-own)。ライトは青にする */
   --c-accent-self-wash: rgba(47, 116, 192, 0.1);
   --c-accent-self-text: #ffffff;
   --c-link: #3a6aa8;
@@ -124,23 +124,34 @@ body,
   border-radius: 10px;
 }
 
+/* 意味ごとの色。配色の --c-accent-self(ダークはピンク、ライトは青)を、役目ごとの名前で使い分ける。
+   どれかだけ変えたいときは、配色ごとにここの変数を上書きする(ほかの役目に響かない) */
+:root {
+  --c-unread: var(--c-accent-self); /* 未読・新着(未読の数、「ここから未読」) */
+  --c-unread-text: var(--c-accent-self-text);
+  --c-own: var(--c-accent-self); /* 自分の書き込み・自分へのレス */
+  --c-own-wash: var(--c-accent-self-wash);
+  --c-error: var(--c-mark-danger); /* 失敗・エラー(書き込みの失敗など) */
+  --c-error-wash: color-mix(in srgb, var(--c-mark-danger) 10%, transparent);
+}
+
 /* 新着のレスの光り方。しばらく色を保ってから消す。
    長さは ThreadView.tsx の FLASH_MS と揃える */
-/* 光る色はテーマの強調色(ダークは藤色、ライトは青)。未読の札などの色(--c-accent-self)とは分け、
+/* 光る色はテーマの強調色(ダークは藤色、ライトは青)。未読の札などの色(--c-unread)とは分け、
    テーマから浮かないようにする。配色ごとに変えたいときは --c-flash-new を上書きする */
 :root {
   --c-flash-new: var(--c-accent);
 }
 /* ライトの強調色は灰みの青で光が見えにくいので、はっきりした青(未読の札と同じ色)で光らせる */
 :root[data-scheme='soft-light'] {
-  --c-flash-new: var(--c-accent-self);
+  --c-flash-new: var(--c-unread);
 }
 
 /* スレ一覧の「新」の札。塗りつぶした明るい色にして、一覧の中で目に入るようにする。
    暗い配色は金色(お気に入りの ★ と同じ)に暗い字、明るい配色ははっきりした青に白い字 */
 :root {
-  --c-new-badge-bg: var(--c-accent-self);
-  --c-new-badge-text: var(--c-accent-self-text);
+  --c-new-badge-bg: var(--c-unread);
+  --c-new-badge-text: var(--c-unread-text);
 }
 :root.dark {
   --c-new-badge-bg: var(--c-mark-fav);

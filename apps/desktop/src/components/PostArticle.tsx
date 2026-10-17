@@ -263,7 +263,7 @@ function PostArticle(props: Props) {
       {(props.isOwn || props.isReplyToOwn) && (
         <span
           className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full pointer-events-none"
-          style={{ background: 'var(--c-accent-self)', opacity: props.isOwn ? 1 : 0.45 }}
+          style={{ background: 'var(--c-own)', opacity: props.isOwn ? 1 : 0.45 }}
           title={props.isOwn ? '自分の書き込み' : '自分へのレス'}
         />
       )}
@@ -338,7 +338,7 @@ function PostArticle(props: Props) {
           onClick={anchorCount > 0 ? (e) => handlers.onReplies(post.no, e.currentTarget) : undefined}
           title={anchorCount > 0 ? 'このレスへの返信を表示' : undefined}
         >
-          <span style={props.isOwn ? { color: 'var(--c-accent-self)' } : undefined}>{post.no}</span>
+          <span style={props.isOwn ? { color: 'var(--c-own)' } : undefined}>{post.no}</span>
           {anchorCount > 0 && <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>}
         </button>
         {name && (
@@ -393,9 +393,9 @@ function PostArticle(props: Props) {
           <span
             className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
             style={{
-              color: 'var(--c-accent-self)',
-              background: 'var(--c-accent-self-wash)',
-              border: '1px solid var(--c-accent-self)',
+              color: 'var(--c-own)',
+              background: 'var(--c-own-wash)',
+              border: '1px solid var(--c-own)',
               borderRadius: 'var(--chip-radius)',
             }}
           >
@@ -415,7 +415,7 @@ function PostArticle(props: Props) {
           paddingLeft: props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
           borderLeftWidth: props.isOwn ? 'var(--post-quote-bar-width-own)' : 'var(--post-quote-bar-width)',
           borderLeftStyle: 'solid',
-          borderLeftColor: props.isOwn ? 'var(--c-accent-self)' : 'var(--c-border)',
+          borderLeftColor: props.isOwn ? 'var(--c-own)' : 'var(--c-border)',
         }}
       >
         {/* BE のアイコンは、画像のサムネイルの設定に関係なく出す(5ch の書き込みの一部なので) */}

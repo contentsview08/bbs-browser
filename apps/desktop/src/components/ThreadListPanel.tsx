@@ -444,7 +444,7 @@ export default function ThreadListPanel(props: Props) {
                 {unreadTotal > 0 && (
                   <span
                     className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                    style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+                    style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
                   >
                     +{unreadTotal}
                   </span>

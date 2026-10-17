@@ -23,8 +23,10 @@ function memoByText<T>(fn: (text: string) => T): (text: string) => T {
 
 /** >>1, >>1-3, ＞＞1、URL(2ch 流の ttp:// も) */
 // URL は見えない文字(ゼロ幅スペース、U+2060 のワードジョイナーなど)で切る。URL の直後に入れて書かれることがある。
-// 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[4])
-const TOKEN = /(?:>>|＞＞)(\d{1,5})(?:-(\d{1,5}))?|(h?ttps?:\/\/[^\s<>"、。「」\u200b-\u200f\u2060-\u2064\ufeff]+)|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)/g
+// アンカーは >>1 のほか、>1、>>1-3、>>1,2,5、>>1-3,8 も拾う(m[1] に番号の並びが入る)。
+// > 1 つのものは、「2>1」のような式を拾わないよう、前が英数字や記号のときは除く。
+// 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[3])
+const TOKEN = /(?:>>|＞＞|(?<![\w>＞=-])[>＞])(\d{1,5}(?:-\d{1,5})?(?:[,，]\d{1,5}(?:-\d{1,5})?)*)(?!\d)|(h?ttps?:\/\/[^\s<>"、。「」\u200b-\u200f\u2060-\u2064\ufeff]+)|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)/g
 
 /** 範囲アンカーは広げすぎない(>>1-1000 で全レスに数が付くのを防ぐ) */
 const MAX_RANGE = 10
@@ -34,10 +36,23 @@ function expand(from: number, to: number | undefined): number[] {
   return Array.from({ length: to - from + 1 }, (_, i) => from + i)
 }
 
+/** 1 つのアンカーで指せる数の上限(>>1,2,3,… と並べすぎたもの) */
+const MAX_LIST = 30
+
+/** アンカーの番号の並び("98-100,105")を、番号の一覧にする */
+function expandList(list: string): number[] {
+  const nos: number[] = []
+  for (const part of list.split(/[,，]/)) {
+    const [from, to] = part.split('-')
+    for (const n of expand(Number(from), to ? Number(to) : undefined)) if (!nos.includes(n)) nos.push(n)
+  }
+  return nos.slice(0, MAX_LIST)
+}
+
 export const anchorsIn = memoByText(function anchorsIn(text: string): number[] {
   const nums: number[] = []
   for (const m of text.matchAll(TOKEN)) {
-    if (m[1]) nums.push(...expand(Number(m[1]), m[2] ? Number(m[2]) : undefined))
+    if (m[1]) nums.push(...expandList(m[1]))
   }
   return nums
 })
@@ -104,8 +119,8 @@ export function toImageUrl(url: string): string | undefined {
 export const imageUrlsIn = memoByText(function imageUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
-    if (m[3]) {
-      const img = toImageUrl(normalizeUrl(m[3]))
+    if (m[2]) {
+      const img = toImageUrl(normalizeUrl(m[2]))
       if (img) urls.push(img)
     }
   }
@@ -123,8 +138,8 @@ export function isVideoFileUrl(url: string): boolean {
 export const videoFileUrlsIn = memoByText(function videoFileUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
-    if (!m[3]) continue
-    const url = normalizeUrl(m[3])
+    if (!m[2]) continue
+    const url = normalizeUrl(m[2])
     if (isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
   }
   return urls
@@ -134,8 +149,8 @@ export const videoFileUrlsIn = memoByText(function videoFileUrlsIn(text: string)
 export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[] {
   const urls: string[] = []
   for (const m of text.matchAll(TOKEN)) {
-    if (!m[3]) continue
-    const url = normalizeUrl(m[3])
+    if (!m[2]) continue
+    const url = normalizeUrl(m[2])
     if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
   }
   return urls
@@ -175,8 +190,8 @@ const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|
 export const youtubeLinksIn = memoByText(function youtubeLinksIn(text: string): { id: string; url: string }[] {
   const links: { id: string; url: string }[] = []
   for (const m of text.matchAll(TOKEN)) {
-    if (!m[3]) continue
-    const url = normalizeUrl(m[3])
+    if (!m[2]) continue
+    const url = normalizeUrl(m[2])
     if (!YOUTUBE_URL.test(url)) continue
     const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
     if (id && !links.some((l) => l.id === id)) links.push({ id, url })
@@ -208,7 +223,7 @@ export function youtubeIdsIn(text: string): string[] {
 
 /** 本文に YouTube の URL があるか(ミニマップの動画の印に使う) */
 export function hasYoutube(text: string): boolean {
-  for (const m of text.matchAll(TOKEN)) if (m[3] && YOUTUBE_URL.test(normalizeUrl(m[3]))) return true
+  for (const m of text.matchAll(TOKEN)) if (m[2] && YOUTUBE_URL.test(normalizeUrl(m[2]))) return true
   return false
 }
 
@@ -237,7 +252,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
     const start = m.index
     if (start > last) parts.push(text.slice(last, start))
     if (m[1]) {
-      const nos = expand(Number(m[1]), m[2] ? Number(m[2]) : undefined)
+      const nos = expandList(m[1])
       parts.push(
         <span
           key={start}
@@ -253,8 +268,8 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
           {m[0]}
         </span>,
       )
-    } else if (m[4]) {
-      const id = m[4]
+    } else if (m[3]) {
+      const id = m[3]
       parts.push(
         <span
           key={start}
@@ -269,7 +284,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
         </span>,
       )
     } else {
-      const url = normalizeUrl(m[3])
+      const url = normalizeUrl(m[2])
       parts.push(
         <a
           key={start}

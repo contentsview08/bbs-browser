@@ -279,6 +279,35 @@ article.post-discord {
 article.post-discord:hover {
   background-color: color-mix(in srgb, var(--c-text-body) 5%, transparent);
 }
+/* LINE 風: スレ表示の背景を強調色に少し寄せ、吹き出しを浮かせる。自分の吹き出しは LINE の緑 */
+[data-post-style='line'] {
+  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 86%, var(--c-accent) 14%);
+  --line-own-bg: #8de055;
+  --line-own-text: #10200a;
+}
+:root.dark[data-post-style='line'] {
+  --line-own-bg: #3f7d2c;
+  --line-own-text: #eef7e8;
+}
+.line-bubble {
+  background: var(--c-surface);
+  border-radius: 16px;
+  padding: 8px 12px;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.06);
+}
+.line-bubble-own {
+  background: var(--line-own-bg);
+  color: var(--line-own-text);
+}
+/* 自分の吹き出しの中の本文は、吹き出しの文字色で読む(本文の既定の色だと緑の上で薄い) */
+.line-bubble-own p {
+  color: inherit !important;
+}
+[data-post-style='line'] article[data-variant='line'] {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 /* 専ブラ風: レスとレスの間を少しだけ空ける(区切り線は引かない) */
 [data-post-style='classic'] article[data-variant='classic'] {
   padding-top: 6px;

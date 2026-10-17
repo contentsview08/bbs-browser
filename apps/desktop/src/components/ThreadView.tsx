@@ -464,7 +464,7 @@ export default function ThreadView(props: Props) {
    */
   const replyPreviews = useMemo(() => {
     const m = new Map<number, { no: number; text: string; id?: string }>()
-    if (variant !== 'discord') return m
+    if (variant !== 'discord' && variant !== 'line') return m
     for (const p of log.posts) {
       if (!/^\s*(?:>>|＞＞)\d/.test(p.body)) continue
       const no = anchorsIn(p.body)[0]
@@ -1442,8 +1442,10 @@ export default function ThreadView(props: Props) {
                       showTopDivider={i > 0 && !firstUnread && variant === 'card'}
                       variant={variant}
                       // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
-                      continued={variant === 'discord' && !firstUnread && continuedFrom(i) && !replyPreviewOf(p)}
-                      replyPreview={variant === 'discord' ? replyPreviewOf(p) : undefined}
+                      continued={
+                        (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
+                      }
+                      replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
                       ng={isNg(p)}
                       ngMode={settings.ngMode}
                       showThumbnails={settings.showThumbnails}

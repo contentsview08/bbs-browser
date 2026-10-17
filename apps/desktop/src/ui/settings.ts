@@ -12,11 +12,12 @@ import type { BarLayout } from '../utils/toolbar'
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light'
 export type DesignPattern = 'tonal' | 'bordered'
 /** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
-export type PostStyle = 'card' | 'discord' | 'classic'
+export type PostStyle = 'card' | 'discord' | 'classic' | 'line'
 export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
   { key: 'card', name: 'カード', note: 'レスを区切り線で並べる、いままでの見た目' },
   { key: 'discord', name: 'Discord 風', note: '丸い ID のアイコンと平らな並び。同じ人の連投をまとめ、返信元を上に出す' },
   { key: 'classic', name: '専ブラ風', note: '「12 ：名前：日付 ID」を 1 行にした、昔ながらの 2ch の見た目' },
+  { key: 'line', name: 'LINE 風', note: '吹き出しで会話のように並べる。自分の書き込みは右に緑の吹き出し' },
 ]
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'

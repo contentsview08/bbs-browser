@@ -24,7 +24,7 @@ export default function AnchorTree(props: {
   focus: number
   renderPost: (no: number) => ReactNode
   /** Discord 風: 線をアイコン同士をつなぐ形にする */
-  variant?: 'card' | 'discord' | 'classic'
+  variant?: 'card' | 'discord' | 'classic' | 'line'
 }) {
   if (props.variant === 'discord') return <DiscordTree {...props} />
   return (
@@ -119,8 +119,11 @@ function DiscordTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: n
               style={r.no === props.focus ? { background: 'var(--c-accent-wash)' } : undefined}
             >
               {props.renderPost(r.no)}
+              {/* 「>>n にも」は本文の始まり(アイコンの右)にそろえる(アイコンの列に置くと線と重なるため) */}
               {r.alsoTo.length > 0 && (
-                <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>
+                <p className="pb-1 text-[10px] text-c-text-muted" style={{ paddingLeft: `calc(var(--post-padding-x) + ${D_STEP}px)` }}>
+                  {r.alsoTo.map((n) => `>>${n}`).join(' ')} にも
+                </p>
               )}
             </div>
           </div>

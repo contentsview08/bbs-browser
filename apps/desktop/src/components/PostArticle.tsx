@@ -71,13 +71,13 @@ interface Props {
   handlers: PostHandlers
   /** 見た目のスタイル。card: いまの区切り線の並び / discord: 丸いアイコンと平らな並び / classic: 専ブラ風の 1 行の頭 */
   variant?: PostVariant
-  /** Discord 風: 直前のレスと同じ ID(続けて書いた)。アイコンと頭を省く */
+  /** Discord 風・LINE 風: 直前のレスと同じ ID(続けて書いた)。アイコンと頭を省く */
   continued?: boolean
-  /** Discord 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
+  /** Discord 風・LINE 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
   replyPreview?: { no: number; text: string; id?: string }
 }
 
-export type PostVariant = 'card' | 'discord' | 'classic'
+export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
 
 const HEAD_TEXT = 'text-xs'
 
@@ -453,7 +453,7 @@ function PostArticle(props: Props) {
           style={{
             // 専ブラ風は本文を字下げし、Discord 風は頭の位置から。どちらも本文の左の縦線は引かない(自分の印は別に出る)
             paddingLeft:
-              variant === 'classic' ? '2em' : variant === 'discord' ? 0 : props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
+              variant === 'classic' ? '2em' : variant === 'discord' || variant === 'line' ? 0 : props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
             borderLeftWidth: variant !== 'card' ? 0 : props.isOwn ? 'var(--post-quote-bar-width-own)' : 'var(--post-quote-bar-width)',
             borderLeftStyle: 'solid',
             borderLeftColor: props.isOwn ? 'var(--c-own)' : 'var(--c-border)',
@@ -565,6 +565,62 @@ function PostArticle(props: Props) {
         </div>
   )
 
+  // ── LINE 風 ──
+  // 吹き出しで並べる。ほかの人は左にアイコンと名前、自分の書き込みは右に緑の吹き出し(アイコンなし)。
+  // 番号と時刻は吹き出しの横に小さく。返信は吹き出しの中の上に、返信元を引用の形で出す
+  const time = /(\d{1,2}:\d{2})(?::\d{2})?/.exec(post.date)?.[1] ?? post.date
+  const lineSide = (
+    <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${props.isOwn ? 'items-end' : 'items-start'}`}>
+      <span className="text-[11px]">{numBtn('#')}</span>
+      <span title={post.date}>{time}</span>
+    </div>
+  )
+  const lineQuote = props.replyPreview && (
+    <button
+      type="button"
+      className="flex items-center gap-1.5 min-w-0 max-w-full mb-1.5 pl-2 border-l-2 text-xs text-c-text-muted hover:text-c-text-body text-left"
+      style={{ borderColor: 'currentColor' }}
+      onClick={(e) => {
+        e.stopPropagation()
+        handlers.onAnchor([props.replyPreview!.no], e.currentTarget, 'click')
+      }}
+      title={`>>${props.replyPreview.no} を表示`}
+    >
+      {props.replyPreview.id && (
+        <span className="flex-shrink-0 block overflow-hidden rounded-full">
+          <Identicon seed={props.replyPreview.id} size={16} />
+        </span>
+      )}
+      <span className="truncate">{props.replyPreview.text}</span>
+    </button>
+  )
+  const lineLayout = (
+    <div className={`flex gap-2 items-start ${props.isOwn ? 'flex-row-reverse' : ''}`}>
+      {!props.isOwn && (
+        <div className="w-9 flex-shrink-0">{props.continued ? null : identiconBtn(36, true) || <span className="block w-9 h-9 rounded-full bg-c-surface3" />}</div>
+      )}
+      <div className={`flex-1 min-w-0 flex flex-col ${props.isOwn ? 'items-end' : 'items-start'}`}>
+        {!props.continued && (
+          <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${props.isOwn ? 'flex-row-reverse' : ''}`}>
+            {!props.isOwn && nameBtn('text-xs')}
+            {opChip}
+            {ngChip}
+            {idBtn}
+            {post.mail && <span className="text-c-text-muted">[{post.mail}]</span>}
+            {toOwnChip}
+          </div>
+        )}
+        <div className={`flex items-end gap-1.5 max-w-full ${props.isOwn ? 'flex-row-reverse' : ''}`}>
+          <div className={`line-bubble min-w-0 ${props.isOwn ? 'line-bubble-own' : ''} ${isAA ? 'max-w-full' : 'max-w-[min(85%,42rem)]'}`}>
+            {lineQuote}
+            {bodyBlock}
+          </div>
+          {lineSide}
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <article
       ref={articleRef}
@@ -630,7 +686,9 @@ function PostArticle(props: Props) {
         })}
         <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
       </div>
-      {variant === 'discord' ? (
+      {variant === 'line' ? (
+        lineLayout
+      ) : variant === 'discord' ? (
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>
         {replyLine}

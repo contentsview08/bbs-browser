@@ -640,9 +640,11 @@ export default function ThreadView(props: Props) {
       return r.bottom > viewTop - room && r.top < box.bottom + room
     }
     const onScreen = i >= 0 && (seen.includes(frames[i]) || near(frames[i]))
+    // まだ選んでいないときに J を押したら、「ここから未読」のレスが見えていればそこから始める(新着から読む)
+    const unreadFrame = cursorNo === undefined && d > 0 && unreadFrom > 1 ? seen.find((f) => Number(f.dataset.post) >= unreadFrom) : undefined
     const target = onScreen
       ? frames[Math.min(frames.length - 1, Math.max(0, i + d))]
-      : ((d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])
+      : (unreadFrame ?? (d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])
     setCursorNo(Number(target.dataset.post))
     // 選んだレスが外に出るときだけ、そのレスが見える所まで(なめらかに)送る。
     // 行き先はレスの位置から毎回測る(画面の外で省いていたレスが描かれて高さが変わっても、ずれないように)

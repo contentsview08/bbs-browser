@@ -1,7 +1,7 @@
 // アンカー・返信・ID のポップアップ。web 版の PostPopup.tsx の見た目と位置決めを移植。
 // ポップアップの中のアンカーを辿ると、上に積み重なっていく。
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export interface PopupEntry {
@@ -73,6 +73,21 @@ function PopupWindow(props: {
       pointerEvents: props.isTop ? 'auto' : 'none',
     })
   }, [entry, containerRect, props.headerBottom, props.stackIndex, props.isTop])
+
+  // ポップアップの上のホイールは、ポップアップの中だけで使う。中がスクロールできない(短い)ときや、端まで来たときに、
+  // 後ろのスレ表示までスクロールしてしまわないよう止める(React のホイールは止められない受け取り方なので、直接受ける)
+  useEffect(() => {
+    const box = ref.current
+    if (!box) return
+    const onWheel = (e: WheelEvent) => {
+      const canScroll = box.scrollHeight > box.clientHeight + 1
+      const atTop = box.scrollTop <= 0
+      const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 1
+      if (!canScroll || (e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) e.preventDefault()
+    }
+    box.addEventListener('wheel', onWheel, { passive: false })
+    return () => box.removeEventListener('wheel', onWheel)
+  }, [])
 
   // 見せたいレスがあれば、出したあとに 1 回だけ、そのレスが真ん中あたりに来るよう中をスクロールし、選んだ状態にする
   // (長いアンカーツリーで、起点のレスが下に隠れないように。選んだ状態にしておくと、J・K がそこから続く)

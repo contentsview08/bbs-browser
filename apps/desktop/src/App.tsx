@@ -1655,6 +1655,7 @@ export default function App() {
                   maxPosts={findConnector(t.thread.connectorId)?.maxPosts}
                   anchorTarget={findConnector(t.thread.connectorId)?.anchorTarget}
                   voteLabel={findConnector(t.thread.connectorId)?.voteLabel}
+                  textQuotes={findConnector(t.thread.connectorId)?.textQuotes}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />

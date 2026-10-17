@@ -85,11 +85,62 @@ export function anchorTargets(text: string, resolve: AnchorResolver = sameNo): n
   return out
 }
 
+/**
+ * 文章で引用する掲示板(ふたば)の、引用元のつながり。レス番号 → (引用した行の文章 → 引用元のレス番号)。
+ * 「>前のレスの文章」の行ごとに、それより前のレスを新しい方から見て、その文章を含むレス(または画像のファイル名)を探す。
+ * 「>>前のレスの引用」は、前のレスの引用の行(「>前のレスの文章」)を含むレスにつなぐ
+ */
+export type QuoteLinks = Map<number, Map<string, number>>
+
+/** 引用の行(「>」で始まり、アンカー(>12)だけの行ではないもの)なら、引用した文章 */
+export function quotedText(line: string): string | undefined {
+  const m = /^[>＞](.+)$/.exec(line.trim())
+  if (!m || /^[>＞]?\d+$/.test(m[1].trim())) return undefined
+  return m[1].trim() || undefined
+}
+
+export function quoteLinksOf(posts: Post[]): QuoteLinks {
+  const out: QuoteLinks = new Map()
+  const lines = posts.map((p) => p.body.split('\n').map((l) => l.trim()))
+  for (let i = 0; i < posts.length; i++) {
+    let links: Map<string, number> | undefined
+    for (const line of lines[i]) {
+      const q = quotedText(line)
+      if (!q || links?.has(line)) continue
+      // まずは、引用の行ではない所にその文があるレス(書いた本人)を探す。同じ文を引用しただけのレスにつながないように。
+      // 見つからなければ(「>>」で引用の引用をしている など)、引用の行も含めて探す
+      const find = (ownTextOnly: boolean) => {
+        for (let j = i - 1; j >= 0; j--) {
+          const hit = lines[j].some(
+            (l) =>
+              (ownTextOnly ? quotedText(l) === undefined : true) &&
+              // 画像のファイル名の引用(「>1792224836232.jpg」)は、その画像を貼ったレス
+              (l.includes(q) || (/^https?:\/\//.test(l) && l.endsWith(`/${q}`))),
+          )
+          if (hit) return posts[j].no
+        }
+        return undefined
+      }
+      const src = find(true) ?? find(false)
+      if (src !== undefined) (links ??= new Map()).set(line, src)
+    }
+    if (links) out.set(posts[i].no, links)
+  }
+  return out
+}
+
+/** レスが指すレスの番号(アンカーと、文章の引用の元)。重ならないようにまとめる */
+export function targetsOfPost(p: Post, resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): number[] {
+  const nums = anchorTargets(p.body, resolve)
+  const q = quotes?.get(p.no)
+  return q ? [...new Set([...nums, ...q.values()])] : nums
+}
+
 /** レス番号 → そのレスへのアンカーの数(自分自身へのアンカーは数えない) */
-export function countAnchors(posts: Post[], resolve: AnchorResolver = sameNo): Map<number, number> {
+export function countAnchors(posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): Map<number, number> {
   const counts = new Map<number, number>()
   for (const p of posts) {
-    for (const n of new Set(anchorTargets(p.body, resolve))) {
+    for (const n of new Set(targetsOfPost(p, resolve, quotes))) {
       if (n !== p.no) counts.set(n, (counts.get(n) ?? 0) + 1)
     }
   }
@@ -275,7 +326,51 @@ export interface BodyHandlers {
   toNo?: AnchorResolver
 }
 
-export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
+/**
+ * 本文を描く。quotes があれば(文章で引用する掲示板)、「>文章」の行を緑の引用にし、引用元が分かれば押せるようにする
+ * (押す・乗せると、アンカーと同じく引用元をポップアップで出す)
+ */
+export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<string, number>): ReactNode[] {
+  if (!quotes) return renderTokens(text, handlers, '')
+  const parts: ReactNode[] = []
+  text.split('\n').forEach((line, i) => {
+    if (i > 0) parts.push('\n')
+    if (quotedText(line) === undefined) return void parts.push(...renderTokens(line, handlers, `${i}:`))
+    const no = quotes.get(line.trim())
+    parts.push(
+      no === undefined ? (
+        <span key={`q${i}`} className="text-mark-new">
+          {line}
+        </span>
+      ) : (
+        <span
+          key={`q${i}`}
+          role="button"
+          tabIndex={0}
+          className="text-mark-new hover:underline cursor-pointer"
+          title={`引用元のレスを出す`}
+          onClick={(e) => {
+            e.stopPropagation()
+            handlers.onAnchor([no], e.currentTarget, 'click')
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            e.stopPropagation()
+            handlers.onAnchor([no], e.currentTarget, 'click')
+          }}
+          onMouseEnter={(e) => handlers.onAnchor([no], e.currentTarget, 'hover')}
+          onMouseLeave={handlers.onAnchorLeave}
+        >
+          {line}
+        </span>
+      ),
+    )
+  })
+  return parts
+}
+
+function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): ReactNode[] {
   const parts: ReactNode[] = []
   let last = 0
   for (const m of text.matchAll(TOKEN)) {
@@ -291,7 +386,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
       }
       parts.push(
         <span
-          key={start}
+          key={keyPrefix + start}
           role="button"
           tabIndex={0}
           className="text-c-link hover:underline cursor-pointer"
@@ -316,7 +411,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
       const id = m[3]
       parts.push(
         <span
-          key={start}
+          key={keyPrefix + start}
           role="button"
           tabIndex={0}
           className="text-c-link hover:underline cursor-pointer"
@@ -338,7 +433,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
       const url = normalizeUrl(m[2])
       parts.push(
         <a
-          key={start}
+          key={keyPrefix + start}
           href={url}
           className={`hover:underline break-all ${
             toImageUrl(url) ? 'text-c-link-image' : YOUTUBE_URL.test(url) ? 'text-[#ff3344]' : isAppThreadUrl(url) ? 'text-mark-new' : 'text-c-link'
@@ -363,12 +458,12 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
  * アンカーツリー: start からアンカーを前後(付けた先・付けられた元)にたどって、つながるレスの番号を全部集める。
  * web 版の buildAnchorTree と同じ。start だけなら長さ 1 になる
  */
-export function anchorTree(start: number, posts: Post[], resolve: AnchorResolver = sameNo): number[] {
+export function anchorTree(start: number, posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): number[] {
   const exists = new Set(posts.map((p) => p.no))
   const to = new Map<number, number[]>()
   const from = new Map<number, number[]>()
   for (const p of posts) {
-    const nums = anchorTargets(p.body, resolve).filter((n) => exists.has(n) && n !== p.no)
+    const nums = targetsOfPost(p, resolve, quotes).filter((n) => exists.has(n) && n !== p.no)
     to.set(p.no, nums)
     for (const n of nums) from.set(n, [...(from.get(n) ?? []), p.no])
   }
@@ -416,15 +511,16 @@ export interface TreeRow {
  * 親は「自分がアンカーを付けた先のうち、いちばん前のレス」。どこにも付けていないレスが根になる。
  * 前にあるレスにしか親を取らないので、輪にはならない
  */
-export function anchorTreeRows(start: number, posts: Post[], resolve: AnchorResolver = sameNo): TreeRow[] {
-  const nos = anchorTree(start, posts, resolve)
+export function anchorTreeRows(start: number, posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): TreeRow[] {
+  const nos = anchorTree(start, posts, resolve, quotes)
   const inTree = new Set(nos)
   const byNo = new Map(posts.map((p) => [p.no, p]))
   const parent = new Map<number, number>()
   const alsoTo = new Map<number, number[]>()
   const children = new Map<number, number[]>()
   for (const no of nos) {
-    const targets = [...new Set(anchorTargets(byNo.get(no)?.body ?? '', resolve))].filter((n) => inTree.has(n) && n < no).sort((a, b) => a - b)
+    const p = byNo.get(no)
+    const targets = (p ? targetsOfPost(p, resolve, quotes) : []).filter((n) => inTree.has(n) && n < no).sort((a, b) => a - b)
     if (targets.length === 0) continue
     parent.set(no, targets[0])
     alsoTo.set(no, targets.slice(1))

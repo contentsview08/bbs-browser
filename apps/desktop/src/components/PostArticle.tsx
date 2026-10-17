@@ -80,6 +80,8 @@ interface Props {
   /** ほかの人からの評価の数と呼び名(ふたばの「そうだね」)。0 や なしなら出さない */
   votes?: number
   voteLabel?: string
+  /** 文章で引用する掲示板(ふたば)の、このレスの引用の行 → 引用元のレス番号。あれば「>文章」の行を緑の引用にする */
+  quotes?: Map<string, number>
 }
 
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
@@ -217,7 +219,7 @@ function PostArticle(props: Props) {
   const name = props.display ? displayName(post.name, props.display) : post.name
   const numHeat = heatClass(anchorCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
-  const hasConnections = anchorCount > 0 || anchorTargets(post.body, handlers.toNo).some((n) => n !== post.no)
+  const hasConnections = anchorCount > 0 || (props.quotes?.size ?? 0) > 0 || anchorTargets(post.body, handlers.toNo).some((n) => n !== post.no)
   const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(body))
   // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする
   const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
@@ -501,7 +503,7 @@ function PostArticle(props: Props) {
           <p
             className={`text-base ${bodyClass} ${isAA ? 'aa-font whitespace-pre overflow-x-auto' : 'whitespace-pre-wrap break-words leading-relaxed'}`}
           >
-            {renderBody(body, handlers)}
+            {renderBody(body, handlers, props.quotes)}
           </p>
 
           {links.length > 0 && (

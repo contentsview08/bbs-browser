@@ -38,6 +38,8 @@ import {
   anchorTargets,
   countAnchors,
   makeAnchorResolver,
+  quoteLinksOf,
+  targetsOfPost,
   countIds,
   hasLink,
   hasVideo,
@@ -99,6 +101,8 @@ interface Props {
   onHeaderHeight?: (height: number) => void
   /** 本文の >>番号 が指すもの(コネクタの anchorTarget)。'ref' なら板の本当の番号 */
   anchorTarget?: 'no' | 'ref'
+  /** 引用を「>前のレスの文章」で書く掲示板(コネクタの textQuotes) */
+  textQuotes?: boolean
   /** レスの評価の数と呼び名(ふたばのそうだね)。キーはレスの画面の番号 */
   votes?: Map<number, number>
   voteLabel?: string
@@ -154,6 +158,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 /** 選んだレスへ送るときのスクロールの時間 */
 const CURSOR_SCROLL_MS = 160
+/** 引用のない(文章で引用する掲示板の)レスに渡す、空のつながり(描き直しを起こさないよう、いつも同じもの) */
+const NO_QUOTES = new Map<string, number>()
 /**
  * スレを開いたときに、最初に中身まで作るレスの数(開く位置の前後)と、そのあと手の空いたときに 1 回で作り足す数。
  * 全部を一度に作ると、1000 レスのスレで開くまでに時間がかかるので、見える所から先に作る
@@ -443,14 +449,18 @@ export default function ThreadView(props: Props) {
   const resolveAnchor = useMemo(() => makeAnchorResolver(log.posts, props.anchorTarget), [log.posts, props.anchorTarget])
   /** 画面に出す番号と、返信で付けるアンカーの番号(板の本当の番号があればそれ) */
   const refOf = (no: number) => byNo.get(no)?.ref ?? no
-  const anchorCounts = useMemo(() => countAnchors(log.posts, resolveAnchor), [log.posts, resolveAnchor])
+  /** 文章で引用する掲示板(ふたば)の、引用の行から引用元へのつながり */
+  const quoteLinks = useMemo(() => (props.textQuotes ? quoteLinksOf(log.posts) : undefined), [props.textQuotes, log.posts])
+  /** レスに渡す、そのレスの引用のつながり(文章で引用しない掲示板は undefined) */
+  const quotesOf = (no: number) => (quoteLinks ? (quoteLinks.get(no) ?? NO_QUOTES) : undefined)
+  const anchorCounts = useMemo(() => countAnchors(log.posts, resolveAnchor, quoteLinks), [log.posts, resolveAnchor, quoteLinks])
   /** 自分の書き込みへのアンカーを含むレス */
   const replyToOwn = useMemo(() => {
     const set = new Set<number>()
     if (ownNos.size === 0) return set
-    for (const p of log.posts) if (anchorTargets(p.body, resolveAnchor).some((n) => ownNos.has(n) && n !== p.no)) set.add(p.no)
+    for (const p of log.posts) if (targetsOfPost(p, resolveAnchor, quoteLinks).some((n) => ownNos.has(n) && n !== p.no)) set.add(p.no)
     return set
-  }, [log.posts, ownNos, resolveAnchor])
+  }, [log.posts, ownNos, resolveAnchor, quoteLinks])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
   // レスの見せ方(名無しの省略・空行の扱い)と、スレ主の ID
   const display = useMemo(
@@ -561,26 +571,27 @@ export default function ThreadView(props: Props) {
     const m = new Map<number, { no: number; text: string; id?: string }>()
     if (variant !== 'discord' && variant !== 'line') return m
     for (const p of log.posts) {
-      if (!/^\s*(?:>>|＞＞)\d/.test(p.body)) continue
-      const no = anchorTargets(p.body, resolveAnchor)[0]
+      // 本文がアンカーで始まるか、文章で引用しているレス(ふたば)の、最初の引用元
+      const no = /^\s*(?:>>|＞＞)\d/.test(p.body) ? anchorTargets(p.body, resolveAnchor)[0] : quoteLinks?.get(p.no)?.values().next().value
+      if (no === undefined) continue
       const src = no === undefined || no === p.no ? undefined : byNo.get(no)
       if (!src) continue
       const ng = isNg(src)
       m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : src.id })
     }
     return m
-  }, [variant, log.posts, byNo, isNg, resolveAnchor])
+  }, [variant, log.posts, byNo, isNg, resolveAnchor, quoteLinks])
   const replyPreviewOf = (p: Post) => replyPreviews.get(p.no)
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
   const replies = useMemo(() => {
     const map = new Map<number, number[]>()
     for (const p of log.posts) {
-      for (const n of new Set(anchorTargets(p.body, resolveAnchor))) {
+      for (const n of new Set(targetsOfPost(p, resolveAnchor, quoteLinks))) {
         if (n !== p.no) map.set(n, [...(map.get(n) ?? []), p.no])
       }
     }
     return map
-  }, [log.posts, resolveAnchor])
+  }, [log.posts, resolveAnchor, quoteLinks])
 
   const {
     scrollToPost,
@@ -822,12 +833,12 @@ export default function ThreadView(props: Props) {
         const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
         if (media.length > 0) setLightbox({ urls: media, index: 0, post: p })
         else if ((replies.get(p.no)?.length ?? 0) > 0) h.onReplies?.(p.no, el)
-        else if (anchorTree(p.no, log.posts, resolveAnchor).length > 1) h.onBody?.(p.no, el)
+        else if (anchorTree(p.no, log.posts, resolveAnchor, quoteLinks).length > 1) h.onBody?.(p.no, el)
         else showQuick(false, `>>${p.no} には画像も返信もアンカーもありません`)
         return true
       }
       case 'anchorTree':
-        if (anchorTree(p.no, log.posts, resolveAnchor).length > 1) h.onBody?.(p.no, el)
+        if (anchorTree(p.no, log.posts, resolveAnchor, quoteLinks).length > 1) h.onBody?.(p.no, el)
         else showQuick(false, `>>${p.no} にはつながるレスがありません`)
         return true
       case 'copyPost':
@@ -1194,7 +1205,7 @@ export default function ThreadView(props: Props) {
           open(`${name} (${list.length})`, list, el, false)
         },
         onBody: (no, el) => {
-          const tree = anchorTree(no, log.posts, resolveAnchor)
+          const tree = anchorTree(no, log.posts, resolveAnchor, quoteLinks)
           if (tree.length <= 1) return
           openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el, false, no)
         },
@@ -1213,7 +1224,7 @@ export default function ThreadView(props: Props) {
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor, quoteLinks],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1221,7 +1232,7 @@ export default function ThreadView(props: Props) {
     const handlers = handlersFor(level)
     return (
       <AnchorTree
-        rows={anchorTreeRows(start, log.posts, resolveAnchor)}
+        rows={anchorTreeRows(start, log.posts, resolveAnchor, quoteLinks)}
         focus={start}
         variant={variant}
         renderPost={(no) => {
@@ -1231,6 +1242,7 @@ export default function ThreadView(props: Props) {
               post={p}
               votes={props.votes?.get(p.ref ?? p.no)}
               voteLabel={props.voteLabel}
+              quotes={quotesOf(p.no)}
               anchorCount={anchorCounts.get(p.no) ?? 0}
               idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
               showTopDivider={false}
@@ -1267,6 +1279,7 @@ export default function ThreadView(props: Props) {
             post={p}
             votes={props.votes?.get(p.ref ?? p.no)}
             voteLabel={props.voteLabel}
+            quotes={quotesOf(p.no)}
             anchorCount={anchorCounts.get(p.no) ?? 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
             showTopDivider={i > 0 && variant === 'card'}
@@ -1549,6 +1562,7 @@ export default function ThreadView(props: Props) {
                         post={p}
                         votes={props.votes?.get(p.ref ?? p.no)}
                         voteLabel={props.voteLabel}
+                        quotes={quotesOf(p.no)}
                         anchorCount={anchorCounts.get(p.no) ?? 0}
                         idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
                         showTopDivider={i > 0 && !firstUnread && variant === 'card'}

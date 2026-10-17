@@ -51,6 +51,8 @@ export const futabaConnector: Connector = {
   capabilities: { post: false, images: true, incremental: true },
   anchorTarget: 'ref',
   voteLabel: 'そうだね',
+  // 引用は番号ではなく「>前のレスの文章」で書く
+  textQuotes: true,
 
   canHandle(url) {
     return HOST.test(url)

@@ -194,6 +194,8 @@ export interface Connector {
   capabilities: ConnectorCapabilities
   /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
   maxPosts?: number
+  /** 引用を「>前のレスの文章」の形で書く掲示板(ふたば)。引用した文章から、元のレスを探してつなぐ */
+  textQuotes?: boolean
   /** レスの評価(FetchPostsResult.votes)の呼び名。ふたばは「そうだね」。評価のない掲示板は付けない */
   voteLabel?: string
   /** 本文の >>番号 が指すもの。'no': スレの中の番号(2ch) / 'ref': 板の本当の番号(Post.ref。4chan など)。既定は 'no' */

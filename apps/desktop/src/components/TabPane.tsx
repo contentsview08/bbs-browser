@@ -96,6 +96,8 @@ interface Props {
   anchorTarget?: 'no' | 'ref'
   /** レスの評価の呼び名(コネクタの voteLabel) */
   voteLabel?: string
+  /** 引用を文章で書く掲示板(コネクタの textQuotes) */
+  textQuotes?: boolean
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -119,6 +121,7 @@ function TabPane({
   maxPosts,
   anchorTarget,
   voteLabel,
+  textQuotes,
   splitPostIcon,
   ev,
 }: Props) {
@@ -184,6 +187,7 @@ function TabPane({
       anchorTarget={anchorTarget}
       votes={tab.votes}
       voteLabel={voteLabel}
+      textQuotes={textQuotes}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

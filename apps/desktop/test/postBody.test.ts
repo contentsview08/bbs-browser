@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
 
 describe('videoFileUrlsIn: 動画のファイル', () => {
   it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
@@ -57,5 +57,34 @@ describe('アンカーの読み替え(AnchorResolver)', () => {
   })
   it('ref を使わない掲示板では、ref があっても番号のまま', () => {
     expect(makeAnchorResolver([post(1, '', 555)], 'no')(3)).toBe(3)
+  })
+})
+
+describe('文章の引用(ふたば)', () => {
+  const post = (no: number, body: string) => ({ no, name: '', mail: '', date: '', body })
+  it('引用の行と、アンカーだけの行を見分ける', () => {
+    expect(quotedText('>コズミックイラって何？')).toBe('コズミックイラって何？')
+    expect(quotedText('>>宇宙世紀も')).toBe('>宇宙世紀も')
+    expect(quotedText('>1003')).toBeUndefined()
+    expect(quotedText('ふつうの行')).toBeUndefined()
+  })
+  it('引用した文を書いた本人のレスにつなぐ(同じ文を引用しただけのレスにはつながない)', () => {
+    const posts = [
+      post(1, 'https://may.2chan.net/b/src/111.jpg\nスレの本文'),
+      post(2, 'コズミックイラって何？'),
+      post(3, '>コズミックイラって何？\n年号'),
+      post(4, '>コズミックイラって何？\nアンテナ低いね'),
+      post(5, '>>コズミックイラって何？\nそこ引用する？'),
+      post(6, '>111.jpg\nこの画像いいね'),
+    ]
+    const links = quoteLinksOf(posts)
+    expect(links.get(3)?.get('>コズミックイラって何？')).toBe(2)
+    expect(links.get(4)?.get('>コズミックイラって何？')).toBe(2)
+    // 引用の引用は、その引用の行があるレス
+    expect(links.get(5)?.get('>>コズミックイラって何？')).toBe(4)
+    // 画像のファイル名の引用は、その画像を貼ったレス
+    expect(links.get(6)?.get('>111.jpg')).toBe(1)
+    expect(countAnchors(posts, undefined, links).get(2)).toBe(2)
+    expect(anchorTree(2, posts, undefined, links)).toEqual([2, 3, 4, 5])
   })
 })

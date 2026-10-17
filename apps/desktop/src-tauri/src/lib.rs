@@ -134,6 +134,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/013_post_ref.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 14,
+            description: "troll_marks",
+            sql: include_str!("../../../../packages/logstore/migrations/014_troll_marks.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

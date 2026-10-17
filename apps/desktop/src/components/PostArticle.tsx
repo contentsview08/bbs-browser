@@ -24,6 +24,7 @@ import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { NgMode } from '../ui/settings'
 import Identicon from './Identicon'
+import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 
 export interface PostHandlers extends BodyHandlers {
   /** レス番号を押した(このレスへの返信を出す) */
@@ -46,6 +47,8 @@ export interface PostHandlers extends BodyHandlers {
   onNgDraft?: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
   /** >>番号 を付けてすぐ書き込む(「草」ボタン)。書き込めないときは undefined */
   onQuickReply?: (no: number, text: string) => void
+  /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す)。reason は付けたときの自動 NG の理由 */
+  onMarkTroll?: (post: Post, troll: boolean | null, reason?: string) => void
 }
 
 interface Props {
@@ -54,6 +57,8 @@ interface Props {
   idCount: number
   showTopDivider: boolean
   ng: boolean
+  /** 自動 NG で畳んだときの理由(ユーザーの NG に当たっていなくても ng は true になる) */
+  autoNg?: AutoNgReason
   ngMode: NgMode
   showThumbnails: boolean
   aaAutoDetect: boolean
@@ -203,19 +208,39 @@ function PostArticle(props: Props) {
   const frameClass = `group w-full ${props.showTopDivider ? 'border-t pt-2' : ''} ${props.flash ? 'flash-new' : ''}`
 
   // NG: 番号だけ残して「あぼーん」と出す。押すとその場で中身を見られる
+  // 自動 NG は、透明あぼーんの設定でも畳んだ形で出す(誤判定に気づいて「荒らしじゃない」で直せるように)
   if (props.ng && !revealed) {
-    if (props.ngMode === 'hide') return null
+    if (props.ngMode === 'hide' && !props.autoNg) return null
+    const auto = props.autoNg
     return (
       <article id={`post-${post.no}`} data-no={post.no} className={frameClass} style={frame}>
-        <button
-          type="button"
-          onClick={() => setRevealed(true)}
-          className="flex items-center gap-3 text-xs text-c-text-muted hover:text-c-text-body"
-          title="押すと中身を表示"
-        >
-          <span className="font-bold text-sm">{post.no}</span>
-          <span>あぼーん</span>
-        </button>
+        <div className="flex items-center gap-3 text-xs text-c-text-muted">
+          <button
+            type="button"
+            onClick={() => setRevealed(true)}
+            className="flex items-center gap-3 hover:text-c-text-body"
+            title="押すと中身を表示"
+          >
+            <span className="font-bold text-sm">{post.ref ?? post.no}</span>
+            <span>あぼーん</span>
+            {auto && (
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm leading-none">smart_toy</span>
+                自動 NG・{reasonLabel(auto)}
+              </span>
+            )}
+          </button>
+          {auto && handlers.onMarkTroll && (
+            <button
+              type="button"
+              onClick={() => handlers.onMarkTroll!(post, auto.kind === 'marked' ? null : false, auto.kind)}
+              className="px-1.5 py-0.5 rounded border border-c-border hover:text-c-accent hover:border-c-accent"
+              title={auto.kind === 'marked' ? '付けた荒らしの印を外す' : '誤判定として印を付け、同じ本文を今後は畳まない'}
+            >
+              {auto.kind === 'marked' ? '印を外す' : '荒らしじゃない'}
+            </button>
+          )}
+        </div>
       </article>
     )
   }
@@ -256,6 +281,20 @@ function PostArticle(props: Props) {
         ]
       : []),
     ...(post.name ? [{ label: 'NGNameに追加', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }] : []),
+    ...(handlers.onMarkTroll
+      ? props.autoNg?.kind === 'marked'
+        ? [{ label: '荒らしの印を外す', icon: 'undo', onClick: () => handlers.onMarkTroll!(post, null) }]
+        : [
+            {
+              label: '荒らしとして NG(同じ本文も)',
+              icon: 'smart_toy',
+              onClick: () => handlers.onMarkTroll!(post, true, props.autoNg?.kind),
+            },
+            ...(props.autoNg
+              ? [{ label: '荒らし判定を外す(誤判定)', icon: 'undo', onClick: () => handlers.onMarkTroll!(post, false, props.autoNg?.kind) }]
+              : []),
+          ]
+      : []),
     ...(handlers.onNgDraft
       ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body) }]
       : []),

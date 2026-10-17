@@ -82,6 +82,18 @@ export interface FavoriteThreadEntry extends ThreadState {
 }
 
 /** サイトのアカウント(5ch の BE など) */
+/** 自動 NG にユーザーが付けた印(荒らし・荒らしじゃない)。本文の鍵ごとに 1 つ */
+export interface TrollMarkRecord {
+  bodyKey: string
+  /** true は荒らし、false は荒らしじゃない(自動 NG の誤判定) */
+  troll: boolean
+  body: string
+  boardUrl: string
+  /** 付けたときの自動 NG の理由(dup・repeat など)。自動 NG されていなかったレスなら undefined */
+  reason?: string
+  createdAt: number
+}
+
 export interface AccountRecord {
   connectorId: string
   accountId: string
@@ -460,6 +472,34 @@ export class LogStore {
       body,
       now,
     ])
+  }
+
+  // ── 自動 NG の印(荒らし・荒らしじゃない) ──
+
+  async listTrollMarks(): Promise<TrollMarkRecord[]> {
+    const rows = await this.db.select<{ body_key: string; label: number; body: string; board_url: string; reason: string | null; created_at: number }>(
+      'SELECT body_key, label, body, board_url, reason, created_at FROM troll_marks ORDER BY created_at',
+    )
+    return rows.map((r) => ({
+      bodyKey: r.body_key,
+      troll: r.label === 1,
+      body: r.body,
+      boardUrl: r.board_url,
+      reason: r.reason ?? undefined,
+      createdAt: r.created_at,
+    }))
+  }
+
+  /** 印を付ける(同じ本文に付け直したら置き換える) */
+  async setTrollMark(mark: TrollMarkRecord): Promise<void> {
+    await this.db.execute(
+      'INSERT OR REPLACE INTO troll_marks (body_key, label, body, board_url, reason, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [mark.bodyKey, mark.troll ? 1 : 0, mark.body, mark.boardUrl, mark.reason ?? null, mark.createdAt],
+    )
+  }
+
+  async removeTrollMark(bodyKey: string): Promise<void> {
+    await this.db.execute('DELETE FROM troll_marks WHERE body_key = $1', [bodyKey])
   }
 
   // ── アカウント ──

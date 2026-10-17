@@ -189,6 +189,8 @@ export interface AppSettings {
   ngRules: NgRule[]
   /** aborn: 「あぼーん」と出す / hide: 何も出さない(透明あぼーん) */
   ngMode: NgMode
+  /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
+  autoNg: boolean
   // 画像のアップロード(catbox.moe)
   /** 書き込み欄から画像をアップロードできるようにする(上げた画像は公開され、匿名なら消せない) */
   uploaderEnabled: boolean
@@ -285,6 +287,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keywordWatchSince: {},
   ngRules: [],
   ngMode: 'aborn',
+  autoNg: true,
   uploaderEnabled: false,
   uploadStripMetadata: true,
   uploadMaxDimension: 2560,

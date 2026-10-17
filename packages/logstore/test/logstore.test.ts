@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql', '012_drafts.sql', '013_post_ref.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql', '012_drafts.sql', '013_post_ref.sql', '014_troll_marks.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -317,6 +317,21 @@ describe('アカウント', () => {
     expect(await store.listAccounts()).toEqual([{ ...be, password: 'q', autoLogin: false }])
     await store.deleteAccount('2ch-compat', 'be')
     expect(await store.listAccounts()).toEqual([])
+  })
+})
+
+describe('自動 NG の印', () => {
+  it('本文の鍵ごとに 1 つ。付け直したら置き換わり、外せる', async () => {
+    const base = { body: '貼り付け', boardUrl: thread.boardUrl, createdAt: 1 }
+    await store.setTrollMark({ ...base, bodyKey: 'a', troll: true, reason: 'dup' })
+    await store.setTrollMark({ ...base, bodyKey: 'b', troll: false, createdAt: 2 })
+    await store.setTrollMark({ ...base, bodyKey: 'a', troll: false, createdAt: 3 })
+    expect(await store.listTrollMarks()).toEqual([
+      { ...base, bodyKey: 'b', troll: false, reason: undefined, createdAt: 2 },
+      { ...base, bodyKey: 'a', troll: false, reason: undefined, createdAt: 3 },
+    ])
+    await store.removeTrollMark('b')
+    expect((await store.listTrollMarks()).map((m) => m.bodyKey)).toEqual(['a'])
   })
 })
 

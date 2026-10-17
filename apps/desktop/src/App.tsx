@@ -25,6 +25,7 @@ import {
   type PostHistoryEntry,
   type ThreadLog,
   type ThreadState,
+  type TrollMarkRecord,
   type UploadRecord,
 } from '@bbs-browser/logstore'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
@@ -68,6 +69,7 @@ import { isAppVisible } from './utils/visibility'
 import { backgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
+import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 /** 閉じたタブを覚えておく数(Shift+X で開き直す) */
@@ -287,6 +289,10 @@ export default function App() {
       setSites(list)
       setFavorites(favs)
       setFavThreads(favThreadList)
+      void s
+        .listTrollMarks()
+        .then((list) => setTrollMarks(marksFrom(list)))
+        .catch(backgroundError('自動 NG の印の読み込み'))
       // アカウントは裏でログインしておく(失敗したら通知だけ出し、起動は止めない)
       await loadAndAutoLogin(s, (a, r) =>
         notify({ icon: 'error', title: `${a.accountId.toUpperCase()} にログインできませんでした`, body: r.message }),
@@ -397,6 +403,30 @@ export default function App() {
   const [favView, setFavView] = useState(false)
   /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
   const [favCounts, setFavCounts] = useState(new Map<string, number>())
+  /** 自動 NG にユーザーが付けた印(本文の鍵の集まり)。起動時に DB から読む */
+  const [trollMarks, setTrollMarks] = useState<TrollMarks>(EMPTY_MARKS)
+  const marksFrom = (records: TrollMarkRecord[]): TrollMarks => ({
+    troll: new Set(records.filter((m) => m.troll).map((m) => m.bodyKey)),
+    notTroll: new Set(records.filter((m) => !m.troll).map((m) => m.bodyKey)),
+  })
+  /** 印を付ける・外す。画面にはすぐ出し、DB には裏で書く */
+  const markTroll = (t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => {
+    const key = bodyKey(p.body)
+    setTrollMarks((m) => {
+      const next = { troll: new Set(m.troll), notTroll: new Set(m.notTroll) }
+      next.troll.delete(key)
+      next.notTroll.delete(key)
+      if (troll === true) next.troll.add(key)
+      if (troll === false) next.notTroll.add(key)
+      return next
+    })
+    if (!store) return
+    const write =
+      troll === null
+        ? store.removeTrollMark(key)
+        : store.setTrollMark({ bodyKey: key, troll, body: p.body, boardUrl: t.boardUrl, reason, createdAt: Date.now() })
+    void write.catch(backgroundError('自動 NG の印の保存'))
+  }
   /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
   const [listCounts, setListCounts] = useState(new Map<string, number>())
   useEffect(() => {
@@ -1397,6 +1427,7 @@ export default function App() {
     openInBrowser: useEvent((t: ThreadSummary) => void openUrl(connectorOf(t.connectorId).threadWebUrl(t))),
     openUrl: useEvent((url: string) => void openLink(url)),
     addNg: useEvent((rule: NgRule) => addNg(rule)),
+    markTroll: useEvent((t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => markTroll(t, p, troll, reason)),
     ngDraft: useEvent((target: NgTarget, text: string) => setNgDraft({ target, pattern: text })),
     canPost: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).createPost !== undefined),
     submitPost: useEvent((input: PostInput) => submitPost(input)),
@@ -1696,6 +1727,7 @@ export default function App() {
                   keyFocus={!listFocused}
                   settings={settings}
                   isNg={isNgPost}
+                  trollMarks={trollMarks}
                   nonameName={boardInfos.get(t.thread.boardUrl)?.nonameName}
                   jumpTo={jump?.tabId === id ? jump : undefined}
                   favorite={favIds.has(id)}

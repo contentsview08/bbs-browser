@@ -1,6 +1,7 @@
 // タブ 1 つぶんのスレ表示。中身(そのタブのログや状態)・設定・開いているかが変わったときだけ描き直す(memo)。
 // アプリ側の処理は、関数そのものが変わらない ev(useEvent)で受け取り、ここでこのタブ向けに結びつける
 
+import type { TrollMarks } from '../utils/autoNg'
 import { memo, useCallback, useMemo } from 'react'
 import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
@@ -38,6 +39,8 @@ export interface TabEvents {
   openUrl: (url: string) => void
   addNg: (rule: NgRule) => void
   ngDraft: (target: NgTarget, text: string) => void
+  /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
+  markTroll: (t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => void
   /** 書き込めない掲示板なら undefined を返す */
   canPost: (t: ThreadSummary) => boolean
   submitPost: (input: PostInput) => Promise<PostResult>
@@ -80,6 +83,8 @@ interface Props {
   keyFocus: boolean
   settings: AppSettings
   isNg: (p: Post) => boolean
+  /** 自動 NG にユーザーが付けた印 */
+  trollMarks: TrollMarks
   nonameName?: string
   jumpTo?: { no: number; seq: number }
   /** お気に入りのスレか */
@@ -119,6 +124,7 @@ function TabPane({
   keyFocus,
   settings,
   isNg,
+  trollMarks,
   nonameName,
   jumpTo,
   favorite,
@@ -149,6 +155,7 @@ function TabPane({
   const onOpenBoard = useCallback(() => ev.openBoardOf(thread), [ev, thread])
   const onVote = useCallback((p: Post) => ev.vote(thread, p), [ev, thread])
   const onDeletePost = useCallback((p: Post) => ev.deletePost(thread, p), [ev, thread])
+  const onMarkTroll = useCallback((p: Post, troll: boolean | null, reason?: string) => ev.markTroll(thread, p, troll, reason), [ev, thread])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
@@ -165,6 +172,8 @@ function TabPane({
       loading={tab.loading}
       settings={settings}
       isNg={isNg}
+      trollMarks={trollMarks}
+      onMarkTroll={onMarkTroll}
       onRead={onRead}
       onRefresh={ev.refresh}
       onOpenInBrowser={onOpenInBrowser}

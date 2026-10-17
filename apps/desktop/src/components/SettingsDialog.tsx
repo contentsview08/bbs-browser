@@ -1309,6 +1309,14 @@ function NgTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           onChange={(v) => update('ngMode', v)}
         />
       </Section>
+      <Section title="自動 NG(荒らし)">
+        <Toggle
+          checked={s.autoNg}
+          onChange={(v) => update('autoNg', v)}
+          label="荒らしらしいレスを自動で畳む"
+          note="同じスレで同じ長い本文が 3 回以上あるレスと、同じ文字の繰り返しばかりのレスを畳みます(理由を出します)。レスの NG メニューの「荒らしとして NG」で同じ本文をスレをまたいで畳み、「荒らし判定を外す」で誤判定を直せます。付けた印は、あとで判定を育てる材料として貯めます"
+        />
+      </Section>
 
       <div className="flex border-b border-c-border mb-4">
         {NG_TABS.map((t) => {

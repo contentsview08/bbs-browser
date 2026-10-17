@@ -4,6 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
+import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
@@ -71,6 +72,10 @@ interface Props {
   loading: boolean
   settings: AppSettings
   isNg: (p: Post) => boolean
+  /** 自動 NG にユーザーが付けた印 */
+  trollMarks: TrollMarks
+  /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
+  onMarkTroll: (p: Post, troll: boolean | null, reason?: string) => void
   onRead: (no: number) => void
   /** 更新。Promise を返せば、引っぱって更新のくるくるが終わるまで待つ */
   onRefresh: () => Promise<unknown> | void
@@ -263,7 +268,15 @@ function Divider({ label, self }: { label: string; self?: boolean }) {
 }
 
 export default function ThreadView(props: Props) {
-  const { log, unreadFrom, settings, isNg, onRead } = props
+  const { log, unreadFrom, settings, onRead } = props
+  /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
+  const autoNg = useMemo(
+    () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks) : new Map<number, AutoNgReason>()),
+    [settings.autoNg, log.posts, props.trollMarks],
+  )
+  // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
+  const isNgRule = props.isNg
+  const isNg = useCallback((p: Post) => isNgRule(p) || autoNg.has(p.no), [isNgRule, autoNg])
   const ref = useRef<HTMLDivElement>(null)
   /** レス一覧とミニマップの領域。ポップアップの幅をこれに合わせる */
   const viewRef = useRef<HTMLDivElement>(null)
@@ -1270,6 +1283,7 @@ export default function ThreadView(props: Props) {
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),
         onAddNg: props.onAddNg,
         onNgDraft: props.onNgDraft,
+        onMarkTroll: props.onMarkTroll,
         onReply: canReply
           ? (no) => {
               setPopups([])
@@ -1283,7 +1297,7 @@ export default function ThreadView(props: Props) {
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor, quoteLinks, props.onVote, props.onDeletePost, grossNos],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onVote, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1309,6 +1323,7 @@ export default function ThreadView(props: Props) {
               variant={variant}
               alignLeft
               ng={isNg(p)}
+              autoNg={autoNg.get(p.no)}
               ngMode="aborn"
               showThumbnails={settings.showThumbnails}
               aaAutoDetect={settings.aaAutoDetect}
@@ -1346,6 +1361,7 @@ export default function ThreadView(props: Props) {
             showTopDivider={i > 0 && variant === 'card'}
             variant={variant}
             ng={isNg(p)}
+              autoNg={autoNg.get(p.no)}
             ngMode="aborn"
             showThumbnails={settings.showThumbnails}
             aaAutoDetect={settings.aaAutoDetect}
@@ -1634,6 +1650,7 @@ export default function ThreadView(props: Props) {
                         }
                         replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
                         ng={isNg(p)}
+              autoNg={autoNg.get(p.no)}
                         ngMode={settings.ngMode}
                         showThumbnails={settings.showThumbnails}
                         aaAutoDetect={settings.aaAutoDetect}

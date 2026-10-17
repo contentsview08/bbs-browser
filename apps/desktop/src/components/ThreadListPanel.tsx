@@ -18,6 +18,7 @@ import type { ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
+import { animateScroll } from '../hooks/useThreadScroll'
 
 type SortMode = 'momentum' | 'newest'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -105,6 +106,11 @@ interface Props {
 /** 1 画面のとき、スレ一覧を広げる幅の上限(これより広いと 1 行が長くて読みにくい) */
 const FILL_MAX_WIDTH = 820
 const LIST_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
+/** J・K で選んだスレへ送るときのスクロールの時間と、画面の上下に残す余白の割合(スレ表示と同じ) */
+const CURSOR_SCROLL_MS = 160
+const CURSOR_MARGIN = 0.25
+/** Esc の 2 回押しとみなす間隔 */
+const DOUBLE_ESC_MS = 500
 const TAB = 'relative flex items-center justify-center gap-1 py-2.5 transition-colors whitespace-nowrap'
 
 export default function ThreadListPanel(props: Props) {
@@ -118,13 +124,24 @@ export default function ThreadListPanel(props: Props) {
   // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
   // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
   // スレ表示の受け取りと順番が決まらないので、ほかの受け取りが済んでから(マイクロタスクで)見る
-  const resetView = useEvent(() => {
+  /** 外すものがあれば外して true。なければ何もしないで false */
+  const resetView = useEvent((): boolean => {
     const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)
-    if (!unreadOnly && !sorted && !query && !searchActive) return
+    if (!unreadOnly && !sorted && !query && !searchActive) return false
     setUnreadOnly(false)
     setSort(defaultSort)
     setQuery('')
     setSearchActive(false)
+    return true
+  })
+  /** 外すものがないときに Esc を 2 回(素早く)押したら、選んでいるスレの印を隠す(スレ表示と同じ。選んでいる場所は残す) */
+  const lastEsc = useRef(0)
+  const escNothing = useEvent(() => {
+    const now = Date.now()
+    if (now - lastEsc.current < DOUBLE_ESC_MS) {
+      setCursorHidden(true)
+      lastEsc.current = 0
+    } else lastEsc.current = now
   })
   useEffect(() => {
     if (props.active === false) return
@@ -134,12 +151,12 @@ export default function ThreadListPanel(props: Props) {
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
       queueMicrotask(() => {
-        if (!e.defaultPrevented) resetView()
+        if (!e.defaultPrevented && !resetView()) escNothing()
       })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [props.active, resetView])
+  }, [props.active, resetView, escNothing])
 
   // キー操作。キーを受け取っているとき(2 画面なら上に線が出ているとき)だけ。割り当てはスレ表示と同じで、
   // 次/前のレス(J・K)→ 次/前のスレを選ぶ、Enter で開く、1 画面分(Space・PageDown)、先頭・末尾(Home・G・End・Shift+G)、
@@ -165,20 +182,23 @@ export default function ThreadListPanel(props: Props) {
       else setSort((s) => cycleSort(s, e.key === '2' ? 'momentum' : 'newest'))
       return
     }
-    const view = el.clientHeight - (headerRef.current?.offsetHeight ?? 0)
-    const page = view - 40
     const cur = ordered.find((x) => threadId(x) === cursorId)
+    keyRepeat.current = e.repeat
     if (action === 'nextPost' || action === 'prevPost') moveCursor(action === 'nextPost' ? 1 : -1)
-    else if (action === 'openPost' && cur) props.onOpen(cur)
-    else if (action === 'pageDown' || action === 'pageUp') el.scrollBy({ top: action === 'pageDown' ? page : -page })
-    else if (action === 'halfDown' || action === 'halfUp') el.scrollBy({ top: action === 'halfDown' ? view / 2 : -view / 2 })
+    else if (action === 'openPost' && cur) {
+      setCursorHidden(false)
+      props.onOpen(cur)
+    } else if (action === 'pageDown' || action === 'pageUp') pageWithCursor(action === 'pageDown' ? 1 : -1, false)
+    else if (action === 'halfDown' || action === 'halfUp') pageWithCursor(action === 'halfDown' ? 1 : -1, true)
     else if (action === 'favorite' && cur && props.onToggleFavoriteThread) props.onToggleFavoriteThread(cur)
     else if (action === 'copyUrl' && cur && props.threadUrl) void navigator.clipboard.writeText(props.threadUrl(cur))
     else if (action === 'top') {
-      el.scrollTo({ top: 0 })
+      animateScroll(el, () => 0)
+      setCursorHidden(false)
       setCursorId(ordered[0] && threadId(ordered[0]))
     } else if (action === 'bottom') {
-      el.scrollTo({ top: el.scrollHeight })
+      animateScroll(el, () => el.scrollHeight)
+      setCursorHidden(false)
       const last = ordered[ordered.length - 1]
       setCursorId(last && threadId(last))
     } else if (action === 'refresh' && props.onRefresh) void props.onRefresh()
@@ -309,29 +329,85 @@ export default function ThreadListPanel(props: Props) {
     [keywordGroups, visible],
   )
   const [cursorId, setCursorId] = useState<string>()
-  /** 選んでいるスレを 1 つ動かす。まだ選んでいなければ、画面に見えている一番上のスレから始める */
-  const moveCursor = (d: 1 | -1) => {
-    if (ordered.length === 0) return
-    const i = ordered.findIndex((t) => threadId(t) === cursorId)
-    if (i >= 0) return setCursorId(threadId(ordered[Math.min(ordered.length - 1, Math.max(0, i + d))]))
+  /** Esc 2 回で、選んでいるスレの印を隠しているか(選んでいる場所は残す) */
+  const [cursorHidden, setCursorHidden] = useState(false)
+  /** いまのキーが、押し続けたときの自動の連打か(押し続けている間はアニメーションしない) */
+  const keyRepeat = useRef(false)
+  /** 並んでいるカードと、見えている範囲(ヘッダーの下から画面の下まで) */
+  const cardGeometry = () => {
     const box = scrollRef.current
-    const limit = (box?.getBoundingClientRect().top ?? 0) + headerHeight
-    const cards = [...(box?.querySelectorAll<HTMLElement>('[data-thread-id]') ?? [])]
-    const first = cards.find((c) => c.getBoundingClientRect().bottom > limit)?.dataset.threadId
-    setCursorId(first ?? threadId(ordered[0]))
-  }
-  // 選んだスレが見えるようにスクロールする(上はヘッダーに隠れない位置まで)
-  useEffect(() => {
-    const box = scrollRef.current
-    const el = box?.querySelector<HTMLElement>('[data-cursor]')
-    if (!box || !el) return
-    const r = el.getBoundingClientRect()
+    if (!box) return undefined
     const b = box.getBoundingClientRect()
-    const above = r.top - (b.top + headerHeight) - 8
-    const below = r.bottom - b.bottom + 8
-    if (above < 0) box.scrollBy({ top: above })
-    else if (below > 0) box.scrollBy({ top: below })
-  }, [cursorId])
+    const viewTop = b.top + headerHeight
+    const cards = [...box.querySelectorAll<HTMLElement>('[data-thread-id]')]
+    const seen = cards.filter((c) => {
+      const r = c.getBoundingClientRect()
+      return r.bottom > viewTop + 4 && r.top < b.bottom - 4
+    })
+    return { box, b, viewTop, cards, seen }
+  }
+  /** 選んだカードが外に出るときだけ、上下に余白(CURSOR_MARGIN)を残して送る(スレ表示の J・K と同じ) */
+  const followCard = (el: HTMLElement, d: 1 | -1) => {
+    const g = cardGeometry()
+    if (!g) return
+    const { box, b, viewTop } = g
+    const room = b.bottom - viewTop
+    const r = el.getBoundingClientRect()
+    const margin = Math.min(room * CURSOR_MARGIN, Math.max(0, room - r.height) / 2)
+    const topLimit = viewTop + (d < 0 ? margin : 0)
+    const bottomLimit = b.bottom - (d > 0 ? margin : 0)
+    const ms = keyRepeat.current ? 0 : CURSOR_SCROLL_MS
+    if (r.top < topLimit) animateScroll(box, () => box.scrollTop + el.getBoundingClientRect().top - topLimit, ms)
+    else if (r.bottom > bottomLimit) animateScroll(box, () => box.scrollTop + el.getBoundingClientRect().bottom - bottomLimit, ms)
+  }
+  /**
+   * 選んでいるスレを 1 つ動かす。選んでいるスレが画面から大きく離れていたら(スクロールした)、見えている所から選び直す
+   * (J は見えている一番上、K は一番下)。Esc 2 回で隠していたら、最初の 1 回は動かさずに出し直す
+   */
+  const moveCursor = (d: 1 | -1) => {
+    const g = cardGeometry()
+    if (!g || g.cards.length === 0) return
+    const { b, viewTop, cards, seen } = g
+    const room = b.bottom - viewTop
+    const i = cards.findIndex((c) => c.dataset.threadId === cursorId)
+    const near = (c: HTMLElement) => {
+      const r = c.getBoundingClientRect()
+      return r.bottom > viewTop - room && r.top < b.bottom + room
+    }
+    const onScreen = i >= 0 && (seen.includes(cards[i]) || near(cards[i]))
+    if (cursorHidden) {
+      setCursorHidden(false)
+      if (onScreen) return
+    }
+    const target = onScreen ? cards[Math.min(cards.length - 1, Math.max(0, i + d))] : ((d > 0 ? seen[0] : seen.at(-1)) ?? cards[0])
+    setCursorId(target.dataset.threadId)
+    followCard(target, d)
+  }
+  /** 1 画面・半画面送るとき、選ぶスレもいっしょに送る(選んでいたスレと同じ高さにあるスレを選ぶ。端なら端のスレ) */
+  const pageWithCursor = (dir: 1 | -1, half: boolean) => {
+    const g = cardGeometry()
+    if (!g) return
+    const { box, b, viewTop, cards, seen } = g
+    setCursorHidden(false)
+    const view = b.bottom - viewTop
+    const cur = cards.find((c) => c.dataset.threadId === cursorId)
+    const y = (cur && seen.includes(cur) ? Math.max(cur.getBoundingClientRect().top, viewTop) : viewTop) + 1
+    const before = box.scrollTop
+    box.scrollTop += dir * (half ? view / 2 : view - 40)
+    const moved = box.scrollTop - before
+    if (cards.length === 0) return
+    const hit =
+      moved === 0
+        ? dir > 0
+          ? cards.at(-1)
+          : cards[0]
+        : cards.find((c) => {
+            const r = c.getBoundingClientRect()
+            return r.top <= y && y < r.bottom
+          })
+    const pick = hit ?? (dir > 0 ? cards.at(-1) : cards[0])
+    if (pick) setCursorId(pick.dataset.threadId)
+  }
 
   // 右端のハンドルをドラッグして幅を変える。離したときに保存する
   const onResizeStart = (e: React.MouseEvent) => {
@@ -353,7 +429,12 @@ export default function ThreadListPanel(props: Props) {
   }
 
   // カードに渡す関数は、どのカードにも同じもの(memo で描き直さずに済むように)
-  const onOpenCard = useEvent((t: ThreadSummary) => props.onOpen(t))
+  // 押して開いたスレも選んだ状態にする(一覧に戻ったとき、どこを見ていたか分かり、J・K がそこから続く)
+  const onOpenCard = useEvent((t: ThreadSummary) => {
+    setCursorId(threadId(t))
+    setCursorHidden(false)
+    props.onOpen(t)
+  })
   const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t.title))
   const onCopyCard = useEvent(
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
@@ -446,7 +527,7 @@ export default function ThreadListPanel(props: Props) {
         isFavorite={props.favoriteIds?.has(id) ?? false}
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
-        isCursor={props.active !== false && cursorId === id}
+        isCursor={props.active !== false && !cursorHidden && cursorId === id}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
       />

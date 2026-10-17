@@ -58,7 +58,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       onClick={() => onOpen(thread)}
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
-      className={`group card-thread ${isCursor ? 'ring-2 ring-c-accent ring-inset' : ''} cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
+      className={`group card-thread cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
         isActive ? 'card-selected border-[var(--card-selected-border-color)]' : 'border-[var(--card-border-color)]'
       }`}
       style={{
@@ -70,6 +70,17 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         paddingBottom: 'var(--thread-card-padding-y)',
       }}
     >
+      {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
+          (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+      {isCursor && (
+        <>
+          <span className="absolute inset-0 pointer-events-none rounded-[inherit]" style={{ background: 'var(--c-cursor-tint)' }} />
+          <span
+            className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none"
+            style={{ left: 'var(--thread-card-radius, var(--card-radius))', right: 'var(--thread-card-radius, var(--card-radius))' }}
+          />
+        </>
+      )}
       {visited && (
         <span
           className="absolute left-0 top-0 bottom-0 w-[3px]"

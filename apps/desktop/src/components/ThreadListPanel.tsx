@@ -578,7 +578,8 @@ export default function ThreadListPanel(props: Props) {
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
                   // 引き伸ばしたら、高さに合わせて字も大きくする(既定の 44px で 1.25rem)
-                  style={headerDrag.height ? { fontSize: `${Math.min(2.6, Math.max(0.9, (headerDrag.height / 44) * 1.25))}rem` } : undefined}
+                  // 行の高さも字に合わせる(text-xl の決まった行の高さのままだと、大きい字の上下が切れる)
+                  style={headerDrag.height ? { fontSize: `${Math.min(2.6, Math.max(0.9, (headerDrag.height / 44) * 1.25))}rem`, lineHeight: 1.45 } : undefined}
                   onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
                   title="クリックで先頭へスクロール"
                 >

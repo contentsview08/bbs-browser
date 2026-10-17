@@ -698,6 +698,8 @@ export default function ThreadView(props: Props) {
   /** ヘッダーの高さ(下の端をつかんで変える) */
   const titleRowRef = useRef<HTMLElement>(null)
   const headerDrag = useDragHeight(settings.threadHeaderHeight ?? 0, (h) => props.onHeaderHeight?.(h), { min: 40, max: 200 })
+  /** 引き伸ばしたときのスレタイの字の大きさ(rem。既定の 80px で 1)。引き伸ばしていなければ undefined */
+  const titleRem = headerDrag.height > 0 ? Math.min(2.2, Math.max(0.85, headerDrag.height / 80)) : undefined
   /** いまのキーが、押し続けたときの自動の連打か */
   const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
@@ -1289,7 +1291,11 @@ export default function ThreadView(props: Props) {
           className="flex items-center justify-between px-6"
           style={{ height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
-          <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
+          <div
+            className="relative min-w-0 flex-1 h-10 flex items-center gap-2"
+            // 字を大きくしたら、行の高さもそれに合わせる(固定の 40px のままだと、大きい字の上下が切れる)
+            style={titleRem ? { height: Math.max(40, titleRem * 16 * 1.5) } : undefined}
+          >
             <input
               ref={searchRef}
               type="text"
@@ -1329,20 +1335,22 @@ export default function ThreadView(props: Props) {
                 <span className="material-symbols-outlined text-xl leading-none">arrow_back</span>
               </button>
             )}
+            {/* スレタイが長いときに省くのはスレタイだけ。後ろのレス数は別の情報なので、いつも出す */}
             <h2
-              className="font-bold truncate text-base cursor-pointer hover:text-c-accent transition-colors"
+              className="min-w-0 flex items-baseline font-bold text-base cursor-pointer hover:text-c-accent transition-colors"
               style={{
                 color: 'var(--thread-title-color, var(--c-text-strong))',
-                // ヘッダーを引き伸ばしたら、高さに合わせて字も大きくする(既定の 80px で 1rem)
-                ...(headerDrag.height > 0 && { fontSize: `${Math.min(2.2, Math.max(0.85, headerDrag.height / 80))}rem` }),
+                // ヘッダーを引き伸ばしたら、高さに合わせて字も大きくする(既定の 80px で 1rem)。
+                // 行の高さは字に合わせる(決まった行の高さのままだと、大きい字の上下が切れる)
+                ...(titleRem && { fontSize: `${titleRem}rem`, lineHeight: 1.45 }),
               }}
               onClick={() => {
                 if (ref.current) ref.current.scrollTop = 0
               }}
               title="クリックで先頭へスクロール"
             >
-              {log.title}
-              <span className="ml-1.5 text-sm font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
+              <span className="truncate">{log.title}</span>
+              <span className="flex-shrink-0 ml-1.5 text-sm font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
             </h2>
             {log.status === 'archived' && (
               <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-c-surface3 text-c-text-muted">

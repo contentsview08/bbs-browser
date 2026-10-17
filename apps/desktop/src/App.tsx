@@ -10,6 +10,7 @@ import {
   type Board,
   type BoardInfo,
   type NewThreadInput,
+  type Post,
   type PostConfirm,
   type PostInput,
   type PostResult,
@@ -87,6 +88,12 @@ const connectorOf = (id: string) => {
   const c = findConnector(id)
   if (!c) throw new Error(`コネクタ ${id} がありません`)
   return c
+}
+
+/** レスの数の上限まで来たスレか(2ch・したらばは 1000。上限のない掲示板はいつも false) */
+const isFull = (t: ThreadSummary, posts: Post[]) => {
+  const max = findConnector(t.connectorId)?.maxPosts
+  return max !== undefined && posts.length >= max
 }
 
 /** URL を扱えるコネクタで、板(とスレ)に読み替える */
@@ -774,7 +781,7 @@ export default function App() {
   const autoRefresh = () => {
     const t = activeTab
     if (!store || !t?.log || !isAppVisible()) return
-    if (t.log.status === 'archived' || (t.log.posts.at(-1)?.no ?? 0) >= 1000) return
+    if (t.log.status === 'archived' || isFull(t.thread, t.log.posts)) return
     readFlush.current?.()
     void fetchThread(store, t.thread).catch(() => undefined)
   }
@@ -1514,7 +1521,7 @@ export default function App() {
             unread: t.log ? Math.max(0, t.log.postCount - t.readNo) : 0,
             loading: t.loading,
             ended:
-              t.log?.status === 'archived' ? 'archived' : (t.log?.posts.at(-1)?.no ?? 0) >= 1000 ? 'full' : undefined,
+              t.log?.status === 'archived' ? 'archived' : t.log && isFull(t.thread, t.log.posts) ? 'full' : undefined,
             boardUrl: t.thread.boardUrl,
             icon: settings.boardMeta[t.thread.boardUrl]?.icon,
           }))}
@@ -1566,6 +1573,7 @@ export default function App() {
                   showBackToList={single}
                   postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
                   postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
+                  maxPosts={findConnector(t.thread.connectorId)?.maxPosts}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />

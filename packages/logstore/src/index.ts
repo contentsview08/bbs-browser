@@ -124,6 +124,7 @@ interface ThreadRow {
 
 interface PostRow {
   no: number
+  ref: number | null
   name: string
   mail: string
   date: string
@@ -302,7 +303,7 @@ export class LogStore {
     ])
     if (!row) return null
     const posts = await this.db.select<PostRow>(
-      'SELECT no, name, mail, date, id, body FROM posts WHERE board_url = $1 AND key = $2 ORDER BY no',
+      'SELECT no, ref, name, mail, date, id, body FROM posts WHERE board_url = $1 AND key = $2 ORDER BY no',
       [thread.boardUrl, thread.key],
     )
     return {
@@ -311,7 +312,7 @@ export class LogStore {
       readNo: row.read_no,
       status: row.status,
       cursor: row.cursor === null ? null : (JSON.parse(row.cursor) as Cursor),
-      posts: posts.map((p) => ({ ...p, id: p.id ?? undefined })),
+      posts: posts.map(({ ref, ...p }) => ({ ...p, id: p.id ?? undefined, ...(ref !== null && { ref }) })),
     }
   }
 
@@ -351,8 +352,8 @@ export class LogStore {
     for (let i = 0; i < result.posts.length; i += CHUNK) {
       const chunk = result.posts.slice(i, i + CHUNK)
       await this.db.execute(
-        `INSERT OR REPLACE INTO posts (board_url, key, no, name, mail, date, id, body) VALUES ${valuesClause(chunk.length, 8)}`,
-        chunk.flatMap((p) => [...where, p.no, p.name, p.mail, p.date, nn(p.id), p.body]),
+        `INSERT OR REPLACE INTO posts (board_url, key, no, ref, name, mail, date, id, body) VALUES ${valuesClause(chunk.length, 9)}`,
+        chunk.flatMap((p) => [...where, p.no, nn(p.ref), p.name, p.mail, p.date, nn(p.id), p.body]),
       )
     }
 

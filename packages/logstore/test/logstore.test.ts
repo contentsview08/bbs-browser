@@ -5,7 +5,7 @@ import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connect
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql', '012_drafts.sql'].map((f) =>
+const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql', '012_drafts.sql', '013_post_ref.sql'].map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()
@@ -86,6 +86,13 @@ describe('スレのログ', () => {
     expect(log?.cursor).toEqual({ bytes: 150 })
     expect(log?.title).toBe('dat のスレタイ')
     expect(log?.postCount).toBe(3)
+  })
+
+  it('板の本当の番号(ref)があれば保存して読み戻す。なければ付けない', async () => {
+    await store.saveFetch(thread, { status: 'updated', posts: [{ ...post(1), ref: 123456789 }, post(2)], cursor: null })
+    const log = await store.loadThread(thread)
+    expect(log?.posts[0].ref).toBe(123456789)
+    expect('ref' in (log?.posts[1] ?? {})).toBe(false)
   })
 
   it('reset なら全件を置き換える', async () => {

@@ -213,6 +213,8 @@ export const twoChConnector: Connector = {
   id: ID,
   name: '2ch 互換',
   capabilities: { post: true, images: false, incremental: true },
+  // 1 つのスレは 1000 レスまで
+  maxPosts: 1000,
 
   canHandle(url) {
     // したらばは専用のコネクタで読む

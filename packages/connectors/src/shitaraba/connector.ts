@@ -74,6 +74,8 @@ export const shitarabaConnector: Connector = {
   id: ID,
   name: 'したらば',
   capabilities: { post: true, images: false, incremental: true },
+  // 1 つのスレは 1000 レスまで
+  maxPosts: 1000,
 
   canHandle(url) {
     return HOST.test(url)

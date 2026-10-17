@@ -86,6 +86,8 @@ interface Props {
   /** 板の書き込みの上限と、その掲示板での数え方 */
   postLimits?: PostLimits
   postByteLength?: (text: string) => number
+  /** 1 つのスレのレスの上限(コネクタの maxPosts) */
+  maxPosts?: number
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -106,6 +108,7 @@ function TabPane({
   showBackToList,
   postLimits,
   postByteLength,
+  maxPosts,
   splitPostIcon,
   ev,
 }: Props) {
@@ -166,6 +169,7 @@ function TabPane({
       registerReadFlush={ev.registerReadFlush}
       postLimits={postLimits}
       postByteLength={postByteLength}
+      maxPosts={maxPosts}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

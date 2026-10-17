@@ -92,6 +92,8 @@ interface Props {
   onFindNext?: () => Promise<NextThreadCandidate[]>
   /** このスレの板のスレ一覧を開く */
   onOpenBoard?: () => void
+  /** 1 つのスレのレスの上限(2ch は 1000)。上限のない掲示板は undefined */
+  maxPosts?: number
   onOpenThread: (t: ThreadSummary) => void
   /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出す) */
   refreshReadyAt?: number
@@ -574,8 +576,8 @@ export default function ThreadView(props: Props) {
     jumpTo: props.jumpTo,
   })
 
-  // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す。ヘッダーのボタンでも出せる
-  const ended = log.status === 'archived' || (log.posts.at(-1)?.no ?? 0) >= 1000
+  // スレが終わったら(dat 落ち・上限(2ch は 1000)到達)、一番下に次スレの候補を出す。ヘッダーのボタンでも出せる
+  const ended = log.status === 'archived' || (props.maxPosts !== undefined && log.posts.length >= props.maxPosts)
   const [showNext, setShowNext] = useState(false)
 
   // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる

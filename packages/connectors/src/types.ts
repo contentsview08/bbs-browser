@@ -52,10 +52,18 @@ export interface ThreadSummary {
   /** subject.txt の並び順(0 始まり) */
   order: number
   createdAt?: Date
+  /** スレの画像のサムネイル(画像が主役の掲示板。ふたば・4chan のカタログ)。なければ出さない */
+  thumb?: string
 }
 
 export interface Post {
+  /** スレの中での並びの番号(1 から順)。既読・未読はこれで数える */
   no: number
+  /**
+   * 板の本当のレス番号が no と違う掲示板(ふたば・4chan は板全体の通し番号)のときの、その番号。
+   * 画面の番号と、返信で付けるアンカー(>>番号)はこちらを使う。2ch のように no と同じなら付けない
+   */
+  ref?: number
   name: string
   mail: string
   /** サーバーが返したままの日付文字列(形式は板ごとにばらばら) */
@@ -174,6 +182,10 @@ export interface Connector {
   id: string
   name: string
   capabilities: ConnectorCapabilities
+  /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
+  maxPosts?: number
+  /** 本文の >>番号 が指すもの。'no': スレの中の番号(2ch) / 'ref': 板の本当の番号(Post.ref。4chan など)。既定は 'no' */
+  anchorTarget?: 'no' | 'ref'
   /** URL を貼られたとき、どのコネクタで開くかを決める */
   canHandle(url: string): boolean
   /**

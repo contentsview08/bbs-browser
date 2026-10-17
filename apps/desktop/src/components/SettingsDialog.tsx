@@ -813,6 +813,12 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           label="いちばん下を見ているときは、新着まで自動でスクロールする"
         />
         <Toggle
+          checked={s.followToEnd}
+          onChange={(v) => update('followToEnd', v)}
+          label="新着が多くても、いちばん下まで送る"
+          note="上の設定がオンのときに効きます。オフなら新着の頭(最初の新しいレス)まで、オンなら一番下まで送ります。実況のように速いスレで、いつも最新を見ていたいとき向け"
+        />
+        <Toggle
           checked={s.notifyReplies}
           onChange={(v) => update('notifyReplies', v)}
           label="自分宛てのレスが届いたら通知する"

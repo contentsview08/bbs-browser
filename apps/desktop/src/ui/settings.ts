@@ -156,6 +156,8 @@ export interface AppSettings {
   autoRefreshSec: number
   /** いちばん下を見ているときに新着が来たら、新着まで自動でスクロールする */
   autoScrollOnNew: boolean
+  /** 一番下を見ているときに届いた新着は、多くても一番下まで送る(オフなら新着の頭まで) */
+  followToEnd: boolean
   /** お気に入りのスレの新着の数を確かめる間隔(分)。0 なら確かめない(スレ一覧だけ取るので軽い) */
   favCheckMin: number
   /** お気に入りのスレに新着があったら、右下に知らせる */
@@ -254,6 +256,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
+  followToEnd: false,
   notifyReplies: true,
   favCheckMin: 5,
   notifyFavThreads: true,

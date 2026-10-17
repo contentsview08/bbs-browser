@@ -635,6 +635,7 @@ export default function ThreadView(props: Props) {
     onRead,
     openPosition: settings.openPosition,
     autoScrollOnNew: settings.autoScrollOnNew,
+    followToEnd: settings.followToEnd,
     showThumbnails: settings.showThumbnails,
     jumpTo: props.jumpTo,
   })

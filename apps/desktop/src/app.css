@@ -225,6 +225,8 @@ html:root[data-scheme='discord-dark'] {
 }
 html:root[data-scheme='oled'] {
   --tabbar-bg: #000000;
+  /* 真っ黒の帯の上で、開いているタブ(とスレのヘッダー)を少し持ち上げて見分けられるようにする */
+  --tab-active-bg: #161616;
 }
 
 /* LINE ライトのカード(スレ一覧のタイル)は白にし、細い枠線で白い背景と分ける(灰色の面だと、画面が灰色っぽくなる) */
@@ -329,7 +331,8 @@ html:root[data-scheme='oled'] {
   --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 90%, black 10%);
 }
 :root.dark {
-  --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 70%, black 30%);
+  /* 暗い配色は、開いているタブとほかのタブの差が出るよう、タブの帯をはっきり暗くする */
+  --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 55%, black 45%);
 }
 
 /* ---------- パネルごとの不透明度 ----------

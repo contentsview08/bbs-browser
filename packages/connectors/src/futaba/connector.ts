@@ -38,6 +38,14 @@ const BOARD_URL = /^https?:\/\/([a-z0-9]+)\.2chan\.net\/([a-z0-9]+)\/?(?:futaba\
  */
 const CHROMIUM_PTUA = String([10, 11, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 30].reduce((n, b) => n + 2 ** b, 0))
 
+/**
+ * ふたばへの通信は、ふつうのブラウザの名乗り(User-Agent)で送る。専ブラの名乗り(Monazilla)のままだと、
+ * 書き込みが「書きこみました」と返るのに出てこない(黙って捨てられる)ことがあったため。ptua も Chromium の値にしてある
+ */
+const BROWSER = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+}
+
 /** カタログを 200 スレ(20 列 x 10 行)・スレタイ 40 文字で返してもらう */
 const CATALOG_COOKIE = 'cxyl=20x10x40x0x0'
 
@@ -88,7 +96,7 @@ export const futabaConnector: Connector = {
     // 板の名前は、板の入口のページの <title> から(「二次元裏＠ふたば」など)
     let res
     try {
-      res = await ctx.http.get(`${boardUrl}futaba.htm`)
+      res = await ctx.http.get(`${boardUrl}futaba.htm`, { headers: BROWSER })
     } catch (e) {
       throw new Error(`ふたばに届きません(${e instanceof Error ? e.message : String(e)})`)
     }
@@ -111,7 +119,7 @@ export const futabaConnector: Connector = {
 
   async listThreads(board, ctx) {
     const url = `${board.url}futaba.php?mode=cat`
-    const res = await ctx.http.get(url, { headers: { Cookie: CATALOG_COOKIE } })
+    const res = await ctx.http.get(url, { headers: { ...BROWSER, Cookie: CATALOG_COOKIE } })
     if (res.status === 404) throw new Error(`ふたばの板が見つかりません(HTTP 404): ${board.url}`)
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${url}`)
     const html = sjis(res.body, ctx)
@@ -135,7 +143,7 @@ export const futabaConnector: Connector = {
     const origin = originOf(thread.boardUrl)
     if (!cursor) {
       // 最初は、スレのページで全部を取る(スレを立てた人のレスは JSON に入っていないため)
-      const res = await ctx.http.get(threadWebUrl(thread))
+      const res = await ctx.http.get(threadWebUrl(thread), { headers: BROWSER })
       if (res.status === 404) return { status: 'archived', posts: [], cursor }
       if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${threadWebUrl(thread)}`)
       const page = parseThreadPage(sjis(res.body, ctx), origin)
@@ -152,7 +160,7 @@ export const futabaConnector: Connector = {
     }
     // そのあとは、JSON で最後の番号より新しい返信だけ
     const url = `${thread.boardUrl}futaba.php?mode=json&res=${thread.key}&start=${cursor.lastRef}`
-    const res = await ctx.http.get(url)
+    const res = await ctx.http.get(url, { headers: BROWSER })
     if (res.status === 404) return { status: 'archived', posts: [], cursor }
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${url}`)
     let parsed
@@ -171,7 +179,7 @@ export const futabaConnector: Connector = {
 
   async createPost(thread, input, ctx): Promise<PostResult> {
     // 書き込む直前にスレのページを取り直し、フォームの隠し欄(hash・ptua など)を写す
-    const page = await ctx.http.get(threadWebUrl(thread))
+    const page = await ctx.http.get(threadWebUrl(thread), { headers: BROWSER })
     if (page.status === 404) return { status: 'error', message: 'スレが消えています(もう書き込めません)' }
     if (page.status !== 200) return { status: 'error', message: `スレのページを開けません(HTTP ${page.status})` }
     const form = parsePostForm(sjis(page.body, ctx))
@@ -180,7 +188,7 @@ export const futabaConnector: Connector = {
     // (ブラウザでは localStorage に残す。ここでは毎回いまの値を入れる)
     let caco = ''
     try {
-      const c = await ctx.http.get(`${originOf(thread.boardUrl)}/bin/cachemt7.php`)
+      const c = await ctx.http.get(`${originOf(thread.boardUrl)}/bin/cachemt7.php`, { headers: BROWSER })
       if (c.status === 200) caco = parseCaco(new TextDecoder().decode(c.body))
     } catch {
       // 取れなければ空のまま送る(断られたら、その文を出す)
@@ -205,14 +213,14 @@ export const futabaConnector: Connector = {
     }
     const url = new URL(form.action, threadWebUrl(thread)).href
     const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread) },
+      headers: { ...BROWSER, 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
       // ページを見たときに渡された Cookie(posttime など)が要る。ないと「cookieを有効にして…」で断られる
       sameCookiesAsGet: true,
     })
     const html = sjis(res.body, ctx)
     const r = parsePostResult(html)
-    if (r.ok) console.info('[futaba] 書き込みの返事', html.slice(0, 200))
-    return r.ok ? { status: 'ok', message: r.message } : { status: 'error', message: r.message, html }
+    // 書けたときも、ふたばが何と返したかを添える(書けたのに出てこないときに、手がかりにするため)
+    return r.ok ? { status: 'ok', message: `${r.message}(ふたばの返事: ${html.trim().slice(0, 80)})` } : { status: 'error', message: r.message, html }
   },
 
   postByteLength: shiftJisByteLength,

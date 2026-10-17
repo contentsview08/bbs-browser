@@ -29,8 +29,15 @@ export default function AnchorTree(props: {
   if (props.variant === 'line') return <IconTree {...props} step={44} />
   return (
     <div className="flex flex-col">
-      {props.rows.map((r) => (
-        <div key={r.no} className="flex">
+      {props.rows.map((r, i) => (
+        <div key={r.no} className="relative flex">
+          {/* 子のレスがあれば、このレスの番号のすぐ下から縦線を下ろす(本文の下からではなく、番号から出ているように) */}
+          {(props.rows[i + 1]?.depth ?? -1) > r.depth && (
+            <span
+              className="absolute bottom-0 pointer-events-none"
+              style={{ left: r.depth * STEP + STEP / 2, top: ELBOW_Y + 10, borderLeft: `2px solid ${LINE}` }}
+            />
+          )}
           {r.depth > 0 && (
             <div className="relative flex-shrink-0" style={{ width: r.depth * STEP }}>
               {/* 上の段から続く縦線 */}

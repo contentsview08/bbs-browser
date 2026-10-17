@@ -222,15 +222,11 @@ export default function TabBar(props: Props) {
                 active || selected ? 'text-c-text-strong' : 'text-c-text-muted hover:text-c-text-body hover:bg-[color-mix(in_srgb,var(--tab-active-fill)_50%,transparent)]'
               } ${active ? 'z-10' : ''} ${dragging ? 'z-30 shadow-lg' : ''}`}
             >
-              {/* 終わったスレは、タブの下端に色の線を引く(dat 落ちは赤、1000 到達は橙) */}
-              {t.ended && (
-                <span
-                  className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full pointer-events-none"
-                  style={{ background: ENDED[t.ended].color }}
-                />
-              )}
+              {/* 開いているタブは、上の端に強調色の線を引く(暗い配色では、開いているタブと、ほかのタブの面の色の差が小さいため)。
+                  終わったスレ(dat 落ち・満)は、ファビコンの場所の「落」「満」の印と薄い字だけで示す(下の線は、開いているタブの印と見間違えるのでやめた) */}
               {active && (
                 <>
+                  <span className="absolute left-2 right-2 top-0 h-[2px] rounded-b-full bg-c-accent pointer-events-none" />
                   {/* タブの下の両端の、スレ表示へ流れ込む内側の曲線 */}
                   <span
                     className="absolute bottom-0 -left-2 w-2 h-2 pointer-events-none"

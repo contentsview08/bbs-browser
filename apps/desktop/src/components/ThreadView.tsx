@@ -183,6 +183,18 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
   )
 }
 
+/**
+ * レスの中で Tab で回るもの。本文(リンク・アンカー・画像・カード)を先に、レスの頭(番号・名前・ID)を後に並べる。
+ * マウスを乗せたときに出る操作バーは入れない
+ */
+function tabItems(post: HTMLElement): HTMLElement[] {
+  const all = [...post.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
+    (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
+  )
+  const inHeader = (el: HTMLElement) => el.closest('[data-post-header]') !== null
+  return [...all.filter((el) => !inHeader(el)), ...all.filter(inHeader)]
+}
+
 function Divider({ label, self }: { label: string; self?: boolean }) {
   const color = self ? 'var(--c-unread)' : 'var(--c-border)'
   return (
@@ -773,9 +785,7 @@ export default function ThreadView(props: Props) {
       if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && cursorFrameRef.current) {
         const frame = cursorFrameRef.current()
         if (frame) {
-          const items = [...frame.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
-            (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
-          )
+          const items = tabItems(frame)
           e.preventDefault()
           if (items.length === 0) return
           const i = items.indexOf(document.activeElement as HTMLElement)
@@ -836,9 +846,7 @@ export default function ThreadView(props: Props) {
       el.scrollIntoView({ block: 'nearest' })
     }
     if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && cur) {
-      const items = [...cur.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
-        (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
-      )
+      const items = tabItems(cur)
       e.preventDefault()
       if (items.length === 0) return
       const i = items.indexOf(document.activeElement as HTMLElement)

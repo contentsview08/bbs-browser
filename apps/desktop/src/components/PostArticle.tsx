@@ -314,7 +314,7 @@ function PostArticle(props: Props) {
         })}
         <MenuButton icon="more_horiz" title="その他" items={actions} onOpenChange={setMoreOpen} />
       </div>
-      <div className="flex items-center mb-2 flex-nowrap overflow-hidden gap-3">
+      <div data-post-header className="flex items-center mb-2 flex-nowrap overflow-hidden gap-3">
         {/* ID のアイコン(web 版と同じく、右下にその ID の書き込み数を重ねる) */}
         {props.showIdenticon && post.id && (
           <button

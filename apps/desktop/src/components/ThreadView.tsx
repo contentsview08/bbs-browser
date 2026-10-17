@@ -475,6 +475,22 @@ export default function ThreadView(props: Props) {
   /** レスに渡す、そのレスの引用のつながり(文章で引用しない掲示板は undefined) */
   const quotesOf = (no: number) => (quoteLinks ? (quoteLinks.get(no) ?? NO_QUOTES) : undefined)
   const anchorCounts = useMemo(() => countAnchors(log.posts, resolveAnchor, quoteLinks), [log.posts, resolveAnchor, quoteLinks])
+  /**
+   * 画像をぼかすレス(グロ注意)。目印の言葉(「グロ」など)を含むレスが返信した先と、その言葉を書いたレス自身。
+   * 画像のないレスが入っていても、ぼかすものがないだけ
+   */
+  const grossNos = useMemo(() => {
+    const words = settings.blurGross ? settings.grossWords.map((w) => normalizeForSearch(w.trim())).filter(Boolean) : []
+    if (words.length === 0) return undefined
+    const set = new Set<number>()
+    for (const p of log.posts) {
+      const text = normalizeForSearch(p.body)
+      if (!words.some((w) => text.includes(w))) continue
+      set.add(p.no)
+      for (const n of targetsOfPost(p, resolveAnchor, quoteLinks)) set.add(n)
+    }
+    return set
+  }, [settings.blurGross, settings.grossWords, log.posts, resolveAnchor, quoteLinks])
   /** 自分の書き込みへのアンカーを含むレス */
   const replyToOwn = useMemo(() => {
     const set = new Set<number>()
@@ -1248,7 +1264,7 @@ export default function ThreadView(props: Props) {
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor, quoteLinks, props.onVote, props.onDeletePost],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor, quoteLinks, props.onVote, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1267,6 +1283,7 @@ export default function ThreadView(props: Props) {
               votes={props.votes?.get(p.ref ?? p.no)}
               voteLabel={props.voteLabel}
               quotes={quotesOf(p.no)}
+              blurMedia={grossNos?.has(p.no)}
               anchorCount={anchorCounts.get(p.no) ?? 0}
               idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
               showTopDivider={false}
@@ -1304,6 +1321,7 @@ export default function ThreadView(props: Props) {
             votes={props.votes?.get(p.ref ?? p.no)}
             voteLabel={props.voteLabel}
             quotes={quotesOf(p.no)}
+            blurMedia={grossNos?.has(p.no)}
             anchorCount={anchorCounts.get(p.no) ?? 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
             showTopDivider={i > 0 && variant === 'card'}
@@ -1587,6 +1605,7 @@ export default function ThreadView(props: Props) {
                         votes={props.votes?.get(p.ref ?? p.no)}
                         voteLabel={props.voteLabel}
                         quotes={quotesOf(p.no)}
+                        blurMedia={grossNos?.has(p.no)}
                         anchorCount={anchorCounts.get(p.no) ?? 0}
                         idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
                         showTopDivider={i > 0 && !firstUnread && variant === 'card'}
@@ -1752,6 +1771,7 @@ export default function ThreadView(props: Props) {
         <MediaGallery
           // NG のレスは除く(見えていないレスの画像は出さない)
           items={collectMedia(log.posts.filter((p) => !isNg(p)))}
+          blurNos={grossNos}
           saveDir={settings.imageSaveDir}
           onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}
           onClose={() => setGalleryOpen(false)}

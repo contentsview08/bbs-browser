@@ -572,6 +572,24 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
         />
         <Toggle
+          checked={s.blurGross}
+          onChange={(v) => update('blurGross', v)}
+          label="グロ注意の画像をぼかす"
+          note="下の言葉を含む返信が付いたレス(画像を貼った本人がそう書いたレスも)の、サムネイルと画像一覧をぼかします。押せばいつもどおり開けます"
+        />
+        {s.blurGross && (
+          <label className="flex items-center gap-2 pl-1 text-sm text-c-text-body">
+            目印の言葉
+            <input
+              type="text"
+              defaultValue={s.grossWords.join('、')}
+              onBlur={(e) => update('grossWords', e.target.value.split(/[、,，\s]+/).map((w) => w.trim()).filter(Boolean))}
+              placeholder="例: グロ、閲覧注意"
+              className={`${INPUT} flex-1`}
+            />
+          </label>
+        )}
+        <Toggle
           checked={s.showIdenticon}
           onChange={(v) => update('showIdenticon', v)}
           label="ID のアイコンを出す"

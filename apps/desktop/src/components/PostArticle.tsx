@@ -84,6 +84,8 @@ interface Props {
   /** ほかの人からの評価の数と呼び名(ふたばの「そうだね」)。0 や なしなら出さない */
   votes?: number
   voteLabel?: string
+  /** 「グロ」などの返信が付いたレス。サムネイルをぼかし、「グロ注意」と出す */
+  blurMedia?: boolean
   /** 文章で引用する掲示板(ふたば)の、このレスの引用の行 → 引用元のレス番号。あれば「>文章」の行を緑の引用にする */
   quotes?: Map<string, number>
 }
@@ -551,8 +553,14 @@ function PostArticle(props: Props) {
               ))}
             </div>
           )}
+          {images.length + videos.length + videoFiles.length > 0 && props.blurMedia && (
+            <p className="mt-2 flex items-center gap-1 text-[11px] font-bold" style={{ color: 'var(--c-error)' }}>
+              <span className="material-symbols-outlined text-sm leading-none">warning</span>
+              グロ注意(押すと開きます)
+            </p>
+          )}
           {images.length + videos.length + videoFiles.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className={`mt-2 flex flex-wrap gap-2 ${props.blurMedia ? 'gross-blur' : ''}`}>
               {images.map((url, i) => (
                 <button
                   key={url + i}

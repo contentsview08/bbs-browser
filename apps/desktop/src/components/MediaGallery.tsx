@@ -46,6 +46,8 @@ const KINDS: { key: MediaKind; name: string }[] = [
 
 export default function MediaGallery(props: {
   items: MediaItem[]
+  /** 画像をぼかすレス(グロ注意)の番号 */
+  blurNos?: Set<number>
   saveDir: string
   /** 押したものをビューアーで開く(見せている順のまま渡す) */
   onOpen: (items: MediaItem[], index: number) => void
@@ -150,7 +152,9 @@ export default function MediaGallery(props: {
                   key={m.url}
                   type="button"
                   onClick={() => props.onOpen(shown, i)}
-                  className="relative aspect-square bg-c-surface2 border border-c-border rounded overflow-hidden hover:border-c-accent transition-colors"
+                  className={`relative aspect-square bg-c-surface2 border border-c-border rounded overflow-hidden hover:border-c-accent transition-colors ${
+                    props.blurNos?.has(m.post.no) ? 'gross-blur' : ''
+                  }`}
                   style={m.kind === 'youtube' ? { borderColor: '#ff0000', borderWidth: 2 } : undefined}
                   title={`>>${m.post.no}`}
                 >

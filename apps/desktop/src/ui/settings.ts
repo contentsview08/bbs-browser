@@ -136,6 +136,10 @@ export interface AppSettings {
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
   showThumbnails: boolean
+  /** 「グロ」などの言葉を含む返信が付いた(または本人がそう書いた)レスの画像を、ぼかして出す */
+  blurGross: boolean
+  /** ぼかす目印にする言葉 */
+  grossWords: string[]
   aaAutoDetect: boolean
   /** 画像でも動画でもないリンクに、埋め込みのカード(タイトル・説明・画像)を出す */
   showLinkPreview: boolean
@@ -248,6 +252,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openPosition: 'unread',
   anchorPopup: 'click',
   showThumbnails: true,
+  blurGross: true,
+  grossWords: ['グロ'],
   aaAutoDetect: true,
   showMinimap: true,
   showIdenticon: false,

@@ -543,6 +543,13 @@ article.post-discord:hover {
   margin-left: 18px;
 }
 
+/* グロ注意の画像(サムネイル・画像一覧)。ぼかして、押すまで中身が分からないようにする */
+.gross-blur img,
+.gross-blur video {
+  filter: blur(14px) saturate(0.6);
+  transform: scale(1.15);
+}
+
 /* ポップアップの中で J・K で選んでいるレス(ThreadView.tsx の popupKey)。本文の選んでいるレスと同じ見た目 */
 article.popup-cursor {
   position: relative;

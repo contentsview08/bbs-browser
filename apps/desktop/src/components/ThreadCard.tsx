@@ -31,11 +31,13 @@ interface Props {
   /** 選べる一覧(閲覧履歴)のとき、既読の線とスレタイの間にチェックボックスを出す。selected はその状態 */
   selected?: boolean
   onSelect?: (t: ThreadSummary, selected: boolean) => void
+  /** キー操作(J・K)で選んでいるカード。枠を強調色にする */
+  isCursor?: boolean
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
-function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew, selected, onSelect }: Props) {
+function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew, selected, onSelect, isCursor }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -54,7 +56,9 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   return (
     <div
       onClick={() => onOpen(thread)}
-      className={`group card-thread cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
+      data-cursor={isCursor || undefined}
+      data-thread-id={`${thread.boardUrl}${thread.key}`}
+      className={`group card-thread ${isCursor ? 'ring-2 ring-c-accent ring-inset' : ''} cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
         isActive ? 'card-selected border-[var(--card-selected-border-color)]' : 'border-[var(--card-border-color)]'
       }`}
       style={{

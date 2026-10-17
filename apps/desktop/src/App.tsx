@@ -56,7 +56,7 @@ import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
-import { isReloadKey } from './utils/keymap'
+import { isReloadKey, resolveKeymap } from './utils/keymap'
 import { findNextThreads } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
@@ -180,6 +180,8 @@ export default function App() {
   const narrow = useNarrow()
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
   const single = settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
+  /** キー操作の割り当て(スレ表示とスレ一覧で同じものを使う) */
+  const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
   // ── 画面の状態 ──
   // 選んでいるタブ・1 画面でスレ一覧を出しているか・戻る/進むの履歴。3 つは utils/viewState.ts の関数でいっしょに変える
   const { view, update: updateView } = useViewState<NavValue>()
@@ -789,8 +791,19 @@ export default function App() {
     const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board, false) : undefined
     if (list) void manualListRefresh(list)()
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: () => goNav(-1), forward: () => goNav(1) })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: () => goNav(-1), forward: () => goNav(1) }
+  /** Ctrl+E: キー操作を受け取る方を、スレ一覧とスレ表示で入れ替える(1 画面なら見せる方を入れ替える) */
+  const toggleFocus = () => {
+    // 入力欄にいたら抜ける(そのままだと J・K などが入力欄に入ってしまう)
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    if (single) {
+      if (threadShown) returnToList()
+      else if (activeId) selectTab(activeId)
+      return
+    }
+    if (activeId !== undefined) setFocusPane(listFocused ? 'thread' : 'list')
+  }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, back: () => goNav(-1), forward: () => goNav(1) })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, back: () => goNav(-1), forward: () => goNav(1) }
   // マウスの戻る・進むボタン(横のボタン)。WebView がページの戻る・進むをしないよう、押したときに止める
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -818,6 +831,12 @@ export default function App() {
         e.preventDefault()
         if (e.key === 'ArrowLeft') keyRef.current.back()
         else keyRef.current.forward()
+        return
+      }
+      // Ctrl+E: スレ一覧とスレ表示の、キー操作を受け取る方を入れ替える
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault()
+        keyRef.current.toggleFocus()
         return
       }
       if (isReloadKey(e)) {
@@ -1324,6 +1343,7 @@ export default function App() {
         <ThreadListPanel
           key={favView ? 'favorites' : history ? 'history' : board?.url}
           active={listFocused}
+          keymap={keymap}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}

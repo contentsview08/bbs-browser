@@ -16,6 +16,7 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
+import { actionFor, isReloadKey, keyString, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 
 type SortMode = 'momentum' | 'newest'
@@ -59,8 +60,10 @@ interface Props {
    * full: 画面の幅いっぱい(狭くて自動で 1 画面になったとき) / centered: 読みやすい幅までで真ん中に(設定で 1 画面にしたとき)
    */
   fill?: 'full' | 'centered'
-  /** 見えていて、キー操作(Esc)を受け取るか。1 画面でスレ表示を出しているときは false */
+  /** 見えていて、キー操作(Esc・J・K など)を受け取るか。1 画面でスレ表示を出しているときは false */
   active?: boolean
+  /** キー操作の割り当て(スレ表示と同じ)。J・K でカードを選び、Enter で開く */
+  keymap?: Keymap
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** 操作ボタンの置き場所(設定) */
@@ -137,27 +140,48 @@ export default function ThreadListPanel(props: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [props.active, resetView])
 
-  // スクロールのキー(1 画面分・先頭・末尾)。キー操作を受け取っているとき(上に線が出ているとき)だけ
+  // キー操作。キーを受け取っているとき(2 画面なら上に線が出ているとき)だけ。割り当てはスレ表示と同じで、
+  // 次/前のレス(J・K)→ 次/前のスレを選ぶ、Enter で開く、1 画面分(Space・PageDown)、先頭・末尾(Home・G・End・Shift+G)、
+  // 更新(R)、検索(/)。ほかの割り当て(未読へ・書き込み欄へ)はスレ一覧では使わない
+  const onListKey = useEvent((e: KeyboardEvent) => {
+    if (e.defaultPrevented || isReloadKey(e)) return
+    const t = e.target as HTMLElement | null
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return
+    const el = scrollRef.current
+    if (!el) return
+    if (e.key === 'Enter' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      const cur = ordered.find((x) => threadId(x) === cursorId)
+      if (!cur) return
+      e.preventDefault()
+      props.onOpen(cur)
+      return
+    }
+    // 割り当てがなくても、PageUp・PageDown・Home・End はスクロールに使う
+    const fallback: Record<string, string> = { PageDown: 'pageDown', PageUp: 'pageUp', Home: 'top', End: 'bottom' }
+    const action = (props.keymap && actionFor(props.keymap, keyString(e))) ?? fallback[e.key]
+    if (!action) return
+    const page = el.clientHeight - (headerRef.current?.offsetHeight ?? 0) - 40
+    if (action === 'nextPost' || action === 'prevPost') moveCursor(action === 'nextPost' ? 1 : -1)
+    else if (action === 'pageDown' || action === 'pageUp') el.scrollBy({ top: action === 'pageDown' ? page : -page })
+    else if (action === 'top') {
+      el.scrollTo({ top: 0 })
+      setCursorId(ordered[0] && threadId(ordered[0]))
+    } else if (action === 'bottom') {
+      el.scrollTo({ top: el.scrollHeight })
+      const last = ordered[ordered.length - 1]
+      setCursorId(last && threadId(last))
+    } else if (action === 'refresh' && props.onRefresh) void props.onRefresh()
+    else if (action === 'search') {
+      setSearchActive(true)
+      requestAnimationFrame(() => searchRef.current?.focus())
+    } else return
+    e.preventDefault()
+  })
   useEffect(() => {
     if (props.active === false) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return
-      const el = scrollRef.current
-      if (!el) return
-      const page = el.clientHeight - (headerRef.current?.offsetHeight ?? 0) - 40
-      const down = e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)
-      const up = e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)
-      if (down || up) el.scrollBy({ top: down ? page : -page })
-      else if (e.key === 'Home') el.scrollTo({ top: 0 })
-      else if (e.key === 'End') el.scrollTo({ top: el.scrollHeight })
-      else return
-      e.preventDefault()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [props.active])
+    window.addEventListener('keydown', onListKey)
+    return () => window.removeEventListener('keydown', onListKey)
+  }, [props.active, onListKey])
   const [width, setWidth] = useState(props.width)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectable = props.onDeleteLogs !== undefined
@@ -265,6 +289,37 @@ export default function ThreadListPanel(props: Props) {
     if (groups.length === 0) return undefined
     return { groups, rest: visible.filter((t) => !taken.has(threadId(t))) }
   }, [visible, props.keywords])
+
+  // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
+  /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */
+  const ordered = useMemo(
+    () => (keywordGroups ? [...keywordGroups.groups.flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
+    [keywordGroups, visible],
+  )
+  const [cursorId, setCursorId] = useState<string>()
+  /** 選んでいるスレを 1 つ動かす。まだ選んでいなければ、画面に見えている一番上のスレから始める */
+  const moveCursor = (d: 1 | -1) => {
+    if (ordered.length === 0) return
+    const i = ordered.findIndex((t) => threadId(t) === cursorId)
+    if (i >= 0) return setCursorId(threadId(ordered[Math.min(ordered.length - 1, Math.max(0, i + d))]))
+    const box = scrollRef.current
+    const limit = (box?.getBoundingClientRect().top ?? 0) + headerHeight
+    const cards = [...(box?.querySelectorAll<HTMLElement>('[data-thread-id]') ?? [])]
+    const first = cards.find((c) => c.getBoundingClientRect().bottom > limit)?.dataset.threadId
+    setCursorId(first ?? threadId(ordered[0]))
+  }
+  // 選んだスレが見えるようにスクロールする(上はヘッダーに隠れない位置まで)
+  useEffect(() => {
+    const box = scrollRef.current
+    const el = box?.querySelector<HTMLElement>('[data-cursor]')
+    if (!box || !el) return
+    const r = el.getBoundingClientRect()
+    const b = box.getBoundingClientRect()
+    const above = r.top - (b.top + headerHeight) - 8
+    const below = r.bottom - b.bottom + 8
+    if (above < 0) box.scrollBy({ top: above })
+    else if (below > 0) box.scrollBy({ top: below })
+  }, [cursorId])
 
   // 右端のハンドルをドラッグして幅を変える。離したときに保存する
   const onResizeStart = (e: React.MouseEvent) => {
@@ -379,6 +434,7 @@ export default function ThreadListPanel(props: Props) {
         isFavorite={props.favoriteIds?.has(id) ?? false}
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
+        isCursor={props.active !== false && cursorId === id}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
       />

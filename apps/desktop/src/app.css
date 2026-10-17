@@ -397,11 +397,13 @@ article.post-discord:hover {
   --c-thread-view-bg: color-mix(in srgb, var(--c-base) 87%, #7f9cc0 13%);
   --line-own-bg: #8de055;
   --line-own-text: #10200a;
+  --line-own-link: #0b4f9e;
 }
 :root.dark[data-post-style='line'] {
   --c-thread-view-bg: color-mix(in srgb, var(--c-base) 90%, #6f8fb8 10%);
   --line-own-bg: #3f7d2c;
   --line-own-text: #eef7e8;
+  --line-own-link: #d3ebff;
 }
 .line-bubble {
   background: var(--c-surface);
@@ -412,6 +414,12 @@ article.post-discord:hover {
 .line-bubble-own {
   background: var(--line-own-bg);
   color: var(--line-own-text);
+  /* 緑の上で読めるよう、吹き出しの中の色を吹き出しの文字色に寄せる(リンク・アンカーの青、薄い文字の灰色は、緑の上だと見えにくい) */
+  --c-link: var(--line-own-link);
+  --c-link-image: var(--line-own-link);
+  --c-mark-new: var(--line-own-link);
+  --c-text-body: var(--line-own-text);
+  --c-text-muted: color-mix(in srgb, var(--line-own-text) 75%, transparent);
 }
 /* 自分の吹き出しの中の本文は、吹き出しの文字色で読む(本文の既定の色だと緑の上で薄い) */
 .line-bubble-own p {

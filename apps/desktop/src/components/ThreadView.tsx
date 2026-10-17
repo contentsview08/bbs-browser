@@ -1520,15 +1520,15 @@ export default function ThreadView(props: Props) {
                     {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
                     {cursorId !== undefined && p.id === cursorId && p.no !== cursorNo && (
                       <span
-                        className="absolute inset-0 pointer-events-none z-[1] rounded-[var(--card-radius)] opacity-50"
+                        className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)] opacity-50"
                         style={{ background: 'var(--c-cursor-tint)' }}
                       />
                     )}
                     {keysOn && !cursorHidden && p.no === cursorNo && (
                       <>
-                        {/* うっすら強調色を重ねて、どのレスか目に入るようにする(カードの上に重ねるので、ごく薄く) */}
+                        {/* うっすら色を敷いて、どのレスか目に入るようにする。中身(本文・吹き出し)の後ろに敷く(上に重ねると、吹き出しの文字まで色がかぶる) */}
                         <span
-                          className="absolute inset-0 pointer-events-none z-[1] rounded-[var(--card-radius)]"
+                          className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)]"
                           style={{ background: 'var(--c-cursor-tint)' }}
                         />
                         <span

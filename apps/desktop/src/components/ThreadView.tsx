@@ -668,38 +668,57 @@ export default function ThreadView(props: Props) {
     else if (r.bottom > bottomLimit)
       animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom + (box.bottom - bottomLimit), ms)
   }
-  /** 選んでいるレスの画像・動画をビューアーで開く。なければ、そのレスへの返信を出す(Enter) */
-  const openCursorPost = () => {
+  /**
+   * 選んでいるレス 1 つへの操作(本文とポップアップで共通)。h はそのレスに渡しているハンドラ(ポップアップなら 1 段深いもの)。
+   * Enter: 画像・動画があればビューアー、なければ返信、それもなければアンカーツリー
+   */
+  const actOnPost = (action: KeyAction, p: Post, el: HTMLElement, h: PostHandlers): boolean => {
+    switch (action) {
+      case 'openPost': {
+        const a = document.activeElement
+        if (a instanceof HTMLElement && el.contains(a)) a.blur()
+        const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
+        if (media.length > 0) setLightbox({ urls: media, index: 0, post: p })
+        else if ((replies.get(p.no)?.length ?? 0) > 0) h.onReplies?.(p.no, el)
+        else if (anchorTree(p.no, log.posts).length > 1) h.onBody?.(p.no, el)
+        else showQuick(false, `>>${p.no} には画像も返信もアンカーもありません`)
+        return true
+      }
+      case 'anchorTree':
+        if (anchorTree(p.no, log.posts).length > 1) h.onBody?.(p.no, el)
+        else showQuick(false, `>>${p.no} にはつながるレスがありません`)
+        return true
+      case 'copyPost':
+        void navigator.clipboard.writeText(p.body).then(
+          () => showQuick(true, `>>${p.no} の本文をコピーしました`),
+          () => showQuick(false, 'コピーできませんでした'),
+        )
+        return true
+      case 'postsById':
+        if (p.id) h.onId?.(p.id, el)
+        return true
+      case 'replyToPost':
+        if (!canReply) return true
+        setPopups([])
+        withReplyRef.current((r) => r.insert(`>>${p.no}\n`))
+        return true
+      default:
+        return false
+    }
+  }
+  /** 本文で選んでいるレスへの操作 */
+  const actOnCursor = (action: KeyAction) => {
     const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
     const el = cursorFrame()
-    if (!p || !el) return
-    releaseFocus()
-    const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
-    if (media.length > 0) return setLightbox({ urls: media, index: 0, post: p })
-    if ((replies.get(p.no)?.length ?? 0) > 0) mainHandlers.onReplies?.(p.no, el)
-    else showQuick(false, `>>${p.no} には画像も返信もありません`)
+    if (p && el) actOnPost(action, p, el, mainHandlers)
   }
   threadKeyActions.current = {
     nextPost: () => moveCursor(1),
     prevPost: () => moveCursor(-1),
-    openPost: openCursorPost,
-    anchorTree: () => {
-      const el = cursorFrame()
-      if (cursorNo !== undefined && el) mainHandlers.onBody?.(cursorNo, el)
-    },
-    copyPost: () => {
-      const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
-      if (!p) return
-      void navigator.clipboard.writeText(p.body).then(
-        () => showQuick(true, `>>${p.no} の本文をコピーしました`),
-        () => showQuick(false, 'コピーできませんでした'),
-      )
-    },
-    postsById: () => {
-      const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
-      const el = cursorFrame()
-      if (p?.id && el) mainHandlers.onId?.(p.id, el)
-    },
+    openPost: () => actOnCursor('openPost'),
+    anchorTree: () => actOnCursor('anchorTree'),
+    copyPost: () => actOnCursor('copyPost'),
+    postsById: () => actOnCursor('postsById'),
     pageDown: () => pageWithCursor(1),
     pageUp: () => pageWithCursor(-1),
     halfDown: () => pageWithCursor(1, true),
@@ -721,7 +740,8 @@ export default function ThreadView(props: Props) {
     reply: () => withReplyRef.current((h) => h.focus()),
     // 選んでいるレス(J・K で送った・押した)への返信を書き込み欄に入れる。選んでいなければ一番上に見えているレス
     replyToPost: () => {
-      const no = cursorNo ?? getPosition()?.no
+      if (cursorNo !== undefined) return actOnCursor('replyToPost')
+      const no = getPosition()?.no
       if (!canReply || no === undefined) return
       withReplyRef.current((h) => h.insert(`>>${no}\n`))
     },
@@ -793,6 +813,60 @@ export default function ThreadView(props: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [keysOn, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
+
+  // ── ポップアップの中のキー操作 ──
+  // ポップアップ(返信・ID・アンカー・アンカーツリー)が出ている間は、一番上のポップアップの中で、本文と同じキーが使える:
+  // J・K・↑↓ でレスを選び、Enter・T・C・Shift+I・Shift+E でそのレスに、Tab でレスの中のリンクなどを選ぶ。Esc で閉じる。
+  // ポップアップの中身は開いたときに作って持っているので、選んでいる印は DOM に直接付ける(.popup-cursor)
+  const popupKey = useRef<(e: KeyboardEvent) => void>(() => {})
+  popupKey.current = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || isReloadKey(e)) return
+    const t = e.target as HTMLElement | null
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    const box = document.querySelector<HTMLElement>('[data-popup-top]')
+    if (!box) return
+    const posts = [...box.querySelectorAll<HTMLElement>('article[data-no]')]
+    if (posts.length === 0) return
+    const cur = box.querySelector<HTMLElement>('article.popup-cursor')
+    const select = (el: HTMLElement) => {
+      cur?.classList.remove('popup-cursor')
+      el.classList.add('popup-cursor')
+      const a = document.activeElement
+      if (a instanceof HTMLElement && box.contains(a)) a.blur()
+      el.scrollIntoView({ block: 'nearest' })
+    }
+    if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && cur) {
+      const items = [...cur.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
+        (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
+      )
+      e.preventDefault()
+      if (items.length === 0) return
+      const i = items.indexOf(document.activeElement as HTMLElement)
+      const next = i < 0 ? (e.shiftKey ? items.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + items.length) % items.length
+      items[next].focus()
+      return
+    }
+    if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
+    const action = actionFor(keymap, keyString(e))
+    if (!action) return
+    if (action === 'nextPost' || action === 'prevPost') {
+      e.preventDefault()
+      const i = cur ? posts.indexOf(cur) : -1
+      const d = action === 'nextPost' ? 1 : -1
+      select(posts[i < 0 ? (d > 0 ? 0 : posts.length - 1) : Math.min(posts.length - 1, Math.max(0, i + d))])
+      return
+    }
+    if (!cur) return
+    const p = byNo.get(Number(cur.dataset.no))
+    // 一番上のポップアップの中身は、開いた数と同じ深さのハンドラで描いてある
+    if (p && actOnPost(action, p, cur, handlersFor(popups.length))) e.preventDefault()
+  }
+  useEffect(() => {
+    if (!keysOn || lightbox || popups.length === 0) return
+    const onKey = (e: KeyboardEvent) => popupKey.current(e)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [keysOn, lightbox, popups.length])
 
   // ── 新着の札 ──
   // 新着が届いて、その頭が画面の外(下にある・絞り込みで隠れている)なら、下から「新着 +N」を少しのあいだ出す。

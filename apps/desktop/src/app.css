@@ -270,6 +270,22 @@ input[type='checkbox']:focus {
   outline: none;
   box-shadow: none;
 }
+/* ポップアップの中で J・K で選んでいるレス(ThreadView.tsx の popupKey)。本文の選んでいるレスと同じ見た目 */
+article.popup-cursor {
+  position: relative;
+  background-image: linear-gradient(color-mix(in srgb, var(--c-accent) 7%, transparent), color-mix(in srgb, var(--c-accent) 7%, transparent));
+}
+article.popup-cursor::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: var(--card-radius);
+  right: var(--card-radius);
+  height: 2px;
+  background: var(--c-accent);
+  pointer-events: none;
+}
+
 /* Tab で選んだ、レスの中のリンク・アンカー・画像(J・K で選んだレスの中を Tab で回る。ThreadView.tsx) */
 .post-cv :is(a, button, [role='button']):focus-visible {
   outline: 2px solid var(--c-accent);

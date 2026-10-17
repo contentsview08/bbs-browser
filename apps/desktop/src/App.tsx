@@ -767,9 +767,9 @@ export default function App() {
     setTabPreview(undefined)
     if (id) keyRef.current.selectTab(id)
   }
-  /** F5 で更新するもの。開いているスレ、なければいま出しているスレ一覧 */
+  /** F5 で更新するもの。開いているスレ、なければいま出しているスレ一覧(1 画面でスレ一覧を出しているときもスレ一覧) */
   const reload = () => {
-    if (activeTab?.log) return void refreshThread()
+    if (activeTab?.log && (!single || threadShown)) return void refreshThread()
     const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board, false) : undefined
     if (list) void manualListRefresh(list)()
   }

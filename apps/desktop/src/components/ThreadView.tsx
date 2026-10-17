@@ -421,14 +421,6 @@ export default function ThreadView(props: Props) {
     if (!p?.id || !prev || prev.id !== p.id || isNg(prev)) return false
     return visibleNos === undefined || (visibleNos.has(prev.no) && visibleNos.has(p.no))
   }
-  /** Discord 風: 本文がアンカーで始まっていれば、その引用元の番号と本文の頭 */
-  const replyPreviewOf = (p: Post) => {
-    if (!/^\s*(?:>>|＞＞)\d/.test(p.body)) return undefined
-    const no = anchorsIn(p.body)[0]
-    const src = no === undefined || no === p.no ? undefined : byNo.get(no)
-    if (!src) return undefined
-    return { no, text: isNg(src) ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: isNg(src) ? undefined : src.id }
-  }
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
   const matchesFilter = useCallback(
     (p: Post, key: PostFilter) =>
@@ -466,6 +458,24 @@ export default function ThreadView(props: Props) {
     [log.posts, visibleNos],
   )
   const byNo = useMemo(() => new Map(log.posts.map((p) => [p.no, p])), [log.posts])
+  /**
+   * Discord 風: 本文がアンカーで始まるレスの、引用元の番号・本文の頭・ID。
+   * レスごとに 1 回だけ作って使い回す(描くたびに作り直すと、memo したレスが全部描き直しになって、J・K が重くなる)
+   */
+  const replyPreviews = useMemo(() => {
+    const m = new Map<number, { no: number; text: string; id?: string }>()
+    if (variant !== 'discord') return m
+    for (const p of log.posts) {
+      if (!/^\s*(?:>>|＞＞)\d/.test(p.body)) continue
+      const no = anchorsIn(p.body)[0]
+      const src = no === undefined || no === p.no ? undefined : byNo.get(no)
+      if (!src) continue
+      const ng = isNg(src)
+      m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : src.id })
+    }
+    return m
+  }, [variant, log.posts, byNo, isNg])
+  const replyPreviewOf = (p: Post) => replyPreviews.get(p.no)
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
   const replies = useMemo(() => {
     const map = new Map<number, number[]>()
@@ -1142,6 +1152,7 @@ export default function ThreadView(props: Props) {
       <AnchorTree
         rows={anchorTreeRows(start, log.posts)}
         focus={start}
+        variant={variant}
         renderPost={(no) => {
           const p = byNo.get(no)!
           return (

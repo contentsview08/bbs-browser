@@ -1,7 +1,7 @@
 // アンカーツリーの表示。どのレスがどのレスに付いているかを、ファイルのツリーのような線(├ └ │)でつなぐ。
 // 行の高さはレスごとに違うので、線は各行の高さいっぱいに伸ばし、分岐はレスの頭の高さで横に出す。
 
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { TreeRow } from '../utils/postBody'
 
 /** 1 段の幅 */
@@ -13,12 +13,20 @@ const LINE = 'var(--c-border-strong)'
 /** 曲がり角の丸み */
 const RADIUS = 6
 
+/** Discord 風: 1 段の幅(大きいアイコン 36px + 隙間 12px。子のアイコンが親のアイコンの右にそろう) */
+const D_STEP = 48
+/** Discord 風: 大きいアイコンの半分(アイコンの真ん中の位置) */
+const D_HALF = 18
+
 export default function AnchorTree(props: {
   rows: TreeRow[]
   /** 押したレス(色を付ける) */
   focus: number
   renderPost: (no: number) => ReactNode
+  /** Discord 風: 線をアイコン同士をつなぐ形にする */
+  variant?: 'card' | 'discord' | 'classic'
 }) {
+  if (props.variant === 'discord') return <DiscordTree {...props} />
   return (
     <div className="flex flex-col">
       {props.rows.map((r) => (
@@ -65,6 +73,59 @@ export default function AnchorTree(props: {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Discord 風のアンカーツリー。親のアイコンの下から縦線を下ろし、子のアイコンの真ん中の高さで右へ曲げて、子のアイコンにつなぐ。
+ * 段の幅をアイコン 1 つ分にして、子のアイコンが親の本文の始まりにそろうようにする
+ */
+function DiscordTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode }) {
+  const line = (key: string, style: CSSProperties) => (
+    <span key={key} aria-hidden className="absolute pointer-events-none" style={{ borderColor: LINE, borderStyle: 'solid', borderWidth: 0, ...style }} />
+  )
+  /** 段 depth のレスの、アイコンの真ん中の横位置(行の左端から) */
+  const x = (depth: number) => `calc(${depth * D_STEP}px + var(--post-padding-x) + ${D_HALF}px)`
+  /** レスの枠の上端から、アイコンの真ん中・アイコンの下端までの高さ */
+  const midY = `calc(var(--post-padding-y) + ${D_HALF}px)`
+  const bottomY = `calc(var(--post-padding-y) + ${D_HALF * 2 + 2}px)`
+  return (
+    <div className="flex flex-col">
+      {props.rows.map((r, i) => {
+        const hasChildren = (props.rows[i + 1]?.depth ?? -1) > r.depth
+        return (
+          <div key={r.no} className="relative flex">
+            {/* 上の段から続く縦線(まだ下に兄弟がいる先祖の線) */}
+            {r.rails.map((on, k) => (on ? line(`rail${k}`, { left: x(k), top: 0, bottom: 0, borderLeftWidth: 2 }) : null))}
+            {r.depth > 0 &&
+              // 親のアイコンからの線を、このレスのアイコンの真ん中の高さで右へ曲げて、アイコンの左まで
+              line('elbow', {
+                left: x(r.depth - 1),
+                top: 0,
+                height: midY,
+                width: D_STEP - D_HALF,
+                borderLeftWidth: 2,
+                borderBottomWidth: 2,
+                borderBottomLeftRadius: RADIUS,
+              })}
+            {/* まだ兄弟がいれば、親からの縦線を下まで伸ばす */}
+            {r.depth > 0 && !r.last && line('sibling', { left: x(r.depth - 1), top: 0, bottom: 0, borderLeftWidth: 2 })}
+            {/* 子があれば、このレスのアイコンの下から縦線を下ろす */}
+            {hasChildren && line('down', { left: x(r.depth), top: bottomY, bottom: 0, borderLeftWidth: 2 })}
+            <div className="flex-shrink-0" style={{ width: r.depth * D_STEP }} />
+            <div
+              className="relative flex-1 min-w-0 rounded-[var(--card-radius)]"
+              style={r.no === props.focus ? { background: 'var(--c-accent-wash)' } : undefined}
+            >
+              {props.renderPost(r.no)}
+              {r.alsoTo.length > 0 && (
+                <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -590,6 +590,30 @@ export default function ThreadView(props: Props) {
         if (f) setCursorNo(Number(f.dataset.post))
       }),
     )
+  /**
+   * 1 画面・半画面送るとき、選ぶレスもいっしょに送る。選んでいるレスが画面のどの高さにあったかを保ったまま、
+   * 送った先でその高さにあるレスを選ぶ(見えていなければ画面の一番上の高さで)。端まで来たら端のレス
+   */
+  const pageWithCursor = (dir: 1 | -1, half = false) => {
+    releaseFocus()
+    const { frames, seen, viewTop } = visibleFrames()
+    const cur = frames.find((f) => Number(f.dataset.post) === cursorNo)
+    const y = (cur && seen.includes(cur) ? Math.max(cur.getBoundingClientRect().top, viewTop) : viewTop) + 1
+    const moved = page(dir, half)
+    if (frames.length === 0) return
+    const at = y + moved
+    const hit =
+      moved === 0
+        ? dir > 0
+          ? frames.at(-1)
+          : frames[0]
+        : frames.find((f) => {
+            const r = f.getBoundingClientRect()
+            return r.top <= at && at < r.bottom
+          })
+    const pick = hit ?? (dir > 0 ? frames.at(-1) : frames[0])
+    if (pick) setCursorNo(Number(pick.dataset.post))
+  }
   const moveCursor = (d: 1 | -1) => {
     releaseFocus()
     const { root, frames, seen, viewTop, box } = visibleFrames()
@@ -639,10 +663,10 @@ export default function ThreadView(props: Props) {
       const el = cursorFrame()
       if (p?.id && el) mainHandlers.onId?.(p.id, el)
     },
-    pageDown: () => page(1),
-    pageUp: () => page(-1),
-    halfDown: () => page(1, true),
-    halfUp: () => page(-1, true),
+    pageDown: () => pageWithCursor(1),
+    pageUp: () => pageWithCursor(-1),
+    halfDown: () => pageWithCursor(1, true),
+    halfUp: () => pageWithCursor(-1, true),
     top: () => {
       jumpToTop()
       selectAfterJump('first')

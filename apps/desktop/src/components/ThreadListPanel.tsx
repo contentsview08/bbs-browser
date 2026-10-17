@@ -159,7 +159,14 @@ export default function ThreadListPanel(props: Props) {
     // 割り当てがなくても、PageUp・PageDown・Home・End はスクロールに使う
     const fallback: Record<string, string> = { PageDown: 'pageDown', PageUp: 'pageUp', Home: 'top', End: 'bottom' }
     const action = (props.keymap && actionFor(props.keymap, keyString(e))) ?? fallback[e.key]
-    if (!action) return
+    if (!action) {
+      // 数字キー: 1 で未読だけ、2 で勢い順、3 で新しい順(押すたびに上の帯のボタンと同じく切り替わる)
+      if (e.ctrlKey || e.altKey || e.metaKey || !/^[1-3]$/.test(e.key)) return
+      e.preventDefault()
+      if (e.key === '1') setUnreadOnly((v) => !v)
+      else setSort((s) => cycleSort(s, e.key === '2' ? 'momentum' : 'newest'))
+      return
+    }
     const page = el.clientHeight - (headerRef.current?.offsetHeight ?? 0) - 40
     if (action === 'nextPost' || action === 'prevPost') moveCursor(action === 'nextPost' ? 1 : -1)
     else if (action === 'pageDown' || action === 'pageUp') el.scrollBy({ top: action === 'pageDown' ? page : -page })
@@ -541,7 +548,7 @@ export default function ThreadListPanel(props: Props) {
                 type="button"
                 onClick={() => setUnreadOnly((v) => !v)}
                 className={`${TAB} ${unreadOnly ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-                title="ログがあり、新着レスのあるスレだけを出す"
+                title="ログがあり、新着レスのあるスレだけを出す(1 キー)"
               >
                 <span className="material-symbols-outlined text-base leading-none">mark_email_unread</span>
                 未読
@@ -565,6 +572,7 @@ export default function ThreadListPanel(props: Props) {
                     key={mode}
                     type="button"
                     onClick={() => setSort((s) => cycleSort(s, mode))}
+                    title={`${label}に並べる。押すたびに 逆順 → 元の並び(${mode === 'momentum' ? 2 : 3} キー)`}
                     className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
                   >
                     <span className="material-symbols-outlined text-base leading-none">{icon}</span>

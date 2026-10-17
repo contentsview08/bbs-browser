@@ -559,7 +559,21 @@ export default function ThreadView(props: Props) {
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
       const action = actionFor(keymap, keyString(e))
-      if (!action) return
+      if (!action) {
+        // 数字キー: 1〜4 で絞り込み(人気・画像・動画・リンク)を付け外し、5 で全部表示(割り当てに使っていなければ)
+        const n = !e.ctrlKey && !e.altKey && !e.metaKey && /^[1-5]$/.test(e.key) ? Number(e.key) : 0
+        if (!n) return
+        e.preventDefault()
+        if (n === 5) return setFilters(new Set())
+        const key = FILTERS[n - 1].key
+        setFilters((f) => {
+          const next = new Set(f)
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
+          return next
+        })
+        return
+      }
       e.preventDefault()
       if (action === 'nextPost') stepPost(1)
       else if (action === 'prevPost') stepPost(-1)
@@ -880,7 +894,7 @@ export default function ThreadView(props: Props) {
           </div>
         </header>
         <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
-          {FILTERS.map(({ key, label, icon, color }) => {
+          {FILTERS.map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (
               <button
@@ -898,6 +912,7 @@ export default function ThreadView(props: Props) {
                   active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
                 }`}
                 style={{ paddingTop: 10, paddingBottom: 10 }}
+                title={`${label}だけを出す(${i + 1} キー)`}
               >
                 <span className={`material-symbols-outlined text-xl leading-none ${active ? 'fill' : ''}`} style={{ color }}>
                   {icon}
@@ -913,6 +928,7 @@ export default function ThreadView(props: Props) {
             onClick={() => setFilters(new Set())}
             className={`relative shrink-0 transition-colors ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
             style={{ paddingTop: 10, paddingBottom: 10 }}
+            title="絞り込みを外す(5 キー・Esc)"
           >
             すべて
             {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}

@@ -419,17 +419,11 @@ article.post-discord:hover {
   --line-own-text: #eef7e8;
   --line-own-link: #d3ebff;
 }
-/* 2ch クラシック × LINE 風: 2ch クラシックの茶色(--c-base)に青灰を混ぜるとくすんだ色になるので、
-   ほぼ白の淡い茶色にして、2ch のレンガの壁をうっすら描く(画像は使わず、SVG の線で描いたタイルを敷き詰める) */
+/* 2ch クラシック × LINE 風: 2ch クラシックの茶色(--c-base)に青灰を混ぜるとくすんだ色になるので、ほぼ白の淡い茶色にする。
+   (レンガの模様を SVG で敷くのも試したが、合わなかったのでやめた) */
 :root[data-scheme='2ch-classic'][data-post-style='line'] {
   --c-thread-view-bg: #f6f1ea;
-  --line-brick: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='28' viewBox='0 0 56 28'><g fill='none' stroke='%23b39478' stroke-opacity='0.22' stroke-width='1'><path d='M0 .5H56M0 14.5H56M.5 0V14M28.5 14V28'/></g></svg>");
   --c-cursor-tint: color-mix(in srgb, #c5ad99 22%, transparent);
-}
-:root[data-scheme='2ch-classic'][data-post-style='line'] .bg-panel-view,
-:root[data-scheme='2ch-classic'][data-post-style='line'] .post-popup {
-  background-image: var(--line-brick);
-  background-repeat: repeat;
 }
 /* LINE 風のポップアップ(返信・ID・アンカー・アンカーツリー)は、中身の背景をスレ表示と同じトークの色にする。
    ポップアップの面(--c-surface)のままだと、吹き出し(同じ --c-surface)と同じ色で、吹き出しが見えなくなる */

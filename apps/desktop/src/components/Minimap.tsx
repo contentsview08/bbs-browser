@@ -172,7 +172,13 @@ export default function Minimap(props: Props) {
   }
 
   return (
-    <div className="flex-shrink-0 py-2 pr-2 pl-1" style={{ paddingTop: props.topOffset + 8 }}>
+    <div className="flex-shrink-0 flex flex-col">
+      {/* スレのヘッダーがスクロールの中にあるとき(すりガラス)、ヘッダーはスクロールする所の幅までしかない。
+          ミニマップの上にも同じ見た目の帯を置いて、ヘッダーが右端まで続いて見えるようにする */}
+      {props.topOffset > 0 && (
+        <div className="flex-shrink-0 frosted-glass bg-panel-thread-header border-b border-c-border" style={{ height: props.topOffset }} />
+      )}
+    <div className="flex-1 min-h-0 py-2 pr-2 pl-1">
       <div
         className="relative w-[24px] h-full cursor-pointer"
         style={{
@@ -324,6 +330,7 @@ export default function Minimap(props: Props) {
           </span>
         </div>
       </div>
+    </div>
     </div>
   )
 }

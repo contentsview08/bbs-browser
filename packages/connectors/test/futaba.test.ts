@@ -7,8 +7,9 @@ import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types
 // 偽サーバーは文字を UTF-8 で返し、decode も UTF-8 で読む(Shift_JIS への変換はここでは確かめない)
 const utf8 = (s: string) => new TextEncoder().encode(s)
 
-function fake(routes: Record<string, { status?: number; body?: string }>) {
+function fake(routes: Record<string, { status?: number; body?: string }>, postReply?: string) {
   const got: { url: string; headers?: Record<string, string> }[] = []
+  const posted: { url: string; body: string; headers?: Record<string, string> }[] = []
   const ctx: ConnectorContext = {
     decode: (b) => new TextDecoder('utf-8').decode(b),
     http: {
@@ -18,12 +19,14 @@ function fake(routes: Record<string, { status?: number; body?: string }>) {
         if (!r) return { status: 404, headers: {}, body: new Uint8Array() }
         return { status: r.status ?? 200, headers: {}, body: utf8(r.body ?? '') }
       },
-      post: async () => {
-        throw new Error('書き込まない')
+      post: async (url, body, opts) => {
+        if (postReply === undefined) throw new Error('書き込まない')
+        posted.push({ url, body, headers: opts?.headers })
+        return { status: 200, headers: {}, body: utf8(postReply) }
       },
     },
   }
-  return { ctx, got }
+  return { ctx, got, posted }
 }
 
 const BOARD = 'https://may.2chan.net/b/'
@@ -108,9 +111,32 @@ describe('ふたばのコネクタ', () => {
     expect((await futabaConnector.fetchPosts(thread, { lastRef: 1007, lastNo: 3 }, gone.ctx)).status).toBe('archived')
   })
 
-  it('アンカーは板の通し番号を指し、書き込みはまだできない', () => {
+  it('アンカーは板の通し番号を指し、レスの上限はない', () => {
     expect(futabaConnector.anchorTarget).toBe('ref')
     expect(futabaConnector.maxPosts).toBeUndefined()
-    expect(futabaConnector.createPost).toBeUndefined()
+  })
+
+  // 本番では試し書きしないので、フォームの写し方と応答の読み方だけを確かめる
+  const FORM_PAGE = `${PAGE}<form action="/b/futaba.php?guid=on" method="POST" enctype="multipart/form-data" id="fm"><input type=hidden name=mode value="regist"><input type=hidden id="hash" name="hash" value="1792226540784444-abc"><input type=hidden id="ptua" name="ptua" value="656869215056"><input type=hidden name=resto value="1000"><input type=text name=name></form>`
+  it('書き込む直前にページを取り直し、隠し欄(hash など)を写して、文字だけを送る', async () => {
+    const { ctx, posted } = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<META HTTP-EQUIV="refresh" content="1;URL=res/1000.htm">書きこみました')
+    const r = await futabaConnector.createPost!(thread, { name: '', mail: 'sage', body: 'abc' }, ctx)
+    expect(r.status).toBe('ok')
+    expect(posted[0].url).toBe('https://may.2chan.net/b/futaba.php?guid=on')
+    const sent = new URLSearchParams(posted[0].body)
+    expect(sent.get('hash')).toBe('1792226540784444-abc')
+    expect(sent.get('ptua')).toBe('656869215056')
+    expect(sent.get('resto')).toBe('1000')
+    expect(sent.get('mode')).toBe('regist')
+    expect(sent.get('textonly')).toBe('on')
+    expect(sent.get('email')).toBe('sage')
+    expect(sent.get('com')).toBe('abc')
+    expect(posted[0].headers?.Referer).toBe(`${BOARD}res/1000.htm`)
+  })
+
+  it('断られたら、返ってきたページの文字を知らせる', async () => {
+    const { ctx } = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<html><body><b>本文がありません</b></body></html>')
+    const r = await futabaConnector.createPost!(thread, { name: '', mail: '', body: '' }, ctx)
+    expect(r).toMatchObject({ status: 'error', message: '本文がありません' })
   })
 })

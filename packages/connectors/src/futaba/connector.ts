@@ -1,13 +1,18 @@
-// ふたば☆ちゃんねる(*.2chan.net)のコネクタ。読むだけ(書き込みはまだ)。2026-10-17 に may.2chan.net/b/ で確かめた作り:
+// ふたば☆ちゃんねる(*.2chan.net)のコネクタ。2026-10-17 に may.2chan.net/b/ で確かめた作り:
 // - 板の URL は https://サーバー.2chan.net/板/(例: https://may.2chan.net/b/)、スレは 板/res/番号.htm
 // - スレ一覧はカタログ(板/futaba.php?mode=cat)。Cookie の cxyl で「列 x 行 x スレタイの文字数」を決められるので、
 //   200 スレ・40 文字にして 1 回で取る。サムネイルの絵の名前はスレを立てた時刻(ミリ秒)
 // - スレの中身は、最初はスレのページ(HTML)で全部、そのあとは JSON(futaba.php?mode=json&res=番号&start=最後の番号)で新しい返信だけ
 // - レスの番号は板全体の通し番号(Post.ref)。アンカーは >No.番号 や >番号 の形でこの番号を指す(anchorTarget: 'ref')
 // - スレは時間が来ると消える(ページが 404)。消えたら dat 落ちと同じに扱う。スレの数の上限(1000)はない
+// - 書き込みは、スレのページのフォーム(id="fm"、板/futaba.php?guid=on へ POST)。隠し欄の hash は時刻入りでページごとに変わるので、
+//   書き込む直前にページを取り直して写す。文字だけ(textonly=on)を Shift_JIS のフォームで送る。
+//   本番での試し書きはしていない(フォームの形だけ確かめた)。本来は JavaScript が埋める欄(pthb・pthc・baseform など)があり、
+//   空のままでは断られるかもしれない。断られたら、返ってきたページ(PostResult の html)を見て直す
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, ThreadSummary } from '../types'
-import { parseCatalog, parseThreadJson, parseThreadPage, titleOf } from './parse'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, PostResult, ThreadSummary } from '../types'
+import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
+import { parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
 
 const ID = 'futaba'
 
@@ -48,7 +53,7 @@ function titleFromOp(body: string): string {
 export const futabaConnector: Connector = {
   id: ID,
   name: 'ふたば☆ちゃんねる',
-  capabilities: { post: false, images: true, incremental: true },
+  capabilities: { post: true, images: true, incremental: true },
   anchorTarget: 'ref',
   voteLabel: 'そうだね',
   // 引用は番号ではなく「>前のレスの文章」で書く
@@ -152,6 +157,38 @@ export const futabaConnector: Connector = {
     const last = fresh.at(-1)!
     return { status: 'updated', posts: fresh, votes: parsed.votes, cursor: { lastRef: last.ref ?? cursor.lastRef, lastNo: last.no } satisfies RawCursor }
   },
+
+  async createPost(thread, input, ctx): Promise<PostResult> {
+    // 書き込む直前にスレのページを取り直し、フォームの隠し欄(hash・ptua など)を写す
+    const page = await ctx.http.get(threadWebUrl(thread))
+    if (page.status === 404) return { status: 'error', message: 'スレが消えています(もう書き込めません)' }
+    if (page.status !== 200) return { status: 'error', message: `スレのページを開けません(HTTP ${page.status})` }
+    const form = parsePostForm(sjis(page.body, ctx))
+    if (!form) return { status: 'error', message: '書き込みのフォームが見つかりません(スレが消えたか、ページの形が変わりました)' }
+    const fields: Record<string, string> = {
+      ...form.hidden,
+      mode: 'regist',
+      resto: thread.key,
+      // JavaScript が動いたことにする(ふつうのブラウザと同じ)
+      js: 'on',
+      scsz: '1920x1080x24',
+      name: input.name,
+      email: input.mail,
+      sub: '',
+      com: input.body,
+      textonly: 'on',
+      pwd: '',
+    }
+    const url = new URL(form.action, threadWebUrl(thread)).href
+    const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread) },
+    })
+    const html = sjis(res.body, ctx)
+    const r = parsePostResult(html)
+    return r.ok ? { status: 'ok', message: r.message } : { status: 'error', message: r.message, html }
+  },
+
+  postByteLength: shiftJisByteLength,
 
   threadWebUrl,
 }

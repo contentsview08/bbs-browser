@@ -135,6 +135,36 @@ export function parseThreadJson(text: string, origin: string): { posts: Post[]; 
   return { posts, old: d.old === 1, votes }
 }
 
+/**
+ * 書き込みのフォーム(id="fm")の隠し欄(mode・hash・ptua など)。hash は時刻を含み、ページを取るたびに変わる。
+ * 見つからなければ undefined(スレが消えた・形が変わった)
+ */
+export function parsePostForm(html: string): { action: string; hidden: Record<string, string> } | undefined {
+  const start = html.search(/<form[^>]*id=["']?fm["']?/i)
+  if (start < 0) return undefined
+  const form = html.slice(start, html.indexOf('</form>', start))
+  const action = decodeEntities(/action=["']([^"']+)["']/i.exec(form)?.[1] ?? '')
+  const hidden: Record<string, string> = {}
+  for (const m of form.matchAll(/<input\b[^>]*>/gi)) {
+    const tag = m[0]
+    if (!/type=["']?hidden/i.test(tag)) continue
+    const name = /name=["']?([^"'\s>]+)/i.exec(tag)?.[1]
+    if (!name) continue
+    hidden[name] = decodeEntities(/value=["']([^"']*)["']/i.exec(tag)?.[1] ?? '')
+  }
+  return action ? { action, hidden } : undefined
+}
+
+/**
+ * 書き込んだあとのページを読む。書き込めたときは、スレへ戻る refresh か「書きこみました」が入る(本番で確かめていない)。
+ * それ以外はエラーとして、ページの文字を短くして返す
+ */
+export function parsePostResult(html: string): { ok: boolean; message: string } {
+  const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim()
+  if (/http-equiv=["']?refresh/i.test(html) || /書きこみました|書き込みました/.test(text)) return { ok: true, message: '書きこみました' }
+  return { ok: false, message: text.slice(0, 200) || '書き込めませんでした(応答が空でした)' }
+}
+
 /** ページの <title>(板名) */
 export function titleOf(html: string): string {
   return decodeEntities(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').trim()

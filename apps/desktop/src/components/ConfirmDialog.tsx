@@ -1,6 +1,7 @@
 // 確かめるダイアログ(取り消せない操作の前に出す)。「次回から表示しない」を付けられる
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 
 export default function ConfirmDialog(props: {
@@ -12,17 +13,18 @@ export default function ConfirmDialog(props: {
   onClose: (ok: boolean, skipNext: boolean) => void
 }) {
   const [skip, setSkip] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+  // Tab・矢印はダイアログの中だけで回し、Esc でやめる
+  const latestClose = useRef(props.onClose)
+  latestClose.current = props.onClose
+  const cancel = useRef(() => latestClose.current(false, false)).current
+  useFocusTrap(boxRef, cancel)
   return createPortal(
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={() => props.onClose(false, false)}>
       <div
+        ref={boxRef}
         className="w-full max-w-md bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            props.onClose(false, false)
-          }
-        }}
       >
         <div className="flex items-center gap-2 px-5 py-3 border-b border-c-border">
           <span className="material-symbols-outlined text-xl" style={{ color: 'var(--c-error)' }}>
@@ -44,14 +46,14 @@ export default function ConfirmDialog(props: {
               type="button"
               autoFocus
               onClick={() => props.onClose(false, false)}
-              className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:bg-c-surface2"
+              className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:bg-c-surface2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-c-accent"
             >
               やめる
             </button>
             <button
               type="button"
               onClick={() => props.onClose(true, skip)}
-              className="px-3 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] text-white hover:opacity-90"
+              className="px-3 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-c-accent"
               style={{ background: 'var(--c-error)' }}
             >
               {props.okLabel}

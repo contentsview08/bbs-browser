@@ -6,7 +6,8 @@
 // - レスの番号は板全体の通し番号(Post.ref)。アンカーは >No.番号 や >番号 の形でこの番号を指す(anchorTarget: 'ref')
 // - スレは時間が来ると消える(ページが 404)。消えたら dat 落ちと同じに扱う。スレの数の上限(1000)はない
 // - 書き込みは、スレのページのフォーム(id="fm"、板/futaba.php?guid=on へ POST)。隠し欄の hash は時刻入りでページごとに変わるので、
-//   書き込む直前にページを取り直して写す。文字だけ(textonly=on)を Shift_JIS のフォームで送る。
+//   書き込む直前にページを取り直して写す。文字だけ(textonly=on)を、ブラウザの FormData と同じく multipart/form-data・UTF-8 で送る
+//   (Shift_JIS の普通のフォームで送ると、受け付けられるのに誰にも見えない書き込みになった)。
 //   ページを見たときに渡される Cookie(posttime など)がないと「cookieを有効にしてもう一度送信してください」で断られるので、
 //   書き込みは読む通信と同じ Cookie の置き場で送る(sameCookiesAsGet)
 //   ふたばの書き込みボタンの JavaScript(/bin/base4esc.js の ptfk)と同じく、
@@ -14,7 +15,7 @@
 //   返事は書けたら「ok」(か JSON)、断られたらエラーの文。2026-10-17 に JavaScript を読んで合わせた
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, PostResult, ThreadSummary } from '../types'
-import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
+import { shiftJisByteLength } from '../sjis'
 import { parseCaco, parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
 
 const ID = 'futaba'
@@ -44,6 +45,20 @@ const CHROMIUM_PTUA = String([10, 11, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24
  */
 const BROWSER = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+}
+
+/** 書き込みの pthb に入れる、このアプリを開いてから初めて書いたときの pthc(ブラウザの localStorage の代わり) */
+let firstCaco: string | undefined
+
+/** multipart/form-data の本文(文字の欄と、空の添付ファイルの欄)。文字は UTF-8 のまま(送るときに UTF-8 になる) */
+function multipart(fields: [string, string][], boundary: string): string {
+  const crlf = '\r\n'
+  const parts = fields.map(([k, v]) => `--${boundary}${crlf}Content-Disposition: form-data; name="${k}"${crlf}${crlf}${v.replace(/\r?\n/g, crlf)}${crlf}`)
+  // ブラウザは、ファイルを選んでいなくても upfile を空のファイルとして付ける
+  const upfile = `--${boundary}${crlf}Content-Disposition: form-data; name="upfile"; filename=""${crlf}Content-Type: application/octet-stream${crlf}${crlf}${crlf}`
+  const at = fields.findIndex(([k]) => k === 'textonly')
+  const ordered = at < 0 ? [...parts, upfile] : [...parts.slice(0, at), upfile, ...parts.slice(at)]
+  return `${ordered.join('')}--${boundary}--${crlf}`
 }
 
 /** カタログを 200 スレ(20 列 x 10 行)・スレタイ 40 文字で返してもらう */
@@ -193,27 +208,38 @@ export const futabaConnector: Connector = {
     } catch {
       // 取れなければ空のまま送る(断られたら、その文を出す)
     }
-    const fields: Record<string, string> = {
-      ...form.hidden,
-      mode: 'regist',
-      resto: thread.key,
-      // JavaScript が動いたことにする(ふつうのブラウザと同じ)
-      js: 'on',
-      scsz: '1920x1080x24',
-      pthc: caco,
-      pthb: caco,
-      ptua: CHROMIUM_PTUA,
-      responsemode: 'ajax',
-      name: input.name,
-      email: input.mail,
-      sub: '',
-      com: input.body,
-      textonly: 'on',
-      pwd: '',
-    }
+    // pthb は、ブラウザなら localStorage に残した「初めて書いたときの pthc」。初めては空で、2 回目からその値を入れる
+    // (いつも pthc と同じ値だと、ふつうのブラウザではありえない組み合わせになる)。ここではアプリを開いている間だけ覚える
+    const pthb = firstCaco ?? ''
+    if (firstCaco === undefined && caco) firstCaco = caco
+    // ふたばのフォームと同じ並びで、書き込みボタンの JavaScript が埋める値を入れる
+    const fields: [string, string][] = [
+      ...Object.entries({
+        ...form.hidden,
+        mode: 'regist',
+        pthb,
+        pthc: caco,
+        ptua: CHROMIUM_PTUA,
+        // JavaScript が動いたことにする(ふつうのブラウザと同じ)
+        scsz: '1920x1080x24',
+        js: 'on',
+        // サーバーはこの欄の文字の形で、送られた文字コード(UTF-8)を見分ける
+        chrenc: '文字',
+        resto: thread.key,
+      }),
+      ['name', input.name],
+      ['email', input.mail],
+      ['sub', ''],
+      ['com', input.body],
+      ['textonly', 'on'],
+      ['pwd', ''],
+      ['responsemode', 'ajax'],
+    ]
     const url = new URL(form.action, threadWebUrl(thread)).href
-    const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
-      headers: { ...BROWSER, 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
+    // ブラウザの FormData と同じく、multipart/form-data で、文字は UTF-8 で送る(添付なしでも upfile の欄は空で付く)
+    const boundary = `----WebKitFormBoundary${Math.random().toString(36).slice(2, 18)}`
+    const res = await ctx.http.post(url, multipart(fields, boundary), {
+      headers: { ...BROWSER, 'Content-Type': `multipart/form-data; boundary=${boundary}`, Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
       // ページを見たときに渡された Cookie(posttime など)が要る。ないと「cookieを有効にして…」で断られる
       sameCookiesAsGet: true,
     })

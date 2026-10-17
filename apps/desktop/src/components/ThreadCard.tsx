@@ -135,7 +135,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         <span className="text-center text-[11px] font-bold select-none" title={archived ? 'dat落ち' : isNew ? '新しいスレ' : unreadCount > 0 ? '新着あり' : visited ? '既読' : ''}>
           {archived ? <span className="text-c-text-muted">落</span> : isNew ? <span style={{ color: 'var(--c-new-badge-bg)' }}>新</span> : unreadCount > 0 ? <span style={{ color: 'var(--c-unread)' }}>●</span> : visited ? <span className="text-c-text-muted">○</span> : null}
         </span>
-        <span className="min-w-0 truncate" style={{ color: titleColor }}>
+        <span className="thread-row-title min-w-0" style={{ color: titleColor }}>
           {favStar}
           {thread.title}
         </span>

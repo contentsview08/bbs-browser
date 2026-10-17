@@ -498,6 +498,20 @@ article.post-discord:hover {
   white-space: nowrap;
 }
 
+/* 専ブラ風の表: 一覧表示ではスレタイを折り返して全部見せ、高密度では 1 行に切る */
+.card-thread[data-variant='classic'] .thread-row-title {
+  overflow-wrap: anywhere;
+}
+[data-density='list'] .card-thread[data-variant='classic'] {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+}
+[data-density='dense'] .card-thread[data-variant='classic'] .thread-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 専ブラ風の表: 角を丸めず、1 行おきにうっすら色を付ける */
 .card-thread[data-variant='classic'] {
   border-radius: 0;

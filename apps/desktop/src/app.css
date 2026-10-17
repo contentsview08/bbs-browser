@@ -277,3 +277,31 @@ input[type='checkbox']:indeterminate {
   scrollbar-width: thin;
   scrollbar-color: var(--c-scrollbar-thumb) transparent;
 }
+
+/* 意味の色(差し色)。配色の統一感は保ちつつ、ボタンや印を色で見分けられるように、意味のあるところにだけ使う。
+   ダーク(.dark)は少し明るく、ライトは少し暗くして、どちらの背景でも浮きすぎないようにする */
+:root {
+  --c-mark-fav: #c98d00; /* お気に入り */
+  --c-mark-danger: #c94442; /* 削除・NG */
+  --c-mark-new: #2e9a5b; /* 新しい・書き込み */
+  --c-mark-video: #c94442; /* 動画 */
+  --c-mark-image: #2e9a5b; /* 画像 */
+  --c-mark-hot: #c96a1e; /* 人気 */
+  --c-mark-link: #2f6fc0; /* リンク・ブラウザ・コピー */
+  --c-mark-purple: #7b52c9; /* 見た目・アップロード */
+}
+:root.dark {
+  --c-mark-fav: #f2c14e;
+  --c-mark-danger: #ef7470;
+  --c-mark-new: #5fc28a;
+  --c-mark-video: #ef7470;
+  --c-mark-image: #5fc28a;
+  --c-mark-hot: #f0954a;
+  --c-mark-link: #6aa9f0;
+  --c-mark-purple: #b48cf0;
+}
+
+/* 乗せたときに意味の色にする(style で --tint を渡す)。ふだんは落ち着いた色のまま */
+.tint-hover:hover:not(:disabled) {
+  color: var(--tint) !important;
+}

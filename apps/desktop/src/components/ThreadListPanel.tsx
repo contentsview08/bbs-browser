@@ -249,8 +249,10 @@ export default function ThreadListPanel(props: Props) {
   // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
   const placements = props.placements
   const barActions: BarAction[] = [
-    { id: 'search', label: 'スレッド検索', icon: 'search', active: searchActive, onClick: () => setSearchActive((v) => !v) },
-    ...(props.onNewThread ? [{ id: 'newThread', label: 'スレを立てる', icon: 'edit_square', onClick: props.onNewThread }] : []),
+    { id: 'search', label: 'スレッド検索', icon: 'search', tint: 'var(--c-accent)', active: searchActive, onClick: () => setSearchActive((v) => !v) },
+    ...(props.onNewThread
+      ? [{ id: 'newThread', label: 'スレを立てる', icon: 'edit_square', tint: 'var(--c-mark-new)', onClick: props.onNewThread }]
+      : []),
     ...(props.favorite
       ? [
           {
@@ -258,7 +260,8 @@ export default function ThreadListPanel(props: Props) {
             label: props.favorite.active ? 'お気に入り板から外す' : 'お気に入り板に追加',
             icon: 'star',
             active: props.favorite.active,
-            activeColor: 'var(--c-heat-warm)',
+            activeColor: 'var(--c-mark-fav)',
+            tint: 'var(--c-mark-fav)',
             fillWhenActive: true,
             onClick: props.favorite.onToggle,
           },
@@ -270,6 +273,7 @@ export default function ThreadListPanel(props: Props) {
             id: 'style',
             label: '表示スタイル',
             icon: 'palette',
+            tint: 'var(--c-mark-purple)',
             render: (where: 'header' | 'footer') => props.style!.button(where === 'footer'),
             submenu: props.style.items,
           },
@@ -281,6 +285,7 @@ export default function ThreadListPanel(props: Props) {
             id: 'refresh',
             label: 'スレッド一覧を更新',
             icon: 'refresh',
+            tint: 'var(--c-accent)',
             // 押せるかは押した時点で決める(クールダウン中なら App が取りに行かない。残りは帯の更新ボタンに出る)
             disabled: props.loading,
             onClick: () => void props.onRefresh?.(),

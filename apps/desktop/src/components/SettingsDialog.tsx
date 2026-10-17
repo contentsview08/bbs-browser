@@ -1409,7 +1409,7 @@ function BoardListTab(props: {
                       <button
                         type="button"
                         onClick={() => props.onToggleFavorite(b)}
-                        className={fav ? 'text-c-heat-warm' : 'text-c-text-muted hover:text-c-text-strong'}
+                        className={fav ? 'text-mark-fav' : 'text-c-text-muted hover:text-mark-fav'}
                         title={fav ? 'お気に入りから外す' : 'お気に入りに追加'}
                       >
                         <span className={`material-symbols-outlined text-lg leading-none ${fav ? 'fill' : ''}`}>star</span>

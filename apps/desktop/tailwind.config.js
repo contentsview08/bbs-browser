@@ -31,6 +31,15 @@ export default {
         'c-heat-warm': 'var(--c-heat-warm)',
         'c-heat-hot': 'var(--c-heat-hot)',
         'c-heat-very-hot': 'var(--c-heat-very-hot)',
+        // 意味の色(差し色)。app.css
+        'mark-fav': 'var(--c-mark-fav)',
+        'mark-danger': 'var(--c-mark-danger)',
+        'mark-new': 'var(--c-mark-new)',
+        'mark-video': 'var(--c-mark-video)',
+        'mark-image': 'var(--c-mark-image)',
+        'mark-hot': 'var(--c-mark-hot)',
+        'mark-link': 'var(--c-mark-link)',
+        'mark-purple': 'var(--c-mark-purple)',
       },
       fontFamily: {
         display: ['"Noto Sans JP Variable"', '"Noto Sans JP"', 'sans-serif'],

@@ -125,11 +125,12 @@ const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colo
 
 /** レスの絞り込み(web 版と同じ 4 種。選んだもののどれかに当たれば出す) */
 type PostFilter = 'popular' | 'image' | 'video' | 'link'
-const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
-  { key: 'popular', label: '人気レス', icon: 'local_fire_department' },
-  { key: 'image', label: '画像', icon: 'image' },
-  { key: 'video', label: '動画', icon: 'play_circle' },
-  { key: 'link', label: 'リンク', icon: 'link' },
+// 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
+const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[] = [
+  { key: 'popular', label: '人気レス', icon: 'local_fire_department', color: 'var(--c-mark-hot)' },
+  { key: 'image', label: '画像', icon: 'image', color: 'var(--c-mark-image)' },
+  { key: 'video', label: '動画', icon: 'play_circle', color: 'var(--c-mark-video)' },
+  { key: 'link', label: 'リンク', icon: 'link', color: 'var(--c-mark-link)' },
 ]
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 const AUTO_COLLAPSE_WIDTH = 720
@@ -449,13 +450,14 @@ export default function ThreadView(props: Props) {
   // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
   const placements = useMemo(() => resolvePlacements('thread', settings.barLayout), [settings.barLayout])
   const barActions: BarAction[] = [
-    { id: 'search', label: 'レス検索', icon: 'search', active: searchActive || !!query, onClick: () => setSearchActive((v) => !v) },
+    { id: 'search', label: 'レス検索', icon: 'search', tint: 'var(--c-accent)', active: searchActive || !!query, onClick: () => setSearchActive((v) => !v) },
     {
       id: 'favorite',
       label: props.isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す',
       icon: 'star',
       active: props.isFavorite,
-      activeColor: 'var(--c-heat-warm)',
+      activeColor: 'var(--c-mark-fav)',
+      tint: 'var(--c-mark-fav)',
       fillWhenActive: true,
       onClick: props.onToggleFavorite,
     },
@@ -465,6 +467,7 @@ export default function ThreadView(props: Props) {
             id: 'findNext',
             label: '次スレを探す',
             icon: 'skip_next',
+            tint: 'var(--c-mark-new)',
             active: ended,
             onClick: () => {
               setShowNext(true)
@@ -489,13 +492,14 @@ export default function ThreadView(props: Props) {
           },
         ]
       : []),
-    { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
-    { id: 'delete', label: 'ログを削除して閉じる (Delete)', icon: 'delete', onClick: props.onDeleteLog },
-    { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
+    { id: 'gallery', label: '画像一覧', icon: 'photo_library', tint: 'var(--c-mark-image)', active: galleryOpen, onClick: () => setGalleryOpen(true) },
+    { id: 'delete', label: 'ログを削除して閉じる (Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
+    { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', tint: 'var(--c-mark-link)', onClick: props.onOpenInBrowser },
     {
       id: 'save',
       label: 'スレを保存(HTML・テキスト)',
       icon: 'save',
+      tint: 'var(--c-mark-link)',
       onClick: () =>
         void saveThread({ title: log.title, url: props.threadUrl, posts: log.posts, savedAt: new Date() }).then(
           (path) => path && showQuick(true, `保存しました: ${path}`),
@@ -506,6 +510,7 @@ export default function ThreadView(props: Props) {
       id: 'refresh',
       label: '更新',
       icon: 'refresh',
+      tint: 'var(--c-accent)',
       disabled: props.loading,
       // 押せるかは押した時点で決める(描いた時刻で決めると、クールダウンが明けても描き直すまで押せない)
       onClick: () => {
@@ -859,7 +864,7 @@ export default function ThreadView(props: Props) {
           </div>
         </header>
         <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
-          {FILTERS.map(({ key, label, icon }) => {
+          {FILTERS.map(({ key, label, icon, color }) => {
             const active = filters.has(key)
             return (
               <button
@@ -878,7 +883,9 @@ export default function ThreadView(props: Props) {
                 }`}
                 style={{ paddingTop: 10, paddingBottom: 10 }}
               >
-                <span className="material-symbols-outlined text-xl leading-none">{icon}</span>
+                <span className={`material-symbols-outlined text-xl leading-none ${active ? 'fill' : ''}`} style={{ color }}>
+                  {icon}
+                </span>
                 {label}
                 {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
               </button>

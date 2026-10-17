@@ -86,7 +86,7 @@ const TOOL_BTN =
  * 押すとメニューを出すボタン。レスのヘッダー行などははみ出しを隠す設定なので、メニューは body の直下に出し、
  * ボタンの位置から場所を決める(ポップアップの中のレスでも使えるよう、ポップアップより手前に出す)
  */
-function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onOpenChange: (open: boolean) => void }) {
+function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onOpenChange: (open: boolean) => void; hoverClass?: string }) {
   const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number }>()
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -125,7 +125,7 @@ function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onO
           e.stopPropagation()
           toggle()
         }}
-        className={`${TOOL_BTN} ${pos ? 'text-c-text-strong bg-c-surface3' : ''}`}
+        className={`${TOOL_BTN} ${props.hoverClass ?? ''} ${pos ? 'text-c-text-strong bg-c-surface3' : ''}`}
         title={props.title}
       >
         <span className="material-symbols-outlined text-lg leading-none">{props.icon}</span>
@@ -277,21 +277,21 @@ function PostArticle(props: Props) {
         {toolbarItems.map((item) => {
           if (item === 'reply' && reply)
             return (
-              <button key={item} type="button" className={TOOL_BTN} title="返信" onClick={() => reply(post.no)}>
+              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="返信" onClick={() => reply(post.no)}>
                 <span className="material-symbols-outlined text-lg leading-none">reply</span>
               </button>
             )
           if (item === 'copy')
             return (
-              <button key={item} type="button" className={TOOL_BTN} title="本文をコピー" onClick={() => copy(post.body)}>
+              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-link`} title="本文をコピー" onClick={() => copy(post.body)}>
                 <span className="material-symbols-outlined text-lg leading-none">content_copy</span>
               </button>
             )
           if (item === 'ng' && ngActions.length > 0)
-            return <MenuButton key={item} icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} />
+            return <MenuButton key={item} icon="block" title="NG に追加" items={ngActions} onOpenChange={setNgOpen} hoverClass="hover:!text-mark-danger" />
           if (item === 'tree' && hasConnections)
             return (
-              <button key={item} type="button" className={TOOL_BTN} title="アンカーツリー" onClick={() => handlers.onBody(post.no, articleRef.current!)}>
+              <button key={item} type="button" className={`${TOOL_BTN} hover:!text-mark-hot`} title="アンカーツリー" onClick={() => handlers.onBody(post.no, articleRef.current!)}>
                 <span className="material-symbols-outlined text-lg leading-none">account_tree</span>
               </button>
             )
@@ -301,7 +301,7 @@ function PostArticle(props: Props) {
               <button
                 key={item}
                 type="button"
-                className={`${TOOL_BTN} text-sm font-bold max-w-[6rem]`}
+                className={`${TOOL_BTN} hover:!text-mark-new text-sm font-bold max-w-[6rem]`}
                 title={`「${text}」とすぐ書き込む`}
                 onClick={() => quick(post.no, text)}
               >

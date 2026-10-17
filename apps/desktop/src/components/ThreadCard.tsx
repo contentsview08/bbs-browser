@@ -80,24 +80,24 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
             <button
               type="button"
               onClick={() => onToggleFavorite(thread)}
-              className={`${TOOL} ${isFavorite ? 'text-c-heat-warm' : ''}`}
+              className={`${TOOL} ${isFavorite ? 'text-mark-fav' : 'hover:!text-mark-fav'}`}
               title={isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す'}
             >
               <span className={`material-symbols-outlined text-base leading-none ${isFavorite ? 'fill' : ''}`}>star</span>
             </button>
           )}
           {onCopy && (
-            <button type="button" onClick={() => onCopy(thread)} className={TOOL} title="スレタイと URL をコピー">
+            <button type="button" onClick={() => onCopy(thread)} className={`${TOOL} hover:!text-mark-link`} title="スレタイと URL をコピー">
               <span className="material-symbols-outlined text-base leading-none">content_copy</span>
             </button>
           )}
           {onNg && (
-            <button type="button" onClick={() => onNg(thread)} className={TOOL} title="スレタイを NG に追加">
+            <button type="button" onClick={() => onNg(thread)} className={`${TOOL} hover:!text-mark-danger`} title="スレタイを NG に追加">
               <span className="material-symbols-outlined text-base leading-none">block</span>
             </button>
           )}
           {onDeleteLog && state && (
-            <button type="button" onClick={() => onDeleteLog(thread)} className={`${TOOL} hover:text-c-heat-very-hot`} title="このスレのログ(閲覧履歴)を削除">
+            <button type="button" onClick={() => onDeleteLog(thread)} className={`${TOOL} hover:!text-mark-danger`} title="このスレのログ(閲覧履歴)を削除">
               <span className="material-symbols-outlined text-base leading-none">delete</span>
             </button>
           )}
@@ -133,14 +133,14 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
           {isNew && (
             <span
               className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
-              style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+              style={{ background: 'var(--c-mark-new)', color: '#fff' }}
               title="前回この板を見たあとに立ったスレ"
             >
               新
             </span>
           )}
           {isFavorite && (
-            <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-c-heat-warm" title="お気に入りのスレ">
+            <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-mark-fav" title="お気に入りのスレ">
               star
             </span>
           )}

@@ -57,6 +57,8 @@ function Row(props: {
   trailing?: ReactNode
   /** アイコンの右上に出す数(新着など)。しまっていても見える */
   badge?: number
+  /** アイコンの色(意味の色)。項目ごとに色を変え、しまっていても見分けやすくする */
+  color?: string
 }) {
   return (
     <button
@@ -69,7 +71,9 @@ function Row(props: {
     >
       <span className="w-[63px] flex-shrink-0 flex items-center justify-center">
         <span className="relative">
-          <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`}>{props.icon}</span>
+          <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`} style={props.color ? { color: props.color } : undefined}>
+            {props.icon}
+          </span>
           {props.badge !== undefined && props.badge > 0 && (
             <span
               className="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-[18px] text-center"
@@ -247,6 +251,7 @@ export default function Sidebar(props: Props) {
         <nav ref={navRef} onScroll={updateMore} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar">
           <Row
             icon="star"
+            color="var(--c-mark-fav)"
             label="お気に入り板"
             filled={favoritesOpen}
             onClick={() => setFavoritesOpen((v) => !v)}
@@ -332,6 +337,7 @@ export default function Sidebar(props: Props) {
           )}
           <Row
             icon="bookmark"
+            color="var(--c-mark-hot)"
             label="お気に入りのスレ"
             active={props.favThreadsActive}
             filled={props.favThreadsActive}
@@ -340,6 +346,7 @@ export default function Sidebar(props: Props) {
           />
           <Row
             icon="schedule"
+            color="var(--c-mark-link)"
             label="閲覧履歴"
             active={props.historyActive}
             filled={props.historyActive || historyOpen}
@@ -377,8 +384,8 @@ export default function Sidebar(props: Props) {
               />
             </div>
           )}
-          <Row icon="edit_note" label="書き込み履歴" onClick={props.onOpenPostHistory} />
-          {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" onClick={props.onOpenUploads} />}
+          <Row icon="edit_note" label="書き込み履歴" color="var(--c-mark-new)" onClick={props.onOpenPostHistory} />
+          {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" color="var(--c-mark-purple)" onClick={props.onOpenUploads} />}
         </nav>
         </div>
 

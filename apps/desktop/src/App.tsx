@@ -171,6 +171,8 @@ export default function App() {
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
   const single = settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
   const [listOpen, setListOpen] = useState(false)
+  /** 1 画面のとき、スレ表示を(スレ一覧の上に)出しているか。開いているスレがあって、一覧に戻っていないとき */
+  const threadShown = (activeId !== undefined) && !listOpen
 
   // 非同期の処理の途中で最新の値を見るための控え
   const tabsRef = useRef(tabs)
@@ -1218,19 +1220,10 @@ export default function App() {
       {/* overflow-hidden: しまったスレ一覧がサイドバーの上にはみ出して見えないように */}
       <div className="relative flex-1 min-h-0 flex overflow-hidden">
 
-      {/* 縦長のときは、スレ一覧を左から引き出す。外を押したら引っ込める */}
+      {/* 1 画面のときは、スレ一覧を土台として画面いっぱい(読みやすい幅で真ん中)に出し、
+          スレを開くとスレ表示がその上に右から重なる(下の threadShown) */}
       {settingsLoaded && (
-        <div
-          className={
-            single
-              ? // 1 画面: スレ一覧を画面いっぱい(読みやすい幅で真ん中)に出す。スレを開いていなければ、いつも一覧を出す。
-                // しまうときも消さずに隠すだけにする(スクロールの位置を残すため)
-                `absolute inset-0 z-30 flex justify-center bg-panel-view transition-[opacity,visibility] duration-150 ${
-                  listOpen || !activeTab ? 'opacity-100' : 'opacity-0 invisible pointer-events-none'
-                }`
-              : 'contents'
-          }
-        >
+        <div className={single ? 'flex-1 min-w-0 flex justify-center bg-panel-view' : 'contents'}>
         <ThreadListPanel
           key={favView ? 'favorites' : history ? 'history' : board?.url}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
@@ -1288,7 +1281,17 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div
+        className={
+          single
+            ? // 1 画面: スレ一覧の上に右から重ねる。出し切ったら動かすための指定(transform)を外す
+              // (付いたままだと、画面の座標で置くポップアップの位置がずれるため)。隠すときは消さずに右へ引っ込める
+              `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl transition-[transform,visibility] duration-200 ease-out ${
+                threadShown ? '' : 'translate-x-full invisible'
+              }`
+            : 'flex-1 min-w-0 flex flex-col'
+        }
+      >
         {settings.tabsEnabled && (
         <TabBar
           tabs={tabs.map((t) => ({
@@ -1330,9 +1333,10 @@ export default function App() {
           {shownIds.map((id) => {
             const t = tabs.find((x) => x.id === id)
             if (!t?.log) return null
-            const isActive = id === activeId
+            // 1 画面でスレ一覧に戻っているあいだは、隠れているスレ表示を開いていないタブと同じに扱う(キー操作・既読を受けない)
+            const isActive = id === activeId && (!single || threadShown)
             return (
-              <div key={id} className={`absolute inset-0 flex ${isActive ? '' : 'invisible pointer-events-none'}`}>
+              <div key={id} className={`absolute inset-0 flex ${id === activeId ? '' : 'invisible pointer-events-none'}`}>
                 <TabPane
                   tab={t as Tab & { log: ThreadLog }}
                   active={isActive}

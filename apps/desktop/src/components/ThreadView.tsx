@@ -25,7 +25,7 @@ import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
-import { useThreadScroll } from '../hooks/useThreadScroll'
+import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
 import type { ScrollPosition } from '../utils/threadScroll'
 import { actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
@@ -137,6 +137,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
   { key: 'link', label: 'リンク', icon: 'link', color: 'var(--c-mark-link)' },
 ]
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
+/** 選んだレスへ送るときのスクロールの時間 */
+const CURSOR_SCROLL_MS = 160
 const AUTO_COLLAPSE_WIDTH = 720
 const AUTO_COLLAPSE_HEIGHT = 420
 /** 新着の札を出しておく時間 */
@@ -550,6 +552,9 @@ export default function ThreadView(props: Props) {
 
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
   const [cursorNo, setCursorNo] = useState<number>()
+  // 新着が届いた・開き直した(「ここから未読」が変わった)ら、前に選んでいたレスは忘れる。
+  // 次の J・K は、いま見えている所(未読の頭へ送ったならそこ)から始まる
+  useEffect(() => setCursorNo(undefined), [unreadFrom])
   /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
   /** 選んでいるレスの枠(見えているもの)。なければ undefined */
@@ -626,10 +631,14 @@ export default function ThreadView(props: Props) {
       ? frames[Math.min(frames.length - 1, Math.max(0, i + d))]
       : ((d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])
     setCursorNo(Number(target.dataset.post))
+    // 選んだレスが外に出るときだけ、そのレスが見える所まで(なめらかに)送る。
+    // 行き先はレスの位置から毎回測る(画面の外で省いていたレスが描かれて高さが変わっても、ずれないように)
     const r = target.getBoundingClientRect()
     const room = box.bottom - viewTop
-    if (r.top < viewTop || r.height > room) root.scrollBy({ top: r.top - viewTop - 4 })
-    else if (r.bottom > box.bottom) root.scrollBy({ top: r.bottom - box.bottom + 4 })
+    if (r.top < viewTop || r.height > room)
+      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop - 4, CURSOR_SCROLL_MS)
+    else if (r.bottom > box.bottom)
+      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom + 4, CURSOR_SCROLL_MS)
   }
   /** 選んでいるレスの画像・動画をビューアーで開く。なければ、そのレスへの返信を出す(Enter) */
   const openCursorPost = () => {

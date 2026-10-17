@@ -1284,10 +1284,12 @@ export default function App() {
       <div
         className={
           single
-            ? // 1 画面: スレ一覧の上に右から重ねる。出し切ったら動かすための指定(transform)を外す
-              // (付いたままだと、画面の座標で置くポップアップの位置がずれるため)。隠すときは消さずに右へ引っ込める
-              `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl transition-[transform,visibility] duration-200 ease-out ${
-                threadShown ? '' : 'translate-x-full invisible'
+            ? // 1 画面: スレ一覧の上に重ねる。開くときは手前(少し大きく・透けた状態)から画面に貼り付くように、
+              // 閉じるときはこちらへ近づきながら(大きくなりながら)透けて消える。
+              // 出し切ったら動かすための指定(transform)を外す(付いたままだと、画面の座標で置くポップアップの位置がずれるため)。
+              // 隠すときも消さずに隠すだけ(読んでいた位置を残すため)
+              `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl origin-center transition-[transform,opacity,visibility] duration-200 ease-out ${
+                threadShown ? 'opacity-100' : 'scale-[1.06] opacity-0 invisible pointer-events-none'
               }`
             : 'flex-1 min-w-0 flex flex-col'
         }

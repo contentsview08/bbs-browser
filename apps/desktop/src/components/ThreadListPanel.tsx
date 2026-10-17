@@ -54,8 +54,11 @@ interface Props {
   onRefresh?: () => Promise<unknown> | void
   width: number
   onResize: (width: number) => void
-  /** 1 画面のとき: 決まった幅ではなく、画面いっぱい(読みやすい幅まで)に広げる。幅を変えるつまみも出さない */
-  fill?: boolean
+  /**
+   * 1 画面のとき: 決まった幅ではなく広げる。幅を変えるつまみも出さない。
+   * full: 画面の幅いっぱい(狭くて自動で 1 画面になったとき) / centered: 読みやすい幅までで真ん中に(設定で 1 画面にしたとき)
+   */
+  fill?: 'full' | 'centered'
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** 操作ボタンの置き場所(設定) */
@@ -341,8 +344,10 @@ export default function ThreadListPanel(props: Props) {
 
   return (
     <section
-      style={props.fill ? { width: '100%', maxWidth: FILL_MAX_WIDTH } : { width }}
-      className={`flex-shrink-0 flex flex-col relative overflow-hidden bg-panel-list ${props.fill ? 'border-x' : 'border-r'} border-c-border`}
+      style={props.fill ? { width: '100%', maxWidth: props.fill === 'centered' ? FILL_MAX_WIDTH : undefined } : { width }}
+      className={`flex-shrink-0 flex flex-col relative overflow-hidden bg-panel-list ${
+        props.fill === 'centered' ? 'border-x' : props.fill ? '' : 'border-r'
+      } border-c-border`}
     >
       {!props.fill && (
         <div

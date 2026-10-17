@@ -1337,7 +1337,8 @@ export default function App() {
           refreshReadyAt={listReadyAt}
           // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
           width={settings.threadPanelWidth}
-          fill={single}
+          // 狭くて自動で 1 画面になったときは幅いっぱいに。設定で 1 画面にしたときは読みやすい幅で真ん中に
+          fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={favView || history ? 'subject' : settings.threadSort}
           isNg={isNgThread}

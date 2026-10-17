@@ -537,6 +537,12 @@ article.post-discord:hover {
   --c-cursor-tint: color-mix(in srgb, #ffffff 55%, transparent);
 }
 
+/* アンカーツリー(カード・専ブラ風)のレスは、本体の左を 1 段の幅(AnchorTree.tsx の STEP)だけ空ける。
+   空けた所もレスの本体なので、選んでいる色はそこにも付き、ツリーの線はそこを通る */
+.tree-post > article {
+  padding-left: calc(var(--post-padding-x) + 18px) !important;
+}
+
 /* ポップアップの中で J・K で選んでいるレス(ThreadView.tsx の popupKey)。本文の選んでいるレスと同じ見た目 */
 article.popup-cursor {
   position: relative;

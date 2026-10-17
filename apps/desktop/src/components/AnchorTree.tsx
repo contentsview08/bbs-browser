@@ -31,12 +31,19 @@ export default function AnchorTree(props: {
     <div className="flex flex-col">
       {props.rows.map((r, i) => (
         <div key={r.no} className="relative flex">
-          {/* 子のレスがあれば、このレスの番号のすぐ下から縦線を下ろす(本文の下からではなく、番号から出ているように)。
-              線はレスの左に空けた所(1 段の幅)を通るので、番号・本文とは重ならない */}
+          {/* 子のレスがあれば、このレスの番号の左から線を出して、角を丸めて下へ曲げる(╭)。番号から線が出ているように。
+              線はレスの左に空けた所(1 段の幅。レスの本体の中)を通るので、番号・本文とは重ならない */}
           {(props.rows[i + 1]?.depth ?? -1) > r.depth && (
             <span
-              className="absolute bottom-0 pointer-events-none"
-              style={{ left: r.depth * STEP + STEP / 2, top: ELBOW_Y + 10, borderLeft: `2px solid ${LINE}` }}
+              className="absolute bottom-0 pointer-events-none z-[2]"
+              style={{
+                left: r.depth * STEP + STEP / 2,
+                top: ELBOW_Y,
+                width: STEP / 2 + 6,
+                borderLeft: `2px solid ${LINE}`,
+                borderTop: `2px solid ${LINE}`,
+                borderTopLeftRadius: RADIUS,
+              }}
             />
           )}
           {r.depth > 0 && (
@@ -68,13 +75,12 @@ export default function AnchorTree(props: {
               />
             </div>
           )}
+          {/* レスの本体の左を 1 段の幅だけ空け(app.css の .tree-post)、番号から下ろす線を、番号や本文と重ならない所に通す。
+              押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくいのでやめた) */}
           <div
-            className="relative flex-1 min-w-0 rounded-[var(--card-radius)]"
-            // 左を 1 段の幅だけ空けて、番号から下ろす縦線を、番号や本文と重ならない所に通す
-            style={{ paddingLeft: STEP, ...(r.no === props.focus && { background: 'var(--c-accent-wash)' }) }}
+            className="tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)]"
+            style={r.no === props.focus ? { background: 'var(--c-cursor-tint)' } : undefined}
           >
-            {/* 押したレスの目印。枠の角丸に沿って曲がらないよう、独立したまっすぐな線にする */}
-            {r.no === props.focus && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-c-accent" />}
             {props.renderPost(r.no)}
             {r.alsoTo.length > 0 && (
               <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>

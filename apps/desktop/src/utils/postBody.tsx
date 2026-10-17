@@ -257,8 +257,16 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
         <span
           key={start}
           role="button"
+          tabIndex={0}
           className="text-c-link hover:underline cursor-pointer"
           onClick={(e) => {
+            e.stopPropagation()
+            handlers.onAnchor(nos, e.currentTarget, 'click')
+          }}
+          onKeyDown={(e) => {
+            // Tab で選んだアンカーは、Enter で開く(押したのと同じ)
+            if (e.key !== 'Enter') return
+            e.preventDefault()
             e.stopPropagation()
             handlers.onAnchor(nos, e.currentTarget, 'click')
           }}
@@ -274,8 +282,15 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
         <span
           key={start}
           role="button"
+          tabIndex={0}
           className="text-c-link hover:underline cursor-pointer"
           onClick={(e) => {
+            e.stopPropagation()
+            handlers.onId?.(id, e.currentTarget)
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
             e.stopPropagation()
             handlers.onId?.(id, e.currentTarget)
           }}

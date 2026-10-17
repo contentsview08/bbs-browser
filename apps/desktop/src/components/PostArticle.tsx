@@ -269,6 +269,7 @@ function PostArticle(props: Props) {
       )}
       {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする */}
       <div
+        data-post-toolbar
         className={`absolute top-0.5 right-3 z-10 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
           menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
         }`}

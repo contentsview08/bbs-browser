@@ -563,6 +563,8 @@ export default function ThreadView(props: Props) {
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
   /** 選んでいるレスの枠(見えているもの)。なければ undefined */
   const cursorFrame = () => (cursorNo === undefined ? null : ref.current?.querySelector<HTMLElement>(`[data-post="${cursorNo}"]`))
+  const cursorFrameRef = useRef(cursorFrame)
+  cursorFrameRef.current = cursorFrame
   /**
    * 選んでいるレスを 1 つ動かす。画面は、選んだレスが外に出るときだけ最小限動かす(スレ一覧の J・K と同じ)。
    * まだ選んでいなければ、画面に見えている一番上のレスから始める
@@ -739,8 +741,24 @@ export default function ThreadView(props: Props) {
       if (e.defaultPrevented || isReloadKey(e)) return
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      // Tab・Shift+Tab: 選んでいるレスの中のリンク・アンカー・画像を順に選ぶ(Enter で開く)。レスを選んでいなければ普通の Tab
+      if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && cursorFrameRef.current) {
+        const frame = cursorFrameRef.current()
+        if (frame) {
+          const items = [...frame.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
+            (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
+          )
+          e.preventDefault()
+          if (items.length === 0) return
+          const i = items.indexOf(document.activeElement as HTMLElement)
+          const next = i < 0 ? (e.shiftKey ? items.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + items.length) % items.length
+          items[next].focus()
+          items[next].scrollIntoView({ block: 'nearest' })
+          return
+        }
+      }
       // ボタンやリンクの上の Enter は、そのボタンを押すのに使う
-      if (e.key === 'Enter' && t && /^(BUTTON|A)$/.test(t.tagName)) return
+      if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
       const action = actionFor(keymap, keyString(e))
       if (!action) {
         // 数字キー: 1〜4 で絞り込み(人気・画像・動画・リンク)を付け外し、5 で全部表示(割り当てに使っていなければ)

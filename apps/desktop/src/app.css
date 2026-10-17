@@ -270,6 +270,12 @@ input[type='checkbox']:focus {
   outline: none;
   box-shadow: none;
 }
+/* Tab で選んだ、レスの中のリンク・アンカー・画像(J・K で選んだレスの中を Tab で回る。ThreadView.tsx) */
+.post-cv :is(a, button, [role='button']):focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
 input[type='checkbox']:focus-visible {
   outline: 2px solid var(--c-accent);
   outline-offset: 1px;

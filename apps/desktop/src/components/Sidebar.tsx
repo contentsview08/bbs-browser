@@ -1,7 +1,8 @@
 // 左端のサイドバー: お気に入り板(開閉・並べ替えできる)、その下に閲覧履歴(開閉できる)、一番下に設定。
 // しまっているときは、0.5 秒マウスを乗せると一時的に開き、離れると閉じる。
 // 見た目は web 版の MenuBar.tsx に合わせている。
-// しまったときも開いたときも、アイコン(板のファビコンも)は左の列(64px から右端の線 1px を除いた 63px)の真ん中に置き、名前はその右に足すだけにする。
+// しまったときも開いたときも、アイコン(板のファビコンも)は左の列(しまったときの幅と同じ 64px)の真ん中に置き、名前はその右に足すだけにする。
+// 列を 64px より狭くすると、しまったときに名前の左端が 1px だけ見えてしまう
 // 外枠の幅だけを動かして開閉するので、アイコンはそのままで、名前が右から現れるように見える。
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -89,7 +90,7 @@ function Row(props: {
       className={`relative w-full h-14 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
     >
       <NavNotch on={!!props.active} />
-      <span className="relative w-[63px] flex-shrink-0 flex items-center justify-center">
+      <span className="relative w-16 flex-shrink-0 flex items-center justify-center">
         <span className="relative">
           <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`} style={props.color ? { color: props.color } : undefined}>
             {props.icon}
@@ -125,7 +126,7 @@ function SmallRow(props: {
   return (
     <div className="group flex items-center h-9 pr-2 hover:bg-c-surface2 transition-colors">
       <button type="button" onClick={props.onClick} className="flex-1 min-w-0 h-full flex items-center text-left" title={props.title ?? props.label}>
-        <span className="w-[63px] flex-shrink-0 flex items-center justify-center">{props.icon}</span>
+        <span className="w-16 flex-shrink-0 flex items-center justify-center">{props.icon}</span>
         <span className={`flex-1 min-w-0 text-sm truncate ${props.muted ? 'text-c-text-muted group-hover:text-c-accent' : 'text-c-text-body'}`}>
           {props.label}
         </span>
@@ -282,7 +283,7 @@ export default function Sidebar(props: Props) {
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
         {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
         <div className="h-10 flex-shrink-0 flex items-center select-none">
-          <span className="w-[63px] flex-shrink-0 flex items-center justify-center">
+          <span className="w-16 flex-shrink-0 flex items-center justify-center">
             <button
               type="button"
               onClick={() => {
@@ -342,7 +343,7 @@ export default function Sidebar(props: Props) {
                     {/* 選んでいる板の印。中身を押さないよう、重ねて描く(ファビコンが右へずれないように) */}
                     {!dragging && <NavNotch on={active} />}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
-                    <span className="relative w-[63px] flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
+                    <span className="relative w-16 flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
                       <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
                       {/* 板名は列の真ん中に置き、入りきらなければ末尾を「…」で略す。
                           幅いっぱいの箱で中央寄せにすると、長い名前は左右両側へはみ出して切れるので、

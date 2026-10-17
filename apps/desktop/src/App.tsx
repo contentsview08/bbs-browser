@@ -56,7 +56,7 @@ import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
-import { actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
+import { modalOpen, actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
 import ConfirmDialog from './components/ConfirmDialog'
 import KeyHelp from './components/KeyHelp'
 import { findNextThreads } from './utils/nextThread'
@@ -897,6 +897,7 @@ export default function App() {
   }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       // F5・Ctrl+R: 画面ごと読み直すのではなく(WebView2 のショートカットは Rust 側で切ってある)、
       // スレを開いていればそのスレを、開いていなければスレ一覧を更新する(どちらもクールダウンあり)。どちらもなければ何もしない
       // Alt+← →: 戻る・進む

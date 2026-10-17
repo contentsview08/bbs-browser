@@ -27,7 +27,7 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
 import type { ScrollPosition } from '../utils/threadScroll'
-import { actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from '../utils/keymap'
+import { modalOpen, actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
@@ -281,6 +281,7 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (!keysOn || lightbox) return
     const onKey = (e: KeyboardEvent) => {
+      if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       if (e.key !== 'Escape' || e.defaultPrevented) return
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
@@ -777,6 +778,7 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (!keysOn || lightbox || popups.length > 0) return
     const onKey = (e: KeyboardEvent) => {
+      if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       // F5・Ctrl+R はアプリ全体で扱う(App.tsx)ので、ここでは見ない
       if (e.defaultPrevented || isReloadKey(e)) return
       const t = e.target as HTMLElement | null
@@ -830,6 +832,7 @@ export default function ThreadView(props: Props) {
   // ポップアップの中身は開いたときに作って持っているので、選んでいる印は DOM に直接付ける(.popup-cursor)
   const popupKey = useRef<(e: KeyboardEvent) => void>(() => {})
   popupKey.current = (e: KeyboardEvent) => {
+    if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return

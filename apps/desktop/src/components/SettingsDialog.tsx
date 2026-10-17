@@ -1,6 +1,7 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { builtinConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import {
@@ -1626,9 +1627,16 @@ export default function SettingsDialog(props: Props) {
   /** 「板とサイト」から板一覧へ移るときに、どの BBS メニューを出すか */
   const [listSite, setListSite] = useState<string>()
 
+  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
+
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(boxRef, props.onClose)
+
   return (
     <div className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
       <div
+        ref={boxRef}
         className="w-full max-w-4xl h-full max-h-[720px] flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
         onClick={(e) => e.stopPropagation()}
       >

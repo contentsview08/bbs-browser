@@ -1,6 +1,8 @@
 // キー操作の一覧(? キーで開く)。割り当ては設定のいまの値を出す。決め打ちのキーも並べる
 
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { FIXED_KEYS, KEY_ACTIONS, keyLabel, type Keymap } from '../utils/keymap'
 
 export default function KeyHelp(props: { keymap: Keymap; onClose: () => void }) {
@@ -11,18 +13,22 @@ export default function KeyHelp(props: { keymap: Keymap; onClose: () => void }) 
     { title: 'アプリ全体', rows: group('app') },
     { title: '決まっているキー', rows: FIXED_KEYS.map((f) => ({ keys: [f.keys], name: f.name })) },
   ]
+  // Tab・矢印はこの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
+  const boxRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(boxRef, props.onClose)
   return createPortal(
     <div
       className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6"
       onClick={props.onClose}
       onKeyDown={(e) => {
-        if (e.key === 'Escape' || e.key === '?') {
+        if (e.key === '?') {
           e.preventDefault()
           props.onClose()
         }
       }}
     >
       <div
+        ref={boxRef}
         className="w-full max-w-4xl max-h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >

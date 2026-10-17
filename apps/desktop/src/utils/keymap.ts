@@ -175,3 +175,8 @@ export function isReloadKey(e: { key: string; ctrlKey: boolean; metaKey: boolean
 export function keyLabel(key: string): string {
   return key.replace('Space', 'スペース').replace('ArrowDown', '↓').replace('ArrowUp', '↑').replace('ArrowLeft', '←').replace('ArrowRight', '→')
 }
+
+/** ダイアログ(NG に追加・キー一覧・設定など)が開いているか。開いている間は、後ろの画面のキー操作を止める(hooks/useFocusTrap.ts) */
+export function modalOpen(): boolean {
+  return document.querySelector('[data-modal]') !== null
+}

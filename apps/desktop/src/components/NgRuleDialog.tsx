@@ -1,6 +1,7 @@
 // NG を登録する画面。元の文字(スレタイや本文)を入れた状態で開くので、要らない部分を削ってそのまま登録できる
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import { NG_TARGETS, isValidPattern, newRule, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
 
@@ -25,17 +26,18 @@ export default function NgRuleDialog(props: { draft: NgDraft; onSubmit: (rule: N
     props.onClose()
   }
 
+  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
+
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(boxRef, props.onClose)
+
   return createPortal(
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
       <div
+        ref={boxRef}
         className="w-full max-w-lg bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            props.onClose()
-          }
-        }}
       >
         <div className="flex items-center justify-between pl-5 pr-2 py-2.5 border-b border-c-border">
           <h2 className="text-base font-bold text-c-text-strong">NG に追加</h2>

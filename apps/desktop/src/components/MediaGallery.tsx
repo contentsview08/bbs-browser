@@ -2,7 +2,8 @@
 // 押すとビューアーで開き(一覧の順に切り替えられる)、「まとめて保存」で画像と動画のファイルを順に保存する。
 // 画像は画面に見えたものから読む(loading="lazy")。動画は最初のコマに要る分だけ読む
 
-import { useMemo, useState } from 'react'
+import { useRef, useMemo, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { imageUrlsIn, videoFileUrlsIn, youtubeLinksIn } from '../utils/postBody'
@@ -76,17 +77,18 @@ export default function MediaGallery(props: {
     setSaving({ done: targets.length, total: targets.length, failed, finished: true })
   }
 
+  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
+
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(boxRef, props.onClose)
+
   return createPortal(
     <div className="fixed inset-0 z-[9600] bg-black/60 flex items-center justify-center p-6" onClick={props.onClose}>
       <div
+        ref={boxRef}
         className="w-full max-w-5xl h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            props.onClose()
-          }
-        }}
       >
         <div className="flex items-center gap-3 pl-5 pr-2 py-2.5 border-b border-c-border">
           <h2 className="text-base font-bold text-c-text-strong whitespace-nowrap">

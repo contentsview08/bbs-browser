@@ -3,6 +3,7 @@
 // 書き込み欄と同じく、画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字が使える。
 
 import { useRef, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import type { NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { useCountdown } from '../hooks/useCountdown'
@@ -79,17 +80,18 @@ export default function NewThreadDialog(props: Props) {
     }
   }
 
+  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
+
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(boxRef, props.onClose)
+
   return (
     <div className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
       <div
+        ref={boxRef}
         className="w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            props.onClose()
-          }
-        }}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-c-border">
           <h2 className="text-base font-bold text-c-text-strong">

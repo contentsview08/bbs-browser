@@ -177,7 +177,7 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
   // body の直下に出す。アプリの枠は背景画像のために重なりの基準を独立させている(isolate)ので、
   // 枠の中に置くと、最前面に出しているレスのポップアップより下に描かれてしまう
   return createPortal(
-    <div ref={overlayRef} className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
+    <div ref={overlayRef} data-lightbox className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden" onClick={onClose}>
       {blocked ? (
         <div className="flex flex-col items-center gap-3 text-white/80 text-sm text-center" onClick={(e) => e.stopPropagation()}>
           <span className="material-symbols-outlined text-5xl">lan</span>

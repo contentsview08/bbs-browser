@@ -16,7 +16,7 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import type { ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
-import { actionFor, isReloadKey, keyString, type Keymap } from '../utils/keymap'
+import { modalOpen, actionFor, isReloadKey, keyString, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 
 type SortMode = 'momentum' | 'newest'
@@ -129,6 +129,7 @@ export default function ThreadListPanel(props: Props) {
   useEffect(() => {
     if (props.active === false) return
     const onKey = (e: KeyboardEvent) => {
+      if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       if (e.key !== 'Escape') return
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
@@ -145,6 +146,7 @@ export default function ThreadListPanel(props: Props) {
   // 半画面(D・U)、更新(R)、検索(/)、スレ立て(書き込み欄へ の W・E)、選んでいるスレの ☆(S)と URL のコピー(Y)。
   // スレ表示だけの操作(未読へ・画像一覧 など)と、アプリ全体の操作(App.tsx が受ける)はここでは受けない
   const onListKey = useEvent((e: KeyboardEvent) => {
+    if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return

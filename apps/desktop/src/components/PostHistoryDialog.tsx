@@ -2,7 +2,8 @@
 // スレのログを消しても、書いた内容は残っている(post_history 表)。
 // 上の欄で本文・スレタイ・名前を絞り込める
 
-import { useMemo, useState } from 'react'
+import { useRef, useMemo, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import type { PostHistoryEntry } from '@bbs-browser/logstore'
 import { normalizeForSearch } from '../utils/postBody'
@@ -33,17 +34,18 @@ export default function PostHistoryDialog(props: {
     return props.entries.filter((e) => normalizeForSearch(`${e.thread.title} ${e.name} ${e.body}`).includes(q))
   }, [props.entries, query])
 
+  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
+
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(boxRef, props.onClose)
+
   return createPortal(
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
       <div
+        ref={boxRef}
         className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            props.onClose()
-          }
-        }}
       >
         <div className="flex items-center gap-3 pl-5 pr-2 py-2.5 border-b border-c-border">
           <h2 className="text-base font-bold text-c-text-strong whitespace-nowrap">

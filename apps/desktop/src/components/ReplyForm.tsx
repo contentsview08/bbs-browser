@@ -2,7 +2,7 @@
 // 大きさは親が決め、本文の欄が残りいっぱいに広がる。
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import type { PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
@@ -22,6 +22,11 @@ export interface ReplyFormHandle {
 }
 
 interface Props {
+  /**
+   * 本文が欄に収まるのに足りない高さ(px。マイナスなら余っている)。書くたびに知らせる。
+   * 書き込み欄を下に置いているとき、欄を自動で伸び縮みさせるのに使う
+   */
+  onTextOverflow?: (deficit: number) => void
   layout: ReplyLayout
   disabled?: string
   initialName: string
@@ -93,6 +98,14 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       if (pendingDraft.current !== undefined) draftRef.current?.save(pendingDraft.current)
     }
   }, [])
+  // 本文が欄に収まるか測って知らせる(足りなければ、書き込み欄を伸ばしてもらう。書き込んで空になれば元に戻る)
+  const onTextOverflow = props.onTextOverflow
+  useLayoutEffect(() => {
+    const ta = textRef.current
+    if (!ta || !onTextOverflow) return
+    onTextOverflow(textHeight(ta, body) - ta.clientHeight)
+  }, [body, onTextOverflow])
+
   /** 書き込めたら、本文も下書きも消す */
   const clearBody = () => {
     setBody('')
@@ -310,3 +323,25 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 })
 
 export default ReplyForm
+
+/** 測るための見えない写し(本文の欄と同じ幅・字・余白で、本文が何 px の高さになるかを測る) */
+let mirror: HTMLDivElement | undefined
+function textHeight(ta: HTMLTextAreaElement, text: string): number {
+  if (!mirror) {
+    mirror = document.createElement('div')
+    Object.assign(mirror.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', boxSizing: 'border-box' })
+    document.body.appendChild(mirror)
+  }
+  const cs = getComputedStyle(ta)
+  Object.assign(mirror.style, {
+    width: `${ta.clientWidth}px`,
+    font: cs.font,
+    lineHeight: cs.lineHeight,
+    letterSpacing: cs.letterSpacing,
+    padding: cs.padding,
+    wordBreak: cs.wordBreak,
+  })
+  // 最後の改行のあとの空の行も 1 行に数える
+  mirror.textContent = `${text}\u200b`
+  return mirror.scrollHeight
+}

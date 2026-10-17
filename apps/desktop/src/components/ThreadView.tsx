@@ -161,6 +161,8 @@ const RENDER_CHUNK = 150
 const DOUBLE_ESC_MS = 500
 /** J・K で選んだレスを、画面の上下からこの割合だけ離しておく */
 const CURSOR_MARGIN = 0.25
+/** 書き込み欄(下に置いたとき)を伸ばせる高さの上限。つかんで伸ばすときの上限と同じ */
+const REPLY_MAX_HEIGHT = 600
 const AUTO_COLLAPSE_WIDTH = 720
 const AUTO_COLLAPSE_HEIGHT = 420
 /** 新着の札を出しておく時間 */
@@ -186,7 +188,7 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
         let latest = startSize
         const onMove = (ev: MouseEvent) => {
           const delta = (vertical ? ev.clientY : ev.clientX) - start
-          latest = Math.min(vertical ? 600 : 900, Math.max(vertical ? 90 : 240, startSize - delta))
+          latest = Math.min(vertical ? REPLY_MAX_HEIGHT : 900, Math.max(vertical ? 90 : 240, startSize - delta))
           props.onChange(latest)
         }
         const onUp = () => {
@@ -369,6 +371,18 @@ export default function ThreadView(props: Props) {
   const savedSize = settings[sizeKey]
   const [replySize, setReplySize] = useState(savedSize)
   useEffect(() => setReplySize(savedSize), [savedSize])
+  // 書き込み欄が下のとき、本文が欄に収まらなくなったら自動で伸ばす(つかんで伸ばせる上限 600px、スレ表示の 7 割まで)。
+  // 本文が短くなる・書き込んで空になると、自分で決めた高さに戻る。伸ばした分は保存しない
+  const [replyExtra, setReplyExtra] = useState(0)
+  const replySizeRef = useRef(replySize)
+  replySizeRef.current = replySize
+  const onTextOverflow = useCallback((deficit: number) => {
+    if (Math.abs(deficit) < 2) return
+    setReplyExtra((e) => {
+      const room = Math.min(REPLY_MAX_HEIGHT, (viewRef.current?.clientHeight ?? 800) * 0.7) - replySizeRef.current
+      return Math.round(Math.min(Math.max(0, room), Math.max(0, e + deficit)))
+    })
+  }, [])
   const canReply = props.onSubmitPost !== undefined && log.status !== 'archived'
 
   // ── 書き込み欄をしまう ──
@@ -1571,16 +1585,21 @@ export default function ThreadView(props: Props) {
           <Splitter
             layout={replyLayout}
             size={replySize}
-            onChange={setReplySize}
+            onChange={(size) => {
+              // 自分でつかんで変えたら、自動で伸ばしていた分はやめる
+              setReplyExtra(0)
+              setReplySize(size)
+            }}
             onEnd={(size) => props.onResizeReply(sizeKey, size)}
           />
           <div
             className="flex-shrink-0 min-h-0 min-w-0"
-            style={replyLayout === 'bottom' ? { height: replySize } : { width: replySize }}
+            style={replyLayout === 'bottom' ? { height: replySize + replyExtra } : { width: replySize }}
           >
             <ReplyForm
               ref={replyRef}
               layout={replyLayout}
+              onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}
               disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
               initialName={props.postName}
               initialMail={props.postMail}

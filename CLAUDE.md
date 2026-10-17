@@ -30,15 +30,27 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   (BE を使わない書き込みでは DMDM・MDMD を外す)。plugin-http の Cookie 置き場はアプリから中身を触れず、
   Cookie ヘッダーを手で付けると置き場の Cookie が付かなくなる(reqwest の決まり)ので使えない。読む通信(GET)は plugin-http のまま。
   本番の板への試し書き込みはしない。応答の解析は eddist のソースにある文面をテストに写して確かめる。
+- ふたばは書き込みの送り方がほかと違う(`packages/connectors/src/futaba/connector.ts` の先頭に詳しく書いた)。
+  ふたばの書き込みボタンの JavaScript(`/bin/base4esc.js` の `ptfk`)と同じにしないと、受け付けられるのに誰にも見えない書き込みになる:
+  multipart/form-data・UTF-8(`chrenc=文字`)、`pthc` に `/bin/cachemt7.php` の値・`pthb` は初回空、`ptua` は Chromium の値、
+  `responsemode=ajax`(返事は ok か JSON)、ブラウザの User-Agent、Cookie は読む通信と同じ置き場(`sameCookiesAsGet` で plugin-http から POST)。
+  2026-10-17 のテスト中に回線ごと「アクセス規制中」になったので、ふたばへリクエストを送る開発は止めている(再開はユーザーと相談)。
 - 見た目は hono-bbs の web 版(`~/git/koizumib/hono-bbs-merge/packages/web`)から移植している。
   `apps/desktop/src/theme/*.css` と `src/index.css` は web 版の複製なので、中身を勝手に変えない。
   色は `c-*` の Tailwind クラス(CSS 変数)だけを使い、固定色や `slate-*` を新しく書かない。
-  表示設定は `<html>` の `data-scheme` / `data-pattern` / `data-density` で切り替わる(`src/ui/settings.ts`)。
+  表示設定は `<html>` の `data-scheme` / `data-pattern` / `data-density` / `data-post-style` で切り替わる(`src/ui/settings.ts`)。
+  `data-pattern`(トーナル・枠線)はレスの見た目(`postStyle`: カード・Discord 風・専ブラ風・LINE 風)から決める。
+  意味の色は役目ごとの変数を使う(未読 `--c-unread`、自分 `--c-own`、失敗 `--c-error`、選んでいる印 `--c-cursor-tint`、差し色 `--c-mark-*`)。
 - フォントは npm パッケージで同梱する(Google Fonts は使わない。通信なしでも同じ見た目にするため)。
 - スレ表示のスクロール(開いたときの位置・既読・新着の追いかけ)は `src/hooks/useThreadScroll.ts` にまとめ、
   どこへ動かすか・どこまで読んだかの判断は `src/utils/threadScroll.ts` の関数に分けてテストする(`apps/desktop/test/`)。
   画面の外のレスは content-visibility で省いているので、仮の高さ(覚えておいた高さか本文からの見積もり)を style で渡す。
 - 残しておくタブのスレ表示は、並び順を変えない(要素が付け替えられるとスクロール位置が一番上に戻る)。
+- 選んでいるタブ・1 画面でスレ一覧を出しているか・戻る/進むの履歴は、`src/utils/viewState.ts` の関数でいっしょに変える(別々に書き換えるとずれる)。
+- J・K などで選ぶレス・スレの決め方は `src/utils/cursor.ts`(スレ表示・スレ一覧・ポップアップで共通、テストあり)。
+- キー操作は `src/utils/keymap.ts` の操作の表(`KeyAction`)に割り当てる。ジェスチャーなどを足すときも、この表に割り当てる。
+- レスを描く数が多いと重い。1 レスの要素を増やさない(操作バーはマウスを乗せたときだけ作る、ID アイコンは背景の絵 1 つ)。
+  スレ表示とスレ一覧は、見える所から先に作り、残りは手の空いたときに作り足す。
 - 他のサービスに迷惑をかけない: 自動の取得(自動更新・お気に入りのスレの確認・キーワードの見張り)は、アプリが見えていないときと、
   dat 落ち・1000 到達のスレでは行わない。手での更新・書き込みにはクールダウンがある。条件なしの GET は 3 秒、
   裏の処理のスレ一覧は 60 秒使い回す(`host/tauriContext.ts`、`hooks/useWatchLists.ts`)。

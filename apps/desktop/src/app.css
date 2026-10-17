@@ -517,14 +517,17 @@ article.post-discord:hover {
 }
 
 /* 選んでいるレス(J・K・クリック)に重ねる色。ふつうは強調色をごく薄く。
-   強調色が黄色・橙の配色(アンバー×ティール)は、薄くても面で敷くとチカチカするので、色のない明るさだけにする(下の線は強調色のまま)。
-   Discord ダークも、青い面だとアンカーやリンクの青い文字と重なって読みにくいので、色のない明るさにする */
+   ライト系の配色だけ。ダーク系は下で、色のない明るさにする(下の線は強調色のまま) */
 :root {
   --c-cursor-tint: color-mix(in srgb, var(--c-accent) 7%, transparent);
 }
-:root[data-scheme='amber-teal'],
-:root[data-scheme='discord-dark'] {
+/* ダーク系の配色は、強調色ではなく、うっすら白く(色のない明るさだけ)する。強調色の面は、リンクやアンカーの色と重なって読みにくい */
+:root.dark {
   --c-cursor-tint: color-mix(in srgb, var(--c-text-strong) 5%, transparent);
+}
+/* 2ch クラシックは灰色の背景なので、白くして浮かせる */
+:root[data-scheme='2ch-classic'] {
+  --c-cursor-tint: color-mix(in srgb, #ffffff 75%, transparent);
 }
 /* LINE ライト × LINE 風: トークの青灰色の背景の上で、選んだレスは緑ではなく白っぽく明るくする */
 :root[data-scheme='line-light'][data-post-style='line'] {

@@ -32,8 +32,8 @@ export type Keymap = Record<KeyAction, string[]>
 export const DEFAULT_KEYMAP: Keymap = {
   nextPost: ['J'],
   prevPost: ['K'],
-  pageDown: ['Space'],
-  pageUp: ['Shift+Space'],
+  pageDown: ['Space', 'PageDown'],
+  pageUp: ['Shift+Space', 'PageUp'],
   top: ['Home', 'G'],
   bottom: ['End', 'Shift+G'],
   unread: ['U'],

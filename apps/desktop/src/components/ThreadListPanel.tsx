@@ -136,6 +136,28 @@ export default function ThreadListPanel(props: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [props.active, resetView])
+
+  // スクロールのキー(1 画面分・先頭・末尾)。キー操作を受け取っているとき(上に線が出ているとき)だけ
+  useEffect(() => {
+    if (props.active === false) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return
+      const el = scrollRef.current
+      if (!el) return
+      const page = el.clientHeight - (headerRef.current?.offsetHeight ?? 0) - 40
+      const down = e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)
+      const up = e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)
+      if (down || up) el.scrollBy({ top: down ? page : -page })
+      else if (e.key === 'Home') el.scrollTo({ top: 0 })
+      else if (e.key === 'End') el.scrollTo({ top: el.scrollHeight })
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props.active])
   const [width, setWidth] = useState(props.width)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectable = props.onDeleteLogs !== undefined

@@ -215,6 +215,12 @@ export default function App() {
   }
   /** 1 画面のとき、スレ表示を(スレ一覧の上に)出しているか。開いているスレがあって、一覧に戻っていないとき */
   const threadShown = (activeId !== undefined) && !listOpen
+  /**
+   * 2 画面のとき、キー操作(F5・Ctrl+R、PageUp・PageDown・Home・End など)をスレ一覧とスレ表示のどちらが受け取るか。
+   * 押した(触った)方に移り、スレを開けばスレ表示、板などを開けばスレ一覧に移る。1 画面では見えている方
+   */
+  const [focusPane, setFocusPane] = useState<'list' | 'thread'>('thread')
+  const listFocused = single ? !threadShown : focusPane === 'list' || activeId === undefined
 
   // 非同期の処理の途中で最新の値を見るための控え
   const tabsRef = useRef(tabs)
@@ -293,6 +299,7 @@ export default function App() {
       if (!store) return
       // 1 画面のとき、選んだ板のスレ一覧を見せる
       updateView((s) => showList(s, record ? listEntry({ kind: 'board', board: b }) : undefined))
+      if (record) setFocusPane('list')
       setBoard(b)
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
@@ -349,6 +356,7 @@ export default function App() {
   const openHistory = (record = true) =>
     run('threads', async () => {
       updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
+      if (record) setFocusPane('list')
       setFavView(false)
       if (store) setHistory(await store.history())
       setHistoryVersion((v) => v + 1)
@@ -469,6 +477,7 @@ export default function App() {
   const openFavThreads = (record = true) =>
     run('threads', async () => {
       updateView((s) => showList(s, record ? listEntry({ kind: 'fav' }) : undefined))
+      if (record) setFocusPane('list')
       setHistory(undefined)
       setFavView(true)
       if (store) await reloadFavThreads(store)
@@ -604,6 +613,7 @@ export default function App() {
 
   /** タブを選んで、そのスレを見せる(1 画面でスレ一覧を出していても、スレ表示に切り替える)。record が false なら履歴に積まない */
   const selectTab = (id: string, record = true) => {
+    setFocusPane('thread')
     const tab = tabsRef.current.find((t) => t.id === id)
     updateView((s) => showThread(s, id, record && tab ? threadEntry(tab.thread) : undefined))
     if (store && tab && !tab.log) void run('posts', () => loadTab(store, tab.thread))
@@ -632,6 +642,7 @@ export default function App() {
       })
       // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
       updateView((s) => showThread(s, id, (opts.record ?? true) ? threadEntry(t) : undefined))
+      setFocusPane('thread')
       await loadTab(store, t)
       if (history) setHistory(await store.history())
       await reloadRecent(store)
@@ -772,9 +783,9 @@ export default function App() {
     setTabPreview(undefined)
     if (id) keyRef.current.selectTab(id)
   }
-  /** F5 で更新するもの。開いているスレ、なければいま出しているスレ一覧(1 画面でスレ一覧を出しているときもスレ一覧) */
+  /** F5 で更新するもの。キー操作を受け取っている方(上に線が出ている方)。スレを開いていなければスレ一覧 */
   const reload = () => {
-    if (activeTab?.log && (!single || threadShown)) return void refreshThread()
+    if (activeTab?.log && !listFocused) return void refreshThread()
     const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board, false) : undefined
     if (list) void manualListRefresh(list)()
   }
@@ -1305,10 +1316,14 @@ export default function App() {
       {/* 1 画面のときは、スレ一覧を土台として画面いっぱい(読みやすい幅で真ん中)に出し、
           スレを開くとスレ表示がその上に右から重なる(下の threadShown) */}
       {settingsLoaded && (
-        <div className={single ? 'flex-1 min-w-0 flex justify-center bg-panel-view' : 'contents'}>
+        <div
+          className={single ? 'flex-1 min-w-0 flex justify-center bg-panel-view' : 'relative flex flex-shrink-0'}
+          onPointerDownCapture={() => setFocusPane('list')}
+        >
+        {!single && <FocusLine on={listFocused} />}
         <ThreadListPanel
           key={favView ? 'favorites' : history ? 'history' : board?.url}
-          active={!single || !threadShown}
+          active={listFocused}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}
@@ -1372,9 +1387,11 @@ export default function App() {
               `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl origin-center transition-[transform,opacity,visibility] duration-200 ease-out ${
                 threadShown ? 'opacity-100' : 'scale-[1.06] opacity-0 invisible pointer-events-none'
               }`
-            : 'flex-1 min-w-0 flex flex-col'
+            : 'relative flex-1 min-w-0 flex flex-col'
         }
+        onPointerDownCapture={() => setFocusPane('thread')}
       >
+        {!single && <FocusLine on={!listFocused} />}
         {settings.tabsEnabled && (
         <TabBar
           tabs={tabs.map((t) => ({
@@ -1423,6 +1440,7 @@ export default function App() {
                 <TabPane
                   tab={t as Tab & { log: ThreadLog }}
                   active={isActive}
+                  keyFocus={!listFocused}
                   settings={settings}
                   isNg={isNgPost}
                   nonameName={boardInfos.get(t.thread.boardUrl)?.nonameName}
@@ -1567,5 +1585,14 @@ export default function App() {
         </div>
       )}
     </div>
+  )
+}
+
+/** 2 画面のとき、キー操作を受け取っている方(スレ一覧・スレ表示)の上辺に引く線 */
+function FocusLine({ on }: { on: boolean }) {
+  return (
+    <span
+      className={`absolute top-0 left-0 right-0 h-[3px] bg-c-accent z-40 pointer-events-none transition-opacity duration-150 ${on ? 'opacity-100' : 'opacity-0'}`}
+    />
   )
 }

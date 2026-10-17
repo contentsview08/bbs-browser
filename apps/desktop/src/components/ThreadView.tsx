@@ -51,6 +51,8 @@ interface Props {
   log: ThreadLog
   /** 開いているタブか。見えていないタブ(残しておいたもの)では、ポップアップを閉じる */
   active: boolean
+  /** キー操作を受け取るか(2 画面でスレ一覧を触っているときは false。開いているタブでも) */
+  keyFocus?: boolean
   /** タブを切り替えて戻ってきたときの位置。あれば「開いたときの位置」の設定より優先する */
   initialPosition?: ScrollPosition
   /** 画面から外れる(タブを切り替える)ときに、読んでいた位置を渡す */
@@ -254,10 +256,12 @@ export default function ThreadView(props: Props) {
     if (searchActive) searchRef.current?.focus()
   }, [searchActive])
 
+  /** キー操作を受け取るか。開いているタブで、2 画面ならスレ表示の方を触っているとき */
+  const keysOn = props.active && props.keyFocus !== false
   // Esc：ポップアップが出ていれば一番上を 1 層だけ閉じ、出ていなければ絞り込みを解いてすべて表示する。
   // 入力欄の中の Esc(検索欄・ダイアログなど)と、画像を大きく見ているとき(Lightbox が閉じる)は手を出さない
   useEffect(() => {
-    if (!props.active || lightbox) return
+    if (!keysOn || lightbox) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return
       const t = e.target as HTMLElement | null
@@ -272,7 +276,7 @@ export default function ThreadView(props: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [props.active, lightbox, popups.length, filters.size])
+  }, [keysOn, lightbox, popups.length, filters.size])
 
   // 「草」などのすぐ書き込む操作の結果。スレ表示の下に少しのあいだ出す
   const [quickMessage, setQuickMessage] = useState<{ ok: boolean; text: string }>()
@@ -548,7 +552,7 @@ export default function ThreadView(props: Props) {
   // ポップアップや画像を見ているときは、後ろのスレ表示を動かさない
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
   useEffect(() => {
-    if (!props.active || lightbox || popups.length > 0) return
+    if (!keysOn || lightbox || popups.length > 0) return
     const onKey = (e: KeyboardEvent) => {
       // F5・Ctrl+R はアプリ全体で扱う(App.tsx)ので、ここでは見ない
       if (e.defaultPrevented || isReloadKey(e)) return
@@ -570,7 +574,7 @@ export default function ThreadView(props: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [props.active, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
+  }, [keysOn, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
 
   // ── 新着の札 ──
   // 新着が届いて、その頭が画面の外(下にある・絞り込みで隠れている)なら、下から「新着 +N」を少しのあいだ出す。

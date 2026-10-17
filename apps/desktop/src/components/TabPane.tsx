@@ -66,6 +66,8 @@ export interface TabEvents {
 interface Props {
   tab: Tab & { log: ThreadLog }
   active: boolean
+  /** キー操作を受け取るか(2 画面でスレ一覧を触っているときは false) */
+  keyFocus: boolean
   settings: AppSettings
   isNg: (p: Post) => boolean
   nonameName?: string
@@ -90,6 +92,7 @@ interface Props {
 function TabPane({
   tab,
   active,
+  keyFocus,
   settings,
   isNg,
   nonameName,
@@ -121,6 +124,7 @@ function TabPane({
       threadKey={id}
       log={tab.log}
       active={active}
+      keyFocus={keyFocus}
       initialPosition={tab.scroll}
       onSavePosition={onSavePosition}
       unreadFrom={tab.unreadFrom}

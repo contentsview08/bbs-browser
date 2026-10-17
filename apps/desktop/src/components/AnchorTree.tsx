@@ -9,7 +9,8 @@ const STEP = 18
 /** 分岐の横線を出す高さ(レスのヘッダーの真ん中あたり) */
 const ELBOW_Y = 14
 
-const LINE = 'var(--c-border-strong)'
+// 線の色は薄い文字の色(枠線の色より濃い)。選んでいるレスの色(うっすら白・薄い強調色)の上でも見えるように
+const LINE = 'color-mix(in srgb, var(--c-text-muted) 80%, transparent)'
 /** 線の太さは Discord 風・LINE 風のツリーと同じ 2px。曲がり角の丸み */
 const RADIUS = 6
 

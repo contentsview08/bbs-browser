@@ -1437,6 +1437,7 @@ export default function App() {
           key={favView ? 'favorites' : history ? 'history' : board?.url}
           active={listFocused}
           keymap={keymap}
+          variant={settings.postStyle}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}

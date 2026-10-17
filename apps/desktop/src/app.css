@@ -311,6 +311,38 @@ article.post-discord:hover {
   padding-bottom: 4px;
 }
 
+/* スレ一覧の行(カード以外の見た目)。カードの面と枠をなくし、マウスを乗せた行・開いているスレだけ色を付ける */
+.card-thread[data-variant='discord'],
+.card-thread[data-variant='classic'],
+.card-thread[data-variant='line'] {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+}
+.card-thread[data-variant='discord']:hover,
+.card-thread[data-variant='line']:hover {
+  background: color-mix(in srgb, var(--c-text-body) 6%, transparent);
+}
+.card-thread[data-variant='discord'].card-selected,
+.card-thread[data-variant='line'].card-selected,
+.card-thread[data-variant='classic'].card-selected {
+  background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
+}
+/* 専ブラ風の表: 角を丸めず、1 行おきにうっすら色を付ける */
+.card-thread[data-variant='classic'] {
+  border-radius: 0;
+}
+.card-thread[data-variant='classic']:nth-child(even) {
+  background: color-mix(in srgb, var(--c-text-body) 3%, transparent);
+}
+.card-thread[data-variant='classic']:hover {
+  background: color-mix(in srgb, var(--c-accent) 8%, transparent);
+}
+/* 開いているスレは、1 行おきの色やマウスを乗せた色より強く */
+.card-thread[data-variant='classic'].card-selected {
+  background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
+}
+
 /* 専ブラ風: レスとレスの間を少しだけ空ける(区切り線は引かない) */
 [data-post-style='classic'] article[data-variant='classic'] {
   padding-top: 6px;

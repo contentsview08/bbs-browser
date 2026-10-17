@@ -65,6 +65,8 @@ interface Props {
   active?: boolean
   /** キー操作の割り当て(スレ表示と同じ)。J・K でカードを選び、Enter で開く */
   keymap?: Keymap
+  /** カードの見た目(レスの見た目の設定に合わせる) */
+  variant?: 'card' | 'discord' | 'classic' | 'line'
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** 操作ボタンの置き場所(設定) */
@@ -528,6 +530,7 @@ export default function ThreadListPanel(props: Props) {
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
         isCursor={props.active !== false && !cursorHidden && cursorId === id}
+        variant={props.variant}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
       />
@@ -700,7 +703,12 @@ export default function ThreadListPanel(props: Props) {
           ) : (
             <div
               className="flex flex-col"
-              style={{ padding: 'var(--list-padding-thread)', gap: 'var(--list-gap-thread)' }}
+              // カード以外(行・表の見た目)は、行と行を詰めて並べる
+              style={
+                (props.variant ?? 'card') === 'card'
+                  ? { padding: 'var(--list-padding-thread)', gap: 'var(--list-gap-thread)' }
+                  : { padding: '4px 6px', gap: props.variant === 'classic' ? 0 : 1 }
+              }
             >
               {keywordGroups ? (
                 <>

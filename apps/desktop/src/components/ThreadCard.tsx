@@ -6,6 +6,7 @@ import { memo } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
+import Identicon from './Identicon'
 
 interface Props {
   thread: ThreadSummary
@@ -33,11 +34,14 @@ interface Props {
   onSelect?: (t: ThreadSummary, selected: boolean) => void
   /** キー操作(J・K)で選んでいるカード。枠を強調色にする */
   isCursor?: boolean
+  /** 見た目のスタイル(レスの見た目の設定に合わせる)。card: いまのカード / discord: チャンネル一覧のような行 /
+   *  classic: 専ブラのスレ一覧のような表 / line: トーク一覧のような行 */
+  variant?: 'card' | 'discord' | 'classic' | 'line'
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
-function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew, selected, onSelect, isCursor }: Props) {
+function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew, selected, onSelect, isCursor, variant = 'card' }: Props) {
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -53,22 +57,188 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   const visited = state !== undefined
   const archived = state?.status === 'archived'
 
+  // ── スタイルごとに並べ替える部品 ──
+  const checkbox = onSelect && (
+    <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+      <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
+    </label>
+  )
+  const newBadge = isNew && (
+    <span
+      className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
+      style={{ background: 'var(--c-new-badge-bg)', color: 'var(--c-new-badge-text)' }}
+      title="前回この板を見たあとに立ったスレ"
+    >
+      新
+    </span>
+  )
+  const favStar = isFavorite && (
+    <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-mark-fav" title="お気に入りのスレ">
+      star
+    </span>
+  )
+  const unreadBadge = (cls = 'text-[9px] px-1.5 py-0.5 rounded') =>
+    unreadCount > 0 && (
+      <span className={`flex-shrink-0 font-bold whitespace-nowrap ${cls}`} style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}>
+        +{unreadCount}
+      </span>
+    )
+  const momentumEl = (cls = '') => (
+    <span className={`font-mono tabular-nums text-right ${momentumColorClass} ${cls}`} title={`勢い：${formatMomentum(m)}`}>
+      {formatMomentum(m)}
+    </span>
+  )
+  /** スレタイの色: 開いたことのあるスレは既読の色、新着があれば強く、まだ開いていないスレはふつうの強さ */
+  const titleColor = visited ? (unreadCount > 0 ? 'var(--c-text-strong)' : 'var(--c-thread-read-title, var(--c-text-body))') : 'var(--thread-list-title-color, var(--c-text-strong))'
+
+  const content =
+    variant === 'discord' ? (
+      // Discord 風: チャンネル一覧のような 1 行。新着のあるスレは左に白い点、スレタイを明るく太く
+      <div className="flex items-center gap-2 min-w-0">
+        {checkbox}
+        {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
+        <span className="flex-shrink-0 text-base leading-none text-c-text-muted select-none">#</span>
+        <span className="flex-1 min-w-0 truncate text-sm" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
+          {newBadge}
+          {favStar}
+          {thread.title}
+        </span>
+        {archived && <span className="flex-shrink-0 text-[10px] text-c-text-muted">dat落ち</span>}
+        {momentumEl('flex-shrink-0 text-[10px] opacity-80')}
+        {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded-full text-center')}
+      </div>
+    ) : variant === 'classic' ? (
+      // 専ブラ風: 印・スレタイ・レス数・新着・勢い・立った時間を 1 行の表に
+      <div className="grid items-center gap-x-2 text-[13px] leading-snug" style={{ gridTemplateColumns: `${onSelect ? 'auto ' : ''}1.5em minmax(0,1fr) 4ch 4ch 6ch 5.5em` }}>
+        {checkbox}
+        <span className="text-center text-[11px] font-bold select-none" title={archived ? 'dat落ち' : isNew ? '新しいスレ' : unreadCount > 0 ? '新着あり' : visited ? '既読' : ''}>
+          {archived ? <span className="text-c-text-muted">落</span> : isNew ? <span style={{ color: 'var(--c-new-badge-bg)' }}>新</span> : unreadCount > 0 ? <span style={{ color: 'var(--c-unread)' }}>●</span> : visited ? <span className="text-c-text-muted">○</span> : null}
+        </span>
+        <span className="min-w-0 truncate" style={{ color: titleColor }}>
+          {favStar}
+          {thread.title}
+        </span>
+        <span className="font-mono tabular-nums text-right text-c-text-muted">{thread.postCount}</span>
+        <span className="font-mono tabular-nums text-right font-bold" style={{ color: 'var(--c-unread)' }}>{unreadCount > 0 ? unreadCount : ''}</span>
+        {momentumEl()}
+        <span className="text-right text-[11px] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
+      </div>
+    ) : variant === 'line' ? (
+      // LINE 風: トーク一覧のような行。左に丸いアイコン(スレごとの模様)、スレタイと「レス数・勢い」、右に時間と新着の数
+      <div className="flex items-center gap-3 min-w-0">
+        {checkbox}
+        <span className="flex-shrink-0 block overflow-hidden rounded-full">
+          <Identicon seed={`${thread.boardUrl}${thread.key}`} size={40} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="truncate text-sm font-bold" style={{ color: titleColor }}>
+            {newBadge}
+            {favStar}
+            {thread.title}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-c-text-muted">
+            <span className="tabular-nums">{thread.postCount} レス</span>
+            <span>·</span>
+            {momentumEl()}
+            {archived && <span>· dat落ち</span>}
+          </div>
+        </div>
+        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+          <span className="text-[10px] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
+          {unreadCount > 0 && (
+            <span className="min-w-[1.25rem] px-1.5 py-px rounded-full text-[10px] font-bold text-center text-white" style={{ background: '#06c755' }}>
+              {unreadCount}
+            </span>
+          )}
+        </div>
+      </div>
+    ) : (
+        <div className="flex items-center gap-3">
+          {onSelect && (
+            <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+              <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
+            </label>
+          )}
+          <div className="flex-1 min-w-0">
+            {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
+            <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
+              {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
+              {archived && <span className="whitespace-nowrap">dat落ち</span>}
+              <div className="flex items-center gap-5 ml-auto">
+                <span
+                  className={`font-mono font-bold tabular-nums text-right min-w-[5ch] ${momentumColorClass}`}
+                  title={`勢い：${formatMomentum(m)}`}
+                >
+                  {formatMomentum(m)}
+                </span>
+                <span className="font-mono tabular-nums text-right min-w-[4ch]">{thread.postCount}</span>
+              </div>
+            </div>
+  
+            {/* タイトル行 */}
+            <div className="flex items-center gap-2.5 min-w-0" style={{ marginTop: 'var(--thread-card-title-gap)' }}>
+              <h3
+                className="flex-1 min-w-0 text-base leading-tight line-clamp-2 font-normal"
+                style={{
+                  color: visited
+                    ? 'var(--c-thread-read-title, var(--c-text-body))'
+                    : 'var(--thread-list-title-color, var(--c-text-strong))',
+                  textDecoration: 'var(--thread-list-title-decoration, none)',
+                }}
+              >
+                {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
+                {isNew && (
+                  <span
+                    className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
+                    style={{ background: 'var(--c-new-badge-bg)', color: 'var(--c-new-badge-text)' }}
+                    title="前回この板を見たあとに立ったスレ"
+                  >
+                    新
+                  </span>
+                )}
+                {isFavorite && (
+                  <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-mark-fav" title="お気に入りのスレ">
+                    star
+                  </span>
+                )}
+                {thread.title}
+              </h3>
+              {unreadCount > 0 && (
+                <span
+                  className="flex-shrink-0 font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                  style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
+                >
+                  +{unreadCount}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+    )
+
   return (
     <div
       onClick={() => onOpen(thread)}
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
+      data-variant={variant}
       className={`group card-thread cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
         isActive ? 'card-selected border-[var(--card-selected-border-color)]' : 'border-[var(--card-border-color)]'
       }`}
-      style={{
-        borderStyle: 'solid',
-        borderWidth: 'var(--card-border-width, 1px)',
-        paddingLeft: 'var(--thread-card-padding-left)',
-        paddingRight: 'var(--thread-card-padding-right)',
-        paddingTop: 'var(--thread-card-padding-y)',
-        paddingBottom: 'var(--thread-card-padding-y)',
-      }}
+      style={
+        variant === 'card'
+          ? {
+              borderStyle: 'solid',
+              borderWidth: 'var(--card-border-width, 1px)',
+              paddingLeft: 'var(--thread-card-padding-left)',
+              paddingRight: 'var(--thread-card-padding-right)',
+              paddingTop: 'var(--thread-card-padding-y)',
+              paddingBottom: 'var(--thread-card-padding-y)',
+            }
+          : variant === 'classic'
+            ? { padding: '3px 10px' }
+            : { padding: variant === 'line' ? '8px 12px' : '5px 10px' }
+      }
     >
       {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
           (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
@@ -81,7 +251,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
           />
         </>
       )}
-      {visited && (
+      {visited && variant === 'card' && (
         <span
           className="absolute left-0 top-0 bottom-0 w-[3px]"
           style={{ background: unreadCount > 0 ? 'var(--c-unread)' : 'var(--c-thread-read-title, var(--c-accent))' }}
@@ -121,67 +291,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
           )}
         </div>
       )}
-      <div className="flex items-center gap-3">
-        {onSelect && (
-          <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-            <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
-          </label>
-        )}
-        <div className="flex-1 min-w-0">
-          {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
-          <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
-            {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
-            {archived && <span className="whitespace-nowrap">dat落ち</span>}
-            <div className="flex items-center gap-5 ml-auto">
-              <span
-                className={`font-mono font-bold tabular-nums text-right min-w-[5ch] ${momentumColorClass}`}
-                title={`勢い：${formatMomentum(m)}`}
-              >
-                {formatMomentum(m)}
-              </span>
-              <span className="font-mono tabular-nums text-right min-w-[4ch]">{thread.postCount}</span>
-            </div>
-          </div>
-
-          {/* タイトル行 */}
-          <div className="flex items-center gap-2.5 min-w-0" style={{ marginTop: 'var(--thread-card-title-gap)' }}>
-            <h3
-              className="flex-1 min-w-0 text-base leading-tight line-clamp-2 font-normal"
-              style={{
-                color: visited
-                  ? 'var(--c-thread-read-title, var(--c-text-body))'
-                  : 'var(--thread-list-title-color, var(--c-text-strong))',
-                textDecoration: 'var(--thread-list-title-decoration, none)',
-              }}
-            >
-              {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
-              {isNew && (
-                <span
-                  className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
-                  style={{ background: 'var(--c-new-badge-bg)', color: 'var(--c-new-badge-text)' }}
-                  title="前回この板を見たあとに立ったスレ"
-                >
-                  新
-                </span>
-              )}
-              {isFavorite && (
-                <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-mark-fav" title="お気に入りのスレ">
-                  star
-                </span>
-              )}
-              {thread.title}
-            </h3>
-            {unreadCount > 0 && (
-              <span
-                className="flex-shrink-0 font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
-              >
-                +{unreadCount}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
+      {content}
     </div>
   )
 }

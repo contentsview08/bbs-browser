@@ -139,6 +139,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 /** 選んだレスへ送るときのスクロールの時間 */
 const CURSOR_SCROLL_MS = 160
+/** J・K で選んだレスを、画面の上下からこの割合だけ離しておく */
+const CURSOR_MARGIN = 0.25
 const AUTO_COLLAPSE_WIDTH = 720
 const AUTO_COLLAPSE_HEIGHT = 420
 /** 新着の札を出しておく時間 */
@@ -550,6 +552,8 @@ export default function ThreadView(props: Props) {
   ]
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
+  /** いまのキーが、押し続けたときの自動の連打か */
+  const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
   const [cursorNo, setCursorNo] = useState<number>()
   // 新着が届いた・開き直した(「ここから未読」が変わった)ら、前に選んでいたレスは忘れる。
@@ -640,11 +644,19 @@ export default function ThreadView(props: Props) {
     setCursorNo(Number(target.dataset.post))
     // 選んだレスが外に出るときだけ、そのレスが見える所まで(なめらかに)送る。
     // 行き先はレスの位置から毎回測る(画面の外で省いていたレスが描かれて高さが変わっても、ずれないように)
+    // 端に寄せきらず、画面の上下に少し余白(CURSOR_MARGIN)を残した所で送り始める(vim の scrolloff)。
+    // こうすると、押し続けたときに選ぶレスが画面の下の方にとどまり、画面がレスの分ずつ続けて流れる。
+    // 押し続けている間(キーの自動の連打)はアニメーションさせない(連打のたびに動き出しの速い所からやり直して、ガクガクするため)
     const r = target.getBoundingClientRect()
-    if (r.top < viewTop || r.height > room)
-      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop - 4, CURSOR_SCROLL_MS)
-    else if (r.bottom > box.bottom)
-      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom + 4, CURSOR_SCROLL_MS)
+    const margin = Math.min(room * CURSOR_MARGIN, Math.max(0, room - r.height) / 2)
+    const ms = keyRepeat.current ? 0 : CURSOR_SCROLL_MS
+    // 余白は進む向きの側だけ見る(下へ進むのに上の余白で戻したりしない)。はみ出していれば向きに関係なく見える所まで
+    const topLimit = viewTop + (d < 0 ? margin : 0)
+    const bottomLimit = box.bottom - (d > 0 ? margin : 0)
+    if (r.height > room || r.top < topLimit)
+      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop - (r.height > room ? 4 : topLimit - viewTop), ms)
+    else if (r.bottom > bottomLimit)
+      animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom + (box.bottom - bottomLimit), ms)
   }
   /** 選んでいるレスの画像・動画をビューアーで開く。なければ、そのレスへの返信を出す(Enter) */
   const openCursorPost = () => {
@@ -749,6 +761,7 @@ export default function ThreadView(props: Props) {
       const run = threadKeyActions.current[action]
       if (!run) return
       e.preventDefault()
+      keyRepeat.current = e.repeat
       run()
     }
     window.addEventListener('keydown', onKey)

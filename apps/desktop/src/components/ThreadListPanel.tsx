@@ -117,6 +117,10 @@ interface Props {
 /** 1 画面のとき、スレ一覧を広げる幅の上限(これより広いと 1 行が長くて読みにくい) */
 const FILL_MAX_WIDTH = 820
 const LIST_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
+/** スレ一覧で最初に作るカードの数と、そのあと 1 回で作り足す数、まだ作っていないカードの見込みの高さ(px) */
+const FIRST_CARDS = 60
+const CARD_CHUNK = 150
+const CARD_ESTIMATE = 64
 /** J・K で選んだスレへ送るときのスクロールの時間と、画面の上下に残す余白の割合(スレ表示と同じ) */
 const CURSOR_SCROLL_MS = 160
 const CURSOR_MARGIN = 0.25
@@ -525,6 +529,24 @@ export default function ThreadListPanel(props: Props) {
     }),
   )
 
+  // ── カードは上から少しずつ作る(数百スレある板でも、開いてすぐ出るように) ──
+  // 最初は FIRST_CARDS 枚、そのあと手の空いたときに CARD_CHUNK 枚ずつ作り足す。板が変わると作り直す(この部品ごと作り直される)
+  const [renderLimit, setRenderLimit] = useState(FIRST_CARDS)
+  useEffect(() => {
+    if (renderLimit >= ordered.length) return
+    const grow = () => setRenderLimit((n) => n + CARD_CHUNK)
+    const idle = window.requestIdleCallback
+    if (idle) {
+      const id = idle(grow, { timeout: 300 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const t = setTimeout(grow, 30)
+    return () => clearTimeout(t)
+  }, [renderLimit, ordered.length])
+  /** 並び順の何番目まで作るか数えながら、カードを作る(キーワードのまとまりをまたいでも、上からの順で数える) */
+  let rendered = 0
+  const renderLimited = (t: ThreadSummary) => (rendered++ < renderLimit ? renderThread(t) : null)
+
   const renderThread = (t: ThreadSummary) => {
     const id = threadId(t)
     return (
@@ -737,15 +759,17 @@ export default function ThreadListPanel(props: Props) {
                   {keywordGroups.groups.map((g) => (
                     <div key={g.keyword} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
                       <Band icon="sell" label={g.keyword} count={g.threads.length} accent />
-                      {g.threads.map(renderThread)}
+                      {g.threads.map(renderLimited)}
                     </div>
                   ))}
                   {keywordGroups.rest.length > 0 && <Band icon="list" label="その他のスレ" count={keywordGroups.rest.length} />}
-                  {keywordGroups.rest.map(renderThread)}
+                  {keywordGroups.rest.map(renderLimited)}
                 </>
               ) : (
-                visible.map(renderThread)
+                visible.map(renderLimited)
               )}
+              {/* まだ作っていないスレの分の高さ(スクロールバーの長さが、作り足すたびに変わらないように) */}
+              {renderLimit < ordered.length && <div aria-hidden style={{ height: (ordered.length - renderLimit) * CARD_ESTIMATE, flexShrink: 0 }} />}
             </div>
           )}
         </div>

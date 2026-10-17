@@ -44,7 +44,7 @@ body,
    長い時間読むことを前提に、背景と文字の差を web 版の配色より抑えたもの。
    変数の意味は theme/theme.css の先頭の説明と同じ */
 
-/* やさしいダーク: 背景を真っ黒から少し持ち上げ、文字も真っ白にしない */
+/* ダーク(設定の名前。キーは soft-dark のまま): 背景を真っ黒から少し持ち上げ、文字も真っ白にしない */
 [data-scheme='soft-dark'] {
   --c-base: #1b1d22;
   --c-header-footer: var(--c-surface);
@@ -75,7 +75,7 @@ body,
   --c-thread-read-title: #a9c4e8;
 }
 
-/* やさしいライト: 真っ白をやめて生成り色にし、文字も真っ黒にしない */
+/* ライト(設定の名前。キーは soft-light のまま): 真っ白をやめて生成り色にし、文字も真っ黒にしない */
 [data-scheme='soft-light'] {
   --c-base: #f0ede8;
   --c-header-footer: var(--c-base);
@@ -92,8 +92,8 @@ body,
   --c-accent-hover: #5d7ea0;
   --c-accent-text: #ffffff;
   --c-accent-wash: rgba(79, 111, 143, 0.1);
-  --c-accent-self: #a85c6f;
-  --c-accent-self-wash: rgba(168, 92, 111, 0.1);
+  --c-accent-self: #2f74c0; /* 新着・未読・自分の書き込み。ライトは青にする */
+  --c-accent-self-wash: rgba(47, 116, 192, 0.1);
   --c-accent-self-text: #ffffff;
   --c-link: #3a6aa8;
   --c-link-twitter: #2a7ea0;

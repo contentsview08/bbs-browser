@@ -256,11 +256,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; border: string }[] = [
   { key: 'indigo', name: 'インディゴ', accent: '#7566e6', border: '#242933' },
   { key: 'amber-teal', name: 'アンバー×ティール', accent: '#e0993f', border: '#2a3247' },
-  { key: 'light', name: 'ライト', accent: '#3d6b96', border: '#e7e4df' },
   { key: '2ch-classic', name: '2chクラシック', accent: '#0000ff', border: '#545454' },
-  // 専ブラで足した、コントラストを抑えた配色(app.css)
-  { key: 'soft-dark', name: 'やさしいダーク', accent: '#8b93d9', border: '#343a44' },
-  { key: 'soft-light', name: 'やさしいライト', accent: '#4f6f8f', border: '#dcd8d1' },
+  // 専ブラで足した、コントラストを抑えた配色(app.css)。web 版のライト('light')は見にくいので外し、これをライトとする
+  { key: 'soft-dark', name: 'ダーク', accent: '#8b93d9', border: '#343a44' },
+  { key: 'soft-light', name: 'ライト', accent: '#4f6f8f', border: '#dcd8d1' },
 ]
 
 /**
@@ -294,8 +293,13 @@ const osDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
 
 /** いま使うテーマ。OS に合わせるなら、OS のダーク・ライトで選んでおいた方 */
 export function effectiveScheme(s: AppSettings): ColorScheme {
-  if (!s.followOsTheme) return s.scheme
-  return osDark() ? s.darkScheme : s.lightScheme
+  if (!s.followOsTheme) return withoutOldLight(s.scheme)
+  return osDark() ? s.darkScheme : withoutOldLight(s.lightScheme)
+}
+
+/** 外した web 版のライトを選んでいた人(設定の読み込みや、古い設定ファイル)は、いまのライトにする */
+function withoutOldLight(scheme: ColorScheme): ColorScheme {
+  return scheme === 'light' ? 'soft-light' : scheme
 }
 
 /**
@@ -336,7 +340,10 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
   useEffect(() => {
     if (!store) return
     void store.getSettings().then((saved) => {
-      setSettings((s) => ({ ...s, ...(saved as Partial<AppSettings>) }))
+      setSettings((s) => {
+        const next = { ...s, ...(saved as Partial<AppSettings>) }
+        return { ...next, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme) }
+      })
       setLoaded(true)
     })
   }, [store])

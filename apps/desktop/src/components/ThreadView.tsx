@@ -377,24 +377,36 @@ export default function ThreadView(props: Props) {
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
+  const matchesFilter = useCallback(
+    (p: Post, key: PostFilter) =>
+      key === 'popular'
+        ? (anchorCounts.get(p.no) ?? 0) >= 3
+        : key === 'image'
+          ? imageUrlsIn(p.body).length > 0
+          : key === 'video'
+            ? hasVideo(p.body)
+            : hasLink(p.body),
+    [anchorCounts],
+  )
+  /** 絞り込みのボタンに出す、当てはまるレスの数(絞り込む前から分かるように) */
+  const filterCounts = useMemo(() => {
+    const c: Record<PostFilter, number> = { popular: 0, image: 0, video: 0, link: 0 }
+    for (const p of log.posts) for (const f of FILTERS) if (matchesFilter(p, f.key)) c[f.key]++
+    return c
+  }, [log.posts, matchesFilter])
   const visibleNos = useMemo(() => {
     const q = normalizeForSearch(query.trim())
     if (filters.size === 0 && !q) return undefined
     const set = new Set<number>()
     for (const p of log.posts) {
       if (filters.size > 0) {
-        const hit =
-          (filters.has('popular') && (anchorCounts.get(p.no) ?? 0) >= 3) ||
-          (filters.has('image') && imageUrlsIn(p.body).length > 0) ||
-          (filters.has('video') && hasVideo(p.body)) ||
-          (filters.has('link') && hasLink(p.body))
-        if (!hit) continue
+        if (![...filters].some((f) => matchesFilter(p, f))) continue
       }
       if (q && !normalizeForSearch(`${p.no} ${p.name} ${p.body}`).includes(q)) continue
       set.add(p.no)
     }
     return set
-  }, [log.posts, filters, query, anchorCounts])
+  }, [log.posts, filters, query, matchesFilter])
 
   const visiblePosts = useMemo(
     () => (visibleNos ? log.posts.filter((p) => visibleNos.has(p.no)) : log.posts),
@@ -887,6 +899,7 @@ export default function ThreadView(props: Props) {
                   {icon}
                 </span>
                 {label}
+                <span className="text-xs tabular-nums opacity-70">({filterCounts[key]})</span>
                 {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
               </button>
             )

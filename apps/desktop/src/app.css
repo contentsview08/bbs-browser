@@ -324,14 +324,16 @@ html:root[data-scheme='oled'] {
   }
 }
 
-/* タブ(Chrome 風)。開いているタブはスレのヘッダーと同じ色にして、境界線なしでつなげる。
-   ヘッダーのすりガラス(.frosted-glass)はスレ表示の背景の上に --c-header-footer を 40% 重ねた色なので、それに合わせる */
+/* タブ(Chrome 風)。開いていないタブは帯と同じ色(面なし)で、タブの間に短い縦線だけを置く。
+   開いているタブとスレのヘッダーは同じ色にして、境界線なしでつなげる。
+   Chrome と同じく、明るい配色では開いているタブを帯より明るく(白に近く)、帯はスレ表示より一段暗くする。
+   暗い配色では帯をはっきり暗くし、開いているタブはスレ表示より少し明るく持ち上げる(Chrome のダークの #202124 と #35363a の関係) */
 :root {
-  --tab-active-bg: color-mix(in srgb, var(--c-header-footer) 40%, var(--c-thread-view-bg) 60%);
+  --tab-active-bg: color-mix(in srgb, var(--c-thread-view-bg) 35%, white 65%);
   --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 90%, black 10%);
 }
 :root.dark {
-  /* 暗い配色は、開いているタブとほかのタブの差が出るよう、タブの帯をはっきり暗くする */
+  --tab-active-bg: color-mix(in srgb, var(--c-thread-view-bg) 91%, white 9%);
   --tabbar-bg: color-mix(in srgb, var(--c-thread-view-bg) 55%, black 45%);
 }
 

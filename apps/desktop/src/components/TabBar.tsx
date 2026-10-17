@@ -238,7 +238,12 @@ export default function TabBar(props: Props) {
                   />
                 </>
               )}
-              {separator && <span className="absolute right-0 top-2 bottom-2 w-px bg-c-border pointer-events-none" />}
+              {separator && (
+                <span
+                  className="absolute right-0 top-2 bottom-2 w-px pointer-events-none"
+                  style={{ background: 'color-mix(in srgb, var(--c-text-muted) 45%, transparent)' }}
+                />
+              )}
               {t.loading ? (
                 <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
               ) : t.ended ? (

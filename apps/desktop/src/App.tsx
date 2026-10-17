@@ -1092,6 +1092,7 @@ export default function App() {
     confirmPost: useEvent((c: PostConfirm, input: PostInput) => confirmPost(c, input)),
     changeReplyLayout: useEvent((layout: ReplyLayout) => updateSetting('replyLayout', layout)),
     resizeReply: useEvent((key: 'replyHeight' | 'replyWidth', size: number) => updateSetting(key, size)),
+    setReplyCollapsed: useEvent((collapsed: boolean) => updateSetting('replyCollapsed', collapsed)),
     deleteLog: useEvent((id: string) => deleteLogs([id])),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
       setHasUploads(true)

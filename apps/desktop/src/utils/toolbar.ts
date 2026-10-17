@@ -19,6 +19,7 @@ export const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'favorite', name: 'お気に入りのスレ', icon: 'star', placement: 'header' },
   { id: 'findNext', name: '次スレを探す', icon: 'skip_next', placement: 'menu' },
   { id: 'gallery', name: '画像一覧', icon: 'photo_library', placement: 'menu' },
+  { id: 'replyToggle', name: '書き込み欄を出す・しまう', icon: 'keyboard_hide', placement: 'header' },
   { id: 'replyLayout', name: '書き込み欄の位置', icon: 'view_sidebar', placement: 'header' },
   { id: 'delete', name: 'ログを削除して閉じる', icon: 'delete', placement: 'header' },
   { id: 'openBrowser', name: 'ブラウザで開く', icon: 'open_in_new', placement: 'menu' },

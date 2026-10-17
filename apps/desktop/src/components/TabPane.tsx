@@ -42,6 +42,7 @@ export interface TabEvents {
   confirmPost: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   changeReplyLayout: (layout: ReplyLayout) => void
   resizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
+  setReplyCollapsed: (collapsed: boolean) => void
   deleteLog: (id: string) => void
   uploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
   /** 次スレの候補を探す。スレタイはログのもの(URL から開いたスレは一覧のスレタイが空のため) */
@@ -134,6 +135,7 @@ function TabPane({
       postMail={meta?.defaultMail ?? settings.postMail}
       onChangeReplyLayout={ev.changeReplyLayout}
       onResizeReply={ev.resizeReply}
+      onSetReplyCollapsed={ev.setReplyCollapsed}
       onDeleteLog={onDeleteLog}
       nonameName={nonameName}
       jumpTo={jumpTo}

@@ -35,6 +35,8 @@ interface Props {
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ。明けるまで書き込むボタンを押せなくし、残りを出す */
   readyAt?: number
   cooldownMs?: number
+  /** 書き込み欄をしまう(しまうボタンを出す) */
+  onCollapse?: () => void
   /** 下のサムネイルを押した(画像ビューアーで開く) */
   onImage?: (urls: string[], index: number) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
@@ -225,7 +227,19 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         {props.accounts && props.onToggleAccount && (
           <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
         )}
-        <div className="ml-auto flex items-center gap-0.5">{media.buttons}</div>
+        <div className="ml-auto flex items-center gap-0.5">
+          {media.buttons}
+          {props.onCollapse && (
+            <button
+              type="button"
+              onClick={props.onCollapse}
+              className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2"
+              title="書き込み欄をしまう(下書きは残ります)"
+            >
+              <span className="material-symbols-outlined text-lg leading-none">keyboard_hide</span>
+            </button>
+          )}
+        </div>
       </div>
         <div className="relative flex-1 min-h-0 flex">
         <textarea

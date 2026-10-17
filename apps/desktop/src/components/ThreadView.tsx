@@ -77,6 +77,8 @@ interface Props {
   postMail: string
   onChangeReplyLayout: (layout: ReplyLayout) => void
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
+  /** 書き込み欄をしまう・出す(設定に覚える) */
+  onSetReplyCollapsed: (collapsed: boolean) => void
   /** ログを消してタブを閉じる */
   onDeleteLog: () => void
   /** 次スレの候補を探す(板のスレ一覧を取り直して似たスレタイを並べる)。できない掲示板では undefined */
@@ -127,6 +129,9 @@ const FILTERS: { key: PostFilter; label: string; icon: string }[] = [
   { key: 'video', label: '動画', icon: 'play_circle' },
   { key: 'link', label: 'リンク', icon: 'link' },
 ]
+/** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
+const AUTO_COLLAPSE_WIDTH = 720
+const AUTO_COLLAPSE_HEIGHT = 420
 /** 新着の札を出しておく時間 */
 const NEW_TOAST_MS = 2500
 /** ホバーで開くまでの待ち時間。通り過ぎただけで開かないように */
@@ -304,6 +309,49 @@ export default function ThreadView(props: Props) {
   const [replySize, setReplySize] = useState(savedSize)
   useEffect(() => setReplySize(savedSize), [savedSize])
   const canReply = props.onSubmitPost !== undefined && log.status !== 'archived'
+
+  // ── 書き込み欄をしまう ──
+  // しまっておく設定に加え、スレ表示が狭い・低いとき(書き込み欄が右なら幅 720px 未満、下なら高さ 420px 未満)は自動でしまう。
+  // 自動でしまっているときも、帯やボタンで出せる(大きさが戻ったら、また自動に任せる)
+  const mainRef = useRef<HTMLElement>(null)
+  const [autoCollapse, setAutoCollapse] = useState(false)
+  const [replyForceOpen, setReplyForceOpen] = useState(false)
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      setAutoCollapse(replyLayout === 'right' ? el.clientWidth < AUTO_COLLAPSE_WIDTH : el.clientHeight < AUTO_COLLAPSE_HEIGHT)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [replyLayout])
+  useEffect(() => {
+    if (!autoCollapse) setReplyForceOpen(false)
+  }, [autoCollapse])
+  const replyCollapsed = settings.replyCollapsed || (autoCollapse && !replyForceOpen)
+  const openReply = () => {
+    if (settings.replyCollapsed) props.onSetReplyCollapsed(false)
+    if (autoCollapse) setReplyForceOpen(true)
+  }
+  const closeReply = () => {
+    props.onSetReplyCollapsed(true)
+    setReplyForceOpen(false)
+  }
+  /** 書き込み欄に何かする(しまっていたら出してから) */
+  const pendingReply = useRef<((h: ReplyFormHandle) => void) | undefined>(undefined)
+  const withReply = (fn: (h: ReplyFormHandle) => void) => {
+    if (!replyCollapsed && replyRef.current) return fn(replyRef.current)
+    pendingReply.current = fn
+    openReply()
+  }
+  const withReplyRef = useRef(withReply)
+  withReplyRef.current = withReply
+  useEffect(() => {
+    if (replyCollapsed || !pendingReply.current || !replyRef.current) return
+    const fn = pendingReply.current
+    pendingReply.current = undefined
+    fn(replyRef.current)
+  })
   const anchorCounts = useMemo(() => countAnchors(log.posts), [log.posts])
   /** 自分の書き込みへのアンカーを含むレス */
   const replyToOwn = useMemo(() => {
@@ -426,6 +474,12 @@ export default function ThreadView(props: Props) {
     ...(props.onSubmitPost
       ? [
           {
+            id: 'replyToggle',
+            label: replyCollapsed ? '書き込み欄を出す' : '書き込み欄をしまう',
+            icon: replyCollapsed ? 'edit' : 'keyboard_hide',
+            onClick: () => (replyCollapsed ? openReply() : closeReply()),
+          },
+          {
             id: 'replyLayout',
             label: replyLayout === 'bottom' ? '書き込み欄を右に置く' : '書き込み欄を下に置く',
             icon: replyLayout === 'bottom' ? 'view_sidebar' : 'view_agenda',
@@ -493,7 +547,7 @@ export default function ThreadView(props: Props) {
       else if (action === 'unread') scrollToUnread(unreadFrom, 'animate')
       else if (action === 'refresh') void props.onRefresh()
       else if (action === 'search') setSearchActive(true)
-      else if (action === 'reply') replyRef.current?.focus()
+      else if (action === 'reply') withReplyRef.current((h) => h.focus())
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -642,7 +696,7 @@ export default function ThreadView(props: Props) {
         onReply: canReply
           ? (no) => {
               setPopups([])
-              replyRef.current?.insert(`>>${no}\n`)
+              withReplyRef.current((h) => h.insert(`>>${no}\n`))
             }
           : undefined,
         onQuickReply: canReply ? (no, text) => void quickPostRef.current(`>>${no}\n${text}`) : undefined,
@@ -821,7 +875,7 @@ export default function ThreadView(props: Props) {
   )
 
   return (
-    <main className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden">
+    <main ref={mainRef} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden">
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div className="flex-1 min-h-0 min-w-0 flex flex-col">
@@ -947,7 +1001,21 @@ export default function ThreadView(props: Props) {
       )}
       </div>
 
-      {props.onSubmitPost && (
+      {props.onSubmitPost && replyCollapsed && (
+        // しまっているときは、細い帯(右に置くときは細い縦の帯)だけを出す。押すと書き込み欄を出す
+        <button
+          type="button"
+          onClick={openReply}
+          className={`flex-shrink-0 flex items-center justify-center gap-2 bg-panel-reply text-sm text-c-text-muted hover:text-c-text-strong transition-colors border-c-border ${
+            replyLayout === 'bottom' ? 'h-9 border-t' : 'w-9 border-l flex-col'
+          }`}
+          title="書き込み欄を出す (W)"
+        >
+          <span className="material-symbols-outlined text-lg">edit</span>
+          {replyLayout === 'bottom' && '書き込む'}
+        </button>
+      )}
+      {props.onSubmitPost && !replyCollapsed && (
         <>
           <Splitter
             layout={replyLayout}
@@ -987,6 +1055,7 @@ export default function ThreadView(props: Props) {
                   : undefined
               }
               onOpenUrl={props.onUrl}
+              onCollapse={closeReply}
             />
           </div>
         </>

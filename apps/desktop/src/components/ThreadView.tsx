@@ -1427,7 +1427,7 @@ export default function ThreadView(props: Props) {
                         {/* うっすら強調色を重ねて、どのレスか目に入るようにする(カードの上に重ねるので、ごく薄く) */}
                         <span
                           className="absolute inset-0 pointer-events-none z-[1] rounded-[var(--card-radius)]"
-                          style={{ background: 'color-mix(in srgb, var(--c-accent) 7%, transparent)' }}
+                          style={{ background: 'var(--c-cursor-tint)' }}
                         />
                         <span
                           className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none z-[1]"

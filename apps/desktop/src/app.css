@@ -279,13 +279,16 @@ article.post-discord {
 article.post-discord:hover {
   background-color: color-mix(in srgb, var(--c-text-body) 5%, transparent);
 }
-/* LINE 風: スレ表示の背景を強調色に少し寄せ、吹き出しを浮かせる。自分の吹き出しは LINE の緑 */
+/* LINE 風: スレ表示の背景を LINE のトークのような落ち着いた青灰色に寄せ、吹き出しを浮かせる。
+   強調色に寄せると、黄色・橙の配色(アンバー×ティールなど)で画面全体がチカチカするので、配色に関係なく同じ青灰にする。
+   自分の吹き出しは LINE の緑 */
 [data-post-style='line'] {
-  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 86%, var(--c-accent) 14%);
+  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 87%, #7f9cc0 13%);
   --line-own-bg: #8de055;
   --line-own-text: #10200a;
 }
 :root.dark[data-post-style='line'] {
+  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 90%, #6f8fb8 10%);
   --line-own-bg: #3f7d2c;
   --line-own-text: #eef7e8;
 }
@@ -314,10 +317,19 @@ article.post-discord:hover {
   padding-bottom: 6px;
 }
 
+/* 選んでいるレス(J・K・クリック)に重ねる色。ふつうは強調色をごく薄く。
+   強調色が黄色・橙の配色(アンバー×ティール)は、薄くても面で敷くとチカチカするので、色のない明るさだけにする(下の線は強調色のまま) */
+:root {
+  --c-cursor-tint: color-mix(in srgb, var(--c-accent) 7%, transparent);
+}
+:root[data-scheme='amber-teal'] {
+  --c-cursor-tint: color-mix(in srgb, var(--c-text-strong) 5%, transparent);
+}
+
 /* ポップアップの中で J・K で選んでいるレス(ThreadView.tsx の popupKey)。本文の選んでいるレスと同じ見た目 */
 article.popup-cursor {
   position: relative;
-  background-image: linear-gradient(color-mix(in srgb, var(--c-accent) 7%, transparent), color-mix(in srgb, var(--c-accent) 7%, transparent));
+  background-image: linear-gradient(var(--c-cursor-tint), var(--c-cursor-tint));
 }
 article.popup-cursor::after {
   content: '';

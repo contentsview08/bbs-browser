@@ -29,7 +29,7 @@ import {
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
-import { anchorsIn } from './utils/postBody'
+import { anchorsIn, isAppThreadUrl } from './utils/postBody'
 import LoadingCenter from './components/LoadingCenter'
 import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
@@ -1002,7 +1002,7 @@ export default function App() {
    * それ以外や、開けなかったときはブラウザで開く
    */
   const openLink = async (url: string) => {
-    if (!builtinConnectors.some((c) => c.isThreadUrl?.(url))) return openUrl(url)
+    if (!isAppThreadUrl(url)) return openUrl(url)
     try {
       const r = await resolve(url)
       if (r.thread) return await openThread(r.thread, { newTab: true })

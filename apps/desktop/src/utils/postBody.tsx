@@ -2,7 +2,7 @@
 // ここではアンカー(>>1)と URL だけを見つけて部品に分ける(HTML としては扱わない)。
 
 import type { ReactNode } from 'react'
-import type { Post } from '@bbs-browser/connectors'
+import { builtinConnectors, type Post } from '@bbs-browser/connectors'
 
 /**
  * 同じ本文を何度も解析しないよう、結果を本文ごとに覚えておく(レスの描き直しやタブの作り直しのたびに解析しない)。
@@ -215,6 +215,9 @@ export function hasVideo(text: string): boolean {
   return hasYoutube(text) || videoFileUrlsIn(text).length > 0
 }
 
+/** アプリ(専ブラ)で開けるスレの URL か。本文のリンクを緑にするのと、押したときにアプリで開くかの判断に使う */
+export const isAppThreadUrl = memoByText((url) => builtinConnectors.some((c) => c.isThreadUrl?.(url) ?? false))
+
 export interface BodyHandlers {
   /** アンカーを押した(via='click')、またはマウスを乗せた(via='hover') */
   onAnchor: (nos: number[], el: HTMLElement, via: 'click' | 'hover') => void
@@ -253,7 +256,7 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
           key={start}
           href={url}
           className={`hover:underline break-all ${
-            toImageUrl(url) ? 'text-c-link-image' : YOUTUBE_URL.test(url) ? 'text-[#ff3344]' : 'text-c-link'
+            toImageUrl(url) ? 'text-c-link-image' : YOUTUBE_URL.test(url) ? 'text-[#ff3344]' : isAppThreadUrl(url) ? 'text-mark-new' : 'text-c-link'
           }`}
           onClick={(e) => {
             e.preventDefault()

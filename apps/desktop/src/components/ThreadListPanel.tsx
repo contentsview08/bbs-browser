@@ -385,7 +385,13 @@ export default function ThreadListPanel(props: Props) {
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
                 >
-                  <span className="truncate">{props.title}</span>
+                  <span
+                    className="truncate cursor-pointer hover:text-c-accent transition-colors"
+                    onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
+                    title="クリックで先頭へスクロール"
+                  >
+                    {props.title}
+                  </span>
                 </h2>
                 <input
                   ref={searchRef}

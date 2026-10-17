@@ -624,9 +624,16 @@ export default function ThreadView(props: Props) {
     const { root, frames, seen, viewTop, box } = visibleFrames()
     if (!root || !box || frames.length === 0) return
     const i = frames.findIndex((f) => Number(f.dataset.post) === cursorNo)
-    // 選んでいるレスが画面の外(先頭・末尾へ飛んだ、スクロールした)なら、いま見えている所から選び直す:
-    // J は見えている一番上、K は見えている一番下
-    const onScreen = i >= 0 && seen.includes(frames[i])
+    // 選んでいるレスが画面から大きく離れていたら(マウスでスクロールした など)、いま見えている所から選び直す:
+    // J は見えている一番上、K は見えている一番下。
+    // 少しはみ出しているだけ(押し続けて、送るのが追いついていない)なら、そのまま続ける
+    // (見えているかだけで決めると、押し続けたときに画面の中をぐるぐる回ってしまう)
+    const room = box.bottom - viewTop
+    const near = (f: HTMLElement) => {
+      const r = f.getBoundingClientRect()
+      return r.bottom > viewTop - room && r.top < box.bottom + room
+    }
+    const onScreen = i >= 0 && (seen.includes(frames[i]) || near(frames[i]))
     const target = onScreen
       ? frames[Math.min(frames.length - 1, Math.max(0, i + d))]
       : ((d > 0 ? seen[0] : seen.at(-1)) ?? frames[0])
@@ -634,7 +641,6 @@ export default function ThreadView(props: Props) {
     // 選んだレスが外に出るときだけ、そのレスが見える所まで(なめらかに)送る。
     // 行き先はレスの位置から毎回測る(画面の外で省いていたレスが描かれて高さが変わっても、ずれないように)
     const r = target.getBoundingClientRect()
-    const room = box.bottom - viewTop
     if (r.top < viewTop || r.height > room)
       animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop - 4, CURSOR_SCROLL_MS)
     else if (r.bottom > box.bottom)

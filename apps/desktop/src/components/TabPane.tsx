@@ -50,6 +50,8 @@ export interface TabEvents {
   /** 次スレの候補を探す。スレタイはログのもの(URL から開いたスレは一覧のスレタイが空のため) */
   findNext: (t: ThreadSummary, title: string) => Promise<NextThreadCandidate[]>
   openThread: (t: ThreadSummary) => void
+  /** スレの板のスレ一覧を開く(︙ の「板に戻る」) */
+  openBoardOf: (t: ThreadSummary) => void
   toggleFavoriteThread: (t: ThreadSummary) => void
   /** 書き込むときに使うアカウントのオン・オフ(どの板でも同じ) */
   togglePostAccount: (id: string, on: boolean) => void
@@ -115,6 +117,7 @@ function TabPane({
   const title = tab.log.title || thread.title
   const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body) }), [ev, thread])
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
+  const onOpenBoard = useCallback(() => ev.openBoardOf(thread), [ev, thread])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
@@ -151,6 +154,7 @@ function TabPane({
       jumpTo={jumpTo}
       onUploaded={ev.uploaded}
       onFindNext={onFindNext}
+      onOpenBoard={onOpenBoard}
       onOpenThread={ev.openThread}
       isFavorite={favorite}
       refreshReadyAt={tab.refreshReadyAt}

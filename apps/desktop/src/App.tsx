@@ -1310,6 +1310,12 @@ export default function App() {
     togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
     openAccountSettings: useEvent(() => setSettingsTab('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
+    // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
+    openBoardOf: useEvent((t: ThreadSummary) => {
+      const fav = favorites?.find((b) => b.url === t.boardUrl)
+      if (fav) void openBoard(fav)
+      else void openUrlInApp(t.boardUrl)
+    }),
     registerReadFlush: useEvent((flush: (() => void) | undefined) => {
       readFlush.current = flush
     }),

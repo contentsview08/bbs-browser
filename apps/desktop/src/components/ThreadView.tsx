@@ -89,6 +89,8 @@ interface Props {
   onDeleteLog: () => void
   /** 次スレの候補を探す(板のスレ一覧を取り直して似たスレタイを並べる)。できない掲示板では undefined */
   onFindNext?: () => Promise<NextThreadCandidate[]>
+  /** このスレの板のスレ一覧を開く */
+  onOpenBoard?: () => void
   onOpenThread: (t: ThreadSummary) => void
   /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出す) */
   refreshReadyAt?: number
@@ -139,6 +141,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 /** 選んだレスへ送るときのスクロールの時間 */
 const CURSOR_SCROLL_MS = 160
+/** Esc の 2 回押しとみなす間隔 */
+const DOUBLE_ESC_MS = 500
 /** J・K で選んだレスを、画面の上下からこの割合だけ離しておく */
 const CURSOR_MARGIN = 0.25
 const AUTO_COLLAPSE_WIDTH = 720
@@ -291,6 +295,15 @@ export default function ThreadView(props: Props) {
       } else if (filters.size > 0) {
         e.preventDefault()
         setFilters(new Set())
+      } else {
+        // 閉じるものも絞り込みもないときに Esc を 2 回(素早く)押したら、選んでいるレスの印を消す(見た目だけ)。
+        // 選んでいた場所は覚えていて、次に J・K などを押すとそこから続ける
+        const now = Date.now()
+        if (now - lastEsc.current < DOUBLE_ESC_MS) {
+          e.preventDefault()
+          setCursorHidden(true)
+          lastEsc.current = 0
+        } else lastEsc.current = now
       }
     }
     window.addEventListener('keydown', onKey)
@@ -496,6 +509,7 @@ export default function ThreadView(props: Props) {
       fillWhenActive: true,
       onClick: props.onToggleFavorite,
     },
+    ...(props.onOpenBoard ? [{ id: 'openBoard', label: '板に戻る', icon: 'list', tint: 'var(--c-accent)', onClick: props.onOpenBoard }] : []),
     ...(props.onFindNext
       ? [
           {
@@ -565,6 +579,10 @@ export default function ThreadView(props: Props) {
   ]
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
+  /** Esc を 2 回押して、選んでいるレスの印を隠しているか(選んでいる場所は残す) */
+  const [cursorHidden, setCursorHidden] = useState(false)
+  /** 最後に Esc を押した時刻(2 回押しを見分ける) */
+  const lastEsc = useRef(0)
   /** いまのキーが、押し続けたときの自動の連打か */
   const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
@@ -609,6 +627,7 @@ export default function ThreadView(props: Props) {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         releaseFocus()
+        setCursorHidden(false)
         if (typeof pick === 'number') return setCursorNo(pick)
         const { frames } = visibleFrames()
         const f = pick === 'first' ? frames[0] : frames.at(-1)
@@ -621,6 +640,7 @@ export default function ThreadView(props: Props) {
    */
   const pageWithCursor = (dir: 1 | -1, half = false) => {
     releaseFocus()
+    setCursorHidden(false)
     const { frames, seen, viewTop } = visibleFrames()
     const cur = frames.find((f) => Number(f.dataset.post) === cursorNo)
     const y = (cur && seen.includes(cur) ? Math.max(cur.getBoundingClientRect().top, viewTop) : viewTop) + 1
@@ -654,6 +674,11 @@ export default function ThreadView(props: Props) {
       return r.bottom > viewTop - room && r.top < box.bottom + room
     }
     const onScreen = i >= 0 && (seen.includes(frames[i]) || near(frames[i]))
+    // Esc 2 回で印を隠していたら、最初の 1 回は動かさずに、隠す前に選んでいたレスを出し直す(そこから続ける)
+    if (cursorHidden) {
+      setCursorHidden(false)
+      if (onScreen) return
+    }
     // まだ選んでいないとき(新着が届いた・開き直した直後)に J を押したら、「ここから未読」のレスから始める(新着から読む)。
     // 見えていなくても、まだ画面より下にある(一番下まで読んでいて、更新で下に届いた)ならそこへ送る。
     // もう画面より上へ読み過ぎていたら、見えている一番上から
@@ -723,7 +748,9 @@ export default function ThreadView(props: Props) {
   const actOnCursor = (action: KeyAction) => {
     const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
     const el = cursorFrame()
-    if (p && el) actOnPost(action, p, el, mainHandlers)
+    if (!p || !el) return
+    setCursorHidden(false)
+    actOnPost(action, p, el, mainHandlers)
   }
   threadKeyActions.current = {
     nextPost: () => moveCursor(1),
@@ -1300,7 +1327,10 @@ export default function ThreadView(props: Props) {
                   <div
                     key={p.no}
                     className={`post-cv relative ${enterDelay !== undefined ? 'post-enter' : ''}`}
-                    onPointerDown={() => setCursorNo(p.no)}
+                    onPointerDown={() => {
+                      setCursorNo(p.no)
+                      setCursorHidden(false)
+                    }}
                     style={
                       {
                         // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
@@ -1312,7 +1342,7 @@ export default function ThreadView(props: Props) {
                     hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
-                    {keysOn && p.no === cursorNo && (
+                    {keysOn && !cursorHidden && p.no === cursorNo && (
                       <>
                         {/* うっすら強調色を重ねて、どのレスか目に入るようにする(カードの上に重ねるので、ごく薄く) */}
                         <span

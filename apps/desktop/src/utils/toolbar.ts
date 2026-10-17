@@ -17,6 +17,7 @@ export interface BarActionDef {
 export const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'search', name: 'レス検索', icon: 'search', placement: 'header' },
   { id: 'favorite', name: 'お気に入りのスレ', icon: 'star', placement: 'header' },
+  { id: 'openBoard', name: '板に戻る', icon: 'list', placement: 'menu' },
   { id: 'findNext', name: '次スレを探す', icon: 'skip_next', placement: 'menu' },
   { id: 'gallery', name: '画像一覧', icon: 'photo_library', placement: 'menu' },
   { id: 'replyToggle', name: '書き込み欄を出す・しまう', icon: 'keyboard_hide', placement: 'header' },

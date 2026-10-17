@@ -142,7 +142,7 @@ export default function ThreadListPanel(props: Props) {
 
   // キー操作。キーを受け取っているとき(2 画面なら上に線が出ているとき)だけ。割り当てはスレ表示と同じで、
   // 次/前のレス(J・K)→ 次/前のスレを選ぶ、Enter で開く、1 画面分(Space・PageDown)、先頭・末尾(Home・G・End・Shift+G)、
-  // 更新(R)、検索(/)。ほかの割り当て(未読へ・書き込み欄へ)はスレ一覧では使わない
+  // 更新(R)、検索(/)、スレ立て(書き込み欄へ の W・E)。未読へ はスレ一覧では使わない
   const onListKey = useEvent((e: KeyboardEvent) => {
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
@@ -178,6 +178,7 @@ export default function ThreadListPanel(props: Props) {
       const last = ordered[ordered.length - 1]
       setCursorId(last && threadId(last))
     } else if (action === 'refresh' && props.onRefresh) void props.onRefresh()
+    else if (action === 'reply' && props.onNewThread) props.onNewThread() // スレ一覧の「書き込む」はスレ立て
     else if (action === 'search') {
       setSearchActive(true)
       requestAnimationFrame(() => searchRef.current?.focus())

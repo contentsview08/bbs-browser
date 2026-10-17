@@ -24,7 +24,7 @@ export const KEY_ACTIONS: { key: KeyAction; name: string }[] = [
   { key: 'unread', name: '最初の未読へ' },
   { key: 'refresh', name: 'スレを更新' },
   { key: 'search', name: 'レスを検索' },
-  { key: 'reply', name: '書き込み欄へ' },
+  { key: 'reply', name: '書き込み欄へ(スレ一覧ではスレ立て)' },
 ]
 
 export type Keymap = Record<KeyAction, string[]>
@@ -40,7 +40,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   // F5・Ctrl+R はアプリ全体で決め打ち(開いているスレ、なければスレ一覧を更新する。App.tsx)
   refresh: ['R'],
   search: ['/', 'Ctrl+F'],
-  reply: ['W'],
+  reply: ['W', 'E'],
 }
 
 /** 保存してある割り当てに、あとから増えた操作の既定値を足す */

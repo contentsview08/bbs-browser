@@ -119,25 +119,36 @@ describe('ふたばのコネクタ', () => {
   // 本番では試し書きしないので、フォームの写し方と応答の読み方だけを確かめる
   const FORM_PAGE = `${PAGE}<form action="/b/futaba.php?guid=on" method="POST" enctype="multipart/form-data" id="fm"><input type=hidden name=mode value="regist"><input type=hidden id="hash" name="hash" value="1792226540784444-abc"><input type=hidden id="ptua" name="ptua" value="656869215056"><input type=hidden name=resto value="1000"><input type=text name=name></form>`
   it('書き込む直前にページを取り直し、隠し欄(hash など)を写して、文字だけを送る', async () => {
-    const { ctx, posted } = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<META HTTP-EQUIV="refresh" content="1;URL=res/1000.htm">書きこみました')
+    const { ctx, posted } = fake(
+      { [`${BOARD}res/1000.htm`]: { body: FORM_PAGE }, 'https://may.2chan.net/bin/cachemt7.php': { body: 'function caco(){return "1792228311081";}' } },
+      'ok',
+    )
     const r = await futabaConnector.createPost!(thread, { name: '', mail: 'sage', body: 'abc' }, ctx)
     expect(r.status).toBe('ok')
     expect(posted[0].url).toBe('https://may.2chan.net/b/futaba.php?guid=on')
     const sent = new URLSearchParams(posted[0].body)
     expect(sent.get('hash')).toBe('1792226540784444-abc')
-    expect(sent.get('ptua')).toBe('656869215056')
     expect(sent.get('resto')).toBe('1000')
     expect(sent.get('mode')).toBe('regist')
     expect(sent.get('textonly')).toBe('on')
     expect(sent.get('email')).toBe('sage')
     expect(sent.get('com')).toBe('abc')
+    // 書き込みボタンの JavaScript が入れる値
+    expect(sent.get('pthc')).toBe('1792228311081')
+    expect(sent.get('pthb')).toBe('1792228311081')
+    expect(sent.get('js')).toBe('on')
+    expect(sent.get('responsemode')).toBe('ajax')
+    expect(sent.get('ptua')).toBe('1341647872')
     expect(posted[0].headers?.Referer).toBe(`${BOARD}res/1000.htm`)
     expect(posted[0].sameCookiesAsGet).toBe(true)
   })
 
   it('断られたら、返ってきたページの文字を知らせる', async () => {
-    const { ctx } = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<html><body><b>本文がありません</b></body></html>')
+    const { ctx } = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<html><head><title>本文がありません</title></head><body>…</body></html>')
     const r = await futabaConnector.createPost!(thread, { name: '', mail: '', body: '' }, ctx)
     expect(r).toMatchObject({ status: 'error', message: '本文がありません' })
+    // 前の読み方(refresh があれば書けた)だと、エラーのページも「書けた」にしてしまっていた
+    const html = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<html><head><META HTTP-EQUIV="refresh" content="1"></head><body>書き込みが多すぎます</body></html>')
+    expect((await futabaConnector.createPost!(thread, { name: '', mail: '', body: 'x' }, html.ctx)).status).toBe('error')
   })
 })

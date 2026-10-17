@@ -9,12 +9,13 @@
 //   書き込む直前にページを取り直して写す。文字だけ(textonly=on)を Shift_JIS のフォームで送る。
 //   ページを見たときに渡される Cookie(posttime など)がないと「cookieを有効にしてもう一度送信してください」で断られるので、
 //   書き込みは読む通信と同じ Cookie の置き場で送る(sameCookiesAsGet)
-//   本番での試し書きはしていない(フォームの形だけ確かめた)。本来は JavaScript が埋める欄(pthb・pthc・baseform など)があり、
-//   空のままでは断られるかもしれない。断られたら、返ってきたページ(PostResult の html)を見て直す
+//   ふたばの書き込みボタンの JavaScript(/bin/base4esc.js の ptfk)と同じく、
+//   pthc・pthb に /bin/cachemt7.php の値、ptua にブラウザの機能の数、js=on・scsz を入れ、responsemode=ajax を付けて送る。
+//   返事は書けたら「ok」(か JSON)、断られたらエラーの文。2026-10-17 に JavaScript を読んで合わせた
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, PostResult, ThreadSummary } from '../types'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
-import { parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
+import { parseCaco, parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
 
 const ID = 'futaba'
 
@@ -28,6 +29,14 @@ interface RawCursor {
 const HOST = /^https?:\/\/[a-z0-9]+\.2chan\.net\//
 const THREAD_URL = /^https?:\/\/([a-z0-9]+)\.2chan\.net\/([a-z0-9]+)\/res\/(\d+)\.html?/
 const BOARD_URL = /^https?:\/\/([a-z0-9]+)\.2chan\.net\/([a-z0-9]+)\/?(?:futaba\.html?|futaba\.php[^#]*)?(?:#.*)?$/
+
+/**
+ * 書き込みの ptua: ふたばの JavaScript が、ブラウザの機能の有無(33 項目)を 2 の累乗で足し合わせた数。
+ * WebView2(Chromium)で真になる項目(onLine・sessionStorage・currentScript・EventSource・crypto・performance・
+ * AudioContext・indexedDB・sendBeacon・getGamepads・languages・mediaDevices・caches・createImageBitmap・onstorage・
+ * getBattery・WebkitAppearance)を足したもの
+ */
+const CHROMIUM_PTUA = String([10, 11, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 30].reduce((n, b) => n + 2 ** b, 0))
 
 /** カタログを 200 スレ(20 列 x 10 行)・スレタイ 40 文字で返してもらう */
 const CATALOG_COOKIE = 'cxyl=20x10x40x0x0'
@@ -167,6 +176,15 @@ export const futabaConnector: Connector = {
     if (page.status !== 200) return { status: 'error', message: `スレのページを開けません(HTTP ${page.status})` }
     const form = parsePostForm(sjis(page.body, ctx))
     if (!form) return { status: 'error', message: '書き込みのフォームが見つかりません(スレが消えたか、ページの形が変わりました)' }
+    // 書き込みボタンの JavaScript が入れる値。pthc は /bin/cachemt7.php の時刻、pthb は初めて書いたときのその値
+    // (ブラウザでは localStorage に残す。ここでは毎回いまの値を入れる)
+    let caco = ''
+    try {
+      const c = await ctx.http.get(`${originOf(thread.boardUrl)}/bin/cachemt7.php`)
+      if (c.status === 200) caco = parseCaco(new TextDecoder().decode(c.body))
+    } catch {
+      // 取れなければ空のまま送る(断られたら、その文を出す)
+    }
     const fields: Record<string, string> = {
       ...form.hidden,
       mode: 'regist',
@@ -174,6 +192,10 @@ export const futabaConnector: Connector = {
       // JavaScript が動いたことにする(ふつうのブラウザと同じ)
       js: 'on',
       scsz: '1920x1080x24',
+      pthc: caco,
+      pthb: caco,
+      ptua: CHROMIUM_PTUA,
+      responsemode: 'ajax',
       name: input.name,
       email: input.mail,
       sub: '',
@@ -189,6 +211,7 @@ export const futabaConnector: Connector = {
     })
     const html = sjis(res.body, ctx)
     const r = parsePostResult(html)
+    if (r.ok) console.info('[futaba] 書き込みの返事', html.slice(0, 200))
     return r.ok ? { status: 'ok', message: r.message } : { status: 'error', message: r.message, html }
   },
 

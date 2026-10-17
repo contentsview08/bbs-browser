@@ -156,13 +156,31 @@ export function parsePostForm(html: string): { action: string; hidden: Record<st
 }
 
 /**
- * 書き込んだあとのページを読む。書き込めたときは、スレへ戻る refresh か「書きこみました」が入る(本番で確かめていない)。
- * それ以外はエラーとして、ページの文字を短くして返す
+ * 書き込んだあとの返事を読む(responsemode=ajax で送ったとき。ふたばの書き込みボタンの JavaScript と同じ読み方)。
+ * 書けたときは「ok」か JSON だけが返る。それ以外はエラー: HTML ならその <title>、文字ならそのまま
  */
-export function parsePostResult(html: string): { ok: boolean; message: string } {
-  const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim()
-  if (/http-equiv=["']?refresh/i.test(html) || /書きこみました|書き込みました/.test(text)) return { ok: true, message: '書きこみました' }
-  return { ok: false, message: text.slice(0, 200) || '書き込めませんでした(応答が空でした)' }
+export function parsePostResult(text: string): { ok: boolean; message: string } {
+  const t = text.trim()
+  if (t === 'ok') return { ok: true, message: '書きこみました' }
+  if (/^[{[]/.test(t)) {
+    try {
+      JSON.parse(t)
+      return { ok: true, message: '書きこみました' }
+    } catch {
+      // JSON ではなかった。エラーとして読む
+    }
+  }
+  if (/<html[> ]|<body[> ]/i.test(t)) {
+    const title = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(t)?.[1] ?? '').trim()
+    const body = decodeEntities(t.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim()
+    return { ok: false, message: title || body.slice(0, 200) || '書き込めませんでした' }
+  }
+  return { ok: false, message: t.slice(0, 200) || '書き込めませんでした(返事が空でした)' }
+}
+
+/** /bin/cachemt7.php の中身(function caco(){return "1792228311081";})から、書き込みの pthb・pthc に入れる値 */
+export function parseCaco(js: string): string {
+  return /return\s*["'](\d+)["']/.exec(js)?.[1] ?? ''
 }
 
 /** ページの <title>(板名) */

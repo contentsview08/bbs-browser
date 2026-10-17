@@ -735,11 +735,12 @@ function PostArticle(props: Props) {
     >
       {/* 自分の書き込み(濃い線)と、自分へのアンカーを含むレス(薄い線)の目印。
           高密度表示では web 版の設定で本文の縦線が 0 になるので、表示の密度に関係なく見えるよう別に引く */}
-      {(props.isOwn || props.isReplyToOwn) && !props.alignLeft && (
+      {/* LINE 風の自分の書き込みは、右に寄せた緑の吹き出しで分かるので、縦の印は出さない(自分宛てのレスには出す) */}
+      {((props.isOwn && variant !== 'line') || props.isReplyToOwn) && !props.alignLeft && (
         <span
           className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full pointer-events-none"
-          style={{ background: 'var(--c-own)', opacity: props.isOwn ? 1 : 0.45 }}
-          title={props.isOwn ? '自分の書き込み' : '自分へのレス'}
+          style={{ background: 'var(--c-own)', opacity: props.isOwn && variant !== 'line' ? 1 : 0.45 }}
+          title={props.isOwn && variant !== 'line' ? '自分の書き込み' : '自分へのレス'}
         />
       )}
       {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする。

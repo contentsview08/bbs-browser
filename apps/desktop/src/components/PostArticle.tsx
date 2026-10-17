@@ -408,27 +408,38 @@ function PostArticle(props: Props) {
       </div>
     )
 
-  /** Discord 風: 本文の先頭のアンカーを「返信」として、本文の上に引用元の頭を出す */
+  /**
+   * Discord 風: 本文の先頭のアンカーを「返信」として、頭の上に返信元の 1 行を出す。
+   * 返信元の小さいアイコンは本文の始まりの位置に置き、そこから左下へ、書いた人の大きいアイコンまで線でつなぐ
+   * (番号は線とアイコンで分かるので出さない)
+   */
   const replyLine = variant === 'discord' && props.replyPreview && (
-    <button
-      type="button"
-      className="flex items-center gap-1.5 min-w-0 max-w-full mb-0.5 text-xs text-c-text-muted hover:text-c-text-body"
-      onClick={(e) => {
-        e.stopPropagation()
-        handlers.onAnchor([props.replyPreview!.no], e.currentTarget, 'click')
-      }}
-      title={`>>${props.replyPreview.no} を表示`}
-    >
-      <span className="material-symbols-outlined text-sm leading-none -scale-y-100 rotate-180">reply</span>
-      {/* 返信元の ID のアイコンを小さく(誰への返信か、アイコンで分かるように) */}
-      {props.replyPreview.id && (
-        <span className="flex-shrink-0 block overflow-hidden rounded-full">
-          <Identicon seed={props.replyPreview.id} size={16} />
-        </span>
-      )}
-      <span className="font-bold text-c-link">&gt;&gt;{props.replyPreview.no}</span>
-      <span className="truncate">{props.replyPreview.text}</span>
-    </button>
+    <div className="relative h-5 mb-0.5 pl-12 flex items-center">
+      {/* 大きいアイコン(幅 36px の真ん中)の上から立ち上がり、右へ曲がって小さいアイコンの手前まで */}
+      <span
+        aria-hidden
+        className="absolute left-[18px] top-1/2 -bottom-0.5 w-[26px] border-l-2 border-t-2 rounded-tl-md pointer-events-none"
+        style={{ borderColor: 'var(--c-border-strong)' }}
+      />
+      <button
+        type="button"
+        className="flex items-center gap-1.5 min-w-0 max-w-full text-xs text-c-text-muted hover:text-c-text-body"
+        onClick={(e) => {
+          e.stopPropagation()
+          handlers.onAnchor([props.replyPreview!.no], e.currentTarget, 'click')
+        }}
+        title={`>>${props.replyPreview.no} を表示`}
+      >
+        {props.replyPreview.id ? (
+          <span className="flex-shrink-0 block overflow-hidden rounded-full">
+            <Identicon seed={props.replyPreview.id} size={16} />
+          </span>
+        ) : (
+          <span className="flex-shrink-0 block w-4 h-4 rounded-full bg-c-surface3" />
+        )}
+        <span className="truncate">{props.replyPreview.text}</span>
+      </button>
+    </div>
   )
 
   const bodyBlock = (
@@ -621,6 +632,8 @@ function PostArticle(props: Props) {
       </div>
       {variant === 'discord' ? (
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
+        <div>
+        {replyLine}
         <div className="flex gap-3 items-start">
           {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
           <div className="w-9 flex-shrink-0 flex justify-center items-start">
@@ -632,9 +645,9 @@ function PostArticle(props: Props) {
           </div>
           <div className="flex-1 min-w-0">
             {headerBlock}
-            {replyLine}
             {bodyBlock}
           </div>
+        </div>
         </div>
       ) : (
         <>

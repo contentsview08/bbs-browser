@@ -1430,7 +1430,8 @@ export default function ThreadView(props: Props) {
                       idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
                       showTopDivider={i > 0 && !firstUnread && variant === 'card'}
                       variant={variant}
-                      continued={variant === 'discord' && !firstUnread && continuedFrom(i)}
+                      // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
+                      continued={variant === 'discord' && !firstUnread && continuedFrom(i) && !replyPreviewOf(p)}
                       replyPreview={variant === 'discord' ? replyPreviewOf(p) : undefined}
                       ng={isNg(p)}
                       ngMode={settings.ngMode}

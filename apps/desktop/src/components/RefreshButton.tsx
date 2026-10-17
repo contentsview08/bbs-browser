@@ -13,6 +13,8 @@ export default function RefreshButton(props: {
   className?: string
   /** アイコンの大きさ(px) */
   size?: number
+  /** クールダウン中も押せる(押したときにすることを、呼ぶ側が決める。スレ表示では既読の位置だけ引き直す) */
+  coolingAction?: string
 }) {
   const { left, ratio } = useCountdown(props.readyAt, props.cooldownMs)
   const size = props.size ?? 20
@@ -23,9 +25,13 @@ export default function RefreshButton(props: {
     <button
       type="button"
       onClick={props.onClick}
-      disabled={props.loading || cooling}
+      disabled={props.loading || (cooling && !props.coolingAction)}
       className={`relative ${props.className ?? ''} disabled:cursor-not-allowed`}
-      title={cooling ? `あと ${Math.ceil(left / 1000)} 秒で更新できます(続けて取りに行かないよう、少しあけています)` : '更新'}
+      title={
+        cooling
+          ? `あと ${Math.ceil(left / 1000)} 秒で更新できます(続けて取りに行かないよう、少しあけています)${props.coolingAction ? `。いま押すと${props.coolingAction}` : ''}`
+          : '更新'
+      }
     >
       {cooling ? (
         <span className="relative flex items-center justify-center" style={{ width: size, height: size }}>

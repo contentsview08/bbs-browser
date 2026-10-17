@@ -72,6 +72,8 @@ export interface AppSettings {
   threadPanelWidth: number
   /** サイドバーを広げたときの幅 */
   sidebarWidth: number
+  /** Shift+Delete でログを消す前に確かめる */
+  confirmDeleteLog: boolean
   /** 背景画像(アプリのデータフォルダにコピーしたもののパス)。空なら出さない */
   backgroundImage: string
   /** 背景画像の濃さ(0〜1)。画像はパネルの後ろに置くので、パネルを透かしたところに見える */
@@ -199,6 +201,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customFont: '',
   threadPanelWidth: 420,
   sidebarWidth: 256,
+  confirmDeleteLog: true,
   backgroundImage: '',
   backgroundOpacity: 1,
   panelAlpha: { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 },

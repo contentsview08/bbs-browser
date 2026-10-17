@@ -453,6 +453,14 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           onChange={(v) => update('threadSort', v)}
         />
       </Section>
+      <Section title="ログの削除">
+        <Toggle
+          checked={s.confirmDeleteLog}
+          onChange={(v) => update('confirmDeleteLog', v)}
+          label="Shift+Delete でログを消す前に確かめる"
+          note="確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます"
+        />
+      </Section>
       <Section advanced title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
           checked={s.tabsEnabled}

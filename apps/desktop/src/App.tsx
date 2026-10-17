@@ -57,7 +57,7 @@ import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
-import { ask } from '@tauri-apps/plugin-dialog'
+import ConfirmDialog from './components/ConfirmDialog'
 import KeyHelp from './components/KeyHelp'
 import { findNextThreads } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
@@ -183,6 +183,8 @@ export default function App() {
   const [ngDraft, setNgDraft] = useState<NgDraft>()
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
+  /** Shift+Delete で消そうとしているタブ(確かめるダイアログを出している間) */
+  const [deleteConfirm, setDeleteConfirm] = useState<string[]>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
   const narrow = useNarrow()
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
@@ -713,9 +715,15 @@ export default function App() {
     run('posts', async () => {
       if (!store || !activeTab) return
       const now = Date.now()
-      if (now < (activeTab.refreshReadyAt ?? 0)) return
       // 既読の記録が間に合っていないと、「ここから未読」を古い位置で引き直してしまうので、先に記録する
       readFlush.current?.()
+      if (now < (activeTab.refreshReadyAt ?? 0)) {
+        // クールダウン中は取りに行かず、「ここから未読」だけ、いま読んだところの次に引き直す
+        // (一番下まで読んでいれば全部既読になり、線は消える)
+        const id = activeTab.id
+        setTabs((ts) => ts.map((x) => (x.id === id && x.unreadFrom !== x.readNo + 1 ? { ...x, unreadFrom: x.readNo + 1 } : x)))
+        return
+      }
       // 明ける時刻をタブに持たせ、更新ボタンに残りを出す
       patchTab(activeTab.id, { refreshReadyAt: now + REFRESH_COOLDOWN_MS })
       await fetchThread(store, activeTab.thread)
@@ -859,8 +867,16 @@ export default function App() {
         return false
     }
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, back: () => goNav(-1), forward: () => goNav(1) })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, back: () => goNav(-1), forward: () => goNav(1) }
+  /** Shift+Delete: 確かめてから(設定で確かめないことにしていれば、すぐ)ログを消して閉じる */
+  const confirmDeleteLogs = (ids: string[]) => {
+    if (!settings.confirmDeleteLog) {
+      setSelectedTabs(new Set())
+      return void deleteLogs(ids)
+    }
+    setDeleteConfirm(ids)
+  }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) }
   // マウスの戻る・進むボタン(横のボタン)。WebView がページの戻る・進むをしないよう、押したときに止める
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -913,16 +929,7 @@ export default function App() {
           setSelectedTabs(new Set())
           return closeTabs(targets)
         }
-        void ask(`${targets.length} 件のスレのログを削除して閉じます。読んだ位置や、dat 落ちして取り直せないレスも消えます。`, {
-          title: 'ログを削除',
-          kind: 'warning',
-          okLabel: '削除',
-          cancelLabel: 'やめる',
-        }).then((ok) => {
-          if (!ok) return
-          setSelectedTabs(new Set())
-          void deleteLogs(targets)
-        })
+        keyRef.current.confirmDeleteLogs(targets)
         return
       }
       // 割り当てを変えられる、アプリ全体の操作(タブ・戻る/進む・URL 欄 など)。
@@ -1604,6 +1611,22 @@ export default function App() {
 
       <Notifications items={notifications} onClose={dismiss} />
 
+      {deleteConfirm && (
+        <ConfirmDialog
+          title="ログを削除"
+          message={`${deleteConfirm.length} 件のスレのログを削除して閉じます。\n読んだ位置や、dat 落ちして取り直せないレスも消えます。`}
+          okLabel="削除"
+          canSkipNext
+          onClose={(ok, skipNext) => {
+            const ids = deleteConfirm
+            setDeleteConfirm(undefined)
+            if (!ok) return
+            if (skipNext) updateSetting('confirmDeleteLog', false)
+            setSelectedTabs(new Set())
+            void deleteLogs(ids)
+          }}
+        />
+      )}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
       {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 

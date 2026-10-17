@@ -11,7 +11,6 @@
     "core:window:allow-start-dragging",
     "opener:default",
     "dialog:allow-open",
-    "dialog:allow-ask",
     "sql:default",
     "sql:allow-execute",
     {

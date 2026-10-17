@@ -503,6 +503,7 @@ function PostArticle(props: Props) {
 
   const bodyBlock = (
         <div
+          data-post-body
           className={hasConnections ? 'cursor-pointer' : ''}
           // LINE 風は、吹き出しの外(レスの行全体)を押しても開けるよう、行の方で受ける(lineLayout)
           onClick={variant === 'line' ? undefined : openTree}

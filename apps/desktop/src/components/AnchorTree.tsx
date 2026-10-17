@@ -13,6 +13,10 @@ const ELBOW_Y = 14
 const LINE = 'color-mix(in srgb, var(--c-text-muted) 80%, transparent)'
 /** 線の太さは Discord 風・LINE 風のツリーと同じ 2px。曲がり角の丸み */
 const RADIUS = 6
+/** 番号の真下に線を通す位置(レスの枠の左の余白から、番号の 1 文字目の真ん中あたりまで) */
+const NUMBER_X = 7
+/** 段 depth のレスの、番号の真下の横位置(行の左端から) */
+const lineX = (depth: number) => `calc(${depth * STEP + NUMBER_X}px + var(--post-padding-x))`
 
 /** Discord 風: 大きいアイコンの半分(アイコンの真ん中の位置) */
 const D_HALF = 18
@@ -32,42 +36,23 @@ export default function AnchorTree(props: {
     <div className="flex flex-col">
       {props.rows.map((r, i) => (
         <div key={r.no} className="relative flex">
-          {/* 子のレスがあれば、このレスの番号の左から線を出して、角を丸めて下へ曲げる(╭)。番号から線が出ているように。
-              線はレスの左に空けた所(1 段の幅。レスの本体の中)を通るので、番号・本文とは重ならない */}
+          {/* 子のレスがあれば、このレスの番号の真下から縦線を下ろす(番号から線が出ているように)。
+              本文は右へずらしてある(app.css の .tree-post)ので、線は番号の下の、本文の左を通る */}
           {(props.rows[i + 1]?.depth ?? -1) > r.depth && (
-            <span
-              className="absolute bottom-0 pointer-events-none z-[2]"
-              style={{
-                left: r.depth * STEP + STEP / 2,
-                top: ELBOW_Y,
-                width: STEP / 2 + 6,
-                borderLeft: `2px solid ${LINE}`,
-                borderTop: `2px solid ${LINE}`,
-                borderTopLeftRadius: RADIUS,
-              }}
-            />
+            <span className="absolute bottom-0 pointer-events-none z-[2]" style={{ left: lineX(r.depth), top: ELBOW_Y + 10, borderLeft: `2px solid ${LINE}` }} />
           )}
           {r.depth > 0 && (
             <div className="relative flex-shrink-0" style={{ width: r.depth * STEP }}>
               {/* 上の段から続く縦線 */}
-              {r.rails.map((on, i) =>
-                on ? (
-                  <span key={i} className="absolute top-0 bottom-0" style={{ left: i * STEP + STEP / 2, borderLeft: `2px solid ${LINE}` }} />
-                ) : null,
-              )}
+              {r.rails.map((on, k) => (on ? <span key={k} className="absolute top-0 bottom-0" style={{ left: lineX(k), borderLeft: `2px solid ${LINE}` }} /> : null))}
               {/* まだ兄弟がいれば、縦線を下まで伸ばす(├) */}
-              {!r.last && (
-                <span
-                  className="absolute top-0 bottom-0"
-                  style={{ left: (r.depth - 1) * STEP + STEP / 2, borderLeft: `2px solid ${LINE}` }}
-                />
-              )}
-              {/* 親からの線を、角を丸めて横に曲げる(└) */}
+              {!r.last && <span className="absolute top-0 bottom-0" style={{ left: lineX(r.depth - 1), borderLeft: `2px solid ${LINE}` }} />}
+              {/* 親の番号の下から来た線を、角を丸めて、このレスの番号の手前まで横に曲げる(└) */}
               <span
-                className="absolute top-0"
+                className="absolute top-0 z-[2]"
                 style={{
-                  left: (r.depth - 1) * STEP + STEP / 2,
-                  width: STEP / 2,
+                  left: lineX(r.depth - 1),
+                  width: STEP - NUMBER_X - 2,
                   height: ELBOW_Y + 1,
                   borderLeft: `2px solid ${LINE}`,
                   borderBottom: `2px solid ${LINE}`,
@@ -76,8 +61,7 @@ export default function AnchorTree(props: {
               />
             </div>
           )}
-          {/* レスの本体の左を 1 段の幅だけ空け(app.css の .tree-post)、番号から下ろす線を、番号や本文と重ならない所に通す。
-              押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくいのでやめた) */}
+          {/* 押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくいのでやめた) */}
           <div
             className="tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)]"
             style={r.no === props.focus ? { background: 'var(--c-cursor-tint)' } : undefined}

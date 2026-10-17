@@ -52,6 +52,20 @@ const MAX_WIDTH = 480
 /** これだけ動かしたらドラッグとみなす */
 const DRAG_PX = 4
 
+/**
+ * 選んでいる行の印。サイドバーの右の境界線が、選んだ行のところでくにっと曲がって行の上・左・下を回り、また右の線へ戻る
+ * (行がスレ一覧の側へ食い込んだように見える)。行の中は、ライトでは少し暗く、ダークでは少し明るく塗る。
+ * 選んでいない行にも置いておき、選び替えたときに、前の行の印は右へ引っ込みながら消え、新しい行の印は右から伸びて出る
+ */
+function NavNotch(props: { on: boolean }) {
+  return (
+    <span aria-hidden className={`nav-notch ${props.on ? 'on' : ''}`}>
+      <span className="nav-notch-curve top" />
+      <span className="nav-notch-curve bottom" />
+    </span>
+  )
+}
+
 /** アイコン(左の列)と名前(右)の 1 行 */
 function Row(props: {
   icon: string
@@ -70,11 +84,10 @@ function Row(props: {
       type="button"
       onClick={props.onClick}
       title={props.label}
-      className={`w-full h-14 flex items-center transition-colors hover:bg-c-surface2 ${
-        props.active ? 'text-c-accent' : 'text-c-text-strong'
-      }`}
+      className={`relative w-full h-14 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
     >
-      <span className="w-[63px] flex-shrink-0 flex items-center justify-center">
+      <NavNotch on={!!props.active} />
+      <span className="relative w-[63px] flex-shrink-0 flex items-center justify-center">
         <span className="relative">
           <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`} style={props.color ? { color: props.color } : undefined}>
             {props.icon}
@@ -89,8 +102,8 @@ function Row(props: {
           )}
         </span>
       </span>
-      <span className="flex-1 min-w-0 text-left text-lg font-medium truncate">{props.label}</span>
-      {props.trailing}
+      <span className="relative flex-1 min-w-0 text-left text-lg font-medium truncate">{props.label}</span>
+      {props.trailing && <span className="relative">{props.trailing}</span>}
     </button>
   )
 }
@@ -242,7 +255,8 @@ export default function Sidebar(props: Props) {
       className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar ${resizing ? '' : 'transition-[width] duration-200 ease-out'} ${
         peek ? 'z-40 shadow-2xl' : 'z-30'
       }`}
-      style={{ width: collapsed ? COLLAPSED : EXPANDED }}
+      // --sb-w: いま見えている幅。選んでいる行の印(NavNotch)を、右の境界線の位置まで伸ばすのに使う
+      style={{ width: collapsed ? COLLAPSED : EXPANDED, ['--sb-w' as string]: `${collapsed ? COLLAPSED : EXPANDED}px` }}
       onMouseEnter={() => {
         if (!props.collapsed) return
         clearTimeout(peekTimer.current)
@@ -318,22 +332,14 @@ export default function Sidebar(props: Props) {
                       transform: `translateY(${dragging ? drag.dy : shiftOf(i)}px)`,
                       transition: dragging ? 'none' : 'transform 150ms ease-out',
                     }}
-                    className={`group relative flex items-center cursor-pointer select-none transition-colors hover:bg-c-surface3 ${
+                    className={`group relative flex items-center cursor-pointer select-none transition-colors ${active ? '' : 'hover:bg-c-surface3'} ${
                       dragging ? 'z-10 bg-c-surface2 shadow-lg' : ''
                     }`}
                   >
                     {/* 選んでいる板の印。中身を押さないよう、重ねて描く(ファビコンが右へずれないように) */}
-                    {active && (
-                      <span
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          background: 'color-mix(in srgb, var(--c-accent) 18%, transparent)',
-                          boxShadow: 'inset 4px 0 0 var(--c-accent)',
-                        }}
-                      />
-                    )}
+                    {!dragging && <NavNotch on={active} />}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
-                    <span className="w-[63px] flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
+                    <span className="relative w-[63px] flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
                       <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
                       {/* 板名は列の真ん中に置き、入りきらなければ末尾を「…」で略す。
                           幅いっぱいの箱で中央寄せにすると、長い名前は左右両側へはみ出して切れるので、
@@ -351,7 +357,7 @@ export default function Sidebar(props: Props) {
                         </span>
                       )}
                     </span>
-                    <span className={`flex-1 min-w-0 text-[1.0625rem] truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
+                    <span className={`relative flex-1 min-w-0 text-[1.0625rem] truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
                       {nameOf(b)}
                     </span>
                     <button
@@ -361,7 +367,7 @@ export default function Sidebar(props: Props) {
                         e.stopPropagation()
                         props.onToggleFavorite(b)
                       }}
-                      className="mr-2 p-0.5 flex-shrink-0 text-c-text-muted opacity-0 group-hover:opacity-100 hover:text-c-text-strong"
+                      className="relative mr-2 p-0.5 flex-shrink-0 text-c-text-muted opacity-0 group-hover:opacity-100 hover:text-c-text-strong"
                       title="お気に入りから外す"
                     >
                       <span className="material-symbols-outlined text-base leading-none">close</span>

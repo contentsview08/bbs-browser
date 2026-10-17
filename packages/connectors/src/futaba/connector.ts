@@ -152,7 +152,8 @@ async function sendRegist(
     ['com', input.body],
     // ファイルを付けないときは「画像なし」にする
     ...(file ? [] : [['textonly', 'on'] as [string, string]]),
-    ['pwd', ''],
+    // 削除キー。アプリが覚えておき、自分の書き込みを消すとき(deletePost)に同じものを送る
+    ['pwd', input.deleteKey ?? ''],
     ['responsemode', 'ajax'],
   ]
   const url = new URL(form.action, pageUrl).href
@@ -166,7 +167,9 @@ async function sendRegist(
   const html = sjis(res.body, ctx)
   const r = parsePostResult(html)
   // 書けたときも、ふたばが何と返したかを添える(書けたのに出てこないときに、手がかりにするため)
-  return r.ok ? { status: 'ok', message: `${r.message}(ふたばの返事: ${html.trim().slice(0, 80)})` } : { status: 'error', message: r.message, html }
+  return r.ok
+    ? { status: 'ok', message: `${r.message}(ふたばの返事: ${html.trim().slice(0, 80)})`, ...(r.ref !== undefined && { ref: r.ref }) }
+    : { status: 'error', message: r.message, html }
 }
 
 export const futabaConnector: Connector = {
@@ -281,6 +284,21 @@ export const futabaConnector: Connector = {
 
   async createPost(thread, input, ctx): Promise<PostResult> {
     return sendRegist(threadWebUrl(thread), thread.boardUrl, { resto: thread.key }, input, ctx)
+  },
+
+  // 自分の書き込みを消す: 板/futaba.php?guid=on へ mode=usrdel・番号=delete・pwd=削除キー(ふたばの JavaScript の usrdelsend と同じ)
+  async deletePost(thread, post, deleteKey, ctx): Promise<PostResult> {
+    const ref = post.ref ?? post.no
+    const board = new URL(thread.boardUrl).pathname.split('/').filter(Boolean)[0]
+    const body = new URLSearchParams({ responsemode: 'ajax', pwd: deleteKey, [String(ref)]: 'delete', mode: 'usrdel' }).toString()
+    const res = await ctx.http.post(`${originOf(thread.boardUrl)}/${board}/futaba.php?guid=on`, body, {
+      headers: { ...BROWSER, 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
+      sameCookiesAsGet: true,
+    })
+    const text = sjis(res.body, ctx).trim()
+    if (text === 'ok') return { status: 'ok', message: '削除しました' }
+    const r = parsePostResult(text)
+    return { status: 'error', message: r.ok ? text.slice(0, 100) : r.message, html: text }
   },
 
   // そうだね: /sd.php?板名.番号 を GET すると、新しい数が返る(ふたばの JavaScript の sd() と同じ)

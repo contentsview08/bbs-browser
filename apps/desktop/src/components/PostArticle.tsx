@@ -38,6 +38,8 @@ export interface PostHandlers extends BodyHandlers {
   onAddNg: (rule: NgRule) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
+  /** 自分の書き込みを消す。消せない掲示板は undefined */
+  onDeletePost?: (post: Post) => void
   /** レスを評価する(ふたばの「そうだね」を押す)。評価のない掲示板は undefined */
   onVote?: (post: Post) => void
   /** NG の画面を、元の文字を入れた状態で開く */
@@ -274,6 +276,10 @@ function PostArticle(props: Props) {
       onClick: () => setAaOverride(!isAA),
     },
     ...ngActions,
+    // 自分の書き込みは、掲示板から消せる(消せる掲示板だけ)
+    ...(props.isOwn && handlers.onDeletePost
+      ? [{ label: 'この書き込みを削除', icon: 'delete_forever', onClick: () => handlers.onDeletePost!(post) }]
+      : []),
   ]
 
   const variant = props.variant ?? 'card'

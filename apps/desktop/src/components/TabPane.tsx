@@ -54,6 +54,8 @@ export interface TabEvents {
   openThread: (t: ThreadSummary) => void
   /** スレの板のスレ一覧を開く(︙ の「板に戻る」) */
   openBoardOf: (t: ThreadSummary) => void
+  /** 自分の書き込みを消す(確かめてから) */
+  deletePost: (thread: ThreadSummary, post: Post) => void
   /** レスを評価する(ふたばの「そうだね」)。新しい数をタブに写す */
   vote: (thread: ThreadSummary, post: Post) => void
   /** スレ表示のヘッダーの高さを保存する(0 なら既定) */
@@ -104,6 +106,8 @@ interface Props {
   attachments?: AttachmentRules
   /** レスを評価できる掲示板か(コネクタの vote) */
   canVote?: boolean
+  /** 自分の書き込みを消せる掲示板か(コネクタの deletePost) */
+  canDeletePost?: boolean
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -130,6 +134,7 @@ function TabPane({
   textQuotes,
   attachments,
   canVote,
+  canDeletePost,
   splitPostIcon,
   ev,
 }: Props) {
@@ -143,6 +148,7 @@ function TabPane({
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
   const onOpenBoard = useCallback(() => ev.openBoardOf(thread), [ev, thread])
   const onVote = useCallback((p: Post) => ev.vote(thread, p), [ev, thread])
+  const onDeletePost = useCallback((p: Post) => ev.deletePost(thread, p), [ev, thread])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
@@ -199,6 +205,7 @@ function TabPane({
       textQuotes={textQuotes}
       attachments={attachments}
       onVote={canVote ? onVote : undefined}
+      onDeletePost={canDeletePost ? onDeletePost : undefined}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

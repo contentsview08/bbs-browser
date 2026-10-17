@@ -164,6 +164,8 @@ export interface PostInput {
   body: string
   /** 付けるファイル(コネクタが attachments を持つときだけ) */
   files?: PostFile[]
+  /** 書き込みの削除キー(ふたば。あとで自分の書き込みを消すときに使う)。使わない掲示板は無視する */
+  deleteKey?: string
   /** この書き込みで使うアカウント(AccountKind の id)。入っていないアカウントの Cookie は付けない */
   accounts?: string[]
 }
@@ -184,7 +186,14 @@ export interface PostConfirm {
 }
 
 export type PostResult =
-  | { status: 'ok'; message: string; /** サーバーが教えてくれたときだけ */ resNumber?: number }
+  | {
+      status: 'ok'
+      message: string
+      /** サーバーが教えてくれたときだけ */
+      resNumber?: number
+      /** 書き込んだレスの、板の本当の番号(Post.ref。ふたばは返事の thisno) */
+      ref?: number
+    }
   /** 認証が要る。url をブラウザで開き、code を入れてから書き込み直す */
   | { status: 'auth'; message: string; url?: string; code?: string; html?: string }
   /** html はサーバーが返したページそのもの(原因を調べるときに、そのまま見られるように) */
@@ -223,6 +232,8 @@ export interface Connector {
   attachments?: AttachmentRules
   /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
   maxPosts?: number
+  /** 自分の書き込みを消す(書いたときと同じ削除キーで)。消せない掲示板は持たない */
+  deletePost?(thread: ThreadSummary, post: Post, deleteKey: string, ctx: ConnectorContext): Promise<PostResult>
   /** レスを評価する(ふたばの「そうだね」を押す)。新しい評価の数を返す。評価のない掲示板は持たない */
   vote?(thread: ThreadSummary, post: Post, ctx: ConnectorContext): Promise<number>
   /** 引用を「>前のレスの文章」の形で書く掲示板(ふたば)。引用した文章から、元のレスを探してつなぐ */

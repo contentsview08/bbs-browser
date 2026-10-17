@@ -193,6 +193,8 @@ export default function App() {
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   /** コマンドパレット(Ctrl+K・:) */
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /** 消そうとしている自分の書き込み(確かめるダイアログを出している間) */
+  const [postDeleteConfirm, setPostDeleteConfirm] = useState<{ t: ThreadSummary; p: Post }>()
   /** Shift+Delete で消そうとしているタブ(確かめるダイアログを出している間) */
   const [deleteConfirm, setDeleteConfirm] = useState<string[]>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
@@ -1103,6 +1105,15 @@ export default function App() {
    * 書き込み。成功したら差分を取り直し、書き込んだレスを「自分の書き込み」として覚える。
    * レス番号はサーバーが教えてくれればそれを、なければ新着の中から本文が同じものを探す
    */
+  /** 書き込みの削除キー(ふたば)。まだなければ、英数字 8 文字を作って覚える */
+  const deleteKey = () => {
+    if (settings.postDeleteKey) return settings.postDeleteKey
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    const key = [...crypto.getRandomValues(new Uint8Array(8))].map((n) => chars[n % chars.length]).join('')
+    updateSetting('postDeleteKey', key)
+    return key
+  }
+
   const submitPost = async (input: PostInput): Promise<PostResult> => {
     if (!store || !activeTab) return { status: 'error', message: 'スレを開いていません' }
     const blocked = postBlocked()
@@ -1110,7 +1121,7 @@ export default function App() {
     const t = activeTab.thread
     const connector = connectorOf(t.connectorId)
     if (!connector.createPost) return { status: 'error', message: 'この掲示板には書き込めません' }
-    const withAccounts = { ...input, accounts: postAccountIds(t.connectorId, t.boardUrl) }
+    const withAccounts = { ...input, accounts: postAccountIds(t.connectorId, t.boardUrl), deleteKey: deleteKey() }
     return afterPost(t, input, await connector.createPost(t, withAccounts, ctx))
   }
 
@@ -1135,8 +1146,10 @@ export default function App() {
     await fetchThread(store, t, { force: true })
     const after = await store.loadThread(t)
     const normalize = (s: string) => s.replace(/\s+/g, '')
+    // 書いたレスの番号: サーバーが教えてくれたもの(ふたばは板の本当の番号 ref)、なければ本文が同じ新しいレス
     const no =
       r.resNumber ??
+      (r.ref !== undefined ? after?.posts.find((p) => p.ref === r.ref)?.no : undefined) ??
       after?.posts
         .filter((p) => p.no > before)
         .reverse()
@@ -1161,7 +1174,7 @@ export default function App() {
     const b = board
     const connector = connectorOf(b.connectorId)
     if (!connector.createThread) return { status: 'error', message: 'この掲示板ではスレを立てられません' }
-    const withAccounts = { ...input, accounts: postAccountIds(b.connectorId, b.url) }
+    const withAccounts = { ...input, accounts: postAccountIds(b.connectorId, b.url), deleteKey: deleteKey() }
     return afterThread(b, input, await connector.createThread(b, withAccounts, ctx))
   }
 
@@ -1393,6 +1406,8 @@ export default function App() {
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
     // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
+    // 自分の書き込みを消す(確かめてから)
+    deletePost: useEvent((t: ThreadSummary, p: Post) => setPostDeleteConfirm({ t, p })),
     // そうだね: 押したら、返ってきた新しい数をタブに写す
     vote: useEvent((t: ThreadSummary, p: Post) => {
       const c = findConnector(t.connectorId)
@@ -1671,6 +1686,7 @@ export default function App() {
                   textQuotes={findConnector(t.thread.connectorId)?.textQuotes}
                   attachments={findConnector(t.thread.connectorId)?.attachments}
                   canVote={!!findConnector(t.thread.connectorId)?.vote}
+                  canDeletePost={!!findConnector(t.thread.connectorId)?.deletePost}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />
@@ -1724,6 +1740,29 @@ export default function App() {
 
       <Notifications items={notifications} onClose={dismiss} />
 
+      {postDeleteConfirm && (
+        <ConfirmDialog
+          title="書き込みを削除"
+          message={`No.${postDeleteConfirm.p.ref ?? postDeleteConfirm.p.no} の書き込みを、掲示板から削除します。\n元に戻せません。`}
+          okLabel="削除"
+          onClose={(ok) => {
+            const { t, p } = postDeleteConfirm
+            setPostDeleteConfirm(undefined)
+            const c = findConnector(t.connectorId)
+            if (!ok || !c?.deletePost) return
+            if (!settings.postDeleteKey) return notify({ icon: 'error', title: '削除できません', body: 'このアプリで書いたときの削除キーがありません' })
+            void c.deletePost(t, p, settings.postDeleteKey, ctx).then(
+              (r) =>
+                notify(
+                  r.status === 'ok'
+                    ? { icon: 'delete', title: '書き込みを削除しました', body: '掲示板のページで確かめられます(このアプリの表示は、次に開き直したときに変わります)' }
+                    : { icon: 'error', title: '削除できませんでした', body: r.message },
+                ),
+              backgroundError('書き込みの削除'),
+            )
+          }}
+        />
+      )}
       {deleteConfirm && (
         <ConfirmDialog
           title="ログを削除"

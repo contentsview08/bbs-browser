@@ -159,13 +159,14 @@ export function parsePostForm(html: string): { action: string; hidden: Record<st
  * 書き込んだあとの返事を読む(responsemode=ajax で送ったとき。ふたばの書き込みボタンの JavaScript と同じ読み方)。
  * 書けたときは「ok」か JSON だけが返る。それ以外はエラー: HTML ならその <title>、文字ならそのまま
  */
-export function parsePostResult(text: string): { ok: boolean; message: string } {
+export function parsePostResult(text: string): { ok: boolean; message: string; ref?: number } {
   const t = text.trim()
   if (t === 'ok') return { ok: true, message: '書きこみました' }
   if (/^[{[]/.test(t)) {
     try {
-      JSON.parse(t)
-      return { ok: true, message: '書きこみました' }
+      // 書き込んだレスの番号(thisno)。スレ立てなら新しいスレの番号(jumpto)にもなる
+      const d = JSON.parse(t) as { thisno?: number }
+      return { ok: true, message: '書きこみました', ...(typeof d.thisno === 'number' && { ref: d.thisno }) }
     } catch {
       // JSON ではなかった。エラーとして読む
     }

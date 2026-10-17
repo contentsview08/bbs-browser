@@ -172,6 +172,22 @@ describe('ふたばのコネクタ', () => {
     expect(posted[0].headers?.Referer).toBe(`${BOARD}futaba.htm`)
   })
 
+  it('削除キーを pwd で送り、返事の thisno を ref として返す。削除は usrdel で同じキーを送る', async () => {
+    const { ctx, posted } = fake(
+      { [`${BOARD}res/1000.htm`]: { body: FORM_PAGE }, 'https://may.2chan.net/bin/cachemt7.php': { body: 'function caco(){return "1";}' } },
+      '{"status":"ok","jumpto":1000,"resto":1000,"thisno":1012}',
+    )
+    const r = await futabaConnector.createPost!(thread, { name: '', mail: '', body: 'x', deleteKey: 'abc12345' }, ctx)
+    expect(r).toMatchObject({ status: 'ok', ref: 1012 })
+    expect(posted[0].body).toContain('name="pwd"\r\n\r\nabc12345\r\n')
+    const del = fake({}, 'ok')
+    const d = await futabaConnector.deletePost!(thread, { no: 4, ref: 1012, name: '', mail: '', date: '', body: '' }, 'abc12345', del.ctx)
+    expect(d.status).toBe('ok')
+    const sent = new URLSearchParams(del.posted[0].body)
+    expect(del.posted[0].url).toBe('https://may.2chan.net/b/futaba.php?guid=on')
+    expect([sent.get('mode'), sent.get('1012'), sent.get('pwd')]).toEqual(['usrdel', 'delete', 'abc12345'])
+  })
+
   it('そうだね: /sd.php?板名.番号 を呼んで、新しい数を返す', async () => {
     const { ctx, got } = fake({ 'https://may.2chan.net/sd.php?b.1003': { body: '5' } })
     const n = await futabaConnector.vote!(thread, { no: 2, ref: 1003, name: '', mail: '', date: '', body: '' }, ctx)

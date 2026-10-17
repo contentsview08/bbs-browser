@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasVideo, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { hasVideo, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
 
 describe('videoFileUrlsIn: 動画のファイル', () => {
   it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
@@ -18,5 +18,12 @@ describe('youtubeEmbedUrl', () => {
     expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=abcDEF12345&t=1m30s')).toContain('&start=90')
     expect(youtubeEmbedUrl('https://www.youtube.com/shorts/abcDEF12345')).toContain('/embed/abcDEF12345')
     expect(youtubeEmbedUrl('https://example.com/watch?v=abcDEF12345')).toBeUndefined()
+  })
+})
+
+describe('imageUrlsIn: 画像', () => {
+  it('URL の直後の見えない文字(U+2060 など)は URL に含めない', () => {
+    const body = 'https://i.imgur.com/LMIhKea.jpg⁠\nhttps://example.com/b.png​続き'
+    expect(imageUrlsIn(body)).toEqual(['https://i.imgur.com/LMIhKea.jpg', 'https://example.com/b.png'])
   })
 })

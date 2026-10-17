@@ -367,6 +367,13 @@ function PostArticle(props: Props) {
       </button>
     )
 
+  /** ID のないレス(板の設定や書き方で ID が付かないもの)のアイコン。何もない丸だと壊れて見えるので、人の形を出す */
+  const noIdAvatar = (
+    <span className="flex w-9 h-9 rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" title="ID のないレス">
+      <span className="material-symbols-outlined fill text-xl leading-none">person</span>
+    </span>
+  )
+
   // ── レスの頭 ──
   const headerBlock =
     variant === 'classic' ? (
@@ -625,7 +632,7 @@ function PostArticle(props: Props) {
               />
             </button>
           ) : (
-            identiconBtn(36, true) || <span className="block w-9 h-9 rounded-full bg-c-surface3" />
+            identiconBtn(36, true) || noIdAvatar
           )}
         </div>
       )}
@@ -733,7 +740,7 @@ function PostArticle(props: Props) {
             {props.continued ? (
               <span className="pt-0.5 text-[10px] tabular-nums text-c-text-muted opacity-0 group-hover:opacity-100">{numBtn('#')}</span>
             ) : (
-              identiconBtn(36, true) || <span className="block w-9 h-9 rounded-full bg-c-surface3" />
+              identiconBtn(36, true) || noIdAvatar
             )}
           </div>
           <div className="flex-1 min-w-0">

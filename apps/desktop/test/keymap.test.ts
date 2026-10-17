@@ -38,12 +38,20 @@ describe('actionFor', () => {
     expect(actionFor(DEFAULT_KEYMAP, 'J')).toBe('nextPost')
     expect(actionFor(DEFAULT_KEYMAP, 'Shift+G')).toBe('bottom')
     expect(actionFor(DEFAULT_KEYMAP, 'R')).toBe('refresh')
-    expect(actionFor(DEFAULT_KEYMAP, 'X')).toBeUndefined()
+    expect(actionFor(DEFAULT_KEYMAP, 'X')).toBe('closeTab')
+    expect(actionFor(DEFAULT_KEYMAP, 'Shift+J')).toBe('nextTab')
+    expect(actionFor(DEFAULT_KEYMAP, 'N')).toBe('unread')
+    expect(actionFor(DEFAULT_KEYMAP, 'Q')).toBeUndefined()
+  })
+
+  it('既定の割り当てで、同じキーを 2 つの操作に使っていない', () => {
+    const all = Object.values(DEFAULT_KEYMAP).flat()
+    expect(new Set(all).size).toBe(all.length)
   })
 
   it('保存してある割り当てに、増えた操作の既定値を足す', () => {
-    const km = resolveKeymap({ nextPost: ['N'] })
-    expect(actionFor(km, 'N')).toBe('nextPost')
+    const km = resolveKeymap({ nextPost: ['Q'] })
+    expect(actionFor(km, 'Q')).toBe('nextPost')
     expect(actionFor(km, 'J')).toBeUndefined()
     expect(actionFor(km, 'K')).toBe('prevPost')
   })

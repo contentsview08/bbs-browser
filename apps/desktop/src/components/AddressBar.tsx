@@ -52,6 +52,7 @@ export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canB
       >
         <span className="material-symbols-outlined text-base text-c-text-muted">link</span>
         <input
+          id="address-input"
           type="text"
           value={draft ?? currentUrl}
           onChange={(e) => setDraft(e.target.value)}

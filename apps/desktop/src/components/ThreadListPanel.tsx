@@ -142,7 +142,8 @@ export default function ThreadListPanel(props: Props) {
 
   // キー操作。キーを受け取っているとき(2 画面なら上に線が出ているとき)だけ。割り当てはスレ表示と同じで、
   // 次/前のレス(J・K)→ 次/前のスレを選ぶ、Enter で開く、1 画面分(Space・PageDown)、先頭・末尾(Home・G・End・Shift+G)、
-  // 更新(R)、検索(/)、スレ立て(書き込み欄へ の W・E)。未読へ はスレ一覧では使わない
+  // 半画面(D・U)、更新(R)、検索(/)、スレ立て(書き込み欄へ の W・E)、選んでいるスレの ☆(S)と URL のコピー(Y)。
+  // スレ表示だけの操作(未読へ・画像一覧 など)と、アプリ全体の操作(App.tsx が受ける)はここでは受けない
   const onListKey = useEvent((e: KeyboardEvent) => {
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
@@ -167,9 +168,14 @@ export default function ThreadListPanel(props: Props) {
       else setSort((s) => cycleSort(s, e.key === '2' ? 'momentum' : 'newest'))
       return
     }
-    const page = el.clientHeight - (headerRef.current?.offsetHeight ?? 0) - 40
+    const view = el.clientHeight - (headerRef.current?.offsetHeight ?? 0)
+    const page = view - 40
+    const cur = ordered.find((x) => threadId(x) === cursorId)
     if (action === 'nextPost' || action === 'prevPost') moveCursor(action === 'nextPost' ? 1 : -1)
     else if (action === 'pageDown' || action === 'pageUp') el.scrollBy({ top: action === 'pageDown' ? page : -page })
+    else if (action === 'halfDown' || action === 'halfUp') el.scrollBy({ top: action === 'halfDown' ? view / 2 : -view / 2 })
+    else if (action === 'favorite' && cur && props.onToggleFavoriteThread) props.onToggleFavoriteThread(cur)
+    else if (action === 'copyUrl' && cur && props.threadUrl) void navigator.clipboard.writeText(props.threadUrl(cur))
     else if (action === 'top') {
       el.scrollTo({ top: 0 })
       setCursorId(ordered[0] && threadId(ordered[0]))

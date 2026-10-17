@@ -44,7 +44,7 @@ import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
-import { useSettings, type ReplyLayout, type SavedTab } from './ui/settings'
+import { useSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
 import { useViewState } from './hooks/useViewState'
@@ -56,7 +56,9 @@ import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
-import { isReloadKey, resolveKeymap } from './utils/keymap'
+import { actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
+import { ask } from '@tauri-apps/plugin-dialog'
+import KeyHelp from './components/KeyHelp'
 import { findNextThreads } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
@@ -65,6 +67,9 @@ import { backgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
+
+/** 閉じたタブを覚えておく数(Shift+X で開き直す) */
+const CLOSED_TABS_MAX = 20
 
 /** 戻る・進むで行き来する場所 */
 type ListTarget = { kind: 'board'; board: Board } | { kind: 'history' } | { kind: 'fav' }
@@ -176,6 +181,8 @@ export default function App() {
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
+  /** キー操作の一覧(? キー) */
+  const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
   const narrow = useNarrow()
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
@@ -650,10 +657,14 @@ export default function App() {
       await reloadRecent(store)
     })
 
+  /** 閉じたタブのスレ(新しいものが後ろ)。Shift+X で開き直す */
+  const closedTabs = useRef<ThreadSummary[]>([])
   /** タブを閉じる。stayOnList なら(1 画面でスレ一覧に戻るとき)、隣のタブは裏で選ぶだけにして、スレ表示も戻るの履歴も変えない */
-  const closeTabs = (ids: string[], stayOnList = single && view.current.listOpen) => {
+  const closeTabs = (ids: string[], stayOnList = single && view.current.listOpen, remember = true) => {
     const ts = tabsRef.current
     setTabs(ts.filter((t) => !ids.includes(t.id)))
+    // 閉じたタブは、開き直せるように覚えておく(ログを消して閉じたものは覚えない)
+    if (remember) closedTabs.current = [...closedTabs.current, ...ts.filter((t) => ids.includes(t.id)).map((t) => t.thread)].slice(-CLOSED_TABS_MAX)
     // 選んでいたタブを閉じたら、右隣(なければ左隣)へ移る
     const next = nextAfterClose(view.current.activeId, ts.map((t) => t.id), ids)
     if (!next.changed) return
@@ -669,7 +680,7 @@ export default function App() {
     for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
     for (const t of extra) targets.set(threadId(t), t)
     // 先に画面から消す(DB の処理を待たない)
-    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)), stayOnList)
+    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)), stayOnList, false)
     const gone = (t: ThreadSummary) => targets.has(threadId(t))
     setRecentHistory((list) => list.filter((t) => !gone(t)))
     setHistory((list) => list?.filter((h) => !gone(h.thread)))
@@ -802,8 +813,54 @@ export default function App() {
     }
     if (activeId !== undefined) setFocusPane(listFocused ? 'thread' : 'list')
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, back: () => goNav(-1), forward: () => goNav(1) })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, back: () => goNav(-1), forward: () => goNav(1) }
+  /** アプリ全体のキー操作(どちらにキーが向いていても効く。割り当ては設定で変えられる) */
+  const appKey = (action: KeyAction): boolean => {
+    const ids = tabsRef.current.map((t) => t.id)
+    const i = activeId ? ids.indexOf(activeId) : -1
+    switch (action) {
+      case 'nextTab':
+      case 'prevTab':
+        if (ids.length > 0) selectTab(ids[(i + (action === 'nextTab' ? 1 : -1) + ids.length) % ids.length])
+        return true
+      case 'back':
+        goNav(-1)
+        return true
+      case 'forward':
+        goNav(1)
+        return true
+      case 'closeTab':
+        setSelectedTabs(new Set())
+        closeTabs(targetTabs())
+        return true
+      case 'reopenTab': {
+        const t = closedTabs.current.pop()
+        if (t) void openThread(t, { newTab: true })
+        return true
+      }
+      case 'focusUrl': {
+        const input = document.getElementById('address-input')
+        if (input instanceof HTMLInputElement) {
+          input.focus()
+          input.select()
+        }
+        return true
+      }
+      case 'toggleSidebar':
+        updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)
+        return true
+      case 'zoomIn':
+      case 'zoomOut':
+        updateSetting('fontSize', Math.min(5, Math.max(1, settings.fontSize + (action === 'zoomIn' ? 1 : -1))) as FontSize)
+        return true
+      case 'help':
+        setKeyHelpOpen(true)
+        return true
+      default:
+        return false
+    }
+  }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, back: () => goNav(-1), forward: () => goNav(1) })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, back: () => goNav(-1), forward: () => goNav(1) }
   // マウスの戻る・進むボタン(横のボタン)。WebView がページの戻る・進むをしないよう、押したときに止める
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -846,15 +903,37 @@ export default function App() {
         return
       }
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
+      // Delete: タブを閉じる。Shift+Delete: 確かめてから、ログを削除して閉じる(取り消せないので 1 キーではしない)
       if (e.key === 'Delete' && !typing && !e.ctrlKey && !e.altKey) {
-        const { deleteLogs, targetTabs, setSelectedTabs } = keyRef.current
+        const { closeTabs, deleteLogs, targetTabs, setSelectedTabs } = keyRef.current
         const targets = targetTabs()
-        if (targets.length > 0) {
-          e.preventDefault()
+        if (targets.length === 0) return
+        e.preventDefault()
+        if (!e.shiftKey) {
+          setSelectedTabs(new Set())
+          return closeTabs(targets)
+        }
+        void ask(`${targets.length} 件のスレのログを削除して閉じます。読んだ位置や、dat 落ちして取り直せないレスも消えます。`, {
+          title: 'ログを削除',
+          kind: 'warning',
+          okLabel: '削除',
+          cancelLabel: 'やめる',
+        }).then((ok) => {
+          if (!ok) return
           setSelectedTabs(new Set())
           void deleteLogs(targets)
-        }
+        })
         return
+      }
+      // 割り当てを変えられる、アプリ全体の操作(タブ・戻る/進む・URL 欄 など)。
+      // 入力欄の中では、Ctrl 付きのもの(Ctrl+L・Ctrl+B など)だけ受ける
+      if (!e.defaultPrevented && !e.altKey && (!typing || e.ctrlKey) && !e.repeat) {
+        const { keymap, appKey } = keyRef.current
+        const action = actionFor(keymap, keyString(e))
+        if (action && appKey(action)) {
+          e.preventDefault()
+          return
+        }
       }
       if (!e.ctrlKey) return
       const { closeTabs, selectTab, activeId, targetTabs, setSelectedTabs } = keyRef.current
@@ -1525,6 +1604,7 @@ export default function App() {
 
       <Notifications items={notifications} onClose={dismiss} />
 
+      {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
       {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 
       {newThreadOpen && board && (

@@ -262,12 +262,13 @@ export function useThreadScroll(o: Options) {
     [rootRef, headerOffset, jumpToBottom, jumpToTop],
   )
 
-  /** 1 画面ぶん下(dir=1)・上(dir=-1)へ。少し重ねて、続きが分かるようにする(キー操作) */
+  /** 1 画面ぶん(half なら半画面ぶん)下(dir=1)・上(dir=-1)へ。少し重ねて、続きが分かるようにする(キー操作) */
   const page = useCallback(
-    (dir: 1 | -1) => {
+    (dir: 1 | -1, half = false) => {
       const root = rootRef.current
       if (!root) return
-      const to = root.scrollTop + dir * Math.max(40, root.clientHeight - headerOffset() - PAGE_OVERLAP_PX)
+      const full = root.clientHeight - headerOffset()
+      const to = root.scrollTop + dir * Math.max(40, half ? full / 2 : full - PAGE_OVERLAP_PX)
       animateScroll(root, () => to, STEP_MS)
     },
     [rootRef, headerOffset],

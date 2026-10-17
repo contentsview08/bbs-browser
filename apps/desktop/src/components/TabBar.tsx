@@ -167,7 +167,7 @@ export default function TabBar(props: Props) {
     ? group && group.length > 1
       ? [
           { label: `選んだ ${group.length} 個のタブを閉じる (Ctrl+W)`, ids: group },
-          { label: `選んだ ${group.length} 個のタブのログを削除 (Delete)`, ids: group, deleteLog: true },
+          { label: `選んだ ${group.length} 個のタブのログを削除 (Shift+Delete)`, ids: group, deleteLog: true },
           { label: 'すべて閉じる', ids },
         ]
       : [
@@ -175,7 +175,7 @@ export default function TabBar(props: Props) {
           { label: '他のタブを閉じる', ids: ids.filter((id) => id !== menu.id) },
           { label: '右側のタブを閉じる', ids: ids.slice(ids.indexOf(menu.id) + 1) },
           { label: 'すべて閉じる', ids },
-          { label: 'ログを削除して閉じる (Delete)', ids: [menu.id], deleteLog: true },
+          { label: 'ログを削除して閉じる (Shift+Delete)', ids: [menu.id], deleteLog: true },
         ]
     : []
 

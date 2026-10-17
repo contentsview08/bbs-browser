@@ -27,7 +27,7 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { useThreadScroll } from '../hooks/useThreadScroll'
 import type { ScrollPosition } from '../utils/threadScroll'
-import { actionFor, isReloadKey, keyString, resolveKeymap } from '../utils/keymap'
+import { actionFor, isReloadKey, keyString, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
@@ -509,7 +509,7 @@ export default function ThreadView(props: Props) {
         ]
       : []),
     { id: 'gallery', label: '画像一覧', icon: 'photo_library', tint: 'var(--c-mark-image)', active: galleryOpen, onClick: () => setGalleryOpen(true) },
-    { id: 'delete', label: 'ログを削除して閉じる (Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
+    { id: 'delete', label: 'ログを削除して閉じる (Shift+Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
     { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', tint: 'var(--c-mark-link)', onClick: props.onOpenInBrowser },
     {
       id: 'save',
@@ -548,6 +548,41 @@ export default function ThreadView(props: Props) {
   ]
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
+  /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
+  const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
+  threadKeyActions.current = {
+    nextPost: () => stepPost(1),
+    prevPost: () => stepPost(-1),
+    pageDown: () => page(1),
+    pageUp: () => page(-1),
+    halfDown: () => page(1, true),
+    halfUp: () => page(-1, true),
+    top: jumpToTop,
+    bottom: jumpToBottom,
+    unread: () => scrollToUnread(unreadFrom, 'animate'),
+    refresh: () => void props.onRefresh(),
+    search: () => setSearchActive(true),
+    reply: () => withReplyRef.current((h) => h.focus()),
+    // いま一番上に見えているレスへの返信を書き込み欄に入れる(J・K で送ってから押す)
+    replyToPost: () => {
+      const no = getPosition()?.no
+      if (!canReply || no === undefined) return
+      withReplyRef.current((h) => h.insert(`>>${no}\n`))
+    },
+    favorite: () => props.onToggleFavorite?.(),
+    gallery: () => setGalleryOpen(true),
+    copyUrl: () =>
+      void navigator.clipboard.writeText(props.threadUrl).then(
+        () => showQuick(true, 'スレの URL をコピーしました'),
+        () => showQuick(false, 'コピーできませんでした'),
+      ),
+    findNext: () => {
+      if (!props.onFindNext) return
+      setShowNext(true)
+      jumpToBottom()
+    },
+  }
+
   // キー操作(設定で割り当てを変えられる)。開いているタブで、入力欄にいないときだけ。
   // ポップアップや画像を見ているときは、後ろのスレ表示を動かさない
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
@@ -574,17 +609,11 @@ export default function ThreadView(props: Props) {
         })
         return
       }
+      // スレ表示の操作だけをここで受ける(タブ・戻る などアプリ全体の操作は App.tsx が受ける)
+      const run = threadKeyActions.current[action]
+      if (!run) return
       e.preventDefault()
-      if (action === 'nextPost') stepPost(1)
-      else if (action === 'prevPost') stepPost(-1)
-      else if (action === 'pageDown') page(1)
-      else if (action === 'pageUp') page(-1)
-      else if (action === 'top') jumpToTop()
-      else if (action === 'bottom') jumpToBottom()
-      else if (action === 'unread') scrollToUnread(unreadFrom, 'animate')
-      else if (action === 'refresh') void props.onRefresh()
-      else if (action === 'search') setSearchActive(true)
-      else if (action === 'reply') withReplyRef.current((h) => h.focus())
+      run()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

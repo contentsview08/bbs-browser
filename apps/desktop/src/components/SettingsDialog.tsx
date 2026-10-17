@@ -25,7 +25,7 @@ import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } f
 import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
 import { BAR_ACTIONS, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
-import { DEFAULT_KEYMAP, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
+import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
 interface Props {
   settings: AppSettings
@@ -858,14 +858,20 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
 
   return (
     <>
+      {(['view', 'app'] as const).map((where) => (
       <Section
-        title="スレ表示のキー操作"
-        note="スレ表示で、入力欄にカーソルがないときに使えます。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)"
+        key={where}
+        title={where === 'view' ? 'スレ表示・スレ一覧のキー操作' : 'アプリ全体のキー操作'}
+        note={
+          where === 'view'
+            ? 'キーを受け取っている方(2 画面なら上に線が出ている方。Ctrl+E で入れ替え)で効きます。入力欄にカーソルがあるときは効きません。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)'
+            : 'スレ一覧・スレ表示のどちらを触っていても効きます。入力欄の中では Ctrl 付きのキーだけ効きます'
+        }
       >
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
-          {KEY_ACTIONS.map(({ key, name }) => (
+          {KEY_ACTIONS.filter((a) => a.where === where).map(({ key, name }) => (
             <div key={key} className="flex items-center gap-3 px-3 py-2">
-              <span className="w-32 flex-shrink-0 text-sm text-c-text-body">{name}</span>
+              <span className="w-56 flex-shrink-0 text-sm text-c-text-body">{name}</span>
               <div className="flex-1 flex flex-wrap items-center gap-1.5">
                 {keymap[key].map((k) => (
                   <span key={k} className="inline-flex items-center gap-0.5 pl-2 pr-0.5 py-0.5 text-xs font-mono rounded border border-c-border bg-c-surface2 text-c-text-strong">
@@ -893,18 +899,20 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
             </div>
           ))}
         </div>
-        <button type="button" onClick={() => update('keymap', {})} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
-          すべて既定に戻す
-        </button>
+        {where === 'app' && (
+          <button type="button" onClick={() => update('keymap', {})} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
+            すべて既定に戻す
+          </button>
+        )}
       </Section>
-      <Section title="決まっているキー" note="ここは変えられません">
+      ))}
+      <Section title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
         <ul className="text-sm text-c-text-body space-y-1">
-          <li><span className="font-mono text-xs">Esc</span> … 一番上のポップアップを閉じる。なければ絞り込みを解く</li>
-          <li><span className="font-mono text-xs">F5 / Ctrl+R</span> … 開いているスレを更新。スレを開いていなければスレ一覧を更新</li>
-          <li><span className="font-mono text-xs">Ctrl+Tab / Ctrl+Shift+Tab</span>(Ctrl+PageDown / PageUp)… タブを切り替える</li>
-          <li><span className="font-mono text-xs">Ctrl+W / Ctrl+Shift+W</span> … タブを閉じる / すべて閉じる</li>
-          <li><span className="font-mono text-xs">Delete</span> … 選んだタブのログを消す</li>
-          <li><span className="font-mono text-xs">Ctrl+Enter</span> … 書き込む(書き込み欄で)</li>
+          {FIXED_KEYS.map((f) => (
+            <li key={f.keys}>
+              <span className="font-mono text-xs">{f.keys}</span> … {f.name}
+            </li>
+          ))}
         </ul>
       </Section>
     </>

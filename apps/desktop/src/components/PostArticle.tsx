@@ -298,7 +298,16 @@ function PostArticle(props: Props) {
         {/* 板の本当の番号があればそれを出す(ふたば・4chan は板全体の通し番号) */}
         {post.ref ?? post.no}
       </span>
-      {anchorCount > 0 && <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>}
+      {/* 返信の数。Discord 風・LINE 風は吹き出しのアイコンと数、ほかは (数) */}
+      {anchorCount > 0 &&
+        (variant === 'discord' || variant === 'line' ? (
+          <span className={`inline-flex items-center gap-0.5 text-xs ${numHeat || 'text-c-text-muted'}`}>
+            <span className="material-symbols-outlined text-[13px] leading-none">chat_bubble</span>
+            {anchorCount}
+          </span>
+        ) : (
+          <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>
+        ))}
     </button>
   )
   const nameBtn = (cls: string) =>

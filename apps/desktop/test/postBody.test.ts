@@ -88,3 +88,19 @@ describe('文章の引用(ふたば)', () => {
     expect(anchorTree(2, posts, undefined, links)).toEqual([2, 3, 4, 5])
   })
 })
+
+describe('ふたばの番号の書き方(>No.12345)', () => {
+  const post = (no: number, body: string, ref: number) => ({ no, name: '', mail: '', date: '', body, ref })
+  it('>No.番号 と、> のない No.番号(6 桁以上)をアンカーにする', () => {
+    expect(anchorsIn('>No.1442072291\nそうだね')).toEqual([1442072291])
+    expect(anchorsIn('No.1442072291 のレス')).toEqual([1442072291])
+    expect(anchorsIn('>no.12')).toEqual([12])
+    // ふつうの文の「No.1」は拾わない
+    expect(anchorsIn('人気No.1 の店')).toEqual([])
+    expect(quotedText('>No.1442072291')).toBeUndefined()
+  })
+  it('板の本当の番号から、スレの中のレスに読み替える', () => {
+    const posts = [post(1, 'OP', 1442072026), post(2, '>No.1442072026\nそれな', 1442072291)]
+    expect(anchorTargets(posts[1].body, makeAnchorResolver(posts, 'ref'))).toEqual([1])
+  })
+})

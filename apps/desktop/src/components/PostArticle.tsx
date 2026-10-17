@@ -74,7 +74,7 @@ interface Props {
   /** Discord 風: 直前のレスと同じ ID(続けて書いた)。アイコンと頭を省く */
   continued?: boolean
   /** Discord 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
-  replyPreview?: { no: number; text: string }
+  replyPreview?: { no: number; text: string; id?: string }
 }
 
 export type PostVariant = 'card' | 'discord' | 'classic'
@@ -420,6 +420,12 @@ function PostArticle(props: Props) {
       title={`>>${props.replyPreview.no} を表示`}
     >
       <span className="material-symbols-outlined text-sm leading-none -scale-y-100 rotate-180">reply</span>
+      {/* 返信元の ID のアイコンを小さく(誰への返信か、アイコンで分かるように) */}
+      {props.replyPreview.id && (
+        <span className="flex-shrink-0 block overflow-hidden rounded-full">
+          <Identicon seed={props.replyPreview.id} size={16} />
+        </span>
+      )}
       <span className="font-bold text-c-link">&gt;&gt;{props.replyPreview.no}</span>
       <span className="truncate">{props.replyPreview.text}</span>
     </button>
@@ -615,8 +621,9 @@ function PostArticle(props: Props) {
       </div>
       {variant === 'discord' ? (
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
-        <div className="flex gap-3">
-          <div className="w-9 flex-shrink-0 flex justify-center">
+        <div className="flex gap-3 items-start">
+          {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
+          <div className="w-9 flex-shrink-0 flex justify-center items-start">
             {props.continued ? (
               <span className="pt-0.5 text-[10px] tabular-nums text-c-text-muted opacity-0 group-hover:opacity-100">{numBtn('#')}</span>
             ) : (

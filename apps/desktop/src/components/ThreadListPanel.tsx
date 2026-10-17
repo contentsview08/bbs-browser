@@ -505,6 +505,13 @@ export default function ThreadListPanel(props: Props) {
                     if (!query.trim()) setSearchActive(false)
                   }}
                   onKeyDown={(e) => {
+                    // Enter: 検索はそのままで欄から抜け、スレ一覧のキー操作(J・K・Enter)に戻る
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault()
+                      if (!query.trim()) setSearchActive(false)
+                      e.currentTarget.blur()
+                      return
+                    }
                     // Esc: 検索を外して欄から抜け、スレ一覧のキー操作に戻る(日本語の変換中の Esc は変換の取り消し)
                     if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
                       e.preventDefault()

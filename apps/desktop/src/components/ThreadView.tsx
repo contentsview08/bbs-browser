@@ -427,7 +427,7 @@ export default function ThreadView(props: Props) {
     const no = anchorsIn(p.body)[0]
     const src = no === undefined || no === p.no ? undefined : byNo.get(no)
     if (!src) return undefined
-    return { no, text: isNg(src) ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80) }
+    return { no, text: isNg(src) ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: isNg(src) ? undefined : src.id }
   }
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
   const matchesFilter = useCallback(
@@ -887,12 +887,18 @@ export default function ThreadView(props: Props) {
     const posts = [...box.querySelectorAll<HTMLElement>('article[data-no]')]
     if (posts.length === 0) return
     const cur = box.querySelector<HTMLElement>('article.popup-cursor')
+    // ポップアップの上に貼り付いている見出しの高さ(この下に隠れないように送る)
+    const headH = box.querySelector<HTMLElement>(':scope > .sticky')?.offsetHeight ?? 0
     const select = (el: HTMLElement) => {
       cur?.classList.remove('popup-cursor')
       el.classList.add('popup-cursor')
       const a = document.activeElement
       if (a instanceof HTMLElement && box.contains(a)) a.blur()
-      el.scrollIntoView({ block: 'nearest' })
+      const r = el.getBoundingClientRect()
+      const b = box.getBoundingClientRect()
+      const top = b.top + headH
+      if (r.top < top || r.height > b.bottom - top) box.scrollTop -= top - r.top + 4
+      else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom + 4
     }
     if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && cur) {
       const items = tabItems(cur)
@@ -911,6 +917,36 @@ export default function ThreadView(props: Props) {
       const i = cur ? posts.indexOf(cur) : -1
       const d = action === 'nextPost' ? 1 : -1
       select(posts[i < 0 ? (d > 0 ? 0 : posts.length - 1) : Math.min(posts.length - 1, Math.max(0, i + d))])
+      return
+    }
+    // 先頭・末尾(G G・Home / Shift+G・End)と、1 画面・半画面(Space・PageDown・D・U)。ポップアップの中を送り、選ぶレスもいっしょに
+    if (action === 'top' || action === 'bottom') {
+      e.preventDefault()
+      box.scrollTop = action === 'top' ? 0 : box.scrollHeight
+      select(action === 'top' ? posts[0] : posts[posts.length - 1])
+      return
+    }
+    if (action === 'pageDown' || action === 'pageUp' || action === 'halfDown' || action === 'halfUp') {
+      e.preventDefault()
+      const view = box.clientHeight - headH
+      const dir = action === 'pageDown' || action === 'halfDown' ? 1 : -1
+      const before = box.scrollTop
+      box.scrollTop += dir * (action.startsWith('half') ? view / 2 : view - 40)
+      const moved = box.scrollTop - before
+      // 選んでいたレスの高さ(なければ見出しのすぐ下)にあるレスを選ぶ。端なら端のレス
+      const b = box.getBoundingClientRect()
+      const y = (cur ? Math.max(cur.getBoundingClientRect().top, b.top + headH) : b.top + headH) + 1
+      const hit =
+        moved === 0
+          ? dir > 0
+            ? posts[posts.length - 1]
+            : posts[0]
+          : (posts.find((p) => {
+              const r = p.getBoundingClientRect()
+              return r.top <= y && y < r.bottom
+            }) ?? (dir > 0 ? posts[posts.length - 1] : posts[0]))
+      cur?.classList.remove('popup-cursor')
+      hit.classList.add('popup-cursor')
       return
     }
     if (!cur) return
@@ -1187,6 +1223,13 @@ export default function ThreadView(props: Props) {
                 if (!query.trim()) setSearchActive(false)
               }}
               onKeyDown={(e) => {
+                // Enter: 検索はそのままで欄から抜け、スレ表示のキー操作(J・K など)に戻る
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  if (!query.trim()) setSearchActive(false)
+                  e.currentTarget.blur()
+                  return
+                }
                 // Esc: 検索を外して欄から抜け、スレ表示のキー操作に戻る(日本語の変換中の Esc は変換の取り消し)
                 if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
                   e.preventDefault()

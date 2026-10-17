@@ -78,12 +78,15 @@ body,
 /* ライト(設定の名前。キーは soft-light のまま): 真っ白をやめて生成り色にし、文字も真っ黒にしない */
 [data-scheme='soft-light'] {
   --c-base: #f0ede8;
-  --c-header-footer: var(--c-base);
+  /* 読む所(スレ一覧・スレ表示)は生成り、枠(URL バー・サイドバー・タブの帯)は強調色に寄せた青灰色にして、
+     白っぽい面ばかりにならないようメリハリを付ける。ヘッダー・フッターも少し青灰に寄せる */
+  --c-chrome: #dde3ea;
+  --c-header-footer: #e3e7ec;
   --c-surface: #f7f5f1;
   --c-surface2: #e9e6e0;
   --c-surface3: #dfdbd4;
-  --c-border: #dcd8d1;
-  --c-border-strong: #c4bfb6;
+  --c-border: #d2cdc5;
+  --c-border-strong: #b8b2a8;
   --c-text-strong: #2e2c29;
   --c-text-body: #45423d;
   --c-text-muted: #85817a;
@@ -104,6 +107,11 @@ body,
   --c-heat-very-hot: #b04242;
   --c-thread-view-bg: #f4f2ee;
   --c-thread-read-title: #3a5f96;
+}
+
+/* ライトのタブの帯は、枠の色より一段濃くして、開いているタブ(スレのヘッダーとつながる明るい色)を浮かせる */
+:root[data-scheme='soft-light'] {
+  --tabbar-bg: #d3dae3;
 }
 
 /* やさしいライトのカードは、トーナルでも枠線でも背景より少しだけ明るい面にする */
@@ -208,10 +216,10 @@ body,
    背景画像を後ろに置き、各パネルの背景色だけを --alpha-* の割合で透かす(文字は透かさない)。
    --alpha-* は src/ui/settings.ts が <html> に入れる(0〜1) */
 .bg-panel-addressbar {
-  background: color-mix(in srgb, var(--c-surface) calc(var(--alpha-address-bar, 1) * 100%), transparent);
+  background: color-mix(in srgb, var(--c-chrome, var(--c-surface)) calc(var(--alpha-address-bar, 1) * 100%), transparent);
 }
 .bg-panel-sidebar {
-  background: color-mix(in srgb, var(--c-surface) calc(var(--alpha-sidebar, 1) * 100%), transparent);
+  background: color-mix(in srgb, var(--c-chrome, var(--c-surface)) calc(var(--alpha-sidebar, 1) * 100%), transparent);
 }
 .bg-panel-tabbar {
   background: color-mix(in srgb, var(--tabbar-bg) calc(var(--alpha-tabs, 1) * 100%), transparent);

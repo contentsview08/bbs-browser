@@ -262,7 +262,7 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: '2ch-classic', name: '2chクラシック', accent: '#0000ff', border: '#545454' },
   // 専ブラで足した、コントラストを抑えた配色(app.css)。web 版のライト('light')は見にくいので外し、これをライトとする
   { key: 'soft-dark', name: 'ダーク', accent: '#8b93d9', border: '#343a44' },
-  { key: 'soft-light', name: 'ライト', accent: '#4f6f8f', border: '#dcd8d1' },
+  { key: 'soft-light', name: 'ライト', accent: '#4f6f8f', border: '#d2cdc5' },
 ]
 
 /**

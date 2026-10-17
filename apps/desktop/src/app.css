@@ -160,6 +160,8 @@ html:root[data-scheme='discord-dark'] {
   --c-base: #f5f6f8;
   --c-header-footer: #ffffff;
   --c-chrome: #f0f2f5;
+  /* スレ一覧も白(LINE のトーク一覧と同じ)。灰色だと、1 画面表示のときに画面のほとんどが灰色になる */
+  --c-panel-bg: #ffffff;
   --c-surface: #ffffff;
   --c-surface2: #eef0f3;
   --c-surface3: #e4e7ec;

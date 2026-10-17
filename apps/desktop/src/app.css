@@ -439,6 +439,36 @@ article.post-discord:hover {
 .card-thread[data-variant='classic'].card-selected {
   background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
 }
+/* Discord 風の行: 一覧表示ではゆとりを持たせ、スレタイを折り返して全部見せる。高密度では詰めて 1 行に切る */
+.card-thread[data-variant='discord'] {
+  padding: 9px 10px;
+}
+.card-thread[data-variant='discord'] .thread-row {
+  align-items: flex-start;
+  line-height: 1.45;
+}
+.card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
+  margin-top: 1px;
+}
+.card-thread[data-variant='discord'] .thread-row-title {
+  overflow-wrap: anywhere;
+}
+[data-density='dense'] .card-thread[data-variant='discord'] {
+  padding: 5px 10px;
+}
+[data-density='dense'] .card-thread[data-variant='discord'] .thread-row {
+  align-items: center;
+  line-height: normal;
+}
+[data-density='dense'] .card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
+  margin-top: 0;
+}
+[data-density='dense'] .card-thread[data-variant='discord'] .thread-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 専ブラ風の表: 角を丸めず、1 行おきにうっすら色を付ける */
 .card-thread[data-variant='classic'] {
   border-radius: 0;

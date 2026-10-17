@@ -97,11 +97,11 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   const content =
     variant === 'discord' ? (
       // Discord 風: チャンネル一覧のような 1 行。新着のあるスレは左に白い点、スレタイを明るく太く
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="thread-row flex gap-2 min-w-0">
         {checkbox}
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
         <span className="flex-shrink-0 text-base leading-none text-c-text-muted select-none">#</span>
-        <span className="flex-1 min-w-0 truncate text-sm" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
+        <span className="thread-row-title flex-1 min-w-0 text-sm" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
           {newBadge}
           {favStar}
           {thread.title}
@@ -244,7 +244,9 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
             }
           : variant === 'classic'
             ? { padding: '3px 10px' }
-            : { padding: variant === 'line' ? '8px 12px' : '5px 10px' }
+            : variant === 'line'
+              ? { padding: '8px 12px' }
+              : undefined // Discord 風の余白は表示の密度で変える(app.css)
       }
     >
       {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線

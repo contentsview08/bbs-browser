@@ -91,6 +91,9 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   /** スレタイの色: 開いたことのあるスレは既読の色、新着があれば強く、まだ開いていないスレはふつうの強さ */
   const titleColor = visited ? (unreadCount > 0 ? 'var(--c-text-strong)' : 'var(--c-thread-read-title, var(--c-text-body))') : 'var(--thread-list-title-color, var(--c-text-strong))'
 
+  /** スレタイの後ろの、立てた人の BE 番号(「… [123456789]」の形の板だけ) */
+  const beNo = variant === 'line' ? /[[［](\d{6,12})[\]］]\s*$/.exec(thread.title)?.[1] : undefined
+
   const content =
     variant === 'discord' ? (
       // Discord 風: チャンネル一覧のような 1 行。新着のあるスレは左に白い点、スレタイを明るく太く
@@ -124,12 +127,16 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         <span className="text-right text-[11px] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
       </div>
     ) : variant === 'line' ? (
-      // LINE 風: トーク一覧のような行。左に丸いアイコン(スレごとの模様)、スレタイと「レス数・勢い」、右に時間と新着の数
+      // LINE 風: トーク一覧のような行。スレタイと「レス数・勢い」、右に時間と新着の数。
+      // スレ一覧(subject.txt)からは誰が立てたか分からないので、ふつうはアイコンを出さない。
+      // スレタイの後ろに立てた人の BE 番号が付く板(嫌儲など。「… [123456789]」)だけ、その番号の模様を出す
       <div className="flex items-center gap-3 min-w-0">
         {checkbox}
-        <span className="flex-shrink-0 block overflow-hidden rounded-full">
-          <Identicon seed={`${thread.boardUrl}${thread.key}`} size={40} />
-        </span>
+        {beNo && (
+          <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の BE:${beNo}`}>
+            <Identicon seed={`be:${beNo}`} size={40} />
+          </span>
+        )}
         <div className="flex-1 min-w-0">
           <div className="truncate text-sm font-bold" style={{ color: titleColor }}>
             {newBadge}

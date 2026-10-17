@@ -461,8 +461,8 @@ function PostArticle(props: Props) {
             borderLeftColor: props.isOwn ? 'var(--c-own)' : 'var(--c-border)',
           }}
         >
-          {/* BE のアイコンは、画像のサムネイルの設定に関係なく出す(5ch の書き込みの一部なので) */}
-          {beIcon && (
+          {/* BE のアイコンは、画像のサムネイルの設定に関係なく出す(5ch の書き込みの一部なので)。LINE 風ではアイコンの場所に出す */}
+          {beIcon && variant !== 'line' && (
             <img
               src={beIcon}
               alt=""
@@ -601,7 +601,29 @@ function PostArticle(props: Props) {
   const lineLayout = (
     <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''}`}>
       {!right && (
-        <div className="w-9 flex-shrink-0">{props.continued ? null : identiconBtn(36, true) || <span className="block w-9 h-9 rounded-full bg-c-surface3" />}</div>
+        <div className="w-9 flex-shrink-0">
+          {props.continued ? null : beIcon ? (
+            // BE のアイコンがあれば、ID の模様の代わりに出す。大きさは絵ごとに違うので、36px の枠に収まるよう縮め・広げる(縦横の比は保つ)
+            <button
+              type="button"
+              className="block w-9 h-9 rounded-xl overflow-hidden bg-c-surface hover:opacity-80"
+              onClick={(e) => post.id && handlers.onId(post.id, e.currentTarget)}
+              title={post.id ? `BE のアイコン(ID:${post.id} のレスを出す)` : 'BE のアイコン'}
+            >
+              <img
+                src={beIcon}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = 'hidden'
+                }}
+              />
+            </button>
+          ) : (
+            identiconBtn(36, true) || <span className="block w-9 h-9 rounded-full bg-c-surface3" />
+          )}
+        </div>
       )}
       <div className={`flex-1 min-w-0 flex flex-col ${right ? 'items-end' : 'items-start'}`}>
         {!props.continued && (

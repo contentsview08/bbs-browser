@@ -6,6 +6,10 @@ export type KeyAction =
   // スレ表示(スレ一覧でも同じキーで、それに当たる操作をする)
   | 'nextPost'
   | 'prevPost'
+  | 'openPost'
+  | 'anchorTree'
+  | 'copyPost'
+  | 'postsById'
   | 'pageDown'
   | 'pageUp'
   | 'halfDown'
@@ -38,6 +42,10 @@ export type KeyAction =
 export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' }[] = [
   { key: 'nextPost', name: '次のレスを選ぶ(スレ一覧では次のスレ)', where: 'view' },
   { key: 'prevPost', name: '前のレスを選ぶ(スレ一覧では前のスレ)', where: 'view' },
+  { key: 'openPost', name: '選んでいるレスの画像を開く(なければ返信を出す。スレ一覧では選んでいるスレを開く)', where: 'view' },
+  { key: 'anchorTree', name: '選んでいるレスのアンカーツリー', where: 'view' },
+  { key: 'copyPost', name: '選んでいるレスの本文をコピー', where: 'view' },
+  { key: 'postsById', name: '選んでいるレスの ID のレスを出す', where: 'view' },
   { key: 'pageDown', name: '1 画面下へ', where: 'view' },
   { key: 'pageUp', name: '1 画面上へ', where: 'view' },
   { key: 'halfDown', name: '半画面下へ', where: 'view' },
@@ -71,8 +79,12 @@ export type Keymap = Record<KeyAction, string[]>
 // vim(ブラウザの拡張 Vimium)に寄せた割り当て。入力欄の外では文字を打たないので、1 文字のキーでもほかとぶつからない。
 // 普通のキー(Space・PageDown・Home・End・Ctrl+F・Ctrl+L など)も並べておく
 export const DEFAULT_KEYMAP: Keymap = {
-  nextPost: ['J'],
-  prevPost: ['K'],
+  nextPost: ['J', 'ArrowDown'],
+  prevPost: ['K', 'ArrowUp'],
+  openPost: ['Enter'],
+  anchorTree: ['T'],
+  copyPost: ['C'],
+  postsById: ['Shift+I'],
   pageDown: ['Space', 'PageDown'],
   pageUp: ['Shift+Space', 'PageUp'],
   halfDown: ['D'],
@@ -109,7 +121,6 @@ export const FIXED_KEYS: { keys: string; name: string }[] = [
   { keys: 'Esc', name: 'ポップアップを閉じる・絞り込みを外す・書き込み欄をしまう' },
   { keys: '1〜4・5', name: 'スレ表示：人気・画像・動画・リンクで絞り込む・すべて' },
   { keys: '1・2・3', name: 'スレ一覧：未読だけ・勢い順・新しい順' },
-  { keys: 'Enter', name: 'スレ一覧：選んでいるスレを開く' },
   { keys: 'Ctrl+Enter', name: '書き込む(書き込み欄で)' },
   { keys: 'Ctrl+Tab・Ctrl+Shift+Tab', name: '次・前のタブ(Ctrl を離すまで選ぶだけ)' },
   { keys: 'Ctrl+PageDown・Ctrl+PageUp', name: '次・前のタブ' },
@@ -162,5 +173,5 @@ export function isReloadKey(e: { key: string; ctrlKey: boolean; metaKey: boolean
 
 /** 画面に出すときの書き方 */
 export function keyLabel(key: string): string {
-  return key.replace('Space', 'スペース')
+  return key.replace('Space', 'スペース').replace('ArrowDown', '↓').replace('ArrowUp', '↑').replace('ArrowLeft', '←').replace('ArrowRight', '→')
 }

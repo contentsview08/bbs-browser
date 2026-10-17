@@ -150,13 +150,6 @@ export default function ThreadListPanel(props: Props) {
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName))) return
     const el = scrollRef.current
     if (!el) return
-    if (e.key === 'Enter' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-      const cur = ordered.find((x) => threadId(x) === cursorId)
-      if (!cur) return
-      e.preventDefault()
-      props.onOpen(cur)
-      return
-    }
     // 割り当てがなくても、PageUp・PageDown・Home・End はスクロールに使う
     const fallback: Record<string, string> = { PageDown: 'pageDown', PageUp: 'pageUp', Home: 'top', End: 'bottom' }
     const action = (props.keymap && actionFor(props.keymap, keyString(e))) ?? fallback[e.key]
@@ -172,6 +165,7 @@ export default function ThreadListPanel(props: Props) {
     const page = view - 40
     const cur = ordered.find((x) => threadId(x) === cursorId)
     if (action === 'nextPost' || action === 'prevPost') moveCursor(action === 'nextPost' ? 1 : -1)
+    else if (action === 'openPost' && cur) props.onOpen(cur)
     else if (action === 'pageDown' || action === 'pageUp') el.scrollBy({ top: action === 'pageDown' ? page : -page })
     else if (action === 'halfDown' || action === 'halfUp') el.scrollBy({ top: action === 'halfDown' ? view / 2 : -view / 2 })
     else if (action === 'favorite' && cur && props.onToggleFavoriteThread) props.onToggleFavoriteThread(cur)

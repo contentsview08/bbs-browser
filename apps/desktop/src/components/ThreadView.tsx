@@ -39,6 +39,8 @@ import {
   hasVideo,
   imageUrlsIn,
   normalizeForSearch,
+  videoFileUrlsIn,
+  youtubeLinksIn,
 } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
 import type { AppSettings, ReplyLayout } from '../ui/settings'
@@ -550,9 +552,59 @@ export default function ThreadView(props: Props) {
   const [cursorNo, setCursorNo] = useState<number>()
   /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
+  /** 選んでいるレスの枠(見えているもの)。なければ undefined */
+  const cursorFrame = () => (cursorNo === undefined ? null : ref.current?.querySelector<HTMLElement>(`[data-post="${cursorNo}"]`))
+  /**
+   * 選んでいるレスを 1 つ動かす。画面は、選んだレスが外に出るときだけ最小限動かす(スレ一覧の J・K と同じ)。
+   * まだ選んでいなければ、画面に見えている一番上のレスから始める
+   */
+  const moveCursor = (d: 1 | -1) => {
+    const root = ref.current
+    if (!root) return
+    const box = root.getBoundingClientRect()
+    const viewTop = box.top + (headerRef.current?.offsetHeight ?? 0)
+    const frames = [...root.querySelectorAll<HTMLElement>('.post-cv')].filter((f) => !f.hidden)
+    if (frames.length === 0) return
+    const i = frames.findIndex((f) => Number(f.dataset.post) === cursorNo)
+    const target =
+      i < 0 ? (frames.find((f) => f.getBoundingClientRect().bottom > viewTop + 4) ?? frames[0]) : frames[Math.min(frames.length - 1, Math.max(0, i + d))]
+    setCursorNo(Number(target.dataset.post))
+    const r = target.getBoundingClientRect()
+    const room = box.bottom - viewTop
+    if (r.top < viewTop || r.height > room) root.scrollBy({ top: r.top - viewTop - 4 })
+    else if (r.bottom > box.bottom) root.scrollBy({ top: r.bottom - box.bottom + 4 })
+  }
+  /** 選んでいるレスの画像・動画をビューアーで開く。なければ、そのレスへの返信を出す(Enter) */
+  const openCursorPost = () => {
+    const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
+    const el = cursorFrame()
+    if (!p || !el) return
+    const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
+    if (media.length > 0) return setLightbox({ urls: media, index: 0, post: p })
+    if ((replies.get(p.no)?.length ?? 0) > 0) mainHandlers.onReplies?.(p.no, el)
+    else showQuick(false, `>>${p.no} には画像も返信もありません`)
+  }
   threadKeyActions.current = {
-    nextPost: () => setCursorNo(stepPost(1) ?? cursorNo),
-    prevPost: () => setCursorNo(stepPost(-1) ?? cursorNo),
+    nextPost: () => moveCursor(1),
+    prevPost: () => moveCursor(-1),
+    openPost: openCursorPost,
+    anchorTree: () => {
+      const el = cursorFrame()
+      if (cursorNo !== undefined && el) mainHandlers.onBody?.(cursorNo, el)
+    },
+    copyPost: () => {
+      const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
+      if (!p) return
+      void navigator.clipboard.writeText(p.body).then(
+        () => showQuick(true, `>>${p.no} の本文をコピーしました`),
+        () => showQuick(false, 'コピーできませんでした'),
+      )
+    },
+    postsById: () => {
+      const p = cursorNo === undefined ? undefined : byNo.get(cursorNo)
+      const el = cursorFrame()
+      if (p?.id && el) mainHandlers.onId?.(p.id, el)
+    },
     pageDown: () => page(1),
     pageUp: () => page(-1),
     halfDown: () => page(1, true),
@@ -593,6 +645,8 @@ export default function ThreadView(props: Props) {
       if (e.defaultPrevented || isReloadKey(e)) return
       const t = e.target as HTMLElement | null
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      // ボタンやリンクの上の Enter は、そのボタンを押すのに使う
+      if (e.key === 'Enter' && t && /^(BUTTON|A)$/.test(t.tagName)) return
       const action = actionFor(keymap, keyString(e))
       if (!action) {
         // 数字キー: 1〜4 で絞り込み(人気・画像・動画・リンク)を付け外し、5 で全部表示(割り当てに使っていなければ)

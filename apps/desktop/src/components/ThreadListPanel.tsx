@@ -500,6 +500,15 @@ export default function ThreadListPanel(props: Props) {
                   onBlur={() => {
                     if (!query.trim()) setSearchActive(false)
                   }}
+                  onKeyDown={(e) => {
+                    // Esc: 検索を外して欄から抜け、スレ一覧のキー操作に戻る(日本語の変換中の Esc は変換の取り消し)
+                    if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
+                      e.preventDefault()
+                      setQuery('')
+                      setSearchActive(false)
+                      e.currentTarget.blur()
+                    }
+                  }}
                   placeholder="スレッド検索..."
                   className={`absolute inset-y-0 right-0 h-9 my-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none transition-[width,opacity] duration-300 ease-out ${
                     searchActive ? 'w-full opacity-100' : 'w-0 opacity-0 pointer-events-none'

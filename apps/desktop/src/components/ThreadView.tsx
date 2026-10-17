@@ -995,9 +995,12 @@ export default function ThreadView(props: Props) {
                 if (!query.trim()) setSearchActive(false)
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') {
+                // Esc: 検索を外して欄から抜け、スレ表示のキー操作に戻る(日本語の変換中の Esc は変換の取り消し)
+                if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
                   setQuery('')
                   setSearchActive(false)
+                  e.currentTarget.blur()
                 }
               }}
               placeholder="レス検索..."

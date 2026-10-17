@@ -25,6 +25,7 @@ export type KeyAction =
   | 'gallery'
   | 'copyUrl'
   | 'findNext'
+  | 'peek'
   // アプリ全体(どちらにキーが向いていても効く)
   | 'nextTab'
   | 'prevTab'
@@ -63,6 +64,7 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'gallery', name: '画像一覧', where: 'view' },
   { key: 'copyUrl', name: 'スレの URL をコピー(スレ一覧では選んでいるスレ)', where: 'view' },
   { key: 'findNext', name: '次スレを探す', where: 'view' },
+  { key: 'peek', name: 'スレを開かずに中身をのぞく(スレ一覧で。中身が一緒に届く掲示板だけ)', where: 'view' },
   { key: 'nextTab', name: '次のタブ', where: 'app' },
   { key: 'prevTab', name: '前のタブ', where: 'app' },
   { key: 'back', name: '戻る', where: 'app' },
@@ -106,6 +108,7 @@ export const DEFAULT_KEYMAP: Keymap = {
   gallery: ['I'],
   copyUrl: ['Y'],
   findNext: ['Shift+N'],
+  peek: ['P'],
   nextTab: ['Shift+J'],
   prevTab: ['Shift+K'],
   back: ['Shift+H'],

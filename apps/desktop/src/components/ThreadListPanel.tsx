@@ -21,6 +21,7 @@ import { useEvent } from '../hooks/useEvent'
 import { animateScroll } from '../hooks/useThreadScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
+import PeekPopup from './PeekPopup'
 import { followDelta, isDoublePress, isNear, isSeen, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 
 type SortMode = 'momentum' | 'newest'
@@ -202,6 +203,11 @@ export default function ThreadListPanel(props: Props) {
     else if (action === 'halfDown' || action === 'halfUp') pageWithCursor(action === 'halfDown' ? 1 : -1, true)
     else if (action === 'favorite' && cur && props.onToggleFavoriteThread) props.onToggleFavoriteThread(cur)
     else if (action === 'copyUrl' && cur && props.threadUrl) void navigator.clipboard.writeText(props.threadUrl(cur))
+    else if (action === 'peek' && cur) {
+      // スレ一覧に中身が一緒に届いた掲示板だけのぞける(のぞくために取りに行くことはしない)
+      if (cur.preview?.length) setPeek(cur)
+      else showNote('この掲示板は、スレを開かずに中身をのぞけません(スレ一覧に中身が入っていないため)')
+    }
     else if (action === 'top') {
       animateScroll(el, () => 0)
       setCursorHidden(false)
@@ -344,6 +350,17 @@ export default function ThreadListPanel(props: Props) {
     [keywordGroups, visible],
   )
   const [cursorId, setCursorId] = useState<string>()
+  /** 中身をのぞいているスレ(P) */
+  const [peek, setPeek] = useState<ThreadSummary>()
+  /** 短い知らせ(のぞけないときなど)。少しして消す */
+  const [note, setNote] = useState<string>()
+  const noteTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const showNote = (text: string) => {
+    setNote(text)
+    clearTimeout(noteTimer.current)
+    noteTimer.current = setTimeout(() => setNote(undefined), 3000)
+  }
+  useEffect(() => () => clearTimeout(noteTimer.current), [])
   /** Esc 2 回で、選んでいるスレの印を隠しているか(選んでいる場所は残す) */
   const [cursorHidden, setCursorHidden] = useState(false)
   /** いまのキーが、押し続けたときの自動の連打か(押し続けている間はアニメーションしない) */
@@ -734,6 +751,12 @@ export default function ThreadListPanel(props: Props) {
         </div>
       </div>
       {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
+      {peek && <PeekPopup thread={peek} onOpen={() => onOpenCard(peek)} onClose={() => setPeek(undefined)} />}
+      {note && (
+        <div className="absolute left-1/2 bottom-4 -translate-x-1/2 z-30 max-w-[90%] px-3 py-2 text-xs rounded-lg bg-c-surface border border-c-border shadow-lg text-c-text-body rise-in">
+          {note}
+        </div>
+      )}
       {hasFooter && (
         <div
           ref={footerRef}

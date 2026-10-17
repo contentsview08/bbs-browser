@@ -54,6 +54,11 @@ export interface ThreadSummary {
   createdAt?: Date
   /** スレの画像のサムネイル(画像が主役の掲示板。ふたば・4chan のカタログ)。なければ出さない */
   thumb?: string
+  /**
+   * スレ一覧を取ったときに一緒に届いた、スレの中身の一部(>>1 と最新のいくつか)。スレを開かずにのぞくのに使う。
+   * スレ一覧に中身が入っている掲示板だけ付ける(2ch の subject.txt には入っていないので付けない。のぞくために取りに行くことはしない)
+   */
+  preview?: { no: number; name: string; date?: string; body: string }[]
 }
 
 export interface Post {

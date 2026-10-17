@@ -114,7 +114,7 @@ describe('createPost', () => {
           throw new Error('get は使わない')
         },
         async post(url, body, opts): Promise<HttpResponse> {
-          sent.push({ url, body, headers: opts?.headers ?? {} })
+          sent.push({ url, body: typeof body === 'string' ? body : new TextDecoder().decode(body), headers: opts?.headers ?? {} })
           const r = responses[sent.length - 1]
           return { status: 200, headers: { 'content-type': 'text/html; charset=x-sjis', ...r.headers }, body: sjisBytes(r.html) }
         },
@@ -194,7 +194,7 @@ describe('createThread', () => {
           throw new Error('get は使わない')
         },
         async post(_url, body, opts): Promise<HttpResponse> {
-          sent.push({ body, headers: opts?.headers ?? {} })
+          sent.push({ body: typeof body === 'string' ? body : new TextDecoder().decode(body), headers: opts?.headers ?? {} })
           return { status: 200, headers: { 'content-type': 'text/html; charset=x-sjis' }, body: sjisBytes(EDDIST_OK) }
         },
       },

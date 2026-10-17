@@ -21,7 +21,7 @@ function fake(routes: Record<string, { status?: number; body?: string }>, postRe
       },
       post: async (url, body, opts) => {
         if (postReply === undefined) throw new Error('書き込まない')
-        posted.push({ url, body, headers: opts?.headers, sameCookiesAsGet: opts?.sameCookiesAsGet })
+        posted.push({ url, body: typeof body === 'string' ? body : new TextDecoder().decode(body), headers: opts?.headers, sameCookiesAsGet: opts?.sameCookiesAsGet })
         return { status: 200, headers: {}, body: utf8(postReply) }
       },
     },
@@ -147,6 +147,34 @@ describe('ふたばのコネクタ', () => {
     expect(posted[0].body.endsWith(`--${boundary}--\r\n`)).toBe(true)
     expect(posted[0].headers?.Referer).toBe(`${BOARD}res/1000.htm`)
     expect(posted[0].sameCookiesAsGet).toBe(true)
+  })
+
+  it('ファイルを付けると、upfile にファイルの中身を入れ、「画像なし」を付けない', async () => {
+    const { ctx, posted } = fake(
+      { [`${BOARD}res/1000.htm`]: { body: FORM_PAGE }, 'https://may.2chan.net/bin/cachemt7.php': { body: 'function caco(){return "1";}' } },
+      'ok',
+    )
+    const data = new TextEncoder().encode('PNGDATA')
+    const r = await futabaConnector.createPost!(thread, { name: '', mail: '', body: '画像', files: [{ name: 'a.png', type: 'image/png', data }] }, ctx)
+    expect(r.status).toBe('ok')
+    expect(posted[0].body).toContain('name="upfile"; filename="a.png"\r\nContent-Type: image/png\r\n\r\nPNGDATA\r\n')
+    expect(posted[0].body).not.toContain('name="textonly"')
+  })
+
+  it('スレ立ては、板の入口のページのフォームから、題名を sub に入れて resto なしで送る', async () => {
+    const BOARD_FORM = FORM_PAGE.replace('<input type=hidden name=resto value="1000">', '')
+    const { ctx, posted, got } = fake({ [`${BOARD}futaba.htm`]: { body: BOARD_FORM } }, '{"status":"ok","jumpto":1100}')
+    const r = await futabaConnector.createThread!(board, { title: '新しいスレ', name: '', mail: '', body: '本文' }, ctx)
+    expect(r.status).toBe('ok')
+    expect(got[0].url).toBe(`${BOARD}futaba.htm`)
+    expect(posted[0].body).toContain('name="sub"\r\n\r\n新しいスレ\r\n')
+    expect(posted[0].body).not.toContain('name="resto"')
+    expect(posted[0].headers?.Referer).toBe(`${BOARD}futaba.htm`)
+  })
+
+  it('添付の決まり: 1 つまで、8000KB まで、画像と動画', () => {
+    expect(futabaConnector.attachments).toMatchObject({ maxFiles: 1, maxBytes: 8_192_000 })
+    expect(futabaConnector.attachments?.types).toContain('video/mp4')
   })
 
   it('断られたら、返ってきたページの文字を知らせる', async () => {

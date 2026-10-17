@@ -26,8 +26,11 @@ export interface HttpRequestOptions {
 export interface ConnectorContext {
   http: {
     get(url: string, opts?: HttpRequestOptions): Promise<HttpResponse>
-    /** body はエンコード済みの文字列(フォームなら ASCII だけになっている) */
-    post(url: string, body: string, opts?: HttpRequestOptions): Promise<HttpResponse>
+    /**
+     * body はエンコード済みの文字列(フォームなら ASCII だけになっている)。
+     * ファイルを付けるとき(multipart)はバイト列で渡す。バイト列は sameCookiesAsGet の POST だけ受け付ける
+     */
+    post(url: string, body: string | Uint8Array, opts?: HttpRequestOptions): Promise<HttpResponse>
   }
   decode(bytes: Uint8Array, encoding: Encoding): string
 }
@@ -138,10 +141,29 @@ export interface ResolvedUrl {
   thread?: ThreadSummary
 }
 
+/** 書き込みに付けるファイル(画像・動画) */
+export interface PostFile {
+  name: string
+  /** MIME の種類(image/png など) */
+  type: string
+  data: Uint8Array
+}
+
+/** 書き込みにファイルを付けられる掲示板の決まり(ふたば)。付けられない掲示板は持たない(外のアップローダーを使う) */
+export interface AttachmentRules {
+  maxFiles: number
+  /** 1 つのファイルの大きさの上限(バイト) */
+  maxBytes: number
+  /** 付けられる種類(MIME)。image/png など */
+  types: string[]
+}
+
 export interface PostInput {
   name: string
   mail: string
   body: string
+  /** 付けるファイル(コネクタが attachments を持つときだけ) */
+  files?: PostFile[]
   /** この書き込みで使うアカウント(AccountKind の id)。入っていないアカウントの Cookie は付けない */
   accounts?: string[]
 }
@@ -197,6 +219,8 @@ export interface Connector {
   id: string
   name: string
   capabilities: ConnectorCapabilities
+  /** 書き込みにファイルを付けられるときの決まり。あれば、書き込み欄の画像のボタンは外のアップローダーではなく、書き込みに付ける */
+  attachments?: AttachmentRules
   /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
   maxPosts?: number
   /** 引用を「>前のレスの文章」の形で書く掲示板(ふたば)。引用した文章から、元のレスを探してつなぐ */

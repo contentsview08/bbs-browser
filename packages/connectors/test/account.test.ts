@@ -17,7 +17,7 @@ function fake(status: number, html: string) {
         throw new Error('get は使わない')
       },
       async post(url, body, opts): Promise<HttpResponse> {
-        sent.push({ url, body, headers: opts?.headers ?? {} })
+        sent.push({ url, body: typeof body === 'string' ? body : new TextDecoder().decode(body), headers: opts?.headers ?? {} })
         return { status, headers: { 'content-type': 'text/html; charset=utf-8' }, body: new TextEncoder().encode(html) }
       },
     },

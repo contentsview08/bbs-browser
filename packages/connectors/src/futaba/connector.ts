@@ -14,7 +14,7 @@
 //   pthc・pthb に /bin/cachemt7.php の値、ptua にブラウザの機能の数、js=on・scsz を入れ、responsemode=ajax を付けて送る。
 //   返事は書けたら「ok」(か JSON)、断られたらエラーの文。2026-10-17 に JavaScript を読んで合わせた
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, PostResult, ThreadSummary } from '../types'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, PostFile, PostInput, PostResult, ThreadSummary } from '../types'
 import { shiftJisByteLength } from '../sjis'
 import { parseCaco, parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
 
@@ -50,15 +50,32 @@ const BROWSER = {
 /** 書き込みの pthb に入れる、このアプリを開いてから初めて書いたときの pthc(ブラウザの localStorage の代わり) */
 let firstCaco: string | undefined
 
-/** multipart/form-data の本文(文字の欄と、空の添付ファイルの欄)。文字は UTF-8 のまま(送るときに UTF-8 になる) */
-function multipart(fields: [string, string][], boundary: string): string {
+/**
+ * multipart/form-data の本文(バイト列)。文字の欄は UTF-8、upfile の欄はファイルの中身(なければ空のファイル)。
+ * upfile はフォームと同じく textonly・pwd の前に置く
+ */
+function multipart(fields: [string, string][], boundary: string, file?: PostFile): Uint8Array {
   const crlf = '\r\n'
-  const parts = fields.map(([k, v]) => `--${boundary}${crlf}Content-Disposition: form-data; name="${k}"${crlf}${crlf}${v.replace(/\r?\n/g, crlf)}${crlf}`)
-  // ブラウザは、ファイルを選んでいなくても upfile を空のファイルとして付ける
-  const upfile = `--${boundary}${crlf}Content-Disposition: form-data; name="upfile"; filename=""${crlf}Content-Type: application/octet-stream${crlf}${crlf}${crlf}`
-  const at = fields.findIndex(([k]) => k === 'textonly')
-  const ordered = at < 0 ? [...parts, upfile] : [...parts.slice(0, at), upfile, ...parts.slice(at)]
-  return `${ordered.join('')}--${boundary}--${crlf}`
+  const enc = new TextEncoder()
+  const text = (k: string, v: string) => enc.encode(`--${boundary}${crlf}Content-Disposition: form-data; name="${k}"${crlf}${crlf}${v.replace(/\r?\n/g, crlf)}${crlf}`)
+  // ファイル名の " と改行は、ブラウザと同じく %22・%0A などに置き換える
+  const fname = (file?.name ?? '').replace(/"/g, '%22').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+  const upfile = [
+    enc.encode(`--${boundary}${crlf}Content-Disposition: form-data; name="upfile"; filename="${fname}"${crlf}Content-Type: ${file?.type || 'application/octet-stream'}${crlf}${crlf}`),
+    file?.data ?? new Uint8Array(),
+    enc.encode(crlf),
+  ]
+  const at = fields.findIndex(([k]) => k === 'textonly' || k === 'pwd')
+  const before = at < 0 ? fields : fields.slice(0, at)
+  const after = at < 0 ? [] : fields.slice(at)
+  const chunks = [...before.map(([k, v]) => text(k, v)), ...upfile, ...after.map(([k, v]) => text(k, v)), enc.encode(`--${boundary}--${crlf}`)]
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0))
+  let pos = 0
+  for (const c of chunks) {
+    out.set(c, pos)
+    pos += c.length
+  }
+  return out
 }
 
 /** カタログを 200 スレ(20 列 x 10 行)・スレタイ 40 文字で返してもらう */
@@ -84,6 +101,74 @@ function titleFromOp(body: string): string {
   return line.trim().slice(0, 60)
 }
 
+/**
+ * 書き込み・スレ立てを送る(ふたばの書き込みボタンの JavaScript と同じ送り方)。
+ * pageUrl のページのフォームの隠し欄を写し、extra(返信なら resto、スレ立てなら sub)と本文・ファイルを足して送る
+ */
+async function sendRegist(
+  pageUrl: string,
+  boardUrl: string,
+  extra: { resto?: string; sub?: string },
+  input: PostInput,
+  ctx: ConnectorContext,
+): Promise<PostResult> {
+  // 書き込む直前にページを取り直し、フォームの隠し欄(hash・ptua など)を写す
+  const page = await ctx.http.get(pageUrl, { headers: BROWSER })
+  if (page.status === 404) return { status: 'error', message: extra.resto ? 'スレが消えています(もう書き込めません)' : '板のページが見つかりません' }
+  if (page.status !== 200) return { status: 'error', message: `ページを開けません(HTTP ${page.status})` }
+  const form = parsePostForm(sjis(page.body, ctx))
+  if (!form) return { status: 'error', message: '書き込みのフォームが見つかりません(スレが消えたか、ページの形が変わりました)' }
+  // 書き込みボタンの JavaScript が入れる値。pthc は /bin/cachemt7.php の時刻
+  let caco = ''
+  try {
+    const c = await ctx.http.get(`${originOf(boardUrl)}/bin/cachemt7.php`, { headers: BROWSER })
+    if (c.status === 200) caco = parseCaco(new TextDecoder().decode(c.body))
+  } catch {
+    // 取れなければ空のまま送る(断られたら、その文を出す)
+  }
+  // pthb は、ブラウザなら localStorage に残した「初めて書いたときの pthc」。初めては空で、2 回目からその値を入れる
+  // (いつも pthc と同じ値だと、ふつうのブラウザではありえない組み合わせになる)。ここではアプリを開いている間だけ覚える
+  const pthb = firstCaco ?? ''
+  if (firstCaco === undefined && caco) firstCaco = caco
+  const file = input.files?.[0]
+  // ふたばのフォームと同じ並びで、書き込みボタンの JavaScript が埋める値を入れる
+  const fields: [string, string][] = [
+    ...Object.entries({
+      ...form.hidden,
+      mode: 'regist',
+      pthb,
+      pthc: caco,
+      ptua: CHROMIUM_PTUA,
+      // JavaScript が動いたことにする(ふつうのブラウザと同じ)
+      scsz: '1920x1080x24',
+      js: 'on',
+      // サーバーはこの欄の文字の形で、送られた文字コード(UTF-8)を見分ける
+      chrenc: '文字',
+      ...(extra.resto && { resto: extra.resto }),
+    }),
+    ['name', input.name],
+    ['email', input.mail],
+    ['sub', extra.sub ?? ''],
+    ['com', input.body],
+    // ファイルを付けないときは「画像なし」にする
+    ...(file ? [] : [['textonly', 'on'] as [string, string]]),
+    ['pwd', ''],
+    ['responsemode', 'ajax'],
+  ]
+  const url = new URL(form.action, pageUrl).href
+  // ブラウザの FormData と同じく、multipart/form-data で、文字は UTF-8 で送る(ファイルがなくても upfile の欄は空で付く)
+  const boundary = `----WebKitFormBoundary${Math.random().toString(36).slice(2, 18)}`
+  const res = await ctx.http.post(url, multipart(fields, boundary, file), {
+    headers: { ...BROWSER, 'Content-Type': `multipart/form-data; boundary=${boundary}`, Referer: pageUrl, Origin: originOf(boardUrl) },
+    // ページを見たときに渡された Cookie(posttime など)が要る。ないと「cookieを有効にして…」で断られる
+    sameCookiesAsGet: true,
+  })
+  const html = sjis(res.body, ctx)
+  const r = parsePostResult(html)
+  // 書けたときも、ふたばが何と返したかを添える(書けたのに出てこないときに、手がかりにするため)
+  return r.ok ? { status: 'ok', message: `${r.message}(ふたばの返事: ${html.trim().slice(0, 80)})` } : { status: 'error', message: r.message, html }
+}
+
 export const futabaConnector: Connector = {
   id: ID,
   name: 'ふたば☆ちゃんねる',
@@ -92,6 +177,8 @@ export const futabaConnector: Connector = {
   voteLabel: 'そうだね',
   // 引用は番号ではなく「>前のレスの文章」で書く
   textQuotes: true,
+  // 書き込みに画像・動画を 1 つ付けられる(フォームの MAX_FILE_SIZE と「添付可能:GIF,JPG,PNG,WEBM,MP4」)
+  attachments: { maxFiles: 1, maxBytes: 8_192_000, types: ['image/gif', 'image/jpeg', 'image/png', 'image/webp', 'video/webm', 'video/mp4'] },
 
   canHandle(url) {
     return HOST.test(url)
@@ -193,60 +280,12 @@ export const futabaConnector: Connector = {
   },
 
   async createPost(thread, input, ctx): Promise<PostResult> {
-    // 書き込む直前にスレのページを取り直し、フォームの隠し欄(hash・ptua など)を写す
-    const page = await ctx.http.get(threadWebUrl(thread), { headers: BROWSER })
-    if (page.status === 404) return { status: 'error', message: 'スレが消えています(もう書き込めません)' }
-    if (page.status !== 200) return { status: 'error', message: `スレのページを開けません(HTTP ${page.status})` }
-    const form = parsePostForm(sjis(page.body, ctx))
-    if (!form) return { status: 'error', message: '書き込みのフォームが見つかりません(スレが消えたか、ページの形が変わりました)' }
-    // 書き込みボタンの JavaScript が入れる値。pthc は /bin/cachemt7.php の時刻、pthb は初めて書いたときのその値
-    // (ブラウザでは localStorage に残す。ここでは毎回いまの値を入れる)
-    let caco = ''
-    try {
-      const c = await ctx.http.get(`${originOf(thread.boardUrl)}/bin/cachemt7.php`, { headers: BROWSER })
-      if (c.status === 200) caco = parseCaco(new TextDecoder().decode(c.body))
-    } catch {
-      // 取れなければ空のまま送る(断られたら、その文を出す)
-    }
-    // pthb は、ブラウザなら localStorage に残した「初めて書いたときの pthc」。初めては空で、2 回目からその値を入れる
-    // (いつも pthc と同じ値だと、ふつうのブラウザではありえない組み合わせになる)。ここではアプリを開いている間だけ覚える
-    const pthb = firstCaco ?? ''
-    if (firstCaco === undefined && caco) firstCaco = caco
-    // ふたばのフォームと同じ並びで、書き込みボタンの JavaScript が埋める値を入れる
-    const fields: [string, string][] = [
-      ...Object.entries({
-        ...form.hidden,
-        mode: 'regist',
-        pthb,
-        pthc: caco,
-        ptua: CHROMIUM_PTUA,
-        // JavaScript が動いたことにする(ふつうのブラウザと同じ)
-        scsz: '1920x1080x24',
-        js: 'on',
-        // サーバーはこの欄の文字の形で、送られた文字コード(UTF-8)を見分ける
-        chrenc: '文字',
-        resto: thread.key,
-      }),
-      ['name', input.name],
-      ['email', input.mail],
-      ['sub', ''],
-      ['com', input.body],
-      ['textonly', 'on'],
-      ['pwd', ''],
-      ['responsemode', 'ajax'],
-    ]
-    const url = new URL(form.action, threadWebUrl(thread)).href
-    // ブラウザの FormData と同じく、multipart/form-data で、文字は UTF-8 で送る(添付なしでも upfile の欄は空で付く)
-    const boundary = `----WebKitFormBoundary${Math.random().toString(36).slice(2, 18)}`
-    const res = await ctx.http.post(url, multipart(fields, boundary), {
-      headers: { ...BROWSER, 'Content-Type': `multipart/form-data; boundary=${boundary}`, Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
-      // ページを見たときに渡された Cookie(posttime など)が要る。ないと「cookieを有効にして…」で断られる
-      sameCookiesAsGet: true,
-    })
-    const html = sjis(res.body, ctx)
-    const r = parsePostResult(html)
-    // 書けたときも、ふたばが何と返したかを添える(書けたのに出てこないときに、手がかりにするため)
-    return r.ok ? { status: 'ok', message: `${r.message}(ふたばの返事: ${html.trim().slice(0, 80)})` } : { status: 'error', message: r.message, html }
+    return sendRegist(threadWebUrl(thread), thread.boardUrl, { resto: thread.key }, input, ctx)
+  },
+
+  async createThread(board, input, ctx): Promise<PostResult> {
+    // スレ立ては、板の入口のページのフォームから(resto なし、題名を sub に)。画像が要る板が多い
+    return sendRegist(`${board.url}futaba.htm`, board.url, { sub: input.title }, input, ctx)
   },
 
   postByteLength: shiftJisByteLength,

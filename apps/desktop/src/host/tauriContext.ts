@@ -10,6 +10,7 @@ import type { ConnectorContext, HttpRequestOptions, HttpResponse } from '@bbs-br
 const USER_AGENT = 'Monazilla/1.00 (bbs-browser/0.1.0)'
 
 async function request(url: string, init: RequestInit, opts?: HttpRequestOptions): Promise<HttpResponse> {
+  // ファイルを付けた multipart の本文(バイト列)も、そのまま送る
   const res = await fetch(url, { ...init, headers: { 'User-Agent': USER_AGENT, ...opts?.headers } })
   const headers: Record<string, string> = {}
   res.headers.forEach((value, key) => {
@@ -22,9 +23,10 @@ async function request(url: string, init: RequestInit, opts?: HttpRequestOptions
  * POST(書き込み・アカウントのログイン)は、Rust 側の自前の通信(post_http.rs)で送る。
  * Cookie もそこが持ち、書き込みごとに一部(BE の Cookie など)を外して送れるようにするため
  */
-async function post(url: string, body: string, opts?: HttpRequestOptions): Promise<HttpResponse> {
+async function post(url: string, body: string | Uint8Array, opts?: HttpRequestOptions): Promise<HttpResponse> {
   // 読む通信と同じ Cookie の置き場で送る(ふたば: ページを見たときに渡された Cookie を、書き込みに付ける)
-  if (opts?.sameCookiesAsGet) return request(url, { method: 'POST', body }, opts)
+  if (opts?.sameCookiesAsGet) return request(url, { method: 'POST', body: body as BodyInit }, opts)
+  if (typeof body !== 'string') throw new Error('ファイルを付けた書き込みは、この送り方では送れません')
   const res = await invoke<{ status: number; headers: Record<string, string>; body: number[] }>('http_post', {
     url,
     body,

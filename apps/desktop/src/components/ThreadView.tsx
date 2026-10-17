@@ -579,6 +579,22 @@ export default function ThreadView(props: Props) {
     }, 450)
     return () => clearTimeout(check)
   }, [flashNos, props.active])
+  // 札が出ているあいだに、自分でスクロールして新着の頭が見えたら(通り越したときも)、札を消す
+  // (通り越したあとに札を押すと、上の新着の頭へ戻ってしまうため)
+  useEffect(() => {
+    const root = ref.current
+    if (!newToast || !root) return
+    const onScroll = () => {
+      const el = root.querySelector<HTMLElement>(`[data-post="${newToast.first}"]`)
+      if (!el || el.hidden) return
+      if (el.getBoundingClientRect().top < root.getBoundingClientRect().bottom - 8) {
+        clearTimeout(toastTimer.current)
+        setNewToast(undefined)
+      }
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => root.removeEventListener('scroll', onScroll)
+  }, [newToast])
   /** 札を押したら、絞り込みを解いて新着の頭へ */
   const jumpToNew = () => {
     if (!newToast) return

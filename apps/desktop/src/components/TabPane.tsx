@@ -52,6 +52,8 @@ export interface TabEvents {
   openThread: (t: ThreadSummary) => void
   /** スレの板のスレ一覧を開く(︙ の「板に戻る」) */
   openBoardOf: (t: ThreadSummary) => void
+  /** スレ表示のヘッダーの高さを保存する(0 なら既定) */
+  setThreadHeaderHeight: (height: number) => void
   toggleFavoriteThread: (t: ThreadSummary) => void
   /** 書き込むときに使うアカウントのオン・オフ(どの板でも同じ) */
   togglePostAccount: (id: string, on: boolean) => void
@@ -161,6 +163,7 @@ function TabPane({
       onUploaded={ev.uploaded}
       onFindNext={onFindNext}
       onOpenBoard={onOpenBoard}
+      onHeaderHeight={ev.setThreadHeaderHeight}
       onOpenThread={ev.openThread}
       isFavorite={favorite}
       refreshReadyAt={tab.refreshReadyAt}

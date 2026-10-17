@@ -19,6 +19,8 @@ import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 import { animateScroll } from '../hooks/useThreadScroll'
+import { useDragHeight } from '../hooks/useDragHeight'
+import DragEdge from './DragEdge'
 import { followDelta, isDoublePress, isNear, isSeen, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 
 type SortMode = 'momentum' | 'newest'
@@ -66,6 +68,11 @@ interface Props {
   active?: boolean
   /** キー操作の割り当て(スレ表示と同じ)。J・K でカードを選び、Enter で開く */
   keymap?: Keymap
+  /** ヘッダー(板名の行)とフッターの高さ(px。0 なら既定)と、変えたときの保存 */
+  headerHeight?: number
+  footerHeight?: number
+  onHeaderHeight?: (height: number) => void
+  onFooterHeight?: (height: number) => void
   /** カードの見た目(レスの見た目の設定に合わせる) */
   variant?: 'card' | 'discord' | 'classic' | 'line'
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
@@ -221,6 +228,11 @@ export default function ThreadListPanel(props: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectable = props.onDeleteLogs !== undefined
   const searchRef = useRef<HTMLInputElement>(null)
+  // ヘッダー(板名の行)とフッターの高さ(端をつかんで変える)
+  const titleRowRef = useRef<HTMLDivElement>(null)
+  const footerRef = useRef<HTMLDivElement>(null)
+  const headerDrag = useDragHeight(props.headerHeight ?? 0, (h) => props.onHeaderHeight?.(h), { min: 32, max: 160 })
+  const footerDrag = useDragHeight(props.footerHeight ?? 0, (h) => props.onFooterHeight?.(h), { min: 28, max: 120 })
   const scrollRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
@@ -551,14 +563,22 @@ export default function ThreadListPanel(props: Props) {
         }}
       >
         <div ref={headerRef} className="sticky top-0 z-10 frosted-glass flex-shrink-0">
+          {/* 下の端をつかんで、板名の行の高さを変える(板名の字も合わせて大きくなる) */}
+          <DragEdge
+            edge="bottom"
+            onMouseDown={(e) => headerDrag.startDrag(e, titleRowRef.current?.getBoundingClientRect().height ?? 44, 1)}
+            onReset={headerDrag.reset}
+          />
           <div className="p-4">
             <div className="flex items-center gap-2">
-              <div className="relative flex-1 min-w-0 h-11">
+              <div ref={titleRowRef} className="relative flex-1 min-w-0 h-11" style={headerDrag.height ? { height: headerDrag.height } : undefined}>
                 {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
                   className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong text-xl cursor-pointer transition-opacity duration-200 ${
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
+                  // 引き伸ばしたら、高さに合わせて字も大きくする(既定の 44px で 1.25rem)
+                  style={headerDrag.height ? { fontSize: `${Math.min(2.6, Math.max(0.9, (headerDrag.height / 44) * 1.25))}rem` } : undefined}
                   onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
                   title="クリックで先頭へスクロール"
                 >
@@ -714,7 +734,17 @@ export default function ThreadListPanel(props: Props) {
       </div>
       {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
       {hasFooter && (
-        <div className="flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border">
+        <div
+          ref={footerRef}
+          className="relative flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border"
+          style={footerDrag.height ? { height: footerDrag.height } : undefined}
+        >
+          {/* 上の端をつかんで、フッターの高さを変える */}
+          <DragEdge
+            edge="top"
+            onMouseDown={(e) => footerDrag.startDrag(e, footerRef.current?.getBoundingClientRect().height ?? 40, -1)}
+            onReset={footerDrag.reset}
+          />
           <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={LIST_BTN} iconClass="text-lg" />
         </div>
       )}

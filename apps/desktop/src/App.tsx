@@ -1319,6 +1319,7 @@ export default function App() {
     openAccountSettings: useEvent(() => setSettingsTab('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
     // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
+    setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
     openBoardOf: useEvent((t: ThreadSummary) => {
       const fav = favorites?.find((b) => b.url === t.boardUrl)
       if (fav) void openBoard(fav)
@@ -1445,6 +1446,10 @@ export default function App() {
           key={favView ? 'favorites' : history ? 'history' : board?.url}
           active={listFocused}
           keymap={keymap}
+          headerHeight={settings.listHeaderHeight}
+          footerHeight={settings.listFooterHeight}
+          onHeaderHeight={(h) => updateSetting('listHeaderHeight', h)}
+          onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
           variant={settings.postStyle}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}

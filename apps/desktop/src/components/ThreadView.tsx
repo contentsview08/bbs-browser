@@ -26,6 +26,8 @@ import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
+import { useDragHeight } from '../hooks/useDragHeight'
+import DragEdge from './DragEdge'
 import { followDelta, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 import type { ScrollPosition } from '../utils/threadScroll'
 import { createKeyReader, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
@@ -93,6 +95,8 @@ interface Props {
   onFindNext?: () => Promise<NextThreadCandidate[]>
   /** このスレの板のスレ一覧を開く */
   onOpenBoard?: () => void
+  /** ヘッダー(スレタイの行)の高さを変えた(下の端をつかんで)。0 なら既定に戻した */
+  onHeaderHeight?: (height: number) => void
   /** 本文の >>番号 が指すもの(コネクタの anchorTarget)。'ref' なら板の本当の番号 */
   anchorTarget?: 'no' | 'ref'
   /** 1 つのスレのレスの上限(2ch は 1000)。上限のない掲示板は undefined */
@@ -677,6 +681,9 @@ export default function ThreadView(props: Props) {
   const lastEsc = useRef(0)
   /** キーを読むもの(「G G」のような 2 つ続きのキーを見分けるため、直前のキーを覚えている) */
   const readKey = useRef(createKeyReader())
+  /** ヘッダーの高さ(下の端をつかんで変える) */
+  const titleRowRef = useRef<HTMLElement>(null)
+  const headerDrag = useDragHeight(settings.threadHeaderHeight ?? 0, (h) => props.onHeaderHeight?.(h), { min: 40, max: 200 })
   /** いまのキーが、押し続けたときの自動の連打か */
   const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
@@ -1255,9 +1262,19 @@ export default function ThreadView(props: Props) {
   const headerBlock = (
     <div
       ref={headerRef}
-      className={`${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
+      className={`relative ${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
     >
-        <header className="flex items-center justify-between px-6" style={{ height: 'var(--header-height, 80px)' }}>
+        {/* 下の端をつかんで、スレタイの行の高さを変える(スレタイの字も合わせて大きくなる) */}
+        <DragEdge
+          edge="bottom"
+          onMouseDown={(e) => headerDrag.startDrag(e, titleRowRef.current?.getBoundingClientRect().height ?? 80, 1)}
+          onReset={headerDrag.reset}
+        />
+        <header
+          ref={titleRowRef}
+          className="flex items-center justify-between px-6"
+          style={{ height: headerDrag.height || 'var(--header-height, 80px)' }}
+        >
           <div className="relative min-w-0 flex-1 h-10 flex items-center gap-2">
             <input
               ref={searchRef}
@@ -1300,7 +1317,11 @@ export default function ThreadView(props: Props) {
             )}
             <h2
               className="font-bold truncate text-base cursor-pointer hover:text-c-accent transition-colors"
-              style={{ color: 'var(--thread-title-color, var(--c-text-strong))' }}
+              style={{
+                color: 'var(--thread-title-color, var(--c-text-strong))',
+                // ヘッダーを引き伸ばしたら、高さに合わせて字も大きくする(既定の 80px で 1rem)
+                ...(headerDrag.height > 0 && { fontSize: `${Math.min(2.2, Math.max(0.85, headerDrag.height / 80))}rem` }),
+              }}
               onClick={() => {
                 if (ref.current) ref.current.scrollTop = 0
               }}

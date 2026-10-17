@@ -82,6 +82,10 @@ export interface AppSettings {
   threadPanelWidth: number
   /** サイドバーを広げたときの幅 */
   sidebarWidth: number
+  /** スレ表示のヘッダー(スレタイの行)・スレ一覧のヘッダー(板名の行)・スレ一覧のフッターの高さ(px)。0 なら既定 */
+  threadHeaderHeight: number
+  listHeaderHeight: number
+  listFooterHeight: number
   /** Shift+Delete でログを消す前に確かめる */
   confirmDeleteLog: boolean
   /** 背景画像(アプリのデータフォルダにコピーしたもののパス)。空なら出さない */
@@ -212,6 +216,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customFont: '',
   threadPanelWidth: 420,
   sidebarWidth: 256,
+  threadHeaderHeight: 0,
+  listHeaderHeight: 0,
+  listFooterHeight: 0,
   confirmDeleteLog: true,
   backgroundImage: '',
   backgroundOpacity: 1,

@@ -667,13 +667,14 @@ input[type='checkbox']:indeterminate {
 
 /* ---------- サイドバーの、選んでいる行の印(components/Sidebar.tsx の NavNotch) ----------
    右の境界線が選んだ行のところで内側へ曲がり、行の上・左・下を回ってまた右の線へ戻る。
-   右端は境界線の上に重ねて線を隠す(行がスレ一覧の側へつながって見える)。
+   右端は境界線の上に重ねて線を隠し、右隣の面(2 画面ならスレ一覧、1 画面ならスレ表示)と同じ色・同じ透け方で塗って、
+   行が右隣の面とひと続きに見えるようにする。
    出るときは右から左へ伸び、消えるときは右へ引っ込む(clip-path)。上下の曲がり角は枠の外にはみ出すので、そのぶん切り抜きを広げる */
-:root {
-  --c-nav-selected: color-mix(in srgb, var(--c-chrome, var(--c-surface)) 90%, black 10%);
+[data-neighbor='list'] {
+  --c-nav-selected: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) calc(var(--alpha-thread-list, 1) * 100%), transparent);
 }
-:root.dark {
-  --c-nav-selected: color-mix(in srgb, var(--c-chrome, var(--c-surface)) 86%, white 14%);
+[data-neighbor='view'] {
+  --c-nav-selected: color-mix(in srgb, var(--c-thread-view-bg) calc(var(--alpha-thread-view, 1) * 100%), transparent);
 }
 .nav-notch {
   position: absolute;

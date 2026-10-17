@@ -1521,6 +1521,7 @@ export default function App() {
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
+        neighbor={single ? 'view' : 'list'}
         width={settings.sidebarWidth}
         onResize={(w) => updateSetting('sidebarWidth', w)}
         favorites={favorites ?? []}

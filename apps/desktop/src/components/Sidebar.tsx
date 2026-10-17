@@ -35,6 +35,8 @@ interface Props {
   /** 設定画面の板一覧を開く(板を足したいとき) */
   onManageBoards: () => void
   collapsed: boolean
+  /** 右隣にあるもの。選んでいる行の印を、その面と同じ色で塗ってつなげる(2 画面ならスレ一覧、1 画面ならスレ表示の背景) */
+  neighbor?: 'list' | 'view'
   onToggleCollapsed: () => void
   /** 広げたときの幅(右端をつかんで変えられる)。離したときに onResize で知らせる */
   width: number
@@ -252,6 +254,7 @@ export default function Sidebar(props: Props) {
     // (外枠の幅を少しずつ変えると、右の本体の配置とスレ表示の測り直しが 1 コマごとに走ってカクつくため)
     <div className="relative flex-shrink-0" style={{ width: props.collapsed ? COLLAPSED : EXPANDED }}>
     <aside
+      data-neighbor={props.neighbor ?? 'list'}
       className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar ${resizing ? '' : 'transition-[width] duration-200 ease-out'} ${
         peek ? 'z-40 shadow-2xl' : 'z-30'
       }`}

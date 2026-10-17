@@ -137,14 +137,14 @@ body,
 }
 
 /* スレ一覧の「新」の札。塗りつぶした明るい色にして、一覧の中で目に入るようにする。
-   暗い配色は強調色を白に寄せた明るい色に暗い字、明るい配色ははっきりした青に白い字 */
+   暗い配色は金色(お気に入りの ★ と同じ)に暗い字、明るい配色ははっきりした青に白い字 */
 :root {
   --c-new-badge-bg: var(--c-accent-self);
   --c-new-badge-text: var(--c-accent-self-text);
 }
 :root.dark {
-  --c-new-badge-bg: color-mix(in srgb, var(--c-accent) 55%, white);
-  --c-new-badge-text: #15172a;
+  --c-new-badge-bg: var(--c-mark-fav);
+  --c-new-badge-text: #1f1a0a;
 }
 @keyframes flash-new-slow {
   0% {

@@ -370,18 +370,15 @@ export default function ThreadListPanel(props: Props) {
           <div className="p-4">
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-0 h-11">
+                {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
-                  className={`absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong text-xl transition-opacity duration-200 ${
+                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong text-xl cursor-pointer transition-opacity duration-200 ${
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
+                  onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
+                  title="クリックで先頭へスクロール"
                 >
-                  <span
-                    className="truncate cursor-pointer hover:text-c-accent transition-colors"
-                    onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
-                    title="クリックで先頭へスクロール"
-                  >
-                    {props.title}
-                  </span>
+                  <span className="truncate group-hover/title:text-c-accent transition-colors">{props.title}</span>
                 </h2>
                 <input
                   ref={searchRef}

@@ -595,6 +595,9 @@ export default function App() {
   }
 
   const selectTab = (id: string) => {
+    // 1 画面でスレ一覧を出しているときにタブを選んだら(タブ・Ctrl+Tab・通知から)、そのスレを見せる。
+    // 見せないまま戻るの履歴にだけ積むと、あとで戻ったときに、もう置き換えたスレを新しいタブで開き直してしまう
+    setListOpen(false)
     setActiveId(id)
     const tab = tabsRef.current.find((t) => t.id === id)
     if (tab) nav.push(threadEntry(tab.thread))
@@ -630,7 +633,8 @@ export default function App() {
       await reloadRecent(store)
     })
 
-  const closeTabs = (ids: string[]) => {
+  /** タブを閉じる。stayOnList なら(1 画面でスレ一覧に戻るとき)、隣のタブは裏で選ぶだけにして、スレ表示も戻るの履歴も変えない */
+  const closeTabs = (ids: string[], stayOnList = single && listOpen) => {
     const ts = tabsRef.current
     const rest = ts.filter((t) => !ids.includes(t.id))
     setTabs(rest)
@@ -638,20 +642,20 @@ export default function App() {
       // 閉じたタブの右隣(なければ左隣)へ移る
       const idx = ts.findIndex((t) => t.id === activeId)
       const next = rest[Math.min(idx, rest.length - 1)]
-      if (next) selectTab(next.id)
-      else setActiveId(undefined)
+      if (next && !stayOnList) selectTab(next.id)
+      else setActiveId(next?.id)
     }
   }
 
   /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
-  const deleteLogs = (ids: string[], extra: ThreadSummary[] = []) => {
+  const deleteLogs = (ids: string[], extra: ThreadSummary[] = [], stayOnList?: boolean) => {
     if (!store) return
     // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
     const targets = new Map<string, ThreadSummary>()
     for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
     for (const t of extra) targets.set(threadId(t), t)
     // 先に画面から消す(DB の処理を待たない)
-    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)))
+    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)), stayOnList)
     const gone = (t: ThreadSummary) => targets.has(threadId(t))
     setRecentHistory((list) => list.filter((t) => !gone(t)))
     setHistory((list) => list?.filter((h) => !gone(h.thread)))
@@ -1173,8 +1177,8 @@ export default function App() {
     }),
     // スレ表示の削除ボタン。1 画面のときは、消したあとスレ一覧に戻る(タブの × や Delete キーは、隣のタブに移る)
     deleteLog: useEvent((id: string) => {
-      void deleteLogs([id])
-      if (!single) return
+      if (!single) return void deleteLogs([id])
+      void deleteLogs([id], [], true)
       setListOpen(true)
       const cur = currentListTarget()
       if (cur) nav.push(listEntry(cur))

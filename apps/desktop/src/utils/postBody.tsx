@@ -22,7 +22,8 @@ function memoByText<T>(fn: (text: string) => T): (text: string) => T {
 }
 
 /** >>1, >>1-3, ＞＞1、URL(2ch 流の ttp:// も) */
-const TOKEN = /(?:>>|＞＞)(\d{1,5})(?:-(\d{1,5}))?|(h?ttps?:\/\/[^\s<>"、。「」]+)/g
+// 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[4])
+const TOKEN = /(?:>>|＞＞)(\d{1,5})(?:-(\d{1,5}))?|(h?ttps?:\/\/[^\s<>"、。「」]+)|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)/g
 
 /** 範囲アンカーは広げすぎない(>>1-1000 で全レスに数が付くのを防ぐ) */
 const MAX_RANGE = 10
@@ -224,6 +225,8 @@ export interface BodyHandlers {
   /** アンカーからマウスが離れた(ホバーで開く前に離れたら取り消す) */
   onAnchorLeave?: () => void
   onUrl: (url: string) => void
+  /** 本文の中の「ID:xxxx」を押した */
+  onId?: (id: string, el: HTMLElement) => void
 }
 
 export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
@@ -245,6 +248,21 @@ export function renderBody(text: string, handlers: BodyHandlers): ReactNode[] {
           }}
           onMouseEnter={(e) => handlers.onAnchor(nos, e.currentTarget, 'hover')}
           onMouseLeave={handlers.onAnchorLeave}
+        >
+          {m[0]}
+        </span>,
+      )
+    } else if (m[4]) {
+      const id = m[4]
+      parts.push(
+        <span
+          key={start}
+          role="button"
+          className="text-c-link hover:underline cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation()
+            handlers.onId?.(id, e.currentTarget)
+          }}
         >
           {m[0]}
         </span>,

@@ -270,6 +270,38 @@ function Divider({ label, self }: { label: string; self?: boolean }) {
   )
 }
 
+/** 続けて並んだあぼーんをまとめた 1 行。押すと広げる・まとめ直す */
+function NgRunRow(props: {
+  run: { nos: number[]; auto: number; rule: number }
+  first: number
+  last?: Post
+  open: boolean
+  onToggle: () => void
+}) {
+  const { run } = props
+  const count = run.auto + run.rule
+  const parts = [run.auto > 0 && `自動 NG ${run.auto}`, run.rule > 0 && `NG ${run.rule}`].filter(Boolean).join('・')
+  return (
+    <article data-no={run.nos[0]} style={{ paddingLeft: 'var(--post-padding-x)', paddingRight: 'var(--post-padding-x)', paddingTop: 6, paddingBottom: 6 }}>
+      <button
+        type="button"
+        onClick={props.onToggle}
+        className="flex items-center gap-2 text-xs text-c-text-muted hover:text-c-text-body"
+        title={props.open ? '1 行にまとめ直す' : '広げて 1 つずつ見る'}
+      >
+        <span className="material-symbols-outlined text-base leading-none">{props.open ? 'unfold_less' : 'unfold_more'}</span>
+        <span className="font-bold">
+          {props.first}〜{props.last ? (props.last.ref ?? props.last.no) : ''}
+        </span>
+        <span>
+          あぼーん × {count}({parts})
+        </span>
+        {props.open && <span>— まとめる</span>}
+      </button>
+    </article>
+  )
+}
+
 export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, onRead } = props
   /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
@@ -627,6 +659,42 @@ export default function ThreadView(props: Props) {
     [log.posts, visibleNos],
   )
   const byNo = useMemo(() => new Map(log.posts.map((p) => [p.no, p])), [log.posts])
+  /**
+   * 続けて並んだあぼーんのまとまり(先頭のレス番号 → まとまり)と、各レスが入っているまとまりの先頭。
+   * 2 つ以上続いたときだけ。「ここから未読」の所では切る(区切りの線が隠れないように)。絞り込み中はまとめない。
+   * 透明あぼーんの設定では、ユーザーの NG(描かない)は数えずに飛ばし、自動 NG だけをまとめる
+   */
+  const ngRuns = useMemo(() => {
+    const runs = new Map<number, { nos: number[]; auto: number; rule: number }>()
+    const firstOf = new Map<number, number>()
+    if (!settings.groupNg || visibleNos) return { runs, firstOf }
+    let cur: number[] = []
+    const close = () => {
+      const shown = cur.filter((no) => settings.ngMode !== 'hide' || autoNg.has(no))
+      if (shown.length >= 2) {
+        const auto = shown.filter((no) => autoNg.has(no) && !isNgRule(byNo.get(no)!)).length
+        runs.set(cur[0], { nos: cur, auto, rule: shown.length - auto })
+        for (const no of cur) firstOf.set(no, cur[0])
+      }
+      cur = []
+    }
+    for (const p of log.posts) {
+      if (p.no === unreadFrom) close()
+      if (isNg(p)) cur.push(p.no)
+      else close()
+    }
+    close()
+    return { runs, firstOf }
+  }, [settings.groupNg, settings.ngMode, visibleNos, log.posts, isNg, isNgRule, autoNg, byNo, unreadFrom])
+  /** 広げたまとまり(先頭のレス番号) */
+  const [openRuns, setOpenRuns] = useState<Set<number>>(new Set())
+  const toggleRun = (first: number) =>
+    setOpenRuns((s) => {
+      const next = new Set(s)
+      if (next.has(first)) next.delete(first)
+      else next.add(first)
+      return next
+    })
   /**
    * Discord 風: 本文がアンカーで始まるレスの、引用元の番号・本文の頭・ID。
    * レスごとに 1 回だけ作って使い回す(描くたびに作り直すと、memo したレスが全部描き直しになって、J・K が重くなる)
@@ -1594,6 +1662,10 @@ export default function ThreadView(props: Props) {
               {log.posts.map((p, i) => {
                 const firstUnread = p.no === unreadFrom && unreadFrom > 1
                 const enterDelay = flashNos.get(p.no)
+                // 続けて並んだあぼーん: まとめているあいだは、先頭に 1 行だけ出し、ほかは隠す
+                const runFirst = ngRuns.firstOf.get(p.no)
+                const run = runFirst === undefined ? undefined : ngRuns.runs.get(runFirst)
+                const runClosed = run !== undefined && !openRuns.has(runFirst!)
                 return (
                   <div
                     key={p.no}
@@ -1613,7 +1685,7 @@ export default function ThreadView(props: Props) {
                     }
                     data-post={p.no}
                     data-placeholder={isRendered(i) ? undefined : ''}
-                    hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
+                    hidden={(visibleNos !== undefined && !visibleNos.has(p.no)) || (runClosed && p.no !== runFirst)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
                     {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
@@ -1636,7 +1708,10 @@ export default function ThreadView(props: Props) {
                         />
                       </>
                     )}
-                    {isRendered(i) && (
+                    {run && runFirst === p.no && (
+                      <NgRunRow run={run} first={p.ref ?? p.no} last={byNo.get(run.nos.at(-1)!)} open={!runClosed} onToggle={() => toggleRun(p.no)} />
+                    )}
+                    {isRendered(i) && !runClosed && (
                       <PostArticle
                         post={p}
                         votes={props.votes?.get(p.ref ?? p.no)}

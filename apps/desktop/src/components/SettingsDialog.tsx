@@ -1309,6 +1309,14 @@ function NgTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           onChange={(v) => update('ngMode', v)}
         />
       </Section>
+      <Section title="続けて並んだあぼーん">
+        <Toggle
+          checked={s.groupNg}
+          onChange={(v) => update('groupNg', v)}
+          label="2 つ以上続いたあぼーんを 1 行にまとめる"
+          note="「あぼーん × 12(自動 NG 10・NG 2)」のように出します。押すと 1 つずつのあぼーんに広がり、そこから中身を見たり「荒らしじゃない」を付けたりできます"
+        />
+      </Section>
       <Section title="自動 NG(荒らし)">
         <Toggle
           checked={s.autoNg}

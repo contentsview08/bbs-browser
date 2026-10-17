@@ -31,7 +31,8 @@ export default function AnchorTree(props: {
     <div className="flex flex-col">
       {props.rows.map((r, i) => (
         <div key={r.no} className="relative flex">
-          {/* 子のレスがあれば、このレスの番号のすぐ下から縦線を下ろす(本文の下からではなく、番号から出ているように) */}
+          {/* 子のレスがあれば、このレスの番号のすぐ下から縦線を下ろす(本文の下からではなく、番号から出ているように)。
+              線はレスの左に空けた所(1 段の幅)を通るので、番号・本文とは重ならない */}
           {(props.rows[i + 1]?.depth ?? -1) > r.depth && (
             <span
               className="absolute bottom-0 pointer-events-none"
@@ -69,7 +70,8 @@ export default function AnchorTree(props: {
           )}
           <div
             className="relative flex-1 min-w-0 rounded-[var(--card-radius)]"
-            style={r.no === props.focus ? { background: 'var(--c-accent-wash)' } : undefined}
+            // 左を 1 段の幅だけ空けて、番号から下ろす縦線を、番号や本文と重ならない所に通す
+            style={{ paddingLeft: STEP, ...(r.no === props.focus && { background: 'var(--c-accent-wash)' }) }}
           >
             {/* 押したレスの目印。枠の角丸に沿って曲がらないよう、独立したまっすぐな線にする */}
             {r.no === props.focus && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-c-accent" />}

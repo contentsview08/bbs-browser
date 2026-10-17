@@ -1172,12 +1172,19 @@ export default function ThreadView(props: Props) {
                     data-post={p.no}
                     hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
-                    {/* 選んでいるレスの印。下辺にまっすぐな線を引く(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+                    {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
                     {keysOn && p.no === cursorNo && (
-                      <span
-                        className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none z-[1]"
-                        style={{ left: 'var(--card-radius)', right: 'var(--card-radius)' }}
-                      />
+                      <>
+                        {/* うっすら強調色を重ねて、どのレスか目に入るようにする(カードの上に重ねるので、ごく薄く) */}
+                        <span
+                          className="absolute inset-0 pointer-events-none z-[1] rounded-[var(--card-radius)]"
+                          style={{ background: 'color-mix(in srgb, var(--c-accent) 7%, transparent)' }}
+                        />
+                        <span
+                          className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none z-[1]"
+                          style={{ left: 'var(--card-radius)', right: 'var(--card-radius)' }}
+                        />
+                      </>
                     )}
                     <PostArticle
                       post={p}

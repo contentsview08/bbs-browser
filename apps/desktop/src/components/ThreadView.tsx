@@ -209,6 +209,15 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
  * レスの中で Tab で回るもの。本文(リンク・アンカー・画像・カード)を先に、レスの頭(番号・名前・ID)を後に並べる。
  * マウスを乗せたときに出る操作バーは入れない
  */
+/** el の中で選んでいる文字(前後の空白を除く)。el の外にまたがって選んでいたり、何も選んでいなければ undefined */
+function selectedTextIn(el: HTMLElement): string | undefined {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed || !sel.anchorNode || !sel.focusNode) return undefined
+  if (!el.contains(sel.anchorNode) || !el.contains(sel.focusNode)) return undefined
+  const text = sel.toString().trim()
+  return text || undefined
+}
+
 /** 要素の縦の位置(画面の座標) */
 function spanOf(el: HTMLElement): Span {
   const r = el.getBoundingClientRect()
@@ -827,11 +836,14 @@ export default function ThreadView(props: Props) {
       case 'postsById':
         if (p.id) h.onId?.(p.id, el)
         return true
-      case 'replyToPost':
+      case 'replyToPost': {
         if (!canReply) return true
+        // そのレスの本文の一部を選んでいたら、選んだ所を「>」を付けて引用する(引用して返信)
+        const quote = selectedTextIn(el)
         setPopups([])
-        withReplyRef.current((r) => r.insert(`>>${refOf(p.no)}\n`))
+        withReplyRef.current((r) => r.insert(`>>${refOf(p.no)}\n${quote ? `${quote.split('\n').map((l) => `>${l}`).join('\n')}\n` : ''}`))
         return true
+      }
       default:
         return false
     }
@@ -1275,6 +1287,9 @@ export default function ThreadView(props: Props) {
 
   // スレタイ・絞り込みの帯。書き込み欄が下のときはスクロール領域の中に置いて(すりガラス越しにレスが透ける)、
   // 右のときはスクロール領域の外に出して横いっぱいに置く(書き込み欄はその下に並ぶ)
+  /** 選んでいるレスの ID(印を出しているときだけ。同じ ID のレスに薄く色を付ける) */
+  const cursorId = keysOn && !cursorHidden && cursorNo !== undefined ? byNo.get(cursorNo)?.id : undefined
+
   const headerBlock = (
     <div
       ref={headerRef}
@@ -1502,6 +1517,13 @@ export default function ThreadView(props: Props) {
                     hidden={visibleNos !== undefined && !visibleNos.has(p.no)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+                    {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
+                    {cursorId !== undefined && p.id === cursorId && p.no !== cursorNo && (
+                      <span
+                        className="absolute inset-0 pointer-events-none z-[1] rounded-[var(--card-radius)] opacity-50"
+                        style={{ background: 'var(--c-cursor-tint)' }}
+                      />
+                    )}
                     {keysOn && !cursorHidden && p.no === cursorNo && (
                       <>
                         {/* うっすら強調色を重ねて、どのレスか目に入るようにする(カードの上に重ねるので、ごく薄く) */}

@@ -5,7 +5,7 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
+import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers, type PostVariant } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
@@ -104,6 +104,8 @@ interface Props {
   anchorTarget?: 'no' | 'ref'
   /** 引用を「>前のレスの文章」で書く掲示板(コネクタの textQuotes) */
   textQuotes?: boolean
+  /** 書き込みにファイルを付けられる掲示板の決まり(コネクタの attachments) */
+  attachments?: AttachmentRules
   /** レスの評価の数と呼び名(ふたばのそうだね)。キーはレスの画面の番号 */
   votes?: Map<number, number>
   voteLabel?: string
@@ -1669,6 +1671,7 @@ export default function ThreadView(props: Props) {
               ref={replyRef}
               layout={replyLayout}
               onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}
+              attach={props.attachments}
               disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
               initialName={props.postName}
               initialMail={props.postMail}

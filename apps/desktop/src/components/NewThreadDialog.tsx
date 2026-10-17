@@ -4,7 +4,7 @@
 
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
-import type { NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
+import type { AttachmentRules, NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { useCountdown } from '../hooks/useCountdown'
 import { useMediaInput } from '../hooks/useMediaInput'
@@ -13,6 +13,8 @@ import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { UploadOptions } from '../host/uploader'
 
 interface Props {
+  /** 書き込みにファイルを付けられる掲示板の決まり(ふたば)。あれば画像のボタンはアップロードではなく添付になる */
+  attach?: AttachmentRules
   boardName: string
   initialName: string
   initialMail: string
@@ -59,10 +61,11 @@ export default function NewThreadDialog(props: Props) {
       el.selectionStart = el.selectionEnd = start + text.length
     })
   }
-  const media = useMediaInput({ uploader: props.uploader, insert, onUploaded: props.onUploaded })
+  const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded })
   const cooldown = useCountdown(props.readyAt, props.cooldownMs)
   const cooling = cooldown.left > 0
-  const ready = title.trim() !== '' && body.trim() !== '' && !sending && !cooling
+  // ファイルを付けていれば、本文が空でも立てられる(画像だけのスレ)
+  const ready = title.trim() !== '' && (body.trim() !== '' || !!media.attachedView) && !sending && !cooling
 
   // 書き込みの長さ。板の上限を超えていたら、送る前に止める
   const measure = props.byteLength ? measurePost({ body, name, mail, subject: title }, props.limits, props.byteLength) : undefined
@@ -72,7 +75,10 @@ export default function NewThreadDialog(props: Props) {
     setSending(true)
     setResult(undefined)
     try {
-      setResult(await props.onSubmit({ title: title.trim(), name, mail, body }))
+      const files = await media.takeFiles()
+      const r = await props.onSubmit({ title: title.trim(), name, mail, body, ...(files.length > 0 && { files }) })
+      setResult(r)
+      if (r.status === 'ok') media.clearAttached()
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -135,6 +141,8 @@ export default function NewThreadDialog(props: Props) {
             {/* 画像と絵文字のボタン。本文の欄の右端にそろえる */}
             <div className="flex-shrink-0 flex items-center gap-0.5">{media.buttons}</div>
           </div>
+          {/* 書き込みに付けたファイル(ふたば) */}
+          {media.attachedView}
           {media.error && (
             <p className="flex items-center gap-1 text-xs text-c-heat-very-hot">
               <span className="material-symbols-outlined text-sm">error</span>

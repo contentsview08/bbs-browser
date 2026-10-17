@@ -2,7 +2,7 @@
 // アプリ側の処理は、関数そのものが変わらない ev(useEvent)で受け取り、ここでこのタブ向けに結びつける
 
 import { memo, useCallback, useMemo } from 'react'
-import type { Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
+import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import ThreadView, { type ScrollPosition } from './ThreadView'
 import type { NgRule, NgTarget } from '../utils/ng'
@@ -98,6 +98,8 @@ interface Props {
   voteLabel?: string
   /** 引用を文章で書く掲示板(コネクタの textQuotes) */
   textQuotes?: boolean
+  /** 書き込みにファイルを付けられる掲示板の決まり(コネクタの attachments) */
+  attachments?: AttachmentRules
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -122,6 +124,7 @@ function TabPane({
   anchorTarget,
   voteLabel,
   textQuotes,
+  attachments,
   splitPostIcon,
   ev,
 }: Props) {
@@ -188,6 +191,7 @@ function TabPane({
       votes={tab.votes}
       voteLabel={voteLabel}
       textQuotes={textQuotes}
+      attachments={attachments}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

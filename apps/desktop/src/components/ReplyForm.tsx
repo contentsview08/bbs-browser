@@ -3,7 +3,7 @@
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
-import type { PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
+import type { AttachmentRules, PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
 import { useCountdown } from '../hooks/useCountdown'
@@ -22,6 +22,8 @@ export interface ReplyFormHandle {
 }
 
 interface Props {
+  /** 書き込みにファイルを付けられる掲示板の決まり(ふたば)。あれば画像のボタンはアップロードではなく添付になる */
+  attach?: AttachmentRules
   /**
    * 本文が欄に収まるのに足りない高さ(px。マイナスなら余っている)。書くたびに知らせる。
    * 書き込み欄を下に置いているとき、欄を自動で伸び縮みさせるのに使う
@@ -134,7 +136,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   useImperativeHandle(ref, () => ({ insert, focus: () => textRef.current?.focus() }))
 
   // 画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字
-  const media = useMediaInput({ uploader: props.uploader, insert, onUploaded: props.onUploaded, disabled: !!props.disabled })
+  const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded, disabled: !!props.disabled })
 
   const sage = mail.trim().toLowerCase() === 'sage'
 
@@ -158,14 +160,19 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   // 書き込みの長さ。板の上限を超えていたら、送る前に止める
   const measure = props.byteLength ? measurePost({ body, name, mail }, props.limits, props.byteLength) : undefined
   const submit = async () => {
-    if (!body.trim() || sending || props.disabled || cooling) return
+    // ファイルを付けていれば、本文が空でも書き込める(画像だけのレス)
+    if ((!body.trim() && !media.attachedView) || sending || props.disabled || cooling) return
     if (measure && measure.over.length > 0) return setResult({ status: 'error', message: measure.over.join(' / ') })
     setSending(true)
     setResult(undefined)
     try {
-      const r = await props.onSubmit({ name, mail, body })
+      const files = await media.takeFiles()
+      const r = await props.onSubmit({ name, mail, body, ...(files.length > 0 && { files }) })
       setResult(r)
-      if (r.status === 'ok') clearBody()
+      if (r.status === 'ok') {
+        clearBody()
+        media.clearAttached()
+      }
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -220,6 +227,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         </p>
       )}
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
+      {/* 書き込みに付けたファイル(ふたば) */}
+      {media.attachedView && <div className="mb-2">{media.attachedView}</div>}
 
       {/* 名前・メールの行と本文の欄を一つの列にまとめ、書き込むボタンはその右(右レイアウトでは下)に置く。
           こうすると絵文字・画像のボタンの右端が本文の欄の右端とそろう */}

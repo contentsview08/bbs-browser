@@ -1656,6 +1656,7 @@ export default function App() {
                   anchorTarget={findConnector(t.thread.connectorId)?.anchorTarget}
                   voteLabel={findConnector(t.thread.connectorId)?.voteLabel}
                   textQuotes={findConnector(t.thread.connectorId)?.textQuotes}
+                  attachments={findConnector(t.thread.connectorId)?.attachments}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />
@@ -1731,6 +1732,7 @@ export default function App() {
 
       {newThreadOpen && board && (
         <NewThreadDialog
+          attach={findConnector(board.connectorId)?.attachments}
           boardName={settings.boardMeta[board.url]?.alias || board.name}
           initialName={settings.boardMeta[board.url]?.defaultName ?? settings.postName}
           initialMail={settings.boardMeta[board.url]?.defaultMail ?? settings.postMail}

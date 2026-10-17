@@ -476,6 +476,16 @@ export class LogStore {
 
   // ── 自動 NG の印(荒らし・荒らしじゃない) ──
 
+  /** 自動 NG の判断軸のためのログ。最近取ったスレのレスから limit 件(スレの名前は「板の URL タブ キー」) */
+  async corpusPosts(limit: number): Promise<{ thread: string; body: string }[]> {
+    const rows = await this.db.select<{ board_url: string; key: string; body: string }>(
+      `SELECT p.board_url, p.key, p.body FROM posts p JOIN threads t ON t.board_url = p.board_url AND t.key = p.key
+       ORDER BY t.fetched_at DESC LIMIT $1`,
+      [limit],
+    )
+    return rows.map((r) => ({ thread: `${r.board_url}\t${r.key}`, body: r.body }))
+  }
+
   async listTrollMarks(): Promise<TrollMarkRecord[]> {
     const rows = await this.db.select<{ body_key: string; label: number; body: string; board_url: string; reason: string | null; created_at: number }>(
       'SELECT body_key, label, body, board_url, reason, created_at FROM troll_marks ORDER BY created_at',

@@ -6,6 +6,7 @@
 // 印はスレをまたいで効く(本文が同じなら、別のスレでも同じ扱い)。印は DB に貯め、あとで判定モデルを育てる材料にも使う
 
 import type { Post } from '@bbs-browser/connectors'
+import { AXIS_LABEL, type Judgement } from './trollModel'
 
 export type AutoNgReason =
   /** 同じスレで同じ本文が count 回 */
@@ -14,6 +15,8 @@ export type AutoNgReason =
   | { kind: 'repeat' }
   /** ユーザーが「荒らし」の印を付けた本文 */
   | { kind: 'marked' }
+  /** 印から学んだ判定(utils/trollModel.ts)。p は確からしさ */
+  | { kind: 'learned'; p: number; axis?: Judgement['axis'] }
 
 /** ユーザーが付けた印。どちらも本文の鍵(bodyKey)の集まり */
 export interface TrollMarks {
@@ -29,6 +32,8 @@ export const DUP_MIN_LENGTH = 60
 /** 繰り返しで荒らしとみなす長さと、違う並びの割合 */
 export const REPEAT_MIN_LENGTH = 100
 export const REPEAT_RATIO = 0.25
+/** 学んだ判定で荒らしとみなす確からしさ(手元の 340 件で、荒らしの印 20 件なら 93% を拾い、普通の誤判定 1% 弱) */
+export const LEARNED_THRESHOLD = 0.7
 
 /** 比べるための本文。アンカーだけの行(>>12 など)と空白を除く(同じ文を別のレスへ向けて貼るので) */
 export function normalizeBody(body: string): string {
@@ -65,7 +70,7 @@ export function distinctRatio(text: string): number {
 }
 
 /** スレのレスを判定する。荒らしとみなしたレスの番号と理由 */
-export function judgeAutoNg(posts: Post[], marks: TrollMarks): Map<number, AutoNgReason> {
+export function judgeAutoNg(posts: Post[], marks: TrollMarks, learned?: (body: string) => Judgement): Map<number, AutoNgReason> {
   const norms = posts.map((p) => normalizeBody(p.body))
   const counts = new Map<string, number>()
   for (const t of norms) if (Array.from(t).length >= DUP_MIN_LENGTH) counts.set(t, (counts.get(t) ?? 0) + 1)
@@ -78,7 +83,9 @@ export function judgeAutoNg(posts: Post[], marks: TrollMarks): Map<number, AutoN
     if (marks.troll.has(key)) return void result.set(p.no, { kind: 'marked' })
     const count = counts.get(t) ?? 0
     if (count >= DUP_COUNT) return void result.set(p.no, { kind: 'dup', count })
-    if (Array.from(t).length >= REPEAT_MIN_LENGTH && distinctRatio(t) < REPEAT_RATIO) result.set(p.no, { kind: 'repeat' })
+    if (Array.from(t).length >= REPEAT_MIN_LENGTH && distinctRatio(t) < REPEAT_RATIO) return void result.set(p.no, { kind: 'repeat' })
+    const j = learned?.(p.body)
+    if (j && j.p >= LEARNED_THRESHOLD) result.set(p.no, { kind: 'learned', p: j.p, axis: j.axis })
   })
   return result
 }
@@ -92,5 +99,7 @@ export function reasonLabel(r: AutoNgReason): string {
       return '同じ文字の繰り返し'
     case 'marked':
       return '荒らしの印を付けた本文'
+    case 'learned':
+      return `学んだ判定 ${Math.round(r.p * 100)}%(${r.axis ? AXIS_LABEL[r.axis] : '文字の並びの癖'})`
   }
 }

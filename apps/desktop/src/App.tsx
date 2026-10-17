@@ -70,6 +70,7 @@ import { backgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
+import { MIN_TROLL_MARKS, buildCorpus, examplesFrom, predict, train, type Corpus, type TrollModel } from './utils/trollModel'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 /** 閉じたタブを覚えておく数(Shift+X で開き直す) */
@@ -291,7 +292,7 @@ export default function App() {
       setFavThreads(favThreadList)
       void s
         .listTrollMarks()
-        .then((list) => setTrollMarks(marksFrom(list)))
+        .then(setMarkRecords)
         .catch(backgroundError('自動 NG の印の読み込み'))
       // アカウントは裏でログインしておく(失敗したら通知だけ出し、起動は止めない)
       await loadAndAutoLogin(s, (a, r) =>
@@ -403,30 +404,48 @@ export default function App() {
   const [favView, setFavView] = useState(false)
   /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
   const [favCounts, setFavCounts] = useState(new Map<string, number>())
-  /** 自動 NG にユーザーが付けた印(本文の鍵の集まり)。起動時に DB から読む */
-  const [trollMarks, setTrollMarks] = useState<TrollMarks>(EMPTY_MARKS)
-  const marksFrom = (records: TrollMarkRecord[]): TrollMarks => ({
-    troll: new Set(records.filter((m) => m.troll).map((m) => m.bodyKey)),
-    notTroll: new Set(records.filter((m) => !m.troll).map((m) => m.bodyKey)),
-  })
+  /** 自動 NG にユーザーが付けた印。起動時に DB から読む */
+  const [markRecords, setMarkRecords] = useState<TrollMarkRecord[]>([])
+  const trollMarks = useMemo<TrollMarks>(
+    () =>
+      markRecords.length === 0
+        ? EMPTY_MARKS
+        : {
+            troll: new Set(markRecords.filter((m) => m.troll).map((m) => m.bodyKey)),
+            notTroll: new Set(markRecords.filter((m) => !m.troll).map((m) => m.bodyKey)),
+          },
+    [markRecords],
+  )
   /** 印を付ける・外す。画面にはすぐ出し、DB には裏で書く */
   const markTroll = (t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => {
     const key = bodyKey(p.body)
-    setTrollMarks((m) => {
-      const next = { troll: new Set(m.troll), notTroll: new Set(m.notTroll) }
-      next.troll.delete(key)
-      next.notTroll.delete(key)
-      if (troll === true) next.troll.add(key)
-      if (troll === false) next.notTroll.add(key)
-      return next
-    })
+    const record: TrollMarkRecord | undefined =
+      troll === null ? undefined : { bodyKey: key, troll, body: p.body, boardUrl: t.boardUrl, reason, createdAt: Date.now() }
+    setMarkRecords((list) => [...list.filter((m) => m.bodyKey !== key), ...(record ? [record] : [])])
     if (!store) return
-    const write =
-      troll === null
-        ? store.removeTrollMark(key)
-        : store.setTrollMark({ bodyKey: key, troll, body: p.body, boardUrl: t.boardUrl, reason, createdAt: Date.now() })
-    void write.catch(backgroundError('自動 NG の印の保存'))
+    void (record ? store.setTrollMark(record) : store.removeTrollMark(key)).catch(backgroundError('自動 NG の印の保存'))
   }
+  // 印から育つ判定(utils/trollModel.ts)。判断軸のためのログ(コーパス)は起動時に 1 回だけ作り、
+  // 印が変わるたびに学び直す(数百件の印でも 0.1 秒ほど)。荒らしの印が少ないうちは使わない
+  const [corpus, setCorpus] = useState<Corpus>()
+  useEffect(() => {
+    if (!store || !settings.autoNg || corpus) return
+    void store
+      .corpusPosts(40000)
+      .then((rows) => setCorpus(buildCorpus(rows)))
+      .catch(backgroundError('自動 NG のログの読み込み'))
+  }, [store, settings.autoNg, corpus])
+  const [trollModel, setTrollModel] = useState<TrollModel>()
+  useEffect(() => {
+    if (!corpus || markRecords.filter((m) => m.troll).length < MIN_TROLL_MARKS) return setTrollModel(undefined)
+    // 印を続けて付けたときに毎回学び直さないよう、少し待ってから
+    const timer = setTimeout(() => setTrollModel(train(examplesFrom(markRecords, corpus), corpus)), 300)
+    return () => clearTimeout(timer)
+  }, [corpus, markRecords])
+  const trollJudge = useMemo(
+    () => (trollModel && corpus ? (body: string) => predict(trollModel, body, corpus) : undefined),
+    [trollModel, corpus],
+  )
   /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
   const [listCounts, setListCounts] = useState(new Map<string, number>())
   useEffect(() => {
@@ -1728,6 +1747,7 @@ export default function App() {
                   settings={settings}
                   isNg={isNgPost}
                   trollMarks={trollMarks}
+                  trollJudge={trollJudge}
                   nonameName={boardInfos.get(t.thread.boardUrl)?.nonameName}
                   jumpTo={jump?.tabId === id ? jump : undefined}
                   favorite={favIds.has(id)}

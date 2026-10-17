@@ -5,6 +5,7 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
+import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
@@ -74,6 +75,8 @@ interface Props {
   isNg: (p: Post) => boolean
   /** 自動 NG にユーザーが付けた印 */
   trollMarks: TrollMarks
+  /** 印から学んだ判定(印が少ないうちは undefined) */
+  trollJudge?: (body: string) => Judgement
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
   onMarkTroll: (p: Post, troll: boolean | null, reason?: string) => void
   onRead: (no: number) => void
@@ -271,8 +274,8 @@ export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, onRead } = props
   /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
   const autoNg = useMemo(
-    () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks) : new Map<number, AutoNgReason>()),
-    [settings.autoNg, log.posts, props.trollMarks],
+    () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks, props.trollJudge) : new Map<number, AutoNgReason>()),
+    [settings.autoNg, log.posts, props.trollMarks, props.trollJudge],
   )
   // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
   const isNgRule = props.isNg

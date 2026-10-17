@@ -2,6 +2,7 @@
 // アプリ側の処理は、関数そのものが変わらない ev(useEvent)で受け取り、ここでこのタブ向けに結びつける
 
 import type { TrollMarks } from '../utils/autoNg'
+import type { Judgement } from '../utils/trollModel'
 import { memo, useCallback, useMemo } from 'react'
 import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
@@ -85,6 +86,8 @@ interface Props {
   isNg: (p: Post) => boolean
   /** 自動 NG にユーザーが付けた印 */
   trollMarks: TrollMarks
+  /** 印から学んだ判定(印が少ないうちは undefined) */
+  trollJudge?: (body: string) => Judgement
   nonameName?: string
   jumpTo?: { no: number; seq: number }
   /** お気に入りのスレか */
@@ -125,6 +128,7 @@ function TabPane({
   settings,
   isNg,
   trollMarks,
+  trollJudge,
   nonameName,
   jumpTo,
   favorite,
@@ -173,6 +177,7 @@ function TabPane({
       settings={settings}
       isNg={isNg}
       trollMarks={trollMarks}
+      trollJudge={trollJudge}
       onMarkTroll={onMarkTroll}
       onRead={onRead}
       onRefresh={ev.refresh}

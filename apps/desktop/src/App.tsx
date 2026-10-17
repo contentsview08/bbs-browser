@@ -47,7 +47,8 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { useSettings, type ReplyLayout, type SavedTab } from './ui/settings'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
-import { useNavHistory } from './hooks/useNavHistory'
+import { useViewState } from './hooks/useViewState'
+import { canBack, canForward, nextAfterClose, selectQuietly, showList, showThread, step } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
 import { useNotifications } from './hooks/useNotifications'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -134,7 +135,6 @@ export default function App() {
   const [states, setStates] = useState(new Map<string, ThreadState>())
   const [history, setHistory] = useState<HistoryEntry[]>()
   const [tabs, setTabs] = useState<Tab[]>([])
-  const [activeId, setActiveId] = useState<string>()
   /** Ctrl/Shift+クリックで選んだタブ */
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set())
   const [refreshingAll, setRefreshingAll] = useState(false)
@@ -180,28 +180,38 @@ export default function App() {
   const narrow = useNarrow()
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
   const single = settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
-  const [listOpen, setListOpen] = useState(false)
+  // ── 画面の状態 ──
+  // 選んでいるタブ・1 画面でスレ一覧を出しているか・戻る/進むの履歴。3 つは utils/viewState.ts の関数でいっしょに変える
+  const { view, update: updateView } = useViewState<NavValue>()
+  const { activeId, listOpen } = view.current
 
-  // ── 戻る・進む ──
   // 見たもの(スレ一覧・スレ)を見た順に覚え、上の帯の ← →・マウスの戻る/進むボタン・Alt+← → で行き来する
-  const nav = useNavHistory<NavValue>((v) => applyNav(v))
-  /** 覚えておいた場所へ戻す(戻る・進むのとき) */
+  const goNav = (d: -1 | 1) => {
+    const r = step(view.current, d)
+    if (!r) return
+    updateView(() => r.state)
+    applyNav(r.entry.value)
+  }
+  /** 覚えておいた場所を見せる(戻る・進むのとき。履歴には積まない) */
   const applyNav = (v: NavValue) => {
     if (v.type === 'thread') {
       const open = tabsRef.current.find((t) => t.id === threadId(v.thread))
-      if (open) {
-        selectTab(open.id)
-        setListOpen(false)
-      } else void openThread(v.thread) // 閉じたタブのスレは開き直す
+      if (open) selectTab(open.id, false)
+      else void openThread(v.thread, { record: false }) // 閉じたタブのスレは開き直す
       return
     }
     const cur = currentListTarget()
     const same =
       cur?.kind === v.list.kind && (v.list.kind !== 'board' || (cur.kind === 'board' && cur.board.url === v.list.board.url))
-    if (same) setListOpen(true)
-    else if (v.list.kind === 'board') void openBoard(v.list.board)
-    else if (v.list.kind === 'history') void openHistory()
-    else void openFavThreads()
+    if (same) updateView((s) => showList(s, undefined))
+    else if (v.list.kind === 'board') void openBoard(v.list.board, false)
+    else if (v.list.kind === 'history') void openHistory(false)
+    else void openFavThreads(false)
+  }
+  /** いま出しているスレ一覧へ戻る(1 画面のとき。スレタイの左の ← や、削除したあと) */
+  const returnToList = () => {
+    const cur = currentListTarget()
+    updateView((s) => showList(s, cur && listEntry(cur)))
   }
   /** 1 画面のとき、スレ表示を(スレ一覧の上に)出しているか。開いているスレがあって、一覧に戻っていないとき */
   const threadShown = (activeId !== undefined) && !listOpen
@@ -277,12 +287,12 @@ export default function App() {
   const [newSince, setNewSince] = useState<number>()
   const lastBoardUrl = useRef(settings.lastBoardUrl)
   lastBoardUrl.current = settings.lastBoardUrl
-  /** 板のスレ一覧を開く。record が false(一覧の更新)なら、戻る・進むの履歴には覚えない */
+  /** 板のスレ一覧を開く。record が false(一覧の更新・戻る/進む)なら、戻る・進むの履歴には覚えない */
   const openBoard = (b: Board, record = true) =>
     run('threads', async () => {
       if (!store) return
-      if (record) nav.push(listEntry({ kind: 'board', board: b }))
-      setListOpen(true) // 1 画面のとき、選んだ板のスレ一覧を見せる
+      // 1 画面のとき、選んだ板のスレ一覧を見せる
+      updateView((s) => showList(s, record ? listEntry({ kind: 'board', board: b }) : undefined))
       setBoard(b)
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
@@ -336,10 +346,9 @@ export default function App() {
       await reloadRecent(store)
     })
 
-  const openHistory = () =>
+  const openHistory = (record = true) =>
     run('threads', async () => {
-      nav.push(listEntry({ kind: 'history' }))
-      setListOpen(true)
+      updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
       setFavView(false)
       if (store) setHistory(await store.history())
       setHistoryVersion((v) => v + 1)
@@ -457,10 +466,9 @@ export default function App() {
       setFavVersion((v) => v + 1)
     })
 
-  const openFavThreads = () =>
+  const openFavThreads = (record = true) =>
     run('threads', async () => {
-      nav.push(listEntry({ kind: 'fav' }))
-      setListOpen(true)
+      updateView((s) => showList(s, record ? listEntry({ kind: 'fav' }) : undefined))
       setHistory(undefined)
       setFavView(true)
       if (store) await reloadFavThreads(store)
@@ -594,57 +602,50 @@ export default function App() {
       notify({ icon: 'error', title: 'スレが見つかりませんでした', body: `${t.title || t.key}\ndat 落ちして過去ログもないか、ない番号のスレです` })
   }
 
-  const selectTab = (id: string) => {
-    // 1 画面でスレ一覧を出しているときにタブを選んだら(タブ・Ctrl+Tab・通知から)、そのスレを見せる。
-    // 見せないまま戻るの履歴にだけ積むと、あとで戻ったときに、もう置き換えたスレを新しいタブで開き直してしまう
-    setListOpen(false)
-    setActiveId(id)
+  /** タブを選んで、そのスレを見せる(1 画面でスレ一覧を出していても、スレ表示に切り替える)。record が false なら履歴に積まない */
+  const selectTab = (id: string, record = true) => {
     const tab = tabsRef.current.find((t) => t.id === id)
-    if (tab) nav.push(threadEntry(tab.thread))
+    updateView((s) => showThread(s, id, record && tab ? threadEntry(tab.thread) : undefined))
     if (store && tab && !tab.log) void run('posts', () => loadTab(store, tab.thread))
   }
 
-  const openThread = (t: ThreadSummary, opts: { newTab?: boolean } = {}) =>
+  /** スレを開く。record が false(戻る・進む)なら履歴に積まない */
+  const openThread = (t: ThreadSummary, opts: { newTab?: boolean; record?: boolean } = {}) =>
     run('posts', async () => {
       if (!store) return
-      // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
-      setListOpen(false)
-      nav.push(threadEntry(t))
       const id = threadId(t)
       const existing = tabsRef.current.find((x) => x.id === id)
       if (existing) {
         // もう開いているスレは、そのタブに移って差分を取りに行く(スレ一覧で新着があるのを見て押したとき)
-        selectTab(id)
+        selectTab(id, opts.record ?? true)
         if (existing.log) await fetchThread(store, existing.thread)
         return
       }
       // タブを使わないときは、いつも今のスレを置き換える
       const inNew = settings.tabsEnabled && (opts.newTab ?? settings.openInNewTab)
-      const current = activeId
+      const current = view.current.activeId
       setTabs((ts) => {
         const i = ts.findIndex((x) => x.id === current)
         if (i < 0) return [...ts, newTab(t)]
         if (!inNew) return ts.map((x, j) => (j === i ? newTab(t) : x))
         return [...ts.slice(0, i + 1), newTab(t), ...ts.slice(i + 1)]
       })
-      setActiveId(id)
+      // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
+      updateView((s) => showThread(s, id, (opts.record ?? true) ? threadEntry(t) : undefined))
       await loadTab(store, t)
       if (history) setHistory(await store.history())
       await reloadRecent(store)
     })
 
   /** タブを閉じる。stayOnList なら(1 画面でスレ一覧に戻るとき)、隣のタブは裏で選ぶだけにして、スレ表示も戻るの履歴も変えない */
-  const closeTabs = (ids: string[], stayOnList = single && listOpen) => {
+  const closeTabs = (ids: string[], stayOnList = single && view.current.listOpen) => {
     const ts = tabsRef.current
-    const rest = ts.filter((t) => !ids.includes(t.id))
-    setTabs(rest)
-    if (activeId && ids.includes(activeId)) {
-      // 閉じたタブの右隣(なければ左隣)へ移る
-      const idx = ts.findIndex((t) => t.id === activeId)
-      const next = rest[Math.min(idx, rest.length - 1)]
-      if (next && !stayOnList) selectTab(next.id)
-      else setActiveId(next?.id)
-    }
+    setTabs(ts.filter((t) => !ids.includes(t.id)))
+    // 選んでいたタブを閉じたら、右隣(なければ左隣)へ移る
+    const next = nextAfterClose(view.current.activeId, ts.map((t) => t.id), ids)
+    if (!next.changed) return
+    if (next.id && !stayOnList) selectTab(next.id)
+    else updateView((s) => selectQuietly(s, next.id))
   }
 
   /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
@@ -777,8 +778,8 @@ export default function App() {
     const list = favView ? refreshFavThreads : history ? refreshHistory : board ? () => openBoard(board, false) : undefined
     if (list) void manualListRefresh(list)()
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: nav.back, forward: nav.forward })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: nav.back, forward: nav.forward }
+  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: () => goNav(-1), forward: () => goNav(1) })
+  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, back: () => goNav(-1), forward: () => goNav(1) }
   // マウスの戻る・進むボタン(横のボタン)。WebView がページの戻る・進むをしないよう、押したときに止める
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -876,7 +877,7 @@ export default function App() {
     setTabs(ts)
     const active = ts.find((t) => t.id === settings.activeTab) ?? ts[0]
     if (active) {
-      setActiveId(active.id)
+      updateView((s) => selectQuietly(s, active.id))
       void run('posts', () => loadTab(store, active.thread))
     }
   }, [settingsLoaded, store])
@@ -1170,18 +1171,12 @@ export default function App() {
     changeReplyLayout: useEvent((layout: ReplyLayout) => updateSetting('replyLayout', layout)),
     resizeReply: useEvent((key: 'replyHeight' | 'replyWidth', size: number) => updateSetting(key, size)),
     setReplyCollapsed: useEvent((collapsed: boolean) => updateSetting('replyCollapsed', collapsed)),
-    backToList: useEvent(() => {
-      setListOpen(true)
-      const cur = currentListTarget()
-      if (cur) nav.push(listEntry(cur))
-    }),
+    backToList: useEvent(() => returnToList()),
     // スレ表示の削除ボタン。1 画面のときは、消したあとスレ一覧に戻る(タブの × や Delete キーは、隣のタブに移る)
     deleteLog: useEvent((id: string) => {
       if (!single) return void deleteLogs([id])
       void deleteLogs([id], [], true)
-      setListOpen(true)
-      const cur = currentListTarget()
-      if (cur) nav.push(listEntry(cur))
+      returnToList()
     }),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
       setHasUploads(true)
@@ -1264,10 +1259,10 @@ export default function App() {
       <AddressBar
         currentUrl={currentUrl}
         onOpen={(url) => void openUrlInApp(url)}
-        onBack={nav.back}
-        onForward={nav.forward}
-        canBack={nav.canBack}
-        canForward={nav.canForward}
+        onBack={() => goNav(-1)}
+        onForward={() => goNav(1)}
+        canBack={canBack(view.current)}
+        canForward={canForward(view.current)}
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
@@ -1293,7 +1288,7 @@ export default function App() {
         onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         boardMeta={settings.boardMeta}
         historyActive={history !== undefined}
-        onOpenHistory={openHistory}
+        onOpenHistory={() => void openHistory()}
         favThreadsActive={favView}
         favThreadsNew={favNewTotal}
         onOpenFavThreads={() => void openFavThreads()}
@@ -1325,10 +1320,7 @@ export default function App() {
                   ? 'スレッドがありません'
                   : '左のお気に入りから板を選んでください'
           }
-          onOpen={(t) => {
-            setListOpen(false)
-            void openThread(t)
-          }}
+          onOpen={(t) => void openThread(t)}
           onRefresh={
             favView
               ? manualListRefresh(refreshFavThreads)

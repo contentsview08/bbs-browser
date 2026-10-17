@@ -172,6 +172,13 @@ describe('ふたばのコネクタ', () => {
     expect(posted[0].headers?.Referer).toBe(`${BOARD}futaba.htm`)
   })
 
+  it('そうだね: /sd.php?板名.番号 を呼んで、新しい数を返す', async () => {
+    const { ctx, got } = fake({ 'https://may.2chan.net/sd.php?b.1003': { body: '5' } })
+    const n = await futabaConnector.vote!(thread, { no: 2, ref: 1003, name: '', mail: '', date: '', body: '' }, ctx)
+    expect(n).toBe(5)
+    expect(got[0].url).toBe('https://may.2chan.net/sd.php?b.1003')
+  })
+
   it('添付の決まり: 1 つまで、8000KB まで、画像と動画', () => {
     expect(futabaConnector.attachments).toMatchObject({ maxFiles: 1, maxBytes: 8_192_000 })
     expect(futabaConnector.attachments?.types).toContain('video/mp4')

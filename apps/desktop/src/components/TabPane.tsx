@@ -54,6 +54,8 @@ export interface TabEvents {
   openThread: (t: ThreadSummary) => void
   /** スレの板のスレ一覧を開く(︙ の「板に戻る」) */
   openBoardOf: (t: ThreadSummary) => void
+  /** レスを評価する(ふたばの「そうだね」)。新しい数をタブに写す */
+  vote: (thread: ThreadSummary, post: Post) => void
   /** スレ表示のヘッダーの高さを保存する(0 なら既定) */
   setThreadHeaderHeight: (height: number) => void
   toggleFavoriteThread: (t: ThreadSummary) => void
@@ -100,6 +102,8 @@ interface Props {
   textQuotes?: boolean
   /** 書き込みにファイルを付けられる掲示板の決まり(コネクタの attachments) */
   attachments?: AttachmentRules
+  /** レスを評価できる掲示板か(コネクタの vote) */
+  canVote?: boolean
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   ev: TabEvents
@@ -125,6 +129,7 @@ function TabPane({
   voteLabel,
   textQuotes,
   attachments,
+  canVote,
   splitPostIcon,
   ev,
 }: Props) {
@@ -137,6 +142,7 @@ function TabPane({
   const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body) }), [ev, thread])
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
   const onOpenBoard = useCallback(() => ev.openBoardOf(thread), [ev, thread])
+  const onVote = useCallback((p: Post) => ev.vote(thread, p), [ev, thread])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
@@ -192,6 +198,7 @@ function TabPane({
       voteLabel={voteLabel}
       textQuotes={textQuotes}
       attachments={attachments}
+      onVote={canVote ? onVote : undefined}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

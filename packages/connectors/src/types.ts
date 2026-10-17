@@ -223,6 +223,8 @@ export interface Connector {
   attachments?: AttachmentRules
   /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
   maxPosts?: number
+  /** レスを評価する(ふたばの「そうだね」を押す)。新しい評価の数を返す。評価のない掲示板は持たない */
+  vote?(thread: ThreadSummary, post: Post, ctx: ConnectorContext): Promise<number>
   /** 引用を「>前のレスの文章」の形で書く掲示板(ふたば)。引用した文章から、元のレスを探してつなぐ */
   textQuotes?: boolean
   /** レスの評価(FetchPostsResult.votes)の呼び名。ふたばは「そうだね」。評価のない掲示板は付けない */

@@ -106,6 +106,8 @@ interface Props {
   textQuotes?: boolean
   /** 書き込みにファイルを付けられる掲示板の決まり(コネクタの attachments) */
   attachments?: AttachmentRules
+  /** レスを評価する(ふたばの「そうだね」を押す)。評価のない掲示板は undefined */
+  onVote?: (post: Post) => void
   /** レスの評価の数と呼び名(ふたばのそうだね)。キーはレスの画面の番号 */
   votes?: Map<number, number>
   voteLabel?: string
@@ -1238,11 +1240,12 @@ export default function ThreadView(props: Props) {
             }
           : undefined,
         toNo: resolveAnchor,
+        onVote: props.onVote,
         onQuickReply: canReply ? (no, text) => void quickPostRef.current(`${replyText(no)}${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor, quoteLinks],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, resolveAnchor, quoteLinks, props.onVote],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */

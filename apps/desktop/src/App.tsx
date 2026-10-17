@@ -1393,6 +1393,19 @@ export default function App() {
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
     // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
+    // そうだね: 押したら、返ってきた新しい数をタブに写す
+    vote: useEvent((t: ThreadSummary, p: Post) => {
+      const c = findConnector(t.connectorId)
+      if (!c?.vote) return
+      void c.vote(t, p, ctx).then(
+        (n) => {
+          const id = threadId(t)
+          const key = p.ref ?? p.no
+          setTabs((ts) => ts.map((x) => (x.id === id ? { ...x, votes: new Map(x.votes ?? []).set(key, n) } : x)))
+        },
+        backgroundError('そうだね'),
+      )
+    }),
     openBoardOf: useEvent((t: ThreadSummary) => {
       const fav = favorites?.find((b) => b.url === t.boardUrl)
       if (fav) void openBoard(fav)
@@ -1657,6 +1670,7 @@ export default function App() {
                   voteLabel={findConnector(t.thread.connectorId)?.voteLabel}
                   textQuotes={findConnector(t.thread.connectorId)?.textQuotes}
                   attachments={findConnector(t.thread.connectorId)?.attachments}
+                  canVote={!!findConnector(t.thread.connectorId)?.vote}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
                 />

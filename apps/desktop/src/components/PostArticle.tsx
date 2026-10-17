@@ -38,6 +38,8 @@ export interface PostHandlers extends BodyHandlers {
   onAddNg: (rule: NgRule) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
+  /** レスを評価する(ふたばの「そうだね」を押す)。評価のない掲示板は undefined */
+  onVote?: (post: Post) => void
   /** NG の画面を、元の文字を入れた状態で開く */
   onNgDraft?: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
   /** >>番号 を付けてすぐ書き込む(「草」ボタン)。書き込めないときは undefined */
@@ -342,11 +344,26 @@ function PostArticle(props: Props) {
         {idCount >= 2 && <span className="text-xs">({idCount})</span>}
       </button>
     )
-  /** 評価の数(ふたばの「そうだね×18」)。多いほど目立つ色に */
-  const voteChip = !!props.votes && props.votes > 0 && (
-    <span className={`flex-shrink-0 text-[11px] font-bold tabular-nums ${heatClass(props.votes) || 'text-mark-hot'}`} title={`${props.voteLabel ?? '評価'} ${props.votes}`}>
-      {props.voteLabel ?? '+'}×{props.votes}
-    </span>
+  /** 評価の数(ふたばの「そうだね×18」)。多いほど目立つ色に。押せる掲示板では、押すと評価する(まだなければ「+」) */
+  const votes = props.votes ?? 0
+  const voteChip = handlers.onVote ? (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        handlers.onVote?.(post)
+      }}
+      className={`flex-shrink-0 text-[11px] font-bold tabular-nums hover:underline ${votes > 0 ? heatClass(votes) || 'text-mark-hot' : 'text-c-text-muted'}`}
+      title={`${props.voteLabel ?? '評価'}を押す`}
+    >
+      {votes > 0 ? `${props.voteLabel ?? '+'}×${votes}` : '+'}
+    </button>
+  ) : (
+    votes > 0 && (
+      <span className={`flex-shrink-0 text-[11px] font-bold tabular-nums ${heatClass(votes) || 'text-mark-hot'}`} title={`${props.voteLabel ?? '評価'} ${votes}`}>
+        {props.voteLabel ?? '+'}×{votes}
+      </span>
+    )
   )
   const toOwnChip = props.isReplyToOwn && (
     <span

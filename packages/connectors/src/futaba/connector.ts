@@ -283,6 +283,15 @@ export const futabaConnector: Connector = {
     return sendRegist(threadWebUrl(thread), thread.boardUrl, { resto: thread.key }, input, ctx)
   },
 
+  // そうだね: /sd.php?板名.番号 を GET すると、新しい数が返る(ふたばの JavaScript の sd() と同じ)
+  async vote(thread, post, ctx) {
+    const board = new URL(thread.boardUrl).pathname.split('/').filter(Boolean)[0]
+    const res = await ctx.http.get(`${originOf(thread.boardUrl)}/sd.php?${board}.${post.ref ?? post.no}`, { headers: { ...BROWSER, Referer: threadWebUrl(thread) } })
+    if (res.status !== 200) throw new Error(`そうだねを送れませんでした(HTTP ${res.status})`)
+    const n = parseInt(new TextDecoder().decode(res.body), 10)
+    return Number.isFinite(n) ? n : 0
+  },
+
   async createThread(board, input, ctx): Promise<PostResult> {
     // スレ立ては、板の入口のページのフォームから(resto なし、題名を sub に)。画像が要る板が多い
     return sendRegist(`${board.url}futaba.htm`, board.url, { sub: input.title }, input, ctx)

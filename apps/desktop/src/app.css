@@ -680,13 +680,14 @@ input[type='checkbox']:indeterminate {
   position: absolute;
   top: 3px;
   bottom: 3px;
-  /* 左はウィンドウの端まで。回り込んだ線の左側は、ウィンドウの左端と重ねる(余白を作らない) */
+  /* 左はウィンドウの端まで(余白を作らない)。回り込んだ線の左の辺はウィンドウの左端に重ね、上下の線とは丸くつなぐ */
   left: 0;
   width: var(--sb-w, 64px);
   pointer-events: none;
   background: var(--c-nav-selected);
-  border-top: 1px solid var(--c-border);
-  border-bottom: 1px solid var(--c-border);
+  border: 1px solid var(--c-border);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
   clip-path: inset(-12px 0 -12px 100%);
   opacity: 0;
   transition:

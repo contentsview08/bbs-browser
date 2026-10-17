@@ -90,7 +90,7 @@ function Row(props: {
       className={`relative w-full h-14 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
     >
       <NavNotch on={!!props.active} />
-      <span className="relative w-16 flex-shrink-0 flex items-center justify-center">
+      <span className="relative w-[64px] flex-shrink-0 flex items-center justify-center">
         <span className="relative">
           <span className={`material-symbols-outlined text-[28px] ${props.filled ? 'fill' : ''}`} style={props.color ? { color: props.color } : undefined}>
             {props.icon}
@@ -126,7 +126,7 @@ function SmallRow(props: {
   return (
     <div className="group flex items-center h-9 pr-2 hover:bg-c-surface2 transition-colors">
       <button type="button" onClick={props.onClick} className="flex-1 min-w-0 h-full flex items-center text-left" title={props.title ?? props.label}>
-        <span className="w-16 flex-shrink-0 flex items-center justify-center">{props.icon}</span>
+        <span className="w-[64px] flex-shrink-0 flex items-center justify-center">{props.icon}</span>
         <span className={`flex-1 min-w-0 text-sm truncate ${props.muted ? 'text-c-text-muted group-hover:text-c-accent' : 'text-c-text-body'}`}>
           {props.label}
         </span>
@@ -283,7 +283,7 @@ export default function Sidebar(props: Props) {
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
         {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
         <div className="h-10 flex-shrink-0 flex items-center select-none">
-          <span className="w-16 flex-shrink-0 flex items-center justify-center">
+          <span className="w-[64px] flex-shrink-0 flex items-center justify-center">
             <button
               type="button"
               onClick={() => {
@@ -343,7 +343,7 @@ export default function Sidebar(props: Props) {
                     {/* 選んでいる板の印。中身を押さないよう、重ねて描く(ファビコンが右へずれないように) */}
                     {!dragging && <NavNotch on={active} />}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
-                    <span className="relative w-16 flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
+                    <span className="relative w-[64px] flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
                       <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
                       {/* 板名は列の真ん中に置き、入りきらなければ末尾を「…」で略す。
                           幅いっぱいの箱で中央寄せにすると、長い名前は左右両側へはみ出して切れるので、

@@ -318,7 +318,7 @@ export default function Sidebar(props: Props) {
                       transform: `translateY(${dragging ? drag.dy : shiftOf(i)}px)`,
                       transition: dragging ? 'none' : 'transform 150ms ease-out',
                     }}
-                    className={`group relative flex items-center cursor-pointer select-none transition-colors hover:bg-c-surface2 ${
+                    className={`group relative flex items-center cursor-pointer select-none transition-colors hover:bg-c-surface3 ${
                       dragging ? 'z-10 bg-c-surface2 shadow-lg' : ''
                     }`}
                   >
@@ -327,7 +327,7 @@ export default function Sidebar(props: Props) {
                       <span
                         className="absolute inset-0 pointer-events-none"
                         style={{
-                          background: 'color-mix(in srgb, var(--c-accent) 10%, transparent)',
+                          background: 'color-mix(in srgb, var(--c-accent) 18%, transparent)',
                           boxShadow: 'inset 4px 0 0 var(--c-accent)',
                         }}
                       />
@@ -344,7 +344,10 @@ export default function Sidebar(props: Props) {
                             stripNames ? 'opacity-100' : 'opacity-0'
                           }`}
                         >
-                          <span className="max-w-full truncate text-[9px] leading-tight text-c-text-muted">{nameOf(b)}</span>
+                          {/* 小さい字でも読めるよう、太字で、薄い色にしない(選んでいる板はいちばん濃く) */}
+                          <span className={`max-w-full truncate text-[10px] font-bold leading-tight ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
+                            {nameOf(b)}
+                          </span>
                         </span>
                       )}
                     </span>

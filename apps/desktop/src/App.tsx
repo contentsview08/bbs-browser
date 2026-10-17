@@ -1266,6 +1266,8 @@ export default function App() {
       />
       <div className="flex-1 min-h-0 flex">
       <Sidebar
+        width={settings.sidebarWidth}
+        onResize={(w) => updateSetting('sidebarWidth', w)}
         favorites={favorites ?? []}
         onReorderFavorites={(urls) =>
           void run(null, async () => {

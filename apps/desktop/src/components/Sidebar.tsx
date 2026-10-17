@@ -36,6 +36,9 @@ interface Props {
   onManageBoards: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** 広げたときの幅(右端をつかんで変えられる)。離したときに onResize で知らせる */
+  width: number
+  onResize: (width: number) => void
   /** 板ごとの別名・ファビコン */
   boardMeta: Record<string, BoardMeta>
   /** しまったときに、板のアイコンの下に板名を小さく出す */
@@ -43,7 +46,9 @@ interface Props {
 }
 
 const COLLAPSED = 64
-const EXPANDED = 256
+/** 広げたときの幅の範囲 */
+const MIN_WIDTH = 200
+const MAX_WIDTH = 480
 /** これだけ動かしたらドラッグとみなす */
 const DRAG_PX = 4
 
@@ -130,6 +135,32 @@ function Chevron({ open }: { open: boolean }) {
 const PEEK_DELAY_MS = 500
 
 export default function Sidebar(props: Props) {
+  // 広げたときの幅。つかんで動かしている間はここだけ変え、離したときに保存してもらう
+  const [width, setWidth] = useState(props.width)
+  const [resizing, setResizing] = useState(false)
+  useEffect(() => setWidth(props.width), [props.width])
+  const EXPANDED = width
+  const onResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = width
+    let latest = startWidth
+    setResizing(true)
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: MouseEvent) => {
+      latest = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + ev.clientX - startX))
+      setWidth(latest)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+      setResizing(false)
+      props.onResize(latest)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(false)
   // しまっているときに、マウスを乗せて一時的に開いているか。開いている間は画面の上に重ねる(ほかを押しのけない)
@@ -208,7 +239,7 @@ export default function Sidebar(props: Props) {
     // (外枠の幅を少しずつ変えると、右の本体の配置とスレ表示の測り直しが 1 コマごとに走ってカクつくため)
     <div className="relative flex-shrink-0" style={{ width: props.collapsed ? COLLAPSED : EXPANDED }}>
     <aside
-      className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar transition-[width] duration-200 ease-out ${
+      className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar ${resizing ? '' : 'transition-[width] duration-200 ease-out'} ${
         peek ? 'z-40 shadow-2xl' : 'z-30'
       }`}
       style={{ width: collapsed ? COLLAPSED : EXPANDED }}
@@ -223,6 +254,14 @@ export default function Sidebar(props: Props) {
       }}
     >
       <span className="absolute right-0 top-0 bottom-0 w-px bg-c-border pointer-events-none" />
+      {/* 右端をつかんで幅を変える(広げているときだけ) */}
+      {!props.collapsed && (
+        <div
+          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-c-accent/30 transition-colors z-20"
+          onMouseDown={onResizeStart}
+          title="ドラッグで幅を変える"
+        />
+      )}
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
         {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
         <div className="h-10 flex-shrink-0 flex items-center select-none">

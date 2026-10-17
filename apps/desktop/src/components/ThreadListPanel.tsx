@@ -305,9 +305,18 @@ export default function ThreadListPanel(props: Props) {
   ]
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
+  const onSelectCard = useEvent((t: ThreadSummary, on: boolean) =>
+    setSelected((s) => {
+      const next = new Set(s)
+      if (on) next.add(threadId(t))
+      else next.delete(threadId(t))
+      return next
+    }),
+  )
+
   const renderThread = (t: ThreadSummary) => {
     const id = threadId(t)
-    const card = (
+    return (
       <ThreadCard
         key={id}
         thread={t}
@@ -322,28 +331,9 @@ export default function ThreadListPanel(props: Props) {
         isFavorite={props.favoriteIds?.has(id) ?? false}
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
+        selected={selectable ? selected.has(id) : undefined}
+        onSelect={selectable ? onSelectCard : undefined}
       />
-    )
-    if (!selectable) return card
-    return (
-      <div key={id} className="flex items-stretch">
-        <label className="flex items-center px-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={selected.has(id)}
-            onChange={(e) =>
-              setSelected((s) => {
-                const next = new Set(s)
-                if (e.target.checked) next.add(id)
-                else next.delete(id)
-                return next
-              })
-            }
-            className="rounded"
-          />
-        </label>
-        <div className="flex-1 min-w-0">{card}</div>
-      </div>
     )
   }
 
@@ -414,10 +404,26 @@ export default function ThreadListPanel(props: Props) {
             </div>
           </div>
 
-          {selectable && (
-            <div className="flex items-center gap-2 px-2 py-1.5 border-b border-c-border text-xs">
-              {/* 一番左のチェックボックスで、すべて選ぶ・すべて外す。一部だけのときは「－」 */}
-              <label className="flex items-center gap-2 cursor-pointer select-none">
+          {selectable && selected.size > 0 && (
+            <div className="flex items-center gap-2 px-4 py-1.5 border-b border-c-border text-xs">
+              <span className="text-c-text-muted">{selected.size} 件選択中</span>
+              <button
+                type="button"
+                className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
+                onClick={() => {
+                  props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
+                  setSelected(new Set())
+                }}
+              >
+                <span className="material-symbols-outlined text-sm">delete</span>
+                ログを削除
+              </button>
+            </div>
+          )}
+          <div className="flex items-stretch px-4 border-b border-c-border text-sm font-medium">
+            {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
+            {selectable && (
+              <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">
                 <input
                   type="checkbox"
                   ref={(el) => {
@@ -427,63 +433,49 @@ export default function ThreadListPanel(props: Props) {
                   onChange={(e) => setSelected(e.target.checked ? new Set(visible.map(threadId)) : new Set())}
                   className="rounded"
                 />
-                <span className="text-c-text-muted">{selected.size > 0 ? `${selected.size} 件選択中` : 'すべて選択'}</span>
               </label>
-              {selected.size > 0 && (
-                <button
-                  type="button"
-                  className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
-                  onClick={() => {
-                    props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
-                    setSelected(new Set())
-                  }}
-                >
-                  <span className="material-symbols-outlined text-sm">delete</span>
-                  ログを削除
-                </button>
-              )}
-            </div>
-          )}
-          <div className="grid grid-cols-3 px-4 border-b border-c-border text-sm font-medium">
-            <button
-              type="button"
-              onClick={() => setUnreadOnly((v) => !v)}
-              className={`${TAB} ${unreadOnly ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-              title="ログがあり、新着レスのあるスレだけを出す"
-            >
-              <span className="material-symbols-outlined text-base leading-none">mark_email_unread</span>
-              未読
-              {unreadTotal > 0 && (
-                <span
-                  className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                  style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
-                >
-                  +{unreadTotal}
-                </span>
-              )}
-              {unreadOnly && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-            </button>
-            {[
-              { mode: 'momentum' as const, label: '勢い順', icon: 'local_fire_department' },
-              { mode: 'newest' as const, label: '新しい順', icon: 'schedule' },
-            ].map(({ mode, label, icon }) => {
-              const active = sort?.mode === mode
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setSort((s) => cycleSort(s, mode))}
-                  className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-                >
-                  <span className="material-symbols-outlined text-base leading-none">{icon}</span>
-                  {label}
-                  <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
-                    {active && sort.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+            )}
+            <div className="flex-1 grid grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setUnreadOnly((v) => !v)}
+                className={`${TAB} ${unreadOnly ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+                title="ログがあり、新着レスのあるスレだけを出す"
+              >
+                <span className="material-symbols-outlined text-base leading-none">mark_email_unread</span>
+                未読
+                {unreadTotal > 0 && (
+                  <span
+                    className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                    style={{ background: 'var(--c-accent-self)', color: 'var(--c-accent-self-text)' }}
+                  >
+                    +{unreadTotal}
                   </span>
-                  {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-                </button>
-              )
-            })}
+                )}
+                {unreadOnly && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+              </button>
+              {[
+                { mode: 'momentum' as const, label: '勢い順', icon: 'local_fire_department' },
+                { mode: 'newest' as const, label: '新しい順', icon: 'schedule' },
+              ].map(({ mode, label, icon }) => {
+                const active = sort?.mode === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSort((s) => cycleSort(s, mode))}
+                    className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+                  >
+                    <span className="material-symbols-outlined text-base leading-none">{icon}</span>
+                    {label}
+                    <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
+                      {active && sort.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                    </span>
+                    {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
 

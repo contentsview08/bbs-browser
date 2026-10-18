@@ -24,7 +24,7 @@ import DragEdge from './DragEdge'
 import PeekPopup from './PeekPopup'
 import { followDelta, isDoublePress, isNear, isSeen, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
 
-type SortMode = 'momentum' | 'newest' | 'count'
+export type SortMode = 'momentum' | 'newest' | 'count'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
 
 /** 同じタブを押すたびに 降順 → 昇順 → 解除(subject.txt の並び) と巡る */
@@ -82,6 +82,13 @@ interface Props {
   placements: Record<string, Placement>
   /** 最初の並び順(設定) */
   defaultSort: ThreadSort
+  /**
+   * いまの threads がサーバーで並べ替え済みのときの、その並び(ふたばのカタログの勢順など)。
+   * 選んだ並びと同じなら手元では並べ替えず、向きだけ違えば逆にする
+   */
+  serverOrder?: { mode: SortMode; dir: 'desc' | 'asc' }
+  /** 並びを変えた(サーバーに並べ替えを頼める掲示板なら、App が一覧を取り直す) */
+  onSortChange?: (sort: { mode: SortMode; dir: 'desc' | 'asc' } | null) => void
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
   /** スレタイの NG に当たるスレは出さない */
@@ -134,6 +141,9 @@ export default function ThreadListPanel(props: Props) {
   const { threads, stateOf } = props
   const defaultSort: SortState = props.defaultSort === 'subject' ? null : { mode: props.defaultSort, dir: 'desc' }
   const [sort, setSort] = useState<SortState>(defaultSort)
+  const onSortChange = useRef(props.onSortChange)
+  onSortChange.current = props.onSortChange
+  useEffect(() => onSortChange.current?.(sort), [sort])
   const [unreadOnly, setUnreadOnly] = useState(false)
   /** 閲覧済み(ログのある)スレだけを出す */
   const [visitedOnly, setVisitedOnly] = useState(false)
@@ -336,14 +346,18 @@ export default function ThreadListPanel(props: Props) {
       if (visitedOnly && stateOf(t) === undefined) return false
       return true
     })
-    if (sort) {
+    const so = props.serverOrder
+    if (sort && so && so.mode === sort.mode) {
+      // サーバーが並べ替えた順をそのまま使う(手元の勢いの計算はサーバーと違うので、並べ替え直さない)
+      if (so.dir !== sort.dir) list = [...list].reverse()
+    } else if (sort) {
       const sign = sort.dir === 'desc' ? -1 : 1
       const value = (t: ThreadSummary) =>
         sort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : sort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
     return list
-  }, [threads, query, unreadOnly, visitedOnly, unreadSnapshot, sort, props.isNg, momenta, stateOf])
+  }, [threads, query, unreadOnly, visitedOnly, unreadSnapshot, sort, props.isNg, momenta, stateOf, props.serverOrder])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。

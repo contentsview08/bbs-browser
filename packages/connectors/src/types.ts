@@ -23,6 +23,9 @@ export interface HttpRequestOptions {
   sameCookiesAsGet?: boolean
 }
 
+/** サーバーに頼めるスレ一覧の並び順。勢い・新しい・古い・レスの多い・少ない順 */
+export type ListSort = 'momentum' | 'newest' | 'oldest' | 'most' | 'fewest'
+
 export interface ConnectorContext {
   http: {
     get(url: string, opts?: HttpRequestOptions): Promise<HttpResponse>
@@ -259,7 +262,13 @@ export interface Connector {
   /** 板の設定を取る(名無しの名前など)。取れなければ空のまま返す */
   boardInfo?(board: Board, ctx: ConnectorContext): Promise<BoardInfo>
   listBoards(site: SiteConfig, ctx: ConnectorContext): Promise<Board[]>
-  listThreads(board: Board, ctx: ConnectorContext): Promise<ThreadSummary[]>
+  /**
+   * スレ一覧を取る。opts.sort は、サーバーに並べ替えてもらう順(serverSorts にあるものだけ)。
+   * ふたばのカタログは並び順ごとに載るスレが変わる(板のスレ全部から選び直す)ので、手元で並べ替えるのではなくサーバーに頼む
+   */
+  listThreads(board: Board, ctx: ConnectorContext, opts?: { sort?: ListSort }): Promise<ThreadSummary[]>
+  /** サーバーに並べ替えを頼める順(なければ、いつも同じ一覧を取り、並べ替えは手元でする) */
+  serverSorts?: ListSort[]
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>
   /** 書き込む。capabilities.post が true のコネクタだけが持つ */
   createPost?(thread: ThreadSummary, input: PostInput, ctx: ConnectorContext): Promise<PostResult>

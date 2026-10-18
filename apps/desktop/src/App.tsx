@@ -16,6 +16,7 @@ import {
   type PostResult,
   type SiteConfig,
   type ThreadSummary,
+  type ListSort,
 } from '@bbs-browser/connectors'
 import {
   applyFetch,
@@ -41,7 +42,7 @@ import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
-import ThreadListPanel, { threadId } from './components/ThreadListPanel'
+import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
@@ -323,6 +324,44 @@ export default function App() {
   const [newSince, setNewSince] = useState<number>()
   const lastBoardUrl = useRef(settings.lastBoardUrl)
   lastBoardUrl.current = settings.lastBoardUrl
+  /**
+   * いまのスレ一覧を、サーバーがどの並びで返したか(ふたばのカタログの勢順など。ふつうの掲示板はいつも undefined)。
+   * スレ一覧で並びを変えたら、サーバーに並べ替えを頼める掲示板なら、その並びで取り直す
+   */
+  const [listOrder, setListOrder] = useState<ListSort>()
+  const listOrderRef = useRef<ListSort | undefined>(undefined)
+  const changeListOrder = (order: ListSort | undefined) => {
+    listOrderRef.current = order
+    setListOrder(order)
+  }
+  /** スレ一覧の並びを、その掲示板のサーバーに頼める並びにする(頼めなければ undefined = 手元で並べ替える) */
+  const serverSortFor = (b: Board, sort: { mode: SortMode; dir: 'desc' | 'asc' } | null): ListSort | undefined => {
+    if (!sort) return undefined
+    const want: ListSort =
+      sort.mode === 'momentum' ? 'momentum' : sort.mode === 'newest' ? (sort.dir === 'desc' ? 'newest' : 'oldest') : sort.dir === 'desc' ? 'most' : 'fewest'
+    return connectorOf(b.connectorId).serverSorts?.includes(want) ? want : undefined
+  }
+  const orderOf = (order: ListSort): { mode: SortMode; dir: 'desc' | 'asc' } =>
+    order === 'momentum'
+      ? { mode: 'momentum', dir: 'desc' }
+      : order === 'newest' || order === 'oldest'
+        ? { mode: 'newest', dir: order === 'newest' ? 'desc' : 'asc' }
+        : { mode: 'count', dir: order === 'most' ? 'desc' : 'asc' }
+  /** スレ一覧で並びを変えた。サーバーに頼める並びが変わったら、その並びで取り直す */
+  const onListSort = (sort: { mode: SortMode; dir: 'desc' | 'asc' } | null) => {
+    const b = boardRef.current
+    if (!b) return
+    const order = serverSortFor(b, sort)
+    if (order === listOrderRef.current) return
+    changeListOrder(order)
+    void run('threads', async () => {
+      const list = await connectorOf(b.connectorId).listThreads(b, ctx, { sort: order })
+      if (boardRef.current?.url !== b.url || listOrderRef.current !== order) return
+      rememberList(b.url, list)
+      setThreads(list)
+    })
+  }
+
   /** 板のスレ一覧を開く。record が false(一覧の更新・戻る/進む)なら、戻る・進むの履歴には覚えない */
   const openBoard = (b: Board, record = true) =>
     run('threads', async () => {
@@ -333,13 +372,19 @@ export default function App() {
       setBoard(b)
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
+      // 同じ板の取り直しなら今の並びのまま、別の板なら設定の「最初の並び順」で(サーバーに頼める掲示板だけ)
+      const order =
+        boardRef.current?.url === b.url && !record
+          ? listOrderRef.current
+          : serverSortFor(b, settingsRef.current.threadSort === 'subject' ? null : { mode: settingsRef.current.threadSort, dir: 'desc' })
+      changeListOrder(order)
       setHistory(undefined)
       setFavView(false)
       setThreads([])
       // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
-      const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx), store.getThreadStates(b.url)])
+      const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }), store.getThreadStates(b.url)])
       rememberList(b.url, list)
       setThreads(list)
       setStates(st)
@@ -1656,6 +1701,8 @@ export default function App() {
           fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={favView || history ? 'subject' : settings.threadSort}
+          serverOrder={!favView && !history && listOrder ? orderOf(listOrder) : undefined}
+          onSortChange={!favView && !history ? onListSort : undefined}
           tabs={settings.listTabs}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}

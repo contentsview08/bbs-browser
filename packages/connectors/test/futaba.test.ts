@@ -75,6 +75,17 @@ describe('ふたばのコネクタ', () => {
     expect(threads[1].thumb).toBeUndefined()
   })
 
+  it('並び順を頼むと、カタログの sort の番号を付けて読む(勢順 6・新順 1・古順 2・多順 3・少順 4)', async () => {
+    const { ctx, got } = fake({
+      [`${BOARD}futaba.php?mode=cat&sort=6`]: { body: CATALOG },
+      [`${BOARD}futaba.php?mode=cat&sort=4`]: { body: CATALOG },
+    })
+    await futabaConnector.listThreads(board, ctx, { sort: 'momentum' })
+    await futabaConnector.listThreads(board, ctx, { sort: 'fewest' })
+    expect(got.map((g) => g.url)).toEqual([`${BOARD}futaba.php?mode=cat&sort=6`, `${BOARD}futaba.php?mode=cat&sort=4`])
+    expect(futabaConnector.serverSorts).toContain('momentum')
+  })
+
   it('最初はスレのページで全部を読む。スレを立てた人が 1 番、通し番号は ref、画像は本文の頭に URL で', async () => {
     const { ctx } = fake({ [`${BOARD}res/1000.htm`]: { body: PAGE } })
     const r = await futabaConnector.fetchPosts(thread, null, ctx)

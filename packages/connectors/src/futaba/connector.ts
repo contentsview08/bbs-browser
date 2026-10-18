@@ -14,7 +14,7 @@
 //   pthc・pthb に /bin/cachemt7.php の値、ptua にブラウザの機能の数、js=on・scsz を入れ、responsemode=ajax を付けて送る。
 //   返事は書けたら「ok」(か JSON)、断られたらエラーの文。2026-10-17 に JavaScript を読んで合わせた
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, PostFile, PostInput, PostResult, ThreadSummary } from '../types'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, ListSort, PostFile, PostInput, PostResult, ThreadSummary } from '../types'
 import { shiftJisByteLength } from '../sjis'
 import { parseCaco, parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
 
@@ -172,6 +172,9 @@ async function sendRegist(
     : { status: 'error', message: r.message, html }
 }
 
+/** サーバーに頼む並び順と、カタログの sort の番号 */
+const CATALOG_SORT: Record<ListSort, number> = { newest: 1, oldest: 2, most: 3, fewest: 4, momentum: 6 }
+
 export const futabaConnector: Connector = {
   id: ID,
   name: 'ふたば☆ちゃんねる',
@@ -222,8 +225,13 @@ export const futabaConnector: Connector = {
     return []
   },
 
-  async listThreads(board, ctx) {
-    const url = `${board.url}futaba.php?mode=cat`
+  // カタログの並び順(futaba.php?mode=cat&sort=番号)。番号はカタログのページの「新順・古順・多順・少順・勢順」のリンクで確かめた(2026-10-18)。
+  // 並び順を変えると、更新順の上位に入っていないスレも載る(板のスレ全部から選び直す)
+  serverSorts: ['momentum', 'newest', 'oldest', 'most', 'fewest'],
+
+  async listThreads(board, ctx, opts) {
+    const sort = opts?.sort ? CATALOG_SORT[opts.sort] : undefined
+    const url = `${board.url}futaba.php?mode=cat${sort ? `&sort=${sort}` : ''}`
     const res = await ctx.http.get(url, { headers: { ...BROWSER, Cookie: CATALOG_COOKIE } })
     if (res.status === 404) throw new Error(`ふたばの板が見つかりません(HTTP 404): ${board.url}`)
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${url}`)

@@ -783,7 +783,9 @@ export default function ThreadListPanel(props: Props) {
               style={
                 (props.variant ?? 'card') === 'card'
                   ? { padding: 'var(--list-padding-thread)', gap: 'var(--list-gap-thread)' }
-                  : { padding: '4px 6px', gap: props.variant === 'classic' ? 0 : 1 }
+                  : props.variant === 'discord'
+                    ? { padding: '8px', gap: 2 }
+                    : { padding: '4px 6px', gap: props.variant === 'classic' ? 0 : 1 }
               }
             >
               {keywordGroups ? (

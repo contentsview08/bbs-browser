@@ -147,6 +147,10 @@ export interface AppSettings {
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
   showThumbnails: boolean
+  /** スレ表示の画像のサムネイルの一辺(px) */
+  postThumbSize: number
+  /** スレ一覧のサムネイル(ふたばのカタログの絵など)の大きさの倍率。見た目ごとの元の大きさに掛ける */
+  listThumbScale: number
   /** 「グロ」などの言葉を含む返信が付いた(または本人がそう書いた)レスの画像を、ぼかして出す */
   blurGross: boolean
   /** ぼかす目印にする言葉 */
@@ -268,6 +272,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openPosition: 'unread',
   anchorPopup: 'click',
   showThumbnails: true,
+  postThumbSize: 80,
+  listThumbScale: 1,
   blurGross: true,
   grossWords: ['グロ'],
   aaAutoDetect: true,
@@ -386,6 +392,8 @@ function apply(s: AppSettings) {
       : preset.css
   root.style.setProperty('--app-font', css)
   for (const p of PANELS) root.style.setProperty(p.cssVar, String(s.panelAlpha[p.key] ?? 1))
+  root.style.setProperty('--post-thumb-size', `${s.postThumbSize}px`)
+  root.style.setProperty('--list-thumb-scale', String(s.listThumbScale))
 }
 
 export type PaneMode = 'split' | 'single' | 'auto'

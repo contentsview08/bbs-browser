@@ -609,7 +609,7 @@ function PostArticle(props: Props) {
                     e.stopPropagation()
                     handlers.onImage(media, i, post)
                   }}
-                  className="w-20 h-20 bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
+                  className="post-thumb bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
                 >
                   {/* 家の中のアドレスは、表示しただけでは読みに行かない(押せば開く) */}
                   {isAutoLoadable(url) ? (
@@ -638,7 +638,7 @@ function PostArticle(props: Props) {
                     e.stopPropagation()
                     handlers.onImage(media, images.length + j, post)
                   }}
-                  className="relative w-20 h-20 bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
+                  className="post-thumb relative bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
                   title="動画を再生する"
                 >
                   {isAutoLoadable(url) ? (
@@ -660,7 +660,7 @@ function PostArticle(props: Props) {
                     e.stopPropagation()
                     handlers.onImage(media, images.length + videoFiles.length + k, post)
                   }}
-                  className="relative w-20 h-20 rounded overflow-hidden flex-shrink-0 hover:opacity-90 transition-opacity"
+                  className="post-thumb relative rounded overflow-hidden flex-shrink-0 hover:opacity-90 transition-opacity"
                   style={{ border: '2px solid #ff0000', background: '#000' }}
                   title="YouTube を再生する"
                 >

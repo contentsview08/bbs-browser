@@ -102,7 +102,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         loading="lazy"
         referrerPolicy="no-referrer"
         className={`flex-shrink-0 object-cover bg-c-surface2 ${cls}`}
-        style={{ width: size, height: size }}
+        style={{ width: `calc(${size}px * var(--list-thumb-scale, 1))`, height: `calc(${size}px * var(--list-thumb-scale, 1))` }}
         onError={(e) => {
           e.currentTarget.style.visibility = 'hidden'
         }}
@@ -118,8 +118,8 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       <div className="thread-row flex gap-2 min-w-0">
         {checkbox}
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
-        {thumbImg(24, 'rounded') || <span className="flex-shrink-0 text-base leading-none text-c-text-muted select-none">#</span>}
-        <span className="thread-row-title flex-1 min-w-0 text-sm" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
+        {thumbImg(28, 'rounded') || <span className="thread-row-hash flex-shrink-0 text-c-text-muted select-none">#</span>}
+        <span className="thread-row-title flex-1 min-w-0" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
           {newBadge}
           {favStar}
           {thread.title}

@@ -476,13 +476,32 @@ article.post-discord:hover {
 .card-thread[data-variant='classic'].card-selected {
   background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
 }
-/* Discord 風の行: 一覧表示ではゆとりを持たせ、スレタイを折り返して全部見せる。高密度では詰めて 1 行に切る */
+/* Discord 風の行: 本家のチャンネル一覧に合わせ、字を大きめ(15px)・# を大きく・行にゆとりを持たせ、スレタイを折り返して全部見せる。
+   高密度では詰めて 1 行に切る */
 .card-thread[data-variant='discord'] {
-  padding: 9px 10px;
+  padding: 10px 12px;
 }
 .card-thread[data-variant='discord'] .thread-row {
   align-items: flex-start;
+  gap: 10px;
   line-height: 1.45;
+}
+.card-thread[data-variant='discord'] .thread-row-title {
+  font-size: 15px;
+}
+.card-thread[data-variant='discord'] .thread-row-hash {
+  width: 20px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 22px;
+}
+[data-density='dense'] .card-thread[data-variant='discord'] .thread-row-title {
+  font-size: 14px;
+}
+[data-density='dense'] .card-thread[data-variant='discord'] .thread-row-hash {
+  font-size: 18px;
+  line-height: 18px;
 }
 .card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
   margin-top: 1px;
@@ -772,4 +791,11 @@ input[type='checkbox']:indeterminate {
     width: 100%;
     opacity: 0.6;
   }
+}
+
+/* スレ表示の画像・動画・YouTube のサムネイル。一辺は設定(--post-thumb-size)で変えられる */
+.post-thumb {
+  width: var(--post-thumb-size, 80px);
+  height: var(--post-thumb-size, 80px);
+  flex-shrink: 0;
 }

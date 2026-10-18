@@ -621,6 +621,34 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           label="画像のサムネイルを出す"
           note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
         />
+      </Section>
+      <Section title="サムネイルの大きさ">
+        <p className="text-xs text-c-text-muted mb-1.5">スレ表示(本文の画像・動画・YouTube)</p>
+        <Choice
+          value={s.postThumbSize}
+          options={[
+            { key: 64, name: '小' },
+            { key: 80, name: '標準' },
+            { key: 120, name: '大' },
+            { key: 160, name: '特大' },
+            { key: 220, name: '最大' },
+          ]}
+          onChange={(v) => update('postThumbSize', v)}
+        />
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">スレ一覧(ふたばのカタログの絵など)</p>
+        <Choice
+          value={s.listThumbScale}
+          options={[
+            { key: 0.75, name: '小' },
+            { key: 1, name: '標準' },
+            { key: 1.5, name: '大' },
+            { key: 2, name: '特大' },
+            { key: 3, name: '最大' },
+          ]}
+          onChange={(v) => update('listThumbScale', v)}
+        />
+      </Section>
+      <Section title="本文の画像">
         <Toggle
           checked={s.blurGross}
           onChange={(v) => update('blurGross', v)}

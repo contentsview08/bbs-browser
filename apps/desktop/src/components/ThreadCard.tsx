@@ -119,7 +119,8 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         {checkbox}
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
         {thumbImg(28, 'rounded') || <span className="thread-row-hash flex-shrink-0 text-c-text-muted select-none">#</span>}
-        <span className="thread-row-title flex-1 min-w-0" style={{ color: titleColor, fontWeight: unreadCount > 0 || !visited ? 600 : 400 }}>
+        {/* 太字は新着のあるスレだけ(本家の未読のチャンネルと同じ)。開いたことのないスレは、太字にせず色の明るさで分ける */}
+        <span className="thread-row-title flex-1 min-w-0" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
           {newBadge}
           {favStar}
           {thread.title}

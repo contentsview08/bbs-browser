@@ -4,7 +4,7 @@
 // tauri-plugin-sql は接続プールを使うため、BEGIN/COMMIT が同じ接続で走る保証がない。
 // トランザクションに頼らず、「途中で落ちても次の取得で正しい状態に戻る」順番で書き込む。
 
-import type { Board, Cursor, FetchPostsResult, Post, SiteConfig, ThreadSummary } from '@bbs-browser/connectors'
+import type { Badge, Board, Cursor, FetchPostsResult, Post, SiteConfig, ThreadSummary } from '@bbs-browser/connectors'
 
 /** プレースホルダーは $1, $2 …(tauri-plugin-sql の SQLite に合わせる) */
 export interface SqlDb {
@@ -142,6 +142,7 @@ interface PostRow {
   date: string
   id: string | null
   body: string
+  badges: string | null
 }
 
 /** 1 文の INSERT に詰めるレスの数(SQLite の変数の上限を超えないように) */
@@ -315,7 +316,7 @@ export class LogStore {
     ])
     if (!row) return null
     const posts = await this.db.select<PostRow>(
-      'SELECT no, ref, name, mail, date, id, body FROM posts WHERE board_url = $1 AND key = $2 ORDER BY no',
+      'SELECT no, ref, name, mail, date, id, body, badges FROM posts WHERE board_url = $1 AND key = $2 ORDER BY no',
       [thread.boardUrl, thread.key],
     )
     return {
@@ -324,7 +325,12 @@ export class LogStore {
       readNo: row.read_no,
       status: row.status,
       cursor: row.cursor === null ? null : (JSON.parse(row.cursor) as Cursor),
-      posts: posts.map(({ ref, ...p }) => ({ ...p, id: p.id ?? undefined, ...(ref !== null && { ref }) })),
+      posts: posts.map(({ ref, badges, ...p }) => ({
+        ...p,
+        id: p.id ?? undefined,
+        ...(ref !== null && { ref }),
+        ...(badges !== null && { badges: JSON.parse(badges) as Badge[] }),
+      })),
     }
   }
 
@@ -364,8 +370,8 @@ export class LogStore {
     for (let i = 0; i < result.posts.length; i += CHUNK) {
       const chunk = result.posts.slice(i, i + CHUNK)
       await this.db.execute(
-        `INSERT OR REPLACE INTO posts (board_url, key, no, ref, name, mail, date, id, body) VALUES ${valuesClause(chunk.length, 9)}`,
-        chunk.flatMap((p) => [...where, p.no, nn(p.ref), p.name, p.mail, p.date, nn(p.id), p.body]),
+        `INSERT OR REPLACE INTO posts (board_url, key, no, ref, name, mail, date, id, body, badges) VALUES ${valuesClause(chunk.length, 10)}`,
+        chunk.flatMap((p) => [...where, p.no, nn(p.ref), p.name, p.mail, p.date, nn(p.id), p.body, p.badges?.length ? JSON.stringify(p.badges) : null]),
       )
     }
 

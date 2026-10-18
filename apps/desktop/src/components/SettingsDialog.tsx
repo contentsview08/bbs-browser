@@ -2,7 +2,7 @@
 
 import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
-import { builtinConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
+import { allConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import { POST_STYLES,
   COLOR_SCHEMES,
@@ -1127,7 +1127,7 @@ function AccountForm(props: {
 
 /** サイトのアカウント。コネクタが申告したものだけ並べる */
 function AccountsTab(props: Pick<Props, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount'>) {
-  const kinds = builtinConnectors.flatMap((c) => (c.accounts ?? []).map((kind) => ({ connectorId: c.id, kind })))
+  const kinds = allConnectors().flatMap((c) => (c.accounts ?? []).map((kind) => ({ connectorId: c.id, kind })))
   const key = (connectorId: string, accountId: string) => `${connectorId}:${accountId}`
   return (
     <>

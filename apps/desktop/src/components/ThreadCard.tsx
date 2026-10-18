@@ -2,6 +2,7 @@
 // サムネイルと作成者 ID は 2ch 互換の subject.txt からは取れないので外し、
 // 既読情報は localStorage の履歴ではなく LogStore の ThreadState から受け取る。
 
+import BadgeChip from './BadgeChip'
 import { memo } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
@@ -73,6 +74,14 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       新
     </span>
   )
+  /** 掲示板がスレに付けた印(「固定」「ロック」など)。スレタイの前に出す */
+  const threadBadges = thread.badges?.length ? (
+    <span className="inline-flex gap-1 mr-1 align-[1px]">
+      {thread.badges.map((b, i) => (
+        <BadgeChip key={i} badge={b} />
+      ))}
+    </span>
+  ) : null
   const favStar = isFavorite && (
     <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-mark-fav" title="お気に入りのスレ">
       star
@@ -123,6 +132,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         <span className="thread-row-title flex-1 min-w-0" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
           {newBadge}
           {favStar}
+          {threadBadges}
           {thread.title}
         </span>
         {archived && <span className="flex-shrink-0 text-[10px] text-c-text-muted">dat落ち</span>}
@@ -138,6 +148,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
         </span>
         <span className="thread-row-title min-w-0" style={{ color: titleColor }}>
           {favStar}
+          {threadBadges}
           {thread.title}
         </span>
         <span className="font-mono tabular-nums text-right text-c-text-muted">{thread.postCount}</span>
@@ -161,6 +172,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
           <div className="truncate text-sm font-bold" style={{ color: titleColor }}>
             {newBadge}
             {favStar}
+          {threadBadges}
             {thread.title}
           </div>
           <div className="flex items-center gap-2 mt-0.5 text-[11px] text-c-text-muted">
@@ -215,6 +227,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
                   textDecoration: 'var(--thread-list-title-decoration, none)',
                 }}
               >
+                {threadBadges}
                 {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
                 {isNew && (
                   <span

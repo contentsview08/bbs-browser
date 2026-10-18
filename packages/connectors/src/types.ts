@@ -70,6 +70,48 @@ export interface ThreadSummary {
    * スレ一覧に中身が入っている掲示板だけ付ける(2ch の subject.txt には入っていないので付けない。のぞくために取りに行くことはしない)
    */
   preview?: { no: number; name: string; date?: string; body: string }[]
+  /** スレに付いた印(「固定」「ロック」「NSFW」など、掲示板が付けるもの)。スレ一覧のスレタイの前に出す */
+  badges?: Badge[]
+}
+
+/**
+ * 掲示板が付ける印(レスなら「スレ主」「管理人」「認証済み」、スレなら「固定」など)。
+ * アプリは名前の横やスレタイの前に小さく出す。色は意味(tone)で選び、配色に合わせて塗る
+ */
+export interface Badge {
+  label: string
+  tone?: 'accent' | 'muted' | 'danger' | 'success' | 'warning'
+  /** マウスを乗せたときの説明 */
+  title?: string
+}
+
+/**
+ * レスへの反応(ふたばの「そうだね」、いいね、リアクションの種類など)。数を数えるもの。
+ * アプリはレスの頭に「名前×数」のチップを出し、押すとコネクタの react を呼ぶ
+ */
+export interface ReactionDef {
+  /** コネクタの中での名前(react に渡し、FetchPostsResult.reactions のキーにする) */
+  id: string
+  /** 画面に出す名前(「そうだね」「いいね」) */
+  label: string
+  /** アイコン(Material Symbols の名前。thumb_up など) */
+  icon: string
+}
+
+/**
+ * レスへの操作(通報など、数を数えないもの)。アプリはレスの「その他」のメニューに並べ、押すとコネクタの runPostAction を呼ぶ。
+ * 自分の書き込みの削除は、削除キーが要るので deletePost で別に扱う
+ */
+export interface PostActionDef {
+  id: string
+  label: string
+  icon: string
+  /** 押したときに確かめる文(通報など、取り消せないもの)。なければすぐ実行する */
+  confirm?: string
+  /** 危ない操作として赤く出す */
+  danger?: boolean
+  /** 自分の書き込みにだけ出す */
+  ownOnly?: boolean
 }
 
 export interface Post {
@@ -87,6 +129,8 @@ export interface Post {
   id?: string
   /** 本文。HTML を取り除き、改行を \n にしたもの */
   body: string
+  /** 掲示板がレスに付けた印(「管理人」「認証済み」など)。なければ付けない */
+  badges?: Badge[]
 }
 
 /**
@@ -114,10 +158,11 @@ export interface FetchPostsResult {
    */
   archived?: boolean
   /**
-   * レスごとの、ほかの人からの評価の数(ふたばの「そうだね」)。キーはレスの画面の番号(ref があれば ref、なければ no)。
+   * レスごとの反応の数(ふたばの「そうだね」など。種類は Connector.reactions)。
+   * キーはレスの画面の番号(ref があれば ref、なければ no)、その中のキーは反応の id。
    * 数はそのときのスレ全体の分(取るたびに増えることがあるので、新しいレスがなくても返してよい)
    */
-  votes?: Record<string, number>
+  reactions?: Record<string, Record<string, number>>
 }
 
 /** 板の設定(2ch 互換なら SETTING.TXT から) */
@@ -237,12 +282,16 @@ export interface Connector {
   maxPosts?: number
   /** 自分の書き込みを消す(書いたときと同じ削除キーで)。消せない掲示板は持たない */
   deletePost?(thread: ThreadSummary, post: Post, deleteKey: string, ctx: ConnectorContext): Promise<PostResult>
-  /** レスを評価する(ふたばの「そうだね」を押す)。新しい評価の数を返す。評価のない掲示板は持たない */
-  vote?(thread: ThreadSummary, post: Post, ctx: ConnectorContext): Promise<number>
+  /** レスへの反応の種類(ふたばは「そうだね」)。反応のない掲示板は付けない */
+  reactions?: ReactionDef[]
+  /** 反応を押す。押したあとの数を返す */
+  react?(thread: ThreadSummary, post: Post, reactionId: string, ctx: ConnectorContext): Promise<number>
+  /** レスへの操作(通報など)の種類。なければ付けない */
+  postActions?: PostActionDef[]
+  /** 操作を実行する。結果の文は画面に知らせとして出す */
+  runPostAction?(thread: ThreadSummary, post: Post, actionId: string, ctx: ConnectorContext): Promise<PostResult>
   /** 引用を「>前のレスの文章」の形で書く掲示板(ふたば)。引用した文章から、元のレスを探してつなぐ */
   textQuotes?: boolean
-  /** レスの評価(FetchPostsResult.votes)の呼び名。ふたばは「そうだね」。評価のない掲示板は付けない */
-  voteLabel?: string
   /** 本文の >>番号 が指すもの。'no': スレの中の番号(2ch) / 'ref': 板の本当の番号(Post.ref。4chan など)。既定は 'no' */
   anchorTarget?: 'no' | 'ref'
   /** URL を貼られたとき、どのコネクタで開くかを決める */

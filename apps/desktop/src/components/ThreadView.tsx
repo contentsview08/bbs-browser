@@ -7,7 +7,7 @@
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
+import type { AttachmentRules, Post, PostActionDef, ReactionDef, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers, type PostVariant } from './PostArticle'
 import PostPopup, { type PopupEntry } from './PostPopup'
@@ -114,13 +114,16 @@ interface Props {
   textQuotes?: boolean
   /** 書き込みにファイルを付けられる掲示板の決まり(コネクタの attachments) */
   attachments?: AttachmentRules
-  /** レスを評価する(ふたばの「そうだね」を押す)。評価のない掲示板は undefined */
-  onVote?: (post: Post) => void
+  /** レスへの反応を押す(ふたばの「そうだね」など)。反応のない掲示板は undefined */
+  onReact?: (post: Post, reactionId: string) => void
+  /** レスへの操作(通報など)。操作のない掲示板は undefined */
+  onPostAction?: (post: Post, actionId: string) => void
   /** 自分の書き込みを消す。消せない掲示板は undefined */
   onDeletePost?: (post: Post) => void
-  /** レスの評価の数と呼び名(ふたばのそうだね)。キーはレスの画面の番号 */
-  votes?: Map<number, number>
-  voteLabel?: string
+  /** レスへの反応の数(キーはレスの画面の番号、中は反応の id → 数)と、反応・操作の種類 */
+  reactions?: Map<number, Record<string, number>>
+  reactionDefs?: ReactionDef[]
+  postActions?: PostActionDef[]
   /** 1 つのスレのレスの上限(2ch は 1000)。上限のない掲示板は undefined */
   maxPosts?: number
   onOpenThread: (t: ThreadSummary) => void
@@ -1362,13 +1365,16 @@ export default function ThreadView(props: Props) {
             }
           : undefined,
         toNo: resolveAnchor,
-        onVote: props.onVote,
+        onReact: props.onReact,
+        reactionDefs: props.reactionDefs,
+        onPostAction: props.onPostAction,
+        postActions: props.postActions,
         onDeletePost: props.onDeletePost,
         onQuickReply: canReply ? (no, text) => void quickPostRef.current(`${replyText(no)}${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onVote, props.onDeletePost, grossNos],
+    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1384,8 +1390,7 @@ export default function ThreadView(props: Props) {
           return (
             <PostArticle
               post={p}
-              votes={props.votes?.get(p.ref ?? p.no)}
-              voteLabel={props.voteLabel}
+              reactions={props.reactions?.get(p.ref ?? p.no)}
               quotes={quotesOf(p.no)}
               blurMedia={grossNos?.has(p.no)}
               anchorCount={anchorCounts.get(p.no) ?? 0}
@@ -1423,8 +1428,7 @@ export default function ThreadView(props: Props) {
           <PostArticle
             key={p.no}
             post={p}
-            votes={props.votes?.get(p.ref ?? p.no)}
-            voteLabel={props.voteLabel}
+            reactions={props.reactions?.get(p.ref ?? p.no)}
             quotes={quotesOf(p.no)}
             blurMedia={grossNos?.has(p.no)}
             anchorCount={anchorCounts.get(p.no) ?? 0}
@@ -1714,8 +1718,7 @@ export default function ThreadView(props: Props) {
                     {isRendered(i) && !runClosed && (
                       <PostArticle
                         post={p}
-                        votes={props.votes?.get(p.ref ?? p.no)}
-                        voteLabel={props.voteLabel}
+                        reactions={props.reactions?.get(p.ref ?? p.no)}
                         quotes={quotesOf(p.no)}
                         blurMedia={grossNos?.has(p.no)}
                         anchorCount={anchorCounts.get(p.no) ?? 0}

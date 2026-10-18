@@ -100,7 +100,7 @@ describe('ふたばのコネクタ', () => {
     expect(r.posts[1]).toMatchObject({ name: 'としあき', mail: 'sage', id: 'abcd1234', date: '26/10/17(土)17:15:10', body: '>スレを立てた人の本文\nそうだね' })
     expect(r.cursor).toEqual({ lastRef: 1007, lastNo: 3 })
     // そうだね(まだないレスは入れない)
-    expect(r.votes).toEqual({ '1000': 3 })
+    expect(r.reactions).toEqual({ '1000': { sodane: 3 } })
   })
 
   it('そのあとは JSON で、最後の番号より新しい返信だけ', async () => {
@@ -110,7 +110,7 @@ describe('ふたばのコネクタ', () => {
     expect(r.status).toBe('updated')
     expect(r.posts.map((p) => [p.no, p.ref, p.body])).toEqual([[4, 1010, 'https://may.2chan.net/b/src/1792225000000.png\n新しい返信']])
     expect(r.cursor).toEqual({ lastRef: 1010, lastNo: 4 })
-    expect(r.votes).toEqual({ '1000': 4, '1007': 1 })
+    expect(r.reactions).toEqual({ '1000': { sodane: 4 }, '1007': { sodane: 1 } })
   })
 
   it('新しい返信がなければ notModified、スレが消えていたら archived', async () => {
@@ -201,7 +201,8 @@ describe('ふたばのコネクタ', () => {
 
   it('そうだね: /sd.php?板名.番号 を呼んで、新しい数を返す', async () => {
     const { ctx, got } = fake({ 'https://may.2chan.net/sd.php?b.1003': { body: '5' } })
-    const n = await futabaConnector.vote!(thread, { no: 2, ref: 1003, name: '', mail: '', date: '', body: '' }, ctx)
+    const n = await futabaConnector.react!(thread, { no: 2, ref: 1003, name: '', mail: '', date: '', body: '' }, 'sodane', ctx)
+    expect(futabaConnector.reactions?.map((r) => r.label)).toEqual(['そうだね'])
     expect(n).toBe(5)
     expect(got[0].url).toBe('https://may.2chan.net/sd.php?b.1003')
   })

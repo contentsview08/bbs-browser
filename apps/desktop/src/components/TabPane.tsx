@@ -4,7 +4,7 @@
 import type { TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
 import { memo, useCallback, useMemo } from 'react'
-import type { AttachmentRules, Post, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
+import type { AttachmentRules, Post, PostActionDef, ReactionDef, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import ThreadView, { type ScrollPosition } from './ThreadView'
 import type { NgRule, NgTarget } from '../utils/ng'
@@ -27,8 +27,8 @@ export interface Tab {
   loading: boolean
   /** 手で更新したあとのクールダウンが明ける時刻 */
   refreshReadyAt?: number
-  /** レスの評価の数(ふたばのそうだね)。キーはレスの画面の番号(ref があれば ref) */
-  votes?: Map<number, number>
+  /** レスへの反応の数(ふたばのそうだねなど)。キーはレスの画面の番号(ref があれば ref)、中は反応の id → 数 */
+  reactions?: Map<number, Record<string, number>>
 }
 
 /** アプリ側の処理。どれも関数そのものは変わらない(描き直しても同じもの) */
@@ -60,8 +60,10 @@ export interface TabEvents {
   openBoardOf: (t: ThreadSummary) => void
   /** 自分の書き込みを消す(確かめてから) */
   deletePost: (thread: ThreadSummary, post: Post) => void
-  /** レスを評価する(ふたばの「そうだね」)。新しい数をタブに写す */
-  vote: (thread: ThreadSummary, post: Post) => void
+  /** レスへの反応を押す(ふたばの「そうだね」など)。新しい数をタブに写す */
+  react: (thread: ThreadSummary, post: Post, reactionId: string) => void
+  /** レスへの操作(通報など)を実行する(確かめる文があれば確かめてから) */
+  postAction: (thread: ThreadSummary, post: Post, actionId: string) => void
   /** スレ表示のヘッダーの高さを保存する(0 なら既定) */
   setThreadHeaderHeight: (height: number) => void
   toggleFavoriteThread: (t: ThreadSummary) => void
@@ -106,14 +108,16 @@ interface Props {
   maxPosts?: number
   /** 本文の >>番号 が指すもの(コネクタの anchorTarget) */
   anchorTarget?: 'no' | 'ref'
-  /** レスの評価の呼び名(コネクタの voteLabel) */
-  voteLabel?: string
+  /** レスへの反応の種類(コネクタの reactions) */
+  reactionDefs?: ReactionDef[]
+  /** レスへの操作の種類(コネクタの postActions) */
+  postActions?: PostActionDef[]
   /** 引用を文章で書く掲示板(コネクタの textQuotes) */
   textQuotes?: boolean
   /** 書き込みにファイルを付けられる掲示板の決まり(コネクタの attachments) */
   attachments?: AttachmentRules
-  /** レスを評価できる掲示板か(コネクタの vote) */
-  canVote?: boolean
+  /** 反応を押せる掲示板か(コネクタの react) */
+  canReact?: boolean
   /** 自分の書き込みを消せる掲示板か(コネクタの deletePost) */
   canDeletePost?: boolean
   /** 本文からアイコンを取り出す(コネクタのもの) */
@@ -140,10 +144,11 @@ function TabPane({
   postByteLength,
   maxPosts,
   anchorTarget,
-  voteLabel,
+  reactionDefs,
+  postActions,
   textQuotes,
   attachments,
-  canVote,
+  canReact,
   canDeletePost,
   splitPostIcon,
   ev,
@@ -157,7 +162,8 @@ function TabPane({
   const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body) }), [ev, thread])
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
   const onOpenBoard = useCallback(() => ev.openBoardOf(thread), [ev, thread])
-  const onVote = useCallback((p: Post) => ev.vote(thread, p), [ev, thread])
+  const onReact = useCallback((p: Post, id: string) => ev.react(thread, p, id), [ev, thread])
+  const onPostAction = useCallback((p: Post, id: string) => ev.postAction(thread, p, id), [ev, thread])
   const onDeletePost = useCallback((p: Post) => ev.deletePost(thread, p), [ev, thread])
   const onMarkTroll = useCallback((p: Post, troll: boolean | null, reason?: string) => ev.markTroll(thread, p, troll, reason), [ev, thread])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
@@ -214,11 +220,13 @@ function TabPane({
       postByteLength={postByteLength}
       maxPosts={maxPosts}
       anchorTarget={anchorTarget}
-      votes={tab.votes}
-      voteLabel={voteLabel}
+      reactions={tab.reactions}
+      reactionDefs={reactionDefs}
+      postActions={postActions}
       textQuotes={textQuotes}
       attachments={attachments}
-      onVote={canVote ? onVote : undefined}
+      onReact={canReact ? onReact : undefined}
+      onPostAction={postActions?.length ? onPostAction : undefined}
       onDeletePost={canDeletePost ? onDeletePost : undefined}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}

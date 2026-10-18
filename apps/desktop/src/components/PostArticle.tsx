@@ -3,7 +3,8 @@
 
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Post } from '@bbs-browser/connectors'
+import type { Post, PostActionDef, ReactionDef } from '@bbs-browser/connectors'
+import BadgeChip from './BadgeChip'
 import {
   anchorTargets,
   displayBody,
@@ -41,8 +42,14 @@ export interface PostHandlers extends BodyHandlers {
   onReply?: (no: number) => void
   /** 自分の書き込みを消す。消せない掲示板は undefined */
   onDeletePost?: (post: Post) => void
-  /** レスを評価する(ふたばの「そうだね」を押す)。評価のない掲示板は undefined */
-  onVote?: (post: Post) => void
+  /** レスへの反応を押す(ふたばの「そうだね」など)。押せない掲示板は undefined */
+  onReact?: (post: Post, reactionId: string) => void
+  /** レスへの反応の種類(コネクタの reactions)。数だけ出して押せない掲示板もある */
+  reactionDefs?: ReactionDef[]
+  /** レスへの操作(通報など)。操作のない掲示板は undefined */
+  onPostAction?: (post: Post, actionId: string) => void
+  /** レスへの操作の種類(コネクタの postActions)。「その他」のメニューに並べる */
+  postActions?: PostActionDef[]
   /** NG の画面を、元の文字を入れた状態で開く */
   onNgDraft?: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
   /** >>番号 を付けてすぐ書き込む(「草」ボタン)。書き込めないときは undefined */
@@ -88,8 +95,8 @@ interface Props {
    *  (ツリーの線と重なって見にくいため。つながりはツリーの線で分かる) */
   alignLeft?: boolean
   /** ほかの人からの評価の数と呼び名(ふたばの「そうだね」)。0 や なしなら出さない */
-  votes?: number
-  voteLabel?: string
+  /** レスへの反応の数(反応の id → 数) */
+  reactions?: Record<string, number>
   /** 「グロ」などの返信が付いたレス。サムネイルをぼかし、「グロ注意」と出す */
   blurMedia?: boolean
   /** 文章で引用する掲示板(ふたば)の、このレスの引用の行 → 引用元のレス番号。あれば「>文章」の行を緑の引用にする */
@@ -318,6 +325,12 @@ function PostArticle(props: Props) {
       onClick: () => setAaOverride(!isAA),
     },
     ...ngActions,
+    // 掲示板ごとの操作(通報など)。自分の書き込みにだけ出すものもある
+    ...(handlers.onPostAction
+      ? (handlers.postActions ?? [])
+          .filter((a) => !a.ownOnly || props.isOwn)
+          .map((a) => ({ label: a.label, icon: a.icon, onClick: () => handlers.onPostAction!(post, a.id) }))
+      : []),
     // 自分の書き込みは、掲示板から消せる(消せる掲示板だけ)
     ...(props.isOwn && handlers.onDeletePost
       ? [{ label: 'この書き込みを削除', icon: 'delete_forever', onClick: () => handlers.onDeletePost!(post) }]
@@ -401,27 +414,47 @@ function PostArticle(props: Props) {
         {idCount >= 2 && <span className="text-xs">({idCount})</span>}
       </button>
     )
-  /** 評価の数(ふたばの「そうだね×18」)。多いほど目立つ色に。押せる掲示板では、押すと評価する(まだなければ「+」) */
-  const votes = props.votes ?? 0
-  const voteChip = handlers.onVote ? (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        handlers.onVote?.(post)
-      }}
-      className={`flex-shrink-0 text-[11px] font-bold tabular-nums hover:underline ${votes > 0 ? heatClass(votes) || 'text-mark-hot' : 'text-c-text-muted'}`}
-      title={`${props.voteLabel ?? '評価'}を押す`}
-    >
-      {votes > 0 ? `${props.voteLabel ?? '+'}×${votes}` : '+'}
-    </button>
-  ) : (
-    votes > 0 && (
-      <span className={`flex-shrink-0 text-[11px] font-bold tabular-nums ${heatClass(votes) || 'text-mark-hot'}`} title={`${props.voteLabel ?? '評価'} ${votes}`}>
-        {props.voteLabel ?? '+'}×{votes}
+  /**
+   * レスへの反応(ふたばの「そうだね×18」、いいねなど)。多いほど目立つ色に。押せる掲示板では、押すと反応する。
+   * 反応が 1 種類なら「名前×数」(まだなければ「+」)、何種類もあればアイコンと数を並べる
+   */
+  const reactionDefs = handlers.reactionDefs ?? []
+  const single = reactionDefs.length === 1
+  const reactionChip = (def: ReactionDef) => {
+    const n = props.reactions?.[def.id] ?? 0
+    const color = n > 0 ? heatClass(n) || 'text-mark-hot' : 'text-c-text-muted'
+    const text = single ? (n > 0 ? `${def.label}×${n}` : '+') : n > 0 ? String(n) : ''
+    const inner = (
+      <>
+        {!single && <span className="material-symbols-outlined text-sm leading-none">{def.icon}</span>}
+        {text}
+      </>
+    )
+    if (handlers.onReact)
+      return (
+        <button
+          key={def.id}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            handlers.onReact?.(post, def.id)
+          }}
+          className={`flex-shrink-0 flex items-center gap-0.5 text-[11px] font-bold tabular-nums hover:underline ${color}`}
+          title={`${def.label}を押す${n > 0 ? `(いま ${n})` : ''}`}
+        >
+          {inner}
+        </button>
+      )
+    if (n === 0) return null
+    return (
+      <span key={def.id} className={`flex-shrink-0 flex items-center gap-0.5 text-[11px] font-bold tabular-nums ${color}`} title={`${def.label} ${n}`}>
+        {inner}
       </span>
     )
-  )
+  }
+  const voteChip = reactionDefs.length > 0 && <>{reactionDefs.map(reactionChip)}</>
+  /** 掲示板がレスに付けた印(「管理人」「認証済み」など) */
+  const badgeChips = post.badges?.length ? <>{post.badges.map((b, i) => <BadgeChip key={i} badge={b} />)}</> : null
   const toOwnChip = props.isReplyToOwn && (
     <span
       className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
@@ -473,6 +506,7 @@ function PostArticle(props: Props) {
         {idBtn}
         {voteChip}
         {opChip}
+            {badgeChips}
         {ngChip}
         {toOwnChip}
       </div>
@@ -482,6 +516,7 @@ function PostArticle(props: Props) {
         <div data-post-header className="flex items-baseline flex-nowrap overflow-hidden gap-2 mb-0.5">
           {nameBtn('text-sm') || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
           {opChip}
+            {badgeChips}
           {ngChip}
           {/* 番号は名前のすぐ後ろに(右端はマウスを乗せたときの操作バーと重なるため) */}
           <span className="flex-shrink-0 text-xs">{numBtn('#')}</span>
@@ -500,6 +535,7 @@ function PostArticle(props: Props) {
         {nameBtn(HEAD_TEXT)}
         {ngChip}
         {opChip}
+            {badgeChips}
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
         <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
         {idBtn}
@@ -796,6 +832,7 @@ function PostArticle(props: Props) {
           <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : ''}`}>
             {!right && nameBtn('text-xs')}
             {opChip}
+            {badgeChips}
             {ngChip}
             {idBtn}
             {voteChip}

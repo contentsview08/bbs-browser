@@ -2,7 +2,7 @@
 // ここではアンカー(>>1)と URL だけを見つけて部品に分ける(HTML としては扱わない)。
 
 import type { ReactNode } from 'react'
-import { builtinConnectors, type Post } from '@bbs-browser/connectors'
+import { allConnectors, type Post } from '@bbs-browser/connectors'
 
 /**
  * 同じ本文を何度も解析しないよう、結果を本文ごとに覚えておく(レスの描き直しやタブの作り直しのたびに解析しない)。
@@ -314,7 +314,7 @@ export function hasVideo(text: string): boolean {
 }
 
 /** アプリ(専ブラ)で開けるスレの URL か。本文のリンクを緑にするのと、押したときにアプリで開くかの判断に使う */
-export const isAppThreadUrl = memoByText((url) => builtinConnectors.some((c) => c.isThreadUrl?.(url) ?? false))
+export const isAppThreadUrl = memoByText((url) => allConnectors().some((c) => c.isThreadUrl?.(url) ?? false))
 
 export interface BodyHandlers {
   /** アンカーを押した(via='click')、またはマウスを乗せた(via='hover') */

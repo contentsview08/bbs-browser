@@ -5,7 +5,9 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
-  builtinConnectors,
+  allConnectors,
+  demoConnector,
+  registerConnector,
   findConnector,
   type Board,
   type BoardInfo,
@@ -17,6 +19,7 @@ import {
   type SiteConfig,
   type ThreadSummary,
   type ListSort,
+  type PostActionDef,
 } from '@bbs-browser/connectors'
 import {
   applyFetch,
@@ -89,6 +92,9 @@ const threadEntry = (thread: ThreadSummary) => ({ key: `thread:${threadId(thread
 /** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
 const TAB_REPEAT_SETTLE_MS = 200
 
+// 開発中のアプリだけ、お試しの掲示板(通信しない。https://demo.bbs-browser.invalid/board/)を足す
+if (import.meta.env.DEV) registerConnector(demoConnector)
+
 const connectorOf = (id: string) => {
   const c = findConnector(id)
   if (!c) throw new Error(`コネクタ ${id} がありません`)
@@ -114,7 +120,7 @@ async function resolve(url: string) {
   } catch {
     throw new Error(`URL として読めません: ${trimmed}`)
   }
-  const connector = builtinConnectors.find((c) => c.canHandle(trimmed))
+  const connector = allConnectors().find((c) => c.canHandle(trimmed))
   if (!connector) throw new Error(`対応していない URL です: ${trimmed}`)
   let r: Awaited<ReturnType<typeof connector.resolveUrl>>
   try {
@@ -199,6 +205,17 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** 消そうとしている自分の書き込み(確かめるダイアログを出している間) */
   const [postDeleteConfirm, setPostDeleteConfirm] = useState<{ t: ThreadSummary; p: Post }>()
+  /** 確かめてから実行するレスへの操作(通報など。コネクタの postActions の confirm) */
+  const [postActionConfirm, setPostActionConfirm] = useState<{ t: ThreadSummary; p: Post; def: PostActionDef }>()
+  /** レスへの操作を実行して、結果を知らせる */
+  const runPostAction = (t: ThreadSummary, p: Post, def: PostActionDef) => {
+    const c = findConnector(t.connectorId)
+    if (!c?.runPostAction) return
+    void c.runPostAction(t, p, def.id, ctx).then(
+      (r) => notify(r.status === 'ok' ? { icon: def.icon, title: r.message || `${def.label}しました` } : { icon: 'error', title: `${def.label}できませんでした`, body: r.message }),
+      backgroundError(def.label),
+    )
+  }
   /** Shift+Delete で消そうとしているタブ(確かめるダイアログを出している間) */
   const [deleteConfirm, setDeleteConfirm] = useState<string[]>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
@@ -672,14 +689,19 @@ export default function App() {
         // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)。
         // 開いたときの取得では動かさない(開いた直後に画面に見えたレスが既読になり、線が下へずれてしまうため)。
         // 変わらなかったときはログを差し替えない(スレ表示を描き直さない)
-        // レスの評価(ふたばのそうだね)は、新しいレスがなくても増えるので、届いたら写す
-        const votes = r.votes && new Map(Object.entries(r.votes).map(([k, v]) => [Number(k), v] as const))
+        // レスへの反応(ふたばのそうだねなど)は、新しいレスがなくても増えるので、届いたら写す
+        const reactions = r.reactions && new Map(Object.entries(r.reactions).map(([k, v]) => [Number(k), v] as const))
         setTabs((ts) =>
           ts.map((x) => {
             if (x.id !== id) return x
             const unreadFrom = opts.keepUnread ? x.unreadFrom : x.readNo + 1
-            if (!changed && x.log && unreadFrom === x.unreadFrom && !votes) return x
-            return { ...x, log: changed || !x.log ? saved : x.log, unreadFrom, ...(votes && { votes: new Map([...(x.votes ?? []), ...votes]) }) }
+            if (!changed && x.log && unreadFrom === x.unreadFrom && !reactions) return x
+            return {
+              ...x,
+              log: changed || !x.log ? saved : x.log,
+              unreadFrom,
+              ...(reactions && { reactions: new Map([...(x.reactions ?? []), ...reactions]) }),
+            }
           }),
         )
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
@@ -1534,18 +1556,28 @@ export default function App() {
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
     // 自分の書き込みを消す(確かめてから)
     deletePost: useEvent((t: ThreadSummary, p: Post) => setPostDeleteConfirm({ t, p })),
-    // そうだね: 押したら、返ってきた新しい数をタブに写す
-    vote: useEvent((t: ThreadSummary, p: Post) => {
+    // 反応(そうだね・いいねなど)を押した: 返ってきた新しい数をタブに写す
+    react: useEvent((t: ThreadSummary, p: Post, reactionId: string) => {
       const c = findConnector(t.connectorId)
-      if (!c?.vote) return
-      void c.vote(t, p, ctx).then(
+      if (!c?.react) return
+      const label = c.reactions?.find((r) => r.id === reactionId)?.label ?? reactionId
+      void c.react(t, p, reactionId, ctx).then(
         (n) => {
           const id = threadId(t)
           const key = p.ref ?? p.no
-          setTabs((ts) => ts.map((x) => (x.id === id ? { ...x, votes: new Map(x.votes ?? []).set(key, n) } : x)))
+          setTabs((ts) =>
+            ts.map((x) => (x.id === id ? { ...x, reactions: new Map(x.reactions ?? []).set(key, { ...x.reactions?.get(key), [reactionId]: n }) } : x)),
+          )
         },
-        backgroundError('そうだね'),
+        backgroundError(label),
       )
+    }),
+    // レスへの操作(通報など): 確かめる文があれば確かめてから
+    postAction: useEvent((t: ThreadSummary, p: Post, actionId: string) => {
+      const def = findConnector(t.connectorId)?.postActions?.find((a) => a.id === actionId)
+      if (!def) return
+      if (def.confirm) setPostActionConfirm({ t, p, def })
+      else runPostAction(t, p, def)
     }),
     openBoardOf: useEvent((t: ThreadSummary) => {
       const fav = favorites?.find((b) => b.url === t.boardUrl)
@@ -1816,10 +1848,11 @@ export default function App() {
                   postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
                   maxPosts={findConnector(t.thread.connectorId)?.maxPosts}
                   anchorTarget={findConnector(t.thread.connectorId)?.anchorTarget}
-                  voteLabel={findConnector(t.thread.connectorId)?.voteLabel}
+                  reactionDefs={findConnector(t.thread.connectorId)?.reactions}
+                  postActions={findConnector(t.thread.connectorId)?.postActions}
                   textQuotes={findConnector(t.thread.connectorId)?.textQuotes}
                   attachments={findConnector(t.thread.connectorId)?.attachments}
-                  canVote={!!findConnector(t.thread.connectorId)?.vote}
+                  canReact={!!findConnector(t.thread.connectorId)?.react}
                   canDeletePost={!!findConnector(t.thread.connectorId)?.deletePost}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
                   ev={stableTabEvents}
@@ -1874,6 +1907,18 @@ export default function App() {
 
       <Notifications items={notifications} onClose={dismiss} />
 
+      {postActionConfirm && (
+        <ConfirmDialog
+          title={postActionConfirm.def.label}
+          message={postActionConfirm.def.confirm!}
+          okLabel={postActionConfirm.def.label}
+          onClose={(ok) => {
+            const { t, p, def } = postActionConfirm
+            setPostActionConfirm(undefined)
+            if (ok) runPostAction(t, p, def)
+          }}
+        />
+      )}
       {postDeleteConfirm && (
         <ConfirmDialog
           title="書き込みを削除"

@@ -172,6 +172,12 @@ async function sendRegist(
     : { status: 'error', message: r.message, html }
 }
 
+/** そうだね(ふたばの、レスへの反応は 1 種類だけ) */
+const SODANE = 'sodane'
+/** パーサーが返す「番号 → そうだねの数」を、反応の形(番号 → { sodane: 数 })にする */
+const sodane = (votes: Record<string, number>): Record<string, Record<string, number>> =>
+  Object.fromEntries(Object.entries(votes).map(([ref, n]) => [ref, { [SODANE]: n }]))
+
 /** サーバーに頼む並び順と、カタログの sort の番号 */
 const CATALOG_SORT: Record<ListSort, number> = { newest: 1, oldest: 2, most: 3, fewest: 4, momentum: 6 }
 
@@ -180,7 +186,7 @@ export const futabaConnector: Connector = {
   name: 'ふたば☆ちゃんねる',
   capabilities: { post: true, images: true, incremental: true },
   anchorTarget: 'ref',
-  voteLabel: 'そうだね',
+  reactions: [{ id: SODANE, label: 'そうだね', icon: 'thumb_up' }],
   // 引用は番号ではなく「>前のレスの文章」で書く
   textQuotes: true,
   // 書き込みに画像・動画を 1 つ付けられる(フォームの MAX_FILE_SIZE と「添付可能:GIF,JPG,PNG,WEBM,MP4」)
@@ -266,7 +272,7 @@ export const futabaConnector: Connector = {
       return {
         status: 'updated',
         posts,
-        votes,
+        reactions: sodane(votes),
         cursor: { lastRef: last.ref ?? 0, lastNo: last.no } satisfies RawCursor,
         ...(!thread.title && { title: titleFromOp(posts[0].body) }),
       }
@@ -285,9 +291,9 @@ export const futabaConnector: Connector = {
     }
     const fresh = parsed.posts.filter((p) => (p.ref ?? 0) > cursor.lastRef)
     // そうだねは前のレスにも増えるので、新しいレスがなくても返す
-    if (fresh.length === 0) return { status: 'notModified', posts: [], cursor, votes: parsed.votes }
+    if (fresh.length === 0) return { status: 'notModified', posts: [], cursor, reactions: sodane(parsed.votes) }
     const last = fresh.at(-1)!
-    return { status: 'updated', posts: fresh, votes: parsed.votes, cursor: { lastRef: last.ref ?? cursor.lastRef, lastNo: last.no } satisfies RawCursor }
+    return { status: 'updated', posts: fresh, reactions: sodane(parsed.votes), cursor: { lastRef: last.ref ?? cursor.lastRef, lastNo: last.no } satisfies RawCursor }
   },
 
   async createPost(thread, input, ctx): Promise<PostResult> {
@@ -310,7 +316,8 @@ export const futabaConnector: Connector = {
   },
 
   // そうだね: /sd.php?板名.番号 を GET すると、新しい数が返る(ふたばの JavaScript の sd() と同じ)
-  async vote(thread, post, ctx) {
+  async react(thread, post, reactionId, ctx) {
+    if (reactionId !== SODANE) throw new Error(`ふたばにない反応です: ${reactionId}`)
     const board = new URL(thread.boardUrl).pathname.split('/').filter(Boolean)[0]
     const res = await ctx.http.get(`${originOf(thread.boardUrl)}/sd.php?${board}.${post.ref ?? post.no}`, { headers: { ...BROWSER, Referer: threadWebUrl(thread) } })
     if (res.status !== 200) throw new Error(`そうだねを送れませんでした(HTTP ${res.status})`)

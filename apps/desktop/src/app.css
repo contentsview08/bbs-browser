@@ -476,8 +476,8 @@ article.post-discord:hover {
 .card-thread[data-variant='classic'].card-selected {
   background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
 }
-/* Discord 風の行: 本家のチャンネル一覧に合わせ、字を大きめ(15px)・# を大きく・行にゆとりを持たせ、スレタイを折り返して全部見せる。
-   高密度では詰めて 1 行に切る */
+/* Discord 風の行: 本家のチャンネル一覧に合わせ、スレタイを本文(1rem)より大きく・# を大きく・行にゆとりを持たせ、スレタイを折り返して全部見せる。
+   大きさは rem で決め、設定の文字の大きさに合わせて伸び縮みさせる。高密度では詰めて 1 行に切る */
 .card-thread[data-variant='discord'] {
   padding: 10px 12px;
 }
@@ -487,21 +487,22 @@ article.post-discord:hover {
   line-height: 1.45;
 }
 .card-thread[data-variant='discord'] .thread-row-title {
-  font-size: 15px;
+  font-size: 1.125rem;
 }
+/* # は 1 行目の高さ(1.125rem × 1.45)の真ん中にそろえる */
 .card-thread[data-variant='discord'] .thread-row-hash {
-  width: 20px;
+  width: 1.375rem;
   text-align: center;
-  font-size: 22px;
+  font-size: 1.5rem;
   font-weight: 300;
-  line-height: 22px;
+  line-height: 1.63rem;
 }
 [data-density='dense'] .card-thread[data-variant='discord'] .thread-row-title {
-  font-size: 14px;
+  font-size: 1.0625rem;
 }
 [data-density='dense'] .card-thread[data-variant='discord'] .thread-row-hash {
-  font-size: 18px;
-  line-height: 18px;
+  font-size: 1.25rem;
+  line-height: 1;
 }
 .card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
   margin-top: 1px;

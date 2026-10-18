@@ -127,6 +127,10 @@ describe('resolveUrl', () => {
       async get(url): Promise<HttpResponse> {
         if (url === 'https://bbs.eddibb.cc/liveedge/subject.txt' || url === 'https://medaka.5ch.io/prog/subject.txt')
           return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1792065954.dat<>スレ (1)\n') }
+        if (url === 'https://mercury.bbspink.com/avideo/subject.txt' || url === 'https://example.com/bbs/news/subject.txt')
+          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1788606033.dat<>スレ (1)\n') }
+        if (url === 'https://itest.bbspink.com/subback/avideo')
+          return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<a href="https://itest.bbspink.com/subback/avideo">x</a><a href="https://mercury.bbspink.com/avideo/">PC版</a>') }
         if (url === 'https://example.com/foo/subject.txt')
           return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<!doctype html><html></html>') }
         if (url === 'https://bbs.eddibb.cc/liveedge/SETTING.TXT') {
@@ -169,6 +173,24 @@ describe('resolveUrl', () => {
   it('SETTING.TXT が取れなければディレクトリ名を板名にする', async () => {
     const r = await twoChConnector.resolveUrl('https://medaka.5ch.io/prog/', ctx)
     expect(r?.board.name).toBe('prog')
+  })
+
+  it('itest(スマホ向け)のスレ・板の URL を、本当のサーバーの URL に直して開く', async () => {
+    const r = await twoChConnector.resolveUrl('https://itest.bbspink.com/mercury/test/read.cgi/avideo/1788606033', ctx)
+    expect(r?.board.url).toBe('https://mercury.bbspink.com/avideo/')
+    expect(r?.thread?.key).toBe('1788606033')
+    // 板の URL にはサーバー名がないので、itest の板のページから探す
+    expect(twoChConnector.canHandle('https://itest.bbspink.com/subback/avideo')).toBe(true)
+    expect((await twoChConnector.resolveUrl('https://itest.bbspink.com/subback/avideo', ctx))?.board.url).toBe('https://mercury.bbspink.com/avideo/')
+    // サーバー名のないスレの URL も、板のページから探す
+    expect((await twoChConnector.resolveUrl('https://itest.bbspink.com/test/read.cgi/avideo/1788606033', ctx))?.thread?.boardUrl).toBe(
+      'https://mercury.bbspink.com/avideo/',
+    )
+  })
+
+  it('/test/read.cgi/ の前に道があるスレの URL も開く', async () => {
+    const r = await twoChConnector.resolveUrl('https://example.com/bbs/test/read.cgi/news/1788606033/', ctx)
+    expect(r?.board.url).toBe('https://example.com/bbs/news/')
   })
 
   it('板でもスレでもない URL は null', async () => {

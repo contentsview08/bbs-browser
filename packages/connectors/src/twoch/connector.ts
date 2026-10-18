@@ -166,8 +166,40 @@ function createdAtOf(key: string, now = Date.now()): Date | undefined {
 }
 
 /** スレの URL(…/test/read.cgi/板/番号/)と板の URL(…/板/)を見分ける */
-const THREAD_URL = /^(https?:\/\/[^/]+)\/test\/read\.cgi\/([^/?#]+)\/(\d+)/
+// スレの URL。/test/read.cgi/ の前に道(ディレクトリ)があってもよい(https://host/bbs/test/read.cgi/板/キー なら、板は https://host/bbs/板/)
+const THREAD_URL = /^(https?:\/\/[^/?#]+(?:\/[^?#]*?)?)\/test\/read\.cgi\/([^/?#]+)\/(\d+)/
+/**
+ * 5ch・bbspink のスマホ向けの見え方(itest)。本当の板は「サーバー名.ドメイン/板/」にある。
+ * - スレ: https://itest.bbspink.com/mercury/test/read.cgi/avideo/1788606033(サーバー名が道に入っている。ないこともある)
+ * - 板: https://itest.bbspink.com/subback/avideo(サーバー名は入っていないので、そのページから探す)
+ */
+const ITEST_THREAD = /^https?:\/\/itest\.(5ch\.net|5ch\.io|bbspink\.com)\/(?:([a-z0-9]+)\/)?test\/read\.cgi\/([^/?#]+)\/(\d+)/
+const ITEST_BOARD = /^https?:\/\/itest\.(5ch\.net|5ch\.io|bbspink\.com)\/subback\/([^/?#]+)/
 const BOARD_URL = /^(https?:\/\/[^/]+)\/([^/?#]+)\/?(?:subject\.txt)?(?:[?#].*)?$/
+
+/**
+ * itest(スマホ向けの見え方)の URL を、本当の板・スレの URL に直す。itest でなければそのまま返す。
+ * サーバー名が URL にないときは、itest の板のページに書かれている本当の板の URL から探す
+ */
+async function fromItest(url: string, ctx: ConnectorContext): Promise<string> {
+  const t = ITEST_THREAD.exec(url)
+  const b = t ? null : ITEST_BOARD.exec(url)
+  if (!t && !b) return url
+  const [domain, server, board, key] = t ? [t[1], t[2], t[3], t[4]] : [b![1], undefined, b![2], undefined]
+  const host = server ? `${server}.${domain}` : await serverOf(domain, board, ctx)
+  return key ? `https://${host}/test/read.cgi/${board}/${key}/` : `https://${host}/${board}/`
+}
+
+/** itest の板のページから、その板のあるサーバー(mercury.bbspink.com など)を探す */
+async function serverOf(domain: string, board: string, ctx: ConnectorContext): Promise<string> {
+  const page = `https://itest.${domain}/subback/${board}`
+  const res = await ctx.http.get(page)
+  ensureOk(res, page)
+  const re = new RegExp(`https?://([a-z0-9]+)\\.${domain.replace('.', '\\.')}/${board}/`)
+  const m = re.exec(ctx.decode(res.body, 'utf-8'))
+  if (!m || m[1] === 'itest') throw new Error(`板のサーバーが分かりませんでした: ${page}`)
+  return `${m[1]}.${domain}`
+}
 
 /** 最後の改行までを切り出す(書き込み途中の行を読まないため) */
 function completeLines(body: Uint8Array): Uint8Array {
@@ -219,7 +251,7 @@ export const twoChConnector: Connector = {
   canHandle(url) {
     // したらばは専用のコネクタで読む
     if (/^https?:\/\/jbbs\.(?:shitaraba\.net|livedoor\.jp)\//.test(url)) return false
-    return THREAD_URL.test(url) || BOARD_URL.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
+    return THREAD_URL.test(url) || BOARD_URL.test(url) || ITEST_BOARD.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
   },
 
   isThreadUrl(url) {
@@ -232,9 +264,10 @@ export const twoChConnector: Connector = {
     return readSettingTxt(board.url, ctx)
   },
 
-  async resolveUrl(url, ctx) {
-    const t = THREAD_URL.exec(url.trim())
-    const b = t ? null : BOARD_URL.exec(url.trim())
+  async resolveUrl(rawUrl, ctx) {
+    const url = await fromItest(rawUrl.trim(), ctx)
+    const t = THREAD_URL.exec(url)
+    const b = t ? null : BOARD_URL.exec(url)
     const [origin, dir] = t ? [t[1], t[2]] : b ? [b[1], b[2]] : []
     if (!origin || !dir || dir === 'test') return null
     const boardUrl = `${origin}/${dir}/`

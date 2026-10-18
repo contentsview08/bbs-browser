@@ -195,6 +195,8 @@ export interface AppSettings {
   ngMode: NgMode
   /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
   autoNg: boolean
+  /** 外付けのコネクタ(connectors/ のフォルダ)ごとの許可。id → 有効か・確かめた通信の先 */
+  connectors: Record<string, { enabled: boolean; hosts: string[] }>
   /** 続けて並んだあぼーん(NG・自動 NG)を 1 行にまとめる */
   groupNg: boolean
   // 画像のアップロード(catbox.moe)
@@ -296,6 +298,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ngRules: [],
   ngMode: 'aborn',
   autoNg: true,
+  connectors: {},
   groupNg: true,
   uploaderEnabled: false,
   uploadStripMetadata: true,

@@ -3,7 +3,7 @@
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import {
   allConnectors,
   demoConnector,
@@ -50,6 +50,7 @@ import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
+import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
 import { COLOR_SCHEMES, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
 import CommandPalette, { type PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
@@ -1211,10 +1212,23 @@ export default function App() {
     }
   }, [])
 
+  // 外付けのコネクタ(connectors/ のフォルダ)を読み込む。タブを戻す・起動時の板を開くのは、読み込み終えてから
+  // (外付けのコネクタのスレを開いたまま閉じていたとき、コネクタがまだないと開けないため)
+  const [externalConnectors, setExternalConnectors] = useState<ExternalConnectorInfo[]>([])
+  const [externalReady, setExternalReady] = useState(false)
+  const reloadExternalConnectors = (approvals = settingsRef.current.connectors) =>
+    loadExternalConnectors(ctx, approvals)
+      .then(setExternalConnectors)
+      .catch(backgroundError('外付けのコネクタの読み込み'))
+  useEffect(() => {
+    if (!settingsLoaded || externalReady) return
+    void reloadExternalConnectors(settings.connectors).finally(() => setExternalReady(true))
+  }, [settingsLoaded])
+
   // 開いていたタブを次の起動で戻す。戻したタブは、選んだときに読み込む
   const restored = useRef(false)
   useEffect(() => {
-    if (restored.current || !settingsLoaded || !store) return
+    if (restored.current || !settingsLoaded || !store || !externalReady) return
     restored.current = true
     const ts = settings.openTabs.map((s) => newTab(fromSaved(s)))
     setTabs(ts)
@@ -1223,7 +1237,7 @@ export default function App() {
       updateView((s) => selectQuietly(s, active.id))
       void run('posts', () => loadTab(store, active.thread))
     }
-  }, [settingsLoaded, store])
+  }, [settingsLoaded, store, externalReady])
 
   const savedTabs = JSON.stringify(
     tabs.map(
@@ -1381,14 +1395,14 @@ export default function App() {
   // 起動時に開く板(設定)。設定とお気に入りを読み終えてから一度だけ
   const startupDone = useRef(false)
   useEffect(() => {
-    if (startupDone.current || !settingsLoaded || !favorites) return
+    if (startupDone.current || !settingsLoaded || !favorites || !externalReady) return
     startupDone.current = true
     const url = settings.startupBoardUrl === '@last' ? settings.lastBoardUrl : settings.startupBoardUrl
     if (!url) return
     const fav = favorites.find((b) => b.url === url)
     if (fav) void openBoard(fav)
     else void openUrlInApp(url)
-  }, [settingsLoaded, favorites, settings.startupBoardUrl])
+  }, [settingsLoaded, favorites, settings.startupBoardUrl, externalReady])
 
   // タブを使わなくしたら、開いているスレ以外のタブを閉じる(戻したタブも 1 つにする)
   useEffect(() => {
@@ -2024,6 +2038,9 @@ export default function App() {
           onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}
+          externalConnectors={externalConnectors}
+          onReloadConnectors={(approvals) => reloadExternalConnectors(approvals)}
+          onOpenConnectorsDir={() => void connectorsDir().then(revealItemInDir).catch(backgroundError('コネクタのフォルダを開く'))}
           onClose={() => setSettingsTab(undefined)}
         />
       )}

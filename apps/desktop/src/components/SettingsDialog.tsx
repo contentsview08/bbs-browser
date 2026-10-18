@@ -21,6 +21,7 @@ import { isValidPattern, newRule, todayDateString, type NgTarget } from '../util
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import type { ExternalConnectorInfo } from '../host/externalConnectors'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
@@ -54,12 +55,32 @@ interface Props {
   onBackupDb: () => Promise<boolean>
   /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */
   onRestoreDb: () => Promise<boolean>
+  /** 外付けのコネクタ(connectors/ のフォルダ)の一覧と、読み込みの結果 */
+  externalConnectors: ExternalConnectorInfo[]
+  /** 外付けのコネクタを読み込み直す(許可を変えたときは、変えたあとの許可を渡す) */
+  onReloadConnectors: (approvals?: Record<string, { enabled: boolean; hosts: string[] }>) => Promise<void>
+  /** connectors/ のフォルダをエクスプローラーで開く */
+  onOpenConnectorsDir: () => void
   /** 最初に開く分類 */
   initialTab?: SettingsTab
   onClose: () => void
 }
 
-export type SettingsTab = 'display' | 'threads' | 'posts' | 'write' | 'refresh' | 'keys' | 'toolbars' | 'ng' | 'boardlist' | 'boards' | 'accounts' | 'backup' | 'about'
+export type SettingsTab =
+  | 'display'
+  | 'threads'
+  | 'posts'
+  | 'write'
+  | 'refresh'
+  | 'keys'
+  | 'toolbars'
+  | 'ng'
+  | 'boardlist'
+  | 'boards'
+  | 'connectors'
+  | 'accounts'
+  | 'backup'
+  | 'about'
 type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string; advanced?: boolean }[] = [
@@ -73,6 +94,7 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean }[] = [
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns', advanced: true },
+  { key: 'connectors', name: 'コネクタ', icon: 'extension', advanced: true },
   { key: 'accounts', name: 'アカウント', icon: 'badge' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
@@ -1730,6 +1752,140 @@ function BoardsTab(
   )
 }
 
+/** 外付けのコネクタ(MOD のように、フォルダに置いて有効にする) */
+function ConnectorsTab({
+  settings: s,
+  update,
+  externalConnectors,
+  onReloadConnectors,
+  onOpenConnectorsDir,
+}: Pick<Props, 'settings' | 'update' | 'externalConnectors' | 'onReloadConnectors' | 'onOpenConnectorsDir'>) {
+  /** 通信の先を確かめてもらっているコネクタ */
+  const [asking, setAsking] = useState<string>()
+  const [busy, setBusy] = useState(false)
+  const reload = async (approvals?: Record<string, { enabled: boolean; hosts: string[] }>) => {
+    setBusy(true)
+    await onReloadConnectors(approvals)
+    setBusy(false)
+  }
+  const setApproval = (id: string, approval: { enabled: boolean; hosts: string[] } | undefined) => {
+    const next = { ...s.connectors }
+    if (approval) next[id] = approval
+    else delete next[id]
+    update('connectors', next)
+    setAsking(undefined)
+    void reload(next)
+  }
+  const STATUS: Record<ExternalConnectorInfo['status'], { label: string; color: string }> = {
+    loaded: { label: '使えます', color: 'var(--c-mark-new)' },
+    disabled: { label: '無効', color: 'var(--c-text-muted)' },
+    needsApproval: { label: '通信の先が変わりました', color: 'var(--c-mark-fav)' },
+    error: { label: '読み込めません', color: 'var(--c-error)' },
+  }
+  return (
+    <>
+      <Section
+        title="外付けのコネクタ"
+        note="アプリのデータフォルダの connectors に、コネクタを 1 つずつフォルダで置きます(manifest.json と connector.js)。置いたら「読み込み直す」を押し、ここで有効にします。コネクタは外と切り離した囲いの中で動き、manifest.json に書いた先とだけ通信できます"
+      >
+        <div className="flex gap-2 mb-3">
+          <button type="button" className={BTN} onClick={onOpenConnectorsDir}>
+            フォルダを開く
+          </button>
+          <button type="button" className={BTN} disabled={busy} onClick={() => void reload()}>
+            {busy ? '読み込み中…' : '読み込み直す'}
+          </button>
+        </div>
+        {externalConnectors.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
+        <div className="flex flex-col gap-2">
+          {externalConnectors.map((c) => {
+            const m = c.manifest
+            const st = STATUS[c.status]
+            const approval = m ? s.connectors[m.id] : undefined
+            return (
+              <div key={c.dir} className="rounded-lg border border-c-border px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-lg text-c-text-muted">extension</span>
+                  <span className="text-sm font-bold text-c-text-strong">{m?.name ?? c.dir}</span>
+                  {m && <span className="text-xs text-c-text-muted">v{m.version}</span>}
+                  {m?.author && <span className="text-xs text-c-text-muted">{m.author}</span>}
+                  <span className="text-[11px] font-bold ml-auto" style={{ color: st.color }}>
+                    {st.label}
+                  </span>
+                  {m && (c.status === 'disabled' || c.status === 'needsApproval') && (
+                    <button type="button" className={BTN} onClick={() => setAsking(m.id)}>
+                      {c.status === 'disabled' ? '有効にする' : '確かめ直す'}
+                    </button>
+                  )}
+                  {m && approval?.enabled && c.status !== 'needsApproval' && (
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border hover:bg-c-surface2"
+                      onClick={() => setApproval(m.id, undefined)}
+                    >
+                      無効にする
+                    </button>
+                  )}
+                </div>
+                {m?.description && <p className="mt-1 text-xs text-c-text-body">{m.description}</p>}
+                <p className="mt-1 text-[11px] text-c-text-muted break-all">
+                  フォルダ: {c.dir}
+                  {m && ` ・ 通信する先: ${m.hosts.join('、')}`}
+                </p>
+                {c.error && (
+                  <p className="mt-1 text-xs break-all" style={{ color: 'var(--c-error)' }}>
+                    {c.error}
+                  </p>
+                )}
+                {m && asking === m.id && (
+                  <div className="mt-2 p-3 rounded-lg bg-c-surface2 text-sm text-c-text-body">
+                    <p className="font-bold">このコネクタは、次の先と通信します</p>
+                    <ul className="my-1.5 list-disc pl-5 font-mono text-xs">
+                      {m.hosts.map((h) => (
+                        <li key={h}>{h}</li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-c-text-muted">
+                      コネクタは、あなたがフォルダに置いたファイルのコードです。囲いの中で動くので、アプリのログ・設定・パスワードには触れませんが、
+                      上の先へは、読んでいるスレの情報や書き込みを送れます。作った人を信頼できるものだけを有効にしてください。
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" className={BTN} onClick={() => setApproval(m.id, { enabled: true, hosts: m.hosts })}>
+                        許可して有効にする
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border hover:bg-c-surface"
+                        onClick={() => setAsking(undefined)}
+                      >
+                        やめる
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Section>
+      <Section title="コネクタの書き方" note="connector.js の中で defineConnector({ ... }) を 1 回呼びます。中身は組み込みのコネクタと同じ形です(リポジトリの docs/connectors.md に、見本と決まりの説明があります)">
+        <pre className="text-[11px] leading-relaxed bg-c-surface2 rounded-lg p-3 overflow-x-auto custom-scrollbar">{`// manifest.json
+{ "id": "my-bbs", "name": "自作の掲示板", "version": "1.0.0", "api": 1, "hosts": ["bbs.example.com"] }
+
+// connector.js
+defineConnector({
+  canHandle: (url) => url.startsWith('https://bbs.example.com/'),
+  threadWebUrl: (t) => 'https://bbs.example.com/t/' + t.key,
+  async resolveUrl(url, ctx) { ... },
+  async listBoards(site, ctx) { return [] },
+  async listThreads(board, ctx) { ... },
+  async fetchPosts(thread, cursor, ctx) { ... },
+})`}</pre>
+      </Section>
+    </>
+  )
+}
+
 function AboutTab() {
   return (
     <>
@@ -1838,6 +1994,7 @@ export default function SettingsDialog(props: Props) {
                 }}
               />
             )}
+            {tab === 'connectors' && <ConnectorsTab {...props} />}
             {tab === 'accounts' && <AccountsTab {...props} />}
             {tab === 'backup' && <BackupTab {...props} />}
             {tab === 'about' && <AboutTab />}

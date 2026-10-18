@@ -14,6 +14,7 @@
     "@bbs-browser/logstore": "*",
     "@fontsource-variable/noto-sans-jp": "^5.3.1",
     "@fontsource/biz-udpgothic": "^5.3.0",
+    "@jitl/quickjs-singlefile-browser-release-sync": "0.31.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-http": "^2",
@@ -21,6 +22,7 @@
     "@tauri-apps/plugin-sql": "^2",
     "date-fns": "^4.1.0",
     "material-symbols": "^0.48.0",
+    "quickjs-emscripten-core": "0.31.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

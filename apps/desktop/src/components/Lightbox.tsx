@@ -5,6 +5,7 @@
 // - Ctrl+ホイールでマウスの位置を中心に拡大・縮小し、拡大中はつかんで動かせる。ダブルクリックで等倍と 2.5 倍を切り替える
 // - 動画のファイル(mp4 など)は、その場で再生する(拡大はしない)。再生できない形式なら、ブラウザで開くボタンを出す
 // - YouTube は埋め込みのプレーヤーで再生する
+// - 2 枚以上なら、下に小さい絵を並べる(何枚あって今どれか。押すとその絵へ飛ぶ)
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -26,6 +27,56 @@ interface Props {
   onIndex: (i: number) => void
   onClose: () => void
   onOpenExternal: (url: string) => void
+}
+
+/** 下に並べる小さい絵の帯の高さ(本文のパネルはこの上に置く) */
+const STRIP_H = 72
+
+/** 下の帯に並べる小さい絵 1 つ。動画のファイルは絵がないので印だけ、YouTube は YouTube の小さい絵 */
+function StripThumb(props: { url: string; current: boolean; onClick: () => void; label: string }) {
+  const { url } = props
+  const ref = useRef<HTMLButtonElement>(null)
+  // 今の絵が帯の外にあれば、見える所へ送る
+  useEffect(() => {
+    if (props.current) ref.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+  }, [props.current])
+  const yt = youtubeEmbedUrl(url) && /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+  const video = isVideoFileUrl(url)
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={props.onClick}
+      title={props.label}
+      className={`relative flex-shrink-0 w-14 h-14 rounded-md overflow-hidden bg-white/10 transition-all ${
+        props.current ? 'ring-2 ring-white opacity-100' : 'opacity-55 hover:opacity-90'
+      }`}
+    >
+      {video ? (
+        <span className="absolute inset-0 flex items-center justify-center text-white/80">
+          <span className="material-symbols-outlined text-2xl">movie</span>
+        </span>
+      ) : !isAutoLoadable(url) ? (
+        <span className="absolute inset-0 flex items-center justify-center text-white/80">
+          <span className="material-symbols-outlined text-xl">lan</span>
+        </span>
+      ) : (
+        <img
+          src={yt ? `https://img.youtube.com/vi/${yt}/default.jpg` : url}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          draggable={false}
+          className="w-full h-full object-cover"
+        />
+      )}
+      {yt && (
+        <span className="absolute inset-0 flex items-center justify-center text-white drop-shadow">
+          <span className="material-symbols-outlined text-xl">play_circle</span>
+        </span>
+      )}
+    </button>
+  )
 }
 
 const NAV = 'absolute top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white bg-black/40 rounded-full'
@@ -260,8 +311,8 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
       {panelOpen && post && !video && !youtube && (
         <div
           ref={panelRef}
-          className="absolute left-1/2 -translate-x-1/2 bottom-4 w-[min(92vw,900px)] max-h-[34vh] overflow-y-auto custom-scrollbar rounded-xl px-5 py-3 text-white backdrop-blur-md"
-          style={{ background: 'rgba(0, 0, 0, 0.62)' }}
+          className="absolute left-1/2 -translate-x-1/2 w-[min(92vw,900px)] max-h-[34vh] overflow-y-auto custom-scrollbar rounded-xl px-5 py-3 text-white backdrop-blur-md"
+          style={{ background: 'rgba(0, 0, 0, 0.62)', bottom: many ? STRIP_H + 8 : 16 }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-3 text-xs text-white/70 mb-1.5">
@@ -325,6 +376,23 @@ export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, 
         </div>
       )}
 
+      {/* 下の帯: 何枚あって今どれか。押すとその絵へ飛ぶ */}
+      {many && (
+        <div
+          className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 px-4"
+          style={{ height: STRIP_H, background: 'linear-gradient(transparent, rgba(0,0,0,0.55))' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="flex-shrink-0 text-white/80 text-sm tabular-nums">
+            {index + 1} / {urls.length}
+          </span>
+          <div className="min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-1">
+            {urls.map((u, i) => (
+              <StripThumb key={`${i}:${u}`} url={u} current={i === index} onClick={() => onIndex(i)} label={`${i + 1} 枚目`} />
+            ))}
+          </div>
+        </div>
+      )}
       {many && (
         <button
           type="button"

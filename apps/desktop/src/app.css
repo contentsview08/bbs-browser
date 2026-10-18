@@ -627,6 +627,12 @@ input[type='checkbox']:indeterminate {
   /* 仮の高さは ThreadView がレスごとに style で入れる。これは入れ忘れたときの値 */
   contain-intrinsic-size: auto 90px;
 }
+/* 操作バーを出しているレスは、描くのを省く仕組み(content-visibility)を外し、次のレスより手前に出す。
+   content-visibility: auto は枠の外を切り取るので、LINE 風で吹き出しの下に出す操作バーが、枠からはみ出た所で見えなくなっていた */
+.post-cv:has([data-post-toolbar]) {
+  content-visibility: visible;
+  z-index: 5;
+}
 
 /* 並びの続きがあることを示す、端のぼかしの色(サイドバー) */
 :root {
@@ -727,5 +733,43 @@ input[type='checkbox']:indeterminate {
 @media (prefers-reduced-motion: reduce) {
   .nav-notch {
     transition: none;
+  }
+}
+
+/* 取り直し・並べ直しの途中に、一覧の上に流す細い帯(ThreadListPanel・スレ表示の切り替え)。一覧は消さずに残す */
+.list-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 30;
+  overflow: hidden;
+  pointer-events: none;
+}
+.list-progress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: var(--c-accent);
+  border-radius: 9999px;
+  animation: list-progress 0.9s ease-in-out infinite;
+}
+@keyframes list-progress {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .list-progress::before {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.6;
   }
 }

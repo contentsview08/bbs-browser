@@ -2,7 +2,7 @@
 // データの流れはここに集め、見た目は components/ の各部品(web 版から移植)に任せる。
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   builtinConnectors,
@@ -329,11 +329,8 @@ export default function App() {
    * スレ一覧で並びを変えたら、サーバーに並べ替えを頼める掲示板なら、その並びで取り直す
    */
   const [listOrder, setListOrder] = useState<ListSort>()
+  /** 頼んでいる並び(取り直しの途中なら、まだ listOrder と違う) */
   const listOrderRef = useRef<ListSort | undefined>(undefined)
-  const changeListOrder = (order: ListSort | undefined) => {
-    listOrderRef.current = order
-    setListOrder(order)
-  }
   /** スレ一覧の並びを、その掲示板のサーバーに頼める並びにする(頼めなければ undefined = 手元で並べ替える) */
   const serverSortFor = (b: Board, sort: { mode: SortMode; dir: 'desc' | 'asc' } | null): ListSort | undefined => {
     if (!sort) return undefined
@@ -353,12 +350,14 @@ export default function App() {
     if (!b) return
     const order = serverSortFor(b, sort)
     if (order === listOrderRef.current) return
-    changeListOrder(order)
+    // 届くまでは、今の一覧を手元で並べ替えて見せる(listOrder は届いた一覧と一緒に変える)
+    listOrderRef.current = order
     void run('threads', async () => {
       const list = await connectorOf(b.connectorId).listThreads(b, ctx, { sort: order })
       if (boardRef.current?.url !== b.url || listOrderRef.current !== order) return
       rememberList(b.url, list)
       setThreads(list)
+      setListOrder(order)
     })
   }
 
@@ -372,21 +371,27 @@ export default function App() {
       setBoard(b)
       // 「起動時に前回の板を開く」ために覚えておく
       if (lastBoardUrl.current !== b.url) updateSetting('lastBoardUrl', b.url)
-      // 同じ板の取り直しなら今の並びのまま、別の板なら設定の「最初の並び順」で(サーバーに頼める掲示板だけ)
-      const order =
-        boardRef.current?.url === b.url && !record
-          ? listOrderRef.current
-          : serverSortFor(b, settingsRef.current.threadSort === 'subject' ? null : { mode: settingsRef.current.threadSort, dir: 'desc' })
-      changeListOrder(order)
+      // 同じ板の取り直しなら、今の並びのまま、届くまで今の一覧を残す(消して待たせない。上に細い帯が流れる)。
+      // 別の板なら、設定の「最初の並び順」で(サーバーに頼める掲示板だけ)
+      const sameBoard = boardRef.current?.url === b.url && !favView && !history
+      const order = sameBoard
+        ? listOrderRef.current
+        : serverSortFor(b, settingsRef.current.threadSort === 'subject' ? null : { mode: settingsRef.current.threadSort, dir: 'desc' })
+      listOrderRef.current = order
       setHistory(undefined)
       setFavView(false)
-      setThreads([])
+      if (!sameBoard) {
+        setThreads([])
+        setListOrder(order)
+      }
       // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }), store.getThreadStates(b.url)])
+      if (listOrderRef.current !== order) return // 待っているあいだに並びを変えた(そちらの取り直しを使う)
       rememberList(b.url, list)
       setThreads(list)
+      setListOrder(order)
       setStates(st)
     })
 
@@ -1472,14 +1477,18 @@ export default function App() {
 
   // 最近開いたタブ(KEEP_TABS 個まで)はスレ表示を残しておく。開いているタブを先頭に、閉じたタブは外す
   const [keptIds, setKeptIds] = useState<string[]>([])
+  // タブの切り替えは、タブの帯(どれを選んだか)を先に描き、スレ表示の組み立て(初めて開くタブはレスを並べる)は後回しにする。
+  // 組み立ての途中は、前のスレ表示の上に細い帯を流す
+  const paneId = useDeferredValue(activeId)
+  const switchingPane = paneId !== activeId
   useEffect(() => {
-    if (!activeId) return
-    setKeptIds((prev) => [activeId, ...prev.filter((x) => x !== activeId)].slice(0, KEEP_TABS))
-  }, [activeId])
+    if (!paneId) return
+    setKeptIds((prev) => [paneId, ...prev.filter((x) => x !== paneId)].slice(0, KEEP_TABS))
+  }, [paneId])
   const aliveIds = new Set(tabs.map((t) => t.id))
   // どれを残すかは最近開いた順で決めるが、並べる順は id で固定する。
   // 並びが変わると React が要素を付け替え、付け替えられたスレ表示はスクロール位置が一番上に戻ってしまうため
-  const shownIds = (activeId && !keptIds.includes(activeId) ? [activeId, ...keptIds] : keptIds)
+  const shownIds = (paneId && !keptIds.includes(paneId) ? [paneId, ...keptIds] : keptIds)
     .filter((id) => aliveIds.has(id))
     .slice(0, KEEP_TABS)
     .sort()
@@ -1780,13 +1789,14 @@ export default function App() {
 
         {/* 最近開いたタブのスレ表示は残しておき、切り替えは見せる・隠すだけにする(作り直さない) */}
         <div className="relative flex-1 min-h-0 flex">
+          {switchingPane && <div className="list-progress" aria-label="読み込み中" />}
           {shownIds.map((id) => {
             const t = tabs.find((x) => x.id === id)
             if (!t?.log) return null
             // 1 画面でスレ一覧に戻っているあいだは、隠れているスレ表示を開いていないタブと同じに扱う(キー操作・既読を受けない)
-            const isActive = id === activeId && (!single || threadShown)
+            const isActive = id === paneId && (!single || threadShown)
             return (
-              <div key={id} className={`absolute inset-0 flex ${id === activeId ? '' : 'invisible pointer-events-none'}`}>
+              <div key={id} className={`absolute inset-0 flex ${id === paneId ? '' : 'invisible pointer-events-none'}`}>
                 <TabPane
                   tab={t as Tab & { log: ThreadLog }}
                   active={isActive}

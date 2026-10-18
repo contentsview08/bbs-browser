@@ -1,7 +1,7 @@
 // スレ一覧パネル。web 版の ThreadListPanel.tsx(PC 版)の見た目を移植。
 // 板のスレ一覧と閲覧履歴の両方をこのパネルで出す。
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import ThreadCard from './ThreadCard'
@@ -337,27 +337,35 @@ export default function ThreadListPanel(props: Props) {
     // threads は snapshotKey を渡さないときのきっかけとして入っている
   }, [unreadOnly, snapshotKey])
 
+  // 並べ替え・一覧の入れ替えは、タブの印(どれを選んだか)を先に描き、並べ直したカードの組み立ては後回しにする。
+  // カードが多いと組み立てに時間がかかり、押してから印が変わるまで固まったように見えるため
+  const shownSort = useDeferredValue(sort)
+  const shownThreads = useDeferredValue(threads)
+  // サーバーの並び(ふたば)は一覧と一緒に変わるので、一緒に遅らせる(ずれると、一瞬だけ並べ替えていない一覧が出る)
+  const shownServerOrder = useDeferredValue(props.serverOrder)
+  /** 並べ直したカードを組み立てている途中(上に細い帯を出す) */
+  const rebuilding = shownSort !== sort || shownThreads !== threads
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    let list = threads.filter((t) => {
+    let list = shownThreads.filter((t) => {
       if (props.isNg(t)) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
       if (unreadOnly && !(unreadSnapshot?.has(threadId(t)) ?? false)) return false
       if (visitedOnly && stateOf(t) === undefined) return false
       return true
     })
-    const so = props.serverOrder
-    if (sort && so && so.mode === sort.mode) {
+    const so = shownServerOrder
+    if (shownSort && so && so.mode === shownSort.mode) {
       // サーバーが並べ替えた順をそのまま使う(手元の勢いの計算はサーバーと違うので、並べ替え直さない)
-      if (so.dir !== sort.dir) list = [...list].reverse()
-    } else if (sort) {
-      const sign = sort.dir === 'desc' ? -1 : 1
+      if (so.dir !== shownSort.dir) list = [...list].reverse()
+    } else if (shownSort) {
+      const sign = shownSort.dir === 'desc' ? -1 : 1
       const value = (t: ThreadSummary) =>
-        sort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : sort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
+        shownSort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : shownSort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
     return list
-  }, [threads, query, unreadOnly, visitedOnly, unreadSnapshot, sort, props.isNg, momenta, stateOf, props.serverOrder])
+  }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
@@ -759,7 +767,9 @@ export default function ThreadListPanel(props: Props) {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col">
+        <div className="relative flex-1 flex flex-col">
+          {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
+          {(rebuilding || (props.loading && visible.length > 0)) && <div className="list-progress" aria-label="読み込み中" />}
           {visible.length === 0 ? (
             props.loading ? (
               <LoadingCenter />

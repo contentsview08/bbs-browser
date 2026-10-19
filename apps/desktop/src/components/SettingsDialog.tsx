@@ -93,18 +93,19 @@ export type SettingsTab =
   | 'about'
 type Tab = SettingsTab
 
-const TABS: { key: Tab; name: string; icon: string; advanced?: boolean }[] = [
+const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopOnly?: boolean }[] = [
   { key: 'display', name: '表示', icon: 'palette' },
   { key: 'threads', name: 'スレッド一覧', icon: 'view_list' },
   { key: 'posts', name: 'レス表示', icon: 'forum' },
   { key: 'write', name: '書き込み', icon: 'edit' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
-  { key: 'keys', name: 'キー操作', icon: 'keyboard', advanced: true },
+  // スマホにはキーがないので、ここはジェスチャー(なぞる操作)の設定になる
+  isMobile ? { key: 'keys', name: 'ジェスチャー', icon: 'swipe' } : { key: 'keys', name: 'キー操作', icon: 'keyboard', advanced: true },
   { key: 'toolbars', name: 'ボタンの配置', icon: 'toolbar', advanced: true },
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns', advanced: true },
-  { key: 'connectors', name: 'コネクタ', icon: 'extension', advanced: true },
+  { key: 'connectors', name: 'コネクタ', icon: 'extension', advanced: true, desktopOnly: true },
   { key: 'accounts', name: 'アカウント', icon: 'badge' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
@@ -123,7 +124,20 @@ const AdvancedContext = createContext(false)
 /** 設定の検索の言葉(空なら探していない)。Section は、中の文字に言葉が入っていなければ隠れる */
 const SearchContext = createContext('')
 
-function Section({ title, children, note, advanced }: { title: string; children: ReactNode; note?: string; advanced?: boolean }) {
+function Section({
+  title,
+  children,
+  note,
+  advanced,
+  desktopOnly,
+}: {
+  title: string
+  children: ReactNode
+  note?: string
+  advanced?: boolean
+  /** PC だけの設定(キー操作・サイドバー・マウスの操作・フォルダなど)。スマホでは出さない */
+  desktopOnly?: boolean
+}) {
   const showAdvanced = useContext(AdvancedContext)
   const query = useContext(SearchContext)
   const ref = useRef<HTMLElement>(null)
@@ -135,6 +149,7 @@ function Section({ title, children, note, advanced }: { title: string; children:
     el.hidden = q !== '' && !normalizeForSearch(el.textContent ?? '').includes(q)
   })
   if (advanced && !showAdvanced) return null
+  if (desktopOnly && isMobile) return null
   return (
     <section ref={ref} className="mb-8">
       <h3 className="text-sm font-bold text-c-text-strong mb-1 flex items-center gap-2">
@@ -336,7 +351,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           })}
         </div>
       </Section>
-      <Section advanced title="フォント">
+      <Section advanced desktopOnly title="フォント">
         <Choice
           value={s.fontFamily}
           options={[...FONT_FAMILIES, { key: 'custom' as const, name: s.customFont ? `OS のフォント(${s.customFont})` : 'OS のフォント' }]}
@@ -355,7 +370,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           あのイーハトーヴォのすきとおった風、0123456789 ABCabc
         </p>
       </Section>
-      <Section advanced title="背景画像" note="パネルの後ろに置きます。下の「パネルの不透明度」でパネルを透かすと見えます。選んだ画像はアプリのフォルダにコピーして使います">
+      <Section advanced desktopOnly title="背景画像" note="パネルの後ろに置きます。下の「パネルの不透明度」でパネルを透かすと見えます。選んだ画像はアプリのフォルダにコピーして使います">
         <div className="flex items-center gap-3">
           <div
             className="w-24 h-16 flex-shrink-0 rounded-[var(--card-radius)] border border-c-border bg-c-surface2 bg-cover bg-center"
@@ -396,6 +411,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
         </div>
       </Section>
       <Section
+        desktopOnly
         title="画面の分け方"
         note="1 画面にすると、スレ一覧とスレ表示のどちらか一方を画面いっぱいに出します。スレを押すとスレ表示に、上の帯の左のボタンで一覧に戻ります"
       >
@@ -409,7 +425,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('paneMode', v)}
         />
       </Section>
-      <Section advanced title="サイドバー">
+      <Section advanced desktopOnly title="サイドバー">
         <Toggle
           checked={s.showStripNames}
           onChange={(v) => update('showStripNames', v)}
@@ -417,7 +433,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           note="お気に入り板のアイコンの下に、板名を小さく出します(別名があれば別名)"
         />
       </Section>
-      <Section advanced title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
+      <Section advanced desktopOnly title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
         <div className="space-y-1.5">
           {PANELS.map((p) => {
             const v = s.panelAlpha[p.key] ?? 1
@@ -486,7 +502,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
   }
   return (
     <>
-      <Section advanced title="更新">
+      <Section advanced desktopOnly title="更新">
         <Toggle
           checked={s.pullToRefreshList}
           onChange={(v) => update('pullToRefreshList', v)}
@@ -554,7 +570,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
           note="確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます"
         />
       </Section>
-      <Section advanced title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+      <Section advanced desktopOnly title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
           checked={s.tabsEnabled}
           onChange={(v) => update('tabsEnabled', v)}
@@ -601,7 +617,7 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           onChange={(v) => update('openPosition', v)}
         />
       </Section>
-      <Section title="アンカー(>>1)のポップアップ" note="レス番号と ID は押すと一覧が出ます">
+      <Section desktopOnly title="アンカー(>>1)のポップアップ" note="レス番号と ID は押すと一覧が出ます">
         <Choice
           value={s.anchorPopup}
           options={[
@@ -611,7 +627,7 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           onChange={(v) => update('anchorPopup', v)}
         />
       </Section>
-      <Section advanced title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
+      <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -855,7 +871,7 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
         </div>
       </Section>
 
-      <Section advanced title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">
+      <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
           {ordered.map((item) => {
             const on = shown.includes(item.key)
@@ -1105,6 +1121,7 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
       {(['view', 'app'] as const).map((where) => (
       <Section
         key={where}
+        desktopOnly
         title={where === 'view' ? 'スレ表示・スレ一覧のキー操作' : 'アプリ全体のキー操作'}
         note={
           where === 'view'
@@ -1151,7 +1168,7 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
       </Section>
       ))}
       {isMobile && <GestureSettings settings={s} update={update} />}
-      <Section title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
+      <Section desktopOnly title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
         <ul className="text-sm text-c-text-body space-y-1">
           {FIXED_KEYS.map((f) => (
             <li key={f.keys}>
@@ -2046,7 +2063,7 @@ function AboutTab() {
           ほかの掲示板は、外付けのコネクタ(設定 → コネクタ)で足せます。
         </p>
       </Section>
-      <Section title="データの保存場所">
+      <Section desktopOnly title="データの保存場所">
         <p className="text-sm font-mono text-c-text-body break-all">%APPDATA%\io.github.yumekui8.bbs-browser\bbs-browser.db</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>
         <p className="text-sm font-mono text-c-text-body break-all mt-3">%APPDATA%\io.github.yumekui8.bbs-browser\backups\</p>
@@ -2078,7 +2095,8 @@ export default function SettingsDialog(props: Props) {
     props.onClose()
   })
 
-  const tabs = TABS.filter((t) => showAdvanced || !t.advanced)
+  // スマホは、PC だけの設定のまとまり(コネクタなど)を出さない
+  const tabs = TABS.filter((t) => (showAdvanced || !t.advanced) && !(isMobile && t.desktopOnly))
   const renderTab = (key: Tab) => {
     switch (key) {
       case 'display':

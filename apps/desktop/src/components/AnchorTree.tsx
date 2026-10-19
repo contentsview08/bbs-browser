@@ -12,7 +12,9 @@ const STEP = isMobile ? 12 : 18
  * スマホ: これより深い段は、この段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)。
  * 線のつながりは少し崩れるが、どのレスへの返信かは本文のアンカーで分かる
  */
-const MAX_DEPTH = isMobile ? 4 : Infinity
+const MAX_DEPTH = isMobile ? 5 : Infinity
+/** スマホ: 1 段ごとに右へずらす幅(罫線を引かず、レスの左の縦線を階段のように並べる) */
+const MOBILE_STEP = 10
 /** 分岐の横線を出す高さ(レスのヘッダーの真ん中あたり) */
 const ELBOW_Y = 14
 
@@ -38,6 +40,8 @@ export default function AnchorTree(props: {
 }) {
   // スマホでは深い段を MAX_DEPTH にそろえる
   if (MAX_DEPTH !== Infinity) props = { ...props, rows: props.rows.map((row) => (row.depth > MAX_DEPTH ? { ...row, depth: MAX_DEPTH } : row)) }
+  // スマホは画面の幅が狭く、罫線でつなぐと本文が窮屈になるので、レスの左に縦線を引いて段をずらすだけにする
+  if (isMobile) return <StepTree {...props} />
   // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
   if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + (isMobile ? 8 : 12)} />
   if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} />
@@ -140,6 +144,31 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * スマホのアンカーツリー。罫線(├ └)を引かず、返信のレスの左に縦線を引いて、段ごとに少しずつ右へずらす。
+ * 縦線が階段のように並ぶので、どのレスへの返信かが分かる(Reddit などのスマホのコメント欄と同じ)
+ */
+function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNode }) {
+  return (
+    <div className="flex flex-col">
+      {props.rows.map((r) => (
+        <div
+          key={r.no}
+          className="tree-post-step min-w-0"
+          style={
+            r.depth > 0
+              ? { marginLeft: (r.depth - 1) * MOBILE_STEP + 4, borderLeft: `2px solid ${LINE}`, paddingLeft: 2 }
+              : undefined
+          }
+        >
+          {props.renderPost(r.no)}
+          {r.alsoTo.length > 0 && <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>}
+        </div>
+      ))}
     </div>
   )
 }

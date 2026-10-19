@@ -1600,8 +1600,8 @@ export default function ThreadView(props: Props) {
             <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
-        {/* スマホは真ん中にそろえる(入りきらないときは左から並べて横にずらせる: safe center) */}
-        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'gap-4 px-4 text-[13px] [justify-content:safe_center]' : 'gap-5 px-4 text-base'}`}>
+        {/* スマホは、左右の端までを等分して並べる(人気・画像・動画・リンク・すべて) */}
+        <div className={`items-center font-medium ${isMobile ? 'grid grid-cols-5 text-[13px]' : 'flex overflow-x-auto no-scrollbar gap-5 px-4 text-base'}`}>
           {FILTERS.map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (
@@ -1616,7 +1616,7 @@ export default function ThreadView(props: Props) {
                     return next
                   })
                 }
-                className={`relative shrink-0 flex items-center ${isMobile ? 'gap-1' : 'gap-1.5'} transition-colors whitespace-nowrap ${
+                className={`relative shrink-0 flex items-center ${isMobile ? 'justify-center gap-1' : 'gap-1.5'} transition-colors whitespace-nowrap ${
                   active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
                 }`}
                 style={{ paddingTop: isMobile ? 8 : 10, paddingBottom: isMobile ? 8 : 10 }}
@@ -1638,14 +1638,15 @@ export default function ThreadView(props: Props) {
           <button
             type="button"
             onClick={() => setFilters(new Set())}
-            className={`relative shrink-0 transition-colors ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+            className={`relative shrink-0 transition-colors ${isMobile ? 'text-center' : ''} ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
             style={{ paddingTop: 10, paddingBottom: 10 }}
             title="絞り込みを外す(5 キー・Esc)"
           >
             すべて
             {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
           </button>
-          {visibleNos && (
+          {/* 絞り込んだ数(スマホは等分の並びが崩れるので出さない。数は各ボタンに出ている) */}
+          {visibleNos && !isMobile && (
             <span className="ml-auto shrink-0 text-xs text-c-text-muted tabular-nums">
               {visibleNos.size} / {log.posts.length} レス
             </span>
@@ -1730,7 +1731,7 @@ export default function ThreadView(props: Props) {
             gap: 'var(--list-gap-post)',
             ...(isMobile && hasFooter && { paddingBottom: `calc(var(--list-padding-post) + ${MOBILE_BAR_H + 8}px)` }),
             // スマホ: 右端に重ねたミニマップの分、本文を左へ寄せる
-            ...(isMobile && settings.showMinimap && { paddingRight: 'calc(var(--list-padding-post) + 34px)' }),
+            ...(isMobile && settings.showMinimap && { paddingRight: 'calc(var(--list-padding-post) + 24px)' }),
           }}
         >
           {log.posts.length === 0 ? (

@@ -5,6 +5,7 @@
 // 印は重ならないよう 3 つの列に分ける(左: 自分のレスと返信、真ん中: 人気レスの帯、右: 画像と動画)。
 // いま見ている位置のつまみは強調色で目立たせ、未読の範囲はうっすら色を付け、乗せた高さのレス番号を出す。
 
+import { isMobile } from '../utils/platform'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
 import { hasVideo, imageUrlsIn } from '../utils/postBody'
@@ -178,7 +179,8 @@ export default function Minimap(props: Props) {
       {props.topOffset > 0 && (
         <div className="flex-shrink-0 frosted-glass bg-panel-thread-header border-b border-c-border" style={{ height: props.topOffset }} />
       )}
-    <div className="flex-1 min-h-0 py-2 pr-2 pl-1">
+    {/* スマホは画面の端にぴったり付ける(余白を削って、本文の幅を残す) */}
+    <div className={`flex-1 min-h-0 ${isMobile ? 'py-1 pr-0.5 pl-0' : 'py-2 pr-2 pl-1'}`}>
       <div
         className="relative w-[24px] h-full cursor-pointer"
         style={{

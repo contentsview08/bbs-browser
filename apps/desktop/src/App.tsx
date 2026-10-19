@@ -34,15 +34,12 @@ import {
   type TrollMarkRecord,
   type UploadRecord,
 } from '@bbs-browser/logstore'
-import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
+import type { SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
 import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
 import LoadingCenter from './components/LoadingCenter'
-import NewThreadDialog from './components/NewThreadDialog'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
-import UploadHistoryDialog from './components/UploadHistoryDialog'
-import PostHistoryDialog from './components/PostHistoryDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
 import { resolvePlacements } from './utils/toolbar'
@@ -52,14 +49,14 @@ import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
+import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
-import ReaderView from './components/ReaderView'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
 import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
-import CommandPalette, { type PaletteItem } from './components/CommandPalette'
+import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
 import { useViewState } from './hooks/useViewState'
@@ -73,7 +70,6 @@ import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { KEY_ACTIONS, modalOpen, actionFor, isReloadKey, keyEventsOf, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
 import ConfirmDialog from './components/ConfirmDialog'
-import KeyHelp from './components/KeyHelp'
 import { findNextThreads } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
@@ -107,6 +103,15 @@ if (import.meta.env.DEV) registerConnector(demoConnector)
 const BROWSER_UA = isMobile
   ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
   : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+
+// たまにしか開かない画面は、開いたときに読み込む(起動を軽くするため)
+const SettingsDialog = lazyComponent(() => import('./components/SettingsDialog'))
+const NewThreadDialog = lazyComponent(() => import('./components/NewThreadDialog'))
+const UploadHistoryDialog = lazyComponent(() => import('./components/UploadHistoryDialog'))
+const PostHistoryDialog = lazyComponent(() => import('./components/PostHistoryDialog'))
+const ReaderView = lazyComponent(() => import('./components/ReaderView'))
+const CommandPalette = lazyComponent(() => import('./components/CommandPalette'))
+const KeyHelp = lazyComponent(() => import('./components/KeyHelp'))
 
 const connectorOf = (id: string) => {
   const c = findConnector(id)

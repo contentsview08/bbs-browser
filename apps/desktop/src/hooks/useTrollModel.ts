@@ -9,6 +9,8 @@ import { backgroundError } from '../utils/backgroundError'
 
 /** 判断軸のために読むログの数(新しく取ったスレから) */
 const CORPUS_POSTS = 40000
+/** 起動してからログを読むまで待つ時間 */
+const STARTUP_DELAY_MS = 4000
 
 export function useTrollModel(store: LogStore | undefined, enabled: boolean, marks: TrollMarkRecord[]): ((body: string) => Judgement) | undefined {
   const worker = useRef<Worker>(undefined)
@@ -29,11 +31,17 @@ export function useTrollModel(store: LogStore | undefined, enabled: boolean, mar
       else if (m.type === 'model' && m.id === requested.current) setModel({ w: m.w, b: m.b, trollMarks: m.trollMarks })
       else if (m.type === 'error') backgroundError('自動 NG の学習')(new Error(m.message))
     }
-    void store
-      .corpusPosts(CORPUS_POSTS)
-      .then((rows) => w.postMessage({ type: 'corpus', rows } satisfies TrollWorkerRequest))
-      .catch(backgroundError('自動 NG のログの読み込み'))
+    // 起動の邪魔をしないよう、少し待ってからログを読む(数万件あり、スマホでは起動が目に見えて遅くなる)
+    const timer = setTimeout(
+      () =>
+        void store
+          .corpusPosts(CORPUS_POSTS)
+          .then((rows) => w.postMessage({ type: 'corpus', rows } satisfies TrollWorkerRequest))
+          .catch(backgroundError('自動 NG のログの読み込み')),
+      STARTUP_DELAY_MS,
+    )
     return () => {
+      clearTimeout(timer)
       w.terminate()
       worker.current = undefined
       setCorpus(undefined)

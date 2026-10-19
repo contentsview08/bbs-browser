@@ -3,7 +3,10 @@
 // 既読情報は localStorage の履歴ではなく LogStore の ThreadState から受け取る。
 
 import BadgeChip from './BadgeChip'
-import { memo } from 'react'
+import ActionSheet from './ActionSheet'
+import { useLongPress } from '../hooks/useLongPress'
+import { isMobile } from '../utils/platform'
+import { memo, useState } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
@@ -44,6 +47,9 @@ interface Props {
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
 function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew, selected, onSelect, isCursor, variant = 'card' }: Props) {
+  // スマホ: 長押しで操作の一覧を出す
+  const [sheet, setSheet] = useState(false)
+  const longPress = useLongPress(isMobile ? () => setSheet(true) : undefined)
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -260,6 +266,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
 
   return (
     <div
+      {...longPress}
       onClick={() => onOpen(thread)}
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
@@ -302,8 +309,24 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
         />
       )}
-      {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す */}
-      {(onNg || onCopy || onToggleFavorite || (onDeleteLog && state)) && (
+      {/* スマホ: 長押しで出す操作の一覧(マウスを乗せて出す操作バーの代わり) */}
+      {sheet && (
+        <ActionSheet
+          title={thread.title}
+          onClose={() => setSheet(false)}
+          items={[
+            { label: '開く', icon: 'open_in_new', onClick: () => onOpen(thread) },
+            ...(onToggleFavorite
+              ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
+              : []),
+            ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
+            ...(onNg ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread), danger: true }] : []),
+            ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread), danger: true }] : []),
+          ]}
+        />
+      )}
+      {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す(スマホは長押しの一覧) */}
+      {!isMobile && (onNg || onCopy || onToggleFavorite || (onDeleteLog && state)) && (
         <div
           className="absolute -top-3.5 right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
           onClick={(e) => e.stopPropagation()}

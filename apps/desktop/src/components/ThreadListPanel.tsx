@@ -15,6 +15,7 @@ import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
+import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { LIST_TABS, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
@@ -274,6 +275,8 @@ export default function ThreadListPanel(props: Props) {
   const footerDrag = useDragHeight(props.footerHeight ?? 0, (h) => props.onFooterHeight?.(h), { min: 28, max: 120 })
   const scrollRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
+  // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
+  const hideBars = useHideOnScroll(headerRef, footerRef)
   const [headerHeight, setHeaderHeight] = useState(0)
   useEffect(() => {
     const el = headerRef.current
@@ -600,7 +603,7 @@ export default function ThreadListPanel(props: Props) {
         key={id}
         thread={t}
         state={stateOf(t)}
-        isActive={props.activeId === id}
+        isActive={!isMobile && props.activeId === id}
         momentum={momenta.get(id) ?? 0}
         momentumRank={ranks.get(id) ?? 0}
         onOpen={onOpenCard}
@@ -610,7 +613,7 @@ export default function ThreadListPanel(props: Props) {
         isFavorite={props.favoriteIds?.has(id) ?? false}
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
-        isCursor={props.active !== false && !cursorHidden && cursorId === id}
+        isCursor={!isMobile && props.active !== false && !cursorHidden && cursorId === id}
         variant={props.variant}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
@@ -679,12 +682,16 @@ export default function ThreadListPanel(props: Props) {
       <div
         ref={scrollRef}
         className="flex-1 min-h-0 overflow-y-auto custom-scrollbar thick-scrollbar flex flex-col"
-        onScroll={pull.noteScroll}
+        onScroll={(e) => {
+          pull.noteScroll()
+          if (isMobile) hideBars.onScroll(e)
+        }}
+        onTouchStart={isMobile ? hideBars.arm : undefined}
         onWheel={(e) => {
           if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
       >
-        <div ref={headerRef} className="sticky top-0 z-10 frosted-glass flex-shrink-0">
+        <div ref={headerRef} className={`sticky top-0 z-10 frosted-glass flex-shrink-0 ${isMobile ? 'transition-transform duration-200' : ''}`}>
           {/* 下の端をつかんで、板名の行の高さを変える(板名の字も合わせて大きくなる) */}
           <DragEdge
             edge="bottom"
@@ -785,7 +792,8 @@ export default function ThreadListPanel(props: Props) {
           </div>
         </div>
 
-        <div className="relative flex-1 flex flex-col">
+        {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
+        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 56 } : undefined}>
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {(rebuilding || (props.loading && visible.length > 0)) && <div className="list-progress" aria-label="読み込み中" />}
           {visible.length === 0 ? (
@@ -848,7 +856,10 @@ export default function ThreadListPanel(props: Props) {
       {(hasFooter || isMobile) && (
         <div
           ref={footerRef}
-          className={`relative flex-shrink-0 ${isMobile ? 'h-12 px-1 bg-panel-thread-header' : 'h-10 px-3'} flex items-center justify-end gap-1 border-t border-c-border`}
+          className={`${
+            // スマホ: 一覧の上に重ね、下へスクロールすると隠す
+            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-12 px-1 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+          } flex items-center justify-end gap-1 border-t border-c-border`}
           style={footerDrag.height ? { height: footerDrag.height } : undefined}
         >
           {/* 上の端をつかんで、フッターの高さを変える */}

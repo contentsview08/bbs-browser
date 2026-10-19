@@ -2,7 +2,7 @@
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
 import { useEffect, useRef, useState } from 'react'
-import { COLOR_SCHEMES, POST_STYLES, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -68,13 +68,13 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
             <button
               key={n}
               type="button"
-              onClick={() => update('fontSize', n)}
+              onClick={() => update(FONT_SIZE_KEY, n)}
               title={`文字サイズ ${n}`}
               className="relative z-10 flex items-center justify-center w-6 h-6 flex-shrink-0"
             >
               <span
                 className={`rounded-full transition-all ${
-                  settings.fontSize === n ? 'w-3 h-3 bg-c-accent' : 'w-1.5 h-1.5 bg-c-border-strong'
+                  settings[FONT_SIZE_KEY] === n ? 'w-3 h-3 bg-c-accent' : 'w-1.5 h-1.5 bg-c-border-strong'
                 }`}
               />
             </button>

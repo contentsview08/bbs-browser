@@ -5,6 +5,9 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post, PostActionDef, ReactionDef } from '@bbs-browser/connectors'
 import BadgeChip from './BadgeChip'
+import ActionSheet, { type SheetItem } from './ActionSheet'
+import { useLongPress } from '../hooks/useLongPress'
+import { isMobile } from '../utils/platform'
 import {
   anchorTargets,
   displayBody,
@@ -107,6 +110,11 @@ export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
 
 const HEAD_TEXT = 'text-xs'
 
+/** Discord 風・LINE 風のアイコンの大きさ。スマホは画面が狭いので小さくする(アンカーツリーの段の幅も合わせる。AnchorTree.tsx) */
+export const AVATAR = isMobile ? 28 : 36
+const AVATAR_W = isMobile ? 'w-7' : 'w-9'
+const AVATAR_CLASS = isMobile ? 'w-7 h-7' : 'w-9 h-9'
+
 interface MenuItem {
   label: string
   icon: string
@@ -202,6 +210,8 @@ function PostArticle(props: Props) {
   const menuOpen = ngOpen || moreOpen
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
   const [hovered, setHovered] = useState(false)
+  const [sheet, setSheet] = useState(false)
+  const longPress = useLongPress(isMobile ? () => setSheet(true) : undefined)
   const [aaOverride, setAaOverride] = useState<boolean | null>(null)
 
   const frame = {
@@ -338,6 +348,14 @@ function PostArticle(props: Props) {
   ]
 
   const variant = props.variant ?? 'card'
+
+  // スマホ: 長押しで、反応(そうだね など)と、︙ のメニューと同じ操作の一覧を出す(マウスを乗せて出す操作バーの代わり)
+  const sheetItems: SheetItem[] = [
+    ...(handlers.onReact
+      ? (handlers.reactionDefs ?? []).map((r) => ({ label: r.label, icon: r.icon, onClick: () => handlers.onReact!(post, r.id) }))
+      : []),
+    ...actions,
+  ]
 
   // ── レスの頭の部品(スタイルごとに並べ方を変える) ──
   /** レス番号(返信があれば数も。押すと返信を出す) */
@@ -487,7 +505,7 @@ function PostArticle(props: Props) {
 
   /** ID のないレス(板の設定や書き方で ID が付かないもの)のアイコン。何もない丸だと壊れて見えるので、人の形を出す */
   const noIdAvatar = (
-    <span className="flex w-9 h-9 rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" title="ID のないレス">
+    <span className={`flex ${AVATAR_CLASS} rounded-full bg-c-surface3 items-center justify-center text-c-text-muted`} title="ID のないレス">
       <span className="material-symbols-outlined fill text-xl leading-none">person</span>
     </span>
   )
@@ -803,12 +821,12 @@ function PostArticle(props: Props) {
   const lineLayout = () => (
     <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''} ${hasConnections ? 'cursor-pointer' : ''}`} onClick={openTree}>
       {!right && (
-        <div className="w-9 flex-shrink-0">
+        <div className={`${AVATAR_W} flex-shrink-0`}>
           {props.continued ? null : beIcon ? (
             // BE のアイコンがあれば、ID の模様の代わりに出す。大きさは絵ごとに違うので、36px の枠に収まるよう縮め・広げる(縦横の比は保つ)
             <button
               type="button"
-              className="block w-9 h-9 rounded-xl overflow-hidden bg-c-surface hover:opacity-80"
+              className={`block ${AVATAR_CLASS} rounded-xl overflow-hidden bg-c-surface hover:opacity-80`}
               onClick={(e) => post.id && handlers.onId(post.id, e.currentTarget)}
               title={post.id ? `BE のアイコン(ID:${post.id} のレスを出す)` : 'BE のアイコン'}
             >
@@ -823,7 +841,7 @@ function PostArticle(props: Props) {
               />
             </button>
           ) : (
-            identiconBtn(36, true) || noIdAvatar
+            identiconBtn(AVATAR, true) || noIdAvatar
           )}
         </div>
       )}
@@ -843,7 +861,7 @@ function PostArticle(props: Props) {
         <div className={`flex items-end gap-1.5 max-w-full ${right ? 'flex-row-reverse' : ''}`}>
           <div className={`line-bubble relative min-w-0 ${props.isOwn ? 'line-bubble-own' : ''} ${isAA ? 'max-w-full' : 'max-w-[min(85%,42rem)]'}`}>
             {/* 操作バーは吹き出しのすぐ下に(自分の吹き出しは右端、相手の吹き出しは左端にそろえる) */}
-            {(hovered || menuOpen) && toolbarAt(`top-full mt-1 ${right ? 'right-0' : 'left-0'}`)}
+            {!isMobile && (hovered || menuOpen) && toolbarAt(`top-full mt-1 ${right ? 'right-0' : 'left-0'}`)}
             {lineQuote}
             {bodyBlock}
           </div>
@@ -855,6 +873,7 @@ function PostArticle(props: Props) {
 
   return (
     <article
+      {...longPress}
       ref={articleRef}
       id={`post-${post.no}`}
       data-no={post.no}
@@ -876,7 +895,7 @@ function PostArticle(props: Props) {
       )}
       {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする。
           マウスを乗せている間だけ作る(全部のレスに最初から作ると、要素がレスの 4 割ほど増えてスレを開くのが遅くなる) */}
-      {variant !== 'line' && (hovered || menuOpen) && toolbarAt('top-0.5 right-3')}
+      {variant !== 'line' && !isMobile && (hovered || menuOpen) && toolbarAt('top-0.5 right-3')}
       {variant === 'line' ? (
         lineLayout()
       ) : variant === 'discord' ? (
@@ -885,11 +904,11 @@ function PostArticle(props: Props) {
         {replyLine}
         <div className="flex gap-3 items-start">
           {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
-          <div className="w-9 flex-shrink-0 flex justify-center items-start">
+          <div className={`${AVATAR_W} flex-shrink-0 flex justify-center items-start`}>
             {props.continued ? (
               <span className="pt-0.5 text-[10px] tabular-nums text-c-text-muted opacity-0 group-hover:opacity-100">{numBtn('#')}</span>
             ) : (
-              identiconBtn(36, true) || noIdAvatar
+              identiconBtn(AVATAR, true) || noIdAvatar
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -904,6 +923,7 @@ function PostArticle(props: Props) {
           {bodyBlock}
         </>
       )}
+      {sheet && <ActionSheet title={`${post.ref ?? post.no} ${post.name}`} items={sheetItems} onClose={() => setSheet(false)} />}
     </article>
   )
 }

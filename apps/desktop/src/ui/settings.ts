@@ -2,6 +2,7 @@
 // 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
 // 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
 
+import { isMobile } from '../utils/platform'
 import { useCallback, useEffect, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { NgRule } from '../utils/ng'
@@ -86,6 +87,8 @@ export interface AppSettings {
   postStyle: PostStyle
   density: ListDensity
   fontSize: FontSize
+  /** スマホの文字の大きさ(PC とは別。画面が狭いので、既定は 1 段小さい) */
+  mobileFontSize: FontSize
   fontFamily: FontFamily
   customFont: string
   threadPanelWidth: number
@@ -254,6 +257,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postStyle: 'card',
   density: 'dense',
   fontSize: 3,
+  mobileFontSize: 2,
   fontFamily: 'system',
   customFont: '',
   threadPanelWidth: 420,
@@ -371,6 +375,8 @@ export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; 
 const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled'])
 
 const FONT_SIZES = [13, 14, 16, 18, 20]
+/** 文字の大きさの設定の名前(スマホは PC と別に持つ)。文字の大きさを変える所は、どこもこれを使う */
+export const FONT_SIZE_KEY = isMobile ? 'mobileFontSize' : 'fontSize'
 
 /** 暗い配色か(OS のダーク・ライトに合わせるとき、どちら用かを見分ける) */
 export function isDarkScheme(scheme: ColorScheme): boolean {
@@ -408,7 +414,7 @@ function apply(s: AppSettings) {
   root.setAttribute('data-pattern', s.postStyle === 'classic' ? 'bordered' : 'tonal')
   root.setAttribute('data-post-style', s.postStyle)
   root.setAttribute('data-density', s.density)
-  root.style.fontSize = `${FONT_SIZES[s.fontSize - 1]}px`
+  root.style.fontSize = `${FONT_SIZES[s[FONT_SIZE_KEY] - 1]}px`
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
   // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く
   const css =

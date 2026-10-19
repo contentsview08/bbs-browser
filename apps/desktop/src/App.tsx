@@ -57,7 +57,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { COLOR_SCHEMES, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
+import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
 import CommandPalette, { type PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -1061,7 +1061,7 @@ export default function App() {
         return true
       case 'zoomIn':
       case 'zoomOut':
-        updateSetting('fontSize', Math.min(5, Math.max(1, settings.fontSize + (action === 'zoomIn' ? 1 : -1))) as FontSize)
+        updateSetting(FONT_SIZE_KEY, Math.min(5, Math.max(1, settings[FONT_SIZE_KEY] + (action === 'zoomIn' ? 1 : -1))) as FontSize)
         return true
       case 'help':
         setKeyHelpOpen(true)
@@ -1774,7 +1774,8 @@ export default function App() {
         (isMobile ? (drawer: ReactNode) => createPortal(drawer, document.body) : (drawer: ReactNode) => drawer)(
       <div className={isMobile ? 'fixed inset-0 z-[9000]' : 'contents'} data-drawer={isMobile ? '' : undefined}>
       {isMobile && <div className="absolute inset-0 bg-black/40 drawer-fade" onClick={() => setDrawerOpen(false)} />}
-      <div className={isMobile ? 'absolute inset-y-0 left-0 drawer-slide' : 'contents'}>
+      {/* flex: サイドバーの外枠を縦いっぱいに伸ばす(中身は外枠の高さに合わせて置くので、伸ばさないと高さが 0 になって見えない) */}
+      <div className={isMobile ? 'absolute inset-y-0 left-0 flex drawer-slide' : 'contents'}>
       <Sidebar
         neighbor={single ? 'view' : 'list'}
         width={isMobile ? Math.min(320, Math.round(window.innerWidth * 0.85)) : settings.sidebarWidth}

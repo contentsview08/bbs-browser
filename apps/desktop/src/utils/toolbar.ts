@@ -30,7 +30,7 @@ export const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'findNext', name: '次スレを探す', icon: 'skip_next', placement: 'menu' },
   { id: 'gallery', name: '画像一覧', icon: 'photo_library', placement: 'menu' },
   { id: 'top', name: '先頭へ', icon: 'vertical_align_top', placement: 'menu', mobileOnly: true },
-  { id: 'bottom', name: '一番下へ', icon: 'vertical_align_bottom', placement: 'menu', mobile: 'footer', mobileOnly: true },
+  { id: 'bottom', name: '一番下へ', icon: 'vertical_align_bottom', placement: 'menu', mobileOnly: true },
   { id: 'reply', name: '書き込む', icon: 'edit', placement: 'menu', mobile: 'footer', mobileOnly: true },
   { id: 'replyToggle', name: '書き込み欄を出す・しまう', icon: 'keyboard_hide', placement: 'header', desktopOnly: true },
   { id: 'replyLayout', name: '書き込み欄の位置', icon: 'view_sidebar', placement: 'header', desktopOnly: true },

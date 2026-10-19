@@ -584,6 +584,10 @@ article.post-discord:hover {
 .tree-post > article [data-post-body] {
   margin-left: 18px;
 }
+/* スマホは段の幅を詰めてある(AnchorTree.tsx の STEP) */
+html[data-platform='mobile'] .tree-post > article [data-post-body] {
+  margin-left: 12px;
+}
 
 /* グロ注意の画像(サムネイル・画像一覧)。ぼかして、押すまで中身が分からないようにする */
 .gross-blur img,
@@ -851,4 +855,24 @@ html[data-platform='mobile'] {
   to {
     transform: none;
   }
+}
+
+/* スマホ: 下からせり上がる操作の一覧(ActionSheet) */
+.sheet-rise {
+  animation: sheet-rise 200ms ease-out;
+}
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+/* スマホ: レスとスレの長押しを、文字の選択・リンクのメニューではなく、アプリの操作の一覧にする */
+html[data-platform='mobile'] .card-thread,
+html[data-platform='mobile'] .post-cv article {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

@@ -6,6 +6,7 @@
 
 import { isMobile } from '../utils/platform'
 import { useSwipeGesture } from '../hooks/useSwipeGesture'
+import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -323,7 +324,8 @@ export default function ThreadView(props: Props) {
   /** レス一覧とミニマップの領域。ポップアップの幅をこれに合わせる */
   const viewRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
-  const headerInScroll = settings.replyLayout === 'bottom'
+  // スマホは、ヘッダーをいつもスクロールの中に置く(下へスクロールすると隠す。useHideOnScroll)
+  const headerInScroll = isMobile || settings.replyLayout === 'bottom'
   const headerOffset = () => (ref.current?.contains(headerRef.current) ? (headerRef.current?.offsetHeight ?? 0) : 0)
   const listRef = useRef<HTMLDivElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
@@ -868,6 +870,9 @@ export default function ThreadView(props: Props) {
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
+  // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
+  const footerRef = useRef<HTMLDivElement>(null)
+  const hideBars = useHideOnScroll(headerRef, footerRef)
 
   /** Esc を 2 回押して、選んでいるレスの印を隠しているか(選んでいる場所は残す) */
   const [cursorHidden, setCursorHidden] = useState(false)
@@ -1486,7 +1491,7 @@ export default function ThreadView(props: Props) {
   const headerBlock = (
     <div
       ref={headerRef}
-      className={`relative ${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
+      className={`relative ${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} ${isMobile ? 'transition-transform duration-200' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
     >
         {/* 下の端をつかんで、スレタイの行の高さを変える(スレタイの字も合わせて大きくなる) */}
         <DragEdge
@@ -1629,7 +1634,7 @@ export default function ThreadView(props: Props) {
     <main ref={mainRef} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden">
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
-      <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+      <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
       <button
         type="button"
@@ -1674,12 +1679,21 @@ export default function ThreadView(props: Props) {
       <div
         ref={ref}
         onWheel={onWheel}
-        onScroll={onScrollPull}
+        onScroll={(e) => {
+          onScrollPull()
+          if (isMobile) hideBars.onScroll(e)
+        }}
+        onTouchStart={isMobile ? hideBars.arm : undefined}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
         {headerInScroll && headerBlock}
 
-        <div ref={listRef} className="flex-1 flex flex-col" style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)' }}>
+        <div
+          ref={listRef}
+          className="flex-1 flex flex-col"
+          // スマホ: フッターは本文の上に重ねるので、最後のレスがその下に隠れないよう、下に余白を足す
+          style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)', ...(isMobile && hasFooter && { paddingBottom: 'calc(var(--list-padding-post) + 56px)' }) }}
+        >
           {log.posts.length === 0 ? (
             props.loading ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">投稿がありません</div>
           ) : (
@@ -1695,10 +1709,15 @@ export default function ThreadView(props: Props) {
                   <div
                     key={p.no}
                     className={`post-cv relative ${enterDelay !== undefined ? 'post-enter' : ''}`}
-                    onPointerDown={() => {
-                      setCursorNo(p.no)
-                      setCursorHidden(false)
-                    }}
+                    // スマホには「選んでいるレス」がない(押したレスに印を付けない)
+                    onPointerDown={
+                      isMobile
+                        ? undefined
+                        : () => {
+                            setCursorNo(p.no)
+                            setCursorHidden(false)
+                          }
+                    }
                     style={
                       {
                         // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
@@ -1714,13 +1733,13 @@ export default function ThreadView(props: Props) {
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
                     {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
-                    {cursorId !== undefined && p.id === cursorId && p.no !== cursorNo && (
+                    {!isMobile && cursorId !== undefined && p.id === cursorId && p.no !== cursorNo && (
                       <span
                         className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)] opacity-50"
                         style={{ background: 'var(--c-cursor-tint)' }}
                       />
                     )}
-                    {keysOn && !cursorHidden && p.no === cursorNo && (
+                    {!isMobile && keysOn && !cursorHidden && p.no === cursorNo && (
                       <>
                         {/* うっすら色を敷いて、どのレスか目に入るようにする。中身(本文・吹き出し)の後ろに敷く(上に重ねると、吹き出しの文字まで色がかぶる) */}
                         <span
@@ -1792,9 +1811,20 @@ export default function ThreadView(props: Props) {
       )}
       </div>
       {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
-      {hasFooter && (
+      {hasFooter && !isMobile && (
         <div className="flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border bg-panel-thread-header">
           <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
+        </div>
+      )}
+      {/* スマホ: フッターは本文の上に重ね、下へスクロールすると隠す。「戻る」は左端、ほかは右に寄せる */}
+      {hasFooter && isMobile && (
+        <div
+          ref={footerRef}
+          className="absolute bottom-0 inset-x-0 z-20 h-12 px-1 flex items-center gap-1 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
+        >
+          <ActionButtons actions={barActions.filter((a) => a.id === 'back')} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
+          <div className="flex-1" />
+          <ActionButtons actions={barActions.filter((a) => a.id !== 'back')} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
         </div>
       )}
       </div>

@@ -3,9 +3,16 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import type { TreeRow } from '../utils/postBody'
+import { isMobile } from '../utils/platform'
+import { AVATAR } from './PostArticle'
 
-/** 1 段の幅 */
-const STEP = 18
+/** 1 段の幅(スマホは画面が狭いので詰める) */
+const STEP = isMobile ? 12 : 18
+/**
+ * スマホ: これより深い段は、この段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)。
+ * 線のつながりは少し崩れるが、どのレスへの返信かは本文のアンカーで分かる
+ */
+const MAX_DEPTH = isMobile ? 4 : Infinity
 /** 分岐の横線を出す高さ(レスのヘッダーの真ん中あたり) */
 const ELBOW_Y = 14
 
@@ -18,8 +25,8 @@ const NUMBER_X = 7
 /** 段 depth のレスの、番号の真下の横位置(行の左端から) */
 const lineX = (depth: number) => `calc(${depth * STEP + NUMBER_X}px + var(--post-padding-x))`
 
-/** Discord 風: 大きいアイコンの半分(アイコンの真ん中の位置) */
-const D_HALF = 18
+/** Discord 風・LINE 風: アイコンの半分(アイコンの真ん中の位置) */
+const D_HALF = AVATAR / 2
 
 export default function AnchorTree(props: {
   rows: TreeRow[]
@@ -29,9 +36,11 @@ export default function AnchorTree(props: {
   /** Discord 風: 線をアイコン同士をつなぐ形にする */
   variant?: 'card' | 'discord' | 'classic' | 'line'
 }) {
+  // スマホでは深い段を MAX_DEPTH にそろえる
+  if (MAX_DEPTH !== Infinity) props = { ...props, rows: props.rows.map((row) => (row.depth > MAX_DEPTH ? { ...row, depth: MAX_DEPTH } : row)) }
   // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
-  if (props.variant === 'discord') return <IconTree {...props} step={48} />
-  if (props.variant === 'line') return <IconTree {...props} step={44} />
+  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + 12} />
+  if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} />
   return (
     <div className="flex flex-col">
       {props.rows.map((r, i) => (

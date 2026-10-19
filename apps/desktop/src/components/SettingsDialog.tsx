@@ -5,6 +5,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { allConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import { POST_STYLES,
+  FONT_SIZE_KEY,
   COLOR_SCHEMES,
   DEFAULT_SETTINGS,
   isDarkScheme,
@@ -432,9 +433,9 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
       </Section>
       <Section title="文字サイズ">
         <Choice
-          value={s.fontSize}
+          value={s[FONT_SIZE_KEY]}
           options={([1, 2, 3, 4, 5] as FontSize[]).map((n) => ({ key: n, name: ['極小', '小', '標準', '大', '特大'][n - 1] }))}
-          onChange={(v) => update('fontSize', v)}
+          onChange={(v) => update(FONT_SIZE_KEY, v)}
         />
       </Section>
       <Section title="密度" note="高密度は余白を詰めた専ブラ風の表示です">

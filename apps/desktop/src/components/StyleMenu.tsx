@@ -2,7 +2,8 @@
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
 import { useEffect, useRef, useState } from 'react'
-import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { isMobile } from '../utils/platform'
+import { COLOR_SCHEMES, FONT_SIZE_KEY, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -38,8 +39,9 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
 
       <div className="my-1 border-t border-c-border" />
 
-      <p className={GROUP_LABEL}>デザイン</p>
-      {DESIGN_CHOICES.map((d) => (
+      {/* スマホは密度を選ばない(レスの見た目で決まる) */}
+      {!isMobile && <p className={GROUP_LABEL}>デザイン</p>}
+      {!isMobile && DESIGN_CHOICES.map((d) => (
         <button key={d.key} type="button" onClick={() => update('density', d.key)} className={MENU_ITEM}>
           <span className="material-symbols-outlined text-base flex-shrink-0">{d.icon}</span>
           <span className="flex-1 text-left truncate">{d.name}</span>
@@ -50,10 +52,10 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
       <div className="my-1 border-t border-c-border" />
 
       <p className={GROUP_LABEL}>レスの見た目</p>
-      {POST_STYLES.map((b) => (
+      {(isMobile ? MOBILE_POST_STYLES : POST_STYLES).map((b) => (
         <button key={b.key} type="button" onClick={() => update('postStyle', b.key)} className={MENU_ITEM} title={b.note}>
           <span className="flex-1 text-left truncate">{b.name}</span>
-          {settings.postStyle === b.key && check}
+          {effectivePostStyle(settings) === b.key && check}
         </button>
       ))}
 

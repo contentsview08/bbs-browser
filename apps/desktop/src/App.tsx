@@ -55,7 +55,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
+import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -1032,8 +1032,12 @@ export default function App() {
       })),
       ...COLOR_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickScheme(settings, c.key)) })),
       ...POST_STYLES.map((p) => ({ group: 'レスの見た目', label: p.name, keywords: p.note, icon: 'style', run: () => updateSetting('postStyle', p.key) })),
-      { group: '表示の密度', label: '一覧表示', icon: 'view_list', run: () => updateSetting('density', 'list') },
-      { group: '表示の密度', label: '高密度', icon: 'density_small', run: () => updateSetting('density', 'dense') },
+      ...(isMobile
+        ? []
+        : [
+            { group: '表示の密度', label: '一覧表示', icon: 'view_list', run: () => updateSetting('density', 'list') },
+            { group: '表示の密度', label: '高密度', icon: 'density_small', run: () => updateSetting('density', 'dense') },
+          ]),
     ]
   }
 
@@ -1847,7 +1851,7 @@ export default function App() {
           footerHeight={settings.listFooterHeight}
           onHeaderHeight={(h) => updateSetting('listHeaderHeight', h)}
           onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
-          variant={settings.postStyle}
+          variant={effectivePostStyle(settings)}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}

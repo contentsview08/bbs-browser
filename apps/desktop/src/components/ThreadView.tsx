@@ -55,7 +55,7 @@ import {
   youtubeLinksIn,
 } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
-import type { AppSettings, ReplyLayout } from '../ui/settings'
+import { effectivePostStyle, type AppSettings, type ReplyLayout } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -513,6 +513,10 @@ export default function ThreadView(props: Props) {
     props.onSetReplyCollapsed(true)
     setReplyForceOpen(false)
   }
+  // 開いたら、本文の欄にカーソルを置く(キーボードを出す)
+  useEffect(() => {
+    if (isMobile && mobileReplyOpen) requestAnimationFrame(() => replyRef.current?.focus())
+  }, [mobileReplyOpen])
   // 書き込み欄の画面を右へなぞると閉じる
   const replySwipe = useSwipeGesture({ right: { label: '閉じる', onCommit: () => setMobileReplyOpen(false) } }, settings.gestureSensitivity)
   /** 書き込み欄に何かする(しまっていたら出してから) */
@@ -633,7 +637,7 @@ export default function ThreadView(props: Props) {
   const isRendered = (i: number) => i >= renderWin.lo && i < renderWin.hi
 
   /** レスの見た目のスタイル(設定) */
-  const variant: PostVariant = settings.postStyle ?? 'card'
+  const variant: PostVariant = effectivePostStyle(settings)
   /** Discord 風: 直前に見えているレスと同じ ID(続けて書いた)か */
   const continuedFrom = (i: number) => {
     const p = log.posts[i]
@@ -1870,7 +1874,48 @@ export default function ThreadView(props: Props) {
           {replyLayout === 'bottom' && '書き込む'}
         </button>
       )}
-      {props.onSubmitPost && !replyCollapsed && isMobile && (
+      {props.onSubmitPost && !replyCollapsed && isMobile && variant === 'line' && (
+        // スマホ・LINE 風: トークのように、画面の下に 1 行の入力欄を出す(スレは上にそのまま見える)。∨ か戻るボタンで閉じる
+        <div
+          className="fixed inset-x-0 z-[60] border-t border-c-border shadow-[0_-4px_12px_rgba(0,0,0,0.08)] sheet-rise"
+          // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)
+          style={{ bottom: 'var(--kb-inset, 0px)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+            <ReplyForm
+              variant="line"
+              ref={replyRef}
+              layout="bottom"
+              attach={props.attachments}
+              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
+              initialName={props.postName}
+              initialMail={props.postMail}
+              onSubmit={props.onSubmitPost}
+              onConfirm={props.onConfirmPost}
+              onUploaded={props.onUploaded}
+              readyAt={props.postReadyAt}
+              cooldownMs={props.postCooldownMs}
+              accounts={props.postAccounts}
+              draft={props.draft}
+              limits={props.postLimits}
+              byteLength={props.postByteLength}
+              onToggleAccount={props.onTogglePostAccount}
+              onOpenAccountSettings={props.onOpenAccountSettings}
+              onImage={(urls, index) => setLightbox({ urls, index })}
+              uploader={
+                settings.uploaderEnabled
+                  ? {
+                      stripMetadata: settings.uploadStripMetadata,
+                      maxDimension: settings.uploadMaxDimension,
+                      userhash: settings.catboxUserhash.trim() || undefined,
+                    }
+                  : undefined
+              }
+              onOpenUrl={props.onUrl}
+              onCollapse={closeReply}
+            />
+        </div>
+      )}
+      {props.onSubmitPost && !replyCollapsed && isMobile && variant !== 'line' && (
         // スマホ: 右から滑り込む、画面いっぱいの書き込み欄。上の帯の ← か、右へなぞると閉じる
         <div
           className="fixed inset-0 z-[60] flex flex-col bg-panel-reply reply-slide"

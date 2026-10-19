@@ -7,6 +7,8 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { allConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import { POST_STYLES,
+  MOBILE_POST_STYLES,
+  effectivePostStyle,
   FONT_SIZE_KEY,
   COLOR_SCHEMES,
   DEFAULT_SETTINGS,
@@ -452,6 +454,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update(FONT_SIZE_KEY, v)}
         />
       </Section>
+      {!isMobile && (
       <Section title="密度" note="高密度は余白を詰めた専ブラ風の表示です">
         <Choice
           value={s.density}
@@ -462,8 +465,12 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           onChange={(v) => update('density', v)}
         />
       </Section>
-      <Section title="レスの見た目" note={POST_STYLES.find((p) => p.key === s.postStyle)?.note}>
-        <Choice value={s.postStyle} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
+      )}
+      <Section
+        title="レスの見た目"
+        note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}${isMobile ? '(スマホでは、Discord 風は一覧表示、ほかは高密度で出します)' : ''}`}
+      >
+        <Choice value={effectivePostStyle(s)} options={isMobile ? MOBILE_POST_STYLES : POST_STYLES} onChange={(v) => update('postStyle', v)} />
       </Section>
     </>
   )

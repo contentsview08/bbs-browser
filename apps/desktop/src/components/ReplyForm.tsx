@@ -30,6 +30,11 @@ interface Props {
    */
   onTextOverflow?: (deficit: number) => void
   layout: ReplyLayout
+  /**
+   * line: LINE 風(スマホで LINE 風の見た目のとき)。下に置く 1 行のトークの入力欄にする:
+   * 丸い本文の欄(書くと伸びる)・丸い送るボタン・画像と絵文字のボタン。名前とメールは人のボタンで出す
+   */
+  variant?: 'line'
   disabled?: string
   initialName: string
   initialMail: string
@@ -71,6 +76,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<PostResult>()
+  /** LINE 風: 名前・メールの欄を出しているか */
+  const [lineOptions, setLineOptions] = useState(false)
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   // ── 下書き ──
@@ -216,6 +223,100 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     if (e.key !== 'Escape' || e.nativeEvent.isComposing || !props.onCollapse) return
     e.preventDefault()
     props.onCollapse()
+  }
+
+  if (props.variant === 'line') {
+    const canSend = !sending && !!body.trim() && !props.disabled && !cooling
+    return (
+      <div className="w-full flex flex-col bg-panel-reply">
+        {media.error && (
+          <p className="px-3 pt-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
+            <span className="material-symbols-outlined text-sm">error</span>
+            {media.error}
+          </p>
+        )}
+        {result && (
+          <div className="px-3 pt-2">
+            <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />
+          </div>
+        )}
+        {media.attachedView && <div className="px-3 pt-2">{media.attachedView}</div>}
+        {lineOptions && (
+          <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} flex-1 min-w-0`} />
+            <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={`${INPUT} flex-1 min-w-0`} />
+            <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
+              <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
+              sage
+            </label>
+            {props.accounts && props.onToggleAccount && (
+              <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
+            )}
+          </div>
+        )}
+        {hasPreview && (
+          <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pt-2">
+            {loadableImages.map((url, i) => (
+              <img
+                key={url}
+                src={url}
+                alt=""
+                referrerPolicy="no-referrer"
+                onClick={() => props.onImage?.(loadableImages, i)}
+                className="h-12 w-12 flex-shrink-0 object-cover rounded-lg border border-c-border bg-c-surface2"
+              />
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-1 px-1.5 py-2">
+          {props.onCollapse && (
+            <button type="button" onClick={props.onCollapse} className="flex-shrink-0 p-2 rounded-full text-c-text-muted active:bg-c-surface2" title="閉じる">
+              <span className="material-symbols-outlined text-2xl leading-none">expand_more</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setLineOptions((v) => !v)}
+            className={`flex-shrink-0 p-2 rounded-full active:bg-c-surface2 ${lineOptions || sage || name ? 'text-c-accent' : 'text-c-text-muted'}`}
+            title="名前・メール"
+          >
+            <span className="material-symbols-outlined text-2xl leading-none">person</span>
+          </button>
+          <div className="flex-shrink-0 flex items-center self-center">{media.buttons}</div>
+          <textarea
+            ref={textRef}
+            rows={1}
+            value={body}
+            onChange={(e) => {
+              changeBody(e.target.value)
+              // 書くと伸びる(6 行くらいまで)
+              const ta = e.currentTarget
+              ta.style.height = 'auto'
+              ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
+            }}
+            {...media.textareaProps}
+            placeholder={props.disabled ?? 'メッセージを入力'}
+            disabled={!!props.disabled}
+            className="flex-1 min-w-0 max-h-40 resize-none rounded-[20px] border border-c-border bg-c-surface px-3.5 py-2 text-[15px] leading-snug text-c-text-body placeholder-c-text-muted focus:border-c-accent focus:ring-0"
+          />
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={!canSend}
+            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
+            style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+            title={cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '送る'}
+          >
+            <span className={`material-symbols-outlined text-xl ${sending ? 'animate-spin' : ''}`}>
+              {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
+            </span>
+          </button>
+        </div>
+        {measure && measure.over.length > 0 && (
+          <p className="px-4 pb-1 text-[10px] text-c-heat-very-hot font-bold">{measure.over.join(' ・ ')}</p>
+        )}
+      </div>
+    )
   }
 
   return (

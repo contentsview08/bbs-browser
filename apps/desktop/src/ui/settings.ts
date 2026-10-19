@@ -20,6 +20,20 @@ export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
   { key: 'classic', name: '専ブラ風', note: '「12 ：名前：日付 ID」を 1 行にした、昔ながらの 2ch の見た目' },
   { key: 'line', name: 'LINE 風', note: '吹き出しで会話のように並べる。自分の書き込みは右に緑の吹き出し' },
 ]
+/**
+ * スマホで選べるレスの見た目(専ブラ風は、狭い画面では読みにくいので出さない)。
+ * スマホでは密度は選ばせず、見た目で決める(effectiveDensity)
+ */
+export const MOBILE_POST_STYLES = POST_STYLES.filter((p) => p.key !== 'classic')
+/** 実際に使うレスの見た目(スマホで専ブラ風が保存されていたらカード) */
+export function effectivePostStyle(s: Pick<AppSettings, 'postStyle'>): PostStyle {
+  return isMobile && s.postStyle === 'classic' ? 'card' : s.postStyle
+}
+/** 実際に使う密度。スマホは見た目で決める: Discord 風は一覧表示(高密度だとスレ一覧が詰まりすぎる)、ほかは高密度 */
+export function effectiveDensity(s: Pick<AppSettings, 'postStyle' | 'density'>): ListDensity {
+  if (!isMobile) return s.density
+  return effectivePostStyle(s) === 'discord' ? 'list' : 'dense'
+}
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
 export type FontSize = 1 | 2 | 3 | 4 | 5
@@ -415,9 +429,9 @@ function apply(s: AppSettings) {
   root.setAttribute('data-scheme', scheme)
   root.classList.toggle('dark', DARK_SCHEMES.has(scheme))
   // カード・Discord 風はトーナル(面の濃淡)、専ブラ風は枠線(色の面なし)の部品の見た目にする
-  root.setAttribute('data-pattern', s.postStyle === 'classic' ? 'bordered' : 'tonal')
-  root.setAttribute('data-post-style', s.postStyle)
-  root.setAttribute('data-density', s.density)
+  root.setAttribute('data-pattern', effectivePostStyle(s) === 'classic' ? 'bordered' : 'tonal')
+  root.setAttribute('data-post-style', effectivePostStyle(s))
+  root.setAttribute('data-density', effectiveDensity(s))
   root.style.fontSize = `${FONT_SIZES[s[FONT_SIZE_KEY] - 1]}px`
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
   // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く

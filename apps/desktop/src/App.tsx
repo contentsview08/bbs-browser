@@ -1455,6 +1455,11 @@ export default function App() {
       return
     }
     if (drawerOpen) return setDrawerOpen(false)
+    // レスのポップアップが出ていれば、Esc を押したことにして閉じる(スレ表示が Esc でいちばん上から閉じる)
+    if (document.querySelector('.post-popup')) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      return
+    }
     if (single && threadShown) return returnToList()
     if (canBack(view.current)) goNav(-1)
   }

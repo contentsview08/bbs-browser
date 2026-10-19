@@ -655,7 +655,8 @@ export default function ThreadListPanel(props: Props) {
                         {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
                       </span>
                     )}
-                    {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+                    {/* 選んでいる印の線。フッターに置くスマホは、本文の側(上)に出す */}
+                    {active && <span className={`absolute ${isMobile ? 'top-0' : 'bottom-0'} left-0 right-0 h-[2px] bg-c-accent rounded-full`} />}
                   </button>
                 )
               })}
@@ -685,7 +686,7 @@ export default function ThreadListPanel(props: Props) {
       </div>
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar thick-scrollbar flex flex-col"
+        className={`flex-1 min-h-0 overflow-y-auto ${isMobile ? 'no-scrollbar' : 'custom-scrollbar thick-scrollbar'} flex flex-col`}
         onScroll={(e) => {
           pull.noteScroll()
           if (isMobile) hideBars.onScroll(e)
@@ -850,7 +851,7 @@ export default function ThreadListPanel(props: Props) {
           ref={footerRef}
           className={`${
             // スマホ: 一覧の上に重ね、下へスクロールすると隠す
-            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-16 px-1 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-16 pl-1 pr-3 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
           } flex items-center justify-end gap-1 border-t border-c-border`}
           style={footerDrag.height ? { height: footerDrag.height } : undefined}
         >

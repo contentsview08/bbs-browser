@@ -3,6 +3,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { isMobile } from '../utils/platform'
 
 export interface PopupEntry {
   id: number
@@ -114,6 +115,8 @@ function PopupWindow(props: {
       onWheel={(e) => e.stopPropagation()}
       onMouseEnter={props.onEnter}
     >
+      {/* 見出し(「n 件の返信」と閉じるボタン)。スマホは出さない(外を押すか、戻るボタンで閉じる。狭い画面では中身を広く) */}
+      {!isMobile && (
       <div className="flex items-center gap-2 pl-4 pr-2 py-1.5 border-b border-c-border sticky top-0 bg-c-surface z-10">
         <span className="flex-1 min-w-0 truncate text-sm font-bold text-c-text-strong">{entry.title}</span>
         <button
@@ -125,6 +128,7 @@ function PopupWindow(props: {
           <span className="material-symbols-outlined text-lg leading-none">close</span>
         </button>
       </div>
+      )}
       <div className="p-3">{entry.content}</div>
     </div>
   )

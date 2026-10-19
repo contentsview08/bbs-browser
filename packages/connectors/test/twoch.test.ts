@@ -222,5 +222,8 @@ describe('スレが立った日時', () => {
     const [notice, normal] = await twoChConnector.listThreads({ connectorId: '2ch-compat', url: 'https://mevius.5ch.io/x/', name: 'x' }, ctx)
     expect(notice.createdAt).toBeUndefined()
     expect(normal.createdAt?.getTime()).toBe(1789358916 * 1000)
+    // お知らせの印も付ける(アプリが一覧の一番下に回す)
+    expect(notice.announcement).toBe(true)
+    expect(normal.announcement).toBeUndefined()
   })
 })

@@ -72,6 +72,11 @@ export interface ThreadSummary {
   preview?: { no: number; name: string; date?: string; body: string }[]
   /** スレに付いた印(「固定」「ロック」「NSFW」など、掲示板が付けるもの)。スレ一覧のスレタイの前に出す */
   badges?: Badge[]
+  /**
+   * 運営のお知らせ・広告のスレ(5ch の「5ちゃんねるからのお知らせ」「プレミアムサービスのお知らせ」など)。
+   * 掲示板はいつも一覧の頭に置くが、アプリはどの並べ方でも一番下に回す
+   */
+  announcement?: boolean
 }
 
 /**

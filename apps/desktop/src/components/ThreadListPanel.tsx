@@ -10,7 +10,8 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
-import type { Placement } from '../utils/toolbar'
+import { mobileMenuActions, type Placement } from '../utils/toolbar'
+import ActionSheet, { type SheetItem } from './ActionSheet'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
@@ -128,6 +129,10 @@ interface Props {
   hideBarsOnScroll?: boolean
   /** 板を開いているときだけ ★ を出す */
   favorite?: { active: boolean; onToggle: () => void }
+  /** 板の URL(板のスレ一覧のとき。板名を押して出すメニューのコピー・ブラウザで開くに使う) */
+  boardUrl?: string
+  /** 外のブラウザで開く */
+  onOpenExternal?: (url: string) => void
 }
 
 /** 1 画面のとき、スレ一覧を広げる幅の上限(これより広いと 1 行が長くて読みにくい) */
@@ -137,6 +142,12 @@ const LIST_BTN = 'p-1.5 text-c-text-muted hover:text-c-text-strong transition-co
 const FIRST_CARDS = 60
 const CARD_CHUNK = 150
 const CARD_ESTIMATE = 64
+
+/**
+ * 運営のお知らせ・広告のスレか。コネクタの印に加えて、手元に残っていた古い一覧(印のないもの)のために、
+ * 5ch と同じ「番号が日時にするとずっと先」のスレも数える
+ */
+const isAnnouncement = (t: ThreadSummary) => !!t.announcement || (/^\d{10}$/.test(t.key) && Number(t.key) * 1000 > Date.now() + 86_400_000)
 /** J・K で選んだスレへ送るときのスクロールの時間と、画面の上下に残す余白の割合(スレ表示と同じ) */
 const CURSOR_SCROLL_MS = 160
 const CURSOR_MARGIN = 0.25
@@ -373,6 +384,8 @@ export default function ThreadListPanel(props: Props) {
         shownSort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : shownSort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
+    // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
+    if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
   }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder])
 
@@ -413,6 +426,13 @@ export default function ThreadListPanel(props: Props) {
     noteTimer.current = setTimeout(() => setNote(undefined), 3000)
   }
   useEffect(() => () => clearTimeout(noteTimer.current), [])
+  /** スマホ: 板名を押して出す、板の操作のメニュー */
+  const [titleSheet, setTitleSheet] = useState(false)
+  const copyText = (text: string, done: string) =>
+    void navigator.clipboard.writeText(text).then(
+      () => showNote(done),
+      () => showNote('コピーできませんでした'),
+    )
   /** Esc 2 回で、選んでいるスレの印を隠しているか(選んでいる場所は残す) */
   const [cursorHidden, setCursorHidden] = useState(false)
   /** いまのキーが、押し続けたときの自動の連打か(押し続けている間はアニメーションしない) */
@@ -739,8 +759,9 @@ export default function ThreadListPanel(props: Props) {
                   // 引き伸ばしたら、高さに合わせて字も大きくする(既定の 44px で 1.25rem)
                   // 行の高さも字に合わせる(text-xl の決まった行の高さのままだと、大きい字の上下が切れる)
                   style={headerDrag.height ? { fontSize: `${Math.min(2.6, Math.max(0.9, (headerDrag.height / 44) * 1.25))}rem`, lineHeight: 1.45 } : undefined}
-                  onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
-                  title="クリックで先頭へスクロール"
+                  // スマホ: 板名を押したら、板の操作のメニュー(お気に入り・コピーなど)
+                  onClick={() => (isMobile ? setTitleSheet(true) : scrollRef.current?.scrollTo({ top: 0 }))}
+                  title={isMobile ? '板の操作' : 'クリックで先頭へスクロール'}
                 >
                   <span className="truncate group-hover/title:text-c-accent transition-colors">{props.title}</span>
                 </h2>
@@ -776,7 +797,7 @@ export default function ThreadListPanel(props: Props) {
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <ActionButtons actions={barActions} placements={placements} where="header" btnClass={LIST_BTN} iconClass="text-lg" />
-                <MoreMenu actions={barActions} btnClass={LIST_BTN} iconClass="text-lg" />
+                <MoreMenu actions={isMobile ? mobileMenuActions('list', barActions, placements) : barActions} btnClass={LIST_BTN} iconClass="text-lg" />
               </div>
             </div>
           </div>
@@ -835,7 +856,7 @@ export default function ThreadListPanel(props: Props) {
                 (props.variant ?? 'card') === 'card'
                   ? { padding: 'var(--list-padding-thread)', gap: 'var(--list-gap-thread)' }
                   : props.variant === 'discord'
-                    ? { padding: '8px', gap: 2 }
+                    ? { padding: isMobile ? '4px 2px' : '8px', gap: 2 }
                     : { padding: '4px 6px', gap: props.variant === 'classic' ? 0 : 1 }
               }
             >
@@ -903,6 +924,27 @@ export default function ThreadListPanel(props: Props) {
             iconClass={isMobile ? 'text-2xl' : 'text-lg'}
           />
         </div>
+      )}
+      {titleSheet && (
+        <ActionSheet
+          title={props.boardUrl ? `${props.title}\n${props.boardUrl}` : props.title}
+          onClose={() => setTitleSheet(false)}
+          items={[
+            ...(props.favorite
+              ? [{ label: props.favorite.active ? 'お気に入り板から外す' : 'お気に入り板に足す', icon: 'star', onClick: props.favorite.onToggle }]
+              : []),
+            ...(props.onNewThread ? [{ label: 'スレを立てる', icon: 'edit_square', onClick: props.onNewThread }] : []),
+            ...(props.boardUrl
+              ? [
+                  { label: '板名をコピー', icon: 'content_copy', onClick: () => copyText(props.title, '板名をコピーしました') },
+                  { label: '板の URL をコピー', icon: 'link', onClick: () => copyText(props.boardUrl!, 'URL をコピーしました') },
+                ]
+              : []),
+            { label: '先頭へ', icon: 'vertical_align_top', onClick: () => scrollRef.current?.scrollTo({ top: 0 }) },
+            ...(props.onRefresh ? [{ label: '更新', icon: 'refresh', onClick: () => void props.onRefresh?.() }] : []),
+            ...(props.boardUrl && props.onOpenExternal ? [{ label: 'ブラウザで開く', icon: 'open_in_new', onClick: () => props.onOpenExternal!(props.boardUrl!) }] : []),
+          ] satisfies SheetItem[]}
+        />
       )}
     </section>
   )

@@ -922,3 +922,16 @@ html[data-platform='mobile'] article.popup-cursor {
 html[data-platform='mobile'] article.popup-cursor::after {
   display: none;
 }
+
+/* スマホ: Discord 風のスレ一覧は、行の頭の # と余白を小さくする(狭い横幅をスレタイに回す) */
+html[data-platform='mobile'] .card-thread[data-variant='discord'] {
+  padding-left: 6px !important;
+  padding-right: 8px !important;
+}
+html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row {
+  gap: 5px;
+}
+html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row-hash {
+  width: 0.8rem;
+  font-size: 1.05rem;
+}

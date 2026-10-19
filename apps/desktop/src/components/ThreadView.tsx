@@ -25,7 +25,9 @@ import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
-import { resolvePlacements } from '../utils/toolbar'
+import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
+import ActionSheet, { type SheetItem } from './ActionSheet'
+import StyleMenu, { StyleMenuItems } from './StyleMenu'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -55,7 +57,7 @@ import {
   youtubeLinksIn,
 } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
-import { effectivePostStyle, type AppSettings, type ReplyLayout } from '../ui/settings'
+import { effectivePostStyle, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -111,6 +113,8 @@ interface Props {
   onFindNext?: () => Promise<NextThreadCandidate[]>
   /** このスレの板のスレ一覧を開く */
   onOpenBoard?: () => void
+  /** 設定を変える(︙ の表示スタイル) */
+  onUpdateSetting?: UpdateSetting
   /** ヘッダー(スレタイの行)の高さを変えた(下の端をつかんで)。0 なら既定に戻した */
   onHeaderHeight?: (height: number) => void
   /** 本文の >>番号 が指すもの(コネクタの anchorTarget)。'ref' なら板の本当の番号 */
@@ -383,6 +387,8 @@ export default function ThreadView(props: Props) {
   }
 
   const [filters, setFilters] = useState<Set<PostFilter>>(new Set())
+  /** スマホ: スレタイを押して出す、スレの操作のメニュー */
+  const [titleSheet, setTitleSheet] = useState(false)
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -443,6 +449,12 @@ export default function ThreadView(props: Props) {
   const quickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(quickTimer.current), [])
   /** スレ表示の下に、少しのあいだ結果を出す */
+  /** 文字をコピーして、短く知らせる */
+  const copyText = (text: string, done: string) =>
+    void navigator.clipboard.writeText(text).then(
+      () => showQuick(true, done),
+      () => showQuick(false, 'コピーできませんでした'),
+    )
   const showQuick = (ok: boolean, text: string) => {
     setQuickMessage({ ok, text })
     clearTimeout(quickTimer.current)
@@ -848,6 +860,18 @@ export default function ThreadView(props: Props) {
         ]
       : []),
     { id: 'gallery', label: '画像一覧', icon: 'photo_library', tint: 'var(--c-mark-image)', active: galleryOpen, onClick: () => setGalleryOpen(true) },
+    ...(props.onUpdateSetting
+      ? [
+          {
+            id: 'style',
+            label: '表示スタイル',
+            icon: 'palette',
+            tint: 'var(--c-mark-purple)',
+            render: (where: 'header' | 'footer') => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={where === 'footer'} />,
+            submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} />,
+          },
+        ]
+      : []),
     { id: 'delete', label: 'ログを削除して閉じる (Shift+Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
     { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', tint: 'var(--c-mark-link)', onClick: props.onOpenInBrowser },
     {
@@ -1605,9 +1629,11 @@ export default function ThreadView(props: Props) {
                 ...(titleRem && { fontSize: `${titleRem}rem`, lineHeight: 1.45 }),
               }}
               onClick={() => {
+                // スマホ: スレタイを押したら、スレの操作のメニュー(板を開く・コピー・NG など)
+                if (isMobile) return setTitleSheet(true)
                 if (ref.current) ref.current.scrollTop = 0
               }}
-              title="クリックで先頭へスクロール"
+              title={isMobile ? 'スレの操作' : 'クリックで先頭へスクロール'}
             >
               <span className="truncate">{log.title}</span>
               <span className="flex-shrink-0 ml-1.5 text-sm font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
@@ -1626,7 +1652,7 @@ export default function ThreadView(props: Props) {
               </span>
             )}
             <ActionButtons actions={barActions} placements={placements} where="header" btnClass={ICON_BTN} iconClass="text-xl" />
-            <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
+            <MoreMenu actions={isMobile ? mobileMenuActions('thread', barActions, placements) : barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
         {/* スマホは、左右の端までを等分して並べる(人気・画像・動画・リンク・すべて) */}
@@ -1925,9 +1951,9 @@ export default function ThreadView(props: Props) {
                     type="button"
                     onClick={() => void props.onRefresh()}
                     title="更新"
-                    className="flex-shrink-0 w-10 h-10 -ml-0.5 rounded-full flex items-center justify-center text-c-text-muted active:bg-c-surface2"
+                    className="flex-shrink-0 w-11 h-11 mr-1 rounded-full flex items-center justify-center text-c-text-muted active:bg-c-surface2"
                   >
-                    <span className={`material-symbols-outlined text-2xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
+                    <span className={`material-symbols-outlined text-[28px] ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
                   </button>
                 )
               }
@@ -2087,6 +2113,27 @@ export default function ThreadView(props: Props) {
           saveDir={settings.imageSaveDir}
           onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}
           onClose={() => setGalleryOpen(false)}
+        />
+      )}
+      {titleSheet && (
+        <ActionSheet
+          title={log.title}
+          onClose={() => setTitleSheet(false)}
+          items={[
+            ...(props.onOpenBoard ? [{ label: '板を開く', icon: 'list', onClick: props.onOpenBoard }] : []),
+            {
+              label: props.isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す',
+              icon: 'star',
+              onClick: props.onToggleFavorite,
+            },
+            { label: 'スレタイをコピー', icon: 'content_copy', onClick: () => copyText(log.title, 'スレタイをコピーしました') },
+            { label: 'URL をコピー', icon: 'link', onClick: () => copyText(props.threadUrl, 'URL をコピーしました') },
+            { label: 'スレタイと URL をコピー', icon: 'content_paste', onClick: () => copyText(`${log.title}\n${props.threadUrl}`, 'スレタイと URL をコピーしました') },
+            { label: 'スレタイを NG に追加', icon: 'block', onClick: () => props.onNgDraft('threadTitle', log.title) },
+            { label: '先頭へ', icon: 'vertical_align_top', onClick: () => jumpToTop() },
+            { label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
+            { label: 'ログを削除して閉じる', icon: 'delete', danger: true, onClick: props.onDeleteLog },
+          ] satisfies SheetItem[]}
         />
       )}
       {lightbox && (

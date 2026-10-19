@@ -25,7 +25,7 @@ export default function ActionSheet(props: { title?: string; items: SheetItem[];
         <div className="flex justify-center pt-2 pb-1">
           <span className="w-10 h-1 rounded-full bg-c-border-strong" />
         </div>
-        {props.title && <p className="px-5 pb-2 text-xs text-c-text-muted truncate">{props.title}</p>}
+        {props.title && <p className="px-5 pb-2 text-xs text-c-text-muted whitespace-pre-line break-all line-clamp-3">{props.title}</p>}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {props.items.map((it, i) => (
             <button

@@ -38,6 +38,7 @@ export const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'openBrowser', name: 'ブラウザで開く', icon: 'open_in_new', placement: 'menu' },
   { id: 'save', name: 'スレを保存', icon: 'save', placement: 'menu', desktopOnly: true },
   { id: 'drawer', name: 'メニュー(引き出し)', icon: 'menu', placement: 'menu', mobileOnly: true },
+  { id: 'style', name: '表示スタイル', icon: 'palette', placement: 'menu' },
   { id: 'refresh', name: '更新', icon: 'refresh', placement: 'header', mobile: 'footer' },
 ]
 
@@ -54,6 +55,21 @@ export const LIST_ACTIONS: BarActionDef[] = [
 ]
 
 export const BAR_ACTIONS: Record<BarArea, BarActionDef[]> = { thread: THREAD_ACTIONS, list: LIST_ACTIONS }
+
+/**
+ * スマホの ︙ に出す操作。帯(ヘッダー・フッター)に出ているものと、いつも別の所にあるもの
+ * (左上のメニュー・戻るのジェスチャー・フッターの入力欄)は出さず、よく使う順に並べ直す
+ */
+const MOBILE_MENU_HIDDEN = new Set(['drawer', 'back', 'reply'])
+const MOBILE_MENU_ORDER: Record<BarArea, string[]> = {
+  thread: ['favorite', 'gallery', 'findNext', 'search', 'openBoard', 'top', 'bottom', 'style', 'openBrowser', 'refresh', 'delete'],
+  list: ['newThread', 'favorite', 'search', 'top', 'style', 'refresh'],
+}
+export function mobileMenuActions<T extends { id: string }>(area: BarArea, actions: T[], placements: Record<string, Placement>): T[] {
+  const order = MOBILE_MENU_ORDER[area]
+  const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length)
+  return actions.filter((a) => placements[a.id] === 'menu' && !MOBILE_MENU_HIDDEN.has(a.id)).sort((a, b) => rank(a.id) - rank(b.id))
+}
 
 /** 設定に保存する形。変えたものだけ持つ(あとで増えた操作は既定の置き場所になる) */
 export type BarLayout = Partial<Record<BarArea, Record<string, Placement>>>

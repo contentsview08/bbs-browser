@@ -54,7 +54,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { PICKABLE_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
+import { PICKABLE_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -1771,6 +1771,7 @@ export default function App() {
       if (fav) void openBoard(fav)
       else void openUrlInApp(t.boardUrl)
     }),
+    updateSetting: useEvent(((key, value) => updateSetting(key, value)) as UpdateSetting),
     registerReadFlush: useEvent((flush: (() => void) | undefined) => {
       readFlush.current = flush
     }),
@@ -1915,7 +1916,12 @@ export default function App() {
           スレを開くとスレ表示がその上に右から重なる(下の threadShown) */}
       {settingsLoaded && (
         <div
-          className={single ? 'flex-1 min-w-0 flex justify-center bg-panel-view' : 'relative flex flex-shrink-0'}
+          className={
+            single
+              ? // スマホ: スレを開くとスレ一覧は少し左へ逃げ、閉じると左から戻ってくる(元の Web アプリと同じ)
+                `flex-1 min-w-0 flex justify-center bg-panel-view ${isMobile ? `transition-transform duration-[250ms] ease-out ${threadShown ? '-translate-x-1/4' : ''}` : ''}`
+              : 'relative flex flex-shrink-0'
+          }
           onPointerDownCapture={() => setFocusPane('list')}
         >
         {!single && <FocusLine on={listFocused} />}
@@ -1965,6 +1971,8 @@ export default function App() {
           tabs={settings.listTabs}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
+          boardUrl={!favView && !history ? board?.url : undefined}
+          onOpenExternal={(url) => void openUrl(url)}
           pullToRefresh={settings.pullToRefreshList}
           hideBarsOnScroll={settings.hideBarsOnScroll}
           newSince={!favView && !history ? newSince : undefined}
@@ -1989,7 +1997,13 @@ export default function App() {
       <div
         className={
           single
-            ? // 1 画面: スレ一覧の上に重ねる。開くときは手前(少し大きく・透けた状態)から画面に貼り付くように、
+            ? isMobile
+              ? // スマホ: 開くときは右からすべり込み、閉じるときは右へすべって出ていく(元の Web アプリと同じ)。
+                // 出し切ったら transform を外す(付いたままだと、画面の座標で置くポップアップの位置がずれるため)
+                `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl transition-[transform,visibility] duration-[250ms] ease-out ${
+                  threadShown ? '' : 'translate-x-full invisible pointer-events-none'
+                }`
+              : // 1 画面: スレ一覧の上に重ねる。開くときは手前(少し大きく・透けた状態)から画面に貼り付くように、
               // 閉じるときはこちらへ近づきながら(大きくなりながら)透けて消える。
               // 出し切ったら動かすための指定(transform)を外す(付いたままだと、画面の座標で置くポップアップの位置がずれるため)。
               // 隠すときも消さずに隠すだけ(読んでいた位置を残すため)

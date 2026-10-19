@@ -165,6 +165,11 @@ function createdAtOf(key: string, now = Date.now()): Date | undefined {
   return date.getTime() > now + FUTURE_TOLERANCE_MS ? undefined : date
 }
 
+/** お知らせスレの番号。10 桁で、日時にするとずっと先(番号がわざと未来になっている。9240230830 など) */
+export function isAnnouncementKey(key: string, now = Date.now()): boolean {
+  return /^\d{10}$/.test(key) && Number(key) * 1000 > now + FUTURE_TOLERANCE_MS
+}
+
 /** スレの URL(…/test/read.cgi/板/番号/)と板の URL(…/板/)を見分ける */
 // スレの URL。/test/read.cgi/ の前に道(ディレクトリ)があってもよい(https://host/bbs/test/read.cgi/板/キー なら、板は https://host/bbs/板/)
 const THREAD_URL = /^(https?:\/\/[^/?#]+(?:\/[^?#]*?)?)\/test\/read\.cgi\/([^/?#]+)\/(\d+)/
@@ -309,6 +314,7 @@ export const twoChConnector: Connector = {
         postCount: e.postCount,
         order,
         createdAt: createdAtOf(e.key),
+        ...(isAnnouncementKey(e.key) && { announcement: true }),
       }),
     )
   },

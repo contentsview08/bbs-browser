@@ -128,24 +128,49 @@ function shortDate(date: string): string {
  */
 function fitAA(el: HTMLElement | null) {
   if (!el) return
+  // 使える幅は、レスの枠(article)の右端まで。LINE 風の吹き出しのように AA に合わせて広がる枠では、
+  // AA の要素の幅を見ても「はみ出していない」になるため、外の枠で測る
+  const box = el.closest('article') ?? el.parentElement
   const fit = () => {
     el.style.fontSize = ''
-    const over = el.scrollWidth / Math.max(1, el.clientWidth)
-    if (over > 1.01) el.style.fontSize = `${Math.max(5, parseFloat(getComputedStyle(el).fontSize) / over)}px`
+    // 縮めた結果がぴったりにならない(字の幅の丸め)ことがあるので、数回測り直す
+    for (let i = 0; i < 4; i++) {
+      const right = box ? box.getBoundingClientRect().right - parseFloat(getComputedStyle(box).paddingRight || '0') : Infinity
+      const avail = Math.min(el.clientWidth, right - el.getBoundingClientRect().left)
+      if (avail <= 0) return
+      const over = el.scrollWidth / avail
+      if (over <= 1.005) return
+      el.style.fontSize = `${Math.max(5, (parseFloat(getComputedStyle(el).fontSize) / over) * 0.98)}px`
+    }
   }
   fit()
-  // 幅は画面の向き・ミニマップなどで変わる。要素ごとに 1 回だけ見張る
-  const tagged = el as HTMLElement & { aaObserver?: ResizeObserver }
+  // 幅は画面の向き・ミニマップなどで変わり、AA 用のフォントはあとから読み込まれて字の幅が変わる。要素ごとに 1 回だけ見張る
+  const tagged = el as AAElement
+  tagged.aaFit = fit
+  el.dataset.aaFit = ''
+  watchFontLoads()
   if (!tagged.aaObserver) {
-    let width = el.clientWidth
+    let width = box?.clientWidth ?? el.clientWidth
     tagged.aaObserver = new ResizeObserver(() => {
-      if (el.clientWidth !== width) {
-        width = el.clientWidth
+      const w = box?.clientWidth ?? el.clientWidth
+      if (w !== width) {
+        width = w
         fit()
       }
     })
-    tagged.aaObserver.observe(el)
+    tagged.aaObserver.observe(box ?? el)
   }
+}
+
+type AAElement = HTMLElement & { aaObserver?: ResizeObserver; aaFit?: () => void }
+let watchingFonts = false
+/** フォントを読み込み終えたら(AA 用のフォントは、AA を初めて描いたときに読み込まれる)、字を縮めた AA をすべて測り直す */
+function watchFontLoads() {
+  if (watchingFonts || !document.fonts) return
+  watchingFonts = true
+  document.fonts.addEventListener('loadingdone', () => {
+    document.querySelectorAll<AAElement>('[data-aa-fit]').forEach((e) => e.aaFit?.())
+  })
 }
 
 interface MenuItem {

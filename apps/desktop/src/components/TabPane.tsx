@@ -8,7 +8,7 @@ import type { AttachmentRules, Post, PostActionDef, ReactionDef, PostConfirm, Po
 import type { ThreadLog } from '@bbs-browser/logstore'
 import ThreadView, { type ScrollPosition } from './ThreadView'
 import type { NgRule, NgTarget } from '../utils/ng'
-import type { AppSettings, ReplyLayout } from '../ui/settings'
+import type { AppSettings, ReplyLayout, UpdateSetting } from '../ui/settings'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import type { PostAccountOption } from './PostAccountMenu'
 
@@ -79,6 +79,8 @@ export interface TabEvents {
   threadUrl: (t: ThreadSummary) => string
   /** 開いているタブの「既読をすぐ知らせる」関数を預かる(更新の直前に呼ぶ) */
   registerReadFlush: (flush: (() => void) | undefined) => void
+  /** 設定を変える(︙ の表示スタイル) */
+  updateSetting: UpdateSetting
 }
 
 interface Props {
@@ -235,6 +237,7 @@ function TabPane({
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}
       onToggleFavorite={onToggleFavorite}
+      onUpdateSetting={ev.updateSetting}
     />
   )
 }

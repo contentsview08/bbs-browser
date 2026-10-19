@@ -43,9 +43,10 @@ export const THREAD_ACTIONS: BarActionDef[] = [
 
 /** スレ一覧の操作(並べる順) */
 export const LIST_ACTIONS: BarActionDef[] = [
-  { id: 'drawer', name: 'メニュー(引き出し)', icon: 'menu', placement: 'menu', mobile: 'footer', mobileOnly: true },
+  { id: 'drawer', name: 'メニュー(引き出し)', icon: 'menu', placement: 'menu', mobileOnly: true },
   { id: 'search', name: 'スレッド検索', icon: 'search', placement: 'header' },
-  { id: 'newThread', name: 'スレを立てる', icon: 'edit_square', placement: 'header', mobile: 'footer' },
+  // スマホでは、左下の丸いボタンでも立てられる
+  { id: 'newThread', name: 'スレを立てる', icon: 'edit_square', placement: 'header', mobile: 'menu' },
   { id: 'favorite', name: 'お気に入り板', icon: 'star', placement: 'header', mobile: 'menu' },
   { id: 'style', name: '表示スタイル', icon: 'palette', placement: 'header', mobile: 'menu' },
   { id: 'top', name: '先頭へ', icon: 'vertical_align_top', placement: 'menu', mobileOnly: true },

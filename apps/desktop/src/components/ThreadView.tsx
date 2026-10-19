@@ -5,6 +5,7 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { isMobile } from '../utils/platform'
+import { useSwipeGesture } from '../hooks/useSwipeGesture'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -493,15 +494,21 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (!autoCollapse) setReplyForceOpen(false)
   }, [autoCollapse])
-  const replyCollapsed = settings.replyCollapsed || (autoCollapse && !replyForceOpen)
+  // スマホ: 書き込み欄はふだん出さず、出すときは右から滑り込む画面にする(元の Web アプリと同じ)
+  const [mobileReplyOpen, setMobileReplyOpen] = useState(false)
+  const replyCollapsed = isMobile ? !mobileReplyOpen : settings.replyCollapsed || (autoCollapse && !replyForceOpen)
   const openReply = () => {
+    if (isMobile) return setMobileReplyOpen(true)
     if (settings.replyCollapsed) props.onSetReplyCollapsed(false)
     if (autoCollapse) setReplyForceOpen(true)
   }
   const closeReply = () => {
+    if (isMobile) return setMobileReplyOpen(false)
     props.onSetReplyCollapsed(true)
     setReplyForceOpen(false)
   }
+  // 書き込み欄の画面を右へなぞると閉じる
+  const replySwipe = useSwipeGesture({ right: { label: '閉じる', onCommit: () => setMobileReplyOpen(false) } }, settings.gestureSensitivity)
   /** 書き込み欄に何かする(しまっていたら出してから) */
   const pendingReply = useRef<((h: ReplyFormHandle) => void) | undefined>(undefined)
   const withReply = (fn: (h: ReplyFormHandle) => void) => {
@@ -1792,7 +1799,7 @@ export default function ThreadView(props: Props) {
       )}
       </div>
 
-      {props.onSubmitPost && replyCollapsed && (
+      {props.onSubmitPost && replyCollapsed && !isMobile && (
         // しまっているときは、細い帯(右に置くときは細い縦の帯)だけを出す。押すと書き込み欄を出す
         <button
           type="button"
@@ -1806,7 +1813,66 @@ export default function ThreadView(props: Props) {
           {replyLayout === 'bottom' && '書き込む'}
         </button>
       )}
-      {props.onSubmitPost && !replyCollapsed && (
+      {props.onSubmitPost && !replyCollapsed && isMobile && (
+        // スマホ: 右から滑り込む、画面いっぱいの書き込み欄。上の帯の ← か、右へなぞると閉じる
+        <div
+          className="fixed inset-0 z-[60] flex flex-col bg-panel-reply reply-slide"
+          style={{
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            touchAction: 'pan-y pinch-zoom',
+          }}
+          onTouchStart={replySwipe.onTouchStart}
+          onTouchEnd={replySwipe.onTouchEnd}
+          onTouchCancel={replySwipe.onTouchCancel}
+        >
+          <div className="flex-shrink-0 h-12 flex items-center gap-2 px-2 border-b border-c-border bg-panel-thread-header">
+            <button type="button" onClick={closeReply} className={ICON_BTN} title="閉じる">
+              <span className="material-symbols-outlined text-xl">arrow_back</span>
+            </button>
+            <span className="flex-1 min-w-0 truncate text-sm font-bold text-c-text-strong">{log.title}</span>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ReplyForm
+              ref={replyRef}
+              layout="right"
+              attach={props.attachments}
+              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
+              initialName={props.postName}
+              initialMail={props.postMail}
+              onSubmit={props.onSubmitPost}
+              onConfirm={props.onConfirmPost}
+              onUploaded={props.onUploaded}
+              readyAt={props.postReadyAt}
+              cooldownMs={props.postCooldownMs}
+              accounts={props.postAccounts}
+              draft={props.draft}
+              limits={props.postLimits}
+              byteLength={props.postByteLength}
+              onToggleAccount={props.onTogglePostAccount}
+              onOpenAccountSettings={props.onOpenAccountSettings}
+              onImage={(urls, index) => setLightbox({ urls, index })}
+              uploader={
+                settings.uploaderEnabled
+                  ? {
+                      stripMetadata: settings.uploadStripMetadata,
+                      maxDimension: settings.uploadMaxDimension,
+                      userhash: settings.catboxUserhash.trim() || undefined,
+                    }
+                  : undefined
+              }
+              onOpenUrl={props.onUrl}
+              onCollapse={closeReply}
+            />
+          </div>
+          {replySwipe.label && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{replySwipe.label}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {props.onSubmitPost && !replyCollapsed && !isMobile && (
         <>
           <Splitter
             layout={replyLayout}

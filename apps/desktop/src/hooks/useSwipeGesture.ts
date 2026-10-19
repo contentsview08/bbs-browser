@@ -85,7 +85,9 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
         }
         segStart.current = { x: t2.clientX, y: t2.clientY }
       }
-      if (segs.length >= 1 && matchesPrefix(map, segs)) ev.preventDefault()
+      // スクロールが始まってしまった後の touchmove は止められない(cancelable が false)ので、止められるときだけ止める。
+      // 横向きで始まるなぞりは、呼ぶ側で touch-action: pan-y にしてあるので、ふつうはスクロールにならない
+      if (segs.length >= 1 && ev.cancelable && matchesPrefix(map, segs)) ev.preventDefault()
     }
     target.addEventListener('touchmove', onMove, { passive: false })
     cleanup.current = () => target.removeEventListener('touchmove', onMove)

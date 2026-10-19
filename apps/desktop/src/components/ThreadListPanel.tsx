@@ -14,6 +14,7 @@ import type { Placement } from '../utils/toolbar'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
+import { isMobile } from '../utils/platform'
 import { LIST_TABS, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
@@ -617,6 +618,43 @@ export default function ThreadListPanel(props: Props) {
     )
   }
 
+  // 未読・勢い順などのタブ。PC はヘッダーの下、スマホはフッターの左に置く
+  const tabGrid = (
+            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}>
+              {tabs.map((key, i) => {
+                const def = LIST_TABS.find((t) => t.key === key)!
+                const filter = key === 'unread' || key === 'visited'
+                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : sort?.mode === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => pressTab(key)}
+                    className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+                    title={`${def.note}${filter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
+                  >
+                    <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
+                    <span className="truncate">{def.name}</span>
+                    {key === 'unread' && unreadTotal > 0 && (
+                      <span
+                        className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                        style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
+                      >
+                        +{unreadTotal}
+                      </span>
+                    )}
+                    {!filter && (
+                      <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
+                        {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                      </span>
+                    )}
+                    {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
+                  </button>
+                )
+              })}
+            </div>
+  )
+
   return (
     <section
       style={props.fill ? { width: '100%', maxWidth: props.fill === 'centered' ? FILL_MAX_WIDTH : undefined } : { width }}
@@ -653,12 +691,18 @@ export default function ThreadListPanel(props: Props) {
             onMouseDown={(e) => headerDrag.startDrag(e, titleRowRef.current?.getBoundingClientRect().height ?? 44, 1)}
             onReset={headerDrag.reset}
           />
-          <div className="p-4">
+          <div className={isMobile ? 'px-2 py-1' : 'p-4'}>
             <div className="flex items-center gap-2">
-              <div ref={titleRowRef} className="relative flex-1 min-w-0 h-11" style={headerDrag.height ? { height: headerDrag.height } : undefined}>
+              {/* スマホ: 左上のメニュー(サイドバーの引き出し) */}
+              {isMobile && props.onOpenDrawer && (
+                <button type="button" onClick={props.onOpenDrawer} className={LIST_BTN} title="メニュー">
+                  <span className="material-symbols-outlined text-xl">menu</span>
+                </button>
+              )}
+              <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-10' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
                 {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
-                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong text-xl cursor-pointer transition-opacity duration-200 ${
+                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-base' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
                   // 引き伸ばしたら、高さに合わせて字も大きくする(既定の 44px で 1.25rem)
@@ -722,7 +766,7 @@ export default function ThreadListPanel(props: Props) {
               </button>
             </div>
           )}
-          <div className="flex items-stretch px-4 border-b border-c-border text-sm font-medium">
+          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile && !selectable ? 'hidden' : ''}`}>
             {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
             {selectable && (
               <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">
@@ -737,39 +781,7 @@ export default function ThreadListPanel(props: Props) {
                 />
               </label>
             )}
-            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}>
-              {tabs.map((key, i) => {
-                const def = LIST_TABS.find((t) => t.key === key)!
-                const filter = key === 'unread' || key === 'visited'
-                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : sort?.mode === key
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => pressTab(key)}
-                    className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-                    title={`${def.note}${filter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
-                  >
-                    <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
-                    <span className="truncate">{def.name}</span>
-                    {key === 'unread' && unreadTotal > 0 && (
-                      <span
-                        className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
-                        style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
-                      >
-                        +{unreadTotal}
-                      </span>
-                    )}
-                    {!filter && (
-                      <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
-                        {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
-                      </span>
-                    )}
-                    {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-                  </button>
-                )
-              })}
-            </div>
+            {!isMobile && tabGrid}
           </div>
         </div>
 
@@ -821,10 +833,22 @@ export default function ThreadListPanel(props: Props) {
           {note}
         </div>
       )}
-      {hasFooter && (
+      {/* スマホ: 左下の丸いスレ立てボタン(フッターの上に浮かせる) */}
+      {isMobile && props.onNewThread && (
+        <button
+          type="button"
+          onClick={props.onNewThread}
+          className="absolute left-4 bottom-16 z-20 w-14 h-14 rounded-full shadow-lg flex items-center justify-center"
+          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+          title="スレを立てる"
+        >
+          <span className="material-symbols-outlined text-2xl">edit_square</span>
+        </button>
+      )}
+      {(hasFooter || isMobile) && (
         <div
           ref={footerRef}
-          className="relative flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border"
+          className={`relative flex-shrink-0 ${isMobile ? 'h-12 px-1 bg-panel-thread-header' : 'h-10 px-3'} flex items-center justify-end gap-1 border-t border-c-border`}
           style={footerDrag.height ? { height: footerDrag.height } : undefined}
         >
           {/* 上の端をつかんで、フッターの高さを変える */}
@@ -833,6 +857,8 @@ export default function ThreadListPanel(props: Props) {
             onMouseDown={(e) => footerDrag.startDrag(e, footerRef.current?.getBoundingClientRect().height ?? 40, -1)}
             onReset={footerDrag.reset}
           />
+          {/* スマホ: 未読・勢い順などのタブを、フッターの左に */}
+          {isMobile && <div className="flex-1 min-w-0 flex self-stretch text-xs font-medium">{tabGrid}</div>}
           <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={LIST_BTN} iconClass="text-lg" />
         </div>
       )}

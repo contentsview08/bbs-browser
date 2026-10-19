@@ -1759,7 +1759,9 @@ export default function App() {
         canForward={canForward(view.current)}
       />
       )}
-      <div className="flex-1 min-h-0 flex" {...swipeHandlers}>
+      {/* スマホ: 横になぞる動きをスクロールにしない(縦のスクロールと、2 本指の拡大だけ任せる)。
+          こうしないと、なぞっている途中でスクロールが始まり、→↓ のような折れ曲がるなぞりが取れない */}
+      <div className="flex-1 min-h-0 flex" style={isMobile ? { touchAction: 'pan-y pinch-zoom' } : undefined} {...swipeHandlers}>
       {/* スマホ: なぞっている間、何の操作になるかを真ん中に出す */}
       {swipe.label && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none">
@@ -1863,6 +1865,7 @@ export default function App() {
           fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={favView || history ? 'subject' : settings.threadSort}
+          onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
           serverOrder={!favView && !history && listOrder ? orderOf(listOrder) : undefined}
           onSortChange={!favView && !history ? onListSort : undefined}
           tabs={settings.listTabs}

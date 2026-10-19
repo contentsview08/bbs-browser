@@ -807,6 +807,10 @@ input[type='checkbox']:indeterminate {
   box-sizing: border-box;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
+/* スマホ: スレ表示のスレタイの帯を低くする(PC の 80px は、狭い画面ではレスの見える量を削りすぎる) */
+html[data-platform='mobile'] {
+  --header-height: 52px;
+}
 /* 指で押しやすいよう、小さいアイコンのボタンを広げる */
 [data-platform='mobile'] [data-post-toolbar] button {
   min-width: 36px;
@@ -833,5 +837,18 @@ input[type='checkbox']:indeterminate {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* スマホ: 右から滑り込む書き込み欄 */
+.reply-slide {
+  animation: reply-slide 200ms ease-out;
+}
+@keyframes reply-slide {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
   }
 }

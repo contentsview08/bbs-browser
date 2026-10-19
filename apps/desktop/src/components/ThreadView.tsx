@@ -172,8 +172,8 @@ const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colo
 /** レスの絞り込み(web 版と同じ 4 種。選んだもののどれかに当たれば出す) */
 type PostFilter = 'popular' | 'image' | 'video' | 'link'
 // 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
-/** スマホのヘッダー・フッターの高さ(押しやすいよう、PC の帯の 1.5 倍) */
-export const MOBILE_BAR_H = 72
+/** スマホのフッターの高さ */
+export const MOBILE_BAR_H = 60
 /** スマホのフッターのボタン(大きく押しやすく) */
 const MOBILE_BTN = 'p-2.5 rounded-xl text-c-text-muted hover:text-c-text-strong active:bg-c-surface2 transition-colors disabled:opacity-40'
 const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[] = [
@@ -1514,9 +1514,15 @@ export default function ThreadView(props: Props) {
         />
         <header
           ref={titleRowRef}
-          className={`flex items-center justify-between ${isMobile ? 'pl-4 pr-1' : 'px-6'}`}
+          className={`flex items-center justify-between ${isMobile ? (props.onOpenDrawer ? 'pl-1 pr-1' : 'pl-4 pr-1') : 'px-6'}`}
           style={{ height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
+          {/* スマホ: スレタイの左にメニュー(サイドバーの引き出し) */}
+          {isMobile && props.onOpenDrawer && (
+            <button type="button" onClick={props.onOpenDrawer} className="flex-shrink-0 p-2 rounded-xl text-c-text-muted active:bg-c-surface2" title="メニュー">
+              <span className="material-symbols-outlined text-2xl">menu</span>
+            </button>
+          )}
           <div
             className="relative min-w-0 flex-1 h-10 flex items-center gap-2"
             // 字を大きくしたら、行の高さもそれに合わせる(固定の 40px のままだと、大きい字の上下が切れる)
@@ -1831,7 +1837,11 @@ export default function ThreadView(props: Props) {
       </div>
       {settings.showMinimap && log.posts.length > 0 && (
         // スマホ: ミニマップは本文の右端に重ねる(横に並べると、ヘッダーの右に同じ幅の空きができ、本文も狭くなる)
-        <div className={isMobile ? 'absolute right-0 bottom-0 z-[5] flex' : 'contents'} style={isMobile ? { top: headerInScroll ? headerHeight : 0 } : undefined}>
+        // フッターが出ている間は、その上で終わらせる(--footer-offset。フッターの後ろに隠れないように)
+        <div
+          className={isMobile ? 'absolute right-0 z-[5] flex transition-[bottom] duration-200' : 'contents'}
+          style={isMobile ? { top: headerInScroll ? headerHeight : 0, bottom: 'var(--footer-offset, 0px)' } : undefined}
+        >
         <Minimap
           posts={visiblePosts}
           scrollRef={ref}

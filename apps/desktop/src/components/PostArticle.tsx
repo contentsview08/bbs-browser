@@ -122,6 +122,32 @@ function shortDate(date: string): string {
   return m ? `${m[1]}/${m[2]} ${m[3]}` : date
 }
 
+/**
+ * スマホ: AA の字を、横幅に収まるまで小さくする(横にずらして読むと、スワイプの操作とぶつかるため)。
+ * 一度もとの大きさに戻して測り、はみ出す分だけ縮める(読めなくならないよう 5px まで)。幅が変わったら測り直す
+ */
+function fitAA(el: HTMLElement | null) {
+  if (!el) return
+  const fit = () => {
+    el.style.fontSize = ''
+    const over = el.scrollWidth / Math.max(1, el.clientWidth)
+    if (over > 1.01) el.style.fontSize = `${Math.max(5, parseFloat(getComputedStyle(el).fontSize) / over)}px`
+  }
+  fit()
+  // 幅は画面の向き・ミニマップなどで変わる。要素ごとに 1 回だけ見張る
+  const tagged = el as HTMLElement & { aaObserver?: ResizeObserver }
+  if (!tagged.aaObserver) {
+    let width = el.clientWidth
+    tagged.aaObserver = new ResizeObserver(() => {
+      if (el.clientWidth !== width) {
+        width = el.clientWidth
+        fit()
+      }
+    })
+    tagged.aaObserver.observe(el)
+  }
+}
+
 interface MenuItem {
   label: string
   icon: string
@@ -646,7 +672,9 @@ function PostArticle(props: Props) {
             />
           )}
           <p
-            className={`text-base ${bodyClass} ${isAA ? 'aa-font whitespace-pre overflow-x-auto' : 'whitespace-pre-wrap break-words leading-relaxed'}`}
+            ref={isAA && isMobile ? fitAA : undefined}
+            // スマホの AA は横にずらさず(スワイプとぶつかる)、字を小さくして 1 画面に収める(fitAA)
+            className={`text-base ${bodyClass} ${isAA ? `aa-font whitespace-pre ${isMobile ? 'overflow-hidden' : 'overflow-x-auto'}` : 'whitespace-pre-wrap break-words leading-relaxed'}`}
           >
             {renderBody(body, handlers, props.quotes)}
           </p>

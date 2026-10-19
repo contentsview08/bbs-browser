@@ -32,8 +32,8 @@ interface Props {
   layout: ReplyLayout
   /**
    * chat: スマホのスレ表示のフッターに組み込む、Discord・LINE のような 1 行の入力欄:
-   * 左に leading(戻るボタンなど)と ＋(画像・絵文字・名前とメールの欄を出す)、真ん中に丸い本文の欄(書くと伸びる)、
-   * 右に丸い送るボタン(本文が空のあいだは idle の操作。更新など)
+   * 丸い本文の欄(書くと伸びる)の左の端に ＋(画像を選ぶ・オプションで名前とメール)、右に丸い送るボタン。
+   * 絵文字はスマホのキーボードで打てるので出さない
    */
   variant?: 'chat'
   /** chat: 入力欄の左に置くもの(戻るボタンなど) */
@@ -83,8 +83,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<PostResult>()
-  /** chat: ＋ で開く欄(画像・絵文字・名前とメール)を出しているか */
+  /** chat: オプション(名前・メール)の欄を出しているか */
   const [lineOptions, setLineOptions] = useState(false)
+  /** chat: ＋ のメニュー(画像・オプション)を出しているか */
+  const [plusMenu, setPlusMenu] = useState(false)
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   // ── 下書き ──
@@ -234,9 +236,9 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   if (props.variant === 'chat') {
     const canSend = !sending && !!body.trim() && !props.disabled && !cooling
-    const idle = !body.trim() && props.idle
     return (
       <div className="w-full flex flex-col">
+        {media.fileInput}
         {media.error && (
           <p className="px-3 pt-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
             <span className="material-symbols-outlined text-sm">error</span>
@@ -249,16 +251,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           </div>
         )}
         {media.attachedView && <div className="px-3 pt-2">{media.attachedView}</div>}
-        {/* ＋ で開く欄: 画像・絵文字と、名前・メール・sage・アカウント */}
+        {/* オプション: 名前・メール・アカウント */}
         {lineOptions && (
           <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
-            <div className="flex items-center gap-1">{media.buttons}</div>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} flex-1 min-w-[6rem]`} />
-            <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={`${INPUT} flex-1 min-w-[6rem]`} />
-            <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
-              <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
-              sage
-            </label>
+            <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール(sage など)" className={`${INPUT} flex-1 min-w-[6rem]`} />
             {props.accounts && props.onToggleAccount && (
               <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
             )}
@@ -278,58 +275,82 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1 px-1.5 py-1.5">
+        <div className="flex items-end gap-1.5 px-2 py-2">
           {props.leading}
-          <button
-            type="button"
-            onClick={() => setLineOptions((v) => !v)}
-            className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full active:bg-c-surface2 ${lineOptions || sage || name ? 'text-c-accent' : 'text-c-text-muted'}`}
-            title="画像・絵文字・名前とメール"
-          >
-            <span className={`material-symbols-outlined text-[26px] leading-none transition-transform ${lineOptions ? 'rotate-45' : ''}`}>add_circle</span>
-          </button>
-          <textarea
-            ref={textRef}
-            rows={1}
-            value={body}
-            onChange={(e) => {
-              changeBody(e.target.value)
-              // 書くと伸びる(6 行くらいまで)
-              const ta = e.currentTarget
-              ta.style.height = 'auto'
-              ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
-            }}
-            onFocus={() => props.onFocusChange?.(true)}
-            onBlur={() => props.onFocusChange?.(false)}
-            {...media.textareaProps}
-            placeholder={props.disabled ?? '書き込む'}
-            disabled={!!props.disabled}
-            className="flex-1 min-w-0 max-h-40 resize-none rounded-[20px] border border-c-border bg-c-surface px-3.5 py-2 text-[15px] leading-snug text-c-text-body placeholder-c-text-muted focus:border-c-accent focus:ring-0"
-          />
-          {idle ? (
+          {/* 丸い本文の欄。左の端に ＋(画像・オプション) */}
+          <div className="relative flex-1 min-w-0 flex items-end rounded-[20px] border border-c-border bg-c-surface focus-within:border-c-accent">
             <button
               type="button"
-              onClick={idle.onClick}
-              disabled={idle.disabled}
-              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-c-text-muted active:bg-c-surface2 disabled:opacity-40"
-              title={idle.title}
+              onClick={() => setPlusMenu((v) => !v)}
+              className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full ${plusMenu || lineOptions || mail || name ? 'text-c-accent' : 'text-c-text-muted'}`}
+              title="画像・オプション"
             >
-              <span className="material-symbols-outlined text-[26px]">{idle.icon}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={!canSend}
-              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
-              style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
-              title={cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '送る'}
-            >
-              <span className={`material-symbols-outlined text-xl ${sending ? 'animate-spin' : ''}`}>
-                {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
+              <span className={`material-symbols-outlined text-[24px] leading-none transition-transform ${plusMenu ? 'rotate-45' : ''}`}>
+                {media.uploading > 0 ? 'progress_activity' : 'add'}
               </span>
             </button>
-          )}
+            {plusMenu && (
+              <div className="absolute left-0 bottom-full mb-2 z-10 min-w-[11rem] py-1 bg-c-surface border border-c-border rounded-xl shadow-lg rise-in">
+                {media.pick && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlusMenu(false)
+                      media.pick!()
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
+                  >
+                    <span className="material-symbols-outlined text-xl text-c-text-muted">image</span>
+                    画像
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlusMenu(false)
+                    setLineOptions((v) => !v)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
+                >
+                  <span className="material-symbols-outlined text-xl text-c-text-muted">tune</span>
+                  {lineOptions ? 'オプションを閉じる' : 'オプション(名前・メール)'}
+                </button>
+              </div>
+            )}
+            <textarea
+              ref={textRef}
+              rows={1}
+              value={body}
+              onChange={(e) => {
+                changeBody(e.target.value)
+                // 書くと伸びる(6 行くらいまで)
+                const ta = e.currentTarget
+                ta.style.height = 'auto'
+                ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
+              }}
+              onFocus={() => {
+                setPlusMenu(false)
+                props.onFocusChange?.(true)
+              }}
+              onBlur={() => props.onFocusChange?.(false)}
+              {...media.textareaProps}
+              placeholder={props.disabled ?? '書き込む'}
+              disabled={!!props.disabled}
+              className="flex-1 min-w-0 max-h-40 resize-none border-0 bg-transparent pl-0 pr-3.5 py-2 text-[15px] leading-snug text-c-text-body placeholder-c-text-muted focus:ring-0"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={!canSend}
+            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
+            style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+            title={cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '送る'}
+          >
+            <span className={`material-symbols-outlined text-xl ${sending ? 'animate-spin' : ''}`}>
+              {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
+            </span>
+          </button>
         </div>
         {measure && measure.over.length > 0 && <p className="px-4 pb-1 text-[10px] text-c-heat-very-hot font-bold">{measure.over.join(' ・ ')}</p>}
       </div>

@@ -6,6 +6,7 @@
 
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
+import { useTouchPull } from '../hooks/useTouchPull'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -360,6 +361,8 @@ export default function ThreadView(props: Props) {
   const canRefresh = () => Date.now() >= (refreshReadyRef.current ?? 0)
   const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1, canRefresh })
   const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1, canRefresh })
+  // スマホ: 指で引っぱって更新する(上の端で下へ・下の端で上へ)
+  const touchPull = useTouchPull(ref, topPull, bottomPull)
   const onScrollPull = () => {
     topPull.noteScroll()
     bottomPull.noteScroll()
@@ -1740,7 +1743,16 @@ export default function ThreadView(props: Props) {
           onScrollPull()
           if (isMobile) hideBars.onScroll(e)
         }}
-        onTouchStart={isMobile ? hideBars.arm : undefined}
+        onTouchStart={
+          isMobile
+            ? (e) => {
+                hideBars.arm()
+                touchPull.onTouchStart(e)
+              }
+            : undefined
+        }
+        onTouchMove={isMobile ? touchPull.onTouchMove : undefined}
+        onTouchEnd={isMobile ? touchPull.onTouchEnd : undefined}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
         {headerInScroll && headerBlock}
@@ -1895,19 +1907,11 @@ export default function ThreadView(props: Props) {
           style={{ bottom: 'var(--kb-inset, 0px)', minHeight: MOBILE_BAR_H }}
         >
           {props.onSubmitPost ? (
-            // 書き込める掲示板: Discord・LINE のような 1 行の入力欄。左に戻る、右は書いていなければ更新
+            // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
             <ReplyForm
               ref={replyRef}
               variant="chat"
               layout="bottom"
-              leading={
-                props.onBackToList && (
-                  <button type="button" onClick={props.onBackToList} className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full text-c-text-muted active:bg-c-surface2" title="一覧に戻る">
-                    <span className="material-symbols-outlined text-[26px]">arrow_back</span>
-                  </button>
-                )
-              }
-              idle={{ icon: 'refresh', title: '更新', onClick: () => void props.onRefresh(), disabled: props.loading }}
               onFocusChange={(f) => {
                 composing.current = f
               }}

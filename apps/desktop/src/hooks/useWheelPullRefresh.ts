@@ -154,5 +154,10 @@ export function useWheelPullRefresh({
     lastScrollRef.current = Date.now()
   }
 
-  return { indicatorRef, iconRef, pull, reset: collapse, noteScroll }
+  /** 指を離した: 確定していなければ戻す(確定して更新中なら、くるくるはそのまま) */
+  function release() {
+    if (!committingRef.current) collapse()
+  }
+
+  return { indicatorRef, iconRef, pull, reset: collapse, release, noteScroll }
 }

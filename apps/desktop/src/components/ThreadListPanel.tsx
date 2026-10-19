@@ -16,6 +16,7 @@ import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
+import { useTouchPull } from '../hooks/useTouchPull'
 import { LIST_TABS, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
@@ -298,6 +299,8 @@ export default function ThreadListPanel(props: Props) {
     commitThreshold: 680,
     canRefresh: () => Date.now() >= (refreshReadyRef.current ?? 0),
   })
+  // スマホ: 指で引っぱって更新する(上の端で下へ。しきい値がスレ表示の 1.7 倍なので、指の量も多めに掛ける)
+  const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh ? pull : undefined, undefined, 6)
 
   useEffect(() => setWidth(props.width), [props.width])
   useEffect(() => {
@@ -349,8 +352,6 @@ export default function ThreadListPanel(props: Props) {
   const shownThreads = useDeferredValue(threads)
   // サーバーの並び(ふたば)は一覧と一緒に変わるので、一緒に遅らせる(ずれると、一瞬だけ並べ替えていない一覧が出る)
   const shownServerOrder = useDeferredValue(props.serverOrder)
-  /** 並べ直したカードを組み立てている途中(上に細い帯を出す) */
-  const rebuilding = shownSort !== sort || shownThreads !== threads
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     let list = shownThreads.filter((t) => {
@@ -693,7 +694,16 @@ export default function ThreadListPanel(props: Props) {
           pull.noteScroll()
           if (isMobile) hideBars.onScroll(e)
         }}
-        onTouchStart={isMobile ? hideBars.arm : undefined}
+        onTouchStart={
+          isMobile
+            ? (e) => {
+                hideBars.arm()
+                touchPull.onTouchStart(e)
+              }
+            : undefined
+        }
+        onTouchMove={isMobile ? touchPull.onTouchMove : undefined}
+        onTouchEnd={isMobile ? touchPull.onTouchEnd : undefined}
         onWheel={(e) => {
           if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
@@ -802,7 +812,8 @@ export default function ThreadListPanel(props: Props) {
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
         <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 72 } : undefined}>
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
-          {(rebuilding || (props.loading && visible.length > 0)) && <div className="list-progress" aria-label="読み込み中" />}
+          {/* 帯は、取り直し(通信)のときだけ。手元の並べ替え(2ch の勢い順など)は通信しないので出さない */}
+          {props.loading && visible.length > 0 && <div className="list-progress" aria-label="読み込み中" />}
           {visible.length === 0 ? (
             props.loading ? (
               <LoadingCenter />

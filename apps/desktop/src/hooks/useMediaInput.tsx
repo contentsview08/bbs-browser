@@ -37,6 +37,14 @@ export function useMediaInput(o: {
   clearAttached: () => void
   /** 画像と絵文字のボタン(右端が絵文字) */
   buttons: ReactNode
+  /**
+   * スマホの入力欄(chat)用: 画像を選ぶ画面を開く。付けられない・上げられない掲示板なら undefined。
+   * 使うときは fileInput(隠したファイルの選び口)も一緒に置く(buttons とは一緒に置かない)
+   */
+  pick?: () => void
+  fileInput: ReactNode
+  /** アップロードしている数 */
+  uploading: number
   /** 本文の欄に付ける。画像を貼り付け・ドロップしたら上げる */
   textareaProps: {
     onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void
@@ -192,5 +200,32 @@ export function useMediaInput(o: {
     },
   }
 
-  return { buttons, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
+  // スマホの入力欄(chat)用の、隠したファイルの選び口(buttons の中のものと同じ働き)
+  const fileInput = o.attach ? (
+    <input
+      ref={fileRef}
+      type="file"
+      accept={o.attach.types.join(',')}
+      hidden
+      onChange={(e) => {
+        attach([...(e.target.files ?? [])])
+        e.target.value = ''
+      }}
+    />
+  ) : o.uploader ? (
+    <input
+      ref={fileRef}
+      type="file"
+      accept="image/*,video/*"
+      multiple
+      hidden
+      onChange={(e) => {
+        void upload(mediaFiles(e.target.files))
+        e.target.value = ''
+      }}
+    />
+  ) : null
+  const pick = o.attach || o.uploader ? () => fileRef.current?.click() : undefined
+
+  return { buttons, pick, fileInput, uploading, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
 }

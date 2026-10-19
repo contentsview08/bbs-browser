@@ -906,3 +906,11 @@ html[data-platform='mobile'][data-density] {
   --list-padding-post: 4px;
   --post-padding-x: 6px;
 }
+
+/* スマホには「選んでいるレス」がないので、ポップアップ・ツリーの中でも選んでいる印を出さない */
+html[data-platform='mobile'] article.popup-cursor {
+  background-image: none;
+}
+html[data-platform='mobile'] article.popup-cursor::after {
+  display: none;
+}

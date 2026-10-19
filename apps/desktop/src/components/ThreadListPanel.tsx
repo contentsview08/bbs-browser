@@ -711,7 +711,11 @@ export default function ThreadListPanel(props: Props) {
           if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
       >
-        <div ref={headerRef} className={`sticky top-0 z-10 frosted-glass flex-shrink-0 ${isMobile ? 'transition-transform duration-200' : ''}`}>
+        {/* スマホ: ヘッダーはフッターと同じ色にし、下に線を引く(一覧と同じ色だと境目が分からないため) */}
+        <div
+          ref={headerRef}
+          className={`sticky top-0 z-10 frosted-glass flex-shrink-0 ${isMobile ? 'bg-panel-thread-header border-b border-c-border transition-transform duration-200' : ''}`}
+        >
           {/* 下の端をつかんで、板名の行の高さを変える(板名の字も合わせて大きくなる) */}
           <DragEdge
             edge="bottom"

@@ -1459,6 +1459,11 @@ export default function App() {
     // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
     // 文字を打っている欄から抜けるのが先(検索欄で戻ると、まず欄から抜ける)
     if (action === 'back' && blurTyping()) return
+    // レスのポップアップが出ていれば、それを閉じるのが先(スレ表示が Esc でまとめて閉じる)
+    if (action === 'back' && document.querySelector('.post-popup')) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      return
+    }
     if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
     // 設定で確かめることにしていれば、確かめてから消す(Shift+Delete と同じ)
@@ -1859,7 +1864,11 @@ export default function App() {
       <div className={isMobile ? 'fixed inset-0 z-[9000]' : 'contents'} data-drawer={isMobile ? '' : undefined}>
       {isMobile && <div className="absolute inset-0 bg-black/40 drawer-fade" onClick={() => setDrawerOpen(false)} />}
       {/* flex: サイドバーの外枠を縦いっぱいに伸ばす(中身は外枠の高さに合わせて置くので、伸ばさないと高さが 0 になって見えない) */}
-      <div className={isMobile ? 'absolute inset-y-0 left-0 flex drawer-slide' : 'contents'}>
+      {/* スマホ: 時刻の帯・ジェスチャーの帯の分だけ内側に寄せ、スレ一覧・スレ表示のヘッダーと同じ高さから始める(寄せた分はヘッダーの色で塗る) */}
+      <div
+        className={isMobile ? 'absolute inset-y-0 left-0 flex drawer-slide' : 'contents'}
+        style={isMobile ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', background: 'var(--tab-active-bg)' } : undefined}
+      >
       <Sidebar
         neighbor={single ? 'view' : 'list'}
         width={isMobile ? Math.min(320, Math.round(window.innerWidth * 0.85)) : settings.sidebarWidth}

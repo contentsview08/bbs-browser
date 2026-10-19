@@ -189,7 +189,7 @@ export interface AppSettings {
   showIdenticon: boolean
   /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
   showMinimap: boolean
-  /** スマホ: スレ表示の右下に、丸い更新ボタンを出す */
+  /** スマホ: スレ表示のフッターの右端(送るボタンの右)に、更新ボタンを出す */
   showRefreshFab: boolean
   /** スマホ: 下へスクロールしたらヘッダーとフッターを隠す(false なら、いつも出しておく) */
   hideBarsOnScroll: boolean
@@ -350,7 +350,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastLogPruneAt: 0,
   connectors: {},
   groupNg: true,
-  uploaderEnabled: false,
+  uploaderEnabled: true,
   uploadStripMetadata: true,
   uploadMaxDimension: 2560,
   catboxUserhash: '',

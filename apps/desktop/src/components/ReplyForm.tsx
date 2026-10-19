@@ -38,6 +38,8 @@ interface Props {
   variant?: 'chat'
   /** chat: 入力欄の左に置くもの(戻るボタンなど) */
   leading?: ReactNode
+  /** chat: 送るボタンの右に置くもの(更新ボタンなど) */
+  trailing?: ReactNode
   /** chat: 本文が空のあいだ、送るボタンの代わりに出す操作 */
   idle?: { icon: string; title: string; onClick: () => void; disabled?: boolean }
   /** chat: 本文の欄に入った・出た(フッターを隠さないようにするため) */
@@ -376,6 +378,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
               {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
             </span>
           </button>
+          {props.trailing}
         </div>
         {measure && measure.over.length > 0 && <p className="px-4 pb-1 text-[10px] text-c-heat-very-hot font-bold">{measure.over.join(' ・ ')}</p>}
       </div>

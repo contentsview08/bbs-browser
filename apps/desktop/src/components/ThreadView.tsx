@@ -412,7 +412,8 @@ export default function ThreadView(props: Props) {
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
       if (popups.length > 0) {
         e.preventDefault()
-        setPopups((ps) => ps.slice(0, -1))
+        // スマホ(戻る操作)は、重なったポップアップをまとめて閉じる。PC の Esc はいちばん上から 1 つずつ
+        setPopups((ps) => (isMobile ? [] : ps.slice(0, -1)))
       } else if (filters.size > 0) {
         e.preventDefault()
         setFilters(new Set())
@@ -1695,18 +1696,6 @@ export default function ThreadView(props: Props) {
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
-      {/* スマホ: 右下の丸い更新ボタン(設定で消せる)。一番下へのボタンは、その上に積む */}
-      {refreshFab && (
-        <button
-          type="button"
-          onClick={() => void props.onRefresh()}
-          title="更新"
-          className="absolute z-20 w-11 h-11 flex items-center justify-center rounded-full shadow-lg active:brightness-110"
-          style={{ right: settings.showMinimap ? 40 : 8, bottom: 'calc(var(--footer-offset, 0px) + 10px)', background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
-        >
-          <span className={`material-symbols-outlined text-2xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
-        </button>
-      )}
       <button
         type="button"
         onClick={jumpToBottom}
@@ -1718,7 +1707,7 @@ export default function ThreadView(props: Props) {
         // スマホは右下の角に寄せる(ミニマップは本文に重ねてあるので、その左に)
         style={
           isMobile
-            ? { right: (settings.showMinimap ? 40 : 8) + (refreshFab ? 4 : 0), bottom: `calc(var(--footer-offset, 0px) + ${refreshFab ? 64 : 8}px)` }
+            ? { right: settings.showMinimap ? 40 : 8, bottom: 'calc(var(--footer-offset, 0px) + 8px)' }
             : { right: settings.showMinimap ? 44 : 20, bottom: 'calc(var(--footer-offset, 0px) + 20px)' }
         }
       >
@@ -1929,6 +1918,19 @@ export default function ThreadView(props: Props) {
             <ReplyForm
               ref={replyRef}
               variant="chat"
+              // フッターの右端(送るボタンの右)に更新ボタン(設定で消せる)
+              trailing={
+                refreshFab && (
+                  <button
+                    type="button"
+                    onClick={() => void props.onRefresh()}
+                    title="更新"
+                    className="flex-shrink-0 w-10 h-10 -ml-0.5 rounded-full flex items-center justify-center text-c-text-muted active:bg-c-surface2"
+                  >
+                    <span className={`material-symbols-outlined text-2xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
+                  </button>
+                )
+              }
               layout="bottom"
               onFocusChange={(f) => {
                 composing.current = f

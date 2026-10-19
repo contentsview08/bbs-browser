@@ -738,8 +738,8 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           <Toggle
             checked={s.showRefreshFab}
             onChange={(v) => update('showRefreshFab', v)}
-            label="右下に更新ボタンを出す"
-            note="スレ表示の右下に、丸い更新ボタンを出します"
+            label="書き込み欄の右に更新ボタンを出す"
+            note="スレ表示のフッターの右端(送るボタンの右)に、更新ボタンを出します"
           />
         )}
         {isMobile && (

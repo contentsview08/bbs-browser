@@ -80,3 +80,29 @@ npm run build    # インストーラー(MSI / NSIS)を作る
 ```
 
 本番の掲示板への試し書き込みはテストでは行わない(偽サーバーで確かめる)。
+
+## 配布
+
+```powershell
+npm install
+npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)と msi ができる
+```
+
+- インストーラーは、管理者の権限なしで、使う人のフォルダに入れる(NSIS の currentUser)。WebView2 がなければ入れる
+- データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.yumekui8.bbs-browser\` にあり、アンインストールしても残る
+- 自動アップデートはまだない(更新ファイルの置き場と、署名の鍵を決めてから足す)
+
+### 版の付け方
+
+`数字.数字.数字`(例 0.2.0)。0.x のあいだは次の決まりで上げる。
+
+| 変えたもの | 上げる所 |
+|---|---|
+| 不具合の直し・小さな見た目の変更 | 3 つ目(0.2.0 → 0.2.1) |
+| 新しい機能・DB の形の変更(migration を足した) | 2 つ目(0.2.1 → 0.3.0) |
+
+```powershell
+npm run version:set -- 0.2.0   # apps/desktop/package.json と Cargo.toml をそろえて書き換える
+```
+
+上げたら `CHANGELOG.md` に書き足し、`git tag v0.2.0` で印を付ける。msi は版に `-beta` などの文字を入れられないので、数字だけにする。

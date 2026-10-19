@@ -21,6 +21,7 @@ import { isValidPattern, newRule, todayDateString, type NgTarget } from '../util
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { getVersion } from '@tauri-apps/api/app'
 import type { ExternalConnectorInfo } from '../host/externalConnectors'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 import BoardIcon from './BoardIcon'
@@ -1926,16 +1927,26 @@ defineConnector({
 }
 
 function AboutTab() {
+  // 版はインストーラーの版(apps/desktop/package.json。tauri.conf.json がそこを読む)
+  const [version, setVersion] = useState<string>()
+  useEffect(() => {
+    void getVersion().then(setVersion, () => setVersion(undefined))
+  }, [])
   return (
     <>
-      <Section title="bbs-browser 0.1.0">
+      <Section title={`bbs-browser ${version ?? ''}`}>
         <p className="text-sm text-c-text-body leading-relaxed">
-          コネクタで掲示板を読む専用ブラウザです。いまは 2ch 互換(5ch・eddibb・eddist・hono-bbs など)を読めます。
+          コネクタで掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・ふたばを読めます。
+          ほかの掲示板は、外付けのコネクタ(設定 → コネクタ)で足せます。
         </p>
       </Section>
       <Section title="データの保存場所">
         <p className="text-sm font-mono text-c-text-body break-all">%APPDATA%\io.github.yumekui8.bbs-browser\bbs-browser.db</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>
+        <p className="text-sm font-mono text-c-text-body break-all mt-3">%APPDATA%\io.github.yumekui8.bbs-browser\backups\</p>
+        <p className="text-xs text-c-text-muted mt-1">
+          DB の形が変わる版に上げたとき、上げる前の DB の写しを自動で置きます(新しいものから 3 つ)。困ったときは、設定 → バックアップ の「バックアップから戻す」で、ここのファイルを選んで戻せます
+        </p>
       </Section>
     </>
   )

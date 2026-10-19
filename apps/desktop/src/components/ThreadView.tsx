@@ -1594,7 +1594,8 @@ export default function ThreadView(props: Props) {
             <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
-        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'gap-4 px-4 text-[13px]' : 'gap-5 px-4 text-base'}`}>
+        {/* スマホは真ん中にそろえる(入りきらないときは左から並べて横にずらせる: safe center) */}
+        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'gap-4 px-4 text-[13px] [justify-content:safe_center]' : 'gap-5 px-4 text-base'}`}>
           {FILTERS.map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (

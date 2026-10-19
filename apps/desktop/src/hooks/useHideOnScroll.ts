@@ -12,6 +12,8 @@ export function useHideOnScroll(
   footerRef: React.RefObject<HTMLElement | null>,
   /** フッターを出した・隠したとき(フッターの上に浮かせたボタンを、一緒に動かすため) */
   onFooterVisible?: (visible: boolean) => void,
+  /** true を返すあいだは、下へスクロールしてもフッターを隠さない(フッターの入力欄で書いているときなど) */
+  keepFooter?: () => boolean,
   threshold = 8,
 ) {
   const lastTop = useRef(0)
@@ -76,15 +78,20 @@ export function useHideOnScroll(
       if (dir === 'down' && moved > threshold) {
         if (!atBottom) {
           setHeader(false)
-          setFooter(false)
+          if (!keepFooter?.()) setFooter(false)
         }
       } else if (dir === 'up' && moved < -threshold) {
         setHeader(true)
         setFooter(true)
       }
     },
-    [setHeader, setFooter, threshold],
+    [setHeader, setFooter, keepFooter, threshold],
   )
+  /** 隠していたヘッダーとフッターを出す(書き込みを始めたときなど) */
+  const reveal = useCallback(() => {
+    setHeader(true)
+    setFooter(true)
+  }, [setHeader, setFooter])
 
-  return { onScroll, arm }
+  return { onScroll, arm, reveal }
 }

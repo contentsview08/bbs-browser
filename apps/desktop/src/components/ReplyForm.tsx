@@ -2,7 +2,7 @@
 // 大きさは親が決め、本文の欄が残りいっぱいに広がる。
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { AttachmentRules, PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
@@ -31,10 +31,17 @@ interface Props {
   onTextOverflow?: (deficit: number) => void
   layout: ReplyLayout
   /**
-   * line: LINE 風(スマホで LINE 風の見た目のとき)。下に置く 1 行のトークの入力欄にする:
-   * 丸い本文の欄(書くと伸びる)・丸い送るボタン・画像と絵文字のボタン。名前とメールは人のボタンで出す
+   * chat: スマホのスレ表示のフッターに組み込む、Discord・LINE のような 1 行の入力欄:
+   * 左に leading(戻るボタンなど)と ＋(画像・絵文字・名前とメールの欄を出す)、真ん中に丸い本文の欄(書くと伸びる)、
+   * 右に丸い送るボタン(本文が空のあいだは idle の操作。更新など)
    */
-  variant?: 'line'
+  variant?: 'chat'
+  /** chat: 入力欄の左に置くもの(戻るボタンなど) */
+  leading?: ReactNode
+  /** chat: 本文が空のあいだ、送るボタンの代わりに出す操作 */
+  idle?: { icon: string; title: string; onClick: () => void; disabled?: boolean }
+  /** chat: 本文の欄に入った・出た(フッターを隠さないようにするため) */
+  onFocusChange?: (focused: boolean) => void
   disabled?: string
   initialName: string
   initialMail: string
@@ -76,7 +83,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<PostResult>()
-  /** LINE 風: 名前・メールの欄を出しているか */
+  /** chat: ＋ で開く欄(画像・絵文字・名前とメール)を出しているか */
   const [lineOptions, setLineOptions] = useState(false)
   const textRef = useRef<HTMLTextAreaElement>(null)
 
@@ -225,10 +232,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     props.onCollapse()
   }
 
-  if (props.variant === 'line') {
+  if (props.variant === 'chat') {
     const canSend = !sending && !!body.trim() && !props.disabled && !cooling
+    const idle = !body.trim() && props.idle
     return (
-      <div className="w-full flex flex-col bg-panel-reply">
+      <div className="w-full flex flex-col">
         {media.error && (
           <p className="px-3 pt-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
             <span className="material-symbols-outlined text-sm">error</span>
@@ -236,15 +244,17 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           </p>
         )}
         {result && (
-          <div className="px-3 pt-2">
+          <div className="px-3 pt-2 max-h-40 overflow-y-auto">
             <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />
           </div>
         )}
         {media.attachedView && <div className="px-3 pt-2">{media.attachedView}</div>}
+        {/* ＋ で開く欄: 画像・絵文字と、名前・メール・sage・アカウント */}
         {lineOptions && (
           <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} flex-1 min-w-0`} />
-            <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={`${INPUT} flex-1 min-w-0`} />
+            <div className="flex items-center gap-1">{media.buttons}</div>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={`${INPUT} flex-1 min-w-[6rem]`} />
+            <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={`${INPUT} flex-1 min-w-[6rem]`} />
             <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
               <input type="checkbox" checked={sage} onChange={(e) => setMail(e.target.checked ? 'sage' : '')} className="rounded" />
               sage
@@ -268,21 +278,16 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1 px-1.5 py-2">
-          {props.onCollapse && (
-            <button type="button" onClick={props.onCollapse} className="flex-shrink-0 p-2 rounded-full text-c-text-muted active:bg-c-surface2" title="閉じる">
-              <span className="material-symbols-outlined text-2xl leading-none">expand_more</span>
-            </button>
-          )}
+        <div className="flex items-end gap-1 px-1.5 py-1.5">
+          {props.leading}
           <button
             type="button"
             onClick={() => setLineOptions((v) => !v)}
-            className={`flex-shrink-0 p-2 rounded-full active:bg-c-surface2 ${lineOptions || sage || name ? 'text-c-accent' : 'text-c-text-muted'}`}
-            title="名前・メール"
+            className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full active:bg-c-surface2 ${lineOptions || sage || name ? 'text-c-accent' : 'text-c-text-muted'}`}
+            title="画像・絵文字・名前とメール"
           >
-            <span className="material-symbols-outlined text-2xl leading-none">person</span>
+            <span className={`material-symbols-outlined text-[26px] leading-none transition-transform ${lineOptions ? 'rotate-45' : ''}`}>add_circle</span>
           </button>
-          <div className="flex-shrink-0 flex items-center self-center">{media.buttons}</div>
           <textarea
             ref={textRef}
             rows={1}
@@ -294,27 +299,39 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
               ta.style.height = 'auto'
               ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
             }}
+            onFocus={() => props.onFocusChange?.(true)}
+            onBlur={() => props.onFocusChange?.(false)}
             {...media.textareaProps}
-            placeholder={props.disabled ?? 'メッセージを入力'}
+            placeholder={props.disabled ?? '書き込む'}
             disabled={!!props.disabled}
             className="flex-1 min-w-0 max-h-40 resize-none rounded-[20px] border border-c-border bg-c-surface px-3.5 py-2 text-[15px] leading-snug text-c-text-body placeholder-c-text-muted focus:border-c-accent focus:ring-0"
           />
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={!canSend}
-            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
-            style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
-            title={cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '送る'}
-          >
-            <span className={`material-symbols-outlined text-xl ${sending ? 'animate-spin' : ''}`}>
-              {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
-            </span>
-          </button>
+          {idle ? (
+            <button
+              type="button"
+              onClick={idle.onClick}
+              disabled={idle.disabled}
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-c-text-muted active:bg-c-surface2 disabled:opacity-40"
+              title={idle.title}
+            >
+              <span className="material-symbols-outlined text-[26px]">{idle.icon}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!canSend}
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
+              style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+              title={cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '送る'}
+            >
+              <span className={`material-symbols-outlined text-xl ${sending ? 'animate-spin' : ''}`}>
+                {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
+              </span>
+            </button>
+          )}
         </div>
-        {measure && measure.over.length > 0 && (
-          <p className="px-4 pb-1 text-[10px] text-c-heat-very-hot font-bold">{measure.over.join(' ・ ')}</p>
-        )}
+        {measure && measure.over.length > 0 && <p className="px-4 pb-1 text-[10px] text-c-heat-very-hot font-bold">{measure.over.join(' ・ ')}</p>}
       </div>
     )
   }

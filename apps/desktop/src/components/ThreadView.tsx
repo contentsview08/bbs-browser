@@ -5,7 +5,6 @@
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
 import { isMobile } from '../utils/platform'
-import { useSwipeGesture } from '../hooks/useSwipeGesture'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
@@ -504,25 +503,26 @@ export default function ThreadView(props: Props) {
   useEffect(() => {
     if (!autoCollapse) setReplyForceOpen(false)
   }, [autoCollapse])
-  // スマホ: 書き込み欄はふだん出さず、出すときは右から滑り込む画面にする(元の Web アプリと同じ)
-  const [mobileReplyOpen, setMobileReplyOpen] = useState(false)
-  const replyCollapsed = isMobile ? !mobileReplyOpen : settings.replyCollapsed || (autoCollapse && !replyForceOpen)
+  // スマホ: 書き込み欄はフッターに組み込んだ 1 行の入力欄(Discord・LINE と同じ)。いつも出ていて、書くときはそこに入る
+  const replyCollapsed = isMobile ? false : settings.replyCollapsed || (autoCollapse && !replyForceOpen)
   const openReply = () => {
-    if (isMobile) return setMobileReplyOpen(true)
+    if (isMobile) {
+      hideBarsRef.current?.reveal()
+      requestAnimationFrame(() => replyRef.current?.focus())
+      return
+    }
     if (settings.replyCollapsed) props.onSetReplyCollapsed(false)
     if (autoCollapse) setReplyForceOpen(true)
   }
   const closeReply = () => {
-    if (isMobile) return setMobileReplyOpen(false)
+    if (isMobile) return (document.activeElement as HTMLElement | null)?.blur()
     props.onSetReplyCollapsed(true)
     setReplyForceOpen(false)
   }
-  // 開いたら、本文の欄にカーソルを置く(キーボードを出す)
-  useEffect(() => {
-    if (isMobile && mobileReplyOpen) requestAnimationFrame(() => replyRef.current?.focus())
-  }, [mobileReplyOpen])
-  // 書き込み欄の画面を右へなぞると閉じる
-  const replySwipe = useSwipeGesture({ right: { label: '閉じる', onCommit: () => setMobileReplyOpen(false) } }, settings.gestureSensitivity)
+  /** フッターの出し入れ(下で作る。openReply から出すため) */
+  const hideBarsRef = useRef<{ reveal: () => void }>(undefined)
+  /** フッターの入力欄で書いているか(書いているあいだはスクロールしてもフッターを隠さない) */
+  const composing = useRef(false)
   /** 書き込み欄に何かする(しまっていたら出してから) */
   const pendingReply = useRef<((h: ReplyFormHandle) => void) | undefined>(undefined)
   const withReply = (fn: (h: ReplyFormHandle) => void) => {
@@ -881,15 +881,32 @@ export default function ThreadView(props: Props) {
   ]
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
-  const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
+  // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
+  const hasFooter = barActions.some((a) => placements[a.id] === 'footer') || (isMobile && !!props.onSubmitPost)
   // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
   const footerRef = useRef<HTMLDivElement>(null)
   // 一番下へ・新着の札は、フッターが出ている間はその上に上げる(重ならないように)。--footer-offset で動かす
+  const footerShown = useRef(true)
   const hideBars = useHideOnScroll(
     headerRef,
     footerRef,
-    useCallback((visible: boolean) => mainRef.current?.style.setProperty('--footer-offset', visible ? `${MOBILE_BAR_H}px` : '0px'), []),
+    useCallback((visible: boolean) => {
+      footerShown.current = visible
+      mainRef.current?.style.setProperty('--footer-offset', visible ? `${footerRef.current?.offsetHeight ?? MOBILE_BAR_H}px` : '0px')
+    }, []),
+    useCallback(() => composing.current || !!footerRef.current?.querySelector('textarea')?.value, []),
   )
+  hideBarsRef.current = hideBars
+  // フッターの入力欄が伸び縮みしたら(何行も書いた・＋の欄を開いた)、上に浮かせたボタンの位置も合わせる
+  useEffect(() => {
+    const el = footerRef.current
+    if (!isMobile || !el) return
+    const observer = new ResizeObserver(() => {
+      if (footerShown.current) mainRef.current?.style.setProperty('--footer-offset', `${el.offsetHeight}px`)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasFooter])
 
   /** Esc を 2 回押して、選んでいるレスの印を隠しているか(選んでいる場所は残す) */
   const [cursorHidden, setCursorHidden] = useState(false)
@@ -1873,12 +1890,62 @@ export default function ThreadView(props: Props) {
       {hasFooter && isMobile && (
         <div
           ref={footerRef}
-          className="absolute bottom-0 inset-x-0 z-20 px-2 flex items-center gap-2 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
-          style={{ height: MOBILE_BAR_H }}
+          className="absolute inset-x-0 z-20 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
+          // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)
+          style={{ bottom: 'var(--kb-inset, 0px)', minHeight: MOBILE_BAR_H }}
         >
-          <ActionButtons actions={barActions.filter((a) => a.id === 'back')} placements={placements} where="footer" btnClass={MOBILE_BTN} iconClass="text-[28px]" />
-          <div className="flex-1" />
-          <ActionButtons actions={barActions.filter((a) => a.id !== 'back')} placements={placements} where="footer" btnClass={MOBILE_BTN} iconClass="text-[28px]" />
+          {props.onSubmitPost ? (
+            // 書き込める掲示板: Discord・LINE のような 1 行の入力欄。左に戻る、右は書いていなければ更新
+            <ReplyForm
+              ref={replyRef}
+              variant="chat"
+              layout="bottom"
+              leading={
+                props.onBackToList && (
+                  <button type="button" onClick={props.onBackToList} className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full text-c-text-muted active:bg-c-surface2" title="一覧に戻る">
+                    <span className="material-symbols-outlined text-[26px]">arrow_back</span>
+                  </button>
+                )
+              }
+              idle={{ icon: 'refresh', title: '更新', onClick: () => void props.onRefresh(), disabled: props.loading }}
+              onFocusChange={(f) => {
+                composing.current = f
+              }}
+              attach={props.attachments}
+              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
+              initialName={props.postName}
+              initialMail={props.postMail}
+              onSubmit={props.onSubmitPost}
+              onConfirm={props.onConfirmPost}
+              onUploaded={props.onUploaded}
+              readyAt={props.postReadyAt}
+              cooldownMs={props.postCooldownMs}
+              accounts={props.postAccounts}
+              draft={props.draft}
+              limits={props.postLimits}
+              byteLength={props.postByteLength}
+              onToggleAccount={props.onTogglePostAccount}
+              onOpenAccountSettings={props.onOpenAccountSettings}
+              onImage={(urls, index) => setLightbox({ urls, index })}
+              uploader={
+                settings.uploaderEnabled
+                  ? {
+                      stripMetadata: settings.uploadStripMetadata,
+                      maxDimension: settings.uploadMaxDimension,
+                      userhash: settings.catboxUserhash.trim() || undefined,
+                    }
+                  : undefined
+              }
+              onOpenUrl={props.onUrl}
+
+            />
+          ) : (
+            <div className="px-2 flex items-center gap-2" style={{ height: MOBILE_BAR_H }}>
+              <ActionButtons actions={barActions.filter((a) => a.id === 'back')} placements={placements} where="footer" btnClass={MOBILE_BTN} iconClass="text-[28px]" />
+              <div className="flex-1" />
+              <ActionButtons actions={barActions.filter((a) => a.id !== 'back')} placements={placements} where="footer" btnClass={MOBILE_BTN} iconClass="text-[28px]" />
+            </div>
+          )}
         </div>
       )}
       </div>
@@ -1896,106 +1963,6 @@ export default function ThreadView(props: Props) {
           <span className="material-symbols-outlined text-lg">edit</span>
           {replyLayout === 'bottom' && '書き込む'}
         </button>
-      )}
-      {props.onSubmitPost && !replyCollapsed && isMobile && variant === 'line' && (
-        // スマホ・LINE 風: トークのように、画面の下に 1 行の入力欄を出す(スレは上にそのまま見える)。∨ か戻るボタンで閉じる
-        <div
-          className="fixed inset-x-0 z-[60] border-t border-c-border shadow-[0_-4px_12px_rgba(0,0,0,0.08)] sheet-rise"
-          // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)
-          style={{ bottom: 'var(--kb-inset, 0px)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-        >
-            <ReplyForm
-              variant="line"
-              ref={replyRef}
-              layout="bottom"
-              attach={props.attachments}
-              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
-              initialName={props.postName}
-              initialMail={props.postMail}
-              onSubmit={props.onSubmitPost}
-              onConfirm={props.onConfirmPost}
-              onUploaded={props.onUploaded}
-              readyAt={props.postReadyAt}
-              cooldownMs={props.postCooldownMs}
-              accounts={props.postAccounts}
-              draft={props.draft}
-              limits={props.postLimits}
-              byteLength={props.postByteLength}
-              onToggleAccount={props.onTogglePostAccount}
-              onOpenAccountSettings={props.onOpenAccountSettings}
-              onImage={(urls, index) => setLightbox({ urls, index })}
-              uploader={
-                settings.uploaderEnabled
-                  ? {
-                      stripMetadata: settings.uploadStripMetadata,
-                      maxDimension: settings.uploadMaxDimension,
-                      userhash: settings.catboxUserhash.trim() || undefined,
-                    }
-                  : undefined
-              }
-              onOpenUrl={props.onUrl}
-              onCollapse={closeReply}
-            />
-        </div>
-      )}
-      {props.onSubmitPost && !replyCollapsed && isMobile && variant !== 'line' && (
-        // スマホ: 右から滑り込む、画面いっぱいの書き込み欄。上の帯の ← か、右へなぞると閉じる
-        <div
-          className="fixed inset-0 z-[60] flex flex-col bg-panel-reply reply-slide"
-          style={{
-            paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'env(safe-area-inset-bottom)',
-            touchAction: 'pan-y pinch-zoom',
-          }}
-          onTouchStart={replySwipe.onTouchStart}
-          onTouchEnd={replySwipe.onTouchEnd}
-          onTouchCancel={replySwipe.onTouchCancel}
-        >
-          <div className="flex-shrink-0 h-12 flex items-center gap-2 px-2 border-b border-c-border bg-panel-thread-header">
-            <button type="button" onClick={closeReply} className={ICON_BTN} title="閉じる">
-              <span className="material-symbols-outlined text-xl">arrow_back</span>
-            </button>
-            <span className="flex-1 min-w-0 truncate text-sm font-bold text-c-text-strong">{log.title}</span>
-          </div>
-          <div className="flex-1 min-h-0">
-            <ReplyForm
-              ref={replyRef}
-              layout="right"
-              attach={props.attachments}
-              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
-              initialName={props.postName}
-              initialMail={props.postMail}
-              onSubmit={props.onSubmitPost}
-              onConfirm={props.onConfirmPost}
-              onUploaded={props.onUploaded}
-              readyAt={props.postReadyAt}
-              cooldownMs={props.postCooldownMs}
-              accounts={props.postAccounts}
-              draft={props.draft}
-              limits={props.postLimits}
-              byteLength={props.postByteLength}
-              onToggleAccount={props.onTogglePostAccount}
-              onOpenAccountSettings={props.onOpenAccountSettings}
-              onImage={(urls, index) => setLightbox({ urls, index })}
-              uploader={
-                settings.uploaderEnabled
-                  ? {
-                      stripMetadata: settings.uploadStripMetadata,
-                      maxDimension: settings.uploadMaxDimension,
-                      userhash: settings.catboxUserhash.trim() || undefined,
-                    }
-                  : undefined
-              }
-              onOpenUrl={props.onUrl}
-              onCollapse={closeReply}
-            />
-          </div>
-          {replySwipe.label && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{replySwipe.label}</span>
-            </div>
-          )}
-        </div>
       )}
       {props.onSubmitPost && !replyCollapsed && !isMobile && (
         <>

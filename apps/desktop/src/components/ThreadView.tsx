@@ -1661,13 +1661,18 @@ export default function ThreadView(props: Props) {
         type="button"
         onClick={jumpToBottom}
         title="いちばん下へ"
-        className={`absolute z-20 w-11 h-11 flex items-center justify-center rounded-full bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
+        className={`absolute z-20 ${isMobile ? 'w-9 h-9' : 'w-11 h-11'} flex items-center justify-center rounded-full bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
           showJump ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
         }`}
         // ミニマップを出しているときは、その左に置く。スマホでフッターが出ているときは、その上に置く
-        style={{ right: settings.showMinimap ? 44 : 20, bottom: 'calc(var(--footer-offset, 0px) + 20px)' }}
+        // スマホは右下の角に寄せる(ミニマップは本文に重ねてあるので、その左に)
+        style={
+          isMobile
+            ? { right: settings.showMinimap ? 40 : 8, bottom: 'calc(var(--footer-offset, 0px) + 8px)' }
+            : { right: settings.showMinimap ? 44 : 20, bottom: 'calc(var(--footer-offset, 0px) + 20px)' }
+        }
       >
-        <span className="material-symbols-outlined text-2xl">keyboard_double_arrow_down</span>
+        <span className={`material-symbols-outlined ${isMobile ? 'text-xl' : 'text-2xl'}`}>keyboard_double_arrow_down</span>
       </button>
       {/* 新着が届いたのに画面の外(下・絞り込みで隠れている)にあるとき、下から少しのあいだ出す札。押すと新着の頭へ */}
       {newToast && (

@@ -710,7 +710,7 @@ export default function ThreadListPanel(props: Props) {
                   <span className="material-symbols-outlined text-xl">menu</span>
                 </button>
               )}
-              <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-16' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
+              <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-12' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
                 {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
                   className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-base' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
@@ -797,7 +797,7 @@ export default function ThreadListPanel(props: Props) {
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
-        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 64 } : undefined}>
+        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 72 } : undefined}>
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {(rebuilding || (props.loading && visible.length > 0)) && <div className="list-progress" aria-label="読み込み中" />}
           {visible.length === 0 ? (
@@ -850,7 +850,7 @@ export default function ThreadListPanel(props: Props) {
           ref={footerRef}
           className={`${
             // スマホ: 一覧の上に重ね、下へスクロールすると隠す
-            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-14 px-1 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-16 px-1 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
           } flex items-center justify-end gap-1 border-t border-c-border`}
           style={footerDrag.height ? { height: footerDrag.height } : undefined}
         >

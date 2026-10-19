@@ -108,12 +108,19 @@ interface Props {
 
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
 
-const HEAD_TEXT = 'text-xs'
+/** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
+const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
 
 /** Discord 風・LINE 風のアイコンの大きさ。スマホは画面が狭いので小さくする(アンカーツリーの段の幅も合わせる。AnchorTree.tsx) */
 export const AVATAR = isMobile ? 28 : 36
 const AVATAR_W = isMobile ? 'w-7' : 'w-9'
 const AVATAR_CLASS = isMobile ? 'w-7 h-7' : 'w-9 h-9'
+
+/** 日付を短くする(「2026/10/19(日) 12:34:56.78」→「10/19 12:34」)。読めない形ならそのまま */
+function shortDate(date: string): string {
+  const m = /(?:\d{2,4}\/)?(\d{1,2})\/(\d{1,2})[^\d]*?(\d{1,2}:\d{2})/.exec(date)
+  return m ? `${m[1]}/${m[2]} ${m[3]}` : date
+}
 
 interface MenuItem {
   label: string
@@ -359,10 +366,11 @@ function PostArticle(props: Props) {
 
   // ── レスの頭の部品(スタイルごとに並べ方を変える) ──
   /** レス番号(返信があれば数も。押すと返信を出す) */
-  const numBtn = (prefix = '') => (
+  /** size: 番号の字の大きさ(LINE 風の吹き出しの横などは小さく) */
+  const numBtn = (prefix = '', size = 'text-sm') => (
     <button
       type="button"
-      className={`font-bold text-sm flex items-center gap-1 ${numHeat || 'text-c-text-muted'} ${anchorCount > 0 ? 'hover:opacity-80' : 'cursor-default'}`}
+      className={`font-bold ${size} flex items-center gap-1 ${numHeat || 'text-c-text-muted'} ${anchorCount > 0 ? 'hover:opacity-80' : 'cursor-default'}`}
       onClick={anchorCount > 0 ? (e) => handlers.onReplies(post.no, e.currentTarget) : undefined}
       title={anchorCount > 0 ? 'このレスへの返信を表示' : undefined}
     >
@@ -374,8 +382,8 @@ function PostArticle(props: Props) {
       {/* 返信の数。Discord 風・LINE 風は吹き出しのアイコンと数、ほかは (数) */}
       {anchorCount > 0 &&
         (variant === 'discord' || variant === 'line' ? (
-          <span className={`inline-flex items-center gap-0.5 text-xs ${numHeat || 'text-c-text-muted'}`}>
-            <span className="material-symbols-outlined text-[13px] leading-none">chat_bubble</span>
+          <span className={`inline-flex items-center gap-0.5 ${size === 'text-sm' ? 'text-xs' : 'text-[10px]'} ${numHeat || 'text-c-text-muted'}`}>
+            <span className={`material-symbols-outlined ${size === 'text-sm' ? 'text-[13px]' : 'text-[11px]'} leading-none`}>chat_bubble</span>
             {anchorCount}
           </span>
         ) : (
@@ -531,17 +539,20 @@ function PostArticle(props: Props) {
     ) : variant === 'discord' ? (
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
-        <div data-post-header className="flex items-baseline flex-nowrap overflow-hidden gap-2 mb-0.5">
-          {nameBtn('text-sm') || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
+        <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
+          {nameBtn(isMobile ? 'text-[13px]' : 'text-sm') || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
           {opChip}
             {badgeChips}
           {ngChip}
           {/* 番号は名前のすぐ後ろに(右端はマウスを乗せたときの操作バーと重なるため) */}
-          <span className="flex-shrink-0 text-xs">{numBtn('#')}</span>
-          <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
+          <span className="flex-shrink-0 text-xs">{numBtn('#', isMobile ? 'text-[11px]' : 'text-sm')}</span>
+          {/* スマホは日付を短く(「10/19 12:34」)して、頭を 1〜2 行に収める */}
+          <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>
+            {isMobile ? shortDate(post.date) : post.date}
+          </span>
           {idBtn}
           {voteChip}
-          {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
+          {post.mail && <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
         </div>
       )
@@ -794,7 +805,8 @@ function PostArticle(props: Props) {
   const right = props.isOwn && !props.alignLeft
   const lineSide = (
     <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${right ? 'items-end' : 'items-start'}`}>
-      <span className="text-[11px]">{numBtn('#')}</span>
+      {/* スマホは横幅が貴重なので、番号も小さくする */}
+      <span className="text-[11px]">{numBtn('#', isMobile ? 'text-[10px]' : 'text-[11px]')}</span>
       <span title={post.date}>{time}</span>
     </div>
   )

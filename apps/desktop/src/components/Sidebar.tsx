@@ -33,6 +33,8 @@ interface Props {
   onOpenUploads?: () => void
   /** 書き込み履歴を開く */
   onOpenPostHistory: () => void
+  /** スマホ: URL を入れて開く(PC は URL 欄の帯があるので出さない) */
+  onOpenUrl?: () => void
   /** 設定画面の板一覧を開く(板を足したいとき) */
   onManageBoards: () => void
   collapsed: boolean
@@ -436,6 +438,7 @@ export default function Sidebar(props: Props) {
               />
             </div>
           )}
+          {props.onOpenUrl && <Row icon="link" label="URL を開く" color="var(--c-mark-link)" onClick={props.onOpenUrl} />}
           <Row icon="edit_note" label="書き込み履歴" color="var(--c-mark-new)" onClick={props.onOpenPostHistory} />
           {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" color="var(--c-mark-purple)" onClick={props.onOpenUploads} />}
         </nav>

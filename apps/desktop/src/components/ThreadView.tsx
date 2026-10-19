@@ -99,6 +99,8 @@ interface Props {
   onResizeReply: (key: 'replyHeight' | 'replyWidth', size: number) => void
   /** 1 画面のとき、スレ一覧に戻る(スレタイの左にボタンを出す) */
   onBackToList?: () => void
+  /** スマホ: サイドバーの引き出しを開く */
+  onOpenDrawer?: () => void
   /** 書き込み欄をしまう・出す(設定に覚える) */
   onSetReplyCollapsed: (collapsed: boolean) => void
   /** ログを消してタブを閉じる */
@@ -766,8 +768,17 @@ export default function ThreadView(props: Props) {
   const [showNext, setShowNext] = useState(false)
 
   // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
-  const placements = useMemo(() => resolvePlacements('thread', settings.barLayout), [settings.barLayout])
-  const barActions: BarAction[] = [
+  const placements = useMemo(
+    () => resolvePlacements('thread', isMobile ? settings.mobileBarLayout : settings.barLayout, isMobile),
+    [settings.barLayout, settings.mobileBarLayout],
+  )
+  const allBarActions: BarAction[] = [
+    // スマホだけの操作(置き場所に出ていなければ、placements にないので並ばない)
+    ...(props.onBackToList ? [{ id: 'back', label: '一覧に戻る', icon: 'arrow_back', onClick: props.onBackToList }] : []),
+    { id: 'top', label: '先頭へ', icon: 'vertical_align_top', onClick: () => jumpToTop() },
+    { id: 'bottom', label: '一番下へ', icon: 'vertical_align_bottom', onClick: () => jumpToBottom() },
+    ...(props.onSubmitPost ? [{ id: 'reply', label: '書き込む', icon: 'edit', tint: 'var(--c-accent)', onClick: () => openReply() }] : []),
+    ...(props.onOpenDrawer ? [{ id: 'drawer', label: 'メニュー', icon: 'menu', onClick: props.onOpenDrawer }] : []),
     { id: 'search', label: 'レス検索', icon: 'search', tint: 'var(--c-accent)', active: searchActive || !!query, onClick: () => setSearchActive((v) => !v) },
     {
       id: 'favorite',
@@ -847,6 +858,8 @@ export default function ThreadView(props: Props) {
       ),
     },
   ]
+  // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
+  const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
   /** Esc を 2 回押して、選んでいるレスの印を隠しているか(選んでいる場所は残す) */
@@ -1512,7 +1525,7 @@ export default function ThreadView(props: Props) {
                 searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
               }`}
             />
-            {props.onBackToList && (
+            {props.onBackToList && !isMobile && (
               <button
                 type="button"
                 onClick={props.onBackToList}

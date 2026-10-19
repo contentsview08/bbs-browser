@@ -51,6 +51,8 @@ export interface TabEvents {
   setReplyCollapsed: (collapsed: boolean) => void
   /** 1 画面のとき、スレ一覧に戻る */
   backToList: () => void
+  /** スマホ: サイドバーの引き出しを開く(PC では undefined) */
+  openDrawer?: () => void
   deleteLog: (id: string) => void
   uploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
   /** 次スレの候補を探す。スレタイはログのもの(URL から開いたスレは一覧のスレタイが空のため) */
@@ -200,6 +202,7 @@ function TabPane({
       onResizeReply={ev.resizeReply}
       onSetReplyCollapsed={ev.setReplyCollapsed}
       onBackToList={showBackToList ? ev.backToList : undefined}
+      onOpenDrawer={ev.openDrawer}
       onDeleteLog={onDeleteLog}
       nonameName={nonameName}
       jumpTo={jumpTo}

@@ -2,7 +2,9 @@
 // データの流れはここに集め、見た目は components/ の各部品(web 版から移植)に任せる。
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { onBackButtonPress } from '@tauri-apps/api/app'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import {
   allConnectors,
@@ -52,6 +54,8 @@ import { openLogStore } from './host/logStore'
 import { tauriContext as ctx } from './host/tauriContext'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
+import UrlPrompt from './components/UrlPrompt'
+import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
 import { COLOR_SCHEMES, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
 import CommandPalette, { type PaletteItem } from './components/CommandPalette'
@@ -227,6 +231,8 @@ export default function App() {
   const single = isMobile || settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
   /** スマホ: サイドバーの引き出しを開いているか(左上のメニュー・左の端からのスワイプで開き、何か開いたら閉じる) */
   const [drawerOpen, setDrawerOpen] = useState(false)
+  /** スマホ: URL を入れて開く小さな画面(URL 欄の帯の代わり)。開いている間は入れている文字 */
+  const [urlPrompt, setUrlPrompt] = useState<string>()
   /** キー操作の割り当て(スレ表示とスレ一覧で同じものを使う) */
   const keymap = useMemo(() => resolveKeymap(settings.keymap), [settings.keymap])
   // ── 画面の状態 ──
@@ -777,7 +783,8 @@ export default function App() {
         return
       }
       // タブを使わないときは、いつも今のスレを置き換える
-      const inNew = settings.tabsEnabled && (opts.newTab ?? settings.openInNewTab)
+      // スマホはタブを使わない(閲覧履歴が代わり)。いつも今のスレを置き換える
+      const inNew = settings.tabsEnabled && !isMobile && (opts.newTab ?? settings.openInNewTab)
       const current = view.current.activeId
       setTabs((ts) => {
         const i = ts.findIndex((x) => x.id === current)
@@ -1377,14 +1384,15 @@ export default function App() {
       if (r.thread) await openThread(r.thread)
     })
 
-  // スマホ: 何かを開いたら(板・スレ・履歴・設定)、サイドバーの引き出しを閉じる
+  // スマホ: 何かを開いたら(板・スレ・履歴・設定・URL)、サイドバーの引き出しを閉じる
   useEffect(() => {
     if (isMobile) setDrawerOpen(false)
-  }, [board?.url, history, favView, activeId, settingsTab])
+  }, [board?.url, history, favView, activeId, settingsTab, urlPrompt !== undefined])
 
   // ── スマホ: スワイプの操作 ──
   /** 操作を実行する。アプリ全体の操作はそのまま、スレ表示・スレ一覧の操作は、割り当てたキーを押したことにして渡す */
   const runAction = (action: string) => {
+    if (action === 'drawer') return setDrawerOpen(true)
     if (appKey(action as KeyAction)) return
     const key = keymap[action as KeyAction]?.[0]
     if (!key) return
@@ -1392,13 +1400,15 @@ export default function App() {
   }
   /** 画面の左の端から右へなぞったら、操作の代わりにサイドバーの引き出しを開く */
   const edgeSwipe = useRef(false)
+  // スレを開いているか、スレ一覧かで、割り当てを変える
+  const gestures = settings.swipeGestures[single && threadShown ? 'thread' : 'list'] ?? {}
   const swipeMap: SwipeMap = Object.fromEntries(
-    [...Object.entries(settings.gestures).filter(([, a]) => a), ...(settings.gestures.right ? [] : [['right', '']])].map(([seq, action]) => [
+    [...Object.entries(gestures).filter(([, a]) => a), ...(gestures.right ? [] : [['right', '']])].map(([seq, action]) => [
       seq,
       {
         // 名前は、なぞり始めた場所(左の端か)で変わるので、読むときに決める
         get label() {
-          return seq === 'right' && edgeSwipe.current ? 'メニュー' : KEY_ACTIONS.find((k) => k.key === action)?.name.replace(/\(.*\)$/, '')
+          return seq === 'right' && edgeSwipe.current ? 'メニュー' : gestureActionName(action)
         },
         onCommit: () => {
           if (seq === 'right' && edgeSwipe.current) setDrawerOpen(true)
@@ -1418,6 +1428,32 @@ export default function App() {
         onTouchCancel: swipe.onTouchCancel,
       }
     : {}
+
+  // スマホ: Android の戻るボタン(・戻るジェスチャー)。開いている画面を、上に重なっているものから順に閉じる:
+  // ダイアログ(設定など。Esc を押したことにして閉じる)→ 引き出し → スレ表示(一覧に戻る)→ 戻るの履歴
+  const backRef = useRef<() => void>(() => {})
+  backRef.current = () => {
+    if (modalOpen() || document.querySelector('[data-lightbox]')) {
+      ;(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      return
+    }
+    if (drawerOpen) return setDrawerOpen(false)
+    if (single && threadShown) return returnToList()
+    if (canBack(view.current)) goNav(-1)
+  }
+  useEffect(() => {
+    if (!isMobile) return
+    let unregister: (() => void) | undefined
+    let cancelled = false
+    void onBackButtonPress(() => backRef.current()).then((l) => {
+      if (cancelled) void l.unregister()
+      else unregister = () => void l.unregister()
+    })
+    return () => {
+      cancelled = true
+      unregister?.()
+    }
+  }, [])
 
   /** 古いログを整理する(設定の日数で)。開いているタブは残す */
   const pruneLogs = async (): Promise<number> => {
@@ -1453,7 +1489,7 @@ export default function App() {
 
   // タブを使わなくしたら、開いているスレ以外のタブを閉じる(戻したタブも 1 つにする)
   useEffect(() => {
-    if (!settings.tabsEnabled && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
+    if ((!settings.tabsEnabled || isMobile) && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
   }, [settings.tabsEnabled, tabs.length, activeId])
 
   // 開いているスレの板と、スレ一覧に出している板の設定を、まだ取っていなければ取る
@@ -1592,6 +1628,7 @@ export default function App() {
     resizeReply: useEvent((key: 'replyHeight' | 'replyWidth', size: number) => updateSetting(key, size)),
     setReplyCollapsed: useEvent((collapsed: boolean) => updateSetting('replyCollapsed', collapsed)),
     backToList: useEvent(() => returnToList()),
+    openDrawer: isMobile ? () => setDrawerOpen(true) : undefined,
     // スレ表示の削除ボタン。1 画面のときは、消したあとスレ一覧に戻る(タブの × や Delete キーは、隣のタブに移る)
     deleteLog: useEvent((id: string) => {
       if (!single) return void deleteLogs([id])
@@ -1688,7 +1725,10 @@ export default function App() {
       ? (t: ThreadSummary) => historyStates.get(threadId(t))
       : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
-  const listPlacements = useMemo(() => resolvePlacements('list', settings.barLayout), [settings.barLayout])
+  const listPlacements = useMemo(
+    () => resolvePlacements('list', isMobile ? settings.mobileBarLayout : settings.barLayout, isMobile),
+    [settings.barLayout, settings.mobileBarLayout],
+  )
 
   const currentUrl = activeTab
     ? connectorOf(activeTab.thread.connectorId).threadWebUrl(activeTab.thread)
@@ -1708,8 +1748,9 @@ export default function App() {
           }}
         />
       )}
+      {/* スマホでは URL 欄の帯は出さない(URL は引き出しの「URL を開く」から) */}
+      {!isMobile && (
       <AddressBar
-        onMenu={isMobile ? () => setDrawerOpen(true) : undefined}
         currentUrl={currentUrl}
         onOpen={(url) => void openUrlInApp(url)}
         onBack={() => goNav(-1)}
@@ -1717,6 +1758,7 @@ export default function App() {
         canBack={canBack(view.current)}
         canForward={canForward(view.current)}
       />
+      )}
       <div className="flex-1 min-h-0 flex" {...swipeHandlers}>
       {/* スマホ: なぞっている間、何の操作になるかを真ん中に出す */}
       {swipe.label && (
@@ -1724,14 +1766,16 @@ export default function App() {
           <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{swipe.label}</span>
         </div>
       )}
-      {/* スマホでは、サイドバーは画面の上に重ねる引き出しにする(ふだんは出さない) */}
-      {(!isMobile || drawerOpen) && (
-      <div className={isMobile ? 'fixed inset-0 z-[70] flex' : 'contents'}>
+      {/* スマホでは、サイドバーは画面の上に重ねる引き出しにする(ふだんは出さない)。
+          画面の部品の重なりに巻き込まれないよう、body の直下に出す */}
+      {(!isMobile || drawerOpen) &&
+        (isMobile ? (drawer: ReactNode) => createPortal(drawer, document.body) : (drawer: ReactNode) => drawer)(
+      <div className={isMobile ? 'fixed inset-0 z-[9000]' : 'contents'} data-drawer={isMobile ? '' : undefined}>
       {isMobile && <div className="absolute inset-0 bg-black/40 drawer-fade" onClick={() => setDrawerOpen(false)} />}
-      <div className={isMobile ? 'relative h-full drawer-slide' : 'contents'}>
+      <div className={isMobile ? 'absolute inset-y-0 left-0 drawer-slide' : 'contents'}>
       <Sidebar
         neighbor={single ? 'view' : 'list'}
-        width={settings.sidebarWidth}
+        width={isMobile ? Math.min(320, Math.round(window.innerWidth * 0.85)) : settings.sidebarWidth}
         onResize={(w) => updateSetting('sidebarWidth', w)}
         favorites={favorites ?? []}
         onReorderFavorites={(urls) =>
@@ -1761,10 +1805,11 @@ export default function App() {
         onOpenFavThreads={() => void openFavThreads()}
         onOpenSettings={() => setSettingsTab('display')}
         onManageBoards={() => setSettingsTab('boardlist')}
+        onOpenUrl={isMobile ? () => setUrlPrompt('') : undefined}
       />
       </div>
-      </div>
-      )}
+      </div>,
+        )}
 
       <div className="flex-1 min-w-0 flex flex-col">
       {/* overflow-hidden: しまったスレ一覧がサイドバーの上にはみ出して見えないように */}
@@ -1858,7 +1903,7 @@ export default function App() {
         onPointerDownCapture={() => setFocusPane('thread')}
       >
         {!single && <FocusLine on={!listFocused} />}
-        {settings.tabsEnabled && (
+        {settings.tabsEnabled && !isMobile && (
         <TabBar
           tabs={tabs.map((t) => ({
             id: t.id,
@@ -1983,6 +2028,15 @@ export default function App() {
 
       <Notifications items={notifications} onClose={dismiss} />
 
+      {urlPrompt !== undefined && (
+        <UrlPrompt
+          onClose={() => setUrlPrompt(undefined)}
+          onOpen={(url) => {
+            setUrlPrompt(undefined)
+            void openUrlInApp(url)
+          }}
+        />
+      )}
       {postActionConfirm && (
         <ConfirmDialog
           title={postActionConfirm.def.label}

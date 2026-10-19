@@ -110,6 +110,8 @@ interface Props {
   onDeleteLogs?: (threads: ThreadSummary[]) => void
   /** スレを立てられる板のときだけ渡す */
   onNewThread?: () => void
+  /** スマホ: サイドバーの引き出しを開く */
+  onOpenDrawer?: () => void
   /** お気に入りのスレ(threadId の集まり)と、足す・外す */
   favoriteIds?: Set<string>
   onToggleFavoriteThread?: (t: ThreadSummary) => void
@@ -502,7 +504,9 @@ export default function ThreadListPanel(props: Props) {
 
   // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
   const placements = props.placements
-  const barActions: BarAction[] = [
+  const allBarActions: BarAction[] = [
+    ...(props.onOpenDrawer ? [{ id: 'drawer', label: 'メニュー', icon: 'menu', onClick: props.onOpenDrawer }] : []),
+    { id: 'top', label: '先頭へ', icon: 'vertical_align_top', onClick: () => scrollRef.current?.scrollTo({ top: 0 }) },
     { id: 'search', label: 'スレッド検索', icon: 'search', tint: 'var(--c-accent)', active: searchActive, onClick: () => setSearchActive((v) => !v) },
     ...(props.onNewThread
       ? [{ id: 'newThread', label: 'スレを立てる', icon: 'edit_square', tint: 'var(--c-mark-new)', onClick: props.onNewThread }]
@@ -557,6 +561,8 @@ export default function ThreadListPanel(props: Props) {
         ]
       : []),
   ]
+  // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
+  const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
   const onSelectCard = useEvent((t: ThreadSummary, on: boolean) =>

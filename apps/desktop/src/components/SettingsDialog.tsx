@@ -22,6 +22,7 @@ import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isMobile } from '../utils/platform'
+import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import type { ExternalConnectorInfo } from '../host/externalConnectors'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -30,7 +31,7 @@ import type { BoardMeta } from '../ui/settings'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
 import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
-import { BAR_ACTIONS, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
+import { barActionsFor, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
 interface Props {
@@ -965,21 +966,21 @@ const GESTURES: { seq: string; name: string }[] = [
   { seq: 'left,down', name: '← ↓' },
 ]
 
-/** スマホ: スワイプに割り当てる操作と、感度 */
+/** スマホ: 画面ごとに、スワイプに割り当てる操作と、感度 */
 function GestureSettings({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
-  return (
-    <Section title="スワイプ(スマホ)" note="画面をなぞる向きに、キー操作と同じ操作を割り当てます。左の端から右へなぞると、サイドバーが開きます">
+  const screen = (key: 'list' | 'thread', title: string) => (
+    <Section title={title} note="画面をなぞる向きに、操作を割り当てます。左の端から右へなぞると、いつもメニュー(引き出し)が開きます">
       <div className="flex flex-col gap-2">
         {GESTURES.map((g) => (
           <label key={g.seq} className="flex items-center gap-3 text-sm">
             <span className="w-16 font-mono text-c-text-strong">{g.name}</span>
             <select
-              value={s.gestures[g.seq] ?? ''}
-              onChange={(e) => update('gestures', { ...s.gestures, [g.seq]: e.target.value })}
+              value={s.swipeGestures[key][g.seq] ?? ''}
+              onChange={(e) => update('swipeGestures', { ...s.swipeGestures, [key]: { ...s.swipeGestures[key], [g.seq]: e.target.value } })}
               className={`${INPUT} flex-1 min-w-0`}
             >
               <option value="">なし</option>
-              {KEY_ACTIONS.map((a) => (
+              {GESTURE_ACTIONS.map((a) => (
                 <option key={a.key} value={a.key}>
                   {a.name}
                 </option>
@@ -988,19 +989,26 @@ function GestureSettings({ settings: s, update }: Pick<Props, 'settings' | 'upda
           </label>
         ))}
       </div>
-      <p className="text-xs text-c-text-muted mt-4 mb-1.5">感度</p>
-      <Choice
-        value={s.gestureSensitivity}
-        options={[
-          { key: 1, name: '鈍い' },
-          { key: 2, name: 'やや鈍い' },
-          { key: 3, name: '標準' },
-          { key: 4, name: 'やや敏感' },
-          { key: 5, name: '敏感' },
-        ]}
-        onChange={(v) => update('gestureSensitivity', v)}
-      />
     </Section>
+  )
+  return (
+    <>
+      {screen('list', 'スワイプ:スレ一覧(スマホ)')}
+      {screen('thread', 'スワイプ:スレ表示(スマホ)')}
+      <Section title="スワイプの感度">
+        <Choice
+          value={s.gestureSensitivity}
+          options={[
+            { key: 1, name: '鈍い' },
+            { key: 2, name: 'やや鈍い' },
+            { key: 3, name: '標準' },
+            { key: 4, name: 'やや敏感' },
+            { key: 5, name: '敏感' },
+          ]}
+          onChange={(v) => update('gestureSensitivity', v)}
+        />
+      </Section>
+    </>
   )
 }
 
@@ -1384,25 +1392,28 @@ function BackupTab({
 
 /** スレ表示とスレ一覧の操作ボタンを、ヘッダー・フッター・︙ の中だけ、のどこに置くか */
 function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+  // スマホでは、スマホの配置(PC とは別に持つ)を変える
+  const key = isMobile ? 'mobileBarLayout' : 'barLayout'
+  const layout = s[key]
   const set = (area: BarArea, id: string, placement: Placement) => {
-    const cur = s.barLayout[area] ?? {}
-    update('barLayout', { ...s.barLayout, [area]: { ...cur, [id]: placement } })
+    const cur = layout[area] ?? {}
+    update(key, { ...layout, [area]: { ...cur, [id]: placement } })
   }
   const PLACES: { key: Placement; name: string }[] = [
     { key: 'header', name: 'ヘッダー' },
     { key: 'footer', name: 'フッター' },
     { key: 'menu', name: '︙ の中だけ' },
   ]
-  const area = (key: BarArea, title: string) => {
-    const placements = resolvePlacements(key, s.barLayout)
+  const area = (areaKey: BarArea, title: string) => {
+    const placements = resolvePlacements(areaKey, layout, isMobile)
     return (
       <Section title={title} note="どのボタンも、ヘッダーの右端の ︙ を押すと出てきます。よく使うものだけヘッダーかフッターに並べてください">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
-          {BAR_ACTIONS[key].map((a) => (
+          {barActionsFor(areaKey, isMobile).map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-3 py-2">
               <span className="material-symbols-outlined text-lg text-c-text-muted">{a.icon}</span>
               <span className="w-36 flex-shrink-0 text-sm text-c-text-body">{a.name}</span>
-              <Choice value={placements[a.id]} options={PLACES} onChange={(v) => set(key, a.id, v)} />
+              <Choice value={placements[a.id]} options={PLACES} onChange={(v) => set(areaKey, a.id, v)} />
             </div>
           ))}
         </div>
@@ -1413,7 +1424,7 @@ function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>
     <>
       {area('thread', 'スレ表示')}
       {area('list', 'スレッド一覧')}
-      <button type="button" onClick={() => update('barLayout', {})} className="text-xs text-c-text-muted hover:text-c-accent underline">
+      <button type="button" onClick={() => update(key, {})} className="text-xs text-c-text-muted hover:text-c-accent underline">
         すべて既定に戻す
       </button>
     </>

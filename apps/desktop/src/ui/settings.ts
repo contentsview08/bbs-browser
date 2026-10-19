@@ -195,8 +195,11 @@ export interface AppSettings {
   ngMode: NgMode
   /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
   autoNg: boolean
-  /** スマホ: スワイプの向きの並び(「right」「right,up」)→ 操作(キー操作と同じ操作の名前。空なら何もしない) */
-  gestures: Record<string, string>
+  /**
+   * スマホ: 画面ごとの、スワイプの向きの並び(「right」「right,up」)→ 操作。
+   * 操作はキー操作と同じ名前(KeyAction)か、drawer(引き出しを開く)。空なら何もしない
+   */
+  swipeGestures: { list: Record<string, string>; thread: Record<string, string> }
   /** スマホ: スワイプの感度(1 = 鈍い 〜 5 = 敏感) */
   gestureSensitivity: number
   /** この日数より長く開いていないスレのログを、起動したときに消す(0 なら消さない)。お気に入り・自分が書いたスレ・開いているタブは残す */
@@ -233,6 +236,8 @@ export interface AppSettings {
   keymap: Partial<Keymap>
   /** スレ表示・スレ一覧の操作ボタンの置き場所(変えたものだけ) */
   barLayout: BarLayout
+  /** スマホのボタンの配置(PC とは別。既定も別) */
+  mobileBarLayout: BarLayout
   /** 設定画面で、高度な設定も見せる(オフなら、よく使う項目だけ) */
   showAdvanced: boolean
   // 書き込み(最後に使った名前とメールを覚えておく)
@@ -306,13 +311,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ngRules: [],
   ngMode: 'aborn',
   autoNg: true,
-  gestures: {
-    right: 'back',
-    left: 'forward',
-    'right,down': 'refresh',
-    'right,up': 'top',
-    'left,down': 'bottom',
-    'left,up': 'reply',
+  // 元の Web アプリ(hono-bbs)のスマホ版に合わせた割り当て
+  swipeGestures: {
+    list: { right: 'drawer', left: 'forward', 'right,up': 'top', 'right,down': 'bottom', 'left,down': 'refresh', 'left,up': 'reply' },
+    thread: { right: 'back', left: 'reply', 'right,up': 'top', 'right,down': 'bottom', 'left,down': 'refresh', 'left,up': 'closeTab' },
   },
   gestureSensitivity: 3,
   logRetentionDays: 90,
@@ -330,6 +332,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postToolbar: ['reply', 'phrase:草', 'copy', 'ng'],
   keymap: {},
   barLayout: {},
+  mobileBarLayout: {},
   showAdvanced: false,
   postName: '',
   postMail: '',

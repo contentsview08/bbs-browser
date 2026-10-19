@@ -191,6 +191,8 @@ export interface AppSettings {
   showMinimap: boolean
   /** スマホ: スレ表示の右下に、丸い更新ボタンを出す */
   showRefreshFab: boolean
+  /** スマホ: 下へスクロールしたらヘッダーとフッターを隠す(false なら、いつも出しておく) */
+  hideBarsOnScroll: boolean
   /** 画像の保存先フォルダ。空ならダウンロードフォルダ */
   imageSaveDir: string
   // 自動更新
@@ -316,6 +318,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aaAutoDetect: true,
   showMinimap: true,
   showRefreshFab: true,
+  hideBarsOnScroll: true,
   showIdenticon: false,
   showLinkPreview: true,
   openLinksInApp: isMobile,

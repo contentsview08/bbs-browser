@@ -898,7 +898,8 @@ export default function ThreadView(props: Props) {
       footerShown.current = visible
       mainRef.current?.style.setProperty('--footer-offset', visible ? `${footerRef.current?.offsetHeight ?? MOBILE_BAR_H}px` : '0px')
     }, []),
-    useCallback(() => composing.current || !!footerRef.current?.querySelector('textarea')?.value, []),
+    // 書いている途中・書き込みの返事を出している間は、スクロールしてもフッターを隠さない
+    useCallback(() => composing.current || !!footerRef.current?.querySelector('textarea')?.value || !!footerRef.current?.querySelector('[data-post-result]'), []),
   )
   hideBarsRef.current = hideBars
   // フッターの入力欄が伸び縮みしたら(何行も書いた・＋の欄を開いた)、上に浮かせたボタンの位置も合わせる
@@ -1757,7 +1758,7 @@ export default function ThreadView(props: Props) {
         onWheel={onWheel}
         onScroll={(e) => {
           onScrollPull()
-          if (isMobile) hideBars.onScroll(e)
+          if (isMobile && settings.hideBarsOnScroll) hideBars.onScroll(e)
         }}
         onTouchStart={
           isMobile

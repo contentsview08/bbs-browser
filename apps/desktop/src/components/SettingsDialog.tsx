@@ -742,6 +742,14 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
             note="スレ表示の右下に、丸い更新ボタンを出します"
           />
         )}
+        {isMobile && (
+          <Toggle
+            checked={s.hideBarsOnScroll}
+            onChange={(v) => update('hideBarsOnScroll', v)}
+            label="下へスクロールしたら、ヘッダーとフッターを隠す"
+            note="切ると、スレ一覧・スレ表示のヘッダーとフッターをいつも出しておきます"
+          />
+        )}
         <Toggle
           checked={s.aaAutoDetect}
           onChange={(v) => update('aaAutoDetect', v)}

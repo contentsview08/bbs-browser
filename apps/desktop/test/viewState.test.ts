@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canBack, canForward, initialView, nextAfterClose, selectQuietly, showList, showThread, step, type ViewState } from '../src/utils/viewState'
+import { canBack, canForward, forget, initialView, nextAfterClose, selectQuietly, showList, showThread, step, type ViewState } from '../src/utils/viewState'
 
 type V = { type: 'list' | 'thread'; id: string }
 const list = (id = 'board') => ({ key: `list:${id}`, value: { type: 'list' as const, id } })
@@ -62,5 +62,27 @@ describe('viewState: 画面の状態', () => {
     expect(nextAfterClose('C', ['A', 'B', 'C'], ['C'])).toEqual({ id: 'B', changed: true })
     expect(nextAfterClose('A', ['A'], ['A'])).toEqual({ id: undefined, changed: true })
     expect(nextAfterClose('A', ['A', 'B'], ['B'])).toEqual({ id: 'A', changed: false })
+  })
+
+  it('ログを削除したスレは履歴から外し、戻るで開き直さない(並んだ同じ一覧は 1 つに)', () => {
+    let s = showList(initialView<V>(), list())
+    s = showThread(s, 'A', thread('A'))
+    s = forget(s, new Set(['thread:A']))
+    // いまの場所(A)を外したので、その前の一覧がいまの場所
+    expect(s.stack.map((e) => e.key)).toEqual(['list:board'])
+    expect(s.index).toBe(0)
+    s = showList(s, list())
+    s = showThread(s, 'B', thread('B'))
+    s = go(s, -1)
+    expect(where(s)).toBe('list:board')
+    expect(canBack(s)).toBe(false)
+    // 一覧 → A → 一覧 → B で A を消すと、一覧 → B
+    let t = showList(initialView<V>(), list())
+    t = showThread(t, 'A', thread('A'))
+    t = showList(t, list())
+    t = showThread(t, 'B', thread('B'))
+    t = forget(t, new Set(['thread:A']))
+    expect(t.stack.map((e) => e.key)).toEqual(['list:board', 'thread:B'])
+    expect(t.index).toBe(1)
   })
 })

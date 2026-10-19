@@ -83,6 +83,12 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<PostResult>()
+  // スマホ: 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
+  useEffect(() => {
+    if (props.variant !== 'chat' || result?.status !== 'ok') return
+    const timer = setTimeout(() => setResult(undefined), 4000)
+    return () => clearTimeout(timer)
+  }, [result, props.variant])
   /** chat: オプション(名前・メール)の欄を出しているか */
   const [lineOptions, setLineOptions] = useState(false)
   /** chat: ＋ のメニュー(画像・オプション)を出しているか */
@@ -129,6 +135,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   /** 書き込めたら、本文も下書きも消す */
   const clearBody = () => {
     setBody('')
+    // スマホ: 書き込めたらキーボードをしまう(書いたレスと返事が見えるように)。伸ばした入力欄の高さも戻す
+    if (props.variant === 'chat' && textRef.current) {
+      textRef.current.blur()
+      textRef.current.style.height = ''
+    }
     clearTimeout(draftTimer.current)
     pendingDraft.current = undefined
     draftRef.current?.save('')
@@ -239,7 +250,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   if (props.variant === 'chat') {
     const canSend = !sending && !!body.trim() && !props.disabled && !cooling
     return (
-      <div className="w-full flex flex-col">
+      <div data-composer className="w-full flex flex-col">
         {media.fileInput}
         {imageHint && (
           <p className="px-3 pt-2 flex items-start gap-1 text-xs text-c-text-muted">
@@ -256,9 +267,13 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             {media.error}
           </p>
         )}
+        {/* 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す。出ている間はフッターを隠さない(data-post-result) */}
         {result && (
-          <div className="px-3 pt-2 max-h-40 overflow-y-auto">
+          <div data-post-result className="relative mx-2 mt-2 px-3 pt-2 pr-8 max-h-40 overflow-y-auto rounded-xl bg-c-surface border border-c-border shadow-lg">
             <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />
+            <button type="button" onClick={() => setResult(undefined)} className="absolute top-1.5 right-1.5 p-1 text-c-text-muted" title="閉じる">
+              <span className="material-symbols-outlined text-base leading-none">close</span>
+            </button>
           </div>
         )}
         {media.attachedView && <div className="px-3 pt-2">{media.attachedView}</div>}

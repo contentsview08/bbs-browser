@@ -59,7 +59,7 @@ import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
 import { useViewState } from './hooks/useViewState'
-import { canBack, canForward, nextAfterClose, selectQuietly, showList, showThread, step } from './utils/viewState'
+import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
 import { useNotifications } from './hooks/useNotifications'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -849,7 +849,16 @@ export default function App() {
     for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
     for (const t of extra) targets.set(threadId(t), t)
     // 先に画面から消す(DB の処理を待たない)
-    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)), stayOnList, false)
+    // スマホはタブを使わない: 開いているスレを消したら、隣のタブを選ぶのではなく、消したスレを履歴から外して前の画面へ戻る
+    const closingShown = isMobile && !!view.current.activeId && targets.has(view.current.activeId)
+    closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)), closingShown || stayOnList, false)
+    // 消したスレは戻る・進むの履歴からも外す(戻るで開き直さないように)
+    updateView((s) => forget(s, new Set([...targets.values()].map((t) => threadEntry(t).key))))
+    if (closingShown) {
+      const back = view.current.stack[view.current.index]
+      if (back) applyNav(back.value)
+      else returnToList()
+    }
     const gone = (t: ThreadSummary) => targets.has(threadId(t))
     setRecentHistory((list) => list.filter((t) => !gone(t)))
     setHistory((list) => list?.filter((h) => !gone(h.thread)))
@@ -1070,6 +1079,12 @@ export default function App() {
         goNav(1)
         return true
       case 'closeTab':
+        // スマホはタブを使わないので、閉じるのは戻ると同じ
+        if (isMobile) {
+          if (canBack(view.current)) goNav(-1)
+          else returnToList()
+          return true
+        }
         setSelectedTabs(new Set())
         closeTabs(targetTabs())
         return true
@@ -1127,6 +1142,10 @@ export default function App() {
       if (e.button !== 0) return
       const el = (e.target as HTMLElement | null)?.closest?.('button, a[href], [role="button"]')
       if (!el || el.closest('[data-modal]')) return
+      // スマホはキー操作がないので、ふつうどおりフォーカスを移す(書き込み欄から外れてキーボードがしまわれる)。
+      // 止めると欄にフォーカスが残り、絞り込みなどのボタンを押すたびにキーボードが出てしまう。
+      // ただし書き込み欄の中のボタン(送る・＋)は、書き続けられるようキーボードを出したままにする
+      if (isMobile && !el.closest('[data-composer]')) return
       e.preventDefault()
     }
     window.addEventListener('mousedown', onDown, true)
@@ -1419,6 +1438,13 @@ export default function App() {
     if (isMobile) setDrawerOpen(false)
   }, [board?.url, history, favView, activeId, settingsTab, urlPrompt !== undefined])
 
+  /** 文字を打つ欄(検索欄・書き込み欄)にフォーカスがあれば、外してキーボードをしまう。外したら true */
+  const blurTyping = (): boolean => {
+    const el = document.activeElement
+    if (!(el instanceof HTMLElement) || !el.matches('input, textarea, [contenteditable="true"]')) return false
+    el.blur()
+    return true
+  }
   /** いま見ている画面(スレ表示かスレ一覧)で絞り込み・検索をしていれば、Esc を押したことにして外す。外したら true */
   const clearFiltering = (): boolean => {
     const screen = single && threadShown ? 'thread' : 'list'
@@ -1431,6 +1457,8 @@ export default function App() {
   /** 操作を実行する。アプリ全体の操作はそのまま、スレ表示・スレ一覧の操作は、割り当てたキーを押したことにして渡す */
   const runAction = (action: string) => {
     // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
+    // 文字を打っている欄から抜けるのが先(検索欄で戻ると、まず欄から抜ける)
+    if (action === 'back' && blurTyping()) return
     if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
     // 設定で確かめることにしていれば、確かめてから消す(Shift+Delete と同じ)
@@ -1484,6 +1512,7 @@ export default function App() {
       return
     }
     if (drawerOpen) return setDrawerOpen(false)
+    if (blurTyping()) return
     // レスのポップアップが出ていれば、Esc を押したことにして閉じる(スレ表示が Esc でいちばん上から閉じる)
     if (document.querySelector('.post-popup')) {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
@@ -1928,6 +1957,7 @@ export default function App() {
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           pullToRefresh={settings.pullToRefreshList}
+          hideBarsOnScroll={settings.hideBarsOnScroll}
           newSince={!favView && !history ? newSince : undefined}
           favoriteIds={favIds}
           onToggleFavoriteThread={toggleFavoriteThread}

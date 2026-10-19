@@ -72,5 +72,22 @@ export function step<T>(s: ViewState<T>, d: -1 | 1): { state: ViewState<T>; entr
   return { state: { ...s, index }, entry }
 }
 
+/**
+ * 消したもの(ログを削除したスレ)を履歴から外す。戻る・進むで、消したスレを開き直さないように。
+ * いまの場所を外したときは、その前に残ったものが「いまの場所」になる(戻ったのと同じ)。外して並んだ同じものは 1 つにまとめる
+ */
+export function forget<T>(s: ViewState<T>, keys: Set<string>): ViewState<T> {
+  const stack: NavEntry<T>[] = []
+  let index = -1
+  s.stack.forEach((e, i) => {
+    if (keys.has(e.key)) return
+    if (stack.at(-1)?.key === e.key) stack[stack.length - 1] = e
+    else stack.push(e)
+    if (i <= s.index) index = stack.length - 1
+  })
+  if (stack.length === s.stack.length) return s
+  return { ...s, stack, index }
+}
+
 export const canBack = (s: ViewState<unknown>) => s.index > 0
 export const canForward = (s: ViewState<unknown>) => s.index < s.stack.length - 1

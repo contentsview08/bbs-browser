@@ -124,6 +124,8 @@ interface Props {
   newSince?: number
   /** 一番上でさらにホイールを回したら更新する(設定) */
   pullToRefresh: boolean
+  /** スマホ: 下へスクロールしたらヘッダーとフッターを隠す */
+  hideBarsOnScroll?: boolean
   /** 板を開いているときだけ ★ を出す */
   favorite?: { active: boolean; onToggle: () => void }
 }
@@ -692,7 +694,7 @@ export default function ThreadListPanel(props: Props) {
         className={`flex-1 min-h-0 overflow-y-auto ${isMobile ? 'no-scrollbar' : 'custom-scrollbar thick-scrollbar'} flex flex-col`}
         onScroll={(e) => {
           pull.noteScroll()
-          if (isMobile) hideBars.onScroll(e)
+          if (isMobile && props.hideBarsOnScroll !== false) hideBars.onScroll(e)
         }}
         onTouchStart={
           isMobile

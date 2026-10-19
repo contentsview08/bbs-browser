@@ -414,6 +414,10 @@ export default function ThreadView(props: Props) {
       } else if (filters.size > 0) {
         e.preventDefault()
         setFilters(new Set())
+      } else if (isMobile && (query || searchActive)) {
+        // スマホ: 戻る操作で、検索も外す
+        e.preventDefault()
+        clearSearch.current()
       } else {
         // 閉じるものも絞り込みもないときに Esc を 2 回(素早く)押したら、選んでいるレスの印を消す(見た目だけ)。
         // 選んでいた場所は覚えていて、次に J・K などを押すとそこから続ける
@@ -1658,6 +1662,8 @@ export default function ThreadView(props: Props) {
   return (
     <main
       ref={mainRef}
+      // 絞り込み・検索をしている印(スマホの戻る操作は、スレを閉じる前にまずこれを外す。App の backRef)
+      data-filtering={props.active && (filters.size > 0 || query || searchActive) ? 'thread' : undefined}
       className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden"
       style={isMobile && hasFooter ? ({ '--footer-offset': `${MOBILE_BAR_H}px` } as CSSProperties) : undefined}
     >

@@ -665,6 +665,8 @@ export default function ThreadListPanel(props: Props) {
 
   return (
     <section
+      // 絞り込み・検索をしている印(スマホの戻る操作は、まずこれを外す。App の backRef)
+      data-filtering={props.active !== false && (unreadOnly || visitedOnly || query || searchActive) ? 'list' : undefined}
       style={props.fill ? { width: '100%', maxWidth: props.fill === 'centered' ? FILL_MAX_WIDTH : undefined } : { width }}
       className={`flex-shrink-0 flex flex-col relative overflow-hidden bg-panel-list ${
         props.fill === 'centered' ? 'border-x' : props.fill ? '' : 'border-r'

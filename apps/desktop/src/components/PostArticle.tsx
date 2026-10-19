@@ -914,7 +914,7 @@ function PostArticle(props: Props) {
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>
         {replyLine}
-        <div className="flex gap-3 items-start">
+        <div className={`flex ${isMobile ? 'gap-2' : 'gap-3'} items-start`}>
           {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
           <div className={`${AVATAR_W} flex-shrink-0 flex justify-center items-start`}>
             {props.continued ? (

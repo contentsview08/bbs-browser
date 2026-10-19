@@ -1406,9 +1406,19 @@ export default function App() {
     if (isMobile) setDrawerOpen(false)
   }, [board?.url, history, favView, activeId, settingsTab, urlPrompt !== undefined])
 
+  /** いま見ている画面(スレ表示かスレ一覧)で絞り込み・検索をしていれば、Esc を押したことにして外す。外したら true */
+  const clearFiltering = (): boolean => {
+    const screen = single && threadShown ? 'thread' : 'list'
+    if (!document.querySelector(`[data-filtering="${screen}"]`)) return false
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    return true
+  }
+
   // ── スマホ: スワイプの操作 ──
   /** 操作を実行する。アプリ全体の操作はそのまま、スレ表示・スレ一覧の操作は、割り当てたキーを押したことにして渡す */
   const runAction = (action: string) => {
+    // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
+    if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
     if (appKey(action as KeyAction)) return
     const key = keymap[action as KeyAction]?.[0]
@@ -1460,6 +1470,7 @@ export default function App() {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
       return
     }
+    if (clearFiltering()) return
     if (single && threadShown) return returnToList()
     if (canBack(view.current)) goNav(-1)
   }

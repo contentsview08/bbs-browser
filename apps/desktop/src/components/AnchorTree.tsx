@@ -39,7 +39,7 @@ export default function AnchorTree(props: {
   // スマホでは深い段を MAX_DEPTH にそろえる
   if (MAX_DEPTH !== Infinity) props = { ...props, rows: props.rows.map((row) => (row.depth > MAX_DEPTH ? { ...row, depth: MAX_DEPTH } : row)) }
   // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
-  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + 12} />
+  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + (isMobile ? 8 : 12)} />
   if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} />
   return (
     <div className="flex flex-col">

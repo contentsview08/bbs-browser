@@ -900,3 +900,9 @@ html[data-platform='mobile'] .post-cv article {
   flex-shrink: 0;
   max-width: 100%;
 }
+
+/* スマホ: スレ表示の左右の余白を詰める(一覧表示の密度のままだと 24px あり、狭い画面では 1 行が短くなりすぎる) */
+html[data-platform='mobile'][data-density] {
+  --list-padding-post: 4px;
+  --post-padding-x: 6px;
+}

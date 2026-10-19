@@ -5,6 +5,7 @@
 // 列を 64px より狭くすると、しまったときに名前の左端が 1px だけ見えてしまう
 // 外枠の幅だけを動かして開閉するので、アイコンはそのままで、名前が右から現れるように見える。
 
+import { isMobile } from '../utils/platform'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Board, ThreadSummary } from '@bbs-browser/connectors'
 import BoardIcon from './BoardIcon'
@@ -284,7 +285,8 @@ export default function Sidebar(props: Props) {
       )}
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
         {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
-        <div className="h-10 flex-shrink-0 flex items-center select-none">
+        {/* スマホ: スレ一覧・スレ表示のヘッダー(48px)と同じ高さにそろえる */}
+        <div className={`${isMobile ? 'h-12' : 'h-10'} flex-shrink-0 flex items-center select-none`}>
           <span className="w-[64px] flex-shrink-0 flex items-center justify-center">
             <button
               type="button"

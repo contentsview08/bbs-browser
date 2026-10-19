@@ -173,7 +173,7 @@ const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colo
 type PostFilter = 'popular' | 'image' | 'video' | 'link'
 // 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
 const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[] = [
-  { key: 'popular', label: '人気レス', icon: 'local_fire_department', color: 'var(--c-mark-hot)' },
+  { key: 'popular', label: '人気', icon: 'local_fire_department', color: 'var(--c-mark-hot)' },
   { key: 'image', label: '画像', icon: 'image', color: 'var(--c-mark-image)' },
   { key: 'video', label: '動画', icon: 'play_circle', color: 'var(--c-mark-video)' },
   { key: 'link', label: 'リンク', icon: 'link', color: 'var(--c-mark-link)' },
@@ -1501,7 +1501,7 @@ export default function ThreadView(props: Props) {
         />
         <header
           ref={titleRowRef}
-          className="flex items-center justify-between px-6"
+          className={`flex items-center justify-between ${isMobile ? 'px-2' : 'px-6'}`}
           style={{ height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
           <div
@@ -1570,7 +1570,7 @@ export default function ThreadView(props: Props) {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 ml-4">
+          <div className={`flex items-center ${isMobile ? 'gap-0 ml-1' : 'gap-2 ml-4'}`}>
             {settings.autoRefreshSec > 0 && (
               <span className="flex items-center gap-1 text-xs text-c-accent" title="自動更新中">
                 <span className="material-symbols-outlined text-base">autorenew</span>
@@ -1581,7 +1581,7 @@ export default function ThreadView(props: Props) {
             <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
-        <div className="flex items-center gap-5 px-4 overflow-x-auto no-scrollbar text-base font-medium">
+        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'gap-3 px-2 text-sm' : 'gap-5 px-4 text-base'}`}>
           {FILTERS.map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (
@@ -1596,13 +1596,13 @@ export default function ThreadView(props: Props) {
                     return next
                   })
                 }
-                className={`relative shrink-0 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                className={`relative shrink-0 flex items-center ${isMobile ? 'gap-1' : 'gap-1.5'} transition-colors whitespace-nowrap ${
                   active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
                 }`}
-                style={{ paddingTop: 10, paddingBottom: 10 }}
+                style={{ paddingTop: isMobile ? 8 : 10, paddingBottom: isMobile ? 8 : 10 }}
                 title={`${label}だけを出す(${i + 1} キー)`}
               >
-                <span className={`material-symbols-outlined text-xl leading-none ${active ? 'fill' : ''}`} style={{ color }}>
+                <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={{ color }}>
                   {icon}
                 </span>
                 {label}
@@ -1692,7 +1692,13 @@ export default function ThreadView(props: Props) {
           ref={listRef}
           className="flex-1 flex flex-col"
           // スマホ: フッターは本文の上に重ねるので、最後のレスがその下に隠れないよう、下に余白を足す
-          style={{ padding: 'var(--list-padding-post)', gap: 'var(--list-gap-post)', ...(isMobile && hasFooter && { paddingBottom: 'calc(var(--list-padding-post) + 56px)' }) }}
+          style={{
+            padding: 'var(--list-padding-post)',
+            gap: 'var(--list-gap-post)',
+            ...(isMobile && hasFooter && { paddingBottom: 'calc(var(--list-padding-post) + 56px)' }),
+            // スマホ: 右端に重ねたミニマップの分、本文を左へ寄せる
+            ...(isMobile && settings.showMinimap && { paddingRight: 'calc(var(--list-padding-post) + 34px)' }),
+          }}
         >
           {log.posts.length === 0 ? (
             props.loading ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">投稿がありません</div>
@@ -1797,6 +1803,8 @@ export default function ThreadView(props: Props) {
         </div>
       </div>
       {settings.showMinimap && log.posts.length > 0 && (
+        // スマホ: ミニマップは本文の右端に重ねる(横に並べると、ヘッダーの右に同じ幅の空きができ、本文も狭くなる)
+        <div className={isMobile ? 'absolute right-0 bottom-0 z-[5] flex' : 'contents'} style={isMobile ? { top: headerInScroll ? headerHeight : 0 } : undefined}>
         <Minimap
           posts={visiblePosts}
           scrollRef={ref}
@@ -1805,9 +1813,10 @@ export default function ThreadView(props: Props) {
           ownNos={ownNos}
           replyToOwn={replyToOwn}
           unreadFrom={unreadFrom}
-          topOffset={headerInScroll ? headerHeight : 0}
+          topOffset={headerInScroll && !isMobile ? headerHeight : 0}
           onJump={scrollToPost}
         />
+        </div>
       )}
       </div>
       {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}

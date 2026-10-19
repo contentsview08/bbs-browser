@@ -317,8 +317,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoNg: true,
   // 元の Web アプリ(hono-bbs)のスマホ版に合わせた割り当て
   swipeGestures: {
-    list: { right: 'drawer', left: 'forward', 'right,up': 'top', 'right,down': 'bottom', 'left,down': 'refresh', 'left,up': 'reply' },
-    thread: { right: 'back', left: 'reply', 'right,up': 'top', 'right,down': 'bottom', 'left,down': 'refresh', 'left,up': 'closeTab' },
+    // →↑ は一番下へ・→↓ は先頭へ(引っぱる向きに動く。元の Web アプリと同じ)
+    list: { right: 'drawer', left: 'forward', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'reply' },
+    thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'closeTab' },
   },
   gestureSensitivity: 3,
   logRetentionDays: 90,

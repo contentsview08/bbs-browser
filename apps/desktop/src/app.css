@@ -813,7 +813,8 @@ input[type='checkbox']:indeterminate {
 }
 /* スマホ: スレ表示のスレタイの帯を低くする(PC の 80px は、狭い画面ではレスの見える量を削りすぎる) */
 html[data-platform='mobile'] {
-  --header-height: 52px;
+  /* スレ一覧のヘッダー・引き出しの上の行と同じ 48px にそろえる */
+  --header-height: 48px;
 }
 /* 指で押しやすいよう、小さいアイコンのボタンを広げる */
 [data-platform='mobile'] [data-post-toolbar] button {

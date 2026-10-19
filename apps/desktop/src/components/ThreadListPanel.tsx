@@ -841,18 +841,6 @@ export default function ThreadListPanel(props: Props) {
           {note}
         </div>
       )}
-      {/* スマホ: 左下の丸いスレ立てボタン(フッターの上に浮かせる) */}
-      {isMobile && props.onNewThread && (
-        <button
-          type="button"
-          onClick={props.onNewThread}
-          className="absolute left-4 bottom-16 z-20 w-14 h-14 rounded-full shadow-lg flex items-center justify-center"
-          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
-          title="スレを立てる"
-        >
-          <span className="material-symbols-outlined text-2xl">edit_square</span>
-        </button>
-      )}
       {(hasFooter || isMobile) && (
         <div
           ref={footerRef}
@@ -868,6 +856,18 @@ export default function ThreadListPanel(props: Props) {
             onMouseDown={(e) => footerDrag.startDrag(e, footerRef.current?.getBoundingClientRect().height ?? 40, -1)}
             onReset={footerDrag.reset}
           />
+          {/* スマホ: 右下の丸いスレ立てボタン。フッターの上に浮かせ、フッターと一緒に隠れる */}
+          {isMobile && props.onNewThread && (
+            <button
+              type="button"
+              onClick={props.onNewThread}
+              className="absolute right-4 bottom-full mb-3 w-14 h-14 rounded-full shadow-lg flex items-center justify-center"
+              style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+              title="スレを立てる"
+            >
+              <span className="material-symbols-outlined text-2xl">edit_square</span>
+            </button>
+          )}
           {/* スマホ: 未読・勢い順などのタブを、フッターの左に */}
           {isMobile && <div className="flex-1 min-w-0 flex self-stretch text-xs font-medium">{tabGrid}</div>}
           <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={LIST_BTN} iconClass="text-lg" />

@@ -91,6 +91,18 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 - インストーラーは、管理者の権限なしで、使う人のフォルダに入れる(NSIS の currentUser)。WebView2 がなければ入れる
 - データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.yumekui8.bbs-browser\` にあり、アンインストールしても残る
 - 自動アップデートはまだない(更新ファイルの置き場と、署名の鍵を決めてから足す)
+- ZIP 版(インストールしない版)は、`npm run build` のあとに `npm run package:zip` で `bundle/zip/` に作る
+
+### GitHub での自動ビルド
+
+`.github/workflows/` に 2 つ置いてある(GitHub にリポジトリを置いたときに動く)。
+
+| ファイル | いつ | 何をする |
+|---|---|---|
+| `ci.yml` | main への push のたび | 型チェックとテスト(Linux。数分) |
+| `release.yml` | 版の印(タグ `v*`)を push したとき | テスト → Windows でビルド → setup.exe・msi・ZIP を Releases に**下書き**で置く。確かめてから公開する |
+
+リリースの手順: `npm run version:set -- 0.2.0` → CHANGELOG を書く → コミット → `git tag v0.2.0` → `git push origin main --tags`。
 
 ### 版の付け方
 

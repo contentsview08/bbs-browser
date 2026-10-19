@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { dropLeadingAnchor, anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
 
 describe('videoFileUrlsIn: 動画のファイル', () => {
   it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
@@ -102,5 +102,17 @@ describe('ふたばの番号の書き方(>No.12345)', () => {
   it('板の本当の番号から、スレの中のレスに読み替える', () => {
     const posts = [post(1, 'OP', 1442072026), post(2, '>No.1442072026\nそれな', 1442072291)]
     expect(anchorTargets(posts[1].body, makeAnchorResolver(posts, 'ref'))).toEqual([1])
+  })
+})
+
+describe('Discord・LINE 風の本文の頭のアンカー', () => {
+  it('頭の 1 つだけのアンカーを省き、範囲・並びや途中のアンカーは残す', () => {
+    expect(dropLeadingAnchor('>>12\nそれな')).toBe('それな')
+    expect(dropLeadingAnchor('\n\n  >>12 それな')).toBe('それな')
+    expect(dropLeadingAnchor('>>12\n\n\nそれな\n>>3')).toBe('それな\n>>3')
+    expect(dropLeadingAnchor('＞＞１２\nそれな')).toBe('それな')
+    expect(dropLeadingAnchor('>>1-3\nまとめて')).toBe('>>1-3\nまとめて')
+    expect(dropLeadingAnchor('>>1,2\nまとめて')).toBe('>>1,2\nまとめて')
+    expect(dropLeadingAnchor('それな >>12')).toBe('それな >>12')
   })
 })

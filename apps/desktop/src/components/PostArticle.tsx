@@ -12,6 +12,7 @@ import {
   anchorTargets,
   displayBody,
   displayName,
+  dropLeadingAnchor,
   heatClass,
   imageUrlsIn,
   linkUrlsIn,
@@ -322,7 +323,9 @@ function PostArticle(props: Props) {
 
   // BE のアイコン(本文の 1 行目の sssp://)は絵にして、本文からは除く
   const { icon: beIcon, body: rawBody } = props.display?.splitIcon?.(post.body) ?? { body: post.body }
-  const body = props.display ? displayBody(rawBody, props.display) : rawBody
+  const shownBody = props.display ? displayBody(rawBody, props.display) : rawBody
+  // Discord・LINE 風は、返信元を頭の上に出しているので、本文の頭のアンカーは省く
+  const body = props.replyPreview ? dropLeadingAnchor(shownBody) : shownBody
   const name = props.display ? displayName(post.name, props.display) : post.name
   const numHeat = heatClass(anchorCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる

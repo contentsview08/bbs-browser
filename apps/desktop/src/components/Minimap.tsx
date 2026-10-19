@@ -189,8 +189,9 @@ export default function Minimap(props: Props) {
           borderRadius: 'var(--minimap-radius)',
         }}
         onClick={onTrackClick}
-        onMouseMove={onTrackMove}
-        onMouseLeave={() => setHover(undefined)}
+        // スマホにはマウスを乗せる操作がない(たたくと、そのときのマウスの動きとして番号が出たまま残る)ので、乗せた所の番号は出さない
+        onMouseMove={isMobile ? undefined : onTrackMove}
+        onMouseLeave={isMobile ? undefined : () => setHover(undefined)}
       >
         {/* 未読の範囲(「ここから未読」から下)は、うっすら色を付ける */}
         {unreadAt !== undefined && (

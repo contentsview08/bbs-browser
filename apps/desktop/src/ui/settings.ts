@@ -442,6 +442,15 @@ export function pickScheme(s: AppSettings, key: ColorScheme): Partial<AppSetting
   return isDarkScheme(key) ? { darkScheme: key } : { lightScheme: key }
 }
 
+/**
+ * 表示スタイルのメニューで配色を選んだとき。選んだ配色がすぐ見えるようにする:
+ * OS に合わせていて、いまの OS と明るさの違う配色を選んだら(OS がダークのときに LINE ライトなど)、合わせるのをやめてその配色にする
+ */
+export function pickSchemeNow(s: AppSettings, key: ColorScheme): Partial<AppSettings> {
+  if (s.followOsTheme && isDarkScheme(key) !== osDark()) return { followOsTheme: false, scheme: key }
+  return pickScheme(s, key)
+}
+
 function apply(s: AppSettings) {
   const root = document.documentElement
   const scheme = effectiveScheme(s)

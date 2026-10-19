@@ -45,6 +45,8 @@ export function useMediaInput(o: {
   fileInput: ReactNode
   /** アップロードしている数 */
   uploading: number
+  /** まとめて上げているとき、いま何枚目か(1 始まり)と全部で何枚か */
+  progress?: { current: number; total: number }
   /** 本文の欄に付ける。画像を貼り付け・ドロップしたら上げる */
   textareaProps: {
     onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void
@@ -56,6 +58,7 @@ export function useMediaInput(o: {
 } {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(0)
+  const [progress, setProgress] = useState<{ current: number; total: number }>()
   const [error, setError] = useState<string>()
 
   // ── 書き込みに付けるファイル(attach のとき) ──
@@ -111,7 +114,9 @@ export function useMediaInput(o: {
     const uploader = o.uploader
     if (!uploader || all.length === 0) return
     setError(all.length > MAX_FILES ? `一度に上げられるのは ${MAX_FILES} 枚までです(先頭の ${MAX_FILES} 枚だけ上げます)` : undefined)
-    for (const file of all.slice(0, MAX_FILES)) {
+    const files = all.slice(0, MAX_FILES)
+    for (const [i, file] of files.entries()) {
+      setProgress({ current: i + 1, total: files.length })
       setUploading((n) => n + 1)
       try {
         const url = await uploadToCatbox(file, uploader)
@@ -123,6 +128,7 @@ export function useMediaInput(o: {
         setUploading((n) => n - 1)
       }
     }
+    setProgress(undefined)
   }
 
   /** ボタン・貼り付け・ドラッグで選んだファイル: 付けられる掲示板なら付け、そうでなければアップロードする */
@@ -227,5 +233,5 @@ export function useMediaInput(o: {
   ) : null
   const pick = o.attach || o.uploader ? () => fileRef.current?.click() : undefined
 
-  return { buttons, pick, fileInput, uploading, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
+  return { buttons, pick, fileInput, uploading, progress, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
 }

@@ -539,3 +539,14 @@ export function anchorTreeRows(start: number, posts: Post[], resolve: AnchorReso
   roots.forEach((r, i) => walk(r, 0, [], i === roots.length - 1))
   return rows
 }
+
+/**
+ * Discord・LINE 風: 本文の頭のアンカー(>>12)を省く(返信元を頭の上に出しているので、同じことを 2 度書かない)。
+ * 空の行を飛ばした最初の行の、頭にあるものだけ。範囲や並び(>>1-3、>>1,2)は情報が減るので残す
+ */
+export function dropLeadingAnchor(body: string): string {
+  const m = /^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)[0-9０-９]+(?![0-9０-９,，\-－ー〜~、])[ \t　]*/.exec(body)
+  if (!m) return body
+  // アンカーだけの行なら、その行と、続く空の行も除く
+  return body.slice(m[0].length).replace(/^\n(?:[ \t　]*\n)*/, '')
+}

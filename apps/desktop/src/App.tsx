@@ -54,7 +54,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { PICKABLE_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
+import { PICKABLE_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickSchemeNow, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -267,6 +267,9 @@ export default function App() {
 
   // 見たもの(スレ一覧・スレ)を見た順に覚え、上の帯の ← →・マウスの戻る/進むボタン・Alt+← → で行き来する
   const goNav = (d: -1 | 1) => {
+    // スレ表示から離れる前に、見えている所までの既読をすぐ知らせる(既読はスクロールが止まって少ししてから知らせるので、
+    // 開いてすぐ戻ると、見えた新着が既読にならず、スレ一覧に新着の印が残っていた)
+    readFlush.current?.()
     const r = step(view.current, d)
     if (!r) return
     updateView(() => r.state)
@@ -290,6 +293,7 @@ export default function App() {
   }
   /** いま出しているスレ一覧へ戻る(1 画面のとき。スレタイの左の ← や、削除したあと) */
   const returnToList = () => {
+    readFlush.current?.()
     const cur = currentListTarget()
     updateView((s) => showList(s, cur && listEntry(cur)))
   }
@@ -1060,7 +1064,7 @@ export default function App() {
         icon: 'bolt',
         run: () => appKey(a.key),
       })),
-      ...PICKABLE_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickScheme(settings, c.key)) })),
+      ...PICKABLE_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickSchemeNow(settings, c.key)) })),
       ...POST_STYLES.map((p) => ({ group: 'レスの見た目', label: p.name, keywords: p.note, icon: 'style', run: () => updateSetting('postStyle', p.key) })),
       ...(isMobile
         ? []

@@ -213,7 +213,7 @@ export default function NewThreadDialog(props: Props) {
                 <span className={`material-symbols-outlined text-xl text-c-text-muted ${media.uploading > 0 ? 'animate-spin' : ''}`}>
                   {media.uploading > 0 ? 'progress_activity' : 'image'}
                 </span>
-                画像
+                {media.uploading > 0 ? `アップロード中${media.progress && media.progress.total > 1 ? ` ${media.progress.current} / ${media.progress.total}` : '…'}` : '画像'}
               </button>
               {imageHint && (
                 <span className="flex-1 text-xs text-c-text-muted">画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください</span>

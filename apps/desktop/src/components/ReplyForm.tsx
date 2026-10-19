@@ -218,6 +218,30 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const loadableImages = previewImages.filter(isAutoLoadable)
   const previewVideos = youtubeIdsIn(body)
   const hasPreview = previewImages.length + previewVideos.length > 0
+  /** 本文に入れた画像・動画のリンクのサムネイル(PC は欄の下、スマホの入力欄は欄の上) */
+  const previewStrip = (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      {loadableImages.map((url, i) => (
+        <img
+          key={url}
+          src={url}
+          alt=""
+          referrerPolicy="no-referrer"
+          onClick={() => props.onImage?.(loadableImages, i)}
+          className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2 cursor-pointer hover:border-c-border-strong"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none'
+          }}
+        />
+      ))}
+      {previewVideos.map((id) => (
+        <div key={id} className="relative h-14 w-20 flex-shrink-0 rounded overflow-hidden border-2" style={{ borderColor: '#ff0000' }}>
+          <img src={`https://img.youtube.com/vi/${id}/default.jpg`} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+          <span className="absolute bottom-0.5 right-0.5 bg-black/80 text-white text-[8px] px-0.5 rounded leading-none">▶</span>
+        </div>
+      ))}
+    </div>
+  )
   // クールダウン中は押せなくし、残りの秒数と、減っていく帯を出す(続けて書き込めないことが分かるように)
   const sendButton = (
     <button
@@ -263,6 +287,13 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             </button>
           </p>
         )}
+        {/* 画像を上げている間は、何枚中の何枚目かを出す */}
+        {media.uploading > 0 && (
+          <p className="px-3 pt-2 flex items-center gap-1.5 text-xs text-c-text-muted">
+            <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+            画像をアップロード中…{media.progress && media.progress.total > 1 && ` ${media.progress.current} / ${media.progress.total} 枚目`}
+          </p>
+        )}
         {media.error && (
           <p className="px-3 pt-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
             <span className="material-symbols-outlined text-sm">error</span>
@@ -279,6 +310,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           </div>
         )}
         {media.attachedView && <div className="px-3 pt-2">{media.attachedView}</div>}
+        {hasPreview && <div className="px-3 pt-2">{previewStrip}</div>}
         {/* オプション: 名前・メール・アカウント */}
         {lineOptions && (
           <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
@@ -328,8 +360,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
                 >
-                  <span className="material-symbols-outlined text-xl text-c-text-muted">image</span>
-                  画像
+                  <span className={`material-symbols-outlined text-xl text-c-text-muted ${media.uploading > 0 ? 'animate-spin' : ''}`}>
+                    {media.uploading > 0 ? 'progress_activity' : 'image'}
+                  </span>
+                  {media.uploading > 0 && media.progress ? `画像(${media.progress.current} / ${media.progress.total} 枚目をアップロード中)` : '画像'}
                 </button>
                 <button
                   type="button"
@@ -471,29 +505,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       </div>
         {sendButton}
       </div>
-      {hasPreview && (
-        <div className="flex-shrink-0 mt-2 flex gap-2 overflow-x-auto no-scrollbar">
-          {loadableImages.map((url, i) => (
-            <img
-              key={url}
-              src={url}
-              alt=""
-              referrerPolicy="no-referrer"
-              onClick={() => props.onImage?.(loadableImages, i)}
-              className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2 cursor-pointer hover:border-c-border-strong"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-              }}
-            />
-          ))}
-          {previewVideos.map((id) => (
-            <div key={id} className="relative h-14 w-20 flex-shrink-0 rounded overflow-hidden border-2" style={{ borderColor: '#ff0000' }}>
-              <img src={`https://img.youtube.com/vi/${id}/default.jpg`} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-              <span className="absolute bottom-0.5 right-0.5 bg-black/80 text-white text-[8px] px-0.5 rounded leading-none">▶</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {hasPreview && <div className="flex-shrink-0 mt-2">{previewStrip}</div>}
     </div>
   )
 })

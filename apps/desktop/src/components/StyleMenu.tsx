@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { PICKABLE_SCHEMES, FONT_SIZE_KEY, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { PICKABLE_SCHEMES, FONT_SIZE_KEY, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -24,7 +24,7 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
           key={s.key}
           type="button"
           onClick={() => {
-            for (const [k, v] of Object.entries(pickScheme(settings, s.key))) update(k as keyof AppSettings, v as never)
+            for (const [k, v] of Object.entries(pickSchemeNow(settings, s.key))) update(k as keyof AppSettings, v as never)
           }}
           className={MENU_ITEM}
         >
@@ -33,7 +33,8 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
             style={{ background: s.accent, boxShadow: `inset 0 0 0 1px ${s.border}` }}
           />
           <span className="flex-1 text-left truncate">{s.name}</span>
-          {(settings.followOsTheme ? s.key === settings.darkScheme || s.key === settings.lightScheme : settings.scheme === s.key) && check}
+          {/* 印は、いま見えている配色だけに付ける(OS に合わせているとき、ダーク用とライト用の 2 つに付いていた) */}
+          {effectiveScheme(settings) === s.key && check}
         </button>
       ))}
 

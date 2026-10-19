@@ -161,6 +161,8 @@ export interface AppSettings {
   aaAutoDetect: boolean
   /** 画像でも動画でもないリンクに、埋め込みのカード(タイトル・説明・画像)を出す */
   showLinkPreview: boolean
+  /** 掲示板でないリンク(ウェブページ・画像・動画)を、アプリの中で開く(リーダー表示。ReaderView)。スマホの既定 */
+  openLinksInApp: boolean
   /** 名前が板の既定の名前(名無し)なら省く */
   omitNoname: boolean
   /** 3 行以上続く空行を 1 行にまとめる */
@@ -299,6 +301,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showMinimap: true,
   showIdenticon: false,
   showLinkPreview: true,
+  openLinksInApp: isMobile,
   omitNoname: true,
   collapseBlankLines: true,
   trimTrailingBlank: true,

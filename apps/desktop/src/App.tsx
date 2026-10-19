@@ -55,6 +55,7 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
+import ReaderView from './components/ReaderView'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
 import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
@@ -101,6 +102,11 @@ const TAB_REPEAT_SETTLE_MS = 200
 
 // 開発中のアプリだけ、お試しの掲示板(通信しない。https://demo.bbs-browser.invalid/board/)を足す
 if (import.meta.env.DEV) registerConnector(demoConnector)
+
+/** アプリの中でウェブページを読むときの名乗り(スマホなら Android の Chrome、PC なら Windows の Chrome) */
+const BROWSER_UA = isMobile
+  ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
+  : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
 const connectorOf = (id: string) => {
   const c = findConnector(id)
@@ -231,6 +237,8 @@ export default function App() {
   const single = isMobile || settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
   /** スマホ: サイドバーの引き出しを開いているか(左上のメニュー・左の端からのスワイプで開き、何か開いたら閉じる) */
   const [drawerOpen, setDrawerOpen] = useState(false)
+  /** アプリの中で開いているリンク(リーダー表示) */
+  const [readerUrl, setReaderUrl] = useState<string>()
   /** スマホ: URL を入れて開く小さな画面(URL 欄の帯の代わり)。開いている間は入れている文字 */
   const [urlPrompt, setUrlPrompt] = useState<string>()
   /** キー操作の割り当て(スレ表示とスレ一覧で同じものを使う) */
@@ -1367,7 +1375,7 @@ export default function App() {
    * それ以外や、開けなかったときはブラウザで開く
    */
   const openLink = async (url: string) => {
-    if (!isAppThreadUrl(url)) return openUrl(url)
+    if (!isAppThreadUrl(url)) return settingsRef.current.openLinksInApp ? setReaderUrl(url) : openUrl(url)
     try {
       const r = await resolve(url)
       if (r.thread) return await openThread(r.thread, { newTab: true })
@@ -2032,6 +2040,16 @@ export default function App() {
 
       <Notifications items={notifications} onClose={dismiss} />
 
+      {readerUrl && (
+        <ReaderView
+          url={readerUrl}
+          // ウェブページはブラウザの名乗り(User-Agent)で取る(専ブラの名乗りだと、スマホ向けでない・断られるページがある)
+          fetchPage={(url) => ctx.http.get(url, { headers: { 'User-Agent': BROWSER_UA } })}
+          saveDir={settings.imageSaveDir}
+          onClose={() => setReaderUrl(undefined)}
+          onOpenExternal={(url) => void openUrl(url)}
+        />
+      )}
       {urlPrompt !== undefined && (
         <UrlPrompt
           onClose={() => setUrlPrompt(undefined)}

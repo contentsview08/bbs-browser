@@ -644,6 +644,12 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           note="画像でも動画でもないリンクに、ページのタイトル・説明・画像のカードを出します(画面に見えたときにページを取りに行きます)"
         />
         <Toggle
+          checked={s.openLinksInApp}
+          onChange={(v) => update('openLinksInApp', v)}
+          label="リンクをアプリの中で開く"
+          note="掲示板でないリンクを、外のブラウザではなくアプリの中で開きます。ウェブページは題・本文・画像だけを抜き出して出し(読めないページは右上からブラウザで開けます)、画像・動画・YouTube はそのまま見られます"
+        />
+        <Toggle
           checked={s.showThumbnails}
           onChange={(v) => update('showThumbnails', v)}
           label="画像のサムネイルを出す"

@@ -885,6 +885,7 @@ export default function ThreadView(props: Props) {
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
   // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
+  const refreshFab = isMobile && settings.showRefreshFab
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer') || (isMobile && !!props.onSubmitPost)
   // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
   const footerRef = useRef<HTMLDivElement>(null)
@@ -905,6 +906,8 @@ export default function ThreadView(props: Props) {
     const el = footerRef.current
     if (!isMobile || !el) return
     const observer = new ResizeObserver(() => {
+      // --footer-height は隠れていてもフッターの高さ(ミニマップは、フッターが隠れても伸ばさずにこの分を空けておく)
+      mainRef.current?.style.setProperty('--footer-height', `${el.offsetHeight}px`)
       if (footerShown.current) mainRef.current?.style.setProperty('--footer-offset', `${el.offsetHeight}px`)
     })
     observer.observe(el)
@@ -1685,12 +1688,24 @@ export default function ThreadView(props: Props) {
       // 絞り込み・検索をしている印(スマホの戻る操作は、スレを閉じる前にまずこれを外す。App の backRef)
       data-filtering={props.active && (filters.size > 0 || query || searchActive) ? 'thread' : undefined}
       className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden"
-      style={isMobile && hasFooter ? ({ '--footer-offset': `${MOBILE_BAR_H}px` } as CSSProperties) : undefined}
+      style={isMobile && hasFooter ? ({ '--footer-offset': `${MOBILE_BAR_H}px`, '--footer-height': `${MOBILE_BAR_H}px` } as CSSProperties) : undefined}
     >
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
+      {/* スマホ: 右下の丸い更新ボタン(設定で消せる)。一番下へのボタンは、その上に積む */}
+      {refreshFab && (
+        <button
+          type="button"
+          onClick={() => void props.onRefresh()}
+          title="更新"
+          className="absolute z-20 w-11 h-11 flex items-center justify-center rounded-full shadow-lg active:brightness-110"
+          style={{ right: settings.showMinimap ? 40 : 8, bottom: 'calc(var(--footer-offset, 0px) + 10px)', background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+        >
+          <span className={`material-symbols-outlined text-2xl ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
+        </button>
+      )}
       <button
         type="button"
         onClick={jumpToBottom}
@@ -1702,7 +1717,7 @@ export default function ThreadView(props: Props) {
         // スマホは右下の角に寄せる(ミニマップは本文に重ねてあるので、その左に)
         style={
           isMobile
-            ? { right: settings.showMinimap ? 40 : 8, bottom: 'calc(var(--footer-offset, 0px) + 8px)' }
+            ? { right: (settings.showMinimap ? 40 : 8) + (refreshFab ? 4 : 0), bottom: `calc(var(--footer-offset, 0px) + ${refreshFab ? 64 : 8}px)` }
             : { right: settings.showMinimap ? 44 : 20, bottom: 'calc(var(--footer-offset, 0px) + 20px)' }
         }
       >
@@ -1754,6 +1769,7 @@ export default function ThreadView(props: Props) {
         }
         onTouchMove={isMobile ? touchPull.onTouchMove : undefined}
         onTouchEnd={isMobile ? touchPull.onTouchEnd : undefined}
+        onTouchCancel={isMobile ? touchPull.onTouchCancel : undefined}
         className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
         {headerInScroll && headerBlock}
@@ -1874,10 +1890,10 @@ export default function ThreadView(props: Props) {
       </div>
       {settings.showMinimap && log.posts.length > 0 && (
         // スマホ: ミニマップは本文の右端に重ねる(横に並べると、ヘッダーの右に同じ幅の空きができ、本文も狭くなる)
-        // フッターが出ている間は、その上で終わらせる(--footer-offset。フッターの後ろに隠れないように)
+        // フッターの上で終わらせる。フッターが隠れても伸ばさない(伸び縮みすると、縮図がぐにゃぐにゃ動いて見にくい)
         <div
-          className={isMobile ? 'absolute right-0 z-[5] flex transition-[bottom] duration-200' : 'contents'}
-          style={isMobile ? { top: headerInScroll ? headerHeight : 0, bottom: 'var(--footer-offset, 0px)' } : undefined}
+          className={isMobile ? 'absolute right-0 z-[5] flex' : 'contents'}
+          style={isMobile ? { top: headerInScroll ? headerHeight : 0, bottom: hasFooter ? 'var(--footer-height, 0px)' : 0 } : undefined}
         >
         <Minimap
           posts={visiblePosts}

@@ -734,6 +734,14 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           label="ミニマップを出す"
           note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
         />
+        {isMobile && (
+          <Toggle
+            checked={s.showRefreshFab}
+            onChange={(v) => update('showRefreshFab', v)}
+            label="右下に更新ボタンを出す"
+            note="スレ表示の右下に、丸い更新ボタンを出します"
+          />
+        )}
         <Toggle
           checked={s.aaAutoDetect}
           onChange={(v) => update('aaAutoDetect', v)}

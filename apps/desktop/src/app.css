@@ -810,6 +810,14 @@ input[type='checkbox']:indeterminate {
 [data-platform='mobile'] #root {
   box-sizing: border-box;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* 寄せた分(時刻の帯・ジェスチャーの帯の下)は、ヘッダー・フッターと同じ色で塗る(何も塗らないと白く見える) */
+  background:
+    linear-gradient(var(--tab-active-bg), var(--tab-active-bg)) top / 100% env(safe-area-inset-top) no-repeat,
+    linear-gradient(var(--tab-active-bg), var(--tab-active-bg)) bottom / 100% env(safe-area-inset-bottom) no-repeat,
+    var(--c-thread-view-bg);
+}
+[data-platform='mobile'] body {
+  background: var(--c-thread-view-bg);
 }
 /* スマホ: スレ表示のスレタイの帯を低くする(PC の 80px は、狭い画面ではレスの見える量を削りすぎる) */
 html[data-platform='mobile'] {

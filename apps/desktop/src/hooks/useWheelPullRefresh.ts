@@ -10,6 +10,9 @@ import {
   dampedPullY,
 } from '../utils/pullRefresh'
 
+/** 指でこれだけ引いて離したら更新する(px。元の Web アプリは 70。もう少し軽くした) */
+export const TOUCH_COMMIT_PX = 56
+
 interface UseWheelPullRefreshOptions {
   /** 実際の更新処理。Promiseを返せば、その完了とMIN_SPIN_MSの長い方を待ってから収納する */
   onRefresh: () => Promise<unknown> | void
@@ -159,5 +162,36 @@ export function useWheelPullRefresh({
     if (!committingRef.current) collapse()
   }
 
-  return { indicatorRef, iconRef, pull, reset: collapse, release, noteScroll }
+  // ── 指(スマホ) ──
+  // 指は本人がわざと引っぱっているので、ホイールのような「着いたばかりの勢い」の待ちや、出し始めのしきい値は置かない
+  // (元の Web アプリのスマホ版と同じ)。引いた分だけすぐに印を出し、TOUCH_COMMIT_PX 以上引いて離したら更新する。
+  // 同じスレを続けて更新しすぎないかは、更新する側(App)が見る
+  const touchDistRef = useRef(0)
+
+  /** 指で引いた量(端に着いてからの合計 px)を渡す */
+  function touchPull(dist: number) {
+    if (committingRef.current) return
+    clearResetTimer()
+    touchDistRef.current = dist
+    const progress = Math.min(1, dist / TOUCH_COMMIT_PX)
+    const ind = indicatorRef.current
+    const icon = iconRef.current
+    if (ind) {
+      ind.style.transition = 'none'
+      ind.style.transform = `translateY(${sign * dampedPullY(dist, TOUCH_COMMIT_PX)}px)`
+      ind.style.opacity = String(Math.min(1, progress + 0.15))
+    }
+    if (icon) icon.style.transform = `rotate(${progress * 360}deg)`
+  }
+
+  /** 指を離した: 十分に引いていれば更新し、足りなければ戻す */
+  function touchRelease() {
+    const dist = touchDistRef.current
+    touchDistRef.current = 0
+    if (committingRef.current) return
+    if (dist >= TOUCH_COMMIT_PX) commit()
+    else collapse()
+  }
+
+  return { indicatorRef, iconRef, pull, reset: collapse, release, noteScroll, touchPull, touchRelease }
 }

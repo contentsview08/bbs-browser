@@ -11,6 +11,7 @@ import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { UploadOptions } from '../host/uploader'
+import { isMobile } from '../utils/platform'
 
 interface Props {
   /** 書き込みにファイルを付けられる掲示板の決まり(ふたば)。あれば画像のボタンはアップロードではなく添付になる */
@@ -91,14 +92,50 @@ export default function NewThreadDialog(props: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
 
   useFocusTrap(boxRef, props.onClose)
+  /** スマホ: 画像のアップロードが無効のときに画像のボタンを押したら、設定のことを知らせる */
+  const [imageHint, setImageHint] = useState(false)
+
+  const submitIcon = (
+    <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
+      {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'edit_square'}
+    </span>
+  )
+  const submitLabel = <span className="tabular-nums">{cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : 'スレを立てる'}</span>
 
   return (
-    <div className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
+    <div
+      className={isMobile ? 'fixed inset-0 z-[9500] flex flex-col bg-c-surface reply-slide' : 'fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6'}
+      style={isMobile ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--kb-inset, 0px))' } : undefined}
+      onClick={isMobile ? undefined : props.onClose}
+    >
       <div
         ref={boxRef}
-        className="w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className={
+          isMobile ? 'flex-1 min-h-0 flex flex-col' : 'w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in'
+        }
         onClick={(e) => e.stopPropagation()}
       >
+        {/* スマホ: 全画面。左上の ← で閉じ、右上で立てる(顔文字のボタン・Ctrl+Enter の案内は出さない) */}
+        {isMobile ? (
+          <div className="flex-shrink-0 flex items-center gap-1 px-2 border-b border-c-border bg-panel-thread-header" style={{ height: 'var(--header-height, 56px)' }}>
+            <button type="button" onClick={props.onClose} className="p-2.5 rounded-xl text-c-text-muted active:bg-c-surface2" title="閉じる">
+              <span className="material-symbols-outlined text-2xl">arrow_back</span>
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-bold text-c-text-strong">スレを立てる</p>
+              <p className="text-[11px] text-c-text-muted truncate">{props.boardName}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!ready}
+              className="btn-thread-create px-4 py-2 text-sm font-bold rounded-full bg-c-accent text-[var(--c-accent-text)] disabled:opacity-50 flex items-center gap-1"
+            >
+              {submitIcon}
+              {submitLabel}
+            </button>
+          </div>
+        ) : (
         <div className="flex items-center justify-between px-5 py-3 border-b border-c-border">
           <h2 className="text-base font-bold text-c-text-strong">
             スレを立てる <span className="ml-2 text-sm font-normal text-c-text-muted">{props.boardName}</span>
@@ -107,8 +144,9 @@ export default function NewThreadDialog(props: Props) {
             <span className="material-symbols-outlined text-xl">close</span>
           </button>
         </div>
+        )}
 
-        <div className="px-5 py-4 space-y-3">
+        <div className={isMobile ? 'flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-3' : 'px-5 py-4 space-y-3'}>
           {result && (
             <PostResultBox
               result={result}
@@ -138,8 +176,8 @@ export default function NewThreadDialog(props: Props) {
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={INPUT} />
             <input type="text" value={mail} onChange={(e) => setMail(e.target.value)} placeholder="メール" className={INPUT} />
             <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={props.onOpenAccountSettings} />
-            {/* 画像と絵文字のボタン。本文の欄の右端にそろえる */}
-            <div className="flex-shrink-0 flex items-center gap-0.5">{media.buttons}</div>
+            {/* 画像と絵文字のボタン。本文の欄の右端にそろえる(スマホは本文の下の画像のボタンだけ) */}
+            {!isMobile && <div className="flex-shrink-0 flex items-center gap-0.5">{media.buttons}</div>}
           </div>
           {/* 書き込みに付けたファイル(ふたば) */}
           {media.attachedView}
@@ -162,8 +200,26 @@ export default function NewThreadDialog(props: Props) {
             }}
             placeholder="本文(>>1)"
             rows={10}
-            className={`${INPUT} resize-y leading-relaxed`}
+            className={`${INPUT} ${isMobile ? 'flex-1 min-h-[10rem] resize-none text-[15px]' : 'resize-y'} leading-relaxed`}
           />
+          {isMobile && (
+            <div className="flex-shrink-0 flex items-center gap-2">
+              {media.fileInput}
+              <button
+                type="button"
+                onClick={() => (media.pick ? media.pick() : setImageHint(true))}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-c-border text-sm text-c-text-body active:bg-c-surface2"
+              >
+                <span className={`material-symbols-outlined text-xl text-c-text-muted ${media.uploading > 0 ? 'animate-spin' : ''}`}>
+                  {media.uploading > 0 ? 'progress_activity' : 'image'}
+                </span>
+                画像
+              </button>
+              {imageHint && (
+                <span className="flex-1 text-xs text-c-text-muted">画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください</span>
+              )}
+            </div>
+          )}
           {measure && (
             <p
               className={`-mt-2 text-right text-[10px] tabular-nums ${measure.over.length > 0 ? 'text-c-heat-very-hot font-bold' : 'text-c-text-muted'}`}
@@ -176,6 +232,7 @@ export default function NewThreadDialog(props: Props) {
           )}
         </div>
 
+        {!isMobile && (
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
           <span className="text-[10px] text-c-text-muted">
             {cooling ? `続けて書き込まないよう、あと ${Math.ceil(cooldown.left / 1000)} 秒あけています` : 'Ctrl+Enter で立てる'}
@@ -186,12 +243,11 @@ export default function NewThreadDialog(props: Props) {
             disabled={!ready}
             className="btn-thread-create px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 flex items-center gap-1"
           >
-            <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
-              {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'edit_square'}
-            </span>
-            <span className="tabular-nums">{cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : 'スレを立てる'}</span>
+            {submitIcon}
+            {submitLabel}
           </button>
         </div>
+        )}
       </div>
     </div>
   )

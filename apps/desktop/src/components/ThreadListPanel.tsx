@@ -300,7 +300,7 @@ export default function ThreadListPanel(props: Props) {
     canRefresh: () => Date.now() >= (refreshReadyRef.current ?? 0),
   })
   // スマホ: 指で引っぱって更新する(上の端で下へ。しきい値がスレ表示の 1.7 倍なので、指の量も多めに掛ける)
-  const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh ? pull : undefined, undefined, 6)
+  const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh ? pull : undefined, undefined)
 
   useEffect(() => setWidth(props.width), [props.width])
   useEffect(() => {
@@ -704,6 +704,7 @@ export default function ThreadListPanel(props: Props) {
         }
         onTouchMove={isMobile ? touchPull.onTouchMove : undefined}
         onTouchEnd={isMobile ? touchPull.onTouchEnd : undefined}
+        onTouchCancel={isMobile ? touchPull.onTouchCancel : undefined}
         onWheel={(e) => {
           if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
@@ -723,10 +724,10 @@ export default function ThreadListPanel(props: Props) {
                   <span className="material-symbols-outlined text-xl">menu</span>
                 </button>
               )}
-              <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-12' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
+              <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-16' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
                 {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
-                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-base' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
+                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-lg' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
                   // 引き伸ばしたら、高さに合わせて字も大きくする(既定の 44px で 1.25rem)
@@ -810,7 +811,7 @@ export default function ThreadListPanel(props: Props) {
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
-        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 84 } : undefined}>
+        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 76 } : undefined}>
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {/* 帯は、取り直し(通信)のときだけ。手元の並べ替え(2ch の勢い順など)は通信しないので出さない */}
           {props.loading && visible.length > 0 && <div className="list-progress" aria-label="読み込み中" />}
@@ -864,7 +865,7 @@ export default function ThreadListPanel(props: Props) {
           ref={footerRef}
           className={`${
             // スマホ: 一覧の上に重ね、下へスクロールすると隠す
-            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-[76px] pl-1 pr-3 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-[68px] pl-1 pr-3 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
           } flex items-center justify-end gap-1 border-t border-c-border`}
           style={footerDrag.height ? { height: footerDrag.height } : undefined}
         >

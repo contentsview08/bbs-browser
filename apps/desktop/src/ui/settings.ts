@@ -189,6 +189,8 @@ export interface AppSettings {
   showIdenticon: boolean
   /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
   showMinimap: boolean
+  /** スマホ: スレ表示の右下に、丸い更新ボタンを出す */
+  showRefreshFab: boolean
   /** 画像の保存先フォルダ。空ならダウンロードフォルダ */
   imageSaveDir: string
   // 自動更新
@@ -273,7 +275,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postStyle: 'card',
   density: 'dense',
   fontSize: 3,
-  mobileFontSize: 2,
+  mobileFontSize: 3,
   fontFamily: 'system',
   customFont: '',
   threadPanelWidth: 420,
@@ -313,6 +315,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   grossWords: ['グロ'],
   aaAutoDetect: true,
   showMinimap: true,
+  showRefreshFab: true,
   showIdenticon: false,
   showLinkPreview: true,
   openLinksInApp: isMobile,
@@ -396,7 +399,8 @@ export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; 
 
 const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled'])
 
-const FONT_SIZES = [13, 14, 16, 18, 20]
+/** 文字の大きさ(px)。極小・小・標準・大・特大。スマホは画面が小さいので 1 段ずつ小さくし、PC の「小」をスマホの「標準」にする */
+const FONT_SIZES = isMobile ? [12, 13, 14, 16, 18] : [13, 14, 16, 18, 20]
 /** 文字の大きさの設定の名前(スマホは PC と別に持つ)。文字の大きさを変える所は、どこもこれを使う */
 export const FONT_SIZE_KEY = isMobile ? 'mobileFontSize' : 'fontSize'
 

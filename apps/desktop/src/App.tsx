@@ -679,6 +679,8 @@ export default function App() {
    * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
    */
   const inflight = useRef(new Map<string, Promise<void>>())
+  /** ログを削除したスレ。削除の前に始まった取得・既読の記録が、あとから一覧の印を書き戻さないように覚えておく(開き直したら外す) */
+  const deletedIds = useRef(new Set<string>())
   const fetchThread = async (
     s: LogStore,
     t: ThreadSummary,
@@ -732,8 +734,9 @@ export default function App() {
             ),
           )
         }
-        // スレ一覧の印(レス数・dat 落ち)は、このスレの 1 行だけ書き換える(板全体を読み直さない)
-        if (changed && boardRef.current?.url === t.boardUrl)
+        // スレ一覧の印(レス数・dat 落ち)は、このスレの 1 行だけ書き換える(板全体を読み直さない)。
+        // 取っている間にログを削除したスレは書き戻さない(一覧で「見たスレ」に戻ってしまう)
+        if (changed && boardRef.current?.url === t.boardUrl && !deletedIds.current.has(id))
           setStates((m) => {
             const cur = m.get(t.key)
             return new Map(m).set(t.key, { postCount: saved.postCount, readNo: cur?.readNo ?? saved.readNo, status: saved.status })
@@ -821,7 +824,10 @@ export default function App() {
       // 1 画面のときは、スレ一覧を閉じてスレ表示に切り替える(通知や本文のリンクから開いたときも)
       updateView((s) => showThread(s, id, (opts.record ?? true) ? threadEntry(t) : undefined))
       setFocusPane('thread')
+      deletedIds.current.delete(id)
       await loadTab(store, t)
+      // 読み込んでいる間にログを削除したら、閲覧履歴を読み直さない(消す前の DB から、消したスレが戻ってくる)
+      if (deletedIds.current.has(id)) return
       if (history) setHistory(await store.history())
       await reloadRecent(store)
     })
@@ -844,6 +850,8 @@ export default function App() {
   /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
   const deleteLogs = (ids: string[], extra: ThreadSummary[] = [], stayOnList?: boolean) => {
     if (!store) return
+    for (const id of ids) deletedIds.current.add(id)
+    for (const t of extra) deletedIds.current.add(threadId(t))
     // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
     const targets = new Map<string, ThreadSummary>()
     for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
@@ -1490,6 +1498,12 @@ export default function App() {
           return seq === 'right' && edgeSwipe.current ? 'メニュー' : gestureActionName(action)
         },
         onCommit: () => {
+          // ダイアログ(スレ立て・NG の追加・下から出るメニューなど)の上では、戻るのジェスチャーで閉じるだけにする
+          if (modalOpen()) {
+            if (action === 'back' || seq === 'right')
+              (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+            return
+          }
           if (seq === 'right' && edgeSwipe.current) setDrawerOpen(true)
           else if (action) runAction(action)
         },
@@ -1497,16 +1511,29 @@ export default function App() {
     ]),
   )
   const swipe = useSwipeGesture(swipeMap, settings.gestureSensitivity)
-  const swipeHandlers = isMobile
-    ? {
-        onTouchStart: (e: React.TouchEvent<HTMLElement>) => {
-          edgeSwipe.current = e.touches[0].clientX < 24
-          swipe.onTouchStart(e)
-        },
-        onTouchEnd: swipe.onTouchEnd,
-        onTouchCancel: swipe.onTouchCancel,
-      }
-    : {}
+  // 指の動きは画面全体(document)で受ける。アプリの枠の中だけで受けると、body の直下に出した
+  // レスのポップアップ・スレ立てなどの上でなぞったときに届かない。
+  // 画像ビューアー(自分で指の操作を受け、外へ伝えない)と引き出しの中は除く
+  const swipeRef = useRef(swipe)
+  swipeRef.current = swipe
+  useEffect(() => {
+    if (!isMobile) return
+    const start = (e: TouchEvent) => {
+      if ((e.target as Element | null)?.closest?.('[data-lightbox], [data-drawer]')) return
+      edgeSwipe.current = e.touches[0].clientX < 24
+      swipeRef.current.onTouchStart(e)
+    }
+    const end = (e: TouchEvent) => swipeRef.current.onTouchEnd(e)
+    const cancel = () => swipeRef.current.onTouchCancel()
+    document.addEventListener('touchstart', start, { passive: true })
+    document.addEventListener('touchend', end)
+    document.addEventListener('touchcancel', cancel)
+    return () => {
+      document.removeEventListener('touchstart', start)
+      document.removeEventListener('touchend', end)
+      document.removeEventListener('touchcancel', cancel)
+    }
+  }, [])
 
   // スマホ: Android の戻るボタン(・戻るジェスチャー)。開いている画面を、上に重なっているものから順に閉じる:
   // ダイアログ(設定など。Esc を押したことにして閉じる)→ 引き出し → スレ表示(一覧に戻る)→ 戻るの履歴
@@ -1611,6 +1638,8 @@ export default function App() {
   const markRead = useEvent((t: ThreadSummary, no: number) => {
     if (!store) return
     const id = threadId(t)
+    // ログを削除したスレの、閉じるときに届いた既読は数えない
+    if (deletedIds.current.has(id)) return
     setTabs((ts) => ts.map((x) => (x.id === id && no > x.readNo ? { ...x, readNo: no } : x)))
     if (boardRef.current?.url === t.boardUrl)
       setStates((m) => {
@@ -1851,7 +1880,7 @@ export default function App() {
       )}
       {/* スマホ: 横になぞる動きをスクロールにしない(縦のスクロールと、2 本指の拡大だけ任せる)。
           こうしないと、なぞっている途中でスクロールが始まり、→↓ のような折れ曲がるなぞりが取れない */}
-      <div className="flex-1 min-h-0 flex" style={isMobile ? { touchAction: 'pan-y pinch-zoom' } : undefined} {...swipeHandlers}>
+      <div className="flex-1 min-h-0 flex" style={isMobile ? { touchAction: 'pan-y pinch-zoom' } : undefined}>
       {/* スマホ: なぞっている間、何の操作になるかを真ん中に出す */}
       {swipe.label && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none">

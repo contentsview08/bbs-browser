@@ -4,6 +4,7 @@
 // - 指が 1 秒止まったらやめる。登録していない並びなら、離しても何もしない
 // - 1 つの向きだけのときは、距離か速さが足りたときだけ確定する(スクロールのつもりの動きで発動しないように)
 // - 登録した並びの途中なら、スクロールを止める
+// - 指の動きは document で受ける(レスのポップアップ・スレ立てなど、body の直下に出した画面の上でなぞっても効くように)
 import { useRef, useState } from 'react'
 
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right'
@@ -56,14 +57,14 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
     idle.current = setTimeout(cancel, IDLE_TIMEOUT_MS)
   }
 
-  const onTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+  const onTouchStart = (e: TouchEvent | React.TouchEvent) => {
     if (e.touches.length !== 1) return cancel()
     const t = e.touches[0]
     start.current = { x: t.clientX, y: t.clientY, time: Date.now() }
     segStart.current = { x: t.clientX, y: t.clientY }
     segments.current = []
     touchIdle()
-    const target = e.currentTarget
+    cleanup.current?.()
     const onMove = (ev: TouchEvent) => {
       if (!segStart.current) return
       touchIdle()
@@ -89,11 +90,11 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
       // 横向きで始まるなぞりは、呼ぶ側で touch-action: pan-y にしてあるので、ふつうはスクロールにならない
       if (segs.length >= 1 && ev.cancelable && matchesPrefix(map, segs)) ev.preventDefault()
     }
-    target.addEventListener('touchmove', onMove, { passive: false })
-    cleanup.current = () => target.removeEventListener('touchmove', onMove)
+    document.addEventListener('touchmove', onMove, { passive: false })
+    cleanup.current = () => document.removeEventListener('touchmove', onMove)
   }
 
-  const onTouchEnd = (e: React.TouchEvent) => {
+  const onTouchEnd = (e: TouchEvent | React.TouchEvent) => {
     cleanup.current?.()
     cleanup.current = null
     clearTimeout(idle.current)
@@ -115,5 +116,11 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
     if (distance > viewport * COMMIT_DISTANCE_RATIO * mult || (distance > COMMIT_MIN_DISTANCE * mult && velocity > COMMIT_MIN_VELOCITY * mult)) binding.onCommit()
   }
 
-  return { onTouchStart, onTouchEnd, onTouchCancel: cancel, label }
+  const onTouchCancel = () => {
+    cleanup.current?.()
+    cleanup.current = null
+    cancel()
+  }
+
+  return { onTouchStart, onTouchEnd, onTouchCancel, label }
 }

@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { COLOR_SCHEMES, FONT_SIZE_KEY, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { PICKABLE_SCHEMES, FONT_SIZE_KEY, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, pickScheme, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -19,7 +19,7 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
   return (
     <>
       <p className={GROUP_LABEL}>テーマ</p>
-      {COLOR_SCHEMES.map((s) => (
+      {PICKABLE_SCHEMES.map((s) => (
         <button
           key={s.key}
           type="button"

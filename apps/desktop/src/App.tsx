@@ -2,7 +2,7 @@
 // データの流れはここに集め、見た目は components/ の各部品(web 版から移植)に任せる。
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { onBackButtonPress } from '@tauri-apps/api/app'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
@@ -38,7 +38,6 @@ import type { SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
 import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
-import LoadingCenter from './components/LoadingCenter'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
@@ -55,7 +54,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { COLOR_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
+import { PICKABLE_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickScheme, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -157,6 +156,19 @@ const KEEP_TABS = 5
 
 function newTab(thread: ThreadSummary): Tab {
   return { id: threadId(thread), thread, unreadFrom: 1, readNo: 0, ownNos: new Set(), loading: false }
+}
+
+/** ログを読み終えるまでの、空のログ(スレごとに 1 つ作って使い回す。毎回作ると表示を作り直してしまう) */
+const placeholders = new Map<string, ThreadLog>()
+function placeholderLog(thread: ThreadSummary): ThreadLog {
+  const id = threadId(thread)
+  let log = placeholders.get(id)
+  if (!log) {
+    if (placeholders.size > 50) placeholders.clear()
+    log = { title: thread.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' }
+    placeholders.set(id, log)
+  }
+  return log
 }
 
 function fromSaved(s: SavedTab): ThreadSummary {
@@ -762,12 +774,13 @@ export default function App() {
   const loadTab = async (s: LogStore, t: ThreadSummary) => {
     const id = threadId(t)
     const [local, own] = await Promise.all([s.loadThread(t), s.getOwnPosts(t)])
-    patchTab(id, {
+    // レスを並べるのは重いので、急ぎでない更新にする(先に出したヘッダー・書き込み欄の操作を止めない)
+    startTransition(() => patchTab(id, {
       log: local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' },
       unreadFrom: (local?.readNo ?? 0) + 1,
       readNo: local?.readNo ?? 0,
       ownNos: new Set(own),
-    })
+    }))
     await fetchThread(s, t, { keepUnread: true })
     // 手元にもサーバーにもレスがなければ、ないスレ(番号の間違い・とうに消えたスレ)として知らせる
     const after = await s.loadThread(t)
@@ -1030,7 +1043,7 @@ export default function App() {
         icon: 'bolt',
         run: () => appKey(a.key),
       })),
-      ...COLOR_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickScheme(settings, c.key)) })),
+      ...PICKABLE_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickScheme(settings, c.key)) })),
       ...POST_STYLES.map((p) => ({ group: 'レスの見た目', label: p.name, keywords: p.note, icon: 'style', run: () => updateSetting('postStyle', p.key) })),
       ...(isMobile
         ? []
@@ -1631,7 +1644,10 @@ export default function App() {
   const [keptIds, setKeptIds] = useState<string[]>([])
   // タブの切り替えは、タブの帯(どれを選んだか)を先に描き、スレ表示の組み立て(初めて開くタブはレスを並べる)は後回しにする。
   // 組み立ての途中は、前のスレ表示の上に細い帯を流す
-  const paneId = useDeferredValue(activeId)
+  // ただし、まだログを読んでいないスレ(開いたばかり)は、ヘッダーと書き込み欄だけの軽い画面なので、すぐに出す。
+  // レスは手元のログを読めたら埋め、サーバーから新しい分が届いたら足す
+  const deferredPane = useDeferredValue(activeId)
+  const paneId = activeTab && !activeTab.log ? activeId : deferredPane
   const switchingPane = paneId !== activeId
   useEffect(() => {
     if (!paneId) return
@@ -1981,8 +1997,10 @@ export default function App() {
         <div className="relative flex-1 min-h-0 flex">
           {switchingPane && <div className="list-progress" aria-label="読み込み中" />}
           {shownIds.map((id) => {
-            const t = tabs.find((x) => x.id === id)
-            if (!t?.log) return null
+            const found = tabs.find((x) => x.id === id)
+            if (!found) return null
+            // ログを読み終えるまでは、空のログで外枠(ヘッダー・書き込み欄)だけを出す
+            const t = found.log ? found : { ...found, log: placeholderLog(found.thread), loading: true }
             // 1 画面でスレ一覧に戻っているあいだは、隠れているスレ表示を開いていないタブと同じに扱う(キー操作・既読を受けない)
             const isActive = id === paneId && (!single || threadShown)
             return (
@@ -2018,9 +2036,9 @@ export default function App() {
               </div>
             )
           })}
-          {!activeTab?.log && (
+          {!activeTab && (
             <main className="absolute inset-0 flex items-center justify-center bg-panel-view">
-              {activeTab ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">スレッドを選択してください</div>}
+              <div className="text-c-text-muted text-sm">スレッドを選択してください</div>
             </main>
           )}
         </div>

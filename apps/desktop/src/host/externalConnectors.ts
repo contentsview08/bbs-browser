@@ -6,7 +6,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { registerConnector, unregisterConnector, type ConnectorContext } from '@bbs-browser/connectors'
-import { loadSandboxedConnector, parseManifest, restrictContext, type ConnectorManifest, type SandboxedConnector } from './connectorSandbox'
+import type { ConnectorManifest, SandboxedConnector } from './connectorSandbox'
 
 /** 設定に覚えておく、コネクタごとの許可(有効か・確かめた通信の先) */
 export interface ConnectorApproval {
@@ -43,6 +43,9 @@ export async function loadExternalConnectors(ctx: ConnectorContext, approvals: R
   }
   loaded.clear()
   const files = await invoke<ConnectorFiles[]>('list_connector_files')
+  if (files.length === 0) return []
+  // 囲い(QuickJS)は大きいので、コネクタが置いてあるときだけ読み込む(起動を軽くする)
+  const { loadSandboxedConnector, parseManifest, restrictContext } = await import('./connectorSandbox')
   const seen = new Set<string>()
   const out: ExternalConnectorInfo[] = []
   for (const f of files) {

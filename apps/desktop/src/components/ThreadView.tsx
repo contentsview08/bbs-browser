@@ -1731,8 +1731,9 @@ export default function ThreadView(props: Props) {
       </div>
       <div
         ref={bottomPull.indicatorRef}
-        className="absolute left-0 right-0 bottom-0 flex justify-center pointer-events-none z-20"
-        style={{ opacity: 0, transform: `translateY(${-PULL_HIDDEN_Y}px)` }}
+        className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
+        // フッター(スマホの書き込み欄など)の上の端から出す。後ろに隠れて見えなくならないように
+        style={{ bottom: 'var(--footer-offset, 0px)', opacity: 0, transform: `translateY(${-PULL_HIDDEN_Y}px)` }}
       >
         <PullSpinner iconRef={bottomPull.iconRef} />
       </div>

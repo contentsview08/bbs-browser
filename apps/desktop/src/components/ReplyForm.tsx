@@ -87,6 +87,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [lineOptions, setLineOptions] = useState(false)
   /** chat: ＋ のメニュー(画像・オプション)を出しているか */
   const [plusMenu, setPlusMenu] = useState(false)
+  /** 画像のアップロードが無効のときに「画像」を押したら、設定のことを知らせる */
+  const [imageHint, setImageHint] = useState(false)
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   // ── 下書き ──
@@ -239,6 +241,15 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     return (
       <div className="w-full flex flex-col">
         {media.fileInput}
+        {imageHint && (
+          <p className="px-3 pt-2 flex items-start gap-1 text-xs text-c-text-muted">
+            <span className="material-symbols-outlined text-sm">info</span>
+            <span className="flex-1">画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください(catbox に上げて URL を本文に入れます)</span>
+            <button type="button" onClick={() => setImageHint(false)} className="material-symbols-outlined text-sm" title="閉じる">
+              close
+            </button>
+          </p>
+        )}
         {media.error && (
           <p className="px-3 pt-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
             <span className="material-symbols-outlined text-sm">error</span>
@@ -291,19 +302,18 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             </button>
             {plusMenu && (
               <div className="absolute left-0 bottom-full mb-2 z-10 min-w-[11rem] py-1 bg-c-surface border border-c-border rounded-xl shadow-lg rise-in">
-                {media.pick && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlusMenu(false)
-                      media.pick!()
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
-                  >
-                    <span className="material-symbols-outlined text-xl text-c-text-muted">image</span>
-                    画像
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlusMenu(false)
+                    if (media.pick) media.pick()
+                    else setImageHint(true)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
+                >
+                  <span className="material-symbols-outlined text-xl text-c-text-muted">image</span>
+                  画像
+                </button>
                 <button
                   type="button"
                   onClick={() => {

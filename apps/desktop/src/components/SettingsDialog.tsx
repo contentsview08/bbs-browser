@@ -10,7 +10,7 @@ import { POST_STYLES,
   MOBILE_POST_STYLES,
   effectivePostStyle,
   FONT_SIZE_KEY,
-  COLOR_SCHEMES,
+  PICKABLE_SCHEMES,
   DEFAULT_SETTINGS,
   isDarkScheme,
   pickScheme,
@@ -310,7 +310,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
           note="オンのときは、暗い配色と明るい配色を 1 つずつ選びます。Windows の設定を切り替えると、その場で切り替わります"
         />
         <div className="mt-2 grid grid-cols-2 gap-2">
-          {COLOR_SCHEMES.map((c) => {
+          {PICKABLE_SCHEMES.map((c) => {
             const chosen = s.followOsTheme ? c.key === s.darkScheme || c.key === s.lightScheme : s.scheme === c.key
             return (
               <button

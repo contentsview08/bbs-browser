@@ -330,6 +330,8 @@ export function useThreadScroll(o: Options) {
     const root = rootRef.current
     if (!root || positioned.current || log.posts.length === 0) return
     positioned.current = true
+    // 開いたときは空のログ(読み込み中)から始まることがあるので、既読の番号は中身が届いたこの時に合わせる
+    sent.current = Math.max(sent.current, log.readNo)
     const saved = latest.current.initialPosition
     const savedEl = saved ? root.querySelector<HTMLElement>(`[data-post="${saved.no}"]`) : null
     const t = openTarget({

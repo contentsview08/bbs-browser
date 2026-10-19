@@ -373,6 +373,9 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'oled', name: '真っ黒', accent: '#7aa2ff', border: '#222222' },
 ]
 
+/** 選べる配色(スマホでは 2ch クラシックを除く) */
+export const PICKABLE_SCHEMES = isMobile ? COLOR_SCHEMES.filter((c) => c.key !== '2ch-classic') : COLOR_SCHEMES
+
 /**
  * 顔文字用の予備フォント(app.css)。日本語フォントで描けない「文字 + 重ねる記号」の組(･᷄ など)を描く。
  * どのフォントでも、日本語フォントのすぐ後ろ(sans-serif の前)に置く
@@ -407,12 +410,15 @@ const osDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
 /** いま使うテーマ。OS に合わせるなら、OS のダーク・ライトで選んでおいた方 */
 export function effectiveScheme(s: AppSettings): ColorScheme {
   if (!s.followOsTheme) return withoutOldLight(s.scheme)
-  return osDark() ? s.darkScheme : withoutOldLight(s.lightScheme)
+  return osDark() ? withoutOldLight(s.darkScheme) : withoutOldLight(s.lightScheme)
 }
 
-/** 外した web 版のライトを選んでいた人(設定の読み込みや、古い設定ファイル)は、いまのライトにする */
+/**
+ * 外した web 版のライトを選んでいた人(設定の読み込みや、古い設定ファイル)は、いまのライトにする。
+ * スマホでは 2ch クラシックも出さない(専ブラ風の見た目と組で、スマホの画面には合わない)ので、ライトにする
+ */
 function withoutOldLight(scheme: ColorScheme): ColorScheme {
-  return scheme === 'light' ? 'soft-light' : scheme
+  return scheme === 'light' || (isMobile && scheme === '2ch-classic') ? 'soft-light' : scheme
 }
 
 /**

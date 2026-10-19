@@ -7,7 +7,13 @@
 // - しきい値は、向きが変わった所からの合計の移動量で見る(1 回のスクロールの差分は数 px しかなく、ゆっくり動かすと発火しないため)
 import { useCallback, useRef } from 'react'
 
-export function useHideOnScroll(headerRef: React.RefObject<HTMLElement | null>, footerRef: React.RefObject<HTMLElement | null>, threshold = 8) {
+export function useHideOnScroll(
+  headerRef: React.RefObject<HTMLElement | null>,
+  footerRef: React.RefObject<HTMLElement | null>,
+  /** フッターを出した・隠したとき(フッターの上に浮かせたボタンを、一緒に動かすため) */
+  onFooterVisible?: (visible: boolean) => void,
+  threshold = 8,
+) {
   const lastTop = useRef(0)
   const direction = useRef<'up' | 'down' | null>(null)
   const anchor = useRef(0)
@@ -30,8 +36,9 @@ export function useHideOnScroll(headerRef: React.RefObject<HTMLElement | null>, 
       footerHidden.current = !visible
       const el = footerRef.current
       if (el) el.style.transform = visible ? '' : 'translateY(100%)'
+      onFooterVisible?.(visible)
     },
-    [footerRef],
+    [footerRef, onFooterVisible],
   )
 
   /** 指で触り始めたときに呼ぶ。呼ばれるまでは、スクロールは基準の位置を覚えるだけ */

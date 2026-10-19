@@ -285,8 +285,8 @@ export default function Sidebar(props: Props) {
       )}
       <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
         {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
-        {/* スマホ: スレ一覧・スレ表示のヘッダー(48px)と同じ高さにそろえる */}
-        <div className={`${isMobile ? 'h-12' : 'h-10'} flex-shrink-0 flex items-center select-none`}>
+        {/* スマホ: スレ一覧・スレ表示のヘッダー(72px)と同じ高さにそろえる */}
+        <div className={`${isMobile ? 'h-[72px]' : 'h-10'} flex-shrink-0 flex items-center select-none`}>
           <span className="w-[64px] flex-shrink-0 flex items-center justify-center">
             <button
               type="button"

@@ -172,6 +172,10 @@ const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colo
 /** レスの絞り込み(web 版と同じ 4 種。選んだもののどれかに当たれば出す) */
 type PostFilter = 'popular' | 'image' | 'video' | 'link'
 // 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
+/** スマホのヘッダー・フッターの高さ(押しやすいよう、PC の帯の 1.5 倍) */
+export const MOBILE_BAR_H = 72
+/** スマホのフッターのボタン(大きく押しやすく) */
+const MOBILE_BTN = 'p-2.5 rounded-xl text-c-text-muted hover:text-c-text-strong active:bg-c-surface2 transition-colors disabled:opacity-40'
 const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[] = [
   { key: 'popular', label: '人気', icon: 'local_fire_department', color: 'var(--c-mark-hot)' },
   { key: 'image', label: '画像', icon: 'image', color: 'var(--c-mark-image)' },
@@ -872,7 +876,12 @@ export default function ThreadView(props: Props) {
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
   // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
   const footerRef = useRef<HTMLDivElement>(null)
-  const hideBars = useHideOnScroll(headerRef, footerRef)
+  // 一番下へ・新着の札は、フッターが出ている間はその上に上げる(重ならないように)。--footer-offset で動かす
+  const hideBars = useHideOnScroll(
+    headerRef,
+    footerRef,
+    useCallback((visible: boolean) => mainRef.current?.style.setProperty('--footer-offset', visible ? `${MOBILE_BAR_H}px` : '0px'), []),
+  )
 
   /** Esc を 2 回押して、選んでいるレスの印を隠しているか(選んでいる場所は残す) */
   const [cursorHidden, setCursorHidden] = useState(false)
@@ -1581,7 +1590,7 @@ export default function ThreadView(props: Props) {
             <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
-        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'gap-3 px-2 text-sm' : 'gap-5 px-4 text-base'}`}>
+        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'justify-start gap-2.5 pl-1 pr-2 text-[13px]' : 'gap-5 px-4 text-base'}`}>
           {FILTERS.map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (
@@ -1606,7 +1615,11 @@ export default function ThreadView(props: Props) {
                   {icon}
                 </span>
                 {label}
-                <span className="text-xs tabular-nums opacity-70">({filterCounts[key]})</span>
+                {isMobile ? (
+                  filterCounts[key] > 0 && <span className="text-[10px] tabular-nums opacity-70 -ml-0.5">{filterCounts[key]}</span>
+                ) : (
+                  <span className="text-xs tabular-nums opacity-70">({filterCounts[key]})</span>
+                )}
                 {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
               </button>
             )
@@ -1631,7 +1644,11 @@ export default function ThreadView(props: Props) {
   )
 
   return (
-    <main ref={mainRef} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden">
+    <main
+      ref={mainRef}
+      className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel-view overflow-hidden"
+      style={isMobile && hasFooter ? ({ '--footer-offset': `${MOBILE_BAR_H}px` } as CSSProperties) : undefined}
+    >
       {!headerInScroll && headerBlock}
       <div className={`flex-1 min-h-0 min-w-0 flex ${replyLayout === 'right' ? 'flex-row' : 'flex-col'}`}>
       <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
@@ -1640,11 +1657,11 @@ export default function ThreadView(props: Props) {
         type="button"
         onClick={jumpToBottom}
         title="いちばん下へ"
-        className={`absolute bottom-5 z-20 w-11 h-11 flex items-center justify-center rounded-full bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
+        className={`absolute z-20 w-11 h-11 flex items-center justify-center rounded-full bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
           showJump ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
         }`}
-        // ミニマップを出しているときは、その左に置く
-        style={{ right: settings.showMinimap ? 44 : 20 }}
+        // ミニマップを出しているときは、その左に置く。スマホでフッターが出ているときは、その上に置く
+        style={{ right: settings.showMinimap ? 44 : 20, bottom: 'calc(var(--footer-offset, 0px) + 20px)' }}
       >
         <span className="material-symbols-outlined text-2xl">keyboard_double_arrow_down</span>
       </button>
@@ -1654,8 +1671,8 @@ export default function ThreadView(props: Props) {
           key={newToast.seq}
           type="button"
           onClick={jumpToNew}
-          className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-4 py-2 rounded-full shadow-lg text-sm font-bold toast-in hover:brightness-110"
-          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
+          className="absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-4 py-2 rounded-full shadow-lg text-sm font-bold toast-in hover:brightness-110"
+          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)', bottom: 'calc(var(--footer-offset, 0px) + 20px)' }}
           title="新着の頭へ飛ぶ"
         >
           <span className="material-symbols-outlined text-lg leading-none">arrow_downward</span>
@@ -1695,7 +1712,7 @@ export default function ThreadView(props: Props) {
           style={{
             padding: 'var(--list-padding-post)',
             gap: 'var(--list-gap-post)',
-            ...(isMobile && hasFooter && { paddingBottom: 'calc(var(--list-padding-post) + 56px)' }),
+            ...(isMobile && hasFooter && { paddingBottom: `calc(var(--list-padding-post) + ${MOBILE_BAR_H + 8}px)` }),
             // スマホ: 右端に重ねたミニマップの分、本文を左へ寄せる
             ...(isMobile && settings.showMinimap && { paddingRight: 'calc(var(--list-padding-post) + 34px)' }),
           }}
@@ -1829,11 +1846,12 @@ export default function ThreadView(props: Props) {
       {hasFooter && isMobile && (
         <div
           ref={footerRef}
-          className="absolute bottom-0 inset-x-0 z-20 h-12 px-1 flex items-center gap-1 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
+          className="absolute bottom-0 inset-x-0 z-20 px-2 flex items-center gap-2 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
+          style={{ height: MOBILE_BAR_H }}
         >
-          <ActionButtons actions={barActions.filter((a) => a.id === 'back')} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
+          <ActionButtons actions={barActions.filter((a) => a.id === 'back')} placements={placements} where="footer" btnClass={MOBILE_BTN} iconClass="text-[28px]" />
           <div className="flex-1" />
-          <ActionButtons actions={barActions.filter((a) => a.id !== 'back')} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
+          <ActionButtons actions={barActions.filter((a) => a.id !== 'back')} placements={placements} where="footer" btnClass={MOBILE_BTN} iconClass="text-[28px]" />
         </div>
       )}
       </div>

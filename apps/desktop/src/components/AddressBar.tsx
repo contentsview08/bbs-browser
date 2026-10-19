@@ -14,12 +14,14 @@ interface Props {
   onForward: () => void
   canBack: boolean
   canForward: boolean
+  /** スマホ: 左に出すメニュー(サイドバーの引き出し)のボタン。あればウィンドウのボタンは出さない */
+  onMenu?: () => void
 }
 
 const NAV_BTN =
   'flex-shrink-0 p-1.5 rounded-lg text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-c-text-muted'
 
-export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canBack, canForward }: Props) {
+export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canBack, canForward, onMenu }: Props) {
   // 書き換えている間だけ自分で値を持つ。確定するか、外へ出たら現在の URL に戻す
   const [draft, setDraft] = useState<string>()
 
@@ -28,10 +30,18 @@ export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canB
   return (
     <div
       data-tauri-drag-region
-      className="flex-shrink-0 h-10 grid grid-cols-[minmax(max-content,1fr)_minmax(0,48rem)_minmax(max-content,1fr)] items-center gap-2 bg-panel-addressbar border-b border-c-border select-none"
+      className={`flex-shrink-0 h-10 grid items-center gap-2 bg-panel-addressbar border-b border-c-border select-none ${
+        // スマホ: ウィンドウのボタンがないので、右の列はなくし、URL 欄を右端まで広げる
+        onMenu ? 'grid-cols-[max-content_minmax(0,1fr)] pr-2' : 'grid-cols-[minmax(max-content,1fr)_minmax(0,48rem)_minmax(max-content,1fr)]'
+      }`}
     >
       {/* 左右の列は、中身(ボタン)の幅より狭くしない(縮むと、はみ出したボタンに URL 欄が重なって押せなくなる) */}
       <div data-tauri-drag-region className="h-full flex items-center gap-0.5 px-2">
+        {onMenu && (
+          <button type="button" onClick={onMenu} className={NAV_BTN} title="メニュー">
+            <span className="material-symbols-outlined text-xl">menu</span>
+          </button>
+        )}
         {/* 戻る・進む(マウスの戻る/進むボタン、Alt+← → でも) */}
         <button type="button" onClick={onBack} disabled={!canBack} className={NAV_BTN} title="戻る (Alt+←)">
           <span className="material-symbols-outlined text-xl">arrow_back</span>
@@ -72,9 +82,11 @@ export default function AddressBar({ currentUrl, onOpen, onBack, onForward, canB
           className="flex-1 min-w-0 bg-transparent border-0 p-0 py-1 text-sm text-c-text-body placeholder-c-text-muted focus:ring-0"
         />
       </form>
-      <div data-tauri-drag-region className="h-full flex items-center justify-end">
-        <WindowControls />
-      </div>
+      {!onMenu && (
+        <div data-tauri-drag-region className="h-full flex items-center justify-end">
+          <WindowControls />
+        </div>
+      )}
     </div>
   )
 }

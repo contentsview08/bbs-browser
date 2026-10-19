@@ -195,6 +195,10 @@ export interface AppSettings {
   ngMode: NgMode
   /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
   autoNg: boolean
+  /** スマホ: スワイプの向きの並び(「right」「right,up」)→ 操作(キー操作と同じ操作の名前。空なら何もしない) */
+  gestures: Record<string, string>
+  /** スマホ: スワイプの感度(1 = 鈍い 〜 5 = 敏感) */
+  gestureSensitivity: number
   /** この日数より長く開いていないスレのログを、起動したときに消す(0 なら消さない)。お気に入り・自分が書いたスレ・開いているタブは残す */
   logRetentionDays: number
   /** 最後にログを整理した時刻(1 日に 1 回だけ整理する) */
@@ -302,6 +306,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ngRules: [],
   ngMode: 'aborn',
   autoNg: true,
+  gestures: {
+    right: 'back',
+    left: 'forward',
+    'right,down': 'refresh',
+    'right,up': 'top',
+    'left,down': 'bottom',
+    'left,up': 'reply',
+  },
+  gestureSensitivity: 3,
   logRetentionDays: 90,
   lastLogPruneAt: 0,
   connectors: {},

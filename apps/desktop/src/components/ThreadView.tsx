@@ -4,6 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
+import { isMobile } from '../utils/platform'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -1331,7 +1332,7 @@ export default function ThreadView(props: Props) {
             open(title, posts, el, false)
             return
           }
-          if (settings.anchorPopup !== 'hover') return
+          if (isMobile || settings.anchorPopup !== 'hover') return
           clearTimeout(hover.current.timer)
           hover.current.timer = setTimeout(() => open(title, posts, el, true), HOVER_DELAY_MS)
         },

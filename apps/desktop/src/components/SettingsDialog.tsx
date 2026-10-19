@@ -21,6 +21,7 @@ import { isValidPattern, newRule, todayDateString, type NgTarget } from '../util
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { isMobile } from '../utils/platform'
 import { getVersion } from '@tauri-apps/api/app'
 import type { ExternalConnectorInfo } from '../host/externalConnectors'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -954,6 +955,55 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
  * キー操作の割り当て。操作ごとにキーを並べ、× で外し、「+」を押してから押したキーを足す。
  * 同じキーをほかの操作に使っていたら、そちらから外して付け替える
  */
+/** スワイプの向き(スマホ)。左の端から右へなぞると、いつもサイドバーの引き出しが開く */
+const GESTURES: { seq: string; name: string }[] = [
+  { seq: 'right', name: '→' },
+  { seq: 'left', name: '←' },
+  { seq: 'right,up', name: '→ ↑' },
+  { seq: 'right,down', name: '→ ↓' },
+  { seq: 'left,up', name: '← ↑' },
+  { seq: 'left,down', name: '← ↓' },
+]
+
+/** スマホ: スワイプに割り当てる操作と、感度 */
+function GestureSettings({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+  return (
+    <Section title="スワイプ(スマホ)" note="画面をなぞる向きに、キー操作と同じ操作を割り当てます。左の端から右へなぞると、サイドバーが開きます">
+      <div className="flex flex-col gap-2">
+        {GESTURES.map((g) => (
+          <label key={g.seq} className="flex items-center gap-3 text-sm">
+            <span className="w-16 font-mono text-c-text-strong">{g.name}</span>
+            <select
+              value={s.gestures[g.seq] ?? ''}
+              onChange={(e) => update('gestures', { ...s.gestures, [g.seq]: e.target.value })}
+              className={`${INPUT} flex-1 min-w-0`}
+            >
+              <option value="">なし</option>
+              {KEY_ACTIONS.map((a) => (
+                <option key={a.key} value={a.key}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-c-text-muted mt-4 mb-1.5">感度</p>
+      <Choice
+        value={s.gestureSensitivity}
+        options={[
+          { key: 1, name: '鈍い' },
+          { key: 2, name: 'やや鈍い' },
+          { key: 3, name: '標準' },
+          { key: 4, name: 'やや敏感' },
+          { key: 5, name: '敏感' },
+        ]}
+        onChange={(v) => update('gestureSensitivity', v)}
+      />
+    </Section>
+  )
+}
+
 function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   const keymap = resolveKeymap(s.keymap)
   // キーを待っている操作
@@ -1048,6 +1098,7 @@ function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
         )}
       </Section>
       ))}
+      {isMobile && <GestureSettings settings={s} update={update} />}
       <Section title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
         <ul className="text-sm text-c-text-body space-y-1">
           {FIXED_KEYS.map((f) => (

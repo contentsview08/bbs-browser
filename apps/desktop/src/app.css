@@ -800,3 +800,38 @@ input[type='checkbox']:indeterminate {
   height: var(--post-thumb-size, 80px);
   flex-shrink: 0;
 }
+
+/* ---------- スマホ(main.tsx が <html data-platform="mobile"> にする) ---------- */
+/* 画面の切り欠き・上の時刻の帯・下のジェスチャーの帯にかからないよう、その分だけ内側に寄せる */
+[data-platform='mobile'] #root {
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+/* 指で押しやすいよう、小さいアイコンのボタンを広げる */
+[data-platform='mobile'] [data-post-toolbar] button {
+  min-width: 36px;
+  min-height: 36px;
+}
+/* サイドバーの引き出し: 左から滑り込み、後ろを暗くする */
+.drawer-slide {
+  animation: drawer-slide 180ms ease-out;
+}
+.drawer-fade {
+  animation: drawer-fade 180ms ease-out;
+}
+@keyframes drawer-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes drawer-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

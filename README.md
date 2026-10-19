@@ -81,6 +81,10 @@ npm run build    # インストーラー(MSI / NSIS)を作る
 
 本番の掲示板への試し書き込みはテストでは行わない(偽サーバーで確かめる)。
 
+## スマホ版
+
+同じソースから Android・iOS 版を作れる(画面と操作をスマホ向けに変える)。手順は [docs/mobile.md](docs/mobile.md)。
+
 ## 配布
 
 ```powershell

@@ -172,6 +172,24 @@ export function keyString(e: { key: string; ctrlKey: boolean; shiftKey: boolean;
   return parts.join('+')
 }
 
+/**
+ * 割り当てたキー(「Shift+G」「G G」「Ctrl++」)を、押したことにするキーの並びにする。
+ * スマホのスワイプから、キー操作と同じ操作を呼ぶのに使う(keyString の逆)
+ */
+export function keyEventsOf(key: string): { key: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }[] {
+  return key.split(' ').map((k) => {
+    // 「Ctrl++」のように、+ そのものがキーのとき
+    const plus = k.endsWith('++')
+    const parts = (plus ? k.slice(0, -2) : k).split('+').filter(Boolean)
+    const base = plus ? '+' : (parts.pop() ?? '')
+    const mods = new Set(parts)
+    const shiftKey = mods.has('Shift')
+    let name = base === 'Space' ? ' ' : base
+    if (/^[A-Z]$/.test(name) && !shiftKey) name = name.toLowerCase()
+    return { key: name, ctrlKey: mods.has('Ctrl'), shiftKey, altKey: mods.has('Alt'), metaKey: false }
+  })
+}
+
 /** 2 つ続けて押すキー(「G G」)とみなす間隔 */
 const SEQUENCE_MS = 600
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_KEYMAP, actionFor, createKeyReader, keyString, resolveKeymap } from '../src/utils/keymap'
+import { DEFAULT_KEYMAP, actionFor, keyEventsOf, createKeyReader, keyString, resolveKeymap } from '../src/utils/keymap'
 
 const k = (key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}) => ({
   key,
@@ -65,5 +65,15 @@ describe('createKeyReader: 2 つ続けて押すキー', () => {
     expect(read(DEFAULT_KEYMAP, k('g'))).toBeUndefined()
     expect(read(DEFAULT_KEYMAP, k('G', { shift: true }))).toBe('bottom')
     expect(read(DEFAULT_KEYMAP, k('j'))).toBe('nextPost')
+  })
+})
+
+describe('keyEventsOf: 割り当てたキーを、押したことにするキーにする', () => {
+  it('keyString と行き来できる', () => {
+    for (const k of ['J', 'Shift+G', 'Ctrl+F', 'Space', 'Shift+Space', '/', 'ArrowDown', 'Ctrl++', 'Ctrl+-']) {
+      const [e] = keyEventsOf(k)
+      expect(keyString(e)).toBe(k)
+    }
+    expect(keyEventsOf('G G').map((e) => e.key)).toEqual(['g', 'g'])
   })
 })

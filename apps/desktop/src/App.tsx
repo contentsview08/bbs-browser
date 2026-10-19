@@ -1433,6 +1433,12 @@ export default function App() {
     // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
     if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
+    // 設定で確かめることにしていれば、確かめてから消す(Shift+Delete と同じ)
+    if (action === 'deleteLog') {
+      const targets = targetTabs()
+      if (targets.length > 0) confirmDeleteLogs(targets)
+      return
+    }
     if (appKey(action as KeyAction)) return
     const key = keymap[action as KeyAction]?.[0]
     if (!key) return

@@ -2,7 +2,10 @@
 import { KEY_ACTIONS } from './keymap'
 
 /** スワイプだけの操作 */
-export const GESTURE_ONLY_ACTIONS: { key: string; name: string }[] = [{ key: 'drawer', name: 'メニュー(引き出し)を開く' }]
+export const GESTURE_ONLY_ACTIONS: { key: string; name: string }[] = [
+  { key: 'drawer', name: 'メニュー(引き出し)を開く' },
+  { key: 'deleteLog', name: 'ログを削除して閉じる' },
+]
 
 /** スワイプに割り当てられる操作の一覧(設定の画面で選ぶ) */
 export const GESTURE_ACTIONS: { key: string; name: string }[] = [...GESTURE_ONLY_ACTIONS, ...KEY_ACTIONS]

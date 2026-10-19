@@ -336,7 +336,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   swipeGestures: {
     // →↑ は一番下へ・→↓ は先頭へ(引っぱる向きに動く。元の Web アプリと同じ)
     list: { right: 'drawer', left: 'forward', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'reply' },
-    thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'closeTab' },
+    // スマホはタブを使わない(→ の「戻る」が閉じるのと同じ)ので、←↑ はログを削除して閉じる
+    thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'deleteLog' },
   },
   gestureSensitivity: 3,
   logRetentionDays: 90,
@@ -421,6 +422,11 @@ function withoutOldLight(scheme: ColorScheme): ColorScheme {
   return scheme === 'light' || (isMobile && scheme === '2ch-classic') ? 'soft-light' : scheme
 }
 
+/** 前の既定だったスレ表示の ←↑「タブを閉じる」(スマホにはタブがない)は、いまの既定の「ログを削除して閉じる」にする */
+function withoutOldGestures(g: AppSettings['swipeGestures']): AppSettings['swipeGestures'] {
+  return g.thread?.['left,up'] === 'closeTab' ? { ...g, thread: { ...g.thread, 'left,up': 'deleteLog' } } : g
+}
+
 /**
  * テーマを選んだときに変える設定。OS に合わせているときは、暗い配色ならダーク用に、明るい配色ならライト用にする
  */
@@ -465,7 +471,7 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
     void store.getSettings().then((saved) => {
       setSettings((s) => {
         const next = { ...s, ...(saved as Partial<AppSettings>) }
-        return { ...next, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme) }
+        return { ...next, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
       })
       setLoaded(true)
     })

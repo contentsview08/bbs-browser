@@ -75,7 +75,7 @@ import { backgroundError } from './utils/backgroundError'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
-import { MIN_TROLL_MARKS, buildCorpus, examplesFrom, predict, train, type Corpus, type TrollModel } from './utils/trollModel'
+import { useTrollModel } from './hooks/useTrollModel'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 /** 閉じたタブを覚えておく数(Shift+X で開き直す) */
@@ -493,27 +493,8 @@ export default function App() {
     if (!store) return
     void (record ? store.setTrollMark(record) : store.removeTrollMark(key)).catch(backgroundError('自動 NG の印の保存'))
   }
-  // 印から育つ判定(utils/trollModel.ts)。判断軸のためのログ(コーパス)は起動時に 1 回だけ作り、
-  // 印が変わるたびに学び直す(数百件の印でも 0.1 秒ほど)。荒らしの印が少ないうちは使わない
-  const [corpus, setCorpus] = useState<Corpus>()
-  useEffect(() => {
-    if (!store || !settings.autoNg || corpus) return
-    void store
-      .corpusPosts(40000)
-      .then((rows) => setCorpus(buildCorpus(rows)))
-      .catch(backgroundError('自動 NG のログの読み込み'))
-  }, [store, settings.autoNg, corpus])
-  const [trollModel, setTrollModel] = useState<TrollModel>()
-  useEffect(() => {
-    if (!corpus || markRecords.filter((m) => m.troll).length < MIN_TROLL_MARKS) return setTrollModel(undefined)
-    // 印を続けて付けたときに毎回学び直さないよう、少し待ってから
-    const timer = setTimeout(() => setTrollModel(train(examplesFrom(markRecords, corpus), corpus)), 300)
-    return () => clearTimeout(timer)
-  }, [corpus, markRecords])
-  const trollJudge = useMemo(
-    () => (trollModel && corpus ? (body: string) => predict(trollModel, body, corpus) : undefined),
-    [trollModel, corpus],
-  )
+  // 印から育つ判定(utils/trollModel.ts)。ログの数え上げと学習は画面の外(workers/trollWorker.ts)で行う
+  const trollJudge = useTrollModel(store, settings.autoNg, markRecords)
   /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
   const [listCounts, setListCounts] = useState(new Map<string, number>())
   useEffect(() => {

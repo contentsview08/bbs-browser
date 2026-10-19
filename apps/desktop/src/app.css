@@ -877,3 +877,26 @@ html[data-platform='mobile'] .post-cv article {
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* 設定の検索: 当てはまる設定が 1 つもない分類は、見出しごと隠す。全部隠れたら「見つかりませんでした」を出す */
+.settings-group:not(:has(section:not([hidden]))) {
+  display: none;
+}
+.settings-empty {
+  display: none;
+}
+*:not(:has(> .settings-group section:not([hidden]))) > .settings-empty {
+  display: block;
+}
+
+/* レスの頭(名前・番号・日付・ID…): 狭いときは、要素の中で折り返さず(「7C」が縦に 1 文字ずつ並ぶなど)、
+   頭全体を次の行へ折り返す。長い名前だけは、行の幅で切って … にする */
+[data-post-header] {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+[data-post-header] > * {
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+}

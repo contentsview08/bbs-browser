@@ -623,7 +623,11 @@ export default function ThreadListPanel(props: Props) {
 
   // 未読・勢い順などのタブ。PC はヘッダーの下、スマホはフッターの左に置く
   const tabGrid = (
-            <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}>
+            <div
+              // スマホ(フッターの左)は、左から詰めて並べる。PC は幅いっぱいに等分する
+              className={isMobile ? 'flex items-stretch gap-4 pl-2' : 'flex-1 grid'}
+              style={isMobile ? undefined : { gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}
+            >
               {tabs.map((key, i) => {
                 const def = LIST_TABS.find((t) => t.key === key)!
                 const filter = key === 'unread' || key === 'visited'
@@ -793,7 +797,7 @@ export default function ThreadListPanel(props: Props) {
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
-        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 80 } : undefined}>
+        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 64 } : undefined}>
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {(rebuilding || (props.loading && visible.length > 0)) && <div className="list-progress" aria-label="読み込み中" />}
           {visible.length === 0 ? (
@@ -846,7 +850,7 @@ export default function ThreadListPanel(props: Props) {
           ref={footerRef}
           className={`${
             // スマホ: 一覧の上に重ね、下へスクロールすると隠す
-            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-[72px] px-2 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-14 px-1 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
           } flex items-center justify-end gap-1 border-t border-c-border`}
           style={footerDrag.height ? { height: footerDrag.height } : undefined}
         >
@@ -874,8 +878,8 @@ export default function ThreadListPanel(props: Props) {
             actions={barActions}
             placements={placements}
             where="footer"
-            btnClass={isMobile ? 'p-2.5 rounded-xl text-c-text-muted active:bg-c-surface2 transition-colors disabled:opacity-40' : LIST_BTN}
-            iconClass={isMobile ? 'text-[28px]' : 'text-lg'}
+            btnClass={isMobile ? 'p-2 rounded-xl text-c-text-muted active:bg-c-surface2 transition-colors disabled:opacity-40' : LIST_BTN}
+            iconClass={isMobile ? 'text-2xl' : 'text-lg'}
           />
         </div>
       )}

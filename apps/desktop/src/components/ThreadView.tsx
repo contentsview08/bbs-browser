@@ -1510,7 +1510,7 @@ export default function ThreadView(props: Props) {
         />
         <header
           ref={titleRowRef}
-          className={`flex items-center justify-between ${isMobile ? 'px-2' : 'px-6'}`}
+          className={`flex items-center justify-between ${isMobile ? 'pl-4 pr-1' : 'px-6'}`}
           style={{ height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
           <div
@@ -1590,7 +1590,7 @@ export default function ThreadView(props: Props) {
             <MoreMenu actions={barActions} btnClass={ICON_BTN} iconClass="text-xl" />
           </div>
         </header>
-        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'justify-start gap-2.5 pl-1 pr-2 text-[13px]' : 'gap-5 px-4 text-base'}`}>
+        <div className={`flex items-center overflow-x-auto no-scrollbar font-medium ${isMobile ? 'gap-4 px-4 text-[13px]' : 'gap-5 px-4 text-base'}`}>
           {FILTERS.map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (

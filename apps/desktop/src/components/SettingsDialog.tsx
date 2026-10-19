@@ -1,6 +1,8 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
 import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { normalizeForSearch } from '../utils/postBody'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { allConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
@@ -116,11 +118,23 @@ const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colo
 const AdvancedContext = createContext(false)
 
 /** 設定のまとまり。advanced なら、高度な設定を見せるときだけ出す */
+/** 設定の検索の言葉(空なら探していない)。Section は、中の文字に言葉が入っていなければ隠れる */
+const SearchContext = createContext('')
+
 function Section({ title, children, note, advanced }: { title: string; children: ReactNode; note?: string; advanced?: boolean }) {
   const showAdvanced = useContext(AdvancedContext)
+  const query = useContext(SearchContext)
+  const ref = useRef<HTMLElement>(null)
+  // 検索中は、題・説明・中の文字(選べる項目の名前など)に言葉が入っている Section だけを出す
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const q = normalizeForSearch(query.trim())
+    el.hidden = q !== '' && !normalizeForSearch(el.textContent ?? '').includes(q)
+  })
   if (advanced && !showAdvanced) return null
   return (
-    <section className="mb-8">
+    <section ref={ref} className="mb-8">
       <h3 className="text-sm font-bold text-c-text-strong mb-1 flex items-center gap-2">
         {title}
         {advanced && <span className="text-[10px] font-normal px-1.5 rounded border border-c-border text-c-text-muted">高度</span>}
@@ -2022,15 +2036,157 @@ function AboutTab() {
 }
 
 export default function SettingsDialog(props: Props) {
-  const [tab, setTab] = useState<Tab>(props.initialTab ?? 'display')
+  // スマホは、はじめに分類の一覧(tab が undefined)を出し、押すとその分類の画面に入る
+  const [tab, setTab] = useState<Tab | undefined>(props.initialTab ?? (isMobile ? undefined : 'display'))
   /** 「板とサイト」から板一覧へ移るときに、どの BBS メニューを出すか */
   const [listSite, setListSite] = useState<string>()
+  /** 設定の検索。言葉があるときは、すべての分類から当てはまる設定だけを並べる */
+  const [query, setQuery] = useState('')
+  const searching = query.trim() !== ''
+  // スマホは、はじめから高度な設定も全部出す(分類を開いてから探すので、多くても困らない)
+  const showAdvanced = isMobile || props.settings.showAdvanced
 
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
-
   const boxRef = useRef<HTMLDivElement>(null)
+  // スマホ: Esc(戻るボタン)は、検索 → 分類の画面 → 一覧 の順に 1 つずつ戻り、一覧で閉じる
+  useFocusTrap(boxRef, () => {
+    if (isMobile && searching) return setQuery('')
+    if (isMobile && tab) return setTab(undefined)
+    props.onClose()
+  })
 
-  useFocusTrap(boxRef, props.onClose)
+  const tabs = TABS.filter((t) => showAdvanced || !t.advanced)
+  const renderTab = (key: Tab) => {
+    switch (key) {
+      case 'display':
+        return <DisplayTab {...props} />
+      case 'threads':
+        return <ThreadsTab {...props} />
+      case 'posts':
+        return <PostsTab {...props} />
+      case 'write':
+        return <WriteTab {...props} />
+      case 'refresh':
+        return <RefreshTab {...props} />
+      case 'keys':
+        return <KeysTab {...props} />
+      case 'toolbars':
+        return <ToolbarsTab {...props} />
+      case 'ng':
+        return <NgTab {...props} />
+      case 'boardlist':
+        return (
+          <BoardListTab
+            key={listSite}
+            sites={props.sites}
+            initialSite={listSite}
+            favorites={props.favorites}
+            loadBoards={props.loadBoards}
+            onToggleFavorite={props.onToggleFavorite}
+            onOpenBoard={props.onOpenBoard}
+          />
+        )
+      case 'boards':
+        return (
+          <BoardsTab
+            {...props}
+            onShowBoardList={(menuUrl) => {
+              setListSite(menuUrl)
+              setTab('boardlist')
+            }}
+          />
+        )
+      case 'connectors':
+        return <ConnectorsTab {...props} />
+      case 'accounts':
+        return <AccountsTab {...props} />
+      case 'backup':
+        return <BackupTab {...props} />
+      case 'about':
+        return <AboutTab />
+    }
+  }
+  /** 検索の結果: すべての分類を並べ、当てはまる Section だけを出す(板一覧は大きいので入れない) */
+  const searchResults = (
+    <SearchContext.Provider value={query}>
+      {tabs
+        .filter((t) => t.key !== 'boardlist')
+        .map((t) => (
+          <div key={t.key} className="settings-group">
+            <p className="flex items-center gap-2 mb-3 text-xs font-bold text-c-accent">
+              <span className="material-symbols-outlined text-base">{t.icon}</span>
+              {t.name}
+            </p>
+            {renderTab(t.key)}
+          </div>
+        ))}
+      <p className="settings-empty text-sm text-c-text-muted">見つかりませんでした</p>
+    </SearchContext.Provider>
+  )
+  const searchBox = (
+    <div className="flex items-center gap-2 px-3 h-10 bg-c-surface2 border border-c-border rounded-full focus-within:border-c-accent">
+      <span className="material-symbols-outlined text-lg text-c-text-muted">search</span>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="設定を探す(例: 文字の大きさ・NG・スワイプ)"
+        className="flex-1 min-w-0 bg-transparent border-0 p-0 text-sm text-c-text-body placeholder-c-text-muted focus:ring-0"
+      />
+      {searching && (
+        <button type="button" onClick={() => setQuery('')} className="p-0.5 text-c-text-muted" title="検索をやめる">
+          <span className="material-symbols-outlined text-base">close</span>
+        </button>
+      )}
+    </div>
+  )
+
+  if (isMobile) {
+    // スマホ: 画面いっぱいの 1 画面。分類の一覧 → 分類の画面(← で一覧に戻る)。上に検索
+    const current = tab && TABS.find((t) => t.key === tab)
+    return createPortal(
+      <div
+        ref={boxRef}
+        className="fixed inset-0 z-[9500] flex flex-col bg-c-surface"
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="flex-shrink-0 flex items-center gap-1 px-2 border-b border-c-border" style={{ height: 'var(--header-height, 56px)' }}>
+          <button
+            type="button"
+            onClick={() => (searching ? setQuery('') : current ? setTab(undefined) : props.onClose())}
+            className="p-2.5 rounded-xl text-c-text-muted active:bg-c-surface2"
+            title={current || searching ? '戻る' : '閉じる'}
+          >
+            <span className="material-symbols-outlined text-2xl">{current || searching ? 'arrow_back' : 'close'}</span>
+          </button>
+          <h2 className="flex-1 min-w-0 truncate text-base font-bold text-c-text-strong">{searching ? '設定の検索' : (current?.name ?? '設定')}</h2>
+        </div>
+        <AdvancedContext.Provider value={showAdvanced}>
+          {!current && <div className="flex-shrink-0 px-3 pt-3 pb-1">{searchBox}</div>}
+          {searching ? (
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">{searchResults}</div>
+          ) : current ? (
+            <div className={`flex-1 min-h-0 px-4 py-4 ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>{renderTab(current.key)}</div>
+          ) : (
+            <div className="flex-1 min-h-0 overflow-y-auto py-2">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
+                >
+                  <span className="material-symbols-outlined text-xl text-c-text-muted">{t.icon}</span>
+                  <span className="flex-1">{t.name}</span>
+                  <span className="material-symbols-outlined text-xl text-c-text-muted">chevron_right</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </AdvancedContext.Provider>
+      </div>,
+      document.body,
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
@@ -2041,18 +2197,22 @@ export default function SettingsDialog(props: Props) {
       >
         <nav className="w-52 flex-shrink-0 flex flex-col bg-c-surface2 border-r border-c-border py-3">
           <h2 className="px-5 pb-3 text-lg font-bold text-c-text-strong">設定</h2>
+          <div className="px-3 pb-2">{searchBox}</div>
           {/* 分類が多くて入りきらないときは、この並びだけスクロールする(下の「高度な設定」は動かさない) */}
           <div className="flex-1 min-h-0 overflow-y-auto hover-scrollbar">
-          {TABS.filter((t) => props.settings.showAdvanced || !t.advanced).map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => {
+                setQuery('')
+                setTab(t.key)
+              }}
               className={`w-full flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                tab === t.key ? 'active-board text-c-text-strong' : 'text-c-text-body hover:bg-c-surface3'
+                tab === t.key && !searching ? 'active-board text-c-text-strong' : 'text-c-text-body hover:bg-c-surface3'
               }`}
             >
-              <span className={`material-symbols-outlined text-lg ${tab === t.key ? 'fill' : ''}`}>{t.icon}</span>
+              <span className={`material-symbols-outlined text-lg ${tab === t.key && !searching ? 'fill' : ''}`}>{t.icon}</span>
               {t.name}
             </button>
           ))}
@@ -2076,47 +2236,16 @@ export default function SettingsDialog(props: Props) {
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 border-b border-c-border">
-            <h3 className="text-base font-bold text-c-text-strong">{TABS.find((t) => t.key === tab)?.name}</h3>
+            <h3 className="text-base font-bold text-c-text-strong">{searching ? '設定の検索' : TABS.find((t) => t.key === tab)?.name}</h3>
             <button type="button" onClick={props.onClose} className={ICON_BTN} title="閉じる">
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
           </div>
-          <AdvancedContext.Provider value={props.settings.showAdvanced}>
+          <AdvancedContext.Provider value={showAdvanced}>
           <div
-            className={`flex-1 min-h-0 px-6 py-5 ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}
+            className={`flex-1 min-h-0 px-6 py-5 ${tab === 'boardlist' && !searching ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}
           >
-            {tab === 'display' && <DisplayTab {...props} />}
-            {tab === 'threads' && <ThreadsTab {...props} />}
-            {tab === 'posts' && <PostsTab {...props} />}
-            {tab === 'write' && <WriteTab {...props} />}
-            {tab === 'refresh' && <RefreshTab {...props} />}
-            {tab === 'keys' && <KeysTab {...props} />}
-            {tab === 'toolbars' && <ToolbarsTab {...props} />}
-            {tab === 'ng' && <NgTab {...props} />}
-            {tab === 'boardlist' && (
-              <BoardListTab
-                key={listSite}
-                sites={props.sites}
-                initialSite={listSite}
-                favorites={props.favorites}
-                loadBoards={props.loadBoards}
-                onToggleFavorite={props.onToggleFavorite}
-                onOpenBoard={props.onOpenBoard}
-              />
-            )}
-            {tab === 'boards' && (
-              <BoardsTab
-                {...props}
-                onShowBoardList={(menuUrl) => {
-                  setListSite(menuUrl)
-                  setTab('boardlist')
-                }}
-              />
-            )}
-            {tab === 'connectors' && <ConnectorsTab {...props} />}
-            {tab === 'accounts' && <AccountsTab {...props} />}
-            {tab === 'backup' && <BackupTab {...props} />}
-            {tab === 'about' && <AboutTab />}
+            {searching ? searchResults : tab && renderTab(tab)}
           </div>
           </AdvancedContext.Provider>
         </div>

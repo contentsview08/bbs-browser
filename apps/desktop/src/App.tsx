@@ -1392,6 +1392,26 @@ export default function App() {
       if (r.thread) await openThread(r.thread)
     })
 
+  /** 古いログを整理する(設定の日数で)。開いているタブは残す */
+  const pruneLogs = async (): Promise<number> => {
+    const days = settingsRef.current.logRetentionDays
+    if (!store || days <= 0) return 0
+    const n = await store.pruneLogs(
+      Date.now() - days * 86_400_000,
+      tabsRef.current.map((t) => ({ boardUrl: t.thread.boardUrl, key: t.thread.key })),
+    )
+    updateSetting('lastLogPruneAt', Date.now())
+    if (n > 0) await reloadRecent(store)
+    return n
+  }
+  // 起動して少し経ってから、1 日に 1 回だけ古いログを整理する(起動の邪魔をしないように)
+  useEffect(() => {
+    if (!settingsLoaded || !store || !externalReady) return
+    if (settings.logRetentionDays <= 0 || Date.now() - settings.lastLogPruneAt < 86_400_000) return
+    const timer = setTimeout(() => void pruneLogs().catch(backgroundError('古いログの整理')), 30_000)
+    return () => clearTimeout(timer)
+  }, [settingsLoaded, store, externalReady])
+
   // 起動時に開く板(設定)。設定とお気に入りを読み終えてから一度だけ
   const startupDone = useRef(false)
   useEffect(() => {
@@ -2038,6 +2058,7 @@ export default function App() {
           onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}
+          onPruneLogs={pruneLogs}
           externalConnectors={externalConnectors}
           onReloadConnectors={(approvals) => reloadExternalConnectors(approvals)}
           onOpenConnectorsDir={() => void connectorsDir().then(revealItemInDir).catch(backgroundError('コネクタのフォルダを開く'))}

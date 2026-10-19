@@ -195,6 +195,10 @@ export interface AppSettings {
   ngMode: NgMode
   /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
   autoNg: boolean
+  /** この日数より長く開いていないスレのログを、起動したときに消す(0 なら消さない)。お気に入り・自分が書いたスレ・開いているタブは残す */
+  logRetentionDays: number
+  /** 最後にログを整理した時刻(1 日に 1 回だけ整理する) */
+  lastLogPruneAt: number
   /** 外付けのコネクタ(connectors/ のフォルダ)ごとの許可。id → 有効か・確かめた通信の先 */
   connectors: Record<string, { enabled: boolean; hosts: string[] }>
   /** 続けて並んだあぼーん(NG・自動 NG)を 1 行にまとめる */
@@ -298,6 +302,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ngRules: [],
   ngMode: 'aborn',
   autoNg: true,
+  logRetentionDays: 90,
+  lastLogPruneAt: 0,
   connectors: {},
   groupNg: true,
   uploaderEnabled: false,

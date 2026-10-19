@@ -334,6 +334,65 @@ fn apply_pending_restore(app: &tauri::AppHandle) {
     let _ = std::fs::rename(&pending, dir.join(DB_FILE));
 }
 
+/// DB の形(migration の数)を覚えておくファイル。前の起動と違えば、DB を開く前に写しを取る
+const SCHEMA_MARK: &str = "db-schema-version.txt";
+/// 形が変わる前の写しを残す数
+const KEEP_SCHEMA_BACKUPS: usize = 3;
+const SCHEMA_BACKUP_PREFIX: &str = "bbs-browser.before-schema-";
+
+/// DB の形を変える版(migration を足した版)を初めて起動したとき、DB を開く前に写しを取る。
+/// 写しは設定フォルダの backups/ に「bbs-browser.before-schema-<新しい形>-<時刻>.db」(と -wal)で置き、新しいものから 3 つ残す。
+/// migration が途中で失敗して DB が壊れても、ここから戻せるようにするため
+fn backup_before_migrations(app: &tauri::AppHandle) {
+    let Ok(dir) = app.path().app_config_dir() else { return };
+    let current = migrations().len().to_string();
+    let mark = dir.join(SCHEMA_MARK);
+    if std::fs::read_to_string(&mark).unwrap_or_default().trim() == current {
+        return;
+    }
+    if dir.join(DB_FILE).exists() {
+        let backups = dir.join("backups");
+        if std::fs::create_dir_all(&backups).is_err() {
+            return;
+        }
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or_default();
+        let name = format!("{SCHEMA_BACKUP_PREFIX}{current}-{stamp}.db");
+        for suffix in ["", "-wal"] {
+            let from = dir.join(format!("{DB_FILE}{suffix}"));
+            // 写しが取れなければ、印を書かずに終わる(次の起動でまた取り直す)
+            if from.exists() && std::fs::copy(&from, backups.join(format!("{name}{suffix}"))).is_err() {
+                return;
+            }
+        }
+        prune_schema_backups(&backups);
+    }
+    let _ = std::fs::write(&mark, current);
+}
+
+/// 形が変わる前の写しを、新しいもの(名前の最後の時刻が大きいもの)から KEEP_SCHEMA_BACKUPS 個だけ残す
+fn prune_schema_backups(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut found: Vec<(u64, PathBuf)> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let stem = name.strip_prefix(SCHEMA_BACKUP_PREFIX)?.strip_suffix(".db")?;
+            let stamp = stem.rsplit('-').next()?.parse::<u64>().ok()?;
+            Some((stamp, e.path()))
+        })
+        .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, path) in found.into_iter().skip(KEEP_SCHEMA_BACKUPS) {
+        let mut wal = path.clone().into_os_string();
+        wal.push("-wal");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(PathBuf::from(wal));
+    }
+}
+
 /// WebView2 の「ブラウザのショートカット」(F5・Ctrl+R の読み直し、Ctrl+F の検索窓、Ctrl+P の印刷など)を切る。
 /// F5 で画面ごと読み直すと、開いていたものが消え、連打でサーバーにも負担がかかる。
 /// ページ側で keydown を止めても効かないことがあるので、WebView2 の設定で切る(F5 はアプリがスレの更新に使う)
@@ -365,6 +424,7 @@ pub fn run() {
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
         .setup(|app| {
             apply_pending_restore(app.handle());
+            backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
             #[cfg(windows)]

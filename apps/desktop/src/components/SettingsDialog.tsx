@@ -61,6 +61,8 @@ interface Props {
   onReloadConnectors: (approvals?: Record<string, { enabled: boolean; hosts: string[] }>) => Promise<void>
   /** connectors/ のフォルダをエクスプローラーで開く */
   onOpenConnectorsDir: () => void
+  /** 古いログを今すぐ整理する(設定の日数で)。消したスレの数を返す */
+  onPruneLogs: () => Promise<number>
   /** 最初に開く分類 */
   initialTab?: SettingsTab
   onClose: () => void
@@ -1179,7 +1181,13 @@ function AccountsTab(props: Pick<Props, 'accounts' | 'loginStatus' | 'onLogin' |
 }
 
 /** 設定・NG の書き出しと読み込み、DB 全体のバックアップと復元 */
-function BackupTab({ settings: s, update, onBackupDb, onRestoreDb }: Pick<Props, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb'>) {
+function BackupTab({
+  settings: s,
+  update,
+  onBackupDb,
+  onRestoreDb,
+  onPruneLogs,
+}: Pick<Props, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onPruneLogs'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
@@ -1223,6 +1231,37 @@ function BackupTab({ settings: s, update, onBackupDb, onRestoreDb }: Pick<Props,
           {message.text}
         </p>
       )}
+      <Section
+        title="古いログの整理"
+        note="この日数より長く開いていないスレのログ(レス)を、起動したときに消します(1 日に 1 回)。お気に入りのスレ・自分が書き込んだスレ・開いているタブは残します。消したスレは、もう一度開けば取り直します(dat 落ちしていれば読めません)"
+      >
+        <Choice
+          value={s.logRetentionDays}
+          options={[
+            { key: 30, name: '30 日' },
+            { key: 90, name: '90 日' },
+            { key: 180, name: '180 日' },
+            { key: 365, name: '1 年' },
+            { key: 0, name: '消さない' },
+          ]}
+          onChange={(v) => update('logRetentionDays', v)}
+        />
+        {s.logRetentionDays > 0 && (
+          <button
+            type="button"
+            className={`${BTN} mt-3`}
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                const n = await onPruneLogs()
+                return n > 0 ? `${n} スレのログを消しました` : '消すログはありませんでした'
+              })
+            }
+          >
+            今すぐ整理する
+          </button>
+        )}
+      </Section>
       <Section
         title="設定"
         note="表示・スレ一覧・キー操作などの設定を JSON に書き出します。catbox のアカウント、開いていたタブ、背景画像、画像の保存先は入れません"

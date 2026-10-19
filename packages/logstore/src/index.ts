@@ -614,6 +614,25 @@ export class LogStore {
     ])
   }
 
+  /**
+   * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの)。
+   * お気に入りのスレ・自分が書き込んだスレと、keep のスレ(開いているタブ)は残す。消したスレの数を返す
+   */
+  async pruneLogs(before: number, keep: { boardUrl: string; key: string }[] = []): Promise<number> {
+    const rows = await this.db.select<{ board_url: string; key: string; connector_id: string }>(
+      `SELECT t.board_url, t.key, t.connector_id FROM threads t
+       WHERE COALESCE(t.read_at, t.fetched_at, 0) < $1
+         AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key)
+         AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)`,
+      [before],
+    )
+    const kept = new Set(keep.map((k) => `${k.boardUrl}\t${k.key}`))
+    const targets = rows.filter((r) => !kept.has(`${r.board_url}\t${r.key}`))
+    for (const r of targets)
+      await this.deleteThread({ connectorId: r.connector_id, boardUrl: r.board_url, key: r.key, title: '', postCount: 0, order: 0 })
+    return targets.length
+  }
+
   /** 既読位置は戻さない(読み返しても未読が増えないように) */
   async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
     await this.db.execute(

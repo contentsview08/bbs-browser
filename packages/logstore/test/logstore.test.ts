@@ -320,6 +320,20 @@ describe('アカウント', () => {
   })
 })
 
+describe('古いログの整理', () => {
+  it('しばらく開いていないスレだけ消し、お気に入り・自分が書いたスレ・開いているタブは残す', async () => {
+    const t = (key: string): ThreadSummary => ({ ...thread, key })
+    const fetched = { status: 'updated' as const, posts: [post(1)], cursor: null }
+    for (const key of ['old', 'fav', 'own', 'tab', 'new']) await store.saveFetch(t(key), fetched, key === 'new' ? 2000 : 100)
+    await store.addFavoriteThread(t('fav'))
+    await store.addOwnPost(t('own'), 1)
+    const removed = await store.pruneLogs(1000, [{ boardUrl: thread.boardUrl, key: 'tab' }])
+    expect(removed).toBe(1)
+    expect(await store.loadThread(t('old'))).toBeNull()
+    for (const key of ['fav', 'own', 'tab', 'new']) expect(await store.loadThread(t(key))).not.toBeNull()
+  })
+})
+
 describe('自動 NG の印', () => {
   it('本文の鍵ごとに 1 つ。付け直したら置き換わり、外せる', async () => {
     const base = { body: '貼り付け', boardUrl: thread.boardUrl, createdAt: 1 }

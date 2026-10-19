@@ -14,8 +14,33 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// 本番(release)の署名。keystore.properties(Git の管理外)があればその鍵、なければ手元の開発用の鍵(~/.android/debug.keystore)で署名する。
+// 開発用の鍵なら、android:dev で入れたアプリの上にそのまま入れ直せる(鍵が違うと入れ直せず、消すとアプリのデータも消えるため)。
+// 配るときは、keystore.properties に storeFile・storePassword・keyAlias・keyPassword を書いて、自分の鍵にする
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 37
+    signingConfigs {
+        create("release") {
+            if (keystoreProperties.containsKey("storeFile")) {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            } else {
+                storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
     namespace = "io.github.yumekui8.bbs_browser"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
@@ -39,6 +64,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             optimization {
                enable = true
             }

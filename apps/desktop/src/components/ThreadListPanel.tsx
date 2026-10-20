@@ -80,6 +80,8 @@ interface Props {
   onFooterHeight?: (height: number) => void
   /** カードの見た目(レスの見た目の設定に合わせる) */
   variant?: 'card' | 'discord' | 'classic' | 'line'
+  /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
+  authorIcon?: boolean
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** 操作ボタンの置き場所(設定) */
@@ -319,7 +321,8 @@ export default function ThreadListPanel(props: Props) {
     canRefresh: () => Date.now() >= (refreshReadyRef.current ?? 0),
   })
   // スマホ: 指で引っぱって更新する(上の端で下へ。しきい値がスレ表示の 1.7 倍なので、指の量も多めに掛ける)
-  const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh ? pull : undefined, undefined)
+  // 選んでいる間(閲覧履歴を長押しで選んで、なぞっているときなど)は、引っぱって更新しない
+  const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh && selected.size === 0 ? pull : undefined, undefined)
 
   useEffect(() => setWidth(props.width), [props.width])
   useEffect(() => {
@@ -687,6 +690,7 @@ export default function ThreadListPanel(props: Props) {
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
         isCursor={!isMobile && props.active !== false && !cursorHidden && cursorId === id}
         variant={props.variant}
+        authorIcon={props.authorIcon}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
         selecting={selected.size > 0}
@@ -740,7 +744,9 @@ export default function ThreadListPanel(props: Props) {
   return (
     <section
       // 絞り込み・検索をしている印(スマホの戻る操作は、まずこれを外す。App の backRef)
-      data-filtering={props.active !== false && (unreadOnly || visitedOnly || query || searchActive || selected.size > 0) ? 'list' : undefined}
+      data-filtering={props.active !== false && (unreadOnly || visitedOnly || query || searchActive) ? 'list' : undefined}
+      // 選んでいる途中の印。戻るで選ぶのをやめる(絞り込みとは別にして、メニューのジェスチャーは止めない)
+      data-selecting={selected.size > 0 || undefined}
       style={props.fill ? { width: '100%', maxWidth: props.fill === 'centered' ? FILL_MAX_WIDTH : undefined } : { width }}
       className={`flex-shrink-0 flex flex-col relative overflow-hidden bg-panel-list ${
         props.fill === 'centered' ? 'border-x' : props.fill ? '' : 'border-r'
@@ -854,8 +860,9 @@ export default function ThreadListPanel(props: Props) {
           </div>
 
           {selectable && selected.size > 0 && isMobile && (
-            // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる
-            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-c-border text-sm">
+            // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる。
+            // ヘッダーに重ねて出す(差し込むと、一覧が下にずれて、なぞっている所が分からなくなる)
+            <div className="absolute inset-0 z-20 flex items-center gap-1 px-2 text-sm bg-panel-thread-header border-b border-c-border">
               <button type="button" onClick={() => setSelected(new Set())} className="p-2 rounded-xl text-c-text-muted active:bg-c-surface2" title="選ぶのをやめる">
                 <span className="material-symbols-outlined text-xl">close</span>
               </button>

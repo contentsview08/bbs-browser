@@ -191,6 +191,8 @@ export interface AppSettings {
   imageUrlCollapse: boolean
   /** 同じ ID の書き込みが多いほど、ID を赤くする */
   idHeat: boolean
+  /** スレ一覧で、立てた人の ID(エッジ)を模様で出す。切っているときは、カードの右下に ID を小さく出す */
+  threadAuthorIcon: boolean
   /** >>1 と同じ ID のレスに「主」の印を付ける */
   highlightOp: boolean
   /** レスの番号の左に、ID から作るアイコン(GitHub 風の Identicon)を出す */
@@ -337,6 +339,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageUrlOmit: true,
   imageUrlCollapse: true,
   idHeat: false,
+  threadAuthorIcon: false,
   highlightOp: true,
   imageSaveDir: '',
   autoRefreshSec: 0,

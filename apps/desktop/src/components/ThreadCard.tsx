@@ -46,6 +46,8 @@ interface Props {
   /** 見た目のスタイル(レスの見た目の設定に合わせる)。card: いまのカード / discord: チャンネル一覧のような行 /
    *  classic: 専ブラのスレ一覧のような表 / line: トーク一覧のような行 */
   variant?: 'card' | 'discord' | 'classic' | 'line'
+  /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
+  authorIcon?: boolean
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
@@ -69,7 +71,10 @@ function ThreadCard({
   onSelectStart,
   isCursor,
   variant = 'card',
+  authorIcon = false,
 }: Props) {
+  /** 立てた人の ID を模様で出すか(出さないときは、右下に ID の文字を出す) */
+  const authorIconId = authorIcon ? thread.authorId : undefined
   // スマホ: 長押しで操作の一覧を出す(選べる一覧(閲覧履歴)では、選び始める)
   const [sheet, setSheet] = useState(false)
   const longPress = useLongPress(isMobile ? (onSelectStart ? () => onSelectStart(thread) : () => setSheet(true)) : undefined)
@@ -159,10 +164,10 @@ function ThreadCard({
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
         {/* 立てた人の ID が分かれば(エッジ)、# の代わりにその ID の模様を出す */}
         {thumbImg(28, 'rounded') ||
-          (thread.authorId ? (
+          (authorIconId ? (
             <span className="thread-row-hash flex-shrink-0 flex justify-center" title={`立てた人の ID:${thread.authorId}`}>
               <span className="block overflow-hidden rounded-full self-center">
-                <Identicon seed={thread.authorId} size={18} />
+                <Identicon seed={authorIconId} size={18} />
               </span>
             </span>
           ) : (
@@ -206,9 +211,9 @@ function ThreadCard({
       <div className="flex items-center gap-3 min-w-0">
         {checkbox}
         {thumbImg(40, 'rounded-xl') ||
-          (thread.authorId && (
-            <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の ID:${thread.authorId}`}>
-              <Identicon seed={thread.authorId} size={40} />
+          (authorIconId && (
+            <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の ID:${authorIconId}`}>
+              <Identicon seed={authorIconId} size={40} />
             </span>
           )) ||
           (beNo && (
@@ -253,12 +258,12 @@ function ThreadCard({
             <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
               {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
               {/* 立てた人の ID(エッジ)。模様と ID で、同じ人の立てたスレが分かる */}
-              {thread.authorId && (
+              {authorIconId && (
                 <span className="flex items-center gap-1 min-w-0 font-mono" title="立てた人の ID">
                   <span className="flex-shrink-0 block overflow-hidden rounded-full">
-                    <Identicon seed={thread.authorId} size={12} />
+                    <Identicon seed={authorIconId} size={12} />
                   </span>
-                  <span className="truncate">{thread.authorId}</span>
+                  <span className="truncate">{authorIconId}</span>
                 </span>
               )}
               {archived && <span className="whitespace-nowrap">dat落ち</span>}
@@ -344,6 +349,12 @@ function ThreadCard({
     >
       {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
           (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+      {/* 立てた人の ID(エッジ)。模様で出さないときは、右下に小さく */}
+      {thread.authorId && !authorIcon && variant !== 'classic' && (
+        <span className="absolute bottom-0.5 right-2 pointer-events-none font-mono text-[9px] leading-none text-c-text-muted opacity-80" title="立てた人の ID">
+          {thread.authorId}
+        </span>
+      )}
       {/* スマホ: 選んでいるスレは、強調色を薄く敷いて右にチェック */}
       {isMobile && selected && (
         <>

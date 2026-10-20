@@ -1471,8 +1471,9 @@ export default function App() {
     // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
     // 文字を打っている欄から抜けるのが先(検索欄で戻ると、まず欄から抜ける)
     if (action === 'back' && blurTyping()) return
-    // レスのポップアップが出ていれば、それを閉じるのが先(スレ表示が Esc でまとめて閉じる)
-    if (action === 'back' && document.querySelector('.post-popup')) {
+    // レスのポップアップが出ていれば、それを閉じるのが先(スレ表示が Esc でまとめて閉じる)。
+    // スレ一覧で選んでいる途中なら、選ぶのをやめる(Esc)
+    if (action === 'back' && (document.querySelector('.post-popup') || document.querySelector('[data-selecting]'))) {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
       return
     }
@@ -1549,6 +1550,10 @@ export default function App() {
     }
     if (drawerOpen) return setDrawerOpen(false)
     if (blurTyping()) return
+    if (document.querySelector('[data-selecting]')) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      return
+    }
     // レスのポップアップが出ていれば、Esc を押したことにして閉じる(スレ表示が Esc でいちばん上から閉じる)
     if (document.querySelector('.post-popup')) {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
@@ -1967,6 +1972,7 @@ export default function App() {
           onHeaderHeight={(h) => updateSetting('listHeaderHeight', h)}
           onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
           variant={effectivePostStyle(settings)}
+          authorIcon={settings.threadAuthorIcon}
           title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}

@@ -691,6 +691,12 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
         />
         <Toggle
+          checked={s.threadAuthorIcon}
+          onChange={(v) => update('threadAuthorIcon', v)}
+          label="スレ一覧で、立てた人の ID を模様で出す"
+          note="スレ一覧に立てた人の ID が付いてくる掲示板(エッジ)だけです。切っているときは、スレの右下に ID を小さく出します"
+        />
+        <Toggle
           checked={s.highlightOp}
           onChange={(v) => update('highlightOp', v)}
           label="スレ主を強調する"

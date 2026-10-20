@@ -18,6 +18,7 @@ import { saveImage } from '../host/saveImage'
 import { isVideoFileUrl, youtubeEmbedUrl } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { isMobile } from '../utils/platform'
+import MobileImageViewer from './mobile/MobileImageViewer'
 
 interface Props {
   urls: string[]
@@ -167,7 +168,13 @@ function zoomAt(z: Zoom, next: number, cx: number, cy: number): Zoom {
   return { scale, x: px - (px - z.x) * k, y: py - (py - z.y) * k }
 }
 
-export default function Lightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex, onClose, onOpenExternal }: Props) {
+/** スマホは、スマホ用に別に作ったビューアー(components/mobile/MobileImageViewer)を使う */
+export default function Lightbox(props: Props) {
+  if (isMobile) return <MobileImageViewer {...props} />
+  return <DesktopLightbox {...props} />
+}
+
+function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex, onClose, onOpenExternal }: Props) {
   const url = urls[index]
   const post = posts?.[index] ?? onlyPost
   const video = isVideoFileUrl(url)

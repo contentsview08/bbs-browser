@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Placement } from '../utils/toolbar'
-import { isMobile } from '../utils/platform'
+import { isMobile, uiLabel } from '../utils/platform'
 
 export interface BarAction {
   id: string
@@ -121,7 +121,7 @@ export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-c-text-muted hover:text-c-text-strong"
               >
                 <span className="material-symbols-outlined text-base">arrow_back</span>
-                {sub.label}
+                {uiLabel(sub.label)}
               </button>
               {sub.submenu}
             </>
@@ -144,7 +144,7 @@ export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
                 >
                   {a.icon}
                 </span>
-                <span className="flex-1">{a.label}</span>
+                <span className="flex-1">{uiLabel(a.label)}</span>
                 {a.submenu && <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>}
               </button>
             ))

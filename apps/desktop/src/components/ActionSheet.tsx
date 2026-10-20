@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { uiLabel } from '../utils/platform'
 
 export interface SheetItem {
   label: string
@@ -11,11 +12,11 @@ export interface SheetItem {
   danger?: boolean
 }
 
-export default function ActionSheet(props: { title?: string; items: SheetItem[]; onClose: () => void }) {
+export default function ActionSheet(props: { title?: string; items: SheetItem[]; onClose: () => void; /** 重なりの高さ(画像ビューアーの上に出すときなど) */ zIndex?: number }) {
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   return createPortal(
-    <div className="fixed inset-0 z-[9600] bg-black/40 flex items-end drawer-fade" onClick={props.onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-end drawer-fade" style={{ zIndex: props.zIndex ?? 9600 }} onClick={props.onClose}>
       <div
         ref={boxRef}
         className="w-full max-h-[75vh] flex flex-col bg-c-surface rounded-t-2xl shadow-2xl sheet-rise"
@@ -38,7 +39,7 @@ export default function ActionSheet(props: { title?: string; items: SheetItem[];
               className={`w-full flex items-center gap-4 px-5 py-3.5 text-left text-[15px] active:bg-c-surface2 ${it.danger ? 'text-c-heat-very-hot' : 'text-c-text-body'}`}
             >
               <span className="material-symbols-outlined text-xl text-c-text-muted">{it.icon}</span>
-              <span className="flex-1 min-w-0 truncate">{it.label}</span>
+              <span className="flex-1 min-w-0 truncate">{uiLabel(it.label)}</span>
             </button>
           ))}
         </div>

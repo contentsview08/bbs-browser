@@ -1010,7 +1010,10 @@ html[data-platform='mobile'] .bar-zoom {
   zoom: var(--bar-zoom, 1);
 }
 
-/* スマホ: カードの見た目のスレ一覧は、スレとスレの間に線を引いて区切る(面の濃淡だけだと境目が分かりにくい) */
+/* スマホ: スレ一覧は、どの見た目でもスレとスレの間に線を引いて区切る(面の濃淡や余白だけだと境目が分かりにくい) */
+html[data-platform='mobile'] .card-thread {
+  box-shadow: 0 1px 0 var(--c-border);
+}
 html[data-platform='mobile'] .card-thread[data-variant='card'] {
   box-shadow: 0 1px 0 var(--c-border-strong);
 }
@@ -1050,4 +1053,20 @@ html:root[data-scheme='discord-dark'] {
 /* スマホの設定: 項目の行(題の一覧・オンオフ)のあいだに線を引いて、1 行ずつ見分けやすくする */
 html[data-platform='mobile'] .settings-row {
   border-bottom: 1px solid var(--c-border);
+}
+
+/* スマホ: 長押しで文字が選ばれるのは、レスの本文と入力欄だけにする(ボタン・見出し・ヘッダーなど、画面の部品の文字は選ばない) */
+html[data-platform='mobile'] body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+html[data-platform='mobile'] [data-post-body],
+html[data-platform='mobile'] input,
+html[data-platform='mobile'] textarea,
+html[data-platform='mobile'] [contenteditable='true'],
+html[data-platform='mobile'] .selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }

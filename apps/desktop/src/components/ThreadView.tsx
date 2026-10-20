@@ -393,6 +393,25 @@ export default function ThreadView(props: Props) {
   const [titleSheet, setTitleSheet] = useState(false)
   /** ︙ の「文字の大きさ・余白」の画面 */
   const [fontDialog, setFontDialog] = useState(false)
+  /** スマホ: スレタイを 2 行に収める(入りきらなければ字を小さく)。スレタイ・幅が変わったら測り直す */
+  const titleFitRef = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const el = titleFitRef.current
+    if (!isMobile || !el) return
+    const fit = () => {
+      el.style.fontSize = ''
+      let size = parseFloat(getComputedStyle(el).fontSize)
+      // 2 行(line-clamp)からはみ出している間、0.5px ずつ小さくする
+      while (el.scrollHeight > el.clientHeight + 1 && size > 11) {
+        size -= 0.5
+        el.style.fontSize = `${size}px`
+      }
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(el.parentElement ?? el)
+    return () => observer.disconnect()
+  }, [log.title, log.posts.length])
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -1656,8 +1675,8 @@ export default function ThreadView(props: Props) {
               title={isMobile ? 'スレの操作' : 'クリックで先頭へスクロール'}
             >
               {isMobile ? (
-                // スマホ: 省かずに折り返す(長くても 3 行まで)。レス数はスレタイの続きに
-                <span className="text-[15px] leading-snug break-words line-clamp-3">
+                // スマホ: 2 行まで。入りきらなければ字を小さくして収める(fitTitle)。レス数はスレタイの続きに
+                <span ref={titleFitRef} className="text-[15px] leading-snug break-words line-clamp-2">
                   {log.title}
                   <span className="ml-1.5 text-xs font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
                 </span>

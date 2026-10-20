@@ -98,6 +98,8 @@ const threadEntry = (thread: ThreadSummary) => ({ key: `thread:${threadId(thread
 const TAB_REPEAT_SETTLE_MS = 200
 /** スマホ: スレ表示がすべり込む・すべって出ていく時間(下の duration-[250ms] と同じ) */
 const SLIDE_MS = 250
+/** スマホ: 引き出し(サイドバー)の中身の拡大率。PC 向けの小さな字のままだと、ほかの画面より小さく見える */
+const DRAWER_ZOOM = 1.15
 
 // 開発中のアプリだけ、お試しの掲示板(通信しない。https://demo.bbs-browser.invalid/board/)を足す
 if (import.meta.env.DEV) registerConnector(demoConnector)
@@ -1960,9 +1962,11 @@ export default function App() {
         className={isMobile ? 'absolute inset-y-0 left-0 flex drawer-slide' : 'contents'}
         style={isMobile ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', background: 'var(--tab-active-bg)' } : undefined}
       >
+      <div className={isMobile ? 'flex' : 'contents'} style={isMobile ? { zoom: DRAWER_ZOOM } : undefined}>
       <Sidebar
         neighbor={single ? 'view' : 'list'}
-        width={isMobile ? Math.min(320, Math.round(window.innerWidth * 0.85)) : settings.sidebarWidth}
+        // スマホは中身を少し拡大して(下の zoom)、ほかの画面の字の大きさにそろえる。拡大する分、幅は割り戻す
+        width={isMobile ? Math.round(Math.min(340, window.innerWidth * 0.86) / DRAWER_ZOOM) : settings.sidebarWidth}
         onResize={(w) => updateSetting('sidebarWidth', w)}
         favorites={favorites ?? []}
         onReorderFavorites={(urls) =>
@@ -1994,6 +1998,7 @@ export default function App() {
         onManageBoards={() => setSettingsTab('boardlist')}
         onOpenUrl={isMobile ? () => setUrlPrompt('') : undefined}
       />
+      </div>
       </div>
       </div>,
         )}

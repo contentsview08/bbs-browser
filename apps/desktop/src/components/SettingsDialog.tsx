@@ -161,10 +161,11 @@ const TAB_COLORS: Record<Tab, string> = {
   connectors: '#6b7280',
 }
 
-/** スマホ: 分類の中の項目が 1 つだけなら、題の一覧を飛ばして、その中身をすぐ出す */
-function SectionAutoOpen(props: { seen: string[]; active: boolean; onOne: (title: string) => void }) {
+/** スマホ: 分類の中の項目が少なければ(3 つまで)、題の一覧を挟まず、中身をそのまま並べる(段を深くしすぎない) */
+const FLAT_MAX = 3
+function SectionAutoOpen(props: { seen: string[]; active: boolean; onFew: () => void }) {
   useEffect(() => {
-    if (props.active && props.seen.length === 1) props.onOne(props.seen[0])
+    if (props.active && props.seen.length > 0 && props.seen.length <= FLAT_MAX) props.onFew()
   })
   return null
 }
@@ -242,12 +243,13 @@ function Section({
     )
   }
   return (
-    <section ref={ref} className="mb-8">
-      <h3 className="text-sm font-bold text-c-text-strong mb-1 flex items-center gap-2">
+    // スマホは、まとまりの間・題と中身の間をゆったり取る
+    <section ref={ref} className={isMobile ? 'mb-10' : 'mb-8'}>
+      <h3 className={`${isMobile ? 'text-base mb-1.5' : 'text-sm mb-1'} font-bold text-c-text-strong flex items-center gap-2`}>
         {title}
         {advanced && <span className="text-[10px] font-normal px-1.5 rounded border border-c-border text-c-text-muted">高度</span>}
       </h3>
-      {note && <p className="text-xs text-c-text-muted mb-2">{note}</p>}
+      {note && <p className={`${isMobile ? 'text-[13px] leading-relaxed mb-3' : 'text-xs mb-2'} text-c-text-muted`}>{note}</p>}
       <div className="mt-2">{children}</div>
     </section>
   )
@@ -2326,17 +2328,15 @@ function AboutTab() {
 export default function SettingsDialog(props: Props) {
   // スマホは、はじめに分類の一覧(tab が undefined)を出し、押すとその分類の画面に入る
   const [tab, setTab] = useState<Tab | undefined>(props.initialTab ?? (isMobile ? undefined : 'display'))
-  /** スマホ: 分類の中で開いている項目(Section の題)。autoOpened は、項目が 1 つだけなのですぐ開いたもの(戻ると分類の一覧へ) */
+  /** スマホ: 分類の中で開いている項目(Section の題) */
   const [section, setSection] = useState<string>()
-  const [autoOpened, setAutoOpened] = useState(false)
-  const openSection = (title: string, auto = false) => {
-    setSection(title)
-    setAutoOpened(auto)
-  }
+  /** スマホ: 項目が少ない分類なので、題の一覧を挟まずに中身をそのまま並べている */
+  const [flat, setFlat] = useState(false)
+  const openSection = (title: string) => setSection(title)
   const enterTab = (key: Tab | undefined) => {
     setTab(key)
     setSection(undefined)
-    setAutoOpened(false)
+    setFlat(false)
   }
   /** 「板とサイト」から板一覧へ移るときに、どの BBS メニューを出すか */
   const [listSite, setListSite] = useState<string>()
@@ -2352,7 +2352,7 @@ export default function SettingsDialog(props: Props) {
   /** スマホ: 1 段戻る(検索 → 項目 → 分類 → 一覧 → 閉じる) */
   const goBack = () => {
     if (searching) return setQuery('')
-    if (section && !autoOpened) return setSection(undefined)
+    if (section) return setSection(undefined)
     if (tab) return enterTab(undefined)
     props.onClose()
   }
@@ -2451,7 +2451,7 @@ export default function SettingsDialog(props: Props) {
     const title = searching ? '設定の検索' : (section ?? current?.name ?? '設定')
     // 分類の画面で、項目(Section)の題を集める(1 つしかなければ、その中身をすぐ出す)
     const seen: string[] = []
-    const nav: SectionNav = section ? { mode: 'detail', title: section } : { mode: 'index', open: openSection, seen }
+    const nav: SectionNav = flat ? { mode: 'all' } : section ? { mode: 'detail', title: section } : { mode: 'index', open: openSection, seen }
     return createPortal(
       <div
         ref={boxRef}
@@ -2469,9 +2469,9 @@ export default function SettingsDialog(props: Props) {
           {searching ? (
             <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">{searchResults}</div>
           ) : current ? (
-            <div key={`${tab}:${section ?? ''}`} className={`flex-1 min-h-0 px-5 py-4 reply-slide ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
+            <div key={`${tab}:${section ?? ''}`} className={`flex-1 min-h-0 px-6 py-6 reply-slide ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
               <SectionNavContext.Provider value={tab === 'boardlist' ? { mode: 'all' } : nav}>
-                <SectionAutoOpen seen={seen} active={!section && tab !== 'boardlist'} onOne={(t) => openSection(t, true)} />
+                <SectionAutoOpen seen={seen} active={!flat && !section && tab !== 'boardlist'} onFew={() => setFlat(true)} />
                 {renderTab(current.key)}
               </SectionNavContext.Provider>
             </div>

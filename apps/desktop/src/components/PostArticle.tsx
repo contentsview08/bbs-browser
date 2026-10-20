@@ -121,6 +121,8 @@ const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
 /** Discord 風・LINE 風のアイコンの大きさ。スマホは画面が狭いので小さくする(アンカーツリーの段の幅も合わせる。AnchorTree.tsx) */
 export const AVATAR = isMobile ? 28 : 36
 const AVATAR_W = isMobile ? 'w-7' : 'w-9'
+/** アイコンと本文の隙間(px)。Discord 風の行の gap-2・gap-3 と同じ */
+const AVATAR_GAP = isMobile ? 8 : 12
 const AVATAR_CLASS = isMobile ? 'w-7 h-7' : 'w-9 h-9'
 
 /** 日付を短くする(「2026/10/19(日) 12:34:56.78」→「10/19 12:34」)。読めない形ならそのまま */
@@ -577,7 +579,8 @@ function PostArticle(props: Props) {
         </span>
         {idCount >= 2 && (
           <span
-            className={`absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(idCount) || 'text-c-text-muted'}`}
+            // 右下の数は、アイコンの外(名前や「主」の印の側)にはみ出さないよう、右へは少しだけ
+            className={`absolute -bottom-1 ${round ? '-right-0.5' : '-right-1'} min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(idCount) || 'text-c-text-muted'}`}
           >
             {idCount}
           </span>
@@ -657,12 +660,13 @@ function PostArticle(props: Props) {
    * (番号は線とアイコンで分かるので出さない)
    */
   const replyLine = variant === 'discord' && props.replyPreview && (
-    <div className="relative h-5 mb-0.5 pl-12 flex items-center">
-      {/* 大きいアイコン(幅 36px の真ん中)の上から立ち上がり、右へ曲がって小さいアイコンの手前まで */}
+    // 本文の始まり(アイコンの幅 + 隙間)にそろえる。スマホはアイコンが小さく隙間も狭いので、決まった値ではなく大きさから出す
+    <div className="relative h-5 mb-0.5 flex items-center" style={{ paddingLeft: AVATAR + AVATAR_GAP }}>
+      {/* 大きいアイコンの真ん中の上から立ち上がり、右へ曲がって小さいアイコンの手前まで */}
       <span
         aria-hidden
-        className="absolute left-[18px] top-1/2 -bottom-0.5 w-[26px] border-l-2 border-t-2 rounded-tl-md pointer-events-none"
-        style={{ borderColor: 'var(--c-border-strong)' }}
+        className="absolute top-1/2 -bottom-0.5 border-l-2 border-t-2 rounded-tl-md pointer-events-none"
+        style={{ borderColor: 'var(--c-border-strong)', left: AVATAR / 2, width: AVATAR / 2 + AVATAR_GAP - 4 }}
       />
       <button
         type="button"

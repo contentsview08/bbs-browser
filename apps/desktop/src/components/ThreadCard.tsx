@@ -156,8 +156,67 @@ function ThreadCard({
   /** スレタイの後ろの、立てた人の BE 番号(「… [123456789]」の形の板だけ) */
   const beNo = variant === 'line' ? /[[［](\d{6,12})[\]］]\s*$/.exec(thread.title)?.[1] : undefined
 
+  /**
+   * スマホ: カード・Discord 風・LINE 風を同じ形にそろえる(見た目ごとに並びがばらばらで読みにくかったので)。
+   * 左に見た目ごとのアイコン、1 段目にスレタイ(3 行まで)、2 段目の左に 立った時間・立てた人の ID・dat落ち、右に 勢い・レス数・未読
+   */
+  const leading =
+    variant === 'discord'
+      ? thumbImg(28, 'rounded') ||
+        (authorIconId ? (
+          <span className="block overflow-hidden rounded-full" title={`立てた人の ID:${authorIconId}`}>
+            <Identicon seed={authorIconId} size={22} />
+          </span>
+        ) : (
+          <span className="thread-row-hash text-c-text-muted select-none">#</span>
+        ))
+      : variant === 'line'
+        ? thumbImg(40, 'rounded-xl') ||
+          ((authorIconId || beNo) && (
+            <span className="block overflow-hidden rounded-full">
+              <Identicon seed={authorIconId ?? `be:${beNo}`} size={40} />
+            </span>
+          ))
+        : thumbImg(48)
+  const unified = (
+    <div className="flex items-start gap-2.5 min-w-0">
+      {leading && <span className="flex-shrink-0 flex items-center justify-center min-w-[1rem] pt-0.5">{leading}</span>}
+      {unreadCount > 0 && variant === 'discord' && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-[15px] leading-snug break-words line-clamp-3"
+          style={{ color: titleColor, fontWeight: variant === 'line' || unreadCount > 0 ? 600 : 400 }}
+        >
+          {newBadge}
+          {favStar}
+          {threadBadges}
+          {thread.title}
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-c-text-muted min-w-0">
+          {thread.createdAt && <span className="flex-shrink-0 whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
+          {thread.authorId && (
+            <span className="min-w-0 truncate font-mono" title="立てた人の ID">
+              {thread.authorId}
+            </span>
+          )}
+          {archived && <span className="flex-shrink-0">dat落ち</span>}
+          <span className="ml-auto flex-shrink-0 flex items-center gap-3">
+            {momentumEl('min-w-[3ch]')}
+            <span className="tabular-nums" title="レス数">
+              {thread.postCount}
+              <span className="ml-0.5 text-[10px]">レス</span>
+            </span>
+            {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded-full text-center leading-tight')}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+
   const content =
-    variant === 'discord' ? (
+    isMobile && variant !== 'classic' ? (
+      unified
+    ) : variant === 'discord' ? (
       // Discord 風: チャンネル一覧のような 1 行。新着のあるスレは左に白い点、スレタイを明るく太く
       <div className="thread-row flex gap-2 min-w-0">
         {checkbox}

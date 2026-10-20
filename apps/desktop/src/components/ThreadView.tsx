@@ -27,7 +27,6 @@ import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
 import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
-import Conversation from './Conversation'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
@@ -390,8 +389,6 @@ export default function ThreadView(props: Props) {
   const [filters, setFilters] = useState<Set<PostFilter>>(new Set())
   /** スマホ: スレタイを押して出す、スレの操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
-  /** スマホ: 会話の画面(アンカーツリーの代わり)で見てきたレス。最後が真ん中に出しているレス */
-  const [convo, setConvo] = useState<number[]>()
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -1446,12 +1443,6 @@ export default function ThreadView(props: Props) {
         onBody: (no, el) => {
           const tree = anchorTree(no, log.posts, resolveAnchor, quoteLinks)
           if (tree.length <= 1) return
-          // スマホ: ツリーを広げる代わりに、そのレスとまわり(元のレス・返信)を見る画面へ。開いていれば、そのレスへ移る
-          if (isMobile) {
-            setPopups([])
-            setConvo((s) => (!s ? [no] : s.at(-1) === no ? s : [...s, no]))
-            return
-          }
           openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el, false, no)
         },
         onUrl: props.onUrl,
@@ -2124,29 +2115,6 @@ export default function ThreadView(props: Props) {
           saveDir={settings.imageSaveDir}
           onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}
           onClose={() => setGalleryOpen(false)}
-        />
-      )}
-      {convo && (
-        <Conversation
-          stack={convo}
-          byNo={byNo}
-          parentOf={(n) => {
-            const p = byNo.get(n)
-            return p ? targetsOfPost(p, resolveAnchor, quoteLinks).find((t) => t < n && byNo.has(t)) : undefined
-          }}
-          repliesOf={(n) => (replies.get(n) ?? []).filter((r) => byNo.has(r))}
-          renderPosts={(nos) => renderPosts(nos.map((n) => byNo.get(n)).filter((p): p is Post => p !== undefined), 0)}
-          refOf={refOf}
-          onOpen={(n) => setConvo((s) => (s && s.at(-1) !== n ? [...s, n] : s))}
-          // 戻る: 会話の上に出したポップアップがあれば、それを先に閉じる。なければ 1 つ前のレスへ(最初なら閉じる)
-          onBack={() => {
-            if (popups.length > 0) return setPopups([])
-            setConvo((s) => (s && s.length > 1 ? s.slice(0, -1) : undefined))
-          }}
-          onClose={() => {
-            setPopups([])
-            setConvo(undefined)
-          }}
         />
       )}
       {titleSheet && (

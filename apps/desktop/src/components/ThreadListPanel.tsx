@@ -839,7 +839,8 @@ export default function ThreadListPanel(props: Props) {
             onReset={headerDrag.reset}
           />
           <div className={isMobile ? 'px-2 py-1' : 'p-4'}>
-            <div className="flex items-center gap-2">
+            {/* スマホ: 左上のメニューのボタンと板名の間を、指で押し分けやすいよう広めに */}
+            <div className={`flex items-center ${isMobile ? 'gap-3' : 'gap-2'}`}>
               {/* スマホ: 左上のメニュー(サイドバーの引き出し) */}
               {isMobile && props.onOpenDrawer && (
                 <button type="button" onClick={props.onOpenDrawer} className={MOBILE_HEAD_BTN} title="メニュー">

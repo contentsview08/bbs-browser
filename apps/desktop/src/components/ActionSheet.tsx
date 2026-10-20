@@ -31,8 +31,13 @@ export default function ActionSheet(props: {
   zIndex?: number
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
-  /** 中を開いている項目 */
-  const [sub, setSub] = useState<SheetItem>()
+  /**
+   * 中を開いている項目。名前だけを覚えて、描くたびに今の項目から引き直す
+   * (項目ごと覚えると、開いた時点の中身のままになり、選んだ印(✓)などが変わらない)
+   */
+  const [subLabel, setSubLabel] = useState<string>()
+  const sub = subLabel === undefined ? undefined : props.items.find((it) => it.label === subLabel)
+  const setSub = (it: SheetItem | undefined) => setSubLabel(it?.label)
   // 戻る: 中を開いていれば元の一覧へ、そうでなければ閉じる
   useFocusTrap(boxRef, () => (sub ? setSub(undefined) : props.onClose()))
   const safe = props.items.filter((it) => !it.danger)

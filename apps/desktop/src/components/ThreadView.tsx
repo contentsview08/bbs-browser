@@ -1426,13 +1426,16 @@ export default function ThreadView(props: Props) {
   }, [])
 
   // handlersFor と renderPosts は互いを使う(ポップアップの中のレスにも、1 段深いハンドラを渡す)
+  /** ポップアップの中身を描く関数(いつも最新の設定で描くよう、控えを通して呼ぶ) */
+  const renderRef = useRef({ renderPosts, renderTree })
+  renderRef.current = { renderPosts, renderTree }
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
       // 開いたレス(el を含むレス)が一覧の中にあれば、そこを見せる(ID のレス など)
       const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) => {
         // el はレスの中のボタンか、キー操作のときはレスの枠
         const from = Number((el.closest<HTMLElement>('article[data-no]') ?? el.querySelector<HTMLElement>('article[data-no]'))?.dataset.no)
-        openContent(title, renderPosts(posts, level + 1), el, viaHover, posts.some((p) => p.no === from) ? from : undefined)
+        openContent(title, renderRef.current.renderPosts(posts, level + 1), el, viaHover, posts.some((p) => p.no === from) ? from : undefined)
       }
       const openContent = (title: string, content: ReactNode, el: HTMLElement, viaHover = false, focusNo?: number) => {
         const rect = el.getBoundingClientRect()
@@ -1481,7 +1484,7 @@ export default function ThreadView(props: Props) {
         onBody: (no, el) => {
           const tree = anchorTree(no, log.posts, resolveAnchor, quoteLinks)
           if (tree.length <= 1) return
-          openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderTree(no, level + 1), el, false, no)
+          openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderRef.current.renderTree(no, level + 1), el, false, no)
         },
         onUrl: props.onUrl,
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),
@@ -1507,7 +1510,8 @@ export default function ThreadView(props: Props) {
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
-    [byNo, replies, log.posts, settings, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
+    // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
+    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1611,7 +1615,8 @@ export default function ThreadView(props: Props) {
         />
         <header
           ref={titleRowRef}
-          className={`flex items-center justify-between ${isMobile ? (props.onOpenDrawer ? 'pl-1 pr-1' : 'pl-4 pr-1') : 'px-6'}`}
+          // スマホ: 左上のメニューのボタンとスレタイの間を広めに(gap-3)
+          className={`flex items-center justify-between ${isMobile ? `gap-3 ${props.onOpenDrawer ? 'pl-1 pr-1' : 'pl-4 pr-1'}` : 'px-6'}`}
           // スマホ: スレタイを省かずに折り返すので、長いスレタイでは帯を高くする(既定の高さより低くはしない)
           style={isMobile ? { minHeight: 'calc(var(--header-height, 72px) / var(--bar-zoom, 1))' } : { height: headerDrag.height || 'var(--header-height, 80px)' }}
         >

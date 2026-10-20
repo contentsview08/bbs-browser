@@ -120,10 +120,14 @@ const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
 
 /** Discord 風・LINE 風のアイコンの大きさ。スマホは画面が狭いので小さくする(アンカーツリーの段の幅も合わせる。AnchorTree.tsx) */
 export const AVATAR = isMobile ? 28 : 36
-const AVATAR_W = isMobile ? 'w-7' : 'w-9'
 /** アイコンと本文の隙間(px)。Discord 風の行の gap-2・gap-3 と同じ */
 const AVATAR_GAP = isMobile ? 8 : 12
-const AVATAR_CLASS = isMobile ? 'w-7 h-7' : 'w-9 h-9'
+/**
+ * アイコンの列・アイコンの大きさ。アイコン(Identicon)は px で描くので、列も px で決める
+ * (文字の大きさに連動する rem で決めると、文字を小さくしたときに列だけ狭くなり、はみ出したアイコンが名前に重なる)
+ */
+const AVATAR_BOX = { width: AVATAR, height: AVATAR }
+const AVATAR_COL = { width: AVATAR }
 
 /** サムネイルを読み込んでいる間の印(サムネイルの真ん中で回る) */
 function ThumbSpinner() {
@@ -601,7 +605,7 @@ function PostArticle(props: Props) {
 
   /** ID のないレス(板の設定や書き方で ID が付かないもの)のアイコン。何もない丸だと壊れて見えるので、人の形を出す */
   const noIdAvatar = (
-    <span className={`flex ${AVATAR_CLASS} rounded-full bg-c-surface3 items-center justify-center text-c-text-muted`} title="ID のないレス">
+    <span className="flex rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" style={AVATAR_BOX} title="ID のないレス">
       <span className="material-symbols-outlined fill text-xl leading-none">person</span>
     </span>
   )
@@ -956,12 +960,13 @@ function PostArticle(props: Props) {
   const lineLayout = () => (
     <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''} ${hasConnections ? 'cursor-pointer' : ''}`} onClick={openTree}>
       {!right && (
-        <div className={`${AVATAR_W} flex-shrink-0`}>
+        <div className="flex-shrink-0" style={AVATAR_COL}>
           {props.continued ? null : beIcon ? (
             // BE のアイコンがあれば、ID の模様の代わりに出す。大きさは絵ごとに違うので、36px の枠に収まるよう縮め・広げる(縦横の比は保つ)
             <button
               type="button"
-              className={`block ${AVATAR_CLASS} rounded-xl overflow-hidden bg-c-surface hover:opacity-80`}
+              className="block rounded-xl overflow-hidden bg-c-surface hover:opacity-80"
+              style={AVATAR_BOX}
               onClick={(e) => post.id && handlers.onId(post.id, e.currentTarget)}
               title={post.id ? `BE のアイコン(ID:${post.id} のレスを出す)` : 'BE のアイコン'}
             >
@@ -1039,9 +1044,9 @@ function PostArticle(props: Props) {
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>
         {replyLine}
-        <div className={`flex ${isMobile ? 'gap-2' : 'gap-3'} items-start ${hasConnections ? 'cursor-pointer' : ''}`} onClick={openTree}>
+        <div className={`flex items-start ${hasConnections ? 'cursor-pointer' : ''}`} style={{ gap: AVATAR_GAP }} onClick={openTree}>
           {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
-          <div className={`${AVATAR_W} flex-shrink-0 flex justify-center items-start`}>
+          <div className="flex-shrink-0 flex justify-center items-start" style={AVATAR_COL}>
             {props.continued ? (
               <span className="pt-0.5 text-[10px] tabular-nums text-c-text-muted opacity-0 group-hover:opacity-100">{numBtn('#')}</span>
             ) : (

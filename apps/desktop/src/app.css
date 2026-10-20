@@ -1110,3 +1110,26 @@ html[data-platform='mobile'] .selectable {
 .sheet-sub p {
   padding-left: 24px !important;
 }
+
+/* スマホ: 文字の大きさ・余白のスライダー。指で扱いやすいよう、線を太く、つまみを大きく */
+.big-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  background: transparent;
+}
+.big-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--c-border-strong);
+}
+.big-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px;
+  height: 30px;
+  margin-top: -11px;
+  border-radius: 999px;
+  background: var(--c-accent);
+  border: 3px solid var(--c-surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}

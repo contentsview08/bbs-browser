@@ -53,7 +53,7 @@ export default function MobilePage(props: {
             className="flex-1 min-w-0 h-10 bg-c-surface border border-c-border rounded-xl px-3 text-[15px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0"
           />
         ) : (
-          <h2 className="flex-1 min-w-0 truncate text-base font-bold text-c-text-strong">
+          <h2 className="flex-1 min-w-0 truncate text-[20px] font-bold text-c-text-strong">
             {props.title}
             {props.count !== undefined && <span className="ml-2 text-sm font-normal text-c-text-muted tabular-nums">{props.count}</span>}
           </h2>
@@ -72,7 +72,7 @@ export default function MobilePage(props: {
           </button>
         )}
       </div>
-      {props.note && <p className="flex-shrink-0 px-4 py-2.5 text-xs leading-relaxed text-c-text-muted border-b border-c-border">{props.note}</p>}
+      {props.note && <p className="flex-shrink-0 px-4 py-3 text-[13.5px] leading-relaxed text-c-text-muted border-b border-c-border">{props.note}</p>}
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">{props.children}</div>
     </div>,
     document.body,

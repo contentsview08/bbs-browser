@@ -113,7 +113,7 @@ export default function MobileSettings(props: SettingsProps & { initialPage?: Pa
         <button type="button" onClick={pop} className={MOBILE_HEAD_BTN} title={stack.length > 1 ? '戻る' : '閉じる'}>
           <span className={`material-symbols-outlined ${MOBILE_HEAD_ICON}`}>{stack.length > 1 ? 'arrow_back' : 'close'}</span>
         </button>
-        <h2 className="flex-1 min-w-0 truncate text-[18px] font-bold text-c-text-strong">{TITLES[page]}</h2>
+        <h2 className="flex-1 min-w-0 truncate text-[20px] font-bold text-c-text-strong">{TITLES[page]}</h2>
       </div>
       <div ref={scrollRef} key={page} className={`flex-1 min-h-0 overflow-y-auto pt-5 pb-10 ${back ? 'page-back' : 'page-in'}`}>
         {renderPage(page, props, s, update, push)}
@@ -187,8 +187,8 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
                   >
                     <span className="w-7 h-7 flex-shrink-0 rounded-full" style={{ background: c.accent, boxShadow: `inset 0 0 0 2px ${c.border}` }} />
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[14px] text-c-text-strong truncate">{c.name}</span>
-                      <span className="block text-[11px] text-c-text-muted">{isDarkScheme(c.key) ? 'ダーク' : 'ライト'}</span>
+                      <span className="block text-[16px] text-c-text-strong truncate">{c.name}</span>
+                      <span className="block text-[13px] text-c-text-muted">{isDarkScheme(c.key) ? 'ダーク' : 'ライト'}</span>
                     </span>
                     {chosen && <span className="material-symbols-outlined fill text-xl text-c-accent">check_circle</span>}
                   </button>
@@ -552,7 +552,8 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
 /** PC の設定画面の部品を、スマホの画面の余白で包んで出す */
 function Embed(props: { children: ReactNode; fill?: boolean }) {
   return (
-    <div className={`px-5 ${props.fill ? 'h-full flex flex-col' : ''}`}>
+    // 前の設定画面の部品は字が小さいので、中身ごと少し拡大する
+    <div className={`px-5 ${props.fill ? 'h-full flex flex-col' : ''}`} style={{ zoom: 1.12 }}>
       <SettingsEmbed>{props.children}</SettingsEmbed>
     </div>
   )

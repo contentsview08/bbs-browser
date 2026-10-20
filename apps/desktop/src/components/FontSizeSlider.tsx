@@ -39,11 +39,69 @@ export default function FontSizeSlider(props: {
   const commit = () => {
     if (px !== shown) props.onCommit(px)
   }
+  const min = props.min ?? FONT_PX_MIN
+  const max = props.max ?? FONT_PX_MAX
+  const step = props.step ?? 1
+  /** − ・ ＋ のボタン: 1 刻みずつ動かして、すぐ保存する(細かく合わせるとき) */
+  const nudge = (d: number) => {
+    const v = Math.round(Math.min(max, Math.max(min, px + d * step)) * 100) / 100
+    setPx(v)
+    props.preview(v)
+    if (v !== shown) props.onCommit(v)
+  }
+  const label = props.format ? props.format(px) : `${px}px`
+  // スマホ: 指で扱いやすいよう、字・つまみ・線を大きくし、左右に − ・ ＋ を置く
+  if (isMobile)
+    return (
+      <div className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="flex-1 min-w-0 text-[16px] text-c-text-strong">{props.label}</span>
+          <span className="tabular-nums text-[18px] font-bold text-c-accent">{label}</span>
+          {props.resettable && isSet && (
+            <button
+              type="button"
+              onClick={() => {
+                props.preview(props.base)
+                props.onCommit(unset)
+              }}
+              className="ml-1 px-2.5 py-1 rounded-full border border-c-border text-[13px] text-c-text-muted active:bg-c-surface3"
+            >
+              元に戻す
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => nudge(-1)} className="w-11 h-11 flex-shrink-0 rounded-full bg-c-surface3 text-c-text-strong flex items-center justify-center active:brightness-110" title="小さく">
+            <span className="material-symbols-outlined text-2xl">remove</span>
+          </button>
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={px}
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              setPx(v)
+              props.preview(v)
+            }}
+            onPointerUp={commit}
+            onTouchEnd={commit}
+            onBlur={commit}
+            className="big-range flex-1 min-w-0"
+            style={{ touchAction: 'pan-y' }}
+          />
+          <button type="button" onClick={() => nudge(1)} className="w-11 h-11 flex-shrink-0 rounded-full bg-c-surface3 text-c-text-strong flex items-center justify-center active:brightness-110" title="大きく">
+            <span className="material-symbols-outlined text-2xl">add</span>
+          </button>
+        </div>
+      </div>
+    )
   return (
     <div className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-1 text-xs text-c-text-muted">
         <span className="flex-1">{props.label}</span>
-        <span className="tabular-nums font-bold text-c-text-strong">{props.format ? props.format(px) : `${px}px`}</span>
+        <span className="tabular-nums font-bold text-c-text-strong">{label}</span>
         {props.resettable && isSet && (
           <button
             type="button"
@@ -62,9 +120,9 @@ export default function FontSizeSlider(props: {
         <span className="material-symbols-outlined text-sm text-c-text-muted">{props.icons?.[0] ?? 'text_decrease'}</span>
         <input
           type="range"
-          min={props.min ?? FONT_PX_MIN}
-          max={props.max ?? FONT_PX_MAX}
-          step={props.step ?? 1}
+          min={min}
+          max={max}
+          step={step}
           value={px}
           onChange={(e) => {
             const v = Number(e.target.value)
@@ -72,12 +130,9 @@ export default function FontSizeSlider(props: {
             props.preview(v)
           }}
           onPointerUp={commit}
-          onTouchEnd={commit}
           onKeyUp={commit}
           onBlur={commit}
-          // touch-action: 指で横になぞってつまみを動かす(スクロールに取られないように)
           className="flex-1 accent-[var(--c-accent)] h-8"
-          style={{ touchAction: 'pan-y' }}
         />
         <span className="material-symbols-outlined text-lg text-c-text-muted">{props.icons?.[1] ?? 'text_increase'}</span>
       </div>
@@ -103,14 +158,24 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   return createPortal(
-    <div className="fixed inset-0 z-[9800] bg-black/25 flex items-center justify-center p-4" onClick={props.onClose}>
+    // スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)
+    <div
+      className={`fixed inset-0 z-[9800] bg-black/25 flex ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`}
+      onClick={props.onClose}
+    >
       <div
         ref={boxRef}
-        className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-c-surface border border-c-border rounded-2xl shadow-2xl rise-in py-2"
+        className={`w-full overflow-y-auto bg-c-surface shadow-2xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
+        style={isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
+        {isMobile && (
+          <div className="flex justify-center pt-0.5 pb-1">
+            <span className="w-10 h-1 rounded-full bg-c-border-strong" />
+          </div>
+        )}
         <div className="flex items-center justify-between pl-4 pr-2 pb-1">
-          <h2 className="text-sm font-bold text-c-text-strong">{props.title}</h2>
+          <h2 className={`${isMobile ? 'text-[17px]' : 'text-sm'} font-bold text-c-text-strong`}>{props.title}</h2>
           <button type="button" onClick={props.onClose} className="p-1.5 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
             <span className="material-symbols-outlined text-xl">close</span>
           </button>

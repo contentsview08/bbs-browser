@@ -11,9 +11,9 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 export function Group(props: { title?: string; note?: ReactNode; children: ReactNode }) {
   return (
     <section className="mb-7">
-      {props.title && <h3 className="px-4 mb-2 text-[13px] font-bold text-c-accent">{props.title}</h3>}
+      {props.title && <h3 className="px-4 mb-2.5 text-[14px] font-bold text-c-accent">{props.title}</h3>}
       <div className="mx-3 rounded-2xl bg-c-surface2 overflow-hidden divide-y divide-c-border">{props.children}</div>
-      {props.note && <p className="px-4 mt-2 text-[12px] leading-relaxed text-c-text-muted">{props.note}</p>}
+      {props.note && <p className="px-4 mt-2 text-[13.5px] leading-relaxed text-c-text-muted">{props.note}</p>}
     </section>
   )
 }
@@ -23,20 +23,20 @@ function RowBody(props: { label: string; desc?: ReactNode; right?: ReactNode; ic
   return (
     <>
       {props.icon && (
-        <span className="w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center text-white" style={{ background: props.color ?? 'var(--c-accent)' }}>
-          <span className="material-symbols-outlined text-[22px]">{props.icon}</span>
+        <span className="w-10 h-10 flex-shrink-0 rounded-xl flex items-center justify-center text-white" style={{ background: props.color ?? 'var(--c-accent)' }}>
+          <span className="material-symbols-outlined text-[24px]">{props.icon}</span>
         </span>
       )}
       <span className="flex-1 min-w-0">
-        <span className="block text-[15px] leading-snug text-c-text-strong">{props.label}</span>
-        {props.desc && <span className="block mt-0.5 text-[12.5px] leading-relaxed text-c-text-muted">{props.desc}</span>}
+        <span className="block text-[17px] leading-snug text-c-text-strong">{props.label}</span>
+        {props.desc && <span className="block mt-0.5 text-[14px] leading-relaxed text-c-text-muted">{props.desc}</span>}
       </span>
       {props.right}
     </>
   )
 }
 
-const ROW = 'w-full flex items-center gap-3.5 px-4 py-3.5 min-h-[56px] text-left active:bg-c-surface3 transition-colors'
+const ROW = 'w-full flex items-center gap-3.5 px-4 py-4 min-h-[64px] text-left active:bg-c-surface3 transition-colors'
 
 export function Switch(props: { on: boolean }) {
   return (
@@ -85,8 +85,8 @@ export function ActionRow(props: { label: string; desc?: ReactNode; icon?: strin
   return (
     <button type="button" onClick={props.onClick} disabled={props.busy} className={`${ROW} disabled:opacity-50`}>
       <span className={`flex-1 min-w-0 ${props.danger ? 'text-c-heat-very-hot' : 'text-c-accent'}`}>
-        <span className="block text-[15px] leading-snug font-bold">{props.label}</span>
-        {props.desc && <span className="block mt-0.5 text-[12.5px] leading-relaxed text-c-text-muted font-normal">{props.desc}</span>}
+        <span className="block text-[17px] leading-snug font-bold">{props.label}</span>
+        {props.desc && <span className="block mt-0.5 text-[14px] leading-relaxed text-c-text-muted font-normal">{props.desc}</span>}
       </span>
       {props.icon && <span className={`material-symbols-outlined text-xl ${props.busy ? 'animate-spin' : ''}`}>{props.busy ? 'progress_activity' : props.icon}</span>}
     </button>
@@ -147,18 +147,18 @@ export function OptionSheet<T extends string | number>(props: { title: string; o
         <div className="flex justify-center pt-2.5 pb-1">
           <span className="w-10 h-1 rounded-full bg-c-border-strong" />
         </div>
-        <p className="px-6 pt-2 pb-3 text-[15px] font-bold text-c-text-strong">{props.title}</p>
+        <p className="px-6 pt-2 pb-3 text-[17px] font-bold text-c-text-strong">{props.title}</p>
         <div className="flex-1 min-h-0 overflow-y-auto pb-2">
           {props.options.map((o) => {
             const on = o.key === props.value
             return (
-              <button key={String(o.key)} type="button" onClick={() => props.onPick(o.key)} className="w-full flex items-center gap-4 px-6 py-3.5 text-left active:bg-c-surface2">
+              <button key={String(o.key)} type="button" onClick={() => props.onPick(o.key)} className="w-full flex items-center gap-4 px-6 py-4 text-left active:bg-c-surface2">
                 <span className={`w-5 h-5 flex-shrink-0 rounded-full border-2 flex items-center justify-center ${on ? 'border-c-accent' : 'border-c-border-strong'}`}>
                   {on && <span className="w-2.5 h-2.5 rounded-full bg-c-accent" />}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className={`block text-[15px] ${on ? 'font-bold text-c-text-strong' : 'text-c-text-body'}`}>{o.name}</span>
-                  {o.desc && <span className="block mt-0.5 text-[12.5px] leading-relaxed text-c-text-muted">{o.desc}</span>}
+                  <span className={`block text-[17px] ${on ? 'font-bold text-c-text-strong' : 'text-c-text-body'}`}>{o.name}</span>
+                  {o.desc && <span className="block mt-0.5 text-[14px] leading-relaxed text-c-text-muted">{o.desc}</span>}
                 </span>
               </button>
             )
@@ -175,14 +175,14 @@ export function TextRow(props: { label: string; value: string; placeholder?: str
   const [v, setV] = useState(props.value)
   return (
     <label className="w-full flex items-center gap-3 px-4 py-2.5 min-h-[56px]">
-      <span className="flex-shrink-0 w-24 text-[15px] text-c-text-strong">{props.label}</span>
+      <span className="flex-shrink-0 w-24 text-[17px] text-c-text-strong">{props.label}</span>
       <input
         type={props.type ?? 'text'}
         value={v}
         placeholder={props.placeholder}
         onChange={(e) => setV(e.target.value)}
         onBlur={() => v !== props.value && props.onChange(v)}
-        className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-c-surface border border-c-border text-[15px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:border-c-accent"
+        className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-c-surface border border-c-border text-[17px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:border-c-accent"
       />
     </label>
   )
@@ -202,7 +202,7 @@ export function WordList(props: { items: string[]; placeholder: string; onChange
       {props.items.length === 0 && props.empty && <p className="px-4 py-3.5 text-[13px] text-c-text-muted">{props.empty}</p>}
       {props.items.map((w) => (
         <div key={w} className="flex items-center gap-3 px-4 py-3 min-h-[52px]">
-          <span className="flex-1 min-w-0 text-[15px] text-c-text-body break-words selectable">{w}</span>
+          <span className="flex-1 min-w-0 text-[17px] text-c-text-body break-words selectable">{w}</span>
           <button type="button" onClick={() => props.onChange(props.items.filter((x) => x !== w))} className="w-9 h-9 flex items-center justify-center rounded-full text-c-text-muted active:bg-c-surface3" title="外す">
             <span className="material-symbols-outlined text-xl">close</span>
           </button>
@@ -214,9 +214,9 @@ export function WordList(props: { items: string[]; placeholder: string; onChange
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && add()}
           placeholder={props.placeholder}
-          className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-c-surface border border-c-border text-[15px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:border-c-accent"
+          className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-c-surface border border-c-border text-[17px] text-c-text-body placeholder-c-text-muted focus:outline-none focus:border-c-accent"
         />
-        <button type="button" onClick={add} disabled={!text.trim()} className="h-10 px-4 rounded-xl bg-c-accent text-[var(--c-accent-text)] text-[15px] font-bold disabled:opacity-40">
+        <button type="button" onClick={add} disabled={!text.trim()} className="h-10 px-4 rounded-xl bg-c-accent text-[var(--c-accent-text)] text-[17px] font-bold disabled:opacity-40">
           足す
         </button>
       </div>

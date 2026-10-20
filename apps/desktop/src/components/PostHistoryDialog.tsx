@@ -10,6 +10,7 @@ import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
 import { useLongPress } from '../hooks/useLongPress'
 import MobilePage, { dayLabel } from './MobilePage'
+import { relativeTime } from '../utils/thread'
 import ActionSheet from './ActionSheet'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
@@ -151,7 +152,7 @@ function MobilePostHistory(props: Props) {
             <div key={e.id}>
               {/* 日が変わる所に見出し */}
               {(i === 0 || dayLabel(shown[i - 1].postedAt) !== day) && (
-                <p className="sticky top-0 z-[1] px-4 py-1.5 text-xs font-bold text-c-text-muted bg-c-surface2 border-b border-c-border">{day}</p>
+                <p className="sticky top-0 z-[1] px-4 py-2 text-[14px] font-bold text-c-accent bg-c-surface2 border-b border-c-border">{day}</p>
               )}
               <HistoryRow entry={e} onOpen={() => props.onOpen(e)} onMenu={() => setSheet(e)} />
             </div>
@@ -178,25 +179,24 @@ function HistoryRow(props: { entry: PostHistoryEntry; onOpen: () => void; onMenu
   const e = props.entry
   const longPress = useLongPress(props.onMenu)
   return (
-    <button
-      type="button"
-      {...longPress}
-      onClick={props.onOpen}
-      className="w-full text-left px-4 py-3 border-b border-c-border active:bg-c-surface2"
-    >
-      <div className="flex items-baseline gap-2 text-xs text-c-text-muted">
-        <span className="tabular-nums">{new Date(e.postedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>
-        <span>{boardLabel(e.thread.boardUrl)}</span>
-        {e.no !== undefined && <span className="font-bold text-c-accent">&gt;&gt;{e.no}</span>}
-        {(e.name || e.mail) && (
-          <span className="truncate">
-            {e.name}
-            {e.mail && <span className="ml-1">[{e.mail}]</span>}
-          </span>
-        )}
+    <button type="button" {...longPress} onClick={props.onOpen} className="w-full text-left px-4 py-4 border-b border-c-border active:bg-c-surface2">
+      {/* 板・レス番号の札と、書いた時間 */}
+      <div className="flex items-center gap-2 text-[13px] text-c-text-muted">
+        <span className="px-2 py-0.5 rounded-full bg-c-surface2 border border-c-border text-c-text-body">{boardLabel(e.thread.boardUrl)}</span>
+        {e.no !== undefined && <span className="px-2 py-0.5 rounded-full bg-[var(--c-accent-wash)] font-bold text-c-accent tabular-nums">&gt;&gt;{e.no}</span>}
+        <span className="ml-auto flex-shrink-0 tabular-nums">{relativeTime(new Date(e.postedAt))}</span>
       </div>
-      <p className="mt-1 text-[15px] font-bold leading-snug text-c-text-strong break-words">{e.thread.title || '(スレタイ不明)'}</p>
-      <p className="mt-1 text-sm leading-relaxed text-c-text-body whitespace-pre-wrap break-words line-clamp-4">{e.body || '(本文なし)'}</p>
+      <p className="mt-2 text-[16px] font-bold leading-snug text-c-text-strong break-words line-clamp-2">{e.thread.title || '(スレタイ不明)'}</p>
+      {/* 書いた本文は、引用の形で */}
+      <p className="mt-2 pl-3 border-l-[3px] text-[15px] leading-relaxed text-c-text-body whitespace-pre-wrap break-words line-clamp-3" style={{ borderColor: 'var(--c-own)' }}>
+        {e.body || '(本文なし)'}
+      </p>
+      {(e.name || e.mail) && (
+        <p className="mt-1.5 text-[12.5px] text-c-text-muted truncate">
+          {e.name}
+          {e.mail && <span className="ml-1">[{e.mail}]</span>}
+        </p>
+      )}
     </button>
   )
 }

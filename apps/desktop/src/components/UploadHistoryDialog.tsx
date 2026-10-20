@@ -166,7 +166,7 @@ function MobileUploadHistory(props: Props) {
       ) : (
         groups.map((g) => (
           <div key={g.day}>
-            <p className="sticky top-0 z-[1] px-4 py-1.5 text-xs font-bold text-c-text-muted bg-c-surface2 border-b border-c-border">{g.day}</p>
+            <p className="sticky top-0 z-[1] px-4 py-2 text-[14px] font-bold text-c-accent bg-c-surface2 border-b border-c-border">{g.day}</p>
             <div className="grid grid-cols-3 gap-1 p-1">
               {g.items.map((u) => (
                 <UploadTile key={u.url} upload={u} onOpen={() => props.onOpen(u.url)} onMenu={() => setSheet(u)} />

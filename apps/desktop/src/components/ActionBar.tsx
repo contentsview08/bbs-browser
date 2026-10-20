@@ -73,6 +73,35 @@ export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
   return <DesktopMoreMenu {...props} />
 }
 
+/** スマホの ︙ のまとまり(まとまりが変わる所に線を引く) */
+const MENU_GROUP: Record<string, string> = {
+  favorite: 'スレ',
+  newThread: 'スレ',
+  findNext: 'スレ',
+  gallery: 'スレ',
+  search: 'スレ',
+  refresh: 'スレ',
+  top: '移動',
+  bottom: '移動',
+  openBoard: '移動',
+  style: '見た目',
+  fontSize: '見た目',
+  copyUrl: '共有',
+  openBrowser: '共有',
+  delete: '削除',
+}
+const GROUP_ORDER = ['スレ', '移動', '見た目', '共有', 'その他', '削除']
+/** スマホでの名前(PC の名前は、キー操作や画面の分け方を前提にしたものがあるので) */
+const MOBILE_LABELS: Record<string, (a: BarAction) => string> = {
+  openBoard: () => '板を開く',
+  search: (a) => (a.label.includes('スレッド') ? 'スレを検索' : 'スレの中を検索'),
+  top: () => 'いちばん上へ',
+  bottom: () => 'いちばん下へ',
+  gallery: () => 'このスレの画像一覧',
+  refresh: (a) => (a.label.includes('一覧') ? 'スレ一覧を更新' : '更新'),
+  delete: () => 'ログを削除して閉じる',
+}
+
 function MobileMoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -83,16 +112,21 @@ function MobileMoreMenu(props: { actions: BarAction[]; btnClass: string; iconCla
       {open && (
         <ActionSheet
           onClose={() => setOpen(false)}
-          items={props.actions.map((a) => ({
-            label: a.label,
-            icon: a.icon,
-            onClick: a.onClick,
-            submenu: a.submenu,
-            disabled: a.disabled,
-            active: a.active && a.fillWhenActive,
-            tint: a.active ? a.activeColor : a.tint === 'var(--c-mark-danger)' ? undefined : a.tint,
-            danger: a.tint === 'var(--c-mark-danger)',
-          }))}
+          items={props.actions
+            .map((a) => ({
+              label: MOBILE_LABELS[a.id]?.(a) ?? a.label,
+              icon: a.icon,
+              onClick: a.onClick,
+              submenu: a.submenu,
+              disabled: a.disabled,
+              active: a.active && a.fillWhenActive,
+              // 色は、選んでいる状態(お気に入りの金色など)のときだけ。ほかは落ち着いた色にそろえる
+              tint: a.active && a.fillWhenActive ? a.activeColor : undefined,
+              danger: a.tint === 'var(--c-mark-danger)',
+              group: MENU_GROUP[a.id] ?? 'その他',
+            }))
+            // まとまりの順に並べる(まとまりの中は、設定で決めた並びのまま)
+            .sort((x, y) => GROUP_ORDER.indexOf(x.group) - GROUP_ORDER.indexOf(y.group))}
         />
       )}
     </>

@@ -33,7 +33,9 @@ export default function FontSizeSlider(props: {
   const isSet = props.value !== unset
   const shown = isSet ? props.value : props.base
   const [px, setPx] = useState(shown)
-  useEffect(() => setPx(shown), [shown])
+  useEffect(() => {
+    setPx(shown)
+  }, [shown])
   const commit = () => {
     if (px !== shown) props.onCommit(px)
   }

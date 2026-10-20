@@ -595,7 +595,9 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
     })
   }, [store])
 
-  useEffect(() => apply(settings), [settings])
+  useEffect(() => {
+    apply(settings)
+  }, [settings])
   // OS のダーク・ライトが切り替わったら、合わせて塗り直す
   useEffect(() => {
     if (!settings.followOsTheme) return

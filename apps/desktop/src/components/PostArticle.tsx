@@ -125,6 +125,15 @@ const AVATAR_W = isMobile ? 'w-7' : 'w-9'
 const AVATAR_GAP = isMobile ? 8 : 12
 const AVATAR_CLASS = isMobile ? 'w-7 h-7' : 'w-9 h-9'
 
+/** サムネイルを読み込んでいる間の印(サムネイルの真ん中で回る) */
+function ThumbSpinner() {
+  return (
+    <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <span className="material-symbols-outlined text-xl text-c-text-muted animate-spin">progress_activity</span>
+    </span>
+  )
+}
+
 /** 日付を短くする(「2026/10/19(日) 12:34:56.78」→「10/19 12:34」)。読めない形ならそのまま */
 function shortDate(date: string): string {
   const m = /(?:\d{2,4}\/)?(\d{1,2})\/(\d{1,2})[^\d]*?(\d{1,2}:\d{2})/.exec(date)
@@ -200,7 +209,9 @@ function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onO
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const { onOpenChange } = props
-  useEffect(() => onOpenChange(pos !== undefined), [pos, onOpenChange])
+  useEffect(() => {
+    onOpenChange(pos !== undefined)
+  }, [pos, onOpenChange])
   useEffect(() => {
     if (!pos) return
     const close = (e: PointerEvent) => {
@@ -779,20 +790,26 @@ function PostArticle(props: Props) {
                       key={m.url + i}
                       type="button"
                       onClick={open}
-                      className="post-thumb bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
+                      className="post-thumb relative bg-c-surface2 border border-c-border rounded overflow-hidden flex-shrink-0 flex items-center justify-center hover:border-c-border-strong transition-colors"
                     >
                       {/* 家の中のアドレスは、表示しただけでは読みに行かない(押せば開く) */}
                       {isAutoLoadable(m.url) ? (
-                        <img
-                          src={m.url}
-                          alt=""
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
-                          }}
-                        />
+                        <>
+                          {/* 読み込んでいる間の印(読み込めたら外す) */}
+                          <ThumbSpinner />
+                          <img
+                            src={m.url}
+                            alt=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="relative w-full h-full object-cover"
+                            onLoad={(e) => hideSpinner(e.currentTarget)}
+                            onError={(e) => {
+                              hideSpinner(e.currentTarget)
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        </>
                       ) : (
                         <LocalAddressMark />
                       )}
@@ -829,7 +846,15 @@ function PostArticle(props: Props) {
                     style={{ border: '2px solid #ff0000', background: '#000' }}
                     title="YouTube を再生する"
                   >
-                    <img src={`https://img.youtube.com/vi/${m.id}/mqdefault.jpg`} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                    <ThumbSpinner />
+                    <img
+                      src={`https://img.youtube.com/vi/${m.id}/mqdefault.jpg`}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className="relative w-full h-full object-cover"
+                      onLoad={(e) => hideSpinner(e.currentTarget)}
+                    />
                     {/* 再生の印は、真ん中に半透明で大きく */}
                     <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <span className="material-symbols-outlined fill text-4xl text-white/85 drop-shadow">play_circle</span>
@@ -1043,3 +1068,9 @@ function PostArticle(props: Props) {
 }
 
 export default memo(PostArticle)
+
+/** 読み込んでいる間の印(画像のすぐ前の要素)を隠す。React が持っている要素なので、消さずに隠すだけにする */
+function hideSpinner(img: HTMLImageElement) {
+  const spinner = img.previousElementSibling
+  if (spinner instanceof HTMLElement) spinner.style.display = 'none'
+}

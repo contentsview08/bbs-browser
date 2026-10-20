@@ -509,7 +509,9 @@ export default function ThreadView(props: Props) {
   // ドラッグ中は手元で大きさを持ち、離したときに設定へ保存する
   const savedSize = settings[sizeKey]
   const [replySize, setReplySize] = useState(savedSize)
-  useEffect(() => setReplySize(savedSize), [savedSize])
+  useEffect(() => {
+    setReplySize(savedSize)
+  }, [savedSize])
   // 書き込み欄が下のとき、本文が欄に収まらなくなったら自動で伸ばす(つかんで伸ばせる上限 600px、スレ表示の 7 割まで)。
   // 本文が短くなる・書き込んで空になると、自分で決めた高さに戻る。伸ばした分は保存しない
   const [replyExtra, setReplyExtra] = useState(0)
@@ -904,6 +906,7 @@ export default function ThreadView(props: Props) {
         ]
       : []),
     { id: 'delete', label: 'ログを削除して閉じる (Shift+Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
+    { id: 'copyUrl', label: 'URL をコピー', icon: 'link', onClick: () => copyText(props.threadUrl, 'URL をコピーしました') },
     { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', tint: 'var(--c-mark-link)', onClick: props.onOpenInBrowser },
     {
       id: 'save',
@@ -991,7 +994,9 @@ export default function ThreadView(props: Props) {
   // 新着が届いた・開き直した(「ここから未読」が変わった)ら、読んだところより前で選んでいたレスは忘れる
   // (次の J は新着の頭から始まる)。読んだところの最後のレスを選んでいた(一番下まで読んでいた)なら、そのまま残す。
   // 残しておけば、新着がなくても選んでいる所は動かず、新着があれば J でそのまま新着の頭へ進む
-  useEffect(() => setCursorNo((c) => keepCursorOnNew(c, unreadFrom)), [unreadFrom])
+  useEffect(() => {
+    setCursorNo((c) => keepCursorOnNew(c, unreadFrom))
+  }, [unreadFrom])
   /** キーで呼べる、スレ表示の操作(描くたびに作り直し、いまの値を使う) */
   const threadKeyActions = useRef<Partial<Record<KeyAction, () => void>>>({})
   /** 選んでいるレスの枠(見えているもの)。なければ undefined */

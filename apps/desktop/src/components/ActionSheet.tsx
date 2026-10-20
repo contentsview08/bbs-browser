@@ -19,6 +19,8 @@ export interface SheetItem {
   /** 押すと、シートの中にこの中身を出す(閉じない) */
   submenu?: ReactNode
   disabled?: boolean
+  /** まとまりの名前。まとまりが変わる所に線を引く */
+  group?: string
 }
 
 export default function ActionSheet(props: {
@@ -82,7 +84,12 @@ export default function ActionSheet(props: {
           <>
             {props.title && <p className="px-6 pt-1 pb-2.5 text-[13px] leading-snug text-c-text-muted whitespace-pre-line break-all line-clamp-3">{props.title}</p>}
             <div className="flex-1 min-h-0 overflow-y-auto pb-1">
-              {safe.map(row)}
+              {safe.map((it, i) => (
+                <div key={`${it.label}:${i}`}>
+                  {i > 0 && it.group !== safe[i - 1].group && <div className="mx-6 my-1 border-t border-c-border" />}
+                  {row(it, i)}
+                </div>
+              ))}
               {danger.length > 0 && safe.length > 0 && <div className="mx-6 my-1 border-t border-c-border" />}
               {danger.map(row)}
             </div>

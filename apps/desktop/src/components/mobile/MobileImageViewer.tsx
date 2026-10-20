@@ -327,8 +327,21 @@ export default function MobileImageViewer(props: Props) {
     else if (isVideoFileUrl(url)) content = current ? <video src={url} controls autoPlay playsInline className="max-w-full max-h-full" /> : null
     else
       content = (
-        <div ref={current ? zoomRef : undefined} className="w-full h-full flex items-center justify-center will-change-transform">
-          <img src={url} alt="" draggable={false} decoding="async" referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain select-none" />
+        <div ref={current ? zoomRef : undefined} className="relative w-full h-full flex items-center justify-center will-change-transform">
+          {/* 読み込んでいる間の印(読み込めたら外す) */}
+          <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">progress_activity</span>
+          </span>
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="relative max-w-full max-h-full object-contain select-none"
+            onLoad={(e) => hideSpinner(e.currentTarget)}
+            onError={(e) => hideSpinner(e.currentTarget)}
+          />
         </div>
       )
     return (
@@ -408,4 +421,10 @@ export default function MobileImageViewer(props: Props) {
     </div>,
     document.body,
   )
+}
+
+/** 読み込んでいる間の印(画像のすぐ前の要素)を隠す。React が持っている要素なので、消さずに隠すだけにする */
+function hideSpinner(img: HTMLImageElement) {
+  const spinner = img.previousElementSibling
+  if (spinner instanceof HTMLElement) spinner.style.display = 'none'
 }

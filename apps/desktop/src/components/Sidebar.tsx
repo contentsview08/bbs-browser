@@ -157,7 +157,9 @@ export default function Sidebar(props: Props) {
   // 広げたときの幅。つかんで動かしている間はここだけ変え、離したときに保存してもらう
   const [width, setWidth] = useState(props.width)
   const [resizing, setResizing] = useState(false)
-  useEffect(() => setWidth(props.width), [props.width])
+  useEffect(() => {
+    setWidth(props.width)
+  }, [props.width])
   const EXPANDED = width
   const onResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()

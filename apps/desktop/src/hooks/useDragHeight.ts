@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react'
 
 export function useDragHeight(saved: number, save: (height: number) => void, limits: { min: number; max: number }) {
   const [height, setHeight] = useState(saved)
-  useEffect(() => setHeight(saved), [saved])
+  useEffect(() => {
+    setHeight(saved)
+  }, [saved])
 
   /**
    * つかみ始め。current はいまの高さ(既定のときは測った値)。dir は下へ動かすと高くなるなら 1(ヘッダーの下端)、

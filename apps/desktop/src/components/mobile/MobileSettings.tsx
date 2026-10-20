@@ -98,7 +98,10 @@ export default function MobileSettings(props: SettingsProps & { initialPage?: Pa
   useFocusTrap(boxRef, pop)
   // 画面を移ったら、いちばん上から
   const scrollRef = useRef<HTMLDivElement>(null)
-  useEffect(() => scrollRef.current?.scrollTo({ top: 0 }), [page])
+  // 波かっこで包んで何も返さない(新しい WebView の scrollTo は Promise を返し、React が後片付けの関数として呼んで落ちる)
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [page])
 
   return createPortal(
     <div

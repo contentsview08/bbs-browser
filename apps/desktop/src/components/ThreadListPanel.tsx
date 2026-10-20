@@ -171,7 +171,9 @@ export default function ThreadListPanel(props: Props) {
   const [sort, setSort] = useState<SortState>(defaultSort)
   const onSortChange = useRef(props.onSortChange)
   onSortChange.current = props.onSortChange
-  useEffect(() => onSortChange.current?.(sort), [sort])
+  useEffect(() => {
+    onSortChange.current?.(sort)
+  }, [sort])
   const [unreadOnly, setUnreadOnly] = useState(false)
   /** 閲覧済み(ログのある)スレだけを出す */
   const [visitedOnly, setVisitedOnly] = useState(false)
@@ -350,7 +352,9 @@ export default function ThreadListPanel(props: Props) {
   // 選んでいる間(閲覧履歴を長押しで選んで、なぞっているときなど)は、引っぱって更新しない
   const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh && selected.size === 0 ? pull : undefined, undefined)
 
-  useEffect(() => setWidth(props.width), [props.width])
+  useEffect(() => {
+    setWidth(props.width)
+  }, [props.width])
   useEffect(() => {
     if (searchActive) searchRef.current?.focus()
   }, [searchActive])

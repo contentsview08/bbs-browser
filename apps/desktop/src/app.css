@@ -1046,3 +1046,8 @@ html:root[data-scheme='discord-dark'] {
   --c-flash-new: #5865f2;
   --c-op: #f0b232;
 }
+
+/* スマホの設定: 項目の行(題の一覧・オンオフ)のあいだに線を引いて、1 行ずつ見分けやすくする */
+html[data-platform='mobile'] .settings-row {
+  border-bottom: 1px solid var(--c-border);
+}

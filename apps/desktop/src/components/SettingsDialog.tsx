@@ -28,6 +28,8 @@ import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isMobile } from '../utils/platform'
+import { DragHandle, DragList, DragZones } from './DragSort'
+import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
 import { GESTURE_ACTIONS } from '../utils/gestures'
@@ -114,6 +116,59 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
   { key: 'about', name: 'このアプリについて', icon: 'info' },
 ]
 
+/** スマホ: 設定の一覧のまとまり(上から)。分類の並びは TABS と別に、使う場面で分ける */
+const MOBILE_GROUPS: { title: string; items: Tab[] }[] = [
+  { title: '見た目', items: ['display', 'posts'] },
+  { title: '読む', items: ['threads', 'refresh'] },
+  { title: '書く', items: ['write', 'accounts'] },
+  { title: '操作', items: ['keys', 'toolbars'] },
+  { title: 'NG', items: ['ng'] },
+  { title: '板とデータ', items: ['boardlist', 'boards', 'backup'] },
+  { title: 'その他', items: ['about', 'connectors'] },
+]
+/** スマホ: 分類ごとの、何が設定できるかの一行 */
+const TAB_DESC: Record<Tab, string> = {
+  display: 'テーマ・文字サイズ',
+  threads: '最初の並び順・タブ・ログの削除',
+  posts: 'レスの見た目・本文・画像とサムネイル',
+  write: '名前・続けて書き込まない間・画像のアップロード',
+  refresh: '自動更新・通知・新着',
+  keys: 'なぞる向きと操作・感度',
+  toolbars: 'ヘッダー・フッター・︙ に置くボタン',
+  ng: 'NG ワード・名前・ID・スレタイ・自動 NG',
+  boardlist: 'お気に入り板・BBS メニュー',
+  boards: '自分で足す掲示板とサイト',
+  connectors: '外付けのコネクタ',
+  accounts: 'BE などのアカウント',
+  backup: '設定の書き出し・まるごとバックアップ',
+  about: '版',
+}
+/** スマホ: 分類のアイコンの色(一覧を見分けやすく) */
+const TAB_COLORS: Record<Tab, string> = {
+  display: '#8b5cf6',
+  posts: '#6366f1',
+  threads: '#0ea5e9',
+  refresh: '#10b981',
+  write: '#f59e0b',
+  accounts: '#d97706',
+  keys: '#ec4899',
+  toolbars: '#f43f5e',
+  ng: '#ef4444',
+  boardlist: '#14b8a6',
+  boards: '#0891b2',
+  backup: '#64748b',
+  about: '#6b7280',
+  connectors: '#6b7280',
+}
+
+/** スマホ: 分類の中の項目が 1 つだけなら、題の一覧を飛ばして、その中身をすぐ出す */
+function SectionAutoOpen(props: { seen: string[]; active: boolean; onOne: (title: string) => void }) {
+  useEffect(() => {
+    if (props.active && props.seen.length === 1) props.onOne(props.seen[0])
+  })
+  return null
+}
+
 const INPUT =
   'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
 const BTN =
@@ -126,6 +181,15 @@ const AdvancedContext = createContext(false)
 /** 設定のまとまり。advanced なら、高度な設定を見せるときだけ出す */
 /** 設定の検索の言葉(空なら探していない)。Section は、中の文字に言葉が入っていなければ隠れる */
 const SearchContext = createContext('')
+
+/**
+ * スマホの設定の段(分類 → 項目 → 中身)。
+ * index: 分類の画面。Section は題と説明だけの行になり、押すと中身の画面へ
+ * detail: 項目の画面。title の Section だけが中身を出す
+ * all: PC・検索の結果。Section はふつうに中身まで出す
+ */
+type SectionNav = { mode: 'all' } | { mode: 'index'; open: (title: string) => void; seen: string[] } | { mode: 'detail'; title: string }
+const SectionNavContext = createContext<SectionNav>({ mode: 'all' })
 
 function Section({
   title,
@@ -143,6 +207,7 @@ function Section({
 }) {
   const showAdvanced = useContext(AdvancedContext)
   const query = useContext(SearchContext)
+  const nav = useContext(SectionNavContext)
   const ref = useRef<HTMLElement>(null)
   // 検索中は、題・説明・中の文字(選べる項目の名前など)に言葉が入っている Section だけを出す
   useEffect(() => {
@@ -153,6 +218,29 @@ function Section({
   })
   if (advanced && !showAdvanced) return null
   if (desktopOnly && isMobile) return null
+  if (nav.mode === 'index') {
+    // 分類の画面: 題と説明だけの行。押すと、この項目だけの画面へ
+    nav.seen.push(title)
+    return (
+      <button type="button" onClick={() => nav.open(title)} className="settings-row w-full flex items-center gap-3 py-4 text-left active:bg-c-surface2">
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] font-bold text-c-text-strong">{title}</span>
+          {note && <span className="block mt-1 text-[13px] leading-relaxed text-c-text-muted line-clamp-2">{note}</span>}
+        </span>
+        <span className="material-symbols-outlined text-xl text-c-text-muted">chevron_right</span>
+      </button>
+    )
+  }
+  if (nav.mode === 'detail') {
+    if (nav.title !== title) return null
+    // 項目の画面: 題は上の帯に出ているので、説明と中身だけを、ゆったり出す
+    return (
+      <section ref={ref}>
+        {note && <p className="mb-4 text-[13px] leading-relaxed text-c-text-muted">{note}</p>}
+        <div>{children}</div>
+      </section>
+    )
+  }
   return (
     <section ref={ref} className="mb-8">
       <h3 className="text-sm font-bold text-c-text-strong mb-1 flex items-center gap-2">
@@ -198,6 +286,48 @@ function Choice<T extends string | number>(props: {
 function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]) => void }) {
   const shown = props.value.filter((k) => LIST_TABS.some((t) => t.key === k))
   const rest = LIST_TABS.map((t) => t.key).filter((k) => !shown.includes(k))
+  // スマホ: 出すタブは、右のつまみをつかんで上下に動かして並べる(上が左)。− で外し、下の + で足す
+  if (isMobile) {
+    const def = (k: ListTabKey) => LIST_TABS.find((t) => t.key === k)!
+    return (
+      <div className="flex flex-col gap-4">
+        <DragList
+          items={shown}
+          onChange={props.onChange}
+          render={(k, handle, dragging) => (
+            <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
+              <button type="button" onClick={() => props.onChange(shown.filter((x) => x !== k))} className="text-c-heat-very-hot" title="外す">
+                <span className="material-symbols-outlined fill text-xl">do_not_disturb_on</span>
+              </button>
+              <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[15px] text-c-text-strong">{def(k).name}</span>
+                <span className="block text-xs text-c-text-muted">{def(k).note}</span>
+              </span>
+              <DragHandle handle={handle} />
+            </div>
+          )}
+        />
+        {rest.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-bold text-c-text-muted">出していないタブ</p>
+            {rest.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => props.onChange([...shown, k])}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-dashed border-c-border text-left active:bg-c-surface2"
+              >
+                <span className="material-symbols-outlined fill text-xl text-c-accent">add_circle</span>
+                <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
+                <span className="text-[15px] text-c-text-body">{def(k).name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
   const move = (i: number, d: -1 | 1) => {
     const next = [...shown]
     ;[next[i], next[i + d]] = [next[i + d], next[i]]
@@ -239,6 +369,25 @@ function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]
 }
 
 function Toggle(props: { checked: boolean; onChange: (v: boolean) => void; label: string; note?: string }) {
+  // スマホ: 説明を左、スイッチを右に。行の上下を広く取り、指で押しやすくする(行のどこを押しても切り替わる)
+  if (isMobile)
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={props.checked}
+        onClick={() => props.onChange(!props.checked)}
+        className="settings-row w-full flex items-center gap-4 py-3.5 text-left"
+      >
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] leading-snug text-c-text-strong">{props.label}</span>
+          {props.note && <span className="block mt-1 text-[13px] leading-relaxed text-c-text-muted">{props.note}</span>}
+        </span>
+        <span className={`relative w-12 h-7 rounded-full flex-shrink-0 transition-colors ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}>
+          <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${props.checked ? 'left-6' : 'left-1'}`} />
+        </span>
+      </button>
+    )
   return (
     <label className="flex items-start gap-3 py-1.5 cursor-pointer">
       <button
@@ -1546,6 +1695,26 @@ function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>
   ]
   const area = (areaKey: BarArea, title: string) => {
     const placements = resolvePlacements(areaKey, layout, isMobile)
+    // スマホ: ボタンをつまんで、ヘッダー・フッター・︙ の箱のあいだで動かす
+    if (isMobile) {
+      const actions = barActionsFor(areaKey, isMobile)
+      const nameOf = (id: string) => actions.find((a) => a.id === id)!
+      return (
+        <Section title={title} note="ボタンの右のつまみをつかんで、置きたい箱へ動かします。どのボタンも、ヘッダーの右端の ︙ を押すと出てきます">
+          <DragZones
+            zones={PLACES.map((p) => ({ key: p.key, title: p.name, items: actions.filter((a) => placements[a.id] === p.key).map((a) => a.id) }))}
+            onMove={(id, zone) => set(areaKey, id, zone)}
+            render={(id, handle, dragging) => (
+              <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
+                <span className="material-symbols-outlined text-xl text-c-text-muted">{nameOf(id).icon}</span>
+                <span className="flex-1 text-[15px] text-c-text-body">{nameOf(id).name}</span>
+                <DragHandle handle={handle} />
+              </div>
+            )}
+          />
+        </Section>
+      )
+    }
     return (
       <Section title={title} note="どのボタンも、ヘッダーの右端の ︙ を押すと出てきます。よく使うものだけヘッダーかフッターに並べてください">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
@@ -2157,6 +2326,18 @@ function AboutTab() {
 export default function SettingsDialog(props: Props) {
   // スマホは、はじめに分類の一覧(tab が undefined)を出し、押すとその分類の画面に入る
   const [tab, setTab] = useState<Tab | undefined>(props.initialTab ?? (isMobile ? undefined : 'display'))
+  /** スマホ: 分類の中で開いている項目(Section の題)。autoOpened は、項目が 1 つだけなのですぐ開いたもの(戻ると分類の一覧へ) */
+  const [section, setSection] = useState<string>()
+  const [autoOpened, setAutoOpened] = useState(false)
+  const openSection = (title: string, auto = false) => {
+    setSection(title)
+    setAutoOpened(auto)
+  }
+  const enterTab = (key: Tab | undefined) => {
+    setTab(key)
+    setSection(undefined)
+    setAutoOpened(false)
+  }
   /** 「板とサイト」から板一覧へ移るときに、どの BBS メニューを出すか */
   const [listSite, setListSite] = useState<string>()
   /** 設定の検索。言葉があるときは、すべての分類から当てはまる設定だけを並べる */
@@ -2168,11 +2349,14 @@ export default function SettingsDialog(props: Props) {
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
   // スマホ: Esc(戻るボタン)は、検索 → 分類の画面 → 一覧 の順に 1 つずつ戻り、一覧で閉じる
-  useFocusTrap(boxRef, () => {
-    if (isMobile && searching) return setQuery('')
-    if (isMobile && tab) return setTab(undefined)
+  /** スマホ: 1 段戻る(検索 → 項目 → 分類 → 一覧 → 閉じる) */
+  const goBack = () => {
+    if (searching) return setQuery('')
+    if (section && !autoOpened) return setSection(undefined)
+    if (tab) return enterTab(undefined)
     props.onClose()
-  })
+  }
+  useFocusTrap(boxRef, () => (isMobile ? goBack() : props.onClose()))
 
   // スマホは、PC だけの設定のまとまり(コネクタなど)を出さない
   const tabs = TABS.filter((t) => (showAdvanced || !t.advanced) && !(isMobile && t.desktopOnly))
@@ -2212,7 +2396,7 @@ export default function SettingsDialog(props: Props) {
             {...props}
             onShowBoardList={(menuUrl) => {
               setListSite(menuUrl)
-              setTab('boardlist')
+              enterTab('boardlist')
             }}
           />
         )
@@ -2261,45 +2445,64 @@ export default function SettingsDialog(props: Props) {
   )
 
   if (isMobile) {
-    // スマホ: 画面いっぱいの 1 画面。分類の一覧 → 分類の画面(← で一覧に戻る)。上に検索
+    // スマホ: 画面いっぱいの 3 段。分類の一覧(まとまりごと)→ 分類の画面(項目の題と説明)→ 項目の画面(中身)。
+    // ← と戻るで 1 段ずつ戻る。一覧の上に検索
     const current = tab && TABS.find((t) => t.key === tab)
+    const title = searching ? '設定の検索' : (section ?? current?.name ?? '設定')
+    // 分類の画面で、項目(Section)の題を集める(1 つしかなければ、その中身をすぐ出す)
+    const seen: string[] = []
+    const nav: SectionNav = section ? { mode: 'detail', title: section } : { mode: 'index', open: openSection, seen }
     return createPortal(
       <div
         ref={boxRef}
         className="fixed inset-0 z-[9500] flex flex-col bg-c-surface"
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="flex-shrink-0 flex items-center gap-1 px-2 border-b border-c-border" style={{ height: 'var(--header-height, 56px)' }}>
-          <button
-            type="button"
-            onClick={() => (searching ? setQuery('') : current ? setTab(undefined) : props.onClose())}
-            className="p-2.5 rounded-xl text-c-text-muted active:bg-c-surface2"
-            title={current || searching ? '戻る' : '閉じる'}
-          >
-            <span className="material-symbols-outlined text-2xl">{current || searching ? 'arrow_back' : 'close'}</span>
+        <div className="flex-shrink-0 flex items-center gap-1 px-1 border-b border-c-border bg-panel-thread-header" style={{ height: 'var(--header-height, 72px)' }}>
+          <button type="button" onClick={goBack} className={MOBILE_HEAD_BTN} title={current || searching ? '戻る' : '閉じる'}>
+            <span className={`material-symbols-outlined ${MOBILE_HEAD_ICON}`}>{current || searching ? 'arrow_back' : 'close'}</span>
           </button>
-          <h2 className="flex-1 min-w-0 truncate text-base font-bold text-c-text-strong">{searching ? '設定の検索' : (current?.name ?? '設定')}</h2>
+          <h2 className="flex-1 min-w-0 truncate text-[17px] font-bold text-c-text-strong">{title}</h2>
         </div>
         <AdvancedContext.Provider value={showAdvanced}>
-          {!current && <div className="flex-shrink-0 px-3 pt-3 pb-1">{searchBox}</div>}
+          {!current && <div className="flex-shrink-0 px-4 pt-4 pb-2">{searchBox}</div>}
           {searching ? (
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">{searchResults}</div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">{searchResults}</div>
           ) : current ? (
-            <div className={`flex-1 min-h-0 px-4 py-4 ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>{renderTab(current.key)}</div>
+            <div key={`${tab}:${section ?? ''}`} className={`flex-1 min-h-0 px-5 py-4 reply-slide ${tab === 'boardlist' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
+              <SectionNavContext.Provider value={tab === 'boardlist' ? { mode: 'all' } : nav}>
+                <SectionAutoOpen seen={seen} active={!section && tab !== 'boardlist'} onOne={(t) => openSection(t, true)} />
+                {renderTab(current.key)}
+              </SectionNavContext.Provider>
+            </div>
           ) : (
-            <div className="flex-1 min-h-0 overflow-y-auto py-2">
-              {tabs.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setTab(t.key)}
-                  className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
-                >
-                  <span className="material-symbols-outlined text-xl text-c-text-muted">{t.icon}</span>
-                  <span className="flex-1">{t.name}</span>
-                  <span className="material-symbols-outlined text-xl text-c-text-muted">chevron_right</span>
-                </button>
-              ))}
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6">
+              {MOBILE_GROUPS.map((g) => {
+                const items = g.items.filter((k) => tabs.some((t) => t.key === k))
+                if (items.length === 0) return null
+                return (
+                  <div key={g.title} className="mt-5">
+                    <p className="px-1 mb-2 text-xs font-bold text-c-text-muted">{g.title}</p>
+                    <div className="rounded-2xl bg-c-surface2 overflow-hidden divide-y divide-c-border">
+                      {items.map((k) => {
+                        const t = TABS.find((x) => x.key === k)!
+                        return (
+                          <button key={k} type="button" onClick={() => enterTab(k)} className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-c-surface3">
+                            <span className="w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center text-white" style={{ background: TAB_COLORS[k] }}>
+                              <span className="material-symbols-outlined text-[22px]">{t.icon}</span>
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[15px] font-bold text-c-text-strong">{t.name}</span>
+                              <span className="block mt-0.5 text-xs text-c-text-muted truncate">{TAB_DESC[k]}</span>
+                            </span>
+                            <span className="material-symbols-outlined text-xl text-c-text-muted">chevron_right</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </AdvancedContext.Provider>

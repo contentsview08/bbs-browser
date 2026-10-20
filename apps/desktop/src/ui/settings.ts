@@ -126,6 +126,10 @@ export interface AppSettings {
   /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ)。スレ一覧のタブ(未読・勢い順など)と、スレ表示の絞り込み(人気・画像など) */
   listTabLabel: TabLabel
   filterTabLabel: TabLabel
+  /** スマホ: ヘッダー・フッターの高さ(px)と、中の文字の大きさ(px)。0 なら既定 */
+  headerPx: number
+  footerPx: number
+  barFontPx: number
   /** レスの本文の行間(字の大きさの何倍か)。0 なら既定(1.625) */
   postLineHeight: number
   /** 画像・動画のサムネイルを読みに行くか。always: いつも / wifi: Wi-Fi のときだけ / tap: 押したら読む(押して出るまではビューアーを開かない) */
@@ -323,6 +327,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   listPadPx: -1,
   postPadPx: -1,
   postLineHeight: 0,
+  headerPx: 0,
+  footerPx: 0,
+  barFontPx: 0,
   listTabLabel: 'both',
   filterTabLabel: 'both',
   thumbLoad: 'always',
@@ -530,6 +537,12 @@ function apply(s: AppSettings) {
   root.style.setProperty('--post-head-zoom', s.postHeadPx ? String(s.postHeadPx / base) : '1')
   if (s.postBodyPx) root.style.setProperty('--post-body-size', `${s.postBodyPx}px`)
   else root.style.removeProperty('--post-body-size')
+  // ヘッダー・フッターの高さと文字(スマホ。文字は中身を比のまま拡大・縮小し、高さは拡大の分で割り戻して決めた高さに保つ)
+  if (s.headerPx) root.style.setProperty('--header-height', `${s.headerPx}px`)
+  else root.style.removeProperty('--header-height')
+  if (s.footerPx) root.style.setProperty('--footer-bar-h', `${s.footerPx}px`)
+  else root.style.removeProperty('--footer-bar-h')
+  root.style.setProperty('--bar-zoom', s.barFontPx ? String(s.barFontPx / base) : '1')
   if (s.postLineHeight) root.style.setProperty('--post-line-height', String(s.postLineHeight))
   else root.style.removeProperty('--post-line-height')
   // 余白(px)。決めていなければ、見た目・密度の既定のまま

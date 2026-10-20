@@ -179,18 +179,22 @@ function ThreadCard({
           {favStar}
           {threadBadges}
           {thread.title}
-        </span>
-        {archived && <span className="flex-shrink-0 text-[10px] text-c-text-muted">dat落ち</span>}
-        {thread.authorId && !authorIcon && (
-          <span className="flex-shrink-0 font-mono text-[10px] text-c-text-muted" title="立てた人の ID">
-            {thread.authorId}
+          {/* dat落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる
+              (右に列で置くと、その分スレタイが手前で折り返して、長いスレタイが 3 行にもなっていた) */}
+          <span className="inline-flex items-center gap-1.5 ml-1.5 align-[1px] whitespace-nowrap font-normal">
+            {archived && <span className="text-[10px] text-c-text-muted">dat落ち</span>}
+            {thread.authorId && !authorIcon && (
+              <span className="font-mono text-[10px] text-c-text-muted" title="立てた人の ID">
+                {thread.authorId}
+              </span>
+            )}
+            <span className="thread-row-count text-[10px] text-c-text-muted tabular-nums" title="レス数">
+              {thread.postCount}
+            </span>
+            {momentumEl('text-[10px] opacity-80')}
+            {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded-full text-center leading-tight')}
           </span>
-        )}
-        <span className="thread-row-count flex-shrink-0 text-[10px] text-c-text-muted tabular-nums" title="レス数">
-          {thread.postCount}
         </span>
-        {momentumEl('flex-shrink-0 text-[10px] opacity-80')}
-        {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded-full text-center')}
       </div>
     ) : variant === 'classic' ? (
       // 専ブラ風: 印・スレタイ・レス数・新着・勢い・立った時間を 1 行の表に

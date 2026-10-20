@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
-import { FONT_PX_MAX, FONT_PX_MIN } from '../ui/settings'
+import { FONT_PX_MAX, FONT_PX_MIN, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { isMobile } from '../utils/platform'
 
 export default function FontSizeSlider(props: {
   label: string
@@ -103,7 +104,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
     <div className="fixed inset-0 z-[9500] bg-black/25 flex items-center justify-center p-4" onClick={props.onClose}>
       <div
         ref={boxRef}
-        className="w-full max-w-sm bg-c-surface border border-c-border rounded-2xl shadow-2xl rise-in py-2"
+        className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-c-surface border border-c-border rounded-2xl shadow-2xl rise-in py-2"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pl-4 pr-2 pb-1">
@@ -116,5 +117,46 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** スマホ: ヘッダー・フッターの高さと文字の大きさのスライダー(スレ一覧・スレ表示のどちらの「文字の大きさ・余白」にも出す) */
+export function BarSliders(props: { settings: AppSettings; update: UpdateSetting }) {
+  const { settings: s, update } = props
+  if (!isMobile) return null
+  const base = baseFontPx(s)
+  return (
+    <>
+      <FontSizeSlider
+        label="ヘッダーの高さ"
+        value={s.headerPx}
+        base={72}
+        min={44}
+        max={120}
+        icons={['vertical_align_center', 'height']}
+        preview={(px) => setCssVar('--header-height', `${px}px`)}
+        onCommit={(px) => update('headerPx', px)}
+        resettable
+      />
+      <FontSizeSlider
+        label="フッターの高さ"
+        value={s.footerPx}
+        base={64}
+        min={44}
+        max={110}
+        icons={['vertical_align_center', 'height']}
+        preview={(px) => setCssVar('--footer-bar-h', `${px}px`)}
+        onCommit={(px) => update('footerPx', px)}
+        resettable
+      />
+      <FontSizeSlider
+        label="ヘッダー・フッターの文字"
+        value={s.barFontPx}
+        base={base}
+        preview={(px) => setCssVar('--bar-zoom', String(px / base))}
+        onCommit={(px) => update('barFontPx', px)}
+        resettable
+      />
+    </>
   )
 }

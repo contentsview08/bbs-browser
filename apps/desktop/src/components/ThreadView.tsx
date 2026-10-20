@@ -29,7 +29,7 @@ import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
-import FontSizeSlider, { SliderDialog, cssPx, setCssVar } from './FontSizeSlider'
+import FontSizeSlider, { BarSliders, SliderDialog, cssPx, setCssVar } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -1574,7 +1574,8 @@ export default function ThreadView(props: Props) {
   const headerBlock = (
     <div
       ref={headerRef}
-      className={`relative ${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} ${isMobile ? 'transition-transform duration-200' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
+      // bar-zoom: スマホのヘッダーの文字の大きさ(設定)
+      className={`relative ${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} ${isMobile ? 'bar-zoom transition-transform duration-200' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
     >
         {/* 下の端をつかんで、スレタイの行の高さを変える(スレタイの字も合わせて大きくなる) */}
         <DragEdge
@@ -1586,7 +1587,7 @@ export default function ThreadView(props: Props) {
           ref={titleRowRef}
           className={`flex items-center justify-between ${isMobile ? (props.onOpenDrawer ? 'pl-1 pr-1' : 'pl-4 pr-1') : 'px-6'}`}
           // スマホ: スレタイを省かずに折り返すので、長いスレタイでは帯を高くする(既定の高さより低くはしない)
-          style={isMobile ? { minHeight: 'var(--header-height, 72px)' } : { height: headerDrag.height || 'var(--header-height, 80px)' }}
+          style={isMobile ? { minHeight: 'calc(var(--header-height, 72px) / var(--bar-zoom, 1))' } : { height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
           {/* スマホ: スレタイの左にメニュー(サイドバーの引き出し) */}
           {isMobile && props.onOpenDrawer && (
@@ -1601,6 +1602,7 @@ export default function ThreadView(props: Props) {
           >
             <input
               ref={searchRef}
+              data-search
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1967,9 +1969,9 @@ export default function ThreadView(props: Props) {
       {hasFooter && isMobile && (
         <div
           ref={footerRef}
-          className="absolute inset-x-0 z-20 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
-          // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)
-          style={{ bottom: 'var(--kb-inset, 0px)', minHeight: MOBILE_BAR_H }}
+          className="bar-zoom absolute inset-x-0 z-20 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
+          // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)。高さは設定(--footer-bar-h)で変えられる
+          style={{ bottom: 'var(--kb-inset, 0px)', minHeight: `calc(var(--footer-bar-h, ${MOBILE_BAR_H}px) / var(--bar-zoom, 1))` }}
         >
           {props.onSubmitPost ? (
             // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
@@ -2191,6 +2193,7 @@ export default function ThreadView(props: Props) {
               onCommit={(px) => props.onUpdateSetting!('postPadPx', px)}
               resettable
             />
+            <BarSliders settings={settings} update={props.onUpdateSetting} />
           </>
         </SliderDialog>
       )}

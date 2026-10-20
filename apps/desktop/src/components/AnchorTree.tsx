@@ -162,7 +162,7 @@ function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNod
           key={r.no}
           className="flex min-w-0"
           // 段が変わる所にだけ、背景になじむ薄い線を引く(同じ段が続く所は引かない)
-          style={i > 0 && props.rows[i - 1].depth !== r.depth ? { borderTop: '1px solid color-mix(in srgb, var(--c-border) 70%, transparent)' } : undefined}
+          style={i > 0 && props.rows[i - 1].depth !== r.depth ? { borderTop: '1.5px solid var(--c-border-strong, var(--c-border))' } : undefined}
         >
           {/* 段の分だけ、縦線より左を薄い灰色で塗る(どこまでが字下げか、ひと目で分かるように)。いちばん上の元のレスにも線を引く */}
           <div

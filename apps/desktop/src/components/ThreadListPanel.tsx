@@ -178,11 +178,26 @@ export default function ThreadListPanel(props: Props) {
   /** タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び */
   /** 閲覧履歴の「見た順」を逆にしている(最近見たものが下) */
   const [reversed, setReversed] = useState(false)
+  // タブはどれか 1 つだけを選ぶ(未読を選んでいて勢い順を押したら、未読の絞り込みは外れる)
   const pressTab = (key: ListTabKey) => {
-    if (key === 'viewed') setReversed((v) => !v)
-    else if (key === 'unread') setUnreadOnly((v) => !v)
-    else if (key === 'visited') setVisitedOnly((v) => !v)
-    else setSort((s) => cycleSort(s, key))
+    if (key === 'unread' || key === 'visited') {
+      const on = !(key === 'unread' ? unreadOnly : visitedOnly)
+      setUnreadOnly(key === 'unread' && on)
+      setVisitedOnly(key === 'visited' && on)
+      // 絞り込みを選んだら、並べ替えは元の並びに戻す
+      if (on) {
+        setSort(defaultSort)
+        setReversed(false)
+      }
+      return
+    }
+    setUnreadOnly(false)
+    setVisitedOnly(false)
+    if (key === 'viewed') {
+      // 見た順: 選んでいなければ選ぶだけ、選んでいれば上下を入れ替える
+      if (!sort && !unreadOnly && !visitedOnly) setReversed((v) => !v)
+      setSort(null)
+    } else setSort((s) => cycleSort(s, key))
   }
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
@@ -725,7 +740,7 @@ export default function ThreadListPanel(props: Props) {
                 const def = key === 'viewed' ? VIEWED_TAB : LIST_TABS.find((t) => t.key === key)!
                 const filter = key === 'unread' || key === 'visited'
                 // 見た順は、並べ替えていないあいだずっと選んでいる(閲覧履歴のいつもの並び)
-                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : key === 'viewed' ? !sort : sort?.mode === key
+                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : key === 'viewed' ? !sort && !unreadOnly && !visitedOnly : sort?.mode === key && !unreadOnly && !visitedOnly
                 return (
                   <button
                     key={key}
@@ -809,7 +824,7 @@ export default function ThreadListPanel(props: Props) {
         {/* スマホ: ヘッダーはフッターと同じ色にし、下に線を引く(一覧と同じ色だと境目が分からないため) */}
         <div
           ref={headerRef}
-          className={`sticky top-0 z-10 frosted-glass flex-shrink-0 ${isMobile ? 'bg-panel-thread-header border-b border-c-border transition-transform duration-200' : ''}`}
+          className={`sticky top-0 z-10 frosted-glass flex-shrink-0 ${isMobile ? 'bar-zoom bg-panel-thread-header border-b border-c-border transition-transform duration-200' : ''}`}
         >
           {/* 下の端をつかんで、板名の行の高さを変える(板名の字も合わせて大きくなる) */}
           <DragEdge
@@ -825,7 +840,12 @@ export default function ThreadListPanel(props: Props) {
                   <span className="material-symbols-outlined text-xl">menu</span>
                 </button>
               )}
-              <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-16' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
+              <div
+                ref={titleRowRef}
+                className={`relative flex-1 min-w-0 ${isMobile ? '' : 'h-11'}`}
+                // スマホは、ヘッダーの高さ(設定 --header-height。上下の余白 8px を除く)に合わせる
+                style={isMobile ? { height: 'calc((var(--header-height, 72px) - 8px) / var(--bar-zoom, 1))' } : headerDrag.height ? { height: headerDrag.height } : undefined}
+              >
                 {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
                   className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-base' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
@@ -843,6 +863,7 @@ export default function ThreadListPanel(props: Props) {
                 </h2>
                 <input
                   ref={searchRef}
+                  data-search
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -942,7 +963,7 @@ export default function ThreadListPanel(props: Props) {
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
-        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 76 } : undefined}>
+        <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 'calc(var(--footer-bar-h, 68px) + 8px)' } : undefined}>
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {/* 帯は、取り直し(通信)のときだけ。手元の並べ替え(2ch の勢い順など)は通信しないので出さない */}
           {props.loading && visible.length > 0 && <div className="list-progress" aria-label="読み込み中" />}
@@ -997,9 +1018,10 @@ export default function ThreadListPanel(props: Props) {
           ref={footerRef}
           className={`${
             // スマホ: 一覧の上に重ね、下へスクロールすると隠す
-            isMobile ? 'absolute bottom-0 inset-x-0 z-20 h-[68px] pl-1 pr-3 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+            isMobile ? 'bar-zoom absolute bottom-0 inset-x-0 z-20 pl-1 pr-3 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
           } flex items-center justify-end gap-1 border-t border-c-border`}
-          style={footerDrag.height ? { height: footerDrag.height } : undefined}
+          // スマホの高さは設定(--footer-bar-h)で変えられる
+          style={isMobile ? { height: 'calc(var(--footer-bar-h, 68px) / var(--bar-zoom, 1))' } : footerDrag.height ? { height: footerDrag.height } : undefined}
         >
           {/* 上の端をつかんで、フッターの高さを変える */}
           <DragEdge

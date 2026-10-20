@@ -494,8 +494,10 @@ function PostArticle(props: Props) {
         title="この ID の書き込みを表示"
       >
         <span>ID:{post.id}</span>
-        {/* Discord 風・LINE 風は、書き込み数をアイコンの右下に出すので、ここには出さない */}
-        {idCount >= 2 && variant !== 'discord' && variant !== 'line' && <span className="text-xs">({idCount})</span>}
+        {/* 書き込み数。Discord 風・LINE 風は、色はアイコンの右下の数で付けるので、ここは色を付けない */}
+        {idCount >= 2 && (
+          <span className={`text-xs ${variant === 'discord' || variant === 'line' ? 'text-c-text-muted font-normal' : ''}`}>({idCount})</span>
+        )}
       </button>
     )
   /** Discord 風・LINE 風: このレスへの返信の数(ID の右に。押すと返信を出す)。多いほど暖色に */

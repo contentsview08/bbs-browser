@@ -967,7 +967,8 @@ html[data-platform='mobile'] .frosted-glass {
 }
 
 /* スレ一覧のスレの上下の余白(⋮ の「文字の大きさ・余白」で決めたとき)。どの見た目でも同じ値にする */
-html[data-list-pad] .card-thread {
+/* (Discord 風のスマホ用の余白より強くするため、属性を重ねて指定を強める) */
+html[data-list-pad][data-platform] .card-thread[data-variant] {
   padding-top: var(--list-row-pad) !important;
   padding-bottom: var(--list-row-pad) !important;
 }
@@ -987,4 +988,9 @@ html[data-platform='mobile'] * {
 html[data-platform='mobile'] .card-thread {
   content-visibility: auto;
   contain-intrinsic-size: auto 60px;
+}
+
+/* スマホ: ヘッダー・フッターの文字の大きさ(設定 barFontPx)。中身を比のまま拡大・縮小する(高さは各部品で割り戻す) */
+html[data-platform='mobile'] .bar-zoom {
+  zoom: var(--bar-zoom, 1);
 }

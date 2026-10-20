@@ -41,7 +41,7 @@ import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postB
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { SliderDialog, cssPx, setCssVar } from './components/FontSizeSlider'
+import FontSizeSlider, { BarSliders, SliderDialog, cssPx, setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -1471,6 +1471,10 @@ export default function App() {
   const blurTyping = (): boolean => {
     const el = document.activeElement
     if (!(el instanceof HTMLElement) || !el.matches('input, textarea, [contenteditable="true"]')) return false
+    // 検索欄に文字が入っていれば、文字も消して元の表示に戻す(欄の Esc と同じ。検索欄は Esc で言葉を消して閉じる)
+    if (el instanceof HTMLInputElement && el.matches('[data-search]') && el.value) {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    }
     el.blur()
     return true
   }
@@ -2077,6 +2081,7 @@ export default function App() {
                 onCommit={(px) => updateSetting('listPadPx', px)}
                 resettable
               />
+              <BarSliders settings={settings} update={updateSetting} />
             </>
           }
           placements={listPlacements}

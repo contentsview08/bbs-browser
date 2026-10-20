@@ -254,7 +254,8 @@ function ThreadCard({
         <div className="flex items-center gap-3">
           {/* スレの画像(ふたば・4chan のカタログ)があれば左に出す */}
           {thumbImg(48)}
-          {onSelect && (
+          {/* スマホはチェックボックスを出さない(長押しで選ぶ) */}
+          {onSelect && !isMobile && (
             <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
               <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
             </label>

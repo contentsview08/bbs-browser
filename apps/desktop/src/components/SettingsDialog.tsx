@@ -10,6 +10,7 @@ import { POST_STYLES,
   MOBILE_POST_STYLES,
   effectivePostStyle,
   FONT_PX_KEY,
+  TAB_LABELS,
   baseFontPx,
   PICKABLE_SCHEMES,
   DEFAULT_SETTINGS,
@@ -565,6 +566,8 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
       </Section>
       <Section title="スレ一覧のタブ" note="スレ一覧の上に出すタブと、その並び(上が左)です。数字キーの 1・2・3… は左から順に当たります">
         <ListTabsEditor value={s.listTabs} onChange={(v) => update('listTabs', v)} />
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">タブの見せ方</p>
+        <Choice value={s.listTabLabel} options={TAB_LABELS} onChange={(v) => update('listTabLabel', v)} />
       </Section>
       <Section title="ログの削除">
         <Toggle
@@ -656,6 +659,9 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
             </button>
           )}
         </div>
+      </Section>
+      <Section title="絞り込みのタブの見せ方" note="スレ表示の上の、人気・画像・動画・リンク・すべて のタブです">
+        <Choice value={s.filterTabLabel} options={TAB_LABELS} onChange={(v) => update('filterTabLabel', v)} />
       </Section>
       <Section title="レスの見せ方">
         <Toggle

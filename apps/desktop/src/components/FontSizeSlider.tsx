@@ -1,7 +1,9 @@
 // 文字の大きさを 1px ずつ変えるスライダー(︙ の「文字の大きさ」と、設定の「文字サイズ」)。
 // 動かしている間は、画面の変数(CSS)だけを書き換えて、その場で大きさを変える。設定に保存するのは指(マウス)を離したとき
 // (動かすたびに保存すると、そのたびに DB へ書いて重い)
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { FONT_PX_MAX, FONT_PX_MIN } from '../ui/settings'
 
 export default function FontSizeSlider(props: {
@@ -88,3 +90,31 @@ export function cssPx(name: string, fallback: number): number {
 
 /** 画面の変数(CSS)をすぐ書き換える(スライダーを動かしている間の見た目) */
 export const setCssVar = (name: string, value: string) => document.documentElement.style.setProperty(name, value)
+
+/**
+ * 文字の大きさ・余白のスライダーを、画面の真ん中に出す小さな画面。
+ * ︙ のメニューの中だと、動かすたびに後ろの画面の大きさが変わって、メニューごとスライダーの位置がずれてしまうので、
+ * 後ろの画面に影響されない手前に出す。後ろはうっすら暗くするだけにして、変わっていく様子は見えるようにする
+ */
+export function SliderDialog(props: { title: string; onClose: () => void; children: ReactNode }) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(boxRef, props.onClose)
+  return createPortal(
+    <div className="fixed inset-0 z-[9500] bg-black/25 flex items-center justify-center p-4" onClick={props.onClose}>
+      <div
+        ref={boxRef}
+        className="w-full max-w-sm bg-c-surface border border-c-border rounded-2xl shadow-2xl rise-in py-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between pl-4 pr-2 pb-1">
+          <h2 className="text-sm font-bold text-c-text-strong">{props.title}</h2>
+          <button type="button" onClick={props.onClose} className="p-1.5 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
+            <span className="material-symbols-outlined text-xl">close</span>
+          </button>
+        </div>
+        {props.children}
+      </div>
+    </div>,
+    document.body,
+  )
+}

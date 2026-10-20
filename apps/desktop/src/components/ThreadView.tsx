@@ -29,7 +29,7 @@ import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
-import FontSizeSlider, { cssPx, setCssVar } from './FontSizeSlider'
+import FontSizeSlider, { SliderDialog, cssPx, setCssVar } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -391,6 +391,8 @@ export default function ThreadView(props: Props) {
   const [filters, setFilters] = useState<Set<PostFilter>>(new Set())
   /** スマホ: スレタイを押して出す、スレの操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
+  /** ︙ の「文字の大きさ・余白」の画面 */
+  const [fontDialog, setFontDialog] = useState(false)
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -877,51 +879,8 @@ export default function ThreadView(props: Props) {
             label: '文字の大きさ・余白',
             icon: 'format_size',
             // レスの本文と、頭(名前・日付・ID など)を別々に。動かすとその場で変わる
-            submenu: (
-              <>
-                <FontSizeSlider
-                  label="レスの本文"
-                  value={settings.postBodyPx}
-                  base={baseFontPx(settings)}
-                  preview={(px) => setCssVar('--post-body-size', `${px}px`)}
-                  onCommit={(px) => props.onUpdateSetting!('postBodyPx', px)}
-                  resettable
-                />
-                <FontSizeSlider
-                  label="レスの頭(名前・日付・ID)"
-                  value={settings.postHeadPx}
-                  base={baseFontPx(settings)}
-                  preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(settings)))}
-                  onCommit={(px) => props.onUpdateSetting!('postHeadPx', px)}
-                  resettable
-                />
-<FontSizeSlider
-                  label="レスの本文の行間"
-                  value={settings.postLineHeight}
-                  base={1.625}
-                  min={1}
-                  max={2.4}
-                  step={0.05}
-                  format={(v) => `${v.toFixed(2)} 倍`}
-                  icons={['format_line_spacing', 'format_line_spacing']}
-                  preview={(v) => setCssVar('--post-line-height', String(v))}
-                  onCommit={(v) => props.onUpdateSetting!('postLineHeight', v)}
-                  resettable
-                />
-                <FontSizeSlider
-                  label="レスの上下の余白"
-                  value={settings.postPadPx}
-                  unset={-1}
-                  base={cssPx('--post-padding-y', 6)}
-                  min={0}
-                  max={24}
-                  icons={['density_small', 'density_large']}
-                  preview={(px) => setCssVar('--post-padding-y', `${px}px`)}
-                  onCommit={(px) => props.onUpdateSetting!('postPadPx', px)}
-                  resettable
-                />
-              </>
-            ),
+            // 動かすと後ろの画面の大きさが変わるので、メニューの中ではなく、真ん中に出す小さな画面で変える
+            onClick: () => setFontDialog(true),
           },
         ]
       : []),
@@ -1747,10 +1706,13 @@ export default function ThreadView(props: Props) {
                 style={{ paddingTop: isMobile ? 8 : 10, paddingBottom: isMobile ? 8 : 10 }}
                 title={`${label}だけを出す(${i + 1} キー)`}
               >
-                <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={{ color }}>
-                  {icon}
-                </span>
-                {label}
+                {/* 見せ方は設定で(アイコンと文字・アイコンだけ・文字だけ) */}
+                {settings.filterTabLabel !== 'text' && (
+                  <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={{ color }}>
+                    {icon}
+                  </span>
+                )}
+                {settings.filterTabLabel !== 'icon' && label}
                 {isMobile ? (
                   filterCounts[key] > 0 && <span className="text-[10px] tabular-nums opacity-70 -ml-0.5">{filterCounts[key]}</span>
                 ) : (
@@ -1767,7 +1729,7 @@ export default function ThreadView(props: Props) {
             style={{ paddingTop: 10, paddingBottom: 10 }}
             title="絞り込みを外す(5 キー・Esc)"
           >
-            すべて
+            {settings.filterTabLabel === 'icon' ? <span className="material-symbols-outlined text-xl leading-none align-middle">apps</span> : 'すべて'}
             {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
           </button>
           {/* 絞り込んだ数(スマホは等分の並びが崩れるので出さない。数は各ボタンに出ている) */}
@@ -2184,6 +2146,53 @@ export default function ThreadView(props: Props) {
           onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}
           onClose={() => setGalleryOpen(false)}
         />
+      )}
+      {fontDialog && props.onUpdateSetting && (
+        <SliderDialog title="文字の大きさ・余白" onClose={() => setFontDialog(false)}>
+              <>
+            <FontSizeSlider
+              label="レスの本文"
+              value={settings.postBodyPx}
+              base={baseFontPx(settings)}
+              preview={(px) => setCssVar('--post-body-size', `${px}px`)}
+              onCommit={(px) => props.onUpdateSetting!('postBodyPx', px)}
+              resettable
+            />
+            <FontSizeSlider
+              label="レスの頭(名前・日付・ID)"
+              value={settings.postHeadPx}
+              base={baseFontPx(settings)}
+              preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(settings)))}
+              onCommit={(px) => props.onUpdateSetting!('postHeadPx', px)}
+              resettable
+            />
+<FontSizeSlider
+              label="レスの本文の行間"
+              value={settings.postLineHeight}
+              base={1.625}
+              min={1}
+              max={2.4}
+              step={0.05}
+              format={(v) => `${v.toFixed(2)} 倍`}
+              icons={['format_line_spacing', 'format_line_spacing']}
+              preview={(v) => setCssVar('--post-line-height', String(v))}
+              onCommit={(v) => props.onUpdateSetting!('postLineHeight', v)}
+              resettable
+            />
+            <FontSizeSlider
+              label="レスの上下の余白"
+              value={settings.postPadPx}
+              unset={-1}
+              base={cssPx('--post-padding-y', 6)}
+              min={0}
+              max={24}
+              icons={['density_small', 'density_large']}
+              preview={(px) => setCssVar('--post-padding-y', `${px}px`)}
+              onCommit={(px) => props.onUpdateSetting!('postPadPx', px)}
+              resettable
+            />
+          </>
+        </SliderDialog>
       )}
       {titleSheet && (
         <ActionSheet

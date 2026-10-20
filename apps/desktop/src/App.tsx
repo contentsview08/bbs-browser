@@ -2014,6 +2014,7 @@ export default function App() {
           onSortChange={!favView && !history ? onListSort : undefined}
           // 閲覧履歴は、見た順と未読だけ(新しい順・勢い順は、見たスレを並べるのには要らない)
           tabs={history ? ['viewed', 'unread'] : settings.listTabs}
+          tabLabel={settings.listTabLabel}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           boardUrl={!favView && !history ? board?.url : undefined}

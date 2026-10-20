@@ -52,6 +52,13 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
 /** 閲覧履歴だけのタブ: 見た順(最近見たものが上。押すたびに上下を入れ替える)。設定のタブの並びには出さない */
 export const VIEWED_TAB = { key: 'viewed' as const, name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' }
 export type OpenPosition = 'unread' | 'top' | 'bottom'
+/** タブの見せ方: both はアイコンと文字、icon はアイコンだけ、text は文字だけ */
+export type TabLabel = 'both' | 'icon' | 'text'
+export const TAB_LABELS: { key: TabLabel; name: string }[] = [
+  { key: 'both', name: 'アイコンと文字' },
+  { key: 'icon', name: 'アイコンだけ' },
+  { key: 'text', name: '文字だけ' },
+]
 export type AnchorPopup = 'hover' | 'click'
 export type NgMode = 'aborn' | 'hide'
 /** 書き込み欄の置き場所: bottom はレスの下、right はレスの右 */
@@ -116,6 +123,9 @@ export interface AppSettings {
   /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
   listPadPx: number
   postPadPx: number
+  /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ)。スレ一覧のタブ(未読・勢い順など)と、スレ表示の絞り込み(人気・画像など) */
+  listTabLabel: TabLabel
+  filterTabLabel: TabLabel
   /** レスの本文の行間(字の大きさの何倍か)。0 なら既定(1.625) */
   postLineHeight: number
   /** 画像・動画のサムネイルを読みに行くか。always: いつも / wifi: Wi-Fi のときだけ / tap: 押したら読む(押して出るまではビューアーを開かない) */
@@ -313,6 +323,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   listPadPx: -1,
   postPadPx: -1,
   postLineHeight: 0,
+  listTabLabel: 'both',
+  filterTabLabel: 'both',
   thumbLoad: 'always',
   fontFamily: 'system',
   customFont: '',

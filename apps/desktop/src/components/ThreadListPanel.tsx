@@ -12,13 +12,14 @@ import RefreshButton from './RefreshButton'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
 import { mobileMenuActions, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
+import { SliderDialog } from './FontSizeSlider'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
-import { LIST_TABS, VIEWED_TAB, type ListTabKey, type ThreadSort } from '../ui/settings'
+import { LIST_TABS, VIEWED_TAB, type ListTabKey, type TabLabel, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -99,6 +100,8 @@ interface Props {
   onSortChange?: (sort: { mode: SortMode; dir: 'desc' | 'asc' } | null) => void
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
+  /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ) */
+  tabLabel?: TabLabel
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
   /**
@@ -445,6 +448,8 @@ export default function ThreadListPanel(props: Props) {
   useEffect(() => () => clearTimeout(noteTimer.current), [])
   /** スマホ: 板名を押して出す、板の操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
+  /** ︙ の「文字の大きさ・余白」の画面 */
+  const [fontDialog, setFontDialog] = useState(false)
   const copyText = (text: string, done: string) =>
     void navigator.clipboard.writeText(text).then(
       () => showNote(done),
@@ -569,7 +574,8 @@ export default function ThreadListPanel(props: Props) {
           },
         ]
       : []),
-    ...(props.fontSize ? [{ id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', submenu: props.fontSize }] : []),
+    // 動かすと一覧の大きさが変わるので、メニューの中ではなく、真ん中に出す小さな画面で変える
+    ...(props.fontSize ? [{ id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setFontDialog(true) }] : []),
     ...(props.style
       ? [
           {
@@ -729,8 +735,8 @@ export default function ThreadListPanel(props: Props) {
                     className={`${TAB} ${isMobile ? 'px-2' : ''} ${active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'}`}
                     title={`${def.note}${filter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
                   >
-                    <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
-                    <span className="truncate">{def.name}</span>
+                    {props.tabLabel !== 'text' && <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>}
+                    {props.tabLabel !== 'icon' && <span className="truncate">{def.name}</span>}
                     {key === 'unread' && unreadTotal > 0 && (
                       <span
                         className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
@@ -1022,6 +1028,11 @@ export default function ThreadListPanel(props: Props) {
             iconClass={isMobile ? 'text-2xl' : 'text-lg'}
           />
         </div>
+      )}
+      {fontDialog && (
+        <SliderDialog title="文字の大きさ・余白" onClose={() => setFontDialog(false)}>
+          {props.fontSize}
+        </SliderDialog>
       )}
       {titleSheet && (
         <ActionSheet

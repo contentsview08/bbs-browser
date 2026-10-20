@@ -9,7 +9,7 @@ import LoadingCenter from './LoadingCenter'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
-import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
+import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
 import { mobileMenuActions, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { SliderDialog } from './FontSizeSlider'
@@ -836,8 +836,8 @@ export default function ThreadListPanel(props: Props) {
             <div className="flex items-center gap-2">
               {/* スマホ: 左上のメニュー(サイドバーの引き出し) */}
               {isMobile && props.onOpenDrawer && (
-                <button type="button" onClick={props.onOpenDrawer} className={LIST_BTN} title="メニュー">
-                  <span className="material-symbols-outlined text-xl">menu</span>
+                <button type="button" onClick={props.onOpenDrawer} className={MOBILE_HEAD_BTN} title="メニュー">
+                  <span className={`material-symbols-outlined ${MOBILE_HEAD_ICON}`}>menu</span>
                 </button>
               )}
               <div
@@ -893,8 +893,8 @@ export default function ThreadListPanel(props: Props) {
                 />
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
-                <ActionButtons actions={barActions} placements={placements} where="header" btnClass={LIST_BTN} iconClass="text-lg" />
-                <MoreMenu actions={isMobile ? mobileMenuActions('list', barActions, placements) : barActions} btnClass={LIST_BTN} iconClass="text-lg" />
+                <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
+                <MoreMenu actions={isMobile ? mobileMenuActions('list', barActions, placements) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
               </div>
             </div>
           </div>

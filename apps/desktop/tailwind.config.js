@@ -4,6 +4,8 @@ import forms from '@tailwindcss/forms'
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
+  // hover: の見た目は、マウスで乗せられる端末だけにする(スマホはたたくと乗せた見た目のまま残るので、出さない)
+  future: { hoverOnlyWhenSupported: true },
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {

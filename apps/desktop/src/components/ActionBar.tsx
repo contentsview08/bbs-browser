@@ -25,6 +25,10 @@ export interface BarAction {
   submenu?: ReactNode
 }
 
+/** スマホのヘッダーのボタン(メニュー・検索・︙)。押しやすいよう、縦と横を同じにした 44px の正方形 */
+export const MOBILE_HEAD_BTN = 'flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl text-c-text-muted active:bg-c-surface2 transition-colors'
+export const MOBILE_HEAD_ICON = 'text-[26px]'
+
 /** 置き場所が where の操作を、帯のボタンとして並べる */
 export function ActionButtons(props: {
   actions: BarAction[]

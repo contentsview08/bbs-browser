@@ -475,7 +475,7 @@ function PostArticle(props: Props) {
   /** スレ主(>>1 と同じ ID)と自分の書き込みの印。行の高さを字に合わせて、名前の行より背を高くしない */
   const CHIP = 'flex-shrink-0 self-center text-[10px] leading-none font-bold px-1 py-[2px] rounded'
   const opChip = props.isOp && (
-    <span className={CHIP} style={{ color: 'var(--c-accent)', background: 'var(--c-accent-wash)', border: '1px solid var(--c-accent)' }} title="スレ主(>>1 と同じ ID)">
+    <span className={CHIP} style={{ color: 'var(--c-op)', background: 'var(--c-op-wash)', border: '1px solid var(--c-op)' }} title="スレ主(>>1 と同じ ID)">
       主
     </span>
   )

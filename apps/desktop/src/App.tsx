@@ -1478,6 +1478,16 @@ export default function App() {
     el.blur()
     return true
   }
+  /**
+   * 検索欄から抜けたあとも言葉が残っていれば(見えている検索欄)、その欄で Esc を押したことにして、言葉を消して検索を閉じる。
+   * 外したら true
+   */
+  const clearSearchText = (): boolean => {
+    const input = [...document.querySelectorAll<HTMLInputElement>('input[data-search]')].find((el) => el.value && el.offsetParent !== null)
+    if (!input) return false
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    return true
+  }
   /** いま見ている画面(スレ表示かスレ一覧)で絞り込み・検索をしていれば、Esc を押したことにして外す。外したら true */
   const clearFiltering = (): boolean => {
     const screen = single && threadShown ? 'thread' : 'list'
@@ -1492,6 +1502,7 @@ export default function App() {
     // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
     // 文字を打っている欄から抜けるのが先(検索欄で戻ると、まず欄から抜ける)
     if (action === 'back' && blurTyping()) return
+    if (action === 'back' && clearSearchText()) return
     // レスのポップアップが出ていれば、それを閉じるのが先(スレ表示が Esc でまとめて閉じる)。
     // スレ一覧で選んでいる途中なら、選ぶのをやめる(Esc)
     if (action === 'back' && (document.querySelector('.post-popup') || document.querySelector('[data-selecting]'))) {
@@ -1572,6 +1583,7 @@ export default function App() {
     }
     if (drawerOpen) return setDrawerOpen(false)
     if (blurTyping()) return
+    if (clearSearchText()) return
     if (document.querySelector('[data-selecting]')) {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
       return

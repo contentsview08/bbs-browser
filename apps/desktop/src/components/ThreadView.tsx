@@ -24,7 +24,7 @@ import RefreshButton from './RefreshButton'
 import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
-import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
+import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
 import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
@@ -1591,8 +1591,8 @@ export default function ThreadView(props: Props) {
         >
           {/* スマホ: スレタイの左にメニュー(サイドバーの引き出し) */}
           {isMobile && props.onOpenDrawer && (
-            <button type="button" onClick={props.onOpenDrawer} className="flex-shrink-0 p-2 rounded-xl text-c-text-muted active:bg-c-surface2" title="メニュー">
-              <span className="material-symbols-outlined text-2xl">menu</span>
+            <button type="button" onClick={props.onOpenDrawer} className={MOBILE_HEAD_BTN} title="メニュー">
+              <span className={`material-symbols-outlined ${MOBILE_HEAD_ICON}`}>menu</span>
             </button>
           )}
           <div
@@ -1681,8 +1681,8 @@ export default function ThreadView(props: Props) {
                 {settings.autoRefreshSec}秒
               </span>
             )}
-            <ActionButtons actions={barActions} placements={placements} where="header" btnClass={ICON_BTN} iconClass="text-xl" />
-            <MoreMenu actions={isMobile ? mobileMenuActions('thread', barActions, placements) : barActions} btnClass={ICON_BTN} iconClass="text-xl" />
+            <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
+            <MoreMenu actions={isMobile ? mobileMenuActions('thread', barActions, placements) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
           </div>
         </header>
         {/* スマホは、左右の端までを等分して並べる(人気・画像・動画・リンク・すべて) */}

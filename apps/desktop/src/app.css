@@ -369,8 +369,11 @@ html:root[data-scheme='oled'] {
 .card-thread {
   background: color-mix(in srgb, var(--card-bg) calc(var(--alpha-thread-list, 1) * 100%), transparent);
 }
-.card-thread:hover {
-  background: color-mix(in srgb, var(--c-surface2) calc(var(--alpha-thread-list, 1) * 100%), transparent);
+/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
+@media (hover: hover) {
+  .card-thread:hover {
+    background: color-mix(in srgb, var(--c-surface2) calc(var(--alpha-thread-list, 1) * 100%), transparent);
+  }
 }
 .card-thread.card-selected {
   background: color-mix(in srgb, var(--card-selected-bg) calc(var(--alpha-thread-list, 1) * 100%), transparent);
@@ -401,8 +404,11 @@ article.post-discord {
   border-radius: 6px;
   transition: background-color 0.1s;
 }
-article.post-discord:hover {
-  background-color: color-mix(in srgb, var(--c-text-body) 5%, transparent);
+/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
+@media (hover: hover) {
+  article.post-discord:hover {
+    background-color: color-mix(in srgb, var(--c-text-body) 5%, transparent);
+  }
 }
 /* LINE 風: スレ表示の背景を LINE のトークのような落ち着いた青灰色に寄せ、吹き出しを浮かせる。
    強調色に寄せると、黄色・橙の配色(アンバー×ティールなど)で画面全体がチカチカするので、配色に関係なく同じ青灰にする。
@@ -467,9 +473,12 @@ article.post-discord:hover {
   border: none;
   border-radius: 6px;
 }
-.card-thread[data-variant='discord']:hover,
-.card-thread[data-variant='line']:hover {
-  background: color-mix(in srgb, var(--c-text-body) 6%, transparent);
+/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
+@media (hover: hover) {
+  .card-thread[data-variant='discord']:hover,
+  .card-thread[data-variant='line']:hover {
+    background: color-mix(in srgb, var(--c-text-body) 6%, transparent);
+  }
 }
 .card-thread[data-variant='discord'].card-selected,
 .card-thread[data-variant='line'].card-selected,
@@ -539,8 +548,11 @@ article.post-discord:hover {
 .card-thread[data-variant='classic']:nth-child(even) {
   background: color-mix(in srgb, var(--c-text-body) 3%, transparent);
 }
-.card-thread[data-variant='classic']:hover {
-  background: color-mix(in srgb, var(--c-accent) 8%, transparent);
+/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
+@media (hover: hover) {
+  .card-thread[data-variant='classic']:hover {
+    background: color-mix(in srgb, var(--c-accent) 8%, transparent);
+  }
 }
 /* 開いているスレは、1 行おきの色やマウスを乗せた色より強く */
 .card-thread[data-variant='classic'].card-selected {
@@ -689,8 +701,11 @@ input[type='checkbox']:indeterminate {
 }
 
 /* 乗せたときに意味の色にする(style で --tint を渡す)。ふだんは落ち着いた色のまま */
-.tint-hover:hover:not(:disabled) {
-  color: var(--tint) !important;
+/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
+@media (hover: hover) {
+  .tint-hover:hover:not(:disabled) {
+    color: var(--tint) !important;
+  }
 }
 
 /* ---------- サイドバーの、選んでいる行の印(components/Sidebar.tsx の NavNotch) ----------
@@ -993,4 +1008,41 @@ html[data-platform='mobile'] .card-thread {
 /* スマホ: ヘッダー・フッターの文字の大きさ(設定 barFontPx)。中身を比のまま拡大・縮小する(高さは各部品で割り戻す) */
 html[data-platform='mobile'] .bar-zoom {
   zoom: var(--bar-zoom, 1);
+}
+
+/* スマホ: カードの見た目のスレ一覧は、スレとスレの間に線を引いて区切る(面の濃淡だけだと境目が分かりにくい) */
+html[data-platform='mobile'] .card-thread[data-variant='card'] {
+  box-shadow: 0 1px 0 var(--c-border-strong);
+}
+
+/* 役目ごとの色を増やす(どの配色でも、未読・自分・主・新着が同じ色に寄って、のっぺりしていたので)。
+   未読・新着の札は今までどおり(ダークはピンク・赤、ライトは青)。ほかは別の色にする */
+/* 主(スレ主の印): 黄色・橙 */
+html:root[data-scheme] {
+  --c-op: #c47a06;
+  --c-op-wash: rgba(196, 122, 6, 0.12);
+}
+html:root.dark[data-scheme] {
+  --c-op: #f0b44c;
+  --c-op-wash: rgba(240, 180, 76, 0.16);
+}
+/* 自分の書き込み: 未読の色と分けて、緑みの青(Discord ダークは、本家と同じ紫みの青のまま) */
+html:root[data-scheme]:not([data-scheme='discord-dark']) {
+  --c-own: #14a37f;
+  --c-own-wash: rgba(20, 163, 127, 0.12);
+}
+html:root.dark[data-scheme]:not([data-scheme='discord-dark']) {
+  --c-own: #3ec7a0;
+  --c-own-wash: rgba(62, 199, 160, 0.16);
+}
+/* 新着のレスの光り方: 空色の青(強調色とも未読の札とも分ける) */
+html:root[data-scheme] {
+  --c-flash-new: #3b8fe8;
+}
+html:root.dark[data-scheme] {
+  --c-flash-new: #5aa9ff;
+}
+html:root[data-scheme='discord-dark'] {
+  --c-flash-new: #5865f2;
+  --c-op: #f0b232;
 }

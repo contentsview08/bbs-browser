@@ -28,6 +28,7 @@ import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isMobile } from '../utils/platform'
+import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
@@ -1037,6 +1038,18 @@ function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
         />
       </Section>
       <Section title="通知">
+        {isMobile && (
+          <Toggle
+            checked={s.osNotify}
+            onChange={(v) => {
+              update('osNotify', v)
+              // オンにしたら、Android に通知の許可を求める(断られたら、Android の設定から許可してもらう)
+              if (v) void ensureNotifyPermission().then((ok) => !ok && alert('通知が許可されていません。Android の設定 → アプリ → bbs-browser → 通知 から許可してください'))
+            }}
+            label="スマホの通知の欄にも出す"
+            note="アプリを裏に回しているときは、下の知らせを Android の通知でも出します。アプリを完全に閉じている間は、新着を確かめられないので知らせません"
+          />
+        )}
         <Toggle
           checked={s.notifyFavThreads}
           onChange={(v) => update('notifyFavThreads', v)}

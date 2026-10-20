@@ -126,6 +126,8 @@ export interface AppSettings {
   /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ)。スレ一覧のタブ(未読・勢い順など)と、スレ表示の絞り込み(人気・画像など) */
   listTabLabel: TabLabel
   filterTabLabel: TabLabel
+  /** スマホ: 知らせ(お気に入りの新着・キーワード・自分への返信)を、アプリを裏に回しているときは OS の通知でも出す */
+  osNotify: boolean
   /** スマホ: ヘッダー・フッターの高さ(px)と、中の文字の大きさ(px)。0 なら既定 */
   headerPx: number
   footerPx: number
@@ -327,6 +329,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   listPadPx: -1,
   postPadPx: -1,
   postLineHeight: 0,
+  osNotify: true,
   headerPx: 0,
   footerPx: 0,
   barFontPx: 0,

@@ -63,6 +63,7 @@ import { useViewState } from './hooks/useViewState'
 import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
 import { useNotifications } from './hooks/useNotifications'
+import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
 import { useWatchLists } from './hooks/useWatchLists'
 import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
@@ -227,7 +228,23 @@ export default function App() {
       if (store) setPostHistory(await store.listPostHistory())
     })
   /** アプリ内の通知(右下)。裏の処理の失敗もここに出る */
-  const { notifications, notify, dismiss } = useNotifications()
+  const { notifications, notify: notifyInApp, dismiss } = useNotifications()
+  /**
+   * 知らせる。いつもアプリの中(右下)に出し、スマホでアプリを裏に回しているときは OS の通知でも出す
+   * (失敗の知らせは、アプリを見ているときに分かればよいので OS には出さない)
+   */
+  const notify = useCallback(
+    (n: Parameters<typeof notifyInApp>[0]) => {
+      notifyInApp(n)
+      if (isMobile && settingsRef.current.osNotify && n.icon !== 'error' && document.visibilityState === 'hidden')
+        void sendOsNotification(n.title, n.body).catch(() => undefined)
+    },
+    [notifyInApp],
+  )
+  // スマホ: OS の通知をオンにしていれば、起動したときに一度だけ許可を求める(もう許可していれば聞かない)
+  useEffect(() => {
+    if (isMobile && settingsLoaded && settingsRef.current.osNotify) void ensureNotifyPermission().catch(() => undefined)
+  }, [settingsLoaded])
   /** 通知から、そのタブのそのレスへ飛ぶ */
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
   /** NG を登録する画面(元の文字を入れて開く) */

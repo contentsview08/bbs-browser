@@ -57,7 +57,11 @@ export interface PostHandlers extends BodyHandlers {
   /** レスへの操作の種類(コネクタの postActions)。「その他」のメニューに並べる */
   postActions?: PostActionDef[]
   /** NG の画面を、元の文字を入れた状態で開く */
-  onNgDraft?: (target: 'content' | 'posterName' | 'posterId' | 'threadTitle', text: string) => void
+  onNgDraft?: (
+    target: 'content' | 'posterName' | 'posterId' | 'threadTitle',
+    text: string,
+    values?: Partial<Record<'content' | 'posterName' | 'posterId' | 'threadTitle', string>>,
+  ) => void
   /** >>番号 を付けてすぐ書き込む(「草」ボタン)。書き込めないときは undefined */
   onQuickReply?: (no: number, text: string) => void
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す)。reason は付けたときの自動 NG の理由 */
@@ -376,7 +380,7 @@ function PostArticle(props: Props) {
           ]
       : []),
     ...(handlers.onNgDraft
-      ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body) }]
+      ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
       : []),
   ]
   const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng']

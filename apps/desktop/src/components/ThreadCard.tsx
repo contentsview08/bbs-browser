@@ -37,6 +37,10 @@ interface Props {
   /** 選べる一覧(閲覧履歴)のとき、既読の線とスレタイの間にチェックボックスを出す。selected はその状態 */
   selected?: boolean
   onSelect?: (t: ThreadSummary, selected: boolean) => void
+  /** スマホ: 選んでいる途中(何か選んでいる)。押すと開く代わりに、選ぶ・外すを切り替える */
+  selecting?: boolean
+  /** スマホ: 長押しで選び始める(チェックボックスの代わり)。長押しのまま上下になぞると続けて選ぶ(一覧の方で受ける) */
+  onSelectStart?: (t: ThreadSummary) => void
   /** キー操作(J・K)で選んでいるカード。枠を強調色にする */
   isCursor?: boolean
   /** 見た目のスタイル(レスの見た目の設定に合わせる)。card: いまのカード / discord: チャンネル一覧のような行 /
@@ -46,10 +50,29 @@ interface Props {
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
-function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen, onNg, onCopy, onDeleteLog, isFavorite, onToggleFavorite, isNew, selected, onSelect, isCursor, variant = 'card' }: Props) {
-  // スマホ: 長押しで操作の一覧を出す
+function ThreadCard({
+  thread,
+  state,
+  isActive,
+  momentum: m,
+  momentumRank,
+  onOpen,
+  onNg,
+  onCopy,
+  onDeleteLog,
+  isFavorite,
+  onToggleFavorite,
+  isNew,
+  selected,
+  onSelect,
+  selecting,
+  onSelectStart,
+  isCursor,
+  variant = 'card',
+}: Props) {
+  // スマホ: 長押しで操作の一覧を出す(選べる一覧(閲覧履歴)では、選び始める)
   const [sheet, setSheet] = useState(false)
-  const longPress = useLongPress(isMobile ? () => setSheet(true) : undefined)
+  const longPress = useLongPress(isMobile ? (onSelectStart ? () => onSelectStart(thread) : () => setSheet(true)) : undefined)
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   const momentumColorClass =
     momentumRank >= 0.9
@@ -66,7 +89,8 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   const archived = state?.status === 'archived'
 
   // ── スタイルごとに並べ替える部品 ──
-  const checkbox = onSelect && (
+  // スマホはチェックボックスを出さない(長押しで選ぶ)
+  const checkbox = onSelect && !isMobile && (
     <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
       <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
     </label>
@@ -133,7 +157,17 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       <div className="thread-row flex gap-2 min-w-0">
         {checkbox}
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
-        {thumbImg(28, 'rounded') || <span className="thread-row-hash flex-shrink-0 text-c-text-muted select-none">#</span>}
+        {/* 立てた人の ID が分かれば(エッジ)、# の代わりにその ID の模様を出す */}
+        {thumbImg(28, 'rounded') ||
+          (thread.authorId ? (
+            <span className="thread-row-hash flex-shrink-0 flex justify-center" title={`立てた人の ID:${thread.authorId}`}>
+              <span className="block overflow-hidden rounded-full self-center">
+                <Identicon seed={thread.authorId} size={18} />
+              </span>
+            </span>
+          ) : (
+            <span className="thread-row-hash flex-shrink-0 text-c-text-muted select-none">#</span>
+          ))}
         {/* 太字は新着のあるスレだけ(本家の未読のチャンネルと同じ)。開いたことのないスレは、太字にせず色の明るさで分ける */}
         <span className="thread-row-title flex-1 min-w-0" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
           {newBadge}
@@ -172,6 +206,11 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
       <div className="flex items-center gap-3 min-w-0">
         {checkbox}
         {thumbImg(40, 'rounded-xl') ||
+          (thread.authorId && (
+            <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の ID:${thread.authorId}`}>
+              <Identicon seed={thread.authorId} size={40} />
+            </span>
+          )) ||
           (beNo && (
           <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の BE:${beNo}`}>
             <Identicon seed={`be:${beNo}`} size={40} />
@@ -213,6 +252,15 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
             {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
             <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
               {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
+              {/* 立てた人の ID(エッジ)。模様と ID で、同じ人の立てたスレが分かる */}
+              {thread.authorId && (
+                <span className="flex items-center gap-1 min-w-0 font-mono" title="立てた人の ID">
+                  <span className="flex-shrink-0 block overflow-hidden rounded-full">
+                    <Identicon seed={thread.authorId} size={12} />
+                  </span>
+                  <span className="truncate">{thread.authorId}</span>
+                </span>
+              )}
               {archived && <span className="whitespace-nowrap">dat落ち</span>}
               <div className="flex items-center gap-5 ml-auto">
                 <span
@@ -270,7 +318,7 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
   return (
     <div
       {...longPress}
-      onClick={() => onOpen(thread)}
+      onClick={() => (isMobile && selecting && onSelect ? onSelect(thread, !selected) : onOpen(thread))}
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
       data-variant={variant}
@@ -296,6 +344,13 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
     >
       {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
           (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+      {/* スマホ: 選んでいるスレは、強調色を薄く敷いて右にチェック */}
+      {isMobile && selected && (
+        <>
+          <span className="absolute inset-0 pointer-events-none rounded-[inherit]" style={{ background: 'var(--c-accent-wash)' }} />
+          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none material-symbols-outlined fill text-xl text-c-accent">check_circle</span>
+        </>
+      )}
       {isCursor && (
         <>
           <span className="absolute inset-0 pointer-events-none rounded-[inherit]" style={{ background: 'var(--c-cursor-tint)' }} />

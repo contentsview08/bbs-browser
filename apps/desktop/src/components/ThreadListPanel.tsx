@@ -105,7 +105,8 @@ interface Props {
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
   keywords?: string[]
   /** スレタイを NG に追加する画面を開く */
-  onNgThread?: (title: string) => void
+  /** スレを NG にする画面を出す(スレタイと、分かれば立てた人の ID を入れて) */
+  onNgThread?: (t: ThreadSummary) => void
   /** スレのログ(閲覧履歴)を消す */
   onDeleteThreadLog?: (t: ThreadSummary) => void
   /** スレのブラウザ用の URL(コピーに使う) */
@@ -181,6 +182,11 @@ export default function ThreadListPanel(props: Props) {
   // スレ表示の受け取りと順番が決まらないので、ほかの受け取りが済んでから(マイクロタスクで)見る
   /** 外すものがあれば外して true。なければ何もしないで false */
   const resetView = useEvent((): boolean => {
+    // スマホ: 選んでいる途中なら、まず選ぶのをやめる(戻るで)
+    if (selected.size > 0) {
+      setSelected(new Set())
+      return true
+    }
     const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)
     if (!unreadOnly && !visitedOnly && !sorted && !query && !searchActive) return false
     setUnreadOnly(false)
@@ -257,11 +263,11 @@ export default function ThreadListPanel(props: Props) {
       else showNote('この掲示板は、スレを開かずに中身をのぞけません(スレ一覧に中身が入っていないため)')
     }
     else if (action === 'top') {
-      animateScroll(el, () => 0)
+      animateScroll(el, () => 0, 0)
       setCursorHidden(false)
       setCursorId(ordered[0] && threadId(ordered[0]))
     } else if (action === 'bottom') {
-      animateScroll(el, () => el.scrollHeight)
+      animateScroll(el, () => el.scrollHeight, 0)
       setCursorHidden(false)
       const last = ordered[ordered.length - 1]
       setCursorId(last && threadId(last))
@@ -522,7 +528,7 @@ export default function ThreadListPanel(props: Props) {
     setCursorHidden(false)
     props.onOpen(t)
   })
-  const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t.title))
+  const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t))
   const onCopyCard = useEvent(
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
   )
@@ -601,6 +607,49 @@ export default function ThreadListPanel(props: Props) {
     }),
   )
 
+  // ── スマホ: 長押しで選び始め、そのまま上下になぞると、なぞった範囲をまとめて選ぶ ──
+  /** なぞって選んでいる途中: 長押ししたスレの位置と、なぞり始める前に選んでいたもの */
+  const dragSelect = useRef<{ anchor: number; base: Set<string> } | null>(null)
+  const orderedRef = useRef(ordered)
+  orderedRef.current = ordered
+  const onSelectStart = useEvent((t: ThreadSummary) => {
+    const base = new Set(selected).add(threadId(t))
+    setSelected(base)
+    dragSelect.current = { anchor: ordered.findIndex((x) => threadId(x) === threadId(t)), base }
+  })
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!isMobile || !el) return
+    const move = (e: TouchEvent) => {
+      const d = dragSelect.current
+      if (!d || d.anchor < 0) return
+      // なぞって選んでいる間は、一覧をスクロールさせない(画面の上下の端に来たら、少しずつ送る)
+      e.preventDefault()
+      const t = e.touches[0]
+      const box = el.getBoundingClientRect()
+      if (t.clientY < box.top + 72) el.scrollTop -= 12
+      else if (t.clientY > box.bottom - 72) el.scrollTop += 12
+      const card = document.elementFromPoint(t.clientX, t.clientY)?.closest<HTMLElement>('[data-thread-id]')
+      const list = orderedRef.current
+      const i = card ? list.findIndex((x) => threadId(x) === card.dataset.threadId) : -1
+      if (i < 0) return
+      const next = new Set(d.base)
+      for (let k = Math.min(i, d.anchor); k <= Math.max(i, d.anchor); k++) next.add(threadId(list[k]))
+      setSelected(next)
+    }
+    const end = () => {
+      dragSelect.current = null
+    }
+    el.addEventListener('touchmove', move, { passive: false })
+    el.addEventListener('touchend', end)
+    el.addEventListener('touchcancel', end)
+    return () => {
+      el.removeEventListener('touchmove', move)
+      el.removeEventListener('touchend', end)
+      el.removeEventListener('touchcancel', end)
+    }
+  }, [])
+
   // ── カードは上から少しずつ作る(数百スレある板でも、開いてすぐ出るように) ──
   // 最初は FIRST_CARDS 枚、そのあと手の空いたときに CARD_CHUNK 枚ずつ作り足す。板が変わると作り直す(この部品ごと作り直される)
   const [renderLimit, setRenderLimit] = useState(FIRST_CARDS)
@@ -640,6 +689,8 @@ export default function ThreadListPanel(props: Props) {
         variant={props.variant}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
+        selecting={selected.size > 0}
+        onSelectStart={selectable && isMobile ? onSelectStart : undefined}
       />
     )
   }
@@ -689,7 +740,7 @@ export default function ThreadListPanel(props: Props) {
   return (
     <section
       // 絞り込み・検索をしている印(スマホの戻る操作は、まずこれを外す。App の backRef)
-      data-filtering={props.active !== false && (unreadOnly || visitedOnly || query || searchActive) ? 'list' : undefined}
+      data-filtering={props.active !== false && (unreadOnly || visitedOnly || query || searchActive || selected.size > 0) ? 'list' : undefined}
       style={props.fill ? { width: '100%', maxWidth: props.fill === 'centered' ? FILL_MAX_WIDTH : undefined } : { width }}
       className={`flex-shrink-0 flex flex-col relative overflow-hidden bg-panel-list ${
         props.fill === 'centered' ? 'border-x' : props.fill ? '' : 'border-r'
@@ -802,7 +853,34 @@ export default function ThreadListPanel(props: Props) {
             </div>
           </div>
 
-          {selectable && selected.size > 0 && (
+          {selectable && selected.size > 0 && isMobile && (
+            // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる
+            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-c-border text-sm">
+              <button type="button" onClick={() => setSelected(new Set())} className="p-2 rounded-xl text-c-text-muted active:bg-c-surface2" title="選ぶのをやめる">
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+              <span className="flex-1 font-bold text-c-text-strong tabular-nums">{selected.size} 件</span>
+              <button
+                type="button"
+                onClick={() => setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(threadId)))}
+                className="px-3 py-1.5 rounded-xl text-c-text-body active:bg-c-surface2"
+              >
+                {selected.size === visible.length ? 'すべて外す' : 'すべて選ぶ'}
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-c-heat-very-hot active:bg-c-surface2"
+                onClick={() => {
+                  props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
+                  setSelected(new Set())
+                }}
+              >
+                <span className="material-symbols-outlined text-lg">delete</span>
+                ログを削除
+              </button>
+            </div>
+          )}
+          {selectable && selected.size > 0 && !isMobile && (
             <div className="flex items-center gap-2 px-4 py-1.5 border-b border-c-border text-xs">
               <span className="text-c-text-muted">{selected.size} 件選択中</span>
               <button
@@ -818,7 +896,7 @@ export default function ThreadListPanel(props: Props) {
               </button>
             </div>
           )}
-          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile && !selectable ? 'hidden' : ''}`}>
+          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile ? 'hidden' : ''}`}>
             {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
             {selectable && (
               <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">

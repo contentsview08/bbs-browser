@@ -91,7 +91,7 @@ interface Props {
   onUrl: (url: string) => void
   onAddNg: (rule: NgRule) => void
   /** NG の画面を、元の文字を入れた状態で開く */
-  onNgDraft: (target: NgTarget, text: string) => void
+  onNgDraft: (target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => void
   /** 自分の書き込みのレス番号 */
   ownNos: Set<number>
   /** 書き込み。コネクタが書き込みに対応していなければ undefined */
@@ -2131,7 +2131,7 @@ export default function ThreadView(props: Props) {
             { label: 'スレタイをコピー', icon: 'content_copy', onClick: () => copyText(log.title, 'スレタイをコピーしました') },
             { label: 'URL をコピー', icon: 'link', onClick: () => copyText(props.threadUrl, 'URL をコピーしました') },
             { label: 'スレタイと URL をコピー', icon: 'content_paste', onClick: () => copyText(`${log.title}\n${props.threadUrl}`, 'スレタイと URL をコピーしました') },
-            { label: 'スレタイを NG に追加', icon: 'block', onClick: () => props.onNgDraft('threadTitle', log.title) },
+            { label: 'スレタイを NG に追加', icon: 'block', onClick: () => props.onNgDraft('threadTitle', log.title, { threadTitle: log.title, posterId: log.posts[0]?.no === 1 ? log.posts[0].id : undefined, posterName: log.posts[0]?.name }) },
             { label: '先頭へ', icon: 'vertical_align_top', onClick: () => jumpToTop() },
             { label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
             { label: 'ログを削除して閉じる', icon: 'delete', danger: true, onClick: props.onDeleteLog },

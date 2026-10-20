@@ -1742,7 +1742,7 @@ export default function App() {
     openUrl: useEvent((url: string) => void openLink(url)),
     addNg: useEvent((rule: NgRule) => addNg(rule)),
     markTroll: useEvent((t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => markTroll(t, p, troll, reason)),
-    ngDraft: useEvent((target: NgTarget, text: string) => setNgDraft({ target, pattern: text })),
+    ngDraft: useEvent((target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => setNgDraft({ target, pattern: text, values })),
     canPost: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).createPost !== undefined),
     submitPost: useEvent((input: PostInput) => submitPost(input)),
     confirmPost: useEvent((c: PostConfirm, input: PostInput) => confirmPost(c, input)),
@@ -2012,7 +2012,7 @@ export default function App() {
           favoriteIds={favIds}
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
-          onNgThread={(title) => setNgDraft({ target: 'threadTitle', pattern: title })}
+          onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId } })}
           onDeleteThreadLog={(t) => void deleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={favView || history ? undefined : settings.keywords}

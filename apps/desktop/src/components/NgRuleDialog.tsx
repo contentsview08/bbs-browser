@@ -11,6 +11,8 @@ const INPUT =
 export interface NgDraft {
   target: NgTarget
   pattern: string
+  /** 種類ごとの、元の文字(本文・名前・ID・スレタイ)。種類を切り替えたら、その種類の文字を欄に入れる */
+  values?: Partial<Record<NgTarget, string>>
 }
 
 export default function NgRuleDialog(props: { draft: NgDraft; onSubmit: (rule: NgRule) => void; onClose: () => void }) {
@@ -51,7 +53,12 @@ export default function NgRuleDialog(props: { draft: NgDraft; onSubmit: (rule: N
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setTarget(t.key)}
+                onClick={() => {
+                  setTarget(t.key)
+                  // その種類の元の文字が分かっていれば入れ替える(ID を押したら、そのレスの ID が入る)
+                  const v = props.draft.values?.[t.key]
+                  if (v) setPattern(v)
+                }}
                 className={`px-3 py-1 text-sm border rounded-[var(--chip-radius)] transition-colors ${
                   t.key === target ? 'border-c-accent text-c-accent bg-[var(--c-accent-wash)]' : 'border-c-border text-c-text-body hover:border-c-border-strong'
                 }`}

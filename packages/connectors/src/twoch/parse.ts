@@ -72,6 +72,16 @@ export function parseSubjectTxt(text: string): SubjectEntry[] {
 }
 
 /**
+ * エッジの subject-metadent.txt のスレタイの後ろに付く、立てた人の ID(「… [YN3MdpLR★]」)を取り出す。
+ * 付いていなければ、スレタイはそのまま
+ */
+export function splitAuthorId(title: string): { title: string; authorId?: string } {
+  const m = /\s*\[([^\s[\]★]{4,20})★\]\s*$/.exec(title)
+  if (!m) return { title }
+  return { title: title.slice(0, m.index).trimEnd(), authorId: m[1] }
+}
+
+/**
  * dat の 1 行 = `名前<>メール<>日付 ID:xxx<>本文<>スレタイ`(スレタイは 1 行目だけ)。
  * 形が崩れた行(あぼーんなど)も番号がずれないよう、1 行 1 レスとして返す。
  */

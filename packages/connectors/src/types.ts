@@ -77,6 +77,11 @@ export interface ThreadSummary {
    * 掲示板はいつも一覧の頭に置くが、アプリはどの並べ方でも一番下に回す
    */
   announcement?: boolean
+  /**
+   * スレを立てた人の ID。スレ一覧に付いてくる掲示板だけ(エッジの subject-metadent.txt はスレタイの後ろに「[ID★]」が付く)。
+   * スレタイからは外して、ここに入れる
+   */
+  authorId?: string
 }
 
 /**

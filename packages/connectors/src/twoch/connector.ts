@@ -14,7 +14,7 @@ import type {
   PostResult,
   ThreadSummary,
 } from '../types'
-import { parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt } from './parse'
+import { parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt, splitAuthorId } from './parse'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 
 /** dat 差分取得の続き */
@@ -165,6 +165,19 @@ function createdAtOf(key: string, now = Date.now()): Date | undefined {
   return date.getTime() > now + FUTURE_TOLERANCE_MS ? undefined : date
 }
 
+/** 立てた人の ID が付いたスレ一覧(subject-metadent.txt)がある掲示板(エッジ) */
+const hasAuthorSubject = (boardUrl: string) => /^https?:\/\/[^/]*eddibb\.cc\//.test(boardUrl)
+
+/** スレ一覧のファイルを読む。boardUrl を渡すと、ないときに「板が見つかりません」と分かる言葉で断る */
+async function readSubject(url: string, ctx: ConnectorContext, boardUrl?: string): Promise<string> {
+  const res = await ctx.http.get(url)
+  if (res.status === 404) throw new Error(`板が見つかりません(HTTP 404): ${boardUrl ?? url}`)
+  ensureOk(res, url)
+  const text = ctx.decode(res.body, encodingOf(res))
+  if (!looksLikeSubject(text)) throw new Error(`スレ一覧を読めませんでした(掲示板の板ではないかもしれません): ${boardUrl ?? url}`)
+  return text
+}
+
 /** お知らせスレの番号。10 桁で、日時にするとずっと先(番号がわざと未来になっている。9240230830 など) */
 export function isAnnouncementKey(key: string, now = Date.now()): boolean {
   return /^\d{10}$/.test(key) && Number(key) * 1000 > now + FUTURE_TOLERANCE_MS
@@ -299,24 +312,23 @@ export const twoChConnector: Connector = {
   },
 
   async listThreads(board, ctx) {
-    const url = `${board.url}subject.txt`
-    const res = await ctx.http.get(url)
-    if (res.status === 404) throw new Error(`板が見つかりません(HTTP 404): ${board.url}`)
-    ensureOk(res, url)
-    const text = ctx.decode(res.body, encodingOf(res))
-    if (!looksLikeSubject(text)) throw new Error(`スレ一覧を読めませんでした(掲示板の板ではないかもしれません): ${board.url}`)
-    return parseSubjectTxt(text).map(
-      (e, order): ThreadSummary => ({
+    // エッジは、スレタイの後ろに立てた人の ID が付いたスレ一覧(subject-metadent.txt)も出している。読めればそちらを使う
+    const meta = hasAuthorSubject(board.url) ? await readSubject(`${board.url}subject-metadent.txt`, ctx).catch(() => undefined) : undefined
+    const text = meta ?? (await readSubject(`${board.url}subject.txt`, ctx, board.url))
+    return parseSubjectTxt(text).map((e, order): ThreadSummary => {
+      const { title, authorId } = meta ? splitAuthorId(e.title) : { title: e.title, authorId: undefined }
+      return {
         connectorId: ID,
         boardUrl: board.url,
         key: e.key,
-        title: e.title,
+        title,
         postCount: e.postCount,
         order,
         createdAt: createdAtOf(e.key),
         ...(isAnnouncementKey(e.key) && { announcement: true }),
-      }),
-    )
+        ...(authorId && { authorId }),
+      }
+    })
   },
 
   async fetchPosts(thread, rawCursor, ctx): Promise<FetchPostsResult> {

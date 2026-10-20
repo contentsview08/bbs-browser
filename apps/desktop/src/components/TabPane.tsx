@@ -39,7 +39,7 @@ export interface TabEvents {
   openInBrowser: (t: ThreadSummary) => void
   openUrl: (url: string) => void
   addNg: (rule: NgRule) => void
-  ngDraft: (target: NgTarget, text: string) => void
+  ngDraft: (target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => void
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
   markTroll: (t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => void
   /** 書き込めない掲示板なら undefined を返す */

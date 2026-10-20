@@ -227,3 +227,48 @@ describe('スレが立った日時', () => {
     expect(normal.announcement).toBeUndefined()
   })
 })
+
+describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
+  const fake = (routes: Record<string, string>) => {
+    const got: string[] = []
+    const ctx: ConnectorContext = {
+      decode: (b, e) => new TextDecoder(e).decode(b),
+      http: {
+        get: async (url): Promise<HttpResponse> => {
+          got.push(url)
+          if (!(url in routes)) return { status: 404, headers: {}, body: new Uint8Array() }
+          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode(routes[url]) }
+        },
+        post: async () => {
+          throw new Error('この試験では書き込まない')
+        },
+      },
+    }
+    return { ctx, got }
+  }
+  const board = { connectorId: '2ch-compat', url: 'https://bbs.eddibb.cc/liveedge/', name: 'liveedge' }
+
+  it('エッジは subject-metadent.txt を読み、スレタイの後ろの [ID★] を立てた人の ID にする', async () => {
+    const { ctx, got } = fake({
+      'https://bbs.eddibb.cc/liveedge/subject-metadent.txt':
+        '1792487946.dat<>【悲報】移民の話 [YN3MdpLR★] (158)\n1792483602.dat<>削除されるwww  [Xiz3GTQy★] (728)\n1792489148.dat<>IDのないスレ (7)\n',
+    })
+    const [a, b, c] = await twoChConnector.listThreads(board, ctx)
+    expect(got).toEqual(['https://bbs.eddibb.cc/liveedge/subject-metadent.txt'])
+    expect(a).toMatchObject({ title: '【悲報】移民の話', authorId: 'YN3MdpLR', postCount: 158 })
+    expect(b).toMatchObject({ title: '削除されるwww', authorId: 'Xiz3GTQy' })
+    expect(c.authorId).toBeUndefined()
+    expect(c.title).toBe('IDのないスレ')
+  })
+
+  it('subject-metadent.txt がなければ subject.txt を読む。ほかの掲示板は subject.txt だけ', async () => {
+    const edge = fake({ 'https://bbs.eddibb.cc/liveedge/subject.txt': '1792489148.dat<>ふつうのスレ [abc★] (7)\n' })
+    const [t] = await twoChConnector.listThreads(board, edge.ctx)
+    expect(edge.got).toEqual(['https://bbs.eddibb.cc/liveedge/subject-metadent.txt', 'https://bbs.eddibb.cc/liveedge/subject.txt'])
+    // subject.txt のスレタイは、そのまま(立てた人の ID の書き方ではないので)
+    expect(t.title).toBe('ふつうのスレ [abc★]')
+    const five = fake({ 'https://mevius.5ch.io/x/subject.txt': '1789358916.dat<>普通のスレ (10)\n' })
+    await twoChConnector.listThreads({ connectorId: '2ch-compat', url: 'https://mevius.5ch.io/x/', name: 'x' }, five.ctx)
+    expect(five.got).toEqual(['https://mevius.5ch.io/x/subject.txt'])
+  })
+})

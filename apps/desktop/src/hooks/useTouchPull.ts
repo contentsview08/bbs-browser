@@ -2,6 +2,7 @@
 // くるくるの出し方・確定は useWheelPullRefresh の指用(touchPull・touchRelease)を使う。
 // 端に着いたかは指を動かすたびに見る(同じ指のまま、スクロールして端に着き、そのまま引っぱっても効くように)
 import { useRef } from 'react'
+import { swipeState } from './useSwipeGesture'
 
 interface Pull {
   touchPull: (dist: number) => void
@@ -30,6 +31,13 @@ export function useTouchPull(scrollRef: React.RefObject<HTMLElement | null>, top
       const y = e.touches[0].clientY
       const dy = y - s.lastY
       s.lastY = y
+      // ジェスチャー(→↑ など)をなぞっている途中は、引っぱって更新しない。引きかけていたら戻す
+      if (swipeState.active) {
+        if (s.edge) (s.edge === 'top' ? top : bottom)?.touchPull(0)
+        s.edge = null
+        s.dist = 0
+        return
+      }
       if (!s.edge) {
         if (dy > 0 && top && el.scrollTop < 1) s.edge = 'top'
         else if (dy < 0 && bottom && el.scrollTop + el.clientHeight >= el.scrollHeight - 2) s.edge = 'bottom'

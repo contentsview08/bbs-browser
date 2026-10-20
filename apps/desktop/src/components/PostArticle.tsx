@@ -32,6 +32,8 @@ import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 
 export interface PostHandlers extends BodyHandlers {
+  /** 書き込みの多い ID を赤くする */
+  idHeat?: boolean
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -486,7 +488,7 @@ function PostArticle(props: Props) {
     (
       <button
         type="button"
-        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${heatClass(idCount) || 'text-c-text-muted'}`}
+        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${(handlers.idHeat ? heatClass(idCount) : '') || 'text-c-text-muted'}`}
         onClick={(e) => handlers.onId(post.id!, e.currentTarget)}
         title="この ID の書き込みを表示"
       >
@@ -557,7 +559,7 @@ function PostArticle(props: Props) {
         </span>
         {idCount >= 2 && (
           <span
-            className={`absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(idCount) || 'text-c-text-muted'}`}
+            className={`absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${(handlers.idHeat ? heatClass(idCount) : '') || 'text-c-text-muted'}`}
           >
             {idCount}
           </span>
@@ -676,7 +678,8 @@ function PostArticle(props: Props) {
           data-post-body
           className={hasConnections ? 'cursor-pointer' : ''}
           // LINE 風は、吹き出しの外(レスの行全体)を押しても開けるよう、行の方で受ける(lineLayout)
-          onClick={variant === 'line' ? undefined : openTree}
+          // Discord 風も、本文の左の空いた所(アイコンの下)を押して開けるよう、行の方で受ける
+          onClick={variant === 'line' || variant === 'discord' ? undefined : openTree}
           style={{
             // 専ブラ風は本文を字下げし、Discord 風は頭の位置から。どちらも本文の左の縦線は引かない(自分の印は別に出る)
             paddingLeft:
@@ -970,7 +973,7 @@ function PostArticle(props: Props) {
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>
         {replyLine}
-        <div className={`flex ${isMobile ? 'gap-2' : 'gap-3'} items-start`}>
+        <div className={`flex ${isMobile ? 'gap-2' : 'gap-3'} items-start ${hasConnections ? 'cursor-pointer' : ''}`} onClick={openTree}>
           {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
           <div className={`${AVATAR_W} flex-shrink-0 flex justify-center items-start`}>
             {props.continued ? (

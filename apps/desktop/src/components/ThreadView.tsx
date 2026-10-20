@@ -1457,6 +1457,8 @@ export default function ThreadView(props: Props) {
             }
           : undefined,
         toNo: resolveAnchor,
+        urls: { shorten: settings.urlShorten, omitImages: settings.imageUrlOmit, collapseImageRuns: settings.imageUrlCollapse },
+        idHeat: settings.idHeat,
         onReact: props.onReact,
         reactionDefs: props.reactionDefs,
         onPostAction: props.onPostAction,
@@ -1724,7 +1726,7 @@ export default function ThreadView(props: Props) {
       <div ref={viewRef} className="relative flex-1 min-h-0 min-w-0 flex overflow-hidden">
       <button
         type="button"
-        onClick={jumpToBottom}
+        onClick={() => jumpToBottom()}
         title="いちばん下へ"
         className={`absolute z-20 ${isMobile ? 'w-10 h-10 rounded-xl' : 'w-11 h-11 rounded-full'} flex items-center justify-center bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
           showJump ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'

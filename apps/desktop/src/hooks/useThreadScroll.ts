@@ -222,14 +222,18 @@ export function useThreadScroll(o: Options) {
     [rootRef, headerOffset],
   )
 
-  const jumpToBottom = useCallback(() => {
-    const root = rootRef.current
-    if (root) animateScroll(root, () => root.scrollHeight)
-  }, [rootRef])
+  /** 一番下・一番上へ。押して飛ぶときはすぐ移る(長いスレを流れていくのを待たせない)。新着を追いかけるときだけ animate */
+  const jumpToBottom = useCallback(
+    (animate = false) => {
+      const root = rootRef.current
+      if (root) animateScroll(root, () => root.scrollHeight, animate ? JUMP_MS : 0)
+    },
+    [rootRef],
+  )
 
   const jumpToTop = useCallback(() => {
     const root = rootRef.current
-    if (root) animateScroll(root, () => 0)
+    if (root) animateScroll(root, () => 0, 0)
   }, [rootRef])
 
   /** いま読んでいる位置(一番上に見えているレスと、一番下にいるか) */
@@ -406,7 +410,7 @@ export function useThreadScroll(o: Options) {
       atBottom: atBottom.current,
     })
     pendingUnread.current = false
-    if (target && 'bottom' in target) jumpToBottom()
+    if (target && 'bottom' in target) jumpToBottom(true)
     else if (target) scrollToUnread(target.no, target.animate ? 'animate' : 'instant')
   }, [log.posts.length, byNo, unreadFrom, rootRef, scrollToUnread, jumpToBottom])
 

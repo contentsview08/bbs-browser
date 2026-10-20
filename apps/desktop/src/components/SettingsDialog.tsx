@@ -667,6 +667,30 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
         />
         <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
         <Toggle
+          checked={s.urlShorten}
+          onChange={(v) => update('urlShorten', v)}
+          label="URL を短く見せる"
+          note="https:// を外し、長い URL は後ろを「…」で省きます。押すと元の URL を開きます"
+        />
+        <Toggle
+          checked={s.imageUrlOmit}
+          onChange={(v) => update('imageUrlOmit', v)}
+          label="画像の URL を「画像」の札にする"
+          note="画像はサムネイルで見えるので、長い URL を出しません。押すと画像を開きます"
+        />
+        <Toggle
+          checked={s.imageUrlCollapse}
+          onChange={(v) => update('imageUrlCollapse', v)}
+          label="続いて並んだ画像の URL をまとめる"
+          note="改行や空白だけをはさんで並んだ画像の URL を、「画像 ×3」のように 1 つにまとめます"
+        />
+        <Toggle
+          checked={s.idHeat}
+          onChange={(v) => update('idHeat', v)}
+          label="書き込みの多い ID を赤くする"
+          note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
+        />
+        <Toggle
           checked={s.highlightOp}
           onChange={(v) => update('highlightOp', v)}
           label="スレ主を強調する"

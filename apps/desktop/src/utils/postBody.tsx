@@ -326,6 +326,24 @@ export interface BodyHandlers {
   onId?: (id: string, el: HTMLElement) => void
   /** アンカーの番号をスレの中の番号に読み替える(なければ 2ch と同じ)。どのレスも指さないアンカーは、ただの文字にする */
   toNo?: AnchorResolver
+  /** URL の見せ方(なければ、そのまま出す) */
+  urls?: UrlDisplay
+}
+
+/** 本文の URL の見せ方。どれも見せ方だけで、押したときに開くのは元の URL */
+export interface UrlDisplay {
+  /** https:// を外し、長い URL の途中を「…」で省く */
+  shorten: boolean
+  /** 画像の URL は「画像」の札にする(サムネイルが下に出るので、長い URL を出さない) */
+  omitImages: boolean
+  /** 続いて並んだ画像の URL(間が空白・改行だけ)を、1 つにまとめる */
+  collapseImageRuns: boolean
+}
+
+/** URL の短い見せ方: https:// と www. を外し、長ければ後ろを「…」にする */
+export function shortUrl(url: string, max = 36): string {
+  const s = url.replace(/^h?ttps?:\/\//i, '').replace(/^www\./i, '')
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
 }
 
 /**
@@ -375,9 +393,48 @@ export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<st
 function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): ReactNode[] {
   const parts: ReactNode[] = []
   let last = 0
-  for (const m of text.matchAll(TOKEN)) {
+  const ud = handlers.urls
+  const matches = [...text.matchAll(TOKEN)]
+  for (let mi = 0; mi < matches.length; mi++) {
+    const m = matches[mi]
     const start = m.index
+    if (start < last) continue // まとめた画像の URL の、2 つ目から先
     if (start > last) parts.push(text.slice(last, start))
+    // 画像の URL: 札にする・続いたものをまとめる(設定)
+    if (m[2] && ud && (ud.omitImages || ud.collapseImageRuns) && toImageUrl(normalizeUrl(m[2]))) {
+      const run = [normalizeUrl(m[2])]
+      let end = start + m[0].length
+      if (ud.collapseImageRuns) {
+        for (let j = mi + 1; j < matches.length; j++) {
+          const n = matches[j]
+          if (!n[2] || !toImageUrl(normalizeUrl(n[2])) || text.slice(end, n.index).trim() !== '') break
+          run.push(normalizeUrl(n[2]))
+          end = n.index + n[0].length
+        }
+      }
+      if (run.length > 1 || ud.omitImages) {
+        const first = run[0]
+        parts.push(
+          <a
+            key={keyPrefix + start}
+            href={first}
+            className="inline-flex items-center gap-0.5 px-1.5 rounded bg-c-surface2 text-c-link-image hover:underline align-baseline text-[0.9em] leading-snug"
+            title={run.join('\n')}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handlers.onUrl(first)
+            }}
+          >
+            <span className="material-symbols-outlined text-[1.1em] leading-none">image</span>
+            {ud.omitImages ? '画像' : ud.shorten ? shortUrl(first) : first}
+            {run.length > 1 && <span className="tabular-nums">{ud.omitImages ? ` ×${run.length}` : ` ほか ${run.length - 1} 件`}</span>}
+          </a>,
+        )
+        last = end
+        continue
+      }
+    }
     if (m[1]) {
       const resolve = handlers.toNo ?? sameNo
       const nos = expandList(m[1]).map(resolve).filter((n): n is number => n !== undefined)
@@ -445,8 +502,9 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
             e.stopPropagation()
             handlers.onUrl(url)
           }}
+          title={ud?.shorten ? url : undefined}
         >
-          {m[0]}
+          {ud?.shorten ? shortUrl(url) : m[0]}
         </a>,
       )
     }

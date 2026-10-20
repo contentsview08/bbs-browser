@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dropLeadingAnchor, anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { dropLeadingAnchor, shortUrl, anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
 
 describe('videoFileUrlsIn: 動画のファイル', () => {
   it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
@@ -114,5 +114,15 @@ describe('Discord・LINE 風の本文の頭のアンカー', () => {
     expect(dropLeadingAnchor('>>1-3\nまとめて')).toBe('>>1-3\nまとめて')
     expect(dropLeadingAnchor('>>1,2\nまとめて')).toBe('>>1,2\nまとめて')
     expect(dropLeadingAnchor('それな >>12')).toBe('それな >>12')
+  })
+})
+
+describe('URL の短い見せ方', () => {
+  it('https:// と www. を外し、長いものは後ろを … にする', () => {
+    expect(shortUrl('https://www.example.com/a')).toBe('example.com/a')
+    expect(shortUrl('ttp://example.com/')).toBe('example.com/')
+    const long = shortUrl('https://example.com/' + 'x'.repeat(100))
+    expect(long.length).toBe(36)
+    expect(long.endsWith('…')).toBe(true)
   })
 })

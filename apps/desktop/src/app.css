@@ -913,6 +913,8 @@ html[data-platform='mobile'] .post-cv article {
 html[data-platform='mobile'][data-density] {
   --list-padding-post: 4px;
   --post-padding-x: 6px;
+  /* レスとレスの間に少しゆとりを持たせる(詰めすぎると、どこからが次のレスか分かりにくい) */
+  --post-padding-y: 7px;
 }
 
 /* スマホには「選んでいるレス」がないので、ポップアップ・ツリーの中でも選んでいる印を出さない */
@@ -934,4 +936,12 @@ html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row {
 html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row-hash {
   width: 0.8rem;
   font-size: 1.05rem;
+}
+/* スマホ: Discord 風のスレ一覧は、字を一回り小さくして 1 画面に多く並べる */
+html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row-title {
+  font-size: 0.9375rem;
+}
+html[data-platform='mobile'] .card-thread[data-variant='discord'] {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
 }

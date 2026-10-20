@@ -183,6 +183,14 @@ export interface AppSettings {
   collapseBlankLines: boolean
   /** 本文の最後の空行を消す */
   trimTrailingBlank: boolean
+  /** 本文の URL を短く見せる(https:// を外し、長いものは「…」で省く) */
+  urlShorten: boolean
+  /** 本文の画像の URL は「画像」の札にする */
+  imageUrlOmit: boolean
+  /** 続いて並んだ画像の URL を 1 つにまとめる */
+  imageUrlCollapse: boolean
+  /** 同じ ID の書き込みが多いほど、ID を赤くする */
+  idHeat: boolean
   /** >>1 と同じ ID のレスに「主」の印を付ける */
   highlightOp: boolean
   /** レスの番号の左に、ID から作るアイコン(GitHub 風の Identicon)を出す */
@@ -325,6 +333,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   omitNoname: true,
   collapseBlankLines: true,
   trimTrailingBlank: true,
+  urlShorten: true,
+  imageUrlOmit: true,
+  imageUrlCollapse: true,
+  idHeat: false,
   highlightOp: true,
   imageSaveDir: '',
   autoRefreshSec: 0,

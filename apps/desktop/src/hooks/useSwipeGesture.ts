@@ -28,6 +28,12 @@ const COMMIT_MIN_VELOCITY = 0.5 // px/ms
 /** 感度(1 = 鈍い 〜 5 = 敏感)を、しきい値に掛ける倍率にする。3 が標準 */
 const SENSITIVITY: Record<number, number> = { 1: 1.6, 2: 1.3, 3: 1.0, 4: 0.7, 5: 0.45 }
 
+/**
+ * いまジェスチャーをなぞっている途中か(登録した並びの途中)。引っぱって更新など、ほかの指の操作はこれを見て止まる
+ * (→ のあと ↑ になぞったときに、スクロールや引っぱって更新が一緒に動かないように)
+ */
+export const swipeState = { active: false }
+
 const dominant = (dx: number, dy: number): SwipeDirection =>
   Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : dy >= 0 ? 'down' : 'up'
 
@@ -49,6 +55,7 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
     start.current = null
     segStart.current = null
     segments.current = []
+    swipeState.active = false
     clearTimeout(idle.current)
     setLabel(null)
   }
@@ -74,7 +81,13 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
       const dist = Math.hypot(dx, dy)
       const segs = segments.current
       if (segs.length === 0) {
-        if (dist < LOCK_THRESHOLD * mult) return
+        // 向きを決める前でも、横向きに動き始めたらスクロールを始めさせない(始まってしまうと、あとから止められない)
+        if (dist < LOCK_THRESHOLD * mult) {
+          // (はっきり横のときだけ。斜めに始まったふつうのスクロールまで止めないように)
+          if (dist >= 3 && Math.abs(dx) > Math.abs(dy) * 1.5 && ev.cancelable && Object.keys(map).some((k) => k.startsWith('left') || k.startsWith('right')))
+            ev.preventDefault()
+          return
+        }
         segs.push(dominant(dx, dy))
         segStart.current = { x: t2.clientX, y: t2.clientY }
         setLabel(map[segs.join(',')]?.label ?? null)
@@ -88,6 +101,8 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
       }
       // スクロールが始まってしまった後の touchmove は止められない(cancelable が false)ので、止められるときだけ止める。
       // 横向きで始まるなぞりは、呼ぶ側で touch-action: pan-y にしてあるので、ふつうはスクロールにならない
+      // 縦に始まったなぞり(ふつうのスクロール)は、2 つ目の向きが付くまではジェスチャーとして扱わない
+      swipeState.active = matchesPrefix(map, segs) && (segs.length > 1 || segs[0] === 'left' || segs[0] === 'right')
       if (segs.length >= 1 && ev.cancelable && matchesPrefix(map, segs)) ev.preventDefault()
     }
     document.addEventListener('touchmove', onMove, { passive: false })
@@ -103,6 +118,7 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
     start.current = null
     segStart.current = null
     segments.current = []
+    swipeState.active = false
     setLabel(null)
     if (!s || segs.length === 0) return
     const binding = map[segs.join(',')]

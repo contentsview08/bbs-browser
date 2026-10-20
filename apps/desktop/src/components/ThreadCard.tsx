@@ -142,6 +142,9 @@ function ThreadCard({ thread, state, isActive, momentum: m, momentumRank, onOpen
           {thread.title}
         </span>
         {archived && <span className="flex-shrink-0 text-[10px] text-c-text-muted">dat落ち</span>}
+        <span className="thread-row-count flex-shrink-0 text-[10px] text-c-text-muted tabular-nums" title="レス数">
+          {thread.postCount}
+        </span>
         {momentumEl('flex-shrink-0 text-[10px] opacity-80')}
         {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded-full text-center')}
       </div>

@@ -965,3 +965,9 @@ html[data-platform='mobile'] .frosted-glass {
 [data-post-body] > p {
   font-size: var(--post-body-size, 1rem);
 }
+
+/* スレ一覧のスレの上下の余白(⋮ の「文字の大きさ・余白」で決めたとき)。どの見た目でも同じ値にする */
+html[data-list-pad] .card-thread {
+  padding-top: var(--list-row-pad) !important;
+  padding-bottom: var(--list-row-pad) !important;
+}

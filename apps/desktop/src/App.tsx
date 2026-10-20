@@ -41,7 +41,7 @@ import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postB
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { setCssVar } from './components/FontSizeSlider'
+import FontSizeSlider, { cssPx, setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -1525,7 +1525,8 @@ export default function App() {
   useEffect(() => {
     if (!isMobile) return
     const start = (e: TouchEvent) => {
-      if ((e.target as Element | null)?.closest?.('[data-lightbox], [data-drawer]')) return
+      // スライダー(文字の大きさなど)の上で始まったなぞりは、スライダーを動かすためのもの
+      if ((e.target as Element | null)?.closest?.('[data-lightbox], [data-drawer], input[type="range"]')) return
       edgeSwipe.current = e.touches[0].clientX < 24
       swipeRef.current.onTouchStart(e)
     }
@@ -1993,7 +1994,10 @@ export default function App() {
             favView
               ? manualListRefresh(refreshFavThreads)
               : history
-                ? manualListRefresh(refreshHistory)
+                ? // 閲覧履歴の更新は時間がかかるので、引っぱったときの丸い矢印は待たずに引っ込め、ヘッダーの下の帯だけで知らせる
+                  manualListRefresh(() => {
+                    void refreshHistory()
+                  })
                 : board
                   ? manualListRefresh(() => openBoard(board, false))
                   : undefined
@@ -2008,7 +2012,8 @@ export default function App() {
           onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
           serverOrder={!favView && !history && listOrder ? orderOf(listOrder) : undefined}
           onSortChange={!favView && !history ? onListSort : undefined}
-          tabs={settings.listTabs}
+          // 閲覧履歴は、見た順と未読だけ(新しい順・勢い順は、見たスレを並べるのには要らない)
+          tabs={history ? ['viewed', 'unread'] : settings.listTabs}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
           boardUrl={!favView && !history ? board?.url : undefined}
@@ -2030,14 +2035,31 @@ export default function App() {
             items: <StyleMenuItems settings={settings} update={updateSetting} />,
           }}
           fontSize={
-            <FontSizeSlider
-              label="スレ一覧"
-              value={settings.listFontPx}
-              base={baseFontPx(settings)}
-              preview={(px) => setCssVar('--list-zoom', String(px / baseFontPx(settings)))}
-              onCommit={(px) => updateSetting('listFontPx', px)}
-              resettable
-            />
+            <>
+              <FontSizeSlider
+                label="スレ一覧の文字"
+                value={settings.listFontPx}
+                base={baseFontPx(settings)}
+                preview={(px) => setCssVar('--list-zoom', String(px / baseFontPx(settings)))}
+                onCommit={(px) => updateSetting('listFontPx', px)}
+                resettable
+              />
+              <FontSizeSlider
+                label="スレの上下の余白"
+                value={settings.listPadPx}
+                unset={-1}
+                base={cssPx('--thread-card-padding-y', 8)}
+                min={0}
+                max={24}
+                icons={['density_small', 'density_large']}
+                preview={(px) => {
+                  setCssVar('--list-row-pad', `${px}px`)
+                  document.documentElement.setAttribute('data-list-pad', '')
+                }}
+                onCommit={(px) => updateSetting('listPadPx', px)}
+                resettable
+              />
+            </>
           }
           placements={listPlacements}
         />

@@ -18,7 +18,7 @@ import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
-import { LIST_TABS, type ListTabKey, type ThreadSort } from '../ui/settings'
+import { LIST_TABS, VIEWED_TAB, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -173,8 +173,11 @@ export default function ThreadListPanel(props: Props) {
   /** 上に出すタブ(設定の並び) */
   const tabs = props.tabs ?? ['unread', 'momentum', 'newest']
   /** タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び */
+  /** 閲覧履歴の「見た順」を逆にしている(最近見たものが下) */
+  const [reversed, setReversed] = useState(false)
   const pressTab = (key: ListTabKey) => {
-    if (key === 'unread') setUnreadOnly((v) => !v)
+    if (key === 'viewed') setReversed((v) => !v)
+    else if (key === 'unread') setUnreadOnly((v) => !v)
     else if (key === 'visited') setVisitedOnly((v) => !v)
     else setSort((s) => cycleSort(s, key))
   }
@@ -192,7 +195,8 @@ export default function ThreadListPanel(props: Props) {
       return true
     }
     const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)
-    if (!unreadOnly && !visitedOnly && !sorted && !query && !searchActive) return false
+    if (!unreadOnly && !visitedOnly && !sorted && !query && !searchActive && !reversed) return false
+    setReversed(false)
     setUnreadOnly(false)
     setVisitedOnly(false)
     setSort(defaultSort)
@@ -395,10 +399,12 @@ export default function ThreadListPanel(props: Props) {
         shownSort.mode === 'momentum' ? (momenta.get(threadId(t)) ?? 0) : shownSort.mode === 'count' ? t.postCount : (t.createdAt?.getTime() ?? 0)
       list = [...list].sort((a, b) => (value(a) - value(b)) * sign)
     }
+    // 閲覧履歴の「見た順」を逆にしたら、最近見たものを下に
+    if (reversed && !shownSort) list = [...list].reverse()
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder])
+  }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder, reversed])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
@@ -563,7 +569,7 @@ export default function ThreadListPanel(props: Props) {
           },
         ]
       : []),
-    ...(props.fontSize ? [{ id: 'fontSize', label: '文字の大きさ', icon: 'format_size', submenu: props.fontSize }] : []),
+    ...(props.fontSize ? [{ id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', submenu: props.fontSize }] : []),
     ...(props.style
       ? [
           {
@@ -710,15 +716,17 @@ export default function ThreadListPanel(props: Props) {
               style={isMobile ? undefined : { gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}
             >
               {tabs.map((key, i) => {
-                const def = LIST_TABS.find((t) => t.key === key)!
+                const def = key === 'viewed' ? VIEWED_TAB : LIST_TABS.find((t) => t.key === key)!
                 const filter = key === 'unread' || key === 'visited'
-                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : sort?.mode === key
+                // 見た順は、並べ替えていないあいだずっと選んでいる(閲覧履歴のいつもの並び)
+                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : key === 'viewed' ? !sort : sort?.mode === key
                 return (
                   <button
                     key={key}
                     type="button"
                     onClick={() => pressTab(key)}
-                    className={`${TAB} ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+                    // 選んでいるタブは、文字の色に加えて、強調色を薄く敷く(ひと目で分かるように)
+                    className={`${TAB} ${isMobile ? 'px-2' : ''} ${active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'}`}
                     title={`${def.note}${filter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
                   >
                     <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
@@ -734,7 +742,7 @@ export default function ThreadListPanel(props: Props) {
                     )}
                     {!filter && (
                       <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
-                        {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                        {key === 'viewed' ? (reversed ? 'arrow_upward' : 'arrow_downward') : active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
                       </span>
                     )}
                     {/* 選んでいる印の線。フッターに置くスマホは、本文の側(上)に出す */}
@@ -765,7 +773,7 @@ export default function ThreadListPanel(props: Props) {
 
       <div
         ref={pull.indicatorRef}
-        className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
+        className="absolute left-0 right-0 flex justify-center pointer-events-none z-[9]"
         style={{ top: headerHeight, opacity: 0, transform: `translateY(${PULL_HIDDEN_Y}px)` }}
       >
         <PullSpinner iconRef={pull.iconRef} />

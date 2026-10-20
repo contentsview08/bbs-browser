@@ -39,7 +39,7 @@ export const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'save', name: 'スレを保存', icon: 'save', placement: 'menu', desktopOnly: true },
   { id: 'drawer', name: 'メニュー(引き出し)', icon: 'menu', placement: 'menu', mobileOnly: true },
   { id: 'style', name: '表示スタイル', icon: 'palette', placement: 'menu' },
-  { id: 'fontSize', name: '文字の大きさ', icon: 'format_size', placement: 'menu' },
+  { id: 'fontSize', name: '文字の大きさ・余白', icon: 'format_size', placement: 'menu' },
   { id: 'refresh', name: '更新', icon: 'refresh', placement: 'header', mobile: 'footer' },
 ]
 
@@ -51,7 +51,7 @@ export const LIST_ACTIONS: BarActionDef[] = [
   { id: 'newThread', name: 'スレを立てる', icon: 'edit_square', placement: 'header', mobile: 'menu' },
   { id: 'favorite', name: 'お気に入り板', icon: 'star', placement: 'header', mobile: 'menu' },
   { id: 'style', name: '表示スタイル', icon: 'palette', placement: 'header', mobile: 'menu' },
-  { id: 'fontSize', name: '文字の大きさ', icon: 'format_size', placement: 'menu' },
+  { id: 'fontSize', name: '文字の大きさ・余白', icon: 'format_size', placement: 'menu' },
   { id: 'top', name: '先頭へ', icon: 'vertical_align_top', placement: 'menu', mobileOnly: true },
   { id: 'refresh', name: '更新', icon: 'refresh', placement: 'header', mobile: 'footer' },
 ]

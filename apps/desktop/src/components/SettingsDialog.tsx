@@ -726,6 +726,19 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           label="画像のサムネイルを出す"
           note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
         />
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">サムネイルを読みに行く</p>
+        <Choice
+          value={s.thumbLoad}
+          options={[
+            { key: 'always' as const, name: 'いつも' },
+            { key: 'wifi' as const, name: 'Wi-Fi のときだけ' },
+            { key: 'tap' as const, name: '押したら' },
+          ]}
+          onChange={(v) => update('thumbLoad', v)}
+        />
+        <p className="text-xs text-c-text-muted mt-1">
+          読みに行かないときは、サムネイルの枠だけを出します。押すとそのサムネイルを読み、もう一度押すと大きく見られます
+        </p>
       </Section>
       <Section title="サムネイルの大きさ">
         <p className="text-xs text-c-text-muted mb-1.5">スレ表示(本文の画像・動画・YouTube)</p>

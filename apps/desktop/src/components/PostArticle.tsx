@@ -30,6 +30,8 @@ import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 
 export interface PostHandlers extends BodyHandlers {
+  /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
+  thumbAuto?: boolean
   /** 書き込みの多い ID を赤くする */
   idHeat?: boolean
   /** レス番号を押した(このレスへの返信を出す) */
@@ -276,6 +278,8 @@ function PostArticle(props: Props) {
   const [sheet, setSheet] = useState(false)
   const longPress = useLongPress(isMobile ? () => setSheet(true) : undefined)
   const [aaOverride, setAaOverride] = useState<boolean | null>(null)
+  /** サムネイルを読みに行かない設定のとき、押して読んだサムネイル(何番目か) */
+  const [loadedThumbs, setLoadedThumbs] = useState<Set<number>>()
 
   const frame = {
     paddingLeft: 'var(--post-padding-x)',
@@ -340,6 +344,7 @@ function PostArticle(props: Props) {
   // サムネイル(画像・動画のファイル・YouTube)は、本文に出てくる順に並べ、ビューアーでも同じ順に見る
   const mediaItems = props.showThumbnails ? mediaIn(post.body) : []
   const media = mediaItems.map((m) => m.url)
+  const thumbReady = (i: number) => handlers.thumbAuto !== false || !!loadedThumbs?.has(i)
   // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
   const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
 
@@ -739,6 +744,23 @@ function PostArticle(props: Props) {
                   e.stopPropagation()
                   handlers.onImage(media, i, post)
                 }
+                // 読みに行かない設定: 同じ大きさの枠だけを出し、押したらそのサムネイルを読む(ビューアーはまだ開かない)
+                if (!thumbReady(i))
+                  return (
+                    <button
+                      key={`wait:${m.url}:${i}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setLoadedThumbs((s) => new Set(s).add(i))
+                      }}
+                      className="post-thumb flex-shrink-0 flex flex-col items-center justify-center gap-0.5 rounded border border-dashed border-c-border bg-c-surface2 text-c-text-muted"
+                      title="押すとサムネイルを読み込みます"
+                    >
+                      <span className="material-symbols-outlined text-2xl">{m.kind === 'image' ? 'image' : m.kind === 'video' ? 'movie' : 'smart_display'}</span>
+                      <span className="text-[10px] leading-none">{m.kind === 'image' ? '画像' : m.kind === 'video' ? '動画' : 'YouTube'}</span>
+                    </button>
+                  )
                 if (m.kind === 'image')
                   return (
                     <button

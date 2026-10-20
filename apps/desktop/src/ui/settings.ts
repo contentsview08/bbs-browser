@@ -41,7 +41,7 @@ export type FontSize = 1 | 2 | 3 | 4 | 5
 export type FontFamily = 'noto' | 'biz-ud' | 'system' | 'custom'
 export type ThreadSort = 'subject' | 'momentum' | 'newest' | 'count'
 /** スレ一覧の上のタブ。unread・visited は絞り込み(押すとその条件のスレだけ)、ほかは並べ替え */
-export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count'
+export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count' | 'viewed'
 export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
   { key: 'unread', name: '未読', icon: 'mark_email_unread', note: 'ログがあり、新着レスのあるスレだけを出す' },
   { key: 'visited', name: '閲覧済み', icon: 'history', note: '一度でも開いた(ログのある)スレだけを出す' },
@@ -49,6 +49,8 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
   { key: 'newest', name: '新しい順', icon: 'schedule', note: '立った時刻の新しい順に並べる' },
   { key: 'count', name: 'レス数順', icon: 'format_list_numbered', note: 'レス数の多い順に並べる' },
 ]
+/** 閲覧履歴だけのタブ: 見た順(最近見たものが上。押すたびに上下を入れ替える)。設定のタブの並びには出さない */
+export const VIEWED_TAB = { key: 'viewed' as const, name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' }
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 export type AnchorPopup = 'hover' | 'click'
 export type NgMode = 'aborn' | 'hide'
@@ -111,6 +113,11 @@ export interface AppSettings {
   /** スレ表示のレスの本文・頭(名前・日付など)の文字の大きさ(px)。0 なら画面全体の大きさのまま */
   postBodyPx: number
   postHeadPx: number
+  /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
+  listPadPx: number
+  postPadPx: number
+  /** 画像・動画のサムネイルを読みに行くか。always: いつも / wifi: Wi-Fi のときだけ / tap: 押したら読む(押して出るまではビューアーを開かない) */
+  thumbLoad: 'always' | 'wifi' | 'tap'
   fontFamily: FontFamily
   customFont: string
   threadPanelWidth: number
@@ -301,6 +308,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   listFontPx: 0,
   postBodyPx: 0,
   postHeadPx: 0,
+  listPadPx: -1,
+  postPadPx: -1,
+  thumbLoad: 'always',
   fontFamily: 'system',
   customFont: '',
   threadPanelWidth: 420,
@@ -505,6 +515,16 @@ function apply(s: AppSettings) {
   root.style.setProperty('--post-head-zoom', s.postHeadPx ? String(s.postHeadPx / base) : '1')
   if (s.postBodyPx) root.style.setProperty('--post-body-size', `${s.postBodyPx}px`)
   else root.style.removeProperty('--post-body-size')
+  // 余白(px)。決めていなければ、見た目・密度の既定のまま
+  if (s.postPadPx >= 0) root.style.setProperty('--post-padding-y', `${s.postPadPx}px`)
+  else root.style.removeProperty('--post-padding-y')
+  if (s.listPadPx >= 0) {
+    root.style.setProperty('--list-row-pad', `${s.listPadPx}px`)
+    root.setAttribute('data-list-pad', '')
+  } else {
+    root.style.removeProperty('--list-row-pad')
+    root.removeAttribute('data-list-pad')
+  }
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
   // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く
   const css =

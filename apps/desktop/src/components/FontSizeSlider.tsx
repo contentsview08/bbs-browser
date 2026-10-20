@@ -16,8 +16,16 @@ export default function FontSizeSlider(props: {
   onCommit: (px: number) => void
   /** 元に戻すボタンを出すか(画面全体の大きさには「元」がないので出さない) */
   resettable?: boolean
+  /** 決めていないことを表す値(文字の大きさは 0。余白は 0px も選べるので -1) */
+  unset?: number
+  /** 選べる幅と、両端のアイコン(既定は文字の大きさ) */
+  min?: number
+  max?: number
+  icons?: [string, string]
 }) {
-  const shown = props.value || props.base
+  const unset = props.unset ?? 0
+  const isSet = props.value !== unset
+  const shown = isSet ? props.value : props.base
   const [px, setPx] = useState(shown)
   useEffect(() => setPx(shown), [shown])
   const commit = () => {
@@ -28,12 +36,12 @@ export default function FontSizeSlider(props: {
       <div className="flex items-center gap-2 mb-1 text-xs text-c-text-muted">
         <span className="flex-1">{props.label}</span>
         <span className="tabular-nums font-bold text-c-text-strong">{px}px</span>
-        {props.resettable && props.value > 0 && (
+        {props.resettable && isSet && (
           <button
             type="button"
             onClick={() => {
               props.preview(props.base)
-              props.onCommit(0)
+              props.onCommit(unset)
             }}
             className="px-1.5 py-0.5 rounded border border-c-border hover:border-c-border-strong"
             title="画面全体の大きさに戻す"
@@ -43,11 +51,11 @@ export default function FontSizeSlider(props: {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <span className="material-symbols-outlined text-sm text-c-text-muted">text_decrease</span>
+        <span className="material-symbols-outlined text-sm text-c-text-muted">{props.icons?.[0] ?? 'text_decrease'}</span>
         <input
           type="range"
-          min={FONT_PX_MIN}
-          max={FONT_PX_MAX}
+          min={props.min ?? FONT_PX_MIN}
+          max={props.max ?? FONT_PX_MAX}
           step={1}
           value={px}
           onChange={(e) => {
@@ -59,12 +67,20 @@ export default function FontSizeSlider(props: {
           onTouchEnd={commit}
           onKeyUp={commit}
           onBlur={commit}
-          className="flex-1 accent-[var(--c-accent)]"
+          // touch-action: 指で横になぞってつまみを動かす(スクロールに取られないように)
+          className="flex-1 accent-[var(--c-accent)] h-8"
+          style={{ touchAction: 'pan-y' }}
         />
-        <span className="material-symbols-outlined text-lg text-c-text-muted">text_increase</span>
+        <span className="material-symbols-outlined text-lg text-c-text-muted">{props.icons?.[1] ?? 'text_increase'}</span>
       </div>
     </div>
   )
+}
+
+/** 画面の変数(CSS)の、いまの値(px)。決めていない余白の既定を、スライダーの初めの位置にする */
+export function cssPx(name: string, fallback: number): number {
+  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name))
+  return Number.isFinite(v) ? Math.round(v) : fallback
 }
 
 /** 画面の変数(CSS)をすぐ書き換える(スライダーを動かしている間の見た目) */

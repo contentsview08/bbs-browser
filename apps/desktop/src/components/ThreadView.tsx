@@ -27,8 +27,9 @@ import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
 import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
+import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
-import FontSizeSlider, { setCssVar } from './FontSizeSlider'
+import FontSizeSlider, { cssPx, setCssVar } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -873,7 +874,7 @@ export default function ThreadView(props: Props) {
           },
           {
             id: 'fontSize',
-            label: '文字の大きさ',
+            label: '文字の大きさ・余白',
             icon: 'format_size',
             // レスの本文と、頭(名前・日付・ID など)を別々に。動かすとその場で変わる
             submenu: (
@@ -892,6 +893,18 @@ export default function ThreadView(props: Props) {
                   base={baseFontPx(settings)}
                   preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(settings)))}
                   onCommit={(px) => props.onUpdateSetting!('postHeadPx', px)}
+                  resettable
+                />
+                <FontSizeSlider
+                  label="レスの上下の余白"
+                  value={settings.postPadPx}
+                  unset={-1}
+                  base={cssPx('--post-padding-y', 6)}
+                  min={0}
+                  max={24}
+                  icons={['density_small', 'density_large']}
+                  preview={(px) => setCssVar('--post-padding-y', `${px}px`)}
+                  onCommit={(px) => props.onUpdateSetting!('postPadPx', px)}
                   resettable
                 />
               </>
@@ -1486,6 +1499,7 @@ export default function ThreadView(props: Props) {
         toNo: resolveAnchor,
         urls: { shorten: settings.urlShorten, omitImages: settings.imageUrlOmit, collapseImageRuns: settings.imageUrlCollapse },
         idHeat: settings.idHeat,
+        thumbAuto: settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi()),
         onReact: props.onReact,
         reactionDefs: props.reactionDefs,
         onPostAction: props.onPostAction,
@@ -1569,6 +1583,8 @@ export default function ThreadView(props: Props) {
             isOp={opId !== undefined && p.id === opId}
             isOwn={ownNos.has(p.no)}
             isReplyToOwn={replyToOwn.has(p.no)}
+            // Discord・LINE 風は、ポップアップの中でも返信元を頭に出し、本文の頭のアンカーを省く
+            replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
             handlers={handlers}
           />
         ))}
@@ -1711,8 +1727,9 @@ export default function ThreadView(props: Props) {
                     return next
                   })
                 }
-                className={`relative shrink-0 flex items-center ${isMobile ? 'justify-center gap-1' : 'gap-1.5'} transition-colors whitespace-nowrap ${
-                  active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'
+                className={`relative shrink-0 flex items-center ${isMobile ? 'justify-center gap-1' : 'gap-1.5 px-2'} transition-colors whitespace-nowrap ${
+                  // 選んでいる絞り込みは、強調色を薄く敷く
+                  active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'
                 }`}
                 style={{ paddingTop: isMobile ? 8 : 10, paddingBottom: isMobile ? 8 : 10 }}
                 title={`${label}だけを出す(${i + 1} キー)`}
@@ -1733,7 +1750,7 @@ export default function ThreadView(props: Props) {
           <button
             type="button"
             onClick={() => setFilters(new Set())}
-            className={`relative shrink-0 transition-colors ${isMobile ? 'text-center' : ''} ${filters.size === 0 ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
+            className={`relative shrink-0 transition-colors ${isMobile ? 'text-center' : 'px-2'} ${filters.size === 0 ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'}`}
             style={{ paddingTop: 10, paddingBottom: 10 }}
             title="絞り込みを外す(5 キー・Esc)"
           >
@@ -1795,14 +1812,14 @@ export default function ThreadView(props: Props) {
       )}
       <div
         ref={topPull.indicatorRef}
-        className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
+        className="absolute left-0 right-0 flex justify-center pointer-events-none z-[9]"
         style={{ top: headerInScroll ? headerHeight : 0, opacity: 0, transform: `translateY(${PULL_HIDDEN_Y}px)` }}
       >
         <PullSpinner iconRef={topPull.iconRef} />
       </div>
       <div
         ref={bottomPull.indicatorRef}
-        className="absolute left-0 right-0 flex justify-center pointer-events-none z-20"
+        className="absolute left-0 right-0 flex justify-center pointer-events-none z-[9]"
         // フッター(スマホの書き込み欄など)の上の端から出す。後ろに隠れて見えなくならないように
         style={{ bottom: 'var(--footer-offset, 0px)', opacity: 0, transform: `translateY(${-PULL_HIDDEN_Y}px)` }}
       >

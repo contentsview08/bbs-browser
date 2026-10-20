@@ -1,9 +1,10 @@
 // 表示スタイルのパレットメニュー。web 版の ThreadListStyleMenu.tsx を移植
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
+import FontSizeSlider from './FontSizeSlider'
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { PICKABLE_SCHEMES, FONT_SIZE_KEY, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type FontSize, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { PICKABLE_SCHEMES, FONT_PX_KEY, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -63,28 +64,13 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
       <div className="my-1 border-t border-c-border" />
 
       <p className={GROUP_LABEL}>文字サイズ</p>
-      <div className="px-3 py-2 flex items-center gap-2">
-        <span className="material-symbols-outlined text-sm text-c-text-muted flex-shrink-0">text_decrease</span>
-        <div className="relative flex-1 h-6 flex items-center justify-between">
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-c-border rounded-full" />
-          {([1, 2, 3, 4, 5] as FontSize[]).map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => update(FONT_SIZE_KEY, n)}
-              title={`文字サイズ ${n}`}
-              className="relative z-10 flex items-center justify-center w-6 h-6 flex-shrink-0"
-            >
-              <span
-                className={`rounded-full transition-all ${
-                  settings[FONT_SIZE_KEY] === n ? 'w-3 h-3 bg-c-accent' : 'w-1.5 h-1.5 bg-c-border-strong'
-                }`}
-              />
-            </button>
-          ))}
-        </div>
-        <span className="material-symbols-outlined text-lg text-c-text-muted flex-shrink-0">text_increase</span>
-      </div>
+      <FontSizeSlider
+        label="画面全体"
+        value={baseFontPx(settings)}
+        base={baseFontPx(settings)}
+        preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
+        onCommit={(px) => update(FONT_PX_KEY, px)}
+      />
     </>
   )
 }

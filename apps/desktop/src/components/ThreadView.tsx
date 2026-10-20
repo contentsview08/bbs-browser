@@ -28,6 +28,7 @@ import { ActionButtons, MoreMenu, type BarAction } from './ActionBar'
 import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
+import FontSizeSlider, { setCssVar } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -57,7 +58,7 @@ import {
   youtubeLinksIn,
 } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
-import { effectivePostStyle, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
+import { baseFontPx, effectivePostStyle, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -869,6 +870,32 @@ export default function ThreadView(props: Props) {
             tint: 'var(--c-mark-purple)',
             render: (where: 'header' | 'footer') => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={where === 'footer'} />,
             submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} />,
+          },
+          {
+            id: 'fontSize',
+            label: '文字の大きさ',
+            icon: 'format_size',
+            // レスの本文と、頭(名前・日付・ID など)を別々に。動かすとその場で変わる
+            submenu: (
+              <>
+                <FontSizeSlider
+                  label="レスの本文"
+                  value={settings.postBodyPx}
+                  base={baseFontPx(settings)}
+                  preview={(px) => setCssVar('--post-body-size', `${px}px`)}
+                  onCommit={(px) => props.onUpdateSetting!('postBodyPx', px)}
+                  resettable
+                />
+                <FontSizeSlider
+                  label="レスの頭(名前・日付・ID)"
+                  value={settings.postHeadPx}
+                  base={baseFontPx(settings)}
+                  preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(settings)))}
+                  onCommit={(px) => props.onUpdateSetting!('postHeadPx', px)}
+                  resettable
+                />
+              </>
+            ),
           },
         ]
       : []),

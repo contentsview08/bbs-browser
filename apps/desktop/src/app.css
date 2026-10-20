@@ -944,3 +944,24 @@ html[data-platform='mobile'] .frosted-glass {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+
+/* アイコンのフォント(Material Symbols。約 4MB)は、読み込み終わるまで見えない文字(arrow_back など)のまま、
+   その文字の幅だけ場所を取るので、開いた直前にボタンが横に広がって画面が一瞬崩れていた。
+   アイコンはいつも 1 文字分の正方形なので、最初からその大きさに決めておく */
+.material-symbols-outlined {
+  width: 1em;
+  overflow: hidden;
+}
+
+/* 文字の大きさを 1px ずつ変える(ui/settings.ts の apply が変数を入れる。⋮ の「文字の大きさ」)。
+   スレ一覧と、レスの頭(名前・日付など)は、中の字の大きさの比を保ったまま拡大・縮小する */
+.list-zoom {
+  zoom: var(--list-zoom, 1);
+}
+[data-post-header] {
+  zoom: var(--post-head-zoom, 1);
+}
+/* レスの本文は、字の大きさそのもの(サムネイル・リンクのカードは変えない) */
+[data-post-body] > p {
+  font-size: var(--post-body-size, 1rem);
+}

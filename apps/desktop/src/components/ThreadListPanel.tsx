@@ -84,6 +84,8 @@ interface Props {
   authorIcon?: boolean
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
+  /** ︙ の「文字の大きさ」の中身(スレ一覧の大きさのスライダー) */
+  fontSize?: ReactNode
   /** 操作ボタンの置き場所(設定) */
   placements: Record<string, Placement>
   /** 最初の並び順(設定) */
@@ -561,6 +563,7 @@ export default function ThreadListPanel(props: Props) {
           },
         ]
       : []),
+    ...(props.fontSize ? [{ id: 'fontSize', label: '文字の大きさ', icon: 'format_size', submenu: props.fontSize }] : []),
     ...(props.style
       ? [
           {
@@ -936,7 +939,8 @@ export default function ThreadListPanel(props: Props) {
             )
           ) : (
             <div
-              className="flex flex-col"
+              // list-zoom: ︙ の「文字の大きさ」で、スレ一覧だけ大きく・小さくする
+              className="list-zoom flex flex-col"
               // カード以外(行・表の見た目)は、行と行を詰めて並べる
               style={
                 (props.variant ?? 'card') === 'card'

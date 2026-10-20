@@ -9,7 +9,8 @@ import type { AccountRecord } from '@bbs-browser/logstore'
 import { POST_STYLES,
   MOBILE_POST_STYLES,
   effectivePostStyle,
-  FONT_SIZE_KEY,
+  FONT_PX_KEY,
+  baseFontPx,
   PICKABLE_SCHEMES,
   DEFAULT_SETTINGS,
   isDarkScheme,
@@ -19,7 +20,6 @@ import { POST_STYLES,
   LIST_TABS,
   type ListTabKey,
   type AppSettings,
-  type FontSize,
   type UpdateSetting,
 } from '../ui/settings'
 import { isValidPattern, newRule, todayDateString, type NgTarget } from '../utils/ng'
@@ -27,6 +27,7 @@ import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isMobile } from '../utils/platform'
+import FontSizeSlider from './FontSizeSlider'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import type { ExternalConnectorInfo } from '../host/externalConnectors'
@@ -464,10 +465,13 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
         </button>
       </Section>
       <Section title="文字サイズ">
-        <Choice
-          value={s[FONT_SIZE_KEY]}
-          options={([1, 2, 3, 4, 5] as FontSize[]).map((n) => ({ key: n, name: ['極小', '小', '標準', '大', '特大'][n - 1] }))}
-          onChange={(v) => update(FONT_SIZE_KEY, v)}
+        {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
+        <FontSizeSlider
+          label="画面全体"
+          value={baseFontPx(s)}
+          base={baseFontPx(s)}
+          preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
+          onCommit={(px) => update(FONT_PX_KEY, px)}
         />
       </Section>
       {!isMobile && (

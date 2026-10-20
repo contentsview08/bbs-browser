@@ -434,16 +434,10 @@ function PostArticle(props: Props) {
         {/* 板の本当の番号があればそれを出す(ふたば・4chan は板全体の通し番号) */}
         {post.ref ?? post.no}
       </span>
-      {/* 返信の数。Discord 風・LINE 風は吹き出しのアイコンと数、ほかは (数) */}
-      {anchorCount > 0 &&
-        (variant === 'discord' || variant === 'line' ? (
-          <span className={`inline-flex items-center gap-0.5 ${size === 'text-sm' ? 'text-xs' : 'text-[10px]'} ${numHeat || 'text-c-text-muted'}`}>
-            <span className={`material-symbols-outlined ${size === 'text-sm' ? 'text-[13px]' : 'text-[11px]'} leading-none`}>chat_bubble</span>
-            {anchorCount}
-          </span>
-        ) : (
-          <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>
-        ))}
+      {/* 返信の数。Discord 風・LINE 風は ID の右に「返信 n 件」で出す(repliesBtn)。ほかは (数) */}
+      {anchorCount > 0 && variant !== 'discord' && variant !== 'line' && (
+        <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>
+      )}
     </button>
   )
   const nameBtn = (cls: string) =>
@@ -492,9 +486,24 @@ function PostArticle(props: Props) {
         title="この ID の書き込みを表示"
       >
         <span>ID:{post.id}</span>
-        {idCount >= 2 && <span className="text-xs">({idCount})</span>}
+        {/* Discord 風・LINE 風は、書き込み数をアイコンの右下に出すので、ここには出さない */}
+        {idCount >= 2 && variant !== 'discord' && variant !== 'line' && <span className="text-xs">({idCount})</span>}
       </button>
     )
+  /** Discord 風・LINE 風: このレスへの返信の数(ID の右に。押すと返信を出す)。多いほど暖色に */
+  const repliesBtn = anchorCount > 0 && (variant === 'discord' || variant === 'line') && (
+    <button
+      type="button"
+      className={`flex-shrink-0 whitespace-nowrap ${isMobile ? 'text-[11px]' : 'text-xs'} font-bold hover:opacity-80 ${numHeat || 'text-c-text-muted'}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        handlers.onReplies(post.no, e.currentTarget)
+      }}
+      title="このレスへの返信を表示"
+    >
+      返信 {anchorCount} 件
+    </button>
+  )
   /**
    * レスへの反応(ふたばの「そうだね×18」、いいねなど)。多いほど目立つ色に。押せる掲示板では、押すと反応する。
    * 反応が 1 種類なら「名前×数」(まだなければ「+」)、何種類もあればアイコンと数を並べる
@@ -558,7 +567,7 @@ function PostArticle(props: Props) {
         </span>
         {idCount >= 2 && (
           <span
-            className={`absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${(handlers.idHeat ? heatClass(idCount) : '') || 'text-c-text-muted'}`}
+            className={`absolute -bottom-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(idCount) || 'text-c-text-muted'}`}
           >
             {idCount}
           </span>
@@ -606,6 +615,7 @@ function PostArticle(props: Props) {
             {isMobile ? shortDate(post.date) : post.date}
           </span>
           {idBtn}
+          {repliesBtn}
           {voteChip}
           {post.mail && <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
@@ -916,6 +926,7 @@ function PostArticle(props: Props) {
             {badgeChips}
             {ngChip}
             {idBtn}
+            {repliesBtn}
             {voteChip}
             {post.mail && <span className="text-c-text-muted">[{post.mail}]</span>}
             {toOwnChip}
@@ -977,6 +988,8 @@ function PostArticle(props: Props) {
           <div className="flex-1 min-w-0">
             {headerBlock}
             {bodyBlock}
+            {/* 続けて書いたレス(頭を省いたもの)は、返信の数を本文の下に */}
+            {props.continued && repliesBtn && <div className="mt-0.5">{repliesBtn}</div>}
           </div>
         </div>
         </div>

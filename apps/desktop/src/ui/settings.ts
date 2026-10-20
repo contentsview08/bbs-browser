@@ -103,6 +103,14 @@ export interface AppSettings {
   fontSize: FontSize
   /** スマホの文字の大きさ(PC とは別。画面が狭いので、既定は 1 段小さい) */
   mobileFontSize: FontSize
+  /** 文字の大きさ(px)。1px ずつ変えられる。0 なら上の段階(fontSize・mobileFontSize)で決める。スマホは mobileFontPx */
+  fontPx: number
+  mobileFontPx: number
+  /** スレ一覧の文字の大きさ(px)。0 なら画面全体の大きさのまま */
+  listFontPx: number
+  /** スレ表示のレスの本文・頭(名前・日付など)の文字の大きさ(px)。0 なら画面全体の大きさのまま */
+  postBodyPx: number
+  postHeadPx: number
   fontFamily: FontFamily
   customFont: string
   threadPanelWidth: number
@@ -288,6 +296,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   density: 'dense',
   fontSize: 3,
   mobileFontSize: 3,
+  fontPx: 0,
+  mobileFontPx: 0,
+  listFontPx: 0,
+  postBodyPx: 0,
+  postHeadPx: 0,
   fontFamily: 'system',
   customFont: '',
   threadPanelWidth: 420,
@@ -421,6 +434,15 @@ const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 
 const FONT_SIZES = isMobile ? [12, 13, 14, 16, 18] : [13, 14, 16, 18, 20]
 /** 文字の大きさの設定の名前(スマホは PC と別に持つ)。文字の大きさを変える所は、どこもこれを使う */
 export const FONT_SIZE_KEY = isMobile ? 'mobileFontSize' : 'fontSize'
+/** 文字の大きさ(px)の設定の名前(スマホは PC と別に持つ) */
+export const FONT_PX_KEY = isMobile ? 'mobileFontPx' : 'fontPx'
+/** 選べる文字の大きさ(px) */
+export const FONT_PX_MIN = 9
+export const FONT_PX_MAX = 26
+/** いまの画面全体の文字の大きさ(px) */
+export function baseFontPx(s: AppSettings): number {
+  return s[FONT_PX_KEY] || FONT_SIZES[s[FONT_SIZE_KEY] - 1]
+}
 
 /** 暗い配色か(OS のダーク・ライトに合わせるとき、どちら用かを見分ける) */
 export function isDarkScheme(scheme: ColorScheme): boolean {
@@ -475,7 +497,14 @@ function apply(s: AppSettings) {
   root.setAttribute('data-pattern', effectivePostStyle(s) === 'classic' ? 'bordered' : 'tonal')
   root.setAttribute('data-post-style', effectivePostStyle(s))
   root.setAttribute('data-density', effectiveDensity(s))
-  root.style.fontSize = `${FONT_SIZES[s[FONT_SIZE_KEY] - 1]}px`
+  const base = baseFontPx(s)
+  root.style.fontSize = `${base}px`
+  // スレ一覧・レスの本文・レスの頭の大きさ(px)。一覧と頭は中の字の大きさの比を保ったまま拡大・縮小する(zoom)。
+  // 本文は字の大きさそのもの(サムネイルなどは大きさを変えない)
+  root.style.setProperty('--list-zoom', s.listFontPx ? String(s.listFontPx / base) : '1')
+  root.style.setProperty('--post-head-zoom', s.postHeadPx ? String(s.postHeadPx / base) : '1')
+  if (s.postBodyPx) root.style.setProperty('--post-body-size', `${s.postBodyPx}px`)
+  else root.style.removeProperty('--post-body-size')
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
   // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く
   const css =

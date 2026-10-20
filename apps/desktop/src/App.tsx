@@ -41,6 +41,7 @@ import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postB
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
+import FontSizeSlider, { setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -54,7 +55,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { PICKABLE_SCHEMES, FONT_SIZE_KEY, POST_STYLES, effectivePostStyle, pickSchemeNow, useSettings, type AppSettings, type FontSize, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
+import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, effectivePostStyle, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -1118,7 +1119,7 @@ export default function App() {
         return true
       case 'zoomIn':
       case 'zoomOut':
-        updateSetting(FONT_SIZE_KEY, Math.min(5, Math.max(1, settings[FONT_SIZE_KEY] + (action === 'zoomIn' ? 1 : -1))) as FontSize)
+        updateSetting(FONT_PX_KEY, Math.min(FONT_PX_MAX, Math.max(FONT_PX_MIN, baseFontPx(settings) + (action === 'zoomIn' ? 1 : -1))))
         return true
       case 'help':
         setKeyHelpOpen(true)
@@ -2028,6 +2029,16 @@ export default function App() {
             button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,
             items: <StyleMenuItems settings={settings} update={updateSetting} />,
           }}
+          fontSize={
+            <FontSizeSlider
+              label="スレ一覧"
+              value={settings.listFontPx}
+              base={baseFontPx(settings)}
+              preview={(px) => setCssVar('--list-zoom', String(px / baseFontPx(settings)))}
+              onCommit={(px) => updateSetting('listFontPx', px)}
+              resettable
+            />
+          }
           placements={listPlacements}
         />
         </div>

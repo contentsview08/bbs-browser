@@ -472,13 +472,16 @@ function PostArticle(props: Props) {
       NG
     </button>
   )
+  /** スレ主(>>1 と同じ ID)と自分の書き込みの印。行の高さを字に合わせて、名前の行より背を高くしない */
+  const CHIP = 'flex-shrink-0 self-center text-[10px] leading-none font-bold px-1 py-[2px] rounded'
   const opChip = props.isOp && (
-    <span
-      className="flex-shrink-0 text-[10px] font-bold px-1.5 py-px rounded"
-      style={{ color: 'var(--c-accent)', background: 'var(--c-accent-wash)', border: '1px solid var(--c-accent)' }}
-      title="スレ主(>>1 と同じ ID)"
-    >
+    <span className={CHIP} style={{ color: 'var(--c-accent)', background: 'var(--c-accent-wash)', border: '1px solid var(--c-accent)' }} title="スレ主(>>1 と同じ ID)">
       主
+    </span>
+  )
+  const ownChip = props.isOwn && (
+    <span className={CHIP} style={{ color: 'var(--c-own)', background: 'var(--c-own-wash)', border: '1px solid var(--c-own)' }} title="自分の書き込み">
+      自分
     </span>
   )
   const idBtn =
@@ -601,6 +604,7 @@ function PostArticle(props: Props) {
         {idBtn}
         {voteChip}
         {opChip}
+        {ownChip}
             {badgeChips}
         {ngChip}
         {toOwnChip}
@@ -611,6 +615,7 @@ function PostArticle(props: Props) {
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
           {nameBtn(isMobile ? 'text-[13px]' : 'text-sm') || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
           {opChip}
+          {ownChip}
             {badgeChips}
           {ngChip}
           {/* 番号は名前のすぐ後ろに(右端はマウスを乗せたときの操作バーと重なるため) */}
@@ -634,6 +639,7 @@ function PostArticle(props: Props) {
         {nameBtn(HEAD_TEXT)}
         {ngChip}
         {opChip}
+        {ownChip}
             {badgeChips}
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
         <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
@@ -945,6 +951,7 @@ function PostArticle(props: Props) {
           <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : ''}`}>
             {!right && nameBtn('text-xs')}
             {opChip}
+            {ownChip}
             {badgeChips}
             {ngChip}
             {idBtn}

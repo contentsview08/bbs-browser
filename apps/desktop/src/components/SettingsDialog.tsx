@@ -670,6 +670,19 @@ function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
           label="3 行以上続く空行を 1 行にまとめる"
         />
         <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
+        <FontSizeSlider
+          label="本文の行間"
+          value={s.postLineHeight}
+          base={1.625}
+          min={1}
+          max={2.4}
+          step={0.05}
+          format={(v) => `${v.toFixed(2)} 倍`}
+          icons={['format_line_spacing', 'format_line_spacing']}
+          preview={(v) => document.documentElement.style.setProperty('--post-line-height', String(v))}
+          onCommit={(v) => update('postLineHeight', v)}
+          resettable
+        />
         <Toggle
           checked={s.urlShorten}
           onChange={(v) => update('urlShorten', v)}

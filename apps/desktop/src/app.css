@@ -971,3 +971,8 @@ html[data-list-pad] .card-thread {
   padding-top: var(--list-row-pad) !important;
   padding-bottom: var(--list-row-pad) !important;
 }
+
+/* レスの本文の行間(設定・⋮ の「文字の大きさ・余白」)。AA は字の並びが崩れないよう、AA の行間のまま */
+[data-post-body] > p:not(.aa-font) {
+  line-height: var(--post-line-height, 1.625);
+}

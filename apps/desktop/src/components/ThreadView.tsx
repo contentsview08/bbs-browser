@@ -895,6 +895,19 @@ export default function ThreadView(props: Props) {
                   onCommit={(px) => props.onUpdateSetting!('postHeadPx', px)}
                   resettable
                 />
+<FontSizeSlider
+                  label="レスの本文の行間"
+                  value={settings.postLineHeight}
+                  base={1.625}
+                  min={1}
+                  max={2.4}
+                  step={0.05}
+                  format={(v) => `${v.toFixed(2)} 倍`}
+                  icons={['format_line_spacing', 'format_line_spacing']}
+                  preview={(v) => setCssVar('--post-line-height', String(v))}
+                  onCommit={(v) => props.onUpdateSetting!('postLineHeight', v)}
+                  resettable
+                />
                 <FontSizeSlider
                   label="レスの上下の余白"
                   value={settings.postPadPx}

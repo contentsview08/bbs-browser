@@ -116,6 +116,8 @@ export interface AppSettings {
   /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
   listPadPx: number
   postPadPx: number
+  /** レスの本文の行間(字の大きさの何倍か)。0 なら既定(1.625) */
+  postLineHeight: number
   /** 画像・動画のサムネイルを読みに行くか。always: いつも / wifi: Wi-Fi のときだけ / tap: 押したら読む(押して出るまではビューアーを開かない) */
   thumbLoad: 'always' | 'wifi' | 'tap'
   fontFamily: FontFamily
@@ -310,6 +312,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postHeadPx: 0,
   listPadPx: -1,
   postPadPx: -1,
+  postLineHeight: 0,
   thumbLoad: 'always',
   fontFamily: 'system',
   customFont: '',
@@ -515,6 +518,8 @@ function apply(s: AppSettings) {
   root.style.setProperty('--post-head-zoom', s.postHeadPx ? String(s.postHeadPx / base) : '1')
   if (s.postBodyPx) root.style.setProperty('--post-body-size', `${s.postBodyPx}px`)
   else root.style.removeProperty('--post-body-size')
+  if (s.postLineHeight) root.style.setProperty('--post-line-height', String(s.postLineHeight))
+  else root.style.removeProperty('--post-line-height')
   // 余白(px)。決めていなければ、見た目・密度の既定のまま
   if (s.postPadPx >= 0) root.style.setProperty('--post-padding-y', `${s.postPadPx}px`)
   else root.style.removeProperty('--post-padding-y')

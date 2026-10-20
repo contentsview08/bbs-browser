@@ -110,6 +110,8 @@ export default function Minimap(props: Props) {
       thumb.style.top = `${(a / n) * 100}%`
       thumb.style.height = `max(14px, ${((b - a + 1) / n) * 100}%)`
     }
+    // スマホ: つまみの大きさ(画面に入っているレスの数)は、スクロールで 1 つずつ変わってカクカクするので、なめらかにつなぐ
+    if (isMobile) thumb.style.transition = 'height 220ms ease-out, top 120ms ease-out'
     let raf = 0
     const update = () => {
       if (!isMobile) return byScroll()

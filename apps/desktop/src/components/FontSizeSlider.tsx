@@ -22,6 +22,9 @@ export default function FontSizeSlider(props: {
   min?: number
   max?: number
   icons?: [string, string]
+  /** 刻み(既定は 1px)と、値の見せ方(既定は「12px」) */
+  step?: number
+  format?: (v: number) => string
 }) {
   const unset = props.unset ?? 0
   const isSet = props.value !== unset
@@ -35,7 +38,7 @@ export default function FontSizeSlider(props: {
     <div className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-1 text-xs text-c-text-muted">
         <span className="flex-1">{props.label}</span>
-        <span className="tabular-nums font-bold text-c-text-strong">{px}px</span>
+        <span className="tabular-nums font-bold text-c-text-strong">{props.format ? props.format(px) : `${px}px`}</span>
         {props.resettable && isSet && (
           <button
             type="button"
@@ -56,7 +59,7 @@ export default function FontSizeSlider(props: {
           type="range"
           min={props.min ?? FONT_PX_MIN}
           max={props.max ?? FONT_PX_MAX}
-          step={1}
+          step={props.step ?? 1}
           value={px}
           onChange={(e) => {
             const v = Number(e.target.value)

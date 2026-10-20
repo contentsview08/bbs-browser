@@ -1577,7 +1577,7 @@ export default function App() {
     const start = (e: TouchEvent) => {
       // スライダー(文字の大きさなど)の上で始まったなぞりは、スライダーを動かすためのもの
       // 設定の並べ替えのつまみも同じ(つまんで動かすためのもの)
-      if ((e.target as Element | null)?.closest?.('[data-lightbox], [data-drawer], input[type="range"], [data-drag-handle]')) return
+      if ((e.target as Element | null)?.closest?.('[data-lightbox], [data-drawer], input[type="range"], [data-drag-handle], [data-gesture-pad]')) return
       edgeSwipe.current = e.touches[0].clientX < 24
       swipeRef.current.onTouchStart(e)
     }

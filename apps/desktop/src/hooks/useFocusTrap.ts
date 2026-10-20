@@ -25,6 +25,9 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () =>
       // 上に画像のビューアーが開いていれば、キー(Esc・矢印)はビューアーのもの
       if (!box || e.defaultPrevented || e.isComposing || document.querySelector('[data-lightbox]')) return
       if (e.key === 'Escape') {
+        // 画面が重なっているとき(ページの上に下からのメニューなど)は、いちばん上(あとから開いたもの)だけが閉じる
+        const modals = document.querySelectorAll('[data-modal]')
+        if (modals[modals.length - 1] !== box) return
         e.preventDefault()
         onEscape()
         return

@@ -7,6 +7,10 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import type { PostHistoryEntry } from '@bbs-browser/logstore'
 import { normalizeForSearch } from '../utils/postBody'
+import { isMobile } from '../utils/platform'
+import { useLongPress } from '../hooks/useLongPress'
+import MobilePage, { dayLabel } from './MobilePage'
+import ActionSheet from './ActionSheet'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
@@ -19,13 +23,21 @@ function boardLabel(url: string): string {
   }
 }
 
-export default function PostHistoryDialog(props: {
+interface Props {
   entries: PostHistoryEntry[]
   /** そのスレを開き、番号が分かっていればそのレスへ飛ぶ */
   onOpen: (e: PostHistoryEntry) => void
   onDelete: (id: number) => void
   onClose: () => void
-}) {
+}
+
+export default function PostHistoryDialog(props: Props) {
+  // スマホは全画面の一覧(書いた日ごとに区切る。たたくと開き、長押しで操作)
+  if (isMobile) return <MobilePostHistory {...props} />
+  return <DesktopPostHistory {...props} />
+}
+
+function DesktopPostHistory(props: Props) {
   const [query, setQuery] = useState('')
   const [copied, setCopied] = useState<number>()
   const shown = useMemo(() => {
@@ -116,5 +128,75 @@ export default function PostHistoryDialog(props: {
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** スマホ: 書き込み履歴のページ */
+function MobilePostHistory(props: Props) {
+  const [query, setQuery] = useState('')
+  const [sheet, setSheet] = useState<PostHistoryEntry>()
+  const shown = useMemo(() => {
+    const q = normalizeForSearch(query.trim())
+    if (!q) return props.entries
+    return props.entries.filter((e) => normalizeForSearch(`${e.thread.title} ${e.name} ${e.body}`).includes(q))
+  }, [props.entries, query])
+  return (
+    <MobilePage title="書き込み履歴" count={props.entries.length} onClose={props.onClose} onQuery={setQuery} placeholder="本文・スレタイ・名前で絞り込む">
+      {shown.length === 0 ? (
+        <p className="p-6 text-sm text-c-text-muted text-center">{props.entries.length === 0 ? 'まだ書き込んでいません' : '見つかりません'}</p>
+      ) : (
+        shown.map((e, i) => {
+          const day = dayLabel(e.postedAt)
+          return (
+            <div key={e.id}>
+              {/* 日が変わる所に見出し */}
+              {(i === 0 || dayLabel(shown[i - 1].postedAt) !== day) && (
+                <p className="sticky top-0 z-[1] px-4 py-1.5 text-xs font-bold text-c-text-muted bg-c-surface2 border-b border-c-border">{day}</p>
+              )}
+              <HistoryRow entry={e} onOpen={() => props.onOpen(e)} onMenu={() => setSheet(e)} />
+            </div>
+          )
+        })
+      )}
+      {sheet && (
+        <ActionSheet
+          title={sheet.thread.title}
+          onClose={() => setSheet(undefined)}
+          items={[
+            { label: 'スレを開いて、このレスへ', icon: 'open_in_new', onClick: () => props.onOpen(sheet) },
+            { label: '本文をコピー', icon: 'content_copy', onClick: () => void navigator.clipboard.writeText(sheet.body) },
+            { label: '履歴から消す(掲示板の書き込みは消えません)', icon: 'delete', danger: true, onClick: () => props.onDelete(sheet.id) },
+          ]}
+        />
+      )}
+    </MobilePage>
+  )
+}
+
+/** スマホ: 書き込み履歴の 1 行。たたくと開き、長押しで操作のメニュー */
+function HistoryRow(props: { entry: PostHistoryEntry; onOpen: () => void; onMenu: () => void }) {
+  const e = props.entry
+  const longPress = useLongPress(props.onMenu)
+  return (
+    <button
+      type="button"
+      {...longPress}
+      onClick={props.onOpen}
+      className="w-full text-left px-4 py-3 border-b border-c-border active:bg-c-surface2"
+    >
+      <div className="flex items-baseline gap-2 text-xs text-c-text-muted">
+        <span className="tabular-nums">{new Date(e.postedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>{boardLabel(e.thread.boardUrl)}</span>
+        {e.no !== undefined && <span className="font-bold text-c-accent">&gt;&gt;{e.no}</span>}
+        {(e.name || e.mail) && (
+          <span className="truncate">
+            {e.name}
+            {e.mail && <span className="ml-1">[{e.mail}]</span>}
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-[15px] font-bold leading-snug text-c-text-strong break-words">{e.thread.title || '(スレタイ不明)'}</p>
+      <p className="mt-1 text-sm leading-relaxed text-c-text-body whitespace-pre-wrap break-words line-clamp-4">{e.body || '(本文なし)'}</p>
+    </button>
   )
 }

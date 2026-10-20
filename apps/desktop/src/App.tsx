@@ -2251,7 +2251,7 @@ export default function App() {
       {uploads && (
         <UploadHistoryDialog
           uploads={uploads}
-          onOpen={(url) => void openUrl(url)}
+          onOpen={(url) => void (isMobile ? openUrlInApp(url) : openUrl(url))}
           canDelete={settings.catboxUserhash.trim() !== ''}
           onDelete={async (url) => {
             if (!store) return

@@ -28,3 +28,14 @@ export function formatMomentum(value: number): string {
 export function relativeTime(date: Date): string {
   return formatDistanceToNow(date, { addSuffix: true, locale: ja })
 }
+
+/** 日ごとの見出し(今日・昨日・10/18(土))。同じ日のものをまとめて区切る */
+export function dayLabel(time: number, now = Date.now()): string {
+  const d = new Date(time)
+  const start = (t: number) => new Date(new Date(t).toDateString()).getTime()
+  const days = Math.round((start(now) - start(time)) / 86_400_000)
+  if (days === 0) return '今日'
+  if (days === 1) return '昨日'
+  const wd = '日月火水木金土'[d.getDay()]
+  return d.getFullYear() === new Date(now).getFullYear() ? `${d.getMonth() + 1}/${d.getDate()}(${wd})` : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${wd})`
+}

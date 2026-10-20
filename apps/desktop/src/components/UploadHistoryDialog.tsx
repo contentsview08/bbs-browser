@@ -6,6 +6,10 @@ import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
 import type { UploadRecord } from '@bbs-browser/logstore'
+import { isMobile } from '../utils/platform'
+import { useLongPress } from '../hooks/useLongPress'
+import MobilePage, { dayLabel } from './MobilePage'
+import ActionSheet from './ActionSheet'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
@@ -14,7 +18,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`
 }
 
-export default function UploadHistoryDialog(props: {
+interface Props {
   uploads: UploadRecord[]
   /** アカウント(userhash)を登録しているか。していなければ、どれも消せない */
   canDelete: boolean
@@ -22,7 +26,15 @@ export default function UploadHistoryDialog(props: {
   onDelete: (url: string) => Promise<void>
   onOpen: (url: string) => void
   onClose: () => void
-}) {
+}
+
+export default function UploadHistoryDialog(props: Props) {
+  // スマホは全画面に、上げた日ごとにサムネイルを 3 列で並べる(たたくと開き、長押しで操作)
+  if (isMobile) return <MobileUploadHistory {...props} />
+  return <DesktopUploadHistory {...props} />
+}
+
+function DesktopUploadHistory(props: Props) {
   const [copied, setCopied] = useState<string>()
   const [deleting, setDeleting] = useState<string>()
   const [error, setError] = useState<string>()
@@ -123,5 +135,82 @@ export default function UploadHistoryDialog(props: {
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** スマホ: アップロード履歴のページ */
+function MobileUploadHistory(props: Props) {
+  const [sheet, setSheet] = useState<UploadRecord>()
+  const [error, setError] = useState<string>()
+  // 上げた日ごとにまとめる(新しい順のまま)
+  const groups: { day: string; items: UploadRecord[] }[] = []
+  for (const u of props.uploads) {
+    const day = dayLabel(u.uploadedAt)
+    if (groups.at(-1)?.day === day) groups.at(-1)!.items.push(u)
+    else groups.push({ day, items: [u] })
+  }
+  return (
+    <MobilePage
+      title="アップロード履歴"
+      count={props.uploads.length}
+      onClose={props.onClose}
+      note={
+        props.canDelete
+          ? '長押しで URL のコピー・削除ができます。消せるのは、アカウント(userhash)で上げたものだけです'
+          : '長押しで URL をコピーできます。消すには、設定 → 書き込み で catbox のアカウント(userhash)を登録してください'
+      }
+    >
+      {error && <p className="px-4 py-2 text-xs text-c-heat-very-hot">{error}</p>}
+      {props.uploads.length === 0 ? (
+        <p className="p-6 text-sm text-c-text-muted text-center">まだ上げていません</p>
+      ) : (
+        groups.map((g) => (
+          <div key={g.day}>
+            <p className="sticky top-0 z-[1] px-4 py-1.5 text-xs font-bold text-c-text-muted bg-c-surface2 border-b border-c-border">{g.day}</p>
+            <div className="grid grid-cols-3 gap-1 p-1">
+              {g.items.map((u) => (
+                <UploadTile key={u.url} upload={u} onOpen={() => props.onOpen(u.url)} onMenu={() => setSheet(u)} />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+      {sheet && (
+        <ActionSheet
+          title={`${sheet.name}(${formatSize(sheet.size)})`}
+          onClose={() => setSheet(undefined)}
+          items={[
+            { label: '開く', icon: 'open_in_new', onClick: () => props.onOpen(sheet.url) },
+            { label: 'URL をコピー', icon: 'content_copy', onClick: () => void navigator.clipboard.writeText(sheet.url) },
+            ...(props.canDelete && sheet.withAccount
+              ? [
+                  {
+                    label: 'catbox から削除',
+                    icon: 'delete',
+                    danger: true,
+                    onClick: () => {
+                      setError(undefined)
+                      props.onDelete(sheet.url).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+                    },
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
+    </MobilePage>
+  )
+}
+
+/** スマホ: アップロード履歴の 1 枚。たたくと開き、長押しで操作のメニュー */
+function UploadTile(props: { upload: UploadRecord; onOpen: () => void; onMenu: () => void }) {
+  const longPress = useLongPress(props.onMenu)
+  return (
+    <button type="button" {...longPress} onClick={props.onOpen} className="relative aspect-square bg-c-surface3 overflow-hidden rounded-md active:opacity-80">
+      <img src={props.upload.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+      {!props.upload.withAccount && (
+        <span className="absolute bottom-1 left-1 px-1 rounded bg-black/60 text-white text-[9px] leading-tight">匿名</span>
+      )}
+    </button>
   )
 }

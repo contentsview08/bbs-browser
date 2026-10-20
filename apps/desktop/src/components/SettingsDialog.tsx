@@ -46,7 +46,7 @@ import { pickOpenPath } from '../host/dialog'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
-interface Props {
+export interface SettingsProps {
   settings: AppSettings
   update: UpdateSetting
   favorites: Board[]
@@ -181,6 +181,14 @@ const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colo
 /** 高度な設定を見せるか(設定画面の左下のチェック) */
 const AdvancedContext = createContext(false)
 
+/**
+ * スマホの設定(components/mobile/MobileSettings)の中に、この画面の部品(NG・板の一覧・バックアップなど)を埋め込むときの囲い。
+ * 高度な設定も出し、Section はふつうに中身まで出す
+ */
+export function SettingsEmbed(props: { children: ReactNode }) {
+  return <AdvancedContext.Provider value={true}>{props.children}</AdvancedContext.Provider>
+}
+
 /** 設定のまとまり。advanced なら、高度な設定を見せるときだけ出す */
 /** 設定の検索の言葉(空なら探していない)。Section は、中の文字に言葉が入っていなければ隠れる */
 const SearchContext = createContext('')
@@ -287,7 +295,7 @@ function Choice<T extends string | number>(props: {
 }
 
 /** スレ一覧のタブを選んで並べる。出すものを上に、出さないものを下に並べる */
-function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]) => void }) {
+export function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]) => void }) {
   const shown = props.value.filter((k) => LIST_TABS.some((t) => t.key === k))
   const rest = LIST_TABS.map((t) => t.key).filter((k) => !shown.includes(k))
   // スマホ: 出すタブは、右のつまみをつかんで上下に動かして並べる(上が左)。− で外し、下の + で足す
@@ -470,7 +478,7 @@ function SystemFontPicker({ value, onPick }: { value: string; onPick: (family: s
   )
 }
 
-function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
     <>
       <Section title="テーマ">
@@ -651,7 +659,7 @@ function DisplayTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>)
   )
 }
 
-function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' | 'update' | 'favorites'>) {
+function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'favorites'>) {
   const [keyword, setKeyword] = useState('')
   const addKeyword = () => {
     const k = keyword.trim()
@@ -764,7 +772,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<Props, 'settings' |
   )
 }
 
-function PostsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
     <>
       <Section title="スレを開いたときの位置">
@@ -1006,7 +1014,7 @@ const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
 ]
 
 /** userhash の入力欄。ふだんは伏せて、目のボタンで見られるようにする */
-function UserhashInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function UserhashInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [shown, setShown] = useState(false)
   return (
     <div className="flex items-center gap-2">
@@ -1026,7 +1034,7 @@ function UserhashInput({ value, onChange }: { value: string; onChange: (v: strin
   )
 }
 
-function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const [phrase, setPhrase] = useState('')
   const addPhrase = () => {
     const p = phrase.trim()
@@ -1170,7 +1178,7 @@ function WriteTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   )
 }
 
-function RefreshTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
     <>
       <Section title="開いているスレの自動更新" note="実況板など、流れの速いスレ向けです。差分だけを取りに行きます">
@@ -1259,7 +1267,7 @@ const GESTURES: { seq: string; name: string }[] = [
 ]
 
 /** スマホ: 画面ごとに、スワイプに割り当てる操作と、感度 */
-function GestureSettings({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   /** なぞり方を覚えさせている操作(と画面) */
   const [recording, setRecording] = useState<{ screen: 'list' | 'thread'; action: string }>()
   /** 足す操作を選んでいる画面 */
@@ -1392,7 +1400,7 @@ function GestureSettings({ settings: s, update }: Pick<Props, 'settings' | 'upda
   )
 }
 
-function KeysTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const keymap = resolveKeymap(s.keymap)
   // キーを待っている操作
   const [waiting, setWaiting] = useState<KeyAction>()
@@ -1591,7 +1599,7 @@ function AccountForm(props: {
 }
 
 /** サイトのアカウント。コネクタが申告したものだけ並べる */
-function AccountsTab(props: Pick<Props, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount'>) {
+export function AccountsTab(props: Pick<SettingsProps, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount'>) {
   const kinds = allConnectors().flatMap((c) => (c.accounts ?? []).map((kind) => ({ connectorId: c.id, kind })))
   const key = (connectorId: string, accountId: string) => `${connectorId}:${accountId}`
   return (
@@ -1622,13 +1630,13 @@ function AccountsTab(props: Pick<Props, 'accounts' | 'loginStatus' | 'onLogin' |
 }
 
 /** 設定・NG の書き出しと読み込み、DB 全体のバックアップと復元 */
-function BackupTab({
+export function BackupTab({
   settings: s,
   update,
   onBackupDb,
   onRestoreDb,
   onPruneLogs,
-}: Pick<Props, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onPruneLogs'>) {
+}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onPruneLogs'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
@@ -1772,7 +1780,7 @@ function BackupTab({
 }
 
 /** スレ表示とスレ一覧の操作ボタンを、ヘッダー・フッター・︙ の中だけ、のどこに置くか */
-function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // スマホでは、スマホの配置(PC とは別に持つ)を変える
   const key = isMobile ? 'mobileBarLayout' : 'barLayout'
   const layout = s[key]
@@ -1855,7 +1863,7 @@ const NG_TABS: { key: NgTarget; name: string; placeholder: string; note: string 
 ]
 
 /** NG の管理。種類(本文・名前・ID・スレタイ)ごとのタブに分け、それぞれに追加欄と一覧を置く */
-function NgTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
+export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const [target, setTarget] = useState<NgTarget>('content')
   const [pattern, setPattern] = useState('')
   const [isRegex, setIsRegex] = useState(false)
@@ -1978,13 +1986,13 @@ function NgTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>) {
   )
 }
 
-function BoardListTab(props: {
+export function BoardListTab(props: {
   sites: SiteConfig[]
   initialSite?: string
   favorites: Board[]
-  loadBoards: Props['loadBoards']
-  onToggleFavorite: Props['onToggleFavorite']
-  onOpenBoard: Props['onOpenBoard']
+  loadBoards: SettingsProps['loadBoards']
+  onToggleFavorite: SettingsProps['onToggleFavorite']
+  onOpenBoard: SettingsProps['onOpenBoard']
 }) {
   const [siteUrl, setSiteUrl] = useState(props.initialSite ?? props.sites[0]?.menuUrl)
   const site = props.sites.find((s) => s.menuUrl === siteUrl)
@@ -2138,9 +2146,9 @@ function BoardMetaEditor({ board, meta, onChange }: { board: Board; meta: BoardM
   )
 }
 
-function BoardsTab(
+export function BoardsTab(
   props: Pick<
-    Props,
+    SettingsProps,
     'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite' | 'settings' | 'update'
   > & { onShowBoardList: (menuUrl: string) => void },
 ) {
@@ -2277,7 +2285,7 @@ function ConnectorsTab({
   externalConnectors,
   onReloadConnectors,
   onOpenConnectorsDir,
-}: Pick<Props, 'settings' | 'update' | 'externalConnectors' | 'onReloadConnectors' | 'onOpenConnectorsDir'>) {
+}: Pick<SettingsProps, 'settings' | 'update' | 'externalConnectors' | 'onReloadConnectors' | 'onOpenConnectorsDir'>) {
   /** 通信の先を確かめてもらっているコネクタ */
   const [asking, setAsking] = useState<string>()
   const [busy, setBusy] = useState(false)
@@ -2404,7 +2412,7 @@ defineConnector({
   )
 }
 
-function AboutTab() {
+export function AboutTab() {
   // 版はインストーラーの版(apps/desktop/package.json。tauri.conf.json がそこを読む)
   const [version, setVersion] = useState<string>()
   useEffect(() => {
@@ -2430,7 +2438,7 @@ function AboutTab() {
   )
 }
 
-export default function SettingsDialog(props: Props) {
+export default function SettingsDialog(props: SettingsProps) {
   // スマホは、はじめに分類の一覧(tab が undefined)を出し、押すとその分類の画面に入る
   const [tab, setTab] = useState<Tab | undefined>(props.initialTab ?? (isMobile ? undefined : 'display'))
   /** スマホ: 分類の中で開いている項目(Section の題) */

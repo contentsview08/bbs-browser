@@ -1070,3 +1070,43 @@ html[data-platform='mobile'] .selectable {
   user-select: text;
   -webkit-touch-callout: default;
 }
+
+/* スマホ: 画面を移るときの動き。進むときは右から、戻るときは左から、すっと入ってやわらかく止まる。
+   動きの曲線と時間は、ほかの動き(画像ビューアー・スレを開く)とそろえる */
+.page-in {
+  animation: page-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.page-back {
+  animation: page-back 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes page-in {
+  from {
+    transform: translateX(28%);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes page-back {
+  from {
+    transform: translateX(-20%);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* スマホ: 下からのシートの中に開いた一覧(表示スタイルなど。PC のメニューの部品)を、指で押しやすい大きさに */
+.sheet-sub button {
+  min-height: 48px;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  font-size: 15px !important;
+}
+.sheet-sub p {
+  padding-left: 24px !important;
+}

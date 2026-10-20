@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Placement } from '../utils/toolbar'
 import { isMobile, uiLabel } from '../utils/platform'
+import ActionSheet from './ActionSheet'
 
 export interface BarAction {
   id: string
@@ -67,6 +68,38 @@ export function ActionButtons(props: {
 
 /** 右端の ︙。押すとすべての操作をメニューで出す。up ならメニューを上に開く(フッターに置いたとき) */
 export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
+  // スマホは、下からせり上がるシート(長押しのメニューと同じ)。中に一覧を持つ項目は、シートの中で開く
+  if (isMobile) return <MobileMoreMenu {...props} />
+  return <DesktopMoreMenu {...props} />
+}
+
+function MobileMoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={props.btnClass} style={open ? { color: 'var(--c-accent)' } : undefined} title="操作">
+        <span className={`material-symbols-outlined ${props.iconClass}`}>more_vert</span>
+      </button>
+      {open && (
+        <ActionSheet
+          onClose={() => setOpen(false)}
+          items={props.actions.map((a) => ({
+            label: a.label,
+            icon: a.icon,
+            onClick: a.onClick,
+            submenu: a.submenu,
+            disabled: a.disabled,
+            active: a.active && a.fillWhenActive,
+            tint: a.active ? a.activeColor : a.tint === 'var(--c-mark-danger)' ? undefined : a.tint,
+            danger: a.tint === 'var(--c-mark-danger)',
+          }))}
+        />
+      )}
+    </>
+  )
+}
+
+function DesktopMoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
   const [open, setOpen] = useState(false)
   // ︙ の中で開いている、操作の中身(テーマの選び方など)。
   // 操作そのものを控えると、押した時点の中身(選ばれている印など)のまま変わらなくなるので、id だけ控えて毎回いまの操作から引く

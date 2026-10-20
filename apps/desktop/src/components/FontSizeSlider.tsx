@@ -101,7 +101,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   return createPortal(
-    <div className="fixed inset-0 z-[9500] bg-black/25 flex items-center justify-center p-4" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9800] bg-black/25 flex items-center justify-center p-4" onClick={props.onClose}>
       <div
         ref={boxRef}
         className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-c-surface border border-c-border rounded-2xl shadow-2xl rise-in py-2"

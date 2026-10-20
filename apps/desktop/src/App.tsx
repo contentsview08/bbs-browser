@@ -112,6 +112,7 @@ const BROWSER_UA = isMobile
 // たまにしか開かない画面は、開いたときに読み込む(起動を軽くするため)
 const SettingsDialog = lazyComponent(() => import('./components/SettingsDialog'))
 const NewThreadDialog = lazyComponent(() => import('./components/NewThreadDialog'))
+const MobileSettings = lazyComponent(() => import('./components/mobile/MobileSettings'))
 const UploadHistoryDialog = lazyComponent(() => import('./components/UploadHistoryDialog'))
 const PostHistoryDialog = lazyComponent(() => import('./components/PostHistoryDialog'))
 const ReaderView = lazyComponent(() => import('./components/ReaderView'))
@@ -1554,6 +1555,8 @@ export default function App() {
           return seq === 'right' && edgeSwipe.current ? 'メニュー' : gestureActionName(action)
         },
         onCommit: () => {
+          // 設定で行をつまんで動かしている間は、ジェスチャーにしない
+          if (document.body.dataset.dragSorting !== undefined) return
           // ダイアログ(スレ立て・NG の追加・下から出るメニューなど)の上では、戻るのジェスチャーで閉じるだけにする
           if (modalOpen()) {
             if (action === 'back' || seq === 'right')
@@ -2391,7 +2394,44 @@ export default function App() {
         />
       )}
 
-      {settingsTab && (
+      {settingsTab && isMobile && (
+        // スマホは、スマホ用に別に作った設定画面。アカウント・板の一覧から開いたときだけその画面から、ほかはトップから
+        <MobileSettings
+          initialPage={settingsTab === 'accounts' ? 'accounts' : settingsTab === 'boardlist' ? 'boards' : 'home'}
+          loadBoards={loadBoards}
+          onToggleFavorite={(b) => void toggleFavorite(b)}
+          onOpenBoard={(b) => {
+            setSettingsTab(undefined)
+            void openBoard(b)
+          }}
+          settings={settings}
+          update={updateSetting}
+          favorites={favorites ?? []}
+          sites={sites}
+          onAddFavoriteUrl={addFavoriteUrl}
+          onRemoveFavorite={(url) =>
+            void run(null, async () => {
+              if (!store) return
+              await store.removeFavorite(url)
+              await reloadFavorites(store)
+            })
+          }
+          onAddSite={addSite}
+          onRemoveSite={removeSite}
+          accounts={accounts}
+          loginStatus={loginStatus}
+          onLogin={saveAndLogin}
+          onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
+          onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
+          onRestoreDb={restoreDatabase}
+          onPruneLogs={pruneLogs}
+          externalConnectors={externalConnectors}
+          onReloadConnectors={(approvals) => reloadExternalConnectors(approvals)}
+          onOpenConnectorsDir={() => undefined}
+          onClose={() => setSettingsTab(undefined)}
+        />
+      )}
+      {settingsTab && !isMobile && (
         <SettingsDialog
           initialTab={settingsTab}
           loadBoards={loadBoards}

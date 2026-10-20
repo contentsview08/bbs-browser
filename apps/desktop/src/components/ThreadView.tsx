@@ -25,7 +25,7 @@ import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
-import { mobileMenuActions, resolvePlacements } from '../utils/toolbar'
+import { mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
@@ -939,7 +939,9 @@ export default function ThreadView(props: Props) {
     },
   ]
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
-  const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
+  /** ボタンの並び(設定で並べ替えたとき) */
+  const barOrder = (isMobile ? settings.mobileBarOrder : settings.barOrder).thread
+  const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), barOrder)
   // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
   const refreshFab = isMobile && settings.showRefreshFab
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer') || (isMobile && !!props.onSubmitPost)
@@ -1701,7 +1703,7 @@ export default function ThreadView(props: Props) {
               </span>
             )}
             <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
-            <MoreMenu actions={isMobile ? mobileMenuActions('thread', barActions, placements) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
+            <MoreMenu actions={isMobile ? mobileMenuActions('thread', barActions, placements, barOrder) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
           </div>
         </header>
         {/* スマホは、左右の端までを等分して並べる(人気・画像・動画・リンク・すべて) */}

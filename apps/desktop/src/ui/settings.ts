@@ -8,7 +8,7 @@ import type { LogStore } from '@bbs-browser/logstore'
 import type { NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
-import type { BarLayout } from '../utils/toolbar'
+import type { BarLayout, BarOrder } from '../utils/toolbar'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
 export type DesignPattern = 'tonal' | 'bordered'
@@ -304,6 +304,9 @@ export interface AppSettings {
   barLayout: BarLayout
   /** スマホのボタンの配置(PC とは別。既定も別) */
   mobileBarLayout: BarLayout
+  /** ボタンの並び(画面ごとの操作 id の順。並べ替えたときだけ持つ)。スマホは PC と別 */
+  barOrder: BarOrder
+  mobileBarOrder: BarOrder
   /** 設定画面で、高度な設定も見せる(オフなら、よく使う項目だけ) */
   showAdvanced: boolean
   // 書き込み(最後に使った名前とメールを覚えておく)
@@ -425,6 +428,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keymap: {},
   barLayout: {},
   mobileBarLayout: {},
+  barOrder: {},
+  mobileBarOrder: {},
   showAdvanced: false,
   postName: '',
   postMail: '',

@@ -10,7 +10,7 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
-import { mobileMenuActions, type Placement } from '../utils/toolbar'
+import { mobileMenuActions, orderBy, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { SliderDialog } from './FontSizeSlider'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
@@ -89,6 +89,8 @@ interface Props {
   fontSize?: ReactNode
   /** 操作ボタンの置き場所(設定) */
   placements: Record<string, Placement>
+  /** ボタンの並び(設定で並べ替えたとき) */
+  barOrder?: string[]
   /** 最初の並び順(設定) */
   defaultSort: ThreadSort
   /**
@@ -628,7 +630,7 @@ export default function ThreadListPanel(props: Props) {
       : []),
   ]
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
-  const barActions = allBarActions.filter((a) => placements[a.id] !== undefined)
+  const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), props.barOrder)
   const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
 
   const onSelectCard = useEvent((t: ThreadSummary, on: boolean) =>
@@ -894,7 +896,7 @@ export default function ThreadListPanel(props: Props) {
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
-                <MoreMenu actions={isMobile ? mobileMenuActions('list', barActions, placements) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
+                <MoreMenu actions={isMobile ? mobileMenuActions('list', barActions, placements, props.barOrder) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
               </div>
             </div>
           </div>

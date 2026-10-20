@@ -41,7 +41,7 @@ import type { BoardMeta } from '../ui/settings'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
 import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
-import { barActionsFor, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
+import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
 interface Props {
@@ -1686,6 +1686,8 @@ function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>
   // スマホでは、スマホの配置(PC とは別に持つ)を変える
   const key = isMobile ? 'mobileBarLayout' : 'barLayout'
   const layout = s[key]
+  const orderKey = isMobile ? 'mobileBarOrder' : 'barOrder'
+  const order = s[orderKey]
   const set = (area: BarArea, id: string, placement: Placement) => {
     const cur = layout[area] ?? {}
     update(key, { ...layout, [area]: { ...cur, [id]: placement } })
@@ -1699,13 +1701,19 @@ function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>
     const placements = resolvePlacements(areaKey, layout, isMobile)
     // スマホ: ボタンをつまんで、ヘッダー・フッター・︙ の箱のあいだで動かす
     if (isMobile) {
-      const actions = barActionsFor(areaKey, isMobile)
+      const actions = orderBy(barActionsFor(areaKey, isMobile), order[areaKey])
       const nameOf = (id: string) => actions.find((a) => a.id === id)!
       return (
-        <Section title={title} note="ボタンの右のつまみをつかんで、置きたい箱へ動かします。どのボタンも、ヘッダーの右端の ︙ を押すと出てきます">
+        <Section title={title} note="ボタンの右のつまみをつかんで、置きたい箱の、置きたい位置へ動かします(同じ箱の中で動かすと並び順が変わります)">
           <DragZones
             zones={PLACES.map((p) => ({ key: p.key, title: p.name, items: actions.filter((a) => placements[a.id] === p.key).map((a) => a.id) }))}
-            onMove={(id, zone) => set(areaKey, id, zone)}
+            onMove={(id, zone, index) => {
+              // 置き場所と、並び(ヘッダー → フッター → ︙ の順に、箱ごとの並びをつなげたもの)を一緒に変える
+              const zones = PLACES.map((p) => ({ key: p.key, ids: actions.filter((a) => placements[a.id] === p.key && a.id !== id).map((a) => a.id) }))
+              zones.find((z) => z.key === zone)!.ids.splice(index, 0, id)
+              update(orderKey, { ...order, [areaKey]: zones.flatMap((z) => z.ids) })
+              if (placements[id] !== zone) set(areaKey, id, zone)
+            }}
             render={(id, handle, dragging) => (
               <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
                 <span className="material-symbols-outlined text-xl text-c-text-muted">{nameOf(id).icon}</span>
@@ -1735,7 +1743,14 @@ function ToolbarsTab({ settings: s, update }: Pick<Props, 'settings' | 'update'>
     <>
       {area('thread', 'スレ表示')}
       {area('list', 'スレッド一覧')}
-      <button type="button" onClick={() => update(key, {})} className="text-xs text-c-text-muted hover:text-c-accent underline">
+      <button
+        type="button"
+        onClick={() => {
+          update(key, {})
+          update(orderKey, {})
+        }}
+        className="text-xs text-c-text-muted hover:text-c-accent underline"
+      >
         すべて既定に戻す
       </button>
     </>

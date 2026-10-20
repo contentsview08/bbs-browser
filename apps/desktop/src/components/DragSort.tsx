@@ -109,13 +109,23 @@ export function DragList<K extends string>(props: {
   )
 }
 
-/** いくつかの箱のあいだで、つまんで動かす(離した所の箱に入れる) */
+/** いくつかの箱のあいだで、つまんで動かす(離した所の箱の、離した高さの位置に入れる。同じ箱の中での並べ替えもできる) */
 export function DragZones<Z extends string>(props: {
   zones: { key: Z; title: string; note?: string; items: string[] }[]
   render: (id: string, handle: HandleProps, dragging: boolean) => ReactNode
-  onMove: (id: string, zone: Z) => void
+  /** index は、動かした先の箱の中で何番目に入れるか(動かしたもの自身を除いて数える) */
+  onMove: (id: string, zone: Z, index: number) => void
 }) {
   const boxes = useRef(new Map<Z, HTMLElement>())
+  const rows = useRef(new Map<string, HTMLElement>())
+  /** 箱の中の、指の高さより上にあるもの(自分を除く)の数 = 入れる位置 */
+  const indexIn = (zone: Z, id: string, y: number) =>
+    (props.zones.find((z) => z.key === zone)?.items ?? [])
+      .filter((x) => x !== id)
+      .filter((x) => {
+        const r = rows.current.get(x)?.getBoundingClientRect()
+        return r !== undefined && r.top + r.height / 2 < y
+      }).length
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; dx: number; dy: number; over?: Z }>()
   const zoneAt = (x: number, y: number) => {
     for (const [key, el] of boxes.current) {
@@ -136,7 +146,7 @@ export function DragZones<Z extends string>(props: {
     },
     onPointerUp: (e) => {
       const z = zoneAt(e.clientX, e.clientY)
-      if (drag && z && !props.zones.find((zone) => zone.key === z)?.items.includes(id)) props.onMove(id, z)
+      if (drag && z && (Math.abs(drag.dx) > 4 || Math.abs(drag.dy) > 4)) props.onMove(id, z, indexIn(z, id, e.clientY))
       setDrag(undefined)
     },
     onPointerCancel: () => setDrag(undefined),
@@ -160,7 +170,14 @@ export function DragZones<Z extends string>(props: {
           >
             {z.items.length === 0 && <p className="py-2 text-center text-xs text-c-text-muted">ここに動かすと、{z.title}に置きます</p>}
             {z.items.map((id) => (
-              <div key={id} style={drag?.id === id ? lifted(drag.dx, drag.dy) : undefined}>
+              <div
+                key={id}
+                ref={(el) => {
+                  if (el) rows.current.set(id, el)
+                  else rows.current.delete(id)
+                }}
+                style={drag?.id === id ? lifted(drag.dx, drag.dy) : undefined}
+              >
                 {props.render(id, handleFor(id), drag?.id === id)}
               </div>
             ))}

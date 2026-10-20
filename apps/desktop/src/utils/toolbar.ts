@@ -67,10 +67,26 @@ const MOBILE_MENU_ORDER: Record<BarArea, string[]> = {
   thread: ['favorite', 'gallery', 'findNext', 'search', 'openBoard', 'top', 'bottom', 'style', 'fontSize', 'openBrowser', 'refresh', 'delete'],
   list: ['newThread', 'favorite', 'search', 'top', 'style', 'fontSize', 'refresh'],
 }
-export function mobileMenuActions<T extends { id: string }>(area: BarArea, actions: T[], placements: Record<string, Placement>): T[] {
+export function mobileMenuActions<T extends { id: string }>(area: BarArea, actions: T[], placements: Record<string, Placement>, custom?: string[]): T[] {
+  const inMenu = actions.filter((a) => placements[a.id] === 'menu' && !MOBILE_MENU_HIDDEN.has(a.id))
+  // 設定で並べ替えていれば、その並び(actions はもうその順)
+  if (custom?.length) return inMenu
   const order = MOBILE_MENU_ORDER[area]
   const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length)
-  return actions.filter((a) => placements[a.id] === 'menu' && !MOBILE_MENU_HIDDEN.has(a.id)).sort((a, b) => rank(a.id) - rank(b.id))
+  return inMenu.sort((a, b) => rank(a.id) - rank(b.id))
+}
+
+/** ボタンの並び(画面ごとの操作 id の順)。並べ替えたときだけ持つ。並びにない操作(あとで増えたもの)は後ろに */
+export type BarOrder = Partial<Record<BarArea, string[]>>
+
+/** 決めた並びに並べ替える。並びにないものは、もとの順のまま後ろに */
+export function orderBy<T extends { id: string }>(actions: T[], order: string[] | undefined): T[] {
+  if (!order?.length) return actions
+  const rank = new Map(order.map((id, i) => [id, i]))
+  return actions
+    .map((a, i) => ({ a, r: rank.get(a.id) ?? order.length + i }))
+    .sort((x, y) => x.r - y.r)
+    .map((x) => x.a)
 }
 
 /** 設定に保存する形。変えたものだけ持つ(あとで増えた操作は既定の置き場所になる) */

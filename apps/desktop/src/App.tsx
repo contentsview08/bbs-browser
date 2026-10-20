@@ -2120,6 +2120,7 @@ export default function App() {
             </>
           }
           placements={listPlacements}
+          barOrder={(isMobile ? settings.mobileBarOrder : settings.barOrder).list}
         />
         </div>
       )}

@@ -824,7 +824,10 @@ function PostArticle(props: Props) {
                     title="YouTube を再生する"
                   >
                     <img src={`https://img.youtube.com/vi/${m.id}/mqdefault.jpg`} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                    <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] px-1 rounded leading-none pointer-events-none">▶</span>
+                    {/* 再生の印は、真ん中に半透明で大きく */}
+                    <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="material-symbols-outlined fill text-4xl text-white/85 drop-shadow">play_circle</span>
+                    </span>
                   </button>
                 )
               })}

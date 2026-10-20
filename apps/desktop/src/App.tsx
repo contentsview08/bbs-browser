@@ -40,8 +40,8 @@ import Notifications from './components/Notifications'
 import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
-import StyleMenu, { StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { cssPx, setCssVar } from './components/FontSizeSlider'
+import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
+import FontSizeSlider, { SliderDialog, cssPx, setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -95,6 +95,8 @@ const threadEntry = (thread: ThreadSummary) => ({ key: `thread:${threadId(thread
 
 /** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
 const TAB_REPEAT_SETTLE_MS = 200
+/** スマホ: スレ表示がすべり込む・すべって出ていく時間(下の duration-[250ms] と同じ) */
+const SLIDE_MS = 250
 
 // 開発中のアプリだけ、お試しの掲示板(通信しない。https://demo.bbs-browser.invalid/board/)を足す
 if (import.meta.env.DEV) registerConnector(demoConnector)
@@ -230,6 +232,13 @@ export default function App() {
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
+  /** 表示スタイルのメニューから開く、画面全体の文字サイズの画面 */
+  const [baseFontDialog, setBaseFontDialog] = useState(false)
+  useEffect(() => {
+    const open = () => setBaseFontDialog(true)
+    window.addEventListener(OPEN_FONT_DIALOG, open)
+    return () => window.removeEventListener(OPEN_FONT_DIALOG, open)
+  }, [])
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   /** コマンドパレット(Ctrl+K・:) */
@@ -781,7 +790,14 @@ export default function App() {
   /** タブにログを読み込み(手元のものをすぐ出す)、差分を取りに行く */
   const loadTab = async (s: LogStore, t: ThreadSummary) => {
     const id = threadId(t)
+    const started = performance.now()
     const [local, own] = await Promise.all([s.loadThread(t), s.getOwnPosts(t)])
+    // スマホ: スレ表示が右からすべり込んでいる間(SLIDE_MS)はレスを並べない。並べるのは重く、すべりがカクつくので、
+    // すべり込み終わってから並べる(その間はヘッダーと書き込み欄だけの軽い画面)
+    if (isMobile) {
+      const wait = SLIDE_MS - (performance.now() - started)
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+    }
     // レスを並べるのは重いので、急ぎでない更新にする(先に出したヘッダー・書き込み欄の操作を止めない)
     startTransition(() => patchTab(id, {
       log: local ?? { title: t.title, posts: [], cursor: null, postCount: 0, readNo: 0, status: 'active' },
@@ -1959,7 +1975,8 @@ export default function App() {
           className={
             single
               ? // スマホ: スレを開くとスレ一覧は少し左へ逃げ、閉じると左から戻ってくる(元の Web アプリと同じ)
-                `flex-1 min-w-0 flex justify-center bg-panel-view ${isMobile ? `transition-transform duration-[250ms] ease-out ${threadShown ? '-translate-x-1/4' : ''}` : ''}`
+                // will-change: 動かす層を最初から分けておき、開く・戻るときのすべりを軽くする
+                `flex-1 min-w-0 flex justify-center bg-panel-view ${isMobile ? `will-change-transform transition-transform duration-[250ms] ease-out ${threadShown ? '-translate-x-1/4' : ''}` : ''}`
               : 'relative flex flex-shrink-0'
           }
           onPointerDownCapture={() => setFocusPane('list')}
@@ -2073,7 +2090,7 @@ export default function App() {
             ? isMobile
               ? // スマホ: 開くときは右からすべり込み、閉じるときは右へすべって出ていく(元の Web アプリと同じ)。
                 // 出し切ったら transform を外す(付いたままだと、画面の座標で置くポップアップの位置がずれるため)
-                `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl transition-[transform,visibility] duration-[250ms] ease-out ${
+                `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl will-change-transform transition-[transform,visibility] duration-[250ms] ease-out ${
                   threadShown ? '' : 'translate-x-full invisible pointer-events-none'
                 }`
               : // 1 画面: スレ一覧の上に重ねる。開くときは手前(少し大きく・透けた状態)から画面に貼り付くように、
@@ -2287,6 +2304,17 @@ export default function App() {
       )}
       {paletteOpen && <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} />}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
+      {baseFontDialog && (
+        <SliderDialog title="文字サイズ" onClose={() => setBaseFontDialog(false)}>
+          <FontSizeSlider
+            label="画面全体"
+            value={baseFontPx(settings)}
+            base={baseFontPx(settings)}
+            preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
+            onCommit={(px) => updateSetting(FONT_PX_KEY, px)}
+          />
+        </SliderDialog>
+      )}
       {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
 
       {newThreadOpen && board && (

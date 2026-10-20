@@ -107,11 +107,22 @@ export default function Minimap(props: Props) {
       if (top === undefined && bottom === undefined) return byScroll()
       const a = top ?? 0
       const b = bottom ?? n - 1
+      const jumped = lastTop >= 0 && Math.abs(a - lastTop) > Math.max(5, (b - a + 1) * 2)
+      lastTop = a
+      if (jumped) thumb.style.transition = 'none'
       thumb.style.top = `${(a / n) * 100}%`
       thumb.style.height = `max(14px, ${((b - a + 1) / n) * 100}%)`
+      if (jumped) {
+        // 動かさずに置いたことを先に確定させてから(位置を読むと、その場で描き直す)、なめらかさを戻す
+        void thumb.offsetHeight
+        thumb.style.transition = SMOOTH
+      }
     }
     // スマホ: つまみの大きさ(画面に入っているレスの数)は、スクロールで 1 つずつ変わってカクカクするので、なめらかにつなぐ
-    if (isMobile) thumb.style.transition = 'height 220ms ease-out, top 120ms ease-out'
+    const SMOOTH = 'height 220ms ease-out, top 120ms ease-out'
+    if (isMobile) thumb.style.transition = SMOOTH
+    /** 前に出したつまみの上端(何番目か)。大きく飛んだ(一番下へ・先頭へ)ときは、なめらかにせずすぐ移す */
+    let lastTop = -1
     let raf = 0
     const update = () => {
       if (!isMobile) return byScroll()

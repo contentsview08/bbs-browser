@@ -1639,7 +1639,7 @@ export default function ThreadView(props: Props) {
             )}
             {/* スレタイが長いときに省くのはスレタイだけ。後ろのレス数は別の情報なので、いつも出す */}
             <h2
-              className="min-w-0 flex items-baseline font-bold text-base cursor-pointer hover:text-c-accent transition-colors"
+              className={`min-w-0 flex items-baseline font-bold text-base cursor-pointer transition-colors ${isMobile ? '' : 'hover:text-c-accent'}`}
               style={{
                 color: 'var(--thread-title-color, var(--c-text-strong))',
                 // ヘッダーを引き伸ばしたら、高さに合わせて字も大きくする(既定の 80px で 1rem)。

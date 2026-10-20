@@ -1,10 +1,9 @@
 // 表示スタイルのパレットメニュー。web 版の ThreadListStyleMenu.tsx を移植
 // (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
 
-import FontSizeSlider from './FontSizeSlider'
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { PICKABLE_SCHEMES, FONT_PX_KEY, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { PICKABLE_SCHEMES, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -15,6 +14,12 @@ const MENU_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2 text-c-text-body h
 const GROUP_LABEL = 'px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tracking-wide'
 
 /** メニューの中身(︙ の中でも使う) */
+/**
+ * 画面全体の文字サイズの画面を開く知らせ(App が受けて開く)。
+ * メニューの中で開くと、画面を押した瞬間にメニューが閉じて一緒に消えるので、メニューの外(App)に置く
+ */
+export const OPEN_FONT_DIALOG = 'bbs:open-font-dialog'
+
 export function StyleMenuItems({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
   const check = <span className="material-symbols-outlined text-base text-c-accent">check</span>
   return (
@@ -63,14 +68,12 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
 
       <div className="my-1 border-t border-c-border" />
 
-      <p className={GROUP_LABEL}>文字サイズ</p>
-      <FontSizeSlider
-        label="画面全体"
-        value={baseFontPx(settings)}
-        base={baseFontPx(settings)}
-        preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
-        onCommit={(px) => update(FONT_PX_KEY, px)}
-      />
+      {/* 文字サイズのスライダーは、メニューの中ではなく真ん中の小さな画面で(動かすとメニューごと大きさが変わってずれるので) */}
+      <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_FONT_DIALOG))} className={MENU_ITEM}>
+        <span className="material-symbols-outlined text-base flex-shrink-0">format_size</span>
+        <span className="flex-1 text-left truncate">文字サイズ(画面全体)</span>
+        <span className="text-xs tabular-nums text-c-text-muted">{baseFontPx(settings)}px</span>
+      </button>
     </>
   )
 }

@@ -157,8 +157,13 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
 function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNode }) {
   return (
     <div className="flex flex-col">
-      {props.rows.map((r) => (
-        <div key={r.no} className="flex min-w-0">
+      {props.rows.map((r, i) => (
+        <div
+          key={r.no}
+          className="flex min-w-0"
+          // 段が変わる所にだけ、背景になじむ薄い線を引く(同じ段が続く所は引かない)
+          style={i > 0 && props.rows[i - 1].depth !== r.depth ? { borderTop: '1px solid color-mix(in srgb, var(--c-border) 70%, transparent)' } : undefined}
+        >
           {/* 段の分だけ、縦線より左を薄い灰色で塗る(どこまでが字下げか、ひと目で分かるように)。いちばん上の元のレスにも線を引く */}
           <div
             aria-hidden

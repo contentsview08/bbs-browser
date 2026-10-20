@@ -976,3 +976,15 @@ html[data-list-pad] .card-thread {
 [data-post-body] > p:not(.aa-font) {
   line-height: var(--post-line-height, 1.625);
 }
+
+/* スマホ: たたいたときに要素の上に出る、ブラウザの四角い色(タップの強調)を出さない */
+html[data-platform='mobile'] * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* スマホ: 画面の外のスレのカードは描かずに済ませる(速くスクロールしたとき・タブで並びが変わったときに軽くなる)。
+   描くまでの仮の高さは、描いたことのあるカードはその高さ(auto)、まだなら 60px */
+html[data-platform='mobile'] .card-thread {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}

@@ -838,7 +838,8 @@ export default function ThreadListPanel(props: Props) {
                   onClick={() => (isMobile ? setTitleSheet(true) : scrollRef.current?.scrollTo({ top: 0 }))}
                   title={isMobile ? '板の操作' : 'クリックで先頭へスクロール'}
                 >
-                  <span className="truncate group-hover/title:text-c-accent transition-colors">{props.title}</span>
+                  {/* スマホはマウスを乗せる操作がない(たたくと乗せた色のまま残る)ので、色を変えない */}
+                  <span className={`truncate transition-colors ${isMobile ? '' : 'group-hover/title:text-c-accent'}`}>{props.title}</span>
                 </h2>
                 <input
                   ref={searchRef}

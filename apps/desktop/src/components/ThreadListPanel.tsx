@@ -725,7 +725,8 @@ export default function ThreadListPanel(props: Props) {
                         className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
                         style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
                       >
-                        +{unreadTotal}
+                        {/* 数が大きくなっても横に伸びないよう、999 で止める */}
+                        {unreadTotal > 999 ? '+999+' : `+${unreadTotal}`}
                       </span>
                     )}
                     {!filter && (
@@ -810,7 +811,7 @@ export default function ThreadListPanel(props: Props) {
               <div ref={titleRowRef} className={`relative flex-1 min-w-0 ${isMobile ? 'h-16' : 'h-11'}`} style={headerDrag.height ? { height: headerDrag.height } : undefined}>
                 {/* 板名の帯全体が押せる(板名が短くても、帯のどこを押しても先頭へ) */}
                 <h2
-                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-lg' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
+                  className={`group/title absolute inset-0 flex items-center min-w-0 font-bold text-c-text-strong ${isMobile ? 'text-base' : 'text-xl'} cursor-pointer transition-opacity duration-200 ${
                     searchActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
                   }`}
                   // 引き伸ばしたら、高さに合わせて字も大きくする(既定の 44px で 1.25rem)

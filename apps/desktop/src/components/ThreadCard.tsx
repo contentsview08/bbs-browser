@@ -125,7 +125,7 @@ function ThreadCard({
   const unreadBadge = (cls = 'text-[9px] px-1.5 py-0.5 rounded') =>
     unreadCount > 0 && (
       <span className={`flex-shrink-0 font-bold whitespace-nowrap ${cls}`} style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}>
-        +{unreadCount}
+        {unreadCount > 999 ? '+999+' : `+${unreadCount}`}
       </span>
     )
   const momentumEl = (cls = '') => (
@@ -181,6 +181,11 @@ function ThreadCard({
           {thread.title}
         </span>
         {archived && <span className="flex-shrink-0 text-[10px] text-c-text-muted">dat落ち</span>}
+        {thread.authorId && !authorIcon && (
+          <span className="flex-shrink-0 font-mono text-[10px] text-c-text-muted" title="立てた人の ID">
+            {thread.authorId}
+          </span>
+        )}
         <span className="thread-row-count flex-shrink-0 text-[10px] text-c-text-muted tabular-nums" title="レス数">
           {thread.postCount}
         </span>
@@ -222,7 +227,7 @@ function ThreadCard({
           </span>
           ))}
         <div className="flex-1 min-w-0">
-          <div className="truncate text-sm font-bold" style={{ color: titleColor }}>
+          <div className="text-sm font-bold break-words" style={{ color: titleColor }}>
             {newBadge}
             {favStar}
           {threadBadges}
@@ -233,6 +238,7 @@ function ThreadCard({
             <span>·</span>
             {momentumEl()}
             {archived && <span>· dat落ち</span>}
+            {thread.authorId && !authorIcon && <span className="font-mono truncate" title="立てた人の ID">· {thread.authorId}</span>}
           </div>
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
@@ -257,13 +263,15 @@ function ThreadCard({
             {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
             <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
               {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
-              {/* 立てた人の ID(エッジ)。模様と ID で、同じ人の立てたスレが分かる */}
-              {authorIconId && (
+              {/* 立てた人の ID(エッジ)。模様は設定でオンのときだけ */}
+              {thread.authorId && (
                 <span className="flex items-center gap-1 min-w-0 font-mono" title="立てた人の ID">
-                  <span className="flex-shrink-0 block overflow-hidden rounded-full">
-                    <Identicon seed={authorIconId} size={12} />
-                  </span>
-                  <span className="truncate">{authorIconId}</span>
+                  {authorIconId && (
+                    <span className="flex-shrink-0 block overflow-hidden rounded-full">
+                      <Identicon seed={authorIconId} size={12} />
+                    </span>
+                  )}
+                  <span className="truncate">{thread.authorId}</span>
                 </span>
               )}
               {archived && <span className="whitespace-nowrap">dat落ち</span>}
@@ -281,7 +289,7 @@ function ThreadCard({
             {/* タイトル行 */}
             <div className="flex items-center gap-2.5 min-w-0" style={{ marginTop: 'var(--thread-card-title-gap)' }}>
               <h3
-                className="flex-1 min-w-0 text-base leading-tight line-clamp-2 font-normal"
+                className="flex-1 min-w-0 text-base leading-tight break-words font-normal"
                 style={{
                   color: visited
                     ? 'var(--c-thread-read-title, var(--c-text-body))'
@@ -312,7 +320,7 @@ function ThreadCard({
                   className="flex-shrink-0 font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
                   style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
                 >
-                  +{unreadCount}
+                  {unreadCount > 999 ? '+999+' : `+${unreadCount}`}
                 </span>
               )}
             </div>
@@ -349,12 +357,6 @@ function ThreadCard({
     >
       {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
           (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
-      {/* 立てた人の ID(エッジ)。模様で出さないときは、右下に小さく */}
-      {thread.authorId && !authorIcon && variant !== 'classic' && (
-        <span className="absolute bottom-0.5 right-2 pointer-events-none font-mono text-[9px] leading-none text-c-text-muted opacity-80" title="立てた人の ID">
-          {thread.authorId}
-        </span>
-      )}
       {/* スマホ: 選んでいるスレは、強調色を薄く敷いて右にチェック */}
       {isMobile && selected && (
         <>

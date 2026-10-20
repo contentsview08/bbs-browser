@@ -280,6 +280,34 @@ export const youtubeLinksIn = memoByText(function youtubeLinksIn(text: string): 
   return links
 })
 
+/** レスのサムネイルに出すもの(画像・動画のファイル・YouTube) */
+export type MediaItem = { kind: 'image'; url: string } | { kind: 'video'; url: string } | { kind: 'youtube'; url: string; id: string }
+
+/**
+ * 本文の画像・動画のファイル・YouTube を、本文に出てくる順に。
+ * 選び方は imageUrlsIn・videoFileUrlsIn・youtubeLinksIn と同じ(画像は同じものも並べ、動画と YouTube は 1 つにまとめる)
+ */
+export const mediaIn = memoByText(function mediaIn(text: string): MediaItem[] {
+  const out: MediaItem[] = []
+  const seen = new Set<string>()
+  for (const m of text.matchAll(TOKEN)) {
+    if (!m[2]) continue
+    const url = normalizeUrl(m[2])
+    const img = toImageUrl(url)
+    if (img) {
+      out.push({ kind: 'image', url: img })
+    } else if (isVideoFileUrl(url)) {
+      if (!seen.has(url)) out.push({ kind: 'video', url })
+      seen.add(url)
+    } else if (YOUTUBE_URL.test(url)) {
+      const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+      if (id && !seen.has(`yt:${id}`)) out.push({ kind: 'youtube', url, id })
+      if (id) seen.add(`yt:${id}`)
+    }
+  }
+  return out
+})
+
 /**
  * YouTube の URL を、埋め込みのプレーヤーの URL にする。YouTube でなければ undefined。
  * 再生を始める位置(t=90、t=1m30s、start=90)があれば、そこから再生する

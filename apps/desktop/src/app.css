@@ -520,11 +520,7 @@ article.post-discord:hover {
 [data-density='dense'] .card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
   margin-top: 0;
 }
-[data-density='dense'] .card-thread[data-variant='discord'] .thread-row-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* スレタイは省かず、折り返して全部出す(どの見た目・密度でも) */
 
 /* 専ブラ風の表: 一覧表示ではスレタイを折り返して全部見せ、高密度では 1 行に切る */
 .card-thread[data-variant='classic'] .thread-row-title {
@@ -534,11 +530,7 @@ article.post-discord:hover {
   padding-top: 5px !important;
   padding-bottom: 5px !important;
 }
-[data-density='dense'] .card-thread[data-variant='classic'] .thread-row-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* スレタイは省かず、折り返して全部出す(どの見た目・密度でも) */
 
 /* 専ブラ風の表: 角を丸めず、1 行おきにうっすら色を付ける */
 .card-thread[data-variant='classic'] {
@@ -944,4 +936,11 @@ html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row-ti
 html[data-platform='mobile'] .card-thread[data-variant='discord'] {
   padding-top: 5px !important;
   padding-bottom: 5px !important;
+}
+
+/* スマホ: すりガラス(後ろをぼかす)は、スクロールのたびに後ろを毎コマぼかし直すので、Android の WebView では重く、
+   スクロールがカクつく元になる。ぼかさず、ヘッダー・フッターの色で塗りつぶす */
+html[data-platform='mobile'] .frosted-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }

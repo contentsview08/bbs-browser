@@ -15,6 +15,8 @@ const STEP = isMobile ? 12 : 18
 const MAX_DEPTH = isMobile ? 5 : Infinity
 /** スマホ: 1 段ごとに右へずらす幅(罫線を引かず、レスの左の縦線を階段のように並べる) */
 const MOBILE_STEP = 10
+/** スマホ: 字下げした所(縦線より左)の色。明るい配色では薄い灰色、暗い配色では少し明るい灰色になる */
+const GUTTER = 'color-mix(in srgb, var(--c-text-muted) 14%, transparent)'
 /** 分岐の横線を出す高さ(レスのヘッダーの真ん中あたり) */
 const ELBOW_Y = 14
 
@@ -156,17 +158,17 @@ function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNod
   return (
     <div className="flex flex-col">
       {props.rows.map((r) => (
-        <div
-          key={r.no}
-          className="tree-post-step min-w-0"
-          style={
-            r.depth > 0
-              ? { marginLeft: (r.depth - 1) * MOBILE_STEP + 4, borderLeft: `2px solid ${LINE}`, paddingLeft: 2 }
-              : undefined
-          }
-        >
-          {props.renderPost(r.no)}
-          {r.alsoTo.length > 0 && <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>}
+        <div key={r.no} className="flex min-w-0">
+          {/* 段の分だけ、縦線より左を薄い灰色で塗る(どこまでが字下げか、ひと目で分かるように)。いちばん上の元のレスにも線を引く */}
+          <div
+            aria-hidden
+            className="flex-shrink-0"
+            style={{ width: 4 + r.depth * MOBILE_STEP, background: GUTTER, borderRight: `2px solid ${LINE}` }}
+          />
+          <div className="tree-post-step flex-1 min-w-0 pl-0.5">
+            {props.renderPost(r.no)}
+            {r.alsoTo.length > 0 && <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>}
+          </div>
         </div>
       ))}
     </div>

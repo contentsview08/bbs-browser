@@ -1570,7 +1570,8 @@ export default function ThreadView(props: Props) {
         <header
           ref={titleRowRef}
           className={`flex items-center justify-between ${isMobile ? (props.onOpenDrawer ? 'pl-1 pr-1' : 'pl-4 pr-1') : 'px-6'}`}
-          style={{ height: headerDrag.height || 'var(--header-height, 80px)' }}
+          // スマホ: スレタイを省かずに折り返すので、長いスレタイでは帯を高くする(既定の高さより低くはしない)
+          style={isMobile ? { minHeight: 'var(--header-height, 72px)' } : { height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
           {/* スマホ: スレタイの左にメニュー(サイドバーの引き出し) */}
           {isMobile && props.onOpenDrawer && (
@@ -1579,7 +1580,7 @@ export default function ThreadView(props: Props) {
             </button>
           )}
           <div
-            className="relative min-w-0 flex-1 h-10 flex items-center gap-2"
+            className={`relative min-w-0 flex-1 flex items-center gap-2 ${isMobile ? 'min-h-10 py-1.5' : 'h-10'}`}
             // 字を大きくしたら、行の高さもそれに合わせる(固定の 40px のままだと、大きい字の上下が切れる)
             style={titleRem ? { height: Math.max(40, titleRem * 16 * 1.5) } : undefined}
           >
@@ -1637,8 +1638,18 @@ export default function ThreadView(props: Props) {
               }}
               title={isMobile ? 'スレの操作' : 'クリックで先頭へスクロール'}
             >
-              <span className="truncate">{log.title}</span>
-              <span className="flex-shrink-0 ml-1.5 text-sm font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
+              {isMobile ? (
+                // スマホ: 省かずに折り返す(長くても 3 行まで)。レス数はスレタイの続きに
+                <span className="text-[15px] leading-snug break-words line-clamp-3">
+                  {log.title}
+                  <span className="ml-1.5 text-xs font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
+                </span>
+              ) : (
+                <>
+                  <span className="truncate">{log.title}</span>
+                  <span className="flex-shrink-0 ml-1.5 text-sm font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
+                </>
+              )}
             </h2>
             {log.status === 'archived' && (
               <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-c-surface3 text-c-text-muted">

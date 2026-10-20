@@ -40,7 +40,9 @@ export default function Minimap(props: Props) {
 
   useEffect(() => {
     const root = scrollRef.current
-    if (!root) return
+    // スマホは、印の位置をレスの番目で決める(測らない)。下の「つまみ」も番目で出す。
+    // 測る作りだと、画像やレスが描かれて高さが変わるたびに印が動き、全部のレスを測り直すのも重い
+    if (!root || isMobile) return
     const measure = () => {
       if (root.scrollHeight === 0) return
       const rootTop = root.getBoundingClientRect().top
@@ -81,11 +83,38 @@ export default function Minimap(props: Props) {
     const root = scrollRef.current
     const thumb = thumbRef.current
     if (!root || !thumb) return
-    const update = () => {
+    const byScroll = () => {
       const { scrollHeight, clientHeight, scrollTop } = root
       // 長いスレでもつかめるよう、つまみは 14px より小さくしない
       thumb.style.height = `max(14px, ${(clientHeight / scrollHeight) * 100}%)`
       thumb.style.top = `${(scrollTop / scrollHeight) * 100}%`
+    }
+    /** スマホ: 画面の上端と下端にあるレスの番目で、つまみを出す(印と同じ、番目の座標) */
+    const byIndex = () => {
+      const box = root.getBoundingClientRect()
+      const x = box.left + Math.min(40, box.width / 2)
+      // 上下の端にはヘッダー・フッターが重なっているので、レスに当たるまで少しずつ内側へずらして探す
+      const at = (from: number, dir: 1 | -1) => {
+        for (let k = 0; k < 24; k++) {
+          const el = document.elementFromPoint(x, from + dir * k * 20)?.closest<HTMLElement>('.post-cv')
+          if (el && root.contains(el)) return indexOf.current.get(Number(el.dataset.post))
+        }
+        return undefined
+      }
+      const n = Math.max(1, postsRef.current.length)
+      const top = at(box.top + props.topOffset + 4, 1)
+      const bottom = at(box.bottom - 4, -1)
+      if (top === undefined && bottom === undefined) return byScroll()
+      const a = top ?? 0
+      const b = bottom ?? n - 1
+      thumb.style.top = `${(a / n) * 100}%`
+      thumb.style.height = `max(14px, ${((b - a + 1) / n) * 100}%)`
+    }
+    let raf = 0
+    const update = () => {
+      if (!isMobile) return byScroll()
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(byIndex)
     }
     root.addEventListener('scroll', update)
     const observer = new ResizeObserver(update)
@@ -93,12 +122,18 @@ export default function Minimap(props: Props) {
     if (listRef.current) observer.observe(listRef.current)
     update()
     return () => {
+      cancelAnimationFrame(raf)
       root.removeEventListener('scroll', update)
       observer.disconnect()
     }
-  }, [scrollRef, listRef])
+  }, [scrollRef, listRef, props.topOffset])
 
   const total = Math.max(1, posts.length - 1)
+  // つまみ(スマホ)を番目で出すための控え
+  const postsRef = useRef(posts)
+  postsRef.current = posts
+  const indexOf = useRef(new Map<number, number>())
+  indexOf.current = useMemo(() => new Map(posts.map((p, i) => [p.no, i])), [posts])
   // 測れていないレスは、並び順からおおよその位置を出す
   const pct = (no: number, index: number) => pcts.get(no) ?? (index / total) * 100
 
@@ -151,6 +186,12 @@ export default function Minimap(props: Props) {
     if (!root) return
     const rect = e.currentTarget.getBoundingClientRect()
     const ratio = (e.clientY - rect.top) / rect.height
+    // スマホは番目の座標なので、その割合の番目のレスへ飛ぶ
+    if (isMobile) {
+      const p = posts[Math.min(posts.length - 1, Math.max(0, Math.round(ratio * total)))]
+      if (p) props.onJump(p.no)
+      return
+    }
     root.scrollTop = ratio * root.scrollHeight - root.clientHeight / 2
   }
 

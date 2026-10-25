@@ -170,6 +170,8 @@ fun SettingsScreen(vm: AppViewModel) {
             Section("画像のサムネイルを自動で読む")
             for (m in ThumbMode.entries) Choice(m.label, p.thumbMode == m) { p.changeThumbMode(m) }
 
+            Section("スレ表示")
+            Toggle("ミニマップを出す", p.showMinimap) { p.changeShowMinimap(it) }
             Section("NG(${p.ngRules.size} 件)")
             if (p.ngRules.isEmpty()) Text("レスを長押しして、ID・名前・言葉を NG に足せます", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 13.sp)
             for (r in p.ngRules) {
@@ -189,6 +191,17 @@ fun SettingsScreen(vm: AppViewModel) {
 @Composable
 private fun Section(title: String) {
     Text(title, Modifier.padding(start = 20.dp, top = 22.dp, bottom = 8.dp), color = Palette.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+}
+
+@Composable
+private fun Toggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!on) }.heightIn(min = 52.dp).padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), color = Palette.textBody, fontSize = 15.sp)
+        androidx.compose.material3.Switch(on, onChange, colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Palette.accent))
+    }
 }
 
 @Composable

@@ -53,6 +53,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -117,7 +118,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         list.filterNot { it.announcement } + list.filter { it.announcement }
     }
 
-    Box(modifier.fillMaxSize().background(Palette.base).nestedScroll(bars.connection)) {
+    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection)) {
         PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshBoard(page) }, modifier = Modifier.fillMaxSize()) {
             when {
                 page.error != null && page.threads.isEmpty() -> Hint("読み込めませんでした: ${page.error}")

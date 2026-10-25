@@ -71,6 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -127,6 +128,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var revealed by remember { mutableStateOf(emptySet<Int>()) }
     var viewer by remember { mutableStateOf<String?>(null) }
     val own = page.ownNos
+    // 自分への返信(自分のレスにアンカーを付けたレス)
+    val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
     val autoLoad = remember(vm.prefs.thumbMode) {
         when (vm.prefs.thumbMode) {
             ThumbMode.ALWAYS -> true
@@ -172,16 +175,20 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     if (list.isNotEmpty()) popup = Popup(">>$no への返信(${list.size})", list)
                 }
                 'i' -> popup = Popup("ID:$v(${index.idCount[v] ?: 0})", index.posts.filter { it.id == v })
-                // 2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
-                'u' -> if (!vm.openUrl(v)) runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(v))) }
+                // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
+                'u' -> when {
+                    v in index.allImages -> viewer = v
+                    !vm.openUrl(v) -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(v))) }
+                }
             }
         }
     }
 
+    val ended = page.archived || index.posts.size >= 1000
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
 
     Column(modifier.fillMaxSize().background(Palette.base)) {
-        Box(Modifier.weight(1f).fillMaxWidth().nestedScroll(bars.connection)) {
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection)) {
             PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.fillMaxSize()) {
                 when {
                     !page.loaded -> Hint("読み込み中…")
@@ -199,7 +206,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                         color = Palette.textMuted, fontSize = 13.sp,
                                     )
                                 } else page.rendered[p.no]?.let {
-                                    PostItem(it, own = p.no in own, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url })
+                                    PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url })
                                 }
                             }
                             HorizontalDivider(color = Palette.border)
@@ -209,8 +216,23 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 Text(if (page.archived) "-END-(dat 落ち)" else "-END-", color = Palette.textMuted, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                             }
                         }
+                        // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す(今のスマホ版と同じ)
+                        if (ended && filter == null && query.isBlank()) item(key = "next") {
+                            LaunchedEffect(Unit) { if (page.nextCandidates == null) vm.findNext(page) }
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 24.dp).border(1.dp, Palette.border, RoundedCornerShape(12.dp)).background(Palette.surface, RoundedCornerShape(12.dp))) {
+                                NextCandidates(page) { vm.openThread(it) }
+                            }
+                        }
                     }
                 }
+            }
+
+            // ミニマップ(右端。上の帯の下から、書き込み欄の上まで)
+            if (vm.prefs.showMinimap && shown.size > 1) {
+                Minimap(
+                    shown, index, own, toOwn, if (filter == null && query.isBlank()) page.unreadFrom else null, listState,
+                    Modifier.align(Alignment.TopEnd).padding(top = with(density) { bars.topHeight.toDp() } + 4.dp, bottom = 4.dp, end = 2.dp),
+                )
             }
 
             // 上の帯と絞り込みのタブ(スクロールで隠れる)
@@ -230,7 +252,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             // 一番下へ(右下)
             if (!atBottom && index.posts.isNotEmpty()) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 14.dp).size(48.dp)
+                    Modifier.align(Alignment.BottomEnd).padding(end = if (vm.prefs.showMinimap) 34.dp else 16.dp, bottom = 14.dp).size(48.dp)
                         .background(Palette.surface2, RoundedCornerShape(12.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(12.dp))
                         .clickable { scope.launch { listState.animateScrollToItem(maxOf(0, shown.size)) } },
                     contentAlignment = Alignment.Center,
@@ -295,7 +317,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Text(pop.title, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.accent, fontWeight = FontWeight.Bold)
             LazyColumn(Modifier.fillMaxWidth()) {
                 items(pop.posts, key = { it.no }) { p ->
-                    page.rendered[p.no]?.let { PostItem(it, own = p.no in own, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url }) }
+                    page.rendered[p.no]?.let { PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url }) }
                     HorizontalDivider(color = Palette.border)
                 }
                 item { Spacer(Modifier.height(24.dp).navigationBarsPadding()) }
@@ -318,20 +340,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     if (nextSheet) {
         ModalBottomSheet(onDismissRequest = { nextSheet = false }, containerColor = Palette.surface) {
-            Text("次スレの候補", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.textStrong, fontWeight = FontWeight.Bold)
-            val list = page.nextCandidates
-            when {
-                list == null -> Hint("探しています…")
-                list.isEmpty() -> Hint("似たスレタイのスレは、まだ立っていないようです")
-                else -> Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
-                    for (c in list) {
-                        Column(Modifier.fillMaxWidth().clickable { nextSheet = false; vm.openThread(c.thread) }.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Text(c.thread.title, color = Palette.textStrong, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text((if (c.isNextNumber) "番号が次 ・ " else "") + "${c.thread.postCount}レス ・ ${relativeTime(c.thread.createdAt)}", color = Palette.textMuted, fontSize = 12.sp)
-                        }
-                        HorizontalDivider(color = Palette.border)
-                    }
-                }
+            Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+                NextCandidates(page) { nextSheet = false; vm.openThread(it) }
             }
         }
     }
@@ -386,5 +396,23 @@ private fun UnreadDivider() {
         Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.35f)))
         Text("ここから未読", Modifier.padding(horizontal = 10.dp), color = Palette.unread.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
         Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.35f)))
+    }
+}
+
+/** 次スレの候補の一覧(︙ の「次スレを探す」と、終わったスレの一番下で共通) */
+@Composable
+private fun NextCandidates(page: Page.Thread, onOpen: (io.github.yumekui8.bbsnative.bbs.ThreadSummary) -> Unit) {
+    Text("次スレの候補", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textStrong, fontWeight = FontWeight.Bold)
+    val list = page.nextCandidates
+    when {
+        list == null -> Text("探しています…", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
+        list.isEmpty() -> Text("似たスレタイのスレは、まだ立っていないようです", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
+        else -> for ((i, c) in list.withIndex()) {
+            if (i > 0) HorizontalDivider(color = Palette.border)
+            Column(Modifier.fillMaxWidth().clickable { onOpen(c.thread) }.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(c.thread.title, color = Palette.textStrong, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text((if (c.isNextNumber) "番号が次 ・ " else "") + "${c.thread.postCount}レス ・ ${relativeTime(c.thread.createdAt)}", color = Palette.textMuted, fontSize = 12.sp)
+            }
+        }
     }
 }

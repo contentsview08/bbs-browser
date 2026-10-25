@@ -87,11 +87,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).heightIn(min = 120.dp, max = 280.dp).focusRequester(focus),
                 placeholder = { Text("本文") }, colors = fieldColors(), shape = RoundedCornerShape(12.dp),
             )
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${shiftJisByteLength(r.body)} バイト", color = Palette.textMuted, fontSize = 12.sp)
-                Spacer(Modifier.width(12.dp))
-                if (r.notice != null) Text(r.notice!!, Modifier.weight(1f), color = Palette.markDanger, fontSize = 12.sp, maxLines = 3)
-            }
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!r.open) {
@@ -104,7 +99,13 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     Icon(Icons.Filled.Add, null, tint = Palette.textMuted, modifier = Modifier.size(22.dp))
                     Text(if (r.body.isNotBlank()) r.body.lineSequence().first() else "書き込む", color = if (r.body.isNotBlank()) Palette.textBody else Palette.textMuted, fontSize = 16.sp, maxLines = 1)
                 }
-            } else Spacer(Modifier.weight(1f))
+            } else {
+                // 広げているときは、送るボタンの左にバイト数と知らせを出す(1 行ぶん詰める)
+                Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                    Text("${shiftJisByteLength(r.body)} バイト", color = Palette.textMuted, fontSize = 12.sp)
+                    if (r.notice != null) Text(r.notice!!, color = Palette.markDanger, fontSize = 12.sp, maxLines = 3)
+                }
+            }
             Spacer(Modifier.width(10.dp))
             // 送る
             val canSend = !r.sending && r.body.isNotBlank()

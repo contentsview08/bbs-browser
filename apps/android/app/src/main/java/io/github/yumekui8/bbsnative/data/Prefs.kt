@@ -36,6 +36,11 @@ class Prefs(context: Context) {
         private set
     fun changeThumbMode(v: ThumbMode) { thumbMode = v; sp.edit().putString("thumbMode", v.name).apply() }
 
+    /** スレ表示の右端にミニマップを出すか */
+    var showMinimap by mutableStateOf(sp.getBoolean("showMinimap", true))
+        private set
+    fun changeShowMinimap(v: Boolean) { showMinimap = v; sp.edit().putBoolean("showMinimap", v).apply() }
+
     /** 書き込みの名前(前回のもの) */
     var postName: String
         get() = sp.getString("postName", "") ?: ""

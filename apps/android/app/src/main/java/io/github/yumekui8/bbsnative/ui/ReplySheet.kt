@@ -27,6 +27,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -80,6 +85,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 )
                 Checkbox(r.sage, { r.sage = it }, colors = CheckboxDefaults.colors(checkedColor = Palette.accent))
                 Text("sage", color = Palette.textBody, fontSize = 14.sp)
+                AttachButton(vm, r)
                 IconButton(onClick = { r.open = false; vm.saveDraft(page) }) { Icon(Icons.Filled.Close, "しまう", tint = Palette.textMuted) }
             }
             TextField(
@@ -118,6 +124,25 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         }
     }
     PostDialogs(r, onAccept = { vm.acceptConfirm(page) })
+}
+
+/**
+ * 画像を付けるボタン(端末の写真の選択画面を開き、選んだ画像を catbox に上げて URL を本文に入れる)。
+ * 設定で切っているときは、押すと案内を出す(PC 版と同じ)
+ */
+@Composable
+fun AttachButton(vm: AppViewModel, r: ReplyState) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
+    IconButton(
+        onClick = {
+            if (!vm.prefs.uploadEnabled) r.notice = "画像を付けるには、設定の「書き込み欄から画像を上げる」をオンにしてください"
+            else picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+        },
+        enabled = !r.uploading,
+    ) {
+        if (r.uploading) CircularProgressIndicator(Modifier.size(22.dp), color = Palette.accent, strokeWidth = 2.dp)
+        else Icon(Icons.Filled.AddPhotoAlternate, "画像を付ける", tint = Palette.markImage)
+    }
 }
 
 @Composable
@@ -176,6 +201,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                     OutlinedTextField(r.name, { r.name = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("名前") })
                     Checkbox(r.sage, { r.sage = it })
                     Text("sage", color = Palette.textBody)
+                    AttachButton(vm, r)
                 }
                 OutlinedTextField(r.body, { r.body = it }, Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp), placeholder = { Text("本文") })
                 if (r.notice != null) Text(r.notice!!, color = Palette.markDanger, fontSize = 12.sp)

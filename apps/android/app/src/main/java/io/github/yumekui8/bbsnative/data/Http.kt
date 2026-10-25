@@ -54,6 +54,11 @@ object Http {
         execute(req.build())
     }
 
+    /** multipart/form-data で送る(画像のアップロード)。OkHttp が区切り(boundary)を付ける */
+    suspend fun postMultipart(url: String, body: okhttp3.MultipartBody, userAgent: String = USER_AGENT): HttpResponse = withContext(Dispatchers.IO) {
+        execute(Request.Builder().url(url).header("User-Agent", userAgent).post(body).build())
+    }
+
     private fun execute(req: Request): HttpResponse = client.newCall(req).execute().use { res ->
         val h = HashMap<String, String>()
         for (name in res.headers.names()) h[name.lowercase()] = res.header(name) ?: ""

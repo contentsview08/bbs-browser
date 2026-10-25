@@ -40,6 +40,8 @@ class ReplyState {
     var title by mutableStateOf("")
     var body by mutableStateOf("")
     var sending by mutableStateOf(false)
+    /** 画像を上げているところ */
+    var uploading by mutableStateOf(false)
     /** 結果の知らせ(書き込めた・エラー) */
     var notice by mutableStateOf<String?>(null)
     /** エッヂの認証待ち(ブラウザで開く URL と認証コード) */
@@ -401,6 +403,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (insert != null) r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + insert else r.body + "\n" + insert
             r.notice = null
             r.open = true
+        }
+    }
+
+    /** 選んだ画像を catbox に上げて、本文の最後に URL を足す(書き込みとスレ立てで共通) */
+    fun attach(r: ReplyState, uri: android.net.Uri) {
+        if (r.uploading) return
+        r.uploading = true
+        r.notice = null
+        viewModelScope.launch {
+            try {
+                val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), uri)
+                r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url else r.body + "\n" + url
+            } catch (e: Exception) {
+                r.notice = e.message ?: "アップロードできませんでした"
+            } finally {
+                r.uploading = false
+            }
         }
     }
 

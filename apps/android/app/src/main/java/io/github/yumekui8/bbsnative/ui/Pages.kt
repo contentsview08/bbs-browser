@@ -172,6 +172,12 @@ fun SettingsScreen(vm: AppViewModel) {
 
             Section("スレ表示")
             Toggle("ミニマップを出す", p.showMinimap) { p.changeShowMinimap(it) }
+            Section("画像のアップロード(catbox.moe)")
+            Toggle("書き込み欄から画像を上げる", p.uploadEnabled) { p.changeUploadEnabled(it) }
+            Text(
+                "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。",
+                Modifier.padding(horizontal = 24.dp, vertical = 4.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp,
+            )
             Section("NG(${p.ngRules.size} 件)")
             if (p.ngRules.isEmpty()) Text("レスを長押しして、ID・名前・言葉を NG に足せます", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 13.sp)
             for (r in p.ngRules) {

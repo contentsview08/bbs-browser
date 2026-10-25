@@ -41,6 +41,11 @@ class Prefs(context: Context) {
         private set
     fun changeShowMinimap(v: Boolean) { showMinimap = v; sp.edit().putBoolean("showMinimap", v).apply() }
 
+    /** 書き込み欄から画像を catbox.moe に上げるか(匿名で上げた画像は公開され、消せないので既定は切る。PC 版と同じ) */
+    var uploadEnabled by mutableStateOf(sp.getBoolean("uploadEnabled", false))
+        private set
+    fun changeUploadEnabled(v: Boolean) { uploadEnabled = v; sp.edit().putBoolean("uploadEnabled", v).apply() }
+
     /** 書き込みの名前(前回のもの) */
     var postName: String
         get() = sp.getString("postName", "") ?: ""

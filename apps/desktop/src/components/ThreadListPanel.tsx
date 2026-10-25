@@ -433,9 +433,12 @@ export default function ThreadListPanel(props: Props) {
   }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder, reversed])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
+  // visible は App が描き直すたびに作り直される(stateOf が毎回新しい)ので、顔ぶれ・並び・レス数が変わったときだけ知らせる。
+  // visible を見て知らせると、App の描き直し → 新しい visible → また知らせる、が止まらなくなる
+  const shownKey = visible.map((t) => `${threadId(t)}:${t.postCount}`).join('\n')
   useEffect(() => {
     onShownChange.current?.(visible)
-  }, [visible])
+  }, [shownKey])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。

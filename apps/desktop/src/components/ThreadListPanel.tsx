@@ -100,6 +100,8 @@ interface Props {
   serverOrder?: { mode: SortMode; dir: 'desc' | 'asc' }
   /** 並びを変えた(サーバーに並べ替えを頼める掲示板なら、App が一覧を取り直す) */
   onSortChange?: (sort: { mode: SortMode; dir: 'desc' | 'asc' } | null) => void
+  /** 見えているスレの並び(絞り込み・並べ替えのあと)が変わった。スレの最後の「次の未読スレへ」がこの順で探す */
+  onShownChange?: (list: ThreadSummary[]) => void
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
   /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ) */
@@ -429,6 +431,11 @@ export default function ThreadListPanel(props: Props) {
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
   }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder, reversed])
+  const onShownChange = useRef(props.onShownChange)
+  onShownChange.current = props.onShownChange
+  useEffect(() => {
+    onShownChange.current?.(visible)
+  }, [visible])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。

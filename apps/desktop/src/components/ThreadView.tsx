@@ -20,6 +20,7 @@ import AnchorTree from './AnchorTree'
 import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
+import NextUnreadButton from './NextUnreadButton'
 import RefreshButton from './RefreshButton'
 import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
@@ -138,6 +139,12 @@ interface Props {
   /** 1 つのスレのレスの上限(2ch は 1000)。上限のない掲示板は undefined */
   maxPosts?: number
   onOpenThread: (t: ThreadSummary) => void
+  /**
+   * スレの最後の横長の「次の未読スレへ」(PC)。いまのスレ一覧で次に未読のあるスレのスレタイ(なければ '')・未読の数・一覧の名前。
+   * 一覧を開いていなければ undefined(出さない)
+   */
+  nextUnread?: { title: string; count: number; listTitle: string }
+  onOpenNextUnread?: () => void
   /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出す) */
   refreshReadyAt?: number
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
@@ -175,8 +182,8 @@ interface Props {
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
 
-/** レスの絞り込み(web 版と同じ 4 種。選んだもののどれかに当たれば出す) */
-type PostFilter = 'popular' | 'image' | 'video' | 'link'
+/** レスの絞り込み(web 版と同じ 4 種と、PC だけの「自分」。選んだもののどれかに当たれば出す) */
+type PostFilter = 'popular' | 'image' | 'video' | 'link' | 'own'
 // 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
 /** スマホのフッターの高さ */
 export const MOBILE_BAR_H = 60
@@ -188,6 +195,8 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
   { key: 'video', label: '動画', icon: 'play_circle', color: 'var(--c-mark-video)' },
   { key: 'link', label: 'リンク', icon: 'link', color: 'var(--c-mark-link)' },
 ]
+/** 自分の書き込み(書き込み履歴にあるレス)だけを出す。PC だけ(スマホは 5 つを等分に並べているため) */
+const OWN_FILTER = { key: 'own', label: '自分', icon: 'person', color: 'var(--c-own)' } as const
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 /** 選んだレスへ送るときのスクロールの時間 */
 const CURSOR_SCROLL_MS = 160
@@ -693,21 +702,24 @@ export default function ThreadView(props: Props) {
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
   const matchesFilter = useCallback(
     (p: Post, key: PostFilter) =>
-      key === 'popular'
+      key === 'own'
+        ? ownNos.has(p.no)
+        : key === 'popular'
         ? (anchorCounts.get(p.no) ?? 0) >= 3
         : key === 'image'
           ? imageUrlsIn(p.body).length > 0
           : key === 'video'
             ? hasVideo(p.body)
             : hasLink(p.body),
-    [anchorCounts],
+    [anchorCounts, ownNos],
   )
   /** 絞り込みのボタンに出す、当てはまるレスの数(絞り込む前から分かるように) */
   const filterCounts = useMemo(() => {
-    const c: Record<PostFilter, number> = { popular: 0, image: 0, video: 0, link: 0 }
+    const c: Record<PostFilter, number> = { popular: 0, image: 0, video: 0, link: 0, own: 0 }
     for (const p of log.posts) for (const f of FILTERS) if (matchesFilter(p, f.key)) c[f.key]++
+    c.own = log.posts.reduce((n, p) => (ownNos.has(p.no) ? n + 1 : n), 0)
     return c
-  }, [log.posts, matchesFilter])
+  }, [log.posts, matchesFilter, ownNos])
   const visibleNos = useMemo(() => {
     const q = normalizeForSearch(query.trim())
     if (filters.size === 0 && !q) return undefined
@@ -1220,12 +1232,12 @@ export default function ThreadView(props: Props) {
       if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
       const action = readKey.current(keymap, e)
       if (!action) {
-        // 数字キー: 1〜4 で絞り込み(人気・画像・動画・リンク)を付け外し、5 で全部表示(割り当てに使っていなければ)
-        const n = !e.ctrlKey && !e.altKey && !e.metaKey && /^[1-5]$/.test(e.key) ? Number(e.key) : 0
+        // 数字キー: 1〜4 で絞り込み(人気・画像・動画・リンク)を付け外し、5 で全部表示、PC は 6 で自分の書き込み(割り当てに使っていなければ)
+        const n = !e.ctrlKey && !e.altKey && !e.metaKey && (isMobile ? /^[1-5]$/ : /^[1-6]$/).test(e.key) ? Number(e.key) : 0
         if (!n) return
         e.preventDefault()
         if (n === 5) return setFilters(new Set())
-        const key = FILTERS[n - 1].key
+        const key = n === 6 ? OWN_FILTER.key : FILTERS[n - 1].key
         setFilters((f) => {
           const next = new Set(f)
           if (next.has(key)) next.delete(key)
@@ -1718,7 +1730,7 @@ export default function ThreadView(props: Props) {
         </header>
         {/* スマホは、左右の端までを等分して並べる(人気・画像・動画・リンク・すべて) */}
         <div className={`items-center font-medium ${isMobile ? 'grid grid-cols-5 text-[13px]' : 'flex overflow-x-auto no-scrollbar gap-5 px-4 text-base'}`}>
-          {FILTERS.map(({ key, label, icon, color }, i) => {
+          {(isMobile ? FILTERS : [...FILTERS, OWN_FILTER]).map(({ key, label, icon, color }, i) => {
             const active = filters.has(key)
             return (
               <button
@@ -1737,7 +1749,7 @@ export default function ThreadView(props: Props) {
                   active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'
                 }`}
                 style={{ paddingTop: isMobile ? 8 : 10, paddingBottom: isMobile ? 8 : 10 }}
-                title={`${label}だけを出す(${i + 1} キー)`}
+                title={key === 'own' ? '自分の書き込みだけを出す(6 キー)' : `${label}だけを出す(${i + 1} キー)`}
               >
                 {/* 見せ方は設定で(アイコンと文字・アイコンだけ・文字だけ) */}
                 {settings.filterTabLabel !== 'text' && (
@@ -1964,6 +1976,9 @@ export default function ThreadView(props: Props) {
                 )
               })}
               <Divider label="-END-" />
+              {!isMobile && props.nextUnread && props.onOpenNextUnread && (
+                <NextUnreadButton {...props.nextUnread} onOpen={props.onOpenNextUnread} />
+              )}
               {props.onFindNext && (ended || showNext) && <NextThreadBox find={props.onFindNext} onOpen={props.onOpenThread} />}
             </>
           )}

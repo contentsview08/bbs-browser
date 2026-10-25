@@ -58,6 +58,8 @@ export interface TabEvents {
   /** 次スレの候補を探す。スレタイはログのもの(URL から開いたスレは一覧のスレタイが空のため) */
   findNext: (t: ThreadSummary, title: string) => Promise<NextThreadCandidate[]>
   openThread: (t: ThreadSummary) => void
+  /** いまのスレ一覧で、次に未読のあるスレを開く */
+  openNextUnread: () => void
   /** スレの板のスレ一覧を開く(︙ の「板に戻る」) */
   openBoardOf: (t: ThreadSummary) => void
   /** 自分の書き込みを消す(確かめてから) */
@@ -126,6 +128,10 @@ interface Props {
   canDeletePost?: boolean
   /** 本文からアイコンを取り出す(コネクタのもの) */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
+  /** スレの最後の「次の未読スレへ」: 次のスレのスレタイ(なければ '')と未読の数、探した一覧の名前。開いていないタブ・一覧のないときは undefined */
+  nextUnreadTitle?: string
+  nextUnreadCount?: number
+  nextListTitle?: string
   ev: TabEvents
 }
 
@@ -155,6 +161,9 @@ function TabPane({
   canReact,
   canDeletePost,
   splitPostIcon,
+  nextUnreadTitle,
+  nextUnreadCount,
+  nextListTitle,
   ev,
 }: Props) {
   const { id, thread } = tab
@@ -213,6 +222,12 @@ function TabPane({
       onOpenBoard={onOpenBoard}
       onHeaderHeight={ev.setThreadHeaderHeight}
       onOpenThread={ev.openThread}
+      nextUnread={
+        nextUnreadTitle === undefined || nextListTitle === undefined
+          ? undefined
+          : { title: nextUnreadTitle, count: nextUnreadCount ?? 0, listTitle: nextListTitle }
+      }
+      onOpenNextUnread={ev.openNextUnread}
       isFavorite={favorite}
       refreshReadyAt={tab.refreshReadyAt}
       postReadyAt={postReadyAt}

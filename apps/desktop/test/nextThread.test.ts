@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ThreadSummary } from '@bbs-browser/connectors'
-import { findNextThreads, normalizeTitle, titleNumber, titleSimilarity } from '../src/utils/nextThread'
+import { findNextThreads, nextUnreadThread, normalizeTitle, titleNumber, titleSimilarity } from '../src/utils/nextThread'
 
 const t = (key: string, title: string, createdSec = Number(key)): ThreadSummary => ({
   connectorId: '2ch-compat',
@@ -62,5 +62,28 @@ describe('findNextThreads', () => {
       t('7', 'なんでも雑談【悲報】'),
     ])
     expect(found.map((c) => c.thread.key)).toEqual(['9', '5', '7'])
+  })
+})
+
+describe('nextUnreadThread', () => {
+  const list = ['1', '2', '3', '4'].map((k) => t(k, `スレ${k}`))
+  const id = (x: ThreadSummary) => x.key
+  const unread = (m: Record<string, number>) => (x: ThreadSummary) => m[x.key] ?? 0
+
+  it('いまのスレより下から探す', () => {
+    expect(nextUnreadThread(list, '2', id, unread({ 1: 5, 4: 3 }))).toEqual({ thread: list[3], unread: 3 })
+  })
+  it('下になければ上へ戻って探す', () => {
+    expect(nextUnreadThread(list, '3', id, unread({ 1: 5 }))?.thread.key).toBe('1')
+  })
+  it('いまのスレは、未読があっても選ばない', () => {
+    expect(nextUnreadThread(list, '2', id, unread({ 2: 9 }))).toBeUndefined()
+  })
+  it('いまのスレが一覧にない(別の板のスレを読んでいる)ときは、上から探す', () => {
+    expect(nextUnreadThread(list, 'x', id, unread({ 3: 1, 4: 1 }))?.thread.key).toBe('3')
+    expect(nextUnreadThread(list, undefined, id, unread({ 2: 1 }))?.thread.key).toBe('2')
+  })
+  it('空の一覧', () => {
+    expect(nextUnreadThread([], '1', id, () => 1)).toBeUndefined()
   })
 })

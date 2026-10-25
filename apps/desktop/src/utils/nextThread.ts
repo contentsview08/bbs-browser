@@ -87,3 +87,24 @@ export function findNextThreads(
   )
   return out.slice(0, limit)
 }
+
+/**
+ * スレの最後の「次の未読スレへ」で開くスレ。いまのスレ一覧(板・閲覧履歴・お気に入り)に見えている並びのまま、
+ * いまのスレより下から探し、なければ上へ戻って探す(いまのスレは除く)。
+ * 未読の数は呼ぶ側が決める(読んだことのないスレは 0 にする。一覧の「+n」と同じ見方)
+ */
+export function nextUnreadThread(
+  list: readonly ThreadSummary[],
+  currentId: string | undefined,
+  idOf: (t: ThreadSummary) => string,
+  unreadOf: (t: ThreadSummary) => number,
+): { thread: ThreadSummary; unread: number } | undefined {
+  const at = currentId === undefined ? -1 : list.findIndex((t) => idOf(t) === currentId)
+  for (let i = 1; i <= list.length; i++) {
+    const t = list[(at + i) % list.length]
+    if (idOf(t) === currentId) continue
+    const unread = unreadOf(t)
+    if (unread > 0) return { thread: t, unread }
+  }
+  return undefined
+}

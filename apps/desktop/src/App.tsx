@@ -71,7 +71,7 @@ import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { KEY_ACTIONS, modalOpen, actionFor, isReloadKey, keyEventsOf, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
 import ConfirmDialog from './components/ConfirmDialog'
-import { findNextThreads } from './utils/nextThread'
+import { findNextThreads, nextUnreadThread } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
@@ -340,6 +340,15 @@ export default function App() {
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
   const activeTab = tabs.find((t) => t.id === activeId)
+  /** スレ一覧に見えているスレの並び(スレの最後の「次の未読スレへ」が探す順) */
+  const [shownList, setShownList] = useState<ThreadSummary[]>([])
+  // 一覧は描き直しのたびに作り直されるので、顔ぶれ・並び・レス数が同じなら差し替えない(描き直しが続かないように)
+  const onShownChange = useCallback((list: ThreadSummary[]) => {
+    setShownList((prev) =>
+      prev.length === list.length && prev.every((t, i) => threadId(t) === threadId(list[i]) && t.postCount === list[i].postCount) ? prev : list,
+    )
+  }, [])
+  const nextUnreadRef = useRef<{ thread: ThreadSummary; unread: number } | undefined>(undefined)
 
   const run = async (kind: Loading | null, fn: () => Promise<void>) => {
     if (kind) setLoading((s) => new Set(s).add(kind))
@@ -1823,6 +1832,10 @@ export default function App() {
       setHasUploads(true)
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
     }),
+    openNextUnread: useEvent(() => {
+      const next = nextUnreadRef.current
+      if (next) void openThread(next.thread)
+    }),
     findNext: useEvent(async (t: ThreadSummary, title: string) => {
       const list = await connectorOf(t.connectorId).listThreads({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx)
       // その板を開いていれば、取り直したスレ一覧も見せる
@@ -1910,6 +1923,16 @@ export default function App() {
       ? (t: ThreadSummary) => historyStates.get(threadId(t))
       : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
+  const listTitle = favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
+  // スレの最後の「次の未読スレへ」。いまのスレ一覧に見えている並びで、いまのスレの次に未読のあるスレ。
+  // 未読の数は一覧の「+n」と同じ見方(読んだことのないスレは数えない)。タブで開いているスレは、タブの既読・レス数のほうが新しい
+  const nextUnread = nextUnreadThread(shownList, activeId, threadId, (t) => {
+    const st = stateOf(t)
+    if (!st) return 0
+    const tab = tabs.find((x) => x.id === threadId(t))
+    return Math.max(0, Math.max(t.postCount, tab?.log?.postCount ?? 0) - Math.max(st.readNo, tab?.readNo ?? 0))
+  })
+  nextUnreadRef.current = nextUnread
   const listPlacements = useMemo(
     () => resolvePlacements('list', isMobile ? settings.mobileBarLayout : settings.barLayout, isMobile),
     [settings.barLayout, settings.mobileBarLayout],
@@ -2034,7 +2057,8 @@ export default function App() {
           onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
           variant={effectivePostStyle(settings)}
           authorIcon={settings.threadAuthorIcon}
-          title={favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : '板を選択'}
+          title={listTitle ?? '板を選択'}
+          onShownChange={onShownChange}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
           stateOf={stateOf}
           activeId={activeId}
@@ -2224,6 +2248,10 @@ export default function App() {
                   canReact={!!findConnector(t.thread.connectorId)?.react}
                   canDeletePost={!!findConnector(t.thread.connectorId)?.deletePost}
                   splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
+                  // 次の未読スレは、いま開いているタブにだけ渡す(ほかのタブを描き直さないように、中身は文字と数だけ)
+                  nextUnreadTitle={isActive && listTitle !== undefined ? (nextUnread?.thread.title ?? '') : undefined}
+                  nextUnreadCount={isActive ? nextUnread?.unread : undefined}
+                  nextListTitle={isActive ? listTitle : undefined}
                   ev={stableTabEvents}
                 />
               </div>

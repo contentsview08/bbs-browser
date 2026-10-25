@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.em
 import io.github.yumekui8.bbsnative.R
+import io.github.yumekui8.bbsnative.bbs.PostInfo
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +36,10 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun PostItem(
     r: RenderedPost, own: Boolean = false, toOwn: Boolean = false,
-    images: List<String> = emptyList(), autoLoad: Boolean = true, onImage: (String) -> Unit = {}, gross: Boolean = false,
+    info: PostInfo? = null, autoLoad: Boolean = true, onImage: (String) -> Unit = {}, onUrl: (String) -> Unit = {}, gross: Boolean = false,
 ) {
+    val images = info?.images ?: emptyList()
+    val youtube = info?.youtube ?: emptyList()
     val content = @Composable {
         Column(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -49,7 +52,8 @@ fun PostItem(
             } else Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
             if (r.aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = 15.sp, lineHeight = 22.sp)
         }
-        if (images.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross)
+        if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl)
+        if (!info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
         }
     }
     if (!own) return content()

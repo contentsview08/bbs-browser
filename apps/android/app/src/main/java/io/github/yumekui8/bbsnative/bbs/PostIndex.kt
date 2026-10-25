@@ -15,7 +15,13 @@ enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO
  * images: 本文の画像の URL(サムネイルに出す)。display: 画面に出す本文(続いた空行を 1 つにまとめ、最後の空行を消したもの。
  * spans の位置はこの文字列の中の位置)
  */
-class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList(), val display: String = "")
+class PostInfo(
+    val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList(), val display: String = "",
+    /** リンクのカードに出す URL(画像・動画・掲示板のスレ以外) */
+    val links: List<String> = emptyList(),
+    /** YouTube の動画 ID と元の URL(サムネイルに出す) */
+    val youtube: List<Pair<String, String>> = emptyList(),
+)
 
 /** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
 fun displayBody(body: String): String =
@@ -105,6 +111,7 @@ class PostIndex(
         private val ANCHOR = Regex("(?:>>|＞＞|>|＞)(\\d{1,4})(?:[-ー－](\\d{1,4}))?")
         private val URL = Regex("(?:h?ttps?)://[\\w\\-.~:/?#\\[\\]@!$&'()*+,;=%]+")
         private val IMAGE = Regex("\\.(?:jpe?g|png|gif|webp|avif)(?:[?#]|$)", RegexOption.IGNORE_CASE)
+        private val YOUTUBE_ID = Regex("(?:v=|youtu\\.be/|shorts/|live/)([\\w-]{6,})")
         private val VIDEO = Regex("(?:youtube\\.com/(?:watch|shorts|live)|youtu\\.be/|\\.(?:mp4|webm|mov)(?:[?#]|$))", RegexOption.IGNORE_CASE)
 
         fun build(posts: List<Post>): PostIndex {
@@ -118,6 +125,8 @@ class PostIndex(
                 var video = false
                 var link = false
                 val images = ArrayList<String>()
+                val links = ArrayList<String>()
+                val youtube = ArrayList<Pair<String, String>>()
                 val text = displayBody(p.body)
                 for (m in URL.findAll(text)) {
                     val raw = m.value
@@ -128,8 +137,15 @@ class PostIndex(
                             image = true
                             images += url
                         }
-                        VIDEO.containsMatchIn(url) -> video = true
-                        else -> link = true
+                        VIDEO.containsMatchIn(url) -> {
+                            video = true
+                            YOUTUBE_ID.find(url)?.groupValues?.get(1)?.let { id -> if (youtube.none { it.first == id }) youtube += id to url }
+                        }
+                        else -> {
+                            link = true
+                            // 掲示板のスレ・板はアプリの中で開くので、カードにしない
+                            if (!url.contains("/test/read.cgi/") && url !in links) links += url
+                        }
                     }
                 }
                 val targets = HashSet<Int>()
@@ -145,7 +161,7 @@ class PostIndex(
                     replies.getOrPut(n) { ArrayList() } += p.no
                 }
                 spans.sortBy { it.start }
-                info[p.no] = PostInfo(spans, image, video, link, images, text)
+                info[p.no] = PostInfo(spans, image, video, link, images, text, links, youtube)
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
             return PostIndex(posts, info, replyCount, replies, idCount)

@@ -30,6 +30,17 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import io.github.yumekui8.bbsnative.data.Ogp
+import io.github.yumekui8.bbsnative.data.OgpFetcher
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -71,17 +82,23 @@ fun isWifi(context: Context): Boolean = runCatching {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun Thumbnails(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit, blur: Boolean = false) {
+fun Thumbnails(
+    urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit, blur: Boolean = false,
+    youtube: List<Pair<String, String>> = emptyList(), onUrl: (String) -> Unit = {},
+) {
     // グロ注意のレスは、押すまでぼかす
     var blurred by rememberSaveable(urls) { mutableStateOf(blur) }
     FlowRow(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (url in urls) Thumbnail(url, autoLoad, if (blurred) { _ -> blurred = false } else onOpen, blurred)
+        // YouTube は動画の絵(i.ytimg.com)に再生の印を重ねる。押すと YouTube で開く
+        for ((id, url) in youtube) Thumbnail("https://i.ytimg.com/vi/$id/hqdefault.jpg", autoLoad, { onUrl(url) }, blurred, play = true)
     }
 }
 
 @Composable
-private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false) {
-    var load by rememberSaveable(url) { mutableStateOf(autoLoad) }
+private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false) {
+    // 家の中のアドレスは、押すまで読まない
+    var load by rememberSaveable(url) { mutableStateOf(autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)) }
     val shape = RoundedCornerShape(8.dp)
     val box = Modifier.size(96.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
     if (!load) {
@@ -90,6 +107,7 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
     }
     Box(box.clickable { onOpen(url) }, contentAlignment = Alignment.Center) {
         AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier))
+        if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
         if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
     }
 }
@@ -158,4 +176,41 @@ private fun ZoomableImage(url: String, onTap: () -> Unit) {
                 translationY = offset.y
             },
     )
+}
+
+/**
+ * リンクのカード(PC 版の LinkPreview と同じ)。画面に出たときに初めてページを取りに行き、題・説明・サイト名・絵を出す。
+ * 何も取れなければ出さない(リンクの文字は本文にある)。3 つまで
+ */
+@Composable
+fun LinkCards(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit) {
+    Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp)) {
+        for (url in urls.take(3)) LinkCard(url, autoLoad, onOpen)
+    }
+}
+
+@Composable
+private fun LinkCard(url: String, autoLoad: Boolean, onOpen: (String) -> Unit) {
+    var state by remember(url) { mutableStateOf<Ogp?>(null) }
+    var done by remember(url) { mutableStateOf(false) }
+    LaunchedEffect(url) { state = OgpFetcher.fetch(url); done = true }
+    val ogp = state
+    if (done && ogp == null) return
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        Modifier.padding(top = 6.dp).fillMaxWidth().height(80.dp).clip(shape).background(Palette.surface2).border(1.dp, Palette.border, shape).clickable { onOpen(url) },
+    ) {
+        Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+            if (ogp == null) Text("読み込み中…", color = Palette.textMuted, fontSize = 11.sp)
+            else {
+                Text(ogp.title ?: url, color = Palette.textStrong, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
+                ogp.description?.let { Text(it, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                Text(ogp.siteName ?: runCatching { java.net.URI(url).host }.getOrNull() ?: url, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        // 絵はサムネイルと同じく、自動で読む設定のときだけ
+        if (ogp?.image != null && autoLoad) {
+            AsyncImage(ogp.image, null, Modifier.width(112.dp).fillMaxHeight().background(Palette.surface3), contentScale = ContentScale.Crop)
+        }
+    }
 }

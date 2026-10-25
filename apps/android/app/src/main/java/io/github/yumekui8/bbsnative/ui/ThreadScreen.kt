@@ -231,7 +231,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
             } else page.rendered[p.no]?.let {
-                PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url }, gross = p.no in index.gross)
+                PostItem(it, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
         }
     }

@@ -9,15 +9,20 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.yumekui8.bbsnative.bbs.Board
 import io.github.yumekui8.bbsnative.bbs.FetchStatus
+import io.github.yumekui8.bbsnative.bbs.NextThreadCandidate
 import io.github.yumekui8.bbsnative.bbs.Post
 import io.github.yumekui8.bbsnative.bbs.PostIndex
-import io.github.yumekui8.bbsnative.bbs.ThreadSummary
-import io.github.yumekui8.bbsnative.bbs.TwoCh
 import io.github.yumekui8.bbsnative.bbs.PostInput
 import io.github.yumekui8.bbsnative.bbs.PostResult
+import io.github.yumekui8.bbsnative.bbs.ThreadSummary
+import io.github.yumekui8.bbsnative.bbs.TwoCh
+import io.github.yumekui8.bbsnative.bbs.findNextThreads
 import io.github.yumekui8.bbsnative.data.HistoryEntry
 import io.github.yumekui8.bbsnative.data.Http
 import io.github.yumekui8.bbsnative.data.LogDb
+import io.github.yumekui8.bbsnative.data.NgRule
+import io.github.yumekui8.bbsnative.data.PostHistoryEntry
+import io.github.yumekui8.bbsnative.data.Prefs
 import io.github.yumekui8.bbsnative.data.ThreadState
 import io.github.yumekui8.bbsnative.ui.PostLinks
 import io.github.yumekui8.bbsnative.ui.RenderedPost
@@ -27,11 +32,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 書き込み欄の状態(スレごと) */
+/** 書き込み欄の状態(スレごと、スレ立てでも使う) */
 class ReplyState {
     var open by mutableStateOf(false)
     var name by mutableStateOf("")
     var sage by mutableStateOf(true)
+    var title by mutableStateOf("")
     var body by mutableStateOf("")
     var sending by mutableStateOf(false)
     /** 結果の知らせ(書き込めた・エラー) */
@@ -43,20 +49,24 @@ class ReplyState {
     var draftLoaded = false
 }
 
-/** 画面の積み重ね(戻るで 1 つ前へ) */
+/** 画面の積み重ね(戻るで 1 つ前へ)。左のメニューから開くものは、積み重ねを入れ替える */
 sealed interface Page {
-    data object Home : Page
     class Threads(val board: Board) : Page {
         var threads by mutableStateOf<List<ThreadSummary>>(emptyList())
         var states by mutableStateOf<Map<String, ThreadState>>(emptyMap())
         var loading by mutableStateOf(false)
         var error by mutableStateOf<String?>(null)
+        /** スレを立てる欄 */
+        val newThread = ReplyState()
     }
+
     class Thread(val summary: ThreadSummary) : Page {
         var title by mutableStateOf(summary.title)
         var index by mutableStateOf(PostIndex.build(emptyList()))
         /** 組み立て済みのレス(レス番号 → 頭の行と本文)。index と一緒に作る */
         var rendered by mutableStateOf<Map<Int, RenderedPost>>(emptyMap())
+        /** NG に当たるレスの番号(あぼーんと出す) */
+        var ngNos by mutableStateOf<Set<Int>>(emptySet())
         /** レスの中の押せるところの呼び先(画面が関数を入れる) */
         val links = PostLinks()
         /** 開いた時点の「最初の未読」(「ここから未読」の線を引く位置)。0 なら線を引かない */
@@ -70,14 +80,28 @@ sealed interface Page {
         var readNo = 0
         /** 自分の書き込みのレス番号 */
         var ownNos by mutableStateOf<Set<Int>>(emptySet())
+        var favorite by mutableStateOf(false)
+        /** 次スレの候補(探したら入る。null はまだ探していない) */
+        var nextCandidates by mutableStateOf<List<NextThreadCandidate>?>(null)
         val reply = ReplyState()
     }
+
+    /** 板一覧(板を足す) */
+    class Boards : Page
+    class History : Page
+    class FavThreads : Page
+    class PostHistory : Page
+    class Settings : Page
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val db = LogDb(app)
+    val prefs = Prefs(app)
 
-    val stack = mutableStateListOf<Page>(Page.Home)
+    val stack = mutableStateListOf<Page>()
+    var drawerOpen by mutableStateOf(false)
+    /** 画面の下に一瞬出す知らせ */
+    var toast by mutableStateOf<String?>(null)
 
     var favorites by mutableStateOf<List<Board>>(emptyList())
         private set
@@ -89,23 +113,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var history by mutableStateOf<List<HistoryEntry>>(emptyList())
         private set
+    var favThreads by mutableStateOf<List<HistoryEntry>>(emptyList())
+        private set
+    var postHistory by mutableStateOf<List<PostHistoryEntry>>(emptyList())
+        private set
 
     init {
         Http.init(app)
-        viewModelScope.launch { favorites = db.favorites() }
-        viewModelScope.launch { history = db.history() }
+        // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
+        val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
+        openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
+        reloadSide()
+    }
+
+    /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
+    fun reloadSide() {
+        viewModelScope.launch {
+            favorites = db.favorites()
+            history = db.history()
+            favThreads = db.favoriteThreads()
+        }
     }
 
     fun back(): Boolean {
         if (stack.size <= 1) return false
         stack.removeAt(stack.lastIndex)
-        // 戻ったスレ一覧・ホームの未読の数を新しくする
+        // 戻ったスレ一覧の未読の数を新しくする
         when (val top = stack.last()) {
             is Page.Threads -> viewModelScope.launch { top.states = db.threadStates(top.board.url) }
-            is Page.Home -> viewModelScope.launch { history = db.history() }
+            is Page.History, is Page.FavThreads -> reloadSide()
             else -> {}
         }
         return true
+    }
+
+    /** 左のメニューから開く(積み重ねを入れ替える) */
+    fun openRoot(page: Page) {
+        drawerOpen = false
+        stack.clear()
+        stack.add(page)
+        when (page) {
+            is Page.History, is Page.FavThreads -> reloadSide()
+            is Page.PostHistory -> viewModelScope.launch { postHistory = db.postHistory() }
+            is Page.Boards -> if (boards.isEmpty()) loadBoards()
+            else -> {}
+        }
     }
 
     // ── 板 ──
@@ -127,18 +179,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun isFavorite(board: Board) = favorites.any { it.url == board.url }
+
     fun toggleFavorite(board: Board) {
         viewModelScope.launch {
-            db.setFavorite(board, favorites.none { it.url == board.url })
+            val on = !isFavorite(board)
+            db.setFavorite(board, on)
             favorites = db.favorites()
+            toast = if (on) "お気に入り板に足しました" else "お気に入り板から外しました"
         }
     }
 
     // ── スレ一覧 ──
 
-    fun openBoard(board: Board) {
+    /** 板のスレ一覧を開く。root なら積み重ねを入れ替える(左のメニューから) */
+    fun openBoard(board: Board, root: Boolean = true) {
+        drawerOpen = false
         val page = Page.Threads(board)
+        if (root) stack.clear()
         stack.add(page)
+        prefs.lastBoardUrl = board.url
+        prefs.lastBoardName = board.name
         refreshBoard(page)
     }
 
@@ -161,11 +222,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ── スレ ──
 
     fun openThread(t: ThreadSummary) {
+        drawerOpen = false
         val page = Page.Thread(t)
         stack.add(page)
+        page.reply.name = prefs.postName
         viewModelScope.launch {
             // 手元のログを先に出し、そのあと新着を取りに行く
             val log = db.loadThread(t)
+            page.ownNos = db.ownPosts(t)
+            page.favorite = db.isFavoriteThread(t)
             if (log != null) {
                 page.title = log.title
                 page.readNo = log.readNo
@@ -181,7 +246,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 db.touch(t)
             }
             page.loaded = log != null
-            page.ownNos = db.ownPosts(t)
             refreshThread(page, firstOpen = true)
         }
     }
@@ -208,7 +272,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (!firstOpen && old.isNotEmpty() && r.posts.isNotEmpty()) page.unreadFrom = r.posts.first().no
                     setPosts(page, all)
                     if (firstOpen && log == null) page.openAt = 1
-                }
+                } else if (!firstOpen) toast = "新着はありません"
             } catch (e: Exception) {
                 page.error = e.message ?: e.toString()
             } finally {
@@ -218,14 +282,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** レスの下ごしらえと組み立てを、画面とは別のスレッドで済ませてから入れる */
+    /** レスの下ごしらえと組み立て(と NG の判定)を、画面とは別のスレッドで済ませてから入れる */
     private suspend fun setPosts(page: Page.Thread, posts: List<Post>) {
-        val (index, rendered) = withContext(Dispatchers.Default) {
+        val rules = prefs.ngRules
+        val result = withContext(Dispatchers.Default) {
             val i = PostIndex.build(posts)
-            i to renderPosts(i, page.links)
+            Triple(i, renderPosts(i, page.links), ngOf(posts, rules))
         }
-        page.rendered = rendered
-        page.index = index
+        page.rendered = result.second
+        page.ngNos = result.third
+        page.index = result.first
+    }
+
+    private fun ngOf(posts: List<Post>, rules: List<NgRule>): Set<Int> {
+        if (rules.isEmpty()) return emptySet()
+        return posts.filter { p ->
+            rules.any { r ->
+                when (r.target) {
+                    "id" -> p.id != null && p.id == r.pattern
+                    "name" -> p.name.contains(r.pattern)
+                    else -> p.body.contains(r.pattern, ignoreCase = true)
+                }
+            }
+        }.map { it.no }.toSet()
+    }
+
+    /** NG を足して、開いているスレに当て直す */
+    fun addNg(rule: NgRule) {
+        prefs.addNg(rule)
+        reapplyNg()
+        toast = "NG に足しました"
+    }
+
+    fun removeNg(rule: NgRule) {
+        prefs.removeNg(rule)
+        reapplyNg()
+    }
+
+    private fun reapplyNg() {
+        val rules = prefs.ngRules
+        for (p in stack) if (p is Page.Thread) viewModelScope.launch { p.ngNos = withContext(Dispatchers.Default) { ngOf(p.index.posts, rules) } }
     }
 
     fun markRead(page: Page.Thread, no: Int) {
@@ -234,16 +330,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { db.markRead(page.summary, no) }
     }
 
-    /** 2ch 互換のスレの URL(…/test/read.cgi/板/番号/)なら、アプリの中で開いて true */
+    fun toggleFavoriteThread(page: Page.Thread) {
+        viewModelScope.launch {
+            val on = !page.favorite
+            db.setFavoriteThread(page.summary, page.title, on)
+            page.favorite = on
+            favThreads = db.favoriteThreads()
+            toast = if (on) "お気に入りのスレに足しました" else "お気に入りのスレから外しました"
+        }
+    }
+
+    /** 次スレを探す(板のスレ一覧を取り直して、似たスレタイを並べる) */
+    fun findNext(page: Page.Thread) {
+        page.nextCandidates = null
+        viewModelScope.launch {
+            try {
+                val list = TwoCh.listThreads(Board(page.summary.boardUrl, ""))
+                page.nextCandidates = findNextThreads(page.summary, page.title, list)
+            } catch (e: Exception) {
+                toast = "探せませんでした: ${e.message ?: e}"
+                page.nextCandidates = emptyList()
+            }
+        }
+    }
+
+    /** このスレの板のスレ一覧を開く */
+    fun openBoardOf(page: Page.Thread) {
+        val url = page.summary.boardUrl
+        openBoard(favorites.firstOrNull { it.url == url } ?: boards.firstOrNull { it.url == url } ?: Board(url, url.removePrefix("https://").trimEnd('/')), root = true)
+    }
+
+    /** 2ch 互換のスレ・板の URL なら、アプリの中で開いて true */
     fun openUrl(url: String): Boolean {
-        val m = Regex("^(https?://[^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(url) ?: return false
-        val key = m.groupValues[3]
-        val created = if (key.length == 10) key.toLong() * 1000 else null
+        val u = url.trim()
         // 本文の URL は http:// のことが多い。Android は暗号化しない通信を断るので https:// で開く
-        // (エッジ・5ch は https で読める。お気に入りの板とも同じスレとして扱える)
-        val origin = m.groupValues[1].replaceFirst(Regex("^http://"), "https://")
-        openThread(ThreadSummary("$origin/${m.groupValues[2]}/", key, "", 0, 0, created))
-        return true
+        val thread = Regex("^https?://([^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
+        if (thread != null) {
+            val key = thread.groupValues[3]
+            val created = if (key.length == 10) key.toLong() * 1000 else null
+            openThread(ThreadSummary("https://${thread.groupValues[1]}/${thread.groupValues[2]}/", key, "", 0, 0, created))
+            return true
+        }
+        val board = Regex("^https?://([^/?#]+)/([^/?#]+)/?$").find(u)
+        if (board != null && !board.groupValues[2].contains('.')) {
+            val bu = "https://${board.groupValues[1]}/${board.groupValues[2]}/"
+            openBoard(favorites.firstOrNull { it.url == bu } ?: Board(bu, board.groupValues[2]), root = true)
+            return true
+        }
+        return false
+    }
+
+    fun deleteLog(page: Page.Thread) {
+        viewModelScope.launch {
+            db.deleteThread(page.summary)
+            back()
+            toast = "ログを削除しました"
+        }
     }
 
     // ── 書き込み ──
@@ -270,17 +412,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val r = page.reply
         if (r.sending || r.body.isBlank()) return
         val body = r.body
-        handlePost(page, body) { TwoCh.createPost(page.summary, PostInput(r.name, if (r.sage) "sage" else "", body)) }
+        val mail = if (r.sage) "sage" else ""
+        prefs.postName = r.name
+        handlePost(page, body, r.name, mail) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
     }
 
     /** 5ch の書き込み確認で承諾した */
     fun acceptConfirm(page: Page.Thread) {
         val c = page.reply.confirm ?: return
         page.reply.confirm = null
-        handlePost(page, page.reply.body) { TwoCh.submitConfirm(c) }
+        handlePost(page, page.reply.body, page.reply.name, if (page.reply.sage) "sage" else "") { TwoCh.submitConfirm(c) }
     }
 
-    private fun handlePost(page: Page.Thread, body: String, send: suspend () -> PostResult) {
+    private fun handlePost(page: Page.Thread, body: String, name: String, mail: String, send: suspend () -> PostResult) {
         val r = page.reply
         viewModelScope.launch {
             r.sending = true
@@ -291,7 +435,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         r.body = ""
                         r.open = false
                         db.saveDraft(page.summary, "")
-                        r.notice = "書き込みました"
+                        toast = "書き込みました"
                         refreshThread(page)?.join()
                         // 自分の書き込みを覚える。番号が返らない掲示板では、新着から同じ本文の一番新しいレスを探す
                         val no = res.resNumber ?: page.index.posts.lastOrNull { it.body.trim() == body.trim() }?.no
@@ -299,6 +443,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             db.addOwnPost(page.summary, no)
                             page.ownNos = page.ownNos + no
                         }
+                        db.addPostHistory(page.summary, page.title, no, name, mail, body)
                     }
                     is PostResult.Auth -> r.auth = res
                     is PostResult.Confirm -> r.confirm = res
@@ -312,10 +457,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteLog(page: Page.Thread) {
+    /** スレを立てる。立てたら一覧を取り直し、同じスレタイのスレを開く */
+    fun createThread(page: Page.Threads) {
+        val r = page.newThread
+        if (r.sending || r.title.isBlank() || r.body.isBlank()) return
+        val mail = if (r.sage) "sage" else ""
+        prefs.postName = r.name
         viewModelScope.launch {
-            db.deleteThread(page.summary)
-            back()
+            r.sending = true
+            r.notice = null
+            try {
+                when (val res = TwoCh.createThread(page.board, r.title, PostInput(r.name, mail, r.body))) {
+                    is PostResult.Ok -> {
+                        val title = r.title.trim()
+                        r.title = ""
+                        r.body = ""
+                        r.open = false
+                        toast = "スレを立てました"
+                        page.threads = TwoCh.listThreads(page.board)
+                        page.threads.firstOrNull { it.title.trim() == title }?.let { openThread(it) }
+                    }
+                    is PostResult.Auth -> r.auth = res
+                    is PostResult.Confirm -> r.confirm = res
+                    is PostResult.Error -> r.notice = res.message
+                }
+            } catch (e: Exception) {
+                r.notice = "立てられませんでした: ${e.message ?: e}"
+            } finally {
+                r.sending = false
+            }
         }
     }
 }

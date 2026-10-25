@@ -22,6 +22,9 @@ data class ThreadState(val readNo: Int, val postCount: Int)
 /** 手元のスレのログ */
 class ThreadLog(val title: String, val posts: List<Post>, val readNo: Int, val cursor: DatCursor?, val archived: Boolean)
 
+/** 書き込み履歴の 1 行 */
+data class PostHistoryEntry(val thread: ThreadSummary, val no: Int?, val body: String, val postedAt: Long)
+
 /** 閲覧履歴の 1 行 */
 data class HistoryEntry(val thread: ThreadSummary, val readNo: Int, val readAt: Long)
 
@@ -198,6 +201,59 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
 
     suspend fun draft(t: ThreadSummary): String = io {
         readableDatabase.rawQuery("SELECT body FROM drafts WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { c -> if (c.moveToFirst()) c.getString(0) else "" }
+    }
+
+    // ── お気に入りのスレ ──
+
+    /** お気に入りのスレ(手元の既読・レス数つき。開いたことがなければ 0) */
+    suspend fun favoriteThreads(): List<HistoryEntry> = io {
+        readableDatabase.rawQuery(
+            "SELECT f.board_url, f.key, f.title, COALESCE(t.post_count, 0), COALESCE(t.read_no, 0), f.added_at, f.created_at FROM favorite_threads f LEFT JOIN threads t ON t.board_url = f.board_url AND t.key = f.key ORDER BY f.sort, f.added_at",
+            null,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    val t = ThreadSummary(c.getString(0), c.getString(1), c.getString(2), c.getInt(3), 0, if (c.isNull(6)) null else c.getLong(6))
+                    add(HistoryEntry(t, c.getInt(4), c.getLong(5)))
+                }
+            }
+        }
+    }
+
+    suspend fun isFavoriteThread(t: ThreadSummary): Boolean = io {
+        readableDatabase.rawQuery("SELECT 1 FROM favorite_threads WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { it.moveToFirst() }
+    }
+
+    suspend fun setFavoriteThread(t: ThreadSummary, title: String, on: Boolean) = io {
+        if (on) {
+            writableDatabase.execSQL(
+                "INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), ?)",
+                arrayOf<Any?>(t.boardUrl, t.key, CONNECTOR, title, t.createdAt, System.currentTimeMillis()),
+            )
+        } else writableDatabase.delete("favorite_threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
+    }
+
+    // ── 書き込み履歴 ──
+
+    suspend fun addPostHistory(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String) = io {
+        writableDatabase.execSQL(
+            "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            arrayOf<Any?>(CONNECTOR, t.boardUrl, t.key, title, no, name, mail, body, System.currentTimeMillis()),
+        )
+    }
+
+    suspend fun postHistory(limit: Int = 300): List<PostHistoryEntry> = io {
+        readableDatabase.rawQuery(
+            "SELECT board_url, key, thread_title, no, body, posted_at FROM post_history ORDER BY posted_at DESC LIMIT ?", arrayOf(limit.toString()),
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    val key = c.getString(1)
+                    val created = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
+                    add(PostHistoryEntry(ThreadSummary(c.getString(0), key, c.getString(2), 0, 0, created), if (c.isNull(3)) null else c.getInt(3), c.getString(4), c.getLong(5)))
+                }
+            }
+        }
     }
 
     suspend fun deleteThread(t: ThreadSummary) = io {

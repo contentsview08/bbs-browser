@@ -239,6 +239,21 @@ object TwoCh {
         return sendBbsCgi("${u.scheme}://${u.host}/test/bbs.cgi", fields, webUrl(t))
     }
 
+    /** スレを立てる */
+    suspend fun createThread(board: Board, title: String, input: PostInput): PostResult {
+        val u = java.net.URI(board.url)
+        val fields = linkedMapOf(
+            "bbs" to u.path.trim('/'),
+            "subject" to title,
+            "time" to (System.currentTimeMillis() / 1000).toString(),
+            "FROM" to input.name,
+            "mail" to input.mail,
+            "MESSAGE" to input.body,
+            "submit" to "新規スレッド作成",
+        )
+        return sendBbsCgi("${u.scheme}://${u.host}/test/bbs.cgi", fields, board.url)
+    }
+
     /** 書き込み確認で承諾したときに送り直す */
     suspend fun submitConfirm(c: PostResult.Confirm): PostResult = sendBbsCgi(c.url, c.fields, c.referer)
 

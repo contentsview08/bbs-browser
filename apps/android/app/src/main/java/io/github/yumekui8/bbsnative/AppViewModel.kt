@@ -137,9 +137,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** スレ一覧に戻る前に見ていたスレ(「進む」で開き直す) */
+    private var forwardPage: Page.Thread? = null
+    val canForward get() = forwardPage != null
+
     fun back(): Boolean {
         if (stack.size <= 1) return false
-        stack.removeAt(stack.lastIndex)
+        forwardPage = stack.removeAt(stack.lastIndex) as? Page.Thread
         // 戻ったスレ一覧の未読の数を新しくする
         when (val top = stack.last()) {
             is Page.Threads -> viewModelScope.launch { top.states = db.threadStates(top.board.url) }
@@ -147,6 +151,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> {}
         }
         return true
+    }
+
+    /** 戻る前に見ていたスレを開き直す */
+    fun forward() {
+        val p = forwardPage ?: run { toast = "進む先がありません"; return }
+        forwardPage = null
+        stack.add(p)
     }
 
     /** 左のメニューから開く(積み重ねを入れ替える) */
@@ -226,6 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openThread(t: ThreadSummary) {
         drawerOpen = false
         val page = Page.Thread(t)
+        forwardPage = null
         stack.add(page)
         page.reply.name = prefs.postName
         viewModelScope.launch {

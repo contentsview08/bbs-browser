@@ -118,7 +118,17 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         list.filterNot { it.announcement } + list.filter { it.announcement }
     }
 
-    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection)) {
+    val swipe = rememberSwipeState()
+    // なぞる操作(今のスマホ版の既定と同じ割り当て)
+    val gestures = mapOf(
+        "right" to SwipeAction("メニュー") { vm.drawerOpen = true },
+        "left" to SwipeAction("進む") { vm.forward() },
+        "right,up" to SwipeAction("一番下へ") { scope.launch { listState.scrollToItem(maxOf(0, shown.size - 1)) } },
+        "right,down" to SwipeAction("先頭へ") { scope.launch { listState.scrollToItem(0); bars.show() } },
+        "left,down" to SwipeAction("更新") { vm.refreshBoard(page) },
+        "left,up" to SwipeAction("スレを立てる") { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+    )
+    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures)) {
         PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshBoard(page) }, modifier = Modifier.fillMaxSize()) {
             when {
                 page.error != null && page.threads.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
@@ -174,6 +184,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 IconButton(onClick = { vm.refreshBoard(page) }, enabled = !page.loading) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted) }
             }
         }
+
+        SwipeLabel(swipe)
 
         // スレを立てる(右下の丸いボタン)
         FloatingActionButton(

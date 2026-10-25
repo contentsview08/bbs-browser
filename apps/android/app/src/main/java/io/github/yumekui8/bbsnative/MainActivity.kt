@@ -59,7 +59,8 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(drawer) { snapshotFlow { drawer.currentValue }.collect { vm.drawerOpen = it == DrawerValue.Open } }
                     BackHandler(enabled = vm.drawerOpen) { vm.drawerOpen = false }
                     BackHandler(enabled = !vm.drawerOpen && vm.stack.size > 1) { vm.back() }
-                    ModalNavigationDrawer(drawerState = drawer, drawerContent = { DrawerContent(vm) }) {
+                    // 引き出しの指の操作は、開いているとき(閉じる)だけ。開くのはスワイプの操作(左の端から右へ)に任せる
+                    ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {
                             when (val page = vm.stack.lastOrNull()) {
                                 is Page.Threads -> ThreadListScreen(vm, page)

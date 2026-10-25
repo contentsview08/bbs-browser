@@ -127,6 +127,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     /** 中身を見せている NG のレス */
     var revealed by remember { mutableStateOf(emptySet<Int>()) }
     var viewer by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val swipe = rememberSwipeState()
     val own = page.ownNos
     // 自分への返信(自分のレスにアンカーを付けたレス)
     val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
@@ -188,14 +190,24 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
 
     Column(modifier.fillMaxSize().background(Palette.base)) {
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection)) {
+        // なぞる操作(今のスマホ版の既定と同じ割り当て)。左の端から右へはメニュー
+        val gestures = mapOf(
+            "right" to SwipeAction("一覧に戻る") { vm.back() },
+            "left" to SwipeAction("書き込む") { vm.openReply(page) },
+            "right,up" to SwipeAction("一番下へ") { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) } },
+            "right,down" to SwipeAction("先頭へ") { scope.launch { listState.scrollToItem(0); bars.show() } },
+            "left,down" to SwipeAction("更新") { vm.refreshThread(page) },
+            "left,up" to SwipeAction("ログを削除") { confirmDelete = true },
+        )
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures) { vm.drawerOpen = true }) {
             PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.fillMaxSize()) {
                 when {
                     !page.loaded -> Hint("読み込み中…")
                     page.error != null && index.posts.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
                     else -> LazyColumn(
                         Modifier.fillMaxSize(), state = listState,
-                        contentPadding = PaddingValues(top = with(density) { bars.topHeight.toDp() }),
+                        // ミニマップの幅だけ右を空けて、レスが下に潜らないようにする
+                        contentPadding = PaddingValues(top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp),
                     ) {
                         items(shown, key = { it.no }, contentType = { if (it.no in page.ngNos) 1 else 0 }) { p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
@@ -234,6 +246,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     Modifier.align(Alignment.TopEnd).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() } + 4.dp, bottom = 4.dp, end = 2.dp),
                 )
             }
+
+            SwipeLabel(swipe)
 
             // 上の帯と絞り込みのタブ(スクロールで隠れる)
             Column(Modifier.fillMaxWidth().onSizeChanged { bars.topHeight = it.height.toFloat() }.graphicsLayer { translationY = -bars.hidden * bars.topHeight }) {
@@ -344,6 +358,16 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 NextCandidates(page) { nextSheet = false; vm.openThread(it) }
             }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("ログを削除しますか") },
+            text = { Text("このスレの手元のログを消して、一覧に戻ります。") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; vm.deleteLog(page) }) { Text("削除する", color = Palette.markDanger) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("やめる") } },
+        )
     }
 
     viewer?.let { url -> ImageViewer(index.allImages.ifEmpty { listOf(url) }, url, onClose = { viewer = null }) }

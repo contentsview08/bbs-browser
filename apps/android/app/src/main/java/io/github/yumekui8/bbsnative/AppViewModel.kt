@@ -13,15 +13,35 @@ import io.github.yumekui8.bbsnative.bbs.Post
 import io.github.yumekui8.bbsnative.bbs.PostIndex
 import io.github.yumekui8.bbsnative.bbs.ThreadSummary
 import io.github.yumekui8.bbsnative.bbs.TwoCh
+import io.github.yumekui8.bbsnative.bbs.PostInput
+import io.github.yumekui8.bbsnative.bbs.PostResult
 import io.github.yumekui8.bbsnative.data.HistoryEntry
+import io.github.yumekui8.bbsnative.data.Http
 import io.github.yumekui8.bbsnative.data.LogDb
 import io.github.yumekui8.bbsnative.data.ThreadState
 import io.github.yumekui8.bbsnative.ui.PostLinks
 import io.github.yumekui8.bbsnative.ui.RenderedPost
 import io.github.yumekui8.bbsnative.ui.renderPosts
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** 書き込み欄の状態(スレごと) */
+class ReplyState {
+    var open by mutableStateOf(false)
+    var name by mutableStateOf("")
+    var sage by mutableStateOf(true)
+    var body by mutableStateOf("")
+    var sending by mutableStateOf(false)
+    /** 結果の知らせ(書き込めた・エラー) */
+    var notice by mutableStateOf<String?>(null)
+    /** エッヂの認証待ち(ブラウザで開く URL と認証コード) */
+    var auth by mutableStateOf<PostResult.Auth?>(null)
+    /** 5ch の書き込み確認(承諾したら送り直す) */
+    var confirm by mutableStateOf<PostResult.Confirm?>(null)
+    var draftLoaded = false
+}
 
 /** 画面の積み重ね(戻るで 1 つ前へ) */
 sealed interface Page {
@@ -48,6 +68,9 @@ sealed interface Page {
         var archived by mutableStateOf(false)
         var error by mutableStateOf<String?>(null)
         var readNo = 0
+        /** 自分の書き込みのレス番号 */
+        var ownNos by mutableStateOf<Set<Int>>(emptySet())
+        val reply = ReplyState()
     }
 }
 
@@ -68,6 +91,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     init {
+        Http.init(app)
         viewModelScope.launch { favorites = db.favorites() }
         viewModelScope.launch { history = db.history() }
     }
@@ -157,13 +181,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 db.touch(t)
             }
             page.loaded = log != null
+            page.ownNos = db.ownPosts(t)
             refreshThread(page, firstOpen = true)
         }
     }
 
-    fun refreshThread(page: Page.Thread, firstOpen: Boolean = false) {
-        if (page.loading) return
-        viewModelScope.launch {
+    /** 新着を取る。取り直しの最中なら何もしない(null)。終わりを待つときは返した Job を join する */
+    fun refreshThread(page: Page.Thread, firstOpen: Boolean = false): Job? {
+        if (page.loading) return null
+        return viewModelScope.launch {
             page.loading = true
             page.error = null
             try {
@@ -206,6 +232,84 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (no <= page.readNo) return
         page.readNo = no
         viewModelScope.launch { db.markRead(page.summary, no) }
+    }
+
+    /** 2ch 互換のスレの URL(…/test/read.cgi/板/番号/)なら、アプリの中で開いて true */
+    fun openUrl(url: String): Boolean {
+        val m = Regex("^(https?://[^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(url) ?: return false
+        val key = m.groupValues[3]
+        val created = if (key.length == 10) key.toLong() * 1000 else null
+        // 本文の URL は http:// のことが多い。Android は暗号化しない通信を断るので https:// で開く
+        // (エッジ・5ch は https で読める。お気に入りの板とも同じスレとして扱える)
+        val origin = m.groupValues[1].replaceFirst(Regex("^http://"), "https://")
+        openThread(ThreadSummary("$origin/${m.groupValues[2]}/", key, "", 0, 0, created))
+        return true
+    }
+
+    // ── 書き込み ──
+
+    /** 書き込み欄を開く。insert(「>>12」など)があれば本文の最後に足す */
+    fun openReply(page: Page.Thread, insert: String? = null) {
+        val r = page.reply
+        viewModelScope.launch {
+            if (!r.draftLoaded) {
+                r.draftLoaded = true
+                if (r.body.isEmpty()) r.body = db.draft(page.summary)
+            }
+            if (insert != null) r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + insert else r.body + "\n" + insert
+            r.notice = null
+            r.open = true
+        }
+    }
+
+    fun saveDraft(page: Page.Thread) {
+        viewModelScope.launch { db.saveDraft(page.summary, page.reply.body) }
+    }
+
+    fun send(page: Page.Thread) {
+        val r = page.reply
+        if (r.sending || r.body.isBlank()) return
+        val body = r.body
+        handlePost(page, body) { TwoCh.createPost(page.summary, PostInput(r.name, if (r.sage) "sage" else "", body)) }
+    }
+
+    /** 5ch の書き込み確認で承諾した */
+    fun acceptConfirm(page: Page.Thread) {
+        val c = page.reply.confirm ?: return
+        page.reply.confirm = null
+        handlePost(page, page.reply.body) { TwoCh.submitConfirm(c) }
+    }
+
+    private fun handlePost(page: Page.Thread, body: String, send: suspend () -> PostResult) {
+        val r = page.reply
+        viewModelScope.launch {
+            r.sending = true
+            r.notice = null
+            try {
+                when (val res = send()) {
+                    is PostResult.Ok -> {
+                        r.body = ""
+                        r.open = false
+                        db.saveDraft(page.summary, "")
+                        r.notice = "書き込みました"
+                        refreshThread(page)?.join()
+                        // 自分の書き込みを覚える。番号が返らない掲示板では、新着から同じ本文の一番新しいレスを探す
+                        val no = res.resNumber ?: page.index.posts.lastOrNull { it.body.trim() == body.trim() }?.no
+                        if (no != null) {
+                            db.addOwnPost(page.summary, no)
+                            page.ownNos = page.ownNos + no
+                        }
+                    }
+                    is PostResult.Auth -> r.auth = res
+                    is PostResult.Confirm -> r.confirm = res
+                    is PostResult.Error -> r.notice = res.message
+                }
+            } catch (e: Exception) {
+                r.notice = "書き込めませんでした: ${e.message ?: e}"
+            } finally {
+                r.sending = false
+            }
+        }
     }
 
     fun deleteLog(page: Page.Thread) {

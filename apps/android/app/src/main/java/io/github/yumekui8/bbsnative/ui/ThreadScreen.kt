@@ -2,6 +2,9 @@ package io.github.yumekui8.bbsnative.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +37,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,17 +56,19 @@ import kotlinx.coroutines.flow.collectLatest
 /** ポップアップに出すもの(アンカー先・返信・同じ ID) */
 private class Popup(val title: String, val posts: List<Post>)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modifier) {
     val index = page.index
     var filters by remember { mutableStateOf(emptySet<Filter>()) }
     var popup by remember { mutableStateOf<Popup?>(null) }
-    val counts = remember(index) { Filter.entries.associateWith { index.count(it) } }
-    val shown = remember(index, filters) {
-        if (filters.isEmpty()) index.posts else index.posts.filter { p -> filters.any { index.matches(p, it) } }
+    val own = page.ownNos
+    val counts = remember(index, own) { Filter.entries.associateWith { index.count(it, own) } }
+    val shown = remember(index, filters, own) {
+        if (filters.isEmpty()) index.posts else index.posts.filter { p -> filters.any { index.matches(p, it, own) } }
     }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     // 開いたときの位置へ(手元のログ・新着が届いて openAt が決まったら一度だけ)
     LaunchedEffect(page.openAt, index) {
@@ -89,6 +97,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     if (list.isNotEmpty()) popup = Popup(">>$no への返信(${list.size})", list)
                 }
                 'i' -> popup = Popup("ID:$v(${index.idCount[v] ?: 0})", index.posts.filter { it.id == v })
+                // 2ch 互換のスレの URL はアプリの中で、それ以外はブラウザで
+                'u' -> if (!vm.openUrl(v)) runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(v))) }
             }
         }
     }
@@ -96,14 +106,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     Column(modifier.fillMaxSize()) {
         TopBar(page.title, onBack = { vm.back() }, onRefresh = { vm.refreshThread(page) }, refreshing = page.loading, subtitle = "${index.posts.size}")
         FilterBar(filters, counts) { f -> filters = if (f == null) emptySet() else if (f in filters) filters - f else filters + f }
-        PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 !page.loaded -> Hint("読み込み中…")
                 page.error != null && index.posts.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
                 else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     items(shown, key = { it.no }, contentType = { 0 }) { p ->
                         if (filters.isEmpty() && p.no == page.unreadFrom) UnreadDivider()
-                        page.rendered[p.no]?.let { PostItem(it) }
+                        // 長押しで、そのレスへの返信を書き込み欄に入れて開く
+                        Box(Modifier.combinedClickable(interactionSource = null, indication = null, onClick = {}, onLongClick = { vm.openReply(page, ">>${p.no}\n") })) {
+                            page.rendered[p.no]?.let { PostItem(it, own = p.no in own) }
+                        }
                         HorizontalDivider(color = Palette.border)
                     }
                     item(key = "end") {
@@ -114,14 +127,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 }
             }
         }
+        BottomBar(page.reply.notice, onWrite = { vm.openReply(page) })
     }
+
+    ReplySheet(vm, page)
 
     popup?.let { pop ->
         ModalBottomSheet(onDismissRequest = { popup = null }, containerColor = Palette.surface) {
             Text(pop.title, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.accent, fontWeight = FontWeight.Bold)
             LazyColumn(Modifier.fillMaxWidth()) {
                 items(pop.posts, key = { it.no }) { p ->
-                    page.rendered[p.no]?.let { PostItem(it) }
+                    page.rendered[p.no]?.let { PostItem(it, own = p.no in own) }
                     HorizontalDivider(color = Palette.border)
                 }
                 item { Spacer(Modifier.height(24.dp).navigationBarsPadding()) }
@@ -145,7 +161,7 @@ private fun ReadTracker(state: LazyListState, shown: List<Post>, onRead: (Int) -
 
 @Composable
 private fun FilterBar(filters: Set<Filter>, counts: Map<Filter, Int>, onToggle: (Filter?) -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Palette.base), horizontalArrangement = Arrangement.SpaceEvenly) {
+    Row(Modifier.fillMaxWidth().background(Palette.base).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         for (f in Filter.entries) FilterTab("${f.label} ${counts[f] ?: 0}", f in filters) { onToggle(f) }
         FilterTab("すべて", filters.isEmpty()) { onToggle(null) }
     }

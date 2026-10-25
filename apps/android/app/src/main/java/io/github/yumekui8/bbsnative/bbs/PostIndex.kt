@@ -9,7 +9,7 @@ sealed class Span(val start: Int, val end: Int) {
     class Url(start: Int, end: Int, val url: String) : Span(start, end)
 }
 
-enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO("動画"), LINK("リンク") }
+enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO("動画"), LINK("リンク"), OWN("自分") }
 
 class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean)
 
@@ -22,9 +22,11 @@ class PostIndex(
     val replies: Map<Int, List<Int>>,
     val idCount: Map<String, Int>,
 ) {
-    fun matches(p: Post, f: Filter): Boolean {
+    /** own: 自分の書き込みのレス番号(「自分」の絞り込み) */
+    fun matches(p: Post, f: Filter, own: Set<Int> = emptySet()): Boolean {
         val i = info[p.no] ?: return false
         return when (f) {
+            Filter.OWN -> p.no in own
             Filter.POPULAR -> (replyCount[p.no] ?: 0) >= 3
             Filter.IMAGE -> i.image
             Filter.VIDEO -> i.video
@@ -32,7 +34,7 @@ class PostIndex(
         }
     }
 
-    fun count(f: Filter): Int = posts.count { matches(it, f) }
+    fun count(f: Filter, own: Set<Int> = emptySet()): Int = posts.count { matches(it, f, own) }
 
     companion object {
         private val ANCHOR = Regex("(?:>>|＞＞|>|＞)(\\d{1,4})(?:[-ー－](\\d{1,4}))?")

@@ -18,7 +18,7 @@ class RenderedPost(val header: AnnotatedString, val body: AnnotatedString)
 
 /**
  * レスの中の押せるところ(番号・ID・アンカー)を押したときに呼ぶ先。組み立てた文字列は使い回すので、
- * 押したときの動きは、ここに入れた関数を差し替えて変える。tag は「a:から-まで」「r:番号」「i:ID」
+ * 押したときの動きは、ここに入れた関数を差し替えて変える。tag は「a:から-まで」「r:番号」「i:ID」「u:URL」
  */
 class PostLinks : LinkInteractionListener {
     var onTag: (String) -> Unit = {}
@@ -74,7 +74,8 @@ fun renderPosts(index: PostIndex, links: PostLinks): Map<Int, RenderedPost> {
                 val text = p.body.substring(s.start, s.end)
                 when (s) {
                     is Span.Anchor -> withLink(LinkAnnotation.Clickable("a:${s.from}-${s.to}", linkStyle, links)) { append(text) }
-                    is Span.Url -> withLink(LinkAnnotation.Url(s.url, linkStyle)) { append(text) }
+                    // URL も押したときに画面が決める(同じ掲示板のスレならアプリの中で開く)
+                    is Span.Url -> withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) { append(text) }
                 }
                 at = s.end
             }

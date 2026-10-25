@@ -224,6 +224,33 @@ object TwoCh {
         )
     }
 
+    /** 書き込む。5ch はスレの URL を Referer に求める */
+    suspend fun createPost(t: ThreadSummary, input: PostInput): PostResult {
+        val u = java.net.URI(t.boardUrl)
+        val fields = linkedMapOf(
+            "bbs" to u.path.trim('/'),
+            "key" to t.key,
+            "time" to (System.currentTimeMillis() / 1000).toString(),
+            "FROM" to input.name,
+            "mail" to input.mail,
+            "MESSAGE" to input.body,
+            "submit" to "書き込む",
+        )
+        return sendBbsCgi("${u.scheme}://${u.host}/test/bbs.cgi", fields, webUrl(t))
+    }
+
+    /** 書き込み確認で承諾したときに送り直す */
+    suspend fun submitConfirm(c: PostResult.Confirm): PostResult = sendBbsCgi(c.url, c.fields, c.referer)
+
+    private suspend fun sendBbsCgi(url: String, fields: Map<String, String>, referer: String): PostResult {
+        val res = Http.postForm(url, encodeShiftJisForm(fields), mapOf("Referer" to referer))
+        val html = String(res.body, charsetOf(res))
+        val resNumber = res.headers["x-resnum"]?.toIntOrNull()?.takeIf { it > 0 }
+        val r = parseBbsCgi(html, url, fields, referer, resNumber)
+        if (r is PostResult.Error && res.status >= 400 && r.message.isBlank()) return PostResult.Error("HTTP ${res.status}")
+        return r
+    }
+
     /** ブラウザで開く URL */
     fun webUrl(t: ThreadSummary): String {
         val u = java.net.URI(t.boardUrl)

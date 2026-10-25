@@ -177,6 +177,29 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         }
     }
 
+    // ── 書き込み ──
+
+    /** 自分の書き込みとして覚える(「自分」の絞り込み・自分への返信の印に使う) */
+    suspend fun addOwnPost(t: ThreadSummary, no: Int) = io {
+        writableDatabase.execSQL("INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES (?, ?, ?, ?)", arrayOf<Any>(t.boardUrl, t.key, no, System.currentTimeMillis()))
+    }
+
+    suspend fun ownPosts(t: ThreadSummary): Set<Int> = io {
+        readableDatabase.rawQuery("SELECT no FROM own_posts WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { c ->
+            buildSet { while (c.moveToNext()) add(c.getInt(0)) }
+        }
+    }
+
+    /** 書きかけ(スレごと)。空なら消す */
+    suspend fun saveDraft(t: ThreadSummary, body: String) = io {
+        if (body.isBlank()) writableDatabase.delete("drafts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
+        else writableDatabase.execSQL("INSERT OR REPLACE INTO drafts (board_url, key, body, updated_at) VALUES (?, ?, ?, ?)", arrayOf<Any>(t.boardUrl, t.key, body, System.currentTimeMillis()))
+    }
+
+    suspend fun draft(t: ThreadSummary): String = io {
+        readableDatabase.rawQuery("SELECT body FROM drafts WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { c -> if (c.moveToFirst()) c.getString(0) else "" }
+    }
+
     suspend fun deleteThread(t: ThreadSummary) = io {
         val db = writableDatabase
         db.delete("posts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))

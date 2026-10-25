@@ -126,7 +126,7 @@ fun MenuSheet(groups: List<List<MenuItem>>, onDismiss: () -> Unit) {
                 if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.border)
                 for (it in items) {
                     Row(
-                        Modifier.fillMaxWidth().clickable { onDismiss(); it.onClick() }.heightIn(min = 52.dp).padding(horizontal = 20.dp),
+                        Modifier.fillMaxWidth().clickable { it.onClick(); onDismiss() }.heightIn(min = 52.dp).padding(horizontal = 20.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(18.dp),
                     ) {

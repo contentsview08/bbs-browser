@@ -53,6 +53,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -105,8 +109,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         val sorted = page.threads.map { it.key to momentum(it, now) }.sortedByDescending { it.second }
         sorted.mapIndexed { i, (k, _) -> k to (1.0 - i.toDouble() / maxOf(1, sorted.size)) }.toMap()
     }
-    val shown = remember(page.threads, page.states, tab, query) {
-        var list = page.threads
+    val ngTitles = vm.prefs.ngRules.filter { it.target == "title" }.map { it.pattern }
+    val shown = remember(page.threads, page.states, tab, query, ngTitles) {
+        // スレタイの NG に当たるスレは出さない
+        var list = if (ngTitles.isEmpty()) page.threads else page.threads.filter { t -> ngTitles.none { t.title.contains(it, ignoreCase = true) } }
         if (query.isNotBlank()) list = list.filter { it.title.contains(query.trim(), ignoreCase = true) }
         list = when (tab) {
             null -> list
@@ -118,6 +124,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         list.filterNot { it.announcement } + list.filter { it.announcement }
     }
 
+    var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
+    menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     val swipe = rememberSwipeState()
     // なぞる操作(今のスマホ版の既定と同じ割り当て)
     val gestures = mapOf(
@@ -141,7 +149,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     ),
                 ) {
                     items(shown, key = { it.key }, contentType = { 0 }) { t ->
-                        ThreadRow(t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now) { vm.openThread(t) }
+                        ThreadRow(t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now, onLongClick = { menuFor = t }) { vm.openThread(t) }
                     }
                 }
             }
@@ -217,10 +225,14 @@ private fun unreadOf(t: ThreadSummary, states: Map<String, ThreadState>): Int {
     return maxOf(0, t.postCount - s.readNo)
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ThreadRow(t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long, onClick: () -> Unit) {
+private fun ThreadRow(t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long, onLongClick: () -> Unit, onClick: () -> Unit) {
     val unread = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 28.dp, end = 16.dp, top = 9.dp, bottom = 9.dp)) {
+    Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+    // 読んだスレは左に線(新着があれば未読の色)。今のスマホ版と同じ
+    if (state != null) Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread else Palette.threadReadTitle))
+    Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 28.dp, end = 16.dp, top = 9.dp, bottom = 9.dp)) {
         Text(
             t.title, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 16.sp, lineHeight = 21.sp,
             // 読んだことがあって未読がないスレは、読んだ色に
@@ -254,6 +266,7 @@ private fun ThreadRow(t: ThreadSummary, state: ThreadState?, momentum: Double, r
             }
         }
     }
+}
 }
 
 /** 上の帯の検索欄(題の代わりに出す) */

@@ -319,7 +319,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 when (r.target) {
                     "id" -> p.id != null && p.id == r.pattern
                     "name" -> p.name.contains(r.pattern)
-                    else -> p.body.contains(r.pattern, ignoreCase = true)
+                    "body" -> p.body.contains(r.pattern, ignoreCase = true)
+                    // スレタイの NG はスレ一覧で使う
+                    else -> false
                 }
             }
         }.map { it.no }.toSet()
@@ -347,6 +349,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         page.readNo = no
         viewModelScope.launch { db.markRead(page.summary, no) }
     }
+
+    /** スレ一覧の長押しから: お気に入りのスレに足す・外す */
+    fun toggleFavoriteThread(t: ThreadSummary) {
+        viewModelScope.launch {
+            val on = !db.isFavoriteThread(t)
+            db.setFavoriteThread(t, t.title, on)
+            favThreads = db.favoriteThreads()
+            toast = if (on) "お気に入りのスレに足しました" else "お気に入りのスレから外しました"
+        }
+    }
+
+    /** スレ一覧の長押しから: ログを削除(開いていないスレ) */
+    fun deleteLogOf(t: ThreadSummary) {
+        viewModelScope.launch {
+            db.deleteThread(t)
+            (stack.lastOrNull() as? Page.Threads)?.let { it.states = db.threadStates(it.board.url) }
+            reloadSide()
+            toast = "ログを削除しました"
+        }
+    }
+
+    suspend fun isFavoriteThread(t: ThreadSummary) = db.isFavoriteThread(t)
 
     fun toggleFavoriteThread(page: Page.Thread) {
         viewModelScope.launch {

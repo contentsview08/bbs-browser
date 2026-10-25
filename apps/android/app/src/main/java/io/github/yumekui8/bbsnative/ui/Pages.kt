@@ -37,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,8 +97,11 @@ private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: (
 }
 
 /** スレの一覧(閲覧履歴・お気に入りのスレで共通)。読んだ位置と、手元で分かっている未読の数 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>, empty: String) {
+    var menuFor by remember { mutableStateOf<io.github.yumekui8.bbsnative.bbs.ThreadSummary?>(null) }
+    menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         HeaderBar(title, onNav = { vm.drawerOpen = true })
         HorizontalDivider(color = Palette.border)
@@ -105,7 +109,7 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
         else LazyColumn(Modifier.fillMaxSize()) {
             items(entries, key = { it.thread.id }) { h ->
                 val unread = maxOf(0, h.thread.postCount - h.readNo)
-                Column(Modifier.fillMaxWidth().clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)) {
+                Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = { menuFor = h.thread }) { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)) {
                     Text(h.thread.title.ifEmpty { h.thread.key }, color = Palette.textStrong, fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.Bold else FontWeight.Normal)
                     Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${relativeTime(h.readAt)}に見た ・ ${h.thread.boardUrl.removePrefix("https://").trimEnd('/')}", Modifier.weight(1f), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
@@ -183,7 +187,7 @@ fun SettingsScreen(vm: AppViewModel) {
             for (r in p.ngRules) {
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        when (r.target) { "id" -> "ID"; "name" -> "名前"; else -> "言葉" },
+                        when (r.target) { "id" -> "ID"; "name" -> "名前"; "title" -> "スレタイ"; else -> "言葉" },
                         Modifier.background(Palette.surface2, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 12.sp,
                     )
                     Text(r.pattern, Modifier.weight(1f).padding(start = 10.dp), color = Palette.textBody, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

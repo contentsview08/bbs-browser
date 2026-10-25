@@ -231,7 +231,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             if (vm.prefs.showMinimap && shown.size > 1) {
                 Minimap(
                     shown, index, own, toOwn, if (filter == null && query.isBlank()) page.unreadFrom else null, listState,
-                    Modifier.align(Alignment.TopEnd).padding(top = with(density) { bars.topHeight.toDp() } + 4.dp, bottom = 4.dp, end = 2.dp),
+                    Modifier.align(Alignment.TopEnd).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() } + 4.dp, bottom = 4.dp, end = 2.dp),
                 )
             }
 

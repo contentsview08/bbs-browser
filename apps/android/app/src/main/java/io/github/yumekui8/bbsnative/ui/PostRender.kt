@@ -15,7 +15,10 @@ import io.github.yumekui8.bbsnative.bbs.PostIndex
 import io.github.yumekui8.bbsnative.bbs.Span
 
 /** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
-class RenderedPost(val header: AnnotatedString, val body: AnnotatedString)
+/** aa: アスキーアートらしい本文(スペースが 5 つ以上続く。今のスマホ版と同じ判定)。AA 用の字で、折り返さず画面の幅に収める */
+class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false)
+
+private val AA = Regex("[ \t　]{5,}")
 
 /**
  * レスの中の押せるところ(番号・ID・アンカー)を押したときに呼ぶ先。組み立てた文字列は使い回すので、
@@ -91,7 +94,7 @@ fun renderPosts(index: PostIndex, links: PostLinks): Map<Int, RenderedPost> {
             append(p.body, at, p.body.length)
             if (bodyStyle != null) pop()
         }
-        out[p.no] = RenderedPost(header, body)
+        out[p.no] = RenderedPost(header, body, AA.containsMatchIn(p.body))
     }
     return out
 }

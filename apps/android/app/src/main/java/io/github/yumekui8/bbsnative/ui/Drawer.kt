@@ -92,7 +92,14 @@ fun DrawerContent(vm: AppViewModel) {
         AlertDialog(
             onDismissRequest = { urlDialog = false },
             title = { Text("URL を開く") },
-            text = { OutlinedTextField(url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") }) },
+            text = {
+                OutlinedTextField(
+                    url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") },
+                    // キーボードの決定でも開く
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Go),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換のスレ・板の URL を入れてください)" }),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換のスレ・板の URL を入れてください)"

@@ -1,6 +1,13 @@
 package io.github.yumekui8.bbsnative.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.em
+import io.github.yumekui8.bbsnative.R
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +47,7 @@ fun PostItem(
                     OwnChip(if (own) "自分" else "→あなた宛")
                 }
             } else Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
-            Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = 15.sp, lineHeight = 22.sp)
+            if (r.aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = 15.sp, lineHeight = 22.sp)
         }
         if (images.isNotEmpty()) Thumbnails(images, autoLoad, onImage)
         }
@@ -50,6 +57,22 @@ fun PostItem(
         Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.own))
         content()
     }
+}
+
+private val AaFont = FontFamily(Font(R.font.aahub_light))
+
+/**
+ * AA の本文。AA 用の字で折り返さず、横幅に収まるまで字を小さくする
+ * (今のスマホ版の fitAA と同じ。横にずらして読むと、スクロールの操作とぶつかるため)
+ */
+@Composable
+private fun AaBody(r: RenderedPost) {
+    BasicText(
+        r.body, Modifier.fillMaxWidth().padding(top = 4.dp),
+        style = TextStyle(color = Palette.textBody, fontFamily = AaFont, fontSize = 15.sp, lineHeight = 1.15.em, letterSpacing = 0.sp),
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(minFontSize = 5.sp, maxFontSize = 15.sp, stepSize = 0.5.sp),
+    )
 }
 
 @Composable

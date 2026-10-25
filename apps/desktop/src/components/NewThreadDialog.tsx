@@ -39,8 +39,10 @@ interface Props {
   onOpenAccountSettings: () => void
 }
 
-const INPUT =
-  'w-full bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted focus:ring-c-accent focus:border-c-accent'
+// スマホは指で押すので、欄を大きく(高さ 48px・字 16px)
+const INPUT = `w-full bg-c-surface2 border-c-border text-c-text-body placeholder-c-text-muted focus:ring-c-accent focus:border-c-accent ${
+  isMobile ? 'rounded-xl text-base px-3.5 py-3' : 'rounded-[var(--btn-radius)] text-sm'
+}`
 
 export default function NewThreadDialog(props: Props) {
   const [title, setTitle] = useState('')
@@ -129,7 +131,7 @@ export default function NewThreadDialog(props: Props) {
               type="button"
               onClick={() => void submit()}
               disabled={!ready}
-              className="btn-thread-create px-4 py-2 text-sm font-bold rounded-full bg-c-accent text-[var(--c-accent-text)] disabled:opacity-50 flex items-center gap-1"
+              className="btn-thread-create px-5 py-2.5 text-base font-bold rounded-full bg-c-accent text-[var(--c-accent-text)] disabled:opacity-50 flex items-center gap-1.5"
             >
               {submitIcon}
               {submitLabel}
@@ -170,7 +172,7 @@ export default function NewThreadDialog(props: Props) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="スレタイ"
             autoFocus
-            className={`${INPUT} text-base font-bold`}
+            className={`${INPUT} ${isMobile ? 'text-lg' : 'text-base'} font-bold`}
           />
           <div className="flex items-center gap-2">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名前" className={INPUT} />
@@ -208,9 +210,9 @@ export default function NewThreadDialog(props: Props) {
               <button
                 type="button"
                 onClick={() => (media.pick ? media.pick() : setImageHint(true))}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-c-border text-sm text-c-text-body active:bg-c-surface2"
+                className="flex items-center gap-2 px-4 py-3 rounded-xl border border-c-border text-base text-c-text-body active:bg-c-surface2"
               >
-                <span className={`material-symbols-outlined text-xl text-c-text-muted ${media.uploading > 0 ? 'animate-spin' : ''}`}>
+                <span className={`material-symbols-outlined text-2xl text-c-text-muted ${media.uploading > 0 ? 'animate-spin' : ''}`}>
                   {media.uploading > 0 ? 'progress_activity' : 'image'}
                 </span>
                 {media.uploading > 0 ? `アップロード中${media.progress && media.progress.total > 1 ? ` ${media.progress.current} / ${media.progress.total}` : '…'}` : '画像'}
@@ -231,6 +233,21 @@ export default function NewThreadDialog(props: Props) {
             </p>
           )}
         </div>
+
+        {/* スマホ: 親指の届く下にも、大きな「スレを立てる」(上の帯のボタンは指が届きにくい) */}
+        {isMobile && (
+          <div className="flex-shrink-0 px-3 pt-2 pb-3 border-t border-c-border">
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!ready}
+              className="btn-thread-create w-full h-12 text-base font-bold rounded-xl bg-c-accent text-[var(--c-accent-text)] disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {submitIcon}
+              {submitLabel}
+            </button>
+          </div>
+        )}
 
         {!isMobile && (
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">

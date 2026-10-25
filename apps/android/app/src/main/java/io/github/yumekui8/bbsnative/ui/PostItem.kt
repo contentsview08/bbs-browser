@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun PostItem(
     r: RenderedPost, own: Boolean = false, toOwn: Boolean = false,
-    images: List<String> = emptyList(), autoLoad: Boolean = true, onImage: (String) -> Unit = {},
+    images: List<String> = emptyList(), autoLoad: Boolean = true, onImage: (String) -> Unit = {}, gross: Boolean = false,
 ) {
     val content = @Composable {
         Column(Modifier.fillMaxWidth()) {
@@ -49,7 +49,7 @@ fun PostItem(
             } else Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
             if (r.aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = 15.sp, lineHeight = 22.sp)
         }
-        if (images.isNotEmpty()) Thumbnails(images, autoLoad, onImage)
+        if (images.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross)
         }
     }
     if (!own) return content()

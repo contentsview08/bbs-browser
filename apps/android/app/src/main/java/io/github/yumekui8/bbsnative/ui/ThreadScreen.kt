@@ -174,6 +174,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     ReadTracker(listState) { vm.markRead(page, it) }
 
+    // いちばん下を見ているときに新着が届いたら、新着まで送る(今のスマホ版の既定と同じ)。
+    // 下にいたかは、新着を組み立てた直後(並べ直す前)に見る
+    var prevCount by remember { mutableIntStateOf(-1) }
+    var stickTo by remember { mutableStateOf<Int?>(null) }
+    SideEffect {
+        val n = index.posts.size
+        if (prevCount in 1 until n && !listState.canScrollForward && filter == null && query.isBlank()) stickTo = prevCount
+        prevCount = n
+    }
+    LaunchedEffect(stickTo) { stickTo?.let { listState.animateScrollToItem(it); stickTo = null } }
+
     // 番号・ID・アンカー・URL を押したとき(組み立て済みの文字列から呼ばれる)
     SideEffect {
         page.links.onTag = { tag ->
@@ -220,7 +231,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
             } else page.rendered[p.no]?.let {
-                PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url })
+                PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url }, gross = p.no in index.gross)
             }
         }
     }

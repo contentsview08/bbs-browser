@@ -161,6 +161,23 @@ object TwoCh {
         return text
     }
 
+    private val nonameCache = HashMap<String, String?>()
+
+    /** 読み終えた既定の名前(まだなら null) */
+    fun cachedNoname(boardUrl: String): String? = synchronized(nonameCache) { nonameCache[boardUrl] }
+
+    /** 板の既定の名前(SETTING.TXT の BBS_NONAME_NAME)。取れなければ null。板ごとに 1 回だけ読む */
+    suspend fun nonameName(boardUrl: String): String? {
+        synchronized(nonameCache) { if (boardUrl in nonameCache) return nonameCache[boardUrl] }
+        val name = runCatching {
+            val res = Http.get("${boardUrl}SETTING.TXT")
+            if (res.status !in 200..299) null
+            else String(res.body, charsetOf(res)).lineSequence().firstOrNull { it.startsWith("BBS_NONAME_NAME=") }?.substringAfter('=')?.trim()?.ifEmpty { null }
+        }.getOrNull()
+        synchronized(nonameCache) { nonameCache[boardUrl] = name }
+        return name
+    }
+
     /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
     suspend fun listThreads(board: Board): List<ThreadSummary> {
         if (board.url.contains("eddibb.cc/")) {

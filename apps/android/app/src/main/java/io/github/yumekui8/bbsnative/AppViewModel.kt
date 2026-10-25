@@ -214,6 +214,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.lastBoardUrl = board.url
         prefs.lastBoardName = board.name
         refreshBoard(page)
+        // 板の既定の名前を先に読んでおく(スレを開いたとき、待たずに名無しを省けるように)
+        viewModelScope.launch { TwoCh.nonameName(board.url) }
     }
 
     fun refreshBoard(page: Page.Threads) {
@@ -299,9 +301,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** レスの下ごしらえと組み立て(と NG の判定)を、画面とは別のスレッドで済ませてから入れる */
     private suspend fun setPosts(page: Page.Thread, posts: List<Post>) {
         val rules = prefs.ngRules
+        // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま
+        val noname = TwoCh.cachedNoname(page.summary.boardUrl)
         val result = withContext(Dispatchers.Default) {
             val i = PostIndex.build(posts)
-            Triple(i, renderPosts(i, page.links), ngOf(posts, rules))
+            Triple(i, renderPosts(i, page.links, noname), ngOf(posts, rules))
         }
         page.rendered = result.second
         page.ngNos = result.third

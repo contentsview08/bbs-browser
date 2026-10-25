@@ -11,8 +11,15 @@ sealed class Span(val start: Int, val end: Int) {
 
 enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO("動画"), LINK("リンク"), OWN("自分") }
 
-/** images: 本文の画像の URL(サムネイルに出す) */
-class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList())
+/**
+ * images: 本文の画像の URL(サムネイルに出す)。display: 画面に出す本文(続いた空行を 1 つにまとめ、最後の空行を消したもの。
+ * spans の位置はこの文字列の中の位置)
+ */
+class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList(), val display: String = "")
+
+/** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
+fun displayBody(body: String): String =
+    body.replace(Regex("\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}"), "\n\n").replace(Regex("[\\s\u3000]+$"), "")
 
 /** アンカーツリーの 1 行 */
 class TreeRow(val no: Int, val depth: Int, val alsoTo: List<Int>)
@@ -84,6 +91,13 @@ class PostIndex(
         return rows
     }
 
+    /** グロ注意のレス(本文に「グロ」があるレスと、そのアンカー先)。サムネイルをぼかす(PC 版と同じ) */
+    val gross: Set<Int> by lazy {
+        val set = HashSet<Int>()
+        for (p in posts) if (p.body.contains("グロ")) { set += p.no; set += targets[p.no] ?: emptyList() }
+        set
+    }
+
     /** スレの中の画像を、出てきた順に全部(ビューアーで左右に送る) */
     val allImages: List<String> by lazy { posts.flatMap { info[it.no]?.images ?: emptyList() } }
 
@@ -104,7 +118,8 @@ class PostIndex(
                 var video = false
                 var link = false
                 val images = ArrayList<String>()
-                for (m in URL.findAll(p.body)) {
+                val text = displayBody(p.body)
+                for (m in URL.findAll(text)) {
                     val raw = m.value
                     val url = if (raw.startsWith("ttp")) "h$raw" else raw
                     spans += Span.Url(m.range.first, m.range.last + 1, url)
@@ -118,7 +133,7 @@ class PostIndex(
                     }
                 }
                 val targets = HashSet<Int>()
-                for (m in ANCHOR.findAll(p.body)) {
+                for (m in ANCHOR.findAll(text)) {
                     if (spans.any { it is Span.Url && m.range.first in it.start until it.end }) continue
                     val from = m.groupValues[1].toInt()
                     val to = m.groupValues[2].toIntOrNull()?.coerceAtMost(from + 50) ?: from
@@ -130,7 +145,7 @@ class PostIndex(
                     replies.getOrPut(n) { ArrayList() } += p.no
                 }
                 spans.sortBy { it.start }
-                info[p.no] = PostInfo(spans, image, video, link, images)
+                info[p.no] = PostInfo(spans, image, video, link, images, text)
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
             return PostIndex(posts, info, replyCount, replies, idCount)

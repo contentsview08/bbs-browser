@@ -43,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -70,14 +71,16 @@ fun isWifi(context: Context): Boolean = runCatching {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun Thumbnails(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit) {
+fun Thumbnails(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit, blur: Boolean = false) {
+    // グロ注意のレスは、押すまでぼかす
+    var blurred by rememberSaveable(urls) { mutableStateOf(blur) }
     FlowRow(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (url in urls) Thumbnail(url, autoLoad, onOpen)
+        for (url in urls) Thumbnail(url, autoLoad, if (blurred) { _ -> blurred = false } else onOpen, blurred)
     }
 }
 
 @Composable
-private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit) {
+private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false) {
     var load by rememberSaveable(url) { mutableStateOf(autoLoad) }
     val shape = RoundedCornerShape(8.dp)
     val box = Modifier.size(96.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
@@ -85,7 +88,10 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit) 
         Box(box.clickable { load = true }, contentAlignment = Alignment.Center) { Text("画像", color = Palette.textMuted, fontSize = 13.sp) }
         return
     }
-    AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = box.clickable { onOpen(url) })
+    Box(box.clickable { onOpen(url) }, contentAlignment = Alignment.Center) {
+        AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier))
+        if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
+    }
 }
 
 /**

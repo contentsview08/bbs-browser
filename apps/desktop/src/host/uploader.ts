@@ -56,16 +56,41 @@ async function prepare(file: File, o: UploadOptions): Promise<Blob> {
   return canvas.convertToBlob({ type: file.type, quality: 0.9 })
 }
 
+/**
+ * multipart/form-data の中身を自分で組み立てる。Android の plugin-http に FormData をそのまま渡すと、
+ * 区切り(boundary)の付いた Content-Type が届かず、catbox が中身を読めずに空の返事(HTTP 200)を返していた
+ */
+async function multipart(fields: [string, string][], file: { name: string; fileName: string; type: string; data: Blob }) {
+  const boundary = `----bbs-browser-${crypto.randomUUID()}`
+  const enc = new TextEncoder()
+  const quote = (v: string) => v.replace(/["\r\n]/g, '_')
+  const parts: Uint8Array[] = []
+  for (const [k, v] of fields) parts.push(enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`))
+  parts.push(
+    enc.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${file.name}"; filename="${quote(file.fileName)}"\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`,
+    ),
+  )
+  parts.push(new Uint8Array(await file.data.arrayBuffer()))
+  parts.push(enc.encode(`\r\n--${boundary}--\r\n`))
+  const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+  let at = 0
+  for (const p of parts) {
+    bytes.set(p, at)
+    at += p.length
+  }
+  return { bytes, contentType: `multipart/form-data; boundary=${boundary}` }
+}
+
 /** 上げて、ファイルの URL を返す */
 export async function uploadToCatbox(file: File, options: UploadOptions): Promise<string> {
   const problem = checkUpload(file)
   if (problem) throw new Error(problem)
   const body = await prepare(file, options)
-  const form = new FormData()
-  form.append('reqtype', 'fileupload')
-  if (options.userhash) form.append('userhash', options.userhash)
-  form.append('fileToUpload', body, file.name || 'image')
-  const res = await fetch(ENDPOINT, { method: 'POST', body: form, headers: { 'User-Agent': USER_AGENT } })
+  const fields: [string, string][] = [['reqtype', 'fileupload']]
+  if (options.userhash) fields.push(['userhash', options.userhash])
+  const { bytes, contentType } = await multipart(fields, { name: 'fileToUpload', fileName: file.name || 'image', type: body.type || file.type, data: body })
+  const res = await fetch(ENDPOINT, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType } })
   const text = (await res.text()).trim()
   // 成功すると、本文にファイルの URL だけが返る。それ以外はエラーの文面
   if (res.ok && /^https:\/\/files\.catbox\.moe\/\S+$/.test(text)) return text
@@ -79,11 +104,13 @@ export async function uploadToCatbox(file: File, options: UploadOptions): Promis
 export async function deleteFromCatbox(url: string, userhash: string): Promise<void> {
   const name = /^https:\/\/files\.catbox\.moe\/([^/?#]+)$/.exec(url)?.[1]
   if (!name) throw new Error('catbox のファイルではありません')
-  const form = new FormData()
-  form.append('reqtype', 'deletefiles')
-  form.append('userhash', userhash)
-  form.append('files', name)
-  const res = await fetch(ENDPOINT, { method: 'POST', body: form, headers: { 'User-Agent': USER_AGENT } })
+  // FormData は Android の plugin-http で区切りが落ちるので、ふつうのフォームの形で送る(uploadToCatbox の multipart を参照)
+  const form = new URLSearchParams({ reqtype: 'deletefiles', userhash, files: name })
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    body: form.toString(),
+    headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
   const text = (await res.text()).trim()
   if (!res.ok || !/success/i.test(text)) throw new Error(`消せませんでした: ${text || `HTTP ${res.status}`}`)
 }

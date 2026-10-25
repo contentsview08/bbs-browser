@@ -101,6 +101,8 @@ interface Options {
   threadKey: string
   log: ThreadLog
   byNo: Map<number, Post>
+  /** NG で畳んで出すレスか(畳んだ高さで見積もる。本文の長さで見積もると大きく外れる) */
+  isCollapsed?: (p: Post) => boolean
   unreadFrom: number
   active: boolean
   initialPosition?: ScrollPosition
@@ -150,25 +152,65 @@ export function useThreadScroll(o: Options) {
   widthRef.current = width
   const metrics = useRef({ fontSize: 16 })
 
+  /** 本文から見積もった高さ(測った高さでの補正の前) */
+  const rawEstimate = (p: Post): number => {
+    const w = widthRef.current
+    const f = metrics.current.fontSize
+    return estimatePostHeight(p, {
+      // 本文の左右の余白とアイコンの分を除いた幅に、全角が何文字入るか
+      charsPerLine: Math.max(10, Math.floor((w - 96) / f)),
+      lineHeight: f * 1.625,
+      chrome: f * 2.5 + 16,
+      thumbRow: 88,
+      linkPreview: 88,
+      showThumbnails: latest.current.showThumbnails,
+    })
+  }
+  /**
+   * 見積もりの補正。測ったレスの「実際の高さ − 見積もり」を覚え、その中央値を見積もりに足す。
+   * レスの見た目(カード・Discord 風・専ブラ風・LINE 風)や密度で頭の部分・余白の高さが変わり、決め打ちの見積もりでは
+   * 1 レスあたり十数 px ずれていた。ずれが積もると、スクロールするにつれてスレ全体の高さが変わり、スクロールバーがガタついた。
+   * 中央値なので、畳まれたあぼーんのような外れた高さには引きずられない
+   */
+  const calib = useRef({ width: 0, diffs: [] as number[], offset: 0, collapsed: [] as number[], collapsedHeight: 0 })
+  /** 補正が使えるようになったら 1 回描き直す(仮の高さを、スクロールする前に補正した値にしておく) */
+  const [calibReady, setCalibReady] = useState(false)
+  const learn = (no: number, actual: number) => {
+    const c = calib.current
+    const w = widthRef.current
+    if (c.width !== w) Object.assign(c, { width: w, diffs: [], offset: 0, collapsed: [], collapsedHeight: 0 })
+    const p = latest.current.byNo.get(no)
+    if (!p) return
+    // 畳んだレスは、高さそのものを別に覚える(中央値)
+    if (latest.current.isCollapsed?.(p)) {
+      c.collapsed.push(actual)
+      if (c.collapsed.length > 50) c.collapsed.shift()
+      c.collapsedHeight = [...c.collapsed].sort((a, b) => a - b)[c.collapsed.length >> 1]
+      return
+    }
+    c.diffs.push(actual - rawEstimate(p))
+    if (c.diffs.length > 200) c.diffs.shift()
+    // 少し集まってから使う
+    if (c.diffs.length >= 8) {
+      const sorted = [...c.diffs].sort((a, b) => a - b)
+      c.offset = sorted[sorted.length >> 1]
+      setCalibReady(true)
+    }
+  }
+
   /** まだ描いていないレスの仮の高さ(content-visibility の contain-intrinsic-size に使う) */
   const intrinsicHeight = useCallback(
     (p: Post): number => {
       const w = widthRef.current
       const known = heights.get(latest.current.threadKey, w, p.no)
       if (known !== undefined) return known
-      const f = metrics.current.fontSize
-      return estimatePostHeight(p, {
-        // 本文の左右の余白とアイコンの分を除いた幅に、全角が何文字入るか
-        charsPerLine: Math.max(10, Math.floor((w - 96) / f)),
-        lineHeight: f * 1.625,
-        chrome: f * 2.5 + 16,
-        thumbRow: 88,
-        linkPreview: 88,
-        showThumbnails: latest.current.showThumbnails,
-      })
+      const c = calib.current
+      const same = c.width === w
+      if (latest.current.isCollapsed?.(p)) return same && c.collapsedHeight > 0 ? c.collapsedHeight : 36
+      return Math.max(16, rawEstimate(p) + (same ? c.offset : 0))
     },
-    // 幅が変わったら見積もり直す
-    [width],
+    // 幅が変わったら・補正が使えるようになったら見積もり直す
+    [width, calibReady],
   )
 
   /** 画面の近くにある(描かれている)レスの高さを覚える */
@@ -178,9 +220,28 @@ export function useThreadScroll(o: Options) {
     for (const r of rects) {
       // まだ中身を作っていないレス(仮の高さの箱)は覚えない
       if (r.hidden || r.placeholder || r.bottom < from || r.top > to) continue
-      heights.set(latest.current.threadKey, w, r.no, Math.round(r.bottom - r.top))
+      const h = Math.round(r.bottom - r.top)
+      if (heights.get(latest.current.threadKey, w, r.no) === undefined) learn(r.no, h)
+      heights.set(latest.current.threadKey, w, r.no, h)
     }
   }
+
+  /**
+   * 中身を作ってあるレスの高さを、いますぐ全部覚える。スマホで画面から遠いレスの中身を外す(仮の高さの箱に戻す)前に呼ぶ。
+   * 覚えておけば、箱に戻しても高さが変わらず、スクロールの位置もスクロールバーも動かない
+   */
+  const rememberRendered = useCallback(() => {
+    const root = rootRef.current
+    const w = widthRef.current
+    if (!root || w <= 0) return
+    for (const el of postFrames(root)) {
+      if (el.hidden || el.dataset.placeholder !== undefined) continue
+      const no = Number(el.dataset.post)
+      const h = Math.round(el.getBoundingClientRect().height)
+      if (heights.get(latest.current.threadKey, w, no) === undefined) learn(no, h)
+      heights.set(latest.current.threadKey, w, no, h)
+    }
+  }, [rootRef])
 
   // ── 動かす ──
 
@@ -500,5 +561,6 @@ export function useThreadScroll(o: Options) {
     restorePosition,
     /** いま見えているところまでの既読を、待たずにすぐ知らせる(更新の直前など) */
     flushRead: reportRead,
+    rememberRendered,
   }
 }

@@ -208,6 +208,14 @@ const NO_QUOTES = new Map<string, number>()
  */
 const FIRST_RENDER = 80
 const RENDER_CHUNK = 150
+/**
+ * スマホ: 中身を作るのは、見えているレスの上 WIN_BEFORE 件・下 WIN_AFTER 件まで(仮想スクロール)。
+ * PC のように全部を作り足すと、1000 レスのスレでは部品が多すぎて、作り足すたび・スクロールのたびに重くなる。
+ * 作っている範囲の端から WIN_MARGIN 件以内まで見えてきたら、範囲を動かす(遠くなったレスは中身を外して仮の高さの箱に戻す)
+ */
+const WIN_BEFORE = 25
+const WIN_AFTER = 45
+const WIN_MARGIN = 10
 /** Esc の 2 回押しとみなす間隔 */
 const DOUBLE_ESC_MS = 500
 /** J・K で選んだレスを、画面の上下からこの割合だけ離しておく */
@@ -409,12 +417,19 @@ export default function ThreadView(props: Props) {
     if (!isMobile || !el) return
     const fit = () => {
       el.style.fontSize = ''
-      let size = parseFloat(getComputedStyle(el).fontSize)
-      // 2 行(line-clamp)からはみ出している間、0.5px ずつ小さくする
-      while (el.scrollHeight > el.clientHeight + 1 && size > 11) {
-        size -= 0.5
-        el.style.fontSize = `${size}px`
+      const over = () => el.scrollHeight > el.clientHeight + 1
+      if (!over()) return
+      // 2 行(line-clamp)に収まる一番大きい字を、0.5px きざみで半分ずつ探す(測るたびにレイアウトをやり直すので、
+      // 0.5px ずつ小さくすると最大 10 回以上測っていた。半分ずつなら 5 回ほど)
+      let lo = 22 // 11px(0.5px きざみの数)
+      let hi = Math.floor(parseFloat(getComputedStyle(el).fontSize) * 2) - 1
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2)
+        el.style.fontSize = `${mid / 2}px`
+        if (over()) hi = mid - 1
+        else lo = mid
       }
+      el.style.fontSize = `${lo / 2}px`
     }
     fit()
     const observer = new ResizeObserver(fit)
@@ -649,7 +664,8 @@ export default function ThreadView(props: Props) {
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
   /** 中身を作るレスの範囲 [lo, hi)(log.posts の位置)。hi が Infinity なら末尾まで(新着もすぐ作る) */
-  const [renderWin, setRenderWin] = useState(() => {
+  /** 開く位置の前後 FIRST_RENDER 件の範囲。レスがまだない(読み込み中)なら、まだ何も作らない(hi 0) */
+  const firstWindow = () => {
     const posts = log.posts
     const n = posts.length
     const at = (no: number) => posts.findIndex((p) => p.no >= no)
@@ -666,14 +682,28 @@ export default function ThreadView(props: Props) {
                 return i < 0 ? n - 1 : i
               })()
             : 0
+    if (n === 0) return { lo: 0, hi: 0 }
     const a = anchor < 0 ? n - 1 : anchor
     const lo = Math.max(0, a - FIRST_RENDER / 2)
     const hi = Math.min(n, a + FIRST_RENDER / 2)
     return { lo, hi: hi >= n ? Infinity : hi }
-  })
-  // 手の空いたときに、上下へ少しずつ作り足す(全部作り終えたら止まる)
+  }
+  const [renderWin, setRenderWin] = useState(firstWindow)
+  // 読み込み中(レス 0 件)に開いたスレは、レスが届いたところで開く位置の前後に決め直す。
+  // 以前は 0 件のときに「最後まで全部」と決まり、届いた瞬間に全部のレス(1000 件)の中身を一度に作っていた
+  const windowPending = useRef(log.posts.length === 0)
+  useLayoutEffect(() => {
+    if (!windowPending.current || log.posts.length === 0) return
+    windowPending.current = false
+    setRenderWin(firstWindow())
+    // レスが初めて届いたときだけ
+  }, [log.posts.length])
+  // 手の空いたときに、上下へ少しずつ作り足す(全部作り終えたら止まる)。スマホは作り足さず、見えている所の前後だけ(下の仮想スクロール)
   useEffect(() => {
+    if (isMobile) return
     const n = log.posts.length
+    // レスが届くまでは広げない(0 件のうちに「最後まで」になると、届いた瞬間に全部作ってしまう)
+    if (n === 0 || windowPending.current) return
     if (renderWin.lo <= 0 && renderWin.hi === Infinity) return
     const grow = () =>
       setRenderWin((w) => {
@@ -818,6 +848,7 @@ export default function ThreadView(props: Props) {
     getPosition,
     restorePosition,
     flushRead,
+    rememberRendered,
   } = useThreadScroll({
     rootRef: ref,
     listRef,
@@ -825,6 +856,7 @@ export default function ThreadView(props: Props) {
     threadKey: props.threadKey,
     log,
     byNo,
+    isCollapsed: isNg,
     unreadFrom,
     active: props.active,
     initialPosition: props.initialPosition,
@@ -836,6 +868,72 @@ export default function ThreadView(props: Props) {
     showThumbnails: settings.showThumbnails,
     jumpTo: props.jumpTo,
   })
+
+  // スマホ: 仮想スクロール。スクロールしたら、見えているレスの前後だけ中身を作るよう、範囲を動かす(WIN_BEFORE・WIN_AFTER)
+  const renderWinRef = useRef(renderWin)
+  renderWinRef.current = renderWin
+  const filteringRef = useRef(false)
+  filteringRef.current = visibleNos !== undefined
+  useEffect(() => {
+    if (!isMobile) return
+    const root = ref.current
+    if (!root) return
+    let raf = 0
+    /** 前回見えていた最初のレス(次はその近くから探す。毎回先頭から測ると、1000 レスのスレの下の方で重い) */
+    let hint = 0
+    const update = () => {
+      raf = 0
+      const frames = root.querySelectorAll<HTMLElement>(':scope .post-cv')
+      const n = frames.length
+      if (n === 0) return
+      const box = root.getBoundingClientRect()
+      const above = (i: number) => frames[i].getBoundingClientRect().bottom < box.top
+      // 見えている最初のレス(log.posts の位置。枠は log.posts と同じ順に並んでいる)
+      let first: number
+      if (filteringRef.current) {
+        // 絞り込み中は隠れた枠(高さ 0)が混ざるので、頭から順に見る(見えている枠は少ない)
+        first = -1
+        for (let i = 0; i < n; i++) {
+          if (frames[i].hidden) continue
+          const r = frames[i].getBoundingClientRect()
+          if (r.bottom >= box.top) {
+            first = i
+            break
+          }
+        }
+        if (first < 0) return
+      } else {
+        let i = Math.min(Math.max(hint, 0), n - 1)
+        if (above(i)) while (i < n - 1 && above(i)) i++
+        else while (i > 0 && !above(i - 1)) i--
+        first = i
+      }
+      hint = first
+      let last = first
+      while (last < n - 1 && frames[last + 1].getBoundingClientRect().top <= box.bottom) last++
+      const w = renderWinRef.current
+      const hi = w.hi === Infinity ? n : w.hi
+      const nearTop = w.lo > 0 && first < w.lo + WIN_MARGIN
+      const nearBottom = w.hi !== Infinity && last > hi - WIN_MARGIN
+      // 広すぎる(開いたときの範囲や、飛んだあと)ときも縮める
+      const tooWide = hi - w.lo > (last - first + WIN_BEFORE + WIN_AFTER) * 2
+      if (!nearTop && !nearBottom && !tooWide) return
+      const nextHi = last + WIN_AFTER
+      const next = { lo: Math.max(0, first - WIN_BEFORE), hi: nextHi >= n ? Infinity : nextHi }
+      if (next.lo === w.lo && next.hi === w.hi) return
+      // 中身を外す前に、いまの高さを覚えておく(箱に戻しても高さが変わらず、スクロールバーも動かないように)
+      rememberRendered()
+      setRenderWin(next)
+    }
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update)
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      root.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [rememberRendered])
 
   // スレが終わったら(dat 落ち・上限(2ch は 1000)到達)、一番下に次スレの候補を出す。ヘッダーのボタンでも出せる
   const ended = log.status === 'archived' || (props.maxPosts !== undefined && log.posts.length >= props.maxPosts)

@@ -848,7 +848,8 @@ export default function ThreadListPanel(props: Props) {
             onMouseDown={(e) => headerDrag.startDrag(e, titleRowRef.current?.getBoundingClientRect().height ?? 44, 1)}
             onReset={headerDrag.reset}
           />
-          <div className={isMobile ? 'px-2 py-1' : 'p-4'}>
+          {/* スマホ: 端のボタンが画面の縁にくっつかないよう、左右に 12px 空ける */}
+          <div className={isMobile ? 'px-3 py-1' : 'p-4'}>
             {/* スマホ: 左上のメニューのボタンと板名の間を、指で押し分けやすいよう広めに */}
             <div className={`flex items-center ${isMobile ? 'gap-3' : 'gap-2'}`}>
               {/* スマホ: 左上のメニュー(サイドバーの引き出し) */}

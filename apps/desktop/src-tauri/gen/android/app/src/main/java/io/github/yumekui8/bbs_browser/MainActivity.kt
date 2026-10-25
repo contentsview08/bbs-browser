@@ -1,6 +1,9 @@
 package io.github.yumekui8.bbs_browser
 
 import android.content.ContentValues
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -39,6 +42,22 @@ class MainActivity : TauriActivity() {
 
 /** 画像・動画を、写真の置き場へ保存する。返すのは保存した場所の説明(失敗したら "error:理由") */
 class MediaSaver(private val activity: MainActivity) {
+  /**
+   * Wi-Fi(か有線)につながっているか。画像を「Wi-Fi のときだけ」読む設定に使う。
+   * WebView の navigator.connection.type は Android では取れないことが多く、取れないと Wi-Fi 扱いになって、
+   * モバイル通信でも画像を読んでしまっていた。分からないときは false(読まない側に倒す)
+   */
+  @JavascriptInterface
+  fun isWifi(): Boolean {
+    return try {
+      val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+      caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+    } catch (e: Exception) {
+      false
+    }
+  }
+
   @JavascriptInterface
   fun saveMedia(base64: String, fileName: String, mime: String): String {
     // 埋め込み(YouTube など)からも呼べてしまうので、受け取るのは画像・動画だけ、大きさにも上限を置く

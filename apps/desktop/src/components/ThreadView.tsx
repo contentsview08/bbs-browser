@@ -1628,7 +1628,8 @@ export default function ThreadView(props: Props) {
         <header
           ref={titleRowRef}
           // スマホ: 左上のメニューのボタンとスレタイの間を広めに(gap-3)
-          className={`flex items-center justify-between ${isMobile ? `gap-3 ${props.onOpenDrawer ? 'pl-1 pr-1' : 'pl-4 pr-1'}` : 'px-6'}`}
+          // スマホ: 端のボタン(︙・更新)が画面の縁にくっつくと押しにくいので、左右に 8〜12px 空ける
+          className={`flex items-center justify-between ${isMobile ? `gap-3 ${props.onOpenDrawer ? 'pl-2 pr-3' : 'pl-4 pr-3'}` : 'px-6'}`}
           // スマホ: スレタイを省かずに折り返すので、長いスレタイでは帯を高くする(既定の高さより低くはしない)
           style={isMobile ? { minHeight: 'calc(var(--header-height, 72px) / var(--bar-zoom, 1))' } : { height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
@@ -1717,7 +1718,7 @@ export default function ThreadView(props: Props) {
               </span>
             )}
           </div>
-          <div className={`flex items-center ${isMobile ? 'gap-0 ml-1' : 'gap-2 ml-4'}`}>
+          <div className={`flex items-center ${isMobile ? 'gap-1 ml-1' : 'gap-2 ml-4'}`}>
             {settings.autoRefreshSec > 0 && (
               <span className="flex items-center gap-1 text-xs text-c-accent" title="自動更新中">
                 <span className="material-symbols-outlined text-base">autorenew</span>

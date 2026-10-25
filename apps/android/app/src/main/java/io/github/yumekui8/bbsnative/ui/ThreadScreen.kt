@@ -71,6 +71,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -96,9 +104,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-/** ポップアップに出すもの(アンカー先・返信・同じ ID) */
-private class Popup(val title: String, val posts: List<Post>)
-
 /** 絞り込みのタブ(今のスマホ版と同じ 4 つ + すべて。アイコンに意味の色) */
 private val TABS: List<Triple<Filter, ImageVector, Color>> = listOf(
     Triple(Filter.POPULAR, Icons.Filled.LocalFireDepartment, Palette.markHot),
@@ -118,7 +123,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var filter by rememberSaveable { mutableStateOf<Filter?>(null) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var popup by remember { mutableStateOf<Popup?>(null) }
+    // 重なったポップアップ(下から順に)。押した所の高さ・押したレスは、指を置いたときに控えておく
+    val popups = remember { mutableStateListOf<PopupEntry>() }
+    var popupSeq by remember { mutableIntStateOf(0) }
+    var downY by remember { mutableFloatStateOf(0f) }
+    var downNo by remember { mutableIntStateOf(0) }
+    fun openPopup(posts: List<Post>, tree: List<io.github.yumekui8.bbsnative.bbs.TreeRow>? = null, focus: Int? = null) {
+        if (posts.isNotEmpty()) popups += PopupEntry(++popupSeq, posts, tree, downY, focus)
+    }
+    BackHandler(enabled = popups.isNotEmpty()) { popups.clear() }
     var menu by remember { mutableStateOf(false) }
     var postMenu by remember { mutableStateOf<Post?>(null) }
     var ngWordFor by remember { mutableStateOf<Post?>(null) }
@@ -169,14 +182,16 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'a' -> {
                     val (from, to) = v.split('-').map { it.toInt() }
                     val list = index.posts.filter { it.no in from..to }
-                    if (list.isNotEmpty()) popup = Popup(if (from == to) ">>$from" else ">>$from-$to", list)
+                    openPopup(list)
                 }
                 'r' -> {
                     val no = v.toInt()
                     val list = (index.replies[no] ?: emptyList()).mapNotNull { n -> index.posts.getOrNull(n - 1)?.takeIf { it.no == n } }
-                    if (list.isNotEmpty()) popup = Popup(">>$no への返信(${list.size})", list)
+                    openPopup(list)
                 }
-                'i' -> popup = Popup("ID:$v(${index.idCount[v] ?: 0})", index.posts.filter { it.id == v })
+                'i' -> openPopup(index.posts.filter { it.id == v }, focus = downNo)
+                // 名前: 同じ名前のレス(タグはレス番号。名前に何が入っていてもよいように)
+                'n' -> index.posts.getOrNull(v.toInt() - 1)?.let { src -> openPopup(index.posts.filter { it.name == src.name }, focus = src.no) }
                 // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
                 'u' -> when {
                     v in index.allImages -> viewer = v
@@ -187,6 +202,28 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
 
     val ended = page.archived || index.posts.size >= 1000
+
+    // レス 1 件(本文とポップアップで共通)。本文を押すとアンカーツリー、長押しでメニュー
+    val postRow = @Composable { p: Post ->
+        Box(
+            Modifier
+                .pointerInput(p.no) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); downNo = p.no } }
+                .combinedClickable(
+                    interactionSource = null, indication = null,
+                    onClick = { index.treeRows(p.no).takeIf { it.size > 1 }?.let { rows -> openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) } },
+                    onLongClick = { postMenu = p },
+                ),
+        ) {
+            if (p.no in page.ngNos && p.no !in revealed) {
+                Text(
+                    "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
+                    color = Palette.textMuted, fontSize = 13.sp,
+                )
+            } else page.rendered[p.no]?.let {
+                PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url })
+            }
+        }
+    }
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
 
     Column(modifier.fillMaxSize().background(Palette.base)) {
@@ -199,7 +236,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             "left,down" to SwipeAction("更新") { vm.refreshThread(page) },
             "left,up" to SwipeAction("ログを削除") { confirmDelete = true },
         )
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures) { vm.drawerOpen = true }) {
+        Box(
+            Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures) { vm.drawerOpen = true }
+                // 押した所の高さを控える(ポップアップを、押した所の真上に出すため)
+                .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
+        ) {
             PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.fillMaxSize()) {
                 when {
                     !page.loaded -> Hint("読み込み中…")
@@ -211,16 +252,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     ) {
                         items(shown, key = { it.no }, contentType = { if (it.no in page.ngNos) 1 else 0 }) { p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
-                            Box(Modifier.combinedClickable(interactionSource = null, indication = null, onClick = {}, onLongClick = { postMenu = p })) {
-                                if (p.no in page.ngNos && p.no !in revealed) {
-                                    Text(
-                                        "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
-                                        color = Palette.textMuted, fontSize = 13.sp,
-                                    )
-                                } else page.rendered[p.no]?.let {
-                                    PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url })
-                                }
-                            }
+                            postRow(p)
                             HorizontalDivider(color = Palette.border)
                         }
                         item(key = "end") {
@@ -272,6 +304,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Filled.KeyboardDoubleArrowDown, "一番下へ", tint = Palette.textBody) }
             }
+
+            PopupLayer(popups, topInset = bars.topHeight * (1f - bars.hidden), onCloseTop = { popups.removeAt(popups.lastIndex) }) { postRow(it) }
         }
         ThreadFooter(vm, page) { vm.refreshThread(page) }
     }
@@ -324,19 +358,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             confirmButton = { TextButton(onClick = { vm.addNg(NgRule("body", word.trim())); ngWordFor = null }) { Text("NG に足す") } },
             dismissButton = { TextButton(onClick = { ngWordFor = null }) { Text("やめる") } },
         )
-    }
-
-    popup?.let { pop ->
-        ModalBottomSheet(onDismissRequest = { popup = null }, containerColor = Palette.surface) {
-            Text(pop.title, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.accent, fontWeight = FontWeight.Bold)
-            LazyColumn(Modifier.fillMaxWidth()) {
-                items(pop.posts, key = { it.no }) { p ->
-                    page.rendered[p.no]?.let { PostItem(it, own = p.no in own, toOwn = p.no in toOwn, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { url -> viewer = url }) }
-                    HorizontalDivider(color = Palette.border)
-                }
-                item { Spacer(Modifier.height(24.dp).navigationBarsPadding()) }
-            }
-        }
     }
 
     if (gallery) {

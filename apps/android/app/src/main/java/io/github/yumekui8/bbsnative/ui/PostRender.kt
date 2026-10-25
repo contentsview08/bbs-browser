@@ -53,7 +53,8 @@ fun renderPosts(index: PostIndex, links: PostLinks): Map<Int, RenderedPost> {
             if (replies > 0) withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) { withStyle(noStyle) { append(noText) } }
             else withStyle(noStyle) { append(noText) }
             append("  ")
-            withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold)) { append(p.name) }
+            // 名前: 押すと同じ名前のレスを出す
+            withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold)) { append(p.name) } }
             if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = Palette.textMuted)) { append("  [${p.mail}]") }
             if (opId != null && p.id == opId) {
                 append("  ")

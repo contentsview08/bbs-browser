@@ -14,6 +14,9 @@ enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO
 /** images: 本文の画像の URL(サムネイルに出す) */
 class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList())
 
+/** アンカーツリーの 1 行 */
+class TreeRow(val no: Int, val depth: Int, val alsoTo: List<Int>)
+
 class PostIndex(
     val posts: List<Post>,
     val info: Map<Int, PostInfo>,
@@ -36,6 +39,50 @@ class PostIndex(
     }
 
     fun count(f: Filter, own: Set<Int> = emptySet()): Int = posts.count { matches(it, f, own) }
+
+    /** そのレスがアンカーを付けた先(replies の逆引き) */
+    private val targets: Map<Int, List<Int>> by lazy {
+        val m = HashMap<Int, MutableList<Int>>()
+        for ((to, froms) in replies) for (f in froms) m.getOrPut(f) { ArrayList() } += to
+        m.mapValues { (_, v) -> v.sorted() }
+    }
+
+    /** アンカーでつながるレスを、上下どちらへもたどって全部(start を含む。番号順)。PC 版の anchorTree と同じ */
+    fun tree(start: Int): List<Int> {
+        val seen = linkedSetOf(start)
+        val queue = ArrayDeque(listOf(start))
+        while (queue.isNotEmpty()) {
+            val cur = queue.removeFirst()
+            for (n in (targets[cur] ?: emptyList()) + (replies[cur] ?: emptyList())) if (seen.add(n)) queue += n
+        }
+        return seen.sorted()
+    }
+
+    /**
+     * ツリーの行に並べる(PC 版の anchorTreeRows と同じ)。親は、ツリーの中でアンカーを付けた先のうち一番小さい番号。
+     * alsoTo はほかにアンカーを付けた先(「>>3 にも」と出す)
+     */
+    fun treeRows(start: Int): List<TreeRow> {
+        val nos = tree(start)
+        val inTree = nos.toHashSet()
+        val parent = HashMap<Int, Int>()
+        val alsoTo = HashMap<Int, List<Int>>()
+        val children = HashMap<Int, MutableList<Int>>()
+        for (no in nos) {
+            val t = (targets[no] ?: emptyList()).filter { it in inTree && it < no }
+            if (t.isEmpty()) continue
+            parent[no] = t[0]
+            alsoTo[no] = t.drop(1)
+            children.getOrPut(t[0]) { ArrayList() } += no
+        }
+        val rows = ArrayList<TreeRow>()
+        fun walk(no: Int, depth: Int) {
+            rows += TreeRow(no, depth, alsoTo[no] ?: emptyList())
+            for (k in (children[no] ?: emptyList()).sorted()) walk(k, depth + 1)
+        }
+        for (r in nos.filter { it !in parent }) walk(r, 0)
+        return rows
+    }
 
     /** スレの中の画像を、出てきた順に全部(ビューアーで左右に送る) */
     val allImages: List<String> by lazy { posts.flatMap { info[it.no]?.images ?: emptyList() } }

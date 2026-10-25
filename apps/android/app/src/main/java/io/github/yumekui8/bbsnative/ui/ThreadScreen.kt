@@ -69,6 +69,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    /** サムネイルを自動で読むか(Wi-Fi のときだけ。開いたときに決める) */
+    val autoLoad = remember { isWifi(context) }
+    /** ビューアーで開いている画像 */
+    var viewer by remember { mutableStateOf<String?>(null) }
 
     // 開いたときの位置へ(手元のログ・新着が届いて openAt が決まったら一度だけ)
     LaunchedEffect(page.openAt, index) {
@@ -115,7 +119,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         if (filters.isEmpty() && p.no == page.unreadFrom) UnreadDivider()
                         // 長押しで、そのレスへの返信を書き込み欄に入れて開く
                         Box(Modifier.combinedClickable(interactionSource = null, indication = null, onClick = {}, onLongClick = { vm.openReply(page, ">>${p.no}\n") })) {
-                            page.rendered[p.no]?.let { PostItem(it, own = p.no in own) }
+                            page.rendered[p.no]?.let { PostItem(it, own = p.no in own, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { viewer = it }) }
                         }
                         HorizontalDivider(color = Palette.border)
                     }
@@ -132,12 +136,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     ReplySheet(vm, page)
 
+    viewer?.let { url -> ImageViewer(index.allImages, url, onClose = { viewer = null }) }
+
     popup?.let { pop ->
         ModalBottomSheet(onDismissRequest = { popup = null }, containerColor = Palette.surface) {
             Text(pop.title, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.accent, fontWeight = FontWeight.Bold)
             LazyColumn(Modifier.fillMaxWidth()) {
                 items(pop.posts, key = { it.no }) { p ->
-                    page.rendered[p.no]?.let { PostItem(it, own = p.no in own) }
+                    page.rendered[p.no]?.let { PostItem(it, own = p.no in own, images = index.info[p.no]?.images ?: emptyList(), autoLoad = autoLoad, onImage = { viewer = it }) }
                     HorizontalDivider(color = Palette.border)
                 }
                 item { Spacer(Modifier.height(24.dp).navigationBarsPadding()) }

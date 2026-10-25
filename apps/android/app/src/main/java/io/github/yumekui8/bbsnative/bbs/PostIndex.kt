@@ -11,7 +11,8 @@ sealed class Span(val start: Int, val end: Int) {
 
 enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO("動画"), LINK("リンク"), OWN("自分") }
 
-class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean)
+/** images: 本文の画像の URL(サムネイルに出す) */
+class PostInfo(val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList())
 
 class PostIndex(
     val posts: List<Post>,
@@ -36,6 +37,9 @@ class PostIndex(
 
     fun count(f: Filter, own: Set<Int> = emptySet()): Int = posts.count { matches(it, f, own) }
 
+    /** スレの中の画像を、出てきた順に全部(ビューアーで左右に送る) */
+    val allImages: List<String> by lazy { posts.flatMap { info[it.no]?.images ?: emptyList() } }
+
     companion object {
         private val ANCHOR = Regex("(?:>>|＞＞|>|＞)(\\d{1,4})(?:[-ー－](\\d{1,4}))?")
         private val URL = Regex("(?:h?ttps?)://[\\w\\-.~:/?#\\[\\]@!$&'()*+,;=%]+")
@@ -52,12 +56,16 @@ class PostIndex(
                 var image = false
                 var video = false
                 var link = false
+                val images = ArrayList<String>()
                 for (m in URL.findAll(p.body)) {
                     val raw = m.value
                     val url = if (raw.startsWith("ttp")) "h$raw" else raw
                     spans += Span.Url(m.range.first, m.range.last + 1, url)
                     when {
-                        IMAGE.containsMatchIn(url) -> image = true
+                        IMAGE.containsMatchIn(url) -> {
+                            image = true
+                            images += url
+                        }
                         VIDEO.containsMatchIn(url) -> video = true
                         else -> link = true
                     }
@@ -75,7 +83,7 @@ class PostIndex(
                     replies.getOrPut(n) { ArrayList() } += p.no
                 }
                 spans.sortBy { it.start }
-                info[p.no] = PostInfo(spans, image, video, link)
+                info[p.no] = PostInfo(spans, image, video, link, images)
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
             return PostIndex(posts, info, replyCount, replies, idCount)

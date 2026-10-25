@@ -22,11 +22,14 @@ import androidx.compose.ui.unit.sp
  * 自分の書き込みは、左に青い線を付ける
  */
 @Composable
-fun PostItem(r: RenderedPost, own: Boolean = false) {
+fun PostItem(r: RenderedPost, own: Boolean = false, images: List<String> = emptyList(), autoLoad: Boolean = true, onImage: (String) -> Unit = {}) {
     val content = @Composable {
+        Column(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
             Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
             Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = 15.sp, lineHeight = 22.sp)
+        }
+        if (images.isNotEmpty()) Thumbnails(images, autoLoad, onImage)
         }
     }
     if (!own) return content()

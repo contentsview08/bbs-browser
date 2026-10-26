@@ -216,8 +216,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var forwardPage: Page.Thread? = null
     val canForward get() = forwardPage != null
 
+    /** 画面の移り方(1: 右から出てくる / -1: 右へ戻る / 0: 入れ替え)。積み重ねを変える直前に決める */
+    var navDir = 0
+        private set
+
     fun back(): Boolean {
         if (stack.size <= 1) return false
+        navDir = -1
         forwardPage = stack.removeAt(stack.lastIndex) as? Page.Thread
         // 戻ったスレ一覧の未読の数を新しくする
         when (val top = stack.last()) {
@@ -232,12 +237,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun forward() {
         val p = forwardPage ?: run { toast = "進む先がありません"; return }
         forwardPage = null
+        navDir = 1
         stack.add(p)
     }
 
     /** 左のメニューから開く(積み重ねを入れ替える) */
     fun openRoot(page: Page) {
         drawerOpen = false
+        navDir = 0
         stack.clear()
         stack.add(page)
         when (page) {
@@ -382,6 +389,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openBoard(board: Board, root: Boolean = true) {
         drawerOpen = false
         val page = Page.Threads(board)
+        navDir = if (root) 0 else 1
         if (root) stack.clear()
         stack.add(page)
         prefs.lastBoardUrl = board.url
@@ -413,6 +421,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         drawerOpen = false
         val page = Page.Thread(t)
         forwardPage = null
+        navDir = 1
         stack.add(page)
         page.reply.name = prefs.postName
         viewModelScope.launch {

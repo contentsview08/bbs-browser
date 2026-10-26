@@ -23,6 +23,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -73,7 +84,26 @@ class MainActivity : ComponentActivity() {
                     // 引き出しの指の操作は、開いているとき(閉じる)だけ。開くのはスワイプの操作(左の端から右へ)に任せる
                     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {
-                            when (val page = vm.stack.lastOrNull()) {
+                            // 画面の移り方: 開くと右から出てきて、戻ると右へ抜ける(今のスマホ版と同じ)。左のメニューから開いたときは入れ替え
+                            AnimatedContent(
+                                targetState = vm.stack.lastOrNull(),
+                                // 今のスマホ版の page-in / page-back と同じ: 出てくる画面だけが、28%(戻るときは左へ 20%)ずれた所から
+                                // 薄い(0.4)状態ですべり込む。260ms・cubic-bezier(0.2, 0.8, 0.2, 1)。前の画面はそのまま消える
+                                transitionSpec = {
+                                    val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+                                    val move = tween<IntOffset>(260, easing = ease)
+                                    val fade = tween<Float>(260, easing = ease)
+                                    when (vm.navDir) {
+                                        1 -> (slideInHorizontally(move) { (it * 0.28f).toInt() } + fadeIn(fade, initialAlpha = 0.4f)) togetherWith ExitTransition.None
+                                        -1 -> (slideInHorizontally(move) { -(it * 0.2f).toInt() } + fadeIn(fade, initialAlpha = 0.4f)) togetherWith ExitTransition.None
+                                        else -> fadeIn(tween(160)) togetherWith ExitTransition.None
+                                    }.apply { targetContentZIndex = 1f }
+                                },
+                                contentKey = { it?.hashCode() },
+                                label = "page",
+                            ) { page ->
+                            Box(Modifier.fillMaxSize().background(Palette.base)) {
+                            when (page) {
                                 is Page.Threads -> ThreadListScreen(vm, page)
                                 is Page.Thread -> ThreadScreen(vm, page)
                                 is Page.Boards -> BoardsScreen(vm)
@@ -82,6 +112,8 @@ class MainActivity : ComponentActivity() {
                                 is Page.PostHistory -> PostHistoryScreen(vm)
                                 is Page.Settings -> SettingsScreen(vm)
                                 null -> {}
+                            }
+                            }
                             }
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->

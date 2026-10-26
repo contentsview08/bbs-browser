@@ -139,7 +139,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun openPopup(posts: List<Post>, tree: List<io.github.yumekui8.bbsnative.bbs.TreeRow>? = null, focus: Int? = null) {
         if (posts.isNotEmpty()) popups += PopupEntry(++popupSeq, posts, tree, downY, focus)
     }
-    BackHandler(enabled = popups.isNotEmpty()) { popups.clear() }
     var menu by remember { mutableStateOf(false) }
     var postMenu by remember { mutableStateOf<Post?>(null) }
     var ngWordFor by remember { mutableStateOf<Post?>(null) }
@@ -229,6 +228,22 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     val ended = page.archived || index.posts.size >= 1000
 
+    /**
+     * 戻る操作(戻るボタン・戻るのジェスチャー)で、スレを閉じる前に外すもの。今のスマホ版と同じ順:
+     * 書き込み欄 → 検索 → ポップアップ(まとめて)→ 絞り込み。外したら true
+     */
+    fun localBack(): Boolean {
+        when {
+            page.reply.open -> { page.reply.open = false; vm.saveDraft(page) }
+            searching || query.isNotEmpty() -> { searching = false; query = "" }
+            popups.isNotEmpty() -> popups.clear()
+            filter != null -> filter = null
+            else -> return false
+        }
+        return true
+    }
+    BackHandler(enabled = page.reply.open || searching || query.isNotEmpty() || popups.isNotEmpty() || filter != null) { localBack() }
+
     // レス 1 件(本文とポップアップで共通)。本文を押すとアンカーツリー、長押しでメニュー
     val style = vm.prefs.postStyle
     // 返信先の 1 行に出す中身(Discord 風・LINE 風)
@@ -270,7 +285,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val gestures = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
             prefs.gestures("thread"), "thread",
             mapOf(
-                "back" to { vm.back(); Unit },
+                "back" to { if (!localBack()) vm.back() },
                 "reply" to { vm.openReply(page) },
                 "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) }; Unit },
                 "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
@@ -486,7 +501,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         )
     }
 
-    viewer?.let { url -> ImageViewer(index.allImages.ifEmpty { listOf(url) }, url, onClose = { viewer = null }) }
+    viewer?.let { url ->
+        if (url in index.allImages) ImageViewer(index.allImages, url, onClose = { viewer = null }, posts = index.allImagePosts)
+        else ImageViewer(listOf(url), url, onClose = { viewer = null })
+    }
 }
 
 /** 見えている一番下のレスを、スクロールが止まって少ししてから既読として知らせる */

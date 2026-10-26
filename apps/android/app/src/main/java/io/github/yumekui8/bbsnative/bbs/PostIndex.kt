@@ -107,6 +107,8 @@ class PostIndex(
 
     /** スレの中の画像を、出てきた順に全部(ビューアーで左右に送る) */
     val allImages: List<String> by lazy { posts.flatMap { info[it.no]?.images ?: emptyList() } }
+    /** allImages と同じ並びの、その画像が載っていたレス(ビューアーの下の帯に出す) */
+    val allImagePosts: List<Post> by lazy { posts.flatMap { p -> (info[p.no]?.images ?: emptyList()).map { p } } }
 
     companion object {
         private val ANCHOR = Regex("(?:>>|＞＞|>|＞)(\\d{1,4})(?:[-ー－](\\d{1,4}))?")

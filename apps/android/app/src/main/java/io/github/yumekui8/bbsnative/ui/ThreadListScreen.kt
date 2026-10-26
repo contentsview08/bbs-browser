@@ -147,6 +147,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
 
     var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
+    // 戻る操作で、まず検索を外す
+    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty()) { searching = false; query = "" }
     val swipe = rememberSwipeState()
     // なぞる操作(今のスマホ版の既定と同じ割り当て)
     val prefs = vm.prefs

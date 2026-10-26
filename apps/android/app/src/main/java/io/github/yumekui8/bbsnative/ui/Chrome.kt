@@ -36,6 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -130,24 +135,62 @@ fun MoreButton(onClick: () -> Unit) = BarIcon(Icons.Filled.MoreVert, "その他"
 /** 下から出るメニューの 1 行 */
 class MenuItem(val label: String, val icon: ImageVector, val tint: Color = Palette.textMuted, val danger: Boolean = false, val onClick: () -> Unit)
 
+/** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
+enum class MenuAt { TopEnd, TopStart, Center }
+
 /**
- * 下から出るメニュー(今のスマホ版の ︙ のメニュー)。groups の間に線を引く。危ない項目(削除)は赤く
+ * メニュー(︙ ・題・長押し)。押した所の近くにふわっと出る(右上の ︙ なら右上の角から広がる)。
+ * groups の間に線を引く。危ない項目(削除)は赤く。外を押すか戻るで閉じる
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MenuSheet(groups: List<List<MenuItem>>, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.surface) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
-            groups.filter { it.isNotEmpty() }.forEachIndexed { gi, items ->
-                if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.border)
-                for (it in items) {
-                    Row(
-                        Modifier.fillMaxWidth().clickable { it.onClick(); onDismiss() }.heightIn(min = 52.dp).padding(horizontal = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(18.dp),
-                    ) {
-                        Icon(it.icon, null, tint = if (it.danger) Palette.markDanger else it.tint, modifier = Modifier.size(24.dp))
-                        Text(it.label, color = if (it.danger) Palette.markDanger else Palette.textStrong, fontSize = 16.sp)
+fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismiss: () -> Unit) {
+    val show = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        show.animateTo(1f, androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
+    }
+    fun close() { scope.launch { show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
+    val origin = when (at) {
+        MenuAt.TopEnd -> androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+        MenuAt.TopStart -> androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+        MenuAt.Center -> androidx.compose.ui.graphics.TransformOrigin.Center
+    }
+    androidx.compose.ui.window.Popup(
+        onDismissRequest = { close() },
+        properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * show.value))
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { close() },
+        ) {
+            val shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            Column(
+                Modifier
+                    .align(when (at) { MenuAt.TopEnd -> Alignment.TopEnd; MenuAt.TopStart -> Alignment.TopStart; MenuAt.Center -> Alignment.Center })
+                    .statusBarsPadding()
+                    .padding(top = if (at == MenuAt.Center) 0.dp else 52.dp, start = 10.dp, end = 10.dp)
+                    .width(288.dp)
+                    .graphicsLayer {
+                        val p = show.value
+                        alpha = p; scaleX = 0.9f + 0.1f * p; scaleY = 0.9f + 0.1f * p; transformOrigin = origin
+                        if (at != MenuAt.Center) translationY = (1f - p) * -6.dp.toPx()
+                    }
+                    .shadow(16.dp, shape).clip(shape).background(Palette.surface).border(1.dp, Palette.border, shape)
+                    .heightIn(max = 560.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {}
+                    .padding(vertical = 6.dp),
+            ) {
+                groups.filter { it.isNotEmpty() }.forEachIndexed { gi, items ->
+                    if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
+                    for (it in items) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { it.onClick(); onDismiss() }.heightIn(min = 46.dp).padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Icon(it.icon, null, tint = if (it.danger) Palette.markDanger else it.tint, modifier = Modifier.size(21.dp))
+                            Text(it.label, color = if (it.danger) Palette.markDanger else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }

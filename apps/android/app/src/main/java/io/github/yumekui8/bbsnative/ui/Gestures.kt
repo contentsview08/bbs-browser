@@ -50,10 +50,11 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
     // 感度(1 鈍い〜5 敏感)を、しきい値に掛ける倍率にする。3 が標準(今のスマホ版と同じ)
     val k = when (sensitivity) { 1 -> 1.6f; 2 -> 1.3f; 4 -> 0.7f; 5 -> 0.45f; else -> 1f }
     return this.pointerInput(k) {
-            val lock = 10.dp.toPx() * k
-            val segment = 24.dp.toPx() * k
+            // しきい値は今のスマホ版と同じ(向きを決める 8・次の向き 16・確定は画面の 40% か、60 を超えて平均 0.5/ms より速い)
+            val lock = 8.dp.toPx() * k
+            val segment = 16.dp.toPx() * k
             val minDistance = 60.dp.toPx() * k
-            val minVelocity = 500.dp.toPx() * k // 1 秒あたり
+            val minVelocity = 0.5f * density * k // 1ms あたり(平均の速さ)
             val edge = 24.dp.toPx()
             fun dominant(d: Offset) = if (abs(d.x) >= abs(d.y)) (if (d.x >= 0) "right" else "left") else (if (d.y >= 0) "down" else "up")
             awaitEachGesture {
@@ -77,9 +78,11 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                             val seq = segs.joinToString(",")
                             val action = actionOf(seq) ?: break
                             if (segs.size == 1) {
-                                val dist = (c.position - down.position).let { if (seq == "left" || seq == "right") abs(it.x) else abs(it.y) }
-                                val v = tracker.calculateVelocity().let { if (seq == "left" || seq == "right") abs(it.x) else abs(it.y) }
-                                if (dist < minDistance || (dist < size.width * 0.4f && v < minVelocity)) break
+                                val horizontal = seq == "left" || seq == "right"
+                                val dist = (c.position - down.position).let { if (horizontal) abs(it.x) else abs(it.y) }
+                                val v = dist / maxOf(1L, c.uptimeMillis - down.uptimeMillis)
+                                val viewport = if (horizontal) size.width else size.height
+                                if (!(dist > viewport * 0.4f * k || (dist > minDistance && v > minVelocity))) break
                             }
                             c.consume()
                             action.run()
@@ -96,15 +99,13 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                             anchor = c.position
                             lastMove = c.uptimeMillis
                         } else {
-                            val dir = dominant(d)
-                            if (dir == segs.last()) {
-                                // 同じ向きに進んでいるあいだは、起点をついてこさせる(向きが変わった所から測る)
-                                if (d.getDistance() > 2f) { anchor = c.position; lastMove = c.uptimeMillis }
-                            } else if (d.getDistance() > segment) {
-                                segs += dir
+                            // 前の区切りから 16 動いたら向きを見て、変わっていれば次の向きを足す(区切りは毎回置き直す)
+                            if (d.getDistance() >= segment) {
+                                val dir = dominant(d)
+                                if (dir != segs.last()) segs += dir
                                 anchor = c.position
-                                lastMove = c.uptimeMillis
                             }
+                            if (d.getDistance() > 2f) lastMove = c.uptimeMillis
                         }
                         c.consume()
                         state.label = actionOf(segs.joinToString(","))?.label

@@ -63,6 +63,8 @@ sealed interface Page {
         var states by mutableStateOf<Map<String, ThreadState>>(emptyMap())
         var loading by mutableStateOf(false)
         var error by mutableStateOf<String?>(null)
+        /** スレ一覧を取り直した回数(取り直したら一覧の一番上へ戻す) */
+        var refreshed by mutableStateOf(0)
         /** スレを立てる欄 */
         val newThread = ReplyState()
     }
@@ -411,6 +413,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 page.states = db.threadStates(page.board.url)
                 page.threads = TwoCh.listThreads(page.board)
+                page.refreshed++
             } catch (e: Exception) {
                 page.error = e.message ?: e.toString()
             } finally {

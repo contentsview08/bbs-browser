@@ -202,11 +202,19 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     // いちばん下を見ているときに新着が届いたら、新着まで送る(今のスマホ版の既定と同じ)。
     // 下にいたかは、新着を組み立てた直後(並べ直す前)に見る
+    // 下にいたかは、最後に落ち着いた並びで見る(届いた直後・開いた直後の並べ直し前の値で決めると、開いただけで一番下まで飛んでしまう)。
+    // 開いたときの新着(page.enter に入らない)では送らない。開いたら最初の未読から読む
     var prevCount by remember { mutableIntStateOf(-1) }
     var stickTo by remember { mutableStateOf<Int?>(null) }
+    var atBottomSettled by remember { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.totalItemsCount > 1 && !listState.canScrollForward && !listState.isScrollInProgress }
+            .collect { atBottomSettled = it }
+    }
     SideEffect {
         val n = index.posts.size
-        if (vm.prefs.autoScrollOnNew && prevCount in 1 until n && !listState.canScrollForward && filter == null && query.isBlank()) stickTo = prevCount
+        val fresh = index.posts.lastOrNull()?.no?.let { it in page.enter } == true
+        if (vm.prefs.autoScrollOnNew && fresh && atBottomSettled && prevCount in 1 until n && filter == null && query.isBlank()) stickTo = prevCount
         prevCount = n
     }
     LaunchedEffect(stickTo) { stickTo?.let { listState.animateScrollToItem(it); stickTo = null } }
@@ -309,68 +317,73 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
 
-    Column(modifier.fillMaxSize().background(Palette.base)) {
-        // なぞる操作(今のスマホ版の既定と同じ割り当て)。左の端から右へはメニュー
-        val prefs = vm.prefs
-        val gestures = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
-            prefs.gestures("thread"), "thread",
-            mapOf(
-                "back" to { if (!localBack()) vm.back() },
-                "reply" to { vm.openReply(page) },
-                "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) }; Unit },
-                "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
-                "refresh" to { vm.refreshThread(page); Unit },
-                "deleteLog" to { confirmDelete = true },
-                "drawer" to { vm.drawerOpen = true },
-                "search" to { searching = true; bars.show() },
-                "favorite" to { vm.toggleFavoriteThread(page) },
-                "next" to { vm.findNext(page); nextSheet = true },
-            ),
-        )
-        bars.enabled = prefs.hideBarsOnScroll
-        // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間は隠さない)。今のスマホ版と同じ
-        var footerH by remember { mutableFloatStateOf(0f) }
-        val footerShown = if (page.reply.open || !bars.enabled) 1f else 1f - bars.hidden
-        // 下の端で上へ引っぱって更新(今のスマホ版の useTouchPull の下の端)
-        var pull by remember { mutableFloatStateOf(0f) }
-        var fromBottom by remember { mutableStateOf(false) }
-        val pullAt = with(density) { 72.dp.toPx() }
-        LaunchedEffect(page.loading) { if (!page.loading) fromBottom = false }
-        val bottomPull = remember(page) {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    // 引っぱっている途中で指を戻したら、まず引いた分を戻す
-                    if (pull > 0f && available.y > 0f && source == NestedScrollSource.UserInput) {
-                        val d = minOf(pull, available.y); pull -= d; return Offset(0f, d)
-                    }
-                    return Offset.Zero
+    // なぞる操作(今のスマホ版の既定と同じ割り当て)。左の端から右へはメニュー
+    val prefs = vm.prefs
+    // ポップアップが出ている間は、ほかの操作(先頭へ・書き込むなど)は効かせず、戻る(→)でポップアップをまとめて閉じるだけ(今のスマホ版と同じ)
+    val gestures = if (!prefs.gesturesEnabled) emptyMap()
+    else if (popups.isNotEmpty()) mapOf("right" to SwipeAction("閉じる") { popups.clear() })
+    else buildGestures(
+        prefs.gestures("thread"), "thread",
+        mapOf(
+            "back" to { if (!localBack()) vm.back() },
+            "reply" to { vm.openReply(page) },
+            "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) }; Unit },
+            "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
+            "refresh" to { vm.refreshThread(page); Unit },
+            "deleteLog" to { confirmDelete = true },
+            "drawer" to { vm.drawerOpen = true },
+            "search" to { searching = true; bars.show() },
+            "favorite" to { vm.toggleFavoriteThread(page) },
+            "next" to { vm.findNext(page); nextSheet = true },
+        ),
+    )
+    bars.enabled = prefs.hideBarsOnScroll
+    // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間は隠さない)。今のスマホ版と同じ
+    var footerH by remember { mutableFloatStateOf(0f) }
+    val footerShown = if (page.reply.open || !bars.enabled) 1f else 1f - bars.hidden
+    // 下の端で上へ引っぱって更新(今のスマホ版の useTouchPull の下の端)
+    var pull by remember { mutableFloatStateOf(0f) }
+    var fromBottom by remember { mutableStateOf(false) }
+    val pullAt = with(density) { 72.dp.toPx() }
+    LaunchedEffect(page.loading) { if (!page.loading) fromBottom = false }
+    val bottomPull = remember(page) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // 引っぱっている途中で指を戻したら、まず引いた分を戻す
+                if (pull > 0f && available.y > 0f && source == NestedScrollSource.UserInput) {
+                    val d = minOf(pull, available.y); pull -= d; return Offset(0f, d)
                 }
-                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (source == NestedScrollSource.UserInput && available.y < 0f) {
-                        pull += -available.y * 0.5f
-                        return Offset(0f, available.y)
-                    }
-                    return Offset.Zero
+                return Offset.Zero
+            }
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y < 0f) {
+                    pull += -available.y * 0.5f
+                    return Offset(0f, available.y)
                 }
-                override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
-                    if (pull >= pullAt && !page.loading) { fromBottom = true; vm.refreshThread(page) }
-                    pull = 0f
-                    return androidx.compose.ui.unit.Velocity.Zero
-                }
+                return Offset.Zero
+            }
+            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                if (pull >= pullAt && !page.loading) { fromBottom = true; vm.refreshThread(page) }
+                pull = 0f
+                return androidx.compose.ui.unit.Velocity.Zero
             }
         }
-        // 開いているスレの自動更新(設定。0 ならしない)
-        if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
-            while (true) {
-                delay(prefs.autoRefreshSec * 1000L)
-                if (!page.loading) vm.refreshThread(page, quiet = true)
-            }
+    }
+    // 開いているスレの自動更新(設定。0 ならしない)
+    if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
+        while (true) {
+            delay(prefs.autoRefreshSec * 1000L)
+            if (!page.loading) vm.refreshThread(page, quiet = true)
         }
+    }
+    // 画面全体(本文とポップアップ)で指の動きを受ける: なぞる操作と、押した所の高さ(ポップアップを押した所の真上に出すため)
+    Box(
+        modifier.fillMaxSize().background(Palette.base)
+            .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
+            .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
+    ) {
         Box(
-            Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection).nestedScroll(bottomPull)
-                .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
-                // 押した所の高さを控える(ポップアップを、押した所の真上に出すため)
-                .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
+            Modifier.fillMaxSize().clipToBounds().nestedScroll(bars.connection).nestedScroll(bottomPull),
         ) {
             PullToRefreshBox(isRefreshing = page.loading && !fromBottom, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.fillMaxSize()) {
                 when {
@@ -460,8 +473,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     .graphicsLayer { translationY = (1f - footerShown) * footerH },
             ) { ThreadFooter(vm, page) { vm.refreshThread(page) } }
 
-            PopupLayer(popups, topInset = bars.topHeight * (1f - bars.hidden), onCloseTop = { popups.removeAt(popups.lastIndex) }) { postRow(it, null) }
         }
+        // ポップアップは本文のスクロールの外に置く(ポップアップの中をスクロールしても、後ろの帯が隠れたり、引っぱって更新が動いたりしないように)
+        PopupLayer(popups, topInset = bars.topHeight * (1f - bars.hidden), onCloseTop = { popups.removeAt(popups.lastIndex) }) { postRow(it, null) }
     }
 
     // ︙ のメニュー(今のスマホ版の並び: お気に入り・画像一覧・次スレ・検索・板・先頭・一番下・表示スタイル・文字の大きさ・URL・ブラウザ・更新・削除)
@@ -513,6 +527,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ),
                 listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { vm.deleteLog(page) }),
             ),
+            MenuAt.TopStart,
         ) { titleSheet = false }
     }
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; fontDialog = true }) { styleSheet = false }
@@ -546,6 +561,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("言葉を NG…", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p },
                 ),
             ),
+            MenuAt.Center,
         ) { postMenu = null }
     }
 

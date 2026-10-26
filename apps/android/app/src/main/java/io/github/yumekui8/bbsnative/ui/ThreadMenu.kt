@@ -47,6 +47,7 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
                     if (hasLog) MenuItem("ログを削除", Icons.Filled.Delete, danger = true) { vm.deleteLogOf(t) } else null,
                 ),
             ),
+            MenuAt.Center,
         ) { if (ngDraft == null) onDismiss() }
     } else {
         var word by remember(t.id) { mutableStateOf(ngDraft ?: "") }

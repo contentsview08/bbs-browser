@@ -158,6 +158,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     // 戻る操作で、まず検索を外す
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty()) { searching = false; query = "" }
+    // 取り直したら一番上へ戻す(上にあったスレの位置を保つと、その上に新しいスレが足されて分かりにくい)
+    LaunchedEffect(page.refreshed) { if (page.refreshed > 1) { listState.scrollToItem(0); bars.show() } }
     val swipe = rememberSwipeState()
     // なぞる操作(今のスマホ版の既定と同じ割り当て)
     val prefs = vm.prefs
@@ -292,6 +294,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, page.board.url, false) },
                 ),
             ),
+            MenuAt.TopStart,
         ) { titleSheet = false }
     }
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; sizeDialog = true }) { styleSheet = false }

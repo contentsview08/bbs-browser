@@ -120,7 +120,7 @@ private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
         NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字と余白", value = "${(p.fontScale * 100).toInt()}%") { open("text") }
     }
     Group("画面") {
-        NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード") { open("list") }
+        NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード・ログ") { open("list") }
         NavRow(Icons.Filled.Forum, Color(0xFF3B82F6), "スレ表示", desc = "開いたときの位置・本文・リンク") { open("thread") }
         NavRow(Icons.Filled.Image, Color(0xFF06B6D4), "画像と動画", desc = "サムネイル・読み込み・グロ注意") { open("media") }
     }
@@ -220,6 +220,13 @@ private fun ListPage(vm: AppViewModel) {
     }
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
         WordList(p.keywords, "キーワードを足す", "まだありません") { p.keywords = it }
+    }
+    Group("ログ", note = "お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
+        ChoiceRow(
+            "開いていないスレのログを消す", p.logRetentionDays.toString(),
+            listOf(30 to "30 日たったら", 90 to "90 日たったら", 180 to "180 日たったら", 365 to "1 年たったら", 0 to "消さない").map { it.first.toString() to it.second },
+        ) { p.logRetentionDays = it.toInt() }
+        ActionRow("今すぐ消す") { vm.pruneLogsNow() }
     }
 }
 

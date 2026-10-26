@@ -132,6 +132,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
         reloadSide()
         viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
+        // 起動したら、しばらく開いていないスレのログを消す(設定)
+        if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }
     }
 
     /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
@@ -140,6 +142,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             favorites = db.favorites()
             history = db.history()
             favThreads = db.favoriteThreads()
+        }
+    }
+
+    /** 設定の「今すぐ消す」 */
+    fun pruneLogsNow() {
+        viewModelScope.launch {
+            val days = prefs.logRetentionDays.takeIf { it > 0 } ?: 30
+            val n = db.pruneLogs(System.currentTimeMillis() - days * 86_400_000L)
+            reloadSide()
+            toast = "$n 件のスレのログを消しました"
+        }
+    }
+
+    /** 掲示板のスレ一覧で分かった、いまのレス数(スレの id → 数)。閲覧履歴・お気に入りのスレの新着に使う。-1 は dat 落ち */
+    var remoteCounts by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+    var checking by mutableStateOf(false)
+        private set
+
+    /** 閲覧履歴・お気に入りのスレの新着を確かめる(板ごとにスレ一覧を 1 回だけ読む) */
+    fun checkNew(entries: List<HistoryEntry>) {
+        if (checking || entries.isEmpty()) return
+        viewModelScope.launch {
+            checking = true
+            val next = remoteCounts.toMutableMap()
+            try {
+                for ((boardUrl, list) in entries.groupBy { it.thread.boardUrl }) {
+                    val threads = runCatching { TwoCh.listThreads(Board(boardUrl, "")) }.getOrNull() ?: continue
+                    val counts = threads.associate { it.key to it.postCount }
+                    for (e in list) next[e.thread.id] = counts[e.thread.key] ?: -1
+                }
+                remoteCounts = next
+            } finally {
+                checking = false
+            }
         }
     }
 

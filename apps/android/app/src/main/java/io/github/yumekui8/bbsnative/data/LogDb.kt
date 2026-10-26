@@ -287,6 +287,33 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         db.delete("threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
     }
 
+    /**
+     * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの。PC 版の pruneLogs と同じ)。
+     * お気に入りのスレ・自分が書き込んだスレは残す。消したスレの数を返す。
+     * rawQuery の引数は文字列で渡るので、CAST して数で比べる(文字列のままだと、どの数も文字列より小さいので全部消える)
+     */
+    suspend fun pruneLogs(before: Long): Int = io {
+        val db = writableDatabase
+        val rows = db.rawQuery(
+            """SELECT t.board_url, t.key FROM threads t
+               WHERE COALESCE(t.read_at, t.fetched_at, 0) < CAST(? AS INTEGER)
+                 AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key)
+                 AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)""",
+            arrayOf(before.toString()),
+        ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) } }
+        db.beginTransaction()
+        try {
+            for ((b, k) in rows) {
+                db.delete("posts", "board_url = ? AND key = ?", arrayOf(b, k))
+                db.delete("threads", "board_url = ? AND key = ?", arrayOf(b, k))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        rows.size
+    }
+
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 }
 

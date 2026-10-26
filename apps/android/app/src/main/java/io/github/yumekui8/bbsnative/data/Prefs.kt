@@ -80,6 +80,8 @@ class Prefs(context: Context) {
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
     var keywords by pref("keywords", "")
     var pullToRefreshList by pref("pullToRefreshList", true)
+    /** 開いていないスレのログを消すまでの日数(0 なら消さない) */
+    var logRetentionDays by pref("logRetentionDays", 90)
 
     // ── スレ表示 ──
     /** 開く位置: unread(最初の未読)/ top / bottom */

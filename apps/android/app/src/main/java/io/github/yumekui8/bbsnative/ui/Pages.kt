@@ -116,18 +116,27 @@ private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: (
 fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>, empty: String) {
     var menuFor by remember { mutableStateOf<io.github.yumekui8.bbsnative.bbs.ThreadSummary?>(null) }
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
+    // お気に入りのスレは、開いたときに新着を確かめる(今のスマホ版と同じ)
+    androidx.compose.runtime.LaunchedEffect(title) { if (title == "お気に入りのスレ") vm.checkNew(entries) }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
-        HeaderBar(title, onNav = { vm.drawerOpen = true })
+        HeaderBar(title, onNav = { vm.drawerOpen = true }) {
+            BarIcon(Icons.Filled.Refresh, "新着を確かめる") { vm.checkNew(entries) }
+        }
         HorizontalDivider(color = Palette.border)
         if (entries.isEmpty()) Hint(empty)
-        else LazyColumn(Modifier.fillMaxSize()) {
+        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { vm.checkNew(entries) }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize()) {
             items(entries, key = { it.thread.id }) { h ->
-                val unread = maxOf(0, h.thread.postCount - h.readNo)
+                // 掲示板で分かったレス数があれば、そちらで未読を数える(-1 は dat 落ち)
+                val remote = vm.remoteCounts[h.thread.id]
+                val unread = maxOf(0, maxOf(h.thread.postCount, remote ?: 0) - h.readNo)
                 Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = { menuFor = h.thread }) { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)) {
                     Text(h.thread.title.ifEmpty { h.thread.key }, color = Palette.textStrong, fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.Bold else FontWeight.Normal)
                     Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${relativeTime(h.readAt)}に見た ・ ${h.thread.boardUrl.removePrefix("https://").trimEnd('/')}", Modifier.weight(1f), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
-                        Text("${h.thread.postCount}レス", color = Palette.textMuted, fontSize = 12.sp)
+                        Text(
+                            (if (remote == -1) "dat 落ち ・ " else "") + "${relativeTime(h.readAt)}に見た ・ ${h.thread.boardUrl.removePrefix("https://").trimEnd('/')}",
+                            Modifier.weight(1f), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1,
+                        )
+                        Text("${maxOf(h.thread.postCount, remote ?: 0)}レス", color = Palette.textMuted, fontSize = 12.sp)
                         if (unread > 0) {
                             Spacer(Modifier.width(8.dp))
                             Text("+$unread", Modifier.background(Palette.unread, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -137,7 +146,7 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
                 HorizontalDivider(color = Palette.border)
             }
             item { Spacer(Modifier.navigationBarsPadding()) }
-        }
+        }}
     }
 }
 

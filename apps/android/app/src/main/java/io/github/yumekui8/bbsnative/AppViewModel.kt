@@ -81,8 +81,13 @@ sealed interface Page {
         var states by mutableStateOf<Map<String, ThreadState>>(emptyMap())
         var loading by mutableStateOf(false)
         var error by mutableStateOf<String?>(null)
-        /** スレ一覧を取り直した回数(取り直したら一覧の一番上へ戻す) */
+        /** スレ一覧を取り直した回数(取り直したら一覧の一番上へ戻す)と、もう一番上へ戻した回 */
         var refreshed by mutableStateOf(0)
+        var scrolledFor = 1
+        /** 並べ替え(勢い順など)の向き。true なら逆順 */
+        var reversed by mutableStateOf(false)
+        /** 「新」の印を付ける境目の時刻(前回この板の一覧を取った時刻)。初めての板なら null */
+        var newSince by mutableStateOf<Long?>(null)
         /** スレを立てる欄 */
         val newThread = ReplyState()
     }
@@ -433,8 +438,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             page.loading = true
             page.error = null
             try {
+                val list = TwoCh.listThreads(page.board)
                 page.states = db.threadStates(page.board.url)
-                page.threads = TwoCh.listThreads(page.board)
+                // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える(今のスマホ版と同じ)
+                page.newSince = prefs.boardVisit(page.board.url)
+                prefs.setBoardVisit(page.board.url, System.currentTimeMillis())
+                page.threads = list
                 page.refreshed++
             } catch (e: Exception) {
                 page.error = e.message ?: e.toString()

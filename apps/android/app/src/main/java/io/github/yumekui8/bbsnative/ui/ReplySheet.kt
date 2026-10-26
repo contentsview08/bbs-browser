@@ -107,7 +107,8 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
     val canSend = !r.sending && r.body.isNotBlank() && disabled == null
     val shape = RoundedCornerShape(20.dp)
-    Column(Modifier.fillMaxWidth().background(Palette.bar).imePadding().navigationBarsPadding()) {
+    // キーボードの分はスレ表示ごと持ち上げる(ThreadScreen の imePadding)。ここはナビゲーションバーの分だけ
+    Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
         HorizontalDivider(color = Palette.border)
         if (imageHint) FooterNote(Icons.Filled.Info, "画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください(catbox に上げて URL を本文に入れます)", Palette.textMuted) { imageHint = false }
         if (r.uploading) FooterNote(Icons.Filled.Sync, "画像をアップロード中…", Palette.textMuted, null)

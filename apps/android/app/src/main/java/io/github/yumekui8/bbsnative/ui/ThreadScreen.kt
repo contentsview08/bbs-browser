@@ -80,6 +80,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.imePadding
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -365,8 +368,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ),
     )
     bars.enabled = prefs.hideBarsOnScroll
+    bars.atTop = { !listState.canScrollBackward }
+    bars.atBottom = { !listState.canScrollForward }
     // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間・返事が出ている間は隠さない)。今のスマホ版と同じ
-    val footerShown = if (page.reply.open || page.reply.done != null || page.reply.notice != null || !bars.enabled) 1f else 1f - bars.hidden
+    val footerShown = if (page.reply.open || page.reply.done != null || page.reply.notice != null || !bars.enabled) 1f else 1f - bars.footerHidden
     // 上の端で下へ・下の端で上へ引っぱって更新(今のスマホ版の useTouchPull)
     val topPull = remember { PullState() }
     val bottomPull = remember { PullState() }
@@ -379,8 +384,16 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
     }
     // 画面全体(本文とポップアップ)で指の動きを受ける: なぞる操作と、押した所の高さ(ポップアップを押した所の真上に出すため)
+    // キーボードが出たら、スレ表示ごとその上に縮め、本文をキーボードの高さだけ送る(LINE と同じく、下のレスが隠れずに上がる)
+    val imeBottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density)
+    var lastIme by remember { mutableIntStateOf(0) }
+    LaunchedEffect(imeBottom) {
+        val d = imeBottom - lastIme
+        lastIme = imeBottom
+        if (d != 0) runCatching { listState.scrollBy(d.toFloat()) }
+    }
     Box(
-        modifier.fillMaxSize().background(Palette.base)
+        modifier.fillMaxSize().background(Palette.base).imePadding()
             .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
             .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
     ) {
@@ -406,9 +419,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
                             if (style == "card") HorizontalDivider(color = Palette.border)
                         }
+                        // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)
                         item(key = "end") {
-                            Box(Modifier.fillMaxWidth().padding(vertical = 22.dp), contentAlignment = Alignment.Center) {
-                                Text(if (page.archived) "-END-(dat 落ち)" else "-END-", color = Palette.textMuted, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f).height(3.dp).background(Palette.border))
+                                Text(
+                                    if (page.archived) "-END-(dat 落ち)" else "-END-", Modifier.padding(horizontal = 12.dp),
+                                    color = Palette.textMuted, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp,
+                                )
+                                Box(Modifier.weight(1f).height(3.dp).background(Palette.border))
                             }
                         }
                         // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す(今のスマホ版と同じ)
@@ -682,9 +701,10 @@ private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, conten
 @Composable
 private fun UnreadDivider() {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.35f)))
-        Text("ここから未読", Modifier.padding(horizontal = 10.dp), color = Palette.unread.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
-        Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.35f)))
+        // 今のスマホ版の Divider(self): 全体を未読の色の 6 割に、線はさらに 4 割
+        Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.24f)))
+        Text("ここから未読", Modifier.padding(horizontal = 12.dp), color = Palette.unread.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
+        Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.24f)))
     }
 }
 

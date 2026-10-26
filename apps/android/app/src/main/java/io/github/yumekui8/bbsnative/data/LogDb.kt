@@ -17,7 +17,7 @@ import org.json.JSONObject
 private const val CONNECTOR = "2ch-compat"
 
 /** 開いたことのあるスレの状態(スレ一覧の未読の数・既読の位置に使う) */
-data class ThreadState(val readNo: Int, val postCount: Int)
+data class ThreadState(val readNo: Int, val postCount: Int, val archived: Boolean = false)
 
 /** 手元のスレのログ */
 class ThreadLog(val title: String, val posts: List<Post>, val readNo: Int, val cursor: DatCursor?, val archived: Boolean)
@@ -123,8 +123,8 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
 
     /** 板の中で開いたことのあるスレの状態(キー → 既読の位置・手元のレス数) */
     suspend fun threadStates(boardUrl: String): Map<String, ThreadState> = io {
-        readableDatabase.rawQuery("SELECT key, read_no, post_count FROM threads WHERE board_url = ?", arrayOf(boardUrl)).use { c ->
-            buildMap { while (c.moveToNext()) put(c.getString(0), ThreadState(c.getInt(1), c.getInt(2))) }
+        readableDatabase.rawQuery("SELECT key, read_no, post_count, status FROM threads WHERE board_url = ?", arrayOf(boardUrl)).use { c ->
+            buildMap { while (c.moveToNext()) put(c.getString(0), ThreadState(c.getInt(1), c.getInt(2), c.getString(3) == "archived")) }
         }
     }
 

@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,37 +54,65 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 /**
- * スクロールで上下の帯を隠す(下へ送ると隠れ、上へ戻すとすぐ出る。今のスマホ版の useHideOnScroll と同じ動き)。
+ * スクロールで上下の帯を隠す(今のスマホ版の useHideOnScroll を写したもの):
+ * - 向きが変わった所からの合計で 8 を超えて下へ送ると隠し、上へ戻すと(どこにいても)すぐ出す。出し入れは 0.2 秒ですべらせる
+ * - 一番上では両方出す。一番下まで来たら、フッターだけは出す(書き込み・更新を押したいはずなので)
+ * - 指で触ってからだけ隠す(開いた直後の、未読への飛び・位置の戻しでは隠さない)
  * 帯の高さは onSizeChanged で測って入れる。帯は graphicsLayer で動かすだけなので、スクロール中も描き直しは軽い
  */
 @Stable
-class HideOnScroll {
+class HideOnScroll(private val threshold: Float) {
     var topHeight by mutableFloatStateOf(0f)
     var bottomHeight by mutableFloatStateOf(0f)
-    /** 0(出ている)〜1(隠れている) */
+    /** 隠すか(目標)。hidden・footerHidden がそこへ向かって動く */
+    var headerOff by mutableStateOf(false)
+    var footerOff by mutableStateOf(false)
+    /** 0(出ている)〜1(隠れている)。上の帯 */
     var hidden by mutableFloatStateOf(0f)
-        private set
+    /** 0(出ている)〜1(隠れている)。下の帯 */
+    var footerHidden by mutableFloatStateOf(0f)
 
     /** 設定で切ったら隠さない */
     var enabled = true
+    /** 一番上・一番下にいるか(画面が渡す) */
+    var atTop: () -> Boolean = { false }
+    var atBottom: () -> Boolean = { false }
+    private var direction = 0
+    private var moved = 0f
 
-    fun show() { hidden = 0f }
+    fun show() { headerOff = false; footerOff = false }
 
-    // 実際にスクロールした量で隠す(指が動いた量で隠すと、スクロールできない短いスレでも隠れて戻せなくなる)
     val connection = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-            if (!enabled) { hidden = 0f; return Offset.Zero }
-            val h = maxOf(topHeight, 1f)
-            hidden = (hidden - consumed.y / h).coerceIn(0f, 1f)
-            // 一番上まで引っぱったら必ず出す
-            if (available.y > 0f) hidden = 0f
+            if (!enabled) { show(); return Offset.Zero }
+            // 指で触ったスクロールだけ(プログラムで動かしたときは隠さない)
+            if (source != NestedScrollSource.UserInput && source != NestedScrollSource.SideEffect) return Offset.Zero
+            if (atTop()) { show(); direction = 0; moved = 0f; return Offset.Zero }
+            val bottom = atBottom()
+            if (bottom) footerOff = false
+            val delta = -consumed.y
+            if (delta == 0f) return Offset.Zero
+            val dir = if (delta > 0) 1 else -1
+            if (dir != direction) { direction = dir; moved = 0f }
+            moved += kotlin.math.abs(delta)
+            if (moved > threshold) {
+                if (dir > 0) { headerOff = true; if (!bottom) footerOff = true } else show()
+            }
             return Offset.Zero
         }
     }
 }
 
 @Composable
-fun rememberHideOnScroll() = remember { HideOnScroll() }
+fun rememberHideOnScroll(): HideOnScroll {
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { 8.dp.toPx() }
+    val bars = remember { HideOnScroll(px) }
+    val h by androidx.compose.animation.core.animateFloatAsState(if (bars.headerOff) 1f else 0f, androidx.compose.animation.core.tween(200), label = "header")
+    val f by androidx.compose.animation.core.animateFloatAsState(if (bars.footerOff) 1f else 0f, androidx.compose.animation.core.tween(200), label = "footer")
+    bars.hidden = h
+    bars.footerHidden = f
+    return bars
+}
 
 /**
  * 上の帯。左に ☰(メニュー)か ←(戻る)、真ん中に題(2 行まで)、右にボタン。今のスマホ版の形

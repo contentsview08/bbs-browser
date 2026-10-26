@@ -91,14 +91,16 @@ class MainActivity : ComponentActivity() {
                                 // 今のスマホ版の page-in / page-back と同じ: 出てくる画面だけが、28%(戻るときは左へ 20%)ずれた所から
                                 // 薄い(0.4)状態ですべり込む。260ms・cubic-bezier(0.2, 0.8, 0.2, 1)。前の画面はそのまま消える
                                 transitionSpec = {
+                                    // 何が起きたか分かるように: 開くと新しい画面が右端からすべり込み、前の画面は少し左へ下がって暗くなる。
+                                    // 戻ると今の画面が右へ抜け、前の画面が左から戻る(スマホのふつうの画面の移り方)
                                     val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
-                                    val move = tween<IntOffset>(260, easing = ease)
-                                    val fade = tween<Float>(260, easing = ease)
+                                    val move = tween<IntOffset>(320, easing = ease)
+                                    val fade = tween<Float>(320, easing = ease)
                                     when (vm.navDir) {
-                                        1 -> (slideInHorizontally(move) { (it * 0.28f).toInt() } + fadeIn(fade, initialAlpha = 0.4f)) togetherWith ExitTransition.None
-                                        -1 -> (slideInHorizontally(move) { -(it * 0.2f).toInt() } + fadeIn(fade, initialAlpha = 0.4f)) togetherWith ExitTransition.None
-                                        else -> fadeIn(tween(160)) togetherWith ExitTransition.None
-                                    }.apply { targetContentZIndex = 1f }
+                                        1 -> slideInHorizontally(move) { it } togetherWith (slideOutHorizontally(move) { -it / 4 } + fadeOut(fade, targetAlpha = 0.5f))
+                                        -1 -> (slideInHorizontally(move) { -it / 4 } + fadeIn(fade, initialAlpha = 0.5f)) togetherWith slideOutHorizontally(move) { it }
+                                        else -> fadeIn(tween(200)) togetherWith fadeOut(tween(200))
+                                    }.apply { targetContentZIndex = if (vm.navDir == -1) -1f else 1f }
                                 },
                                 contentKey = { it?.hashCode() },
                                 label = "page",

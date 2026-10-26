@@ -94,6 +94,10 @@ class Prefs(context: Context) {
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
     var keywords by pref("keywords", "")
     var pullToRefreshList by pref("pullToRefreshList", true)
+    /** 板ごとに、前回スレ一覧を取った時刻(「新」の印の境目)。JSON */
+    private var boardVisitsJson by pref("boardVisits", "{}")
+    fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
+    fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }
     /** 一覧の下に出すタブと並び(カンマ区切り。unread / visited / momentum / newest / count) */
     var listTabs by pref("listTabs", "unread,momentum,newest")
     /** 開いていないスレのログを消すまでの日数(0 なら消さない) */

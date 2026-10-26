@@ -60,6 +60,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.height
@@ -125,7 +131,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val ngTitles = vm.prefs.ngRules.filter { it.target == "title" }.map { it.pattern }
     val sort = vm.prefs.threadSort
     val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val shown = remember(page.threads, page.states, tab, query, ngTitles, sort, keywords) {
+    val shown = remember(page.threads, page.states, tab, query, ngTitles, sort, keywords, page.reversed) {
         // スレタイの NG に当たるスレは出さない
         var list = if (ngTitles.isEmpty()) page.threads else page.threads.filter { t -> ngTitles.none { t.title.contains(it, ignoreCase = true) } }
         if (query.isNotBlank()) list = list.filter { it.title.contains(query.trim(), ignoreCase = true) }
@@ -139,9 +145,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             }
             ListTab.UNREAD -> list.filter { unreadOf(it, page.states) > 0 }
             ListTab.VISITED -> list.filter { page.states[it.key] != null }
-            ListTab.COUNT -> list.sortedByDescending { it.postCount }
-            ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }
-            ListTab.NEWEST -> list.sortedByDescending { it.createdAt ?: 0 }
+            // 並べ替えのタブは、押すたびに 逆順 → 元の並び(page.reversed)
+            ListTab.COUNT -> list.sortedByDescending { it.postCount }.let { if (page.reversed) it.reversed() else it }
+            ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }.let { if (page.reversed) it.reversed() else it }
+            ListTab.NEWEST -> list.sortedByDescending { it.createdAt ?: 0 }.let { if (page.reversed) it.reversed() else it }
         }
         // キーワードの入ったスレは一番上にまとめる(設定)。運営のお知らせは一番下に
         if (keywords.isNotEmpty()) {
@@ -152,6 +159,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     }
 
     var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
+    val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     var titleSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
     var sizeDialog by remember { mutableStateOf(false) }
@@ -160,7 +168,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     // 戻る操作で、まず検索を外す
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty()) { searching = false; query = "" }
     // 取り直したら一番上へ戻す(上にあったスレの位置を保つと、その上に新しいスレが足されて分かりにくい)
-    LaunchedEffect(page.refreshed) { if (page.refreshed > 1) { listState.scrollToItem(0); bars.show() } }
+    // (戻ってきたときにもう一度動かさないよう、戻した回を覚えておく。更新しない限り、一覧の位置はそのまま)
+    LaunchedEffect(page.refreshed) {
+        if (page.refreshed > page.scrolledFor) { page.scrolledFor = page.refreshed; listState.scrollToItem(0); bars.show() }
+    }
     val swipe = rememberSwipeState()
     // なぞる操作(今のスマホ版の既定と同じ割り当て)
     val prefs = vm.prefs
@@ -177,6 +188,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ),
     )
     bars.enabled = prefs.hideBarsOnScroll
+    bars.atTop = { !listState.canScrollBackward }
+    bars.atBottom = { !listState.canScrollForward }
     Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)) {
         // 引っぱって更新は設定で切れる(切ったら包まない)
         val pull: @Composable (@Composable () -> Unit) -> Unit = { body ->
@@ -195,7 +208,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     ),
                 ) {
                     items(shown, key = { it.key }, contentType = { 0 }) { t ->
-                        ThreadRow(t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now, onLongClick = { menuFor = t }) { vm.openThread(t) }
+                        ThreadRow(
+                            t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
+                            isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds,
+                            onLongClick = { menuFor = t },
+                        ) { vm.openThread(t) }
+                        HorizontalDivider(color = Palette.border)
                     }
                 }
             }
@@ -221,7 +239,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         // 下の帯(並び順と更新)
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { bars.bottomHeight = it.height.toFloat() }
-                .graphicsLayer { translationY = bars.hidden * bars.bottomHeight },
+                .graphicsLayer { translationY = bars.footerHidden * bars.bottomHeight },
         ) {
             HorizontalDivider(color = Palette.border)
             Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = (vm.prefs.footerHeight - 4).dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -229,14 +247,42 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
                 // タブが多くて入りきらないときは、横にずらせる
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                // 今のスマホ版のタブ: 選んでいるタブは強調色の文字と薄い色、上に線。未読のタブには未読の合計。
+                // 並べ替えのタブは、押すたびに 逆順 → 元の並び(矢印で向き)。絞り込みのタブは押すたびに入り切り
+                val unreadTotal = remember(page.threads, page.states) { page.threads.sumOf { unreadOf(it, page.states) } }
                 for (t in tabs) {
                     val active = tab == t
-                    Row(
-                        Modifier.clickable { page.tab = if (active) null else t.key }.background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED
+                    Box(
+                        Modifier.clickable {
+                            when {
+                                filterTab -> page.tab = if (active) null else t.key
+                                !active -> { page.tab = t.key; page.reversed = false }
+                                !page.reversed -> page.reversed = true
+                                else -> { page.tab = null; page.reversed = false }
+                            }
+                            scope.launch { listState.scrollToItem(0) }
+                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = 48.dp).padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(t.icon, null, tint = t.color, modifier = Modifier.size(18.dp))
-                        Text(t.label, color = if (active) Palette.accent else Palette.textMuted, fontSize = 15.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val c = if (active) Palette.accent else Palette.textMuted
+                            Icon(t.icon, null, tint = c, modifier = Modifier.size(17.dp))
+                            Text(t.label, color = c, fontSize = 14.sp)
+                            if (t == ListTab.UNREAD && unreadTotal > 0) {
+                                Text(
+                                    if (unreadTotal > 999) "+999+" else "+$unreadTotal",
+                                    Modifier.background(Palette.unread, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
+                                    color = Palette.unreadText, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            if (!filterTab) Icon(
+                                if (active && page.reversed) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward, null,
+                                tint = if (active) c else Color.Transparent, modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        // 選んでいる印の線(フッターなので本文の側=上に)
+                        if (active) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp).background(Palette.accent, RoundedCornerShape(1.dp)))
                     }
                 }
                 }
@@ -252,7 +298,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             containerColor = Palette.accent, contentColor = Color.White, shape = CircleShape,
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp).navigationBarsPadding()
                 .padding(bottom = with(density) { bars.bottomHeight.toDp() })
-                .graphicsLayer { translationY = bars.hidden * bars.bottomHeight },
+                .graphicsLayer { translationY = bars.footerHidden * bars.bottomHeight },
         ) { Icon(Icons.Filled.EditNote, "スレを立てる") }
     }
 
@@ -316,52 +362,72 @@ private fun unreadOf(t: ThreadSummary, states: Map<String, ThreadState>): Int {
     return maxOf(0, t.postCount - s.readNo)
 }
 
+/**
+ * スレ 1 行(今のスマホ版の ThreadCard のスマホの形): 1 段目にスレタイ(3 行まで。頭に「新」・お気に入りの星)、
+ * 2 段目の左に立った時間・立てた人の ID・dat落ち、右に勢い・レス数・未読の数。開いたことのあるスレは左に線
+ * (新着があれば未読の色)。スレタイの色: 新着があれば強く(太字)、開いて新着がなければ既読の色、開いていなければふつう
+ */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ThreadRow(t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long, onLongClick: () -> Unit, onClick: () -> Unit) {
+private fun ThreadRow(
+    t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long,
+    isNew: Boolean, isFavorite: Boolean, onLongClick: () -> Unit, onClick: () -> Unit,
+) {
     val unread = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
-    // 文字の大きさ・余白(設定)
     val prefs = LocalPrefs.current
     val k = prefs.listFontScale
     val pad = prefs.listPad.dp
-    Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-    // 読んだスレは左に線(新着があれば未読の色)。今のスマホ版と同じ
-    if (state != null) Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread else Palette.threadReadTitle))
-    Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 28.dp, end = 16.dp, top = pad, bottom = pad)) {
-        Text(
-            t.title, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (16 * k).sp, lineHeight = (21 * k).sp,
-            // 読んだことがあって未読がないスレは、読んだ色に
-            color = if (state != null && unread == 0) Palette.threadReadTitle.copy(alpha = 0.75f) else Palette.textStrong,
-            fontWeight = if (unread > 0) FontWeight.Bold else FontWeight.Normal,
-        )
-        Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = (12 * k).sp)
-            if (t.authorId != null) {
-                Spacer(Modifier.width(8.dp))
-                Text(t.authorId, color = Palette.textMuted, fontSize = (12 * k).sp, fontFamily = FontFamily.Monospace, maxLines = 1)
-            }
-            Spacer(Modifier.weight(1f))
+    val visited = state != null
+    val archived = state?.archived == true
+    Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min).graphicsLayer { alpha = if (archived) 0.6f else 1f }) {
+        if (visited) Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread else Palette.threadReadTitle))
+        Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad, bottom = pad)) {
+            val titleColor = if (visited) (if (unread > 0) Palette.textStrong else Palette.threadReadTitle) else Palette.textStrong
             Text(
-                if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), fontSize = (12 * k).sp, fontFamily = FontFamily.Monospace,
-                color = when {
-                    rank >= 0.9 -> Palette.heatVeryHot
-                    rank >= 0.6 -> Palette.heatHot
-                    rank >= 0.3 -> Palette.heatWarm
-                    else -> Palette.textMuted
+                buildAnnotatedString {
+                    if (isNew) {
+                        withStyle(SpanStyle(background = Palette.markFav, color = Color(0xFF1F1A0A), fontWeight = FontWeight.Bold, fontSize = (10 * k).sp)) { append("\u00A0新\u00A0") }
+                        append(" ")
+                    }
+                    if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
+                    append(t.title)
                 },
+                maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
+                color = titleColor, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
-            Spacer(Modifier.width(10.dp))
-            Text("${t.postCount}レス", color = Palette.textMuted, fontSize = (12 * k).sp)
-            if (unread > 0) {
-                Spacer(Modifier.width(8.dp))
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1)
+                if (t.authorId != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(t.authorId, Modifier.weight(1f, fill = false), color = Palette.textMuted, fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (archived) { Spacer(Modifier.width(8.dp)); Text("dat落ち", color = Palette.textMuted, fontSize = (11 * k).sp) }
+                Spacer(Modifier.weight(1f))
                 Text(
-                    "+$unread", Modifier.background(Palette.unread, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
-                    color = Palette.unreadText, fontSize = (11 * k).sp, fontWeight = FontWeight.Bold,
+                    if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
+                    color = when {
+                        rank >= 0.9 -> Palette.heatVeryHot
+                        rank >= 0.6 -> Palette.heatHot
+                        rank >= 0.3 -> Palette.heatWarm
+                        else -> Palette.textMuted
+                    },
                 )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    buildAnnotatedString { append("${t.postCount}"); withStyle(SpanStyle(fontSize = (10 * k).sp)) { append("レス") } },
+                    color = Palette.textMuted, fontSize = (11 * k).sp,
+                )
+                if (unread > 0) {
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (unread > 999) "+999+" else "+$unread",
+                        Modifier.widthIn(min = 28.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+                        color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
             }
         }
     }
-}
 }
 
 /** 上の帯の検索欄(題の代わりに出す) */

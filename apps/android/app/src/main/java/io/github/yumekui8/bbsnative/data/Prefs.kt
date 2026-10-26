@@ -111,6 +111,8 @@ class Prefs(context: Context) {
     // ── 書き込み ──
     /** 書き込みの名前(前回のもの) */
     var postName by pref("postName", "")
+    /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
+    var quickPhrases by pref("quickPhrases", "草")
     /** 書き込み欄から画像を catbox.moe に上げるか(匿名で上げた画像は公開され、消せないので既定は切る。PC 版と同じ) */
     var uploadEnabled by pref("uploadEnabled", false)
     /** 上げる前に縮める、長い辺の大きさ(px。0 なら縮めない) */

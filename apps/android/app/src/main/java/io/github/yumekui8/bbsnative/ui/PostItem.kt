@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun PostItem(
-    r: RenderedPost, own: Boolean = false, toOwn: Boolean = false,
+    r: RenderedPost, aa: Boolean = r.aa, own: Boolean = false, toOwn: Boolean = false,
     info: PostInfo? = null, autoLoad: Boolean = true, onImage: (String) -> Unit = {}, onUrl: (String) -> Unit = {}, gross: Boolean = false,
 ) {
     val prefs = LocalPrefs.current
@@ -52,7 +52,7 @@ fun PostItem(
                     OwnChip(if (own) "自分" else "→あなた宛")
                 }
             } else Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
-            if (r.aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+            if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
         }
         if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.thumbSize)
         if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)

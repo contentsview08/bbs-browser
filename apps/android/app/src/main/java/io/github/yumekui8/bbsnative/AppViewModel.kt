@@ -595,6 +595,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { db.saveDraft(page.summary, page.reply.body) }
     }
 
+    /** 長押しの「「草」とすぐ書き込む」: >>番号 と定型文を、書き込み欄を開かずに送る(今のスマホ版と同じ) */
+    fun quickPost(page: Page.Thread, no: Int, phrase: String) {
+        val r = page.reply
+        if (r.sending) return
+        val body = ">>$no\n$phrase"
+        val mail = if (r.sage) "sage" else ""
+        handlePost(page, body, r.name, mail, quick = true) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
+    }
+
     fun send(page: Page.Thread) {
         val r = page.reply
         if (r.sending || r.body.isBlank()) return
@@ -611,7 +620,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         handlePost(page, page.reply.body, page.reply.name, if (page.reply.sage) "sage" else "") { TwoCh.submitConfirm(c) }
     }
 
-    private fun handlePost(page: Page.Thread, body: String, name: String, mail: String, send: suspend () -> PostResult) {
+    /** quick: 長押しの「すぐ書き込む」(書き込み欄の下書きは消さず、うまくいかなければ知らせで出す) */
+    private fun handlePost(page: Page.Thread, body: String, name: String, mail: String, quick: Boolean = false, send: suspend () -> PostResult) {
         val r = page.reply
         viewModelScope.launch {
             r.sending = true
@@ -619,9 +629,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 when (val res = send()) {
                     is PostResult.Ok -> {
-                        r.body = ""
-                        r.open = false
-                        db.saveDraft(page.summary, "")
+                        if (!quick) {
+                            r.body = ""
+                            r.open = false
+                            db.saveDraft(page.summary, "")
+                        }
                         toast = "書き込みました"
                         refreshThread(page)?.join()
                         // 自分の書き込みを覚える。番号が返らない掲示板では、新着から同じ本文の一番新しいレスを探す
@@ -634,10 +646,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     is PostResult.Auth -> r.auth = res
                     is PostResult.Confirm -> r.confirm = res
-                    is PostResult.Error -> r.notice = res.message
+                    is PostResult.Error -> if (quick) toast = res.message else r.notice = res.message
                 }
             } catch (e: Exception) {
-                r.notice = "書き込めませんでした: ${e.message ?: e}"
+                if (quick) toast = "書き込めませんでした: ${e.message ?: e}" else r.notice = "書き込めませんでした: ${e.message ?: e}"
             } finally {
                 r.sending = false
             }

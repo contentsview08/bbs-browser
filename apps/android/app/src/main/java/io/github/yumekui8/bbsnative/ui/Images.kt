@@ -29,6 +29,11 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.foundation.shape.CircleShape
@@ -120,6 +125,10 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
 @Composable
 fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit) {
     val context = LocalContext.current
+    val prefs = LocalPrefs.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
     val pager = rememberPagerState(initialPage = urls.indexOf(start).coerceAtLeast(0)) { urls.size }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -127,9 +136,30 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit) {
             Row(Modifier.fillMaxWidth().safeDrawingPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "閉じる", tint = Color.White) }
                 Text("${pager.currentPage + 1} / ${urls.size}", Modifier.weight(1f), color = Color.White, fontSize = 14.sp)
-                TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urls[pager.currentPage]))) } }) {
-                    Text("ブラウザで開く", color = Color.White)
+                // 操作(今のスマホ版と同じ: 保存・URL をコピー・ブラウザで開く)
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "操作", tint = Color.White) }
+                    androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                        val url = urls[pager.currentPage]
+                        androidx.compose.material3.DropdownMenuItem({ Text("保存") }, leadingIcon = { Icon(Icons.Filled.Download, null) }, onClick = {
+                            menu = false
+                            scope.launch { notice = runCatching { io.github.yumekui8.bbsnative.data.ImageSaver.save(context, url) }.getOrElse { "保存できませんでした: ${it.message}" } }
+                        })
+                        androidx.compose.material3.DropdownMenuItem({ Text("URL をコピー") }, leadingIcon = { Icon(Icons.Filled.Link, null) }, onClick = {
+                            menu = false; copyText(context, url); notice = "URL をコピーしました"
+                        })
+                        androidx.compose.material3.DropdownMenuItem({ Text("ブラウザで開く") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) }, onClick = {
+                            menu = false; openExternal(context, url, prefs.openLinksInApp)
+                        })
+                    }
                 }
+            }
+            notice?.let { msg ->
+                androidx.compose.runtime.LaunchedEffect(msg) { kotlinx.coroutines.delay(2000); notice = null }
+                Text(
+                    msg, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 32.dp).background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                    color = Color.White, fontSize = 14.sp,
+                )
             }
         }
     }

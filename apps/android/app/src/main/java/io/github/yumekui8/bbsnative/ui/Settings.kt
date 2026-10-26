@@ -125,7 +125,7 @@ private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
         NavRow(Icons.Filled.Image, Color(0xFF06B6D4), "画像と動画", desc = "サムネイル・読み込み・グロ注意") { open("media") }
     }
     Group("書き込み") {
-        NavRow(Icons.Filled.Edit, Color(0xFFF59E0B), "書き込み", desc = "名前・画像のアップロード") { open("write") }
+        NavRow(Icons.Filled.Edit, Color(0xFFF59E0B), "書き込み", desc = "名前・定型文・画像のアップロード") { open("write") }
     }
     Group("操作") {
         NavRow(Icons.Filled.Swipe, Color(0xFFEC4899), "ジェスチャー", desc = "なぞって操作する形") { open("gestures") }
@@ -265,6 +265,9 @@ private fun WritePage(vm: AppViewModel) {
     val p = vm.prefs
     Group("名前") {
         TextRow("名前", p.postName, "名無し") { p.postName = it }
+    }
+    Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
+        WordList(p.quickPhrases, "定型文を足す", "定型文はありません") { p.quickPhrases = it }
     }
     Group("画像のアップロード(catbox.moe)", note = "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます") {
         SwitchRow("画像のアップロードを使う", p.uploadEnabled) { p.uploadEnabled = it }

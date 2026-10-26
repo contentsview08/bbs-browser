@@ -88,6 +88,10 @@ sealed interface Page {
         /** 自分の書き込みのレス番号 */
         var ownNos by mutableStateOf<Set<Int>>(emptySet())
         var favorite by mutableStateOf(false)
+        /** 新着で届いたレスの番号 → 出てくるまでの遅れ(ms)。今のスマホ版の post-enter・flash-new(35ms ずつ・合わせて 450ms まで) */
+        var enter by mutableStateOf<Map<Int, Int>>(emptyMap())
+        /** 出てくる動きを済ませたレス(スクロールで出直しても、もう一度は動かさない) */
+        val entered = HashSet<Int>()
         /** 次スレの候補(探したら入る。null はまだ探していない) */
         var nextCandidates by mutableStateOf<List<NextThreadCandidate>?>(null)
         val reply = ReplyState()
@@ -471,7 +475,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val old = if (r.status == FetchStatus.RESET) emptyList() else page.index.posts
                     val all: List<Post> = old + r.posts
                     // 手で更新したときは、届いた新着の頭に「ここから未読」を引き直す
-                    if (!firstOpen && old.isNotEmpty() && r.posts.isNotEmpty()) page.unreadFrom = r.posts.first().no
+                    if (!firstOpen && old.isNotEmpty() && r.posts.isNotEmpty()) {
+                        page.unreadFrom = r.posts.first().no
+                        val nos = r.posts.map { it.no }
+                        val step = minOf(35f, 450f / maxOf(1, nos.size - 1))
+                        page.enter = nos.mapIndexed { i, n -> n to (i * step).toInt() }.toMap()
+                    }
                     setPosts(page, all)
                     if (firstOpen && log == null) page.openAt = if (prefs.openPosition == "bottom") all.lastOrNull()?.no else 1
                 } else if (!firstOpen && !quiet) toast = "新着はありません"

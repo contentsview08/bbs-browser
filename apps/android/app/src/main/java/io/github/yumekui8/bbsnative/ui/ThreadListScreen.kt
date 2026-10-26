@@ -22,6 +22,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -146,6 +151,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     }
 
     var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
+    var titleSheet by remember { mutableStateOf(false) }
+    var styleSheet by remember { mutableStateOf(false) }
+    var sizeDialog by remember { mutableStateOf(false) }
+    var fontOnly by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     // 戻る操作で、まず検索を外す
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty()) { searching = false; query = "" }
@@ -197,6 +206,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 HeaderBar(
                     page.board.name, onNav = { vm.drawerOpen = true },
                     leading = { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp)) },
+                    onTitle = { titleSheet = true },
                 ) {
                     BarIcon(Icons.Filled.Search, "探す") { searching = true }
                     MoreButton { menu = true }
@@ -211,7 +221,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 .graphicsLayer { translationY = bars.hidden * bars.bottomHeight },
         ) {
             HorizontalDivider(color = Palette.border)
-            Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = 60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = (vm.prefs.footerHeight - 4).dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 出すタブと並びは設定(スレ一覧 › タブ)
                 val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
                 // タブが多くて入りきらないときは、横にずらせる
@@ -243,6 +253,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ) { Icon(Icons.Filled.EditNote, "スレを立てる") }
     }
 
+    // ︙ のメニュー(今のスマホ版の並び: スレを立てる・お気に入り板・スレッド検索・先頭へ・表示スタイル・文字の大きさ・余白・更新)
     if (menu) {
         val fav = vm.isFavorite(page.board)
         MenuSheet(
@@ -250,10 +261,48 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 listOf(
                     MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
                     MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star, Palette.markFav) { vm.toggleFavorite(page.board) },
+                    MenuItem("スレッド検索", Icons.Filled.Search, Palette.accent) { searching = true; bars.show() },
+                    MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                 ),
-                listOf(MenuItem("いちばん上へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } }),
+                listOf(
+                    MenuItem("表示スタイル", Icons.Filled.Palette, Palette.markPurple) { styleSheet = true },
+                    MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { sizeDialog = true },
+                    MenuItem("スレッド一覧を更新", Icons.Filled.Refresh, Palette.accent) { vm.refreshBoard(page) },
+                ),
             ),
         ) { menu = false }
+    }
+    // 板名を押したときのメニュー
+    if (titleSheet) {
+        val fav = vm.isFavorite(page.board)
+        val context = androidx.compose.ui.platform.LocalContext.current
+        MenuSheet(
+            listOf(
+                listOf(
+                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に足す", if (fav) Icons.Filled.Star else Icons.Outlined.Star, Palette.markFav) { vm.toggleFavorite(page.board) },
+                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+                ),
+                listOf(
+                    MenuItem("板名をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
+                    MenuItem("板の URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
+                ),
+                listOf(
+                    MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
+                    MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { vm.refreshBoard(page) },
+                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, page.board.url, false) },
+                ),
+            ),
+        ) { titleSheet = false }
+    }
+    if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; sizeDialog = true }) { styleSheet = false }
+    if (sizeDialog) SizeDialog({ sizeDialog = false; fontOnly = false }) {
+        val p = vm.prefs
+        if (fontOnly) SizeSlider("画面全体の文字", p.fontScale, 0.85f..1.3f, 8, "${(p.fontScale * 100).toInt()}%", 1f) { p.fontScale = (it * 20).toInt() / 20f }
+        else {
+            SizeSlider("スレ一覧の文字", p.listFontScale, 0.8f..1.4f, 11, "${(p.listFontScale * 100).toInt()}%", 1f) { p.listFontScale = (it * 20).toInt() / 20f }
+            SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..24f, 23, "${p.listPad}dp", 9f) { p.listPad = it.toInt() }
+            BarSliders(p)
+        }
     }
     NewThreadSheet(vm, page)
 }
@@ -267,25 +316,29 @@ private fun unreadOf(t: ThreadSummary, states: Map<String, ThreadState>): Int {
 @Composable
 private fun ThreadRow(t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long, onLongClick: () -> Unit, onClick: () -> Unit) {
     val unread = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
+    // 文字の大きさ・余白(設定)
+    val prefs = LocalPrefs.current
+    val k = prefs.listFontScale
+    val pad = prefs.listPad.dp
     Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
     // 読んだスレは左に線(新着があれば未読の色)。今のスマホ版と同じ
     if (state != null) Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread else Palette.threadReadTitle))
-    Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 28.dp, end = 16.dp, top = 9.dp, bottom = 9.dp)) {
+    Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 28.dp, end = 16.dp, top = pad, bottom = pad)) {
         Text(
-            t.title, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 16.sp, lineHeight = 21.sp,
+            t.title, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (16 * k).sp, lineHeight = (21 * k).sp,
             // 読んだことがあって未読がないスレは、読んだ色に
             color = if (state != null && unread == 0) Palette.threadReadTitle.copy(alpha = 0.75f) else Palette.textStrong,
             fontWeight = if (unread > 0) FontWeight.Bold else FontWeight.Normal,
         )
         Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = 12.sp)
+            Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = (12 * k).sp)
             if (t.authorId != null) {
                 Spacer(Modifier.width(8.dp))
-                Text(t.authorId, color = Palette.textMuted, fontSize = 12.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+                Text(t.authorId, color = Palette.textMuted, fontSize = (12 * k).sp, fontFamily = FontFamily.Monospace, maxLines = 1)
             }
             Spacer(Modifier.weight(1f))
             Text(
-                if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), fontSize = (12 * k).sp, fontFamily = FontFamily.Monospace,
                 color = when {
                     rank >= 0.9 -> Palette.heatVeryHot
                     rank >= 0.6 -> Palette.heatHot
@@ -294,12 +347,12 @@ private fun ThreadRow(t: ThreadSummary, state: ThreadState?, momentum: Double, r
                 },
             )
             Spacer(Modifier.width(10.dp))
-            Text("${t.postCount}レス", color = Palette.textMuted, fontSize = 12.sp)
+            Text("${t.postCount}レス", color = Palette.textMuted, fontSize = (12 * k).sp)
             if (unread > 0) {
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "+$unread", Modifier.background(Palette.unread, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
-                    color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    color = Palette.unreadText, fontSize = (11 * k).sp, fontWeight = FontWeight.Bold,
                 )
             }
         }

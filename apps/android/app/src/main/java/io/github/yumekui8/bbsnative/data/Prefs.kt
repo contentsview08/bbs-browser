@@ -75,6 +75,18 @@ class Prefs(context: Context) {
     var bodyScale by pref("bodyScale", 1f)
     /** レスの本文の行間(字の高さの倍) */
     var lineHeight by pref("lineHeight", 1.47f)
+    /** レスの頭(名前・日付・ID)の文字の倍率 */
+    var postHeadScale by pref("postHeadScale", 1f)
+    /** レスの上下の余白(dp) */
+    var postPad by pref("postPad", 8)
+    /** スレ一覧の文字の倍率 */
+    var listFontScale by pref("listFontScale", 1f)
+    /** スレ一覧のスレの上下の余白(dp) */
+    var listPad by pref("listPad", 9)
+    /** ヘッダー・フッターの高さ(dp)と文字の倍率 */
+    var headerHeight by pref("headerHeight", 64)
+    var footerHeight by pref("footerHeight", 64)
+    var barFontScale by pref("barFontScale", 1f)
 
     // ── スレ一覧 ──
     /** 板を開いたときの並び: subject(更新順)/ momentum / newest / count */

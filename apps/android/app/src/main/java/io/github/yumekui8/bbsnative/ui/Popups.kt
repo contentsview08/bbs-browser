@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.Layout
@@ -74,10 +75,14 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, post: @Com
     val minTop = topInset + gap
     val limit = (areaH - minTop) * 0.8f
     val shape = RoundedCornerShape(12.dp)
+    // 出てくるとき: 少し小さく・少し下から浮き上がる(今のスマホ版の rise-in。200ms)
+    val rise = remember(e.id) { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(e.id) { rise.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
     Layout(
         content = {
             Box(
-                Modifier.padding(horizontal = 6.dp).shadow(12.dp, shape).clip(shape).background(Palette.surface).border(2.dp, Palette.accent, shape)
+                Modifier.padding(horizontal = 6.dp)
+                    .graphicsLayer { val p = rise.value; alpha = p; val s = 0.94f + 0.06f * p; scaleX = s; scaleY = s; translationY = (1f - p) * 12.dp.toPx() }.shadow(12.dp, shape).clip(shape).background(Palette.surface).border(2.dp, Palette.accent, shape)
                     // 中を押しても幕に届かない(閉じない)ように
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
             ) { PopupContent(e, post) }

@@ -50,6 +50,8 @@ fun PostItem(
     val images = if (prefs.showThumbnails) info?.images ?: emptyList() else emptyList()
     val youtube = if (prefs.showThumbnails) info?.youtube ?: emptyList() else emptyList()
     val bodySize = (15 * prefs.bodyScale).sp
+    val headSize = (12 * prefs.postHeadScale).sp
+    val pad = prefs.postPad.dp
     val body = @Composable { mod: Modifier ->
         if (aa) AaBody(r) else Text(r.body, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
     }
@@ -60,16 +62,16 @@ fun PostItem(
     val header = @Composable {
         if (own || toOwn) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.header, Modifier.weight(1f, fill = false), fontSize = 12.sp, lineHeight = 17.sp)
+                Text(r.header, Modifier.weight(1f, fill = false), fontSize = headSize, lineHeight = 1.4.em)
                 Spacer(Modifier.width(6.dp))
                 OwnChip(if (own) "自分" else "→あなた宛")
             }
-        } else Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
+        } else Text(r.header, fontSize = headSize, lineHeight = 1.4.em)
     }
     when (style) {
         "discord" -> {
             // 左に丸い ID のアイコン、右に頭と本文。続けて書いたレス(同じ ID)はアイコンと頭を省く。返信先は頭の上に 1 行
-            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else 10.dp, bottom = 4.dp)) {
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
                 if (reply != null) ReplyLine(reply, indent = AVATAR + 10.dp) { onReply(reply.no) }
                 Row(Modifier.fillMaxWidth()) {
                     Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR) }
@@ -103,7 +105,7 @@ fun PostItem(
         else -> {
             val content = @Composable {
                 Column(Modifier.fillMaxWidth()) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = pad)) {
                         header()
                         body(Modifier.padding(top = 4.dp))
                     }

@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.unit.IntOffset
@@ -118,8 +119,12 @@ class MainActivity : ComponentActivity() {
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->
                                 LaunchedEffect(msg) { delay(2200); if (vm.toast == msg) vm.toast = null }
+                                // 右からすべり込む(今のスマホ版の toast-in。260ms)
+                                val slide = androidx.compose.runtime.remember(msg) { androidx.compose.animation.core.Animatable(0f) }
+                                LaunchedEffect(msg) { slide.animateTo(1f, tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
                                 Text(
                                     msg, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp)
+                                        .graphicsLayer { alpha = slide.value; translationX = (1f - slide.value) * size.width * 1.1f }
                                         .background(Palette.surface3, RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
                                     color = Palette.textStrong, fontSize = 14.sp,
                                 )

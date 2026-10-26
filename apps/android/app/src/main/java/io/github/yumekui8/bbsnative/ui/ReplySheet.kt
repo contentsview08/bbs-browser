@@ -94,7 +94,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 placeholder = { Text("本文") }, colors = fieldColors(), shape = RoundedCornerShape(12.dp),
             )
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!r.open) {
                 // 押すと書き込み欄に広がる、入力欄の形のボタン
                 Row(

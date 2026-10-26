@@ -218,6 +218,22 @@ private fun ListPage(vm: AppViewModel) {
         ) { p.threadSort = it }
         SwitchRow("引っぱって更新", p.pullToRefreshList, desc = "いちばん上で下へ引くと、スレ一覧を取り直します") { p.pullToRefreshList = it }
     }
+    Group("タブ", note = "一覧の下に出すタブ。矢印で並べ替え、スイッチで出す・出さないを決めます(上が左)") {
+        val all = listOf("unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
+        val on = p.listTabs.split(',').filter { it.isNotEmpty() }
+        // 出しているものを並びのとおりに先に、出していないものを後ろに
+        val rows = on.mapNotNull { k -> all.firstOrNull { it.first == k } } + all.filter { it.first !in on }
+        for ((k, name) in rows) {
+            val shown = k in on
+            val i = on.indexOf(k)
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, Modifier.weight(1f), color = if (shown) Palette.textStrong else Palette.textMuted, fontSize = 15.sp)
+                IconButton(onClick = { p.listTabs = on.toMutableList().apply { add(i - 1, removeAt(i)) }.joinToString(",") }, enabled = shown && i > 0) { Icon(Icons.Filled.KeyboardArrowUp, "左へ", tint = Palette.textMuted) }
+                IconButton(onClick = { p.listTabs = on.toMutableList().apply { add(i + 1, removeAt(i)) }.joinToString(",") }, enabled = shown && i < on.lastIndex) { Icon(Icons.Filled.KeyboardArrowDown, "右へ", tint = Palette.textMuted) }
+                Switch(shown, { v -> p.listTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 12.dp), colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+            }
+        }
+    }
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
         WordList(p.keywords, "キーワードを足す", "まだありません") { p.keywords = it }
     }

@@ -111,7 +111,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /** 絞り込みのタブ(今のスマホ版と同じ 4 つ + すべて。アイコンに意味の色) */
-private val TABS: List<Triple<Filter, ImageVector, Color>> = listOf(
+// 色は配色を変えたら変わるよう、読むたびに Palette から取る(get())
+private val TABS: List<Triple<Filter, ImageVector, Color>> get() = listOf(
     Triple(Filter.POPULAR, Icons.Filled.LocalFireDepartment, Palette.markHot),
     Triple(Filter.IMAGE, Icons.Filled.Image, Palette.markImage),
     Triple(Filter.VIDEO, Icons.Filled.PlayCircle, Palette.markVideo),

@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EditNote
@@ -53,6 +55,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -77,11 +81,14 @@ import io.github.yumekui8.bbsnative.bbs.ThreadSummary
 import io.github.yumekui8.bbsnative.data.ThreadState
 import kotlinx.coroutines.launch
 
-/** 一覧の並び。どれも選ばなければサーバーの順(更新順) */
-private enum class ListTab(val label: String, val icon: ImageVector, val color: Color) {
-    UNREAD("未読", Icons.Filled.MarkEmailUnread, Palette.unread),
-    MOMENTUM("勢い順", Icons.Filled.LocalFireDepartment, Palette.markHot),
-    NEWEST("新しい順", Icons.Filled.Schedule, Palette.markLink),
+/** 一覧のタブ(今のスマホ版の LIST_TABS と同じ)。どれも選ばなければ設定の並び。色は配色に合わせて読むたびに取る */
+private enum class ListTab(val key: String, val label: String, val icon: ImageVector, private val tint: () -> Color) {
+    UNREAD("unread", "未読", Icons.Filled.MarkEmailUnread, { Palette.unread }),
+    VISITED("visited", "閲覧済み", Icons.Filled.History, { Palette.markPurple }),
+    MOMENTUM("momentum", "勢い順", Icons.Filled.LocalFireDepartment, { Palette.markHot }),
+    NEWEST("newest", "新しい順", Icons.Filled.Schedule, { Palette.markLink }),
+    COUNT("count", "レス数順", Icons.Filled.FormatListNumbered, { Palette.markNew });
+    val color get() = tint()
 }
 
 /** 勢い(1 日あたりのレス数) */
@@ -125,6 +132,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 else -> list
             }
             ListTab.UNREAD -> list.filter { unreadOf(it, page.states) > 0 }
+            ListTab.VISITED -> list.filter { page.states[it.key] != null }
+            ListTab.COUNT -> list.sortedByDescending { it.postCount }
             ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }
             ListTab.NEWEST -> list.sortedByDescending { it.createdAt ?: 0 }
         }
@@ -201,7 +210,11 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ) {
             HorizontalDivider(color = Palette.border)
             Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = 60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                for (t in ListTab.entries) {
+                // 出すタブと並びは設定(スレ一覧 › タブ)
+                val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
+                // タブが多くて入りきらないときは、横にずらせる
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                for (t in tabs) {
                     val active = tab == t
                     Row(
                         Modifier.clickable { tab = if (active) null else t }.background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
@@ -211,7 +224,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         Text(t.label, color = if (active) Palette.accent else Palette.textMuted, fontSize = 15.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
                     }
                 }
-                Spacer(Modifier.weight(1f))
+                }
                 IconButton(onClick = { vm.refreshBoard(page) }, enabled = !page.loading) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted) }
             }
         }

@@ -84,23 +84,23 @@ fun isWifi(context: Context): Boolean = runCatching {
 @Composable
 fun Thumbnails(
     urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit, blur: Boolean = false,
-    youtube: List<Pair<String, String>> = emptyList(), onUrl: (String) -> Unit = {},
+    youtube: List<Pair<String, String>> = emptyList(), onUrl: (String) -> Unit = {}, size: Int = 96,
 ) {
     // グロ注意のレスは、押すまでぼかす
     var blurred by rememberSaveable(urls) { mutableStateOf(blur) }
     FlowRow(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (url in urls) Thumbnail(url, autoLoad, if (blurred) { _ -> blurred = false } else onOpen, blurred)
+        for (url in urls) Thumbnail(url, autoLoad, if (blurred) { _ -> blurred = false } else onOpen, blurred, size = size)
         // YouTube は動画の絵(i.ytimg.com)に再生の印を重ねる。押すと YouTube で開く
-        for ((id, url) in youtube) Thumbnail("https://i.ytimg.com/vi/$id/hqdefault.jpg", autoLoad, { onUrl(url) }, blurred, play = true)
+        for ((id, url) in youtube) Thumbnail("https://i.ytimg.com/vi/$id/hqdefault.jpg", autoLoad, { onUrl(url) }, blurred, play = true, size = size)
     }
 }
 
 @Composable
-private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false) {
+private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
     // 家の中のアドレスは、押すまで読まない
     var load by rememberSaveable(url) { mutableStateOf(autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)) }
     val shape = RoundedCornerShape(8.dp)
-    val box = Modifier.size(96.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
+    val box = Modifier.size(size.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
     if (!load) {
         Box(box.clickable { load = true }, contentAlignment = Alignment.Center) { Text("画像", color = Palette.textMuted, fontSize = 13.sp) }
         return

@@ -54,11 +54,15 @@ class HideOnScroll {
     var hidden by mutableFloatStateOf(0f)
         private set
 
+    /** 設定で切ったら隠さない */
+    var enabled = true
+
     fun show() { hidden = 0f }
 
     // 実際にスクロールした量で隠す(指が動いた量で隠すと、スクロールできない短いスレでも隠れて戻せなくなる)
     val connection = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            if (!enabled) { hidden = 0f; return Offset.Zero }
             val h = maxOf(topHeight, 1f)
             hidden = (hidden - consumed.y / h).coerceIn(0f, 1f)
             // 一番上まで引っぱったら必ず出す

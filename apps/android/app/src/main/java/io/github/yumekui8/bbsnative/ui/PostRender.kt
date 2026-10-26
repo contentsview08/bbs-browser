@@ -31,15 +31,29 @@ class PostLinks : LinkInteractionListener {
     }
 }
 
-private val linkStyle = TextLinkStyles(SpanStyle(color = Palette.link))
 private val plain = TextLinkStyles(null)
+
+/** レスの組み立て方の設定(設定画面の「スレ表示」。変えたら組み立て直す) */
+data class RenderOptions(
+    val noname: String? = null,
+    val highlightOp: Boolean = true,
+    val idHeat: Boolean = true,
+    val urlShorten: Boolean = true,
+    val imageUrlOmit: Boolean = true,
+    val imageUrlCollapse: Boolean = true,
+    val aaAutoDetect: Boolean = true,
+)
 
 /**
  * 全部のレスを組み立てる。レスが届いたときに、画面とは別のスレッド(Dispatchers.Default)で 1 回だけ呼ぶ。
  * 1 レスの部品を「頭の行の Text 1 つ・本文の Text 1 つ」にし、スクロールで出てきたときの組み立てを軽くする
  */
-fun renderPosts(index: PostIndex, links: PostLinks, noname: String? = null): Map<Int, RenderedPost> {
+fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOptions()): Map<Int, RenderedPost> {
     val out = HashMap<Int, RenderedPost>(index.posts.size * 2)
+    val noname = o.noname
+    // 色は組み立てるときの配色で決める(配色を変えたら組み立て直す)
+    val linkStyle = TextLinkStyles(SpanStyle(color = Palette.link))
+    val imageChip = SpanStyle(color = Palette.markImage, background = Palette.surface2, fontSize = 13.sp)
     // スレ主: >>1 と同じ ID
     val opId = index.posts.firstOrNull()?.id
     for (p in index.posts) {
@@ -57,7 +71,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, noname: String? = null): Map
             val name = if (noname != null && p.name.startsWith(noname)) p.name.substring(noname.length).trim() else p.name
             if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold)) { append(name) } }
             if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = Palette.textMuted)) { append("  [${p.mail}]") }
-            if (opId != null && p.id == opId) {
+            if (o.highlightOp && opId != null && p.id == opId) {
                 append("  ")
                 withStyle(SpanStyle(color = Palette.op, background = Palette.opWash, fontWeight = FontWeight.Bold, fontSize = 11.sp)) { append(" 主 ") }
             }
@@ -67,7 +81,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, noname: String? = null): Map
             if (p.id != null) {
                 append("  ")
                 // 書き込みの多い ID は暖色。押すと同じ ID のレスを出す
-                val heat = Palette.heat(idCount)
+                val heat = if (o.idHeat) Palette.heat(idCount) else null
                 withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
                     withStyle(SpanStyle(color = heat ?: Palette.textMuted, fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
                         append("ID:${p.id}")
@@ -93,35 +107,39 @@ fun renderPosts(index: PostIndex, links: PostLinks, noname: String? = null): Map
                 when {
                     s is Span.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.from}-${s.to}", linkStyle, links)) { append(text) }; at = s.end }
                     // 画像の URL は「画像」の札に。空白だけを挟んで続いたものは「画像 ×3」にまとめる(PC 版と同じ)
-                    s is Span.Url && isImageUrl(s.url) -> {
+                    s is Span.Url && isImageUrl(s.url) && (o.imageUrlOmit || o.imageUrlCollapse) -> {
                         var end = s.end
                         var n = 1
-                        while (i + 1 < spans.size) {
+                        while (o.imageUrlCollapse && i + 1 < spans.size) {
                             val next = spans[i + 1]
                             if (next !is Span.Url || !isImageUrl(next.url) || src.substring(end, next.start).isNotBlank()) break
                             end = next.end; n++; i++
                         }
-                        withLink(LinkAnnotation.Clickable("u:${s.url}", plain, links)) {
+                        if (o.imageUrlOmit) withLink(LinkAnnotation.Clickable("u:${s.url}", plain, links)) {
                             withStyle(imageChip) { append("\u00A0▣\u00A0画像" + (if (n > 1) "\u00A0×$n" else "") + "\u00A0") }
+                        }
+                        // 札にしないときは、最初の URL に「ほか n 件」を添える
+                        else withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) {
+                            append(if (o.urlShorten) shortUrl(s.url) else s.url)
+                            if (n > 1) append(" ほか ${n - 1} 件")
                         }
                         at = end
                     }
                     // URL は https:// を外し、長いものは後ろを省く。押したときに画面が決める(同じ掲示板のスレならアプリの中で開く)
-                    s is Span.Url -> { withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) { append(shortUrl(s.url)) }; at = s.end }
+                    s is Span.Url -> { withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) { append(if (o.urlShorten) shortUrl(s.url) else text) }; at = s.end }
                 }
                 i++
             }
             append(src, at, src.length)
             if (bodyStyle != null) pop()
         }
-        out[p.no] = RenderedPost(header, body, AA.containsMatchIn(p.body))
+        out[p.no] = RenderedPost(header, body, o.aaAutoDetect && AA.containsMatchIn(p.body))
     }
     return out
 }
 
 private val IMAGE_URL = Regex("\\.(?:jpe?g|png|gif|webp|avif)(?:[?#]|$)", RegexOption.IGNORE_CASE)
 private fun isImageUrl(url: String) = IMAGE_URL.containsMatchIn(url)
-private val imageChip = SpanStyle(color = Palette.markImage, background = Palette.surface2, fontSize = 13.sp)
 
 /** 見せる URL(PC 版の shortUrl と同じ): https:// と www. を外し、36 文字を超えたら後ろを省く */
 fun shortUrl(url: String, max: Int = 36): String {

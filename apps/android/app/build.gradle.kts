@@ -59,4 +59,6 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    // リンクをアプリの中で開く(Custom Tabs。今のスマホ版の「リンクをアプリの中で開く」)
+    implementation("androidx.browser:browser:1.8.0")
 }

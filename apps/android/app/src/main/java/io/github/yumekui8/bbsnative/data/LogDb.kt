@@ -62,7 +62,32 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         } else writableDatabase.execSQL("DELETE FROM favorite_boards WHERE url = ?", arrayOf(board.url))
     }
 
-    /** 板一覧の取得元(bbsmenu)。いまは 5ch だけ(DB を作るときに入る) */
+    /** お気に入り板の並びを入れ替える(urls の順に並べ直す) */
+    suspend fun reorderFavorites(urls: List<String>) = io {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            urls.forEachIndexed { i, u -> db.execSQL("UPDATE favorite_boards SET sort = ? WHERE url = ?", arrayOf<Any>(i, u)) }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 板一覧の取得元(bbsmenu)を足す・外す */
+    suspend fun addSite(menuUrl: String, name: String) = io {
+        writableDatabase.execSQL(
+            "INSERT OR REPLACE INTO sites (menu_url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM sites))",
+            arrayOf(menuUrl, CONNECTOR, name),
+        )
+    }
+
+    suspend fun removeSite(menuUrl: String) = io {
+        writableDatabase.execSQL("DELETE FROM boards WHERE site_menu_url = ?", arrayOf(menuUrl))
+        writableDatabase.execSQL("DELETE FROM sites WHERE menu_url = ?", arrayOf(menuUrl))
+    }
+
+    /** 板一覧の取得元(bbsmenu)。はじめは 5ch だけ(DB を作るときに入る) */
     suspend fun siteMenuUrls(): List<Pair<String, String>> = io {
         readableDatabase.rawQuery("SELECT menu_url, name FROM sites ORDER BY sort", null).use { c ->
             buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) }

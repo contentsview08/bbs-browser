@@ -24,7 +24,12 @@ import io.github.yumekui8.bbsnative.data.NgRule
 import io.github.yumekui8.bbsnative.data.PostHistoryEntry
 import io.github.yumekui8.bbsnative.data.Prefs
 import io.github.yumekui8.bbsnative.data.ThreadState
+import io.github.yumekui8.bbsnative.ui.Palette
 import io.github.yumekui8.bbsnative.ui.PostLinks
+import io.github.yumekui8.bbsnative.ui.RenderOptions
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import io.github.yumekui8.bbsnative.ui.RenderedPost
 import io.github.yumekui8.bbsnative.ui.renderPosts
 import kotlinx.coroutines.Dispatchers
@@ -126,6 +131,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
         openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
         reloadSide()
+        viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
     }
 
     /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
@@ -175,13 +181,111 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 板 ──
 
+    /** 板一覧の取得元(bbsmenu の URL と名前) */
+    var sites by mutableStateOf<List<Pair<String, String>>>(emptyList())
+        private set
+    /** 「板を探す」で見ているサイト(null なら最初のサイト) */
+    var siteUrl by mutableStateOf<String?>(null)
+
+    fun reloadSites() { viewModelScope.launch { sites = db.siteMenuUrls() } }
+
+    fun selectSite(url: String) {
+        siteUrl = url
+        boards = emptyList()
+        loadBoards()
+    }
+
+    /** bbsmenu の URL を足す(読めるか確かめてから) */
+    fun addSite(menuUrl: String, name: String) {
+        val url = menuUrl.trim()
+        viewModelScope.launch {
+            try {
+                val list = TwoCh.listBoards(url)
+                if (list.isEmpty()) throw IllegalStateException("板が 1 つもありません")
+                db.addSite(url, name.trim().ifEmpty { url.removePrefix("https://").substringBefore('/') })
+                db.replaceBoards(url, list)
+                sites = db.siteMenuUrls()
+                toast = "サイトを足しました(${list.size} 板)"
+            } catch (e: Exception) {
+                toast = "足せませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
+    fun removeSite(menuUrl: String) {
+        viewModelScope.launch {
+            db.removeSite(menuUrl)
+            sites = db.siteMenuUrls()
+            if (siteUrl == menuUrl) { siteUrl = null; boards = emptyList() }
+        }
+    }
+
+    /** お気に入り板を 1 つ上・下へ */
+    fun moveFavorite(board: Board, delta: Int) {
+        val list = favorites.toMutableList()
+        val i = list.indexOfFirst { it.url == board.url }
+        val j = i + delta
+        if (i < 0 || j !in list.indices) return
+        list.add(j, list.removeAt(i))
+        favorites = list
+        viewModelScope.launch { db.reorderFavorites(list.map { it.url }) }
+    }
+
+    /** バックアップを書き出す: 設定・お気に入り板・お気に入りのスレ・サイト・NG(設定に入っている) */
+    fun exportBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val o = org.json.JSONObject()
+                o.put("app", "bbs-native").put("version", 1)
+                o.put("settings", prefs.export())
+                o.put("favoriteBoards", org.json.JSONArray().apply { for (b in db.favorites()) put(org.json.JSONObject().put("url", b.url).put("name", b.name)) })
+                o.put("favoriteThreads", org.json.JSONArray().apply {
+                    for (h in db.favoriteThreads()) put(org.json.JSONObject().put("boardUrl", h.thread.boardUrl).put("key", h.thread.key).put("title", h.thread.title))
+                })
+                o.put("sites", org.json.JSONArray().apply { for ((u, n) in db.siteMenuUrls()) put(org.json.JSONObject().put("url", u).put("name", n)) })
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(o.toString(2).toByteArray()) }
+                }
+                toast = "バックアップを保存しました"
+            } catch (e: Exception) {
+                toast = "保存できませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
+    /** バックアップから戻す(今あるものに足す。設定は上書き) */
+    fun importBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
+                val o = org.json.JSONObject(text)
+                o.optJSONObject("settings")?.let { prefs.import(it) }
+                o.optJSONArray("favoriteBoards")?.let { a -> for (i in 0 until a.length()) a.getJSONObject(i).let { db.setFavorite(Board(it.getString("url"), it.getString("name")), true) } }
+                o.optJSONArray("favoriteThreads")?.let { a ->
+                    for (i in 0 until a.length()) a.getJSONObject(i).let {
+                        val t = ThreadSummary(it.getString("boardUrl"), it.getString("key"), it.getString("title"), 0, 0, null)
+                        db.setFavoriteThread(t, t.title, true)
+                    }
+                }
+                o.optJSONArray("sites")?.let { a -> for (i in 0 until a.length()) a.getJSONObject(i).let { db.addSite(it.getString("url"), it.getString("name")) } }
+                favorites = db.favorites()
+                sites = db.siteMenuUrls()
+                reloadSide()
+                toast = "バックアップから戻しました(設定は、アプリを開き直すと全部に効きます)"
+            } catch (e: Exception) {
+                toast = "戻せませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
     fun loadBoards(refresh: Boolean = false) {
         if (boardsLoading) return
         viewModelScope.launch {
             boardsLoading = true
             boardsError = null
             try {
-                val (menuUrl, _) = db.siteMenuUrls().firstOrNull() ?: return@launch
+                if (sites.isEmpty()) sites = db.siteMenuUrls()
+                val menuUrl = siteUrl ?: sites.firstOrNull()?.first ?: return@launch
                 val cached = if (refresh) emptyList() else db.cachedBoards(menuUrl)
                 boards = cached.ifEmpty { TwoCh.listBoards(menuUrl).also { db.replaceBoards(menuUrl, it) } }
             } catch (e: Exception) {
@@ -254,7 +358,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 setPosts(page, log.posts)
                 val hasUnread = log.readNo in 1 until log.posts.size
                 page.unreadFrom = if (hasUnread) log.readNo + 1 else 0
+                // 開く位置(設定): 最初の未読・先頭・いちばん下
                 page.openAt = when {
+                    prefs.openPosition == "top" -> 1
+                    prefs.openPosition == "bottom" -> log.posts.lastOrNull()?.no
                     log.readNo <= 0 -> 1
                     hasUnread -> log.readNo
                     else -> log.posts.lastOrNull()?.no
@@ -267,7 +374,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 新着を取る。取り直しの最中なら何もしない(null)。終わりを待つときは返した Job を join する */
-    fun refreshThread(page: Page.Thread, firstOpen: Boolean = false): Job? {
+    /** quiet: 自動更新(「新着はありません」を出さない) */
+    fun refreshThread(page: Page.Thread, firstOpen: Boolean = false, quiet: Boolean = false): Job? {
         if (page.loading) return null
         return viewModelScope.launch {
             page.loading = true
@@ -287,8 +395,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     // 手で更新したときは、届いた新着の頭に「ここから未読」を引き直す
                     if (!firstOpen && old.isNotEmpty() && r.posts.isNotEmpty()) page.unreadFrom = r.posts.first().no
                     setPosts(page, all)
-                    if (firstOpen && log == null) page.openAt = 1
-                } else if (!firstOpen) toast = "新着はありません"
+                    if (firstOpen && log == null) page.openAt = if (prefs.openPosition == "bottom") all.lastOrNull()?.no else 1
+                } else if (!firstOpen && !quiet) toast = "新着はありません"
             } catch (e: Exception) {
                 page.error = e.message ?: e.toString()
             } finally {
@@ -302,10 +410,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun setPosts(page: Page.Thread, posts: List<Post>) {
         val rules = prefs.ngRules
         // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま
-        val noname = TwoCh.cachedNoname(page.summary.boardUrl)
+        val noname = if (prefs.omitNoname) TwoCh.cachedNoname(page.summary.boardUrl) else null
+        val o = renderOptions(noname)
+        val collapse = prefs.collapseBlankLines
+        val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val result = withContext(Dispatchers.Default) {
-            val i = PostIndex.build(posts)
-            Triple(i, renderPosts(i, page.links, noname), ngOf(posts, rules))
+            val i = PostIndex.build(posts, collapse, gross)
+            Triple(i, renderPosts(i, page.links, o), ngOf(posts, rules))
         }
         page.rendered = result.second
         page.ngNos = result.third
@@ -337,6 +448,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun removeNg(rule: NgRule) {
         prefs.removeNg(rule)
         reapplyNg()
+    }
+
+    private fun renderOptions(noname: String?) = RenderOptions(
+        noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, urlShorten = prefs.urlShorten,
+        imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect,
+    )
+
+    /**
+     * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
+     */
+    private fun renderKey() = listOf(
+        prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.urlShorten, prefs.imageUrlOmit,
+        prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key,
+    )
+
+    private fun rerenderAll() {
+        for (p in stack.toList()) if (p is Page.Thread && p.loaded) viewModelScope.launch { setPosts(p, p.index.posts) }
     }
 
     private fun reapplyNg() {
@@ -453,7 +581,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         r.notice = null
         viewModelScope.launch {
             try {
-                val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), uri)
+                val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), uri, prefs.uploadMaxDimension)
                 r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url else r.body + "\n" + url
             } catch (e: Exception) {
                 r.notice = e.message ?: "アップロードできませんでした"

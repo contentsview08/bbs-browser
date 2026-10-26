@@ -24,8 +24,9 @@ object Uploader {
     private const val MAX_DIMENSION = 4096
 
     /** 上げて、ファイルの URL を返す。だめなら理由を書いた例外 */
-    suspend fun upload(context: Context, uri: Uri): String {
-        val (name, type, bytes) = withContext(Dispatchers.IO) { prepare(context, uri) }
+    /** maxDimension: 長い辺がこれを超える画像は縮める(0 なら縮めない) */
+    suspend fun upload(context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION): String {
+        val (name, type, bytes) = withContext(Dispatchers.IO) { prepare(context, uri, maxDimension) }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("reqtype", "fileupload")
             .addFormDataPart("fileToUpload", name, bytes.toRequestBody(type.toMediaType()))
@@ -37,7 +38,7 @@ object Uploader {
         error("アップロードできませんでした: ${text.ifEmpty { "HTTP ${res.status}" }}")
     }
 
-    private fun prepare(context: Context, uri: Uri): Triple<String, String, ByteArray> {
+    private fun prepare(context: Context, uri: Uri, maxDimension: Int): Triple<String, String, ByteArray> {
         val cr = context.contentResolver
         val type = cr.getType(uri) ?: "application/octet-stream"
         if (!type.startsWith("image/") && !type.startsWith("video/")) error("画像か動画だけを上げられます")
@@ -65,8 +66,8 @@ object Uploader {
             bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
         }
         val long = maxOf(bmp.width, bmp.height)
-        if (long > MAX_DIMENSION) {
-            val s = MAX_DIMENSION.toFloat() / long
+        if (maxDimension > 0 && long > maxDimension) {
+            val s = maxDimension.toFloat() / long
             bmp = Bitmap.createScaledBitmap(bmp, (bmp.width * s).toInt(), (bmp.height * s).toInt(), true)
         }
         val out = ByteArrayOutputStream()

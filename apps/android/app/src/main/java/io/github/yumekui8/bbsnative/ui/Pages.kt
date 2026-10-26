@@ -37,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +66,19 @@ fun BoardsScreen(vm: AppViewModel) {
             BarIcon(Icons.Filled.Refresh, "取り直す") { vm.loadBoards(refresh = true) }
         }
         HorizontalDivider(color = Palette.border)
+        // サイトが 2 つ以上あれば、どのサイトの板を見るか選ぶ
+        if (vm.sites.size > 1) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val current = vm.siteUrl ?: vm.sites.first().first
+                for ((url, name) in vm.sites) {
+                    val on = url == current
+                    Text(
+                        name, Modifier.background(if (on) Palette.accentWash else Palette.surface2, RoundedCornerShape(16.dp)).clickable { vm.selectSite(url) }.padding(horizontal = 14.dp, vertical = 7.dp),
+                        color = if (on) Palette.accent else Palette.textBody, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
         when {
             vm.boardsLoading && vm.boards.isEmpty() -> Hint("読み込み中…")
             vm.boardsError != null && vm.boards.isEmpty() -> Hint("読み込めませんでした: ${vm.boardsError}")
@@ -150,75 +164,4 @@ fun PostHistoryScreen(vm: AppViewModel) {
             item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }
-}
-
-/** 設定: 文字の大きさ・画像の自動読み込み・NG の一覧 */
-@Composable
-fun SettingsScreen(vm: AppViewModel) {
-    val p = vm.prefs
-    Column(Modifier.fillMaxSize().background(Palette.base)) {
-        HeaderBar("設定", onNav = { vm.drawerOpen = true })
-        HorizontalDivider(color = Palette.border)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp).navigationBarsPadding()) {
-            Section("文字の大きさ")
-            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("A", color = Palette.textMuted, fontSize = 13.sp)
-                Slider(
-                    p.fontScale, { p.changeFontScale((it * 20).toInt() / 20f) }, Modifier.weight(1f).padding(horizontal = 12.dp), valueRange = 0.85f..1.3f,
-                    colors = SliderDefaults.colors(thumbColor = Palette.accent, activeTrackColor = Palette.accent),
-                )
-                Text("A", color = Palette.textMuted, fontSize = 20.sp)
-            }
-            Text("${(p.fontScale * 100).toInt()}%", Modifier.padding(horizontal = 20.dp), color = Palette.textMuted, fontSize = 12.sp)
-
-            Section("画像のサムネイルを自動で読む")
-            for (m in ThumbMode.entries) Choice(m.label, p.thumbMode == m) { p.changeThumbMode(m) }
-
-            Section("スレ表示")
-            Toggle("ミニマップを出す", p.showMinimap) { p.changeShowMinimap(it) }
-            Section("画像のアップロード(catbox.moe)")
-            Toggle("書き込み欄から画像を上げる", p.uploadEnabled) { p.changeUploadEnabled(it) }
-            Text(
-                "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。",
-                Modifier.padding(horizontal = 24.dp, vertical = 4.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp,
-            )
-            Section("NG(${p.ngRules.size} 件)")
-            if (p.ngRules.isEmpty()) Text("レスを長押しして、ID・名前・言葉を NG に足せます", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 13.sp)
-            for (r in p.ngRules) {
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        when (r.target) { "id" -> "ID"; "name" -> "名前"; "title" -> "スレタイ"; else -> "言葉" },
-                        Modifier.background(Palette.surface2, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 12.sp,
-                    )
-                    Text(r.pattern, Modifier.weight(1f).padding(start = 10.dp), color = Palette.textBody, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    IconButton(onClick = { vm.removeNg(r) }) { Icon(Icons.Filled.Close, "外す", tint = Palette.textMuted) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Section(title: String) {
-    Text(title, Modifier.padding(start = 20.dp, top = 22.dp, bottom = 8.dp), color = Palette.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-}
-
-@Composable
-private fun Toggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable { onChange(!on) }.heightIn(min = 52.dp).padding(horizontal = 24.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, Modifier.weight(1f), color = Palette.textBody, fontSize = 15.sp)
-        androidx.compose.material3.Switch(on, onChange, colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Palette.accent))
-    }
-}
-
-@Composable
-private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp).background(if (selected) Palette.accentWash else Color.Transparent, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) { Text(label, color = if (selected) Palette.accent else Palette.textBody, fontSize = 15.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
 }

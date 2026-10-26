@@ -120,7 +120,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.AutoMirrored.Filled.Send, if (r.sending) "送っています" else "書き込む", tint = Color.White.copy(alpha = if (canSend) 1f else 0.6f), modifier = Modifier.size(22.dp)) }
             Spacer(Modifier.width(6.dp))
-            IconButton(onClick = onRefresh, enabled = !page.loading) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp)) }
+            if (vm.prefs.showRefreshButton) IconButton(onClick = onRefresh, enabled = !page.loading) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp)) }
         }
     }
     PostDialogs(r, onAccept = { vm.acceptConfirm(page) })

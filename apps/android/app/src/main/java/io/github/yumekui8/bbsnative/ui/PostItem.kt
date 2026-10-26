@@ -38,8 +38,10 @@ fun PostItem(
     r: RenderedPost, own: Boolean = false, toOwn: Boolean = false,
     info: PostInfo? = null, autoLoad: Boolean = true, onImage: (String) -> Unit = {}, onUrl: (String) -> Unit = {}, gross: Boolean = false,
 ) {
-    val images = info?.images ?: emptyList()
-    val youtube = info?.youtube ?: emptyList()
+    val prefs = LocalPrefs.current
+    val images = if (prefs.showThumbnails) info?.images ?: emptyList() else emptyList()
+    val youtube = if (prefs.showThumbnails) info?.youtube ?: emptyList() else emptyList()
+    val bodySize = (15 * prefs.bodyScale).sp
     val content = @Composable {
         Column(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -50,10 +52,10 @@ fun PostItem(
                     OwnChip(if (own) "自分" else "→あなた宛")
                 }
             } else Text(r.header, fontSize = 12.sp, lineHeight = 17.sp)
-            if (r.aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = 15.sp, lineHeight = 22.sp)
+            if (r.aa) AaBody(r) else Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
         }
-        if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl)
-        if (!info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
+        if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.thumbSize)
+        if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
         }
     }
     if (!own) return content()

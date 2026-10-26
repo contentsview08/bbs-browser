@@ -49,10 +49,21 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
+            // 配色: 設定の配色か、スマホのダーク・ライトに合わせた配色
+            val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val p = vm.prefs
+            val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
+            LaunchedEffect(key) { Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key) }
+            // 時計などのアイコンの色を、配色の明るさに合わせる
+            LaunchedEffect(Palette.dark) {
+                val t = android.graphics.Color.TRANSPARENT
+                val style = if (Palette.dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
             BbsTheme {
                 // 文字の大きさの設定は、アプリ全体の文字の倍率にかける
                 val d = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * vm.prefs.fontScale)) {
+                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * vm.prefs.fontScale), io.github.yumekui8.bbsnative.ui.LocalPrefs provides vm.prefs) {
                     val drawer = rememberDrawerState(DrawerValue.Closed)
                     // 引き出しの開け閉めは ViewModel の drawerOpen に合わせる(画面の ☰ から開く)
                     LaunchedEffect(vm.drawerOpen) { if (vm.drawerOpen) drawer.open() else drawer.close() }

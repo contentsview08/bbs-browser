@@ -38,6 +38,7 @@ class PostIndex(
     /** そのレスに返信したレスの番号 */
     val replies: Map<Int, List<Int>>,
     val idCount: Map<String, Int>,
+    private val grossWords: List<String> = listOf("グロ"),
 ) {
     /** own: 自分の書き込みのレス番号(「自分」の絞り込み) */
     fun matches(p: Post, f: Filter, own: Set<Int> = emptySet()): Boolean {
@@ -100,7 +101,7 @@ class PostIndex(
     /** グロ注意のレス(本文に「グロ」があるレスと、そのアンカー先)。サムネイルをぼかす(PC 版と同じ) */
     val gross: Set<Int> by lazy {
         val set = HashSet<Int>()
-        for (p in posts) if (p.body.contains("グロ")) { set += p.no; set += targets[p.no] ?: emptyList() }
+        for (p in posts) if (grossWords.any { p.body.contains(it, ignoreCase = true) }) { set += p.no; set += targets[p.no] ?: emptyList() }
         set
     }
 
@@ -114,7 +115,8 @@ class PostIndex(
         private val YOUTUBE_ID = Regex("(?:v=|youtu\\.be/|shorts/|live/)([\\w-]{6,})")
         private val VIDEO = Regex("(?:youtube\\.com/(?:watch|shorts|live)|youtu\\.be/|\\.(?:mp4|webm|mov)(?:[?#]|$))", RegexOption.IGNORE_CASE)
 
-        fun build(posts: List<Post>): PostIndex {
+        /** collapse: 続いた空行をまとめる(設定)。grossWords: グロ注意とみなす言葉 */
+        fun build(posts: List<Post>, collapse: Boolean = true, grossWords: List<String> = listOf("グロ")): PostIndex {
             val info = HashMap<Int, PostInfo>(posts.size * 2)
             val replyCount = HashMap<Int, Int>()
             val replies = HashMap<Int, MutableList<Int>>()
@@ -127,7 +129,7 @@ class PostIndex(
                 val images = ArrayList<String>()
                 val links = ArrayList<String>()
                 val youtube = ArrayList<Pair<String, String>>()
-                val text = displayBody(p.body)
+                val text = if (collapse) displayBody(p.body) else p.body
                 for (m in URL.findAll(text)) {
                     val raw = m.value
                     val url = if (raw.startsWith("ttp")) "h$raw" else raw
@@ -164,7 +166,7 @@ class PostIndex(
                 info[p.no] = PostInfo(spans, image, video, link, images, text, links, youtube)
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
-            return PostIndex(posts, info, replyCount, replies, idCount)
+            return PostIndex(posts, info, replyCount, replies, idCount, grossWords)
         }
     }
 }

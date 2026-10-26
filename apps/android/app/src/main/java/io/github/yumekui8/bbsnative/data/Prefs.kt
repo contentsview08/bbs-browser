@@ -1,24 +1,57 @@
 package io.github.yumekui8.bbsnative.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
 
-/** NG のルール。target: id / name / body(本文の言葉) */
+/** NG のルール。target: id / name / body(本文の言葉) / title(スレタイ) */
 data class NgRule(val target: String, val pattern: String)
 
 /** 画像のサムネイルを自動で読むか */
 enum class ThumbMode(val label: String) { ALWAYS("いつも"), WIFI("Wi-Fi のときだけ"), NEVER("押したら") }
 
+/** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
+private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T) : ReadWriteProperty<Any?, T> {
+    @Suppress("UNCHECKED_CAST")
+    private var state = mutableStateOf(
+        runCatching {
+            when (def) {
+                is Boolean -> sp.getBoolean(key, def)
+                is Int -> sp.getInt(key, def)
+                is Float -> sp.getFloat(key, def)
+                is String -> sp.getString(key, def) ?: def
+                else -> def
+            } as T
+        }.getOrDefault(def),
+    )
+
+    override fun getValue(thisRef: Any?, property: KProperty<*>): T = state.value
+    override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+        state.value = value
+        sp.edit().apply {
+            when (value) {
+                is Boolean -> putBoolean(key, value)
+                is Int -> putInt(key, value)
+                is Float -> putFloat(key, value)
+                is String -> putString(key, value)
+            }
+        }.apply()
+    }
+}
+
 /**
  * 設定(端末の SharedPreferences)。画面から見る値は Compose の状態にして、変えたらすぐ画面に出る。
- * 前回開いていた板・文字の大きさ・画像の自動読み込み・NG
+ * 項目と既定の値は、今のスマホ版(apps/desktop/src/ui/settings.ts の DEFAULT_SETTINGS)にそろえる
  */
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> = Pref(sp, key, def)
 
     var lastBoardUrl: String?
         get() = sp.getString("lastBoardUrl", null)
@@ -27,29 +60,93 @@ class Prefs(context: Context) {
         get() = sp.getString("lastBoardName", null)
         set(v) = sp.edit().putString("lastBoardName", v).apply()
 
-    /** 文字の大きさの倍率(0.85〜1.3) */
-    var fontScale by mutableStateOf(sp.getFloat("fontScale", 1f))
-        private set
-    fun changeFontScale(v: Float) { fontScale = v; sp.edit().putFloat("fontScale", v).apply() }
+    // ── テーマと文字 ──
+    /** 配色(Palette の SCHEMES のキー) */
+    var scheme by pref("scheme", "indigo")
+    /** スマホのダーク・ライトに合わせる(合わせるときは darkScheme / lightScheme を使う) */
+    var followSystem by pref("followSystem", false)
+    var darkScheme by pref("darkScheme", "soft-dark")
+    var lightScheme by pref("lightScheme", "soft-light")
+    /** 画面全体の文字の倍率(0.85〜1.3) */
+    var fontScale by pref("fontScale", 1f)
+    /** レスの本文の文字の倍率(画面全体に掛ける) */
+    var bodyScale by pref("bodyScale", 1f)
+    /** レスの本文の行間(字の高さの倍) */
+    var lineHeight by pref("lineHeight", 1.47f)
 
-    var thumbMode by mutableStateOf(runCatching { ThumbMode.valueOf(sp.getString("thumbMode", "WIFI")!!) }.getOrDefault(ThumbMode.WIFI))
-        private set
-    fun changeThumbMode(v: ThumbMode) { thumbMode = v; sp.edit().putString("thumbMode", v.name).apply() }
+    // ── スレ一覧 ──
+    /** 板を開いたときの並び: subject(更新順)/ momentum / newest / count */
+    var threadSort by pref("threadSort", "subject")
+    /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
+    var keywords by pref("keywords", "")
+    var pullToRefreshList by pref("pullToRefreshList", true)
 
-    /** スレ表示の右端にミニマップを出すか */
-    var showMinimap by mutableStateOf(sp.getBoolean("showMinimap", true))
-        private set
-    fun changeShowMinimap(v: Boolean) { showMinimap = v; sp.edit().putBoolean("showMinimap", v).apply() }
+    // ── スレ表示 ──
+    /** 開く位置: unread(最初の未読)/ top / bottom */
+    var openPosition by pref("openPosition", "unread")
+    var omitNoname by pref("omitNoname", true)
+    var collapseBlankLines by pref("collapseBlankLines", true)
+    var aaAutoDetect by pref("aaAutoDetect", true)
+    var highlightOp by pref("highlightOp", true)
+    var idHeat by pref("idHeat", true)
+    var showMinimap by pref("showMinimap", true)
+    var urlShorten by pref("urlShorten", true)
+    var imageUrlOmit by pref("imageUrlOmit", true)
+    var imageUrlCollapse by pref("imageUrlCollapse", true)
+    var showLinkPreview by pref("showLinkPreview", true)
+    var openLinksInApp by pref("openLinksInApp", true)
 
-    /** 書き込み欄から画像を catbox.moe に上げるか(匿名で上げた画像は公開され、消せないので既定は切る。PC 版と同じ) */
-    var uploadEnabled by mutableStateOf(sp.getBoolean("uploadEnabled", false))
-        private set
-    fun changeUploadEnabled(v: Boolean) { uploadEnabled = v; sp.edit().putBoolean("uploadEnabled", v).apply() }
+    // ── 画像と動画 ──
+    var showThumbnails by pref("showThumbnails", true)
+    private var thumbModeName by pref("thumbMode", "WIFI")
+    var thumbMode: ThumbMode
+        get() = runCatching { ThumbMode.valueOf(thumbModeName) }.getOrDefault(ThumbMode.WIFI)
+        set(v) { thumbModeName = v.name }
+    /** サムネイルの大きさ(dp) */
+    var thumbSize by pref("thumbSize", 96)
+    var blurGross by pref("blurGross", true)
+    /** グロ注意とみなす言葉(改行区切り) */
+    var grossWords by pref("grossWords", "グロ")
 
+    // ── 書き込み ──
     /** 書き込みの名前(前回のもの) */
-    var postName: String
-        get() = sp.getString("postName", "") ?: ""
-        set(v) = sp.edit().putString("postName", v).apply()
+    var postName by pref("postName", "")
+    /** 書き込み欄から画像を catbox.moe に上げるか(匿名で上げた画像は公開され、消せないので既定は切る。PC 版と同じ) */
+    var uploadEnabled by pref("uploadEnabled", false)
+    /** 上げる前に縮める、長い辺の大きさ(px。0 なら縮めない) */
+    var uploadMaxDimension by pref("uploadMaxDimension", 4096)
+
+    // ── 操作 ──
+    var gesturesEnabled by pref("gesturesEnabled", true)
+    /** なぞる操作の感度(1 鈍い〜5 敏感) */
+    var gestureSensitivity by pref("gestureSensitivity", 3)
+    private var gesturesListJson by pref("gesturesList", "")
+    private var gesturesThreadJson by pref("gesturesThread", "")
+    var hideBarsOnScroll by pref("hideBarsOnScroll", true)
+    var autoScrollOnNew by pref("autoScrollOnNew", true)
+    /** 開いているスレの自動更新(秒。0 ならしない) */
+    var autoRefreshSec by pref("autoRefreshSec", 0)
+    var showRefreshButton by pref("showRefreshButton", true)
+
+    /** なぞる操作の割り当て(向きの並び → 操作)。screen は list / thread */
+    fun gestures(screen: String): Map<String, String> {
+        val json = if (screen == "list") gesturesListJson else gesturesThreadJson
+        if (json.isEmpty()) return DEFAULT_GESTURES.getValue(screen)
+        return runCatching { JSONObject(json).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrDefault(DEFAULT_GESTURES.getValue(screen))
+    }
+
+    fun setGesture(screen: String, seq: String, action: String) {
+        val json = JSONObject(gestures(screen).toMutableMap().apply { put(seq, action) } as Map<*, *>).toString()
+        if (screen == "list") gesturesListJson = json else gesturesThreadJson = json
+    }
+
+    fun resetGestures() { gesturesListJson = ""; gesturesThreadJson = "" }
+
+    // 古い呼び方(画面の側)
+    fun changeFontScale(v: Float) { fontScale = v }
+    fun changeThumbMode(v: ThumbMode) { thumbMode = v }
+    fun changeShowMinimap(v: Boolean) { showMinimap = v }
+    fun changeUploadEnabled(v: Boolean) { uploadEnabled = v }
 
     var ngRules by mutableStateOf(loadNg())
         private set
@@ -66,5 +163,35 @@ class Prefs(context: Context) {
         val arr = JSONArray()
         for (r in list) arr.put(JSONObject().put("target", r.target).put("pattern", r.pattern))
         sp.edit().putString("ngRules", arr.toString()).apply()
+    }
+
+    /** バックアップ: 設定を全部 JSON に(最後に開いた板は除く) */
+    fun export(): JSONObject {
+        val o = JSONObject()
+        for ((k, v) in sp.all) if (k != "lastBoardUrl" && k != "lastBoardName") o.put(k, v)
+        return o
+    }
+
+    /** バックアップから戻す(戻したあとはアプリを開き直すと全部に効く) */
+    fun import(o: JSONObject) {
+        val e = sp.edit()
+        for (k in o.keys()) {
+            when (val v = o.get(k)) {
+                is Boolean -> e.putBoolean(k, v)
+                is Int -> e.putInt(k, v)
+                is Double -> e.putFloat(k, v.toFloat())
+                is Float -> e.putFloat(k, v)
+                is String -> e.putString(k, v)
+            }
+        }
+        e.commit()
+    }
+
+    companion object {
+        /** なぞる操作の既定(今のスマホ版と同じ) */
+        val DEFAULT_GESTURES = mapOf(
+            "list" to mapOf("right" to "drawer", "left" to "forward", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "newThread"),
+            "thread" to mapOf("right" to "back", "left" to "reply", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "deleteLog"),
+        )
     }
 }

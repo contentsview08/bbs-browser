@@ -180,7 +180,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var stickTo by remember { mutableStateOf<Int?>(null) }
     SideEffect {
         val n = index.posts.size
-        if (prevCount in 1 until n && !listState.canScrollForward && filter == null && query.isBlank()) stickTo = prevCount
+        if (vm.prefs.autoScrollOnNew && prevCount in 1 until n && !listState.canScrollForward && filter == null && query.isBlank()) stickTo = prevCount
         prevCount = n
     }
     LaunchedEffect(stickTo) { stickTo?.let { listState.animateScrollToItem(it); stickTo = null } }
@@ -206,7 +206,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
                 'u' -> when {
                     v in index.allImages -> viewer = v
-                    !vm.openUrl(v) -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(v))) }
+                    !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
                 }
             }
         }
@@ -239,16 +239,33 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     Column(modifier.fillMaxSize().background(Palette.base)) {
         // なぞる操作(今のスマホ版の既定と同じ割り当て)。左の端から右へはメニュー
-        val gestures = mapOf(
-            "right" to SwipeAction("一覧に戻る") { vm.back() },
-            "left" to SwipeAction("書き込む") { vm.openReply(page) },
-            "right,up" to SwipeAction("一番下へ") { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) } },
-            "right,down" to SwipeAction("先頭へ") { scope.launch { listState.scrollToItem(0); bars.show() } },
-            "left,down" to SwipeAction("更新") { vm.refreshThread(page) },
-            "left,up" to SwipeAction("ログを削除") { confirmDelete = true },
+        val prefs = vm.prefs
+        val gestures = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
+            prefs.gestures("thread"), "thread",
+            mapOf(
+                "back" to { vm.back(); Unit },
+                "reply" to { vm.openReply(page) },
+                "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) }; Unit },
+                "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
+                "refresh" to { vm.refreshThread(page); Unit },
+                "deleteLog" to { confirmDelete = true },
+                "drawer" to { vm.drawerOpen = true },
+                "search" to { searching = true; bars.show() },
+                "favorite" to { vm.toggleFavoriteThread(page) },
+                "next" to { vm.findNext(page); nextSheet = true },
+            ),
         )
+        bars.enabled = prefs.hideBarsOnScroll
+        // 開いているスレの自動更新(設定。0 ならしない)
+        if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
+            while (true) {
+                delay(prefs.autoRefreshSec * 1000L)
+                if (!page.loading) vm.refreshThread(page, quiet = true)
+            }
+        }
         Box(
-            Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures) { vm.drawerOpen = true }
+            Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(bars.connection)
+                .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
                 // 押した所の高さを控える(ポップアップを、押した所の真上に出すため)
                 .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
         ) {

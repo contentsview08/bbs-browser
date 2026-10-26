@@ -110,17 +110,29 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         sorted.mapIndexed { i, (k, _) -> k to (1.0 - i.toDouble() / maxOf(1, sorted.size)) }.toMap()
     }
     val ngTitles = vm.prefs.ngRules.filter { it.target == "title" }.map { it.pattern }
-    val shown = remember(page.threads, page.states, tab, query, ngTitles) {
+    val sort = vm.prefs.threadSort
+    val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val shown = remember(page.threads, page.states, tab, query, ngTitles, sort, keywords) {
         // スレタイの NG に当たるスレは出さない
         var list = if (ngTitles.isEmpty()) page.threads else page.threads.filter { t -> ngTitles.none { t.title.contains(it, ignoreCase = true) } }
         if (query.isNotBlank()) list = list.filter { it.title.contains(query.trim(), ignoreCase = true) }
         list = when (tab) {
-            null -> list
+            // タブを選んでいないときは、設定の並び(板を開いたときの並び)
+            null -> when (sort) {
+                "momentum" -> list.sortedByDescending { momentum(it, now) }
+                "newest" -> list.sortedByDescending { it.createdAt ?: 0 }
+                "count" -> list.sortedByDescending { it.postCount }
+                else -> list
+            }
             ListTab.UNREAD -> list.filter { unreadOf(it, page.states) > 0 }
             ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }
             ListTab.NEWEST -> list.sortedByDescending { it.createdAt ?: 0 }
         }
-        // 運営のお知らせは一番下に
+        // キーワードの入ったスレは一番上にまとめる(設定)。運営のお知らせは一番下に
+        if (keywords.isNotEmpty()) {
+            val (hit, rest) = list.partition { t -> keywords.any { t.title.contains(it, ignoreCase = true) } }
+            list = hit + rest
+        }
         list.filterNot { it.announcement } + list.filter { it.announcement }
     }
 
@@ -128,16 +140,27 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     val swipe = rememberSwipeState()
     // なぞる操作(今のスマホ版の既定と同じ割り当て)
-    val gestures = mapOf(
-        "right" to SwipeAction("メニュー") { vm.drawerOpen = true },
-        "left" to SwipeAction("進む") { vm.forward() },
-        "right,up" to SwipeAction("一番下へ") { scope.launch { listState.scrollToItem(maxOf(0, shown.size - 1)) } },
-        "right,down" to SwipeAction("先頭へ") { scope.launch { listState.scrollToItem(0); bars.show() } },
-        "left,down" to SwipeAction("更新") { vm.refreshBoard(page) },
-        "left,up" to SwipeAction("スレを立てる") { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+    val prefs = vm.prefs
+    val gestures = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
+        prefs.gestures("list"), "list",
+        mapOf(
+            "drawer" to { vm.drawerOpen = true },
+            "forward" to { vm.forward() },
+            "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size - 1)) }; Unit },
+            "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
+            "refresh" to { vm.refreshBoard(page) },
+            "newThread" to { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+            "search" to { searching = true; bars.show() },
+        ),
     )
-    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures)) {
-        PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshBoard(page) }, modifier = Modifier.fillMaxSize()) {
+    bars.enabled = prefs.hideBarsOnScroll
+    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)) {
+        // 引っぱって更新は設定で切れる(切ったら包まない)
+        val pull: @Composable (@Composable () -> Unit) -> Unit = { body ->
+            if (prefs.pullToRefreshList) PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshBoard(page) }, modifier = Modifier.fillMaxSize()) { body() }
+            else Box(Modifier.fillMaxSize()) { body() }
+        }
+        pull {
             when {
                 page.error != null && page.threads.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
                 page.threads.isEmpty() && page.loading -> Hint("読み込み中…")

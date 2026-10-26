@@ -44,14 +44,16 @@ fun rememberSwipeState() = remember { SwipeState() }
  * - 画面の左の端から右へなぞったら、onEdgeRight(メニューを開く)
  */
 @Composable
-fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onEdgeRight: (() -> Unit)? = null): Modifier {
+fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onEdgeRight: (() -> Unit)? = null, sensitivity: Int = 3): Modifier {
     val current by rememberUpdatedState(map)
     val edgeAction by rememberUpdatedState(onEdgeRight)
-    return this.pointerInput(Unit) {
-            val lock = 10.dp.toPx()
-            val segment = 24.dp.toPx()
-            val minDistance = 60.dp.toPx()
-            val minVelocity = 500.dp.toPx() // 1 秒あたり
+    // 感度(1 鈍い〜5 敏感)を、しきい値に掛ける倍率にする。3 が標準(今のスマホ版と同じ)
+    val k = when (sensitivity) { 1 -> 1.6f; 2 -> 1.3f; 4 -> 0.7f; 5 -> 0.45f; else -> 1f }
+    return this.pointerInput(k) {
+            val lock = 10.dp.toPx() * k
+            val segment = 24.dp.toPx() * k
+            val minDistance = 60.dp.toPx() * k
+            val minVelocity = 500.dp.toPx() * k // 1 秒あたり
             val edge = 24.dp.toPx()
             fun dominant(d: Offset) = if (abs(d.x) >= abs(d.y)) (if (d.x >= 0) "right" else "left") else (if (d.y >= 0) "down" else "up")
             awaitEachGesture {
@@ -122,4 +124,25 @@ fun BoxScope.SwipeLabel(state: SwipeState) {
             color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold,
         )
     }
+}
+
+/** なぞる操作に割り当てられる操作(キー → 名前)。screen は list / thread。"" は何もしない */
+val GESTURE_ACTIONS: Map<String, List<Pair<String, String>>> = mapOf(
+    "list" to listOf(
+        "drawer" to "メニュー", "forward" to "進む", "bottom" to "一番下へ", "top" to "先頭へ", "refresh" to "更新",
+        "newThread" to "スレを立てる", "search" to "スレタイを探す", "" to "なし",
+    ),
+    "thread" to listOf(
+        "back" to "一覧に戻る", "reply" to "書き込む", "bottom" to "一番下へ", "top" to "先頭へ", "refresh" to "更新",
+        "deleteLog" to "ログを削除", "drawer" to "メニュー", "search" to "レスを探す", "favorite" to "お気に入りのスレ", "next" to "次スレを探す", "" to "なし",
+    ),
+)
+
+/** 向きの並びの見せ方(「right,up」→「→↑」) */
+fun gestureArrows(seq: String) = seq.split(',').joinToString("") { when (it) { "right" -> "→"; "left" -> "←"; "up" -> "↑"; else -> "↓" } }
+
+/** 設定の割り当てを、画面の操作に結びつける。actions は操作のキー → 動き */
+fun buildGestures(assign: Map<String, String>, screen: String, actions: Map<String, () -> Unit>): Map<String, SwipeAction> {
+    val names = GESTURE_ACTIONS.getValue(screen).toMap()
+    return assign.mapNotNull { (seq, key) -> actions[key]?.let { run -> seq to SwipeAction(names[key] ?: key, run) } }.toMap()
 }

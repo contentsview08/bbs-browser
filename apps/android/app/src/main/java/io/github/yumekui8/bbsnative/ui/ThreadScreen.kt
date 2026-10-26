@@ -30,6 +30,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.AccountTree
@@ -145,6 +147,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var revealed by remember { mutableStateOf(emptySet<Int>()) }
     var viewer by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var fontDialog by remember { mutableStateOf(false) }
+    // スレを保存(テキスト・HTML)。保存先は端末のファイルの画面で選ぶ
+    val safeName = remember(page.title) { page.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60) }
+    val saveText = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")) { uri -> if (uri != null) vm.saveThread(page, uri, html = false) }
+    val saveHtml = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/html")) { uri -> if (uri != null) vm.saveThread(page, uri, html = true) }
     /** 長押しで「AAとして表示」「文字列として表示」を選んだレス */
     var aaOverride by remember { mutableStateOf(mapOf<Int, Boolean>()) }
     val swipe = rememberSwipeState()
@@ -357,9 +364,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("板を開く", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
                     MenuItem("いちばん上へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                     MenuItem("いちばん下へ", Icons.Filled.VerticalAlignBottom) { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) } },
+                    MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { fontDialog = true },
                 ),
                 listOf(
                     MenuItem("URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
+                    MenuItem("スレを保存(テキスト)", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
+                    MenuItem("スレを保存(HTML)", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TwoCh.webUrl(page.summary)))) } },
                 ),
                 listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { vm.deleteLog(page) }),
@@ -429,6 +439,26 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 NextCandidates(page) { nextSheet = false; vm.openThread(it) }
             }
         }
+    }
+
+    // 文字の大きさ・余白(︙ から。設定の「文字と余白」と同じ値)
+    if (fontDialog) {
+        val pr = vm.prefs
+        AlertDialog(
+            onDismissRequest = { fontDialog = false },
+            title = { Text("文字の大きさ・余白") },
+            text = {
+                Column {
+                    Text("レスの本文 ${(pr.bodyScale * 100).toInt()}%", color = Palette.textBody, fontSize = 14.sp)
+                    androidx.compose.material3.Slider(pr.bodyScale, { pr.bodyScale = (it * 20).toInt() / 20f }, valueRange = 0.8f..1.4f, steps = 11)
+                    Text("行間 ${"%.2f".format(pr.lineHeight)}", color = Palette.textBody, fontSize = 14.sp)
+                    androidx.compose.material3.Slider(pr.lineHeight, { pr.lineHeight = (it * 20).toInt() / 20f }, valueRange = 1.2f..1.9f, steps = 13)
+                    Text("画面全体 ${(pr.fontScale * 100).toInt()}%", color = Palette.textBody, fontSize = 14.sp)
+                    androidx.compose.material3.Slider(pr.fontScale, { pr.fontScale = (it * 20).toInt() / 20f }, valueRange = 0.85f..1.3f, steps = 8)
+                }
+            },
+            confirmButton = { TextButton(onClick = { fontDialog = false }) { Text("閉じる") } },
+        )
     }
 
     if (confirmDelete) {

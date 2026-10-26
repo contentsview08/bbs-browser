@@ -145,6 +145,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** スレを保存(︙ の「スレを保存」)。html なら HTML、そうでなければテキスト */
+    fun saveThread(page: Page.Thread, uri: android.net.Uri, html: Boolean) {
+        viewModelScope.launch {
+            try {
+                val url = TwoCh.webUrl(page.summary)
+                val text = withContext(Dispatchers.Default) {
+                    fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    if (!html) buildString {
+                        append(page.title).append('\n').append(url).append("\n\n")
+                        for (p in page.index.posts) {
+                            append("${p.no} ${p.name}${if (p.mail.isNotEmpty()) " [${p.mail}]" else ""} ${p.date}${p.id?.let { " ID:$it" } ?: ""}\n")
+                            append(p.body).append("\n\n")
+                        }
+                    } else buildString {
+                        append("<!doctype html><html lang=\"ja\"><head><meta charset=\"utf-8\"><title>").append(esc(page.title)).append("</title>")
+                        append("<style>body{font-family:sans-serif;max-width:48rem;margin:auto;padding:1rem;line-height:1.6}dt{color:#666;font-size:.85em;margin-top:1em}dd{margin:0;white-space:pre-wrap}</style></head><body>")
+                        append("<h1>").append(esc(page.title)).append("</h1><p><a href=\"").append(esc(url)).append("\">").append(esc(url)).append("</a></p><dl>")
+                        for (p in page.index.posts) {
+                            append("<dt>${p.no} <b>${esc(p.name)}</b>${if (p.mail.isNotEmpty()) " [${esc(p.mail)}]" else ""} ${esc(p.date)}${p.id?.let { " ID:${esc(it)}" } ?: ""}</dt>")
+                            append("<dd>").append(esc(p.body)).append("</dd>")
+                        }
+                        append("</dl></body></html>")
+                    }
+                }
+                withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } }
+                toast = "スレを保存しました"
+            } catch (e: Exception) {
+                toast = "保存できませんでした: ${e.message ?: e}"
+            }
+        }
+    }
+
     /** 設定の「今すぐ消す」 */
     fun pruneLogsNow() {
         viewModelScope.launch {

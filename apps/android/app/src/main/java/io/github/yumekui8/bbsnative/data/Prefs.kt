@@ -127,8 +127,9 @@ class Prefs(context: Context) {
     var grossWords by pref("grossWords", "グロ")
 
     // ── 書き込み ──
-    /** 書き込みの名前(前回のもの) */
+    /** 書き込みの名前・メール(前回のもの) */
     var postName by pref("postName", "")
+    var postMail by pref("postMail", "")
     /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
     var quickPhrases by pref("quickPhrases", "草")
     /** 書き込み欄から画像を catbox.moe に上げるか(匿名で上げた画像は公開され、消せないので既定は切る。PC 版と同じ) */

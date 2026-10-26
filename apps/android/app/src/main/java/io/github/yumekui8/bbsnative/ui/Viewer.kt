@@ -140,7 +140,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                     translationY = with(density) { 28.dp.toPx() } * (1f - p) + dismiss.value
                 },
             ) {
-                HorizontalPager(pager, Modifier.fillMaxSize(), key = { urls[it] }, beyondViewportPageCount = 1, userScrollEnabled = !zoomed) { page ->
+                HorizontalPager(pager, Modifier.fillMaxSize(), key = { it }, beyondViewportPageCount = 1, userScrollEnabled = !zoomed) { page ->
                     ZoomPage(
                         urls[page], active = page == pager.currentPage,
                         onZoomed = { if (page == pager.currentPage) zoomed = it },

@@ -40,7 +40,10 @@ import io.github.yumekui8.bbsnative.bbs.TreeRow
  * ポップアップ 1 枚。posts(アンカー先・返信・同じ ID / 名前)か、tree(アンカーツリー)のどちらかを出す。
  * triggerY: 押した所の高さ(スレ表示の領域の中の座標)。focusNo: 開いたときに見せる(色を付ける)レス
  */
-class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = null, val triggerY: Float, val focusNo: Int? = null)
+class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = null, val triggerY: Float, val focusNo: Int? = null) {
+    /** 中のスクロール(ジェスチャーの「先頭へ」「一番下へ」で、一番上のポップアップを送る) */
+    val state = androidx.compose.foundation.lazy.LazyListState()
+}
 
 /**
  * レスのポップアップ(今のスマホ版の PostPopup と同じ)。スレ表示の領域いっぱいの幅で、押した所の真上に収まるなら真上に、
@@ -51,6 +54,7 @@ class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = 
 fun PopupLayer(
     popups: List<PopupEntry>,
     topInset: Float,
+    endInset: androidx.compose.ui.unit.Dp = 0.dp,
     onCloseTop: () -> Unit,
     post: @Composable (Post) -> Unit,
 ) {
@@ -63,13 +67,13 @@ fun PopupLayer(
             if (i == popups.lastIndex) {
                 Box(Modifier.fillMaxSize().clickable(interactionSource = noRipple, indication = null, onClick = onCloseTop))
             }
-            PopupWindow(e, topInset, areaH, post)
+            PopupWindow(e, topInset, areaH, endInset, post)
         }
     }
 }
 
 @Composable
-private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, post: @Composable (Post) -> Unit) {
+private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, post: @Composable (Post) -> Unit) {
     val density = LocalDensity.current
     val gap = with(density) { 4.dp.toPx() }
     val minTop = topInset + gap
@@ -81,7 +85,8 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, post: @Com
     Layout(
         content = {
             Box(
-                Modifier.padding(horizontal = 6.dp)
+                // ミニマップに重ならないよう、その幅だけ右を空ける
+                Modifier.padding(start = 6.dp, end = 6.dp + endInset)
                     .graphicsLayer { val p = rise.value; alpha = p; val s = 0.94f + 0.06f * p; scaleX = s; scaleY = s; translationY = (1f - p) * 12.dp.toPx() }.shadow(12.dp, shape).clip(shape).background(Palette.surface).border(2.dp, Palette.accent, shape)
                     // 中を押しても幕に届かない(閉じない)ように
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
@@ -98,7 +103,7 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, post: @Com
 
 @Composable
 private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
-    val state = rememberLazyListState()
+    val state = e.state
     val tree = e.tree
     // 見せたいレスまで中を送る(長いツリーで、起点のレスが下に隠れないように)
     LaunchedEffect(e.id) {

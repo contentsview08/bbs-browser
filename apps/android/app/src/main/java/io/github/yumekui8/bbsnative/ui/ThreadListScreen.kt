@@ -106,12 +106,13 @@ fun momentum(t: ThreadSummary, now: Long): Double {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = Modifier) {
-    var tab by rememberSaveable { mutableStateOf<ListTab?>(null) }
-    var searching by rememberSaveable { mutableStateOf(false) }
-    var query by rememberSaveable { mutableStateOf("") }
+    // タブ・検索・スクロールの位置はページに持つ(スレを開いて戻っても残す)
+    val tab = ListTab.entries.firstOrNull { it.key == page.tab }
+    var searching by page::searching
+    var query by page::query
     var menu by remember { mutableStateOf(false) }
     val now = remember(page.threads) { System.currentTimeMillis() }
-    val listState = rememberLazyListState()
+    val listState = page.listState
     val scope = rememberCoroutineScope()
     val bars = rememberHideOnScroll()
     val density = LocalDensity.current
@@ -231,7 +232,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 for (t in tabs) {
                     val active = tab == t
                     Row(
-                        Modifier.clickable { tab = if (active) null else t }.background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                        Modifier.clickable { page.tab = if (active) null else t.key }.background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         Icon(t.icon, null, tint = t.color, modifier = Modifier.size(18.dp))

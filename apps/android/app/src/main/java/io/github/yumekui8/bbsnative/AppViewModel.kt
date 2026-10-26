@@ -37,11 +37,24 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 読んでいた位置(今のスマホ版の ScrollPosition) */
+data class ScrollPos(val no: Int, val offset: Int, val bottom: Boolean)
+
 /** 書き込み欄の状態(スレごと、スレ立てでも使う) */
 class ReplyState {
+    /** 本文の欄に入っている(書いている)。書いている間はフッターを隠さない */
     var open by mutableStateOf(false)
     var name by mutableStateOf("")
-    var sage by mutableStateOf(true)
+    /** メール(sage など)。今のスマホ版と同じく、オプションの欄で書く */
+    var mail by mutableStateOf("")
+    var sage: Boolean
+        get() = mail.trim().equals("sage", true)
+        set(v) { mail = if (v) "sage" else "" }
+    /** 本文の欄に入る(返信・書き込むのジェスチャー)・出る(書き込めたとき)を頼む。数が変わったら画面が応える */
+    var focusSeq by mutableStateOf(0)
+    var blurSeq by mutableStateOf(0)
+    /** 書き込めたときの知らせ(少しで消す) */
+    var done by mutableStateOf<String?>(null)
     var title by mutableStateOf("")
     var body by mutableStateOf("")
     var sending by mutableStateOf(false)
@@ -59,6 +72,11 @@ class ReplyState {
 /** 画面の積み重ね(戻るで 1 つ前へ)。左のメニューから開くものは、積み重ねを入れ替える */
 sealed interface Page {
     class Threads(val board: Board) : Page {
+        // 画面の状態(タブ・検索・スクロールの位置)は画面ではなくここに持つ。スレを開いて戻っても、そのまま残るように
+        val listState = androidx.compose.foundation.lazy.LazyListState()
+        var tab by mutableStateOf<String?>(null)
+        var searching by mutableStateOf(false)
+        var query by mutableStateOf("")
         var threads by mutableStateOf<List<ThreadSummary>>(emptyList())
         var states by mutableStateOf<Map<String, ThreadState>>(emptyMap())
         var loading by mutableStateOf(false)
@@ -70,6 +88,12 @@ sealed interface Page {
     }
 
     class Thread(val summary: ThreadSummary) : Page {
+        // 画面の状態(スクロールの位置・絞り込み・検索・読んだところの覚え)はここに持つ。一覧へ戻って「進む」で開き直しても、そのまま残るように
+        val listState = androidx.compose.foundation.lazy.LazyListState()
+        val scroll = io.github.yumekui8.bbsnative.ui.ThreadScrollCtl(this)
+        var filter by mutableStateOf<io.github.yumekui8.bbsnative.bbs.Filter?>(null)
+        var searching by mutableStateOf(false)
+        var query by mutableStateOf("")
         var title by mutableStateOf(summary.title)
         var index by mutableStateOf(PostIndex.build(emptyList()))
         /** 組み立て済みのレス(レス番号 → 頭の行と本文)。index と一緒に作る */
@@ -81,7 +105,6 @@ sealed interface Page {
         /** 開いた時点の「最初の未読」(「ここから未読」の線を引く位置)。0 なら線を引かない */
         var unreadFrom by mutableStateOf(0)
         /** 開いたときに移る位置(レス番号)。一度移ったら null */
-        var openAt by mutableStateOf<Int?>(null)
         var loaded by mutableStateOf(false)
         var loading by mutableStateOf(false)
         var archived by mutableStateOf(false)
@@ -90,10 +113,6 @@ sealed interface Page {
         /** 自分の書き込みのレス番号 */
         var ownNos by mutableStateOf<Set<Int>>(emptySet())
         var favorite by mutableStateOf(false)
-        /** 新着で届いたレスの番号 → 出てくるまでの遅れ(ms)。今のスマホ版の post-enter・flash-new(35ms ずつ・合わせて 450ms まで) */
-        var enter by mutableStateOf<Map<Int, Int>>(emptyMap())
-        /** 出てくる動きを済ませたレス(スクロールで出直しても、もう一度は動かさない) */
-        val entered = HashSet<Int>()
         /** 次スレの候補(探したら入る。null はまだ探していない) */
         var nextCandidates by mutableStateOf<List<NextThreadCandidate>?>(null)
         val reply = ReplyState()
@@ -192,6 +211,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             toast = "$n 件のスレのログを消しました"
         }
     }
+
+    /** スレごとの読んでいた位置(画面のいちばん上に見えていたレスとずれ、一番下にいたか)。戻って開き直したときに戻す */
+    val positions = HashMap<String, ScrollPos>()
 
     /** 掲示板のスレ一覧で分かった、いまのレス数(スレの id → 数)。閲覧履歴・お気に入りのスレの新着に使う。-1 は dat 落ち */
     var remoteCounts by mutableStateOf<Map<String, Int>>(emptyMap())
@@ -431,6 +453,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         navDir = 1
         stack.add(page)
         page.reply.name = prefs.postName
+        page.reply.mail = prefs.postMail
         viewModelScope.launch {
             // 手元のログを先に出し、そのあと新着を取りに行く
             val log = db.loadThread(t)
@@ -440,17 +463,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 page.title = log.title
                 page.readNo = log.readNo
                 page.archived = log.archived
+                // 「ここから未読」は、開いた時点の既読の次(まだ手元にないときは、届いた新着の頭に線が出る)。今のスマホ版と同じ。
+                // 開く位置は画面が決める(レスが出たときに、覚えた位置・設定・未読から)ので、レスより先に入れておく
+                page.unreadFrom = log.readNo + 1
                 setPosts(page, log.posts)
-                val hasUnread = log.readNo in 1 until log.posts.size
-                page.unreadFrom = if (hasUnread) log.readNo + 1 else 0
-                // 開く位置(設定): 最初の未読・先頭・いちばん下
-                page.openAt = when {
-                    prefs.openPosition == "top" -> 1
-                    prefs.openPosition == "bottom" -> log.posts.lastOrNull()?.no
-                    log.readNo <= 0 -> 1
-                    hasUnread -> log.readNo
-                    else -> log.posts.lastOrNull()?.no
-                }
                 db.touch(t)
             }
             page.loaded = log != null
@@ -474,19 +490,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (log == null) db.touch(t)
                 page.title = title
                 if (r.status == FetchStatus.ARCHIVED || r.archived) page.archived = true
+                // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)。今のスマホ版と同じ
+                if (!firstOpen) page.unreadFrom = page.readNo + 1
                 if (r.posts.isNotEmpty() || r.status == FetchStatus.RESET) {
                     val old = if (r.status == FetchStatus.RESET) emptyList() else page.index.posts
                     val all: List<Post> = old + r.posts
                     // 手で更新したときは、届いた新着の頭に「ここから未読」を引き直す
-                    if (!firstOpen && old.isNotEmpty() && r.posts.isNotEmpty()) {
-                        page.unreadFrom = r.posts.first().no
-                        val nos = r.posts.map { it.no }
-                        val step = minOf(35f, 450f / maxOf(1, nos.size - 1))
-                        page.enter = nos.mapIndexed { i, n -> n to (i * step).toInt() }.toMap()
-                    }
+
                     setPosts(page, all)
-                    if (firstOpen && log == null) page.openAt = if (prefs.openPosition == "bottom") all.lastOrNull()?.no else 1
-                } else if (!firstOpen && !quiet) toast = "新着はありません"
+                }
             } catch (e: Exception) {
                 page.error = e.message ?: e.toString()
             } finally {
@@ -660,7 +672,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (insert != null) r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + insert else r.body + "\n" + insert
             r.notice = null
-            r.open = true
+            r.focusSeq++
         }
     }
 
@@ -681,6 +693,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 書きかけを戻す(開いたとき 1 回。もう何か書いていたら、そちらを優先する) */
+    fun loadDraft(page: Page.Thread) {
+        val r = page.reply
+        if (r.draftLoaded) return
+        r.draftLoaded = true
+        viewModelScope.launch { if (r.body.isEmpty()) r.body = db.draft(page.summary) }
+    }
+
+    private var draftJob: Job? = null
+    /** 書くのが止まって少ししたら、書きかけを保存する(1 文字ごとに DB へ書かないように) */
+    fun saveDraftLater(page: Page.Thread) {
+        draftJob?.cancel()
+        draftJob = viewModelScope.launch { kotlinx.coroutines.delay(400); db.saveDraft(page.summary, page.reply.body) }
+    }
+
     fun saveDraft(page: Page.Thread) {
         viewModelScope.launch { db.saveDraft(page.summary, page.reply.body) }
     }
@@ -690,7 +717,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val r = page.reply
         if (r.sending) return
         val body = ">>$no\n$phrase"
-        val mail = if (r.sage) "sage" else ""
+        val mail = r.mail.trim()
         handlePost(page, body, r.name, mail, quick = true) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
     }
 
@@ -698,7 +725,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val r = page.reply
         if (r.sending || r.body.isBlank()) return
         val body = r.body
-        val mail = if (r.sage) "sage" else ""
+        val mail = r.mail.trim()
         prefs.postName = r.name
         handlePost(page, body, r.name, mail) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
     }
@@ -707,7 +734,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun acceptConfirm(page: Page.Thread) {
         val c = page.reply.confirm ?: return
         page.reply.confirm = null
-        handlePost(page, page.reply.body, page.reply.name, if (page.reply.sage) "sage" else "") { TwoCh.submitConfirm(c) }
+        handlePost(page, page.reply.body, page.reply.name, page.reply.mail.trim()) { TwoCh.submitConfirm(c) }
     }
 
     /** quick: 長押しの「すぐ書き込む」(書き込み欄の下書きは消さず、うまくいかなければ知らせで出す) */
@@ -721,8 +748,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     is PostResult.Ok -> {
                         if (!quick) {
                             r.body = ""
-                            r.open = false
+                            // 書き込めたらキーボードをしまう(書いたレスと返事が見えるように)
+                            r.blurSeq++
+                            r.done = "書き込みました"
                             db.saveDraft(page.summary, "")
+                            prefs.postMail = r.mail
                         }
                         toast = "書き込みました"
                         refreshThread(page)?.join()
@@ -750,7 +780,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun createThread(page: Page.Threads) {
         val r = page.newThread
         if (r.sending || r.title.isBlank() || r.body.isBlank()) return
-        val mail = if (r.sage) "sage" else ""
+        val mail = r.mail.trim()
         prefs.postName = r.name
         viewModelScope.launch {
             r.sending = true

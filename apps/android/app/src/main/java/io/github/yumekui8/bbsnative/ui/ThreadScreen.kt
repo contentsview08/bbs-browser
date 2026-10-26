@@ -80,6 +80,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -137,9 +140,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val bars = rememberHideOnScroll()
-    var filter by rememberSaveable { mutableStateOf<Filter?>(null) }
-    var searching by rememberSaveable { mutableStateOf(false) }
-    var query by rememberSaveable { mutableStateOf("") }
+    // 絞り込み・検索・スクロールの位置はページに持つ(一覧へ戻って「進む」で開き直しても残す)
+    var filter by page::filter
+    var searching by page::searching
+    var query by page::query
     // 重なったポップアップ(下から順に)。押した所の高さ・押したレスは、指を置いたときに控えておく
     val popups = remember { mutableStateListOf<PopupEntry>() }
     var popupSeq by remember { mutableIntStateOf(0) }
@@ -187,37 +191,45 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         if (q.isNotEmpty()) list = list.filter { it.body.contains(q, true) || it.name.contains(q, true) || it.id == q }
         list
     }
-    val listState = rememberLazyListState()
+    val listState = page.listState
 
-    // 開いたときの位置へ(手元のログ・新着が届いて openAt が決まったら一度だけ)
-    LaunchedEffect(page.openAt, index) {
-        val at = page.openAt ?: return@LaunchedEffect
-        val i = index.posts.indexOfFirst { it.no >= at }
-        if (i >= 0) {
-            listState.scrollToItem(i)
-            page.openAt = null
-        }
+    // スクロールの覚えと操作(今のスマホ版の useThreadScroll と同じ動き)
+    val ctl = page.scroll
+    var footerH by remember { mutableFloatStateOf(0f) }
+    // 並んでいるレスは、いつも今のものを見る(作ったときの並びを覚えたままだと、開いたときに位置が見つからず一番下へ飛んでいた)
+    val shownNow = androidx.compose.runtime.rememberUpdatedState(shown)
+    val scroller = remember(page, listState) {
+        ThreadScroller(ctl, listState, scope, { shownNow.value }, { footerH }, with(density) { 80.dp.toPx() })
     }
-    ReadTracker(listState) { vm.markRead(page, it) }
-
-    // いちばん下を見ているときに新着が届いたら、新着まで送る(今のスマホ版の既定と同じ)。
-    // 下にいたかは、新着を組み立てた直後(並べ直す前)に見る
-    // 下にいたかは、最後に落ち着いた並びで見る(届いた直後・開いた直後の並べ直し前の値で決めると、開いただけで一番下まで飛んでしまう)。
-    // 開いたときの新着(page.enter に入らない)では送らない。開いたら最初の未読から読む
-    var prevCount by remember { mutableIntStateOf(-1) }
-    var stickTo by remember { mutableStateOf<Int?>(null) }
-    var atBottomSettled by remember { mutableStateOf(false) }
+    // 更新(更新の前に、いま見えているところまでの既読を知らせる。「ここから未読」を古い位置で引き直さないように)
+    fun refresh(): kotlinx.coroutines.Job? { reportRead(ctl, scroller, vm, page); return vm.refreshThread(page) }
+    // 開いたら(最初にレスが出て並んだら)、覚えた位置か設定の位置へ
+    LaunchedEffect(page, index.posts.isNotEmpty()) {
+        if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+        scroller.open(vm.positions[page.summary.id], vm.prefs.openPosition)
+        reportRead(ctl, scroller, vm, page)
+    }
+    // 新着が届いたら
+    LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew) }
+    // スクロールが止まって 300ms たったら・中身が変わったら、どこまで読んだかを知らせ、位置を覚える
     LaunchedEffect(listState) {
-        snapshotFlow { listState.layoutInfo.totalItemsCount > 1 && !listState.canScrollForward && !listState.isScrollInProgress }
-            .collect { atBottomSettled = it }
+        snapshotFlow { Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, listState.layoutInfo.totalItemsCount) }
+            .collectLatest {
+                delay(300)
+                if (ctl.positioned) reportRead(ctl, scroller, vm, page)
+            }
     }
-    SideEffect {
-        val n = index.posts.size
-        val fresh = index.posts.lastOrNull()?.no?.let { it in page.enter } == true
-        if (vm.prefs.autoScrollOnNew && fresh && atBottomSettled && prevCount in 1 until n && filter == null && query.isBlank()) stickTo = prevCount
-        prevCount = n
+    // 本人がスクロールしたら、それ以降の新着へは動かして見せる
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { if (it is androidx.compose.foundation.interaction.DragInteraction.Start) ctl.untouched = false }
     }
-    LaunchedEffect(stickTo) { stickTo?.let { listState.animateScrollToItem(it); stickTo = null } }
+    // 札が出ているあいだに、新着の頭が見えたら(通り越したときも)札を消す
+    LaunchedEffect(ctl.newToast) {
+        val t = ctl.newToast ?: return@LaunchedEffect
+        snapshotFlow { scroller.isVisible(t.second) || (listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key is Int }?.key as Int? ?: 0) > t.second }.first { it }
+        ctl.newToast = null
+    }
 
     // 番号・ID・アンカー・URL を押したとき(組み立て済みの文字列から呼ばれる)
     SideEffect {
@@ -254,7 +266,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
      */
     fun localBack(): Boolean {
         when {
-            page.reply.open -> { page.reply.open = false; vm.saveDraft(page) }
+            // 書いている(本文の欄に入っている)なら、まず欄から出る
+            page.reply.open -> { page.reply.blurSeq++; vm.saveDraft(page) }
             searching || query.isNotEmpty() -> { searching = false; query = "" }
             popups.isNotEmpty() -> popups.clear()
             filter != null -> filter = null
@@ -274,11 +287,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     val postRow = @Composable { p: Post, prev: Post? ->
         // 新着で届いたレスは、下から少し浮き上がって順に出てきて、しばらく光る(今のスマホ版の post-enter と flash-new)
-        val delayMs = page.enter[p.no]
-        val anim = remember(p.no, delayMs) { if (delayMs != null && p.no !in page.entered) Animatable(0f) else null }
+        val delayMs = ctl.flash[p.no]
+        val anim = remember(p.no, delayMs) { if (delayMs != null) Animatable(0f) else null }
         val flash = remember(p.no, delayMs) { if (anim != null) Animatable(1f) else null }
         if (anim != null) LaunchedEffect(anim) {
-            page.entered += p.no
             delay(delayMs!!.toLong())
             launch { flash!!.animateTo(0f, tween(1000, easing = androidx.compose.animation.core.LinearEasing)) }
             anim.animateTo(1f, tween(180, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
@@ -315,13 +327,28 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             }
         }
     }
-    val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
+    // 一番下へ飛ぶボタンは、一番下から 1 画面ぶん以上離れているときだけ出す(今のスマホ版と同じ)
+    val atBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            !listState.canScrollForward || (last != null && last.index >= info.totalItemsCount - 2)
+        }
+    }
 
     // なぞる操作(今のスマホ版の既定と同じ割り当て)。左の端から右へはメニュー
     val prefs = vm.prefs
     // ポップアップが出ている間は、ほかの操作(先頭へ・書き込むなど)は効かせず、戻る(→)でポップアップをまとめて閉じるだけ(今のスマホ版と同じ)
     val gestures = if (!prefs.gesturesEnabled) emptyMap()
-    else if (popups.isNotEmpty()) mapOf("right" to SwipeAction("閉じる") { popups.clear() })
+    // ポップアップが出ている間: 戻るでまとめて閉じ、先頭へ・一番下へは一番上のポップアップの中を送る。ほかは効かせない(今のスマホ版と同じ)
+    else if (popups.isNotEmpty()) buildGestures(
+        prefs.gestures("thread"), "thread",
+        mapOf(
+            "back" to { popups.clear() },
+            "top" to { scope.launch { popups.lastOrNull()?.state?.scrollToItem(0) }; Unit },
+            "bottom" to { scope.launch { popups.lastOrNull()?.let { it.state.scrollToItem(maxOf(0, it.state.layoutInfo.totalItemsCount - 1)) } }; Unit },
+        ),
+    ).let { if ("right" in it) it else it + ("right" to SwipeAction("閉じる") { popups.clear() }) }
     else buildGestures(
         prefs.gestures("thread"), "thread",
         mapOf(
@@ -329,7 +356,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             "reply" to { vm.openReply(page) },
             "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) }; Unit },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
-            "refresh" to { vm.refreshThread(page); Unit },
+            "refresh" to { refresh(); Unit },
             "deleteLog" to { confirmDelete = true },
             "drawer" to { vm.drawerOpen = true },
             "search" to { searching = true; bars.show() },
@@ -338,37 +365,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ),
     )
     bars.enabled = prefs.hideBarsOnScroll
-    // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間は隠さない)。今のスマホ版と同じ
-    var footerH by remember { mutableFloatStateOf(0f) }
-    val footerShown = if (page.reply.open || !bars.enabled) 1f else 1f - bars.hidden
-    // 下の端で上へ引っぱって更新(今のスマホ版の useTouchPull の下の端)
-    var pull by remember { mutableFloatStateOf(0f) }
-    var fromBottom by remember { mutableStateOf(false) }
-    val pullAt = with(density) { 72.dp.toPx() }
-    LaunchedEffect(page.loading) { if (!page.loading) fromBottom = false }
-    val bottomPull = remember(page) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // 引っぱっている途中で指を戻したら、まず引いた分を戻す
-                if (pull > 0f && available.y > 0f && source == NestedScrollSource.UserInput) {
-                    val d = minOf(pull, available.y); pull -= d; return Offset(0f, d)
-                }
-                return Offset.Zero
-            }
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y < 0f) {
-                    pull += -available.y * 0.5f
-                    return Offset(0f, available.y)
-                }
-                return Offset.Zero
-            }
-            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
-                if (pull >= pullAt && !page.loading) { fromBottom = true; vm.refreshThread(page) }
-                pull = 0f
-                return androidx.compose.ui.unit.Velocity.Zero
-            }
-        }
-    }
+    // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間・返事が出ている間は隠さない)。今のスマホ版と同じ
+    val footerShown = if (page.reply.open || page.reply.done != null || page.reply.notice != null || !bars.enabled) 1f else 1f - bars.hidden
+    // 上の端で下へ・下の端で上へ引っぱって更新(今のスマホ版の useTouchPull)
+    val topPull = remember { PullState() }
+    val bottomPull = remember { PullState() }
+    val pullConn = remember(page) { PullConnection(topPull, bottomPull, density.density, scope) { refresh()?.join() } }
     // 開いているスレの自動更新(設定。0 ならしない)
     if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
         while (true) {
@@ -383,9 +385,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
     ) {
         Box(
-            Modifier.fillMaxSize().clipToBounds().nestedScroll(bars.connection).nestedScroll(bottomPull),
+            Modifier.fillMaxSize().clipToBounds().nestedScroll(bars.connection).nestedScroll(pullConn),
         ) {
-            PullToRefreshBox(isRefreshing = page.loading && !fromBottom, onRefresh = { vm.refreshThread(page) }, modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize()) {
                 when {
                     !page.loaded -> Hint("読み込み中…")
                     page.error != null && index.posts.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
@@ -450,20 +452,29 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(end = if (vm.prefs.showMinimap) 34.dp else 16.dp, bottom = 14.dp + with(density) { (footerH * footerShown).toDp() }).size(48.dp)
                         .background(Palette.surface2, RoundedCornerShape(12.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(12.dp))
-                        .clickable { scope.launch { listState.animateScrollToItem(maxOf(0, shown.size)) } },
+                        .clickable { scroller.toBottom() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Filled.KeyboardDoubleArrowDown, "一番下へ", tint = Palette.textBody) }
             }
 
-            // 下の端で引っぱっているとき・そこから更新しているときの印
-            if (pull > 0f || (fromBottom && page.loading)) {
-                Box(
-                    Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { (footerH * footerShown).toDp() } + 12.dp).size(40.dp)
-                        .background(Palette.surface2, androidx.compose.foundation.shape.CircleShape),
-                    contentAlignment = Alignment.Center,
+            // 引っぱって更新の印(上は上の帯の下から、下はフッターの上の端から出てくる)
+            PullSpinner(topPull, 1, Modifier.align(Alignment.TopCenter).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() }))
+            PullSpinner(bottomPull, -1, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { (footerH * footerShown).toDp() }))
+
+            // 新着の札: 新着の頭が画面の外なら、下から「新着 +N」を少しのあいだ出す。押すと新着の頭へ
+            ctl.newToast?.let { (count, first) ->
+                val slide = remember(first) { Animatable(0f) }
+                LaunchedEffect(first) { slide.animateTo(1f, tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
+                Row(
+                    Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { (footerH * footerShown).toDp() } + 20.dp)
+                        .graphicsLayer { alpha = slide.value; translationX = (1f - slide.value) * size.width * 1.1f }
+                        .shadow(8.dp, RoundedCornerShape(50)).background(Palette.accent, RoundedCornerShape(50))
+                        .clickable { ctl.newToast = null; scroller.toUnread(first, animate = true) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (fromBottom && page.loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Palette.accent, strokeWidth = 2.5.dp)
-                    else androidx.compose.material3.CircularProgressIndicator({ (pull / pullAt).coerceAtMost(1f) }, Modifier.size(22.dp), color = if (pull >= pullAt) Palette.accent else Palette.textMuted, strokeWidth = 2.5.dp)
+                    Icon(Icons.Filled.ArrowDownward, null, tint = Palette.accentText, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("新着 +$count", color = Palette.accentText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -471,11 +482,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerH = it.height.toFloat() }
                     .graphicsLayer { translationY = (1f - footerShown) * footerH },
-            ) { ThreadFooter(vm, page) { vm.refreshThread(page) } }
+            ) { ThreadFooter(vm, page) { refresh() } }
 
         }
         // ポップアップは本文のスクロールの外に置く(ポップアップの中をスクロールしても、後ろの帯が隠れたり、引っぱって更新が動いたりしないように)
-        PopupLayer(popups, topInset = bars.topHeight * (1f - bars.hidden), onCloseTop = { popups.removeAt(popups.lastIndex) }) { postRow(it, null) }
+        PopupLayer(
+            popups, topInset = bars.topHeight * (1f - bars.hidden), endInset = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp,
+            onCloseTop = { popups.removeAt(popups.lastIndex) },
+        ) { postRow(it, null) }
     }
 
     // ︙ のメニュー(今のスマホ版の並び: お気に入り・画像一覧・次スレ・検索・板・先頭・一番下・表示スタイル・文字の大きさ・URL・ブラウザ・更新・削除)
@@ -501,7 +515,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("スレを保存(テキスト)", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
                     MenuItem("スレを保存(HTML)", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
                     MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person, Palette.own) { filter = if (filter == Filter.OWN) null else Filter.OWN },
-                    MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { vm.refreshThread(page) },
+                    MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { refresh() },
                 ),
                 listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { vm.deleteLog(page) }),
             ),
@@ -627,15 +641,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 }
 
 /** 見えている一番下のレスを、スクロールが止まって少ししてから既読として知らせる */
-@Composable
-private fun ReadTracker(state: LazyListState, onRead: (Int) -> Unit) {
-    LaunchedEffect(state) {
-        snapshotFlow { state.layoutInfo.visibleItemsInfo.lastOrNull { it.key is Int }?.key as Int? }
-            .collectLatest { no ->
-                if (no == null) return@collectLatest
-                delay(500)
-                onRead(no)
-            }
+/** どこまで読んだかを知らせ、読んでいた位置を覚える(戻って開き直したときに戻す) */
+private fun reportRead(ctl: ThreadScrollCtl, scroller: ThreadScroller, vm: AppViewModel, page: Page.Thread) {
+    val (last, pos) = scroller.progress()
+    if (pos != null) vm.positions[page.summary.id] = pos
+    if (last > ctl.sent) {
+        ctl.sent = last
+        vm.markRead(page, last)
     }
 }
 

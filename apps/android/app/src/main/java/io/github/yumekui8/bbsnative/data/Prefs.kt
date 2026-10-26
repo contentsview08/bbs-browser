@@ -67,6 +67,8 @@ class Prefs(context: Context) {
     var followSystem by pref("followSystem", false)
     var darkScheme by pref("darkScheme", "soft-dark")
     var lightScheme by pref("lightScheme", "soft-light")
+    /** レスの見た目: card(カード)/ discord(Discord 風)/ line(LINE 風) */
+    var postStyle by pref("postStyle", "card")
     /** 画面全体の文字の倍率(0.85〜1.3) */
     var fontScale by pref("fontScale", 1f)
     /** レスの本文の文字の倍率(画面全体に掛ける) */

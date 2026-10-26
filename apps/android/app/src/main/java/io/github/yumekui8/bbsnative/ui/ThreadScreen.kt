@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -229,7 +230,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val ended = page.archived || index.posts.size >= 1000
 
     // レス 1 件(本文とポップアップで共通)。本文を押すとアンカーツリー、長押しでメニュー
-    val postRow = @Composable { p: Post ->
+    val style = vm.prefs.postStyle
+    // 返信先の 1 行に出す中身(Discord 風・LINE 風)
+    fun replyOf(r: RenderedPost?): ReplyPreview? {
+        val no = r?.replyTo ?: return null
+        val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
+        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, t.body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+    }
+    val postRow = @Composable { p: Post, prev: Post? ->
         Box(
             Modifier
                 .pointerInput(p.no) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); downNo = p.no } }
@@ -245,7 +253,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
             } else page.rendered[p.no]?.let {
-                PostItem(it, aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
+                // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
+                val continued = style != "card" && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
+                PostItem(
+                    it, style = style, id = p.id, continued = continued, reply = replyOf(it),
+                    onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> openPopup(listOf(t)) } },
+                    aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
         }
     }
@@ -292,10 +305,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         // ミニマップの幅だけ右を空けて、レスが下に潜らないようにする
                         contentPadding = PaddingValues(top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp),
                     ) {
-                        items(shown, key = { it.no }, contentType = { if (it.no in page.ngNos) 1 else 0 }) { p ->
+                        itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
-                            postRow(p)
-                            HorizontalDivider(color = Palette.border)
+                            postRow(p, shown.getOrNull(i - 1))
+                            // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
+                            if (style == "card") HorizontalDivider(color = Palette.border)
                         }
                         item(key = "end") {
                             Box(Modifier.fillMaxWidth().padding(vertical = 22.dp), contentAlignment = Alignment.Center) {
@@ -347,7 +361,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ) { Icon(Icons.Filled.KeyboardDoubleArrowDown, "一番下へ", tint = Palette.textBody) }
             }
 
-            PopupLayer(popups, topInset = bars.topHeight * (1f - bars.hidden), onCloseTop = { popups.removeAt(popups.lastIndex) }) { postRow(it) }
+            PopupLayer(popups, topInset = bars.topHeight * (1f - bars.hidden), onCloseTop = { popups.removeAt(popups.lastIndex) }) { postRow(it, null) }
         }
         ThreadFooter(vm, page) { vm.refreshThread(page) }
     }

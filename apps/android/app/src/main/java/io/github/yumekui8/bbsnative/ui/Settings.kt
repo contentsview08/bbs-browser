@@ -153,6 +153,12 @@ private fun ThemePage(vm: AppViewModel) {
     Group {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followSystem, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followSystem = it }
     }
+    Group("レスの見た目") {
+        ChoiceRow(
+            "見た目", p.postStyle,
+            listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風"),
+        ) { p.postStyle = it }
+    }
     if (!p.followSystem) {
         Group("配色") { SchemeGrid(p.scheme) { p.scheme = it } }
     } else {

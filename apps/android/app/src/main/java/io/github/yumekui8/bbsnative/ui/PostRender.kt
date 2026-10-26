@@ -16,7 +16,16 @@ import io.github.yumekui8.bbsnative.bbs.Span
 
 /** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
 /** aa: アスキーアートらしい本文(スペースが 5 つ以上続く。今のスマホ版と同じ判定)。AA 用の字で、折り返さず画面の幅に収める */
-class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false)
+/** replyTo: Discord 風・LINE 風で、本文の頭のアンカーを「返信」として頭の上に出すときの返信先(その分は本文から省いてある) */
+class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null)
+
+/** 本文の頭の 1 つだけのアンカー(PC 版の dropLeadingAnchor と同じ形)。範囲や並び(>>1-3、>>1,2)は対象にしない */
+private val LEADING_ANCHOR = Regex("^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)([0-9０-９]+)(?![0-9０-９,，\\-－ー〜~、])[ \t　]*")
+private val BLANK_AFTER = Regex("^\n(?:[ \t　]*\n)*")
+
+/** 「2026/10/26(月) 07:37:30.214」→「10/26 07:37」(Discord 風・LINE 風の頭を短く) */
+fun shortDate(date: String): String =
+    Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})").find(date)?.let { m -> "${m.groupValues[2]}/${m.groupValues[3]} ${m.groupValues[4]}:${m.groupValues[5]}" } ?: date
 
 private val AA = Regex("[ \t　]{5,}")
 
@@ -42,6 +51,8 @@ data class RenderOptions(
     val imageUrlOmit: Boolean = true,
     val imageUrlCollapse: Boolean = true,
     val aaAutoDetect: Boolean = true,
+    /** レスの見た目: card / discord / line */
+    val style: String = "card",
 )
 
 /**
@@ -60,7 +71,9 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         val replies = index.replyCount[p.no] ?: 0
         val idCount = p.id?.let { index.idCount[it] } ?: 0
         val replyHeat = Palette.heat(replies)
-        val header = buildAnnotatedString {
+        val name = if (noname != null && p.name.startsWith(noname)) p.name.substring(noname.length).trim() else p.name
+        val isOp = o.highlightOp && opId != null && p.id == opId
+        val header = if (o.style != "card") compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
             val noStyle = SpanStyle(color = replyHeat ?: Palette.textMuted, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             val noText = if (replies > 0) "${p.no} ($replies)" else "${p.no}"
@@ -68,10 +81,9 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             else withStyle(noStyle) { append(noText) }
             append("  ")
             // 名前: 板の既定の名前(名無し)は省く(後ろのワッチョイなどは残す)。押すと同じ名前のレスを出す
-            val name = if (noname != null && p.name.startsWith(noname)) p.name.substring(noname.length).trim() else p.name
             if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold)) { append(name) } }
             if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = Palette.textMuted)) { append("  [${p.mail}]") }
-            if (o.highlightOp && opId != null && p.id == opId) {
+            if (isOp) {
                 append("  ")
                 withStyle(SpanStyle(color = Palette.op, background = Palette.opWash, fontWeight = FontWeight.Bold, fontSize = 11.sp)) { append(" 主 ") }
             }
@@ -93,15 +105,28 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         // 人気のレス(返信 3 件から)は、本文を暖色に(5 件から太字)
         val bodyStyle = replyHeat?.let { SpanStyle(color = it, fontWeight = if (replies >= 5) FontWeight.Bold else FontWeight.Normal) }
         val info = index.info[p.no]
+        val full = info?.display ?: p.body
+        // Discord 風・LINE 風: 頭のアンカーを返信として外に出し、本文からは省く(その分だけ押せるところの位置をずらす)
+        var skip = 0
+        var replyTo: Int? = null
+        if (o.style != "card") LEADING_ANCHOR.find(full)?.let { m ->
+            val n = m.groupValues[1].map { if (it in '０'..'９') '0' + (it - '０') else it }.joinToString("").toIntOrNull()
+            if (n != null && n < p.no && n >= 1) {
+                replyTo = n
+                skip = m.range.last + 1
+                // アンカーだけの行なら、その行と続く空行も省く
+                BLANK_AFTER.find(full.substring(skip))?.let { skip += it.value.length }
+            }
+        }
         val body = buildAnnotatedString {
             if (bodyStyle != null) pushStyle(bodyStyle)
-            val src = info?.display ?: p.body
+            val src = full
             val spans = info?.spans ?: emptyList()
-            var at = 0
+            var at = skip
             var i = 0
             while (i < spans.size) {
                 val s = spans[i]
-                if (s.start < at) { i++; continue }
+                if (s.start < at || s.start < skip) { i++; continue }
                 append(src, at, s.start)
                 val text = src.substring(s.start, s.end)
                 when {
@@ -133,7 +158,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             append(src, at, src.length)
             if (bodyStyle != null) pop()
         }
-        out[p.no] = RenderedPost(header, body, o.aaAutoDetect && AA.containsMatchIn(p.body))
+        out[p.no] = RenderedPost(header, body, o.aaAutoDetect && AA.containsMatchIn(p.body), replyTo)
     }
     return out
 }
@@ -146,3 +171,39 @@ fun shortUrl(url: String, max: Int = 36): String {
     val s = url.replace(Regex("^h?ttps?://", RegexOption.IGNORE_CASE), "").replace(Regex("^www\\.", RegexOption.IGNORE_CASE), "")
     return if (s.length > max) s.take(max - 1) + "…" else s
 }
+
+/**
+ * Discord 風・LINE 風の頭(PC 版の discord の headerBlock と同じ並び): 名前を大きめに、主・#番号・短い日付・ID・返信の数を小さく横に
+ */
+private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks): AnnotatedString =
+    buildAnnotatedString {
+        val small = SpanStyle(color = Palette.textMuted, fontSize = 11.sp)
+        withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
+            withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold, fontSize = 13.sp)) { append(name.ifEmpty { "名無し" }) }
+        }
+        if (isOp) {
+            append(" ")
+            withStyle(SpanStyle(color = Palette.op, background = Palette.opWash, fontWeight = FontWeight.Bold, fontSize = 10.sp)) { append(" 主 ") }
+        }
+        append("  ")
+        withStyle(small) { append("#${p.no}") }
+        append("  ")
+        withStyle(small) { append(shortDate(p.date).replace(' ', '\u00A0')) }
+        if (p.id != null) {
+            append("  ")
+            val heat = if (o.idHeat) Palette.heat(idCount) else null
+            withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
+                withStyle(SpanStyle(color = heat ?: Palette.textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
+                    append("ID:${p.id}")
+                    if (idCount >= 2) append("($idCount)")
+                }
+            }
+        }
+        if (replies > 0) {
+            append("  ")
+            withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
+                withStyle(SpanStyle(color = Palette.heat(replies) ?: Palette.link, fontSize = 11.sp, fontWeight = FontWeight.Bold)) { append("返信\u00A0$replies") }
+            }
+        }
+        if (p.mail.isNotEmpty()) { append("  "); withStyle(small) { append("[${p.mail}]") } }
+    }

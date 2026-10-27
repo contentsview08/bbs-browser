@@ -60,6 +60,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
@@ -190,13 +195,73 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     bars.enabled = prefs.hideBarsOnScroll
     bars.atTop = { !listState.canScrollBackward }
     bars.atBottom = { !listState.canScrollForward }
-    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)) {
-        // 引っぱって更新は設定で切れる(切ったら包まない)
-        val pull: @Composable (@Composable () -> Unit) -> Unit = { body ->
-            if (prefs.pullToRefreshList) PullToRefreshBox(isRefreshing = page.loading, onRefresh = { vm.refreshBoard(page) }, modifier = Modifier.fillMaxSize()) { body() }
-            else Box(Modifier.fillMaxSize()) { body() }
+    // 引っぱって更新(2ch Mate のように): 一番上で下へ引くと一覧が伸びて「引っぱって更新」→「離して更新」、
+    // 離すと「更新中…」を出したまま取り直し、終わったら戻る(取り直しが速くても、更新したと分かるように)
+    val pullPx = remember { Animatable(0f) }
+    var pullRaw by remember { mutableFloatStateOf(0f) }
+    var pulling by remember { mutableStateOf(false) }
+    var pullRefreshing by remember { mutableStateOf(false) }
+    val maxPull = with(density) { 140.dp.toPx() }
+    val commitPull = with(density) { 64.dp.toPx() }
+    val holdPull = with(density) { 52.dp.toPx() }
+    fun damp(d: Float) = maxPull * d / (d + maxPull)
+    val listPull = remember(page) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (!prefs.pullToRefreshList || pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) return androidx.compose.ui.geometry.Offset.Zero
+                if (pullRaw > 0f && available.y < 0f) {
+                    val d = minOf(pullRaw, -available.y); pullRaw -= d
+                    scope.launch { pullPx.snapTo(damp(pullRaw)) }
+                    return androidx.compose.ui.geometry.Offset(0f, -d)
+                }
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+            override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (!prefs.pullToRefreshList || pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput || available.y <= 0f) return androidx.compose.ui.geometry.Offset.Zero
+                pulling = true
+                pullRaw += available.y
+                scope.launch { pullPx.snapTo(damp(pullRaw)) }
+                return androidx.compose.ui.geometry.Offset(0f, available.y)
+            }
+            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                if (!pulling) return androidx.compose.ui.unit.Velocity.Zero
+                pulling = false
+                val reached = damp(pullRaw) >= commitPull
+                pullRaw = 0f
+                scope.launch {
+                    if (reached) {
+                        pullRefreshing = true
+                        pullPx.animateTo(holdPull, tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
+                        vm.refreshBoard(page)?.join()
+                        pullPx.animateTo(0f, tween(250, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
+                        pullRefreshing = false
+                    } else pullPx.animateTo(0f, tween(250))
+                }
+                return androidx.compose.ui.unit.Velocity.Zero
+            }
         }
-        pull {
+    }
+    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).nestedScroll(listPull).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)) {
+        // 引っぱっている所(伸びたすき間)の案内
+        if (pullPx.value > 1f) {
+            Box(
+                Modifier.fillMaxWidth().padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() }).height(with(density) { pullPx.value.toDp() }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (pullRefreshing) {
+                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accent, strokeWidth = 2.dp)
+                        Text("更新中…", color = Palette.textMuted, fontSize = 13.sp)
+                    } else {
+                        val over = pullPx.value >= commitPull
+                        val rot by androidx.compose.animation.core.animateFloatAsState(if (over) 180f else 0f, label = "arrow")
+                        Icon(Icons.Filled.ArrowDownward, null, tint = if (over) Palette.accent else Palette.textMuted, modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = rot })
+                        Text(if (over) "離して更新" else "引っぱって更新", color = if (over) Palette.accent else Palette.textMuted, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+        Box(Modifier.fillMaxSize().graphicsLayer { translationY = pullPx.value }) {
             when {
                 page.error != null && page.threads.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
                 page.threads.isEmpty() && page.loading -> Hint("読み込み中…")
@@ -234,6 +299,16 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 }
             }
             HorizontalDivider(color = Palette.border)
+        }
+
+        // 取り直しの途中は、一覧を残したまま、上の帯の下に細い帯を流す(今のスマホ版の list-progress。0.9 秒で左から右へ)
+        if (page.loading && page.threads.isNotEmpty()) {
+            val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "progress").animateFloat(
+                -0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing)), label = "x",
+            )
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() }).height(2.dp).clipToBounds()) {
+                Box(Modifier.width(maxWidth * 0.35f).fillMaxHeight().graphicsLayer { translationX = t.value * constraints.maxWidth }.background(Palette.accent, RoundedCornerShape(1.dp)))
+            }
         }
 
         // 下の帯(並び順と更新)
@@ -445,7 +520,7 @@ fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, on
                 focusedContainerColor = Palette.surface2, unfocusedContainerColor = Palette.surface2,
                 focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
             ),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(6.dp),
         )
         if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted) }
         Spacer(Modifier.width(4.dp))

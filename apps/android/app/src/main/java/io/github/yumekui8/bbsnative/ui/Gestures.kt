@@ -121,7 +121,7 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
 fun BoxScope.SwipeLabel(state: SwipeState) {
     state.label?.let {
         Text(
-            it, Modifier.align(Alignment.Center).background(Palette.surface3.copy(alpha = 0.92f), RoundedCornerShape(16.dp)).padding(horizontal = 22.dp, vertical = 14.dp),
+            it, Modifier.align(Alignment.Center).background(Palette.surface3.copy(alpha = 0.92f), RoundedCornerShape(8.dp)).padding(horizontal = 22.dp, vertical = 14.dp),
             color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold,
         )
     }

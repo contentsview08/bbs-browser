@@ -37,6 +37,8 @@ import kotlinx.coroutines.launch
 fun Minimap(
     posts: List<Post>, index: PostIndex, own: Set<Int>, toOwn: Set<Int>, unreadFrom: Int?,
     listState: LazyListState, modifier: Modifier = Modifier,
+    /** 印を押して飛んだ(そのレスを一瞬光らせる) */
+    onJumped: (Int) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val n = posts.size
@@ -62,10 +64,23 @@ fun Minimap(
         val i = ((y / h).coerceIn(0f, 1f) * (n - 1)).toInt()
         scope.launch { listState.scrollToItem(i) }
     }
-    val shape = RoundedCornerShape(6.dp)
+    /**
+     * たたいた: 近くに印(人気・自分・自分への返信・画像・動画)があれば、そのレスへ優先して飛び、一瞬光らせる。
+     * 印がなければ、その割合の位置へ
+     */
+    fun tap(y: Float, h: Float, slop: Float) {
+        if (n == 0) return
+        fun yOf(i: Int) = if (n <= 1) 0f else i.toFloat() / (n - 1) * h
+        val near = marks.minByOrNull { kotlin.math.abs(yOf(it.i) - y) }?.takeIf { kotlin.math.abs(yOf(it.i) - y) <= slop }
+        if (near != null) {
+            scope.launch { listState.scrollToItem(near.i) }
+            onJumped(posts[near.i].no)
+        } else jump(y, h)
+    }
+    val shape = RoundedCornerShape(4.dp)
     Canvas(
         modifier.width(22.dp).fillMaxHeight().background(Palette.surface2.copy(alpha = 0.85f), shape).border(1.dp, Palette.border, shape)
-            .pointerInput(n) { detectTapGestures { jump(it.y, size.height.toFloat()) } }
+            .pointerInput(n, marks) { detectTapGestures { tap(it.y, size.height.toFloat(), 14.dp.toPx()) } }
             .pointerInput(n) { detectVerticalDragGestures { change, _ -> jump(change.position.y, size.height.toFloat()) } },
     ) {
         if (n == 0) return@Canvas

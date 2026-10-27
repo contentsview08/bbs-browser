@@ -106,7 +106,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
     val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
     val canSend = !r.sending && r.body.isNotBlank() && disabled == null
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(10.dp)
     // キーボードの分はスレ表示ごと持ち上げる(ThreadScreen の imePadding)。ここはナビゲーションバーの分だけ
     Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
         HorizontalDivider(color = Palette.border)
@@ -115,7 +115,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         // 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す
         val result = r.notice ?: r.done
         if (result != null) {
-            Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp).fillMaxWidth().heightIn(max = 160.dp).shadow(6.dp, RoundedCornerShape(12.dp)).background(Palette.surface, RoundedCornerShape(12.dp)).border(1.dp, Palette.border, RoundedCornerShape(12.dp))) {
+            Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp).fillMaxWidth().heightIn(max = 160.dp).shadow(6.dp, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))) {
                 Text(
                     result, Modifier.padding(start = 12.dp, end = 34.dp, top = 8.dp, bottom = 8.dp).verticalScroll(rememberScrollState()),
                     color = if (r.notice != null) Palette.heatVeryHot else Palette.own, fontSize = 13.sp,
@@ -127,7 +127,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
         if (previews.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (u in previews) coil3.compose.AsyncImage(u, null, Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).border(1.dp, Palette.border, RoundedCornerShape(8.dp)).background(Palette.surface2), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                for (u in previews) coil3.compose.AsyncImage(u, null, Modifier.size(48.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
             }
         }
         // オプション: 名前・メール
@@ -167,7 +167,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         LaunchedEffect(Unit) { rise.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
                         Column(
                             Modifier.graphicsLayer { alpha = rise.value; val sc = 0.94f + 0.06f * rise.value; scaleX = sc; scaleY = sc; translationY = (1f - rise.value) * 12.dp.toPx() }
-                                .widthIn(min = 176.dp).shadow(10.dp, RoundedCornerShape(12.dp)).background(Palette.surface, RoundedCornerShape(12.dp)).border(1.dp, Palette.border, RoundedCornerShape(12.dp)).padding(vertical = 4.dp),
+                                .widthIn(min = 176.dp).shadow(10.dp, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).padding(vertical = 4.dp),
                         ) {
                             PlusItem(Icons.Filled.Image, if (r.uploading) "画像(アップロード中)" else "画像") {
                                 plusMenu = false
@@ -221,7 +221,7 @@ private fun PlusItem(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 @Composable
 private fun SmallField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier) {
     androidx.compose.foundation.text.BasicTextField(
-        value, onChange, modifier.heightIn(min = 38.dp).background(Palette.surface, RoundedCornerShape(10.dp)).border(1.dp, Palette.border, RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 9.dp),
+        value, onChange, modifier.heightIn(min = 38.dp).background(Palette.surface, RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 9.dp),
         singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textBody, fontSize = 14.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
         decorationBox = { inner -> Box { if (value.isEmpty()) Text(placeholder, color = Palette.textMuted, fontSize = 14.sp); inner() } },
     )
@@ -308,7 +308,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                 if (r.notice != null) Text(r.notice!!, color = Palette.markDanger, fontSize = 12.sp)
                 Button(
                     onClick = { vm.createThread(page) }, enabled = !r.sending && r.title.isNotBlank() && r.body.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(6.dp),
                 ) { Text(if (r.sending) "送っています…" else "スレを立てる", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             }
         }

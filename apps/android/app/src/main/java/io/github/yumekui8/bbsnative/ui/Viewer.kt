@@ -193,7 +193,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
             notice?.let { msg ->
                 LaunchedEffect(msg) { delay(2500); notice = null }
                 Text(
-                    msg, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp).background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                    msg, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp).background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
                     color = Color.White, fontSize = 14.sp,
                 )
             }
@@ -205,7 +205,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 val url = urls.getOrNull(pager.currentPage) ?: ""
-                Column(Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).navigationBarsPadding().padding(vertical = 8.dp)) {
+                Column(Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)).navigationBarsPadding().padding(vertical = 8.dp)) {
                     SheetRow(Icons.Filled.Download, "保存") {
                         sheet = false
                         notice = "保存しています…"

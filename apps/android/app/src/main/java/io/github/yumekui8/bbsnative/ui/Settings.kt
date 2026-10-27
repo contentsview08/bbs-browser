@@ -175,12 +175,12 @@ private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String)
         for (s in SCHEMES.filter { dark == null || it.dark == dark }) {
             val on = s.key == selected
             Column(
-                Modifier.width(100.dp).clip(RoundedCornerShape(12.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(12.dp))
+                Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
                     .clickable { onPick(s.key) },
             ) {
                 // 見本: 背景・面・強調色・未読の色
                 Box(Modifier.fillMaxWidth().height(56.dp).background(s.base).padding(8.dp)) {
-                    Column(Modifier.fillMaxWidth().background(s.surface2, RoundedCornerShape(6.dp)).padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.fillMaxWidth().background(s.surface2, RoundedCornerShape(4.dp)).padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.width(48.dp).height(5.dp).background(s.textStrong, RoundedCornerShape(3.dp)))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Box(Modifier.size(10.dp).background(s.accent, CircleShape))
@@ -353,7 +353,7 @@ private fun NgPage(vm: AppViewModel) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     ngLabel(r.target),
-                    Modifier.background(Palette.surface2, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 12.sp,
+                    Modifier.background(Palette.surface2, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 12.sp,
                 )
                 Text(r.pattern, Modifier.weight(1f).padding(start = 10.dp), color = Palette.textBody, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 IconButton(onClick = { vm.removeNg(r) }) { Icon(Icons.Filled.Close, "外す", tint = Palette.textMuted) }
@@ -374,7 +374,7 @@ private fun NgPage(vm: AppViewModel) {
                             val on = t == target
                             Text(
                                 ngLabel(t),
-                                Modifier.clip(RoundedCornerShape(8.dp)).background(if (on) Palette.accentWash else Palette.surface2).clickable { target = t }.padding(horizontal = 10.dp, vertical = 6.dp),
+                                Modifier.clip(RoundedCornerShape(5.dp)).background(if (on) Palette.accentWash else Palette.surface2).clickable { target = t }.padding(horizontal = 10.dp, vertical = 6.dp),
                                 color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp,
                             )
                         }
@@ -466,7 +466,7 @@ private fun AboutPage() {
 private fun Group(title: String? = null, note: String? = null, content: @Composable () -> Unit) {
     if (title != null) Text(title, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     else Spacer(Modifier.height(16.dp))
-    Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(14.dp))) {
+    Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(8.dp))) {
         content()
     }
     if (note != null) Text(note, Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
@@ -476,7 +476,7 @@ private fun Group(title: String? = null, note: String? = null, content: @Composa
 @Composable
 private fun NavRow(icon: ImageVector, color: Color, label: String, desc: String? = null, value: String? = null, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 56.dp).padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(32.dp).background(color, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+        Box(Modifier.size(32.dp).background(color, RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(label, color = Palette.textStrong, fontSize = 15.sp)
             if (desc != null) Text(desc, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -516,7 +516,7 @@ private fun ChoiceRow(label: String, value: String, options: List<Pair<String, S
                     for ((k, name) in options) {
                         val on = k == value
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (on) Palette.accentWash else Color.Transparent)
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (on) Palette.accentWash else Color.Transparent)
                                 .clickable { onChange(k); open = false }.heightIn(min = 46.dp).padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

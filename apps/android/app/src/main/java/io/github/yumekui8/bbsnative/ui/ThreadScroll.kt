@@ -72,6 +72,10 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var flash by mutableStateOf<Map<Int, Int>>(emptyMap())
     /** 新着の札(件数と、新着の頭の番号) */
     var newToast by mutableStateOf<Pair<Int, Int>?>(null)
+    /** 新着が届いた時刻。出る動きは、この時に画面に出ていたレスだけ(あとからスクロールして出てきたレスは、待たせずにすぐ描く) */
+    var flashAt = 0L
+    /** 押して飛んだレス(番号と、押した時刻)。一瞬光らせる */
+    var jumpFlash by mutableStateOf<Pair<Int, Long>?>(null)
 }
 
 /** 新着を若い番号から順に出すときの、1 件ごとの遅れ(PC 版の staggerDelays) */
@@ -158,6 +162,7 @@ class ThreadScroller(
         if (!grew || !ctl.positioned) return
         val fresh = posts.filter { it.no > prevLastNo }.map { it.no }
         if (fresh.isEmpty()) return
+        ctl.flashAt = System.currentTimeMillis()
         ctl.flash = staggerDelays(fresh)
         scope.launch { delay(FLASH_MS + STAGGER_TOTAL_MS.toLong()); ctl.flash = emptyMap() }
         val opening = ctl.untouched && ctl.firstGrowth

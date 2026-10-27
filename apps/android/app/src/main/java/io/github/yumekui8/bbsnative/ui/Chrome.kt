@@ -89,14 +89,15 @@ class HideOnScroll(private val threshold: Float) {
             if (source != NestedScrollSource.UserInput && source != NestedScrollSource.SideEffect) return Offset.Zero
             if (atTop()) { show(); direction = 0; moved = 0f; return Offset.Zero }
             val bottom = atBottom()
-            if (bottom) footerOff = false
+            // 一番下まで来たら、ヘッダーもフッターも出す
+            if (bottom) { show(); direction = 0; moved = 0f; return Offset.Zero }
             val delta = -consumed.y
             if (delta == 0f) return Offset.Zero
             val dir = if (delta > 0) 1 else -1
             if (dir != direction) { direction = dir; moved = 0f }
             moved += kotlin.math.abs(delta)
             if (moved > threshold) {
-                if (dir > 0) { headerOff = true; if (!bottom) footerOff = true } else show()
+                if (dir > 0) { headerOff = true; footerOff = true } else show()
             }
             return Offset.Zero
         }
@@ -192,7 +193,7 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * show.value))
                 .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { close() },
         ) {
-            val shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
             Column(
                 Modifier
                     .align(when (at) { MenuAt.TopEnd -> Alignment.TopEnd; MenuAt.TopStart -> Alignment.TopStart; MenuAt.Center -> Alignment.Center })

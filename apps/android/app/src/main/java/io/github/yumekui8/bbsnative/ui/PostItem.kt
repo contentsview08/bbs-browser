@@ -93,7 +93,7 @@ fun PostItem(
                 Row(verticalAlignment = Alignment.Top) {
                     if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR) }; Spacer(Modifier.width(8.dp)) }
                     Column(
-                        Modifier.widthIn(max = 320.dp).background(bubble, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+                        Modifier.widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
                         if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
@@ -155,7 +155,7 @@ private fun AaBody(r: RenderedPost) {
 private fun OwnChip(label: String) {
     Text(
         label,
-        Modifier.border(1.dp, Palette.own, RoundedCornerShape(6.dp)).background(Palette.ownWash, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+        Modifier.border(1.dp, Palette.own, RoundedCornerShape(4.dp)).background(Palette.ownWash, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
         color = Palette.own, fontSize = 10.sp, lineHeight = 14.sp,
     )
 }

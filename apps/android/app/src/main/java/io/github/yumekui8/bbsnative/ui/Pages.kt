@@ -73,7 +73,7 @@ fun BoardsScreen(vm: AppViewModel) {
                 for ((url, name) in vm.sites) {
                     val on = url == current
                     Text(
-                        name, Modifier.background(if (on) Palette.accentWash else Palette.surface2, RoundedCornerShape(16.dp)).clickable { vm.selectSite(url) }.padding(horizontal = 14.dp, vertical = 7.dp),
+                        name, Modifier.background(if (on) Palette.accentWash else Palette.surface2, RoundedCornerShape(8.dp)).clickable { vm.selectSite(url) }.padding(horizontal = 14.dp, vertical = 7.dp),
                         color = if (on) Palette.accent else Palette.textBody, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
@@ -139,7 +139,7 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
                         Text("${maxOf(h.thread.postCount, remote ?: 0)}レス", color = Palette.textMuted, fontSize = 12.sp)
                         if (unread > 0) {
                             Spacer(Modifier.width(8.dp))
-                            Text("+$unread", Modifier.background(Palette.unread, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("+$unread", Modifier.background(Palette.unread, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -161,7 +161,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
             items(vm.postHistory) { e ->
                 Column(Modifier.fillMaxWidth().clickable { vm.openThread(e.thread) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (e.no != null) Text(">>${e.no}", Modifier.background(Palette.ownWash, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.own, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        if (e.no != null) Text(">>${e.no}", Modifier.background(Palette.ownWash, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.own, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
                         Text(relativeTime(e.postedAt), color = Palette.textMuted, fontSize = 12.sp)
                     }

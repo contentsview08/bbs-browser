@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 /**
  * 配色 1 つ分。値は今の専ブラ(apps/desktop/src/theme/theme.css と app.css の [data-scheme])と同じ。
@@ -149,5 +150,13 @@ fun BbsTheme(content: @Composable () -> Unit) {
             outline = p.border, outlineVariant = p.border, secondaryContainer = p.accentWash, onSecondaryContainer = p.textStrong,
         )
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    // 角の丸みは控えめに(ダイアログ・メニュー・下から出る画面も)
+    val shapes = androidx.compose.material3.Shapes(
+        extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(3.dp),
+        small = androidx.compose.foundation.shape.RoundedCornerShape(5.dp),
+        medium = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+        large = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+    )
+    MaterialTheme(colorScheme = scheme, shapes = shapes, content = content)
 }

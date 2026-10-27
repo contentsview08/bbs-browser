@@ -217,8 +217,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** スレごとの読んでいた位置(画面のいちばん上に見えていたレスとずれ、一番下にいたか)。戻って開き直したときに戻す */
-    val positions = HashMap<String, ScrollPos>()
+    /**
+     * スレごとの読んでいた位置(画面のいちばん上に見えていたレスとずれ、一番下にいたか)。戻って開き直したときに戻す。
+     * 端末にも残し、アプリを開き直しても同じ所から読めるようにする
+     */
+    private val positionStore = app.getSharedPreferences("positions", android.content.Context.MODE_PRIVATE)
+    private val positionCache = HashMap<String, ScrollPos?>()
+
+    fun position(id: String): ScrollPos? = positionCache.getOrPut(id) {
+        positionStore.getString(id, null)?.split(',')?.takeIf { it.size == 3 }?.let { ScrollPos(it[0].toInt(), it[1].toInt(), it[2] == "1") }
+    }
+
+    fun savePosition(id: String, pos: ScrollPos) {
+        if (positionCache[id] == pos) return
+        positionCache[id] = pos
+        positionStore.edit().putString(id, "${pos.no},${pos.offset},${if (pos.bottom) 1 else 0}").apply()
+    }
 
     /** 掲示板のスレ一覧で分かった、いまのレス数(スレの id → 数)。閲覧履歴・お気に入りのスレの新着に使う。-1 は dat 落ち */
     var remoteCounts by mutableStateOf<Map<String, Int>>(emptyMap())
@@ -432,11 +446,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { TwoCh.nonameName(board.url) }
     }
 
-    fun refreshBoard(page: Page.Threads) {
-        if (page.loading) return
-        viewModelScope.launch {
+    /** スレ一覧を取り直す。取り直しの印が一瞬で消えて、取れたか分からなくならないよう、印は 0.8 秒は出しておく */
+    fun refreshBoard(page: Page.Threads): Job? {
+        if (page.loading) return null
+        return viewModelScope.launch {
             page.loading = true
             page.error = null
+            val start = System.currentTimeMillis()
             try {
                 val list = TwoCh.listThreads(page.board)
                 page.states = db.threadStates(page.board.url)
@@ -448,6 +464,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 page.error = e.message ?: e.toString()
             } finally {
+                val left = 800 - (System.currentTimeMillis() - start)
+                if (left > 0) kotlinx.coroutines.delay(left)
                 page.loading = false
             }
         }

@@ -104,7 +104,7 @@ fun Thumbnails(
 private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
     // 家の中のアドレスは、押すまで読まない
     var load by rememberSaveable(url) { mutableStateOf(autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)) }
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(5.dp)
     val box = Modifier.size(size.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
     if (!load) {
         Box(box.clickable { load = true }, contentAlignment = Alignment.Center) { Text("画像", color = Palette.textMuted, fontSize = 13.sp) }
@@ -113,7 +113,7 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
     Box(box.clickable { onOpen(url) }, contentAlignment = Alignment.Center) {
         AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier))
         if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
-        if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
+        if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
     }
 }
 
@@ -135,7 +135,7 @@ private fun LinkCard(url: String, autoLoad: Boolean, onOpen: (String) -> Unit) {
     LaunchedEffect(url) { state = OgpFetcher.fetch(url); done = true }
     val ogp = state
     if (done && ogp == null) return
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(5.dp)
     Row(
         Modifier.padding(top = 6.dp).fillMaxWidth().height(80.dp).clip(shape).background(Palette.surface2).border(1.dp, Palette.border, shape).clickable { onOpen(url) },
     ) {

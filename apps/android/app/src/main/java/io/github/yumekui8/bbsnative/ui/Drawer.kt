@@ -124,7 +124,7 @@ private fun DrawerRow(
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp)
-            .background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(12.dp))
+            .background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .heightIn(min = if (sub) 44.dp else 54.dp)
             .padding(start = if (sub) 28.dp else 16.dp, end = 4.dp),

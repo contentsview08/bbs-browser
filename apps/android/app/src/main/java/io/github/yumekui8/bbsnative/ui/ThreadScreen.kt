@@ -210,8 +210,16 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     LaunchedEffect(page, index.posts.isNotEmpty()) {
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
-        scroller.open(vm.positions[page.summary.id], vm.prefs.openPosition)
+        scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
         reportRead(ctl, scroller, vm, page)
+    }
+    // 一覧へ戻って「進む」で開き直したとき: 一番下まで読んでいたなら一番下へ(戻る前と同じ所から続けて読めるように)
+    LaunchedEffect(page) {
+        if (ctl.positioned && vm.position(page.summary.id)?.bottom == true) {
+            snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+            scroller.toBottomNow()
+            bars.show()
+        }
     }
     // 新着が届いたら
     LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew) }
@@ -290,8 +298,17 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     val postRow = @Composable { p: Post, prev: Post? ->
         // 新着で届いたレスは、下から少し浮き上がって順に出てきて、しばらく光る(今のスマホ版の post-enter と flash-new)
-        val delayMs = ctl.flash[p.no]
+        // 出る動きは、届いた時に画面に出ていたレスだけ。あとからスクロールして(一番下へ飛んで)出てきたレスは、待たせずにすぐ描く
+        val delayMs = ctl.flash[p.no]?.takeIf { System.currentTimeMillis() - ctl.flashAt < it + 150 }
         val anim = remember(p.no, delayMs) { if (delayMs != null) Animatable(0f) else null }
+        // 押して飛んだレス(ミニマップの印・新着の札)は一瞬光らせる
+        val jf = ctl.jumpFlash?.takeIf { it.first == p.no }
+        val jumpGlow = remember(jf) { if (jf != null) Animatable(1f) else null }
+        if (jumpGlow != null) LaunchedEffect(jumpGlow) {
+            delay(120)
+            jumpGlow.animateTo(0f, tween(900, easing = androidx.compose.animation.core.LinearEasing))
+            if (ctl.jumpFlash == jf) ctl.jumpFlash = null
+        }
         val flash = remember(p.no, delayMs) { if (anim != null) Animatable(1f) else null }
         if (anim != null) LaunchedEffect(anim) {
             delay(delayMs!!.toLong())
@@ -302,6 +319,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         Box(
             Modifier
                 .then(if (anim != null) Modifier.graphicsLayer { alpha = anim.value; translationY = (1f - anim.value) * 8.dp.toPx() } else Modifier)
+                .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = 0.28f * jumpGlow.value)) } else Modifier)
                 .then(if (flash != null) Modifier.drawBehind {
                     // 24% → 16%(45% の所)→ 0 と消える
                     val f = flash.value
@@ -357,7 +375,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         mapOf(
             "back" to { if (!localBack()) vm.back() },
             "reply" to { vm.openReply(page) },
-            "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) }; Unit },
+            "bottom" to { scroller.toBottom(); bars.show() },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
             "refresh" to { refresh(); Unit },
             "deleteLog" to { confirmDelete = true },
@@ -433,7 +451,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す(今のスマホ版と同じ)
                         if (ended && filter == null && query.isBlank()) item(key = "next") {
                             LaunchedEffect(Unit) { if (page.nextCandidates == null) vm.findNext(page) }
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 24.dp).border(1.dp, Palette.border, RoundedCornerShape(12.dp)).background(Palette.surface, RoundedCornerShape(12.dp))) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 24.dp).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))) {
                                 NextCandidates(page) { vm.openThread(it) }
                             }
                         }
@@ -447,6 +465,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     shown, index, own, toOwn, if (filter == null && query.isBlank()) page.unreadFrom else null, listState,
                     // フッターの上で終わらせる(フッターが隠れても伸ばさない。伸び縮みすると縮図が動いて見にくい)
                     Modifier.align(Alignment.TopEnd).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() } + 4.dp, bottom = with(density) { footerH.toDp() } + 4.dp, end = 2.dp),
+                    onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show() },
                 )
             }
 
@@ -470,8 +489,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             if (!atBottom && index.posts.isNotEmpty()) {
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(end = if (vm.prefs.showMinimap) 34.dp else 16.dp, bottom = 14.dp + with(density) { (footerH * footerShown).toDp() }).size(48.dp)
-                        .background(Palette.surface2, RoundedCornerShape(12.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(12.dp))
-                        .clickable { scroller.toBottom() },
+                        .background(Palette.surface2, RoundedCornerShape(6.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(6.dp))
+                        .clickable { scroller.toBottom(); bars.show() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Filled.KeyboardDoubleArrowDown, "一番下へ", tint = Palette.textBody) }
             }
@@ -488,7 +507,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { (footerH * footerShown).toDp() } + 20.dp)
                         .graphicsLayer { alpha = slide.value; translationX = (1f - slide.value) * size.width * 1.1f }
                         .shadow(8.dp, RoundedCornerShape(50)).background(Palette.accent, RoundedCornerShape(50))
-                        .clickable { ctl.newToast = null; scroller.toUnread(first, animate = true) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        .clickable { ctl.newToast = null; scroller.toUnread(first, animate = true); ctl.jumpFlash = first to System.nanoTime() }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.ArrowDownward, null, tint = Palette.accentText, modifier = Modifier.size(18.dp))
@@ -524,7 +543,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ),
                 listOf(
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
-                    MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scope.launch { listState.scrollToItem(maxOf(0, shown.size)) } },
+                    MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
                     MenuItem("表示スタイル", Icons.Filled.Palette, Palette.markPurple) { styleSheet = true },
                     MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { fontDialog = true },
                 ),
@@ -663,7 +682,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 /** どこまで読んだかを知らせ、読んでいた位置を覚える(戻って開き直したときに戻す) */
 private fun reportRead(ctl: ThreadScrollCtl, scroller: ThreadScroller, vm: AppViewModel, page: Page.Thread) {
     val (last, pos) = scroller.progress()
-    if (pos != null) vm.positions[page.summary.id] = pos
+    if (pos != null) vm.savePosition(page.summary.id, pos)
     if (last > ctl.sent) {
         ctl.sent = last
         vm.markRead(page, last)

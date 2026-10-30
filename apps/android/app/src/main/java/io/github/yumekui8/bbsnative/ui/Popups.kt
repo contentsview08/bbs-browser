@@ -25,6 +25,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -133,6 +136,33 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
 private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, content: @Composable () -> Unit) {
     // 深い段は 5 段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)
     val depth = minOf(r.depth, 5)
+    // Discord 風・LINE 風: 地を塗らず、段ごとに細い縦の線を引いて、線から枝を出す(チャットの返信の線と同じ見え方)
+    if (LocalPrefs.current.postStyle != "card") {
+        val step = 14.dp
+        val line = Palette.borderStrong
+        Row(
+            Modifier.height(IntrinsicSize.Min).then(if (focus) Modifier.background(Palette.accentWash) else Modifier)
+                .drawBehind {
+                    val w = 1.5.dp.toPx()
+                    val s = step.toPx()
+                    for (k in 0 until depth) {
+                        val x = s * k + s / 2
+                        // 自分の段の 1 つ上の線は、枝のところまで。それより上の段は行の高さいっぱい
+                        if (k == depth - 1) {
+                            drawLine(line, Offset(x, 0f), Offset(x, 22.dp.toPx()), w)
+                            drawLine(line, Offset(x, 22.dp.toPx()), Offset(x + s * 0.7f, 22.dp.toPx()), w)
+                        } else drawLine(line, Offset(x, 0f), Offset(x, size.height), w)
+                    }
+                },
+        ) {
+            Spacer(Modifier.width(step * depth))
+            Column(Modifier.weight(1f)) {
+                content()
+                if (r.alsoTo.isNotEmpty()) Text(r.alsoTo.joinToString(" ") { ">>$it" } + " にも", Modifier.padding(start = 56.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 10.sp)
+            }
+        }
+        return
+    }
     Column {
         if (depthChanged) HorizontalDivider(thickness = 1.5.dp, color = Palette.borderStrong)
         Row(Modifier.height(IntrinsicSize.Min).then(if (focus) Modifier.background(Palette.accentWash) else Modifier)) {

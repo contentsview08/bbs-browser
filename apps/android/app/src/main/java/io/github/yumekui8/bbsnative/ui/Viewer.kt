@@ -189,10 +189,11 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                         Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f), Color.Black.copy(alpha = 0.8f))))
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp).navigationBarsPadding(),
                     ) {
+                        // 名前が長くても ID が縦に潰れないよう、名前の方を 1 行で省く(番号と ID は折り返さない)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${post.no}", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(post.name, color = Color(0xFFA9BBFF), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            post.id?.let { Text("ID:$it", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
+                            Text("${post.no}", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                            Text(post.name, Modifier.weight(1f, fill = false), color = Color(0xFFA9BBFF), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            post.id?.let { Text("ID:$it", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false) }
                         }
                         Text(post.body, Modifier.padding(top = 4.dp), color = Color.White, fontSize = 14.sp, lineHeight = 21.sp, maxLines = 6, overflow = TextOverflow.Ellipsis)
                     }

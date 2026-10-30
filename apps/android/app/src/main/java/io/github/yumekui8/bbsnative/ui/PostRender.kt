@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.unit.sp
 import io.github.yumekui8.bbsnative.bbs.PostIndex
 import io.github.yumekui8.bbsnative.bbs.Span
@@ -85,7 +86,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = Palette.textMuted)) { append("  [${p.mail}]") }
             if (isOp) {
                 append("  ")
-                withStyle(SpanStyle(color = Palette.op, background = Palette.opWash, fontWeight = FontWeight.Bold, fontSize = 11.sp)) { append(" 主 ") }
+                appendInlineContent("op", "[主]")
             }
             append("  ")
             // 日付の途中で折り返さない(日と時刻の間の空白を、折り返さない空白に)
@@ -103,7 +104,8 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             }
         }
         // 人気のレス(返信 3 件から)は、本文を暖色に(5 件から太字)
-        val bodyStyle = replyHeat?.let { SpanStyle(color = it, fontWeight = if (replies >= 5) FontWeight.Bold else FontWeight.Normal) }
+        // 人気のレスは本文の色を変えず、レスの左の線と淡い地で示す(PostItem の heat)。本文は読みやすい色のまま
+        val bodyStyle: SpanStyle? = null
         val info = index.info[p.no]
         val full = info?.display ?: p.body
         // Discord 風・LINE 風: 頭のアンカーを返信として外に出し、本文からは省く(その分だけ押せるところの位置をずらす)
@@ -183,7 +185,7 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
         }
         if (isOp) {
             append(" ")
-            withStyle(SpanStyle(color = Palette.op, background = Palette.opWash, fontWeight = FontWeight.Bold, fontSize = 10.sp)) { append(" 主 ") }
+            appendInlineContent("op", "[主]")
         }
         append("  ")
         withStyle(small) { append("#${p.no}") }

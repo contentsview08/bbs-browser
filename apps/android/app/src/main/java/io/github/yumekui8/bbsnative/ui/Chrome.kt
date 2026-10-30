@@ -333,7 +333,7 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * 表示スタイル(今のスマホ版の StyleMenuItems): テーマ・レスの見た目・文字サイズ(画面全体)。真ん中に浮かぶ
+ * 表示スタイル(今のスマホ版の StyleMenuItems): テーマ・レスの見た目。真ん中に浮かぶ(画面全体の文字の大きさは「文字の大きさ・余白」と設定にあるので、ここには置かない)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -358,8 +358,6 @@ fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, o
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
             group("レスの見た目")
             for ((k, name) in listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風")) row(name, p.postStyle == k) { p.postStyle = k }
-            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
-            row("文字サイズ(画面全体)  ${(p.fontScale * 100).toInt()}%", false, lead = { Icon(Icons.Filled.FormatSize, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp)) }) { onDismiss(); onFont() }
         }
     }
 }
@@ -424,4 +422,28 @@ fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composab
             }
         }
     }
+}
+
+/** 字の中に置く札(主・新など)。地の色をはっきり塗り、字は地とはっきり差のある色にする(薄い地に同じ系統の字だと読みにくかった) */
+@Composable
+fun BadgeChip(text: String, bg: Color, fg: Color) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 1.dp, vertical = 1.dp).background(bg, androidx.compose.foundation.shape.RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {
+        Text(text, color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp,
+            style = androidx.compose.ui.text.TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)))
+    }
+}
+
+/** 札の色: 主(スレ主)は橙、新(新しいスレ)は黄。どちらも塗りつぶして、字は濃い色(暗い配色)・白(明るい配色) */
+fun opChipColors() = if (Palette.dark) Color(0xFFF0B44C) to Color(0xFF241500) else Color(0xFFB7791F) to Color.White
+fun newChipColors() = if (Palette.dark) Color(0xFFF2C14E) to Color(0xFF221A00) else Color(0xFFB8860B) to Color.White
+
+/** 札を字の中に置くための登録(appendInlineContent の id → 中身)。幅は字の大きさに合わせる */
+@Composable
+fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineTextContent> {
+    val (opBg, opFg) = opChipColors()
+    val (nBg, nFg) = newChipColors()
+    fun chip(text: String, bg: Color, fg: Color) = androidx.compose.foundation.text.InlineTextContent(
+        androidx.compose.ui.text.Placeholder(1.7.em, 1.25.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
+    ) { BadgeChip(text, bg, fg) }
+    return mapOf("op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg))
 }

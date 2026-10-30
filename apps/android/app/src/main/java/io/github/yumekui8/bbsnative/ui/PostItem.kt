@@ -45,7 +45,10 @@ fun PostItem(
     r: RenderedPost, aa: Boolean = r.aa, own: Boolean = false, toOwn: Boolean = false,
     info: PostInfo? = null, autoLoad: Boolean = true, onImage: (String) -> Unit = {}, onUrl: (String) -> Unit = {}, gross: Boolean = false,
     style: String = "card", id: String? = null, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
+    /** 人気のレス(返信 3 件から)の色。左に線、淡い地 */
+    heat: Color? = null,
 ) {
+    val chips = chipInlineContent()
     val prefs = LocalPrefs.current
     val images = if (prefs.showThumbnails) info?.images ?: emptyList() else emptyList()
     val youtube = if (prefs.showThumbnails) info?.youtube ?: emptyList() else emptyList()
@@ -62,11 +65,11 @@ fun PostItem(
     val header = @Composable {
         if (own || toOwn) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.header, Modifier.weight(1f, fill = false), fontSize = headSize, lineHeight = 1.4.em)
+                Text(r.header, Modifier.weight(1f, fill = false), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips)
                 Spacer(Modifier.width(6.dp))
                 OwnChip(if (own) "自分" else "→あなた宛")
             }
-        } else Text(r.header, fontSize = headSize, lineHeight = 1.4.em)
+        } else Text(r.header, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips)
     }
     when (style) {
         "discord" -> {
@@ -113,9 +116,11 @@ fun PostItem(
                     media()
                 }
             }
-            if (!own) return content()
-            Row(Modifier.height(IntrinsicSize.Min)) {
-                Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.own))
+            // 左の線: 自分の書き込みは緑、人気のレスは返信の数に応じた暖色(淡い地も)。どちらでもなければ線なし
+            val bar = if (own) Palette.own else heat
+            if (bar == null) return content()
+            Row(Modifier.height(IntrinsicSize.Min).then(if (!own && heat != null) Modifier.background(heat.copy(alpha = 0.06f)) else Modifier)) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(bar))
                 content()
             }
         }

@@ -60,6 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.animation.core.animateFloat
@@ -460,25 +461,24 @@ private fun ThreadRow(
             val titleColor = if (visited) (if (unread > 0) Palette.textStrong else Palette.threadReadTitle) else Palette.textStrong
             Text(
                 buildAnnotatedString {
-                    if (isNew) {
-                        withStyle(SpanStyle(background = Palette.markFav, color = Color(0xFF1F1A0A), fontWeight = FontWeight.Bold, fontSize = (10 * k).sp)) { append("\u00A0新\u00A0") }
-                        append(" ")
-                    }
+                    if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
                     if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
                     append(t.title)
                 },
-                maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
+                maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
                 color = titleColor, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
-            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // 左(時間・ID・dat落ち)は残りの幅に収め、右の 3 つは右端にそろえる
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1)
                 if (t.authorId != null) {
                     Spacer(Modifier.width(8.dp))
                     Text(t.authorId, Modifier.weight(1f, fill = false), color = Palette.textMuted, fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (archived) { Spacer(Modifier.width(8.dp)); Text("dat落ち", color = Palette.textMuted, fontSize = (11 * k).sp) }
-                Spacer(Modifier.weight(1f))
-                // 右の 3 つ(勢い・レス数・未読)は幅をそろえて右寄せにする(行ごとに位置がずれないように。未読がない行も場所を空けておく)
+                }
+                // 右の 3 つ(勢い・レス数・未読)は右端に寄せる(勢い・レス数は幅をそろえて、数字の桁が縦にそろうように)
                 Text(
                     if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
@@ -493,8 +493,8 @@ private fun ThreadRow(
                     buildAnnotatedString { append("${t.postCount}"); withStyle(SpanStyle(fontSize = (10 * k).sp)) { append("レス") } },
                     Modifier.widthIn(min = 60.dp), color = Palette.textMuted, fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                 )
-                Box(Modifier.widthIn(min = 46.dp), contentAlignment = Alignment.CenterEnd) {
-                    if (unread > 0) Text(
+                if (unread > 0) Box(Modifier.padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                    Text(
                         if (unread > 999) "+999+" else "+$unread",
                         Modifier.widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
                         color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,

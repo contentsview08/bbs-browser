@@ -87,12 +87,18 @@ fun parseSubjectTxt(text: String, boardUrl: String, withAuthorId: Boolean): List
                 title = title.substring(0, it.range.first).trimEnd()
             }
         }
+        // 5ch の BE の板(嫌儲など)は、スレタイの後ろに立てた人の BE 番号が付く(「… [834922174]」)。立てた人として外に出す
+        if (authorId == null) BE_NO.find(title)?.let {
+            authorId = "BE:" + it.groupValues[1]
+            title = title.substring(0, it.range.first).trimEnd()
+        }
         val key = m.groupValues[1]
         out += ThreadSummary(boardUrl, key, title, m.groupValues[3].toInt(), out.size, createdAtOf(key, now), authorId, isAnnouncementKey(key, now))
     }
     return out
 }
 
+private val BE_NO = Regex("\\s*[\\[［](\\d{6,12})[\\]］]\\s*$")
 private val ID_IN_DATE = Regex("\\sID:(\\S+)")
 private val ID_BE = Regex("\\s(?:ID|BE):\\S+")
 

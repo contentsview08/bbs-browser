@@ -66,12 +66,12 @@ val SCHEMES = listOf(
         c(0x111111), c(0x2B2B2B), c(0x8B8F97), c(0x00A650), c(0xFFFFFF), wash(0x06C755, 0.12f),
         c(0x06C755), c(0xFFFFFF), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0xC98A12), c(0xD9622B), c(0xD33A3A),
     ),
-    // グレー: 色みをほとんど持たない灰色。強調色も灰みの青に抑え、未読の印だけはっきりさせる
+    // グレー: ネズミ色の中くらいの灰色の地に、白に近い字。色みはほとんど持たせず、未読の印だけはっきりさせる
     Scheme(
         "gray", "グレー", true,
-        c(0x1E1F21), c(0x252628), c(0x252628), c(0x2D2E31), c(0x36383B), c(0x38393C), c(0x4A4C50),
-        c(0xE6E6E6), c(0xC9C9CA), c(0x86888C), c(0xA9B4C2), c(0x16191D), wash(0xA9B4C2, 0.14f),
-        c(0xE07A7A), c(0x2A0B0B), c(0x8FB6E0), c(0x7FA394), c(0xB7C2D0), c(0xD3B06A), c(0xD6905E), c(0xD86A66),
+        c(0x55575B), c(0x4A4C50), c(0x606266), c(0x6A6C70), c(0x75777B), c(0x6E7074), c(0x84868A),
+        c(0xF5F5F6), c(0xE6E6E8), c(0xB9BBBF), c(0xE4E8EE), c(0x1E2125), wash(0xFFFFFF, 0.14f),
+        c(0xFF9DAE), c(0x2A0B12), c(0xC6DDFF), c(0xC3E6D4), c(0xD7DEE8), c(0xFFD27A), c(0xFFB077), c(0xFF8A85),
     ),
     Scheme(
         "light-gray", "ライトグレー", false,
@@ -180,5 +180,20 @@ fun BbsTheme(content: @Composable () -> Unit) {
         large = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
         extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
     )
-    MaterialTheme(colorScheme = scheme, shapes = shapes, content = content)
+    // 字の上下に Android が足す余白(includeFontPadding)を外す。字の上側の余白が大きく見えていた
+    val base = androidx.compose.material3.Typography()
+    fun androidx.compose.ui.text.TextStyle.tight() = copy(
+        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+            androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+        ),
+    )
+    val typography = androidx.compose.material3.Typography(
+        displayLarge = base.displayLarge.tight(), displayMedium = base.displayMedium.tight(), displaySmall = base.displaySmall.tight(),
+        headlineLarge = base.headlineLarge.tight(), headlineMedium = base.headlineMedium.tight(), headlineSmall = base.headlineSmall.tight(),
+        titleLarge = base.titleLarge.tight(), titleMedium = base.titleMedium.tight(), titleSmall = base.titleSmall.tight(),
+        bodyLarge = base.bodyLarge.tight(), bodyMedium = base.bodyMedium.tight(), bodySmall = base.bodySmall.tight(),
+        labelLarge = base.labelLarge.tight(), labelMedium = base.labelMedium.tight(), labelSmall = base.labelSmall.tight(),
+    )
+    MaterialTheme(colorScheme = scheme, shapes = shapes, typography = typography, content = content)
 }

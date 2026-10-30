@@ -315,7 +315,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             launch { flash!!.animateTo(0f, tween(1000, easing = androidx.compose.animation.core.LinearEasing)) }
             anim.animateTo(1f, tween(180, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
         }
-        val flashColor = if (Palette.scheme.key == "soft-light") Palette.unread else Palette.accent
+        // 光る色は色みのない白(暗い配色)・黒(明るい配色)。強調色(緑など)だと配色によって見分けにくかった
+        val flashColor = if (Palette.dark) Color.White else Color.Black
         Box(
             Modifier
                 .then(if (anim != null) Modifier.graphicsLayer { alpha = anim.value; translationY = (1f - anim.value) * 8.dp.toPx() } else Modifier)
@@ -324,7 +325,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // 24% → 16%(45% の所)→ 0 と消える
                     val f = flash.value
                     val a = if (f > 0.55f) 0.16f + (f - 0.55f) / 0.45f * 0.08f else f / 0.55f * 0.16f
-                    drawRect(flashColor.copy(alpha = a))
+                    drawRect(flashColor.copy(alpha = a * if (Palette.dark) 0.8f else 0.5f))
                 } else Modifier)
                 .pointerInput(p.no) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); downNo = p.no } }
                 .combinedClickable(
@@ -344,6 +345,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 PostItem(
                     it, style = style, id = p.id, continued = continued, reply = replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> openPopup(listOf(t)) } },
+                    heat = Palette.heat(index.replyCount[p.no] ?: 0),
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
         }
@@ -477,7 +479,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (searching) {
                     SearchBar(query, { query = it }, "レスを探す(本文・名前・ID)") { searching = false; query = "" }
                 } else {
-                    HeaderBar(page.title, onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
+                    HeaderBar(page.title.replace(Regex("\\s*[\\[［]\\d{6,12}[\\]］]\\s*$"), ""), onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
                         BarIcon(Icons.Filled.Search, "探す") { searching = true }
                         MoreButton { menu = true }
                     }

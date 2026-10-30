@@ -584,7 +584,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun renderOptions(noname: String?) = RenderOptions(
         noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, urlShorten = prefs.urlShorten,
-        imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text",
+        imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
     )
 
     /**

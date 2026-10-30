@@ -54,6 +54,8 @@ data class RenderOptions(
     val aaAutoDetect: Boolean = true,
     /** 人気のレスの本文に色を付ける(人気のレスの示し方が「本文の色」のとき) */
     val heatText: Boolean = false,
+    /** 頭の字(名前・日付・ID)を白っぽくする(空色の地の上で読めるように) */
+    val onSky: Boolean = false,
     /** レスの見た目: card / discord / line */
     val style: String = "card",
 )
@@ -78,27 +80,27 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         val isOp = o.highlightOp && opId != null && p.id == opId
         val header = if (o.style != "card") compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
-            val noStyle = SpanStyle(color = replyHeat ?: Palette.textMuted, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            val noStyle = SpanStyle(color = replyHeat ?: mutedC(o), fontWeight = FontWeight.Bold, fontSize = 13.sp)
             val noText = if (replies > 0) "${p.no} ($replies)" else "${p.no}"
             if (replies > 0) withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) { withStyle(noStyle) { append(noText) } }
             else withStyle(noStyle) { append(noText) }
             append("  ")
             // 名前: 板の既定の名前(名無し)は省く(後ろのワッチョイなどは残す)。押すと同じ名前のレスを出す
-            if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold)) { append(name) } }
-            if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = Palette.textMuted)) { append("  [${p.mail}]") }
+            if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = nameC(o), fontWeight = FontWeight.Bold)) { append(name) } }
+            if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = mutedC(o))) { append("  [${p.mail}]") }
             if (isOp) {
                 append("  ")
                 appendInlineContent("op", "[主]")
             }
             append("  ")
             // 日付の途中で折り返さない(日と時刻の間の空白を、折り返さない空白に)
-            withStyle(SpanStyle(color = Palette.textMuted)) { append(p.date.replace(' ', '\u00A0')) }
+            withStyle(SpanStyle(color = mutedC(o))) { append(p.date.replace(' ', '\u00A0')) }
             if (p.id != null) {
                 append("  ")
                 // 書き込みの多い ID は暖色。押すと同じ ID のレスを出す
                 val heat = if (o.idHeat) Palette.heat(idCount) else null
                 withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                    withStyle(SpanStyle(color = heat ?: Palette.textMuted, fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
+                    withStyle(SpanStyle(color = heat ?: mutedC(o), fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
                         append("ID:${p.id}")
                         if (idCount >= 2) append("($idCount)")
                     }
@@ -181,9 +183,9 @@ fun shortUrl(url: String, max: Int = 36): String {
  */
 private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks): AnnotatedString =
     buildAnnotatedString {
-        val small = SpanStyle(color = Palette.textMuted, fontSize = 11.sp)
+        val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
         withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
-            withStyle(SpanStyle(color = Palette.posterName, fontWeight = FontWeight.Bold, fontSize = 13.sp)) { append(name.ifEmpty { "名無し" }) }
+            withStyle(SpanStyle(color = nameC(o), fontWeight = FontWeight.Bold, fontSize = 13.sp)) { append(name.ifEmpty { "名無し" }) }
         }
         if (isOp) {
             append(" ")
@@ -197,7 +199,7 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
             append("  ")
             val heat = if (o.idHeat) Palette.heat(idCount) else null
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                withStyle(SpanStyle(color = heat ?: Palette.textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
+                withStyle(SpanStyle(color = heat ?: mutedC(o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
                     append("ID:${p.id}")
                     if (idCount >= 2) append("($idCount)")
                 }
@@ -211,3 +213,7 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
         }
         if (p.mail.isNotEmpty()) { append("  "); withStyle(small) { append("[${p.mail}]") } }
     }
+
+/** 頭の字の色(空色の地の上では白っぽく) */
+private fun mutedC(o: RenderOptions) = if (o.onSky) Palette.skyMuted else Palette.textMuted
+private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.posterName

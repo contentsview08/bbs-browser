@@ -37,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -428,16 +430,21 @@ fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composab
 /** 字の中に置く札(主・新など)。地の色をはっきり塗り、字は地とはっきり差のある色にする(薄い地に同じ系統の字だと読みにくかった) */
 @Composable
 fun BadgeChip(text: String, bg: Color, fg: Color) {
-    Box(Modifier.fillMaxSize().padding(horizontal = 1.dp, vertical = 1.dp).background(bg, androidx.compose.foundation.shape.RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {
-        // 字の上下の余白をそろえる(行の高さを字の大きさにし、上下を同じだけ切る)。日本語の字は下に寄って見えるので少し上へ
-        Text(
-            text, Modifier.offset(y = (-0.5).dp), color = fg,
-            style = androidx.compose.ui.text.TextStyle(
-                fontSize = 10.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp,
-                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
-                lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.Both),
-            ),
-        )
+    // 字は、字そのものの形の上下(グリフの外枠)で真ん中に置く。字の高さの余白(フォントごとに上下で違う)に左右されないように
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val paint = remember(fg) {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = fg.toArgb()
+            textSize = with(density) { 10.sp.toPx() }
+            isFakeBoldText = true
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+    }
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize().padding(horizontal = 1.dp, vertical = 1.dp)) {
+        drawRoundRect(bg, cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
+        val bounds = android.graphics.Rect()
+        paint.getTextBounds(text, 0, text.length, bounds)
+        drawContext.canvas.nativeCanvas.drawText(text, size.width / 2f, size.height / 2f - bounds.exactCenterY(), paint)
     }
 }
 

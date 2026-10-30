@@ -469,7 +469,7 @@ private fun ThreadRow(
     Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min).graphicsLayer { alpha = if (archived) 0.6f else 1f }) {
         if (visited) Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread else Palette.threadReadTitle))
         Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad, bottom = pad)) {
-            val titleColor = if (visited) (if (unread > 0) Palette.textStrong else Palette.threadReadTitle) else Palette.textStrong
+            val titleColor = if (visited) Palette.threadReadTitle else Palette.textStrong
             Text(
                 buildAnnotatedString {
                     if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
@@ -477,8 +477,8 @@ private fun ThreadRow(
                     append(t.title)
                 },
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
-                // まだ読んでいない(開いていない・新着がある)スレは太字、読み終えたスレは細く既読の色に
-                color = titleColor, fontWeight = if (!visited || unread > 0) FontWeight.SemiBold else FontWeight.Normal,
+                // まだ開いていないスレだけ太字。開いたスレは新着があっても細く既読の色に(新着は右の +N の札で分かる)
+                color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
             )
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 左(時間・ID・dat落ち)は残りの幅に収め、右の 3 つは右端にそろえる

@@ -414,7 +414,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     Box(
         // LINE 風のときは、地を吹き出しと区別できる色に
-        modifier.fillMaxSize().background(if (vm.prefs.postStyle == "line") (if (vm.prefs.lineBg == "sky") Palette.lineSky else Palette.lineBg) else Palette.base).imePadding()
+        modifier.fillMaxSize().background(Palette.threadBg(vm.prefs.postStyle)).imePadding()
             .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
             .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
     ) {
@@ -443,12 +443,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)
                         item(key = "end") {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.weight(1f).height(3.dp).background(Palette.border))
+                                val sky = Palette.onSky(style)
+                                Box(Modifier.weight(1f).height(3.dp).background(if (sky) Palette.skyMuted.copy(alpha = 0.5f) else Palette.border))
                                 Text(
                                     if (page.archived) "-END-(dat 落ち)" else "-END-", Modifier.padding(horizontal = 12.dp),
-                                    color = Palette.textMuted, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp,
+                                    color = if (sky) Palette.skyText else Palette.textMuted, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp,
                                 )
-                                Box(Modifier.weight(1f).height(3.dp).background(Palette.border))
+                                Box(Modifier.weight(1f).height(3.dp).background(if (sky) Palette.skyMuted.copy(alpha = 0.5f) else Palette.border))
                             }
                         }
                         // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す(今のスマホ版と同じ)
@@ -528,7 +529,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
         // ポップアップは本文のスクロールの外に置く(ポップアップの中をスクロールしても、後ろの帯が隠れたり、引っぱって更新が動いたりしないように)
         PopupLayer(
-            popups, topInset = bars.topHeight * (1f - bars.hidden), endInset = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp,
+            popups, bg = Palette.threadBg(style), topInset = bars.topHeight * (1f - bars.hidden), endInset = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp,
             onCloseTop = { popups.removeAt(popups.lastIndex) },
         ) { postRow(it, null) }
     }

@@ -140,8 +140,21 @@ object Palette {
      * LINE 風の地と吹き出し(今のスマホ版の [data-post-style='line']): 地は配色の背景に青灰を少し混ぜ(明 13%・暗 10%)、
      * 吹き出しは面の色、自分の吹き出しは明るい緑(暗い配色では深い緑)
      */
-    /** LINE のトーク画面のような空色の地(明るい配色は空色、暗い配色は紺)。白い吹き出しと濃い字がはっきり見える */
-    val lineSky get() = if (scheme.dark) Color(0xFF1C2838) else Color(0xFF9DB8DC)
+    /**
+     * スレ表示の地。LINE 風のときだけ配色ごとに変える: LINE ライトは LINE のトーク画面のような空色(ライトとの見分け)、
+     * グレーは濃い群青(灰色の吹き出しと白い字がはっきり見える)、ほかは配色の背景に青灰を少し混ぜる
+     */
+    fun threadBg(style: String) = when {
+        style != "line" -> base
+        scheme.key == "line-light" -> Color(0xFF9DB8DC)
+        scheme.key == "gray" -> Color(0xFF1C2838)
+        else -> lineBg
+    }
+    /** 地が空色(LINE ライトの LINE 風)で、吹き出しの外の字(名前・日付・ID)を白っぽくするか */
+    fun onSky(style: String) = style == "line" && scheme.key == "line-light"
+    /** 空色の地の上で読める字の色 */
+    val skyText get() = Color(0xFFF4F8FC)
+    val skyMuted get() = Color(0xE6FFFFFF)
     val lineBg get() = androidx.compose.ui.graphics.lerp(base, if (scheme.dark) Color(0xFF6F8FB8) else Color(0xFF7F9CC0), if (scheme.dark) 0.10f else 0.13f)
     // 暗い配色の吹き出しは、地より少しだけ明るい面(明るすぎると白い字との差が小さくなる)
     val lineBubble get() = if (scheme.dark) surface2 else Color.White

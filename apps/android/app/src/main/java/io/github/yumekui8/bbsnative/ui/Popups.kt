@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawBehind
@@ -56,6 +57,8 @@ class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = 
 @Composable
 fun PopupLayer(
     popups: List<PopupEntry>,
+    /** ポップアップの地(LINE 風なら、スレ表示と同じ地) */
+    bg: Color = Palette.surface,
     topInset: Float,
     endInset: androidx.compose.ui.unit.Dp = 0.dp,
     onCloseTop: () -> Unit,
@@ -70,13 +73,13 @@ fun PopupLayer(
             if (i == popups.lastIndex) {
                 Box(Modifier.fillMaxSize().clickable(interactionSource = noRipple, indication = null, onClick = onCloseTop))
             }
-            PopupWindow(e, topInset, areaH, endInset, post)
+            PopupWindow(e, topInset, areaH, endInset, bg, post)
         }
     }
 }
 
 @Composable
-private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, post: @Composable (Post) -> Unit) {
+private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, bg: Color, post: @Composable (Post) -> Unit) {
     val density = LocalDensity.current
     val gap = with(density) { 4.dp.toPx() }
     val minTop = topInset + gap
@@ -90,7 +93,7 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: 
             Box(
                 // ミニマップに重ならないよう、その幅だけ右を空ける
                 Modifier.padding(start = 6.dp, end = 6.dp + endInset)
-                    .graphicsLayer { val p = rise.value; alpha = p; val s = 0.94f + 0.06f * p; scaleX = s; scaleY = s; translationY = (1f - p) * 12.dp.toPx() }.shadow(12.dp, shape).clip(shape).background(Palette.surface).border(2.dp, Palette.accent, shape)
+                    .graphicsLayer { val p = rise.value; alpha = p; val s = 0.94f + 0.06f * p; scaleX = s; scaleY = s; translationY = (1f - p) * 12.dp.toPx() }.shadow(12.dp, shape).clip(shape).background(bg).border(2.dp, Palette.accent, shape)
                     // 中を押しても幕に届かない(閉じない)ように
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
             ) { PopupContent(e, post) }

@@ -343,7 +343,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
                 val continued = style != "card" && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 PostItem(
-                    it, style = style, id = p.id, continued = continued, reply = replyOf(it),
+                    it, style = style, id = p.id, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
@@ -414,7 +414,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     Box(
         // LINE 風のときは、地を吹き出しと区別できる色に
-        modifier.fillMaxSize().background(if (vm.prefs.postStyle == "line") Palette.lineBg else Palette.base).imePadding()
+        modifier.fillMaxSize().background(if (vm.prefs.postStyle == "line") (if (vm.prefs.lineBg == "sky") Palette.lineSky else Palette.lineBg) else Palette.base).imePadding()
             .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
             .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
     ) {

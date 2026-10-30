@@ -158,6 +158,7 @@ private fun ThemePage(vm: AppViewModel) {
             "見た目", p.postStyle,
             listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風"),
         ) { p.postStyle = it }
+        if (p.postStyle == "line") ChoiceRow("LINE 風の地の色", p.lineBg, listOf("sky" to "空色(LINE のような)", "theme" to "配色の背景に寄せる")) { p.lineBg = it }
     }
     if (!p.followSystem) {
         Group("配色") { SchemeGrid(p.scheme) { p.scheme = it } }

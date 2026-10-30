@@ -377,10 +377,15 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         // スレを立てる(右下の丸いボタン)
         FloatingActionButton(
             onClick = { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
-            containerColor = Palette.accent, contentColor = Color.White, shape = CircleShape,
+            containerColor = Palette.accent, contentColor = Palette.accentText, shape = CircleShape,
+            // 下へスクロールしてフッターが隠れるときは、一緒に画面の下へ沈めて消す
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp).navigationBarsPadding()
                 .padding(bottom = with(density) { bars.bottomHeight.toDp() })
-                .graphicsLayer { translationY = bars.footerHidden * bars.bottomHeight },
+                .graphicsLayer {
+                    val f = bars.footerHidden
+                    translationY = f * (bars.bottomHeight + size.height + 40.dp.toPx())
+                    alpha = 1f - f
+                },
         ) { Icon(Icons.Filled.EditNote, "スレを立てる") }
     }
 
@@ -472,7 +477,8 @@ private fun ThreadRow(
                     append(t.title)
                 },
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
-                color = titleColor, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
+                // まだ読んでいない(開いていない・新着がある)スレは太字、読み終えたスレは細く既読の色に
+                color = titleColor, fontWeight = if (!visited || unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 左(時間・ID・dat落ち)は残りの幅に収め、右の 3 つは右端にそろえる

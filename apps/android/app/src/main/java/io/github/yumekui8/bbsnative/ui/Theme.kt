@@ -140,9 +140,12 @@ object Palette {
      * LINE 風の地と吹き出し(今のスマホ版の [data-post-style='line']): 地は配色の背景に青灰を少し混ぜ(明 13%・暗 10%)、
      * 吹き出しは面の色、自分の吹き出しは明るい緑(暗い配色では深い緑)
      */
+    /** LINE のトーク画面のような空色の地(明るい配色は空色、暗い配色は紺)。白い吹き出しと濃い字がはっきり見える */
+    val lineSky get() = if (scheme.dark) Color(0xFF1C2838) else Color(0xFF9DB8DC)
     val lineBg get() = androidx.compose.ui.graphics.lerp(base, if (scheme.dark) Color(0xFF6F8FB8) else Color(0xFF7F9CC0), if (scheme.dark) 0.10f else 0.13f)
     // 暗い配色の吹き出しは、地より少しだけ明るい面(明るすぎると白い字との差が小さくなる)
     val lineBubble get() = if (scheme.dark) surface2 else Color.White
+    /** 吹き出しの外の字(名前・日付)は、空色の地の上でも読める色に */
     val lineOwnBg get() = if (scheme.dark) Color(0xFF3F7D2C) else Color(0xFF8DE055)
     val lineOwnText get() = if (scheme.dark) Color(0xFFEEF7E8) else Color(0xFF10200A)
 

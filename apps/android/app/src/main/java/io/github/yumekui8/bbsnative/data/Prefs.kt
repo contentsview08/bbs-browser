@@ -67,6 +67,8 @@ class Prefs(context: Context) {
     var followSystem by pref("followSystem", false)
     var darkScheme by pref("darkScheme", "soft-dark")
     var lightScheme by pref("lightScheme", "soft-light")
+    /** LINE 風の地: sky(LINE のような空色)/ theme(配色の背景に寄せる) */
+    var lineBg by pref("lineBg", "sky")
     /** レスの見た目: card(カード)/ discord(Discord 風)/ line(LINE 風) */
     var postStyle by pref("postStyle", "card")
     /** 画面全体の文字の倍率(0.85〜1.3) */

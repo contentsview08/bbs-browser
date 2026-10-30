@@ -125,11 +125,16 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
         LazyColumn(state = state) {
             itemsIndexed(tree, key = { _, r -> r.no }) { i, r ->
                 val p = byNo[r.no] ?: return@itemsIndexed
-                TreeStep(r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth) { post(p) }
+                TreeStep(r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth) {
+                    androidx.compose.runtime.CompositionLocalProvider(LocalInTree provides true) { post(p) }
+                }
             }
         }
     }
 }
+
+/** ツリーの中か(ツリーの中のレスは、返信先の 1 行を出さない。線をたどれば返信先が分かるので) */
+val LocalInTree = androidx.compose.runtime.compositionLocalOf { false }
 
 /** スマホのツリーの 1 行(今のスマホ版の StepTree): 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線 */
 @Composable

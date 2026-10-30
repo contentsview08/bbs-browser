@@ -299,6 +299,7 @@ private fun ThreadPage(vm: AppViewModel) {
         SwitchRow("AA を見分けて、AA 用の字で出す", p.aaAutoDetect) { p.aaAutoDetect = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
         SwitchRow("書き込みの多い ID を赤く", p.idHeat) { p.idHeat = it }
+        SwitchRow("ID ごとに色を付ける", p.idColor, desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idColor = it }
         ChoiceRow(
             "人気のレスの示し方", p.heatStyle,
             listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色", "none" to "示さない"),

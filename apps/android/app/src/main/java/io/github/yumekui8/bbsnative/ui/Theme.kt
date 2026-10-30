@@ -232,6 +232,27 @@ object Palette {
     val lineOwnBg get() = if (scheme.dark) Color(0xFF3F7D2C) else Color(0xFF8DE055)
     val lineOwnText get() = if (scheme.dark) Color(0xFFEEF7E8) else Color(0xFF10200A)
 
+    /**
+     * ID ごとの色。ID の文字から色相を決め、彩度と明るさは配色の明るさで固定する(どの色相でも地との差が同じくらいになるように)。
+     * 暖色の赤〜橙は「書き込みの多い ID」の色と紛れるので避ける
+     */
+    fun idColor(id: String, sky: Boolean = false): Color {
+        val h = ((id.hashCode().toLong() and 0xffffffffL) % 280 + 40).toFloat()
+        // 空色の地の上では、白っぽい字と同じくらいの明るさの淡い色に
+        if (sky) {
+            var l = 0.8f
+            var c = Color.hsl(h, 0.85f, l)
+            while (c.luminance() < 0.7f && l < 0.97f) { l += 0.02f; c = Color.hsl(h, 0.85f, l) }
+            return c
+        }
+        // 黄や緑は同じ明るさでも明るく見えるので、輝度が目安に入るまで明るさをずらす(明るい地で 3:1、暗い地で 3.5:1 を超える)
+        var l = if (scheme.dark) 0.62f else 0.42f
+        var c = Color.hsl(h, 0.6f, l)
+        if (scheme.dark) while (c.luminance() < 0.28f && l < 0.9f) { l += 0.02f; c = Color.hsl(h, 0.6f, l) }
+        else while (c.luminance() > 0.15f && l > 0.1f) { l -= 0.02f; c = Color.hsl(h, 0.6f, l) }
+        return c
+    }
+
     /** 書き込み数・被アンカー数の色(今の専ブラの heatClass と同じ段階)。null なら色を付けない */
     fun heat(count: Int): Color? = when {
         count >= 7 -> heatVeryHot

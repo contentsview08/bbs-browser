@@ -20,6 +20,7 @@ val SETTINGS_INDEX = listOf(
     Triple("thread", "AA を見分けて、AA 用の字で出す", ""),
     Triple("thread", "スレ主に「主」の印", ">>1 と同じ ID のレス"),
     Triple("thread", "書き込みの多い ID を赤く", ""),
+    Triple("thread", "ID ごとに色を付ける", "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます"),
     Triple("thread", "人気のレスの示し方", ""),
     Triple("thread", "ミニマップを出す", "右端に、人気レス・自分のレス・画像の位置を示します"),
     Triple("thread", "時間が空いたところに区切りを入れる", "前のレスから 1 時間以上空いたところや、日付が変わったところに線を引きます"),

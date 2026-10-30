@@ -67,11 +67,17 @@ class PostLinks : LinkInteractionListener {
 
 private val plain = TextLinkStyles(null)
 
+/** ID の字の色: ID ごとの色(設定がオンで 2 回以上書いた ID)か、薄い字 */
+private fun idC(id: String, count: Int, o: RenderOptions) =
+    if (o.idColor && count >= 2) Palette.idColor(id, sky = o.onSky) else mutedC(o)
+
 /** レスの組み立て方の設定(設定画面の「スレ表示」。変えたら組み立て直す) */
 data class RenderOptions(
     val noname: String? = null,
     val highlightOp: Boolean = true,
     val idHeat: Boolean = true,
+    /** 2 回以上書いた ID に、ID ごとの色を付ける(同じ人の書き込みを目で追えるように) */
+    val idColor: Boolean = false,
     val urlShorten: Boolean = true,
     val imageUrlOmit: Boolean = true,
     val imageUrlCollapse: Boolean = true,
@@ -124,7 +130,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                 // 書き込みの多い ID は暖色。押すと同じ ID のレスを出す
                 val heat = if (o.idHeat) Palette.heat(idCount) else null
                 withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                    withStyle(SpanStyle(color = heat ?: mutedC(o), fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
+                    withStyle(SpanStyle(color = heat ?: idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
                         append("ID:${p.id}")
                         if (idCount >= 2) append("($idCount)")
                     }
@@ -223,7 +229,7 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
             append("  ")
             val heat = if (o.idHeat) Palette.heat(idCount) else null
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                withStyle(SpanStyle(color = heat ?: mutedC(o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
+                withStyle(SpanStyle(color = heat ?: idC(p.id, idCount, o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
                     append("ID:${p.id}")
                     if (idCount >= 2) append("($idCount)")
                 }

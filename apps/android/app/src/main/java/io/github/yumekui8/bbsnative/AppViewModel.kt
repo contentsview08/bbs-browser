@@ -592,7 +592,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun renderOptions(noname: String?) = RenderOptions(
-        noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, urlShorten = prefs.urlShorten,
+        noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, idColor = prefs.idColor, urlShorten = prefs.urlShorten,
         imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
     )
 
@@ -600,7 +600,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
      */
     private fun renderKey() = listOf(
-        prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.urlShorten, prefs.imageUrlOmit,
+        prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.idColor, prefs.urlShorten, prefs.imageUrlOmit,
         prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle,
     )
 

@@ -114,6 +114,8 @@ class Prefs(context: Context) {
     var highlightOp by pref("highlightOp", true)
     var idHeat by pref("idHeat", true)
     var idColor by pref("idColor", false)
+    /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */
+    var doubleTapReply by pref("doubleTapReply", false)
     var showMinimap by pref("showMinimap", true)
     /** 前のレスから時間が空いたところに「3 時間後」の区切りを入れる */
     var timeGap by pref("timeGap", true)

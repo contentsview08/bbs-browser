@@ -335,6 +335,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     interactionSource = null, indication = null,
                     onClick = { index.treeRows(p.no).takeIf { it.size > 1 }?.let { rows -> openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) } },
                     onLongClick = { Haptics.longPress(view); postMenu = p },
+                    // ダブルタップで返信(設定がオンのときだけ。オフなら 1 回のタップを待たせない)
+                    onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); vm.openReply(page, ">>${p.no}\n") }) else null,
                 ),
         ) {
             if (p.no in page.ngNos && p.no !in revealed) {

@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
             io.github.yumekui8.bbsnative.ui.Haptics.enabled = p.haptics
             val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
             LaunchedEffect(key) { Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key) }
+            LaunchedEffect(p.accent) { Palette.accentPick = io.github.yumekui8.bbsnative.ui.accentOf(p.accent) }
             // 時計などのアイコンの色を、配色の明るさに合わせる
             LaunchedEffect(Palette.dark) {
                 val t = android.graphics.Color.TRANSPARENT

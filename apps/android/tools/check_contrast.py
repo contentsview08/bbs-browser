@@ -39,9 +39,16 @@ def ratio(a: str, b: str) -> float:
 def main() -> int:
     src = THEME.read_text(encoding="utf-8")
     bad = 0
-    for key, name, body in re.findall(r'Scheme\(\s*"([^"]+)", "([^"]+)", (?:true|false),(.*?)\n    \),', src, re.S):
+    # 設定で選べる差し色(ACCENTS)。明るい配色では light、暗い配色では dark を、地と面の上で 3 以上に
+    accents = re.findall(r'Accent\("([^"]+)", "[^"]+", Color\(0xFF([0-9A-Fa-f]{6})\), Color\(0xFF([0-9A-Fa-f]{6})\)\)', src)
+    for key, name, dark, body in re.findall(r'Scheme\(\s*"([^"]+)", "([^"]+)", (true|false),(.*?)\n    \),', src, re.S):
         vals = dict(zip(NAMES, re.findall(r"(?:c|wash)\(0x([0-9A-Fa-f]{6})", body)))
         ng = [f"{label} {ratio(vals[a], vals[b]):.1f}" for label, a, b, th in CHECKS if ratio(vals[a], vals[b]) < th]
+        for ak, light, darkc in accents:
+            c = darkc if dark == "true" else light
+            m = min(ratio(c, vals["base"]), ratio(c, vals["surface"]))
+            if m < 3.0:
+                ng.append(f"差し色 {ak} {m:.1f}")
         print(f"{key:14} {name:12} {'NG: ' + ' / '.join(ng) if ng else 'ok'}")
         bad += bool(ng)
     return 1 if bad else 0

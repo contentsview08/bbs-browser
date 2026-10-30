@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -395,6 +396,22 @@ fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, o
                 // スマホのダーク・ライトに合わせているときは、いまの明るさの方の配色を変える(PC 版の pickSchemeNow)
                 if (p.followSystem) { if (s.dark == Palette.dark) { if (s.dark) p.darkScheme = s.key else p.lightScheme = s.key } else { p.followSystem = false; p.scheme = s.key } }
                 else p.scheme = s.key
+            }
+            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
+            group("差し色")
+            // 丸を押して選ぶ。左端の「テーマ」はテーマの色に戻す
+            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                @Composable fun dot(c: Color, label: String, on: Boolean, onClick: () -> Unit) {
+                    Column(Modifier.clickable(onClick = onClick).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.size(30.dp).background(c, androidx.compose.foundation.shape.CircleShape)
+                                .border(if (on) 3.dp else 1.dp, if (on) Palette.textStrong else Palette.border, androidx.compose.foundation.shape.CircleShape),
+                        )
+                        Text(label, color = if (on) Palette.textStrong else Palette.textMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+                    }
+                }
+                dot(Palette.scheme.accent, "テーマ", p.accent.isEmpty()) { p.accent = "" }
+                for (a in ACCENTS) dot(if (Palette.dark) a.dark else a.light, a.name, p.accent == a.key) { p.accent = a.key }
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
             group("レスの見た目")

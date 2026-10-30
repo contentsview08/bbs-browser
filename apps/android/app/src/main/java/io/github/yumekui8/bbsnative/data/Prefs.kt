@@ -66,6 +66,8 @@ class Prefs(context: Context) {
     /** スマホのダーク・ライトに合わせる(合わせるときは darkScheme / lightScheme を使う) */
     var followSystem by pref("followSystem", false)
     var darkScheme by pref("darkScheme", "soft-dark")
+    /** 差し色(ACCENTS のキー)。空ならテーマの色 */
+    var accent by pref("accent", "")
     var lightScheme by pref("lightScheme", "soft-light")
     /** レスの見た目: card(カード)/ discord(Discord 風)/ line(LINE 風) */
     var postStyle by pref("postStyle", "card")

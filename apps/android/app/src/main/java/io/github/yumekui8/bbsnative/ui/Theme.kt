@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
 /**
@@ -138,6 +139,22 @@ val SCHEMES = listOf(
     ),
 )
 
+/** 差し色の候補。明るい配色と暗い配色で濃さを変える(どちらの地でも、押せる所の字として 3:1 を超えるように) */
+data class Accent(val key: String, val name: String, val light: Color, val dark: Color)
+
+val ACCENTS = listOf(
+    Accent("indigo", "藍", Color(0xFF4757C9), Color(0xFF8F9BF5)),
+    Accent("blue", "青", Color(0xFF1F6FD1), Color(0xFF6AA9F0)),
+    Accent("teal", "青緑", Color(0xFF0E8A7E), Color(0xFF4FCDBE)),
+    Accent("green", "緑", Color(0xFF2E8B3E), Color(0xFF6CCB7A)),
+    Accent("orange", "橙", Color(0xFFC8641A), Color(0xFFF29A55)),
+    Accent("red", "朱", Color(0xFFC9423A), Color(0xFFF07B72)),
+    Accent("pink", "桃", Color(0xFFC23F7E), Color(0xFFF08DBA)),
+    Accent("purple", "紫", Color(0xFF7E4FC4), Color(0xFFB792F2)),
+)
+
+fun accentOf(key: String) = ACCENTS.firstOrNull { it.key == key }
+
 fun schemeOf(key: String) = SCHEMES.firstOrNull { it.key == key } ?: SCHEMES[0]
 
 /**
@@ -159,9 +176,11 @@ object Palette {
     val textStrong get() = scheme.textStrong
     val textBody get() = scheme.textBody
     val textMuted get() = scheme.textMuted
-    val accent get() = scheme.accent
-    val accentText get() = scheme.accentText
-    val accentWash get() = scheme.accentWash
+    /** 設定で選んだ差し色(null ならテーマの色) */
+    var accentPick by mutableStateOf<Accent?>(null)
+    val accent get() = accentPick?.let { if (scheme.dark) it.dark else it.light } ?: scheme.accent
+    val accentText get() = accentPick?.let { if (accent.luminance() > 0.45f) Color(0xFF111111) else Color.White } ?: scheme.accentText
+    val accentWash get() = accentPick?.let { accent.copy(alpha = if (scheme.dark) 0.18f else 0.12f) } ?: scheme.accentWash
     /** 未読(「ここから未読」・未読の数) */
     val unread get() = scheme.unread
     val unreadText get() = scheme.unreadText

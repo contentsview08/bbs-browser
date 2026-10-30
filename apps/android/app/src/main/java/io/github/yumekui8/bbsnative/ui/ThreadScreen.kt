@@ -439,6 +439,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     ) {
                         itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
+                            // 時間が空いたところの区切り(絞り込みの間は、並びが飛ぶので出さない)
+                            if (vm.prefs.timeGap && filter == null && query.isBlank() && p.no != page.unreadFrom)
+                                shown.getOrNull(i - 1)?.let { q -> remember(q.date, p.date) { timeGapLabel(q.date, p.date) } }?.let { TimeGapDivider(it, style) }
                             postRow(p, shown.getOrNull(i - 1))
                             // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
                             if (style == "card") HorizontalDivider(color = Palette.border)
@@ -752,6 +755,18 @@ private fun UnreadDivider() {
         Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.24f)))
         Text("ここから未読", Modifier.padding(horizontal = 12.dp), color = Palette.unread.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
         Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.24f)))
+    }
+}
+
+/** 時間が空いたところの区切り。未読の区切りより控えめに、細い線と小さい字で */
+@Composable
+private fun TimeGapDivider(label: String, style: String) {
+    val sky = Palette.onSky(style)
+    val c = if (sky) Palette.skyMuted else Palette.textMuted
+    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.dp).background(c.copy(alpha = 0.35f)))
+        Text(label, Modifier.padding(horizontal = 10.dp), color = c, fontSize = 11.sp)
+        Box(Modifier.weight(1f).height(1.dp).background(c.copy(alpha = 0.35f)))
     }
 }
 

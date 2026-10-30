@@ -269,6 +269,7 @@ private fun ThreadPage(vm: AppViewModel) {
             listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色", "none" to "示さない"),
         ) { p.heatStyle = it }
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
+        SwitchRow("時間が空いたところに区切りを入れる", p.timeGap, desc = "前のレスから 1 時間以上空いたところや、日付が変わったところに線を引きます") { p.timeGap = it }
     }
     Group("リンク") {
         SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます") { p.urlShorten = it }

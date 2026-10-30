@@ -112,6 +112,8 @@ class Prefs(context: Context) {
     var highlightOp by pref("highlightOp", true)
     var idHeat by pref("idHeat", true)
     var showMinimap by pref("showMinimap", true)
+    /** 前のレスから時間が空いたところに「3 時間後」の区切りを入れる */
+    var timeGap by pref("timeGap", true)
     /** 人気のレスの示し方: left(左の帯)/ right(右の帯)/ text(本文の色)/ none */
     var heatStyle by pref("heatStyle", "left")
     var urlShorten by pref("urlShorten", true)

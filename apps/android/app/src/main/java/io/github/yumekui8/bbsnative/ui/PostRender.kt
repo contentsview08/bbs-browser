@@ -28,6 +28,30 @@ private val BLANK_AFTER = Regex("^\n(?:[ \t　]*\n)*")
 fun shortDate(date: String): String =
     Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})").find(date)?.let { m -> "${m.groupValues[2]}/${m.groupValues[3]} ${m.groupValues[4]}:${m.groupValues[5]}" } ?: date
 
+/** 日付の文字列(2026/10/31(金) 01:23:45.67)を分単位の通し番号にする。読めなければ null(日付の差を出すためだけに使う) */
+fun postMinutes(date: String): Long? =
+    Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})").find(date)?.let { m ->
+        val (y, mo, d, h, mi) = m.destructured
+        runCatching { java.time.LocalDateTime.of(y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt()).toEpochSecond(java.time.ZoneOffset.UTC) / 60 }.getOrNull()
+    }
+
+/** 前のレスとの間の区切りの言葉。1 時間未満で日付も同じなら null */
+fun timeGapLabel(prev: String, cur: String): String? {
+    val a = postMinutes(prev) ?: return null
+    val b = postMinutes(cur) ?: return null
+    val gap = b - a
+    val day = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})(\\([^)]*\\))?").find(cur)
+    val newDay = day != null && Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})").find(prev)?.value != Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})").find(cur)?.value
+    val span = when {
+        gap < 60 -> null
+        gap < 60 * 24 -> "${gap / 60} 時間後"
+        gap < 60 * 24 * 30 -> "${gap / (60 * 24)} 日後"
+        else -> "${gap / (60 * 24 * 30)} か月後"
+    }
+    val dayLabel = if (newDay) day!!.groupValues.let { g -> "${g[2].toInt()}/${g[3].toInt()}${g[4]}" } else null
+    return listOfNotNull(dayLabel, span).joinToString("  ").ifEmpty { null }
+}
+
 private val AA = Regex("[ \t　]{5,}")
 
 /**

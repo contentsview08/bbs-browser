@@ -426,7 +426,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) {
             Box(Modifier.fillMaxSize()) {
                 when {
-                    !page.loaded -> Hint("読み込み中…")
+                    !page.loaded -> Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
                     page.error != null && index.posts.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
                     else -> LazyColumn(
                         Modifier.fillMaxSize(), state = listState,

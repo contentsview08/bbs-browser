@@ -1,6 +1,8 @@
 package io.github.yumekui8.bbsnative.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -253,6 +255,42 @@ fun relativeTime(millis: Long?, now: Long = System.currentTimeMillis()): String 
 @Composable
 fun Hint(text: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(text, color = Palette.textMuted, fontSize = 14.sp) }
+}
+
+/**
+ * 読み込み中の仮の行(スケルトン)。文字の代わりに、ゆっくり明滅する灰色の棒を、本物の行と同じ並びで置く。
+ * post = true でレスの形(頭の短い棒 + 本文の長い棒 2〜3 本)、false でスレ一覧の行の形
+ */
+@Composable
+fun Skeleton(top: androidx.compose.ui.unit.Dp, post: Boolean) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "skeleton")
+    val a by t.animateFloat(
+        0.45f, 0.9f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween<Float>(800), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "pulse",
+    )
+    val bar = Palette.textMuted.copy(alpha = 0.18f)
+    Column(Modifier.fillMaxSize().padding(top = top).graphicsLayer { alpha = a }) {
+        // 長さを行ごとに少し変えて、それらしく見せる
+        val widths = listOf(0.92f, 0.7f, 0.85f, 0.6f, 0.95f, 0.75f, 0.8f, 0.66f, 0.9f, 0.72f)
+        for (i in 0 until if (post) 7 else 12) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = if (post) 12.dp else 10.dp)) {
+                if (post) {
+                    Box(Modifier.fillMaxWidth(0.42f).height(10.dp).background(bar, RoundedCornerShape(3.dp)))
+                    Spacer(Modifier.height(10.dp))
+                    for (j in 0 until 2 + i % 2) {
+                        Box(Modifier.fillMaxWidth(widths[(i + j) % widths.size]).height(12.dp).background(bar, RoundedCornerShape(3.dp)))
+                        Spacer(Modifier.height(7.dp))
+                    }
+                } else {
+                    Box(Modifier.fillMaxWidth(widths[i % widths.size]).height(13.dp).background(bar, RoundedCornerShape(3.dp)))
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.fillMaxWidth(0.3f).height(9.dp).background(bar, RoundedCornerShape(3.dp)))
+                }
+            }
+            HorizontalDivider(color = Palette.border.copy(alpha = 0.5f))
+        }
+    }
 }
 
 /** 「文字の大きさ・余白」の小さな画面で、いま動かしているスライダー(動かしている間は、ほかを透かして後ろの画面を見せる) */

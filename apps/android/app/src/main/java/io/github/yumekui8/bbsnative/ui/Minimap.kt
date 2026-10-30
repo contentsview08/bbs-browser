@@ -156,7 +156,7 @@ fun Minimap(
                     .requiredWidth(220.dp).wrapContentWidth(Alignment.End),
             ) {
                 androidx.compose.material3.Text(
-                    "#${p.no}  ${p.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: ""}",
+                    "#${p.no}  ${p.body.lineSequence().map { it.replace(Regex("(&gt;|>|＞){1,2}\\d+(-\\d+)?"), "").replace(Regex("<[^>]+>"), "").trim() }.firstOrNull { it.isNotBlank() } ?: ""}",
                     Modifier.shadow(6.dp, RoundedCornerShape(5.dp)).background(Palette.surface3, RoundedCornerShape(5.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
                     color = Palette.textStrong, fontSize = 12.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )

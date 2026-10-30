@@ -275,7 +275,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         Box(Modifier.fillMaxSize().graphicsLayer { translationY = pullPx.value }) {
             when {
                 page.error != null && page.threads.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
-                page.threads.isEmpty() && page.loading -> Hint("読み込み中…")
+                page.threads.isEmpty() && page.loading -> Skeleton(with(density) { bars.topHeight.toDp() }, post = false)
                 else -> LazyColumn(
                     Modifier.fillMaxSize(), state = listState,
                     contentPadding = PaddingValues(

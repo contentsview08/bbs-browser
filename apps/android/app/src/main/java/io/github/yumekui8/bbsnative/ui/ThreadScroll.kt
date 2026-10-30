@@ -204,8 +204,10 @@ class ThreadScroller(
         val items = info.visibleItemsInfo.filter { it.key is Int }
         if (items.isEmpty()) return 0 to null
         val end = info.viewportEndOffset - info.afterContentPadding
-        val lastItem = info.visibleItemsInfo.lastOrNull()
-        val rest = if (lastItem != null && lastItem.index == info.totalItemsCount - 1) (lastItem.offset + lastItem.size - end).toFloat() else Float.MAX_VALUE
+        // 一番下かどうかは -END- の行で測る(その下の「次の未読スレへ」が画面の外でも、END まで見えていれば一番下)
+        val lastItem = info.visibleItemsInfo.firstOrNull { it.key == "end" }
+            ?: info.visibleItemsInfo.lastOrNull()?.takeIf { it.index == info.totalItemsCount - 1 }
+        val rest = if (lastItem != null) (lastItem.offset + lastItem.size - end).toFloat() else Float.MAX_VALUE
         ctl.atBottom = !state.canScrollForward || rest < bottomPx
         var last = items.last().key as Int
         if (ctl.atBottom) last = maxOf(last, ctl.page.index.posts.lastOrNull()?.no ?: 0)

@@ -821,6 +821,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             prefs.postMail = r.mail
                         }
                         toast = "書き込みました"
+                        // 自動更新の最中だと取り直しが飛ばされ、自分のレスが見つからない。終わるのを待ってから取り直す
+                        while (page.loading) kotlinx.coroutines.delay(100)
                         refreshThread(page)?.join()
                         // 自分の書き込みを覚える。番号が返らない掲示板では、新着から同じ本文の一番新しいレスを探す
                         val no = res.resNumber ?: page.index.posts.lastOrNull { it.body.trim() == body.trim() }?.no
@@ -859,8 +861,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         r.body = ""
                         r.open = false
                         toast = "スレを立てました"
-                        page.threads = TwoCh.listThreads(page.board)
-                        page.threads.firstOrNull { it.title.trim() == title }?.let { openThread(it) }
+                        // 立てたあとの一覧の取り直しに失敗しても、立てられなかったとは出さない
+                        runCatching { TwoCh.listThreads(page.board) }.onSuccess { list ->
+                            page.threads = list
+                            list.firstOrNull { it.title.trim() == title }?.let { openThread(it) }
+                        }
                     }
                     is PostResult.Auth -> r.auth = res
                     is PostResult.Confirm -> r.confirm = res

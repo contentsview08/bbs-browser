@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatSize
@@ -115,6 +116,37 @@ fun SettingsScreen(vm: AppViewModel) {
 @Composable
 private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
+    // 設定の検索(項目の名前と説明から探し、押すとその項目のあるページを開く)
+    var q by rememberSaveable { mutableStateOf("") }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).background(Palette.surface2, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(1f)) {
+            if (q.isEmpty()) Text("設定を探す", color = Palette.textMuted, fontSize = 15.sp)
+            androidx.compose.foundation.text.BasicTextField(
+                q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 15.sp),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+            )
+        }
+        if (q.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(20.dp).clickable { q = "" })
+    }
+    val words = q.trim().split(Regex("[\\s　]+")).filter { it.isNotEmpty() }
+    if (words.isNotEmpty()) {
+        val hits = SETTINGS_INDEX.filter { (k, label, desc) -> words.all { w -> label.contains(w, true) || desc.contains(w, true) || (TITLES[k] ?: "").contains(w, true) } }
+        Group(if (hits.isEmpty()) "見つかりませんでした" else "${hits.size} 件") {
+            for ((k, label, desc) in hits) {
+                Column(Modifier.fillMaxWidth().clickable { open(k) }.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(label, color = Palette.textStrong, fontSize = 15.sp)
+                    Text(listOfNotNull(TITLES[k], desc.ifEmpty { null }).joinToString(" ・ "), color = Palette.textMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        return
+    }
     Group("見た目") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "テーマと色", value = if (p.followSystem) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
         NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字と余白", value = "${(p.fontScale * 100).toInt()}%") { open("text") }
@@ -158,6 +190,9 @@ private fun ThemePage(vm: AppViewModel) {
             "見た目", p.postStyle,
             listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風"),
         ) { p.postStyle = it }
+    }
+    Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
+        ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
     }
     if (!p.followSystem) {
         Group("配色") { SchemeGrid(p.scheme) { p.scheme = it } }

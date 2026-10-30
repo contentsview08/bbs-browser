@@ -462,3 +462,17 @@ fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineText
     ) { BadgeChip(text, bg, fg) }
     return mapOf("op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg))
 }
+
+/**
+ * 軽い振動(指で「できた」が分かるように)。tick: 向きが変わった・しきい値を越えた。confirm: 操作が決まった・長押しのメニュー
+ */
+object Haptics {
+    var enabled = true
+    fun tick(view: android.view.View) { if (enabled) view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK) }
+    fun confirm(view: android.view.View) {
+        if (!enabled) return
+        val c = if (android.os.Build.VERSION.SDK_INT >= 30) android.view.HapticFeedbackConstants.CONFIRM else android.view.HapticFeedbackConstants.VIRTUAL_KEY
+        view.performHapticFeedback(c)
+    }
+    fun longPress(view: android.view.View) { if (enabled) view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) }
+}

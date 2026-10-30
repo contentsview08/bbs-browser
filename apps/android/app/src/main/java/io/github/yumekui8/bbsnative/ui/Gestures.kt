@@ -47,6 +47,7 @@ fun rememberSwipeState() = remember { SwipeState() }
 fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onEdgeRight: (() -> Unit)? = null, sensitivity: Int = 3): Modifier {
     val current by rememberUpdatedState(map)
     val edgeAction by rememberUpdatedState(onEdgeRight)
+    val view = androidx.compose.ui.platform.LocalView.current
     // 感度(1 鈍い〜5 敏感)を、しきい値に掛ける倍率にする。3 が標準(今のスマホ版と同じ)
     val k = when (sensitivity) { 1 -> 1.6f; 2 -> 1.3f; 4 -> 0.7f; 5 -> 0.45f; else -> 1f }
     return this.pointerInput(k) {
@@ -85,6 +86,7 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                                 if (!(dist > viewport * 0.4f * k || (dist > minDistance && v > minVelocity))) break
                             }
                             c.consume()
+                            Haptics.confirm(view)
                             action.run()
                             break
                         }
@@ -108,7 +110,10 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                             if (d.getDistance() > 2f) lastMove = c.uptimeMillis
                         }
                         c.consume()
-                        state.label = actionOf(segs.joinToString(","))?.label
+                        val label = actionOf(segs.joinToString(","))?.label
+                        // 操作の名前が変わったら(向きを足した・登録した並びに入った)軽く振動
+                        if (label != state.label && label != null) Haptics.tick(view)
+                        state.label = label
                     }
                 } finally {
                     state.label = null

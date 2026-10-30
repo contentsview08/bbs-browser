@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
             // 配色: 設定の配色か、スマホのダーク・ライトに合わせた配色
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val p = vm.prefs
+            io.github.yumekui8.bbsnative.ui.Haptics.enabled = p.haptics
             val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
             LaunchedEffect(key) { Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key) }
             // 時計などのアイコンの色を、配色の明るさに合わせる

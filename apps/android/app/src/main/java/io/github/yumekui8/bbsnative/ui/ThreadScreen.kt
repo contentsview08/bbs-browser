@@ -140,6 +140,7 @@ private val TABS: List<Triple<Filter, ImageVector, Color>> get() = listOf(
 fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modifier) {
     val index = page.index
     val context = LocalContext.current
+    val view = androidx.compose.ui.platform.LocalView.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val bars = rememberHideOnScroll()
@@ -331,7 +332,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 .combinedClickable(
                     interactionSource = null, indication = null,
                     onClick = { index.treeRows(p.no).takeIf { it.size > 1 }?.let { rows -> openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) } },
-                    onLongClick = { postMenu = p },
+                    onLongClick = { Haptics.longPress(view); postMenu = p },
                 ),
         ) {
             if (p.no in page.ngNos && p.no !in revealed) {
@@ -393,8 +394,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間・返事が出ている間は隠さない)。今のスマホ版と同じ
     val footerShown = if (page.reply.open || page.reply.done != null || page.reply.notice != null || !bars.enabled) 1f else 1f - bars.footerHidden
     // 上の端で下へ・下の端で上へ引っぱって更新(今のスマホ版の useTouchPull)
-    val topPull = remember { PullState() }
-    val bottomPull = remember { PullState() }
+    val topPull = remember { PullState { Haptics.confirm(view) } }
+    val bottomPull = remember { PullState { Haptics.confirm(view) } }
     val pullConn = remember(page) { PullConnection(topPull, bottomPull, density.density, scope) { refresh()?.join() } }
     // 開いているスレの自動更新(設定。0 ならしない)
     if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {

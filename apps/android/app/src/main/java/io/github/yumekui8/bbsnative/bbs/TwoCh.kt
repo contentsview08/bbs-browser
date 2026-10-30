@@ -280,7 +280,12 @@ object TwoCh {
     /** 書き込み確認で承諾したときに送り直す */
     suspend fun submitConfirm(c: PostResult.Confirm): PostResult = sendBbsCgi(c.url, c.fields, c.referer)
 
-    private suspend fun sendBbsCgi(url: String, fields: Map<String, String>, referer: String): PostResult {
+    /** 5ch は 5ch.net から 5ch.io へ移った。書き込み(POST)はリダイレクトをたどれないので、送る先と Referer を 5ch.io に直す(前に 5ch.net で開いたスレ・板でも書けるように) */
+    private fun to5chIo(url: String) = url.replace(Regex("^(https?://[a-z0-9]+)\\.5ch\\.net/"), "$1.5ch.io/")
+
+    private suspend fun sendBbsCgi(url0: String, fields: Map<String, String>, referer0: String): PostResult {
+        val url = to5chIo(url0)
+        val referer = to5chIo(referer0)
         val res = Http.postForm(url, encodeShiftJisForm(fields), mapOf("Referer" to referer))
         val html = String(res.body, charsetOf(res))
         val resNumber = res.headers["x-resnum"]?.toIntOrNull()?.takeIf { it > 0 }

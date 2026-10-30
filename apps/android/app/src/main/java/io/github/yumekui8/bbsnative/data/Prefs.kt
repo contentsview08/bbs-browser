@@ -145,6 +145,8 @@ class Prefs(context: Context) {
 
     // ── 操作 ──
     var gesturesEnabled by pref("gesturesEnabled", true)
+    /** 操作が決まったときなどに軽く振動する */
+    var haptics by pref("haptics", true)
     /** なぞる操作の感度(1 鈍い〜5 敏感) */
     var gestureSensitivity by pref("gestureSensitivity", 3)
     private var gesturesListJson by pref("gesturesList", "")

@@ -231,7 +231,7 @@ private fun dampedPullY(dy: Float, threshold: Float): Float {
 
 /** 上か下の端の、引っぱって更新の印の状態 */
 @Stable
-class PullState {
+class PullState(private val onCommit: () -> Unit = {}) {
     /** 引いた量(dp) */
     var dist by mutableFloatStateOf(0f)
     val y = Animatable(PULL_HIDDEN_Y)
@@ -255,6 +255,7 @@ class PullState {
         if (d >= TOUCH_COMMIT_DP) {
             committing = true
             spinning = true
+            onCommit()
             y.animateTo(PULL_REVEAL_Y, tween(150, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
             val start = System.currentTimeMillis()
             refresh()

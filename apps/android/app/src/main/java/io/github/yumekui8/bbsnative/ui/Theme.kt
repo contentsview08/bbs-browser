@@ -63,8 +63,9 @@ val SCHEMES = listOf(
     Scheme(
         "line-light", "LINE ライト", false,
         c(0xF5F6F8), c(0xFFFFFF), c(0xFFFFFF), c(0xEEF0F3), c(0xE4E7EC), c(0xDFE2E7), c(0xC5CAD3),
-        c(0x111111), c(0x2B2B2B), c(0x8B8F97), c(0x00A650), c(0xFFFFFF), wash(0x06C755, 0.12f),
-        c(0x06C755), c(0xFFFFFF), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0xC98A12), c(0xD9622B), c(0xD33A3A),
+        // 薄い字・強調(送るボタン)・未読の札は、コントラスト比を満たすよう少し濃く(未読の札の字は濃い緑)
+        c(0x111111), c(0x2B2B2B), c(0x747983), c(0x008C45), c(0xFFFFFF), wash(0x06C755, 0.12f),
+        c(0x06C755), c(0x03230F), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0xC98A12), c(0xD9622B), c(0xD33A3A),
     ),
     // グレー(2ch Mate のグレーに近い形): 地は白い字がはっきり読める暗めの灰色、上下の帯はそれより明るい灰色、行の間は黒に近い線
     Scheme(
@@ -78,6 +79,56 @@ val SCHEMES = listOf(
         c(0xECECEC), c(0xE2E2E3), c(0xF6F6F6), c(0xE4E4E5), c(0xD9D9DB), c(0xD2D2D4), c(0xB4B5B8),
         c(0x222222), c(0x3E3E40), c(0x7E7F83), c(0x4E5A68), c(0xFFFFFF), wash(0x4E5A68, 0.10f),
         c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0xA8721E), c(0xB25A2E), c(0xA83A3A),
+    ),
+    // ── 提案書(2026-10-31)から足した配色。どれも 字と地のコントラスト比 4.5 以上 ──
+    // 紙(セピア): 読書アプリのような生成りの地にこげ茶の字
+    Scheme(
+        "sepia", "紙(セピア)", false,
+        c(0xF4ECD8), c(0xE9DFC4), c(0xF8F2E3), c(0xEDE3C9), c(0xE2D6B6), c(0xDCCFAE), c(0xC4B48E),
+        c(0x2E2418), c(0x3B2F20), c(0x7E6C50), c(0x8B5E34), c(0xFFFFFF), wash(0x8B5E34, 0.10f),
+        c(0xC2410C), c(0xFFFFFF), c(0x2F5E9E), c(0x5B7F2A), c(0x6B4E2E), c(0xA86512), c(0xB4531A), c(0xA8321E),
+    ),
+    // Nord: 青みの灰色の地に淡い水色の強調。彩度が低く色がうるさくない
+    Scheme(
+        "nord", "Nord", true,
+        c(0x2E3440), c(0x3B4252), c(0x353C4A), c(0x3B4252), c(0x434C5E), c(0x434C5E), c(0x4C566A),
+        c(0xECEFF4), c(0xD8DEE9), c(0x8F9BB3), c(0x88C0D0), c(0x1E222A), wash(0x88C0D0, 0.14f),
+        c(0xBF616A), c(0xFFFFFF), c(0x81A1C1), c(0xA3BE8C), c(0xB4C6DC), c(0xEBCB8B), c(0xD08770), c(0xBF616A),
+    ),
+    // ハイコントラスト: 真っ黒の地に真っ白の字、意味の色は彩度最大
+    Scheme(
+        "contrast", "ハイコントラスト", true,
+        c(0x000000), c(0x000000), c(0x0B0B0B), c(0x161616), c(0x222222), c(0x5C5C5C), c(0x8A8A8A),
+        c(0xFFFFFF), c(0xFFFFFF), c(0xD0D0D0), c(0xFFD400), c(0x000000), wash(0xFFD400, 0.18f),
+        c(0xFF4D6D), c(0x000000), c(0x7CC4FF), c(0x7DFFB3), c(0xE6F0FF), c(0xFFD400), c(0xFF9F1C), c(0xFF4D6D),
+    ),
+    // 夜間(暖色): 青い色を使わない、オレンジがかった暗い配色。寝る前用
+    Scheme(
+        "night", "夜間(暖色)", true,
+        c(0x1B1410), c(0x231A14), c(0x211812), c(0x2A1F18), c(0x33261D), c(0x3A2C22), c(0x4A382B),
+        c(0xF2DFC8), c(0xE6D0B5), c(0xA98F74), c(0xFF9E57), c(0x241406), wash(0xFF9E57, 0.14f),
+        c(0xFF6B5E), c(0x240A06), c(0xF0B37E), c(0xC9B458), c(0xE7C9A4), c(0xFFB347), c(0xFF8F4D), c(0xFF6B5E),
+    ),
+    // LINE ダーク: LINE のダークモードに近い。地は濃い紺、自分の吹き出しは深い緑
+    Scheme(
+        "line-dark", "LINE ダーク", true,
+        c(0x1B2129), c(0x20262F), c(0x222831), c(0x2A313B), c(0x343C47), c(0x323A45), c(0x434C59),
+        c(0xE9EDF2), c(0xD7DDE5), c(0x8A96A6), c(0x06C755), c(0x04210E), wash(0x06C755, 0.14f),
+        c(0xFF5B5B), c(0x2A0707), c(0x6FB1FF), c(0x7FD0A0), c(0xAFC0D6), c(0xFFB020), c(0xFF8A3D), c(0xFF5B5B),
+    ),
+    // Discord ライト: 白い地に青紫の強調
+    Scheme(
+        "discord-light", "Discord ライト", false,
+        c(0xFFFFFF), c(0xF2F3F5), c(0xF8F9FA), c(0xEBEDEF), c(0xE3E5E8), c(0xE3E5E8), c(0xC7CCD1),
+        c(0x060607), c(0x2E3338), c(0x6D7581), c(0x5865F2), c(0xFFFFFF), wash(0x5865F2, 0.10f),
+        c(0xED4245), c(0xFFFFFF), c(0x0068E0), c(0x3E8E5E), c(0x4E5D94), c(0xC27C0E), c(0xD9622B), c(0xD83C3E),
+    ),
+    // モノクロ: 灰色だけで作り、未読・自分の印だけに色を残す(色の役割の原則をいちばん素直に当てたもの)
+    Scheme(
+        "mono", "モノクロ", true,
+        c(0x181818), c(0x202020), c(0x1E1E1E), c(0x262626), c(0x303030), c(0x2E2E2E), c(0x3E3E3E),
+        c(0xEDEDED), c(0xDADADA), c(0x8C8C8C), c(0xE8E8E8), c(0x111111), wash(0xFFFFFF, 0.10f),
+        c(0xFF6B81), c(0x2A0710), c(0xBDBDBD), c(0xB8B8B8), c(0xC9C9C9), c(0xBDBDBD), c(0xD6D6D6), c(0xF0F0F0),
     ),
     Scheme(
         "oled", "真っ黒", true,

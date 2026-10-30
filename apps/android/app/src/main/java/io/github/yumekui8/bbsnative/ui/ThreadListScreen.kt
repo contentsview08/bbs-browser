@@ -128,6 +128,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val scope = rememberCoroutineScope()
     val bars = rememberHideOnScroll()
     val density = LocalDensity.current
+    val hapticView = androidx.compose.ui.platform.LocalView.current
 
     // 勢いの色は、板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなるように。今の専ブラと同じ)
     val rank = remember(page.threads) {
@@ -226,7 +227,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
                 if (!prefs.pullToRefreshList || pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput || available.y <= 0f) return androidx.compose.ui.geometry.Offset.Zero
                 pulling = true
+                val before = damp(pullRaw) >= commitPull
                 pullRaw += available.y
+                if (!before && damp(pullRaw) >= commitPull) Haptics.tick(hapticView)
                 scope.launch { pullPx.snapTo(damp(pullRaw)) }
                 return androidx.compose.ui.geometry.Offset(0f, available.y)
             }
@@ -238,6 +241,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 scope.launch {
                     if (reached) {
                         pullRefreshing = true
+                        Haptics.confirm(hapticView)
                         pullPx.animateTo(holdPull, tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
                         vm.refreshBoard(page)?.join()
                         pullPx.animateTo(0f, tween(250, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
@@ -283,7 +287,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         ThreadRow(
                             t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                             isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds,
-                            onLongClick = { menuFor = t },
+                            onLongClick = { Haptics.longPress(hapticView); menuFor = t },
                         ) { vm.openThread(t) }
                         HorizontalDivider(color = Palette.border)
                     }

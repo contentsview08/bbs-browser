@@ -584,7 +584,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun renderOptions(noname: String?) = RenderOptions(
         noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, urlShorten = prefs.urlShorten,
-        imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle,
+        imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text",
     )
 
     /**
@@ -592,7 +592,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun renderKey() = listOf(
         prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.urlShorten, prefs.imageUrlOmit,
-        prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle,
+        prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle,
     )
 
     private fun rerenderAll() {

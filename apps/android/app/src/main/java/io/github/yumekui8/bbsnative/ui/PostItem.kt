@@ -71,6 +71,13 @@ fun PostItem(
             }
         } else Text(r.header, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips)
     }
+    // 左右の帯: 自分の書き込みは左に緑。人気のレスは設定の側(左・右)に暖色(左のときに自分の書き込みと重なれば右へ)と淡い地。
+    // 見た目(カード・Discord 風・LINE 風)に関わらず同じ
+    val heatSide = prefs.heatStyle
+    val showHeat = heat != null && (heatSide == "left" || heatSide == "right")
+    val leftBar = if (own) Palette.own else if (showHeat && heatSide == "left") heat else null
+    val rightBar = if (showHeat && (heatSide == "right" || own)) heat else null
+    val inner = @Composable {
     when (style) {
         "discord" -> {
             // 左に丸い ID のアイコン、右に頭と本文。続けて書いたレス(同じ ID)はアイコンと頭を省く。返信先は頭の上に 1 行
@@ -107,23 +114,21 @@ fun PostItem(
             }
         }
         else -> {
-            val content = @Composable {
-                Column(Modifier.fillMaxWidth()) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = pad)) {
-                        header()
-                        body(Modifier.padding(top = 4.dp))
-                    }
-                    media()
+            Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = pad)) {
+                    header()
+                    body(Modifier.padding(top = 4.dp))
                 }
-            }
-            // 左の線: 自分の書き込みは緑、人気のレスは返信の数に応じた暖色(淡い地も)。どちらでもなければ線なし
-            val bar = if (own) Palette.own else heat
-            if (bar == null) return content()
-            Row(Modifier.height(IntrinsicSize.Min).then(if (!own && heat != null) Modifier.background(heat.copy(alpha = 0.06f)) else Modifier)) {
-                Box(Modifier.width(3.dp).fillMaxHeight().background(bar))
-                content()
+                media()
             }
         }
+    }
+    }
+    if (leftBar == null && rightBar == null) return inner()
+    Row(Modifier.height(IntrinsicSize.Min).then(if (showHeat && heat != null) Modifier.background(heat.copy(alpha = 0.06f)) else Modifier)) {
+        if (leftBar != null) Box(Modifier.width(3.dp).fillMaxHeight().background(leftBar))
+        Box(Modifier.weight(1f)) { inner() }
+        if (rightBar != null) Box(Modifier.width(3.dp).fillMaxHeight().background(rightBar))
     }
 }
 
@@ -141,6 +146,7 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
     }
 }
 
+/** AA 用の字(aahub_light)。書き込み欄でも使う */
 /** AA 用の字(aahub_light)。書き込み欄でも使う */
 val AaFont = FontFamily(Font(R.font.aahub_light))
 

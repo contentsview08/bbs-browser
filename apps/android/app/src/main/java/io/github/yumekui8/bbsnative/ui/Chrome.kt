@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -428,8 +429,15 @@ fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composab
 @Composable
 fun BadgeChip(text: String, bg: Color, fg: Color) {
     Box(Modifier.fillMaxSize().padding(horizontal = 1.dp, vertical = 1.dp).background(bg, androidx.compose.foundation.shape.RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {
-        Text(text, color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp,
-            style = androidx.compose.ui.text.TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)))
+        // 字の上下の余白をそろえる(行の高さを字の大きさにし、上下を同じだけ切る)。日本語の字は下に寄って見えるので少し上へ
+        Text(
+            text, Modifier.offset(y = (-0.5).dp), color = fg,
+            style = androidx.compose.ui.text.TextStyle(
+                fontSize = 10.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp,
+                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.Both),
+            ),
+        )
     }
 }
 

@@ -125,7 +125,7 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
         LazyColumn(state = state) {
             itemsIndexed(tree, key = { _, r -> r.no }) { i, r ->
                 val p = byNo[r.no] ?: return@itemsIndexed
-                TreeStep(r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo) { post(p) }
+                TreeStep(r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth) { post(p) }
             }
         }
     }
@@ -133,26 +133,38 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
 
 /** スマホのツリーの 1 行(今のスマホ版の StepTree): 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線 */
 @Composable
-private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, content: @Composable () -> Unit) {
+private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild: Boolean = false, content: @Composable () -> Unit) {
     // 深い段は 5 段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)
     val depth = minOf(r.depth, 5)
-    // Discord 風・LINE 風: 地を塗らず、段ごとに細い縦の線を引いて、線から枝を出す(チャットの返信の線と同じ見え方)
+    // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
+    // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
     if (LocalPrefs.current.postStyle != "card") {
-        val step = 14.dp
-        val line = Palette.borderStrong
+        val step = 16.dp
+        val line = Palette.textMuted.copy(alpha = 0.8f)
         Row(
             Modifier.height(IntrinsicSize.Min).then(if (focus) Modifier.background(Palette.accentWash) else Modifier)
                 .drawBehind {
-                    val w = 1.5.dp.toPx()
+                    val w = 2.dp.toPx()
                     val s = step.toPx()
-                    for (k in 0 until depth) {
-                        val x = s * k + s / 2
-                        // 自分の段の 1 つ上の線は、枝のところまで。それより上の段は行の高さいっぱい
-                        if (k == depth - 1) {
-                            drawLine(line, Offset(x, 0f), Offset(x, 22.dp.toPx()), w)
-                            drawLine(line, Offset(x, 22.dp.toPx()), Offset(x + s * 0.7f, 22.dp.toPx()), w)
-                        } else drawLine(line, Offset(x, 0f), Offset(x, size.height), w)
+                    val elbow = 26.dp.toPx()
+                    val radius = 6.dp.toPx()
+                    fun x(k: Int) = s * k + s / 2
+                    // 上の段から続く縦線
+                    r.rails.forEachIndexed { k, on -> if (on) drawLine(line, Offset(x(k), 0f), Offset(x(k), size.height), w) }
+                    if (depth > 0) {
+                        val px = x(depth - 1)
+                        // まだ兄弟がいれば下まで(├)、最後の子なら角まで(└)
+                        drawLine(line, Offset(px, 0f), Offset(px, if (r.last) elbow - radius else size.height), w)
+                        // 角を丸めて横へ
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(px, elbow - radius)
+                            quadraticTo(px, elbow, px + radius, elbow)
+                            lineTo(px + s * 0.85f, elbow)
+                        }
+                        drawPath(path, line, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
                     }
+                    // 子があれば、自分の頭の下から縦線を下ろす
+                    if (hasChild) drawLine(line, Offset(x(depth), elbow + 14.dp.toPx()), Offset(x(depth), size.height), w)
                 },
         ) {
             Spacer(Modifier.width(step * depth))

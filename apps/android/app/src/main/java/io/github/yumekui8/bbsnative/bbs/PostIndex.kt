@@ -28,7 +28,11 @@ fun displayBody(body: String): String =
     body.replace(Regex("\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}"), "\n\n").replace(Regex("[\\s\u3000]+$"), "")
 
 /** アンカーツリーの 1 行 */
-class TreeRow(val no: Int, val depth: Int, val alsoTo: List<Int>)
+/**
+ * アンカーツリーの 1 行。rails: 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか)。
+ * last: 同じ親の最後の子か(最後なら └、まだ兄弟がいれば ├)。PC 版の TreeRow と同じ
+ */
+class TreeRow(val no: Int, val depth: Int, val alsoTo: List<Int>, val rails: List<Boolean> = emptyList(), val last: Boolean = true)
 
 class PostIndex(
     val posts: List<Post>,
@@ -90,11 +94,13 @@ class PostIndex(
             children.getOrPut(t[0]) { ArrayList() } += no
         }
         val rows = ArrayList<TreeRow>()
-        fun walk(no: Int, depth: Int) {
-            rows += TreeRow(no, depth, alsoTo[no] ?: emptyList())
-            for (k in (children[no] ?: emptyList()).sorted()) walk(k, depth + 1)
+        fun walk(no: Int, depth: Int, rails: List<Boolean>, last: Boolean) {
+            rows += TreeRow(no, depth, alsoTo[no] ?: emptyList(), rails, last)
+            val kids = (children[no] ?: emptyList()).sorted()
+            kids.forEachIndexed { i, k -> walk(k, depth + 1, if (depth == 0) emptyList() else rails + !last, i == kids.lastIndex) }
         }
-        for (r in nos.filter { it !in parent }) walk(r, 0)
+        val roots = nos.filter { it !in parent }
+        roots.forEachIndexed { i, r -> walk(r, 0, emptyList(), i == roots.lastIndex) }
         return rows
     }
 

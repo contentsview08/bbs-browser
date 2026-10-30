@@ -52,6 +52,8 @@ data class RenderOptions(
     val imageUrlOmit: Boolean = true,
     val imageUrlCollapse: Boolean = true,
     val aaAutoDetect: Boolean = true,
+    /** 人気のレスの本文に色を付ける(人気のレスの示し方が「本文の色」のとき) */
+    val heatText: Boolean = false,
     /** レスの見た目: card / discord / line */
     val style: String = "card",
 )
@@ -105,7 +107,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         }
         // 人気のレス(返信 3 件から)は、本文を暖色に(5 件から太字)
         // 人気のレスは本文の色を変えず、レスの左の線と淡い地で示す(PostItem の heat)。本文は読みやすい色のまま
-        val bodyStyle: SpanStyle? = null
+        val bodyStyle: SpanStyle? = if (o.heatText) replyHeat?.let { SpanStyle(color = it, fontWeight = if (replies >= 5) FontWeight.Bold else FontWeight.Normal) } else null
         val info = index.info[p.no]
         val full = info?.display ?: p.body
         // Discord 風・LINE 風: 頭のアンカーを返信として外に出し、本文からは省く(その分だけ押せるところの位置をずらす)

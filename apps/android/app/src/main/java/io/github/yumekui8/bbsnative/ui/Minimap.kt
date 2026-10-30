@@ -15,6 +15,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -78,10 +88,21 @@ fun Minimap(
         } else jump(y, h)
     }
     val shape = RoundedCornerShape(4.dp)
+    // なぞっている間の位置(指の高さと、そこにあるレス)。指の左に「#523 名無し: 本文の頭」の札を出す(どこへ飛ぶか分かるように)
+    var drag by remember { androidx.compose.runtime.mutableStateOf<Pair<Float, Int>?>(null) }
+    Box(modifier.width(22.dp).fillMaxHeight()) {
     Canvas(
-        modifier.width(22.dp).fillMaxHeight().background(Palette.surface2.copy(alpha = 0.85f), shape).border(1.dp, Palette.border, shape)
+        Modifier.fillMaxSize().background(Palette.surface2.copy(alpha = 0.85f), shape).border(1.dp, Palette.border, shape)
             .pointerInput(n, marks) { detectTapGestures { tap(it.y, size.height.toFloat(), 14.dp.toPx()) } }
-            .pointerInput(n) { detectVerticalDragGestures { change, _ -> jump(change.position.y, size.height.toFloat()) } },
+            .pointerInput(n) {
+                detectVerticalDragGestures(
+                    onDragEnd = { drag = null }, onDragCancel = { drag = null },
+                ) { change, _ ->
+                    val h = size.height.toFloat()
+                    jump(change.position.y, h)
+                    if (n > 0) drag = change.position.y.coerceIn(0f, h) to ((change.position.y / h).coerceIn(0f, 1f) * (n - 1)).toInt()
+                }
+            },
     ) {
         if (n == 0) return@Canvas
         val h = size.height
@@ -125,6 +146,23 @@ fun Minimap(
                 drawRect(Palette.markImage, Offset(x, y - 2.5.dp.toPx()), Size(5.dp.toPx(), 5.dp.toPx()))
             }
         }
+    }
+    drag?.let { (y, i) ->
+        val p = posts.getOrNull(i)
+        if (p != null) {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            Box(
+                Modifier.align(Alignment.TopEnd).offset { androidx.compose.ui.unit.IntOffset(-with(density) { 129.dp.roundToPx() }, (y - with(density) { 18.dp.toPx() }).toInt()) }
+                    .requiredWidth(220.dp).wrapContentWidth(Alignment.End),
+            ) {
+                androidx.compose.material3.Text(
+                    "#${p.no}  ${p.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: ""}",
+                    Modifier.shadow(6.dp, RoundedCornerShape(5.dp)).background(Palette.surface3, RoundedCornerShape(5.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = Palette.textStrong, fontSize = 12.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
     }
 }
 

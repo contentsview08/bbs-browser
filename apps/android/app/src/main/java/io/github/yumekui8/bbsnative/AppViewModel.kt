@@ -610,6 +610,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { db.markRead(page.summary, no) }
     }
 
+    /**
+     * 次の未読スレ(PC 版の「次の未読スレへ」): このスレを開いた一覧(板のスレ一覧・閲覧履歴・お気に入りのスレ)で、
+     * このスレより後ろにある、新着のある読んだスレ。なければ一覧の頭から探す。一覧の名前と、スレと未読の数を返す
+     */
+    fun nextUnread(page: Page.Thread): Triple<String, ThreadSummary, Int>? {
+        val i = stack.indexOf(page)
+        val under = stack.getOrNull(i - 1) ?: return null
+        val (name, list) = when (under) {
+            is Page.Threads -> under.board.name to under.threads.map { t -> t to (under.states[t.key]?.let { maxOf(0, t.postCount - it.readNo) } ?: 0) }
+            is Page.History -> "閲覧履歴" to history.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
+            is Page.FavThreads -> "お気に入りのスレ" to favThreads.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
+            else -> return null
+        }
+        val at = list.indexOfFirst { it.first.id == page.summary.id }
+        val order = if (at >= 0) list.drop(at + 1) + list.take(at) else list
+        val hit = order.firstOrNull { it.second > 0 && it.first.id != page.summary.id } ?: return null
+        return Triple(name, hit.first, hit.second)
+    }
+
+    /** 次の未読スレを、今のスレと入れ替えて開く(戻ると一覧へ) */
+    fun openNextUnread(page: Page.Thread, t: ThreadSummary) {
+        val i = stack.indexOf(page)
+        if (i >= 0) stack.removeAt(i)
+        openThread(t)
+    }
+
     /** スレ一覧の長押しから: お気に入りのスレに足す・外す */
     fun toggleFavoriteThread(t: ThreadSummary) {
         viewModelScope.launch {

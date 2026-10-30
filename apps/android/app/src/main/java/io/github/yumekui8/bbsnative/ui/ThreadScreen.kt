@@ -31,6 +31,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
@@ -451,6 +453,35 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                     color = if (sky) Palette.skyText else Palette.textMuted, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp,
                                 )
                                 Box(Modifier.weight(1f).height(3.dp).background(if (sky) Palette.skyMuted.copy(alpha = 0.5f) else Palette.border))
+                            }
+                        }
+                        // 次の未読スレへ(このスレを開いた一覧で、次に新着のあるスレ)
+                        if (filter == null && query.isBlank()) item(key = "nextUnread") {
+                            val next = remember(index.posts.size, page.readNo) { vm.nextUnread(page) }
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 16.dp)
+                                    .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
+                                    .clickable(enabled = next != null) { next?.let { vm.openNextUnread(page, it.second) } }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(if (next != null) Icons.AutoMirrored.Filled.ArrowForward else Icons.Filled.DoneAll, null, tint = if (next != null) Palette.accent else Palette.textMuted, modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    if (next == null) Text("この一覧に未読のあるスレはありません", color = Palette.textMuted, fontSize = 12.sp)
+                                    else {
+                                        Text("次の未読スレへ(${next.first})", color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
+                                        Text(next.second.title, color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                                if (next != null) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        if (next.third > 999) "+999+" else "+${next.third}",
+                                        Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 1.dp),
+                                        color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                                    )
+                                }
                             }
                         }
                         // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す(今のスマホ版と同じ)

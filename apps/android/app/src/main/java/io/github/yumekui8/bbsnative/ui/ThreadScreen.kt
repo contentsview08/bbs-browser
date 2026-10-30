@@ -411,7 +411,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         if (d != 0) runCatching { listState.scrollBy(d.toFloat()) }
     }
     Box(
-        modifier.fillMaxSize().background(Palette.base).imePadding()
+        // LINE 風のときは、地を吹き出しと区別できる色に
+        modifier.fillMaxSize().background(if (vm.prefs.postStyle == "line") Palette.lineBg else Palette.base).imePadding()
             .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
             .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
     ) {
@@ -629,21 +630,19 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
 
     if (gallery) {
-        ModalBottomSheet(onDismissRequest = { gallery = false }, containerColor = Palette.surface) {
-            Text("このスレの画像(${index.allImages.size})", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = Palette.textStrong, fontWeight = FontWeight.Bold)
+        CenterPanel("このスレの画像(${index.allImages.size})", { gallery = false }) {
             if (index.allImages.isEmpty()) Hint("画像はありません")
             else LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxWidth().heightIn(max = 600.dp), contentPadding = PaddingValues(8.dp)) {
                 items(index.allImages) { url ->
-                    AsyncImage(url, null, Modifier.padding(3.dp).aspectRatio(1f).background(Palette.surface2).clickable { viewer = url }, contentScale = ContentScale.Crop)
+                    AsyncImage(url, null, Modifier.padding(3.dp).aspectRatio(1f).background(Palette.surface2).clickable { gallery = false; viewer = url }, contentScale = ContentScale.Crop)
                 }
             }
-            Spacer(Modifier.height(16.dp).navigationBarsPadding())
         }
     }
 
     if (nextSheet) {
-        ModalBottomSheet(onDismissRequest = { nextSheet = false }, containerColor = Palette.surface) {
-            Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+        CenterPanel(onDismiss = { nextSheet = false }) {
+            Column(Modifier.padding(bottom = 4.dp)) {
                 NextCandidates(page) { nextSheet = false; vm.openThread(it) }
             }
         }
@@ -693,7 +692,8 @@ private fun FilterTabs(filter: Filter?, counts: Map<Filter, Int>, onSelect: (Fil
             val n = counts[f] ?: 0
             if (n > 0) Text("$n", Modifier.padding(start = 2.dp), fontSize = 10.sp, color = Palette.textMuted)
         }
-        Tab(Modifier.weight(1f), filter == null || filter == Filter.OWN, { onSelect(null) }) {
+        // 「すべて」(絞り込んでいない、いつもの状態)は面を塗らず、文字と線だけ。絞り込んだときだけ面を塗って目立たせる
+        Tab(Modifier.weight(1f), filter == null || filter == Filter.OWN, { onSelect(null) }, wash = filter == Filter.OWN) {
             if (filter == Filter.OWN) {
                 Icon(Icons.Filled.Person, null, tint = Palette.own, modifier = Modifier.size(17.dp))
                 Text("自分", fontSize = 14.sp, color = Palette.accent)
@@ -703,8 +703,8 @@ private fun FilterTabs(filter: Filter?, counts: Map<Filter, Int>, onSelect: (Fil
 }
 
 @Composable
-private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(modifier.background(if (active) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
+private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, wash: Boolean = true, content: @Composable () -> Unit) {
+    Box(modifier.background(if (active && wash) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) { content() }
         if (active) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(Palette.accent))
     }

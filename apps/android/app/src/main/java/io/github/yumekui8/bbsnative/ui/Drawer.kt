@@ -68,8 +68,8 @@ fun DrawerContent(vm: AppViewModel) {
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
-            DrawerRow(Icons.Filled.Bookmark, "お気に入りのスレ", Palette.markHot, active = current is Page.FavThreads) { vm.openRoot(Page.FavThreads()) }
-            DrawerRow(Icons.Filled.History, "閲覧履歴", Palette.markLink, active = current is Page.History, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
+            DrawerRow(Icons.Filled.Bookmark, "お気に入りのスレ", Palette.textMuted, active = current is Page.FavThreads) { vm.openRoot(Page.FavThreads()) }
+            DrawerRow(Icons.Filled.History, "閲覧履歴", Palette.textMuted, active = current is Page.History, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
                 vm.openRoot(Page.History())
             }
             if (histOpen) {
@@ -80,8 +80,8 @@ fun DrawerContent(vm: AppViewModel) {
                     )
                 }
             }
-            DrawerRow(Icons.Filled.Link, "URL を開く", Palette.markLink) { urlDialog = true }
-            DrawerRow(Icons.Filled.EditNote, "書き込み履歴", Palette.markNew, active = current is Page.PostHistory) { vm.openRoot(Page.PostHistory()) }
+            DrawerRow(Icons.Filled.Link, "URL を開く", Palette.textMuted) { urlDialog = true }
+            DrawerRow(Icons.Filled.EditNote, "書き込み履歴", Palette.textMuted, active = current is Page.PostHistory) { vm.openRoot(Page.PostHistory()) }
         }
         HorizontalDivider(color = Palette.border)
         DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = current is Page.Settings) { vm.openRoot(Page.Settings()) }

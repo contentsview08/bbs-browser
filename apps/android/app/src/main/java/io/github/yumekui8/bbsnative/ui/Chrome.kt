@@ -221,7 +221,8 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            Icon(it.icon, null, tint = if (it.danger) Palette.markDanger else it.tint, modifier = Modifier.size(21.dp))
+                            // アイコンは色を付けず控えめに(色が多いと、どれが大事か分からなくなる)。危ない項目だけ赤
+                            Icon(it.icon, null, tint = if (it.danger) Palette.markDanger else Palette.textMuted, modifier = Modifier.size(21.dp))
                             Text(it.label, color = if (it.danger) Palette.markDanger else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -332,13 +333,13 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * 表示スタイル(今のスマホ版の StyleMenuItems): テーマ・レスの見た目・文字サイズ(画面全体)。下から出る
+ * 表示スタイル(今のスマホ版の StyleMenuItems): テーマ・レスの見た目・文字サイズ(画面全体)。真ん中に浮かぶ
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.surface) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+    CenterPanel("表示スタイル", onDismiss) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             @Composable fun group(t: String) = Text(t, Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             @Composable fun row(label: String, on: Boolean, lead: (@Composable () -> Unit)? = null, onClick: () -> Unit) {
                 Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -392,4 +393,35 @@ fun BoardIcon(boardUrl: String, size: androidx.compose.ui.unit.Dp, fallback: @Co
     val b = bytes
     if (b == null) fallback()
     else coil3.compose.AsyncImage(b, null, Modifier.size(size).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)), error = null)
+}
+
+/**
+ * 真ん中に浮かぶ小さな画面(表示スタイル・画像一覧・次スレの候補など)。下から出るシートの代わりに使う。
+ * 少し小さく・少し下から浮き上がって出て、外を押すか戻るで閉じる
+ */
+@Composable
+fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    val show = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) { show.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
+    fun close() { scope.launch { show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
+    androidx.compose.ui.window.Popup(onDismissRequest = { close() }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f * show.value))
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { close() },
+            contentAlignment = Alignment.Center,
+        ) {
+            val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+            Column(
+                Modifier.padding(horizontal = 20.dp, vertical = 48.dp).fillMaxWidth()
+                    .graphicsLayer { val p = show.value; alpha = p; val s = 0.94f + 0.06f * p; scaleX = s; scaleY = s; translationY = (1f - p) * 12.dp.toPx() }
+                    .shadow(16.dp, shape).clip(shape).background(Palette.surface).border(1.dp, Palette.border, shape)
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {}
+                    .padding(vertical = 8.dp),
+            ) {
+                if (title != null) Text(title, Modifier.padding(horizontal = 20.dp, vertical = 10.dp), color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                content()
+            }
+        }
+    }
 }

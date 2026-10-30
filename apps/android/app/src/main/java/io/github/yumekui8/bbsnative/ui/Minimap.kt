@@ -97,8 +97,9 @@ fun Minimap(
         thumb?.let { (a, b) ->
             val top = yOf(a.coerceAtMost(n - 1))
             val bottom = maxOf(yOf(b.coerceAtMost(n - 1)), top + 14.dp.toPx()).coerceAtMost(h)
-            drawRoundRect(Palette.accent.copy(alpha = 0.28f), Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()))
-            drawRoundRect(Palette.accent, Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()), style = Stroke(1.dp.toPx()))
+            // つまみは文字の色の薄い面(強調色にすると、印より目立ってしまう)
+            drawRoundRect(Palette.textMuted.copy(alpha = 0.22f), Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()))
+            drawRoundRect(Palette.textMuted.copy(alpha = 0.7f), Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()), style = Stroke(1.dp.toPx()))
         }
         val d = 7.dp.toPx()
         for (m in marks) {

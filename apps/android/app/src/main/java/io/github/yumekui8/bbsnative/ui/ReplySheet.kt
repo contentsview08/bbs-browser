@@ -54,6 +54,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.animation.core.animateFloat
@@ -150,17 +152,13 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     IconButton(onClick = { plusMenu = !plusMenu }, Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Add, "画像・オプション", tint = if (plusMenu || options || r.mail.isNotEmpty() || r.name.isNotEmpty()) Palette.accent else Palette.textMuted, modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = rot })
                     }
-                    androidx.compose.foundation.text.BasicTextField(
-                        field, { v -> field = v; r.body = v.text; vm.saveDraftLater(page) },
-                        Modifier.weight(1f).heightIn(min = 40.dp, max = 160.dp).padding(end = 14.dp, top = 10.dp, bottom = 10.dp).focusRequester(focus)
-                            .onFocusChanged { r.open = it.isFocused; if (it.isFocused) plusMenu = false },
-                        enabled = disabled == null,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textBody, fontSize = 15.sp, lineHeight = 20.sp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
-                        decorationBox = { inner ->
-                            Box { if (field.text.isEmpty()) Text(disabled ?: "書き込む", color = Palette.textMuted, fontSize = 15.sp); inner() }
-                        },
-                    )
+                    Box(Modifier.weight(1f).heightIn(min = 40.dp, max = 160.dp).padding(end = 14.dp, top = 10.dp, bottom = 10.dp)) {
+                        BodyField(
+                            field, { v -> field = v; r.body = v.text; vm.saveDraftLater(page) }, isAA(r, vm.prefs.aaAutoDetect), disabled ?: "書き込む", 15,
+                            Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { r.open = it.isFocused; if (it.isFocused) plusMenu = false },
+                            enabled = disabled == null,
+                        )
+                    }
                 }
                 // ＋ のメニュー(欄の上にふわっと出る)
                 if (plusMenu) {
@@ -176,6 +174,8 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                                 if (vm.prefs.uploadEnabled) picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) else imageHint = true
                             }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
+                            val aaNow = isAA(r, vm.prefs.aaAutoDetect)
+                            PlusItem(if (aaNow) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示") { plusMenu = false; r.aaOverride = !aaNow }
                         }
                     }
                 }
@@ -199,6 +199,27 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         }
     }
     PostDialogs(r, onAccept = { vm.acceptConfirm(page) })
+}
+
+/** 本文を AA 用の字で出すか: 選んでいればそれ、なければ空白が 5 つ以上続く本文(設定の「AA を見分ける」がオンのとき) */
+private fun isAA(r: ReplyState, auto: Boolean) = r.aaOverride ?: (auto && Regex("[ \t　]{5,}").containsMatchIn(r.body))
+
+/**
+ * 本文の欄。AA のときは AA 用の字で、折り返さず横にずらせる(レスの表示と同じ字なので、書いたとおりに見える。今のスマホ版の書き込み欄と同じ)
+ */
+@Composable
+private fun BodyField(
+    value: androidx.compose.ui.text.input.TextFieldValue, onChange: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
+    aa: Boolean, placeholder: String, fontSize: Int, modifier: Modifier, enabled: Boolean = true,
+) {
+    val style = if (aa) androidx.compose.ui.text.TextStyle(color = Palette.textBody, fontSize = 14.sp, fontFamily = AaFont, lineHeight = 17.sp, letterSpacing = 0.sp)
+    else androidx.compose.ui.text.TextStyle(color = Palette.textBody, fontSize = fontSize.sp, lineHeight = (fontSize * 1.4f).sp)
+    androidx.compose.foundation.text.BasicTextField(
+        value, onChange,
+        if (aa) modifier.horizontalScroll(rememberScrollState()) else modifier,
+        enabled = enabled, textStyle = style, cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+        decorationBox = { inner -> Box { if (value.text.isEmpty()) Text(placeholder, color = Palette.textMuted, fontSize = fontSize.sp); inner() } },
+    )
 }
 
 @Composable
@@ -362,13 +383,10 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Palette.border)
                     }
                     // 本文
-                    androidx.compose.foundation.text.BasicTextField(
-                        r.body, { r.body = it },
-                        Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp),
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textBody, fontSize = 16.sp, lineHeight = 24.sp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
-                        decorationBox = { inner -> Box { if (r.body.isEmpty()) Text("本文", color = Palette.textMuted, fontSize = 16.sp); inner() } },
-                    )
+                    var bodyField by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body)) }
+                    Box(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        BodyField(bodyField, { bodyField = it; r.body = it.text }, isAA(r, vm.prefs.aaAutoDetect), "本文", 16, Modifier.fillMaxWidth())
+                    }
                     // 本文に入れた画像のサムネイル
                     val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
                     if (previews.isNotEmpty()) {
@@ -388,6 +406,9 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                         else Icon(Icons.Filled.Image, "画像を付ける", tint = Palette.textMuted)
                     }
                     IconButton(onClick = { options = !options }) { Icon(Icons.Filled.Tune, "名前・メール", tint = if (options || r.name.isNotEmpty() || r.mail.isNotEmpty()) Palette.accent else Palette.textMuted) }
+                    // AA として表示・文字列として表示
+                    val aaNow = isAA(r, vm.prefs.aaAutoDetect)
+                    IconButton(onClick = { r.aaOverride = !aaNow }) { Icon(Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示", tint = if (aaNow) Palette.accent else Palette.textMuted) }
                     Spacer(Modifier.weight(1f))
                     Text("${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
                 }

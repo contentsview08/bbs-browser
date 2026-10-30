@@ -465,7 +465,7 @@ private fun AboutPage() {
 /** 項目のまとまり。見出しと、下に小さな説明 */
 @Composable
 private fun Group(title: String? = null, note: String? = null, content: @Composable () -> Unit) {
-    if (title != null) Text(title, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    if (title != null) Text(title, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     else Spacer(Modifier.height(16.dp))
     Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(8.dp))) {
         content()
@@ -505,7 +505,7 @@ private fun ChoiceRow(label: String, value: String, options: List<Pair<String, S
     var open by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
-        Text(options.firstOrNull { it.first == value }?.second ?: value, color = Palette.accent, fontSize = 14.sp, maxLines = 1)
+        Text(options.firstOrNull { it.first == value }?.second ?: value, color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textMuted)
     }
     if (open) {

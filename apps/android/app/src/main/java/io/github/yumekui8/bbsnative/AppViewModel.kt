@@ -53,6 +53,8 @@ class ReplyState {
     /** 本文の欄に入る(返信・書き込むのジェスチャー)・出る(書き込めたとき)を頼む。数が変わったら画面が応える */
     var focusSeq by mutableStateOf(0)
     var blurSeq by mutableStateOf(0)
+    /** 本文を AA 用の字で出すか(＋ のメニューで選んだもの。null なら本文から見分ける) */
+    var aaOverride by mutableStateOf<Boolean?>(null)
     /** 書き込めたときの知らせ(少しで消す) */
     var done by mutableStateOf<String?>(null)
     var title by mutableStateOf("")

@@ -86,8 +86,9 @@ fun PostItem(
         }
         "line" -> {
             // 吹き出しで会話のように。自分の書き込みは右に緑の吹き出し、ほかは左にアイコンと吹き出し
-            val bubble = if (own) Color(0xFF06C755) else Palette.surface2
-            val textColor = if (own) Color.White else Palette.textBody
+            // 地と区別できる吹き出し(今のスマホ版の line-bubble・line-bubble-own)
+            val bubble = if (own) Palette.lineOwnBg else Palette.lineBubble
+            val textColor = if (own) Palette.lineOwnText else Palette.textBody
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                 if (!continued || own) Box(Modifier.padding(start = if (own) 0.dp else AVATAR + 8.dp, bottom = 2.dp)) { header() }
                 Row(verticalAlignment = Alignment.Top) {
@@ -135,7 +136,8 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
     }
 }
 
-private val AaFont = FontFamily(Font(R.font.aahub_light))
+/** AA 用の字(aahub_light)。書き込み欄でも使う */
+val AaFont = FontFamily(Font(R.font.aahub_light))
 
 /**
  * AA の本文。AA 用の字で折り返さず、横幅に収まるまで字を小さくする

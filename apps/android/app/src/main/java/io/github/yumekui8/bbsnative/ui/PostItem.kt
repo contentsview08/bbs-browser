@@ -75,8 +75,18 @@ fun PostItem(
     // 見た目(カード・Discord 風・LINE 風)に関わらず同じ
     val heatSide = prefs.heatStyle
     val showHeat = heat != null && (heatSide == "left" || heatSide == "right")
-    val leftBar = if (own) Palette.own else if (showHeat && heatSide == "left") heat else null
-    val rightBar = if (showHeat && (heatSide == "right" || own)) heat else null
+    // 自分の書き込みの帯は、人気の帯と反対の側にいつも出す(人気が左の帯なら自分は右。人気を帯で示さないときは左)
+    val ownSide = if (heatSide == "left") "right" else "left"
+    val leftBar = when {
+        own && ownSide == "left" -> Palette.own
+        showHeat && heatSide == "left" -> heat
+        else -> null
+    }
+    val rightBar = when {
+        own && ownSide == "right" -> Palette.own
+        showHeat && heatSide == "right" -> heat
+        else -> null
+    }
     val inner = @Composable {
     when (style) {
         "discord" -> {

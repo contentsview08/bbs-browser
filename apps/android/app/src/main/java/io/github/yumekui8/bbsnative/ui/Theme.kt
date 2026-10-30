@@ -66,11 +66,11 @@ val SCHEMES = listOf(
         c(0x111111), c(0x2B2B2B), c(0x8B8F97), c(0x00A650), c(0xFFFFFF), wash(0x06C755, 0.12f),
         c(0x06C755), c(0xFFFFFF), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0xC98A12), c(0xD9622B), c(0xD33A3A),
     ),
-    // グレー(2ch Mate のグレーに近い形): 一覧の地は濃い灰色、上下の帯は明るい灰色、行の間は黒に近い線。字は白に近い
+    // グレー(2ch Mate のグレーに近い形): 地は白い字がはっきり読める暗めの灰色、上下の帯はそれより明るい灰色、行の間は黒に近い線
     Scheme(
         "gray", "グレー", true,
-        c(0x404040), c(0x686868), c(0x404040), c(0x4A4A4A), c(0x575757), c(0x2C2C2C), c(0x222222),
-        c(0xF4F4F4), c(0xE6E6E6), c(0xB4B4B4), c(0xDCDCDC), c(0x1C1C1C), wash(0xFFFFFF, 0.12f),
+        c(0x313131), c(0x575757), c(0x313131), c(0x3A3A3A), c(0x434343), c(0x232323), c(0x1A1A1A),
+        c(0xF4F4F4), c(0xE2E2E2), c(0xA8A8A8), c(0xDCDCDC), c(0x1C1C1C), wash(0xFFFFFF, 0.10f),
         c(0xFF8FA3), c(0x2A0B12), c(0x9CC8FF), c(0x9FDDB8), c(0xC8D6E8), c(0xF2C14E), c(0xF2914B), c(0xFF6B6B),
     ),
     Scheme(
@@ -141,7 +141,8 @@ object Palette {
      * 吹き出しは面の色、自分の吹き出しは明るい緑(暗い配色では深い緑)
      */
     val lineBg get() = androidx.compose.ui.graphics.lerp(base, if (scheme.dark) Color(0xFF6F8FB8) else Color(0xFF7F9CC0), if (scheme.dark) 0.10f else 0.13f)
-    val lineBubble get() = if (scheme.dark) surface3 else Color.White
+    // 暗い配色の吹き出しは、地より少しだけ明るい面(明るすぎると白い字との差が小さくなる)
+    val lineBubble get() = if (scheme.dark) surface2 else Color.White
     val lineOwnBg get() = if (scheme.dark) Color(0xFF3F7D2C) else Color(0xFF8DE055)
     val lineOwnText get() = if (scheme.dark) Color(0xFFEEF7E8) else Color(0xFF10200A)
 

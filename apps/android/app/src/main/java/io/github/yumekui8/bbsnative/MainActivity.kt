@@ -23,6 +23,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
@@ -82,6 +84,12 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(drawer) { snapshotFlow { drawer.currentValue }.collect { vm.drawerOpen = it == DrawerValue.Open } }
                     BackHandler(enabled = vm.drawerOpen) { vm.drawerOpen = false }
                     BackHandler(enabled = !vm.drawerOpen && vm.stack.size > 1) { vm.back() }
+                    // いちばん下の画面で戻ると、すぐには閉じず「もう一度戻ると終了します」を出す。2 秒以内にもう一度戻ったら閉じる
+                    var lastBack by androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+                    BackHandler(enabled = !vm.drawerOpen && vm.stack.size <= 1) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastBack < 2000) finish() else { lastBack = now; vm.toast = "もう一度戻るとアプリを終了します" }
+                    }
                     // 引き出しの指の操作は、開いているとき(閉じる)だけ。開くのはスワイプの操作(左の端から右へ)に任せる
                     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {

@@ -172,7 +172,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var fontOnly by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     // 戻る操作で、まず検索を外す
-    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty()) { searching = false; query = "" }
+    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null) {
+        if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false }
+    }
     // 取り直したら一番上へ戻す(上にあったスレの位置を保つと、その上に新しいスレが足されて分かりにくい)
     // (戻ってきたときにもう一度動かさないよう、戻した回を覚えておく。更新しない限り、一覧の位置はそのまま)
     LaunchedEffect(page.refreshed) {
@@ -184,7 +186,11 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val gestures = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
         prefs.gestures("list"), "list",
         mapOf(
-            "drawer" to { vm.drawerOpen = true },
+            // 絞り込み(未読など)・並べ替え・検索をしていれば、まずそれを外す。外れていればメニュー
+            "drawer" to {
+                if (page.tab != null || searching || query.isNotEmpty()) { page.tab = null; page.reversed = false; searching = false; query = ""; scope.launch { listState.scrollToItem(0) } }
+                else vm.drawerOpen = true
+            },
             "forward" to { vm.forward() },
             "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size - 1)) }; Unit },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },

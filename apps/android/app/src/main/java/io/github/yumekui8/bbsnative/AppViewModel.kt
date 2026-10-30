@@ -523,7 +523,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)。今のスマホ版と同じ
                 if (!firstOpen) page.unreadFrom = page.readNo + 1
                 if (r.posts.isNotEmpty() || r.status == FetchStatus.RESET) {
-                    val old = if (r.status == FetchStatus.RESET) emptyList() else page.index.posts
+                    val old = if (r.status == FetchStatus.RESET) emptyList() else renderSeq[page]?.second ?: page.index.posts
                     val all: List<Post> = old + r.posts
                     // 手で更新したときは、届いた新着の頭に「ここから未読」を引き直す
 
@@ -538,8 +538,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * スレごとの組み立ての通し番号。設定を変えたときの組み立て直しと新着の取り込みが重なると、遅れて終わった古い並びが
+     * 新着を上書きして、届いたレスが抜け落ちる。最後に頼んだ組み立てだけを入れ、組み立て直しは最後に頼んだ並びで行う
+     */
+    private val renderSeq = java.util.WeakHashMap<Page.Thread, Pair<Int, List<Post>>>()
+
     /** レスの下ごしらえと組み立て(と NG の判定)を、画面とは別のスレッドで済ませてから入れる */
     private suspend fun setPosts(page: Page.Thread, posts: List<Post>) {
+        val seq = (renderSeq[page]?.first ?: 0) + 1
+        renderSeq[page] = seq to posts
         val rules = prefs.ngRules
         // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま
         val noname = if (prefs.omitNoname) TwoCh.cachedNoname(page.summary.boardUrl) else null
@@ -550,6 +558,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val i = PostIndex.build(posts, collapse, gross)
             Triple(i, renderPosts(i, page.links, o), ngOf(posts, rules))
         }
+        if (renderSeq[page]?.first != seq) return
         page.rendered = result.second
         page.ngNos = result.third
         page.index = result.first
@@ -596,7 +605,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     private fun rerenderAll() {
-        for (p in stack.toList()) if (p is Page.Thread && p.loaded) viewModelScope.launch { setPosts(p, p.index.posts) }
+        for (p in stack.toList()) if (p is Page.Thread && p.loaded) viewModelScope.launch { setPosts(p, renderSeq[p]?.second ?: p.index.posts) }
     }
 
     private fun reapplyNg() {

@@ -392,11 +392,37 @@ fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, o
             }
             group("テーマ")
             val current = Palette.scheme.key
-            for (s in SCHEMES) row(s.name, s.key == current, lead = { Box(Modifier.size(16.dp).background(s.accent, androidx.compose.foundation.shape.CircleShape).border(1.dp, s.border, androidx.compose.foundation.shape.CircleShape)) }) {
-                // スマホのダーク・ライトに合わせているときは、いまの明るさの方の配色を変える(PC 版の pickSchemeNow)
-                if (p.followSystem) { if (s.dark == Palette.dark) { if (s.dark) p.darkScheme = s.key else p.lightScheme = s.key } else { p.followSystem = false; p.scheme = s.key } }
-                else p.scheme = s.key
+            // 2 列の見本(地・帯・面・差し色を小さく描く)。名前だけより、押す前に色が分かる
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (pair in SCHEMES.chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (s in pair) {
+                        val on = s.key == current
+                        val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        Row(
+                            Modifier.weight(1f).clip(shape).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, shape)
+                                .clickable {
+                                    // スマホのダーク・ライトに合わせているときは、いまの明るさの方の配色を変える(PC 版の pickSchemeNow)
+                                    if (p.followSystem) { if (s.dark == Palette.dark) { if (s.dark) p.darkScheme = s.key else p.lightScheme = s.key } else { p.followSystem = false; p.scheme = s.key } }
+                                    else p.scheme = s.key
+                                }
+                                .padding(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // 見本: 上に帯、地の上に面の棒 2 本、右下に差し色の丸
+                            Column(Modifier.size(width = 34.dp, height = 40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp)).background(s.base).border(1.dp, s.border, androidx.compose.foundation.shape.RoundedCornerShape(5.dp))) {
+                                Box(Modifier.fillMaxWidth().height(8.dp).background(s.bar))
+                                Box(Modifier.padding(start = 4.dp, top = 5.dp).width(24.dp).height(5.dp).background(s.surface2, androidx.compose.foundation.shape.RoundedCornerShape(2.dp)))
+                                Box(Modifier.padding(start = 4.dp, top = 3.dp).width(17.dp).height(5.dp).background(s.textMuted.copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)))
+                                Box(Modifier.padding(start = 20.dp, top = 3.dp).size(8.dp).background(s.accent, androidx.compose.foundation.shape.CircleShape))
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(s.name, Modifier.weight(1f), color = if (on) Palette.textStrong else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else null, maxLines = 2)
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
             }
+            Spacer(Modifier.height(6.dp))
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
             group("差し色")
             // 丸を押して選ぶ。左端の「テーマ」はテーマの色に戻す

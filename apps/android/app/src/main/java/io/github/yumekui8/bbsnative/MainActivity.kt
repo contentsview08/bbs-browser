@@ -105,7 +105,15 @@ class MainActivity : ComponentActivity() {
                                 contentKey = { it?.hashCode() },
                                 label = "page",
                             ) { page ->
-                            Box(Modifier.fillMaxSize().background(Palette.base)) {
+                            // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴・設定など)も、右へなぞるとメニューを開く
+                            val swipe = io.github.yumekui8.bbsnative.ui.rememberSwipeState()
+                            val others = page !is Page.Threads && page !is Page.Thread
+                            val drawerGesture = mapOf("right" to io.github.yumekui8.bbsnative.ui.SwipeAction("メニュー") { vm.drawerOpen = true })
+                            Box(
+                                Modifier.fillMaxSize().background(Palette.base).then(
+                                    if (others && vm.prefs.gesturesEnabled) with(io.github.yumekui8.bbsnative.ui.SwipeGesturesHolder) { Modifier.gestures(swipe, drawerGesture, vm.prefs.gestureSensitivity) } else Modifier,
+                                ),
+                            ) {
                             when (page) {
                                 is Page.Threads -> ThreadListScreen(vm, page)
                                 is Page.Thread -> ThreadScreen(vm, page)

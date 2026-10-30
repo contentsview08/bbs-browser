@@ -291,7 +291,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             } else {
                 HeaderBar(
                     page.board.name, onNav = { vm.drawerOpen = true },
-                    leading = { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp)) },
+                    leading = { BoardIcon(page.board.url, 22.dp) { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp)) } },
                     onTitle = { titleSheet = true },
                 ) {
                     BarIcon(Icons.Filled.Search, "探す") { searching = true }
@@ -317,7 +317,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 .graphicsLayer { translationY = bars.footerHidden * bars.bottomHeight },
         ) {
             HorizontalDivider(color = Palette.border)
-            Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = (vm.prefs.footerHeight - 4).dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 出すタブと並びは設定(スレ一覧 › タブ)
                 val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
                 // タブが多くて入りきらないときは、横にずらせる
@@ -337,7 +337,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                                 else -> { page.tab = null; page.reversed = false }
                             }
                             scope.launch { listState.scrollToItem(0) }
-                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = 48.dp).padding(horizontal = 10.dp),
+                        }.background(if (active) Palette.accentWash else Color.Transparent).heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 10.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -478,8 +478,10 @@ private fun ThreadRow(
                 }
                 if (archived) { Spacer(Modifier.width(8.dp)); Text("dat落ち", color = Palette.textMuted, fontSize = (11 * k).sp) }
                 Spacer(Modifier.weight(1f))
+                // 右の 3 つ(勢い・レス数・未読)は幅をそろえて右寄せにする(行ごとに位置がずれないように。未読がない行も場所を空けておく)
                 Text(
-                    if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
+                    if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                     color = when {
                         rank >= 0.9 -> Palette.heatVeryHot
                         rank >= 0.6 -> Palette.heatHot
@@ -487,16 +489,14 @@ private fun ThreadRow(
                         else -> Palette.textMuted
                     },
                 )
-                Spacer(Modifier.width(12.dp))
                 Text(
                     buildAnnotatedString { append("${t.postCount}"); withStyle(SpanStyle(fontSize = (10 * k).sp)) { append("レス") } },
-                    color = Palette.textMuted, fontSize = (11 * k).sp,
+                    Modifier.widthIn(min = 60.dp), color = Palette.textMuted, fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                 )
-                if (unread > 0) {
-                    Spacer(Modifier.width(12.dp))
-                    Text(
+                Box(Modifier.widthIn(min = 46.dp), contentAlignment = Alignment.CenterEnd) {
+                    if (unread > 0) Text(
                         if (unread > 999) "+999+" else "+$unread",
-                        Modifier.widthIn(min = 28.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+                        Modifier.widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
                         color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
                 }

@@ -378,7 +378,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             "bottom" to { scroller.toBottom(); bars.show() },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
             "refresh" to { refresh(); Unit },
-            "deleteLog" to { confirmDelete = true },
+            "deleteLog" to { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) },
             "drawer" to { vm.drawerOpen = true },
             "search" to { searching = true; bars.show() },
             "favorite" to { vm.toggleFavoriteThread(page) },
@@ -555,7 +555,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person, Palette.own) { filter = if (filter == Filter.OWN) null else Filter.OWN },
                     MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { refresh() },
                 ),
-                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { vm.deleteLog(page) }),
+                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }),
             ),
         ) { menu = false }
     }
@@ -577,7 +577,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, TwoCh.webUrl(page.summary), false) },
                 ),
-                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { vm.deleteLog(page) }),
+                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }),
             ),
             MenuAt.TopStart,
         ) { titleSheet = false }
@@ -662,15 +662,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
     }
 
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("ログを削除しますか") },
-            text = { Text("このスレの手元のログを消して、一覧に戻ります。") },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; vm.deleteLog(page) }) { Text("削除する", color = Palette.markDanger) } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("やめる") } },
-        )
-    }
+    if (confirmDelete) ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLog(page) }) { confirmDelete = false }
 
     viewer?.let { url ->
         if (url in index.allImages) ImageViewer(index.allImages, url, onClose = { viewer = null }, posts = index.allImagePosts)
@@ -694,7 +686,8 @@ private fun reportRead(ctl: ThreadScrollCtl, scroller: ThreadScroller, vm: AppVi
 private fun FilterTabs(filter: Filter?, counts: Map<Filter, Int>, onSelect: (Filter?) -> Unit) {
     Row(Modifier.fillMaxWidth().background(Palette.bar)) {
         for ((f, icon, color) in TABS) Tab(Modifier.weight(1f), filter == f, { onSelect(if (filter == f) null else f) }) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(17.dp))
+            // 絞り込みは大事な情報ではないので、アイコンは色を付けず控えめに(選んでいるときだけ強調色)
+            Icon(icon, null, tint = if (filter == f) Palette.accent else Palette.textMuted.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(3.dp))
             Text(f.label, fontSize = 14.sp, color = if (filter == f) Palette.accent else Palette.textMuted, maxLines = 1)
             val n = counts[f] ?: 0
@@ -711,7 +704,7 @@ private fun FilterTabs(filter: Filter?, counts: Map<Filter, Int>, onSelect: (Fil
 
 @Composable
 private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(modifier.background(if (active) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).heightIn(min = 46.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.background(if (active) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) { content() }
         if (active) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(Palette.accent))
     }

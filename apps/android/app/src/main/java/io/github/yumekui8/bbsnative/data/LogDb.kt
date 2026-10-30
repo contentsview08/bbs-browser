@@ -314,6 +314,14 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         rows.size
     }
 
+    /** ファビコンのキャッシュ(data: URL と取った時刻) */
+    fun favicon(key: String): Pair<String, Long>? =
+        readableDatabase.rawQuery("SELECT data, fetched_at FROM favicons WHERE key = ?", arrayOf(key)).use { c -> if (c.moveToFirst()) c.getString(0) to c.getLong(1) else null }
+
+    fun setFavicon(key: String, data: String) {
+        writableDatabase.execSQL("INSERT OR REPLACE INTO favicons (key, data, fetched_at) VALUES (?, ?, ?)", arrayOf<Any>(key, data, System.currentTimeMillis()))
+    }
+
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 }
 

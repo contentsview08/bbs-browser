@@ -54,6 +54,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -137,7 +139,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 SmallField(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f))
             }
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
+        Row(Modifier.fillMaxWidth().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
             // 丸い本文の欄。左の端に ＋(画像・オプション)
             Box(Modifier.weight(1f)) {
                 Row(
@@ -288,32 +290,111 @@ fun PostDialogs(r: ReplyState, onAccept: () -> Unit) {
     }
 }
 
-/** スレを立てる欄(下から出る) */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * スレを立てる画面(全画面)。下から出る欄だと、入れる欄を切り替えるたびにキーボードが出入りして画面ごと上下に動いていたので、
+ * 画面いっぱいに置き、キーボードの分だけ下を縮める。上に ✕・板名・「立てる」、中にスレタイ・(オプションで名前とメール)・本文、
+ * 本文に入れた画像のサムネイル、下にキーボードのすぐ上の道具(画像・バイト数)
+ */
 @Composable
 fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
     val r = page.newThread
     if (r.open) {
-        ModalBottomSheet(onDismissRequest = { r.open = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Palette.surface) {
-            Column(Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("スレを立てる ・ ${page.board.name}", color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                OutlinedTextField(r.title, { r.title = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("スレタイ") }, textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(r.name, { r.name = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("名前") })
-                    Checkbox(r.sage, { r.sage = it })
-                    Text("sage", color = Palette.textBody)
-                    AttachButton(vm, r)
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { r.open = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        ) {
+            val view = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.SideEffect {
+                (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+                    w.setDimAmount(0f)
+                    w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                 }
-                OutlinedTextField(r.body, { r.body = it }, Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp), placeholder = { Text("本文") })
-                if (r.notice != null) Text(r.notice!!, color = Palette.markDanger, fontSize = 12.sp)
-                Button(
-                    onClick = { vm.createThread(page) }, enabled = !r.sending && r.title.isNotBlank() && r.body.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(6.dp),
-                ) { Text(if (r.sending) "送っています…" else "スレを立てる", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            }
+            // 下からすべり上がって出る
+            val rise = remember { androidx.compose.animation.core.Animatable(1f) }
+            LaunchedEffect(Unit) { rise.animateTo(0f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))) }
+            val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
+            var options by remember { mutableStateOf(false) }
+            val titleFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
+            val canSend = !r.sending && r.title.isNotBlank() && r.body.isNotBlank()
+            Column(
+                Modifier.fillMaxSize().graphicsLayer { translationY = rise.value * size.height * 0.15f; alpha = 1f - rise.value }
+                    .background(Palette.base).statusBarsPadding().imePadding().navigationBarsPadding(),
+            ) {
+                // 上の帯
+                Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = vm.prefs.headerHeight.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { r.open = false }) { Icon(Icons.Filled.Close, "閉じる", tint = Palette.textMuted) }
+                    Column(Modifier.weight(1f)) {
+                        Text("スレを立てる", color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(page.board.name, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
+                    }
+                    Box(
+                        Modifier.padding(end = 8.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, RoundedCornerShape(6.dp))
+                            .clickable(enabled = canSend) { vm.createThread(page) }.padding(horizontal = 16.dp, vertical = 9.dp),
+                    ) {
+                        if (r.sending) CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accentText, strokeWidth = 2.dp)
+                        else Text("立てる", color = Palette.accentText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                HorizontalDivider(color = Palette.border)
+                // 返事(エラー)
+                r.notice?.let { n ->
+                    Text(n, Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 16.dp, vertical = 8.dp), color = Palette.heatVeryHot, fontSize = 13.sp)
+                    HorizontalDivider(color = Palette.border)
+                }
+                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    // スレタイ(大きく太く)
+                    androidx.compose.foundation.text.BasicTextField(
+                        r.title, { r.title = it },
+                        Modifier.fillMaxWidth().focusRequester(titleFocus).padding(horizontal = 16.dp, vertical = 14.dp),
+                        singleLine = false, maxLines = 3,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+                        decorationBox = { inner -> Box { if (r.title.isEmpty()) Text("スレタイ", color = Palette.textMuted, fontSize = 18.sp, fontWeight = FontWeight.Bold); inner() } },
+                    )
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Palette.border)
+                    if (options) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SmallField(r.name, { r.name = it }, "名前", Modifier.weight(1f))
+                            SmallField(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f))
+                        }
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Palette.border)
+                    }
+                    // 本文
+                    androidx.compose.foundation.text.BasicTextField(
+                        r.body, { r.body = it },
+                        Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textBody, fontSize = 16.sp, lineHeight = 24.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+                        decorationBox = { inner -> Box { if (r.body.isEmpty()) Text("本文", color = Palette.textMuted, fontSize = 16.sp); inner() } },
+                    )
+                    // 本文に入れた画像のサムネイル
+                    val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
+                    if (previews.isNotEmpty()) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (u in previews) coil3.compose.AsyncImage(u, null, Modifier.size(72.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                        }
+                    }
+                }
+                // キーボードのすぐ上の道具: 画像・オプション(名前・メール)・バイト数
+                HorizontalDivider(color = Palette.border)
+                Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = {
+                        if (vm.prefs.uploadEnabled) picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        else r.notice = "画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください"
+                    }, enabled = !r.uploading) {
+                        if (r.uploading) CircularProgressIndicator(Modifier.size(20.dp), color = Palette.accent, strokeWidth = 2.dp)
+                        else Icon(Icons.Filled.Image, "画像を付ける", tint = Palette.textMuted)
+                    }
+                    IconButton(onClick = { options = !options }) { Icon(Icons.Filled.Tune, "名前・メール", tint = if (options || r.name.isNotEmpty() || r.mail.isNotEmpty()) Palette.accent else Palette.textMuted) }
+                    Spacer(Modifier.weight(1f))
+                    Text("${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
+                }
             }
         }
     }
-    PostDialogs(r, onAccept = { r.confirm = null; vm.toast = "書き込み確認が出ました。もう一度「スレを立てる」を押してください" })
+    PostDialogs(r, onAccept = { r.confirm = null; vm.toast = "書き込み確認が出ました。もう一度「立てる」を押してください" })
 }
 
 fun copyText(context: Context, text: String) {

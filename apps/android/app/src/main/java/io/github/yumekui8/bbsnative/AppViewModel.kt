@@ -157,6 +157,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Http.init(app)
+        io.github.yumekui8.bbsnative.data.Favicons.db = db
         // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
         val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
         openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
@@ -661,7 +662,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 2ch 互換のスレ・板の URL なら、アプリの中で開いて true */
     fun openUrl(url: String): Boolean {
-        val u = url.trim()
+        // 5ch は 5ch.net から 5ch.io へ移った(5ch.net は 301 で 5ch.io へ送る)。書き込み(POST)はリダイレクトをたどれないので、初めから 5ch.io で開く
+        val u = url.trim().replace(Regex("^(https?://[a-z0-9]+)\\.5ch\\.net/"), "$1.5ch.io/")
         // 本文の URL は http:// のことが多い。Android は暗号化しない通信を断るので https:// で開く
         val thread = Regex("^https?://([^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
         if (thread != null) {

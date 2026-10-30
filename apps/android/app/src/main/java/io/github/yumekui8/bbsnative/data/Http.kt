@@ -40,10 +40,17 @@ object Http {
         if (!::jar.isInitialized) jar = SavedCookieJar(context.applicationContext)
     }
 
+    /** 読むときはリダイレクトをたどる(板・スレが別のサーバーへ移ったとき。5ch の http → https など)。書き込み(POST)はたどらない */
+    private val getClient by lazy { client.newBuilder().followRedirects(true).followSslRedirects(true).build() }
+
     suspend fun get(url: String, headers: Map<String, String> = emptyMap()): HttpResponse = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(url).header("User-Agent", USER_AGENT)
         for ((k, v) in headers) req.header(k, v)
-        execute(req.build())
+        getClient.newCall(req.build()).execute().use { res ->
+            val h = HashMap<String, String>()
+            for (name in res.headers.names()) h[name.lowercase()] = res.header(name) ?: ""
+            HttpResponse(res.code, h, res.body?.bytes() ?: ByteArray(0))
+        }
     }
 
     /** フォームを送る(body はエンコード済みの application/x-www-form-urlencoded) */

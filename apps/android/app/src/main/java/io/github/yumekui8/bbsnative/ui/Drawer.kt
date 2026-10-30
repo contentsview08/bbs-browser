@@ -64,7 +64,7 @@ fun DrawerContent(vm: AppViewModel) {
             if (favOpen) {
                 for (b in vm.favorites) {
                     val active = current is Page.Threads && current.board.url == b.url
-                    DrawerRow(Icons.Filled.Forum, b.name, Palette.textMuted, sub = true, active = active) { vm.openBoard(b) }
+                    DrawerRow(Icons.Filled.Forum, boardUrl = b.url, label = b.name, tint = Palette.textMuted, sub = true, active = active) { vm.openBoard(b) }
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
@@ -120,6 +120,8 @@ private fun DrawerRow(
     muted: Boolean = false,
     trailing: ImageVector? = null,
     onTrailing: (() -> Unit)? = null,
+    /** 板のファビコンを出すとき、その板の URL */
+    boardUrl: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -131,7 +133,9 @@ private fun DrawerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(if (sub) 20.dp else 26.dp))
+        if (boardUrl != null) Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+            BoardIcon(boardUrl, 18.dp) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
+        } else Icon(icon, null, tint = tint, modifier = Modifier.size(if (sub) 20.dp else 26.dp))
         Text(
             label, Modifier.weight(1f), color = if (muted) Palette.textMuted else if (active) Palette.accent else Palette.textStrong,
             fontSize = if (sub) 15.sp else 17.sp, fontWeight = if (sub) FontWeight.Normal else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,

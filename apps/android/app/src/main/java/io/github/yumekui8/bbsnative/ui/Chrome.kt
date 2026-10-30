@@ -37,6 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
@@ -248,17 +251,31 @@ fun Hint(text: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(text, color = Palette.textMuted, fontSize = 14.sp) }
 }
 
+/** 「文字の大きさ・余白」の小さな画面で、いま動かしているスライダー(動かしている間は、ほかを透かして後ろの画面を見せる) */
+class SizeDrag { var active by mutableStateOf<String?>(null) }
+val LocalSizeDrag = androidx.compose.runtime.compositionLocalOf<SizeDrag?> { null }
+
 /** 「文字の大きさ・余白」の 1 行(名前・いまの値・スライダー・元に戻す) */
 @Composable
 fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int, text: String, default: Float, onChange: (Float) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    val drag = LocalSizeDrag.current
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val dragged by source.collectIsDraggedAsState()
+    val pressed by source.collectIsPressedAsState()
+    androidx.compose.runtime.LaunchedEffect(dragged || pressed) {
+        if (drag != null) { if (dragged || pressed) drag.active = label else if (drag.active == label) drag.active = null }
+    }
+    // ほかのスライダーを動かしている間は、この行を隠す
+    val hidden = drag?.active != null && drag.active != label
+    val a by androidx.compose.animation.core.animateFloatAsState(if (hidden) 0f else 1f, androidx.compose.animation.core.tween(150), label = "row")
+    Column(Modifier.fillMaxWidth().graphicsLayer { alpha = a }.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
             Text(text, color = Palette.accent, fontSize = 13.sp)
             if (value != default) Text("元に戻す", Modifier.padding(start = 10.dp).clickable { onChange(default) }, color = Palette.textMuted, fontSize = 12.sp)
         }
         androidx.compose.material3.Slider(
-            value, onChange, valueRange = range, steps = steps,
+            value, onChange, valueRange = range, steps = steps, interactionSource = source,
             colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.accent, activeTrackColor = Palette.accent),
         )
     }
@@ -267,20 +284,51 @@ fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Floa
 /** ヘッダー・フッターの高さと文字(今のスマホ版の BarSliders) */
 @Composable
 fun BarSliders(p: io.github.yumekui8.bbsnative.data.Prefs) {
-    SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 44f..120f, 0, "${p.headerHeight}dp", 64f) { p.headerHeight = it.toInt() }
-    SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 44f..110f, 0, "${p.footerHeight}dp", 64f) { p.footerHeight = it.toInt() }
+    SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 44f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
+    SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 44f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
     SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.8f..1.4f, 11, "${(p.barFontScale * 100).toInt()}%", 1f) { p.barFontScale = (it * 20).toInt() / 20f }
 }
 
-/** 真ん中に出す「文字の大きさ・余白」の小さな画面(動かすと後ろの画面がすぐ変わる) */
+/**
+ * 真ん中に出す「文字の大きさ・余白」の小さな画面。動かすと後ろの画面がすぐ変わる。
+ * スライダーを動かしている間は、そのスライダーだけを残して、画面の地や暗い幕を透かす(後ろの字の大きさを見ながら合わせられるように)
+ */
 @Composable
 fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("文字の大きさ・余白") },
-        text = { Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) { content() } },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("閉じる") } },
-    )
+    val drag = remember { SizeDrag() }
+    val dragging = drag.active != null
+    val bg by androidx.compose.animation.core.animateFloatAsState(if (dragging) 0f else 1f, androidx.compose.animation.core.tween(150), label = "bg")
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.SideEffect {
+            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+                w.setDimAmount(0f)
+                w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            }
+        }
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f * bg))
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { onDismiss() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                Modifier.padding(horizontal = 24.dp).fillMaxWidth()
+                    .background(Palette.surface.copy(alpha = bg), shape).border(1.dp, Palette.border.copy(alpha = bg), shape)
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {}
+                    .padding(20.dp),
+            ) {
+                Text("文字の大きさ・余白", Modifier.graphicsLayer { alpha = bg }, color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                Column(Modifier.heightIn(max = 480.dp).verticalScroll(androidx.compose.foundation.rememberScrollState(), enabled = !dragging)) {
+                    androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides drag) { content() }
+                }
+                Row(Modifier.fillMaxWidth().graphicsLayer { alpha = bg }, horizontalArrangement = Arrangement.End) {
+                    androidx.compose.material3.TextButton(onClick = onDismiss) { Text("閉じる") }
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -313,4 +361,35 @@ fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, o
             row("文字サイズ(画面全体)  ${(p.fontScale * 100).toInt()}%", false, lead = { Icon(Icons.Filled.FormatSize, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp)) }) { onDismiss(); onFont() }
         }
     }
+}
+
+/** ログを削除する前に確かめる。「次回から表示しない」を入れて削除すると、次からは確かめずに消す(設定の「スクロールと更新」で戻せる) */
+@Composable
+fun ConfirmDeleteDialog(prefs: io.github.yumekui8.bbsnative.data.Prefs, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    var dontAsk by remember { mutableStateOf(false) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ログを削除しますか") },
+        text = {
+            Column {
+                Text("このスレの手元のログを消します。もう一度開けば取り直します。", color = Palette.textBody, fontSize = 14.sp)
+                Row(Modifier.padding(top = 8.dp).clickable { dontAsk = !dontAsk }, verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(dontAsk, { dontAsk = it }, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
+                    Text("次回から表示しない", color = Palette.textBody, fontSize = 14.sp)
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { if (dontAsk) prefs.confirmDeleteLog = false; onDismiss(); onDelete() }) { Text("削除する", color = Palette.markDanger) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("やめる") } },
+    )
+}
+
+/** 板のファビコン。取れるまで(取れなければ)は fallback を出す */
+@Composable
+fun BoardIcon(boardUrl: String, size: androidx.compose.ui.unit.Dp, fallback: @Composable () -> Unit) {
+    var bytes by remember(boardUrl) { mutableStateOf<ByteArray?>(null) }
+    androidx.compose.runtime.LaunchedEffect(boardUrl) { bytes = io.github.yumekui8.bbsnative.data.Favicons.of(boardUrl) }
+    val b = bytes
+    if (b == null) fallback()
+    else coil3.compose.AsyncImage(b, null, Modifier.size(size).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)), error = null)
 }

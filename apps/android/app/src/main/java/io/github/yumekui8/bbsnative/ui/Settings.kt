@@ -332,6 +332,7 @@ private fun BehaviorPage(vm: AppViewModel) {
     Group("スクロール") {
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
         SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
+        SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {
         SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshButton) { p.showRefreshButton = it }

@@ -124,6 +124,15 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     }
 
     Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        // 窓の後ろを暗くしない(暗さは自分で背景に描く。窓の暗さが残ると、閉じたあとに一瞬暗い画面が残っていた)
+        val dialogView = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.SideEffect {
+            (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+                w.setDimAmount(0f)
+                w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                w.setWindowAnimations(0)
+            }
+        }
         BackHandler(enabled = sheet) { sheet = false }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val h = constraints.maxHeight.toFloat()

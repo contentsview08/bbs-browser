@@ -32,6 +32,8 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
     val context = LocalContext.current
     var fav by remember(t.id) { mutableStateOf(false) }
     var ngDraft by remember(t.id) { mutableStateOf<String?>(null) }
+    var confirmDel by remember(t.id) { mutableStateOf(false) }
+    if (confirmDel) { ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLogOf(t) }) { confirmDel = false; onDismiss() }; return }
     LaunchedEffect(t.id) { fav = vm.isFavoriteThread(t) }
     if (ngDraft == null) {
         MenuSheet(
@@ -44,11 +46,11 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
                 listOfNotNull(
                     // メニューを閉じたあと、言葉を直せる欄を出す
                     MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
-                    if (hasLog) MenuItem("ログを削除", Icons.Filled.Delete, danger = true) { vm.deleteLogOf(t) } else null,
+                    if (hasLog) MenuItem("ログを削除", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDel = true else vm.deleteLogOf(t) } else null,
                 ),
             ),
             MenuAt.Center,
-        ) { if (ngDraft == null) onDismiss() }
+        ) { if (ngDraft == null && !confirmDel) onDismiss() }
     } else {
         var word by remember(t.id) { mutableStateOf(ngDraft ?: "") }
         AlertDialog(

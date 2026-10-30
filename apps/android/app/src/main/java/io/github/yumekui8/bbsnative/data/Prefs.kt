@@ -84,8 +84,8 @@ class Prefs(context: Context) {
     /** スレ一覧のスレの上下の余白(dp) */
     var listPad by pref("listPad", 9)
     /** ヘッダー・フッターの高さ(dp)と文字の倍率 */
-    var headerHeight by pref("headerHeight", 64)
-    var footerHeight by pref("footerHeight", 64)
+    var headerHeight by pref("headerHeight", 54)
+    var footerHeight by pref("footerHeight", 52)
     var barFontScale by pref("barFontScale", 1f)
 
     // ── スレ一覧 ──
@@ -148,6 +148,8 @@ class Prefs(context: Context) {
     private var gesturesListJson by pref("gesturesList", "")
     private var gesturesThreadJson by pref("gesturesThread", "")
     var hideBarsOnScroll by pref("hideBarsOnScroll", true)
+    /** ログを削除する前に確かめる(確かめる画面の「次回から表示しない」で切れる) */
+    var confirmDeleteLog by pref("confirmDeleteLog", true)
     var autoScrollOnNew by pref("autoScrollOnNew", true)
     /** 開いているスレの自動更新(秒。0 ならしない) */
     var autoRefreshSec by pref("autoRefreshSec", 0)

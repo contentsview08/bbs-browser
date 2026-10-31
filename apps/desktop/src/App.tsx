@@ -55,7 +55,7 @@ import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
 import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
-import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, effectivePostStyle, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
+import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -2055,7 +2055,7 @@ export default function App() {
           footerHeight={settings.listFooterHeight}
           onHeaderHeight={(h) => updateSetting('listHeaderHeight', h)}
           onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
-          variant={effectivePostStyle(settings)}
+          variant={baseVariant(effectivePostStyle(settings))}
           authorIcon={settings.threadAuthorIcon}
           title={listTitle ?? '板を選択'}
           onShownChange={onShownChange}

@@ -13,6 +13,8 @@ import { POST_STYLES,
   TAB_LABELS,
   baseFontPx,
   PICKABLE_SCHEMES,
+  ACCENTS,
+  effectiveScheme,
   DEFAULT_SETTINGS,
   isDarkScheme,
   pickScheme,
@@ -515,6 +517,24 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           })}
         </div>
       </Section>
+      <Section title="差し色">
+        <p className="text-xs text-c-text-muted mb-2">ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります(スマホのアプリ・web と同じ 8 色)</p>
+        <div className="flex flex-wrap gap-3">
+          {[{ key: '', name: 'テーマの色', color: '' }, ...ACCENTS.map((a) => ({ key: a.key, name: a.name, color: isDarkScheme(effectiveScheme(s)) ? a.dark : a.light }))].map((a) => {
+            const on = s.accent === a.key
+            return (
+              <button key={a.key || 'theme'} type="button" onClick={() => update('accent', a.key)} className="flex flex-col items-center gap-1 min-w-[3rem]">
+                <span
+                  data-scheme={a.key ? undefined : effectiveScheme(s)}
+                  className="w-7 h-7 rounded-full"
+                  style={{ background: a.color || 'var(--c-accent)', border: on ? '3px solid var(--c-text-strong)' : '1px solid var(--c-border)' }}
+                />
+                <span className={`text-xs ${on ? 'text-c-text-strong font-bold' : 'text-c-text-muted'}`}>{a.name}</span>
+              </button>
+            )
+          })}
+        </div>
+      </Section>
       <Section advanced desktopOnly title="フォント">
         <Choice
           value={s.fontFamily}
@@ -977,6 +997,12 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           onChange={(v) => update('showMinimap', v)}
           label="ミニマップを出す"
           note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
+        />
+        <Toggle
+          checked={s.timeGap}
+          onChange={(v) => update('timeGap', v)}
+          label="時間が空いたところに区切りを入れる"
+          note="前のレスから 1 時間以上空いたところや、日付が変わったところに、細い線と「3 時間後」「10/31(金)」を出します"
         />
         {isMobile && (
           <Toggle

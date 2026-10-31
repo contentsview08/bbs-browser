@@ -11,14 +11,19 @@ import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
+  // スマホのアプリ(ネイティブ版)で足した配色。色は theme/native-schemes.css
+  | 'gray' | 'light-gray' | 'sepia' | 'nord' | 'contrast' | 'night' | 'line-dark' | 'discord-light' | 'x-dim' | 'mono'
 export type DesignPattern = 'tonal' | 'bordered'
 /** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
-export type PostStyle = 'card' | 'discord' | 'classic' | 'line'
+export type PostStyle = 'card' | 'discord' | 'classic' | 'line' | 'timeline' | 'matome'
 export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
   { key: 'card', name: 'カード', note: 'レスを区切り線で並べる、いままでの見た目' },
   { key: 'discord', name: 'Discord 風', note: '丸い ID のアイコンと平らな並び。同じ人の連投をまとめ、返信元を上に出す' },
   { key: 'classic', name: '専ブラ風', note: '「12 ：名前：日付 ID」を 1 行にした、昔ながらの 2ch の見た目' },
   { key: 'line', name: 'LINE 風', note: '吹き出しで会話のように並べる。自分の書き込みは右に緑の吹き出し' },
+  // スマホのアプリ(ネイティブ版)・hono-bbs の web と同じ見た目
+  { key: 'timeline', name: 'タイムライン(X 風)', note: 'アイコン左、本文の下に返信を小さく字下げして(返信の多い順に 2 件、「ほか N 件」でその場に全部)' },
+  { key: 'matome', name: 'まとめ風', note: '返信の多いレスは字を大きく濃く、ほかは小さめに。レスの間の線はごく薄く' },
 ]
 /**
  * スマホで選べるレスの見た目(専ブラ風は、狭い画面では読みにくいので出さない)。
@@ -29,10 +34,15 @@ export const MOBILE_POST_STYLES = POST_STYLES.filter((p) => p.key !== 'classic')
 export function effectivePostStyle(s: Pick<AppSettings, 'postStyle'>): PostStyle {
   return isMobile && s.postStyle === 'classic' ? 'card' : s.postStyle
 }
+/** スレ一覧・アンカーツリーの見た目(レスの見た目のうち、一覧とツリーにない X 風・まとめ風は、近いものにする) */
+export function baseVariant(v: PostStyle): 'card' | 'discord' | 'classic' | 'line' {
+  return v === 'timeline' ? 'discord' : v === 'matome' ? 'card' : v
+}
 /** 実際に使う密度。スマホは見た目で決める: Discord 風は一覧表示(高密度だとスレ一覧が詰まりすぎる)、ほかは高密度 */
 export function effectiveDensity(s: Pick<AppSettings, 'postStyle' | 'density'>): ListDensity {
   if (!isMobile) return s.density
-  return effectivePostStyle(s) === 'discord' ? 'list' : 'dense'
+  const st = effectivePostStyle(s)
+  return st === 'discord' || st === 'timeline' ? 'list' : 'dense'
 }
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
@@ -309,6 +319,10 @@ export interface AppSettings {
   mobileBarOrder: BarOrder
   /** 設定画面で、高度な設定も見せる(オフなら、よく使う項目だけ) */
   showAdvanced: boolean
+  /** 差し色(ACCENTS のキー)。空ならテーマの色 */
+  accent: string
+  /** 前のレスから時間が空いた所に区切りを入れる */
+  timeGap: boolean
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -431,6 +445,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   barOrder: {},
   mobileBarOrder: {},
   showAdvanced: false,
+  accent: '',
+  timeGap: true,
   postName: '',
   postMail: '',
 }
@@ -446,6 +462,17 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'discord-dark', name: 'Discord ダーク', accent: '#5865f2', border: '#29292d' },
   { key: 'line-light', name: 'LINE ライト', accent: '#06c755', border: '#dfe2e7' },
   { key: 'oled', name: '真っ黒', accent: '#7aa2ff', border: '#222222' },
+  // スマホのアプリ(ネイティブ版)で足した配色
+  { key: 'gray', name: 'グレー', accent: '#dcdcdc', border: '#232323' },
+  { key: 'light-gray', name: 'ライトグレー', accent: '#4e5a68', border: '#d2d2d4' },
+  { key: 'sepia', name: '紙(セピア)', accent: '#8b5e34', border: '#dccfae' },
+  { key: 'nord', name: 'Nord', accent: '#88c0d0', border: '#3b4252' },
+  { key: 'contrast', name: 'ハイコントラスト', accent: '#ffd400', border: '#5c5c5c' },
+  { key: 'night', name: '夜間(暖色)', accent: '#ff9e57', border: '#3a2c22' },
+  { key: 'line-dark', name: 'LINE ダーク', accent: '#06c755', border: '#323a45' },
+  { key: 'discord-light', name: 'Discord ライト', accent: '#5865f2', border: '#e3e5e8' },
+  { key: 'x-dim', name: 'X(Twitter)ディム', accent: '#1d9bf0', border: '#38444d' },
+  { key: 'mono', name: 'モノクロ', accent: '#e8e8e8', border: '#2e2e2e' },
 ]
 
 /** 選べる配色(スマホでは 2ch クラシックを除く) */
@@ -468,7 +495,7 @@ export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; 
   },
 ]
 
-const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled'])
+const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled', 'gray', 'nord', 'contrast', 'night', 'line-dark', 'x-dim', 'mono'])
 
 /** 文字の大きさ(px)。極小・小・標準・大・特大。スマホは画面が小さいので 1 段ずつ小さくし、PC の「小」をスマホの「標準」にする */
 const FONT_SIZES = isMobile ? [12, 13, 14, 16, 18] : [13, 14, 16, 18, 20]
@@ -482,6 +509,44 @@ export const FONT_PX_MAX = 26
 /** いまの画面全体の文字の大きさ(px) */
 export function baseFontPx(s: AppSettings): number {
   return s[FONT_PX_KEY] || FONT_SIZES[s[FONT_SIZE_KEY] - 1]
+}
+
+/**
+ * 差し色(スマホのアプリ・hono-bbs の web と同じ 8 色)。明るい配色と暗い配色で濃さを変える(どちらの地でも押せる所の字として読めるように)
+ */
+export const ACCENTS: { key: string; name: string; light: string; dark: string }[] = [
+  { key: 'indigo', name: '藍', light: '#4757c9', dark: '#8f9bf5' },
+  { key: 'blue', name: '青', light: '#1f6fd1', dark: '#6aa9f0' },
+  { key: 'teal', name: '青緑', light: '#0e8a7e', dark: '#4fcdbe' },
+  { key: 'green', name: '緑', light: '#2e8b3e', dark: '#6ccb7a' },
+  { key: 'orange', name: '橙', light: '#c8641a', dark: '#f29a55' },
+  { key: 'red', name: '朱', light: '#c9423a', dark: '#f07b72' },
+  { key: 'pink', name: '桃', light: '#c23f7e', dark: '#f08dba' },
+  { key: 'purple', name: '紫', light: '#7e4fc4', dark: '#b792f2' },
+]
+
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16)
+  const f = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * f(((n >> 16) & 255) / 255) + 0.7152 * f(((n >> 8) & 255) / 255) + 0.0722 * f((n & 255) / 255)
+}
+
+/** 差し色を <html> に入れる(選んでいなければテーマの色に戻す)。塗った上の字は、白と黒のうち差の大きいほう */
+function applyAccent(key: string, dark: boolean) {
+  const root = document.documentElement
+  const a = ACCENTS.find((x) => x.key === key)
+  const props = ['--c-accent', '--c-accent-hover', '--c-accent-text', '--c-accent-wash']
+  if (!a) {
+    for (const p of props) root.style.removeProperty(p)
+    return
+  }
+  const c = dark ? a.dark : a.light
+  const l = luminance(c)
+  const text = (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? '#111111' : '#ffffff'
+  root.style.setProperty('--c-accent', c)
+  root.style.setProperty('--c-accent-hover', `color-mix(in srgb, ${c} 85%, ${dark ? '#ffffff' : '#000000'})`)
+  root.style.setProperty('--c-accent-text', text)
+  root.style.setProperty('--c-accent-wash', `color-mix(in srgb, ${c} ${dark ? 18 : 12}%, transparent)`)
 }
 
 /** 暗い配色か(OS のダーク・ライトに合わせるとき、どちら用かを見分ける) */
@@ -533,6 +598,7 @@ function apply(s: AppSettings) {
   const scheme = effectiveScheme(s)
   root.setAttribute('data-scheme', scheme)
   root.classList.toggle('dark', DARK_SCHEMES.has(scheme))
+  applyAccent(s.accent, DARK_SCHEMES.has(scheme))
   // カード・Discord 風はトーナル(面の濃淡)、専ブラ風は枠線(色の面なし)の部品の見た目にする
   root.setAttribute('data-pattern', effectivePostStyle(s) === 'classic' ? 'bordered' : 'tonal')
   root.setAttribute('data-post-style', effectivePostStyle(s))

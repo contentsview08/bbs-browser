@@ -101,6 +101,8 @@ interface Props {
   continued?: boolean
   /** Discord 風・LINE 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
   replyPreview?: { no: number; text: string; id?: string }
+  /** タイムライン(X 風): このレスへの返信(返信の多い順)。本文の下に字下げして小さく出す */
+  replyItems?: { no: number; text: string; id?: string; name: string }[]
   /** アンカーツリーの中のレス。LINE 風は自分の書き込みも左にそろえ、どのスタイルでも左端の縦の印(自分・自分宛て)を出さない
    *  (ツリーの線と重なって見にくいため。つながりはツリーの線で分かる) */
   alignLeft?: boolean
@@ -113,7 +115,7 @@ interface Props {
   quotes?: Map<string, number>
 }
 
-export type PostVariant = 'card' | 'discord' | 'classic' | 'line'
+export type PostVariant = 'card' | 'discord' | 'classic' | 'line' | 'timeline' | 'matome'
 
 /** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
 const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
@@ -293,6 +295,8 @@ function PostArticle(props: Props) {
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
   const [hovered, setHovered] = useState(false)
   const [sheet, setSheet] = useState(false)
+  /** タイムライン: 「ほか N 件の返信」を広げたか */
+  const [repliesOpen, setRepliesOpen] = useState(false)
   const longPress = useLongPress(isMobile ? () => setSheet(true) : undefined)
   const [aaOverride, setAaOverride] = useState<boolean | null>(null)
   /** サムネイルを読みに行かない設定のとき、押して読んだサムネイル(何番目か) */
@@ -457,7 +461,7 @@ function PostArticle(props: Props) {
         {post.ref ?? post.no}
       </span>
       {/* 返信の数。Discord 風・LINE 風は ID の右に「返信 n 件」で出す(repliesBtn)。ほかは (数) */}
-      {anchorCount > 0 && variant !== 'discord' && variant !== 'line' && (
+      {anchorCount > 0 && variant !== 'discord' && variant !== 'line' && variant !== 'timeline' && (
         <span className={`text-xs ${numHeat || 'text-c-text-muted'}`}>({anchorCount})</span>
       )}
     </button>
@@ -513,12 +517,12 @@ function PostArticle(props: Props) {
         <span>ID:{post.id}</span>
         {/* 書き込み数。Discord 風・LINE 風は、色はアイコンの右下の数で付けるので、ここは色を付けない */}
         {idCount >= 2 && (
-          <span className={`text-xs ${variant === 'discord' || variant === 'line' ? 'text-c-text-muted font-normal' : ''}`}>({idCount})</span>
+          <span className={`text-xs ${variant === 'discord' || variant === 'line' || variant === 'timeline' ? 'text-c-text-muted font-normal' : ''}`}>({idCount})</span>
         )}
       </button>
     )
   /** Discord 風・LINE 風: このレスへの返信の数(ID の右に。押すと返信を出す)。多いほど暖色に */
-  const repliesBtn = anchorCount > 0 && (variant === 'discord' || variant === 'line') && (
+  const repliesBtn = anchorCount > 0 && (variant === 'discord' || variant === 'line' || variant === 'timeline') && (
     <button
       type="button"
       className={`flex-shrink-0 whitespace-nowrap ${isMobile ? 'text-[11px]' : 'text-xs'} font-bold hover:opacity-80 ${numHeat || 'text-c-text-muted'}`}
@@ -528,7 +532,11 @@ function PostArticle(props: Props) {
       }}
       title="このレスへの返信を表示"
     >
-      返信 {anchorCount} 件
+      {/* 吹き出しの印と数だけ(スマホのアプリ・hono-bbs の web と同じ) */}
+      <span className="inline-flex items-center gap-0.5">
+        <span className="material-symbols-outlined text-[14px] leading-none">chat_bubble</span>
+        {anchorCount}
+      </span>
     </button>
   )
   /**
@@ -629,7 +637,7 @@ function PostArticle(props: Props) {
         {ngChip}
         {toOwnChip}
       </div>
-    ) : variant === 'discord' ? (
+    ) : variant === 'discord' || variant === 'timeline' ? (
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
@@ -674,7 +682,7 @@ function PostArticle(props: Props) {
    * 返信元の小さいアイコンは本文の始まりの位置に置き、そこから左下へ、書いた人の大きいアイコンまで線でつなぐ
    * (番号は線とアイコンで分かるので出さない)
    */
-  const replyLine = variant === 'discord' && props.replyPreview && (
+  const replyLine = (variant === 'discord' || variant === 'timeline') && props.replyPreview && (
     // 本文の始まり(アイコンの幅 + 隙間)にそろえる。スマホはアイコンが小さく隙間も狭いので、決まった値ではなく大きさから出す
     <div className="relative h-5 mb-0.5 flex items-center" style={{ paddingLeft: AVATAR + AVATAR_GAP }}>
       {/* 大きいアイコンの真ん中の上から立ち上がり、右へ曲がって小さいアイコンの手前まで */}
@@ -720,12 +728,12 @@ function PostArticle(props: Props) {
           className={hasConnections ? 'cursor-pointer' : ''}
           // LINE 風は、吹き出しの外(レスの行全体)を押しても開けるよう、行の方で受ける(lineLayout)
           // Discord 風も、本文の左の空いた所(アイコンの下)を押して開けるよう、行の方で受ける
-          onClick={variant === 'line' || variant === 'discord' ? undefined : openTree}
+          onClick={variant === 'line' || variant === 'discord' || variant === 'timeline' ? undefined : openTree}
           style={{
             // 専ブラ風は本文を字下げし、Discord 風は頭の位置から。どちらも本文の左の縦線は引かない(自分の印は別に出る)
             paddingLeft:
-              variant === 'classic' ? '2em' : variant === 'discord' || variant === 'line' ? 0 : props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
-            borderLeftWidth: variant !== 'card' ? 0 : props.isOwn ? 'var(--post-quote-bar-width-own)' : 'var(--post-quote-bar-width)',
+              variant === 'classic' ? '2em' : variant === 'discord' || variant === 'line' || variant === 'timeline' ? 0 : props.isOwn ? 'var(--post-quote-padding-own)' : 'var(--post-quote-padding)',
+            borderLeftWidth: variant !== 'card' && variant !== 'matome' ? 0 : props.isOwn ? 'var(--post-quote-bar-width-own)' : 'var(--post-quote-bar-width)',
             borderLeftStyle: 'solid',
             borderLeftColor: props.isOwn ? 'var(--c-own)' : 'var(--c-border)',
           }}
@@ -747,6 +755,8 @@ function PostArticle(props: Props) {
             ref={isAA && isMobile ? fitAA : undefined}
             // スマホの AA は横にずらさず(スワイプとぶつかる)、字を小さくして 1 画面に収める(fitAA)
             className={`text-base ${bodyClass} ${isAA ? `aa-font whitespace-pre ${isMobile ? 'overflow-hidden' : 'overflow-x-auto'}` : 'whitespace-pre-wrap break-words leading-relaxed'}`}
+            // まとめ風: 返信の多いレスは字を大きく濃く、ほかは小さめに(読み飛ばしながら見どころを拾える)
+            style={variant === 'matome' && !isAA ? (anchorCount >= 3 ? { fontSize: 'calc(var(--post-body-size, 1rem) * 1.2)', fontWeight: 500, color: 'var(--c-text-strong)' } : { fontSize: 'calc(var(--post-body-size, 1rem) * 0.88)', opacity: 0.85 }) : undefined}
           >
             {renderBody(body, handlers, props.quotes)}
           </p>
@@ -924,6 +934,39 @@ function PostArticle(props: Props) {
       </div>
   )
 
+  // ── タイムライン(X 風): 本文の下の返信。返信の多い順に 2 件、「ほか N 件」でその場に全部 ──
+  const replyItems = props.replyItems ?? []
+  const shownReplies = repliesOpen ? replyItems : replyItems.slice(0, 2)
+  const timelineReplies = replyItems.length > 0 && (
+    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      <div className="border-l-2 border-c-border-strong pl-2.5 flex flex-col gap-1.5">
+        {shownReplies.map((r) => (
+          <button
+            key={r.no}
+            type="button"
+            className="flex items-start gap-2 text-left"
+            onClick={(e) => handlers.onAnchor([r.no], e.currentTarget, 'click')}
+          >
+            {r.id ? (
+              <span className="flex-shrink-0 block overflow-hidden rounded-full"><Identicon seed={r.id} size={22} /></span>
+            ) : (
+              <span className="flex-shrink-0 w-[22px] h-[22px] rounded-full bg-c-surface3" />
+            )}
+            <span className="min-w-0">
+              <span className="block text-[11px] text-c-text-muted truncate">{r.name}</span>
+              <span className="block text-sm text-c-text-body line-clamp-2 break-words">{r.text}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {replyItems.length > shownReplies.length && (
+        <button type="button" className="mt-1 ml-3 text-[13px] font-bold text-c-link" onClick={() => setRepliesOpen(true)}>
+          ほか {replyItems.length - shownReplies.length} 件の返信を見る
+        </button>
+      )}
+    </div>
+  )
+
   // ── LINE 風 ──
   // 吹き出しで並べる。ほかの人は左にアイコンと名前、自分の書き込みは右に緑の吹き出し(アイコンなし)。
   // 番号と時刻は吹き出しの横に小さく。返信は吹き出しの中の上に、返信元を引用の形で出す
@@ -1040,8 +1083,9 @@ function PostArticle(props: Props) {
       {variant !== 'line' && !isMobile && (hovered || menuOpen) && toolbarAt('top-0.5 right-3')}
       {variant === 'line' ? (
         lineLayout()
-      ) : variant === 'discord' ? (
+      ) : variant === 'discord' || variant === 'timeline' ? (
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
+        // タイムライン(X 風)も同じ並びで、本文の下に返信を出す(timelineReplies)
         <div>
         {replyLine}
         <div className={`flex items-start ${hasConnections ? 'cursor-pointer' : ''}`} style={{ gap: AVATAR_GAP }} onClick={openTree}>
@@ -1058,6 +1102,7 @@ function PostArticle(props: Props) {
             {bodyBlock}
             {/* 続けて書いたレス(頭を省いたもの)は、返信の数を本文の下に */}
             {props.continued && repliesBtn && <div className="mt-0.5">{repliesBtn}</div>}
+            {variant === 'timeline' && timelineReplies}
           </div>
         </div>
         </div>

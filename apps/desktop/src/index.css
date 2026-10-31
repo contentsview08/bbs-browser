@@ -3,6 +3,7 @@
 
 
 @import './theme/theme.css';
+@import './theme/native-schemes.css';
 @import './theme/patterns.css';
 
 /* AA(アスキーアート)用フォント。'MS Pゴシック'とほぼ同じ文字送り幅になるよう

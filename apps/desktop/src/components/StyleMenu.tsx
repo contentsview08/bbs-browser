@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { PICKABLE_SCHEMES, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type ListDensity, type UpdateSetting } from '../ui/settings'
+import { PICKABLE_SCHEMES, ACCENTS, isDarkScheme, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type ListDensity, type UpdateSetting } from '../ui/settings'
 
 const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
   { key: 'list', name: '一覧表示', icon: 'view_list' },
@@ -43,6 +43,23 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
           {effectiveScheme(settings) === s.key && check}
         </button>
       ))}
+      <p className={GROUP_LABEL}>差し色</p>
+      {/* 差し色(スマホのアプリ・hono-bbs の web と同じ 8 色)。左端の「テーマ」はテーマの色に戻す */}
+      <div className="flex flex-wrap gap-2 px-3 pb-2">
+        {[{ key: '', name: 'テーマ', color: '' }, ...ACCENTS.map((a) => ({ key: a.key, name: a.name, color: isDarkScheme(effectiveScheme(settings)) ? a.dark : a.light }))].map((a) => {
+          const on = settings.accent === a.key
+          return (
+            <button key={a.key || 'theme'} type="button" onClick={() => update('accent', a.key)} title={a.name} className="flex flex-col items-center gap-0.5 w-9">
+              <span
+                data-scheme={a.key ? undefined : effectiveScheme(settings)}
+                className="w-6 h-6 rounded-full"
+                style={{ background: a.color || 'var(--c-accent)', border: on ? '2px solid var(--c-text-strong)' : '1px solid var(--c-border)' }}
+              />
+              <span className={`text-[10px] leading-none whitespace-nowrap ${on ? 'text-c-text-strong' : 'text-c-text-muted'}`}>{a.name}</span>
+            </button>
+          )
+        })}
+      </div>
 
       <div className="my-1 border-t border-c-border" />
 

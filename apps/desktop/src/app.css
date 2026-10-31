@@ -1133,3 +1133,44 @@ html[data-platform='mobile'] .selectable {
   border: 3px solid var(--c-surface);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
+
+/* まとめ風はレスの間の線をごく薄く(まとめサイトのように、切れ目は余白で見せる) */
+html[data-post-style='matome'] article[data-variant='matome'] {
+  --post-divider-color: color-mix(in srgb, var(--c-border) 30%, transparent);
+}
+
+/* LINE 風の地と吹き出しを見分けられるように(スマホのアプリと同じ)。
+   地と吹き出しの明るさの比が 1.2〜2 になるように: 明るい配色は地に青灰をはっきり混ぜ、吹き出しは白。暗い配色は地を沈めて、吹き出しを少し浮かせる。
+   LINE ライトは LINE のトーク画面のような空色、グレーは濃い群青 */
+[data-post-style='line'] {
+  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 78%, #7f9cc0);
+}
+[data-post-style='line'] .line-bubble:not(.line-bubble-own) {
+  background: #ffffff;
+}
+:root.dark[data-post-style='line'] {
+  --c-thread-view-bg: color-mix(in srgb, color-mix(in srgb, var(--c-base) 94%, #6f8fb8) 65%, #000000);
+}
+:root.dark[data-post-style='line'] .line-bubble:not(.line-bubble-own) {
+  background: color-mix(in srgb, var(--c-surface2) 92%, #ffffff);
+}
+:root[data-scheme='line-light'][data-post-style='line'] {
+  --c-thread-view-bg: #9db8dc;
+}
+:root[data-scheme='gray'][data-post-style='line'] {
+  --c-thread-view-bg: #1c2838;
+}
+:root[data-scheme='gray'][data-post-style='line'] .line-bubble:not(.line-bubble-own) {
+  background: var(--c-surface2);
+}
+/* LINE ライト × LINE 風: 空色の地の上の字(名前・日付・ID・番号)は白っぽく(スマホのアプリと同じ) */
+:root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header],
+:root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header] button,
+:root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] .line-bubble + div {
+  --c-text-muted: rgba(255, 255, 255, 0.9);
+  --c-poster-name: #f4f8fc;
+  color: rgba(255, 255, 255, 0.9);
+}
+:root[data-scheme='line-light'][data-post-style='line'] .post-cv > div > .flex.items-center span {
+  color: rgba(255, 255, 255, 0.85);
+}

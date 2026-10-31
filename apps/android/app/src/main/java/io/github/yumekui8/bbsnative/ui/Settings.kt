@@ -237,6 +237,17 @@ private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String)
 @Composable
 private fun TextPage(vm: AppViewModel) {
     val p = vm.prefs
+    Group("字", note = "端末の標準以外は、選んだときに Google Fonts から 1 回だけ取ります(Wi-Fi のときがおすすめ)") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val f = io.github.yumekui8.bbsnative.data.Fonts
+        ChoiceRow(
+            "字", p.font,
+            listOf("" to "端末の標準") + f.CHOICES.map { it.key to "${it.name}${if (f.isDownloaded(context, it.key)) "" else "(${it.desc.substringAfter('(').trimEnd(')')})"}" },
+        ) { p.font = it }
+        f.loading?.let { InfoRow("字を取っています", f.CHOICES.firstOrNull { c -> c.key == it }?.name ?: "") }
+        f.error?.let { InfoRow("うまくいきませんでした", it) }
+        if (f.CHOICES.any { it.key != p.font && f.isDownloaded(context, it.key) }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.font) }
+    }
     Group("文字の大きさ") {
         SliderRow("画面全体", p.fontScale, 0.85f..1.3f, steps = 8, label = "${(p.fontScale * 100).toInt()}%") { p.fontScale = (it * 20).toInt() / 20f }
         SliderRow("レスの本文", p.bodyScale, 0.8f..1.4f, steps = 11, label = "${(p.bodyScale * 100).toInt()}%") { p.bodyScale = (it * 20).toInt() / 20f }

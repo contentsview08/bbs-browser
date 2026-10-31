@@ -8,6 +8,8 @@ val SETTINGS_INDEX = listOf(
     Triple("theme", "動きを減らす", "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります"),
     Triple("theme", "見た目", ""),
     Triple("theme", "差し色", ""),
+    Triple("text", "字", ""),
+    Triple("text", "使っていない字を消す", ""),
     Triple("text", "画面全体", ""),
     Triple("text", "レスの本文", ""),
     Triple("text", "レスの本文の行間", ""),

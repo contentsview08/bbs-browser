@@ -124,6 +124,8 @@ class Prefs(context: Context) {
     var idColor by pref("idColor", false)
     /** 動きを減らす(画面の移り方・新着の光り方・数字の繰り上がりを省く)。端末の「アニメーションを削除」でも同じになる */
     var reduceMotion by pref("reduceMotion", false)
+    /** 字(Fonts.CHOICES のキー)。空なら端末の標準 */
+    var font by pref("font", "")
     /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */
     var ngStyle by pref("ngStyle", "fold")
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */

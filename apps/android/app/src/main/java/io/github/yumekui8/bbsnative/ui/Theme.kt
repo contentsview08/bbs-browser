@@ -297,7 +297,9 @@ fun BbsTheme(content: @Composable () -> Unit) {
     )
     // 字の上下に Android が足す余白(includeFontPadding)を外す。字の上側の余白が大きく見えていた
     val base = androidx.compose.material3.Typography()
+    val font = io.github.yumekui8.bbsnative.data.Fonts.family
     fun androidx.compose.ui.text.TextStyle.tight() = copy(
+        fontFamily = font ?: fontFamily,
         platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
             androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,

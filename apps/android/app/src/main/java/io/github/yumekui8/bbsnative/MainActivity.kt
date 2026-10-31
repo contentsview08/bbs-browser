@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
             io.github.yumekui8.bbsnative.ui.Haptics.enabled = p.haptics
             io.github.yumekui8.bbsnative.ui.Motion.pref = p.reduceMotion
             LaunchedEffect(Unit) { io.github.yumekui8.bbsnative.ui.Motion.read(this@MainActivity) }
+            LaunchedEffect(p.font) { io.github.yumekui8.bbsnative.data.Fonts.apply(this@MainActivity, p.font) }
             val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
             LaunchedEffect(key) { Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key) }
             LaunchedEffect(p.accent) { Palette.accentPick = io.github.yumekui8.bbsnative.ui.accentOf(p.accent) }

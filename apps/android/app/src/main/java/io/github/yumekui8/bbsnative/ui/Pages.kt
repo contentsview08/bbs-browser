@@ -113,7 +113,8 @@ private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: (
 /** スレの一覧(閲覧履歴・お気に入りのスレで共通)。読んだ位置と、手元で分かっている未読の数 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>, empty: String) {
+fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null) {
+    val refresh = onRefresh ?: { vm.checkNew(entries) }
     var menuFor by remember { mutableStateOf<io.github.yumekui8.bbsnative.bbs.ThreadSummary?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
@@ -121,11 +122,11 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
     androidx.compose.runtime.LaunchedEffect(title) { if (title == "お気に入りのスレ") vm.checkNew(entries) }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         HeaderBar(title, onNav = { vm.drawerOpen = true }) {
-            BarIcon(Icons.Filled.Refresh, "新着を確かめる") { vm.checkNew(entries) }
+            BarIcon(Icons.Filled.Refresh, "新着を確かめる") { refresh() }
         }
         HorizontalDivider(color = Palette.border)
         if (entries.isEmpty()) Hint(empty)
-        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { vm.checkNew(entries) }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize()) {
+        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize()) {
             items(entries, key = { it.thread.id }) { h ->
                 // 掲示板で分かったレス数があれば、そちらで未読を数える(-1 は dat 落ち)
                 val remote = vm.remoteCounts[h.thread.id]
@@ -134,7 +135,8 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
                     Text(h.thread.title.ifEmpty { h.thread.key }, color = Palette.textStrong, fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.Bold else FontWeight.Normal)
                     Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            (if (remote == -1) "dat 落ち ・ " else "") + "${relativeTime(h.readAt)}に見た ・ ${h.thread.boardUrl.removePrefix("https://").trimEnd('/')}",
+                            (if (remote == -1) "dat 落ち ・ " else "") + (if (h.readAt > 0) "${relativeTime(h.readAt)}に見た ・ " else "") +
+                                (vm.favorites.firstOrNull { it.url == h.thread.boardUrl }?.name ?: h.thread.boardUrl.removePrefix("https://").trimEnd('/')),
                             Modifier.weight(1f), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1,
                         )
                         Text("${maxOf(h.thread.postCount, remote ?: 0)}レス", color = Palette.textMuted, fontSize = 12.sp)

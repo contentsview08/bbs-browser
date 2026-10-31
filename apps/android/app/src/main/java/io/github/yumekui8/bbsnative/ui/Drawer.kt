@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -69,6 +70,7 @@ fun DrawerContent(vm: AppViewModel) {
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
             DrawerRow(Icons.Filled.Bookmark, "お気に入りのスレ", Palette.textMuted, active = current is Page.FavThreads) { vm.openRoot(Page.FavThreads()) }
+            DrawerRow(Icons.Filled.MarkEmailUnread, "全板の未読", Palette.unread, active = current is Page.AllUnread) { vm.openRoot(Page.AllUnread()); vm.loadAllUnread() }
             DrawerRow(Icons.Filled.History, "閲覧履歴", Palette.textMuted, active = current is Page.History, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
                 vm.openRoot(Page.History())
             }

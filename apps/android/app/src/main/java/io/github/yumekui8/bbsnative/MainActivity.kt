@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
                                 is Page.Thread -> ThreadScreen(vm, page)
                                 is Page.Boards -> BoardsScreen(vm)
                                 is Page.History -> ThreadEntryList(vm, "閲覧履歴", vm.history, "閲覧履歴はありません")
+                                is Page.AllUnread -> io.github.yumekui8.bbsnative.ui.ThreadEntryList(vm, "全板の未読", vm.allUnread, "お気に入り板に、新着のある読んだスレはありません", onRefresh = { vm.loadAllUnread() })
                                 is Page.FavThreads -> ThreadEntryList(vm, "お気に入りのスレ", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)")
                                 is Page.PostHistory -> PostHistoryScreen(vm)
                                 is Page.Settings -> SettingsScreen(vm)

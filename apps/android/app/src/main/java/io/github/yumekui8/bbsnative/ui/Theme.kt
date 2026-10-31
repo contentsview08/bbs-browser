@@ -162,7 +162,12 @@ val ACCENTS = listOf(
 
 fun accentOf(key: String) = ACCENTS.firstOrNull { it.key == key }
 
-fun schemeOf(key: String) = SCHEMES.firstOrNull { it.key == key } ?: SCHEMES[0]
+fun schemeOf(key: String) =
+    if (key == "custom") CustomSchemes.def?.let { buildScheme(it) } ?: SCHEMES[0]
+    else SCHEMES.firstOrNull { it.key == key } ?: SCHEMES[0]
+
+/** 選べる配色(自分の配色を作っていれば、最後に足す) */
+fun allSchemes(): List<Scheme> = CustomSchemes.def?.let { SCHEMES + buildScheme(it) } ?: SCHEMES
 
 /**
  * 画面の色。いまの配色(scheme)から読む。配色を変えると、色を読んでいる所がすべて描き直される
@@ -186,13 +191,13 @@ object Palette {
     /** 設定で選んだ差し色(null ならテーマの色) */
     var accentPick by mutableStateOf<Accent?>(null)
     val accent get() = accentPick?.let { if (scheme.dark) it.dark else it.light } ?: scheme.accent
-    val accentText get() = accentPick?.let { if (accent.luminance() > 0.45f) Color(0xFF111111) else Color.White } ?: scheme.accentText
+    val accentText get() = accentPick?.let { if (contrast(Color(0xFF111111), accent) >= contrast(Color.White, accent)) Color(0xFF111111) else Color.White } ?: scheme.accentText
     val accentWash get() = accentPick?.let { accent.copy(alpha = if (scheme.dark) 0.18f else 0.12f) } ?: scheme.accentWash
     /** 未読(「ここから未読」・未読の数) */
     val unread get() = scheme.unread
     val unreadText get() = scheme.unreadText
     /** 自分の書き込み */
-    val own get() = if (scheme.dark) Color(0xFF3EC7A0) else Color(0xFF1F9A78)
+    val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF1F9A78) else if (scheme.dark) Color(0xFF3EC7A0) else Color(0xFF1F9A78)
     val ownWash get() = own.copy(alpha = 0.16f)
     /** スレ主 */
     val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFFB7791F)

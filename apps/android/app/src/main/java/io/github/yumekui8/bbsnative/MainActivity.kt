@@ -71,7 +71,10 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) { io.github.yumekui8.bbsnative.ui.Motion.read(this@MainActivity) }
             LaunchedEffect(p.font) { io.github.yumekui8.bbsnative.data.Fonts.apply(this@MainActivity, p.font) }
             val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
-            LaunchedEffect(key) { Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key) }
+            LaunchedEffect(key, p.customScheme) {
+                io.github.yumekui8.bbsnative.ui.CustomSchemes.def = io.github.yumekui8.bbsnative.ui.CustomDef.parse(p.customScheme)
+                Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key)
+            }
             LaunchedEffect(p.accent) { Palette.accentPick = io.github.yumekui8.bbsnative.ui.accentOf(p.accent) }
             // 時計などのアイコンの色を、配色の明るさに合わせる
             LaunchedEffect(Palette.dark) {

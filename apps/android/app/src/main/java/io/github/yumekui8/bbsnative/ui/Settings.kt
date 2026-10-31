@@ -82,7 +82,7 @@ import io.github.yumekui8.bbsnative.data.ThumbMode
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "ng" to "NG",
-    "sites" to "お気に入り板とサイト", "backup" to "バックアップ", "about" to "このアプリについて",
+    "sites" to "お気に入り板とサイト", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
 )
 
 @Composable
@@ -96,7 +96,7 @@ fun SettingsScreen(vm: AppViewModel) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp).navigationBarsPadding()) {
             when (sub) {
                 null -> SettingsTop(vm) { sub = it }
-                "theme" -> ThemePage(vm)
+                "theme" -> ThemePage(vm) { sub = it }
                 "text" -> TextPage(vm)
                 "list" -> ListPage(vm)
                 "thread" -> ThreadPage(vm)
@@ -108,6 +108,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 "sites" -> SitesPage(vm)
                 "backup" -> BackupPage(vm)
                 "about" -> AboutPage()
+                "custom" -> CustomSchemeEditor(vm.prefs)
             }
         }
     }
@@ -180,7 +181,7 @@ private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ThemePage(vm: AppViewModel) {
+private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     Group {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followSystem, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followSystem = it }
@@ -191,6 +192,9 @@ private fun ThemePage(vm: AppViewModel) {
             "見た目", p.postStyle,
             listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風"),
         ) { p.postStyle = it }
+    }
+    Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), if (p.customScheme.isEmpty()) "自分の配色を作る" else "自分の配色を直す") { open("custom") }
     }
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
@@ -208,7 +212,7 @@ private fun ThemePage(vm: AppViewModel) {
 @Composable
 private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String) -> Unit) {
     FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (s in SCHEMES.filter { dark == null || it.dark == dark }) {
+        for (s in allSchemes().filter { dark == null || it.dark == dark }) {
             val on = s.key == selected
             Column(
                 Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))

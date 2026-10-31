@@ -407,7 +407,7 @@ fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, o
             val current = Palette.scheme.key
             // 2 列の見本(地・帯・面・差し色を小さく描く)。名前だけより、押す前に色が分かる
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (pair in SCHEMES.chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (pair in allSchemes().chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (s in pair) {
                         val on = s.key == current
                         val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)

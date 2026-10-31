@@ -285,6 +285,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** たどってきた画面の名前(戻る先の一覧に出す) */
+    fun pageName(p: Page): String = when (p) {
+        is Page.Threads -> p.board.name
+        is Page.Thread -> p.title.ifEmpty { p.summary.title }
+        is Page.Boards -> "板を探す"
+        is Page.History -> "閲覧履歴"
+        is Page.FavThreads -> "お気に入りのスレ"
+        is Page.PostHistory -> "書き込み履歴"
+        is Page.Settings -> "設定"
+    }
+
+    /** 戻る先の一覧から選んだ画面まで、まとめて戻る */
+    fun popTo(index: Int) {
+        if (index !in 0 until stack.lastIndex) return
+        navDir = -1
+        forwardPage = stack.last() as? Page.Thread
+        while (stack.lastIndex > index) stack.removeAt(stack.lastIndex)
+        when (val top = stack.last()) {
+            is Page.Threads -> viewModelScope.launch { top.states = db.threadStates(top.board.url) }
+            is Page.History, is Page.FavThreads -> reloadSide()
+            else -> {}
+        }
+    }
+
     /** 戻る前に見ていたスレを開き直す */
     fun forward() {
         val p = forwardPage ?: run { toast = "進む先がありません"; return }

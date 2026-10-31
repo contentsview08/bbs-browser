@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -127,6 +128,10 @@ fun rememberHideOnScroll(): HideOnScroll {
 /**
  * 上の帯。左に ☰(メニュー)か ←(戻る)、真ん中に題(2 行まで)、右にボタン。今のスマホ版の形
  */
+/** 上の帯の左のボタンを長押ししたとき(戻る先の一覧を出す)。MainActivity が入れる */
+val LocalNavLong = androidx.compose.runtime.compositionLocalOf<(() -> Unit)?> { null }
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun HeaderBar(
     title: String,
@@ -141,7 +146,13 @@ fun HeaderBar(
         Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = prefs.headerHeight.dp).padding(start = 4.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onNav) {
+        // 長押しで、たどってきた画面の一覧(戻る先を選べる)
+        val navLong = LocalNavLong.current
+        Box(
+            Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                .combinedClickable(onLongClick = navLong, onClick = onNav),
+            contentAlignment = Alignment.Center,
+        ) {
             Icon(if (navIsBack) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Menu, if (navIsBack) "戻る" else "メニュー", tint = Palette.textMuted, modifier = Modifier.size(28.dp))
         }
         if (leading != null) {

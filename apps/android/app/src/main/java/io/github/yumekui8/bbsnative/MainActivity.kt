@@ -25,6 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
@@ -85,7 +89,21 @@ class MainActivity : ComponentActivity() {
             BbsTheme {
                 // 文字の大きさの設定は、アプリ全体の文字の倍率にかける
                 val d = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * vm.prefs.fontScale), io.github.yumekui8.bbsnative.ui.LocalPrefs provides vm.prefs) {
+                // 上の帯の左のボタンの長押し: たどってきた画面の一覧(押すとそこまで戻る)
+                var backMenu by remember { mutableStateOf(false) }
+                val navLong: (() -> Unit)? = if (vm.stack.size > 1) ({ backMenu = true }) else null
+                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * vm.prefs.fontScale), io.github.yumekui8.bbsnative.ui.LocalPrefs provides vm.prefs, io.github.yumekui8.bbsnative.ui.LocalNavLong provides navLong) {
+                    if (backMenu) io.github.yumekui8.bbsnative.ui.MenuSheet(
+                        listOf(
+                            vm.stack.toList().withIndex().reversed().drop(1).map { (i, pg) ->
+                                io.github.yumekui8.bbsnative.ui.MenuItem(
+                                    "${"› ".repeat(i)}${vm.pageName(pg)}",
+                                    if (pg is Page.Thread) androidx.compose.material.icons.Icons.Filled.Forum else androidx.compose.material.icons.Icons.AutoMirrored.Filled.List,
+                                ) { vm.popTo(i) }
+                            },
+                        ),
+                        io.github.yumekui8.bbsnative.ui.MenuAt.TopStart,
+                    ) { backMenu = false }
                     val drawer = rememberDrawerState(DrawerValue.Closed)
                     // 引き出しの開け閉めは ViewModel の drawerOpen に合わせる(画面の ☰ から開く)
                     LaunchedEffect(vm.drawerOpen) { if (vm.drawerOpen) drawer.open() else drawer.close() }

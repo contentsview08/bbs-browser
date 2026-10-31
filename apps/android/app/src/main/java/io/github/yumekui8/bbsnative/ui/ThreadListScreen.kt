@@ -609,7 +609,7 @@ private fun DiffLine(newCount: Int, unreadCount: Int, onlyNew: Boolean, onNew: (
         @Composable fun chip(label: String, on: Boolean, enabled: Boolean, onClick: () -> Unit) = Text(
             label,
             Modifier.clip(RoundedCornerShape(50)).background(if (on) Palette.accentWash else Color.Transparent)
-                .border(1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(50))
+                .border(1.dp, if (on) Palette.accent else Palette.borderStrong, RoundedCornerShape(50))
                 .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 3.dp),
             color = if (!enabled) Palette.textMuted else if (on) Palette.accent else Palette.textStrong, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         )

@@ -155,36 +155,43 @@ private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild
     // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
     // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
     if (isChatStyle(LocalPrefs.current.postStyle)) {
-        val step = 16.dp
+        // 線はアイコンに合わせて引く: 縦線はアイコンの左寄り(左端から 8dp)を通り、子のアイコンの真ん中の高さで曲がって、子のアイコンの左端へ届く。
+        // 子への線は、自分のアイコンの下から下ろす。アイコンの上端は見た目ごとに違う(LINE 風は名前の行の下、ほかは頭と同じ高さ)
+        val prefs = LocalPrefs.current
+        val step = 20.dp
         val line = Palette.textMuted.copy(alpha = 0.8f)
+        val avatarTop = if (prefs.postStyle == "line") 6.dp + (12 * prefs.postHeadScale * 1.4f).dp + 4.dp else prefs.postPad.dp + 2.dp
+        val padStart = if (prefs.postStyle == "line") 10.dp else 12.dp
         Row(
             Modifier.height(IntrinsicSize.Min).then(if (focus) Modifier.background(Palette.accentWash) else Modifier)
                 .drawBehind {
                     val w = 2.dp.toPx()
                     val s = step.toPx()
-                    val elbow = 26.dp.toPx()
                     val radius = 6.dp.toPx()
-                    fun x(k: Int) = s * k + s / 2
+                    val elbow = (avatarTop + AVATAR / 2).toPx()
+                    fun x(k: Int) = padStart.toPx() + 8.dp.toPx() + s * k
                     // 上の段から続く縦線。5 段より深いところは 5 段目にそろえて描くので、つなぎの列(depth - 1)より右の線は描かない
                     r.rails.forEachIndexed { k, on -> if (on && k < depth - 1) drawLine(line, Offset(x(k), 0f), Offset(x(k), size.height), w) }
                     // 5 段より深い段の兄弟の続きは、まとめてつなぎの列に
                     if (r.depth > 5 && r.rails.drop(depth - 1).any { it }) drawLine(line, Offset(x(depth - 1), 0f), Offset(x(depth - 1), size.height), w)
                     if (depth > 0) {
                         val px = x(depth - 1)
+                        val toX = padStart.toPx() + s * depth - 2.dp.toPx()
                         // まだ兄弟がいれば下まで(├)、最後の子なら角まで(└)
                         drawLine(line, Offset(px, 0f), Offset(px, if (r.last) elbow - radius else size.height), w)
-                        // 角を丸めて横へ
+                        // 角を丸めて、子のアイコンの左端へ
                         val path = androidx.compose.ui.graphics.Path().apply {
                             moveTo(px, elbow - radius)
                             quadraticTo(px, elbow, px + radius, elbow)
-                            lineTo(px + s * 0.85f, elbow)
+                            lineTo(toX, elbow)
                         }
                         drawPath(path, line, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
                     }
                     // 子があれば、自分のアイコンの下から縦線を下ろす。5 段目(これより右へずらさない段)では、子も同じ段に並ぶので、自分のつなぎの列に下ろす
                     if (hasChild) {
-                        val cx = if (r.depth >= 5) x(depth - 1) else x(depth)
-                        val top = if (r.depth >= 5) elbow else 10.dp.toPx() + AVATAR.toPx()
+                        val deep = r.depth >= 5
+                        val cx = if (deep) x(depth - 1) else x(depth)
+                        val top = if (deep) elbow else (avatarTop + AVATAR + 2.dp).toPx()
                         drawLine(line, Offset(cx, top), Offset(cx, size.height), w)
                     }
                 },

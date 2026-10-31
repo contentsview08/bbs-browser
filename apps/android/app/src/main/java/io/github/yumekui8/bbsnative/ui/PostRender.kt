@@ -25,23 +25,34 @@ private val LEADING_ANCHOR = Regex("^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)([0-9
 private val BLANK_AFTER = Regex("^\n(?:[ \t　]*\n)*")
 
 /** 「2026/10/26(月) 07:37:30.214」→「10/26 07:37」(Discord 風・LINE 風の頭を短く) */
+// 日付の読み取り(何度も呼ぶので、作っておいて使い回す)
+private val DATE_TIME = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})")
+private val DATE_DAY = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})(\\([^)]*\\))?")
+private val minutesCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
 fun shortDate(date: String): String =
-    Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})").find(date)?.let { m -> "${m.groupValues[2]}/${m.groupValues[3]} ${m.groupValues[4]}:${m.groupValues[5]}" } ?: date
+    DATE_TIME.find(date)?.let { m -> "${m.groupValues[2]}/${m.groupValues[3]} ${m.groupValues[4]}:${m.groupValues[5]}" } ?: date
 
 /** 日付の文字列(2026/10/31(金) 01:23:45.67)を分単位の通し番号にする。読めなければ null(日付の差を出すためだけに使う) */
-fun postMinutes(date: String): Long? =
-    Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})").find(date)?.let { m ->
+fun postMinutes(date: String): Long? {
+    minutesCache[date]?.let { return if (it == Long.MIN_VALUE) null else it }
+    val v = DATE_TIME.find(date)?.let { m ->
         val (y, mo, d, h, mi) = m.destructured
         runCatching { java.time.LocalDateTime.of(y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt()).toEpochSecond(java.time.ZoneOffset.UTC) / 60 }.getOrNull()
     }
+    if (minutesCache.size > 20000) minutesCache.clear()
+    minutesCache[date] = v ?: Long.MIN_VALUE
+    return v
+}
 
 /** 前のレスとの間の区切りの言葉。1 時間未満で日付も同じなら null */
 fun timeGapLabel(prev: String, cur: String): String? {
     val a = postMinutes(prev) ?: return null
     val b = postMinutes(cur) ?: return null
     val gap = b - a
-    val day = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})(\\([^)]*\\))?").find(cur)
-    val newDay = day != null && Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})").find(prev)?.value != Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})").find(cur)?.value
+    // 日付が変わったか(分の通し番号を 1 日の分で割って比べる)
+    val day = DATE_DAY.find(cur)
+    val newDay = day != null && a / (60 * 24) != b / (60 * 24)
     val span = when {
         gap < 60 -> null
         gap < 60 * 24 -> "${gap / 60} 時間後"

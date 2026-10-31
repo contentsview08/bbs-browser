@@ -693,6 +693,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun markRead(page: Page.Thread, no: Int) {
         if (no <= page.readNo) return
         page.readNo = no
+        // 開いている一覧(板のスレ一覧・全板の未読)の既読も合わせる。古いままだと「次の未読スレへ」が読み終えたスレへ戻ってループした
+        val t = page.summary
+        for (p in stack) if (p is Page.Threads && p.board.url == t.boardUrl) {
+            val st = p.states[t.key]
+            p.states = p.states + (t.key to (st?.copy(readNo = maxOf(st.readNo, no)) ?: ThreadState(no, page.index.posts.size)))
+        }
+        if (allUnread.any { it.thread.id == t.id }) allUnread = allUnread.map { if (it.thread.id == t.id) HistoryEntry(it.thread, maxOf(it.readNo, no), it.readAt) else it }
+        history = history.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
+        favThreads = favThreads.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
         viewModelScope.launch { db.markRead(page.summary, no) }
     }
 

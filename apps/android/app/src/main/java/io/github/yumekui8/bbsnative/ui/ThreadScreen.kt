@@ -551,6 +551,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         // 次の未読スレへ(このスレを開いた一覧で、次に新着のあるスレ)
                         if (filter == null && query.isBlank()) item(key = "nextUnread") {
                             val next = remember(index.posts.size, page.readNo) { vm.nextUnread(page) }
+                            // 未読のあるスレがなければ、何も出さない(下に余白だけ)
+                            if (next == null) { Spacer(Modifier.height(16.dp)); return@item }
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 16.dp)
                                     .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))

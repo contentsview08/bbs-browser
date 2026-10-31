@@ -50,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -393,13 +394,22 @@ private fun ZoomPage(
             },
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            url, null, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = ox; translationY = oy },
+        // 読み込みの状態は絵の状態そのものから読む(知らせを取りこぼして、読み込めたのに回り続けることがあった)
+        val painter = coil3.compose.rememberAsyncImagePainter(url)
+        val st by painter.state.collectAsState()
+        LaunchedEffect(st) {
+            when (val s = st) {
+                is coil3.compose.AsyncImagePainter.State.Success -> { loading = false; natural = s.painter.intrinsicSize }
+                is coil3.compose.AsyncImagePainter.State.Error -> loading = false
+                else -> {}
+            }
+        }
+        androidx.compose.foundation.Image(
+            painter, null, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = ox; translationY = oy },
             contentScale = ContentScale.Fit,
-            onSuccess = { st -> loading = false; natural = st.painter.intrinsicSize },
-            onError = { loading = false },
         )
-        if (loading) CircularProgressIndicator(Modifier.size(36.dp), color = Color.White.copy(alpha = 0.7f), strokeWidth = 3.dp)
+        if (st is coil3.compose.AsyncImagePainter.State.Error) Text("読み込めませんでした", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+        if (loading && st !is coil3.compose.AsyncImagePainter.State.Error) CircularProgressIndicator(Modifier.size(36.dp), color = Color.White.copy(alpha = 0.7f), strokeWidth = 3.dp)
     }
 }
 

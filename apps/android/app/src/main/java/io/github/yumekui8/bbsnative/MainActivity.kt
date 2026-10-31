@@ -70,6 +70,21 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        // 画像の読み込み: 同じサーバーから同時に取れる数を増やし(既定の 5 では、サムネイルが多いスレでビューアーの画像が順番待ちになった)、
+        // ディスクのキャッシュを大きめに
+        coil3.SingletonImageLoader.setSafe { ctx ->
+            coil3.ImageLoader.Builder(ctx)
+                .components {
+                    add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = {
+                        okhttp3.OkHttpClient.Builder()
+                            .dispatcher(okhttp3.Dispatcher().apply { maxRequests = 48; maxRequestsPerHost = 12 })
+                            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS).readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+                    }))
+                }
+                .diskCache { coil3.disk.DiskCache.Builder().directory(java.io.File(ctx.cacheDir, "image_cache").absolutePath.let { okio.Path.Companion.run { it.toPath() } }).maxSizeBytes(256L * 1024 * 1024).build() }
+                .build()
+        }
         setContent {
             // 配色: 設定の配色か、スマホのダーク・ライトに合わせた配色
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()

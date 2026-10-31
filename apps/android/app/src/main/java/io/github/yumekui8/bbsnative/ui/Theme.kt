@@ -248,7 +248,14 @@ object Palette {
      * ID ごとの色。ID の文字から色相を決め、彩度と明るさは配色の明るさで固定する(どの色相でも地との差が同じくらいになるように)。
      * 暖色の赤〜橙は「書き込みの多い ID」の色と紛れるので避ける
      */
+    private val idColorCache = HashMap<String, Color>()
     fun idColor(id: String, sky: Boolean = false): Color {
+        val key = "${scheme.key}|$sky|$id"
+        idColorCache[key]?.let { return it }
+        if (idColorCache.size > 5000) idColorCache.clear()
+        return idColorOf(id, sky).also { idColorCache[key] = it }
+    }
+    private fun idColorOf(id: String, sky: Boolean): Color {
         val h = ((id.hashCode().toLong() and 0xffffffffL) % 280 + 40).toFloat()
         // 空色の地の上では、白っぽい字と同じくらいの明るさの淡い色に
         if (sky) {

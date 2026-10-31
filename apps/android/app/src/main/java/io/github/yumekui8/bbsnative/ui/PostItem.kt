@@ -235,7 +235,11 @@ fun PostItem(
         }
     }
     }
-    if (leftBar == null && rightBar == null) return inner()
+    // ツリーの中では、左の帯はツリーの 1 行が枠の左端に描く(ここで描くと段の線より右に出る)
+    val edge = LocalEdgeBar.current
+    if (edge != null) androidx.compose.runtime.SideEffect { edge.color = leftBar }
+    val ownLeft = if (edge != null) null else leftBar
+    if (ownLeft == null && rightBar == null) return inner()
     // 帯は描くだけにする(中身の高さを先に見積もる形だと、サムネイルやリンクのカードの分が足りず、本文と重なって出ることがあった)
     Box(
         Modifier.fillMaxWidth().then(
@@ -246,9 +250,9 @@ fun PostItem(
             },
         ).drawBehind {
             val w = 3.dp.toPx()
-            if (leftBar != null) drawRect(leftBar, size = androidx.compose.ui.geometry.Size(w, size.height))
+            if (ownLeft != null) drawRect(ownLeft, size = androidx.compose.ui.geometry.Size(w, size.height))
             if (rightBar != null) drawRect(rightBar, topLeft = androidx.compose.ui.geometry.Offset(size.width - w, 0f), size = androidx.compose.ui.geometry.Size(w, size.height))
-        }.padding(start = if (leftBar != null) 3.dp else 0.dp, end = if (rightBar != null) 3.dp else 0.dp),
+        }.padding(start = if (ownLeft != null) 3.dp else 0.dp, end = if (rightBar != null) 3.dp else 0.dp),
     ) { inner() }
 }
 

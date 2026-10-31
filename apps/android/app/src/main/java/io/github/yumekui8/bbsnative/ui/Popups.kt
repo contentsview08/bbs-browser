@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.geometry.Offset
@@ -138,12 +139,13 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
                 val p = byNo[r.no] ?: return@itemsIndexed
                 // 親: 上へさかのぼって、最初に 1 段浅い行
                 val parentNo = if (r.depth == 0) null else (i - 1 downTo 0).firstOrNull { tree[it].depth == r.depth - 1 }?.let { tree[it].no }
-                TreeStep(
+                val edge = remember(r.no) { EdgeBar() }
+                androidx.compose.runtime.CompositionLocalProvider(LocalEdgeBar provides edge) { TreeStep(
                     r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth,
                     prevIsParent = i > 0 && r.depth > 0 && tree[i - 1].depth == r.depth - 1, parentNo = parentNo,
                 ) {
                     androidx.compose.runtime.CompositionLocalProvider(LocalInTree provides true) { post(p) }
-                }
+                } }
             }
         }
     }
@@ -151,6 +153,13 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
 
 /** ツリーの中か(ツリーの中のレスは、返信先の 1 行を出さない。線をたどれば返信先が分かるので) */
 val LocalInTree = androidx.compose.runtime.compositionLocalOf { false }
+
+/**
+ * ツリーの中のレスの左の帯(人気・自分)。レスが自分で描くと段の線より右に出てしまうので、レスは色だけをここへ知らせ、
+ * ツリーの 1 行が枠の左端に描く
+ */
+class EdgeBar { val state = androidx.compose.runtime.mutableStateOf<Color?>(null); var color: Color? get() = state.value; set(v) { state.value = v } }
+val LocalEdgeBar = androidx.compose.runtime.compositionLocalOf<EdgeBar?> { null }
 
 /** スマホのツリーの 1 行(今のスマホ版の StepTree): 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線 */
 @Composable
@@ -162,6 +171,9 @@ private fun TreeStep(
 ) {
     // 深い段は 5 段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)
     val depth = minOf(r.depth, 5)
+    val edge = LocalEdgeBar.current
+    // レスの左の帯(人気・自分)は、段の線より左、枠の左端に描く(ポップアップの枠線 2dp に隠れる分、少し太く)
+    val edgeMod = Modifier.drawWithContent { drawContent(); edge?.color?.let { drawRect(it, size = androidx.compose.ui.geometry.Size(5.dp.toPx(), size.height)) } }
     // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
     // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
     // X 風: X の会話の表示のように、段を下げずに並べ、親と子のアイコンを縦の線でつなぐ。
@@ -173,7 +185,7 @@ private fun TreeStep(
         val labelH = 22.dp
         val avatarTop = prefs.postPad.dp + 2.dp + (if (label) labelH else 0.dp)
         Column(
-            Modifier.fillMaxWidth().then(if (focus) Modifier.background(Palette.accentWash) else Modifier).drawBehind {
+            Modifier.fillMaxWidth().then(if (focus) Modifier.background(Palette.accentWash) else Modifier).then(edgeMod).drawBehind {
                 val x = (12.dp + AVATAR / 2).toPx()
                 val w = 2.dp.toPx()
                 if (prevIsParent) drawLine(line, Offset(x, 0f), Offset(x, avatarTop.toPx() - 3.dp.toPx()), w)
@@ -201,7 +213,7 @@ private fun TreeStep(
         val avatarTop = if (prefs.postStyle == "line") 6.dp else prefs.postPad.dp + 2.dp
         val padStart = if (prefs.postStyle == "line") 10.dp else 12.dp
         Row(
-            Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier)
+            Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier).then(edgeMod)
                 .drawBehind {
                     val w = 2.dp.toPx()
                     val s = step.toPx()
@@ -247,7 +259,7 @@ private fun TreeStep(
         val shade = Palette.textMuted.copy(alpha = 0.14f)
         val rule = Palette.textMuted.copy(alpha = 0.8f)
         val gutter = (4 + depth * 10).dp
-        Row(Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier).drawBehind {
+        Row(Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier).then(edgeMod).drawBehind {
             // 段の分だけ左を塗り、縦線を引く(描くだけ。高さの見積もりはしない)
             drawRect(shade, size = androidx.compose.ui.geometry.Size(gutter.toPx(), size.height))
             drawRect(rule, topLeft = Offset(gutter.toPx(), 0f), size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height))

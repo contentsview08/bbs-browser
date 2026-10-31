@@ -79,7 +79,10 @@ fun PostItem(
     heat: Color? = null,
     /** タイムライン: 本文の下に出す返信(2 件まで)と、返信の数・押したとき */
     replies: List<ReplyPreview> = emptyList(), replyTotal: Int = 0, onReplies: () -> Unit = {},
+    /** アイコンを押したとき(その ID のレスを出す)。null なら押せない */
+    onAvatar: (() -> Unit)? = null,
 ) {
+    val avatarMod = if (onAvatar != null) Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onAvatar) else Modifier
     val chips = chipInlineContent()
     val prefs = LocalPrefs.current
     val images = if (prefs.showThumbnails) info?.images ?: emptyList() else emptyList()
@@ -131,7 +134,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
                 if (reply != null) ReplyLine(reply, indent = AVATAR + 10.dp) { onReply(reply.no) }
                 Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR) }
+                    Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         if (!continued) header()
@@ -149,7 +152,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                 if (!continued || own) Box(Modifier.padding(start = if (own) 0.dp else AVATAR + 8.dp, bottom = 2.dp)) { header() }
                 Row(verticalAlignment = Alignment.Top) {
-                    if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR) }; Spacer(Modifier.width(8.dp)) }
+                    if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
                     Column(
                         Modifier.widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
@@ -161,19 +164,23 @@ fun PostItem(
             }
         }
         "timeline" -> {
-            // X 風: アイコン左、名前と時刻・本文、下に返信を 2 件まで字下げして(それ以上は「ほか N 件」)
+            // X 風: アイコン左、名前と時刻・本文。返信先は本文の下に枠で(引用リツイートのように)。
+            // 本文の下の返信は、アイコンを元のレスと同じ横の位置にそろえて小さく並べ、縦の線でつなぐ(X のスレッドのように)
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = pad + 2.dp, bottom = pad)) {
-                Row(Modifier.fillMaxWidth()) {
-                    Identicon(id, AVATAR)
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                    Column(Modifier.width(AVATAR).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Identicon(id, AVATAR, avatarMod)
+                        // 返信があれば、アイコンの下から返信のアイコンまで線を下ろす
+                        if (replies.isNotEmpty()) Box(Modifier.padding(top = 4.dp).width(2.dp).weight(1f).background(Palette.borderStrong))
+                    }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         header()
                         body(Modifier.padding(top = 2.dp))
                         media()
-                        // 返信先は、引用リツイートのように本文の下に枠で囲んで小さく(下の「返信」と見分けやすいように)
                         if (reply != null) Column(
-                            Modifier.padding(top = 6.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, Palette.borderStrong, RoundedCornerShape(8.dp)).clickable { onReply(reply.no) }
+                            Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, Palette.borderStrong, RoundedCornerShape(10.dp)).clickable { onReply(reply.no) }
                                 .padding(horizontal = 10.dp, vertical = 7.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -183,28 +190,27 @@ fun PostItem(
                             }
                             Text(reply.text, Modifier.padding(top = 2.dp), color = Palette.textBody, fontSize = 13.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
-                        if (replies.isNotEmpty()) Column(
-                            Modifier.padding(top = 6.dp).fillMaxWidth().background(Palette.surface2.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
-                        ) {
-                            for (rp in replies) Row(Modifier.fillMaxWidth().clickable { onReply(rp.no) }.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                                Identicon(rp.id, 18.dp)
-                                Spacer(Modifier.width(6.dp))
-                                // 名前と本文の頭を 1 つの字の並びに(名前の幅で本文が細く折り返さないように)
-                                Text(
-                                    androidx.compose.ui.text.buildAnnotatedString {
-                                        withStyle(androidx.compose.ui.text.SpanStyle(color = Palette.textMuted, fontSize = 12.sp)) { append(rp.name + "  ") }
-                                        append(rp.text)
-                                    },
-                                    Modifier.weight(1f), color = Palette.textBody, fontSize = 13.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                )
-                            }
-                            if (replyTotal > replies.size) Text(
-                                "ほか ${replyTotal - replies.size} 件の返信", Modifier.clickable(onClick = onReplies).padding(top = 3.dp),
-                                color = Palette.link, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            )
-                        }
+                        if (replies.isNotEmpty()) Spacer(Modifier.height(14.dp))
                     }
                 }
+                for ((k, rp) in replies.withIndex()) Row(
+                    Modifier.fillMaxWidth().height(IntrinsicSize.Min).clickable { onReply(rp.no) },
+                ) {
+                    Column(Modifier.width(AVATAR).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Identicon(rp.id, 26.dp)
+                        // 次の返信(か「ほか N 件」)まで線を続ける
+                        if (k < replies.lastIndex || replyTotal > replies.size) Box(Modifier.padding(top = 3.dp).width(2.dp).weight(1f).background(Palette.borderStrong))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f).padding(bottom = 10.dp)) {
+                        Text(rp.name, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
+                        Text(rp.text, color = Palette.textBody, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                }
+                if (replyTotal > replies.size) Text(
+                    "ほか ${replyTotal - replies.size} 件の返信を見る", Modifier.padding(start = AVATAR + 10.dp).clickable(onClick = onReplies).padding(vertical = 2.dp),
+                    color = Palette.link, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
             }
         }
         "classic" -> {

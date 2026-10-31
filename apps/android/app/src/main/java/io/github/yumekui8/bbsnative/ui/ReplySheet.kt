@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.height
@@ -108,7 +109,15 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     LaunchedEffect(r.body) { if (field.text != r.body) field = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
     // 下書きを戻す
     LaunchedEffect(page) { vm.loadDraft(page) }
-    LaunchedEffect(r.focusSeq) { if (r.focusSeq > 0) runCatching { focus.requestFocus() } }
+    // 欄に入る: メニューの窓が閉じきってから入り、キーボードもはっきり出す(すぐに入ろうとすると、窓に取られてキーボードが出なかった)
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(r.focusSeq) {
+        if (r.focusSeq == 0) return@LaunchedEffect
+        kotlinx.coroutines.delay(150)
+        runCatching { focus.requestFocus() }
+        keyboard?.show()
+    }
+    var phraseMenu by remember { mutableStateOf(false) }
     LaunchedEffect(r.blurSeq) { if (r.blurSeq > 0) focusManager.clearFocus() }
     // 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
@@ -195,6 +204,31 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         )
                     }
                 }
+                // 定型文を選ぶ(＋ の「定型文」から)。押すとカーソルの所に入る
+                if (phraseMenu) {
+                    val phrases = vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                    androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { phraseMenu = false }) {
+                        Column(
+                            Modifier.widthIn(min = 200.dp, max = 320.dp).heightIn(max = 360.dp).shadow(10.dp, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
+                                .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                        ) {
+                            Text("定型文", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
+                            if (phrases.isEmpty()) Text("定型文はありません(設定の書き込みで足せます)", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 13.sp)
+                            for (ph in phrases) Text(
+                                ph,
+                                Modifier.fillMaxWidth().clickable {
+                                    phraseMenu = false
+                                    val sel = field.selection
+                                    val t = field.text.substring(0, sel.min) + ph + field.text.substring(sel.max)
+                                    field = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(sel.min + ph.length))
+                                    r.body = t; vm.saveDraftLater(page)
+                                    r.focusSeq++
+                                }.padding(horizontal = 16.dp, vertical = 11.dp),
+                                color = Palette.textStrong, fontSize = 15.sp, maxLines = 2,
+                            )
+                        }
+                    }
+                }
                 // ＋ のメニュー(欄の上にふわっと出る)
                 if (plusMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { plusMenu = false }) {
@@ -209,6 +243,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                                 if (vm.prefs.uploadEnabled) picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) else imageHint = true
                             }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
+                            PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
                             val aaNow = isAA(r, vm.prefs.aaAutoDetect)
                             PlusItem(if (aaNow) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示") { plusMenu = false; r.aaOverride = !aaNow }
                         }

@@ -171,6 +171,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun openPopup(posts: List<Post>, tree: List<io.github.yumekui8.bbsnative.bbs.TreeRow>? = null, focus: Int? = null) {
         if (posts.isNotEmpty()) popups += PopupEntry(++popupSeq, posts, tree, downY, focus, downX)
     }
+    /**
+     * 書き込み欄を開く。ポップアップの上から返信したときも、ポップアップを閉じて帯を出してから欄に入る
+     * (ポップアップが書き込み欄の上に重なって隠し、メニューの窓が閉じきる前に欄へ入ろうとしてキーボードが出なかった)
+     */
+    fun replyWith(text: String?) {
+        popups.clear()
+        bars.show()
+        vm.openReply(page, text)
+    }
     var menu by remember { mutableStateOf(false) }
     var postMenu by remember { mutableStateOf<Post?>(null) }
     var ngWordFor by remember { mutableStateOf<Post?>(null) }
@@ -403,7 +412,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         if (headMenu == null) { Haptics.longPress(view); postMenu = p }
                     },
                     // ダブルタップで返信(設定がオンのときだけ。オフなら 1 回のタップを待たせない)
-                    onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); vm.openReply(page, ">>${p.no}\n") }) else null,
+                    onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); replyWith(">>${p.no}\n") }) else null,
                 ),
         ) {
             val ngStyle = vm.prefs.ngStyle
@@ -428,6 +437,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // 返信の多い(人気の)返信から出す
                     replies = if (style == "timeline") (index.replies[p.no] ?: emptyList()).sortedByDescending { n -> index.replyCount[n] ?: 0 }.take(2).mapNotNull { n -> previewOf(n) } else emptyList(),
                     replyTotal = index.replies[p.no]?.size ?: 0,
+                    // アイコンを押すと、その ID のレス
+                    onAvatar = p.id?.let { pid -> { openPopup(index.posts.filter { it.id == pid }, focus = p.no) } },
                     onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
@@ -486,7 +497,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         prefs.gestures("thread"), "thread",
         mapOf(
             "back" to { if (!localBack()) vm.back() },
-            "reply" to { vm.openReply(page) },
+            "reply" to { replyWith(null) },
             "bottom" to { scroller.toBottom(); bars.show() },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
             "refresh" to { refresh(); Unit },
@@ -776,11 +787,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             listOf(
                 // 今のスマホ版の長押しと同じ並び: 返信・定型文・アンカーツリー / コピー・AA / NG
                 listOf(
-                    MenuItem("返信(>>${p.no})", Icons.AutoMirrored.Filled.Reply, Palette.accent) { vm.openReply(page, ">>${p.no}\n") },
+                    MenuItem("返信(>>${p.no})", Icons.AutoMirrored.Filled.Reply, Palette.accent) { replyWith(">>${p.no}\n") },
                     // 引用して返信: >>番号 と、本文の頭(アンカーの行を除いて 3 行まで)を「>」付きで
                     MenuItem("引用して返信", Icons.Filled.FormatQuote, Palette.accent) {
                         val quote = p.body.lines().filter { it.isNotBlank() && !it.trimStart().startsWith(">>") }.take(3).joinToString("\n") { "> ${it.trim()}" }
-                        vm.openReply(page, ">>${p.no}\n$quote\n")
+                        replyWith(">>${p.no}\n$quote\n")
                     },
                 ) +
                     vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { ph ->
@@ -843,31 +854,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         )
     }
 
-    if (gallery) {
-        CenterPanel("このスレの画像(${index.allImages.size})", { gallery = false }) {
-            // 全部まとめて保存(1 枚ずつ順に。終わったら件数を知らせる)
-            if (index.allImages.isNotEmpty()) Text(
-                "全部保存(${index.allImages.size} 枚)",
-                Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                    .clickable {
-                        val list = index.allImages
-                        vm.toast = "${list.size} 枚を保存しています…"
-                        scope.launch {
-                            var ok = 0
-                            for (u in list) if (runCatching { io.github.yumekui8.bbsnative.data.ImageSaver.save(context, u) }.isSuccess) ok++
-                            vm.toast = "$ok 枚を保存しました" + if (ok < list.size) "(${list.size - ok} 枚は保存できませんでした)" else ""
-                        }
-                    }.padding(horizontal = 14.dp, vertical = 8.dp),
-                color = Palette.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-            )
-            if (index.allImages.isEmpty()) Hint("画像はありません")
-            else LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxWidth().heightIn(max = 600.dp), contentPadding = PaddingValues(8.dp)) {
-                items(index.allImages) { url ->
-                    AsyncImage(url, null, Modifier.padding(3.dp).aspectRatio(1f).background(Palette.surface2).clickable { gallery = false; viewer = url }, contentScale = ContentScale.Crop)
-                }
-            }
-        }
-    }
+    // 画像一覧(ビューアーを閉じたら一覧に戻る。一覧は閉じない)
+    if (gallery) GalleryPanel(index.allImages, onOpen = { viewer = it }, onToast = { vm.toast = it }) { gallery = false }
 
     if (nextSheet) {
         CenterPanel(onDismiss = { nextSheet = false }) {

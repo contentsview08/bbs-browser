@@ -41,7 +41,7 @@ def main() -> int:
     bad = 0
     # 設定で選べる差し色(ACCENTS)。明るい配色では light、暗い配色では dark を、地と面の上で 3 以上に
     accents = re.findall(r'Accent\("([^"]+)", "[^"]+", Color\(0xFF([0-9A-Fa-f]{6})\), Color\(0xFF([0-9A-Fa-f]{6})\)\)', src)
-    for key, name, dark, body in re.findall(r'Scheme\(\s*"([^"]+)", "([^"]+)", (true|false),(.*?)\n    \),', src, re.S):
+    for key, name, dark, body in re.findall(r'Scheme\(\s*(?://[^\n]*\n\s*)*"([^"]+)", "([^"]+)", (true|false),(.*?)\n    \),', src, re.S):
         vals = dict(zip(NAMES, re.findall(r"(?:c|wash)\(0x([0-9A-Fa-f]{6})", body)))
         ng = [f"{label} {ratio(vals[a], vals[b]):.1f}" for label, a, b, th in CHECKS if ratio(vals[a], vals[b]) < th]
         for ak, light, darkc in accents:

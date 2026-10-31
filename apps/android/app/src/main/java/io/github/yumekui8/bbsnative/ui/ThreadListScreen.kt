@@ -55,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import io.github.yumekui8.bbsnative.data.ThumbMode
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -550,6 +551,8 @@ private fun ThreadRow(
                 // まだ開いていないスレだけ太字。開いたスレは新着があっても細く既読の色に(新着は右の +N の札で分かる)
                 color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
             )
+            // 1 レス目ののぞき見とサムネイル(スレ一覧の時点で本文が分かる掲示板だけ。hono-bbs)
+            if (t.preview != null) ThreadPreview(t.preview, t.thumb, k)
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 左(時間・ID・dat落ち)は残りの幅に収め、右の 3 つは右端にそろえる
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -587,6 +590,27 @@ private fun ThreadRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 1 レス目の頭(画像の URL とアンカーは除く)と、右に画像の小さなサムネイル。サムネイルは「サムネイルを読み込む」の設定に従う */
+@Composable
+private fun ThreadPreview(body: String, thumb: String?, k: Float) {
+    val prefs = LocalPrefs.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val text = remember(body) {
+        body.replace(Regex("https?://\\S+"), "").replace(Regex("(>>|＞＞)\\d+"), "").lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ")
+    }
+    val showThumb = thumb != null && prefs.showThumbnails && remember(prefs.thumbMode) {
+        when (prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(context); ThumbMode.NEVER -> false }
+    }
+    if (text.isEmpty() && !showThumb) return
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.Top) {
+        Text(text, Modifier.weight(1f), color = Palette.textMuted, fontSize = (12.5f * k).sp, lineHeight = (17 * k).sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (showThumb) {
+            Spacer(Modifier.width(10.dp))
+            StoredImage(thumb!!, Modifier.size(44.dp).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
         }
     }
 }

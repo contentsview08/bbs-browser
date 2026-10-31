@@ -100,12 +100,12 @@ fun DrawerContent(vm: AppViewModel) {
                     url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") },
                     // キーボードの決定でも開く
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Go),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換のスレ・板の URL を入れてください)" }),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換・hono-bbs のスレ・板の URL を入れてください)" }),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換のスレ・板の URL を入れてください)"
+                    if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換・hono-bbs のスレ・板の URL を入れてください)"
                 }) { Text("開く") }
             },
             dismissButton = { TextButton(onClick = { urlDialog = false }) { Text("やめる") } },

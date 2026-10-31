@@ -61,6 +61,11 @@ object Http {
         execute(req.build())
     }
 
+    /** JSON を送る(hono-bbs の書き込み)。Cookie は読む通信と同じ置き場(Turnstile のつなぎの Cookie を返すため) */
+    suspend fun postJson(url: String, json: String): HttpResponse = withContext(Dispatchers.IO) {
+        execute(Request.Builder().url(url).header("User-Agent", USER_AGENT).post(json.toRequestBody("application/json".toMediaType())).build())
+    }
+
     /** multipart/form-data で送る(画像のアップロード)。OkHttp が区切り(boundary)を付ける */
     suspend fun postMultipart(url: String, body: okhttp3.MultipartBody, userAgent: String = USER_AGENT): HttpResponse = withContext(Dispatchers.IO) {
         execute(Request.Builder().url(url).header("User-Agent", userAgent).post(body).build())

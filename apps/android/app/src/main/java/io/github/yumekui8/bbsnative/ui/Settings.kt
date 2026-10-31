@@ -507,7 +507,7 @@ private fun SitesPage(vm: AppViewModel) {
             }
         }
     }
-    Group("サイト(BBS メニュー)", note = "「板を探す」で板を選べる掲示板です。bbsmenu.json か bbsmenu.html の URL を足せます") {
+    Group("サイト(BBS メニュー)", note = "「板を探す」で板を選べる掲示板です。bbsmenu.json か bbsmenu.html の URL を足せます。hono-bbs は板の一覧の URL(https://…/boards)") {
         for ((url, name) in vm.sites) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 8.dp)) {

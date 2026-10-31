@@ -310,7 +310,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
 @Composable
 private fun ByteMeter(body: String, boardUrl: String) {
     val (maxBytes, maxLines) = remember(boardUrl) { io.github.yumekui8.bbsnative.bbs.TwoCh.cachedLimits(boardUrl) }
-    val bytes = remember(body) { shiftJisByteLength(body) }
+    val bytes = remember(body, boardUrl) { io.github.yumekui8.bbsnative.bbs.TwoCh.lengthOf(boardUrl, body) }
     val lines = body.count { it == '\n' } + 1
     val limit = maxBytes ?: 2048
     val f = maxOf(bytes.toFloat() / limit, maxLines?.let { lines.toFloat() / it } ?: 0f)
@@ -558,7 +558,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                     val aaNow = isAA(r, vm.prefs.aaAutoDetect)
                     IconButton(onClick = { r.aaOverride = !aaNow }) { Icon(Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示", tint = if (aaNow) Palette.accent else Palette.textMuted) }
                     Spacer(Modifier.weight(1f))
-                    Text("${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
+                    Text(if (io.github.yumekui8.bbsnative.bbs.HonoBbs.isBoardUrl(page.board.url)) "${r.body.length} 文字" else "${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)
                 }
             }
         }

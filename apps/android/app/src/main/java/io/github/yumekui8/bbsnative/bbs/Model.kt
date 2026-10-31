@@ -1,6 +1,6 @@
 package io.github.yumekui8.bbsnative.bbs
 
-// 掲示板の形(専ブラの packages/connectors/src/types.ts にあたる)。いまは 2ch 互換だけ
+// 掲示板の形(専ブラの packages/connectors/src/types.ts にあたる)。2ch 互換と hono-bbs(HonoBbs.kt)
 
 /** 板。url が板を一意に表すキー(例: https://bbs.eddibb.cc/liveedge/) */
 data class Board(val url: String, val name: String, val category: String? = null)
@@ -20,6 +20,10 @@ data class ThreadSummary(
     val authorId: String? = null,
     /** 運営のお知らせ(番号がわざと未来になっているスレ)。一覧の一番下に回す */
     val announcement: Boolean = false,
+    /** 1 レス目の本文(スレ一覧の時点で分かる掲示板だけ。hono-bbs) */
+    val preview: String? = null,
+    /** スレ一覧のサムネイル(1 レス目の最初の画像) */
+    val thumb: String? = null,
 ) {
     val id: String get() = "$boardUrl$key"
 }

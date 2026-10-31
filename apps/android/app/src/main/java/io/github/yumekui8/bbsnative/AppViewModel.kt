@@ -15,6 +15,7 @@ import io.github.yumekui8.bbsnative.bbs.PostIndex
 import io.github.yumekui8.bbsnative.bbs.PostInput
 import io.github.yumekui8.bbsnative.bbs.PostResult
 import io.github.yumekui8.bbsnative.bbs.ThreadSummary
+import io.github.yumekui8.bbsnative.bbs.HonoBbs
 import io.github.yumekui8.bbsnative.bbs.TwoCh
 import io.github.yumekui8.bbsnative.bbs.findNextThreads
 import io.github.yumekui8.bbsnative.data.HistoryEntry
@@ -805,11 +806,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         openBoard(favorites.firstOrNull { it.url == url } ?: boards.firstOrNull { it.url == url } ?: Board(url, url.removePrefix("https://").trimEnd('/')), root = true)
     }
 
-    /** 2ch 互換のスレ・板の URL なら、アプリの中で開いて true */
+    /** 2ch 互換・hono-bbs のスレ・板の URL なら、アプリの中で開いて true */
     fun openUrl(url: String): Boolean {
         // 5ch は 5ch.net から 5ch.io へ移った(5ch.net は 301 で 5ch.io へ送る)。書き込み(POST)はリダイレクトをたどれないので、初めから 5ch.io で開く
         val u = url.trim().replace(Regex("^(https?://[a-z0-9]+)\\.5ch\\.net/"), "$1.5ch.io/")
         // 本文の URL は http:// のことが多い。Android は暗号化しない通信を断るので https:// で開く
+        // hono-bbs のスレ・板(https://<web>/boards/<板>/<スレ>)
+        HonoBbs.parseThreadUrl(u)?.let { openThread(it); return true }
+        HonoBbs.normalizeBoardUrl(u)?.let { bu ->
+            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
+            if (known != null) openBoard(known, root = true)
+            else viewModelScope.launch { openBoard(Board(bu, HonoBbs.boardName(bu) ?: bu.removeSuffix("/").substringAfterLast('/')), root = true) }
+            return true
+        }
         val thread = Regex("^https?://([^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
         if (thread != null) {
             val key = thread.groupValues[3]

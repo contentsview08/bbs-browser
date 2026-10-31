@@ -14,7 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-private const val CONNECTOR = "2ch-compat"
+/** どの掲示板の形か(専ブラの DB と同じ connector_id) */
+private fun connectorOf(boardUrl: String) = if (io.github.yumekui8.bbsnative.bbs.HonoBbs.isBoardUrl(boardUrl)) "honobbs" else "2ch-compat"
 
 /** 開いたことのあるスレの状態(スレ一覧の未読の数・既読の位置に使う) */
 data class ThreadState(val readNo: Int, val postCount: Int, val archived: Boolean = false)
@@ -57,7 +58,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         if (on) {
             writableDatabase.execSQL(
                 "INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))",
-                arrayOf(board.url, CONNECTOR, board.name),
+                arrayOf(board.url, connectorOf(board.url), board.name),
             )
         } else writableDatabase.execSQL("DELETE FROM favorite_boards WHERE url = ?", arrayOf(board.url))
     }
@@ -78,7 +79,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
     suspend fun addSite(menuUrl: String, name: String) = io {
         writableDatabase.execSQL(
             "INSERT OR REPLACE INTO sites (menu_url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM sites))",
-            arrayOf(menuUrl, CONNECTOR, name),
+            arrayOf(menuUrl, if (io.github.yumekui8.bbsnative.bbs.HonoBbs.isSiteUrl(menuUrl)) "honobbs" else "2ch-compat", name),
         )
     }
 
@@ -108,7 +109,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
             val st = db.compileStatement("INSERT OR REPLACE INTO boards (site_menu_url, url, connector_id, name, category, sort) VALUES (?, ?, ?, ?, ?, ?)")
             boards.forEachIndexed { i, b ->
                 st.clearBindings()
-                st.bindString(1, menuUrl); st.bindString(2, b.url); st.bindString(3, CONNECTOR); st.bindString(4, b.name)
+                st.bindString(1, menuUrl); st.bindString(2, b.url); st.bindString(3, connectorOf(b.url)); st.bindString(4, b.name)
                 if (b.category != null) st.bindString(5, b.category) else st.bindNull(5)
                 st.bindLong(6, i.toLong())
                 st.executeInsert()
@@ -149,7 +150,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         try {
             db.execSQL(
                 "INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at) VALUES (?, ?, ?, ?, ?)",
-                arrayOf<Any?>(t.boardUrl, t.key, CONNECTOR, title, t.createdAt),
+                arrayOf<Any?>(t.boardUrl, t.key, connectorOf(t.boardUrl), title, t.createdAt),
             )
             if (r.status == FetchStatus.RESET) db.delete("posts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
             if (r.posts.isNotEmpty()) {
@@ -253,7 +254,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         if (on) {
             writableDatabase.execSQL(
                 "INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), ?)",
-                arrayOf<Any?>(t.boardUrl, t.key, CONNECTOR, title, t.createdAt, System.currentTimeMillis()),
+                arrayOf<Any?>(t.boardUrl, t.key, connectorOf(t.boardUrl), title, t.createdAt, System.currentTimeMillis()),
             )
         } else writableDatabase.delete("favorite_threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
     }
@@ -263,7 +264,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
     suspend fun addPostHistory(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String) = io {
         writableDatabase.execSQL(
             "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            arrayOf<Any?>(CONNECTOR, t.boardUrl, t.key, title, no, name, mail, body, System.currentTimeMillis()),
+            arrayOf<Any?>(connectorOf(t.boardUrl), t.boardUrl, t.key, title, no, name, mail, body, System.currentTimeMillis()),
         )
     }
 

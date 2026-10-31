@@ -101,10 +101,21 @@ fun Thumbnails(
     }
 }
 
+/** このアプリを開いている間に読み込めた画像(押して読んだものも)。開き直したときに「画像」の札へ戻さないために使う */
+object LoadedImages { val urls: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet()) }
+
 @Composable
 private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
     // 家の中のアドレスは、押すまで読まない
-    var load by rememberSaveable(url) { mutableStateOf(autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)) }
+    // 一度読んだ画像(このアプリを開いている間に読んだもの・画像のキャッシュに残っているもの)は、自動で読まない設定でもそのまま出す
+    // (ポップアップや別の画面で開き直すと、読んだのに「画像」の札に戻っていた)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var load by rememberSaveable(url) {
+        mutableStateOf(
+            url in LoadedImages.urls || (autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)) ||
+                runCatching { coil3.SingletonImageLoader.get(context).diskCache?.openSnapshot(url)?.use { true } == true }.getOrDefault(false),
+        )
+    }
     val shape = RoundedCornerShape(5.dp)
     val box = Modifier.size(size.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
     if (!load) {
@@ -123,7 +134,7 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
         if (state == 2) Text("×", color = Palette.textMuted, fontSize = 16.sp)
         AsyncImage(
             model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier),
-            onSuccess = { state = 1 }, onError = { state = 2 },
+            onSuccess = { state = 1; LoadedImages.urls += url }, onError = { state = 2 },
         )
         if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
         if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)

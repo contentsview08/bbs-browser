@@ -399,7 +399,7 @@ private fun ZoomPage(
         val st by painter.state.collectAsState()
         LaunchedEffect(st) {
             when (val s = st) {
-                is coil3.compose.AsyncImagePainter.State.Success -> { loading = false; natural = s.painter.intrinsicSize }
+                is coil3.compose.AsyncImagePainter.State.Success -> { loading = false; natural = s.painter.intrinsicSize; LoadedImages.urls += url }
                 is coil3.compose.AsyncImagePainter.State.Error -> loading = false
                 else -> {}
             }

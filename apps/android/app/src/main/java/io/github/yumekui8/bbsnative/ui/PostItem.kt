@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -150,18 +151,19 @@ fun PostItem(
             // 地と区別できる吹き出し(今のスマホ版の line-bubble・line-bubble-own)
             val bubble = if (own) Palette.lineOwnBg else Palette.lineBubble
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
-            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
-                if (!continued || own) Box(Modifier.padding(start = if (own) 0.dp else AVATAR + 8.dp, bottom = 2.dp)) { header() }
-                Row(verticalAlignment = Alignment.Top) {
-                    if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
+            // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
+                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
+                Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
+                    if (!continued || own) Box(Modifier.padding(bottom = 2.dp)) { header() }
                     Column(
                         Modifier.widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
                         if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
                     }
+                    Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
                 }
-                Box(Modifier.padding(start = if (own) 0.dp else AVATAR - 4.dp)) { Column { media() } }
             }
         }
         "timeline" -> {

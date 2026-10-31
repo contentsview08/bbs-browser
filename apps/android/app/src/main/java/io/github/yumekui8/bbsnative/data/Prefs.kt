@@ -103,6 +103,28 @@ class Prefs(context: Context) {
     var listSections by pref("listSections", false)
     var pullToRefreshList by pref("pullToRefreshList", true)
     /** 板ごとに、前回スレ一覧を取った時刻(「新」の印の境目)。JSON */
+    /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */
+    private var recentBoardsJson by pref("recentBoards", "[]")
+    fun recentBoards(): List<Triple<String, String, Long>> = runCatching {
+        val a = org.json.JSONArray(recentBoardsJson)
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> Triple(o.getString("url"), o.getString("name"), o.getLong("t")) } }
+    }.getOrDefault(emptyList())
+    fun addRecentBoard(url: String, name: String) {
+        val list = listOf(Triple(url, name, System.currentTimeMillis())) + recentBoards().filter { it.first != url }
+        recentBoardsJson = org.json.JSONArray(list.take(30).map { org.json.JSONObject().put("url", it.first).put("name", it.second).put("t", it.third) }).toString()
+    }
+
+    /** 上げた画像(新しい順、100 まで)。クイックアクセスから URL をもう一度使えるように */
+    private var uploadsJson by pref("uploads", "[]")
+    fun uploads(): List<Pair<String, Long>> = runCatching {
+        val a = org.json.JSONArray(uploadsJson)
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> o.getString("url") to o.getLong("t") } }
+    }.getOrDefault(emptyList())
+    fun addUpload(url: String) {
+        val list = listOf(url to System.currentTimeMillis()) + uploads().filter { it.first != url }
+        uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.first).put("t", it.second) }).toString()
+    }
+
     private var boardVisitsJson by pref("boardVisits", "{}")
     fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }

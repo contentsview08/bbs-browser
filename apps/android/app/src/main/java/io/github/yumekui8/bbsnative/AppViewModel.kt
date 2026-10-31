@@ -540,6 +540,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stack.add(page)
         prefs.lastBoardUrl = board.url
         prefs.lastBoardName = board.name
+        prefs.addRecentBoard(board.url, board.name)
         refreshBoard(page)
         // 板の既定の名前を先に読んでおく(スレを開いたとき、待たずに名無しを省けるように)
         viewModelScope.launch { TwoCh.nonameName(board.url) }
@@ -857,6 +858,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), uri, prefs.uploadMaxDimension)
                 r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url else r.body + "\n" + url
+                prefs.addUpload(url)
             } catch (e: Exception) {
                 r.notice = e.message ?: "アップロードできませんでした"
             } finally {

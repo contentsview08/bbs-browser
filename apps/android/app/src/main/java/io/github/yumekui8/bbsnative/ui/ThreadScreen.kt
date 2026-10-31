@@ -164,9 +164,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     LaunchedEffect(popups.isEmpty(), traced) { if (popups.isEmpty() && traced.isNotEmpty()) { delay(1800); traced = emptySet() } }
     var popupSeq by remember { mutableIntStateOf(0) }
     var downY by remember { mutableFloatStateOf(0f) }
+    var downX by remember { mutableFloatStateOf(-1f) }
     var downNo by remember { mutableIntStateOf(0) }
     fun openPopup(posts: List<Post>, tree: List<io.github.yumekui8.bbsnative.bbs.TreeRow>? = null, focus: Int? = null) {
-        if (posts.isNotEmpty()) popups += PopupEntry(++popupSeq, posts, tree, downY, focus)
+        if (posts.isNotEmpty()) popups += PopupEntry(++popupSeq, posts, tree, downY, focus, downX)
     }
     var menu by remember { mutableStateOf(false) }
     var postMenu by remember { mutableStateOf<Post?>(null) }
@@ -478,7 +479,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         // LINE 風のときは、地を吹き出しと区別できる色に
         modifier.fillMaxSize().background(Palette.threadBg(vm.prefs.postStyle)).imePadding()
             .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
-            .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } }
+            .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.let { downY = it.y; downX = it.x } } }
             // 2 本指で広げる・狭めると、本文の字の大きさを変える(設定に入る)。1 本指の操作には触らない
             .pointerInput(Unit) {
                 awaitEachGesture {

@@ -44,7 +44,7 @@ import io.github.yumekui8.bbsnative.bbs.TreeRow
  * ポップアップ 1 枚。posts(アンカー先・返信・同じ ID / 名前)か、tree(アンカーツリー)のどちらかを出す。
  * triggerY: 押した所の高さ(スレ表示の領域の中の座標)。focusNo: 開いたときに見せる(色を付ける)レス
  */
-class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = null, val triggerY: Float, val focusNo: Int? = null) {
+class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = null, val triggerY: Float, val focusNo: Int? = null, val triggerX: Float = -1f) {
     /** 中のスクロール(ジェスチャーの「先頭へ」「一番下へ」で、一番上のポップアップを送る) */
     val state = androidx.compose.foundation.lazy.LazyListState()
 }
@@ -87,13 +87,19 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: 
     val shape = RoundedCornerShape(6.dp)
     // 出てくるとき: 少し小さく・少し下から浮き上がる(今のスマホ版の rise-in。200ms)
     val rise = remember(e.id) { androidx.compose.animation.core.Animatable(0f) }
+    // 広がり始める点(押した字の位置)。置く位置が決まってから、ポップアップの中の割合にする
+    val origin = remember(e.id) { floatArrayOf(0.5f, 1f) }
     androidx.compose.runtime.LaunchedEffect(e.id) { if (Motion.reduced) rise.snapTo(1f) else rise.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
     Layout(
         content = {
             Box(
                 // ミニマップに重ならないよう、その幅だけ右を空ける
                 Modifier.padding(start = 6.dp, end = 6.dp + endInset)
-                    .graphicsLayer { val p = rise.value; alpha = p; val s = 0.94f + 0.06f * p; scaleX = s; scaleY = s; translationY = (1f - p) * 12.dp.toPx() }.shadow(12.dp, shape).clip(shape).background(bg).border(2.dp, Palette.accent, shape)
+                    .graphicsLayer {
+                        // 押した字の位置から広がる(どのアンカーから出たか分かるように)
+                        val p = rise.value; alpha = p; val s = 0.6f + 0.4f * p; scaleX = s; scaleY = s
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(origin[0], origin[1])
+                    }.shadow(12.dp, shape).clip(shape).background(bg).border(2.dp, Palette.accent, shape)
                     // 中を押しても幕に届かない(閉じない)ように
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
             ) { PopupContent(e, post) }
@@ -103,6 +109,8 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: 
         val p = measurables.first().measure(Constraints(maxWidth = constraints.maxWidth, maxHeight = limit.toInt().coerceAtLeast(0)))
         // 押した所の真上に収まるなら真上、収まらなければ上の帯のすぐ下
         val y = if (p.height <= spaceAbove) e.triggerY - p.height - gap else minTop
+        if (p.height > 0) origin[1] = ((e.triggerY - y) / p.height).coerceIn(0f, 1f)
+        if (e.triggerX >= 0 && p.width > 0) origin[0] = (e.triggerX / p.width).coerceIn(0f, 1f)
         layout(constraints.maxWidth, constraints.maxHeight) { p.place(0, y.toInt()) }
     }
 }

@@ -184,6 +184,7 @@ private fun ThemePage(vm: AppViewModel) {
     val p = vm.prefs
     Group {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followSystem, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followSystem = it }
+        SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
     }
     Group("レスの見た目") {
         ChoiceRow(

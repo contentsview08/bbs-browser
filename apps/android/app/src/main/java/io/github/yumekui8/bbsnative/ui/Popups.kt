@@ -87,7 +87,7 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: 
     val shape = RoundedCornerShape(6.dp)
     // 出てくるとき: 少し小さく・少し下から浮き上がる(今のスマホ版の rise-in。200ms)
     val rise = remember(e.id) { androidx.compose.animation.core.Animatable(0f) }
-    androidx.compose.runtime.LaunchedEffect(e.id) { rise.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
+    androidx.compose.runtime.LaunchedEffect(e.id) { if (Motion.reduced) rise.snapTo(1f) else rise.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
     Layout(
         content = {
             Box(

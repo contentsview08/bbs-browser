@@ -54,6 +54,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.combinedClickable
@@ -229,8 +231,34 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             // 更新(設定で消せる)。取っている間は回る
             if (vm.prefs.showRefreshButton) {
                 val spin = androidx.compose.animation.core.rememberInfiniteTransition(label = "r").animateFloat(0f, 360f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.LinearEasing)), label = "s")
-                IconButton(onClick = onRefresh, Modifier.padding(start = 6.dp, end = 4.dp).size(44.dp)) {
-                    Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = if (page.loading) spin.value else 0f })
+                // 取り終えたら、新着があれば ✓、なければ「—」を少しだけ出して戻る(取れたか分かるように)
+                var startCount by remember { mutableStateOf(-1) }
+                var result by remember { mutableStateOf<Boolean?>(null) }
+                LaunchedEffect(page.loading) {
+                    if (page.loading) startCount = page.index.posts.size
+                    else if (startCount >= 0) {
+                        result = page.index.posts.size > startCount
+                        startCount = -1
+                        kotlinx.coroutines.delay(1200)
+                        result = null
+                    }
+                }
+                // 押した瞬間に軽く沈む
+                val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                val pressed by press.collectIsPressedAsState()
+                val sink by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.86f else 1f, label = "sink")
+                Box(
+                    Modifier.padding(start = 6.dp, end = 4.dp).size(44.dp).graphicsLayer { scaleX = sink; scaleY = sink }
+                        .clickable(interactionSource = press, indication = null, onClick = onRefresh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.animation.Crossfade(result, label = "result") { res ->
+                        when (res) {
+                            true -> Icon(Icons.Filled.Check, "新着あり", tint = Palette.own, modifier = Modifier.size(28.dp))
+                            false -> Text("—", color = Palette.textMuted, fontSize = 22.sp)
+                            null -> Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = if (page.loading) spin.value else 0f })
+                        }
+                    }
                 }
             }
         }

@@ -163,7 +163,8 @@ class ThreadScroller(
         val fresh = posts.filter { it.no > prevLastNo }.map { it.no }
         if (fresh.isEmpty()) return
         ctl.flashAt = System.currentTimeMillis()
-        ctl.flash = staggerDelays(fresh)
+        // 動きを減らすときは、浮き上がりも光りもしない
+        if (!Motion.reduced) ctl.flash = staggerDelays(fresh)
         scope.launch { delay(FLASH_MS + STAGGER_TOTAL_MS.toLong()); ctl.flash = emptyMap() }
         val opening = ctl.untouched && ctl.firstGrowth
         ctl.firstGrowth = false

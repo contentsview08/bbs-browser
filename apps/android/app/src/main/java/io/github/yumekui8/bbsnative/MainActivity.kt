@@ -67,6 +67,8 @@ class MainActivity : ComponentActivity() {
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val p = vm.prefs
             io.github.yumekui8.bbsnative.ui.Haptics.enabled = p.haptics
+            io.github.yumekui8.bbsnative.ui.Motion.pref = p.reduceMotion
+            LaunchedEffect(Unit) { io.github.yumekui8.bbsnative.ui.Motion.read(this@MainActivity) }
             val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
             LaunchedEffect(key) { Palette.scheme = io.github.yumekui8.bbsnative.ui.schemeOf(key) }
             LaunchedEffect(p.accent) { Palette.accentPick = io.github.yumekui8.bbsnative.ui.accentOf(p.accent) }
@@ -106,7 +108,9 @@ class MainActivity : ComponentActivity() {
                                     val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
                                     val move = tween<IntOffset>(320, easing = ease)
                                     val fade = tween<Float>(320, easing = ease)
-                                    when (vm.navDir) {
+                                    // 動きを減らすときは、すっと切り替えるだけ
+                                    if (io.github.yumekui8.bbsnative.ui.Motion.reduced) fadeIn(tween(90)) togetherWith fadeOut(tween(90))
+                                    else when (vm.navDir) {
                                         1 -> slideInHorizontally(move) { it } togetherWith (slideOutHorizontally(move) { -it / 4 } + fadeOut(fade, targetAlpha = 0.5f))
                                         -1 -> (slideInHorizontally(move) { -it / 4 } + fadeIn(fade, initialAlpha = 0.5f)) togetherWith slideOutHorizontally(move) { it }
                                         else -> fadeIn(tween(200)) togetherWith fadeOut(tween(200))

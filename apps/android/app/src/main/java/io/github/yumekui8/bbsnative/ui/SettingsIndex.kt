@@ -5,6 +5,7 @@ package io.github.yumekui8.bbsnative.ui
 /** 設定の検索の索引: ページのキー・項目の名前・説明 */
 val SETTINGS_INDEX = listOf(
     Triple("theme", "スマホのダーク・ライトに合わせる", "オンにすると、スマホの設定で配色が切り替わります"),
+    Triple("theme", "動きを減らす", "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります"),
     Triple("theme", "見た目", ""),
     Triple("theme", "差し色", ""),
     Triple("text", "画面全体", ""),

@@ -252,6 +252,19 @@ fun relativeTime(millis: Long?, now: Long = System.currentTimeMillis()): String 
     }
 }
 
+/**
+ * 動きを減らす: 端末の「アニメーションを削除」(アニメーターの速さが 0)か、設定の「動きを減らす」のとき。
+ * 新着の浮き上がり・光り方・数字の繰り上がりなどを省く
+ */
+object Motion {
+    var system by mutableStateOf(false)
+    var pref by mutableStateOf(false)
+    val reduced get() = system || pref
+    fun read(context: android.content.Context) {
+        system = runCatching { android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }.getOrDefault(false)
+    }
+}
+
 /** 中身のない画面の案内 */
 @Composable
 fun Hint(text: String) {

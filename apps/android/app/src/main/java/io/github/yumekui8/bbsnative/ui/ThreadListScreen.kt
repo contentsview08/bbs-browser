@@ -60,6 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.mutableFloatStateOf
@@ -579,11 +580,20 @@ private fun ThreadRow(
                     Modifier.widthIn(min = 60.dp), color = Palette.textMuted, fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                 )
                 if (unread > 0) Box(Modifier.padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                    Text(
-                        if (unread > 999) "+999+" else "+$unread",
-                        Modifier.widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
-                        color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    )
+                    // 数が増えたら、数字が下から繰り上がる(カウンターの回転)
+                    androidx.compose.animation.AnimatedContent(
+                        unread, Modifier.widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+                        transitionSpec = {
+                            if (Motion.reduced) androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+                            else (androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn()) togetherWith (androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut())
+                        },
+                        contentAlignment = Alignment.Center, label = "unread",
+                    ) { n ->
+                        Text(
+                            if (n > 999) "+999+" else "+$n",
+                            color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
                 }
             }
         }

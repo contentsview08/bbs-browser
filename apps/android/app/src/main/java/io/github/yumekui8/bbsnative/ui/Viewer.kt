@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -223,6 +224,11 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                     }
                     SheetRow(Icons.Filled.Link, "URL をコピー") { sheet = false; copyText(context, url); notice = "URL をコピーしました" }
                     SheetRow(Icons.AutoMirrored.Filled.OpenInNew, "ブラウザで開く") { sheet = false; openExternal(context, url, prefs.openLinksInApp) }
+                    // 画像で検索(Google レンズ。画像の URL を渡すだけで、画像そのものは送らない)
+                    SheetRow(Icons.Filled.ImageSearch, "画像で検索(Google レンズ)") {
+                        sheet = false
+                        openExternal(context, "https://lens.google.com/uploadbyurl?url=" + java.net.URLEncoder.encode(url, "UTF-8"), false)
+                    }
                 }
             }
         }
@@ -394,5 +400,46 @@ private fun ZoomPage(
             onError = { loading = false },
         )
         if (loading) CircularProgressIndicator(Modifier.size(36.dp), color = Color.White.copy(alpha = 0.7f), strokeWidth = 3.dp)
+    }
+}
+
+
+/**
+ * 動画(mp4・webm)をアプリの中で再生する。端末の再生の仕組み(VideoView)に任せ、操作の帯(再生・止める・送る)を付ける。
+ * 再生できない形式なら、ブラウザで開くボタンを出す
+ */
+@Composable
+fun VideoPlayer(url: String, onBrowser: () -> Unit, onClose: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onClose, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        var error by remember { mutableStateOf(false) }
+        var loading by remember { mutableStateOf(true) }
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            androidx.compose.ui.viewinterop.AndroidView(
+                factory = { ctx ->
+                    android.widget.VideoView(ctx).apply {
+                        val mc = android.widget.MediaController(ctx)
+                        mc.setAnchorView(this)
+                        setMediaController(mc)
+                        setOnPreparedListener { mp -> loading = false; mp.isLooping = true; start() }
+                        setOnErrorListener { _, _, _ -> error = true; loading = false; true }
+                        setVideoURI(android.net.Uri.parse(url))
+                    }
+                },
+                modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
+                onRelease = { it.stopPlayback() },
+            )
+            if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+            if (error) Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("この動画はアプリの中で再生できませんでした", color = Color.White, fontSize = 14.sp)
+                Text(
+                    "ブラウザで開く", Modifier.padding(top = 12.dp).background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).clickable(onClick = onBrowser).padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = Color.White, fontSize = 14.sp,
+                )
+            }
+            Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)) {
+                IconButton(onClick = onBrowser) { Icon(Icons.AutoMirrored.Filled.OpenInNew, "ブラウザで開く", tint = Color.White) }
+                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "閉じる", tint = Color.White) }
+            }
+        }
     }
 }

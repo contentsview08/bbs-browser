@@ -84,6 +84,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.ime
@@ -188,6 +189,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var aaOverride by remember { mutableStateOf(mapOf<Int, Boolean>()) }
     /** 拡大して見ている AA のレス */
     var aaZoom by remember { mutableStateOf<Int?>(null) }
+    /** アプリの中で再生している動画の URL */
+    var video by remember { mutableStateOf<String?>(null) }
     /** ピンチで字の大きさを変えている間の札 */
     var pinchLabel by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
@@ -287,6 +290,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
                 'u' -> when {
                     v in index.allImages -> viewer = v
+                    // mp4・webm はアプリの中で再生
+                    Regex("\\.(mp4|webm|mov|m4v)(\\?|#|$)", RegexOption.IGNORE_CASE).containsMatchIn(v) -> video = v
                     !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
                 }
             }
@@ -713,6 +718,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { titleSheet = false }
     }
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
+    video?.let { VideoPlayer(it, onBrowser = { openExternal(context, it, false); video = null }) { video = null } }
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; fontDialog = true }) { styleSheet = false }
 
     postMenu?.let { p ->
@@ -771,6 +777,21 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     if (gallery) {
         CenterPanel("このスレの画像(${index.allImages.size})", { gallery = false }) {
+            // 全部まとめて保存(1 枚ずつ順に。終わったら件数を知らせる)
+            if (index.allImages.isNotEmpty()) Text(
+                "全部保存(${index.allImages.size} 枚)",
+                Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                    .clickable {
+                        val list = index.allImages
+                        vm.toast = "${list.size} 枚を保存しています…"
+                        scope.launch {
+                            var ok = 0
+                            for (u in list) if (runCatching { io.github.yumekui8.bbsnative.data.ImageSaver.save(context, u) }.isSuccess) ok++
+                            vm.toast = "$ok 枚を保存しました" + if (ok < list.size) "(${list.size - ok} 枚は保存できませんでした)" else ""
+                        }
+                    }.padding(horizontal = 14.dp, vertical = 8.dp),
+                color = Palette.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            )
             if (index.allImages.isEmpty()) Hint("画像はありません")
             else LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxWidth().heightIn(max = 600.dp), contentPadding = PaddingValues(8.dp)) {
                 items(index.allImages) { url ->

@@ -95,6 +95,14 @@ class Prefs(context: Context) {
     var threadSort by pref("threadSort", "subject")
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
     var keywords by pref("keywords", "")
+    /** スレ一覧の勢いの示し方: number(数字の色)/ bar(行の下のバー)/ both */
+    var momentumStyle by pref("momentumStyle", "number")
+    /** スレ一覧の行の形: normal / compact(スレタイ 1 行と数だけ) */
+    var listDensity by pref("listDensity", "normal")
+    /** スレ一覧を見出し(キーワード・新しいスレ・新着のある読んだスレ・その他)で区切る */
+    var listSections by pref("listSections", false)
+    /** 板を開いたとき、一覧の上に前回からの差分(新しいスレ・新着のある読んだスレの数)を出す */
+    var listDiff by pref("listDiff", true)
     var pullToRefreshList by pref("pullToRefreshList", true)
     /** 板ごとに、前回スレ一覧を取った時刻(「新」の印の境目)。JSON */
     private var boardVisitsJson by pref("boardVisits", "{}")

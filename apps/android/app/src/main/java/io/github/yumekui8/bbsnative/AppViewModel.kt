@@ -90,6 +90,8 @@ sealed interface Page {
         var reversed by mutableStateOf(false)
         /** 「新」の印を付ける境目の時刻(前回この板の一覧を取った時刻)。初めての板なら null */
         var newSince by mutableStateOf<Long?>(null)
+        /** 差分の行から絞り込んだ: "new"(新しく立ったスレ)/ null */
+        var only by mutableStateOf<String?>(null)
         /** スレを立てる欄 */
         val newThread = ReplyState()
     }

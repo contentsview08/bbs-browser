@@ -258,6 +258,12 @@ private fun ListPage(vm: AppViewModel) {
             listOf("subject" to "更新順(掲示板の並び)", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順"),
         ) { p.threadSort = it }
         SwitchRow("引っぱって更新", p.pullToRefreshList, desc = "いちばん上で下へ引くと、スレ一覧を取り直します") { p.pullToRefreshList = it }
+        SwitchRow("見出しで区切る", p.listSections, desc = "並べ替えていないとき、キーワード・新しいスレ・新着のある読んだスレ・その他に分けて出します") { p.listSections = it }
+        SwitchRow("前回からの差分を出す", p.listDiff, desc = "一覧の上に「前回から +12 スレ・新着 3」の行。押すとそのスレだけに絞ります") { p.listDiff = it }
+    }
+    Group("行の見た目") {
+        ChoiceRow("行の形", p.listDensity, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listDensity = it }
+        ChoiceRow("勢いの示し方", p.momentumStyle, listOf("number" to "数字の色", "bar" to "行の下のバー", "both" to "両方")) { p.momentumStyle = it }
     }
     Group("タブ", note = "一覧の下に出すタブ。矢印で並べ替え、スイッチで出す・出さないを決めます(上が左)") {
         val all = listOf("unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")

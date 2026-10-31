@@ -60,6 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -79,6 +80,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.border
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -138,10 +140,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val ngTitles = vm.prefs.ngRules.filter { it.target == "title" }.map { it.pattern }
     val sort = vm.prefs.threadSort
     val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val shown = remember(page.threads, page.states, tab, query, ngTitles, sort, keywords, page.reversed) {
+    val shown = remember(page.threads, page.states, tab, query, ngTitles, sort, keywords, page.reversed, page.only) {
         // スレタイの NG に当たるスレは出さない
         var list = if (ngTitles.isEmpty()) page.threads else page.threads.filter { t -> ngTitles.none { t.title.contains(it, ignoreCase = true) } }
         if (query.isNotBlank()) list = list.filter { it.title.contains(query.trim(), ignoreCase = true) }
+        // 差分の行から「新しいスレ」だけに絞った
+        if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }
         list = when (tab) {
             // タブを選んでいないときは、設定の並び(板を開いたときの並び)
             null -> when (sort) {
@@ -173,8 +177,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var fontOnly by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     // 戻る操作で、まず検索を外す
-    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null) {
-        if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false }
+    androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.only != null) {
+        if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false; page.only = null }
     }
     // 取り直したら一番上へ戻す(上にあったスレの位置を保つと、その上に新しいスレが足されて分かりにくい)
     // (戻ってきたときにもう一度動かさないよう、戻した回を覚えておく。更新しない限り、一覧の位置はそのまま)
@@ -189,7 +193,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         mapOf(
             // 絞り込み(未読など)・並べ替え・検索をしていれば、まずそれを外す。外れていればメニュー
             "drawer" to {
-                if (page.tab != null || searching || query.isNotEmpty()) { page.tab = null; page.reversed = false; searching = false; query = ""; scope.launch { listState.scrollToItem(0) } }
+                if (page.tab != null || searching || query.isNotEmpty() || page.only != null) { page.tab = null; page.reversed = false; page.only = null; searching = false; query = ""; scope.launch { listState.scrollToItem(0) } }
                 else vm.drawerOpen = true
             },
             "forward" to { vm.forward() },
@@ -283,13 +287,38 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         bottom = with(density) { bars.bottomHeight.toDp() } + 24.dp,
                     ),
                 ) {
-                    items(shown, key = { it.key }, contentType = { 0 }) { t ->
-                        ThreadRow(
-                            t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
-                            isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds,
-                            onLongClick = { Haptics.longPress(hapticView); menuFor = t },
-                        ) { vm.openThread(t) }
-                        HorizontalDivider(color = Palette.border)
+                    val plain = tab == null && query.isBlank() && page.only == null
+                    // 前回からの差分(板を前にも開いていて、絞り込んでいないとき)。押すとそのスレだけに
+                    val since = page.newSince
+                    if (vm.prefs.listDiff && since != null && tab == null && query.isBlank()) item(key = "diff", contentType = 2) {
+                        DiffLine(
+                            newCount = page.threads.count { (it.createdAt ?: 0) > since },
+                            unreadCount = page.threads.count { unreadOf(it, page.states) > 0 },
+                            onlyNew = page.only == "new",
+                            onNew = { page.only = if (page.only == "new") null else "new"; scope.launch { listState.scrollToItem(0) } },
+                            onUnread = { page.only = null; page.tab = "unread"; scope.launch { listState.scrollToItem(0) } },
+                        )
+                    }
+                    // 見出しで区切る(並べ替え・絞り込みをしていないとき)。キーワード → 新しいスレ → 新着のある読んだスレ → その他
+                    val groups: List<Pair<String?, List<ThreadSummary>>> = if (plain && vm.prefs.listSections) {
+                        val isNew = { t: ThreadSummary -> since != null && (t.createdAt ?: 0) > since }
+                        val kw = { t: ThreadSummary -> keywords.any { t.title.contains(it, ignoreCase = true) } }
+                        val a = shown.filter(kw)
+                        val b = shown.filter { !kw(it) && isNew(it) }
+                        val c = shown.filter { !kw(it) && !isNew(it) && unreadOf(it, page.states) > 0 }
+                        val d = shown.filter { !kw(it) && !isNew(it) && unreadOf(it, page.states) == 0 }
+                        listOf("キーワード" to a, "新しく立ったスレ" to b, "新着のある読んだスレ" to c, "その他" to d).filter { it.second.isNotEmpty() }
+                    } else listOf(null to shown)
+                    for ((title, list) in groups) {
+                        if (title != null) item(key = "h:$title", contentType = 3) { SectionHeader(title, list.size) }
+                        items(list, key = { it.key }, contentType = { 0 }) { t ->
+                            ThreadRow(
+                                t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
+                                isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds,
+                                onLongClick = { Haptics.longPress(hapticView); menuFor = t },
+                            ) { vm.openThread(t) }
+                            HorizontalDivider(color = Palette.border)
+                        }
                     }
                 }
             }
@@ -470,8 +499,52 @@ private fun ThreadRow(
     val pad = prefs.listPad.dp
     val visited = state != null
     val archived = state?.archived == true
+    val compact = prefs.listDensity == "compact"
+    val heatC = when {
+        rank >= 0.9 -> Palette.heatVeryHot
+        rank >= 0.6 -> Palette.heatHot
+        rank >= 0.3 -> Palette.heatWarm
+        else -> Palette.textMuted
+    }
     Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min).graphicsLayer { alpha = if (archived) 0.6f else 1f }) {
-        if (visited) Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread else Palette.threadReadTitle))
+        // 左の帯: 未読が多いほど濃く(+3 は薄く、+300 は濃く。札を見なくても溜まり具合が分かる)
+        if (visited) Box(
+            Modifier.width(3.dp).fillMaxHeight().background(
+                if (unread > 0) Palette.unread.copy(alpha = (0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f))) else Palette.threadReadTitle,
+            ),
+        )
+        // 勢いを行の下のバーで(長さ = 板の中の順位)
+        if (prefs.momentumStyle != "number") Box(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth(rank.toFloat().coerceIn(0.02f, 1f)).height(2.dp)
+                .background(heatC.copy(alpha = if (rank >= 0.3) 0.55f else 0.3f)),
+        )
+        if (compact) {
+            // コンパクト: スレタイ 1 行と、右端にレス数と未読だけ
+            Row(
+                Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad / 2 + 2.dp, bottom = pad / 2 + 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    buildAnnotatedString {
+                        if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
+                        if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
+                        append(t.title)
+                    },
+                    Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = (14 * k).sp, inlineContent = chipInlineContent(),
+                    color = if (visited) Palette.threadReadTitle else Palette.textStrong, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
+                )
+                Text(
+                    "${t.postCount}", Modifier.widthIn(min = 36.dp), fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
+                    color = if (prefs.momentumStyle == "bar") Palette.textMuted else heatC,
+                )
+                if (unread > 0) Text(
+                    if (unread > 999) "+999+" else "+$unread",
+                    Modifier.padding(start = 6.dp).widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+                    color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+            return@Box
+        }
         Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad, bottom = pad)) {
             val titleColor = if (visited) Palette.threadReadTitle else Palette.textStrong
             Text(
@@ -498,12 +571,7 @@ private fun ThreadRow(
                 Text(
                     if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
-                    color = when {
-                        rank >= 0.9 -> Palette.heatVeryHot
-                        rank >= 0.6 -> Palette.heatHot
-                        rank >= 0.3 -> Palette.heatWarm
-                        else -> Palette.textMuted
-                    },
+                    color = if (prefs.momentumStyle == "bar") Palette.textMuted else heatC,
                 )
                 Text(
                     buildAnnotatedString { append("${t.postCount}"); withStyle(SpanStyle(fontSize = (10 * k).sp)) { append("レス") } },
@@ -519,6 +587,36 @@ private fun ThreadRow(
             }
         }
     }
+}
+
+/** 一覧の上の差分の行: 「前回から +12 スレ ・ 新着のある読んだスレ 3」。それぞれ押すと、そのスレだけに絞る */
+@Composable
+private fun DiffLine(newCount: Int, unreadCount: Int, onlyNew: Boolean, onNew: () -> Unit, onUnread: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Palette.surface2).padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("前回から", color = Palette.textMuted, fontSize = 12.sp)
+        Spacer(Modifier.width(6.dp))
+        @Composable fun chip(label: String, on: Boolean, enabled: Boolean, onClick: () -> Unit) = Text(
+            label,
+            Modifier.clip(RoundedCornerShape(50)).background(if (on) Palette.accentWash else Color.Transparent)
+                .border(1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(50))
+                .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 3.dp),
+            color = if (!enabled) Palette.textMuted else if (on) Palette.accent else Palette.textStrong, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        )
+        chip(if (onlyNew) "+$newCount スレ ✕" else "+$newCount スレ", onlyNew, newCount > 0 || onlyNew, onNew)
+        Spacer(Modifier.width(6.dp))
+        chip("新着 $unreadCount", false, unreadCount > 0, onUnread)
+    }
+}
+
+/** 見出しで区切ったときの見出し */
+@Composable
+private fun SectionHeader(title: String, count: Int) {
+    Row(Modifier.fillMaxWidth().background(Palette.base).padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(6.dp))
+        Text("$count", color = Palette.textMuted, fontSize = 11.sp)
+    }
+    HorizontalDivider(color = Palette.border)
 }
 
 /** 上の帯の検索欄(題の代わりに出す) */

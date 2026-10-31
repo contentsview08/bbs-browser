@@ -128,6 +128,8 @@ class Prefs(context: Context) {
     var font by pref("font", "")
     /** 自分で作った配色(CustomDef の JSON)。空なら作っていない */
     var customScheme by pref("customScheme", "")
+    /** 設定で、詳しい項目も出す */
+    var showAdvanced by pref("showAdvanced", false)
     /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */
     var ngStyle by pref("ngStyle", "fold")
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */

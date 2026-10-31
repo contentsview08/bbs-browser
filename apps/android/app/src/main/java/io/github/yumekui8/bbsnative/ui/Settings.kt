@@ -85,22 +85,28 @@ private val TITLES = mapOf(
     "sites" to "お気に入り板とサイト", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
 )
 
+/** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
+private val LocalAdvanced = androidx.compose.runtime.compositionLocalOf { false }
+
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
-    BackHandler(enabled = sub != null) { sub = null }
+    // 検索から開いたページは、探した項目が隠れないよう詳しい設定も出す
+    var viaSearch by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = sub != null) { sub = null; viaSearch = false }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
-        else HeaderBar(TITLES[sub] ?: "", onNav = { sub = null }, navIsBack = true)
+        else HeaderBar(TITLES[sub] ?: "", onNav = { sub = null; viaSearch = false }, navIsBack = true)
         HorizontalDivider(color = Palette.border)
         // テーマと色のページは、今の配色の見本を上に止めておく(下で選ぶと、その場で変わる)
         if (sub == "theme") {
             SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
             HorizontalDivider(color = Palette.border)
         }
+        androidx.compose.runtime.CompositionLocalProvider(LocalAdvanced provides (vm.prefs.showAdvanced || viaSearch)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp).navigationBarsPadding()) {
             when (sub) {
-                null -> SettingsTop(vm) { sub = it }
+                null -> SettingsTop(vm, { sub = it; viaSearch = true }) { sub = it }
                 "theme" -> ThemePage(vm) { sub = it }
                 "text" -> TextPage(vm)
                 "list" -> ListPage(vm)
@@ -115,12 +121,22 @@ fun SettingsScreen(vm: AppViewModel) {
                 "about" -> AboutPage()
                 "custom" -> CustomSchemeEditor(vm.prefs)
             }
+            // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
+            if (sub != null && sub !in setOf("about", "backup", "custom", "sites") && !(vm.prefs.showAdvanced || viaSearch)) {
+                Text(
+                    "詳しい設定も出す",
+                    Modifier.padding(16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                        .clickable { vm.prefs.showAdvanced = true }.padding(horizontal = 14.dp, vertical = 8.dp),
+                    color = Palette.accent, fontSize = 14.sp,
+                )
+            }
+        }
         }
     }
 }
 
 @Composable
-private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
+private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open: (String) -> Unit) {
     val p = vm.prefs
     // 設定の検索(項目の名前と説明から探し、押すとその項目のあるページを開く)
     var q by rememberSaveable { mutableStateOf("") }
@@ -145,7 +161,7 @@ private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
         val hits = SETTINGS_INDEX.filter { (k, label, desc) -> words.all { w -> label.contains(w, true) || desc.contains(w, true) || (TITLES[k] ?: "").contains(w, true) } }
         Group(if (hits.isEmpty()) "見つかりませんでした" else "${hits.size} 件") {
             for ((k, label, desc) in hits) {
-                Column(Modifier.fillMaxWidth().clickable { open(k) }.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Column(Modifier.fillMaxWidth().clickable { openFromSearch(k) }.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(label, color = Palette.textStrong, fontSize = 15.sp)
                     Text(listOfNotNull(TITLES[k], desc.ifEmpty { null }).joinToString(" ・ "), color = Palette.textMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
@@ -177,6 +193,7 @@ private fun SettingsTop(vm: AppViewModel, open: (String) -> Unit) {
         NavRow(Icons.Filled.TravelExplore, Color(0xFF0891B2), "板を探す", desc = "BBS メニューから板を選ぶ") { vm.openRoot(Page.Boards()) }
     }
     Group {
+        SwitchRow("詳しい設定を出す", p.showAdvanced, desc = "オフのときは、よく使う項目だけを出します(検索ではいつも全部から探せます)") { p.showAdvanced = it }
         NavRow(Icons.Filled.Backup, Color(0xFF64748B), "バックアップ") { open("backup") }
         NavRow(Icons.Filled.Info, Color(0xFF6B7280), "このアプリについて") { open("about") }
     }
@@ -190,7 +207,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
     Group {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followSystem, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followSystem = it }
-        SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
+        if (LocalAdvanced.current) SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
     }
     Group("レスの見た目") {
         ChoiceRow(
@@ -198,7 +215,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
             listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風"),
         ) { p.postStyle = it }
     }
-    Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
+    if (LocalAdvanced.current) Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), if (p.customScheme.isEmpty()) "自分の配色を作る" else "自分の配色を直す") { open("custom") }
     }
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
@@ -260,7 +277,7 @@ private fun TextPage(vm: AppViewModel) {
     Group("文字の大きさ") {
         SliderRow("画面全体", p.fontScale, 0.85f..1.3f, steps = 8, label = "${(p.fontScale * 100).toInt()}%") { p.fontScale = (it * 20).toInt() / 20f }
         SliderRow("レスの本文", p.bodyScale, 0.8f..1.4f, steps = 11, label = "${(p.bodyScale * 100).toInt()}%") { p.bodyScale = (it * 20).toInt() / 20f }
-        SliderRow("レスの本文の行間", p.lineHeight, 1.2f..1.9f, steps = 13, label = "%.2f".format(p.lineHeight)) { p.lineHeight = (it * 20).toInt() / 20f }
+        if (LocalAdvanced.current) SliderRow("レスの本文の行間", p.lineHeight, 1.2f..1.9f, steps = 13, label = "%.2f".format(p.lineHeight)) { p.lineHeight = (it * 20).toInt() / 20f }
     }
     Group("見本") {
         Text(
@@ -279,14 +296,14 @@ private fun ListPage(vm: AppViewModel) {
             listOf("subject" to "更新順(掲示板の並び)", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順"),
         ) { p.threadSort = it }
         SwitchRow("引っぱって更新", p.pullToRefreshList, desc = "いちばん上で下へ引くと、スレ一覧を取り直します") { p.pullToRefreshList = it }
-        SwitchRow("見出しで区切る", p.listSections, desc = "並べ替えていないとき、キーワード・新しいスレ・新着のある読んだスレ・その他に分けて出します") { p.listSections = it }
-        SwitchRow("前回からの差分を出す", p.listDiff, desc = "一覧の上に「前回から +12 スレ・新着 3」の行。押すとそのスレだけに絞ります") { p.listDiff = it }
+        if (LocalAdvanced.current) SwitchRow("見出しで区切る", p.listSections, desc = "並べ替えていないとき、キーワード・新しいスレ・新着のある読んだスレ・その他に分けて出します") { p.listSections = it }
+        if (LocalAdvanced.current) SwitchRow("前回からの差分を出す", p.listDiff, desc = "一覧の上に「前回から +12 スレ・新着 3」の行。押すとそのスレだけに絞ります") { p.listDiff = it }
     }
-    Group("行の見た目") {
+    if (LocalAdvanced.current) Group("行の見た目") {
         ChoiceRow("行の形", p.listDensity, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listDensity = it }
         ChoiceRow("勢いの示し方", p.momentumStyle, listOf("number" to "数字の色", "bar" to "行の下のバー", "both" to "両方")) { p.momentumStyle = it }
     }
-    Group("タブ", note = "一覧の下に出すタブ。矢印で並べ替え、スイッチで出す・出さないを決めます(上が左)") {
+    if (LocalAdvanced.current) Group("タブ", note = "一覧の下に出すタブ。矢印で並べ替え、スイッチで出す・出さないを決めます(上が左)") {
         val all = listOf("unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
         val on = p.listTabs.split(',').filter { it.isNotEmpty() }
         // 出しているものを並びのとおりに先に、出していないものを後ろに
@@ -305,7 +322,7 @@ private fun ListPage(vm: AppViewModel) {
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
         WordList(p.keywords, "キーワードを足す", "まだありません") { p.keywords = it }
     }
-    Group("ログ", note = "お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
+    if (LocalAdvanced.current) Group("ログ", note = "お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
         ChoiceRow(
             "開いていないスレのログを消す", p.logRetentionDays.toString(),
             listOf(30 to "30 日たったら", 90 to "90 日たったら", 180 to "180 日たったら", 365 to "1 年たったら", 0 to "消さない").map { it.first.toString() to it.second },
@@ -322,19 +339,19 @@ private fun ThreadPage(vm: AppViewModel) {
     }
     Group("本文") {
         SwitchRow("名無しの名前を省く", p.omitNoname, desc = "板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
-        SwitchRow("続いた空行を 1 行にまとめる", p.collapseBlankLines) { p.collapseBlankLines = it }
-        SwitchRow("AA を見分けて、AA 用の字で出す", p.aaAutoDetect) { p.aaAutoDetect = it }
+        if (LocalAdvanced.current) SwitchRow("続いた空行を 1 行にまとめる", p.collapseBlankLines) { p.collapseBlankLines = it }
+        if (LocalAdvanced.current) SwitchRow("AA を見分けて、AA 用の字で出す", p.aaAutoDetect) { p.aaAutoDetect = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
         SwitchRow("書き込みの多い ID を赤く", p.idHeat) { p.idHeat = it }
-        SwitchRow("ID ごとに色を付ける", p.idColor, desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idColor = it }
+        if (LocalAdvanced.current) SwitchRow("ID ごとに色を付ける", p.idColor, desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idColor = it }
         ChoiceRow(
             "人気のレスの示し方", p.heatStyle,
             listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色", "none" to "示さない"),
         ) { p.heatStyle = it }
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
-        SwitchRow("時間が空いたところに区切りを入れる", p.timeGap, desc = "前のレスから 1 時間以上空いたところや、日付が変わったところに線を引きます") { p.timeGap = it }
+        if (LocalAdvanced.current) SwitchRow("時間が空いたところに区切りを入れる", p.timeGap, desc = "前のレスから 1 時間以上空いたところや、日付が変わったところに線を引きます") { p.timeGap = it }
     }
-    Group("リンク") {
+    if (LocalAdvanced.current) Group("リンク") {
         SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます") { p.urlShorten = it }
         SwitchRow("画像の URL を「画像」の札に", p.imageUrlOmit) { p.imageUrlOmit = it }
         SwitchRow("続いた画像の URL をまとめる", p.imageUrlCollapse, desc = "「画像 ×3」のように 1 つの札に") { p.imageUrlCollapse = it }
@@ -351,7 +368,7 @@ private fun MediaPage(vm: AppViewModel) {
         ChoiceRow("サムネイルを読み込む", p.thumbMode.name, ThumbMode.entries.map { it.name to it.label }) { p.thumbMode = ThumbMode.valueOf(it) }
         ChoiceRow("大きさ", p.thumbSize.toString(), listOf("72" to "小", "96" to "中", "128" to "大")) { p.thumbSize = it.toInt() }
     }
-    Group("グロ注意", note = "この言葉を含むレスと、そのアンカー先の画像を、押すまでぼかします") {
+    if (LocalAdvanced.current) Group("グロ注意", note = "この言葉を含むレスと、そのアンカー先の画像を、押すまでぼかします") {
         SwitchRow("グロ注意の画像をぼかす", p.blurGross) { p.blurGross = it }
         if (p.blurGross) WordList(p.grossWords, "言葉を足す", "言葉がありません") { p.grossWords = it }
     }
@@ -365,12 +382,12 @@ private fun WritePage(vm: AppViewModel) {
     }
     Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
         WordList(p.quickPhrases, "定型文を足す", "定型文はありません") { p.quickPhrases = it }
-        SwitchRow("書いている間、定型文のバーを出す", p.phraseBar, desc = "本文の欄の上に並べ、押すとカーソルの所に入ります") { p.phraseBar = it }
+        if (LocalAdvanced.current) SwitchRow("書いている間、定型文のバーを出す", p.phraseBar, desc = "本文の欄の上に並べ、押すとカーソルの所に入ります") { p.phraseBar = it }
     }
-    Group("送るとき") {
+    if (LocalAdvanced.current) Group("送るとき") {
         SwitchRow("送る前に 3 秒待つ", p.sendDelay, desc = "その間は「取り消す」で止められます(誤爆を防ぐ)。送るボタンを長押しすると、送る前の見た目を確かめられます") { p.sendDelay = it }
     }
-    Group("画像のアップロード(catbox.moe)", note = "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます") {
+    if (LocalAdvanced.current) Group("画像のアップロード(catbox.moe)", note = "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます") {
         SwitchRow("画像のアップロードを使う", p.uploadEnabled) { p.uploadEnabled = it }
         if (p.uploadEnabled) ChoiceRow(
             "大きい画像を縮める", p.uploadMaxDimension.toString(),
@@ -385,10 +402,10 @@ private fun GesturesPage(vm: AppViewModel) {
     Group {
         SwitchRow("なぞって操作する", p.gesturesEnabled, desc = "左右になぞり、続けて上下になぞると、別の操作になります") { p.gesturesEnabled = it }
         SwitchRow("振動で知らせる", p.haptics, desc = "ジェスチャー・引っぱって更新が決まったとき、長押しのメニューで軽く振動します") { p.haptics = it }
-        SwitchRow("レスをダブルタップで返信", p.doubleTapReply, desc = ">>番号 を入れて書き込み欄を開きます。オンにすると、1 回のタップ(ツリーを開く)が少し遅れます") { p.doubleTapReply = it }
-        if (p.gesturesEnabled) SliderRow("感度", p.gestureSensitivity.toFloat(), 1f..5f, steps = 3, label = listOf("鈍い", "少し鈍い", "標準", "少し敏感", "敏感")[p.gestureSensitivity - 1]) { p.gestureSensitivity = it.toInt().coerceIn(1, 5) }
+        if (LocalAdvanced.current) SwitchRow("レスをダブルタップで返信", p.doubleTapReply, desc = ">>番号 を入れて書き込み欄を開きます。オンにすると、1 回のタップ(ツリーを開く)が少し遅れます") { p.doubleTapReply = it }
+        if (p.gesturesEnabled && LocalAdvanced.current) SliderRow("感度", p.gestureSensitivity.toFloat(), 1f..5f, steps = 3, label = listOf("鈍い", "少し鈍い", "標準", "少し敏感", "敏感")[p.gestureSensitivity - 1]) { p.gestureSensitivity = it.toInt().coerceIn(1, 5) }
     }
-    if (!p.gesturesEnabled) return
+    if (!p.gesturesEnabled || !LocalAdvanced.current) return
     for ((screen, title) in listOf("list" to "スレ一覧", "thread" to "スレ表示")) {
         Group(title) {
             val assign = p.gestures(screen)
@@ -405,12 +422,12 @@ private fun BehaviorPage(vm: AppViewModel) {
     val p = vm.prefs
     Group("スクロール") {
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
-        SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
-        SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
+        if (LocalAdvanced.current) SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
+        if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {
-        SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshButton) { p.showRefreshButton = it }
-        SwitchRow("スレ一覧も引っぱって更新", p.pullToRefreshList) { p.pullToRefreshList = it }
+        if (LocalAdvanced.current) SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshButton) { p.showRefreshButton = it }
+        if (LocalAdvanced.current) SwitchRow("スレ一覧も引っぱって更新", p.pullToRefreshList) { p.pullToRefreshList = it }
         ChoiceRow(
             "開いているスレの自動更新", p.autoRefreshSec.toString(),
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },
@@ -422,7 +439,7 @@ private fun BehaviorPage(vm: AppViewModel) {
 private fun NgPage(vm: AppViewModel) {
     val p = vm.prefs
     var adding by remember { mutableStateOf(false) }
-    Group("見せ方") {
+    if (LocalAdvanced.current) Group("見せ方") {
         ChoiceRow("NG のレス", p.ngStyle, listOf("fold" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngStyle = it }
     }
     Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイの NG は、スレを長押しして足せます") {

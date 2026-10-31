@@ -313,6 +313,8 @@ export interface Connector {
   anchorTarget?: 'no' | 'ref'
   /** URL を貼られたとき、どのコネクタで開くかを決める */
   canHandle(url: string): boolean
+  /** サイト(板の一覧の入口)の URL を受け持つか。なければ 2ch 互換(bbsmenu)として足す */
+  handlesSite?(menuUrl: string): boolean
   /**
    * 本文からアイコン(5ch の BE アイコンなど)を取り出す。掲示板ごとの書き方なので、コネクタが受け持つ。
    * 返す body はアイコンの部分を除いた本文

@@ -165,6 +165,11 @@ export const honoBbsConnector: Connector = {
     return THREAD_URL.test(url)
   },
 
+  /** サイトの入口は web の板の一覧の URL(https://<web>/boards) */
+  handlesSite(menuUrl) {
+    return /^https?:\/\/[^/]+\/boards\/?(?:[?#].*)?$/.test(menuUrl)
+  },
+
   async resolveUrl(url, ctx) {
     const t = THREAD_URL.exec(url)
     const b = t ? undefined : BOARD_URL.exec(url)

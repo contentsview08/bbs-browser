@@ -2258,7 +2258,7 @@ export function BoardsTab(
         </form>
       </Section>
 
-      <Section title="BBS メニュー" note="掲示板の板一覧(bbsmenu.html か bbsmenu.json)です。「板一覧を見る」から、お気に入りに登録する板を探せます">
+      <Section title="BBS メニュー" note="掲示板の板一覧(bbsmenu.html か bbsmenu.json)です。hono-bbs は web の板の一覧の URL(https://〜/boards)を入れます。「板一覧を見る」から、お気に入りに登録する板を探せます">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {props.sites.map((s) => (
             <div key={s.menuUrl}>

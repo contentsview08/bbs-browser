@@ -1751,7 +1751,9 @@ export default function App() {
   const addSite = async (name: string, menuUrl: string) => {
     if (!store) return
     const host = new URL(menuUrl).host // URL として読めなければここで例外になる
-    const s: SiteConfig = { connectorId: '2ch-compat', name: name || host, menuUrl }
+    // サイトの入口を受け持つコネクタ(hono-bbs の /boards など)があればそれ、なければ 2ch 互換(bbsmenu)
+    const connectorId = allConnectors().find((c) => c.handlesSite?.(menuUrl))?.id ?? '2ch-compat'
+    const s: SiteConfig = { connectorId, name: name || host, menuUrl }
     await store.addSite(s)
     setSites(await store.listSites())
   }

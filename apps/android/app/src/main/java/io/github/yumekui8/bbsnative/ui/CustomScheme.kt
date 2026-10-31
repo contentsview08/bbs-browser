@@ -106,16 +106,9 @@ fun contrast(a: Color, b: Color): Float {
 
 private val LABELS = mapOf("base" to "地", "surface" to "面(レス・帯)", "text" to "字", "accent" to "強調(ボタン・選んだ印)", "unread" to "未読", "own" to "自分の書き込み")
 
-/** 設定の「自分の配色」のページ: 見本・6 色・コントラストの判定・使う・JSON をコピー */
+/** 配色の見本: 上の帯・スレ一覧の行(読んだ・まだ開いていない)・レス・書き込み欄を、その配色で小さく描く */
 @Composable
-fun CustomSchemeEditor(prefs: io.github.yumekui8.bbsnative.data.Prefs) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val def = CustomDef.parse(prefs.customScheme) ?: CustomDef.of(schemeOf(prefs.scheme).takeIf { it.key != "custom" } ?: SCHEMES[0])
-    fun save(d: CustomDef) { prefs.customScheme = d.toJson() }
-    val s = buildScheme(def)
-    var editing by remember { mutableStateOf<String?>(null) }
-
-    // 見本(いま作っている色で、スレ一覧の行とレスを描く。変えるとその場で変わる)
+fun SchemePreview(s: Scheme, own: Color, accent: Color = s.accent, accentText: Color = s.accentText) {
     Column(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, Palette.border, RoundedCornerShape(8.dp)).background(s.base)) {
         Row(Modifier.fillMaxWidth().background(s.bar).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("ニュー速", color = s.textStrong, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f))
@@ -136,7 +129,7 @@ fun CustomSchemeEditor(prefs: io.github.yumekui8.bbsnative.data.Prefs) {
         Text("まだ開いていないスレ", Modifier.padding(horizontal = 15.dp, vertical = 8.dp), color = s.textStrong, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         Box(Modifier.fillMaxWidth().height(1.dp).background(s.border))
         Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).background(s.surface)) {
-            Box(Modifier.width(3.dp).fillMaxHeight().background(def.own))
+            Box(Modifier.width(3.dp).fillMaxHeight().background(own))
             Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("12  ", color = s.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -150,9 +143,23 @@ fun CustomSchemeEditor(prefs: io.github.yumekui8.bbsnative.data.Prefs) {
         Row(Modifier.fillMaxWidth().background(s.bar).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("書き込む", Modifier.weight(1f).background(s.surface, RoundedCornerShape(10.dp)).border(1.dp, s.border, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 8.dp), color = s.textMuted, fontSize = 13.sp)
             Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(34.dp).background(s.accent, CircleShape), contentAlignment = Alignment.Center) { Text("➤", color = s.accentText, fontSize = 14.sp) }
+            Box(Modifier.size(34.dp).background(accent, CircleShape), contentAlignment = Alignment.Center) { Text("➤", color = accentText, fontSize = 14.sp) }
         }
     }
+
+}
+
+/** 設定の「自分の配色」のページ: 見本・6 色・コントラストの判定・使う・JSON をコピー */
+@Composable
+fun CustomSchemeEditor(prefs: io.github.yumekui8.bbsnative.data.Prefs) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val def = CustomDef.parse(prefs.customScheme) ?: CustomDef.of(schemeOf(prefs.scheme).takeIf { it.key != "custom" } ?: SCHEMES[0])
+    fun save(d: CustomDef) { prefs.customScheme = d.toJson() }
+    val s = buildScheme(def)
+    var editing by remember { mutableStateOf<String?>(null) }
+
+    // 見本(いま作っている色で、スレ一覧の行とレスを描く。変えるとその場で変わる)
+    SchemePreview(s, def.own)
 
     // 6 色
     Column(Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(8.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(8.dp))) {

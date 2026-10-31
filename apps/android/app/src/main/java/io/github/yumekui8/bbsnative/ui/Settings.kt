@@ -93,6 +93,11 @@ fun SettingsScreen(vm: AppViewModel) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
         else HeaderBar(TITLES[sub] ?: "", onNav = { sub = null }, navIsBack = true)
         HorizontalDivider(color = Palette.border)
+        // テーマと色のページは、今の配色の見本を上に止めておく(下で選ぶと、その場で変わる)
+        if (sub == "theme") {
+            SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
+            HorizontalDivider(color = Palette.border)
+        }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp).navigationBarsPadding()) {
             when (sub) {
                 null -> SettingsTop(vm) { sub = it }

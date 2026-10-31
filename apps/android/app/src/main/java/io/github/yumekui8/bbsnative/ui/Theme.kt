@@ -91,10 +91,11 @@ val SCHEMES = listOf(
     ),
     // Nord: 青みの灰色の地に淡い水色の強調。彩度が低く色がうるさくない
     Scheme(
+        // 地を一段暗く、字を一段明るくして、全体が薄く見えないように(Nord の色味は保つ)
         "nord", "Nord", true,
-        c(0x2E3440), c(0x3B4252), c(0x353C4A), c(0x3B4252), c(0x434C5E), c(0x434C5E), c(0x4C566A),
-        c(0xECEFF4), c(0xD8DEE9), c(0x8F9BB3), c(0x88C0D0), c(0x1E222A), wash(0x88C0D0, 0.14f),
-        c(0xBF616A), c(0xFFFFFF), c(0x81A1C1), c(0xA3BE8C), c(0xB4C6DC), c(0xEBCB8B), c(0xD08770), c(0xBF616A),
+        c(0x242933), c(0x2E3440), c(0x2E3440), c(0x3B4252), c(0x434C5E), c(0x3B4252), c(0x4C566A),
+        c(0xF5F7FA), c(0xE5E9F0), c(0x9BA6BC), c(0x88C0D0), c(0x1E222A), wash(0x88C0D0, 0.16f),
+        c(0xD06C76), c(0xFFFFFF), c(0x8FBCDB), c(0xA3BE8C), c(0xBFD0E3), c(0xEBCB8B), c(0xE0956E), c(0xE06C75),
     ),
     // ハイコントラスト: 真っ黒の地に真っ白の字、意味の色は彩度最大
     Scheme(
@@ -237,9 +238,11 @@ object Palette {
     /** 空色の地の上で読める字の色 */
     val skyText get() = Color(0xFFF4F8FC)
     val skyMuted get() = Color(0xE6FFFFFF)
-    val lineBg get() = androidx.compose.ui.graphics.lerp(base, if (scheme.dark) Color(0xFF6F8FB8) else Color(0xFF7F9CC0), if (scheme.dark) 0.10f else 0.13f)
-    // 暗い配色の吹き出しは、地より少しだけ明るい面(明るすぎると白い字との差が小さくなる)
-    val lineBubble get() = if (scheme.dark) surface2 else Color.White
+    // 地と吹き出しが見分けられるように: 暗い配色は地を沈めて吹き出しを少し浮かせ、明るい配色は地に青灰をはっきり混ぜる
+    // (地と吹き出しの明るさの比が 1.2〜2 になるように。字と吹き出しの差は大きいまま)
+    val lineBg get() = if (scheme.dark) androidx.compose.ui.graphics.lerp(androidx.compose.ui.graphics.lerp(base, Color(0xFF6F8FB8), 0.06f), Color.Black, 0.35f)
+        else androidx.compose.ui.graphics.lerp(base, Color(0xFF7F9CC0), 0.22f)
+    val lineBubble get() = if (scheme.key == "gray") surface2 else if (scheme.dark) androidx.compose.ui.graphics.lerp(surface2, Color.White, 0.08f) else Color.White
     /** 吹き出しの外の字(名前・日付)は、空色の地の上でも読める色に */
     val lineOwnBg get() = if (scheme.dark) Color(0xFF3F7D2C) else Color(0xFF8DE055)
     val lineOwnText get() = if (scheme.dark) Color(0xFFEEF7E8) else Color(0xFF10200A)

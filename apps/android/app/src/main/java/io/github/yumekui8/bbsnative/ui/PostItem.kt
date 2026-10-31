@@ -25,6 +25,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,6 +43,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** Discord 風・LINE 風で、頭の上に出す返信先(本文の頭のアンカー) */
+/**
+ * 頭の行の置き場所と字の並び(レスごと)。長押しした位置が ID・名前の上なら、その ID・名前の操作を出すために使う
+ */
+object HeaderHits {
+    val coords = java.util.WeakHashMap<RenderedPost, androidx.compose.ui.layout.LayoutCoordinates>()
+    val layouts = java.util.WeakHashMap<RenderedPost, androidx.compose.ui.text.TextLayoutResult>()
+
+    /** row の中の位置 pos が、レス r の頭の行の押せる所(ID「i:」・名前「n:」)の上なら、そのタグ */
+    fun tagAt(r: RenderedPost, row: androidx.compose.ui.layout.LayoutCoordinates, pos: androidx.compose.ui.geometry.Offset): String? {
+        val c = coords[r]?.takeIf { it.isAttached } ?: return null
+        val l = layouts[r] ?: return null
+        val p = runCatching { c.localPositionOf(row, pos) }.getOrNull() ?: return null
+        if (p.x < 0 || p.y < 0 || p.x > c.size.width || p.y > c.size.height) return null
+        val i = l.getOffsetForPosition(p)
+        return r.header.getLinkAnnotations(maxOf(0, i - 1), i + 1).mapNotNull { (it.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag }
+            .firstOrNull { it.startsWith("i:") || it.startsWith("n:") }
+    }
+}
+
 class ReplyPreview(val no: Int, val id: String?, val name: String, val text: String)
 
 /**
@@ -72,14 +94,16 @@ fun PostItem(
         if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.thumbSize)
         if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
     }
+    // 頭の行の字の並びと位置を覚えておく(長押しした所が ID・名前の上か、スレ表示が調べる)
+    val track = Modifier.onGloballyPositioned { HeaderHits.coords[r] = it }
     val header = @Composable {
         if (own || toOwn) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.header, Modifier.weight(1f, fill = false), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips)
+                Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { HeaderHits.layouts[r] = it })
                 Spacer(Modifier.width(6.dp))
                 OwnChip(if (own) "自分" else "→あなた宛")
             }
-        } else Text(r.header, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips)
+        } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { HeaderHits.layouts[r] = it })
     }
     // 左右の帯: 自分の書き込みは左に緑。人気のレスは設定の側(左・右)に暖色(左のときに自分の書き込みと重なれば右へ)と淡い地。
     // 見た目(カード・Discord 風・LINE 風)に関わらず同じ
@@ -143,18 +167,36 @@ fun PostItem(
                     Identicon(id, AVATAR)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        if (reply != null) ReplyLine(reply, indent = 0.dp) { onReply(reply.no) }
                         header()
                         body(Modifier.padding(top = 2.dp))
                         media()
+                        // 返信先は、引用リツイートのように本文の下に枠で囲んで小さく(下の「返信」と見分けやすいように)
+                        if (reply != null) Column(
+                            Modifier.padding(top = 6.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, Palette.borderStrong, RoundedCornerShape(8.dp)).clickable { onReply(reply.no) }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Identicon(reply.id, 16.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("${reply.name}  >>${reply.no}", color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                            Text(reply.text, Modifier.padding(top = 2.dp), color = Palette.textBody, fontSize = 13.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
                         if (replies.isNotEmpty()) Column(
                             Modifier.padding(top = 6.dp).fillMaxWidth().background(Palette.surface2.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
                         ) {
-                            for (rp in replies) Row(Modifier.fillMaxWidth().clickable { onReply(rp.no) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            for (rp in replies) Row(Modifier.fillMaxWidth().clickable { onReply(rp.no) }.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
                                 Identicon(rp.id, 18.dp)
                                 Spacer(Modifier.width(6.dp))
-                                Text("${rp.name}  ", color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
-                                Text(rp.text, Modifier.weight(1f), color = Palette.textBody, fontSize = 13.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                // 名前と本文の頭を 1 つの字の並びに(名前の幅で本文が細く折り返さないように)
+                                Text(
+                                    androidx.compose.ui.text.buildAnnotatedString {
+                                        withStyle(androidx.compose.ui.text.SpanStyle(color = Palette.textMuted, fontSize = 12.sp)) { append(rp.name + "  ") }
+                                        append(rp.text)
+                                    },
+                                    Modifier.weight(1f), color = Palette.textBody, fontSize = 13.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
                             }
                             if (replyTotal > replies.size) Text(
                                 "ほか ${replyTotal - replies.size} 件の返信", Modifier.clickable(onClick = onReplies).padding(top = 3.dp),

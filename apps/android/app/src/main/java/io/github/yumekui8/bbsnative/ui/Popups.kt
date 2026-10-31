@@ -165,8 +165,10 @@ private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild
                     val elbow = 26.dp.toPx()
                     val radius = 6.dp.toPx()
                     fun x(k: Int) = s * k + s / 2
-                    // 上の段から続く縦線
-                    r.rails.forEachIndexed { k, on -> if (on) drawLine(line, Offset(x(k), 0f), Offset(x(k), size.height), w) }
+                    // 上の段から続く縦線。5 段より深いところは 5 段目にそろえて描くので、つなぎの列(depth - 1)より右の線は描かない
+                    r.rails.forEachIndexed { k, on -> if (on && k < depth - 1) drawLine(line, Offset(x(k), 0f), Offset(x(k), size.height), w) }
+                    // 5 段より深い段の兄弟の続きは、まとめてつなぎの列に
+                    if (r.depth > 5 && r.rails.drop(depth - 1).any { it }) drawLine(line, Offset(x(depth - 1), 0f), Offset(x(depth - 1), size.height), w)
                     if (depth > 0) {
                         val px = x(depth - 1)
                         // まだ兄弟がいれば下まで(├)、最後の子なら角まで(└)
@@ -179,8 +181,12 @@ private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild
                         }
                         drawPath(path, line, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
                     }
-                    // 子があれば、自分の頭の下から縦線を下ろす
-                    if (hasChild) drawLine(line, Offset(x(depth), elbow + 14.dp.toPx()), Offset(x(depth), size.height), w)
+                    // 子があれば、自分のアイコンの下から縦線を下ろす。5 段目(これより右へずらさない段)では、子も同じ段に並ぶので、自分のつなぎの列に下ろす
+                    if (hasChild) {
+                        val cx = if (r.depth >= 5) x(depth - 1) else x(depth)
+                        val top = if (r.depth >= 5) elbow else 10.dp.toPx() + AVATAR.toPx()
+                        drawLine(line, Offset(cx, top), Offset(cx, size.height), w)
+                    }
                 },
         ) {
             Spacer(Modifier.width(step * depth))

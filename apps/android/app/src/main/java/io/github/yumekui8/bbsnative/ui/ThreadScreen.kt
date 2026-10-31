@@ -84,6 +84,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.calculateZoom
@@ -172,6 +174,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var menu by remember { mutableStateOf(false) }
     var postMenu by remember { mutableStateOf<Post?>(null) }
     var ngWordFor by remember { mutableStateOf<Post?>(null) }
+    /** ID・名前を長押ししたときのメニュー(種類「i」「n」と、そのレス) */
+    var headMenu by remember { mutableStateOf<Pair<Char, Post>?>(null) }
+    // 長押しの判定のため、レスの行の置き場所と、指を置いた位置(行の中)を覚えておく
+    val rowCoords = remember { HashMap<Int, androidx.compose.ui.layout.LayoutCoordinates>() }
+    var downInRow by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var gallery by remember { mutableStateOf(false) }
     var nextSheet by remember { mutableStateOf(false) }
     /** 中身を見せている NG のレス */
@@ -363,11 +370,38 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     val a = if (f > 0.55f) 0.16f + (f - 0.55f) / 0.45f * 0.08f else f / 0.55f * 0.16f
                     drawRect(flashColor.copy(alpha = a * if (Palette.dark) 0.8f else 0.5f))
                 } else Modifier)
-                .pointerInput(p.no) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); downNo = p.no } }
+                .onGloballyPositioned { if (inMain) rowCoords[p.no] = it }
+                .pointerInput(p.no) {
+                    awaitEachGesture {
+                        val d = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        downNo = p.no; downInRow = d.position
+                        // ID・名前の上での長押しは、字のリンクより先にここで受ける(リンクが指を受け取り、離したときに押したことになっていた)
+                        val tag = if (inMain) page.rendered[p.no]?.let { r -> rowCoords[p.no]?.takeIf { it.isAttached }?.let { rc -> HeaderHits.tagAt(r, rc, d.position) } } else null
+                        if (tag == null) return@awaitEachGesture
+                        val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            var e: androidx.compose.ui.input.pointer.PointerEvent
+                            do {
+                                e = awaitPointerEvent(PointerEventPass.Initial)
+                                val c = e.changes.firstOrNull { it.id == d.id } ?: break
+                                if ((c.position - d.position).getDistance() > viewConfiguration.touchSlop) break
+                            } while (e.changes.any { it.pressed })
+                            true
+                        }
+                        if (up == null) {
+                            // 長押しになった: メニューを出し、離すまでの指の動きは下へ渡さない(リンクも行の長押しも動かさない)
+                            Haptics.longPress(view)
+                            headMenu = tag[0] to p
+                            do { val e = awaitPointerEvent(PointerEventPass.Initial); e.changes.forEach { it.consume() } } while (e.changes.any { it.pressed })
+                        }
+                    }
+                }
                 .combinedClickable(
                     interactionSource = null, indication = null,
                     onClick = { index.treeRows(p.no).takeIf { it.size > 1 }?.let { rows -> openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) } },
-                    onLongClick = { Haptics.longPress(view); postMenu = p },
+                    onLongClick = {
+                        // ID・名前の上の長押しは上で受けている
+                        if (headMenu == null) { Haptics.longPress(view); postMenu = p }
+                    },
                     // ダブルタップで返信(設定がオンのときだけ。オフなら 1 回のタップを待たせない)
                     onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); vm.openReply(page, ">>${p.no}\n") }) else null,
                 ),
@@ -391,7 +425,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
                     // タイムライン: 本文の下に返信を 2 件まで(それ以上は「ほか N 件」)
-                    replies = if (style == "timeline") (index.replies[p.no] ?: emptyList()).take(2).mapNotNull { n -> previewOf(n) } else emptyList(),
+                    // 返信の多い(人気の)返信から出す
+                    replies = if (style == "timeline") (index.replies[p.no] ?: emptyList()).sortedByDescending { n -> index.replyCount[n] ?: 0 }.take(2).mapNotNull { n -> previewOf(n) } else emptyList(),
                     replyTotal = index.replies[p.no]?.size ?: 0,
                     onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
@@ -534,7 +569,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 shown.getOrNull(i - 1)?.let { q -> remember(q.date, p.date) { timeGapLabel(q.date, p.date) } }?.let { TimeGapDivider(it, style) }
                             postRow(p, shown.getOrNull(i - 1), true)
                             // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
-                            if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
+                            // まとめ風は区切りをごく薄く(まとめサイトのように、レスの切れ目は余白で見せる)
+                            if (style == "matome") HorizontalDivider(color = Palette.border.copy(alpha = 0.3f))
+                            else if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
                         }
                         // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)
                         item(key = "end") {
@@ -700,8 +737,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 listOf(
                     MenuItem("URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, TwoCh.webUrl(page.summary), false) },
-                    MenuItem("スレを保存(テキスト)", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
-                    MenuItem("スレを保存(HTML)", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
                     MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person, Palette.own) { filter = if (filter == Filter.OWN) null else Filter.OWN },
                     MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { refresh() },
                 ),
@@ -779,6 +814,24 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { postMenu = null }
     }
 
+    headMenu?.let { (kind, p) ->
+        val sameId = if (kind == 'i' && p.id != null) index.posts.filter { it.id == p.id } else emptyList()
+        val sameName = if (kind == 'n') index.posts.filter { it.name == p.name } else emptyList()
+        MenuSheet(
+            listOf(
+                if (kind == 'i' && p.id != null) listOf(
+                    MenuItem("この ID を NG(ID:${p.id})", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("id", p.id)) },
+                    MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameId, focus = p.no) },
+                    MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyText(context, p.id); vm.toast = "コピーしました" },
+                ) else listOf(
+                    MenuItem("この名前を NG(${p.name.take(20)})", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("name", p.name)) },
+                    MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameName, focus = p.no) },
+                    MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyText(context, p.name); vm.toast = "コピーしました" },
+                ),
+            ),
+            MenuAt.Center,
+        ) { headMenu = null }
+    }
     ngWordFor?.let { p ->
         var word by remember(p.no) { mutableStateOf(p.body.lineSequence().firstOrNull()?.take(30) ?: "") }
         AlertDialog(

@@ -59,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -111,7 +112,19 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
         return
     }
     Box(box.clickable { onOpen(url) }, contentAlignment = Alignment.Center) {
-        AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier))
+        // 読み込み中は、ゆっくり明滅する面と小さな輪を出す(読めなかったら「×」)
+        var state by remember(url) { mutableStateOf(0) } // 0 読み込み中・1 読めた・2 読めなかった
+        if (state == 0) {
+            val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "thumb")
+            val a by t.animateFloat(0.35f, 0.8f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween<Float>(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
+            Box(Modifier.matchParentSize().graphicsLayer { alpha = a }.background(Palette.textMuted.copy(alpha = 0.18f)))
+            androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), color = Palette.textMuted, strokeWidth = 2.dp)
+        }
+        if (state == 2) Text("×", color = Palette.textMuted, fontSize = 16.sp)
+        AsyncImage(
+            model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier),
+            onSuccess = { state = 1 }, onError = { state = 2 },
+        )
         if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
         if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
     }

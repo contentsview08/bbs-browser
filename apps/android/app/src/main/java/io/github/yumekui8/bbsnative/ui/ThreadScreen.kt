@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -654,7 +655,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         MenuSheet(
             listOf(
                 // 今のスマホ版の長押しと同じ並び: 返信・定型文・アンカーツリー / コピー・AA / NG
-                listOf(MenuItem("返信(>>${p.no})", Icons.AutoMirrored.Filled.Reply, Palette.accent) { vm.openReply(page, ">>${p.no}\n") }) +
+                listOf(
+                    MenuItem("返信(>>${p.no})", Icons.AutoMirrored.Filled.Reply, Palette.accent) { vm.openReply(page, ">>${p.no}\n") },
+                    // 引用して返信: >>番号 と、本文の頭(アンカーの行を除いて 3 行まで)を「>」付きで
+                    MenuItem("引用して返信", Icons.Filled.FormatQuote, Palette.accent) {
+                        val quote = p.body.lines().filter { it.isNotBlank() && !it.trimStart().startsWith(">>") }.take(3).joinToString("\n") { "> ${it.trim()}" }
+                        vm.openReply(page, ">>${p.no}\n$quote\n")
+                    },
+                ) +
                     vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { ph ->
                         MenuItem("「$ph」とすぐ書き込む", Icons.Filled.Bolt, Palette.markHot) { vm.quickPost(page, p.no, ph) }
                     } +

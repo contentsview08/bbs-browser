@@ -344,6 +344,10 @@ private fun WritePage(vm: AppViewModel) {
     }
     Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
         WordList(p.quickPhrases, "定型文を足す", "定型文はありません") { p.quickPhrases = it }
+        SwitchRow("書いている間、定型文のバーを出す", p.phraseBar, desc = "本文の欄の上に並べ、押すとカーソルの所に入ります") { p.phraseBar = it }
+    }
+    Group("送るとき") {
+        SwitchRow("送る前に 3 秒待つ", p.sendDelay, desc = "その間は「取り消す」で止められます(誤爆を防ぐ)。送るボタンを長押しすると、送る前の見た目を確かめられます") { p.sendDelay = it }
     }
     Group("画像のアップロード(catbox.moe)", note = "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます") {
         SwitchRow("画像のアップロードを使う", p.uploadEnabled) { p.uploadEnabled = it }

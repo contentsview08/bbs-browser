@@ -167,21 +167,33 @@ object TwoCh {
         return text
     }
 
-    private val nonameCache = HashMap<String, String?>()
+    /** 板の SETTING.TXT(キー → 値)。取れなければ空。板ごとに 1 回だけ読む */
+    private val settingCache = HashMap<String, Map<String, String>>()
+
+    /** 読み終えた SETTING.TXT(まだなら null) */
+    fun cachedSetting(boardUrl: String): Map<String, String>? = synchronized(settingCache) { settingCache[boardUrl] }
+
+    suspend fun setting(boardUrl: String): Map<String, String> {
+        synchronized(settingCache) { settingCache[boardUrl]?.let { return it } }
+        val map = runCatching {
+            val res = Http.get("${boardUrl}SETTING.TXT")
+            if (res.status !in 200..299) emptyMap()
+            else String(res.body, charsetOf(res)).lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
+        }.getOrDefault(emptyMap())
+        synchronized(settingCache) { settingCache[boardUrl] = map }
+        return map
+    }
 
     /** 読み終えた既定の名前(まだなら null) */
-    fun cachedNoname(boardUrl: String): String? = synchronized(nonameCache) { nonameCache[boardUrl] }
+    fun cachedNoname(boardUrl: String): String? = cachedSetting(boardUrl)?.get("BBS_NONAME_NAME")?.ifEmpty { null }
 
-    /** 板の既定の名前(SETTING.TXT の BBS_NONAME_NAME)。取れなければ null。板ごとに 1 回だけ読む */
-    suspend fun nonameName(boardUrl: String): String? {
-        synchronized(nonameCache) { if (boardUrl in nonameCache) return nonameCache[boardUrl] }
-        val name = runCatching {
-            val res = Http.get("${boardUrl}SETTING.TXT")
-            if (res.status !in 200..299) null
-            else String(res.body, charsetOf(res)).lineSequence().firstOrNull { it.startsWith("BBS_NONAME_NAME=") }?.substringAfter('=')?.trim()?.ifEmpty { null }
-        }.getOrNull()
-        synchronized(nonameCache) { nonameCache[boardUrl] = name }
-        return name
+    /** 板の既定の名前(SETTING.TXT の BBS_NONAME_NAME)。取れなければ null */
+    suspend fun nonameName(boardUrl: String): String? = setting(boardUrl)["BBS_NONAME_NAME"]?.ifEmpty { null }
+
+    /** 本文の上限(バイト数・行数)。SETTING.TXT にあれば。5ch の BBS_LINE_NUMBER は行数の半分を書くので 2 倍する */
+    fun cachedLimits(boardUrl: String): Pair<Int?, Int?> {
+        val m = cachedSetting(boardUrl) ?: return null to null
+        return m["BBS_MESSAGE_COUNT"]?.toIntOrNull() to m["BBS_LINE_NUMBER"]?.toIntOrNull()?.let { it * 2 }
     }
 
     /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */

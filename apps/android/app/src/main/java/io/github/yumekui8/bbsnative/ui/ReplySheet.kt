@@ -54,6 +54,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.foundation.layout.fillMaxSize
@@ -109,7 +112,13 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
     val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
-    val canSend = !r.sending && r.body.isNotBlank() && disabled == null
+    // 送る前の待ち(設定)。残り秒数。0 より大きい間は「取り消す」を出す
+    var pending by remember { mutableStateOf(0) }
+    LaunchedEffect(pending > 0) {
+        while (pending > 0) { kotlinx.coroutines.delay(1000); if (pending > 0) pending-- ; if (pending == 0) vm.send(page) }
+    }
+    var preview by remember { mutableStateOf(false) }
+    val canSend = !r.sending && r.body.isNotBlank() && disabled == null && pending == 0
     val shape = RoundedCornerShape(10.dp)
     // キーボードの分はスレ表示ごと持ち上げる(ThreadScreen の imePadding)。ここはナビゲーションバーの分だけ
     Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
@@ -139,6 +148,30 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SmallField(r.name, { r.name = it }, "名前", Modifier.weight(1f))
                 SmallField(r.mail, { r.mail = it }, "メール(sage など)", Modifier.weight(1f))
+            }
+        }
+        // 定型文のバー(書いている間)。押すとカーソルの所に入る
+        val phrases = vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (r.open && vm.prefs.phraseBar && phrases.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (ph in phrases) Text(
+                    ph,
+                    Modifier.clip(RoundedCornerShape(50)).background(Palette.surface2).border(1.dp, Palette.border, RoundedCornerShape(50))
+                        .clickable {
+                            val sel = field.selection
+                            val t = field.text.substring(0, sel.min) + ph + field.text.substring(sel.max)
+                            field = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(sel.min + ph.length))
+                            r.body = t; vm.saveDraftLater(page)
+                        }.padding(horizontal = 12.dp, vertical = 5.dp),
+                    color = Palette.textStrong, fontSize = 13.sp,
+                )
+            }
+        }
+        // 送るまでの待ち(取り消せる)
+        if (pending > 0) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp).background(Palette.surface2, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("$pending 秒後に送ります", Modifier.weight(1f), color = Palette.textStrong, fontSize = 13.sp)
+                Text("取り消す", Modifier.clickable { pending = 0 }.padding(horizontal = 8.dp, vertical = 2.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             }
         }
         Row(Modifier.fillMaxWidth().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
@@ -183,7 +216,11 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             Spacer(Modifier.width(6.dp))
             // 送る(丸いボタン)
             Box(
-                Modifier.padding(bottom = 1.dp).size(40.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape).clickable(enabled = canSend) { vm.send(page) },
+                Modifier.padding(bottom = 1.dp).size(40.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape)
+                    .combinedClickable(
+                        enabled = canSend,
+                        onLongClick = { preview = true },
+                    ) { if (vm.prefs.sendDelay) pending = 3 else vm.send(page) },
                 contentAlignment = Alignment.Center,
             ) {
                 if (r.sending) CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accentText, strokeWidth = 2.dp)
@@ -197,8 +234,56 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 }
             }
         }
+        if (r.open && r.body.isNotEmpty()) ByteMeter(r.body, page.summary.boardUrl)
     }
+    // 送る前の見た目(送るボタンの長押し)
+    if (preview) PostPreview(vm, page) { preview = false }
     PostDialogs(r, onAccept = { vm.acceptConfirm(page) })
+}
+
+/**
+ * バイト数・行数の目盛り(書いている間、欄の下に)。板の上限(SETTING.TXT)に対する割合を細い線で、9 割を超えたら暖色、超えたら赤
+ */
+@Composable
+private fun ByteMeter(body: String, boardUrl: String) {
+    val (maxBytes, maxLines) = remember(boardUrl) { io.github.yumekui8.bbsnative.bbs.TwoCh.cachedLimits(boardUrl) }
+    val bytes = remember(body) { shiftJisByteLength(body) }
+    val lines = body.count { it == '\n' } + 1
+    val limit = maxBytes ?: 2048
+    val f = maxOf(bytes.toFloat() / limit, maxLines?.let { lines.toFloat() / it } ?: 0f)
+    val c = when { f > 1f -> Palette.markDanger; f > 0.9f -> Palette.markHot; else -> Palette.textMuted }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(3.dp).background(Palette.border, RoundedCornerShape(2.dp))) {
+            Box(Modifier.fillMaxWidth(f.coerceIn(0f, 1f)).fillMaxHeight().background(c, RoundedCornerShape(2.dp)))
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$bytes/${limit} バイト" + (maxLines?.let { "・$lines/$it 行" } ?: ""),
+            color = c, fontSize = 11.sp,
+        )
+    }
+}
+
+/** 送る前の見た目: 書いた本文を、スレの中と同じ組み立てで 1 レスの形にして見せる */
+@Composable
+private fun PostPreview(vm: AppViewModel, page: Page.Thread, onDismiss: () -> Unit) {
+    val r = page.reply
+    val rendered = remember(r.body) {
+        val post = io.github.yumekui8.bbsnative.bbs.Post(
+            (page.index.posts.lastOrNull()?.no ?: 0) + 1, r.name.ifBlank { "名無し" }, r.mail.trim(), "(送る前の見た目)", null, r.body,
+        )
+        val idx = io.github.yumekui8.bbsnative.bbs.PostIndex.build(page.index.posts + post)
+        renderPosts(idx, PostLinks(), RenderOptions(style = "card"))[post.no]
+    }
+    CenterPanel("送る前の見た目", onDismiss) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+            if (rendered != null) PostItem(rendered, aa = isAA(r, vm.prefs.aaAutoDetect))
+            Text(
+                "AA・改行・リンクの見え方を確かめてから送れます", Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                color = Palette.textMuted, fontSize = 12.sp,
+            )
+        }
+    }
 }
 
 /** 本文を AA 用の字で出すか: 選んでいればそれ、なければ空白が 5 つ以上続く本文(設定の「AA を見分ける」がオンのとき) */

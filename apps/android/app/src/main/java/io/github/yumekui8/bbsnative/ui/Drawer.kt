@@ -71,10 +71,10 @@ fun DrawerContent(vm: AppViewModel) {
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
-            DrawerRow(Icons.Filled.Bookmark, "お気に入りのスレ", Palette.textMuted, active = current is Page.FavThreads) { vm.openRoot(Page.FavThreads()) }
-            DrawerRow(Icons.Filled.MarkEmailUnread, "全板の未読", Palette.unread, active = current is Page.AllUnread) { vm.openRoot(Page.AllUnread()); vm.loadAllUnread() }
-            DrawerRow(Icons.Filled.History, "閲覧履歴", Palette.textMuted, active = current is Page.History, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
-                vm.openRoot(Page.History())
+            // 過去に見たスレの一覧(未読・閲覧履歴・お気に入りのスレ・書き込み履歴)は 1 つの画面にまとめ、上のタブで切り替える
+            val past = current is Page.History || current is Page.AllUnread || current is Page.FavThreads || current is Page.PostHistory
+            DrawerRow(Icons.Filled.History, "過去のスレ", Palette.textMuted, active = past, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
+                vm.openPast(vm.prefs.pastTab)
             }
             if (histOpen) {
                 for (h in vm.history.take(8)) {
@@ -85,7 +85,6 @@ fun DrawerContent(vm: AppViewModel) {
                 }
             }
             DrawerRow(Icons.Filled.Link, "URL を開く", Palette.textMuted) { urlDialog = true }
-            DrawerRow(Icons.Filled.EditNote, "書き込み履歴", Palette.textMuted, active = current is Page.PostHistory) { vm.openRoot(Page.PostHistory()) }
         }
         HorizontalDivider(color = Palette.border)
         DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = current is Page.Settings) { vm.openRoot(Page.Settings()) }
@@ -170,14 +169,14 @@ fun BottomTabs(vm: io.github.yumekui8.bbsnative.AppViewModel, current: Page?, mo
                     Text(label, color = if (on) Palette.accent else Palette.textMuted, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
                 }
             }
-            tab(Icons.Filled.History, "履歴", current is Page.History) { vm.openRoot(Page.History()) }
-            tab(Icons.Filled.MarkEmailUnread, "未読", current is Page.AllUnread) { vm.openRoot(Page.AllUnread()); vm.loadAllUnread() }
+            tab(Icons.Filled.History, "履歴", current is Page.History || current is Page.FavThreads || current is Page.PostHistory) { vm.openPast(if (vm.prefs.pastTab == "unread") "history" else vm.prefs.pastTab) }
+            tab(Icons.Filled.MarkEmailUnread, "未読", current is Page.AllUnread) { vm.openPast("unread") }
             tab(Icons.Filled.Forum, "スレ", current is Page.Threads) {
                 val url = vm.prefs.lastBoardUrl
                 if (!url.isNullOrEmpty()) vm.openBoard(vm.favorites.firstOrNull { it.url == url } ?: io.github.yumekui8.bbsnative.bbs.Board(url, vm.prefs.lastBoardName ?: url))
                 else vm.openRoot(Page.Boards())
             }
-            tab(Icons.Filled.Star, "板", current is Page.Boards || current is Page.FavThreads) { vm.openRoot(Page.Boards()) }
+            tab(Icons.Filled.Star, "板", current is Page.Boards) { vm.openRoot(Page.Boards()) }
         }
     }
 }

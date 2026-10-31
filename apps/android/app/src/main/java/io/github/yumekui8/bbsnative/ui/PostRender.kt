@@ -258,7 +258,9 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
         if (replies > 0) {
             append("  ")
             withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
-                withStyle(SpanStyle(color = Palette.heat(replies) ?: if (o.onSky) Palette.skyText else Palette.link, fontSize = 11.sp, fontWeight = FontWeight.Bold)) { append("返信\u00A0$replies") }
+                // 吹き出しの印と数だけ(返信が多いほど数を暖色に)
+                appendInlineContent("reply", "[返信]")
+                withStyle(SpanStyle(color = Palette.heat(replies) ?: if (o.onSky) Palette.skyText else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)) { append("\u2009$replies") }
             }
         }
         if (p.mail.isNotEmpty()) { append("  "); withStyle(small) { append("[${p.mail}]") } }

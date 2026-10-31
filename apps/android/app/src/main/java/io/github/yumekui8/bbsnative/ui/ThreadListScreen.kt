@@ -290,17 +290,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     ),
                 ) {
                     val plain = tab == null && query.isBlank() && page.only == null
-                    // 前回からの差分(板を前にも開いていて、絞り込んでいないとき)。押すとそのスレだけに
                     val since = page.newSince
-                    if (vm.prefs.listDiff && since != null && tab == null && query.isBlank()) item(key = "diff", contentType = 2) {
-                        DiffLine(
-                            newCount = page.threads.count { (it.createdAt ?: 0) > since },
-                            unreadCount = page.threads.count { unreadOf(it, page.states) > 0 },
-                            onlyNew = page.only == "new",
-                            onNew = { page.only = if (page.only == "new") null else "new"; scope.launch { listState.scrollToItem(0) } },
-                            onUnread = { page.only = null; page.tab = "unread"; scope.launch { listState.scrollToItem(0) } },
-                        )
-                    }
                     // 見出しで区切る(並べ替え・絞り込みをしていないとき)。キーワード → 新しいスレ → 新着のある読んだスレ → その他
                     val groups: List<Pair<String?, List<ThreadSummary>>> = if (plain && vm.prefs.listSections) {
                         val isNew = { t: ThreadSummary -> since != null && (t.createdAt ?: 0) > since }
@@ -597,25 +587,6 @@ private fun ThreadRow(
                 }
             }
         }
-    }
-}
-
-/** 一覧の上の差分の行: 「前回から +12 スレ ・ 新着のある読んだスレ 3」。それぞれ押すと、そのスレだけに絞る */
-@Composable
-private fun DiffLine(newCount: Int, unreadCount: Int, onlyNew: Boolean, onNew: () -> Unit, onUnread: () -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Palette.surface2).padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("前回から", color = Palette.textMuted, fontSize = 12.sp)
-        Spacer(Modifier.width(6.dp))
-        @Composable fun chip(label: String, on: Boolean, enabled: Boolean, onClick: () -> Unit) = Text(
-            label,
-            Modifier.clip(RoundedCornerShape(50)).background(if (on) Palette.accentWash else Color.Transparent)
-                .border(1.dp, if (on) Palette.accent else Palette.borderStrong, RoundedCornerShape(50))
-                .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 3.dp),
-            color = if (!enabled) Palette.textMuted else if (on) Palette.accent else Palette.textStrong, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-        )
-        chip(if (onlyNew) "+$newCount スレ ✕" else "+$newCount スレ", onlyNew, newCount > 0 || onlyNew, onNew)
-        Spacer(Modifier.width(6.dp))
-        chip("新着 $unreadCount", false, unreadCount > 0, onUnread)
     }
 }
 

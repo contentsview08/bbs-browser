@@ -179,21 +179,11 @@ fun PostItem(
                     Box(Modifier.width(AVATAR)) { Identicon(id, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
+                        // 返信先は、Discord 風・LINE 風と同じく頭の上に 1 行で
+                        if (reply != null) ReplyLine(reply, indent = 0.dp) { onReply(reply.no) }
                         header()
                         body(Modifier.padding(top = 2.dp))
                         media()
-                        if (reply != null) Column(
-                            Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                .border(1.dp, Palette.borderStrong, RoundedCornerShape(10.dp)).clickable { onReply(reply.no) }
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Identicon(reply.id, 16.dp)
-                                Spacer(Modifier.width(6.dp))
-                                Text("${reply.name}  >>${reply.no}", color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            }
-                            Text(reply.text, Modifier.padding(top = 2.dp), color = Palette.textBody, fontSize = 13.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        }
                         if (shownReplies.isNotEmpty()) Spacer(Modifier.height(14.dp))
                     }
                 }

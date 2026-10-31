@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -565,7 +566,11 @@ fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineText
     fun chip(text: String, bg: Color, fg: Color) = androidx.compose.foundation.text.InlineTextContent(
         androidx.compose.ui.text.Placeholder(1.7.em, 1.25.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
     ) { BadgeChip(text, bg, fg) }
-    return mapOf("op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg))
+    // 返信の数の印(吹き出しの形)。色は頭の行の薄い字
+    val replyIcon = androidx.compose.foundation.text.InlineTextContent(
+        androidx.compose.ui.text.Placeholder(1.15.em, 1.15.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
+    ) { Icon(Icons.Outlined.ChatBubbleOutline, "返信", tint = Palette.textMuted, modifier = Modifier.fillMaxSize()) }
+    return mapOf("op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg), "reply" to replyIcon)
 }
 
 /**

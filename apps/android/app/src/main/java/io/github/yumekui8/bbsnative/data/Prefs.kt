@@ -101,8 +101,6 @@ class Prefs(context: Context) {
     var listDensity by pref("listDensity", "normal")
     /** スレ一覧を見出し(キーワード・新しいスレ・新着のある読んだスレ・その他)で区切る */
     var listSections by pref("listSections", false)
-    /** 板を開いたとき、一覧の上に前回からの差分(新しいスレ・新着のある読んだスレの数)を出す */
-    var listDiff by pref("listDiff", true)
     var pullToRefreshList by pref("pullToRefreshList", true)
     /** 板ごとに、前回スレ一覧を取った時刻(「新」の印の境目)。JSON */
     private var boardVisitsJson by pref("boardVisits", "{}")
@@ -134,6 +132,8 @@ class Prefs(context: Context) {
     var anchorInline by pref("anchorInline", false)
     /** 画面の下に「履歴・未読・スレ・板」のタブ(2ch Mate 風) */
     var bottomTabs by pref("bottomTabs", false)
+    /** 過去のスレの画面で最後に見たタブ(unread / history / fav / posts) */
+    var pastTab by pref("pastTab", "history")
     /** 返信の連なりの起点のレスの下に「この会話 (N)」を出す */
     var showConversations by pref("showConversations", false)
     /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */

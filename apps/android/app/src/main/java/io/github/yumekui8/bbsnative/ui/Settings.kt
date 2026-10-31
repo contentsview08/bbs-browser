@@ -297,7 +297,6 @@ private fun ListPage(vm: AppViewModel) {
         ) { p.threadSort = it }
         SwitchRow("引っぱって更新", p.pullToRefreshList, desc = "いちばん上で下へ引くと、スレ一覧を取り直します") { p.pullToRefreshList = it }
         if (LocalAdvanced.current) SwitchRow("見出しで区切る", p.listSections, desc = "並べ替えていないとき、キーワード・新しいスレ・新着のある読んだスレ・その他に分けて出します") { p.listSections = it }
-        if (LocalAdvanced.current) SwitchRow("前回からの差分を出す", p.listDiff, desc = "一覧の上に「前回から +12 スレ・新着 3」の行。押すとそのスレだけに絞ります") { p.listDiff = it }
     }
     if (LocalAdvanced.current) Group("行の見た目") {
         ChoiceRow("行の形", p.listDensity, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listDensity = it }

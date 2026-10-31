@@ -274,6 +274,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 過去のスレの画面を、そのタブで開く(左のメニュー・下のタブ・画面の上のタブから) */
+    fun openPast(tab: String) {
+        prefs.pastTab = tab
+        when (tab) {
+            "unread" -> { openRoot(Page.AllUnread()); loadAllUnread() }
+            "fav" -> openRoot(Page.FavThreads())
+            "posts" -> openRoot(Page.PostHistory())
+            else -> openRoot(Page.History())
+        }
+    }
+
     /** 全板の未読を、手元の既読で数え直す(読んだスレは外す。通信はしない) */
     private fun recountAllUnread() {
         viewModelScope.launch {

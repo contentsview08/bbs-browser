@@ -6,6 +6,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +31,12 @@ import kotlin.math.abs
 class SwipeAction(val label: String, val run: () -> Unit)
 
 /** なぞっている間に出す名前(画面の真ん中に SwipeLabel で出す) */
-class SwipeState { var label by mutableStateOf<String?>(null) }
+class SwipeState {
+    var label by mutableStateOf<String?>(null)
+    /** なぞっている向きの並び(「→↑」)と、指の軌跡(なぞっている間だけ描く) */
+    var arrows by mutableStateOf("")
+    val path = androidx.compose.runtime.mutableStateListOf<Offset>()
+}
 
 @Composable
 fun rememberSwipeState() = remember { SwipeState() }
@@ -91,6 +98,7 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                             break
                         }
                         tracker.addPosition(c.uptimeMillis, c.position)
+                        if (segs.isNotEmpty()) state.path += c.position
                         val d = c.position - anchor
                         if (segs.isEmpty()) {
                             if (d.getDistance() < lock) continue
@@ -98,6 +106,7 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                             // 縦に動き始めたら、ふつうのスクロール
                             if (dir == "up" || dir == "down") break
                             segs += dir
+                            state.path.clear(); state.path += down.position; state.path += c.position
                             anchor = c.position
                             lastMove = c.uptimeMillis
                         } else {
@@ -111,24 +120,79 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                         }
                         c.consume()
                         val label = actionOf(segs.joinToString(","))?.label
+                        state.arrows = gestureArrows(segs.joinToString(","))
                         // 操作の名前が変わったら(向きを足した・登録した並びに入った)軽く振動
                         if (label != state.label && label != null) Haptics.tick(view)
                         state.label = label
                     }
                 } finally {
                     state.label = null
+                    state.arrows = ""
+                    state.path.clear()
                 }
             }
         }
 }
 
+/**
+ * なぞっている間の目印: 指の軌跡を薄い線で描き、真ん中の札に向きの並び(→↑)と操作の名前を出す。
+ * 割り当てのない並びのときは、向きだけを薄く出す(離しても何も起きないと分かるように)
+ */
 @Composable
 fun BoxScope.SwipeLabel(state: SwipeState) {
-    state.label?.let {
-        Text(
-            it, Modifier.align(Alignment.Center).background(Palette.surface3.copy(alpha = 0.92f), RoundedCornerShape(8.dp)).padding(horizontal = 22.dp, vertical = 14.dp),
-            color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-        )
+    if (state.path.size >= 2) {
+        val c = Palette.accent
+        androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+            val p = androidx.compose.ui.graphics.Path().apply {
+                moveTo(state.path[0].x, state.path[0].y)
+                for (i in 1 until state.path.size) lineTo(state.path[i].x, state.path[i].y)
+            }
+            drawPath(p, c.copy(alpha = 0.45f), style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            drawCircle(c.copy(alpha = 0.7f), 7.dp.toPx(), state.path.last())
+        }
+    }
+    val label = state.label
+    if (label != null || state.arrows.isNotEmpty()) {
+        androidx.compose.foundation.layout.Column(
+            Modifier.align(Alignment.Center).background(Palette.surface3.copy(alpha = if (label != null) 0.92f else 0.7f), RoundedCornerShape(8.dp)).padding(horizontal = 22.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (state.arrows.isNotEmpty()) Text(state.arrows, color = if (label != null) Palette.accent else Palette.textMuted, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(label ?: "割り当てなし", color = if (label != null) Palette.textStrong else Palette.textMuted, fontSize = if (label != null) 17.sp else 13.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * ジェスチャーの練習: 枠の中でなぞると、スレ一覧・スレ表示でそれぞれ何の操作になるかを出す(実際には動かさない)。
+ * 感度を変えながら試せる
+ */
+@Composable
+fun GesturePractice(prefs: io.github.yumekui8.bbsnative.data.Prefs) {
+    var screen by remember { mutableStateOf("thread") }
+    var last by remember { mutableStateOf<String?>(null) }
+    val swipe = rememberSwipeState()
+    val names = GESTURE_ACTIONS.getValue(screen).toMap()
+    val map = prefs.gestures(screen).mapNotNull { (seq, key) -> names[key]?.takeIf { key.isNotEmpty() }?.let { n -> seq to SwipeAction(n) { last = "${gestureArrows(seq)}  $n" } } }.toMap()
+    androidx.compose.foundation.layout.Column(Modifier.padding(16.dp)) {
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            for ((k, n) in listOf("list" to "スレ一覧", "thread" to "スレ表示")) Text(
+                n,
+                Modifier.background(if (k == screen) Palette.accentWash else Palette.surface2, RoundedCornerShape(50))
+                    .then(Modifier.pointerInput(k) { awaitEachGesture { awaitFirstDown(); screen = k; last = null } }).padding(horizontal = 14.dp, vertical = 6.dp),
+                color = if (k == screen) Palette.accent else Palette.textBody, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            )
+        }
+        Box(
+            Modifier.padding(top = 12.dp).fillMaxWidth().height(320.dp).background(Palette.surface, RoundedCornerShape(8.dp))
+                .swipeGestures(swipe, map, sensitivity = prefs.gestureSensitivity),
+        ) {
+            Text(
+                last?.let { "いまの操作: $it" } ?: "この枠の中でなぞってください(横に動かし始め、続けて上下に)", Modifier.align(Alignment.TopCenter).padding(14.dp),
+                color = if (last != null) Palette.textStrong else Palette.textMuted, fontSize = 13.sp,
+            )
+            SwipeLabel(swipe)
+        }
     }
 }
 

@@ -413,7 +413,7 @@ private fun GesturesPage(vm: AppViewModel) {
     for ((screen, title) in listOf("list" to "スレ一覧", "thread" to "スレ表示")) {
         Group(title) {
             val assign = p.gestures(screen)
-            for (seq in listOf("right", "left", "right,up", "right,down", "left,up", "left,down")) {
+            for (seq in listOf("right", "left", "right,up", "right,down", "left,up", "left,down", "left,right", "right,left")) {
                 ChoiceRow(gestureArrows(seq), assign[seq] ?: "", GESTURE_ACTIONS.getValue(screen)) { p.setGesture(screen, seq, it) }
             }
         }

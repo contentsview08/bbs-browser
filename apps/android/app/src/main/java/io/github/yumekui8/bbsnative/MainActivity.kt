@@ -213,6 +213,7 @@ class MainActivity : ComponentActivity() {
                                 contentKey = { it?.hashCode() },
                                 label = "page",
                             ) { page -> pageContent(page) }
+                            io.github.yumekui8.bbsnative.ui.QuickAccess(vm)
                             if (showTabs) io.github.yumekui8.bbsnative.ui.BottomTabs(
                                 vm, top, Modifier.align(Alignment.BottomCenter).onSizeChanged { tabsH = it.height },
                             )

@@ -206,8 +206,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var aaOverride by remember { mutableStateOf(mapOf<Int, Boolean>()) }
     /** 拡大して見ている AA のレス */
     var aaZoom by remember { mutableStateOf<Int?>(null) }
-    /** アプリの中で再生している動画の URL */
-    var video by remember { mutableStateOf<String?>(null) }
     /** ピンチで字の大きさを変えている間の札 */
     var pinchLabel by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
@@ -307,8 +305,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
                 'u' -> when {
                     v in index.allImages -> viewer = v
-                    // mp4・webm はアプリの中で再生
-                    Regex("\\.(mp4|webm|mov|m4v)(\\?|#|$)", RegexOption.IGNORE_CASE).containsMatchIn(v) -> video = v
+                    // mp4・webm はブラウザ(アプリの中のブラウザ)の再生に任せる(ダブルタップで 10 秒送り・速さの切り替えなどがそのまま使える)
+                    Regex("\\.(mp4|webm|mov|m4v)(\\?|#|$)", RegexOption.IGNORE_CASE).containsMatchIn(v) -> openExternal(context, v, true)
                     !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
                 }
             }
@@ -504,6 +502,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             "deleteLog" to { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) },
             "drawer" to { vm.drawerOpen = true },
             "search" to { searching = true; bars.show() },
+            "quick" to { vm.openQuick() },
             "favorite" to { vm.toggleFavoriteThread(page) },
             "next" to { vm.findNext(page); nextSheet = true },
         ),
@@ -779,7 +778,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { titleSheet = false }
     }
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
-    video?.let { VideoPlayer(it, onBrowser = { openExternal(context, it, false); video = null }) { video = null } }
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; fontDialog = true }) { styleSheet = false }
 
     postMenu?.let { p ->

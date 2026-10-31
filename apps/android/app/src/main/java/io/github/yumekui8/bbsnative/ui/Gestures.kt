@@ -200,11 +200,11 @@ fun GesturePractice(prefs: io.github.yumekui8.bbsnative.data.Prefs) {
 val GESTURE_ACTIONS: Map<String, List<Pair<String, String>>> = mapOf(
     "list" to listOf(
         "drawer" to "メニュー", "forward" to "進む", "bottom" to "一番下へ", "top" to "先頭へ", "refresh" to "更新",
-        "newThread" to "スレを立てる", "search" to "スレタイを探す", "" to "なし",
+        "newThread" to "スレを立てる", "search" to "スレタイを探す", "quick" to "クイックアクセス", "" to "なし",
     ),
     "thread" to listOf(
         "back" to "一覧に戻る", "reply" to "書き込む", "bottom" to "一番下へ", "top" to "先頭へ", "refresh" to "更新",
-        "deleteLog" to "ログを削除", "drawer" to "メニュー", "search" to "レスを探す", "favorite" to "お気に入りのスレ", "next" to "次スレを探す", "" to "なし",
+        "deleteLog" to "ログを削除", "drawer" to "メニュー", "search" to "レスを探す", "favorite" to "お気に入りのスレ", "next" to "次スレを探す", "quick" to "クイックアクセス", "" to "なし",
     ),
 )
 

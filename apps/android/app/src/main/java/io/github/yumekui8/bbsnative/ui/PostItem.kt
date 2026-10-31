@@ -168,14 +168,9 @@ fun PostItem(
             // 返信は人気順に 2 件まで。「ほか N 件」を押すと、その場で下に全部を広げる(ポップアップは出さない)
             var expanded by androidx.compose.runtime.saveable.rememberSaveable(r.hashCode()) { androidx.compose.runtime.mutableStateOf(false) }
             val shownReplies = if (expanded) replies else replies.take(2)
-            // X 風: アイコン左、名前と時刻・本文。返信先は本文の下に枠で(引用リツイートのように)。
-            // 本文の下の返信は、アイコンを元のレスと同じ横の位置にそろえて小さく並べ、縦の線でつなぐ(X のスレッドのように)
+            // X 風: アイコン左、名前と時刻・本文。返信先は頭の上に 1 行、返信は本文の下に字下げして小さく
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = pad + 2.dp, bottom = pad)) {
-                // 返信があれば、アイコンの下から返信のアイコンまで線を下ろす(描くだけ。高さの見積もりはしない)
-                val lineC = Palette.borderStrong
-                Row(Modifier.fillMaxWidth().drawBehind {
-                    if (shownReplies.isNotEmpty()) { val x = AVATAR.toPx() / 2; drawLine(lineC, androidx.compose.ui.geometry.Offset(x, AVATAR.toPx() + 4.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height), 2.dp.toPx()) }
-                }) {
+                Row(Modifier.fillMaxWidth()) {
                     Box(Modifier.width(AVATAR)) { Identicon(id, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
@@ -184,27 +179,27 @@ fun PostItem(
                         header()
                         body(Modifier.padding(top = 2.dp))
                         media()
-                        if (shownReplies.isNotEmpty()) Spacer(Modifier.height(14.dp))
+                        // 返信は本文の下に字下げして小さく(人気順に 2 件、「ほか N 件」でその場に全部)。左に細い線
+                        if (shownReplies.isNotEmpty()) {
+                            val lineC = Palette.borderStrong
+                            Column(Modifier.padding(top = 8.dp).fillMaxWidth().drawBehind { drawRect(lineC, size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height)) }.padding(start = 10.dp)) {
+                                for (rp in shownReplies) Row(Modifier.fillMaxWidth().clickable { onReply(rp.no) }.padding(vertical = 4.dp)) {
+                                    Identicon(rp.id, 22.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(rp.name, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
+                                        Text(rp.text, color = Palette.textBody, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                        }
+                        if (replyTotal > shownReplies.size) Text(
+                            "ほか ${replyTotal - shownReplies.size} 件の返信を見る",
+                            Modifier.padding(start = 12.dp, top = 2.dp).clickable { if (replies.size > shownReplies.size) expanded = true else onReplies() }.padding(vertical = 2.dp),
+                            color = Palette.link, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        )
                     }
                 }
-                for ((k, rp) in shownReplies.withIndex()) Row(
-                    Modifier.fillMaxWidth().clickable { onReply(rp.no) }.drawBehind {
-                        // 次の返信(か「ほか N 件」)まで線を続ける
-                        if (k < shownReplies.lastIndex || replyTotal > shownReplies.size) { val x = AVATAR.toPx() / 2; drawLine(lineC, androidx.compose.ui.geometry.Offset(x, 29.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height), 2.dp.toPx()) }
-                    },
-                ) {
-                    Box(Modifier.width(AVATAR), contentAlignment = Alignment.TopCenter) { Identicon(rp.id, 26.dp) }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f).padding(bottom = 10.dp)) {
-                        Text(rp.name, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
-                        Text(rp.text, color = Palette.textBody, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    }
-                }
-                if (replyTotal > shownReplies.size) Text(
-                    "ほか ${replyTotal - shownReplies.size} 件の返信を見る",
-                    Modifier.padding(start = AVATAR + 10.dp).clickable { if (replies.size > shownReplies.size) expanded = true else onReplies() }.padding(vertical = 2.dp),
-                    color = Palette.link, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                )
             }
         }
         "classic" -> {

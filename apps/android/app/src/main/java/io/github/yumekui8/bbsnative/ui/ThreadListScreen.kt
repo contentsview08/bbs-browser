@@ -204,6 +204,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             "refresh" to { vm.refreshBoard(page) },
             "newThread" to { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
             "search" to { searching = true; bars.show() },
+            "quick" to { vm.openQuick() },
         ),
     )
     bars.enabled = prefs.hideBarsOnScroll

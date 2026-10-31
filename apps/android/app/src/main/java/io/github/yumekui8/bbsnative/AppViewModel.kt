@@ -174,6 +174,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
+    /** クイックアクセス(最近見たスレ・書き込んだスレへさっと移る小さな画面)を出しているか */
+    var quickOpen by mutableStateOf(false)
+
+    fun openQuick() {
+        quickOpen = true
+        viewModelScope.launch { history = db.history(); postHistory = db.postHistory(); favThreads = db.favoriteThreads() }
+    }
+
     fun reloadSide() {
         viewModelScope.launch {
             favorites = db.favorites()

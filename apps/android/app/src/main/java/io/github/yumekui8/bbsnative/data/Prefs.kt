@@ -197,8 +197,10 @@ class Prefs(context: Context) {
     /** なぞる操作の割り当て(向きの並び → 操作)。screen は list / thread */
     fun gestures(screen: String): Map<String, String> {
         val json = if (screen == "list") gesturesListJson else gesturesThreadJson
-        if (json.isEmpty()) return DEFAULT_GESTURES.getValue(screen)
-        return runCatching { JSONObject(json).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrDefault(DEFAULT_GESTURES.getValue(screen))
+        val defaults = DEFAULT_GESTURES.getValue(screen)
+        if (json.isEmpty()) return defaults
+        // 保存した割り当てを既定に重ねる(あとから足した向きの並びも、既定の操作で使えるように)
+        return defaults + runCatching { JSONObject(json).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrDefault(emptyMap())
     }
 
     fun setGesture(screen: String, seq: String, action: String) {
@@ -256,8 +258,8 @@ class Prefs(context: Context) {
     companion object {
         /** なぞる操作の既定(今のスマホ版と同じ) */
         val DEFAULT_GESTURES = mapOf(
-            "list" to mapOf("right" to "drawer", "left" to "forward", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "newThread"),
-            "thread" to mapOf("right" to "back", "left" to "reply", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "deleteLog"),
+            "list" to mapOf("right" to "drawer", "left" to "forward", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "newThread", "left,right" to "quick", "right,left" to "quick"),
+            "thread" to mapOf("right" to "back", "left" to "reply", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "deleteLog", "left,right" to "quick", "right,left" to "quick"),
         )
     }
 }

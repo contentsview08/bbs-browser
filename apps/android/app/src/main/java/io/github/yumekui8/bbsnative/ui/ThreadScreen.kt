@@ -84,6 +84,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.imePadding
@@ -186,6 +188,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var aaOverride by remember { mutableStateOf(mapOf<Int, Boolean>()) }
     /** 拡大して見ている AA のレス */
     var aaZoom by remember { mutableStateOf<Int?>(null) }
+    /** ピンチで字の大きさを変えている間の札 */
+    var pinchLabel by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
     val swipe = rememberSwipeState()
     val own = page.ownNos
     // 自分への返信(自分のレスにアンカーを付けたレス)
@@ -468,7 +473,25 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         // LINE 風のときは、地を吹き出しと区別できる色に
         modifier.fillMaxSize().background(Palette.threadBg(vm.prefs.postStyle)).imePadding()
             .swipeGestures(swipe, gestures, onEdgeRight = if (prefs.gesturesEnabled && popups.isEmpty()) ({ vm.drawerOpen = true }) else null, sensitivity = prefs.gestureSensitivity)
-            .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } },
+            .pointerInput(Unit) { awaitEachGesture { downY = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y } }
+            // 2 本指で広げる・狭めると、本文の字の大きさを変える(設定に入る)。1 本指の操作には触らない
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var acc = 1f
+                    val start = vm.prefs.bodyScale
+                    do {
+                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                        if (e.changes.count { it.pressed } >= 2) {
+                            acc *= e.calculateZoom()
+                            val v = ((start * acc).coerceIn(0.8f, 1.4f) * 20).roundToInt() / 20f
+                            if (v != vm.prefs.bodyScale) { vm.prefs.bodyScale = v; Haptics.tick(view) }
+                            pinchLabel = "本文 ${(v * 100).roundToInt()}%"
+                            e.changes.forEach { it.consume() }
+                        }
+                    } while (e.changes.any { it.pressed })
+                }
+            },
     ) {
         Box(
             Modifier.fillMaxSize().clipToBounds().nestedScroll(bars.connection).nestedScroll(pullConn),
@@ -623,6 +646,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     .graphicsLayer { translationY = (1f - footerShown) * footerH },
             ) { ThreadFooter(vm, page) { refresh() } }
 
+        }
+        pinchLabel?.let {
+            Text(
+                it, Modifier.align(Alignment.Center).background(Palette.surface3.copy(alpha = 0.95f), RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+            )
         }
         // ポップアップは本文のスクロールの外に置く(ポップアップの中をスクロールしても、後ろの帯が隠れたり、引っぱって更新が動いたりしないように)
         PopupLayer(

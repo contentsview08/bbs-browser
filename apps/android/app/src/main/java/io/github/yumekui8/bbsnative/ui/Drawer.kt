@@ -42,6 +42,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -147,5 +149,35 @@ private fun DrawerRow(
                 Icon(trailing, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
             }
         } else Spacer(Modifier.width(4.dp))
+    }
+}
+
+
+/**
+ * 下のタブ(2ch Mate 風): 履歴・未読(全板)・スレ(最後に開いた板)・板(板を探す)。いま見ている画面のタブに色を付ける
+ */
+@Composable
+fun BottomTabs(vm: io.github.yumekui8.bbsnative.AppViewModel, current: Page?, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
+        androidx.compose.material3.HorizontalDivider(color = Palette.border)
+        Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+            @Composable fun tab(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().clickable(onClick = onClick),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                ) {
+                    Icon(icon, null, tint = if (on) Palette.accent else Palette.textMuted, modifier = Modifier.size(22.dp))
+                    Text(label, color = if (on) Palette.accent else Palette.textMuted, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+            tab(Icons.Filled.History, "履歴", current is Page.History) { vm.openRoot(Page.History()) }
+            tab(Icons.Filled.MarkEmailUnread, "未読", current is Page.AllUnread) { vm.openRoot(Page.AllUnread()); vm.loadAllUnread() }
+            tab(Icons.Filled.Forum, "スレ", current is Page.Threads) {
+                val url = vm.prefs.lastBoardUrl
+                if (!url.isNullOrEmpty()) vm.openBoard(vm.favorites.firstOrNull { it.url == url } ?: io.github.yumekui8.bbsnative.bbs.Board(url, vm.prefs.lastBoardName ?: url))
+                else vm.openRoot(Page.Boards())
+            }
+            tab(Icons.Filled.Star, "板", current is Page.Boards || current is Page.FavThreads) { vm.openRoot(Page.Boards()) }
+        }
     }
 }

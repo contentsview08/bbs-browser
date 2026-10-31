@@ -132,6 +132,8 @@ class Prefs(context: Context) {
     var showAdvanced by pref("showAdvanced", false)
     /** 本文のアンカーを押したら、ポップアップではなくその下に差し込む */
     var anchorInline by pref("anchorInline", false)
+    /** 画面の下に「履歴・未読・スレ・板」のタブ(2ch Mate 風) */
+    var bottomTabs by pref("bottomTabs", false)
     /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */
     var ngStyle by pref("ngStyle", "fold")
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */

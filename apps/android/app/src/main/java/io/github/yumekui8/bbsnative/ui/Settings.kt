@@ -425,6 +425,7 @@ private fun GesturesPage(vm: AppViewModel) {
 private fun BehaviorPage(vm: AppViewModel) {
     val p = vm.prefs
     Group("スクロール") {
+        SwitchRow("下に「履歴・未読・スレ・板」のタブ", p.bottomTabs, desc = "2ch Mate のように、左のメニューを開かずに一覧を行き来できます") { p.bottomTabs = it }
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
         if (LocalAdvanced.current) SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
         if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }

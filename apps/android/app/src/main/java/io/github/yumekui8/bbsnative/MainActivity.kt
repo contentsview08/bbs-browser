@@ -42,6 +42,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,8 +123,14 @@ class MainActivity : ComponentActivity() {
                     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {
                             // 画面の移り方: 開くと右から出てきて、戻ると右へ抜ける(今のスマホ版と同じ)。左のメニューから開いたときは入れ替え
+                            // 下のタブ(2ch Mate 風・設定): スレ表示と設定のほかの画面で、画面の下に固定する。中身はその分だけ縮める
+                            val top = vm.stack.lastOrNull()
+                            val showTabs = vm.prefs.bottomTabs && top != null && top !is Page.Thread && top !is Page.Settings
+                            var tabsH by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+                            val density = LocalDensity.current
                             AnimatedContent(
                                 targetState = vm.stack.lastOrNull(),
+                                modifier = if (showTabs) Modifier.padding(bottom = with(density) { tabsH.toDp() }).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars) else Modifier,
                                 // 今のスマホ版の page-in / page-back と同じ: 出てくる画面だけが、28%(戻るときは左へ 20%)ずれた所から
                                 // 薄い(0.4)状態ですべり込む。260ms・cubic-bezier(0.2, 0.8, 0.2, 1)。前の画面はそのまま消える
                                 transitionSpec = {
@@ -163,6 +172,9 @@ class MainActivity : ComponentActivity() {
                             }
                             }
                             }
+                            if (showTabs) io.github.yumekui8.bbsnative.ui.BottomTabs(
+                                vm, top, Modifier.align(Alignment.BottomCenter).onSizeChanged { tabsH = it.height },
+                            )
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->
                                 LaunchedEffect(msg) { delay(2200); if (vm.toast == msg) vm.toast = null }

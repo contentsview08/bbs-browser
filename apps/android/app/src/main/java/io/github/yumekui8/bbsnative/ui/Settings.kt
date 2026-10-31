@@ -348,6 +348,7 @@ private fun ThreadPage(vm: AppViewModel) {
             "人気のレスの示し方", p.heatStyle,
             listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色", "none" to "示さない"),
         ) { p.heatStyle = it }
+        SwitchRow("会話のまとまりを示す", p.showConversations, desc = "返信が 3 件以上連なっているレスの下に「この会話 (8)」を出し、押すとツリーで開きます") { p.showConversations = it }
         SwitchRow("アンカーをその場で開く", p.anchorInline, desc = "本文の >>12 を押すと、ポップアップではなく、そのレスの下に差し込みます。もう一度押すと畳みます") { p.anchorInline = it }
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
         if (LocalAdvanced.current) SwitchRow("時間が空いたところに区切りを入れる", p.timeGap, desc = "前のレスから 1 時間以上空いたところや、日付が変わったところに線を引きます") { p.timeGap = it }

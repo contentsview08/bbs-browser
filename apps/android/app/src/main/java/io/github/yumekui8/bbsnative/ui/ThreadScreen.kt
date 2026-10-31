@@ -396,6 +396,18 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
+            // 会話のまとまり(設定): 返信の連なりの起点のレスの下に「この会話 (8)」。押すとツリーで開く
+            if (inMain && vm.prefs.showConversations && (index.replies[p.no]?.isNotEmpty() == true)) {
+                val size = remember(index, p.no) { index.tree(p.no).size }
+                if (size >= 4) Text(
+                    "この会話 ($size) ›",
+                    Modifier.padding(start = if (style == "discord" || style == "line" || style == "timeline") 56.dp else 14.dp, bottom = 8.dp)
+                        .clip(RoundedCornerShape(50)).background(Palette.accentWash)
+                        .clickable { val rows = index.treeRows(p.no); openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) }
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    color = Palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                )
+            }
             // その場で開いたアンカー(設定)。本文の下に字下げして差し込む。もう一度押すと畳む
             if (inMain) inline[p.no]?.let { nos ->
                 for (n in nos) {

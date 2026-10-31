@@ -151,7 +151,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
         if (previews.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (u in previews) coil3.compose.AsyncImage(u, null, Modifier.size(48.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                for (u in previews) StoredImage(u, Modifier.size(48.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), showProgress = false)
             }
         }
         // オプション: 名前・メール
@@ -539,7 +539,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                     val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
                     if (previews.isNotEmpty()) {
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            for (u in previews) coil3.compose.AsyncImage(u, null, Modifier.size(72.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            for (u in previews) StoredImage(u, Modifier.size(72.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), showProgress = false)
                         }
                     }
                 }

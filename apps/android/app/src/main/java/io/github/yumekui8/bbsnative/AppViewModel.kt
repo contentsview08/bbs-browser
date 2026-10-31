@@ -163,6 +163,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Http.init(app)
+        io.github.yumekui8.bbsnative.data.ImageStore.init(app)
         io.github.yumekui8.bbsnative.data.Favicons.db = db
         // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
         val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"

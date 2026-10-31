@@ -101,20 +101,49 @@ fun Thumbnails(
     }
 }
 
-/** このアプリを開いている間に読み込めた画像(押して読んだものも)。開き直したときに「画像」の札へ戻さないために使う */
-object LoadedImages { val urls: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet()) }
+/**
+ * 画像を 1 枚出す(サムネイル・画像一覧・クイックアクセスで共通)。ImageStore に頼み、取れたファイルを出す。
+ * 取っている間は明滅する面と輪と「320 KB / 1.2 MB」、失敗したら「×」と理由(押すと取り直す)
+ */
+@Composable
+fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, blurred: Boolean = false, showProgress: Boolean = true) {
+    val st = io.github.yumekui8.bbsnative.data.ImageStore.states[url]
+    androidx.compose.runtime.LaunchedEffect(url) { io.github.yumekui8.bbsnative.data.ImageStore.request(url) }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        when (st) {
+            is io.github.yumekui8.bbsnative.data.ImageStore.State.Done -> AsyncImage(
+                model = st.file, contentDescription = null, contentScale = contentScale,
+                modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier),
+            )
+            is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed -> Column(
+                Modifier.matchParentSize().clickable { io.github.yumekui8.bbsnative.data.ImageStore.request(url) },
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+            ) {
+                Text("×", color = Palette.textMuted, fontSize = 16.sp)
+                if (showProgress) Text("押して取り直す", color = Palette.textMuted, fontSize = 9.sp)
+            }
+            else -> {
+                val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "thumb")
+                val a by t.animateFloat(0.35f, 0.8f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween<Float>(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
+                Box(Modifier.matchParentSize().graphicsLayer { alpha = a }.background(Palette.textMuted.copy(alpha = 0.18f)))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val l = st as? io.github.yumekui8.bbsnative.data.ImageStore.State.Loading
+                    if (l != null && l.total > 0) androidx.compose.material3.CircularProgressIndicator(
+                        progress = { (l.read.toFloat() / l.total).coerceIn(0f, 1f) }, modifier = Modifier.size(18.dp), color = Palette.textMuted, strokeWidth = 2.dp,
+                    ) else androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), color = Palette.textMuted, strokeWidth = 2.dp)
+                    if (showProgress && l != null) Text(io.github.yumekui8.bbsnative.data.ImageStore.progressText(l), Modifier.padding(top = 3.dp), color = Palette.textMuted, fontSize = 9.sp, maxLines = 1)
+                    else if (showProgress && (st == null || st is io.github.yumekui8.bbsnative.data.ImageStore.State.Queued)) Text("待ち", Modifier.padding(top = 3.dp), color = Palette.textMuted, fontSize = 9.sp)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
-    // 家の中のアドレスは、押すまで読まない
-    // 一度読んだ画像(このアプリを開いている間に読んだもの・画像のキャッシュに残っているもの)は、自動で読まない設定でもそのまま出す
-    // (ポップアップや別の画面で開き直すと、読んだのに「画像」の札に戻っていた)
-    val context = androidx.compose.ui.platform.LocalContext.current
+    // 家の中のアドレスは、押すまで読まない。手元にある画像(どの画面で取ったものでも)は、自動で読まない設定でもそのまま出す
     var load by rememberSaveable(url) {
-        mutableStateOf(
-            url in LoadedImages.urls || (autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)) ||
-                runCatching { coil3.SingletonImageLoader.get(context).diskCache?.openSnapshot(url)?.use { true } == true }.getOrDefault(false),
-        )
+        mutableStateOf(io.github.yumekui8.bbsnative.data.ImageStore.cached(url) != null || (autoLoad && io.github.yumekui8.bbsnative.data.isAutoLoadable(url)))
     }
     val shape = RoundedCornerShape(5.dp)
     val box = Modifier.size(size.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
@@ -123,19 +152,7 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
         return
     }
     Box(box.clickable { onOpen(url) }, contentAlignment = Alignment.Center) {
-        // 読み込み中は、ゆっくり明滅する面と小さな輪を出す(読めなかったら「×」)
-        var state by remember(url) { mutableStateOf(0) } // 0 読み込み中・1 読めた・2 読めなかった
-        if (state == 0) {
-            val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "thumb")
-            val a by t.animateFloat(0.35f, 0.8f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween<Float>(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
-            Box(Modifier.matchParentSize().graphicsLayer { alpha = a }.background(Palette.textMuted.copy(alpha = 0.18f)))
-            androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), color = Palette.textMuted, strokeWidth = 2.dp)
-        }
-        if (state == 2) Text("×", color = Palette.textMuted, fontSize = 16.sp)
-        AsyncImage(
-            model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier),
-            onSuccess = { state = 1; LoadedImages.urls += url }, onError = { state = 2 },
-        )
+        StoredImage(url, Modifier.matchParentSize(), blurred = blurred)
         if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
         if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
     }

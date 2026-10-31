@@ -394,21 +394,42 @@ private fun ZoomPage(
             },
         contentAlignment = Alignment.Center,
     ) {
-        // 読み込みの状態は絵の状態そのものから読む(知らせを取りこぼして、読み込めたのに回り続けることがあった)
-        val painter = coil3.compose.rememberAsyncImagePainter(url)
-        val st by painter.state.collectAsState()
-        LaunchedEffect(st) {
-            when (val s = st) {
-                is coil3.compose.AsyncImagePainter.State.Success -> { loading = false; natural = s.painter.intrinsicSize; LoadedImages.urls += url }
-                is coil3.compose.AsyncImagePainter.State.Error -> loading = false
-                else -> {}
+        // 画像は ImageStore で取る(サムネイルと同じファイルを使う。ビューアーの枠で、サムネイルの順番待ちに並ばない)
+        val store = io.github.yumekui8.bbsnative.data.ImageStore
+        val ds = store.states[url]
+        LaunchedEffect(url, active) { if (active || ds !is io.github.yumekui8.bbsnative.data.ImageStore.State.Done) store.request(url, viewer = active) }
+        val file = (ds as? io.github.yumekui8.bbsnative.data.ImageStore.State.Done)?.file
+        if (file != null) {
+            val painter = coil3.compose.rememberAsyncImagePainter(file)
+            val st by painter.state.collectAsState()
+            LaunchedEffect(st) {
+                when (val s = st) {
+                    is coil3.compose.AsyncImagePainter.State.Success -> { loading = false; natural = s.painter.intrinsicSize }
+                    is coil3.compose.AsyncImagePainter.State.Error -> loading = false
+                    else -> {}
+                }
             }
+            androidx.compose.foundation.Image(
+                painter, null, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = ox; translationY = oy },
+                contentScale = ContentScale.Fit,
+            )
+            if (st is coil3.compose.AsyncImagePainter.State.Error) Text("この画像は表示できませんでした", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
         }
-        androidx.compose.foundation.Image(
-            painter, null, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = ox; translationY = oy },
-            contentScale = ContentScale.Fit,
-        )
-        if (st is coil3.compose.AsyncImagePainter.State.Error) Text("読み込めませんでした", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
-        if (loading && st !is coil3.compose.AsyncImagePainter.State.Error) CircularProgressIndicator(Modifier.size(36.dp), color = Color.White.copy(alpha = 0.7f), strokeWidth = 3.dp)
+        // 取っている間は進み具合、失敗したら理由と取り直すボタン
+        when (ds) {
+            is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("読み込めませんでした(${ds.message})", color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
+                Text(
+                    "取り直す", Modifier.padding(top = 12.dp).background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).clickable { store.request(url, viewer = true) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = Color.White, fontSize = 14.sp,
+                )
+            }
+            is io.github.yumekui8.bbsnative.data.ImageStore.State.Loading -> Text(
+                store.progressText(ds), Modifier.padding(top = 70.dp), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp,
+            )
+            is io.github.yumekui8.bbsnative.data.ImageStore.State.Queued, null -> Text("待っています…", Modifier.padding(top = 70.dp), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+            else -> {}
+        }
+        if (loading && ds !is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed) CircularProgressIndicator(Modifier.size(36.dp), color = Color.White.copy(alpha = 0.7f), strokeWidth = 3.dp)
     }
 }

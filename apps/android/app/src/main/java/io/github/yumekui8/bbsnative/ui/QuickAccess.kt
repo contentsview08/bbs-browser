@@ -93,11 +93,10 @@ fun QuickAccess(vm: AppViewModel) {
                 items(ups.size) { i ->
                     val (url, _) = ups[i]
                     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-                    coil3.compose.AsyncImage(
-                        url, null,
+                    StoredImage(
+                        url,
                         Modifier.padding(3.dp).aspectRatio(1f).clip(RoundedCornerShape(4.dp)).background(Palette.surface2)
                             .combinedClickable(onLongClick = { copyText(context, url); vm.toast = "URL をコピーしました" }) { viewerUrl = url },
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     )
                 }
             }

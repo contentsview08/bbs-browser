@@ -128,7 +128,7 @@ fun GalleryPanel(images: List<String>, onOpen: (String) -> Unit, onToast: (Strin
                             detectTapGestures { if (selecting) selected = if (i in selected) selected - i else selected + i else onOpen(url) }
                         },
                 ) {
-                    AsyncImage(url, null, Modifier.matchParentSize().padding(if (on) 8.dp else 0.dp).clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
+                    StoredImage(url, Modifier.matchParentSize().padding(if (on) 8.dp else 0.dp).clip(RoundedCornerShape(4.dp)))
                     if (selecting) Box(
                         Modifier.align(Alignment.TopEnd).padding(5.dp).size(22.dp).clip(CircleShape)
                             .background(if (on) Palette.accent else Color.Black.copy(alpha = 0.3f)).border(2.dp, Color.White, CircleShape),

@@ -197,7 +197,8 @@ private fun TreeStep(
         val prefs = LocalPrefs.current
         val step = 20.dp
         val line = Palette.textMuted.copy(alpha = 0.8f)
-        val avatarTop = if (prefs.postStyle == "line") 6.dp + (12 * prefs.postHeadScale * 1.4f).dp + 4.dp else prefs.postPad.dp + 2.dp
+        // アイコンの上端: LINE 風は頭の行の横(行の上の余白 6dp)、Discord 風は頭と同じ高さ
+        val avatarTop = if (prefs.postStyle == "line") 6.dp else prefs.postPad.dp + 2.dp
         val padStart = if (prefs.postStyle == "line") 10.dp else 12.dp
         Row(
             Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier)

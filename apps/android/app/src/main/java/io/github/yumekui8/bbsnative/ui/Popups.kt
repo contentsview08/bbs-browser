@@ -136,7 +136,12 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
         LazyColumn(state = state) {
             itemsIndexed(tree, key = { _, r -> r.no }) { i, r ->
                 val p = byNo[r.no] ?: return@itemsIndexed
-                TreeStep(r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth) {
+                // 親: 上へさかのぼって、最初に 1 段浅い行
+                val parentNo = if (r.depth == 0) null else (i - 1 downTo 0).firstOrNull { tree[it].depth == r.depth - 1 }?.let { tree[it].no }
+                TreeStep(
+                    r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth,
+                    prevIsParent = i > 0 && r.depth > 0 && tree[i - 1].depth == r.depth - 1, parentNo = parentNo,
+                ) {
                     androidx.compose.runtime.CompositionLocalProvider(LocalInTree provides true) { post(p) }
                 }
             }
@@ -149,11 +154,43 @@ val LocalInTree = androidx.compose.runtime.compositionLocalOf { false }
 
 /** スマホのツリーの 1 行(今のスマホ版の StepTree): 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線 */
 @Composable
-private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild: Boolean = false, content: @Composable () -> Unit) {
+private fun TreeStep(
+    r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild: Boolean = false,
+    /** すぐ上の行が親(X 風で線をつなぐ) と、親の番号 */
+    prevIsParent: Boolean = false, parentNo: Int? = null,
+    content: @Composable () -> Unit,
+) {
     // 深い段は 5 段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)
     val depth = minOf(r.depth, 5)
     // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
     // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
+    // X 風: X の会話の表示のように、段を下げずに並べ、親と子のアイコンを縦の線でつなぐ。
+    // すぐ上が親でないときは「>>N への返信」と書く
+    if (LocalPrefs.current.postStyle == "timeline") {
+        val prefs = LocalPrefs.current
+        val line = Palette.borderStrong
+        val label = !prevIsParent && r.depth > 0 && parentNo != null
+        val labelH = 22.dp
+        val avatarTop = prefs.postPad.dp + 2.dp + (if (label) labelH else 0.dp)
+        Column(
+            Modifier.fillMaxWidth().then(if (focus) Modifier.background(Palette.accentWash) else Modifier).drawBehind {
+                val x = (12.dp + AVATAR / 2).toPx()
+                val w = 2.dp.toPx()
+                if (prevIsParent) drawLine(line, Offset(x, 0f), Offset(x, avatarTop.toPx() - 3.dp.toPx()), w)
+                if (hasChild) drawLine(line, Offset(x, (avatarTop + AVATAR + 3.dp).toPx()), Offset(x, size.height), w)
+            },
+        ) {
+            if (label) Text(
+                "↳ >>$parentNo への返信", Modifier.height(labelH).padding(start = 12.dp + AVATAR + 10.dp, top = 6.dp),
+                color = Palette.textMuted, fontSize = 11.sp,
+            )
+            content()
+            if (r.alsoTo.isNotEmpty()) Text(r.alsoTo.joinToString(" ") { ">>$it" } + " にも", Modifier.padding(start = 12.dp + AVATAR + 10.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 10.sp)
+        }
+        // 次が自分の子でなければ、会話の切れ目に線
+        if (!hasChild) HorizontalDivider(color = Palette.border)
+        return
+    }
     if (isChatStyle(LocalPrefs.current.postStyle)) {
         // 線はアイコンに合わせて引く: 縦線はアイコンの左寄り(左端から 8dp)を通り、子のアイコンの真ん中の高さで曲がって、子のアイコンの左端へ届く。
         // 子への線は、自分のアイコンの下から下ろす。アイコンの上端は見た目ごとに違う(LINE 風は名前の行の下、ほかは頭と同じ高さ)
@@ -163,7 +200,7 @@ private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild
         val avatarTop = if (prefs.postStyle == "line") 6.dp + (12 * prefs.postHeadScale * 1.4f).dp + 4.dp else prefs.postPad.dp + 2.dp
         val padStart = if (prefs.postStyle == "line") 10.dp else 12.dp
         Row(
-            Modifier.height(IntrinsicSize.Min).then(if (focus) Modifier.background(Palette.accentWash) else Modifier)
+            Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier)
                 .drawBehind {
                     val w = 2.dp.toPx()
                     val s = step.toPx()
@@ -206,9 +243,15 @@ private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild
     }
     Column {
         if (depthChanged) HorizontalDivider(thickness = 1.5.dp, color = Palette.borderStrong)
-        Row(Modifier.height(IntrinsicSize.Min).then(if (focus) Modifier.background(Palette.accentWash) else Modifier)) {
-            Box(Modifier.width((4 + depth * 10).dp).fillMaxHeight().background(Palette.textMuted.copy(alpha = 0.14f)))
-            Box(Modifier.width(2.dp).fillMaxHeight().background(Palette.textMuted.copy(alpha = 0.8f)))
+        val shade = Palette.textMuted.copy(alpha = 0.14f)
+        val rule = Palette.textMuted.copy(alpha = 0.8f)
+        val gutter = (4 + depth * 10).dp
+        Row(Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier).drawBehind {
+            // 段の分だけ左を塗り、縦線を引く(描くだけ。高さの見積もりはしない)
+            drawRect(shade, size = androidx.compose.ui.geometry.Size(gutter.toPx(), size.height))
+            drawRect(rule, topLeft = Offset(gutter.toPx(), 0f), size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height))
+        }) {
+            Spacer(Modifier.width(gutter + 2.dp))
             Column(Modifier.weight(1f)) {
                 content()
                 if (r.alsoTo.isNotEmpty()) {

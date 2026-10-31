@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
@@ -164,15 +165,18 @@ fun PostItem(
             }
         }
         "timeline" -> {
+            // 返信は人気順に 2 件まで。「ほか N 件」を押すと、その場で下に全部を広げる(ポップアップは出さない)
+            var expanded by androidx.compose.runtime.saveable.rememberSaveable(r.hashCode()) { androidx.compose.runtime.mutableStateOf(false) }
+            val shownReplies = if (expanded) replies else replies.take(2)
             // X 風: アイコン左、名前と時刻・本文。返信先は本文の下に枠で(引用リツイートのように)。
             // 本文の下の返信は、アイコンを元のレスと同じ横の位置にそろえて小さく並べ、縦の線でつなぐ(X のスレッドのように)
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = pad + 2.dp, bottom = pad)) {
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                    Column(Modifier.width(AVATAR).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Identicon(id, AVATAR, avatarMod)
-                        // 返信があれば、アイコンの下から返信のアイコンまで線を下ろす
-                        if (replies.isNotEmpty()) Box(Modifier.padding(top = 4.dp).width(2.dp).weight(1f).background(Palette.borderStrong))
-                    }
+                // 返信があれば、アイコンの下から返信のアイコンまで線を下ろす(描くだけ。高さの見積もりはしない)
+                val lineC = Palette.borderStrong
+                Row(Modifier.fillMaxWidth().drawBehind {
+                    if (shownReplies.isNotEmpty()) { val x = AVATAR.toPx() / 2; drawLine(lineC, androidx.compose.ui.geometry.Offset(x, AVATAR.toPx() + 4.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height), 2.dp.toPx()) }
+                }) {
+                    Box(Modifier.width(AVATAR)) { Identicon(id, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         header()
@@ -190,25 +194,25 @@ fun PostItem(
                             }
                             Text(reply.text, Modifier.padding(top = 2.dp), color = Palette.textBody, fontSize = 13.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
-                        if (replies.isNotEmpty()) Spacer(Modifier.height(14.dp))
+                        if (shownReplies.isNotEmpty()) Spacer(Modifier.height(14.dp))
                     }
                 }
-                for ((k, rp) in replies.withIndex()) Row(
-                    Modifier.fillMaxWidth().height(IntrinsicSize.Min).clickable { onReply(rp.no) },
-                ) {
-                    Column(Modifier.width(AVATAR).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Identicon(rp.id, 26.dp)
+                for ((k, rp) in shownReplies.withIndex()) Row(
+                    Modifier.fillMaxWidth().clickable { onReply(rp.no) }.drawBehind {
                         // 次の返信(か「ほか N 件」)まで線を続ける
-                        if (k < replies.lastIndex || replyTotal > replies.size) Box(Modifier.padding(top = 3.dp).width(2.dp).weight(1f).background(Palette.borderStrong))
-                    }
+                        if (k < shownReplies.lastIndex || replyTotal > shownReplies.size) { val x = AVATAR.toPx() / 2; drawLine(lineC, androidx.compose.ui.geometry.Offset(x, 29.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height), 2.dp.toPx()) }
+                    },
+                ) {
+                    Box(Modifier.width(AVATAR), contentAlignment = Alignment.TopCenter) { Identicon(rp.id, 26.dp) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f).padding(bottom = 10.dp)) {
                         Text(rp.name, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
                         Text(rp.text, color = Palette.textBody, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
-                if (replyTotal > replies.size) Text(
-                    "ほか ${replyTotal - replies.size} 件の返信を見る", Modifier.padding(start = AVATAR + 10.dp).clickable(onClick = onReplies).padding(vertical = 2.dp),
+                if (replyTotal > shownReplies.size) Text(
+                    "ほか ${replyTotal - shownReplies.size} 件の返信を見る",
+                    Modifier.padding(start = AVATAR + 10.dp).clickable { if (replies.size > shownReplies.size) expanded = true else onReplies() }.padding(vertical = 2.dp),
                     color = Palette.link, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 )
             }
@@ -245,19 +249,20 @@ fun PostItem(
     }
     }
     if (leftBar == null && rightBar == null) return inner()
-    Row(
-        Modifier.height(IntrinsicSize.Min).then(
+    // 帯は描くだけにする(中身の高さを先に見積もる形だと、サムネイルやリンクのカードの分が足りず、本文と重なって出ることがあった)
+    Box(
+        Modifier.fillMaxWidth().then(
             when {
                 toOwn -> Modifier.background(Palette.own.copy(alpha = 0.09f))
                 showHeat && heat != null -> Modifier.background(heat.copy(alpha = 0.06f))
                 else -> Modifier
             },
-        ),
-    ) {
-        if (leftBar != null) Box(Modifier.width(3.dp).fillMaxHeight().background(leftBar))
-        Box(Modifier.weight(1f)) { inner() }
-        if (rightBar != null) Box(Modifier.width(3.dp).fillMaxHeight().background(rightBar))
-    }
+        ).drawBehind {
+            val w = 3.dp.toPx()
+            if (leftBar != null) drawRect(leftBar, size = androidx.compose.ui.geometry.Size(w, size.height))
+            if (rightBar != null) drawRect(rightBar, topLeft = androidx.compose.ui.geometry.Offset(size.width - w, 0f), size = androidx.compose.ui.geometry.Size(w, size.height))
+        }.padding(start = if (leftBar != null) 3.dp else 0.dp, end = if (rightBar != null) 3.dp else 0.dp),
+    ) { inner() }
 }
 
 /** 返信先の 1 行(小さいアイコン・名前・本文の頭)。押すと返信先をポップアップで出す */

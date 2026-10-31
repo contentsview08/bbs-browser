@@ -435,8 +435,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
                     // タイムライン: 本文の下に返信を 2 件まで(それ以上は「ほか N 件」)
                     // 返信の多い(人気の)返信から出す
-                    replies = if (style == "timeline") (index.replies[p.no] ?: emptyList()).sortedByDescending { n -> index.replyCount[n] ?: 0 }.take(2).mapNotNull { n -> previewOf(n) } else emptyList(),
-                    replyTotal = index.replies[p.no]?.size ?: 0,
+                    replies = if (style == "timeline" && !LocalInTree.current) (index.replies[p.no] ?: emptyList()).sortedByDescending { n -> index.replyCount[n] ?: 0 }.mapNotNull { n -> previewOf(n) } else emptyList(),
+                    replyTotal = if (LocalInTree.current) 0 else index.replies[p.no]?.size ?: 0,
                     // アイコンを押すと、その ID のレス
                     onAvatar = p.id?.let { pid -> { openPopup(index.posts.filter { it.id == pid }, focus = p.no) } },
                     onReplies = { page.links.onTag("r:${p.no}") },

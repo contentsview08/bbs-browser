@@ -454,7 +454,7 @@ fun StyleSheet(p: io.github.yumekui8.bbsnative.data.Prefs, onFont: () -> Unit, o
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
             group("レスの見た目")
-            for ((k, name) in listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風")) row(name, p.postStyle == k) { p.postStyle = k }
+            for ((k, name) in POST_STYLES) row(name, p.postStyle == k) { p.postStyle = k }
         }
     }
 }

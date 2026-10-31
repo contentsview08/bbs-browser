@@ -299,6 +299,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // レス 1 件(本文とポップアップで共通)。本文を押すとアンカーツリー、長押しでメニュー
     val style = vm.prefs.postStyle
     // 返信先の 1 行に出す中身(Discord 風・LINE 風)
+    fun previewOf(no: Int): ReplyPreview? {
+        val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
+        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, t.body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+    }
     fun replyOf(r: RenderedPost?): ReplyPreview? {
         val no = r?.replyTo ?: return null
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
@@ -355,7 +359,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 )
             } else page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
-                val continued = style != "card" && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
+                val continued = (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 // 薄く表示する NG(会話の流れは残して、字を 3 割に)
                 if (p.no in page.ngNos && p.no !in revealed) Box(Modifier.graphicsLayer { alpha = 0.3f }) { PostItem(
                     it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,
@@ -364,6 +368,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     it, style = style, id = p.id, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
+                    // タイムライン: 本文の下に返信を 2 件まで(それ以上は「ほか N 件」)
+                    replies = if (style == "timeline") (index.replies[p.no] ?: emptyList()).take(2).mapNotNull { n -> previewOf(n) } else emptyList(),
+                    replyTotal = index.replies[p.no]?.size ?: 0,
+                    onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
         }
@@ -459,7 +467,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 shown.getOrNull(i - 1)?.let { q -> remember(q.date, p.date) { timeGapLabel(q.date, p.date) } }?.let { TimeGapDivider(it, style) }
                             postRow(p, shown.getOrNull(i - 1), true)
                             // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
-                            if (style == "card") HorizontalDivider(color = Palette.border)
+                            if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
                         }
                         // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)
                         item(key = "end") {

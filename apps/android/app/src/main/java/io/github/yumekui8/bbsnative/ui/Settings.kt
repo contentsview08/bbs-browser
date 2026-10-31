@@ -212,7 +212,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     Group("レスの見た目") {
         ChoiceRow(
             "見た目", p.postStyle,
-            listOf("card" to "カード", "discord" to "Discord 風", "line" to "LINE 風"),
+            POST_STYLES,
         ) { p.postStyle = it }
     }
     if (LocalAdvanced.current) Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {

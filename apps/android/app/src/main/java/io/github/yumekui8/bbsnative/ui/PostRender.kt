@@ -67,6 +67,15 @@ class PostLinks : LinkInteractionListener {
 
 private val plain = TextLinkStyles(null)
 
+/** レスの見た目のうち、会話の形(アイコン・短い頭・返信先の 1 行)にするもの */
+fun isChatStyle(style: String) = style == "discord" || style == "line" || style == "timeline"
+
+/** 選べるレスの見た目(キーと名前) */
+val POST_STYLES = listOf(
+    "card" to "カード", "classic" to "専ブラ風(詰めて)", "matome" to "まとめ風(人気を大きく)",
+    "discord" to "Discord 風", "line" to "LINE 風", "timeline" to "タイムライン(X 風)",
+)
+
 /** ID の字の色: ID ごとの色(設定がオンで 2 回以上書いた ID)か、薄い字 */
 private fun idC(id: String, count: Int, o: RenderOptions) =
     if (o.idColor && count >= 2) Palette.idColor(id, sky = o.onSky) else mutedC(o)
@@ -108,7 +117,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         val replyHeat = Palette.heat(replies)
         val name = if (noname != null && p.name.startsWith(noname)) p.name.substring(noname.length).trim() else p.name
         val isOp = o.highlightOp && opId != null && p.id == opId
-        val header = if (o.style != "card") compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
+        val header = if (isChatStyle(o.style)) compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
             val noStyle = SpanStyle(color = replyHeat ?: mutedC(o), fontWeight = FontWeight.Bold, fontSize = 13.sp)
             val noText = if (replies > 0) "${p.no} ($replies)" else "${p.no}"
@@ -145,7 +154,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         // Discord 風・LINE 風: 頭のアンカーを返信として外に出し、本文からは省く(その分だけ押せるところの位置をずらす)
         var skip = 0
         var replyTo: Int? = null
-        if (o.style != "card") LEADING_ANCHOR.find(full)?.let { m ->
+        if (isChatStyle(o.style)) LEADING_ANCHOR.find(full)?.let { m ->
             val n = m.groupValues[1].map { if (it in '０'..'９') '0' + (it - '０') else it }.joinToString("").toIntOrNull()
             if (n != null && n < p.no && n >= 1) {
                 replyTo = n

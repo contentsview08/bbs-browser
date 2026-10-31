@@ -47,6 +47,8 @@ fun PostItem(
     style: String = "card", id: String? = null, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
     /** 人気のレス(返信 3 件から)の色。左に線、淡い地 */
     heat: Color? = null,
+    /** タイムライン: 本文の下に出す返信(2 件まで)と、返信の数・押したとき */
+    replies: List<ReplyPreview> = emptyList(), replyTotal: Int = 0, onReplies: () -> Unit = {},
 ) {
     val chips = chipInlineContent()
     val prefs = LocalPrefs.current
@@ -124,6 +126,55 @@ fun PostItem(
                     }
                 }
                 Box(Modifier.padding(start = if (own) 0.dp else AVATAR - 4.dp)) { Column { media() } }
+            }
+        }
+        "timeline" -> {
+            // X 風: アイコン左、名前と時刻・本文、下に返信を 2 件まで字下げして(それ以上は「ほか N 件」)
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = pad + 2.dp, bottom = pad)) {
+                Row(Modifier.fillMaxWidth()) {
+                    Identicon(id, AVATAR)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        if (reply != null) ReplyLine(reply, indent = 0.dp) { onReply(reply.no) }
+                        header()
+                        body(Modifier.padding(top = 2.dp))
+                        media()
+                        if (replies.isNotEmpty()) Column(
+                            Modifier.padding(top = 6.dp).fillMaxWidth().background(Palette.surface2.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
+                        ) {
+                            for (rp in replies) Row(Modifier.fillMaxWidth().clickable { onReply(rp.no) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Identicon(rp.id, 18.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("${rp.name}  ", color = Palette.textMuted, fontSize = 12.sp, maxLines = 1)
+                                Text(rp.text, Modifier.weight(1f), color = Palette.textBody, fontSize = 13.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                            if (replyTotal > replies.size) Text(
+                                "ほか ${replyTotal - replies.size} 件の返信", Modifier.clickable(onClick = onReplies).padding(top = 3.dp),
+                                color = Palette.link, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        "classic" -> {
+            // 専ブラ風: 余白を詰め、頭の行を小さく。1 画面にたくさん並ぶ
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
+                if (own || toOwn) header() else Text(r.header, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips)
+                if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
+            }
+            media()
+        }
+        "matome" -> {
+            // まとめ風: 返信の多いレス(人気)は字を大きく濃く、ほかは小さめに。読み飛ばしながら見どころが拾える
+            Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = if (heat != null) pad + 2.dp else pad / 2 + 2.dp)) {
+                    header()
+                    if (aa) AaBody(r)
+                    else if (heat != null) Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                    else Text(r.body, Modifier.padding(top = 2.dp), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em)
+                }
+                media()
             }
         }
         else -> {

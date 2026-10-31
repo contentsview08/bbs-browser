@@ -146,7 +146,7 @@ private fun TreeStep(r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild
     val depth = minOf(r.depth, 5)
     // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
     // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
-    if (LocalPrefs.current.postStyle != "card") {
+    if (isChatStyle(LocalPrefs.current.postStyle)) {
         val step = 16.dp
         val line = Palette.textMuted.copy(alpha = 0.8f)
         Row(

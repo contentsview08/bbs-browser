@@ -124,6 +124,13 @@ val SCHEMES = listOf(
         c(0x060607), c(0x2E3338), c(0x6D7581), c(0x5865F2), c(0xFFFFFF), wash(0x5865F2, 0.10f),
         c(0xED4245), c(0xFFFFFF), c(0x0068E0), c(0x3E8E5E), c(0x4E5D94), c(0xC27C0E), c(0xD9622B), c(0xD83C3E),
     ),
+    // X(Twitter)ディム: 濃紺の地に青の強調。X の「ディム」と同じ色合い(未読は X のピンク)
+    Scheme(
+        "x-dim", "X(Twitter)ディム", true,
+        c(0x15202B), c(0x15202B), c(0x192734), c(0x1E2732), c(0x273340), c(0x38444D), c(0x4A5864),
+        c(0xF7F9F9), c(0xE1E6EA), c(0x8B98A5), c(0x1D9BF0), c(0xFFFFFF), wash(0x1D9BF0, 0.16f),
+        c(0xF91880), c(0xFFFFFF), c(0x4FB2F5), c(0x00BA7C), c(0xA9C5DE), c(0xFFAD1F), c(0xF7853E), c(0xF4212E),
+    ),
     // モノクロ: 灰色だけで作り、未読・自分の印だけに色を残す(色の役割の原則をいちばん素直に当てたもの)
     Scheme(
         "mono", "モノクロ", true,

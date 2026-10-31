@@ -605,10 +605,12 @@ private fun ThreadPreview(body: String, thumb: String?, k: Float) {
     val showThumb = thumb != null && prefs.showThumbnails && remember(prefs.thumbMode) {
         when (prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(context); ThumbMode.NEVER -> false }
     }
-    if (text.isEmpty() && !showThumb) return
+    // 取れなかった画像は出さない(×の枠が並ばないように。web 版と同じ)
+    val failed = thumb != null && io.github.yumekui8.bbsnative.data.ImageStore.states[thumb] is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed
+    if (text.isEmpty() && (!showThumb || failed)) return
     Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.Top) {
         Text(text, Modifier.weight(1f), color = Palette.textMuted, fontSize = (12.5f * k).sp, lineHeight = (17 * k).sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (showThumb) {
+        if (showThumb && !failed) {
             Spacer(Modifier.width(10.dp))
             StoredImage(thumb!!, Modifier.size(44.dp).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
         }

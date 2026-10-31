@@ -136,9 +136,11 @@ function ThreadCard({
   /** スレタイの色: 開いたことのあるスレは既読の色、新着があれば強く、まだ開いていないスレはふつうの強さ */
   const titleColor = visited ? (unreadCount > 0 ? 'var(--c-text-strong)' : 'var(--c-thread-read-title, var(--c-text-body))') : 'var(--thread-list-title-color, var(--c-text-strong))'
 
+  const [thumbFailed, setThumbFailed] = useState(false)
   /** スレの画像のサムネイル(ふたば・4chan のカタログ)。size は一辺(px) */
   const thumbImg = (size: number, cls = 'rounded-md') =>
     thread.thumb &&
+    !thumbFailed &&
     isAutoLoadable(thread.thumb) && (
       <img
         src={thread.thumb}
@@ -147,9 +149,8 @@ function ThreadCard({
         referrerPolicy="no-referrer"
         className={`flex-shrink-0 object-cover bg-c-surface2 ${cls}`}
         style={{ width: `calc(${size}px * var(--list-thumb-scale, 1))`, height: `calc(${size}px * var(--list-thumb-scale, 1))` }}
-        onError={(e) => {
-          e.currentTarget.style.visibility = 'hidden'
-        }}
+        // 取れなかった画像は枠ごと消す(空いたすき間が残らないように)
+        onError={() => setThumbFailed(true)}
       />
     )
 
@@ -178,6 +179,15 @@ function ThreadCard({
             </span>
           ))
         : thumbImg(48)
+  /** 1 レス目の頭(URL とアンカーは除いて 1 行に) */
+  const previewText = thread.preview?.[0]?.body
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/(>>|&gt;&gt;|＞＞)\d+/g, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(' ')
   const unified = (
     <div className="flex items-start gap-2.5 min-w-0">
       {leading && <span className="flex-shrink-0 flex items-center justify-center min-w-[1rem] pt-0.5">{leading}</span>}
@@ -192,6 +202,8 @@ function ThreadCard({
           {threadBadges}
           {thread.title}
         </div>
+        {/* 1 レス目ののぞき見(スレ一覧の時点で本文が分かる掲示板だけ。hono-bbs など) */}
+        {previewText && <div className="mt-0.5 text-[12.5px] leading-snug line-clamp-2 break-words text-c-text-muted">{previewText}</div>}
         <div className="mt-1 flex items-center gap-2 text-[11px] text-c-text-muted min-w-0">
           {thread.createdAt && <span className="flex-shrink-0 whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
           {thread.authorId && (

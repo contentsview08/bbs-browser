@@ -6,6 +6,7 @@
         android:label="bbs N"
         android:allowBackup="false"
         android:supportsRtl="false"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity
             android:name=".MainActivity"

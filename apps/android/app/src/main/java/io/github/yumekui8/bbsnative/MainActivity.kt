@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -112,7 +113,23 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(vm.drawerOpen) { if (vm.drawerOpen) drawer.open() else drawer.close() }
                     LaunchedEffect(drawer) { snapshotFlow { drawer.currentValue }.collect { vm.drawerOpen = it == DrawerValue.Open } }
                     BackHandler(enabled = vm.drawerOpen) { vm.drawerOpen = false }
-                    BackHandler(enabled = !vm.drawerOpen && vm.stack.size > 1) { vm.back() }
+                    // 戻る(なぞって戻る途中も): なぞっている間は今の画面が指についてきて、後ろに前の画面が見える。離せば戻り、引き返せばやめる
+                    androidx.activity.compose.PredictiveBackHandler(enabled = !vm.drawerOpen && vm.stack.size > 1) { progress ->
+                        try {
+                            progress.collect { e -> vm.backDrag = e.progress }
+                            // 指で最後まで動かしたので、移り変わりの動きはなしで戻る
+                            val dragged = vm.backDrag > 0f
+                            vm.back()
+                            if (dragged) vm.navDir = 2
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            // やめた: 元の位置へ戻す
+                            val a = androidx.compose.animation.core.Animatable(vm.backDrag)
+                            a.animateTo(0f, tween(180)) { vm.backDrag = value }
+                            throw e
+                        } finally {
+                            if (vm.navDir == 2 || vm.backDrag != 0f) vm.backDrag = 0f
+                        }
+                    }
                     // いちばん下の画面で戻ると、すぐには閉じず「もう一度戻ると終了します」を出す。2 秒以内にもう一度戻ったら閉じる
                     var lastBack by androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
                     BackHandler(enabled = !vm.drawerOpen && vm.stack.size <= 1) {
@@ -128,28 +145,7 @@ class MainActivity : ComponentActivity() {
                             val showTabs = vm.prefs.bottomTabs && top != null && top !is Page.Thread && top !is Page.Settings
                             var tabsH by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
                             val density = LocalDensity.current
-                            AnimatedContent(
-                                targetState = vm.stack.lastOrNull(),
-                                modifier = if (showTabs) Modifier.padding(bottom = with(density) { tabsH.toDp() }).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars) else Modifier,
-                                // 今のスマホ版の page-in / page-back と同じ: 出てくる画面だけが、28%(戻るときは左へ 20%)ずれた所から
-                                // 薄い(0.4)状態ですべり込む。260ms・cubic-bezier(0.2, 0.8, 0.2, 1)。前の画面はそのまま消える
-                                transitionSpec = {
-                                    // 何が起きたか分かるように: 開くと新しい画面が右端からすべり込み、前の画面は少し左へ下がって暗くなる。
-                                    // 戻ると今の画面が右へ抜け、前の画面が左から戻る(スマホのふつうの画面の移り方)
-                                    val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
-                                    val move = tween<IntOffset>(320, easing = ease)
-                                    val fade = tween<Float>(320, easing = ease)
-                                    // 動きを減らすときは、すっと切り替えるだけ
-                                    if (io.github.yumekui8.bbsnative.ui.Motion.reduced) fadeIn(tween(90)) togetherWith fadeOut(tween(90))
-                                    else when (vm.navDir) {
-                                        1 -> slideInHorizontally(move) { it } togetherWith (slideOutHorizontally(move) { -it / 4 } + fadeOut(fade, targetAlpha = 0.5f))
-                                        -1 -> (slideInHorizontally(move) { -it / 4 } + fadeIn(fade, initialAlpha = 0.5f)) togetherWith slideOutHorizontally(move) { it }
-                                        else -> fadeIn(tween(200)) togetherWith fadeOut(tween(200))
-                                    }.apply { targetContentZIndex = if (vm.navDir == -1) -1f else 1f }
-                                },
-                                contentKey = { it?.hashCode() },
-                                label = "page",
-                            ) { page ->
+                            val pageContent: @androidx.compose.runtime.Composable (Page?) -> Unit = { page ->
                             // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴・設定など)も、右へなぞるとメニューを開く
                             val swipe = io.github.yumekui8.bbsnative.ui.rememberSwipeState()
                             val others = page !is Page.Threads && page !is Page.Thread
@@ -172,6 +168,36 @@ class MainActivity : ComponentActivity() {
                             }
                             }
                             }
+                            // なぞって戻っている途中は、前の画面を後ろに置く(今の画面は上で指の分だけ右へずれる)
+                            val behind = vm.stack.getOrNull(vm.stack.lastIndex - 1)
+                            if (vm.backDrag > 0f && behind != null) Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(1f - vm.backDrag) * size.width * 0.25f }) {
+                                pageContent(behind)
+                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * (1f - vm.backDrag))))
+                            }
+                            AnimatedContent(
+                                targetState = vm.stack.lastOrNull(),
+                                modifier = (if (showTabs) Modifier.padding(bottom = with(density) { tabsH.toDp() }).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars) else Modifier)
+                                    .graphicsLayer { translationX = vm.backDrag * size.width; shadowElevation = if (vm.backDrag > 0f) 24f else 0f },
+                                // 今のスマホ版の page-in / page-back と同じ: 出てくる画面だけが、28%(戻るときは左へ 20%)ずれた所から
+                                // 薄い(0.4)状態ですべり込む。260ms・cubic-bezier(0.2, 0.8, 0.2, 1)。前の画面はそのまま消える
+                                transitionSpec = {
+                                    // 何が起きたか分かるように: 開くと新しい画面が右端からすべり込み、前の画面は少し左へ下がって暗くなる。
+                                    // 戻ると今の画面が右へ抜け、前の画面が左から戻る(スマホのふつうの画面の移り方)
+                                    val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+                                    val move = tween<IntOffset>(320, easing = ease)
+                                    val fade = tween<Float>(320, easing = ease)
+                                    // 動きを減らすときは、すっと切り替えるだけ
+                                    if (vm.navDir == 2) androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+                                    else if (io.github.yumekui8.bbsnative.ui.Motion.reduced) fadeIn(tween(90)) togetherWith fadeOut(tween(90))
+                                    else when (vm.navDir) {
+                                        1 -> slideInHorizontally(move) { it } togetherWith (slideOutHorizontally(move) { -it / 4 } + fadeOut(fade, targetAlpha = 0.5f))
+                                        -1 -> (slideInHorizontally(move) { -it / 4 } + fadeIn(fade, initialAlpha = 0.5f)) togetherWith slideOutHorizontally(move) { it }
+                                        else -> fadeIn(tween(200)) togetherWith fadeOut(tween(200))
+                                    }.apply { targetContentZIndex = if (vm.navDir == -1) -1f else 1f }
+                                },
+                                contentKey = { it?.hashCode() },
+                                label = "page",
+                            ) { page -> pageContent(page) }
                             if (showTabs) io.github.yumekui8.bbsnative.ui.BottomTabs(
                                 vm, top, Modifier.align(Alignment.BottomCenter).onSizeChanged { tabsH = it.height },
                             )

@@ -314,8 +314,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val canForward get() = forwardPage != null
 
     /** 画面の移り方(1: 右から出てくる / -1: 右へ戻る / 0: 入れ替え)。積み重ねを変える直前に決める */
+    /** なぞって戻っている途中の量(0〜1)。画面が指についてきて、後ろに前の画面が見える */
+    var backDrag by mutableStateOf(0f)
+    /** 画面の移り方の向き(1 開く・-1 戻る・0 入れ替え・2 なぞって戻り終えた: 動きなし) */
     var navDir = 0
-        private set
 
     fun back(): Boolean {
         if (stack.size <= 1) return false

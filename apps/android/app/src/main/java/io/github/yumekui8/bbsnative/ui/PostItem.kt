@@ -25,6 +25,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.clickable
@@ -218,7 +226,36 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
     }
 }
 
-/** AA 用の字(aahub_light)。書き込み欄でも使う */
+/**
+ * AA を拡大して見る: 画面いっぱいに AA だけを出し、2 本指で拡大・縮小、1 本指で動かせる(縮めて収めた AA は字が小さすぎて読めないことがある)。
+ * 横向きにすると広く使える。押すか戻るで閉じる
+ */
+@Composable
+fun AaZoom(r: RenderedPost, onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismiss, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        var scale by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+        var offset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        Box(
+            Modifier.fillMaxSize().background(Palette.base)
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(0.5f, 6f)
+                        offset += pan
+                    }
+                }
+                .pointerInput(Unit) { detectTapGestures(onDoubleTap = { scale = 1f; offset = androidx.compose.ui.geometry.Offset.Zero }, onTap = { onDismiss() }) },
+            contentAlignment = Alignment.Center,
+        ) {
+            BasicText(
+                r.body, Modifier.wrapContentSize(unbounded = true).graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
+                style = TextStyle(color = Palette.textBody, fontFamily = AaFont, fontSize = 13.sp, lineHeight = 1.15.em, letterSpacing = 0.sp),
+                softWrap = false,
+            )
+            Text("2 本指で拡大 ・ ダブルタップで戻す ・ タップで閉じる", Modifier.align(Alignment.BottomCenter).padding(16.dp), color = Palette.textMuted, fontSize = 11.sp)
+        }
+    }
+}
+
 /** AA 用の字(aahub_light)。書き込み欄でも使う */
 val AaFont = FontFamily(Font(R.font.aahub_light))
 

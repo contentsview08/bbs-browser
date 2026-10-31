@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -155,6 +156,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val popups = remember { mutableStateListOf<PopupEntry>() }
     // アンカーをたどったレス(本文側で、ポップアップを閉じたあとも少しのあいだ色を付け、どこだったか分かるように)
     var traced by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    // その場で開いたアンカー(レスの番号 → 差し込んだレスの番号)
+    var inline by remember { mutableStateOf<Map<Int, List<Int>>>(emptyMap()) }
     LaunchedEffect(popups.isEmpty(), traced) { if (popups.isEmpty() && traced.isNotEmpty()) { delay(1800); traced = emptySet() } }
     var popupSeq by remember { mutableIntStateOf(0) }
     var downY by remember { mutableFloatStateOf(0f) }
@@ -181,6 +184,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val saveHtml = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/html")) { uri -> if (uri != null) vm.saveThread(page, uri, html = true) }
     /** 長押しで「AAとして表示」「文字列として表示」を選んだレス */
     var aaOverride by remember { mutableStateOf(mapOf<Int, Boolean>()) }
+    /** 拡大して見ている AA のレス */
+    var aaZoom by remember { mutableStateOf<Int?>(null) }
     val swipe = rememberSwipeState()
     val own = page.ownNos
     // 自分への返信(自分のレスにアンカーを付けたレス)
@@ -257,8 +262,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'a' -> {
                     val (from, to) = v.split('-').map { it.toInt() }
                     val list = index.posts.filter { it.no in from..to }
-                    traced = list.map { it.no }.toSet()
-                    openPopup(list)
+                    val host = downNo
+                    // その場で開く(設定)。本文の中で押したときだけ(ポップアップの中ではポップアップで)
+                    if (vm.prefs.anchorInline && popups.isEmpty() && host > 0 && list.isNotEmpty() && list.size <= 10) {
+                        inline = if (inline[host] == list.map { it.no }) inline - host else inline + (host to list.map { it.no })
+                    } else {
+                        traced = list.map { it.no }.toSet()
+                        openPopup(list)
+                    }
                 }
                 'r' -> {
                     val no = v.toInt()
@@ -357,7 +368,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
-            } else page.rendered[p.no]?.let {
+            } else Column { page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
                 val continued = (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 // 薄く表示する NG(会話の流れは残して、字を 3 割に)
@@ -373,6 +384,21 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     replyTotal = index.replies[p.no]?.size ?: 0,
                     onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
+            }
+            // その場で開いたアンカー(設定)。本文の下に字下げして差し込む。もう一度押すと畳む
+            if (inMain) inline[p.no]?.let { nos ->
+                for (n in nos) {
+                    val t = index.posts.getOrNull(n - 1)?.takeIf { it.no == n } ?: continue
+                    val rt = page.rendered[n] ?: continue
+                    Box(
+                        Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, bottom = 6.dp)
+                            .background(Palette.surface2.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                            .drawBehind { drawRect(Palette.accent.copy(alpha = 0.6f), size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) },
+                    ) {
+                        PostItem(rt, style = "card", id = t.id, aa = aaOverride[n] ?: rt.aa, own = n in own, info = index.info[n], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = n in index.gross)
+                    }
+                }
+            }
             }
         }
     }
@@ -657,6 +683,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             MenuAt.TopStart,
         ) { titleSheet = false }
     }
+    aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; fontDialog = true }) { styleSheet = false }
 
     postMenu?.let { p ->
@@ -688,6 +715,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     (aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false).let { isAA ->
                         MenuItem(if (isAA) "文字列として表示" else "AAとして表示", if (isAA) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn) { aaOverride = aaOverride + (p.no to !isAA) }
                     },
+                ) + listOfNotNull(
+                    // AA のレスだけ(縮めて収めた AA は字が小さすぎて読めないことがある)
+                    if (aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false) MenuItem("AA を拡大して見る", Icons.Filled.ZoomIn, Palette.markPurple) { aaZoom = p.no } else null,
                 ),
                 listOfNotNull(
                     p.id?.let { id -> MenuItem("ID を NG(ID:$id)", Icons.Filled.Block, Palette.markDanger) { vm.addNg(NgRule("id", id)) } },

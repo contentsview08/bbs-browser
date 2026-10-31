@@ -397,6 +397,9 @@ private fun BehaviorPage(vm: AppViewModel) {
 private fun NgPage(vm: AppViewModel) {
     val p = vm.prefs
     var adding by remember { mutableStateOf(false) }
+    Group("見せ方") {
+        ChoiceRow("NG のレス", p.ngStyle, listOf("fold" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngStyle = it }
+    }
     Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイの NG は、スレを長押しして足せます") {
         if (p.ngRules.isEmpty()) Text("NG はまだありません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
         for (r in p.ngRules) {

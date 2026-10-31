@@ -51,6 +51,7 @@ val SETTINGS_INDEX = listOf(
     Triple("behavior", "書き込み欄の右に更新ボタン", ""),
     Triple("behavior", "スレ一覧も引っぱって更新", ""),
     Triple("behavior", "開いているスレの自動更新", ""),
+    Triple("ng", "NG のレス", ""),
     Triple("ng", "NG を足す", ""),
     Triple("sites", "サイトを足す", ""),
     Triple("backup", "バックアップを書き出す", ""),

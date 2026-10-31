@@ -122,6 +122,8 @@ class Prefs(context: Context) {
     var highlightOp by pref("highlightOp", true)
     var idHeat by pref("idHeat", true)
     var idColor by pref("idColor", false)
+    /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */
+    var ngStyle by pref("ngStyle", "fold")
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */
     var doubleTapReply by pref("doubleTapReply", false)
     var showMinimap by pref("showMinimap", true)

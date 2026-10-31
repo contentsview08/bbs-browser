@@ -134,7 +134,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
 
     // 勢いの色は、板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなるように。今の専ブラと同じ)
     val rank = remember(page.threads) {
-        val sorted = page.threads.map { it.key to momentum(it, now) }.sortedByDescending { it.second }
+        // 順位は、立って 10 分たっていないスレを 10 分として数える(立った直後の 1 レスのスレが一番勢いがあることにならないように)
+        val sorted = page.threads.map { it.key to momentum(it, maxOf(now, (it.createdAt ?: now) + 600_000L)) }.sortedByDescending { it.second }
         sorted.mapIndexed { i, (k, _) -> k to (1.0 - i.toDouble() / maxOf(1, sorted.size)) }.toMap()
     }
     val ngTitles = vm.prefs.ngRules.filter { it.target == "title" }.map { it.pattern }

@@ -152,6 +152,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var query by page::query
     // 重なったポップアップ(下から順に)。押した所の高さ・押したレスは、指を置いたときに控えておく
     val popups = remember { mutableStateListOf<PopupEntry>() }
+    // アンカーをたどったレス(本文側で、ポップアップを閉じたあとも少しのあいだ色を付け、どこだったか分かるように)
+    var traced by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    LaunchedEffect(popups.isEmpty(), traced) { if (popups.isEmpty() && traced.isNotEmpty()) { delay(1800); traced = emptySet() } }
     var popupSeq by remember { mutableIntStateOf(0) }
     var downY by remember { mutableFloatStateOf(0f) }
     var downNo by remember { mutableIntStateOf(0) }
@@ -253,6 +256,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'a' -> {
                     val (from, to) = v.split('-').map { it.toInt() }
                     val list = index.posts.filter { it.no in from..to }
+                    traced = list.map { it.no }.toSet()
                     openPopup(list)
                 }
                 'r' -> {
@@ -299,7 +303,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
         return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, t.body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
-    val postRow = @Composable { p: Post, prev: Post? ->
+    val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->
         // 新着で届いたレスは、下から少し浮き上がって順に出てきて、しばらく光る(今のスマホ版の post-enter と flash-new)
         // 出る動きは、届いた時に画面に出ていたレスだけ。あとからスクロールして(一番下へ飛んで)出てきたレスは、待たせずにすぐ描く
         val delayMs = ctl.flash[p.no]?.takeIf { System.currentTimeMillis() - ctl.flashAt < it + 150 }
@@ -324,6 +328,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Modifier
                 .then(if (anim != null) Modifier.graphicsLayer { alpha = anim.value; translationY = (1f - anim.value) * 8.dp.toPx() } else Modifier)
                 .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = 0.28f * jumpGlow.value)) } else Modifier)
+                // たどったレス(本文側だけ)
+                .then(if (inMain && p.no in traced) Modifier.drawBehind { drawRect(Palette.accent.copy(alpha = 0.14f)); drawRect(Palette.accent, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) } else Modifier)
                 .then(if (flash != null) Modifier.drawBehind {
                     // 24% → 16%(45% の所)→ 0 と消える
                     val f = flash.value
@@ -339,17 +345,23 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); vm.openReply(page, ">>${p.no}\n") }) else null,
                 ),
         ) {
-            if (p.no in page.ngNos && p.no !in revealed) {
-                Text(
+            val ngStyle = vm.prefs.ngStyle
+            if (p.no in page.ngNos && p.no !in revealed && ngStyle != "dim") {
+                // あぼーん(1 行に畳む)か、透明あぼーん(何も出さない)
+                if (ngStyle == "fold") Text(
                     "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
             } else page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
                 val continued = style != "card" && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
-                PostItem(
+                // 薄く表示する NG(会話の流れは残して、字を 3 割に)
+                if (p.no in page.ngNos && p.no !in revealed) Box(Modifier.graphicsLayer { alpha = 0.3f }) { PostItem(
+                    it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,
+                    info = null, autoLoad = false, gross = false,
+                ) } else PostItem(
                     it, style = style, id = p.id, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
-                    onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> openPopup(listOf(t)) } },
+                    onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             }
@@ -444,7 +456,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             // 時間が空いたところの区切り(絞り込みの間は、並びが飛ぶので出さない)
                             if (vm.prefs.timeGap && filter == null && query.isBlank() && p.no != page.unreadFrom)
                                 shown.getOrNull(i - 1)?.let { q -> remember(q.date, p.date) { timeGapLabel(q.date, p.date) } }?.let { TimeGapDivider(it, style) }
-                            postRow(p, shown.getOrNull(i - 1))
+                            postRow(p, shown.getOrNull(i - 1), true)
                             // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
                             if (style == "card") HorizontalDivider(color = Palette.border)
                         }
@@ -507,6 +519,19 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // フッターの上で終わらせる(フッターが隠れても伸ばさない。伸び縮みすると縮図が動いて見にくい)
                     Modifier.align(Alignment.TopEnd).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() } + 4.dp, bottom = with(density) { footerH.toDp() } + 4.dp, end = 2.dp),
                     onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show() },
+                    readNo = page.readNo,
+                )
+            } else if (shown.size > 1) {
+                // ミニマップを出していないときは、上の帯の下端に読み進み具合の細いバー
+                val progress by remember(shown) {
+                    derivedStateOf {
+                        val last = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.key is Int }?.index ?: 0
+                        (last + 1f) / shown.size
+                    }
+                }
+                Box(
+                    Modifier.align(Alignment.TopStart).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() })
+                        .fillMaxWidth(progress.coerceIn(0f, 1f)).height(2.dp).background(Palette.accent.copy(alpha = 0.7f)),
                 )
             }
 
@@ -568,7 +593,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         PopupLayer(
             popups, bg = Palette.threadBg(style), topInset = bars.topHeight * (1f - bars.hidden), endInset = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp,
             onCloseTop = { popups.removeAt(popups.lastIndex) },
-        ) { postRow(it, null) }
+        ) { postRow(it, null, false) }
     }
 
     // ︙ のメニュー(今のスマホ版の並び: お気に入り・画像一覧・次スレ・検索・板・先頭・一番下・表示スタイル・文字の大きさ・URL・ブラウザ・更新・削除)

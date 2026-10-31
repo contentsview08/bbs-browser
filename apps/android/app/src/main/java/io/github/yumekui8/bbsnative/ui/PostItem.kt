@@ -77,13 +77,16 @@ fun PostItem(
     val showHeat = heat != null && (heatSide == "left" || heatSide == "right")
     // 自分の書き込みの帯は、人気の帯と反対の側にいつも出す(人気が左の帯なら自分は右。人気を帯で示さないときは左)
     val ownSide = if (heatSide == "left") "right" else "left"
+    // 自分への返信は、自分の側に半分の濃さの帯と、うっすら自分の色の地(スクロール中でも目に入るように)
     val leftBar = when {
         own && ownSide == "left" -> Palette.own
+        toOwn && ownSide == "left" -> Palette.own.copy(alpha = 0.6f)
         showHeat && heatSide == "left" -> heat
         else -> null
     }
     val rightBar = when {
         own && ownSide == "right" -> Palette.own
+        toOwn && ownSide == "right" -> Palette.own.copy(alpha = 0.6f)
         showHeat && heatSide == "right" -> heat
         else -> null
     }
@@ -135,7 +138,15 @@ fun PostItem(
     }
     }
     if (leftBar == null && rightBar == null) return inner()
-    Row(Modifier.height(IntrinsicSize.Min).then(if (showHeat && heat != null) Modifier.background(heat.copy(alpha = 0.06f)) else Modifier)) {
+    Row(
+        Modifier.height(IntrinsicSize.Min).then(
+            when {
+                toOwn -> Modifier.background(Palette.own.copy(alpha = 0.09f))
+                showHeat && heat != null -> Modifier.background(heat.copy(alpha = 0.06f))
+                else -> Modifier
+            },
+        ),
+    ) {
         if (leftBar != null) Box(Modifier.width(3.dp).fillMaxHeight().background(leftBar))
         Box(Modifier.weight(1f)) { inner() }
         if (rightBar != null) Box(Modifier.width(3.dp).fillMaxHeight().background(rightBar))

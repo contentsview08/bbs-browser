@@ -159,9 +159,12 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const bodyRef = useRef(body)
   bodyRef.current = body
   /** 本文のカーソルの位置に文字を入れる */
-  const insert = (text: string) => {
+  const insert = (text0: string, opts?: { ownLine?: boolean }) => {
     const el = textRef.current
     const cur = bodyRef.current
+    const at = el ? el.selectionStart : cur.length
+    // 画像の URL は行の頭から(本文のすぐ後ろにくっつかないように)
+    const text = opts?.ownLine && at > 0 && cur[at - 1] !== '\n' ? `\n${text0}` : text0
     if (!el) {
       bodyRef.current = cur + text
       return changeBody(cur + text)

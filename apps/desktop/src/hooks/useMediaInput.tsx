@@ -21,8 +21,8 @@ function mediaFiles(list: FileList | null | undefined): File[] {
 export function useMediaInput(o: {
   /** 画像のアップロードを使うとき。使わないなら undefined(絵文字だけ出す) */
   uploader?: UploadOptions
-  /** 本文のカーソルの位置に文字を入れる */
-  insert: (text: string) => void
+  /** 本文のカーソルの位置に文字を入れる(ownLine: 行の途中なら改行してから入れる。画像の URL) */
+  insert: (text: string, opts?: { ownLine?: boolean }) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
   /** 書き込みにファイルを付けられる掲示板の決まり。あれば、アップロードの代わりに書き込みに付ける */
@@ -120,7 +120,7 @@ export function useMediaInput(o: {
       setUploading((n) => n + 1)
       try {
         const url = await uploadToCatbox(file, uploader)
-        o.insert(`${url}\n`)
+        o.insert(`${url}\n`, { ownLine: true })
         o.onUploaded?.({ url, name: file.name || 'image', size: file.size, withAccount: !!uploader.userhash })
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))

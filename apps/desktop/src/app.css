@@ -148,10 +148,8 @@ body,
   --c-thread-view-bg: #1a1a1e;
   --c-thread-read-title: #81828a;
 }
-/* 自分の書き込みは強調色(赤だと失敗に見えるので、未読の赤と分ける)。タブの帯はチャンネルの並びと同じ一番暗い面 */
+/* タブの帯はチャンネルの並びと同じ一番暗い面 */
 html:root[data-scheme='discord-dark'] {
-  --c-own: #5865f2;
-  --c-own-wash: rgba(88, 101, 242, 0.22);
   --tabbar-bg: #121214;
 }
 
@@ -169,15 +167,16 @@ html:root[data-scheme='discord-dark'] {
   --c-border-strong: #c5cad3;
   --c-text-strong: #111111;
   --c-text-body: #2b2b2b;
-  --c-text-muted: #8b8f97;
+  /* 薄い字・強調(送るボタン)・未読の札は、コントラスト比を満たすよう少し濃く(スマホのアプリと同じ。未読の札の字は濃い緑) */
+  --c-text-muted: #747983;
   --c-text-emphasis: #000000;
-  --c-accent: #00a650;
-  --c-accent-hover: #06c755;
+  --c-accent: #008c45;
+  --c-accent-hover: #00a650;
   --c-accent-text: #ffffff;
   --c-accent-wash: rgba(6, 199, 85, 0.12);
   --c-accent-self: #06c755;
   --c-accent-self-wash: rgba(6, 199, 85, 0.12);
-  --c-accent-self-text: #ffffff;
+  --c-accent-self-text: #03230f;
   --c-link: #2a62c9;
   --c-link-twitter: #1d8fd6;
   --c-link-youtube: #d6336c;
@@ -239,6 +238,40 @@ html:root[data-scheme='oled'] {
 /* やさしいライトのカードは、トーナルでも枠線でも背景より少しだけ明るい面にする */
 [data-pattern][data-scheme='soft-light'] {
   --card-bg: #f9f7f4;
+}
+
+/* 書き込んだ人の名前の色は、スマホのアプリ(ui/Theme.kt)と同じ。web 版の暗く落とした色だと、暗い地の上で読みにくい */
+[data-scheme='indigo'] {
+  --c-poster-name: #3f9d84;
+}
+[data-scheme='amber-teal'] {
+  --c-poster-name: #4a9583;
+}
+
+/* ---------- 面の色の役目をスマホのアプリ(bbs N)にそろえる ----------
+   スマホのアプリは、スレ一覧・スレ表示 = 地の色(--c-base)、スレ一覧の行は面を敷かずに線で区切る、書き込み欄 = 帯の色。
+   web 版から受け継いだ決まり(スレ一覧の地は --c-surface2、カードの行は --c-surface2 に黒を 15% 混ぜた面)のままだと、
+   明るい配色ではスレ一覧が灰色にくすみ、黒い字が読みにくかった(Discord ライトでは #c8c9cb ほどの面に黒い字)。
+   2ch クラシックはスマホのアプリにない PC だけの配色なので、元の見た目のまま。
+   配色ごとの指定([data-pattern][data-scheme='line-light'] など)より強くするため、html:root まで付ける */
+html:root[data-scheme]:not([data-scheme='2ch-classic']) {
+  --c-panel-bg: var(--c-base);
+  --card-bg: transparent;
+  --list-gap-thread: 0px;
+}
+/* スレ表示の地も地の色(LINE 風は、下の「LINE 風の地」の青灰を混ぜた色のまま) */
+html:root[data-scheme]:not([data-scheme='2ch-classic']):not([data-post-style='line']) {
+  --c-thread-view-bg: var(--c-base);
+}
+/* カードの行は枠を消して、下に線を引いて区切る(枠線の見た目で開いているスレに付ける強調色の枠は残す) */
+html:root[data-scheme]:not([data-scheme='2ch-classic']) .card-thread[data-variant='card'] {
+  box-shadow: 0 1px 0 var(--c-border);
+}
+html:root[data-scheme]:not([data-scheme='2ch-classic']) .card-thread[data-variant='card']:not(.card-selected) {
+  border-color: transparent;
+}
+html:root[data-scheme]:not([data-scheme='2ch-classic']) .bg-panel-reply {
+  background: color-mix(in srgb, var(--c-header-footer) calc(var(--alpha-reply-form, 1) * 100%), transparent);
 }
 
 /* スレ一覧のスクロールバーは、つかみやすいように太くする(つまみの周りに透明な余白を取る) */
@@ -680,14 +713,14 @@ input[type='checkbox']:indeterminate {
 /* 意味の色(差し色)。配色の統一感は保ちつつ、ボタンや印を色で見分けられるように、意味のあるところにだけ使う。
    ダーク(.dark)は少し明るく、ライトは少し暗くして、どちらの背景でも浮きすぎないようにする */
 :root {
-  --c-mark-fav: #c98d00; /* お気に入り */
-  --c-mark-danger: #c94442; /* 削除・NG */
-  --c-mark-new: #2e9a5b; /* 新しい・書き込み */
-  --c-mark-video: #c94442; /* 動画 */
-  --c-mark-image: #2e9a5b; /* 画像 */
-  --c-mark-hot: #c96a1e; /* 人気 */
-  --c-mark-link: #2f6fc0; /* リンク・ブラウザ・コピー */
-  --c-mark-purple: #7b52c9; /* 見た目・アップロード */
+  --c-mark-fav: #c9961a; /* お気に入り */
+  --c-mark-danger: #d14b47; /* 削除・NG */
+  --c-mark-new: #2e9a5e; /* 新しい・書き込み(スマホのアプリの markNew と同じ) */
+  --c-mark-video: #d14b47; /* 動画 */
+  --c-mark-image: #2e9a5e; /* 画像 */
+  --c-mark-hot: #d9732a; /* 人気 */
+  --c-mark-link: #3a7bd5; /* リンク・ブラウザ・コピー */
+  --c-mark-purple: #8457c9; /* 見た目・アップロード */
 }
 :root.dark {
   --c-mark-fav: #f2c14e;
@@ -1022,19 +1055,19 @@ html[data-platform='mobile'] .card-thread[data-variant='card'] {
    未読・新着の札は今までどおり(ダークはピンク・赤、ライトは青)。ほかは別の色にする */
 /* 主(スレ主の印): 黄色・橙 */
 html:root[data-scheme] {
-  --c-op: #c47a06;
-  --c-op-wash: rgba(196, 122, 6, 0.12);
+  --c-op: #b7791f;
+  --c-op-wash: rgba(183, 121, 31, 0.16);
 }
 html:root.dark[data-scheme] {
   --c-op: #f0b44c;
   --c-op-wash: rgba(240, 180, 76, 0.16);
 }
-/* 自分の書き込み: 未読の色と分けて、緑みの青(Discord ダークは、本家と同じ紫みの青のまま) */
-html:root[data-scheme]:not([data-scheme='discord-dark']) {
-  --c-own: #14a37f;
-  --c-own-wash: rgba(20, 163, 127, 0.12);
+/* 自分の書き込み: 未読の色と分けて、緑みの青(スマホのアプリの Palette.own と同じ。どの配色でも同じ) */
+html:root[data-scheme] {
+  --c-own: #1f9a78;
+  --c-own-wash: rgba(31, 154, 120, 0.16);
 }
-html:root.dark[data-scheme]:not([data-scheme='discord-dark']) {
+html:root.dark[data-scheme] {
   --c-own: #3ec7a0;
   --c-own-wash: rgba(62, 199, 160, 0.16);
 }
@@ -1047,7 +1080,6 @@ html:root.dark[data-scheme] {
 }
 html:root[data-scheme='discord-dark'] {
   --c-flash-new: #5865f2;
-  --c-op: #f0b232;
 }
 
 /* スマホの設定: 項目の行(題の一覧・オンオフ)のあいだに線を引いて、1 行ずつ見分けやすくする */
@@ -1163,6 +1195,42 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 :root[data-scheme='gray'][data-post-style='line'] .line-bubble:not(.line-bubble-own) {
   background: var(--c-surface2);
 }
+/* スマホのアプリ(bbs N)の Theme.kt の lineBg・lineBubble と同じ値(Compose の lerp は Oklab で混ぜるので、計算した色をそのまま書く)。
+   scripts で作った値。配色を変えたら作り直す */
+:root[data-scheme='indigo'][data-post-style='line'] { --c-thread-view-bg: #05070a; --c-line-bg: #05070a; --c-line-bubble: #282c35; }
+:root[data-scheme='indigo'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #282c35; }
+:root[data-scheme='amber-teal'][data-post-style='line'] { --c-thread-view-bg: #090b11; --c-line-bg: #090b11; --c-line-bubble: #2d3341; }
+:root[data-scheme='amber-teal'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #2d3341; }
+:root[data-scheme='soft-dark'][data-post-style='line'] { --c-thread-view-bg: #0d0f13; --c-line-bg: #0d0f13; --c-line-bubble: #35383f; }
+:root[data-scheme='soft-dark'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #35383f; }
+:root[data-scheme='soft-light'][data-post-style='line'] { --c-thread-view-bg: #d6dbe0; --c-line-bg: #d6dbe0; --c-line-bubble: #ffffff; }
+:root[data-scheme='soft-light'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #ffffff; }
+:root[data-scheme='discord-dark'][data-post-style='line'] { --c-thread-view-bg: #0c0d10; --c-line-bg: #0c0d10; --c-line-bubble: #333337; }
+:root[data-scheme='discord-dark'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #333337; }
+:root[data-scheme='line-light'][data-post-style='line'] { --c-thread-view-bg: #9db8dc; --c-line-bg: #9db8dc; --c-line-bubble: #ffffff; }
+:root[data-scheme='line-light'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #ffffff; }
+:root[data-scheme='gray'][data-post-style='line'] { --c-thread-view-bg: #1c2838; --c-line-bg: #1c2838; --c-line-bubble: #3a3a3a; }
+:root[data-scheme='gray'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #3a3a3a; }
+:root[data-scheme='light-gray'][data-post-style='line'] { --c-thread-view-bg: #d3dae3; --c-line-bg: #d3dae3; --c-line-bubble: #ffffff; }
+:root[data-scheme='light-gray'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #ffffff; }
+:root[data-scheme='sepia'][data-post-style='line'] { --c-thread-view-bg: #dadad4; --c-line-bg: #dadad4; --c-line-bubble: #ffffff; }
+:root[data-scheme='sepia'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #ffffff; }
+:root[data-scheme='nord'][data-post-style='line'] { --c-thread-view-bg: #12151c; --c-line-bg: #12151c; --c-line-bubble: #494f5f; }
+:root[data-scheme='nord'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #494f5f; }
+:root[data-scheme='contrast'][data-post-style='line'] { --c-thread-view-bg: #000000; --c-line-bg: #000000; --c-line-bubble: #252525; }
+:root[data-scheme='contrast'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #252525; }
+:root[data-scheme='night'][data-post-style='line'] { --c-thread-view-bg: #0d0a09; --c-line-bg: #0d0a09; --c-line-bubble: #392e27; }
+:root[data-scheme='night'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #392e27; }
+:root[data-scheme='line-dark'][data-post-style='line'] { --c-thread-view-bg: #0d1116; --c-line-bg: #0d1116; --c-line-bubble: #383f49; }
+:root[data-scheme='line-dark'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #383f49; }
+:root[data-scheme='discord-light'][data-post-style='line'] { --c-thread-view-bg: #e2e9f1; --c-line-bg: #e2e9f1; --c-line-bubble: #ffffff; }
+:root[data-scheme='discord-light'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #ffffff; }
+:root[data-scheme='x-dim'][data-post-style='line'] { --c-thread-view-bg: #091018; --c-line-bg: #091018; --c-line-bubble: #2d3640; }
+:root[data-scheme='x-dim'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #2d3640; }
+:root[data-scheme='mono'][data-post-style='line'] { --c-thread-view-bg: #0b0c0d; --c-line-bg: #0b0c0d; --c-line-bubble: #353535; }
+:root[data-scheme='mono'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #353535; }
+:root[data-scheme='oled'][data-post-style='line'] { --c-thread-view-bg: #000000; --c-line-bg: #000000; --c-line-bubble: #232323; }
+:root[data-scheme='oled'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #232323; }
 /* LINE ライト × LINE 風: 空色の地の上の字(名前・日付・ID・番号)は白っぽく(スマホのアプリと同じ) */
 :root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header],
 :root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header] button,
@@ -1173,4 +1241,9 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 }
 :root[data-scheme='line-light'][data-post-style='line'] .post-cv > div > .flex.items-center span {
   color: rgba(255, 255, 255, 0.85);
+}
+
+/* 本文の「▣ 画像」の札は緑(アプリの markImage = markNew と同じ。灰色だと札に見えにくかった)。PC もスマホも同じ */
+html:root {
+  --c-link-image: var(--c-mark-new);
 }

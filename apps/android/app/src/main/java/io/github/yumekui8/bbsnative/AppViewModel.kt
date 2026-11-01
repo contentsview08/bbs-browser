@@ -421,9 +421,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** bbsmenu の URL を足す(読めるか確かめてから) */
     fun addSite(menuUrl: String, name: String) {
-        val url = menuUrl.trim()
         viewModelScope.launch {
             try {
+                // hono-bbs(web のトップ・板・API の URL のどれでも)なら、板の一覧の URL(https://…/boards)にそろえる
+                val url = if (menuUrl.contains("bbsmenu")) menuUrl.trim() else HonoBbs.detectSite(menuUrl) ?: menuUrl.trim()
                 val list = TwoCh.listBoards(url)
                 if (list.isEmpty()) throw IllegalStateException("板が 1 つもありません")
                 db.addSite(url, name.trim().ifEmpty { url.removePrefix("https://").substringBefore('/') })

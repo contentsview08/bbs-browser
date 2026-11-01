@@ -539,7 +539,17 @@ private fun ThreadRow(
             }
             return@Box
         }
-        Column(Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad, bottom = pad)) {
+        // スレの画像(1 レス目の最初の画像。hono-bbs)を左に、行の縦いっぱいに(web 版と同じ)
+        val thumb = rememberListThumb(t.thumb)
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick, onClick = onClick)
+                .padding(start = 14.dp, end = 12.dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
+        ) {
+        if (thumb != null) {
+            StoredImage(thumb, Modifier.width(96.dp).fillMaxHeight().heightIn(min = 72.dp).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
+            Spacer(Modifier.width(10.dp))
+        }
+        Column(Modifier.weight(1f).align(Alignment.CenterVertically).padding(vertical = if (thumb != null) (pad - 2.dp).coerceAtLeast(0.dp) else 0.dp)) {
             val titleColor = if (visited) Palette.threadReadTitle else Palette.textStrong
             Text(
                 buildAnnotatedString {
@@ -551,8 +561,6 @@ private fun ThreadRow(
                 // まだ開いていないスレだけ太字。開いたスレは新着があっても細く既読の色に(新着は右の +N の札で分かる)
                 color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
             )
-            // 1 レス目ののぞき見とサムネイル(スレ一覧の時点で本文が分かる掲示板だけ。hono-bbs)
-            if (t.preview != null) ThreadPreview(t.preview, t.thumb, k)
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 左(時間・ID・dat落ち)は残りの幅に収め、右の 3 つは右端にそろえる
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -591,30 +599,21 @@ private fun ThreadRow(
                 }
             }
         }
+        }
     }
 }
 
-/** 1 レス目の頭(画像の URL とアンカーは除く)と、右に画像の小さなサムネイル。サムネイルは「サムネイルを読み込む」の設定に従う */
+/** スレ一覧に出すサムネイルの URL。「サムネイルを読み込む」の設定に従い、取れなかった画像は出さない(×の枠が並ばないように) */
 @Composable
-private fun ThreadPreview(body: String, thumb: String?, k: Float) {
+private fun rememberListThumb(thumb: String?): String? {
+    if (thumb == null) return null
     val prefs = LocalPrefs.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    val text = remember(body) {
-        body.replace(Regex("https?://\\S+"), "").replace(Regex("(>>|＞＞)\\d+"), "").lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ")
-    }
-    val showThumb = thumb != null && prefs.showThumbnails && remember(prefs.thumbMode) {
+    val allowed = prefs.showThumbnails && remember(prefs.thumbMode) {
         when (prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(context); ThumbMode.NEVER -> false }
     }
-    // 取れなかった画像は出さない(×の枠が並ばないように。web 版と同じ)
-    val failed = thumb != null && io.github.yumekui8.bbsnative.data.ImageStore.states[thumb] is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed
-    if (text.isEmpty() && (!showThumb || failed)) return
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.Top) {
-        Text(text, Modifier.weight(1f), color = Palette.textMuted, fontSize = (12.5f * k).sp, lineHeight = (17 * k).sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (showThumb && !failed) {
-            Spacer(Modifier.width(10.dp))
-            StoredImage(thumb!!, Modifier.size(44.dp).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
-        }
-    }
+    val failed = io.github.yumekui8.bbsnative.data.ImageStore.states[thumb] is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed
+    return thumb.takeIf { allowed && !failed }
 }
 
 /** 見出しで区切ったときの見出し */

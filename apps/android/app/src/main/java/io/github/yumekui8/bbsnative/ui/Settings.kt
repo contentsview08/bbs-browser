@@ -507,7 +507,7 @@ private fun SitesPage(vm: AppViewModel) {
             }
         }
     }
-    Group("サイト(BBS メニュー)", note = "「板を探す」で板を選べる掲示板です。bbsmenu.json か bbsmenu.html の URL を足せます。hono-bbs は板の一覧の URL(https://…/boards)") {
+    Group("サイト(BBS メニュー)", note = "「板を探す」で板を選べる掲示板です。bbsmenu.json か bbsmenu.html の URL を足せます。hono-bbs はサイトの URL(https://red-edge.net など)") {
         for ((url, name) in vm.sites) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -527,7 +527,7 @@ private fun SitesPage(vm: AppViewModel) {
             title = { Text("サイトを足す") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("BBS メニューの URL") }, placeholder = { Text("https://…/bbsmenu.json") })
+                    OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("BBS メニュー・サイトの URL") }, placeholder = { Text("https://…/bbsmenu.json") })
                     OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("名前(なくてもよい)") })
                 }
             },

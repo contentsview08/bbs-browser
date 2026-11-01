@@ -28,6 +28,30 @@ object HonoBbs {
     /** サイトの入口(web の板の一覧 https://<web>/boards) */
     fun isSiteUrl(url: String) = SITE_URL.matches(url.trim())
 
+    /**
+     * 入れられた URL が hono-bbs なら、サイトの入口(https://<web>/boards)を返す。違えば null。
+     * web のトップ・板・スレの URL、API の URL(https://api.<web>/api/v1…)、ページに <meta name="bbs-api"> があるサイトを受け付ける
+     */
+    suspend fun detectSite(input: String): String? {
+        val url = input.trim().let { if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(it)) it else "https://$it" }
+        val origin = Regex("^(https?://[^/?#]+)").find(url)?.groupValues?.get(1) ?: return null
+        if (SITE_URL.matches(url) || BOARD_URL.matches(url) || THREAD_URL.matches(url)) return "$origin/boards"
+        // API の URL: web は api. を外したホストと決めてかかり、API の場所を覚えておく
+        val api = Regex("^(https?://[^/?#]+(?:/[^?#]*?)?/api/v\\d+)").find(url)?.groupValues?.get(1)
+        if (api != null) {
+            val ok = runCatching { val r = Http.get("$api/boards?limit=1"); r.status == 200 && json(r).has("data") }.getOrDefault(false)
+            if (!ok) return null
+            val web = origin.replaceFirst(Regex("^(https?://)api\\."), "$1")
+            synchronized(apiBases) { apiBases[web] = api }
+            return "$web/boards"
+        }
+        // web のトップ: ページに API の場所の印があれば hono-bbs
+        val res = runCatching { Http.get("$origin/") }.getOrNull() ?: return null
+        if (res.status != 200) return null
+        val meta = Regex("<meta\\s+name=[\"']bbs-api[\"']", RegexOption.IGNORE_CASE).containsMatchIn(String(res.body, Charsets.UTF_8))
+        return if (meta) "$origin/boards" else null
+    }
+
     /** スレの URL → (板, スレ)。板の名前は仮(開いてから API で分かる) */
     fun parseThreadUrl(url: String): ThreadSummary? {
         val m = THREAD_URL.find(url) ?: return null

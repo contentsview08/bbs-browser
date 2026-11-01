@@ -21,7 +21,6 @@ import LoadingCenter from './LoadingCenter'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
 import NextUnreadButton from './NextUnreadButton'
-import TimeGap from './TimeGap'
 import RefreshButton from './RefreshButton'
 import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
@@ -2041,7 +2040,6 @@ export default function ThreadView(props: Props) {
                     hidden={(visibleNos !== undefined && !visibleNos.has(p.no)) || (runClosed && p.no !== runFirst)}>
                     {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
                     {/* 前のレスから 1 時間以上空いた所・日付が変わった所に、細い区切り(スマホのアプリ・hono-bbs の web と同じ) */}
-                    {settings.timeGap && !visibleNos && !firstUnread && i > 0 && <TimeGap prev={log.posts[i - 1]?.date} cur={p.date} />}
                     {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
                     {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
                     {!isMobile && cursorId !== undefined && p.id === cursorId && p.no !== cursorNo && (

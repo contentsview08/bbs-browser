@@ -321,8 +321,6 @@ export interface AppSettings {
   showAdvanced: boolean
   /** 差し色(ACCENTS のキー)。空ならテーマの色 */
   accent: string
-  /** 前のレスから時間が空いた所に区切りを入れる */
-  timeGap: boolean
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -446,7 +444,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mobileBarOrder: {},
   showAdvanced: false,
   accent: '',
-  timeGap: true,
   postName: '',
   postMail: '',
 }

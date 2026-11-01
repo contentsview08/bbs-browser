@@ -998,12 +998,6 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           label="ミニマップを出す"
           note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
         />
-        <Toggle
-          checked={s.timeGap}
-          onChange={(v) => update('timeGap', v)}
-          label="時間が空いたところに区切りを入れる"
-          note="前のレスから 1 時間以上空いたところや、日付が変わったところに、細い線と「3 時間後」「10/31(金)」を出します"
-        />
         {isMobile && (
           <Toggle
             checked={s.showRefreshFab}

@@ -974,6 +974,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             // 書き込めたらキーボードをしまう(書いたレスと返事が見えるように)
                             r.blurSeq++
                             r.done = "書き込みました"
+                            // 遅れて保存する書きかけが、空にしたあとで古い本文を書き戻さないように止める
+                            draftJob?.cancel()
                             db.saveDraft(page.summary, "")
                             prefs.postMail = r.mail
                         }
@@ -1017,6 +1019,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         r.title = ""
                         r.body = ""; r.uploads.clear()
                         r.open = false
+                        prefs.setNewThreadDraft(page.board.url, "", "", "", "")
                         toast = "スレを立てました"
                         // 立てたあとの一覧の取り直しに失敗しても、立てられなかったとは出さない
                         runCatching { TwoCh.listThreads(page.board) }.onSuccess { list ->

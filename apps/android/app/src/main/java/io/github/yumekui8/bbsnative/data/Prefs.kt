@@ -125,6 +125,23 @@ class Prefs(context: Context) {
         uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.first).put("t", it.second) }).toString()
     }
 
+    // スレ立ての書きかけ(板ごと)。閉じても・板を開き直しても・認証の間にアプリが閉じられても消えないように
+    private var newThreadDraftsJson by pref("newThreadDrafts", "{}")
+
+    /** 板の書きかけ(スレタイ・名前・メール・本文)。なければ null */
+    fun newThreadDraft(boardUrl: String): List<String>? = runCatching {
+        val o = org.json.JSONObject(newThreadDraftsJson).optJSONObject(boardUrl) ?: return null
+        listOf(o.optString("title"), o.optString("name"), o.optString("mail"), o.optString("body"))
+    }.getOrNull()
+
+    /** 書きかけを覚える(スレタイも本文も空なら消す) */
+    fun setNewThreadDraft(boardUrl: String, title: String, name: String, mail: String, body: String) {
+        val all = runCatching { org.json.JSONObject(newThreadDraftsJson) }.getOrDefault(org.json.JSONObject())
+        if (title.isEmpty() && body.isEmpty()) all.remove(boardUrl)
+        else all.put(boardUrl, org.json.JSONObject().put("title", title).put("name", name).put("mail", mail).put("body", body))
+        newThreadDraftsJson = all.toString()
+    }
+
     private var boardVisitsJson by pref("boardVisits", "{}")
     fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }

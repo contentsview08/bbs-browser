@@ -466,6 +466,15 @@ fun PostDialogs(r: ReplyState, onAccept: () -> Unit) {
 @Composable
 fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
     val r = page.newThread
+    // 書きかけを戻す(開いたとき、まだ何も書いていなければ)・書くたびに覚える(閉じても消えないように)
+    androidx.compose.runtime.LaunchedEffect(r.open) {
+        if (r.open && r.title.isEmpty() && r.body.isEmpty()) vm.prefs.newThreadDraft(page.board.url)?.let { (t, n, m, b) ->
+            r.title = t; if (n.isNotEmpty()) r.name = n; r.mail = m; r.body = b
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(r.title, r.name, r.mail, r.body) {
+        if (r.open || r.title.isNotEmpty() || r.body.isNotEmpty()) vm.prefs.setNewThreadDraft(page.board.url, r.title, r.name, r.mail, r.body)
+    }
     if (r.open) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { r.open = false },

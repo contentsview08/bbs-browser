@@ -89,8 +89,8 @@ private val TITLES = mapOf(
 private val LocalAdvanced = androidx.compose.runtime.compositionLocalOf { false }
 
 @Composable
-fun SettingsScreen(vm: AppViewModel) {
-    var sub by rememberSaveable { mutableStateOf<String?>(null) }
+fun SettingsScreen(vm: AppViewModel, start: String? = null) {
+    var sub by rememberSaveable { mutableStateOf(start) }
     // 検索から開いたページは、探した項目が隠れないよう詳しい設定も出す
     var viaSearch by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = sub != null) { sub = null; viaSearch = false }

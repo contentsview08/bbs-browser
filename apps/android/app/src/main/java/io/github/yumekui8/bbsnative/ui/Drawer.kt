@@ -91,31 +91,34 @@ fun DrawerContent(vm: AppViewModel) {
         DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = current is Page.Settings) { vm.openRoot(Page.Settings()) }
     }
 
-    if (urlDialog) {
-        // クリップボードに URL があれば、はじめから入れておく(コピーしてきた URL をすぐ開けるように)
+    if (urlDialog) OpenUrlDialog(vm) { urlDialog = false }
+}
+
+/** URL を開く(左のメニュー・板を探す)。クリップボードに URL があれば、はじめから入れておく */
+@Composable
+fun OpenUrlDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
         var url by rememberSaveable {
             mutableStateOf(runCatching { clipboard.getText()?.text?.trim() }.getOrNull()?.takeIf { Regex("^(h?ttps?://|//)?[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/\\S*$").matches(it) } ?: "")
         }
         AlertDialog(
-            onDismissRequest = { urlDialog = false },
+            onDismissRequest = onDismiss,
             title = { Text("URL を開く") },
             text = {
                 OutlinedTextField(
                     url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") },
                     // キーボードの決定でも開く
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Go),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換・hono-bbs のスレ・板の URL を入れてください)" }),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) onDismiss() else vm.toast = "開けない URL です(2ch 互換・hono-bbs のスレ・板の URL を入れてください)" }),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (vm.openUrl(url)) urlDialog = false else vm.toast = "開けない URL です(2ch 互換・hono-bbs のスレ・板の URL を入れてください)"
+                    if (vm.openUrl(url)) onDismiss() else vm.toast = "開けない URL です(2ch 互換・hono-bbs のスレ・板の URL を入れてください)"
                 }) { Text("開く") }
             },
-            dismissButton = { TextButton(onClick = { urlDialog = false }) { Text("やめる") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
         )
-    }
 }
 
 @Composable

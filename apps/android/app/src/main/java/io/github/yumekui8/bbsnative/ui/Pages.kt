@@ -19,6 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -38,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -57,54 +63,97 @@ import io.github.yumekui8.bbsnative.bbs.Board
 import io.github.yumekui8.bbsnative.data.HistoryEntry
 import io.github.yumekui8.bbsnative.data.ThumbMode
 
-/** 板一覧(5ch の bbsmenu)。☆ でお気に入り板に足す。押すとその板を開く */
+/** サイトの見せる名前(5ch の bbsmenu は「5ちゃんねる」と出す) */
+fun siteLabel(url: String, name: String): String = if (url.contains("menu.5ch.") || url.contains("menu.5ch.net")) "5ちゃんねる" else name
+
+/**
+ * 板を探す: サイト(5ちゃんねる・red-edge など) → カテゴリ → 板 の順に入っていく(スマホのファイルの選び方と同じ)。
+ * 戻る(左上・端末の戻る)で 1 段上へ。☆ でお気に入り板に足す。押すとその板を開く。
+ * 探す(虫めがね)は、いま見ているサイトの板の名前・カテゴリから(サイトを選ぶ前は、最初のサイトから)
+ */
 @Composable
-fun BoardsScreen(vm: AppViewModel) {
+fun BoardsScreen(vm: AppViewModel, page: io.github.yumekui8.bbsnative.Page.Boards) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var urlDialog by rememberSaveable { mutableStateOf(false) }
     val favUrls = remember(vm.favorites) { vm.favorites.map { it.url }.toSet() }
-    val shown = remember(vm.boards, query) {
-        val q = query.trim()
-        if (q.isEmpty()) vm.boards else vm.boards.filter { it.name.contains(q, true) || (it.category ?: "").contains(q, true) }
-    }
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.reloadSites() }
+    // サイトを選んだら、その板の一覧を読む
+    androidx.compose.runtime.LaunchedEffect(page.site) { page.site?.let { if (vm.siteUrl != it || vm.boards.isEmpty()) vm.selectSite(it) } }
+    val up = { if (page.category != null) page.category = null else page.site = null }
+    androidx.activity.compose.BackHandler(enabled = page.site != null && !searching) { up() }
+    val siteName = page.site?.let { u -> vm.sites.firstOrNull { it.first == u }?.let { siteLabel(it.first, it.second) } }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         if (searching) SearchBar(query, { query = it }, "板の名前・カテゴリ") { searching = false; query = "" }
-        else HeaderBar("板を追加", onNav = { vm.drawerOpen = true }) {
+        else if (page.site == null) HeaderBar("板を探す", onNav = { vm.drawerOpen = true })
+        else HeaderBar(page.category ?: siteName ?: "", onNav = up, navIsBack = true) {
             BarIcon(Icons.Filled.Search, "探す") { searching = true }
             BarIcon(Icons.Filled.Refresh, "取り直す") { vm.loadBoards(refresh = true) }
         }
         HorizontalDivider(color = Palette.border)
-        // サイトが 2 つ以上あれば、どのサイトの板を見るか選ぶ
-        if (vm.sites.size > 1) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val current = vm.siteUrl ?: vm.sites.first().first
-                for ((url, name) in vm.sites) {
-                    val on = url == current
-                    Text(
-                        name, Modifier.background(if (on) Palette.accentWash else Palette.surface2, RoundedCornerShape(8.dp)).clickable { vm.selectSite(url) }.padding(horizontal = 14.dp, vertical = 7.dp),
-                        color = if (on) Palette.accent else Palette.textBody, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                    )
+        val loaded = page.site != null && vm.siteUrl == page.site
+        when {
+            // 探す: いま見ているサイトの板から
+            searching && query.isNotBlank() -> {
+                val q = query.trim()
+                val hits = vm.boards.filter { it.name.contains(q, true) || (it.category ?: "").contains(q, true) }
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(hits, key = { it.url }) { b -> BoardRow(b, b.url in favUrls, onStar = { vm.toggleFavorite(b) }, onClick = { vm.openBoard(b) }) }
+                    item { Spacer(Modifier.navigationBarsPadding()) }
                 }
             }
-        }
-        when {
-            vm.boardsLoading && vm.boards.isEmpty() -> Hint("読み込み中…")
-            vm.boardsError != null && vm.boards.isEmpty() -> Hint("読み込めませんでした: ${vm.boardsError}")
-            else -> LazyColumn(Modifier.fillMaxSize()) {
-                var lastCat: String? = null
-                for (b in shown) {
-                    if (query.isBlank() && b.category != lastCat) {
-                        lastCat = b.category
-                        item(key = "cat:${b.category}") {
-                            Text(b.category ?: "", Modifier.fillMaxWidth().padding(start = 20.dp, top = 16.dp, bottom = 4.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    item(key = b.url) { BoardRow(b, b.url in favUrls, onStar = { vm.toggleFavorite(b) }, onClick = { vm.openBoard(b) }) }
+            // 1 段目: サイト
+            page.site == null -> LazyColumn(Modifier.fillMaxSize()) {
+                item { SectionLabel("サイト") }
+                items(vm.sites, key = { it.first }) { (url, name) ->
+                    FolderRow(siteLabel(url, name), url.removePrefix("https://").substringBefore('/'), Icons.Filled.Public) { page.site = url; page.category = null }
                 }
+                item { SectionLabel("ほかの掲示板") }
+                item { FolderRow("サイトを足す", "bbsmenu・hono-bbs のサイトの URL から", Icons.Filled.Add, chevron = false) { vm.openRoot(io.github.yumekui8.bbsnative.Page.Settings("sites")) } }
+                item { FolderRow("URL で板・スレを開く", "板の一覧がない掲示板は、板・スレの URL から", Icons.Filled.Link, chevron = false) { urlDialog = true } }
                 item { Spacer(Modifier.navigationBarsPadding()) }
+            }
+            vm.boardsLoading && !loaded || vm.boardsLoading && vm.boards.isEmpty() -> Hint("読み込み中…")
+            vm.boardsError != null && vm.boards.isEmpty() -> Hint("読み込めませんでした: ${vm.boardsError}")
+            // 2 段目: カテゴリ
+            page.category == null -> {
+                val cats = remember(vm.boards) { vm.boards.groupBy { it.category ?: "その他" }.map { it.key to it.value.size } }
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(cats, key = { it.first }) { (cat, n) -> FolderRow(cat, "$n 板", Icons.Filled.Folder) { page.category = cat } }
+                    item { Spacer(Modifier.navigationBarsPadding()) }
+                }
+            }
+            // 3 段目: 板
+            else -> {
+                val list = remember(vm.boards, page.category) { vm.boards.filter { (it.category ?: "その他") == page.category } }
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(list, key = { it.url }) { b -> BoardRow(b, b.url in favUrls, onStar = { vm.toggleFavorite(b) }, onClick = { vm.openBoard(b) }) }
+                    item { Spacer(Modifier.navigationBarsPadding()) }
+                }
             }
         }
     }
+    if (urlDialog) OpenUrlDialog(vm) { urlDialog = false }
+}
+
+/** 段の見出し(小さく) */
+@Composable
+private fun SectionLabel(text: String) =
+    Text(text, Modifier.fillMaxWidth().padding(start = 20.dp, top = 18.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+/** 入っていく行(サイト・カテゴリ): アイコン、名前と小さな説明、右に › */
+@Composable
+private fun FolderRow(title: String, sub: String?, icon: androidx.compose.ui.graphics.vector.ImageVector, chevron: Boolean = true, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 60.dp).padding(start = 20.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+            Text(title, color = Palette.textStrong, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) Text(sub, color = Palette.textMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        if (chevron) Icon(Icons.Filled.ChevronRight, null, tint = Palette.textMuted)
+    }
+    HorizontalDivider(color = Palette.border)
 }
 
 @Composable

@@ -143,14 +143,18 @@ sealed interface Page {
         val reply = ReplyState()
     }
 
-    /** 板一覧(板を足す) */
-    class Boards : Page
+    /** 板一覧(板を足す)。サイト → カテゴリ → 板 の順に入っていく。site・category は今いる段 */
+    class Boards : Page {
+        var site by mutableStateOf<String?>(null)
+        var category by mutableStateOf<String?>(null)
+    }
     class History : Page
     class FavThreads : Page
     /** お気に入り板すべての、新着のある読んだスレ */
     class AllUnread : Page
     class PostHistory : Page
-    class Settings : Page
+    /** start: 開いたときに出すページ("sites" など) */
+    class Settings(val start: String? = null) : Page
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {

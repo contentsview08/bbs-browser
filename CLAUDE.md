@@ -2,6 +2,10 @@
 
 日本語で応答する。コメントも日本語。
 
+このリポジトリ(PC 版 `apps/desktop`・スマホ版 `apps/android`)は、hono-bbs と合わせて 1 つの製品。3 つをまたぐ決まり・そろえるもの・
+ビルドと本番に出す方法・道具は、入口の `/mnt/c/Users/kbaku/git/bbs-suite`(`CLAUDE.md`・`docs/`・`tools/`)にある。
+見た目・言葉・設定を変えるときは、そちらの `docs/parity.md` を見る。
+
 ## 概要
 
 PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先、Linux は次点。

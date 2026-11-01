@@ -133,6 +133,14 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     if (!ta || !onTextOverflow) return
     onTextOverflow(textHeight(ta, body) - ta.clientHeight)
   }, [body, onTextOverflow])
+  // スマホの入力欄(chat): 本文に合わせて伸びる(6 行くらいまで)。手で書いたときだけでなく、
+  // 画像の URL・>>番号・下書きなど、外から本文が変わったときも測り直す
+  useLayoutEffect(() => {
+    const ta = textRef.current
+    if (props.variant !== 'chat' || !ta) return
+    ta.style.height = 'auto'
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
+  }, [body, props.variant])
 
   /** 書き込めたら、本文も下書きも消す */
   const clearBody = () => {
@@ -384,10 +392,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
               value={body}
               onChange={(e) => {
                 changeBody(e.target.value)
-                // 書くと伸びる(6 行くらいまで)
-                const ta = e.currentTarget
-                ta.style.height = 'auto'
-                ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
               }}
               onFocus={() => {
                 setPlusMenu(false)

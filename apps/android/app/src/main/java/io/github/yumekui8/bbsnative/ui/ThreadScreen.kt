@@ -330,12 +330,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 返信先の 1 行に出す中身(Discord 風・LINE 風)
     fun previewOf(no: Int): ReplyPreview? {
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
-        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, t.body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.yumekui8.bbsnative.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
     fun replyOf(r: RenderedPost?): ReplyPreview? {
         val no = r?.replyTo ?: return null
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
-        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, t.body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.yumekui8.bbsnative.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
     val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->
         // 新着で届いたレスは、下から少し浮き上がって順に出てきて、しばらく光る(今のスマホ版の post-enter と flash-new)

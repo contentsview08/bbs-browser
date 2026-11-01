@@ -4,11 +4,12 @@ import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 
-/** 勢い = レス数 / スレが立ってからの経過時間(時間) */
+/** 勢い = レス数 / スレが立ってからの経過日数(1 日あたりのレス数。2ch の専ブラと、スマホのアプリ bbs N と同じ) */
 export function momentum(t: ThreadSummary, now = Date.now()): number {
   if (!t.createdAt) return 0
-  const hours = (now - t.createdAt.getTime()) / 3_600_000
-  return t.postCount / Math.max(0.01, hours)
+  // 立って 1 分までは 1 分とみなす(立った直後に大きくなりすぎないように)
+  const days = Math.max(now - t.createdAt.getTime(), 60_000) / 86_400_000
+  return t.postCount / days
 }
 
 /**
@@ -21,8 +22,10 @@ export function rankMomentum(values: Map<string, number>): Map<string, number> {
   return new Map(sorted.map(([key], i) => [key, n <= 1 ? 1 : i / (n - 1)]))
 }
 
+/** 100 からは整数、それより小さければ小数 1 桁(アプリと同じ) */
 export function formatMomentum(value: number): string {
-  return value.toLocaleString('ja-JP', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const d = value >= 100 ? 0 : 1
+  return value.toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 
 export function relativeTime(date: Date): string {

@@ -45,23 +45,6 @@ fun postMinutes(date: String): Long? {
     return v
 }
 
-/** 前のレスとの間の区切りの言葉。1 時間未満で日付も同じなら null */
-fun timeGapLabel(prev: String, cur: String): String? {
-    val a = postMinutes(prev) ?: return null
-    val b = postMinutes(cur) ?: return null
-    val gap = b - a
-    // 日付が変わったか(分の通し番号を 1 日の分で割って比べる)
-    val day = DATE_DAY.find(cur)
-    val newDay = day != null && a / (60 * 24) != b / (60 * 24)
-    val span = when {
-        gap < 60 -> null
-        gap < 60 * 24 -> "${gap / 60} 時間後"
-        gap < 60 * 24 * 30 -> "${gap / (60 * 24)} 日後"
-        else -> "${gap / (60 * 24 * 30)} か月後"
-    }
-    val dayLabel = if (newDay) day!!.groupValues.let { g -> "${g[2].toInt()}/${g[3].toInt()}${g[4]}" } else null
-    return listOfNotNull(dayLabel, span).joinToString("  ").ifEmpty { null }
-}
 
 private val AA = Regex("[ \t　]{5,}")
 

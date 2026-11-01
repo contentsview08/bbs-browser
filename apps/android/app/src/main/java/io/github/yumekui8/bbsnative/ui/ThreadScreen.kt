@@ -541,9 +541,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     ) {
                         itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
-                            // 時間が空いたところの区切り(絞り込みの間は、並びが飛ぶので出さない)
-                            if (vm.prefs.timeGap && filter == null && query.isBlank() && p.no != page.unreadFrom)
-                                shown.getOrNull(i - 1)?.let { q -> remember(q.date, p.date) { timeGapLabel(q.date, p.date) } }?.let { TimeGapDivider(it, style) }
                             postRow(p, shown.getOrNull(i - 1), true)
                             // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
                             // まとめ風は区切りをごく薄く(まとめサイトのように、レスの切れ目は余白で見せる)
@@ -902,17 +899,6 @@ private fun UnreadDivider() {
     }
 }
 
-/** 時間が空いたところの区切り。未読の区切りより控えめに、細い線と小さい字で */
-@Composable
-private fun TimeGapDivider(label: String, style: String) {
-    val sky = Palette.onSky(style)
-    val c = if (sky) Palette.skyMuted else Palette.textMuted
-    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).height(1.dp).background(c.copy(alpha = 0.35f)))
-        Text(label, Modifier.padding(horizontal = 10.dp), color = c, fontSize = 11.sp)
-        Box(Modifier.weight(1f).height(1.dp).background(c.copy(alpha = 0.35f)))
-    }
-}
 
 /** 次スレの候補の一覧(︙ の「次スレを探す」と、終わったスレの一番下で共通) */
 @Composable

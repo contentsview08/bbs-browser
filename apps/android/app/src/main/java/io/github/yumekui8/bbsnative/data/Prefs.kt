@@ -180,8 +180,6 @@ class Prefs(context: Context) {
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */
     var doubleTapReply by pref("doubleTapReply", false)
     var showMinimap by pref("showMinimap", true)
-    /** 前のレスから時間が空いたところに「3 時間後」の区切りを入れる */
-    var timeGap by pref("timeGap", true)
     /** 人気のレスの示し方: left(左の帯)/ right(右の帯)/ text(本文の色)/ none */
     var heatStyle by pref("heatStyle", "left")
     var urlShorten by pref("urlShorten", true)

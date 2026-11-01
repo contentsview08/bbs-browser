@@ -3,6 +3,7 @@ package io.github.yumekui8.bbsnative.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -292,20 +293,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     ),
                 ) {
                     val plain = tab == null && query.isBlank() && page.only == null
-                    val since = page.newSince
-                    // 見出しで区切る(並べ替え・絞り込みをしていないとき)。キーワード → 新しいスレ → 新着のある読んだスレ → その他
-                    val groups: List<Pair<String?, List<ThreadSummary>>> = if (plain && vm.prefs.listSections) {
-                        val isNew = { t: ThreadSummary -> since != null && (t.createdAt ?: 0) > since }
-                        val kw = { t: ThreadSummary -> keywords.any { t.title.contains(it, ignoreCase = true) } }
-                        val a = shown.filter(kw)
-                        val b = shown.filter { !kw(it) && isNew(it) }
-                        val c = shown.filter { !kw(it) && !isNew(it) && unreadOf(it, page.states) > 0 }
-                        val d = shown.filter { !kw(it) && !isNew(it) && unreadOf(it, page.states) == 0 }
-                        listOf("キーワード" to a, "新しく立ったスレ" to b, "新着のある読んだスレ" to c, "その他" to d).filter { it.second.isNotEmpty() }
-                    } else listOf(null to shown)
-                    for ((title, list) in groups) {
-                        if (title != null) item(key = "h:$title", contentType = 3) { SectionHeader(title, list.size) }
-                        items(list, key = { it.key }, contentType = { 0 }) { t ->
+                    run {
+                        items(shown, key = { it.key }, contentType = { 0 }) { t ->
                             ThreadRow(
                                 t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                                 isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds,
@@ -507,11 +496,6 @@ private fun ThreadRow(
                 if (unread > 0) Palette.unread.copy(alpha = (0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f))) else Palette.threadReadTitle,
             ),
         )
-        // 勢いを行の下のバーで(長さ = 板の中の順位)
-        if (prefs.momentumStyle != "number") Box(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth(rank.toFloat().coerceIn(0.02f, 1f)).height(2.dp)
-                .background(heatC.copy(alpha = if (rank >= 0.3) 0.55f else 0.3f)),
-        )
         if (compact) {
             // コンパクト: スレタイ 1 行と、右端にレス数と未読だけ
             Row(
@@ -529,7 +513,7 @@ private fun ThreadRow(
                 )
                 Text(
                     "${t.postCount}", Modifier.widthIn(min = 36.dp), fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
-                    color = if (prefs.momentumStyle == "bar") Palette.textMuted else heatC,
+                    color = heatC,
                 )
                 if (unread > 0) Text(
                     if (unread > 999) "+999+" else "+$unread",
@@ -546,7 +530,8 @@ private fun ThreadRow(
                 .padding(start = 14.dp, end = 12.dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
         ) {
         if (thumb != null) {
-            StoredImage(thumb, Modifier.width(96.dp).fillMaxHeight().heightIn(min = 72.dp).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
+            // 1:1 に切り取り、行の縦いっぱいに(幅は高さと同じ)
+            StoredImage(thumb, Modifier.fillMaxHeight().heightIn(min = 64.dp).aspectRatio(1f, matchHeightConstraintsFirst = true).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
             Spacer(Modifier.width(10.dp))
         }
         Column(Modifier.weight(1f).align(Alignment.CenterVertically).padding(vertical = if (thumb != null) (pad - 2.dp).coerceAtLeast(0.dp) else 0.dp)) {
@@ -575,7 +560,7 @@ private fun ThreadRow(
                 Text(
                     if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
-                    color = if (prefs.momentumStyle == "bar") Palette.textMuted else heatC,
+                    color = heatC,
                 )
                 Text(
                     buildAnnotatedString { append("${t.postCount}"); withStyle(SpanStyle(fontSize = (10 * k).sp)) { append("レス") } },
@@ -616,16 +601,6 @@ private fun rememberListThumb(thumb: String?): String? {
     return thumb.takeIf { allowed && !failed }
 }
 
-/** 見出しで区切ったときの見出し */
-@Composable
-private fun SectionHeader(title: String, count: Int) {
-    Row(Modifier.fillMaxWidth().background(Palette.base).padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(6.dp))
-        Text("$count", color = Palette.textMuted, fontSize = 11.sp)
-    }
-    HorizontalDivider(color = Palette.border)
-}
 
 /** 上の帯の検索欄(題の代わりに出す) */
 @Composable

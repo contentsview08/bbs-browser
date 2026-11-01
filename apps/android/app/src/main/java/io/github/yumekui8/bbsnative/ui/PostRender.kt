@@ -18,7 +18,7 @@ import io.github.yumekui8.bbsnative.bbs.Span
 /** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
 /** aa: アスキーアートらしい本文(スペースが 5 つ以上続く。今のスマホ版と同じ判定)。AA 用の字で、折り返さず画面の幅に収める */
 /** replyTo: Discord 風・LINE 風で、本文の頭のアンカーを「返信」として頭の上に出すときの返信先(その分は本文から省いてある) */
-class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null)
+class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null, val beIcon: String? = null)
 
 /** 本文の頭の 1 つだけのアンカー(PC 版の dropLeadingAnchor と同じ形)。範囲や並び(>>1-3、>>1,2)は対象にしない */
 private val LEADING_ANCHOR = Regex("^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)([0-9０-９]+)(?![0-9０-９,，\\-－ー〜~、])[ \t　]*")
@@ -214,7 +214,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             append(src, at, src.length)
             if (bodyStyle != null) pop()
         }
-        out[p.no] = RenderedPost(header, body, o.aaAutoDetect && AA.containsMatchIn(p.body), replyTo)
+        out[p.no] = RenderedPost(header, body, o.aaAutoDetect && AA.containsMatchIn(p.body), replyTo, info?.beIcon)
     }
     return out
 }

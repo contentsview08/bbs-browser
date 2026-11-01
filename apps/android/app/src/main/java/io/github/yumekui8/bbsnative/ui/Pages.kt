@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
@@ -192,10 +193,13 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
     // お気に入りのスレは、開いたときに新着を確かめる(今のスマホ版と同じ)
     androidx.compose.runtime.LaunchedEffect(title) { if (title == "お気に入りのスレ") vm.checkNew(entries) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val swipe = rememberSwipeState()
+    Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, refresh, swipe))) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         PastHeader(vm, tab, refresh)
         if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
-        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize()) {
+        else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize(), state = listState) {
             items(entries, key = { it.thread.id }) { h ->
                 // 掲示板で分かったレス数があれば、そちらで未読を数える(-1 は dat 落ち)
                 val remote = vm.remoteCounts[h.thread.id]
@@ -211,19 +215,45 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
             item { Spacer(Modifier.navigationBarsPadding()) }
         }}
     }
+    SwipeLabel(swipe)
+    }
 }
 
 /** 過去のスレの「書き込み」のタブ(新しい順)。行の形はほかのタブと同じで、書いた本文を足す */
 @Composable
 fun PostHistoryScreen(vm: AppViewModel) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val swipe = rememberSwipeState()
+    Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         PastHeader(vm, "posts", null)
         if (vm.postHistory.isEmpty()) Hint("書き込み履歴はありません")
-        else LazyColumn(Modifier.fillMaxSize()) {
+        else LazyColumn(Modifier.fillMaxSize(), state = listState) {
             items(vm.postHistory) { e ->
                 PastRow(vm, e.thread, "${boardName(vm, e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた", null, 0, own = e.body.lines().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: e.body.trim(), ownNo = e.no)
             }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }
+    SwipeLabel(swipe)
+    }
+}
+
+/** 過去のスレの一覧でも、スレ一覧と同じなぞる操作(一番上へ・一番下へ・更新・メニューなど)を使う */
+@Composable
+private fun pastGestures(vm: AppViewModel, listState: androidx.compose.foundation.lazy.LazyListState, refresh: (() -> Unit)?, swipe: SwipeState): Modifier {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val prefs = vm.prefs
+    val g = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
+        prefs.gestures("list"), "list",
+        buildMap {
+            put("drawer") { vm.drawerOpen = true }
+            put("forward") { vm.forward() }
+            put("bottom") { scope.launch { listState.scrollToItem(maxOf(0, listState.layoutInfo.totalItemsCount - 1)) }; Unit }
+            put("top") { scope.launch { listState.scrollToItem(0) }; Unit }
+            if (refresh != null) put("refresh", refresh)
+            put("quick") { vm.openQuick() }
+        },
+    )
+    return Modifier.swipeGestures(swipe, g, sensitivity = prefs.gestureSensitivity)
 }

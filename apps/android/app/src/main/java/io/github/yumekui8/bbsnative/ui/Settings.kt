@@ -296,27 +296,24 @@ private fun ListPage(vm: AppViewModel) {
             listOf("subject" to "更新順(掲示板の並び)", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順"),
         ) { p.threadSort = it }
         SwitchRow("引っぱって更新", p.pullToRefreshList, desc = "いちばん上で下へ引くと、スレ一覧を取り直します") { p.pullToRefreshList = it }
-        if (LocalAdvanced.current) SwitchRow("見出しで区切る", p.listSections, desc = "並べ替えていないとき、キーワード・新しいスレ・新着のある読んだスレ・その他に分けて出します") { p.listSections = it }
     }
     if (LocalAdvanced.current) Group("行の見た目") {
         ChoiceRow("行の形", p.listDensity, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listDensity = it }
-        ChoiceRow("勢いの示し方", p.momentumStyle, listOf("number" to "数字の色", "bar" to "行の下のバー", "both" to "両方")) { p.momentumStyle = it }
     }
-    if (LocalAdvanced.current) Group("タブ", note = "一覧の下に出すタブ。矢印で並べ替え、スイッチで出す・出さないを決めます(上が左)") {
+    if (LocalAdvanced.current) Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
         val all = listOf("unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
         val on = p.listTabs.split(',').filter { it.isNotEmpty() }
-        // 出しているものを並びのとおりに先に、出していないものを後ろに
-        val rows = on.mapNotNull { k -> all.firstOrNull { it.first == k } } + all.filter { it.first !in on }
-        for ((k, name) in rows) {
-            val shown = k in on
-            val i = on.indexOf(k)
+        @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(name, Modifier.weight(1f), color = if (shown) Palette.textStrong else Palette.textMuted, fontSize = 15.sp)
-                IconButton(onClick = { p.listTabs = on.toMutableList().apply { add(i - 1, removeAt(i)) }.joinToString(",") }, enabled = shown && i > 0) { Icon(Icons.Filled.KeyboardArrowUp, "左へ", tint = Palette.textMuted) }
-                IconButton(onClick = { p.listTabs = on.toMutableList().apply { add(i + 1, removeAt(i)) }.joinToString(",") }, enabled = shown && i < on.lastIndex) { Icon(Icons.Filled.KeyboardArrowDown, "右へ", tint = Palette.textMuted) }
-                Switch(shown, { v -> p.listTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 12.dp), colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                Switch(shown, { v -> p.listTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 4.dp), colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                if (handle != null) DragHandleIcon(handle) else Spacer(Modifier.size(46.dp))
             }
+        // 出しているものは掴んで並べ替える。出していないものは後ろに(並びはない)
+        ReorderableColumn(on, { it }, { from, to -> p.listTabs = p.listTabs.split(',').filter { it.isNotEmpty() }.toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") }) { k, handle, _ ->
+            TabRow(k, all.firstOrNull { it.first == k }?.second ?: k, true, handle)
         }
+        for ((k, name) in all.filter { it.first !in on }) TabRow(k, name, false, null)
     }
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
         WordList(p.keywords, "キーワードを足す", "まだありません") { p.keywords = it }
@@ -347,8 +344,6 @@ private fun ThreadPage(vm: AppViewModel) {
             "人気のレスの示し方", p.heatStyle,
             listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色", "none" to "示さない"),
         ) { p.heatStyle = it }
-        SwitchRow("会話のまとまりを示す", p.showConversations, desc = "返信が 3 件以上連なっているレスの下に「この会話 (8)」を出し、押すとツリーで開きます") { p.showConversations = it }
-        SwitchRow("アンカーをその場で開く", p.anchorInline, desc = "本文の >>12 を押すと、ポップアップではなく、そのレスの下に差し込みます。もう一度押すと畳みます") { p.anchorInline = it }
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
         if (LocalAdvanced.current) SwitchRow("時間が空いたところに区切りを入れる", p.timeGap, desc = "前のレスから 1 時間以上空いたところや、日付が変わったところに線を引きます") { p.timeGap = it }
     }
@@ -493,17 +488,16 @@ private fun ngLabel(target: String) = when (target) { "id" -> "ID"; "name" -> "�
 @Composable
 private fun SitesPage(vm: AppViewModel) {
     var adding by remember { mutableStateOf(false) }
-    Group("お気に入り板", note = "左のメニューに出る順です。矢印で並べ替えます") {
+    Group("お気に入り板", note = "左のメニューに出る順です。≡ を掴んで並べ替えます(左のメニューでも、長押しして動かせます)") {
         if (vm.favorites.isEmpty()) Text("お気に入り板はありません(板を探す・スレ一覧の ︙ から足せます)", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
-        vm.favorites.forEachIndexed { i, b ->
+        ReorderableColumn(vm.favorites, { it.url }, { from, to -> vm.moveFavorite(from, to) }) { b, handle, _ ->
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(b.name, color = Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(b.url.removePrefix("https://"), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                IconButton(onClick = { vm.moveFavorite(b, -1) }, enabled = i > 0) { Icon(Icons.Filled.KeyboardArrowUp, "上へ", tint = Palette.textMuted) }
-                IconButton(onClick = { vm.moveFavorite(b, 1) }, enabled = i < vm.favorites.lastIndex) { Icon(Icons.Filled.KeyboardArrowDown, "下へ", tint = Palette.textMuted) }
                 IconButton(onClick = { vm.toggleFavorite(b) }) { Icon(Icons.Filled.Close, "外す", tint = Palette.textMuted) }
+                DragHandleIcon(handle)
             }
         }
     }

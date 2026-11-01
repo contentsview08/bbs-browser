@@ -65,9 +65,10 @@ fun DrawerContent(vm: AppViewModel) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             DrawerRow(Icons.Filled.Star, "お気に入り板", Palette.markFav, trailing = if (favOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore) { favOpen = !favOpen }
             if (favOpen) {
-                for (b in vm.favorites) {
+                // 長押しして掴むと、上下に動かして並べ替えられる
+                ReorderableColumn(vm.favorites, { it.url }, { from, to -> vm.moveFavorite(from, to) }, longPress = true) { b, handle, _ ->
                     val active = current is Page.Threads && current.board.url == b.url
-                    DrawerRow(Icons.Filled.Forum, boardUrl = b.url, label = b.name, tint = Palette.textMuted, sub = true, active = active) { vm.openBoard(b) }
+                    Box(handle) { DrawerRow(Icons.Filled.Forum, boardUrl = b.url, label = b.name, tint = Palette.textMuted, sub = true, active = active) { vm.openBoard(b) } }
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
@@ -91,7 +92,11 @@ fun DrawerContent(vm: AppViewModel) {
     }
 
     if (urlDialog) {
-        var url by rememberSaveable { mutableStateOf("") }
+        // クリップボードに URL があれば、はじめから入れておく(コピーしてきた URL をすぐ開けるように)
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        var url by rememberSaveable {
+            mutableStateOf(runCatching { clipboard.getText()?.text?.trim() }.getOrNull()?.takeIf { Regex("^(h?ttps?://|//)?[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/\\S*$").matches(it) } ?: "")
+        }
         AlertDialog(
             onDismissRequest = { urlDialog = false },
             title = { Text("URL を開く") },

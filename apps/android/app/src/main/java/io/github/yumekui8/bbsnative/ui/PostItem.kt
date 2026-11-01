@@ -40,6 +40,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -136,7 +138,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
                 if (reply != null) ReplyLine(reply, indent = AVATAR + 10.dp) { onReply(reply.no) }
                 Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR, avatarMod) }
+                    Box(Modifier.width(AVATAR)) { if (!continued) Avatar(id, r.beIcon, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         if (!continued) header()
@@ -153,7 +155,7 @@ fun PostItem(
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
-                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Identicon(id, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
+                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Avatar(id, r.beIcon, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
                 Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                     if (!continued || own) Box(Modifier.padding(bottom = 2.dp)) { header() }
                     Column(
@@ -173,7 +175,7 @@ fun PostItem(
             // X 風: アイコン左、名前と時刻・本文。返信先は頭の上に 1 行、返信は本文の下に字下げして小さく
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = pad + 2.dp, bottom = pad)) {
                 Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.width(AVATAR)) { Identicon(id, AVATAR, avatarMod) }
+                    Box(Modifier.width(AVATAR)) { Avatar(id, r.beIcon, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         // 返信先は、Discord 風・LINE 風と同じく頭の上に 1 行で
@@ -208,6 +210,7 @@ fun PostItem(
             // 専ブラ風: 余白を詰め、頭の行を小さく。1 画面にたくさん並ぶ
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
                 if (own || toOwn) header() else Text(r.header, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips)
+                BeIcon(r.beIcon)
                 if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
             }
             media()
@@ -217,6 +220,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = if (heat != null) pad + 2.dp else pad / 2 + 2.dp)) {
                     header()
+                    BeIcon(r.beIcon)
                     if (aa) AaBody(r)
                     else if (heat != null) Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                     else Text(r.body, Modifier.padding(top = 2.dp), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em)
@@ -228,6 +232,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = pad)) {
                     header()
+                    BeIcon(r.beIcon)
                     body(Modifier.padding(top = 4.dp))
                 }
                 media()
@@ -324,4 +329,27 @@ private fun OwnChip(label: String) {
         Modifier.border(1.dp, Palette.own, RoundedCornerShape(4.dp)).background(Palette.ownWash, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
         color = Palette.own, fontSize = 10.sp, lineHeight = 14.sp,
     )
+}
+
+/** BE のアイコン(カード・専ブラ風・まとめ風): 本文の上に、高さ 28dp にそろえて(元の絵は小さいので広げる)。取れなければ出さない */
+@Composable
+private fun BeIcon(url: String?) {
+    if (url == null) return
+    var failed by androidx.compose.runtime.remember(url) { androidx.compose.runtime.mutableStateOf(false) }
+    if (failed) return
+    coil3.compose.AsyncImage(
+        url, "BE のアイコン", Modifier.padding(top = 4.dp).height(28.dp).widthIn(max = 96.dp),
+        contentScale = androidx.compose.ui.layout.ContentScale.Fit, onError = { failed = true },
+    )
+}
+
+/** アイコンの列(Discord 風・LINE 風・X 風): BE のアイコンがあれば ID の模様の代わりに出す(枠に収まるよう縮める・縦横の比は保つ) */
+@Composable
+private fun Avatar(id: String?, beIcon: String?, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    if (beIcon == null) return Identicon(id, size, modifier)
+    var failed by androidx.compose.runtime.remember(beIcon) { androidx.compose.runtime.mutableStateOf(false) }
+    if (failed) return Identicon(id, size, modifier)
+    Box(modifier.size(size).clip(RoundedCornerShape(10.dp)).background(Palette.surface)) {
+        coil3.compose.AsyncImage(beIcon, "BE のアイコン", Modifier.matchParentSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit, onError = { failed = true })
+    }
 }

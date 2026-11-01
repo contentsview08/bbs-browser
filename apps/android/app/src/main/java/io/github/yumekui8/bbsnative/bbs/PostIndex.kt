@@ -21,7 +21,17 @@ class PostInfo(
     val links: List<String> = emptyList(),
     /** YouTube の動画 ID と元の URL(サムネイルに出す) */
     val youtube: List<Pair<String, String>> = emptyList(),
+    /** BE のアイコン(本文の 1 行目の sssp://…。PC 版の splitBeIcon と同じ)。本文からは除いてある */
+    val beIcon: String? = null,
 )
+
+private val BE_ICON = Regex("^\\s*sssp://([^\\s/]+/\\S+\\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)", RegexOption.IGNORE_CASE)
+
+/** 本文の 1 行目の BE のアイコン(sssp は https の読み替え)と、その行を除いた本文 */
+fun splitBeIcon(body: String): Pair<String?, String> {
+    val m = BE_ICON.find(body) ?: return null to body
+    return "https://${m.groupValues[1]}" to body.substring(m.range.last + 1)
+}
 
 /** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
 fun displayBody(body: String): String =
@@ -118,7 +128,24 @@ class PostIndex(
 
     companion object {
         private val ANCHOR = Regex("(?:>>|＞＞|>|＞)(\\d{1,4})(?:[-ー－](\\d{1,4}))?")
-        private val URL = Regex("(?:h?ttps?)://[\\w\\-.~:/?#\\[\\]@!$&'()*+,;=%]+")
+        /**
+         * URL。崩した書き方も拾う: h 抜き(ttps://・tps://)、コロンなし(//i.imgur.com/…)、http 抜き(i.imgur.com/a.jpg)。
+         * http 抜きは、ふつうの文と取り違えないよう、画像の拡張子で終わるものだけ
+         */
+        private val URL = Regex(
+            "(?:(?<![\\w/])(?:h?t?tps?:)?//|(?<![\\w./@:-])(?=[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+/[\\w\\-.~/%]*\\.(?:jpe?g|png|gif|webp)(?![\\w])))[\\w\\-.~:/?#\\[\\]@!$&'()*+,;=%]+",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** 崩した書き方の URL を、開ける形(https://…)に直す。http:// と書いてあるものは http のまま */
+        fun normalizeUrl(raw: String): String {
+            Regex("^(h?t?tps?:)?//", RegexOption.IGNORE_CASE).find(raw)?.let { m ->
+                val rest = raw.substring(m.range.last + 1)
+                val scheme = m.groupValues[1].lowercase()
+                return (if (scheme.isNotEmpty() && !scheme.contains("s:")) "http://" else "https://") + rest
+            }
+            return "https://$raw"
+        }
         private val IMAGE = Regex("\\.(?:jpe?g|png|gif|webp|avif)(?:[?#]|$)", RegexOption.IGNORE_CASE)
         private val YOUTUBE_ID = Regex("(?:v=|youtu\\.be/|shorts/|live/)([\\w-]{6,})")
         private val VIDEO = Regex("(?:youtube\\.com/(?:watch|shorts|live)|youtu\\.be/|\\.(?:mp4|webm|mov)(?:[?#]|$))", RegexOption.IGNORE_CASE)
@@ -137,10 +164,11 @@ class PostIndex(
                 val images = ArrayList<String>()
                 val links = ArrayList<String>()
                 val youtube = ArrayList<Pair<String, String>>()
-                val text = if (collapse) displayBody(p.body) else p.body
+                val (beIcon, body0) = splitBeIcon(p.body)
+                val text = if (collapse) displayBody(body0) else body0
                 for (m in URL.findAll(text)) {
                     val raw = m.value
-                    val url = if (raw.startsWith("ttp")) "h$raw" else raw
+                    val url = normalizeUrl(raw)
                     spans += Span.Url(m.range.first, m.range.last + 1, url)
                     when {
                         IMAGE.containsMatchIn(url) -> {
@@ -171,7 +199,7 @@ class PostIndex(
                     replies.getOrPut(n) { ArrayList() } += p.no
                 }
                 spans.sortBy { it.start }
-                info[p.no] = PostInfo(spans, image, video, link, images, text, links, youtube)
+                info[p.no] = PostInfo(spans, image, video, link, images, text, links, youtube, beIcon)
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
             return PostIndex(posts, info, replyCount, replies, idCount, grossWords)

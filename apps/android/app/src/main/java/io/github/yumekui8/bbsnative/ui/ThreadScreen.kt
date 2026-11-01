@@ -162,7 +162,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // アンカーをたどったレス(本文側で、ポップアップを閉じたあとも少しのあいだ色を付け、どこだったか分かるように)
     var traced by remember { mutableStateOf<Set<Int>>(emptySet()) }
     // その場で開いたアンカー(レスの番号 → 差し込んだレスの番号)
-    var inline by remember { mutableStateOf<Map<Int, List<Int>>>(emptyMap()) }
     LaunchedEffect(popups.isEmpty(), traced) { if (popups.isEmpty() && traced.isNotEmpty()) { delay(1800); traced = emptySet() } }
     var popupSeq by remember { mutableIntStateOf(0) }
     var downY by remember { mutableFloatStateOf(0f) }
@@ -285,14 +284,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'a' -> {
                     val (from, to) = v.split('-').map { it.toInt() }
                     val list = index.posts.filter { it.no in from..to }
-                    val host = downNo
-                    // その場で開く(設定)。本文の中で押したときだけ(ポップアップの中ではポップアップで)
-                    if (vm.prefs.anchorInline && popups.isEmpty() && host > 0 && list.isNotEmpty() && list.size <= 10) {
-                        inline = if (inline[host] == list.map { it.no }) inline - host else inline + (host to list.map { it.no })
-                    } else {
-                        traced = list.map { it.no }.toSet()
-                        openPopup(list)
-                    }
+                    traced = list.map { it.no }.toSet()
+                    openPopup(list)
                 }
                 'r' -> {
                     val no = v.toInt()
@@ -439,32 +432,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onAvatar = p.id?.let { pid -> { openPopup(index.posts.filter { it.id == pid }, focus = p.no) } },
                     onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
-            }
-            // 会話のまとまり(設定): 返信の連なりの起点のレスの下に「この会話 (8)」。押すとツリーで開く
-            if (inMain && vm.prefs.showConversations && (index.replies[p.no]?.isNotEmpty() == true)) {
-                val size = remember(index, p.no) { index.tree(p.no).size }
-                if (size >= 4) Text(
-                    "この会話 ($size) ›",
-                    Modifier.padding(start = if (style == "discord" || style == "line" || style == "timeline") 56.dp else 14.dp, bottom = 8.dp)
-                        .clip(RoundedCornerShape(50)).background(Palette.accentWash)
-                        .clickable { val rows = index.treeRows(p.no); openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) }
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = Palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                )
-            }
-            // その場で開いたアンカー(設定)。本文の下に字下げして差し込む。もう一度押すと畳む
-            if (inMain) inline[p.no]?.let { nos ->
-                for (n in nos) {
-                    val t = index.posts.getOrNull(n - 1)?.takeIf { it.no == n } ?: continue
-                    val rt = page.rendered[n] ?: continue
-                    Box(
-                        Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, bottom = 6.dp)
-                            .background(Palette.surface2.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                            .drawBehind { drawRect(Palette.accent.copy(alpha = 0.6f), size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) },
-                    ) {
-                        PostItem(rt, style = "card", id = t.id, aa = aaOverride[n] ?: rt.aa, own = n in own, info = index.info[n], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = n in index.gross)
-                    }
-                }
             }
             }
         }

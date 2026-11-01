@@ -460,12 +460,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** お気に入り板を 1 つ上・下へ */
-    fun moveFavorite(board: Board, delta: Int) {
+    /** お気に入り板を from 番目から to 番目へ(掴んで並べ替え) */
+    fun moveFavorite(i: Int, j: Int) {
         val list = favorites.toMutableList()
-        val i = list.indexOfFirst { it.url == board.url }
-        val j = i + delta
-        if (i < 0 || j !in list.indices) return
+        if (i !in list.indices || j !in list.indices) return
         list.add(j, list.removeAt(i))
         favorites = list
         viewModelScope.launch { db.reorderFavorites(list.map { it.url }) }

@@ -2,7 +2,8 @@
 // 成功したら親がスレ一覧を取り直し、新しいスレをタブで開く。
 // 書き込み欄と同じく、画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字が使える。
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { stashGet, stashSet } from '../utils/draftStash'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import type { AttachmentRules, NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
@@ -37,6 +38,15 @@ interface Props {
   accounts: PostAccountOption[]
   onToggleAccount: (id: string, on: boolean) => void
   onOpenAccountSettings: () => void
+  /** 書きかけを覚えておく名前(板ごと)。閉じても・ページを離れても(Turnstile の確認)消えないように */
+  draftKey?: string
+}
+
+interface NewThreadDraft {
+  title: string
+  name: string
+  mail: string
+  body: string
 }
 
 // スマホは指で押すので、欄を大きく(高さ 48px・字 16px)
@@ -45,10 +55,24 @@ const INPUT = `w-full bg-c-surface2 border-c-border text-c-text-body placeholder
 }`
 
 export default function NewThreadDialog(props: Props) {
-  const [title, setTitle] = useState('')
-  const [name, setName] = useState(props.initialName)
-  const [mail, setMail] = useState(props.initialMail)
-  const [body, setBody] = useState('')
+  // 書きかけがあれば戻す
+  const saved = (() => {
+    const raw = props.draftKey ? stashGet(props.draftKey) : undefined
+    try {
+      return raw ? (JSON.parse(raw) as NewThreadDraft) : undefined
+    } catch {
+      return undefined
+    }
+  })()
+  const [title, setTitle] = useState(saved?.title ?? '')
+  const [name, setName] = useState(saved?.name ?? props.initialName)
+  const [mail, setMail] = useState(saved?.mail ?? props.initialMail)
+  const [body, setBody] = useState(saved?.body ?? '')
+  // 打つたびに覚える(スレタイも本文も空なら消す)
+  useEffect(() => {
+    if (!props.draftKey) return
+    stashSet(props.draftKey, title || body ? JSON.stringify({ title, name, mail, body } satisfies NewThreadDraft) : '')
+  }, [props.draftKey, title, name, mail, body])
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<PostResult>()
   const bodyRef = useRef<HTMLTextAreaElement>(null)
@@ -81,7 +105,12 @@ export default function NewThreadDialog(props: Props) {
       const files = await media.takeFiles()
       const r = await props.onSubmit({ title: title.trim(), name, mail, body, ...(files.length > 0 && { files }) })
       setResult(r)
-      if (r.status === 'ok') media.clearAttached()
+      if (r.status === 'ok') {
+        // 立てられたら、書いたものを消す(閉じて開き直しても残らないように)
+        media.clearAttached()
+        setTitle('')
+        setBody('')
+      }
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -157,7 +186,12 @@ export default function NewThreadDialog(props: Props) {
                 setSending(true)
                 setResult(undefined)
                 try {
-                  setResult(await props.onConfirm(c, { title: title.trim(), name, mail, body }))
+                  const r = await props.onConfirm(c, { title: title.trim(), name, mail, body })
+                  setResult(r)
+                  if (r.status === 'ok') {
+                    setTitle('')
+                    setBody('')
+                  }
                 } catch (e) {
                   setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
                 } finally {

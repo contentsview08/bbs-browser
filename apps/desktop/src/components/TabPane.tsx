@@ -172,7 +172,7 @@ function TabPane({
   const onOpenInBrowser = useCallback(() => ev.openInBrowser(thread), [ev, thread])
   const onDeleteLog = useCallback(() => ev.deleteLog(id), [ev, id])
   const title = tab.log.title || thread.title
-  const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body) }), [ev, thread])
+  const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body), key: `reply:${thread.boardUrl}${thread.key}` }), [ev, thread])
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
   const onOpenBoard = useCallback(() => ev.openBoardOf(thread), [ev, thread])
   const onReact = useCallback((p: Post, id: string) => ev.react(thread, p, id), [ev, thread])

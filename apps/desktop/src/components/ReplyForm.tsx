@@ -2,6 +2,7 @@
 // 大きさは親が決め、本文の欄が残りいっぱいに広がる。
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
+import { stashGet, stashSet } from '../utils/draftStash'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { AttachmentRules, PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
@@ -66,7 +67,8 @@ interface Props {
    * 書きかけの本文を覚えておく所(スレごと)。開いたときに読み、書くのが止まったら保存し、書き込めたら消す。
    * タブを閉じても・アプリを閉じても、書きかけが残るように
    */
-  draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
+  /** key があれば、書きかけを打つたびにその場でも覚える(utils/draftStash。ページを離れても消えないように) */
+  draft?: { load: () => Promise<string | undefined>; save: (body: string) => void; key?: string }
   /** 板の書き込みの上限と、その掲示板での数え方。本文の欄の右下に長さを出し、超えていたら書き込まない */
   limits?: PostLimits
   byteLength?: (text: string) => number
@@ -106,6 +108,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const pendingDraft = useRef<string | undefined>(undefined)
   /** 書くのが止まって少ししたら保存する(1 文字ごとに DB へ書かないように) */
   const saveDraftLater = (next: string) => {
+    const key = draftRef.current?.key
+    if (key) stashSet(key, next)
     pendingDraft.current = next
     clearTimeout(draftTimer.current)
     draftTimer.current = setTimeout(() => {
@@ -116,9 +120,14 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   // 開いたら、覚えておいた書きかけを戻す(もう何か書いていたら、そちらを優先する)
   useEffect(() => {
     let alive = true
-    void props.draft?.load().then((saved) => {
-      if (alive && saved) setBody((b) => (b === '' ? saved : b))
-    })
+    // すぐ書ける置き場に覚えていれば、そちらを使う(空なら、書き込めて消したもの。DB の古い書きかけは読み戻さない)
+    const stashed = props.draft?.key ? stashGet(props.draft.key) : undefined
+    if (stashed !== undefined) {
+      if (stashed) setBody((b) => (b === '' ? stashed : b))
+    } else
+      void props.draft?.load().then((saved) => {
+        if (alive && saved) setBody((b) => (b === '' ? saved : b))
+      })
     return () => {
       alive = false
       // 保存し損ねた書きかけは、閉じるときに保存する
@@ -153,6 +162,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     clearTimeout(draftTimer.current)
     pendingDraft.current = undefined
     draftRef.current?.save('')
+    if (draftRef.current?.key) stashSet(draftRef.current.key, '')
   }
   /** 本文を変える(下書きにも残す) */
   const changeBody = (next: string) => {

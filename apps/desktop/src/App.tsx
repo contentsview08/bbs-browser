@@ -2395,6 +2395,7 @@ export default function App() {
         <NewThreadDialog
           attach={findConnector(board.connectorId)?.attachments}
           boardName={settings.boardMeta[board.url]?.alias || board.name}
+          draftKey={`new:${board.url}`}
           initialName={settings.boardMeta[board.url]?.defaultName ?? settings.postName}
           initialMail={settings.boardMeta[board.url]?.defaultMail ?? settings.postMail}
           onSubmit={createThread}

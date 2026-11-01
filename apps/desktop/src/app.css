@@ -263,8 +263,8 @@ html:root[data-scheme]:not([data-scheme='2ch-classic']) {
 html:root[data-scheme]:not([data-scheme='2ch-classic']):not([data-post-style='line']) {
   --c-thread-view-bg: var(--c-base);
 }
-/* カードの行は枠を消して、下に線を引いて区切る(枠線の見た目で開いているスレに付ける強調色の枠は残す) */
-html:root[data-scheme]:not([data-scheme='2ch-classic']) .card-thread[data-variant='card'] {
+/* スレ一覧の行は、どの見た目でも下に線を引いて区切る。カードの行は枠を消す(枠線の見た目で開いているスレに付ける強調色の枠は残す) */
+html:root[data-scheme]:not([data-scheme='2ch-classic']) .card-thread {
   box-shadow: 0 1px 0 var(--c-border);
 }
 html:root[data-scheme]:not([data-scheme='2ch-classic']) .card-thread[data-variant='card']:not(.card-selected) {
@@ -300,14 +300,14 @@ html:root[data-scheme]:not([data-scheme='2ch-classic']) .bg-panel-reply {
 
 /* 新着のレスの光り方。しばらく色を保ってから消す。
    長さは ThreadView.tsx の FLASH_MS と揃える */
-/* 光る色はテーマの強調色(ダークは藤色、ライトは青)。未読の札などの色(--c-unread)とは分け、
-   テーマから浮かないようにする。配色ごとに変えたいときは --c-flash-new を上書きする */
-:root {
-  --c-flash-new: var(--c-accent);
+/* 光る色はスマホのアプリ(ThreadScreen の flashColor)と同じく、色みのない黒(明るい配色)・白(暗い配色)。
+   強調色だと配色によって見分けにくかった。アプリは黒を 0.5 倍・白を 0.8 倍の濃さで重ねるので、その濃さを色の不透明度で持たせる
+   (下の color-mix で 24%・16% を掛けると、アプリと同じ濃さになる) */
+html:root[data-scheme] {
+  --c-flash-new: rgba(0, 0, 0, 0.5);
 }
-/* ライトの強調色は灰みの青で光が見えにくいので、はっきりした青(未読の札と同じ色)で光らせる */
-:root[data-scheme='soft-light'] {
-  --c-flash-new: var(--c-unread);
+html:root.dark[data-scheme] {
+  --c-flash-new: rgba(255, 255, 255, 0.8);
 }
 
 /* スレ一覧の「新」の札。塗りつぶした明るい色にして、一覧の中で目に入るようにする。
@@ -574,12 +574,9 @@ article.post-discord {
 }
 /* スレタイは省かず、折り返して全部出す(どの見た目・密度でも) */
 
-/* 専ブラ風の表: 角を丸めず、1 行おきにうっすら色を付ける */
+/* 専ブラ風の表: 角を丸めない。1 行おきの色は付けない(スマホのアプリと同じく、地の色のまま線で区切る) */
 .card-thread[data-variant='classic'] {
   border-radius: 0;
-}
-.card-thread[data-variant='classic']:nth-child(even) {
-  background: color-mix(in srgb, var(--c-text-body) 3%, transparent);
 }
 /* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
 @media (hover: hover) {
@@ -1043,13 +1040,6 @@ html[data-platform='mobile'] .bar-zoom {
   zoom: var(--bar-zoom, 1);
 }
 
-/* スマホ: スレ一覧は、どの見た目でもスレとスレの間に線を引いて区切る(面の濃淡や余白だけだと境目が分かりにくい) */
-html[data-platform='mobile'] .card-thread {
-  box-shadow: 0 1px 0 var(--c-border);
-}
-html[data-platform='mobile'] .card-thread[data-variant='card'] {
-  box-shadow: 0 1px 0 var(--c-border-strong);
-}
 
 /* 役目ごとの色を増やす(どの配色でも、未読・自分・主・新着が同じ色に寄って、のっぺりしていたので)。
    未読・新着の札は今までどおり(ダークはピンク・赤、ライトは青)。ほかは別の色にする */
@@ -1070,16 +1060,6 @@ html:root[data-scheme] {
 html:root.dark[data-scheme] {
   --c-own: #3ec7a0;
   --c-own-wash: rgba(62, 199, 160, 0.16);
-}
-/* 新着のレスの光り方: 空色の青(強調色とも未読の札とも分ける) */
-html:root[data-scheme] {
-  --c-flash-new: #3b8fe8;
-}
-html:root.dark[data-scheme] {
-  --c-flash-new: #5aa9ff;
-}
-html:root[data-scheme='discord-dark'] {
-  --c-flash-new: #5865f2;
 }
 
 /* スマホの設定: 項目の行(題の一覧・オンオフ)のあいだに線を引いて、1 行ずつ見分けやすくする */

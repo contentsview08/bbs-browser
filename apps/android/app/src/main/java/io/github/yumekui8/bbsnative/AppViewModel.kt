@@ -61,8 +61,12 @@ class ReplyState {
     var title by mutableStateOf("")
     var body by mutableStateOf("")
     var sending by mutableStateOf(false)
-    /** 画像を上げているところ */
-    var uploading by mutableStateOf(false)
+    /** 選んだ画像の上げ具合(選んだ順。上げ終わったものも、本文のサムネイルを端末の画像で出すために残す) */
+    val uploads = androidx.compose.runtime.mutableStateListOf<UploadItem>()
+    /** 画像を上げているところ(待っている画像も含む) */
+    val uploading: Boolean get() = uploads.any { it.state is UploadItem.State.Waiting || it.state is UploadItem.State.Uploading }
+    /** 上げ終わった URL → 端末の画像(サムネイルをすぐ出すため) */
+    fun localOf(url: String): android.net.Uri? = uploads.firstOrNull { (it.state as? UploadItem.State.Done)?.url == url }?.uri
     /** 結果の知らせ(書き込めた・エラー) */
     var notice by mutableStateOf<String?>(null)
     /** エッヂの認証待ち(ブラウザで開く URL と認証コード) */
@@ -70,6 +74,17 @@ class ReplyState {
     /** 5ch の書き込み確認(承諾したら送り直す) */
     var confirm by mutableStateOf<PostResult.Confirm?>(null)
     var draftLoaded = false
+}
+
+/** 書き込み欄で選んだ画像 1 枚 */
+class UploadItem(val uri: android.net.Uri) {
+    sealed interface State {
+        data object Waiting : State
+        data object Uploading : State
+        data class Done(val url: String) : State
+        data class Failed(val message: String) : State
+    }
+    var state by mutableStateOf<State>(State.Waiting)
 }
 
 /** 画面の積み重ね(戻るで 1 つ前へ)。左のメニューから開くものは、積み重ねを入れ替える */
@@ -860,22 +875,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 選んだ画像を catbox に上げて、本文の最後に URL を足す(書き込みとスレ立てで共通) */
-    fun attach(r: ReplyState, uri: android.net.Uri) {
-        if (r.uploading) return
-        r.uploading = true
+    /**
+     * 選んだ画像(何枚でも、一度に 10 枚まで)を catbox に 1 枚ずつ順番に上げ、上げ終わるたびに本文の最後に URL を足す
+     * (書き込みとスレ立てで共通)。上げている途中に選び足したら、列の後ろに並べる
+     */
+    fun attach(r: ReplyState, uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
         r.notice = null
+        val running = r.uploading
+        r.uploads.removeAll { it.state is UploadItem.State.Failed }
+        r.uploads += uris.take(10).map { UploadItem(it) }
+        if (uris.size > 10) r.notice = "一度に上げられるのは 10 枚までです(先頭の 10 枚だけ上げます)"
+        if (running) return
         viewModelScope.launch {
-            try {
-                val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), uri, prefs.uploadMaxDimension)
-                r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url else r.body + "\n" + url
-                prefs.addUpload(url)
-            } catch (e: Exception) {
-                r.notice = e.message ?: "アップロードできませんでした"
-            } finally {
-                r.uploading = false
+            while (true) {
+                val item = r.uploads.firstOrNull { it.state is UploadItem.State.Waiting } ?: break
+                item.state = UploadItem.State.Uploading
+                try {
+                    val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), item.uri, prefs.uploadMaxDimension)
+                    // いつも最新の本文に足す(前の画像の URL を消さない)
+                    r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
+                    prefs.addUpload(url)
+                    item.state = UploadItem.State.Done(url)
+                } catch (e: Exception) {
+                    val msg = e.message ?: "アップロードできませんでした"
+                    item.state = UploadItem.State.Failed(msg)
+                    r.notice = "画像を上げられませんでした($msg)。画像を押すと上げ直します"
+                }
             }
         }
+    }
+
+    /** 上げられなかった画像を、もう一度上げる */
+    fun retryUpload(r: ReplyState, item: UploadItem) {
+        r.uploads.remove(item)
+        attach(r, listOf(item.uri))
+    }
+
+    /** 本文から画像の URL を外す(サムネイルの ×) */
+    fun removeImageUrl(r: ReplyState, url: String) {
+        r.body = r.body.lines().filter { it.trim() != url }.joinToString("\n").let { if (it.contains(url)) it.replace(url, "") else it }
+        r.uploads.removeAll { (it.state as? UploadItem.State.Done)?.url == url }
     }
 
     /** 書きかけを戻す(開いたとき 1 回。もう何か書いていたら、そちらを優先する) */
@@ -932,7 +972,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 when (val res = send()) {
                     is PostResult.Ok -> {
                         if (!quick) {
-                            r.body = ""
+                            r.body = ""; r.uploads.clear()
                             // 書き込めたらキーボードをしまう(書いたレスと返事が見えるように)
                             r.blurSeq++
                             r.done = "書き込みました"
@@ -977,7 +1017,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     is PostResult.Ok -> {
                         val title = r.title.trim()
                         r.title = ""
-                        r.body = ""
+                        r.body = ""; r.uploads.clear()
                         r.open = false
                         toast = "スレを立てました"
                         // 立てたあとの一覧の取り直しに失敗しても、立てられなかったとは出さない

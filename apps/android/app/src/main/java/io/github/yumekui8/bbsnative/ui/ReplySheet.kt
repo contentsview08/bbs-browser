@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -121,7 +122,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     LaunchedEffect(r.blurSeq) { if (r.blurSeq > 0) focusManager.clearFocus() }
     // 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
+    val picker = rememberImagePicker(vm, r)
     val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
     // 送る前の待ち(設定)。残り秒数。0 より大きい間は「取り消す」を出す
     var pending by remember { mutableStateOf(0) }
@@ -135,7 +136,10 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
         HorizontalDivider(color = Palette.border)
         if (imageHint) FooterNote(Icons.Filled.Info, "画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください(catbox に上げて URL を本文に入れます)", Palette.textMuted) { imageHint = false }
-        if (r.uploading) FooterNote(Icons.Filled.Sync, "画像をアップロード中…", Palette.textMuted, null)
+        if (r.uploading) {
+            val done = r.uploads.count { it.state is io.github.yumekui8.bbsnative.UploadItem.State.Done || it.state is io.github.yumekui8.bbsnative.UploadItem.State.Failed }
+            FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${r.uploads.size} 枚目", Palette.textMuted, null)
+        }
         // 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す
         val result = r.notice ?: r.done
         if (result != null) {
@@ -148,12 +152,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             }
         }
         // 本文に入れた画像のリンクのサムネイル(欄の上)
-        val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
-        if (previews.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (u in previews) StoredImage(u, Modifier.size(48.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), showProgress = false)
-            }
-        }
+        UploadStrip(vm, r, 56.dp, PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp))
         // オプション: 名前・メール
         if (options) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -240,7 +239,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         ) {
                             PlusItem(Icons.Filled.Image, if (r.uploading) "画像(アップロード中)" else "画像") {
                                 plusMenu = false
-                                if (vm.prefs.uploadEnabled) picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) else imageHint = true
+                                if (vm.prefs.uploadEnabled) picker() else imageHint = true
                             }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
                             PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
@@ -404,11 +403,11 @@ private fun SmallField(value: String, onChange: (String) -> Unit, placeholder: S
  */
 @Composable
 fun AttachButton(vm: AppViewModel, r: ReplyState) {
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
+    val picker = rememberImagePicker(vm, r)
     IconButton(
         onClick = {
             if (!vm.prefs.uploadEnabled) r.notice = "画像を付けるには、設定の「書き込み欄から画像を上げる」をオンにしてください"
-            else picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            else picker()
         },
         enabled = !r.uploading,
     ) {
@@ -482,7 +481,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
             // 下からすべり上がって出る
             val rise = remember { androidx.compose.animation.core.Animatable(1f) }
             LaunchedEffect(Unit) { rise.animateTo(0f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))) }
-            val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.attach(r, uri) }
+            val picker = rememberImagePicker(vm, r)
             var options by remember { mutableStateOf(false) }
             val titleFocus = remember { FocusRequester() }
             LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
@@ -532,22 +531,19 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                     }
                     // 本文
                     var bodyField by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body)) }
+                    // 画像の URL など、外から本文が変わったら欄にも映す(映さないと、書き足したときに URL が消える)
+                    LaunchedEffect(r.body) { if (bodyField.text != r.body) bodyField = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
                     Box(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp)) {
                         BodyField(bodyField, { bodyField = it; r.body = it.text }, isAA(r, vm.prefs.aaAutoDetect), "本文", 16, Modifier.fillMaxWidth())
                     }
                     // 本文に入れた画像のサムネイル
-                    val previews = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
-                    if (previews.isNotEmpty()) {
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            for (u in previews) StoredImage(u, Modifier.size(72.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Palette.border, RoundedCornerShape(5.dp)).background(Palette.surface2), showProgress = false)
-                        }
-                    }
+                    UploadStrip(vm, r, 72.dp, PaddingValues(horizontal = 16.dp, vertical = 8.dp))
                 }
                 // キーボードのすぐ上の道具: 画像・オプション(名前・メール)・バイト数
                 HorizontalDivider(color = Palette.border)
                 Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = {
-                        if (vm.prefs.uploadEnabled) picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        if (vm.prefs.uploadEnabled) picker()
                         else r.notice = "画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください"
                     }, enabled = !r.uploading) {
                         if (r.uploading) CircularProgressIndicator(Modifier.size(20.dp), color = Palette.accent, strokeWidth = 2.dp)
@@ -569,4 +565,56 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
 fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("bbs", text))
+}
+
+/** 写真の選択画面(何枚でも選べる。一度に 10 枚まで)を開く関数。選んだ画像は順番に上げる */
+@Composable
+fun rememberImagePicker(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyState): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> vm.attach(r, uris) }
+    return { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
+}
+
+/**
+ * 書き込み欄の画像の帯: 本文に入れた画像の URL と、上げている途中・待っている・失敗した画像を、選んだ順に 1 枚ずつ並べる。
+ * 上げた画像は端末の画像をそのまま出す(ネットから取り直さないので、すぐ見える)。× で本文から外す。失敗した画像は押すと上げ直す
+ */
+@Composable
+private fun UploadStrip(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyState, size: androidx.compose.ui.unit.Dp, padding: PaddingValues) {
+    val urls = remember(r.body) { Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)", RegexOption.IGNORE_CASE).findAll(r.body).map { it.value }.distinct().toList() }
+    val pending = r.uploads.filter { it.state !is io.github.yumekui8.bbsnative.UploadItem.State.Done }
+    if (urls.isEmpty() && pending.isEmpty()) return
+    val shape = RoundedCornerShape(6.dp)
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(padding), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (u in urls) Box(Modifier.size(size)) {
+            val local = r.localOf(u)
+            val m = Modifier.matchParentSize().clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
+            if (local != null) coil3.compose.AsyncImage(local, null, m, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            else StoredImage(u, m, showProgress = false)
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(3.dp).size(20.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.Black.copy(alpha = 0.6f))
+                    .clickable { vm.removeImageUrl(r, u) },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Filled.Close, "外す", tint = Color.White, modifier = Modifier.size(13.dp)) }
+        }
+        for (item in pending) Box(
+            Modifier.size(size).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
+                .clickable(enabled = item.state is io.github.yumekui8.bbsnative.UploadItem.State.Failed) { vm.retryUpload(r, item) },
+            contentAlignment = Alignment.Center,
+        ) {
+            coil3.compose.AsyncImage(item.uri, null, Modifier.matchParentSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            // 上げる前・途中は暗くして、印を重ねる
+            Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.5f)))
+            when (val st = item.state) {
+                is io.github.yumekui8.bbsnative.UploadItem.State.Uploading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    Text("上げ中", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                is io.github.yumekui8.bbsnative.UploadItem.State.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.Refresh, st.message, tint = Palette.markDanger, modifier = Modifier.size(20.dp))
+                    Text("再送", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                else -> Text("待ち", color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp)
+            }
+        }
+    }
 }

@@ -2059,6 +2059,7 @@ export default function App() {
           onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
           variant={baseVariant(effectivePostStyle(settings))}
           authorIcon={settings.threadAuthorIcon}
+          compact={settings.listShape === 'compact'}
           title={listTitle ?? '板を選択'}
           onShownChange={onShownChange}
           threads={favView ? favListThreads : (historyThreads ?? threads)}

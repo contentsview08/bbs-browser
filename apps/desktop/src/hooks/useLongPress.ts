@@ -1,6 +1,7 @@
 // スマホ: 長押し。指を置いたまま少し待つと呼ぶ(動かしたら、スクロールのつもりなのでやめる)。
 // 長押しのあとの指を離したときのクリックは捨てる(長押しでメニューを出したのに、レスやスレも開いてしまわないように)。
 // スマホの長押しでふつう出る、文字の選択・リンクのメニュー(contextmenu)も止める
+import { buzz } from '../utils/haptics'
 import { useRef } from 'react'
 
 const HOLD_MS = 450
@@ -24,7 +25,7 @@ export function useLongPress(onLongPress: (() => void) | undefined) {
       timer.current = setTimeout(() => {
         fired.current = true
         start.current = null
-        navigator.vibrate?.(15)
+        buzz(15)
         onLongPress()
       }, HOLD_MS)
     },

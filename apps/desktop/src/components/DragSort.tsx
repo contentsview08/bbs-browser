@@ -4,6 +4,7 @@
 // つかみ方: 行のどこでも長押し(LONG_MS)するか、右のつまみ(≡)に触れればすぐ。
 // つかんでいる間は、ほかの行がよけて、置く所がその場で分かる(箱をまたぐときも、移る先の箱にその場で入る)。
 // つかんでいる行は指に付いて動き、離した所で決まる。つかんでいる間は画面をスクロールさせない
+import { buzz } from '../utils/haptics'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 const LONG_MS = 300
@@ -138,7 +139,7 @@ function useDragSort<Z extends string>(zones: ZoneDef<Z>[], onDrop: (id: string,
     const r = rows.current.get(id)?.getBoundingClientRect()
     const zone = zonesRef.current.find((z) => z.items.includes(id))
     if (!r || !zone) return
-    navigator.vibrate?.(10)
+    buzz(10)
     setDrag({ id, zone: zone.key, index: zone.items.indexOf(id), x, y, grabX: x - r.left, grabY: y - r.top })
   }
 

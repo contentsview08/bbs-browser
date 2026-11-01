@@ -5,6 +5,7 @@
 // - 1 回たたくと、上下の帯(閉じる・何枚目か・本文)を出し入れする
 // - 長押しで、保存・URL のコピー・ブラウザで開く
 // 指の動きのあいだは React の描き直しをせず、位置(transform)を直接書き換える(描き直すと重く、カクつく)
+import { buzz } from '../../utils/haptics'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
@@ -152,7 +153,7 @@ export default function MobileImageViewer(props: Props) {
     s.longTimer = setTimeout(() => {
       if (!s.moved && s.mode !== 'pinch') {
         s.mode = 'none'
-        navigator.vibrate?.(15)
+        buzz(15)
         setSheet(true)
       }
     }, LONG_PRESS_MS)

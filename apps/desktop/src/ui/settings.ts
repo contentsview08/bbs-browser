@@ -1,4 +1,6 @@
 // アプリの設定。SQLite の settings 表に 1 項目 1 行(JSON)で保存する。
+import { setHaptics } from '../utils/haptics'
+import { customLineBg, customVars, isCustomDark, parseCustom } from './customScheme'
 // 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
 // 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
 
@@ -13,6 +15,8 @@ import type { BarLayout, BarOrder } from '../utils/toolbar'
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
   // スマホのアプリ(ネイティブ版)で足した配色。色は theme/native-schemes.css
   | 'gray' | 'light-gray' | 'sepia' | 'nord' | 'contrast' | 'night' | 'line-dark' | 'discord-light' | 'x-dim' | 'mono'
+  // 自分の配色(設定 customScheme の 6 色から作る。ui/customScheme.ts)
+  | 'custom'
 export type DesignPattern = 'tonal' | 'bordered'
 /** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
 export type PostStyle = 'card' | 'discord' | 'classic' | 'line' | 'timeline' | 'matome'
@@ -62,6 +66,10 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
 /** 閲覧履歴だけのタブ: 見た順(最近見たものが上。押すたびに上下を入れ替える)。設定のタブの並びには出さない */
 export const VIEWED_TAB = { key: 'viewed' as const, name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' }
 export type OpenPosition = 'unread' | 'top' | 'bottom'
+/** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色・示さない(スマホのアプリの heatStyle と同じ) */
+export type HeatStyle = 'left' | 'right' | 'text' | 'none'
+/** スレ一覧の行の形: ふつう・コンパクト(スレタイ 1 行と数だけ。スマホのアプリの listDensity と同じ) */
+export type ListShape = 'normal' | 'compact'
 /** タブの見せ方: both はアイコンと文字、icon はアイコンだけ、text は文字だけ */
 export type TabLabel = 'both' | 'icon' | 'text'
 export const TAB_LABELS: { key: TabLabel; name: string }[] = [
@@ -321,6 +329,25 @@ export interface AppSettings {
   showAdvanced: boolean
   /** 差し色(ACCENTS のキー)。空ならテーマの色 */
   accent: string
+  // ここからスマホのアプリ(bbs N)と同じ設定(名前と意味はアプリの data/Prefs.kt と同じ)
+  /** 動きを減らす(画面の移り方・新着の光り方などを省く) */
+  reduceMotion: boolean
+  /** 人気のレスの示し方 */
+  heatStyle: HeatStyle
+  /** 2 回以上書いた ID を、ID ごとの色にする */
+  idColor: boolean
+  /** スレ一覧の行の形 */
+  listShape: ListShape
+  /** 書いている間、本文の欄の上に定型文のバーを出す(押すとカーソルの所に入る) */
+  phraseBar: boolean
+  /** 送る前に 3 秒待つ(その間は取り消せる) */
+  sendDelay: boolean
+  /** レスをダブルタップで返信(スマホ) */
+  doubleTapReply: boolean
+  /** 振動で知らせる(ジェスチャー・引っぱって更新が決まったとき、長押しのメニュー。スマホ) */
+  haptics: boolean
+  /** 自分の配色(地・面・字・強調・未読・自分の 6 色。CustomScheme の JSON)。空なら作っていない */
+  customScheme: string
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -444,6 +471,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mobileBarOrder: {},
   showAdvanced: false,
   accent: '',
+  reduceMotion: false,
+  heatStyle: 'left',
+  idColor: false,
+  listShape: 'normal',
+  phraseBar: false,
+  sendDelay: false,
+  doubleTapReply: false,
+  haptics: true,
+  customScheme: '',
   postName: '',
   postMail: '',
 }
@@ -548,8 +584,12 @@ function applyAccent(key: string, dark: boolean) {
 
 /** 暗い配色か(OS のダーク・ライトに合わせるとき、どちら用かを見分ける) */
 export function isDarkScheme(scheme: ColorScheme): boolean {
-  return DARK_SCHEMES.has(scheme)
+  return scheme === 'custom' ? customDark : DARK_SCHEMES.has(scheme)
 }
+/** 自分の配色が暗いか(地の明るさで決まる。apply で入れる) */
+let customDark = false
+/** 自分の配色で、<html> に直に入れた CSS 変数(配色を変えたら外す) */
+let customApplied: string[] = []
 
 /** OS がダークモードか */
 const osDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -592,14 +632,32 @@ export function pickSchemeNow(s: AppSettings, key: ColorScheme): Partial<AppSett
 
 function apply(s: AppSettings) {
   const root = document.documentElement
-  const scheme = effectiveScheme(s)
+  // 自分の配色を選んでいても、作っていなければ(読めなければ)ダークにしておく
+  const custom = parseCustom(s.customScheme)
+  if (custom) customDark = isCustomDark(custom)
+  const want = effectiveScheme(s)
+  const scheme: ColorScheme = want === 'custom' && !custom ? 'soft-dark' : want
   root.setAttribute('data-scheme', scheme)
-  root.classList.toggle('dark', DARK_SCHEMES.has(scheme))
-  applyAccent(s.accent, DARK_SCHEMES.has(scheme))
+  root.classList.toggle('dark', isDarkScheme(scheme))
+  applyAccent(s.accent, isDarkScheme(scheme))
+  // 自分の配色: 6 色から作った色を <html> に直に入れる(テーマの CSS のどの指定よりも強い)。差し色を選んでいれば、強調の色はそちら
+  for (const n of customApplied) root.style.removeProperty(n)
+  customApplied = []
+  if (scheme === 'custom' && custom) {
+    const vars: Record<string, string> = customVars(custom)
+    if (effectivePostStyle(s) === 'line') vars['--c-thread-view-bg'] = customLineBg(custom)
+    for (const [n, v] of Object.entries(vars)) {
+      if (s.accent && n.startsWith('--c-accent') && !n.startsWith('--c-accent-self')) continue
+      root.style.setProperty(n, v)
+      customApplied.push(n)
+    }
+  }
   // カード・Discord 風はトーナル(面の濃淡)、専ブラ風は枠線(色の面なし)の部品の見た目にする
   root.setAttribute('data-pattern', effectivePostStyle(s) === 'classic' ? 'bordered' : 'tonal')
   root.setAttribute('data-post-style', effectivePostStyle(s))
   root.setAttribute('data-density', effectiveDensity(s))
+  root.toggleAttribute('data-reduce-motion', s.reduceMotion)
+  setHaptics(s.haptics)
   const base = baseFontPx(s)
   root.style.fontSize = `${base}px`
   // スレ一覧・レスの本文・レスの頭の大きさ(px)。一覧と頭は中の字の大きさの比を保ったまま拡大・縮小する(zoom)。

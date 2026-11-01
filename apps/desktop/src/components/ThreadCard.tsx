@@ -48,6 +48,8 @@ interface Props {
   variant?: 'card' | 'discord' | 'classic' | 'line'
   /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
   authorIcon?: boolean
+  /** 行の形がコンパクト: スレタイ 1 行と、右端にレス数(勢いの色)と未読だけ(スマホのアプリの listDensity = compact と同じ)。専ブラ風の表は元から 1 行なので変えない */
+  compact?: boolean
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
@@ -72,6 +74,7 @@ function ThreadCard({
   isCursor,
   variant = 'card',
   authorIcon = false,
+  compact = false,
 }: Props) {
   /** 立てた人の ID を模様で出すか(出さないときは、右下に ID の文字を出す) */
   const authorIconId = authorIcon ? thread.authorId : undefined
@@ -225,8 +228,30 @@ function ThreadCard({
     </div>
   )
 
+  // コンパクト: スレタイ 1 行と、右端にレス数(勢いの色)と未読だけ。まだ開いていないスレだけ太字(アプリと同じ)
+  const compactRow = (
+    <div className="flex items-center gap-2 min-w-0">
+      {checkbox}
+      <span
+        className="flex-1 min-w-0 truncate text-[14px]"
+        style={{ color: visited ? 'var(--c-thread-read-title, var(--c-text-body))' : 'var(--c-text-strong)', fontWeight: visited ? 400 : 600 }}
+      >
+        {newBadge}
+        {favStar}
+        {threadBadges}
+        {thread.title}
+      </span>
+      <span className={`flex-shrink-0 min-w-[36px] text-right text-[11px] tabular-nums ${momentumColorClass}`} title={`レス数(勢い：${formatMomentum(m)})`}>
+        {thread.postCount}
+      </span>
+      {unreadBadge('text-[10px] min-w-[30px] px-1.5 py-px rounded-full text-center leading-tight')}
+    </div>
+  )
+
   const content =
-    isMobile && variant !== 'classic' ? (
+    compact && variant !== 'classic' ? (
+      compactRow
+    ) : isMobile && variant !== 'classic' ? (
       unified
     ) : variant === 'discord' ? (
       // Discord 風: チャンネル一覧のような 1 行。新着のあるスレは左に白い点、スレタイを明るく太く
@@ -411,6 +436,7 @@ function ThreadCard({
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
       data-variant={variant}
+      data-compact={(compact && variant !== 'classic') || undefined}
       className={`group card-thread cursor-pointer transition-colors relative rounded-[var(--thread-card-radius,var(--card-radius))] ${archived ? 'opacity-60' : ''} ${
         isActive ? 'card-selected border-[var(--card-selected-border-color)]' : 'border-[var(--card-border-color)]'
       }`}

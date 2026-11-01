@@ -169,6 +169,14 @@ export function heatClass(count: number): string {
   return ''
 }
 
+/** 人気の色の CSS 変数(heatClass と同じ段階)。帯など、字の色以外に使う。3 件より少なければ null */
+export function heatVar(count: number): string | null {
+  if (count >= 7) return 'var(--c-heat-very-hot)'
+  if (count >= 5) return 'var(--c-heat-hot)'
+  if (count >= 3) return 'var(--c-heat-warm)'
+  return null
+}
+
 /** 画像として扱う URL(拡張子で判定) */
 const IMAGE_URL = /\.(?:jpe?g|png|gif|webp|avif)(?:[?#][^\s]*)?$/i
 

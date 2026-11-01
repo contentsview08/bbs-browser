@@ -1,5 +1,7 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
+import CustomSchemeEditor from './mobile/CustomSchemeEditor'
+import { isCustomDark, parseCustom } from '../ui/customScheme'
 import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { normalizeForSearch } from '../utils/postBody'
@@ -490,8 +492,14 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           label="OS のダーク・ライトに合わせる"
           note="オンのときは、暗い配色と明るい配色を 1 つずつ選びます。Windows の設定を切り替えると、その場で切り替わります"
         />
+        <Toggle
+          checked={s.reduceMotion}
+          onChange={(v) => update('reduceMotion', v)}
+          label="動きを減らす"
+          note="画面の移り方・新着の光り方・数字の繰り上がりを省きます。OS の「アニメーションを表示しない」がオンでも同じになります"
+        />
         <div className="mt-2 grid grid-cols-2 gap-2">
-          {PICKABLE_SCHEMES.map((c) => {
+          {[...PICKABLE_SCHEMES, ...(parseCustom(s.customScheme) ? [{ key: 'custom' as const, name: '自分の配色', accent: parseCustom(s.customScheme)!.accent, border: 'var(--c-border)' }] : [])].map((c) => {
             const chosen = s.followOsTheme ? c.key === s.darkScheme || c.key === s.lightScheme : s.scheme === c.key
             return (
               <button
@@ -508,7 +516,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
                 <span className="flex-1 text-left">{c.name}</span>
                 {s.followOsTheme && (
                   <span className="text-[10px] text-c-text-muted">
-                    {isDarkScheme(c.key) ? 'ダーク' : 'ライト'}
+                    {(c.key === 'custom' ? isCustomDark(parseCustom(s.customScheme)!) : isDarkScheme(c.key)) ? 'ダーク' : 'ライト'}
                     {chosen && 'で使う'}
                   </span>
                 )}
@@ -534,6 +542,9 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
             )
           })}
         </div>
+      </Section>
+      <Section advanced title="自分の配色" note="地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます(スマホのアプリと同じ JSON)">
+        <CustomSchemeEditor settings={s} update={update} />
       </Section>
       <Section advanced desktopOnly title="フォント">
         <Choice
@@ -669,6 +680,16 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
         />
       </Section>
       )}
+      <Section title="スレ一覧の行の形">
+        <Choice
+          value={s.listShape}
+          options={[
+            { key: 'normal' as const, name: 'ふつう' },
+            { key: 'compact' as const, name: 'コンパクト(スレタイ 1 行と数だけ)' },
+          ]}
+          onChange={(v) => update('listShape', v)}
+        />
+      </Section>
       <Section
         title="レスの見た目"
         note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}${isMobile ? '(スマホでは、Discord 風は一覧表示、ほかは高密度で出します)' : ''}`}
@@ -896,6 +917,12 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
         />
         <Toggle
+          checked={s.idColor}
+          onChange={(v) => update('idColor', v)}
+          label="ID ごとに色を付ける"
+          note="2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます"
+        />
+        <Toggle
           checked={s.threadAuthorIcon}
           onChange={(v) => update('threadAuthorIcon', v)}
           label="スレ一覧で、立てた人の ID を模様で出す"
@@ -906,6 +933,18 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           onChange={(v) => update('highlightOp', v)}
           label="スレ主を強調する"
           note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
+        />
+      </Section>
+      <Section title="人気のレスの示し方" note="返信が 3 件からのレス。多いほど赤くします">
+        <Choice
+          value={s.heatStyle}
+          options={[
+            { key: 'left' as const, name: '左の帯' },
+            { key: 'right' as const, name: '右の帯' },
+            { key: 'text' as const, name: '本文の色' },
+            { key: 'none' as const, name: '示さない' },
+          ]}
+          onChange={(v) => update('heatStyle', v)}
         />
       </Section>
       <Section title="本文">
@@ -1117,6 +1156,10 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           ))}
           {s.quickPhrases.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
         </div>
+        <Toggle checked={s.phraseBar} onChange={(v) => update('phraseBar', v)} label="書いている間、定型文のバーを出す" note="本文の欄の上に並べ、押すとカーソルの所に入ります" />
+      </Section>
+      <Section advanced title="送るとき">
+        <Toggle checked={s.sendDelay} onChange={(v) => update('sendDelay', v)} label="送る前に 3 秒待つ" note="その間は「取り消す」で止められます(誤爆を防ぐ)" />
       </Section>
 
       <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">

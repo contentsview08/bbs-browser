@@ -5,6 +5,7 @@
 // - 1 つの向きだけのときは、距離か速さが足りたときだけ確定する(スクロールのつもりの動きで発動しないように)
 // - 登録した並びの途中なら、スクロールを止める
 // - 指の動きは document で受ける(レスのポップアップ・スレ立てなど、body の直下に出した画面の上でなぞっても効くように)
+import { buzz } from '../utils/haptics'
 import { useRef, useState } from 'react'
 
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right'
@@ -123,13 +124,19 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
     if (!s || segs.length === 0) return
     const binding = map[segs.join(',')]
     if (!binding) return
-    if (segs.length > 1) return binding.onCommit()
+    if (segs.length > 1) {
+      buzz()
+      return binding.onCommit()
+    }
     const t = e.changedTouches[0]
     const horizontal = segs[0] === 'left' || segs[0] === 'right'
     const distance = horizontal ? Math.abs(t.clientX - s.x) : Math.abs(t.clientY - s.y)
     const velocity = distance / Math.max(1, Date.now() - s.time)
     const viewport = horizontal ? window.innerWidth : window.innerHeight
-    if (distance > viewport * COMMIT_DISTANCE_RATIO * mult || (distance > COMMIT_MIN_DISTANCE * mult && velocity > COMMIT_MIN_VELOCITY * mult)) binding.onCommit()
+    if (distance > viewport * COMMIT_DISTANCE_RATIO * mult || (distance > COMMIT_MIN_DISTANCE * mult && velocity > COMMIT_MIN_VELOCITY * mult)) {
+      buzz()
+      binding.onCommit()
+    }
   }
 
   const onTouchCancel = () => {

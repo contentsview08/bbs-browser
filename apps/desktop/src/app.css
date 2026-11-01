@@ -1227,3 +1227,36 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 html:root {
   --c-link-image: var(--c-mark-new);
 }
+
+/* 動きを減らす(設定。スマホのアプリの reduceMotion と同じ): 画面の移り方・新着の光り方・数字の繰り上がりなど、動きを全部省く。
+   OS の「視差効果を減らす」「アニメーションを削除」がオンのときも同じ */
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html *,
+  html *::before,
+  html *::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* スレ一覧の行の形がコンパクト(設定)のとき: 上下の余白を詰める(スマホのアプリの compact と同じ 上下 6・左 14・右 12) */
+html .card-thread[data-compact][data-variant] {
+  padding: 6px 12px 6px 14px !important;
+}
+
+/* スマホ: レスの上で 2 回たたいたときに、ページの拡大ではなくタップとして届くように(設定「レスをダブルタップで返信」)。
+   ずらす・つまんで拡大するのは、そのまま使える */
+html[data-platform='mobile'] article[data-no] {
+  touch-action: manipulation;
+}

@@ -76,6 +76,10 @@ interface Props {
   accounts?: PostAccountOption[]
   onToggleAccount?: (id: string, on: boolean) => void
   onOpenAccountSettings?: () => void
+  /** 送る前に 3 秒待つ(設定 sendDelay)。その間は「取り消す」で止められる */
+  sendDelay?: boolean
+  /** 書いている間、本文の欄の上に並べる定型文(設定 phraseBar がオンのときだけ渡す)。押すとカーソルの所に入る */
+  phraseBar?: string[]
 }
 
 const INPUT =
@@ -95,6 +99,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }, [result, props.variant])
   /** chat: オプション(名前・メール)の欄を出しているか */
   const [lineOptions, setLineOptions] = useState(false)
+  /** chat: 本文の欄に入っているか(定型文のバーを出す) */
+  const [chatFocused, setChatFocused] = useState(false)
   /** chat: ＋ のメニュー(画像・オプション)を出しているか */
   const [plusMenu, setPlusMenu] = useState(false)
   /** 画像のアップロードが無効のときに「画像」を押したら、設定のことを知らせる */
@@ -243,6 +249,62 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     }
   }
 
+  // 送る前の待ち(設定 sendDelay。スマホのアプリと同じ 3 秒)。残りの秒数。0 より大きい間は「取り消す」を出す
+  const [pending, setPending] = useState(0)
+  const submitRef = useRef(submit)
+  submitRef.current = submit
+  useEffect(() => {
+    if (pending <= 0) return
+    const timer = setTimeout(() => {
+      setPending((n) => {
+        if (n === 1) void submitRef.current()
+        return Math.max(0, n - 1)
+      })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [pending])
+  /** 送るボタン・Ctrl+Enter。待つ設定なら数え始める(数えている間にもう一度押しても数え直さない) */
+  const requestSend = () => {
+    if (pending > 0) return
+    if (props.sendDelay && body.trim() && !sending && !props.disabled && !cooling) setPending(3)
+    else void submit()
+  }
+  const pendingBar = pending > 0 && (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-surface2 text-[13px]">
+      <span className="flex-1 text-c-text-strong tabular-nums">{pending} 秒後に送ります</span>
+      <button type="button" onClick={() => setPending(0)} className="px-2 py-0.5 font-bold text-c-accent">
+        取り消す
+      </button>
+    </div>
+  )
+  /** 定型文のバー。押すとカーソルの所に入れる(選んでいた字は置き換える) */
+  const insertPhrase = (ph: string) => {
+    const el = textRef.current
+    const start = el?.selectionStart ?? body.length
+    const end = el?.selectionEnd ?? body.length
+    changeBody(body.slice(0, start) + ph + body.slice(end))
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + ph.length, start + ph.length)
+    })
+  }
+  const phraseBar = !!props.phraseBar?.length && (
+    <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+      {props.phraseBar.map((ph) => (
+        <button
+          key={ph}
+          type="button"
+          // 押しても本文の欄からカーソルが外れないように(外れるとスマホのキーボードが閉じる)
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => insertPhrase(ph)}
+          className="flex-shrink-0 px-3 py-1 rounded-full bg-c-surface2 border border-c-border text-[13px] text-c-text-strong whitespace-nowrap"
+        >
+          {ph}
+        </button>
+      ))}
+    </div>
+  )
+
   const right = props.layout === 'right'
   // 本文に入れた画像・動画のリンクは、下にサムネイルを出す(web 版と同じ)
   const previewImages = imageUrlsIn(body)
@@ -278,8 +340,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const sendButton = (
     <button
       type="button"
-      onClick={() => void submit()}
-      disabled={sending || !body.trim() || !!props.disabled || cooling}
+      onClick={requestSend}
+      disabled={sending || !body.trim() || !!props.disabled || cooling || pending > 0}
       title={cooling ? `続けて書き込まないよう、あと ${Math.ceil(cooldown.left / 1000)} 秒あけています(設定 → 書き込み で変えられます)` : 'Ctrl+Enter でも書き込めます'}
       className={`btn-thread-create relative overflow-hidden px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
     >
@@ -306,7 +368,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }
 
   if (props.variant === 'chat') {
-    const canSend = !sending && !!body.trim() && !props.disabled && !cooling
+    const canSend = !sending && !!body.trim() && !props.disabled && !cooling && pending === 0
     return (
       <div data-composer className="w-full flex flex-col">
         {media.fileInput}
@@ -343,6 +405,9 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         )}
         {media.attachedView && <div className="px-3 pt-2">{media.attachedView}</div>}
         {hasPreview && <div className="px-3 pt-2">{previewStrip}</div>}
+        {/* 定型文のバーは書いている間だけ(本文の欄に入っているか、書きかけがあるとき。アプリと同じ) */}
+        {phraseBar && (chatFocused || body) && <div className="px-2.5 pt-1.5">{phraseBar}</div>}
+        {pendingBar && <div className="px-3 pt-1.5">{pendingBar}</div>}
         {/* オプション: 名前・メール・アカウント */}
         {lineOptions && (
           <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
@@ -405,9 +470,13 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
               }}
               onFocus={() => {
                 setPlusMenu(false)
+                setChatFocused(true)
                 props.onFocusChange?.(true)
               }}
-              onBlur={() => props.onFocusChange?.(false)}
+              onBlur={() => {
+                setChatFocused(false)
+                props.onFocusChange?.(false)
+              }}
               {...media.textareaProps}
               placeholder={props.disabled ?? '書き込む'}
               disabled={!!props.disabled}
@@ -416,7 +485,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           </div>
           <button
             type="button"
-            onClick={() => void submit()}
+            onClick={requestSend}
             disabled={!canSend}
             className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
             style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
@@ -444,6 +513,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
       {/* 書き込みに付けたファイル(ふたば) */}
       {media.attachedView && <div className="mb-2">{media.attachedView}</div>}
+      {pendingBar && <div className="mb-2 flex-shrink-0">{pendingBar}</div>}
+      {phraseBar && <div className="mb-2 flex-shrink-0">{phraseBar}</div>}
 
       {/* 名前・メールの行と本文の欄を一つの列にまとめ、書き込むボタンはその右(右レイアウトでは下)に置く。
           こうすると絵文字・画像のボタンの右端が本文の欄の右端とそろう */}
@@ -496,7 +567,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()
-              void submit()
+              requestSend()
             } else collapseOnEsc(e)
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}

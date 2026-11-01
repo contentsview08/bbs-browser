@@ -60,7 +60,7 @@ import {
   youtubeLinksIn,
 } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
-import { baseFontPx, effectivePostStyle, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
+import { baseFontPx, effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -1634,6 +1634,12 @@ export default function ThreadView(props: Props) {
         toNo: resolveAnchor,
         urls: { shorten: settings.urlShorten, omitImages: settings.imageUrlOmit, collapseImageRuns: settings.imageUrlCollapse },
         idHeat: settings.idHeat,
+        // ID ごとの色は配色の明るさで変える。LINE ライトの LINE 風は空色の地なので、白っぽい字に合う淡い色(スマホのアプリと同じ)
+        idColor: settings.idColor
+          ? { dark: isDarkScheme(effectiveScheme(settings)), sky: effectiveScheme(settings) === 'line-light' && effectivePostStyle(settings) === 'line' }
+          : undefined,
+        heatStyle: settings.heatStyle,
+        doubleTapReply: settings.doubleTapReply,
         thumbAuto: settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi()),
         onReact: props.onReact,
         reactionDefs: props.reactionDefs,
@@ -1645,7 +1651,7 @@ export default function ThreadView(props: Props) {
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
-    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
+    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -2148,6 +2154,8 @@ export default function ThreadView(props: Props) {
             // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
             <ReplyForm
               ref={replyRef}
+              sendDelay={settings.sendDelay}
+              phraseBar={settings.phraseBar ? settings.quickPhrases : undefined}
               variant="chat"
               // フッターの右端(送るボタンの右)に更新ボタン(設定で消せる)
               trailing={
@@ -2237,6 +2245,8 @@ export default function ThreadView(props: Props) {
           >
             <ReplyForm
               ref={replyRef}
+              sendDelay={settings.sendDelay}
+              phraseBar={settings.phraseBar ? settings.quickPhrases : undefined}
               layout={replyLayout}
               onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}
               attach={props.attachments}

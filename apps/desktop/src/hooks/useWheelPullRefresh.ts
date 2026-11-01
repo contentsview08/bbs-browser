@@ -1,5 +1,6 @@
 // hono-bbs-merge packages/web/src/hooks/useWheelPullRefresh.ts から複製。
 // 専ブラでは、端に着いた勢いで更新してしまい、取得が増えすぎたので、armDelayMs と cooldownMs を足した
+import { buzz } from '../utils/haptics'
 import { useRef } from 'react'
 import {
   PULL_HIDDEN_Y,
@@ -189,7 +190,10 @@ export function useWheelPullRefresh({
     const dist = touchDistRef.current
     touchDistRef.current = 0
     if (committingRef.current) return
-    if (dist >= TOUCH_COMMIT_PX) commit()
+    if (dist >= TOUCH_COMMIT_PX) {
+      buzz()
+      commit()
+    }
     else collapse()
   }
 

@@ -83,6 +83,8 @@ interface Props {
   variant?: 'card' | 'discord' | 'classic' | 'line'
   /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
   authorIcon?: boolean
+  /** 行の形がコンパクト(スレタイ 1 行と数だけ。設定 listShape) */
+  compact?: boolean
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
   style?: { button: (up: boolean) => ReactNode; items: ReactNode }
   /** ︙ の「文字の大きさ」の中身(スレ一覧の大きさのスライダー) */
@@ -737,6 +739,7 @@ export default function ThreadListPanel(props: Props) {
         isCursor={!isMobile && props.active !== false && !cursorHidden && cursorId === id}
         variant={props.variant}
         authorIcon={props.authorIcon}
+        compact={props.compact}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}
         selecting={selected.size > 0}

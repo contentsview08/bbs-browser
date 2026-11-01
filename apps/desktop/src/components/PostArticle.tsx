@@ -14,6 +14,7 @@ import {
   displayName,
   dropLeadingAnchor,
   heatClass,
+  heatVar,
   linkUrlsIn,
   looksLikeAA,
   renderBody,
@@ -25,7 +26,8 @@ import LinkPreview from './LinkPreview'
 import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
-import type { NgMode } from '../ui/settings'
+import type { HeatStyle, NgMode } from '../ui/settings'
+import { idColorOf } from '../utils/idColor'
 import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 
@@ -34,6 +36,12 @@ export interface PostHandlers extends BodyHandlers {
   thumbAuto?: boolean
   /** 書き込みの多い ID を赤くする */
   idHeat?: boolean
+  /** ID ごとに色を付ける(設定 idColor)。dark は暗い配色か、sky は空色の地(LINE ライトの LINE 風)か。付けないときは undefined */
+  idColor?: { dark: boolean; sky: boolean }
+  /** 人気のレス(返信 3 件から)の示し方(設定 heatStyle)。既定は左の帯 */
+  heatStyle?: HeatStyle
+  /** レスをダブルタップで返信する(設定 doubleTapReply。スマホ)。オンだと 1 回のタップ(ツリーを開く)は少し遅れる */
+  doubleTapReply?: boolean
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -119,6 +127,8 @@ export type PostVariant = 'card' | 'discord' | 'classic' | 'line' | 'timeline' |
 
 /** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
 const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
+/** ダブルタップで返信: 2 回目のタップを待つ時間(ms) */
+const DOUBLE_TAP_MS = 280
 
 /** Discord 風・LINE 風のアイコンの大きさ。スマホは画面が狭いので小さくする(アンカーツリーの段の幅も合わせる。AnchorTree.tsx) */
 export const AVATAR = isMobile ? 28 : 36
@@ -294,6 +304,8 @@ function PostArticle(props: Props) {
   const menuOpen = ngOpen || moreOpen
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
   const [hovered, setHovered] = useState(false)
+  /** ダブルタップで返信: 1 回目のタップのあと、2 回目を待っている間のタイマー */
+  const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [sheet, setSheet] = useState(false)
   /** タイムライン: 「ほか N 件の返信」を広げたか */
   const [repliesOpen, setRepliesOpen] = useState(false)
@@ -360,8 +372,14 @@ function PostArticle(props: Props) {
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
   const hasConnections = anchorCount > 0 || (props.quotes?.size ?? 0) > 0 || anchorTargets(post.body, handlers.toNo).some((n) => n !== post.no)
   const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(body))
-  // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする
-  const bodyClass = anchorCount >= 3 ? numHeat : 'text-c-text-body'
+  // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする。
+  // 人気のレスを「本文の色」で示すときだけ、本文を暖色に(5 件から太字。スマホのアプリと同じ)
+  const heatStyle = handlers.heatStyle ?? 'left'
+  const bodyClass = heatStyle === 'text' && anchorCount >= 3 ? numHeat : 'text-c-text-body'
+  // 人気のレスを帯で示すときの色(左・右の 3px の帯と、淡い地)
+  const heatBar = (heatStyle === 'left' || heatStyle === 'right') && anchorCount >= 3 ? heatVar(anchorCount) : null
+  // 自分の書き込みの帯は、人気の帯と反対の側に(人気が左の帯なら自分は右。スマホのアプリと同じ)
+  const ownRight = heatStyle === 'left'
   // サムネイル(画像・動画のファイル・YouTube)は、本文に出てくる順に並べ、ビューアーでも同じ順に見る
   const mediaItems = props.showThumbnails ? mediaIn(post.body) : []
   const media = mediaItems.map((m) => m.url)
@@ -505,12 +523,17 @@ function PostArticle(props: Props) {
       自分
     </span>
   )
+  // 書き込みの多い ID は暖色(設定 idHeat)。それ以外で 2 回以上書いた ID は、ID ごとの色(設定 idColor)
+  const idHeatClass = handlers.idHeat ? heatClass(idCount) : ''
+  const idTint = !idHeatClass && handlers.idColor && post.id && idCount >= 2 ? idColorOf(post.id, handlers.idColor.dark, handlers.idColor.sky) : null
   const idBtn =
     post.id &&
     (
       <button
         type="button"
-        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${(handlers.idHeat ? heatClass(idCount) : '') || 'text-c-text-muted'}`}
+        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${idHeatClass || (idTint ? '' : 'text-c-text-muted')}`}
+        style={idTint ? { color: idTint } : undefined}
+        data-head-target="id"
         onClick={(e) => handlers.onId(post.id!, e.currentTarget)}
         title="この ID の書き込みを表示"
       >
@@ -716,10 +739,25 @@ function PostArticle(props: Props) {
 
   /** 本文(LINE 風はレスの行)を押したら、アンカーツリーを出す。文字を選んでいるとき(コピーしようとしているとき)は開かない */
   const openTree = (e: React.MouseEvent<HTMLElement>) => {
-    if (!hasConnections || window.getSelection()?.toString().trim()) return
     // 名前・ID・リンクなどのボタンを押したときは、そちらだけ(LINE 風は頭もレスの行の中にあるため)
     if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
-    handlers.onBody(post.no, e.currentTarget)
+    if (window.getSelection()?.toString().trim()) return
+    const el = e.currentTarget
+    // ダブルタップで返信(設定): 2 回目が来るまで少し待ち、来たら返信、来なければツリー(スマホのアプリと同じ)
+    if (handlers.doubleTapReply && handlers.onReply && isMobile) {
+      if (tapTimer.current !== undefined) {
+        clearTimeout(tapTimer.current)
+        tapTimer.current = undefined
+        handlers.onReply(post.no)
+        return
+      }
+      tapTimer.current = setTimeout(() => {
+        tapTimer.current = undefined
+        if (hasConnections) handlers.onBody(post.no, el)
+      }, DOUBLE_TAP_MS)
+      return
+    }
+    if (hasConnections) handlers.onBody(post.no, el)
   }
 
   const bodyBlock = (
@@ -1064,16 +1102,25 @@ function PostArticle(props: Props) {
       data-no={post.no}
       data-variant={variant}
       className={`relative ${frameClass} ${variant === 'discord' ? 'post-discord' : ''}`}
-      style={frame}
+      // 人気のレスを帯で示すときは、淡い地も敷く(スマホのアプリと同じ 6%)
+      style={heatBar ? { ...frame, background: `color-mix(in srgb, ${heatBar} 6%, transparent)` } : frame}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* 自分の書き込み(濃い線)と、自分へのアンカーを含むレス(薄い線)の目印。
           高密度表示では web 版の設定で本文の縦線が 0 になるので、表示の密度に関係なく見えるよう別に引く */}
       {/* LINE 風の自分の書き込みは、右に寄せた緑の吹き出しで分かるので、縦の印は出さない(自分宛てのレスには出す) */}
+      {/* 人気のレスの帯(設定で左・右)。淡い地は article の style で敷く */}
+      {heatBar && (
+        <span
+          className={`absolute ${heatStyle === 'left' ? 'left-0' : 'right-0'} top-1 bottom-1 w-[3px] rounded-full pointer-events-none`}
+          style={{ background: heatBar }}
+          title={`返信 ${anchorCount} 件`}
+        />
+      )}
       {((props.isOwn && variant !== 'line') || props.isReplyToOwn) && !props.alignLeft && (
         <span
-          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full pointer-events-none"
+          className={`absolute ${ownRight ? 'right-0' : 'left-0'} top-1 bottom-1 w-[3px] rounded-full pointer-events-none`}
           style={{ background: 'var(--c-own)', opacity: props.isOwn && variant !== 'line' ? 1 : 0.45 }}
           title={props.isOwn && variant !== 'line' ? '自分の書き込み' : '自分へのレス'}
         />

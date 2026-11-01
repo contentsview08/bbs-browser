@@ -152,12 +152,23 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     saveDraftLater(next)
   }
 
+  /**
+   * いまの本文。画像を何枚も続けて上げると、上げ終わるたびに insert が呼ばれる。そのとき古い描画の body を使うと、
+   * 前に入れた URL が消えて最後の 1 枚だけになるので、いつも最新の本文に足す
+   */
+  const bodyRef = useRef(body)
+  bodyRef.current = body
   /** 本文のカーソルの位置に文字を入れる */
   const insert = (text: string) => {
     const el = textRef.current
-    if (!el) return changeBody(body + text)
+    const cur = bodyRef.current
+    if (!el) {
+      bodyRef.current = cur + text
+      return changeBody(cur + text)
+    }
     const start = el.selectionStart
-    const next = body.slice(0, start) + text + body.slice(el.selectionEnd)
+    const next = cur.slice(0, start) + text + cur.slice(el.selectionEnd)
+    bodyRef.current = next
     changeBody(next)
     requestAnimationFrame(() => {
       el.focus()
@@ -319,20 +330,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             {props.accounts && props.onToggleAccount && (
               <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
             )}
-          </div>
-        )}
-        {hasPreview && (
-          <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pt-2">
-            {loadableImages.map((url, i) => (
-              <img
-                key={url}
-                src={url}
-                alt=""
-                referrerPolicy="no-referrer"
-                onClick={() => props.onImage?.(loadableImages, i)}
-                className="h-12 w-12 flex-shrink-0 object-cover rounded-lg border border-c-border bg-c-surface2"
-              />
-            ))}
           </div>
         )}
         <div className="flex items-end gap-1.5 px-2 py-2">

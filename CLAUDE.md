@@ -39,7 +39,7 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   multipart/form-data・UTF-8(`chrenc=文字`)、`pthc` に `/bin/cachemt7.php` の値・`pthb` は初回空、`ptua` は Chromium の値、
   `responsemode=ajax`(返事は ok か JSON)、ブラウザの User-Agent、Cookie は読む通信と同じ置き場(`sameCookiesAsGet` で plugin-http から POST)。
   2026-10-17 のテスト中に回線ごと「アクセス規制中」になったので、ふたばへリクエストを送る開発は止めている(再開はユーザーと相談)。
-- 見た目は hono-bbs の web 版(`~/git/koizumib/hono-bbs-merge/packages/web`)から移植している。
+- 見た目は hono-bbs の web 版(`~/git/contentsview08/hono-bbs/packages/web`)から移植している。
   `apps/desktop/src/theme/*.css` と `src/index.css` は web 版の複製なので、中身を勝手に変えない。
   色は `c-*` の Tailwind クラス(CSS 変数)だけを使い、固定色や `slate-*` を新しく書かない。
   表示設定は `<html>` の `data-scheme` / `data-pattern` / `data-density` / `data-post-style` で切り替わる(`src/ui/settings.ts`)。

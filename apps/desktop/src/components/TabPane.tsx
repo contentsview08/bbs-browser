@@ -222,6 +222,7 @@ function TabPane({
       onOpenDrawer={ev.openDrawer}
       onDeleteLog={onDeleteLog}
       nonameName={nonameName}
+      boardUrl={thread.boardUrl}
       omitNoname={meta?.omitNoname}
       extraNonames={meta?.nonames}
       jumpTo={jumpTo}

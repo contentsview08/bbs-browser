@@ -1,4 +1,5 @@
 // アプリの設定。SQLite の settings 表に 1 項目 1 行(JSON)で保存する。
+import { AI_NG_SAMPLES, type AiNgOverride, type AiNgRule } from '../utils/aiNg'
 import { setHaptics } from '../utils/haptics'
 import { customLineBg, customVars, isCustomDark, parseCustom } from './customScheme'
 import type { DateStyle } from '../utils/displayDate'
@@ -283,6 +284,11 @@ export interface AppSettings {
   ngMode: NgMode
   /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
   autoNg: boolean
+  /** AI NG(本人が書いた条件に当たるレスを、端末の中の判定モデルで見つける。utils/aiNg.ts)。オンのときだけモデルを取って動かす */
+  aiNgEnabled: boolean
+  aiNgRules: AiNgRule[]
+  /** 手で付けた「当たる・当たらない」(条件の id → 本文の鍵) */
+  aiNgOverrides: Record<string, AiNgOverride>
   /**
    * スマホ: 画面ごとの、スワイプの向きの並び(「right」「right,up」)→ 操作。
    * 操作はキー操作と同じ名前(KeyAction)か、drawer(引き出しを開く)。空なら何もしない
@@ -457,6 +463,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ngRules: [],
   ngMode: 'aborn',
   autoNg: true,
+  aiNgEnabled: false,
+  aiNgRules: AI_NG_SAMPLES.map((r, i) => ({ ...r, id: `sample-${i}` })),
+  aiNgOverrides: {},
   // 元の Web アプリ(hono-bbs)のスマホ版に合わせた割り当て
   swipeGestures: {
     // →↑ は一番下へ・→↓ は先頭へ(引っぱる向きに動く。元の Web アプリと同じ)

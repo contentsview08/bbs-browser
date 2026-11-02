@@ -7,6 +7,7 @@
 
 import type { Post } from '@bbs-browser/connectors'
 import { AXIS_LABEL, type Judgement } from './trollModel'
+import { aiHitLabel, type AiNgHit } from './aiNg'
 
 export type AutoNgReason =
   /** 同じスレで同じ本文が count 回 */
@@ -17,6 +18,8 @@ export type AutoNgReason =
   | { kind: 'marked' }
   /** 印から学んだ判定(utils/trollModel.ts)。p は確からしさ */
   | { kind: 'learned'; p: number; axis?: Judgement['axis'] }
+  /** AI NG(本人が書いた条件に当たった。utils/aiNg.ts) */
+  | { kind: 'ai'; hit: AiNgHit }
 
 /** ユーザーが付けた印。どちらも本文の鍵(bodyKey)の集まり */
 export interface TrollMarks {
@@ -101,5 +104,7 @@ export function reasonLabel(r: AutoNgReason): string {
       return '荒らしの印を付けた本文'
     case 'learned':
       return `学んだ判定 ${Math.round(r.p * 100)}%(${r.axis ? AXIS_LABEL[r.axis] : '文字の並びの癖'})`
+    case 'ai':
+      return aiHitLabel(r.hit)
   }
 }

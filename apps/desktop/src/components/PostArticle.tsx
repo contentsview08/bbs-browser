@@ -31,6 +31,7 @@ import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
+import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
 
 export interface PostHandlers extends BodyHandlers {
   /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
@@ -78,6 +79,10 @@ export interface PostHandlers extends BodyHandlers {
   onQuickReply?: (no: number, text: string) => void
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す)。reason は付けたときの自動 NG の理由 */
   onMarkTroll?: (post: Post, troll: boolean | null, reason?: string) => void
+  /** AI NG の手の印を付ける(hit: 当たる・miss: 当たらない・null: 外す)。AI NG を使っていなければ undefined */
+  onMarkAi?: (post: Post, ruleId: string, mark: 'hit' | 'miss' | null) => void
+  /** いま効いている AI NG の条件(メニューの「〜に当たる」に並べる) */
+  aiRules?: { id: string; name: string }[]
 }
 
 interface Props {
@@ -88,6 +93,8 @@ interface Props {
   ng: boolean
   /** 自動 NG で畳んだときの理由(ユーザーの NG に当たっていなくても ng は true になる) */
   autoNg?: AutoNgReason
+  /** AI NG の見せ方が「印だけ」の条件に当たった(中身は出し、頭に印を付ける) */
+  aiMark?: AiNgHit
   ngMode: NgMode
   showThumbnails: boolean
   aaAutoDetect: boolean
@@ -329,6 +336,8 @@ function PostArticle(props: Props) {
   if (props.ng && !revealed) {
     if (props.ngMode === 'hide' && !props.autoNg) return null
     const auto = props.autoNg
+    // AI NG の「隠す」は、何も出さない(透明あぼーん)
+    if (auto?.kind === 'ai' && auto.hit.rule.show === 'hide') return null
     return (
       <article id={`post-${post.no}`} data-no={post.no} className={frameClass} style={frame}>
         <div className="flex items-center gap-3 text-xs text-c-text-muted">
@@ -342,12 +351,22 @@ function PostArticle(props: Props) {
             <span>あぼーん</span>
             {auto && (
               <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm leading-none">smart_toy</span>
-                自動 NG・{reasonLabel(auto)}
+                <span className="material-symbols-outlined text-sm leading-none">{auto.kind === 'ai' ? 'psychology' : 'smart_toy'}</span>
+                {auto.kind === 'ai' ? reasonLabel(auto) : `自動 NG・${reasonLabel(auto)}`}
               </span>
             )}
           </button>
-          {auto && handlers.onMarkTroll && (
+          {auto?.kind === 'ai' && handlers.onMarkAi && (
+            <button
+              type="button"
+              onClick={() => handlers.onMarkAi!(post, auto.hit.rule.id, auto.hit.manual ? null : 'miss')}
+              className="px-1.5 py-0.5 rounded border border-c-border hover:text-c-accent hover:border-c-accent"
+              title={auto.hit.manual ? '手で付けた「当たる」を外す' : 'この本文はこの条件に当たらない、と印を付ける(同じ本文は今後も当てない)'}
+            >
+              {auto.hit.manual ? '印を外す' : '当たらない'}
+            </button>
+          )}
+          {auto && auto.kind !== 'ai' && handlers.onMarkTroll && (
             <button
               type="button"
               onClick={() => handlers.onMarkTroll!(post, auto.kind === 'marked' ? null : false, auto.kind)}
@@ -417,6 +436,16 @@ function PostArticle(props: Props) {
               ? [{ label: '荒らし判定を外す(誤判定)', icon: 'undo', onClick: () => handlers.onMarkTroll!(post, false, props.autoNg?.kind) }]
               : []),
           ]
+      : []),
+    // AI NG: 条件ごとに「当たる」を手で付ける。当たっている(畳んだ・印の)ものは「当たらない」も
+    ...(handlers.onMarkAi && handlers.aiRules
+      ? handlers.aiRules.flatMap((r) => {
+          const shown = props.autoNg?.kind === 'ai' ? props.autoNg.hit : props.aiMark
+          const on = shown?.rule.id === r.id
+          return on
+            ? [{ label: `AI NG「${r.name}」に当たらない(誤判定)`, icon: 'psychology_alt', onClick: () => handlers.onMarkAi!(post, r.id, shown.manual ? null : 'miss') }]
+            : [{ label: `AI NG「${r.name}」に当たる`, icon: 'psychology', onClick: () => handlers.onMarkAi!(post, r.id, 'hit') }]
+        })
       : []),
     ...(handlers.onNgDraft
       ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
@@ -604,7 +633,14 @@ function PostArticle(props: Props) {
   }
   const voteChip = reactionDefs.length > 0 && <>{reactionDefs.map(reactionChip)}</>
   /** 掲示板がレスに付けた印(「管理人」「認証済み」など) */
-  const badgeChips = post.badges?.length ? <>{post.badges.map((b, i) => <BadgeChip key={i} badge={b} />)}</> : null
+  // AI NG の「印だけ」: 頭に条件の名前と当たり具合を出す
+  const aiChip = props.aiMark && (
+    <span className={`${CHIP} flex items-center gap-0.5`} style={{ color: 'var(--c-mark-purple)', border: '1px solid var(--c-mark-purple)' }} title={aiHitLabel(props.aiMark)}>
+      <span className="material-symbols-outlined text-[11px] leading-none">psychology</span>
+      {props.aiMark.rule.name || 'AI'}
+    </span>
+  )
+  const badgeChips = post.badges?.length || aiChip ? <>{post.badges?.map((b, i) => <BadgeChip key={i} badge={b} />)}{aiChip}</> : null
   const toOwnChip = props.isReplyToOwn && (
     <span
       className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"

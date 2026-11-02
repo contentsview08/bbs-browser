@@ -82,6 +82,7 @@ import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
+import { startAiModel, stopAiModel } from './hooks/useAiNg'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 /** 閉じたタブを覚えておく数(Shift+X で開き直す) */
@@ -599,6 +600,11 @@ export default function App() {
   }
   // 印から育つ判定(utils/trollModel.ts)。ログの数え上げと学習は画面の外(workers/trollWorker.ts)で行う
   const trollJudge = useTrollModel(store, settings.autoNg, markRecords)
+  // AI NG のモデルは、使う設定のときだけ動かす(取ってあれば通信しない)
+  useEffect(() => {
+    if (settings.aiNgEnabled) startAiModel()
+    else stopAiModel()
+  }, [settings.aiNgEnabled])
   /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
   const [listCounts, setListCounts] = useState(new Map<string, number>())
   useEffect(() => {

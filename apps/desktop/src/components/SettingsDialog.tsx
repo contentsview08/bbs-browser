@@ -2,6 +2,7 @@
 
 import { UPLOAD_HOSTS } from '../host/uploader'
 import NgManager from './NgManager'
+import AiNgSettings from './AiNgSettings'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
 import { isCustomDark, parseCustom } from '../ui/customScheme'
 import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -2162,6 +2163,13 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
           label="荒らしらしいレスを自動で畳む"
           note="同じスレで同じ長い本文が 3 回以上あるレスと、同じ文字の繰り返しばかりのレスを畳みます(理由を出します)。レスの NG メニューの「荒らしとして NG」で同じ本文をスレをまたいで畳み、「荒らし判定を外す」で誤判定を直せます。荒らしの印が 3 件以上になると、印から判定を学び(でたらめな文字の並び・ほかのスレにも同じ長文・繰り返しなどの判断軸と、文字の並びの癖)、印のない似た荒らしも畳むようになります"
         />
+      </Section>
+
+      <Section
+        title="AI NG(条件で見つける)"
+        note="「他人を煽っている」のように、当てたい書き込みを文で書くと、端末の中の判定モデルがレスごとに当たり具合を出します。条件ごとに、隠す・畳む・印だけを選べます"
+      >
+        <AiNgSettings settings={s} update={update} />
       </Section>
 
       <Section title="NG の一覧" note="レスの ⋯・スレの NG ボタンからも足せます。正規表現・効く板(すべて / この板だけ)・期限・メモを決められます">

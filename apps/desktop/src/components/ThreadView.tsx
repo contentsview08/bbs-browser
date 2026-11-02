@@ -8,6 +8,8 @@ import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
+import { activeRules, judgeAiNg, setOverride, trainRules } from '../utils/aiNg'
+import { scoreOf as aiScoreOf, useAiNgScores } from '../hooks/useAiNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AttachmentRules, Post, PostActionDef, ReactionDef, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
@@ -181,6 +183,8 @@ interface Props {
   jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
   nonameName?: string
+  /** スレの板(AI NG の「この板だけ」の条件に使う) */
+  boardUrl?: string
   /** 板ごとの設定: 名無しを省くか(なければ全体の設定)と、名無しとみなす名前 */
   omitNoname?: boolean
   extraNonames?: string[]
@@ -315,7 +319,7 @@ function Divider({ label, self }: { label: string; self?: boolean }) {
 
 /** 続けて並んだあぼーんをまとめた 1 行。押すと広げる・まとめ直す */
 function NgRunRow(props: {
-  run: { nos: number[]; auto: number; rule: number }
+  run: { nos: number[]; auto: number; ai: number; rule: number }
   first: number
   last?: Post
   open: boolean
@@ -323,7 +327,7 @@ function NgRunRow(props: {
 }) {
   const { run } = props
   const count = run.auto + run.rule
-  const parts = [run.auto > 0 && `自動 NG ${run.auto}`, run.rule > 0 && `NG ${run.rule}`].filter(Boolean).join('・')
+  const parts = [run.auto > 0 && `自動 NG ${run.auto}`, run.ai > 0 && `AI NG ${run.ai}`, run.rule > 0 && `NG ${run.rule}`].filter(Boolean).join('・')
   return (
     <article data-no={run.nos[0]} style={{ paddingLeft: 'var(--post-padding-x)', paddingRight: 'var(--post-padding-x)', paddingTop: 6, paddingBottom: 6 }}>
       <button
@@ -348,9 +352,33 @@ function NgRunRow(props: {
 export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, onRead } = props
   /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
-  const autoNg = useMemo(
+  const autoNgBase = useMemo(
     () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks, props.trollJudge) : new Map<number, AutoNgReason>()),
     [settings.autoNg, log.posts, props.trollMarks, props.trollJudge],
+  )
+  // AI NG: 本人の条件に当たったレス。畳む・隠すものは自動 NG と同じ並びに入れ、印だけのものは別に持つ
+  const aiRules = useMemo(() => (settings.aiNgEnabled ? activeRules(settings.aiNgRules, props.boardUrl) : []), [settings.aiNgEnabled, settings.aiNgRules, props.boardUrl])
+  const aiVersion = useAiNgScores(log.posts, aiRules.map((r) => r.prompt), aiRules.length > 0)
+  // 手の印から学んだ判定(印が変わったときだけ学び直す)
+  const aiLearned = useMemo(() => trainRules(aiRules, settings.aiNgOverrides), [aiRules, settings.aiNgOverrides])
+  const aiNg = useMemo(
+    () => judgeAiNg(log.posts, aiRules, aiScoreOf, settings.aiNgOverrides, aiLearned),
+    // aiVersion: 当たり具合が届いたら判定し直す
+    [log.posts, aiRules, settings.aiNgOverrides, aiLearned, aiVersion],
+  )
+  const autoNg = useMemo(() => {
+    if (aiNg.size === 0) return autoNgBase
+    const m = new Map(autoNgBase)
+    for (const [no, hit] of aiNg) if (hit.rule.show !== 'mark' && !m.has(no)) m.set(no, { kind: 'ai', hit })
+    return m
+  }, [autoNgBase, aiNg])
+  const aiMarkOf = (no: number) => {
+    const h = aiNg.get(no)
+    return h?.rule.show === 'mark' ? h : undefined
+  }
+  const onMarkAi = useCallback(
+    (p: Post, ruleId: string, mark: 'hit' | 'miss' | null) => props.onUpdateSetting?.('aiNgOverrides', setOverride(settings.aiNgOverrides, ruleId, p.body, mark)),
+    [props.onUpdateSetting, settings.aiNgOverrides],
   )
   // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
   const isNgRule = props.isNg
@@ -784,15 +812,21 @@ export default function ThreadView(props: Props) {
    * 透明あぼーんの設定では、ユーザーの NG(描かない)は数えずに飛ばし、自動 NG だけをまとめる
    */
   const ngRuns = useMemo(() => {
-    const runs = new Map<number, { nos: number[]; auto: number; rule: number }>()
+    const runs = new Map<number, { nos: number[]; auto: number; ai: number; rule: number }>()
     const firstOf = new Map<number, number>()
     if (!settings.groupNg || visibleNos) return { runs, firstOf }
     let cur: number[] = []
     const close = () => {
-      const shown = cur.filter((no) => settings.ngMode !== 'hide' || autoNg.has(no))
+      // AI NG の「隠す」は数えない(何も出さないので)
+      const aiHidden = (no: number) => {
+        const r = autoNg.get(no)
+        return r?.kind === 'ai' && r.hit.rule.show === 'hide' && !isNgRule(byNo.get(no)!)
+      }
+      const shown = cur.filter((no) => (settings.ngMode !== 'hide' || autoNg.has(no)) && !aiHidden(no))
       if (shown.length >= 2) {
-        const auto = shown.filter((no) => autoNg.has(no) && !isNgRule(byNo.get(no)!)).length
-        runs.set(cur[0], { nos: cur, auto, rule: shown.length - auto })
+        const machine = shown.filter((no) => autoNg.has(no) && !isNgRule(byNo.get(no)!))
+        const ai = machine.filter((no) => autoNg.get(no)?.kind === 'ai').length
+        runs.set(cur[0], { nos: cur, auto: machine.length - ai, ai, rule: shown.length - machine.length })
         for (const no of cur) firstOf.set(no, cur[0])
       }
       cur = []
@@ -1611,6 +1645,8 @@ export default function ThreadView(props: Props) {
         onAddNg: props.onAddNg,
         onNgDraft: props.onNgDraft,
         onMarkTroll: props.onMarkTroll,
+        onMarkAi: aiRules.length > 0 && props.onUpdateSetting ? onMarkAi : undefined,
+        aiRules: aiRules.map((r) => ({ id: r.id, name: r.name || r.prompt })),
         onReply: canReply
           ? (no) => {
               setPopups([])
@@ -1639,7 +1675,7 @@ export default function ThreadView(props: Props) {
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
-    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
+    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1665,6 +1701,7 @@ export default function ThreadView(props: Props) {
               alignLeft
               ng={isNg(p)}
               autoNg={autoNg.get(p.no)}
+              aiMark={aiMarkOf(p.no)}
               ngMode="aborn"
               showThumbnails={settings.showThumbnails}
               aaAutoDetect={settings.aaAutoDetect}
@@ -1702,6 +1739,7 @@ export default function ThreadView(props: Props) {
             variant={variant}
             ng={isNg(p)}
               autoNg={autoNg.get(p.no)}
+              aiMark={aiMarkOf(p.no)}
             ngMode="aborn"
             showThumbnails={settings.showThumbnails}
             aaAutoDetect={settings.aaAutoDetect}
@@ -2081,6 +2119,7 @@ export default function ThreadView(props: Props) {
                         replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
                         ng={isNg(p)}
               autoNg={autoNg.get(p.no)}
+              aiMark={aiMarkOf(p.no)}
                         ngMode={settings.ngMode}
                         showThumbnails={settings.showThumbnails}
                         aaAutoDetect={settings.aaAutoDetect}

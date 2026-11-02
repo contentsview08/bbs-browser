@@ -297,6 +297,32 @@ class Prefs(context: Context) {
         sp.edit().putString("ngRules", arr.toString()).apply()
     }
 
+    /** AI NG(data/AiNg.kt)。オンのときだけモデルを取って動かす */
+    var aiNgEnabled by pref("aiNgEnabled", false)
+    var aiNgRules by mutableStateOf(loadAiRules())
+        private set
+    var aiNgOverrides by mutableStateOf(loadAiOverrides())
+        private set
+
+    fun setAiRules(list: List<AiNgRule>) {
+        aiNgRules = list
+        sp.edit().putString("aiNgRules", JSONArray().apply { for (r in list) put(r.toJson()) }.toString()).apply()
+    }
+
+    fun setAiOverrides(map: Map<String, AiNgOverride>) {
+        aiNgOverrides = map
+        sp.edit().putString("aiNgOverrides", JSONObject().apply { for ((k, v) in map) put(k, v.toJson()) }.toString()).apply()
+    }
+
+    private fun loadAiRules(): List<AiNgRule> = sp.getString("aiNgRules", null)?.let { s ->
+        runCatching { JSONArray(s).let { a -> List(a.length()) { AiNgRule.fromJson(a.getJSONObject(it)) } } }.getOrNull()
+    } ?: AiNgRule.SAMPLES
+
+    private fun loadAiOverrides(): Map<String, AiNgOverride> = runCatching {
+        val o = JSONObject(sp.getString("aiNgOverrides", "{}") ?: "{}")
+        o.keys().asSequence().associateWith { AiNgOverride.fromJson(o.getJSONObject(it)) }
+    }.getOrDefault(emptyMap())
+
     /** 板ごとの設定(板の URL → 設定)。PC 版・Web の settings.boardMeta と同じ項目 */
     var boardMeta by mutableStateOf(loadBoardMeta())
         private set

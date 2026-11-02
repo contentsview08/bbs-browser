@@ -16,13 +16,15 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+        // ONNX Runtime(AI NG)はネイティブのライブラリを持つので、スマホ(arm64)とエミュレーター(x86_64)の分だけ入れる
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     buildTypes {
         getByName("release") {
             // R8 で縮めて最適化する(Compose はデバッグ用のビルドだと何倍も遅い。速さは配布用のビルドで比べる)
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // 手元の開発用の鍵で署名する(配るときは自分の鍵に)
             signingConfig = signingConfigs.getByName("debug")
         }
@@ -63,4 +65,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     // リンクをアプリの中で開く(Custom Tabs。今のスマホ版の「リンクをアプリの中で開く」)
     implementation("androidx.browser:browser:1.8.0")
+    // AI NG の判定モデル(mDeBERTa-v3 の ONNX)を動かす
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    testImplementation("junit:junit:4.13.2")
 }

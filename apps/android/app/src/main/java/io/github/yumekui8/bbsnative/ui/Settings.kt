@@ -198,7 +198,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("板") {
         NavRow(Icons.Filled.Star, Color(0xFF14B8A6), "お気に入り板", value = "${vm.favorites.size} 板") { open("sites") }
-        NavRow(Icons.Filled.Dns, Color(0xFF0E7490), "BBS メニュー", value = "${vm.sites.size} サイト") { vm.reloadSites(); open("menus") }
+        NavRow(Icons.Filled.Dns, Color(0xFF0E7490), "BBS メニュー", desc = "板一覧を取る掲示板") { vm.reloadSites(); open("menus") }
         NavRow(Icons.Filled.TravelExplore, Color(0xFF0891B2), "板を探す", desc = "BBS メニューから板を選ぶ") { vm.openRoot(Page.Boards()) }
     }
     Group {
@@ -468,6 +468,9 @@ private fun NgPage(vm: AppViewModel) {
     val today = io.github.yumekui8.bbsnative.data.today()
     Group("見せ方") {
         ChoiceRow("NG のレス", p.ngStyle, listOf("fold" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngStyle = it }
+    }
+    Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
+        AiNgSettings(vm)
     }
     Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
         // 種類の切り替え(件数付き)

@@ -137,6 +137,8 @@ sealed interface Page {
         var rendered by mutableStateOf<Map<Int, RenderedPost>>(emptyMap())
         /** NG に当たるレスの番号(あぼーんと出す) */
         var ngNos by mutableStateOf<Set<Int>>(emptySet())
+        /** AI NG に当たったレス(data/AiNg.kt)。ふつうの NG とは別に持つ */
+        var aiNg by mutableStateOf<Map<Int, io.github.yumekui8.bbsnative.data.AiHit>>(emptyMap())
         /** レスの中の押せるところの呼び先(画面が関数を入れる) */
         val links = PostLinks()
         /** 開いた時点の「最初の未読」(「ここから未読」の線を引く位置)。0 なら線を引かない */
@@ -740,6 +742,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val m = io.github.yumekui8.bbsnative.data.NgMatcher(rules)
         if (m.isEmpty) return emptySet()
         return posts.filter { m.post(it, boardUrl) }.map { it.no }.toSet()
+    }
+
+    // ── AI NG ──
+
+    /** このスレの板に効く AI NG の条件(使っていなければ空) */
+    fun aiRulesFor(page: Page.Thread) =
+        if (prefs.aiNgEnabled) io.github.yumekui8.bbsnative.data.activeRules(prefs.aiNgRules, page.summary.boardUrl) else emptyList()
+
+    /** 印から学んだ判定(印が変わったときだけ学び直す) */
+    private var learned: Pair<Map<String, io.github.yumekui8.bbsnative.data.AiNgOverride>, Map<String, io.github.yumekui8.bbsnative.data.RuleModel>>? = null
+
+    /** スレのレスを判定し直す(当たり具合のないものはモデルに頼む)。当たり具合が届くたびに呼ぶ */
+    fun applyAiNg(page: Page.Thread) {
+        val rules = aiRulesFor(page)
+        if (rules.isEmpty()) { page.aiNg = emptyMap(); return }
+        val posts = page.index.posts
+        val overrides = prefs.aiNgOverrides
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                val models = learned?.takeIf { it.first === overrides }?.second
+                    ?: io.github.yumekui8.bbsnative.data.trainRules(rules, overrides).also { learned = overrides to it }
+                io.github.yumekui8.bbsnative.data.AiModel.request(posts.asReversed(), rules.map { it.prompt })
+                io.github.yumekui8.bbsnative.data.judgeAiNg(posts, rules, io.github.yumekui8.bbsnative.data.AiModel::scoreOf, overrides, models)
+            }
+            page.aiNg = result
+        }
+    }
+
+    /** AI NG の手の印(true: 当たる・false: 当たらない・null: 外す) */
+    fun markAi(p: Post, ruleId: String, mark: Boolean?) {
+        prefs.setAiOverrides(io.github.yumekui8.bbsnative.data.setOverride(prefs.aiNgOverrides, ruleId, p.body, mark))
+        toast = when (mark) { true -> "AI NG に当たる、と印を付けました"; false -> "AI NG に当たらない、と印を付けました"; null -> "印を外しました" }
     }
 
     /** NG を足して、開いているスレに当て直す */

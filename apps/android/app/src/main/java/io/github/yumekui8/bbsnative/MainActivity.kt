@@ -79,6 +79,8 @@ class MainActivity : ComponentActivity() {
             io.github.yumekui8.bbsnative.ui.Motion.pref = p.reduceMotion
             LaunchedEffect(Unit) { io.github.yumekui8.bbsnative.ui.Motion.read(this@MainActivity) }
             LaunchedEffect(p.font) { io.github.yumekui8.bbsnative.data.Fonts.apply(this@MainActivity, p.font) }
+            // AI NG のモデルは、使う設定のときだけ動かす(取ってあれば通信しない)
+            LaunchedEffect(p.aiNgEnabled) { if (p.aiNgEnabled) io.github.yumekui8.bbsnative.data.AiModel.start(this@MainActivity) else io.github.yumekui8.bbsnative.data.AiModel.stop() }
             val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
             LaunchedEffect(key, p.customScheme) {
                 io.github.yumekui8.bbsnative.ui.CustomSchemes.def = io.github.yumekui8.bbsnative.ui.CustomDef.parse(p.customScheme)

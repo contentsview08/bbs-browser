@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -148,6 +149,9 @@ private val TABS: List<Triple<Filter, ImageVector, Color>> get() = listOf(
 @Composable
 fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modifier) {
     val index = page.index
+    // AI NG: レス・条件・手の印が変わったときと、当たり具合が届いたときに判定し直す
+    val ai = io.github.yumekui8.bbsnative.data.AiModel
+    LaunchedEffect(index, ai.version, ai.status, vm.prefs.aiNgEnabled, vm.prefs.aiNgRules, vm.prefs.aiNgOverrides) { vm.applyAiNg(page) }
     val context = LocalContext.current
     val view = androidx.compose.ui.platform.LocalView.current
     val density = LocalDensity.current
@@ -406,13 +410,22 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ),
         ) {
             val ngStyle = vm.prefs.ngStyle
-            if (p.no in page.ngNos && p.no !in revealed && ngStyle != "dim") {
+            // AI NG(data/AiNg.kt): 畳む・隠すは、ふつうの NG とは別の 1 行に(理由と「当たらない」)。印だけは、レスの上に小さく
+            val ai = page.aiNg[p.no]
+            if (ai != null && ai.rule.show != "mark" && p.no !in page.ngNos && p.no !in revealed) {
+                if (ai.rule.show == "fold") Row(Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(start = 14.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${p.no}  あぼーん  ${ai.label}", Modifier.weight(1f), color = Palette.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = { vm.markAi(p, ai.rule.id, if (ai.manual) null else false) }) { Text(if (ai.manual) "印を外す" else "当たらない", fontSize = 12.sp) }
+                }
+            } else if (p.no in page.ngNos && p.no !in revealed && ngStyle != "dim") {
                 // あぼーん(1 行に畳む)か、透明あぼーん(何も出さない)
                 if (ngStyle == "fold") Text(
                     "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
-            } else Column { androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { page.rendered[p.no]?.let {
+            } else Column {
+                if (ai != null && ai.rule.show == "mark") Text(ai.label, Modifier.padding(start = 14.dp, top = 4.dp), color = Palette.markPurple, fontSize = 11.sp)
+                androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
                 val continued = (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 // 薄く表示する NG(会話の流れは残して、字を 3 割に)
@@ -776,6 +789,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("名前を NG(${p.name.take(20)})", Icons.Filled.Block, Palette.markDanger) { vm.addNg(NgRule("name", p.name)) },
                     MenuItem("言葉を NG…", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p },
                 ),
+                // AI NG: 条件ごとに「当たる」を手で付ける。当たっているものは「当たらない」
+                vm.aiRulesFor(page).map { r ->
+                    val on = page.aiNg[p.no]?.rule?.id == r.id
+                    if (on) MenuItem("AI NG「${r.name}」に当たらない(誤判定)", Icons.Filled.Psychology, Palette.markPurple) { vm.markAi(p, r.id, if (page.aiNg[p.no]?.manual == true) null else false) }
+                    else MenuItem("AI NG「${r.name}」に当たる", Icons.Filled.Psychology, Palette.markPurple) { vm.markAi(p, r.id, true) }
+                },
             ),
             MenuAt.Center,
         ) { postMenu = null }

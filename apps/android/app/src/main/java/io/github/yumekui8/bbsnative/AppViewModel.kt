@@ -722,7 +722,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val result = withContext(Dispatchers.Default) {
             val i = PostIndex.build(posts, collapse, gross)
-            Triple(i, renderPosts(i, page.links, o), ngOf(posts, rules))
+            Triple(i, renderPosts(i, page.links, o), ngOf(posts, rules, page.summary.boardUrl))
         }
         if (renderSeq[page]?.first != seq) return
         page.rendered = result.second
@@ -730,19 +730,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         page.index = result.first
     }
 
-    private fun ngOf(posts: List<Post>, rules: List<NgRule>): Set<Int> {
-        if (rules.isEmpty()) return emptySet()
-        return posts.filter { p ->
-            rules.any { r ->
-                when (r.target) {
-                    "id" -> p.id != null && p.id == r.pattern
-                    "name" -> p.name.contains(r.pattern)
-                    "body" -> p.body.contains(r.pattern, ignoreCase = true)
-                    // スレタイの NG はスレ一覧で使う
-                    else -> false
-                }
-            }
-        }.map { it.no }.toSet()
+    /** NG に当たるレスの番号(data/Ng.kt の NgMatcher。boardUrl はこのスレの板。「この板だけ」の NG を当てる) */
+    private fun ngOf(posts: List<Post>, rules: List<NgRule>, boardUrl: String): Set<Int> {
+        val m = io.github.yumekui8.bbsnative.data.NgMatcher(rules)
+        if (m.isEmpty) return emptySet()
+        return posts.filter { m.post(it, boardUrl) }.map { it.no }.toSet()
     }
 
     /** NG を足して、開いているスレに当て直す */
@@ -754,6 +746,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeNg(rule: NgRule) {
         prefs.removeNg(rule)
+        reapplyNg()
+    }
+
+    /** NG を直す(同じ id を差し替える)・まとめて置き換える */
+    fun saveNg(rule: NgRule) {
+        prefs.addNg(rule)
+        reapplyNg()
+    }
+
+    fun setNg(list: List<NgRule>) {
+        prefs.setNg(list)
         reapplyNg()
     }
 
@@ -777,7 +780,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun reapplyNg() {
         val rules = prefs.ngRules
-        for (p in stack) if (p is Page.Thread) viewModelScope.launch { p.ngNos = withContext(Dispatchers.Default) { ngOf(p.index.posts, rules) } }
+        for (p in stack) if (p is Page.Thread) viewModelScope.launch { p.ngNos = withContext(Dispatchers.Default) { ngOf(p.index.posts, rules, p.summary.boardUrl) } }
     }
 
     fun markRead(page: Page.Thread, no: Int) {

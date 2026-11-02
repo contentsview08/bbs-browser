@@ -11,7 +11,6 @@ import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
 /** NG のルール。target: id / name / body(本文の言葉) / title(スレタイ) */
-data class NgRule(val target: String, val pattern: String)
 
 /** 画像のサムネイルを自動で読むか */
 enum class ThumbMode(val label: String) { ALWAYS("いつも"), WIFI("Wi-Fi のときだけ"), NEVER("押したら") }
@@ -270,18 +269,25 @@ class Prefs(context: Context) {
 
     var ngRules by mutableStateOf(loadNg())
         private set
-    fun addNg(rule: NgRule) { if (rule.pattern.isNotBlank() && rule !in ngRules) saveNg(ngRules + rule) }
-    fun removeNg(rule: NgRule) = saveNg(ngRules - rule)
+    /** NG を足す(同じもの = 種類・文字・正規表現か・効く板が同じ、は重ねない)。同じ id のものがあれば差し替える(直したとき) */
+    fun addNg(rule: NgRule) {
+        if (rule.pattern.isBlank()) return
+        if (ngRules.any { it.id == rule.id }) saveNg(ngRules.map { if (it.id == rule.id) rule else it })
+        else if (ngRules.none { it.sameAs(rule) }) saveNg(ngRules + rule)
+    }
+    fun removeNg(rule: NgRule) = saveNg(ngRules.filter { it.id != rule.id })
+    /** NG をまとめて置き換える(まとめて削除・期限切れの片づけなど) */
+    fun setNg(list: List<NgRule>) = saveNg(list)
 
     private fun loadNg(): List<NgRule> = runCatching {
         val arr = JSONArray(sp.getString("ngRules", "[]"))
-        List(arr.length()) { arr.getJSONObject(it).let { o -> NgRule(o.getString("target"), o.getString("pattern")) } }
+        List(arr.length()) { NgRule.fromJson(arr.getJSONObject(it)) }
     }.getOrDefault(emptyList())
 
     private fun saveNg(list: List<NgRule>) {
         ngRules = list
         val arr = JSONArray()
-        for (r in list) arr.put(JSONObject().put("target", r.target).put("pattern", r.pattern))
+        for (r in list) arr.put(r.toJson())
         sp.edit().putString("ngRules", arr.toString()).apply()
     }
 

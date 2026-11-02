@@ -1,5 +1,10 @@
 package io.github.yumekui8.bbsnative.ui
 
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.filled.Delete
+import io.github.yumekui8.bbsnative.data.active
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -455,52 +460,184 @@ private fun BehaviorPage(vm: AppViewModel) {
 @Composable
 private fun NgPage(vm: AppViewModel) {
     val p = vm.prefs
+    // 種類の切り替え(all か NG_TARGETS のキー)・検索・編集の板に出している NG
+    var filter by remember { mutableStateOf("all") }
+    var query by remember { mutableStateOf("") }
+    var editing by remember { mutableStateOf<NgRule?>(null) }
     var adding by remember { mutableStateOf(false) }
-    if (LocalAdvanced.current) Group("見せ方") {
+    val today = io.github.yumekui8.bbsnative.data.today()
+    Group("見せ方") {
         ChoiceRow("NG のレス", p.ngStyle, listOf("fold" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngStyle = it }
     }
-    Group(note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイの NG は、スレを長押しして足せます") {
-        if (p.ngRules.isEmpty()) Text("NG はまだありません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
-        for (r in p.ngRules) {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Group("NG", note = "レスを長押しして、ID・名前・言葉を NG に足すこともできます。スレタイ・立てた人の NG は、スレを長押しして足せます") {
+        // 種類の切り替え(件数付き)
+        Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for ((k, label) in listOf("all" to "すべて") + io.github.yumekui8.bbsnative.data.NG_TARGETS) {
+                val on = k == filter
+                val n = if (k == "all") p.ngRules.size else p.ngRules.count { it.target == k }
                 Text(
-                    ngLabel(r.target),
-                    Modifier.background(Palette.surface2, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 12.sp,
+                    "$label $n",
+                    Modifier.clip(RoundedCornerShape(50)).background(if (on) Palette.accentWash else Palette.surface2).clickable { filter = k }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
                 )
-                Text(r.pattern, Modifier.weight(1f).padding(start = 10.dp), color = Palette.textBody, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                IconButton(onClick = { vm.removeNg(r) }) { Icon(Icons.Filled.Close, "外す", tint = Palette.textMuted) }
             }
         }
-        ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
-    }
-    if (adding) {
-        var target by remember { mutableStateOf("body") }
-        var word by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { adding = false },
-            title = { Text("NG を足す") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (t in listOf("body", "name", "id", "title")) {
-                            val on = t == target
-                            Text(
-                                ngLabel(t),
-                                Modifier.clip(RoundedCornerShape(5.dp)).background(if (on) Palette.accentWash else Palette.surface2).clickable { target = t }.padding(horizontal = 10.dp, vertical = 6.dp),
-                                color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp,
-                            )
-                        }
+        Row(
+            Modifier.padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.surface2).padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f)) {
+                if (query.isEmpty()) Text("文字・メモで探す", color = Palette.textMuted, fontSize = 14.sp)
+                androidx.compose.foundation.text.BasicTextField(
+                    query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 14.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+                )
+            }
+        }
+        val q = query.trim()
+        val shown = p.ngRules.filter { (filter == "all" || it.target == filter) && (q.isEmpty() || it.pattern.contains(q, true) || (it.note ?: "").contains(q, true)) }
+            .asReversed().sortedByDescending { it.createdAt }
+        if (shown.isEmpty()) Text(if (p.ngRules.isEmpty()) "NG はまだありません" else "当てはまる NG はありません", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 14.sp)
+        for (r in shown) {
+            val expired = r.expiresOn != null && r.expiresOn < today
+            val marks = listOfNotNull(
+                if (r.isRegex) "正規表現" else null, r.boardUrl?.let { "${r.boardName ?: "この板"}だけ" },
+                r.expiresOn?.let { if (expired) "期限切れ" else "${it}まで" }, r.note,
+            )
+            HorizontalDivider(color = Palette.border)
+            Row(
+                Modifier.fillMaxWidth().clickable { editing = r }.graphicsLayer { alpha = if (r.active(today)) 1f else 0.6f }.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            io.github.yumekui8.bbsnative.data.ngTargetName(r.target),
+                            Modifier.background(Palette.surface2, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.textMuted, fontSize = 11.sp,
+                        )
+                        Text(
+                            r.pattern, Modifier.padding(start = 8.dp), color = Palette.textBody, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            fontFamily = if (r.isRegex) androidx.compose.ui.text.font.FontFamily.Monospace else null,
+                        )
                     }
-                    OutlinedTextField(word, { word = it }, singleLine = true, placeholder = { Text("NG にする文字") })
+                    if (marks.isNotEmpty()) Text(marks.joinToString(" ・ "), Modifier.padding(top = 2.dp), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-            },
-            confirmButton = { TextButton(onClick = { if (word.isNotBlank()) vm.addNg(NgRule(target, word.trim())); adding = false }) { Text("足す") } },
-            dismissButton = { TextButton(onClick = { adding = false }) { Text("やめる") } },
-        )
+                Switch(r.enabled, { vm.saveNg(r.copy(enabled = it)) }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+            }
+        }
+        HorizontalDivider(color = Palette.border)
+        ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
+        val expiredCount = p.ngRules.count { it.expiresOn != null && it.expiresOn < today }
+        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.setNg(p.ngRules.filter { it.expiresOn == null || it.expiresOn >= today }) }
     }
+    // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
+    val board = when (val pg = vm.stack.lastOrNull { it is io.github.yumekui8.bbsnative.Page.Thread || it is io.github.yumekui8.bbsnative.Page.Threads }) {
+        is io.github.yumekui8.bbsnative.Page.Thread -> pg.summary.boardUrl to (vm.favorites.firstOrNull { it.url == pg.summary.boardUrl }?.name ?: pg.summary.boardUrl)
+        is io.github.yumekui8.bbsnative.Page.Threads -> pg.board.url to pg.board.name
+        else -> null
+    }
+    if (adding) NgEditSheet(NgRule(if (filter == "all") "body" else filter, ""), board, isNew = true, onDismiss = { adding = false }) { vm.saveNg(it); adding = false }
+    editing?.let { r -> NgEditSheet(r, board, isNew = false, onDismiss = { editing = null }, onDelete = { vm.removeNg(r); editing = null }) { vm.saveNg(it); editing = null } }
 }
 
-private fun ngLabel(target: String) = when (target) { "id" -> "ID"; "name" -> "名前"; "title" -> "スレタイ"; else -> "言葉" }
+/**
+ * NG 1 つの編集(下から出る板): 種類・文字・正規表現(読めないときは理由)・有効・効く板・期限・メモ・試し(当たる所に色)。
+ * hono-bbs の web・PC 版の NgEditor と同じ項目・同じ言葉
+ */
+@Composable
+fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, onDismiss: () -> Unit, onDelete: (() -> Unit)? = null, onSave: (NgRule) -> Unit) {
+    var r by remember { mutableStateOf(initial) }
+    var sample by remember { mutableStateOf("") }
+    val err = if (r.pattern.isBlank()) null else io.github.yumekui8.bbsnative.data.ngPatternError(r.pattern.trim(), r.isRegex)
+    val scope = r.boardUrl?.let { it to (r.boardName ?: it) } ?: board
+    @Composable fun chip(label: String, on: Boolean, onClick: () -> Unit) = Text(
+        label,
+        Modifier.clip(RoundedCornerShape(50)).border(1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(50))
+            .background(if (on) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+        color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp, maxLines = 1,
+    )
+    androidx.compose.ui.window.Popup(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { onDismiss() },
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            Column(
+                Modifier.fillMaxWidth().clip(shape).background(Palette.surface)
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {}.navigationBarsPadding().imePadding(),
+            ) {
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Palette.borderStrong))
+                }
+                Text(if (isNew) "NG を足す" else "NG を直す", Modifier.padding(start = 18.dp, top = 10.dp, bottom = 6.dp), color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for ((k, label) in io.github.yumekui8.bbsnative.data.NG_TARGETS) chip(label, r.target == k) { r = r.copy(target = k) }
+                    }
+                    OutlinedTextField(
+                        r.pattern, { r = r.copy(pattern = it) }, Modifier.fillMaxWidth(), isError = err != null,
+                        placeholder = { Text(if (r.isRegex) "正規表現(例: ^ｷﾀ━+|ｗ{5,})" else "NG にする言葉") },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = if (r.isRegex) androidx.compose.ui.text.font.FontFamily.Monospace else null),
+                        supportingText = {
+                            Text(err ?: if (r.isRegex) "正規表現で当てます(大文字と小文字は区別します)" else if (r.target == "id") "ID が同じときだけ当てます(完全一致)" else "この言葉を含めば当てます(部分一致。大文字と小文字は区別しません)")
+                        },
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("正規表現", Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
+                        Switch(r.isRegex, { r = r.copy(isRegex = it) }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                        Spacer(Modifier.width(16.dp))
+                        Text("有効", color = Palette.textBody, fontSize = 14.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Switch(r.enabled, { r = r.copy(enabled = it) }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                    }
+                    Text("効く板", color = Palette.textMuted, fontSize = 12.sp)
+                    Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        chip("すべての板", r.boardUrl == null) { r = r.copy(boardUrl = null, boardName = null) }
+                        scope?.let { (url, name) -> chip("この板だけ($name)", r.boardUrl != null) { r = r.copy(boardUrl = url, boardName = name) } }
+                    }
+                    Text("期限", color = Palette.textMuted, fontSize = 12.sp)
+                    Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val t = io.github.yumekui8.bbsnative.data.today()
+                        val w = io.github.yumekui8.bbsnative.data.daysLater(7)
+                        val m = io.github.yumekui8.bbsnative.data.daysLater(30)
+                        chip("ずっと", r.expiresOn == null) { r = r.copy(expiresOn = null) }
+                        chip("今日だけ", r.expiresOn == t) { r = r.copy(expiresOn = t) }
+                        chip("7 日", r.expiresOn == w) { r = r.copy(expiresOn = w) }
+                        chip("30 日", r.expiresOn == m) { r = r.copy(expiresOn = m) }
+                        if (r.expiresOn != null && r.expiresOn !in listOf(t, w, m)) chip("${r.expiresOn} まで", true) {}
+                    }
+                    OutlinedTextField(r.note ?: "", { r = r.copy(note = it.ifEmpty { null }) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("メモ(なぜ NG にしたか)") })
+                    // 試し: 文を入れると、当たる所に色が付く
+                    val ranges = if (err == null) io.github.yumekui8.bbsnative.data.ngMatchRanges(r.copy(pattern = r.pattern.trim()), sample) else emptyList()
+                    OutlinedTextField(
+                        sample, { sample = it }, Modifier.fillMaxWidth(), label = { Text("試す(文を入れると、当たる所に色が付きます)") },
+                        supportingText = { Text(if (ranges.isEmpty()) "当たらない" else "${ranges.size} か所に当たる", color = if (ranges.isEmpty()) Palette.textMuted else Palette.markDanger) },
+                    )
+                    if (sample.isNotEmpty()) Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            append(sample)
+                            for (x in ranges) addStyle(androidx.compose.ui.text.SpanStyle(background = Palette.markDanger.copy(alpha = 0.35f)), x.first, x.last + 1)
+                        },
+                        Modifier.fillMaxWidth().background(Palette.surface2, RoundedCornerShape(6.dp)).padding(8.dp), color = Palette.textBody, fontSize = 13.sp,
+                    )
+                }
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (onDelete != null) TextButton(onClick = onDelete) { Text("削除", color = Palette.markDanger, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.weight(1f))
+                    val ok = r.pattern.isNotBlank() && err == null
+                    Text(
+                        if (isNew) "足す" else "直す",
+                        Modifier.clip(RoundedCornerShape(8.dp)).background(Palette.accent).graphicsLayer { alpha = if (ok) 1f else 0.5f }
+                            .clickable(enabled = ok) { onSave(r.copy(pattern = r.pattern.trim())) }.padding(horizontal = 24.dp, vertical = 10.dp),
+                        color = Palette.accentText, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SitesPage(vm: AppViewModel) {

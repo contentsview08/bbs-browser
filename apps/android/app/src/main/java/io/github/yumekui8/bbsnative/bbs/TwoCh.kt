@@ -45,6 +45,21 @@ fun htmlToText(html: String): String {
 private val BOARD_URL = Regex("^https?://[^/]+/[^/?#]+/$")
 fun isBoardUrl(url: String) = BOARD_URL.matches(url)
 
+private val MENU_ITEM = Regex("<b>([^<]+)</b>|<a\\s+href=[\"']?([^\"'\\s>]+)[\"']?[^>]*>([^<]+)</a>", RegexOption.IGNORE_CASE)
+
+/** 一般的な bbsmenu.html。<B>カテゴリ</B> の後に <A HREF=板URL>板名</A> が並ぶ形(PC 版の twoch/parse.ts の parseBbsMenuHtml と同じ) */
+fun parseBbsMenuHtml(html: String): List<Board> {
+    val out = ArrayList<Board>()
+    var category: String? = null
+    for (m in MENU_ITEM.findAll(html)) {
+        if (m.groupValues[1].isNotEmpty()) { category = decodeEntities(m.groupValues[1].trim()); continue }
+        val url = m.groupValues[2]
+        val c = category
+        if (c != null && isBoardUrl(url)) out += Board(url, decodeEntities(m.groupValues[3].trim()), c)
+    }
+    return out
+}
+
 /** 5ch の bbsmenu.json */
 fun parseBbsMenuJson(text: String): List<Board> {
     val out = ArrayList<Board>()
@@ -161,7 +176,9 @@ object TwoCh {
         if (HonoBbs.isSiteUrl(menuUrl)) return HonoBbs.listBoards(menuUrl)
         val res = Http.get(menuUrl)
         ensureOk(res, menuUrl)
-        return parseBbsMenuJson(String(res.body, Charsets.UTF_8))
+        // bbsmenu.json(5ch)は JSON、それ以外は bbsmenu.html(kenmo.org など。文字コードは Content-Type から)
+        return if (menuUrl.substringBefore('?').endsWith(".json")) parseBbsMenuJson(String(res.body, Charsets.UTF_8))
+        else parseBbsMenuHtml(String(res.body, charsetOf(res)))
     }
 
     private suspend fun readSubject(url: String): String {

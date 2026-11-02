@@ -200,7 +200,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
         val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
         openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
-        reloadSide()
+        // 最初から入れておく掲示板・板を足してから、左のメニューを読む
+        viewModelScope.launch { runCatching { applyPresets() }; reloadSide() }
         viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
         // 起動したら、しばらく開いていないスレのログを消す(設定)
         if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }
@@ -448,6 +449,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         siteUrl = url
         boards = emptyList()
         loadBoards()
+    }
+
+    /**
+     * 最初から入れておく掲示板・板(assets の sites.json。PC 版と同じ packages/presets/sites.json)を足す。起動のたびに 1 回。
+     * まだ足していない id のものだけを足し、足した id を覚える(本人が消したものは戻さない)。板一覧は開いたときに取る
+     */
+    private suspend fun applyPresets() {
+        val json = runCatching { getApplication<android.app.Application>().assets.open("sites.json").bufferedReader().use { it.readText() } }.getOrNull() ?: return
+        val o = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return
+        val done = prefs.presetsApplied.split(',').filter { it.isNotEmpty() }.toMutableSet()
+        val before = done.size
+        val have = db.siteMenuUrls().map { it.first }.toSet()
+        o.optJSONArray("sites")?.let { a ->
+            for (i in 0 until a.length()) {
+                val s = a.getJSONObject(i)
+                val id = s.getString("id")
+                if (id in done) continue
+                if (s.getString("menu") !in have) db.addSite(s.getString("menu"), s.getString("name"))
+                done += id
+            }
+        }
+        o.optJSONArray("boards")?.let { a ->
+            val favs = db.favorites().map { it.url }.toSet()
+            for (i in 0 until a.length()) {
+                val b = a.getJSONObject(i)
+                val id = b.getString("id")
+                if (id in done) continue
+                if (b.getString("url") !in favs) db.setFavorite(Board(b.getString("url"), b.getString("name")), true)
+                done += id
+            }
+        }
+        if (done.size != before) {
+            prefs.presetsApplied = done.joinToString(",")
+            sites = db.siteMenuUrls()
+            favorites = db.favorites()
+        }
     }
 
     /** bbsmenu の URL を足す(読めるか確かめてから) */

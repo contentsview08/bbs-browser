@@ -307,6 +307,8 @@ export interface AppSettings {
   uploadHost: UploadHost
   /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で本人が登録したもの)。空なら imgur は使わない */
   imgurClientId: string
+  /** 最初から入れておく掲示板・板(packages/presets/sites.json)のうち、もう足したものの id。本人が消したものを戻さないために覚える */
+  presetsApplied: string[]
   /** 書き込むときにアカウント(BE など)を使うか。アカウントの id → 使うか。書いていなければ使う(登録してあれば) */
   postAccounts: Record<string, boolean>
   /** 書き込み欄をしまっておく(スレ表示が狭いときは、これに関係なく自動でしまう) */
@@ -469,6 +471,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   catboxUserhash: '',
   uploadHost: 'auto',
   imgurClientId: '',
+  presetsApplied: [],
   postCooldownSec: 10,
   replyCollapsed: false,
   postAccounts: {},

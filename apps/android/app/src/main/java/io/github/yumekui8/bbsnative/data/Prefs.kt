@@ -225,6 +225,8 @@ class Prefs(context: Context) {
     var uploadMaxDimension by pref("uploadMaxDimension", 4096)
     /** 画像の上げ先: auto(catbox → 0x0.st → imgur → uguu.se の順に試す)/ catbox / 0x0 / imgur / uguu。hono-bbs の板は、いつもその掲示板の置き場 */
     var uploadHost by pref("uploadHost", "auto")
+    /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切り)。本人が消したものを戻さないために覚える */
+    var presetsApplied by pref("presetsApplied", "")
     /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で登録したもの)。空なら imgur は使わない */
     var imgurClientId by pref("imgurClientId", "")
 

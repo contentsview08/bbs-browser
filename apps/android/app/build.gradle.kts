@@ -34,6 +34,8 @@ android {
     buildFeatures {
         compose = true
     }
+    // 最初から入れておく掲示板・板(PC 版と同じ packages/presets/sites.json)を assets に同梱する
+    sourceSets["main"].assets.srcDir("../../../packages/presets")
 }
 
 kotlin {

@@ -77,6 +77,7 @@ import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
 import { backgroundError } from './utils/backgroundError'
+import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
@@ -352,6 +353,20 @@ export default function App() {
   const nextUnreadRef = useRef<{ thread: ThreadSummary; unread: number } | undefined>(undefined)
   /** スレ一覧を読めなかった理由(一覧が空のとき、取り直しのボタンと一緒に出す) */
   const [listError, setListError] = useState<string>()
+
+  // 最初から入れておく掲示板・板(packages/presets/sites.json)を足す。DB と設定がそろったときに 1 回
+  useEffect(() => {
+    if (!store || !settingsLoaded) return
+    void applyPresets(store, settingsRef.current.presetsApplied ?? [])
+      .then(async (done) => {
+        if (!done) return
+        updateSetting('presetsApplied', done)
+        setSites(await store.listSites())
+        setFavorites(await store.listFavorites())
+      })
+      .catch(backgroundError('最初の掲示板の追加'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, settingsLoaded])
 
   const run = async (kind: Loading | null, fn: () => Promise<void>) => {
     if (kind) setLoading((s) => new Set(s).add(kind))

@@ -1,0 +1,11 @@
+{
+  "_説明": "最初から入れておく掲示板(板一覧ごと)と単独の板。スマホ版(assets に同梱)と PC 版(apps/desktop/src/presets.ts が読み込む)が、起動したときに読む。まだ足していない id のものだけを足し、足した id は覚える(本人が消したものは戻さない)。足したいときは、新しい id で並びの後ろに書く。id は変えない",
+  "sites": [
+    { "id": "5ch", "name": "5ちゃんねる", "menu": "https://menu.5ch.io/bbsmenu.json" },
+    { "id": "kenmo", "name": "kenmo.org", "menu": "https://kenmo.org/bbsmenu.html" },
+    { "id": "red-edge", "name": "red-edge.net", "menu": "https://red-edge.net/boards" }
+  ],
+  "boards": [
+    { "id": "edge-liveedge", "name": "エッヂ", "url": "https://bbs.eddibb.cc/liveedge/" }
+  ]
+}

@@ -42,7 +42,8 @@ import kotlinx.coroutines.withContext
 data class ScrollPos(val no: Int, val offset: Int, val bottom: Boolean)
 
 /** 書き込み欄の状態(スレごと、スレ立てでも使う) */
-class ReplyState {
+/** boardUrl: 書き込む板(画像の上げ先を板で選ぶ。hono-bbs の板は、その掲示板の画像の置き場) */
+class ReplyState(val boardUrl: String = "") {
     /** 本文の欄に入っている(書いている)。書いている間はフッターを隠さない */
     var open by mutableStateOf(false)
     var name by mutableStateOf("")
@@ -109,7 +110,7 @@ sealed interface Page {
         /** 差分の行から絞り込んだ: "new"(新しく立ったスレ)/ null */
         var only by mutableStateOf<String?>(null)
         /** スレを立てる欄 */
-        val newThread = ReplyState()
+        val newThread = ReplyState(board.url)
     }
 
     class Thread(val summary: ThreadSummary) : Page {
@@ -140,7 +141,7 @@ sealed interface Page {
         var favorite by mutableStateOf(false)
         /** 次スレの候補(探したら入る。null はまだ探していない) */
         var nextCandidates by mutableStateOf<List<NextThreadCandidate>?>(null)
-        val reply = ReplyState()
+        val reply = ReplyState(summary.boardUrl)
     }
 
     /** 板一覧(板を足す)。サイト → カテゴリ → 板 の順に入っていく。site・category は今いる段 */
@@ -582,7 +583,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 page.threads = list
                 page.refreshed++
             } catch (e: Exception) {
-                page.error = e.message ?: e.toString()
+                page.error = loadErrorText(e)
             } finally {
                 val left = 800 - (System.currentTimeMillis() - start)
                 if (left > 0) kotlinx.coroutines.delay(left)
@@ -647,7 +648,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     setPosts(page, all)
                 }
             } catch (e: Exception) {
-                page.error = e.message ?: e.toString()
+                page.error = loadErrorText(e)
             } finally {
                 page.loaded = true
                 page.loading = false
@@ -711,13 +712,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun renderOptions(noname: String?) = RenderOptions(
         noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, idColor = prefs.idColor, urlShorten = prefs.urlShorten,
         imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
+        dateStyle = prefs.dateStyle, idShort = prefs.idShort,
     )
 
     /**
      * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
      */
     private fun renderKey() = listOf(
-        prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.idColor, prefs.urlShorten, prefs.imageUrlOmit,
+        prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.idColor, prefs.dateStyle, prefs.idShort, prefs.urlShorten, prefs.imageUrlOmit,
         prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle,
     )
 
@@ -878,8 +880,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 選んだ画像(何枚でも、一度に 10 枚まで)を catbox に 1 枚ずつ順番に上げ、上げ終わるたびに本文の最後に URL を足す
-     * (書き込みとスレ立てで共通)。上げている途中に選び足したら、列の後ろに並べる
+     * 選んだ画像(何枚でも、一度に 10 枚まで)を 1 枚ずつ順番に上げ、上げ終わるたびに本文の最後に URL を足す
+     * (書き込みとスレ立てで共通)。上げている途中に選び足したら、列の後ろに並べる。
+     * 上げ先は板で決める(hono-bbs の板はその掲示板の置き場、ほかは catbox。catbox がだめなら 0x0.st。data/Uploader.kt)
      */
     fun attach(r: ReplyState, uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
@@ -894,15 +897,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val item = r.uploads.firstOrNull { it.state is UploadItem.State.Waiting } ?: break
                 item.state = UploadItem.State.Uploading
                 try {
-                    val url = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), item.uri, prefs.uploadMaxDimension)
+                    val api = HonoBbs.apiFor(r.boardUrl)
+                    val res = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), item.uri, prefs.uploadMaxDimension, api)
+                    val url = res.url
                     // いつも最新の本文に足す(前の画像の URL を消さない)
                     r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
                     prefs.addUpload(url)
                     item.state = UploadItem.State.Done(url)
+                    // catbox が受け付けず、代わりの置き場に上げたときは知らせる(どこに上げたか分かるように)
+                    if (api == null && res.host != "catbox") r.done = "catbox が受け付けていないので、${res.host} に上げました"
                 } catch (e: Exception) {
-                    val msg = e.message ?: "アップロードできませんでした"
+                    // 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む
+                    val msg = (e as? io.github.yumekui8.bbsnative.data.Uploader.UploadException)?.message
+                        ?: "${e.javaClass.simpleName}${e.message?.let { ": $it" } ?: ""}"
                     item.state = UploadItem.State.Failed(msg)
-                    r.notice = "画像を上げられませんでした($msg)。画像を押すと上げ直します"
+                    r.notice = "画像を上げられませんでした: $msg。画像を押すと上げ直します"
+                } catch (e: OutOfMemoryError) {
+                    item.state = UploadItem.State.Failed("メモリが足りません")
+                    r.notice = "画像が大きすぎて読めませんでした(メモリが足りません)。設定の「大きい画像を縮める」を小さくしてください"
                 }
             }
         }

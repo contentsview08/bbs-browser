@@ -585,7 +585,8 @@ fun rememberImagePicker(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyS
 
 /**
  * 書き込み欄の画像の帯: 本文に入れた画像の URL と、上げている途中・待っている・失敗した画像を、選んだ順に 1 枚ずつ並べる。
- * 上げた画像は端末の画像をそのまま出す(ネットから取り直さないので、すぐ見える)。× で本文から外す。失敗した画像は押すと上げ直す
+ * 上げた画像は端末の画像をそのまま出す(ネットから取り直さないので、すぐ見える)。押すと画像ビューアーで開き、× で本文から外す。
+ * 失敗した画像は押すと上げ直す
  */
 @Composable
 private fun UploadStrip(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyState, size: androidx.compose.ui.unit.Dp, padding: PaddingValues) {
@@ -593,10 +594,13 @@ private fun UploadStrip(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyS
     val pending = r.uploads.filter { it.state !is io.github.yumekui8.bbsnative.UploadItem.State.Done }
     if (urls.isEmpty() && pending.isEmpty()) return
     val shape = RoundedCornerShape(6.dp)
+    // 押した画像を、本文に入れた画像の並びのまま画像ビューアーで開く(スレの画像と同じビューアー)
+    var viewing by remember { mutableStateOf<String?>(null) }
+    viewing?.let { u -> ImageViewer(urls, u, onClose = { viewing = null }) }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(padding), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (u in urls) Box(Modifier.size(size)) {
             val local = r.localOf(u)
-            val m = Modifier.matchParentSize().clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
+            val m = Modifier.matchParentSize().clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2).clickable { viewing = u }
             if (local != null) coil3.compose.AsyncImage(local, null, m, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
             else StoredImage(u, m, showProgress = false)
             Box(

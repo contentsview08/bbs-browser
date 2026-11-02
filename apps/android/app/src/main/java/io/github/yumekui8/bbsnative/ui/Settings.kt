@@ -339,6 +339,11 @@ private fun ThreadPage(vm: AppViewModel) {
         if (LocalAdvanced.current) SwitchRow("AA を見分けて、AA 用の字で出す", p.aaAutoDetect) { p.aaAutoDetect = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
         SwitchRow("書き込みの多い ID を赤く", p.idHeat) { p.idHeat = it }
+        ChoiceRow(
+            "日時の出し方", p.dateStyle,
+            listOf("md_w_hms" to "月日・曜日・時刻(11/02(月) 19:01:15)", "md_hm" to "月日と時分(11/02 19:01)", "full" to "すべて(年・秒の下の桁まで)"),
+        ) { p.dateStyle = it }
+        SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         if (LocalAdvanced.current) SwitchRow("ID ごとに色を付ける", p.idColor, desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idColor = it }
         ChoiceRow(
             "人気のレスの示し方", p.heatStyle,

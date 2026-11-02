@@ -70,6 +70,9 @@ object HonoBbs {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
+    /** hono-bbs の板なら、その掲示板の API の場所(画像の置き場もここ)。hono-bbs の板でなければ null */
+    suspend fun apiFor(boardUrl: String): String? = if (isBoardUrl(boardUrl)) runCatching { apiBaseOf(parts(boardUrl).first) }.getOrNull() else null
+
     /** web のオリジン → API の場所。一度調べたら覚えておく */
     private val apiBases = HashMap<String, String>()
 

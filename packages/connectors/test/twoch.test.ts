@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { twoChConnector } from '../src/twoch/connector'
-import { parseBbsMenuHtml, parseDatLine, parseSubjectTxt } from '../src/twoch/parse'
+import { parseBbsMenuHtml, parseDatLine, parseSubjectTxt, splitAuthorId } from '../src/twoch/parse'
 import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types'
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)))
@@ -228,6 +228,23 @@ describe('スレが立った日時', () => {
   })
 })
 
+describe('スレタイの後ろの角かっこ(立てた人)', () => {
+  it('ID★・BE 番号・ほかの名前や ID を、立てた人として取り出す', () => {
+    expect(splitAuthorId('【悲報】移民の話 [YN3MdpLR★]')).toEqual({ title: '【悲報】移民の話', authorId: 'YN3MdpLR' })
+    expect(splitAuthorId('ニュース [834922174]')).toEqual({ title: 'ニュース', authorId: 'BE:834922174' })
+    expect(splitAuthorId('雑談スレ [ﾀﾋﾁｬﾝ]')).toEqual({ title: '雑談スレ', authorId: 'ﾀﾋﾁｬﾝ' })
+    expect(splitAuthorId('雑談スレ ［ab12CD］')).toEqual({ title: '雑談スレ', authorId: 'ab12CD' })
+    expect(splitAuthorId('雑談スレ [名無し さん]')).toEqual({ title: '雑談スレ', authorId: '名無し さん' })
+  })
+  it('決まり文句・© で始まるもの・角かっこだけのスレタイ・途中の角かっこは、スレタイのまま', () => {
+    expect(splitAuthorId('ニュース [無断転載禁止]')).toEqual({ title: 'ニュース [無断転載禁止]' })
+    expect(splitAuthorId('ニュース [©2ch.net]')).toEqual({ title: 'ニュース [©2ch.net]' })
+    expect(splitAuthorId('[速報]')).toEqual({ title: '[速報]' })
+    expect(splitAuthorId('[速報] 地震')).toEqual({ title: '[速報] 地震' })
+    expect(splitAuthorId('ふつうのスレ')).toEqual({ title: 'ふつうのスレ' })
+  })
+})
+
 describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
   const fake = (routes: Record<string, string>) => {
     const got: string[] = []
@@ -265,8 +282,8 @@ describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
     const edge = fake({ 'https://bbs.eddibb.cc/liveedge/subject.txt': '1792489148.dat<>ふつうのスレ [abc★] (7)\n' })
     const [t] = await twoChConnector.listThreads(board, edge.ctx)
     expect(edge.got).toEqual(['https://bbs.eddibb.cc/liveedge/subject-metadent.txt', 'https://bbs.eddibb.cc/liveedge/subject.txt'])
-    // subject.txt のスレタイは、そのまま(立てた人の ID の書き方ではないので)
-    expect(t.title).toBe('ふつうのスレ [abc★]')
+    // subject.txt のスレタイの後ろの角かっこも、立てた人として取り出す
+    expect(t).toMatchObject({ title: 'ふつうのスレ', authorId: 'abc' })
     const five = fake({ 'https://mevius.5ch.io/x/subject.txt': '1789358916.dat<>普通のスレ (10)\n' })
     await twoChConnector.listThreads({ connectorId: '2ch-compat', url: 'https://mevius.5ch.io/x/', name: 'x' }, five.ctx)
     expect(five.got).toEqual(['https://mevius.5ch.io/x/subject.txt'])

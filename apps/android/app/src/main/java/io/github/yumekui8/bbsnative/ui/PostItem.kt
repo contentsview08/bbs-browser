@@ -51,13 +51,14 @@ import androidx.compose.ui.unit.sp
  * 頭の行の置き場所と字の並び(レスごと)。長押しした位置が ID・名前の上なら、その ID・名前の操作を出すために使う
  */
 object HeaderHits {
-    val coords = java.util.WeakHashMap<RenderedPost, androidx.compose.ui.layout.LayoutCoordinates>()
-    val layouts = java.util.WeakHashMap<RenderedPost, androidx.compose.ui.text.TextLayoutResult>()
-
-    /** row の中の位置 pos が、レス r の頭の行の押せる所(ID「i:」・名前「n:」)の上なら、そのタグ */
-    fun tagAt(r: RenderedPost, row: androidx.compose.ui.layout.LayoutCoordinates, pos: androidx.compose.ui.geometry.Offset): String? {
-        val c = coords[r]?.takeIf { it.isAttached } ?: return null
-        val l = layouts[r] ?: return null
+    /**
+     * row の中の位置 pos が、レス r の頭の行の押せる所(ID「i:」・名前「n:」)の上なら、そのタグ。
+     * 頭の行の位置は、描いた行ごとに覚える(hit)。同じレスがスレ表示とポップアップの両方に出ても取り違えないように
+     */
+    fun tagAt(r: RenderedPost, hit: HeaderHit, pos: androidx.compose.ui.geometry.Offset): String? {
+        val row = hit.row?.takeIf { it.isAttached } ?: return null
+        val c = hit.coords?.takeIf { it.isAttached } ?: return null
+        val l = hit.layout ?: return null
         val p = runCatching { c.localPositionOf(row, pos) }.getOrNull() ?: return null
         if (p.x < 0 || p.y < 0 || p.x > c.size.width || p.y > c.size.height) return null
         val i = l.getOffsetForPosition(p)
@@ -65,6 +66,16 @@ object HeaderHits {
             .firstOrNull { it.startsWith("i:") || it.startsWith("n:") }
     }
 }
+
+/** 描いた 1 行の、行・頭の行の位置と、頭の行の字の並び(長押しした所が ID・名前の上かを調べる) */
+class HeaderHit {
+    var row: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var coords: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var layout: androidx.compose.ui.text.TextLayoutResult? = null
+}
+
+/** いま描いている行の HeaderHit(スレ表示・ポップアップの行が渡す) */
+val LocalHeaderHit = androidx.compose.runtime.compositionLocalOf<HeaderHit?> { null }
 
 class ReplyPreview(val no: Int, val id: String?, val name: String, val text: String)
 
@@ -102,15 +113,16 @@ fun PostItem(
         if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
     }
     // 頭の行の字の並びと位置を覚えておく(長押しした所が ID・名前の上か、スレ表示が調べる)
-    val track = Modifier.onGloballyPositioned { HeaderHits.coords[r] = it }
+    val hit = LocalHeaderHit.current
+    val track = Modifier.onGloballyPositioned { hit?.coords = it }
     val header = @Composable {
         if (own || toOwn) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { HeaderHits.layouts[r] = it })
+                Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                 Spacer(Modifier.width(6.dp))
                 OwnChip(if (own) "自分" else "→あなた宛")
             }
-        } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { HeaderHits.layouts[r] = it })
+        } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
     }
     // 左右の帯: 自分の書き込みは左に緑。人気のレスは設定の側(左・右)に暖色(左のときに自分の書き込みと重なれば右へ)と淡い地。
     // 見た目(カード・Discord 風・LINE 風)に関わらず同じ
@@ -208,12 +220,16 @@ fun PostItem(
         }
         "classic" -> {
             // 専ブラ風: 余白を詰め、頭の行を小さく。1 画面にたくさん並ぶ
-            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
-                if (own || toOwn) header() else Text(r.header, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips)
-                BeIcon(r.beIcon)
-                if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
+            // 頭と本文・画像は 1 つの縦の並びにまとめる(並べたままだと、人気の帯を描く Box の中で画像が頭と本文の上に重なった)
+            Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
+                    // 頭の行の位置と字の並びを覚える(ID・名前の長押しのメニュー。付けていなかったので、専ブラ風では長押しが効かなかった)
+                    if (own || toOwn) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                    BeIcon(r.beIcon)
+                    if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
+                }
+                media()
             }
-            media()
         }
         "matome" -> {
             // まとめ風: 返信の多いレス(人気)は字を大きく濃く、ほかは小さめに。読み飛ばしながら見どころが拾える
@@ -258,7 +274,10 @@ fun PostItem(
             if (ownLeft != null) drawRect(ownLeft, size = androidx.compose.ui.geometry.Size(w, size.height))
             if (rightBar != null) drawRect(rightBar, topLeft = androidx.compose.ui.geometry.Offset(size.width - w, 0f), size = androidx.compose.ui.geometry.Size(w, size.height))
         }.padding(start = if (ownLeft != null) 3.dp else 0.dp, end = if (rightBar != null) 3.dp else 0.dp),
-    ) { inner() }
+    ) {
+        // Box の中に部品を並べると重なるので、見た目の作りに関係なくいつも縦に積む
+        Column(Modifier.fillMaxWidth()) { inner() }
+    }
 }
 
 /** 返信先の 1 行(小さいアイコン・名前・本文の頭)。押すと返信先をポップアップで出す */

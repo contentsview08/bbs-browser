@@ -1,5 +1,6 @@
 package io.github.yumekui8.bbsnative.ui
 
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -281,6 +282,32 @@ object Motion {
 @Composable
 fun Hint(text: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(text, color = Palette.textMuted, fontSize = 14.sp) }
+}
+
+/**
+ * 読み込めなかったときの画面: 理由と「もう一度読み込む」ボタン。スクロールできる部品の上に置くので、引っぱって更新でも取り直せる
+ * (ただの文字だと、引っぱっても指の動きが届かず、取り直せなかった)
+ */
+@Composable
+fun LoadError(message: String?, loading: Boolean, topPadding: androidx.compose.ui.unit.Dp, onRetry: () -> Unit) {
+    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = topPadding)) {
+        item {
+            Column(Modifier.fillParentMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("読み込めませんでした", color = Palette.textStrong, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                if (!message.isNullOrBlank()) Text(message, Modifier.padding(top = 6.dp), color = Palette.textMuted, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Row(
+                    Modifier.padding(top = 18.dp).clip(RoundedCornerShape(8.dp)).background(Palette.accent).clickable(enabled = !loading, onClick = onRetry)
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), color = Palette.accentText, strokeWidth = 2.dp)
+                    else Icon(androidx.compose.material.icons.Icons.Filled.Refresh, null, tint = Palette.accentText, modifier = Modifier.size(18.dp))
+                    Text(if (loading) "読み込んでいます…" else "もう一度読み込む", color = Palette.accentText, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                }
+                Text("下へ引っぱっても読み込み直せます", Modifier.padding(top = 10.dp), color = Palette.textMuted, fontSize = 12.sp)
+            }
+        }
+    }
 }
 
 /**

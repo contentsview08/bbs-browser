@@ -71,6 +71,20 @@ object Http {
         execute(Request.Builder().url(url).header("User-Agent", userAgent).post(body).build())
     }
 
+    /** 置き場(R2 などの署名付き URL)へファイルをそのまま送る(hono-bbs の画像のアップロード) */
+    suspend fun put(url: String, body: ByteArray, contentType: String): HttpResponse = withContext(Dispatchers.IO) {
+        execute(Request.Builder().url(url).header("User-Agent", USER_AGENT).put(body.toRequestBody(contentType.toMediaType())).build())
+    }
+
+    /** 中身を取らずに、あるか・種類・大きさだけを聞く(上げた画像が本当に開けるかの確かめ)。リダイレクトはたどる */
+    suspend fun head(url: String, userAgent: String = USER_AGENT): HttpResponse = withContext(Dispatchers.IO) {
+        getClient.newCall(Request.Builder().url(url).header("User-Agent", userAgent).head().build()).execute().use { res ->
+            val h = HashMap<String, String>()
+            for (name in res.headers.names()) h[name.lowercase()] = res.header(name) ?: ""
+            HttpResponse(res.code, h, ByteArray(0))
+        }
+    }
+
     private fun execute(req: Request): HttpResponse = client.newCall(req).execute().use { res ->
         val h = HashMap<String, String>()
         for (name in res.headers.names()) h[name.lowercase()] = res.header(name) ?: ""

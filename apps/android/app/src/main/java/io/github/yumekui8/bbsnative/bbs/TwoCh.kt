@@ -62,7 +62,6 @@ fun parseBbsMenuJson(text: String): List<Board> {
 }
 
 private val SUBJECT_LINE = Regex("^(\\d+)\\.(?:dat<>|cgi,)(.*)\\((\\d+)\\)\\s*$")
-private val AUTHOR_ID = Regex("\\s*\\[([^\\s\\[\\]★]{4,20})★]\\s*$")
 private const val FUTURE_TOLERANCE_MS = 24L * 60 * 60 * 1000
 
 /** dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する。未来の日時はお知らせスレなので「不明」) */
@@ -74,31 +73,37 @@ private fun createdAtOf(key: String, now: Long): Long? {
 
 private fun isAnnouncementKey(key: String, now: Long) = key.length == 10 && key.all { it.isDigit() } && key.toLong() * 1000 > now + FUTURE_TOLERANCE_MS
 
-fun parseSubjectTxt(text: String, boardUrl: String, withAuthorId: Boolean): List<ThreadSummary> {
+/** withAuthorId: エッジの subject-metadent.txt か(今はどちらも同じ読み方。スレタイの後ろの角かっこは立てた人) */
+fun parseSubjectTxt(text: String, boardUrl: String, @Suppress("UNUSED_PARAMETER") withAuthorId: Boolean): List<ThreadSummary> {
     val now = System.currentTimeMillis()
     val out = ArrayList<ThreadSummary>()
     for (raw in text.split('\n')) {
         val m = SUBJECT_LINE.find(raw.trimEnd()) ?: continue
-        var title = decodeEntities(m.groupValues[2].trim())
-        var authorId: String? = null
-        if (withAuthorId) {
-            AUTHOR_ID.find(title)?.let {
-                authorId = it.groupValues[1]
-                title = title.substring(0, it.range.first).trimEnd()
-            }
-        }
-        // 5ch の BE の板(嫌儲など)は、スレタイの後ろに立てた人の BE 番号が付く(「… [834922174]」)。立てた人として外に出す
-        if (authorId == null) BE_NO.find(title)?.let {
-            authorId = "BE:" + it.groupValues[1]
-            title = title.substring(0, it.range.first).trimEnd()
-        }
+        val (title, authorId) = splitAuthorId(decodeEntities(m.groupValues[2].trim()))
         val key = m.groupValues[1]
         out += ThreadSummary(boardUrl, key, title, m.groupValues[3].toInt(), out.size, createdAtOf(key, now), authorId, isAnnouncementKey(key, now))
     }
     return out
 }
 
-private val BE_NO = Regex("\\s*[\\[［](\\d{6,12})[\\]］]\\s*$")
+private val TRAILING_BRACKET = Regex("\\s*[\\[［]([^\\[\\]［］]{1,32})[\\]］]\\s*$")
+private val ID_STAR = Regex("^(\\S{1,20})★$")
+private val BE_DIGITS = Regex("^\\d{6,12}$")
+
+/**
+ * スレタイの後ろの角かっこ(「… [xxx]」「… ［xxx］」)を、立てた人として取り出す(PC 版の twoch/parse.ts の splitAuthorId と同じ決まり):
+ * エッジの「[ID★]」は ★ を外して ID、5ch の BE の板の 6〜12 桁の数字は「BE:番号」、それ以外(ほかの板の名前や ID)は中身をそのまま。
+ * 「[転載禁止]」のような決まり文句・「©」で始まるもの・スレタイが角かっこだけのときは、スレタイのまま
+ */
+fun splitAuthorId(title: String): Pair<String, String?> {
+    val m = TRAILING_BRACKET.find(title) ?: return title to null
+    val inner = m.groupValues[1].trim()
+    if (inner.isEmpty() || inner.contains("転載") || inner.startsWith("©")) return title to null
+    val rest = title.substring(0, m.range.first).trimEnd()
+    if (rest.isEmpty()) return title to null
+    val id = ID_STAR.find(inner)?.groupValues?.get(1) ?: if (BE_DIGITS.matches(inner)) "BE:$inner" else inner
+    return rest to id
+}
 private val ID_IN_DATE = Regex("\\sID:(\\S+)")
 private val ID_BE = Regex("\\s(?:ID|BE):\\S+")
 

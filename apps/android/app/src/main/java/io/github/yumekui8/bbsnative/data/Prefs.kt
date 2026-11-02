@@ -159,6 +159,10 @@ class Prefs(context: Context) {
     var highlightOp by pref("highlightOp", true)
     var idHeat by pref("idHeat", true)
     var idColor by pref("idColor", false)
+    /** レスの頭の日時の出し方: md_w_hms(11/02(月) 19:01:15。既定)/ md_hm(11/02 19:01)/ full(掲示板が出したまま) */
+    var dateStyle by pref("dateStyle", "md_w_hms")
+    /** レスの頭の ID を短く出す(先頭の 6 文字。「ID:」も省く) */
+    var idShort by pref("idShort", true)
     /** 動きを減らす(画面の移り方・新着の光り方・数字の繰り上がりを省く)。端末の「アニメーションを削除」でも同じになる */
     var reduceMotion by pref("reduceMotion", false)
     /** 字(Fonts.CHOICES のキー)。空なら端末の標準 */

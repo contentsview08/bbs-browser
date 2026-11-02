@@ -30,6 +30,27 @@ private val DATE_TIME = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(
 private val DATE_DAY = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})(\\([^)]*\\))?")
 private val minutesCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
+/** 年・月・日・曜日・時・分・秒(・秒の下の桁)を読む(2026/11/02(月) 19:01:15.960)。曜日と秒はないこともある */
+private val DATE_PARTS = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})\\s*(?:\\(([^)]*)\\))?\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
+
+/**
+ * レスの頭の日時(設定「日時の出し方」)。スマホでは頭を短くしたいので、既定は年と秒の下の桁を省く:
+ * md_w_hms = 11/02(月) 19:01:15 / md_hm = 11/02 19:01 / full = 掲示板が出したまま(2026/11/02(月) 19:01:15.960)。読めない形はそのまま
+ */
+fun displayDate(date: String, style: String): String {
+    if (style == "full") return date
+    val m = DATE_PARTS.find(date) ?: return date
+    val (_, mo, d, w, h, mi, s) = m.destructured
+    val md = "${mo.padStart(2, '0')}/${d.padStart(2, '0')}"
+    val rest = date.substring(m.range.last + 1).replace(Regex("^[.,]\\d+"), "").trim()
+    val out = if (style == "md_hm") "$md ${h.padStart(2, '0')}:$mi" else "$md${if (w.isNotEmpty()) "($w)" else ""} ${h.padStart(2, '0')}:$mi${if (s.isNotEmpty()) ":$s" else ""}"
+    // 日時の後ろに付く印(BE の番号など)は残す
+    return if (rest.isNotEmpty()) "$out $rest" else out
+}
+
+/** 頭に出す ID(設定「ID を短く出す」がオンなら先頭の 6 文字だけで、「ID:」も省く。数えるのと色は ID 全体で決める) */
+fun displayId(id: String, short: Boolean): String = if (short) id.take(6) else "ID:$id"
+
 fun shortDate(date: String): String =
     DATE_TIME.find(date)?.let { m -> "${m.groupValues[2]}/${m.groupValues[3]} ${m.groupValues[4]}:${m.groupValues[5]}" } ?: date
 
@@ -91,6 +112,10 @@ data class RenderOptions(
     val onSky: Boolean = false,
     /** レスの見た目: card / discord / line */
     val style: String = "card",
+    /** 日時の出し方(displayDate) */
+    val dateStyle: String = "md_w_hms",
+    /** ID を短く出す(displayId) */
+    val idShort: Boolean = true,
 )
 
 /**
@@ -127,14 +152,14 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             }
             append("  ")
             // 日付の途中で折り返さない(日と時刻の間の空白を、折り返さない空白に)
-            withStyle(SpanStyle(color = mutedC(o))) { append(p.date.replace(' ', '\u00A0')) }
+            withStyle(SpanStyle(color = mutedC(o))) { append(displayDate(p.date, o.dateStyle).replace(' ', '\u00A0')) }
             if (p.id != null) {
                 append("  ")
                 // 書き込みの多い ID は暖色。押すと同じ ID のレスを出す
                 val heat = if (o.idHeat) Palette.heat(idCount) else null
                 withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
                     withStyle(SpanStyle(color = heat ?: idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
-                        append("ID:${p.id}")
+                        append(displayId(p.id, o.idShort))
                         if (idCount >= 2) append("($idCount)")
                     }
                 }
@@ -233,7 +258,7 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
             val heat = if (o.idHeat) Palette.heat(idCount) else null
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
                 withStyle(SpanStyle(color = heat ?: idC(p.id, idCount, o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
-                    append("ID:${p.id}")
+                    append(displayId(p.id, o.idShort))
                     if (idCount >= 2) append("($idCount)")
                 }
             }

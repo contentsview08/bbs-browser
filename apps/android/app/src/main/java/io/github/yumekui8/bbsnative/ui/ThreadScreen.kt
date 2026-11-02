@@ -338,6 +338,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.yumekui8.bbsnative.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
     val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->
+        // この行の、頭の行の位置(長押しした所が ID・名前の上かを調べる)
+        val hit = remember(p.no) { HeaderHit() }
         // 新着で届いたレスは、下から少し浮き上がって順に出てきて、しばらく光る(今のスマホ版の post-enter と flash-new)
         // 出る動きは、届いた時に画面に出ていたレスだけ。あとからスクロールして(一番下へ飛んで)出てきたレスは、待たせずにすぐ描く
         val delayMs = ctl.flash[p.no]?.takeIf { System.currentTimeMillis() - ctl.flashAt < it + 150 }
@@ -370,13 +372,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     val a = if (f > 0.55f) 0.16f + (f - 0.55f) / 0.45f * 0.08f else f / 0.55f * 0.16f
                     drawRect(flashColor.copy(alpha = a * if (Palette.dark) 0.8f else 0.5f))
                 } else Modifier)
-                .onGloballyPositioned { if (inMain) rowCoords[p.no] = it }
+                .onGloballyPositioned { hit.row = it; if (inMain) rowCoords[p.no] = it }
                 .pointerInput(p.no) {
                     awaitEachGesture {
                         val d = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         downNo = p.no; downInRow = d.position
-                        // ID・名前の上での長押しは、字のリンクより先にここで受ける(リンクが指を受け取り、離したときに押したことになっていた)
-                        val tag = if (inMain) page.rendered[p.no]?.let { r -> rowCoords[p.no]?.takeIf { it.isAttached }?.let { rc -> HeaderHits.tagAt(r, rc, d.position) } } else null
+                        // ID・名前の上での長押しは、字のリンクより先にここで受ける(リンクが指を受け取り、離したときに押したことになっていた)。
+                        // ポップアップ(レス抽出・ツリー)の中でも同じ(行ごとに頭の位置を覚えているので、スレ表示の行と取り違えない)
+                        val tag = page.rendered[p.no]?.let { r -> HeaderHits.tagAt(r, hit, d.position) }
                         if (tag == null) return@awaitEachGesture
                         val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                             var e: androidx.compose.ui.input.pointer.PointerEvent
@@ -413,7 +416,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
-            } else Column { page.rendered[p.no]?.let {
+            } else Column { androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
                 val continued = (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 // 薄く表示する NG(会話の流れは残して、字を 3 割に)
@@ -432,7 +435,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onAvatar = p.id?.let { pid -> { openPopup(index.posts.filter { it.id == pid }, focus = p.no) } },
                     onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
-            }
+            } }
             }
         }
     }
@@ -529,7 +532,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Box(Modifier.fillMaxSize()) {
                 when {
                     !page.loaded -> Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
-                    page.error != null && index.posts.isEmpty() -> Hint("読み込めませんでした: ${page.error}")
+                    page.error != null && index.posts.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }) { refresh() }
                     else -> LazyColumn(
                         Modifier.fillMaxSize(), state = listState,
                         // ミニマップの幅だけ右を空けて、レスが下に潜らないようにする

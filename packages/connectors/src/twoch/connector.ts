@@ -316,7 +316,8 @@ export const twoChConnector: Connector = {
     const meta = hasAuthorSubject(board.url) ? await readSubject(`${board.url}subject-metadent.txt`, ctx).catch(() => undefined) : undefined
     const text = meta ?? (await readSubject(`${board.url}subject.txt`, ctx, board.url))
     return parseSubjectTxt(text).map((e, order): ThreadSummary => {
-      const { title, authorId } = meta ? splitAuthorId(e.title) : { title: e.title, authorId: undefined }
+      // スレタイの後ろの角かっこは、立てた人(エッジの ID・BE 番号・ほかの板の名前や ID)
+      const { title, authorId } = splitAuthorId(e.title)
       return {
         connectorId: ID,
         boardUrl: board.url,

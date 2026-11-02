@@ -98,6 +98,8 @@ private fun idC(id: String, count: Int, o: RenderOptions) =
 /** レスの組み立て方の設定(設定画面の「スレ表示」。変えたら組み立て直す) */
 data class RenderOptions(
     val noname: String? = null,
+    /** 板の既定の名前のほかに、名無しとみなす名前(板ごとの設定) */
+    val extraNonames: List<String> = emptyList(),
     val highlightOp: Boolean = true,
     val idHeat: Boolean = true,
     /** 2 回以上書いた ID に、ID ごとの色を付ける(同じ人の書き込みを目で追えるように) */
@@ -134,7 +136,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         val replies = index.replyCount[p.no] ?: 0
         val idCount = p.id?.let { index.idCount[it] } ?: 0
         val replyHeat = Palette.heat(replies)
-        val name = if (noname != null && p.name.startsWith(noname)) p.name.substring(noname.length).trim() else p.name
+        val name = displayName(p.name, noname, o.extraNonames)
         val isOp = o.highlightOp && opId != null && p.id == opId
         val header = if (isChatStyle(o.style)) compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
@@ -277,3 +279,13 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
 /** 頭の字の色(空色の地の上では白っぽく) */
 private fun mutedC(o: RenderOptions) = if (o.onSky) Palette.skyMuted else Palette.textMuted
 private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.posterName
+
+/**
+ * 名前の見せ方: 板の既定の名前(と、名無しとみなす名前)で始まるなら、その部分を省く(後ろのトリップなどは残す)。
+ * 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)。PC 版の utils/postBody.tsx の displayName と同じ
+ */
+fun displayName(name: String, noname: String?, extra: List<String>): String {
+    if (noname == null && extra.isEmpty()) return name
+    val hit = (listOfNotNull(noname) + extra).filter { it.isNotEmpty() }.sortedByDescending { it.length }.firstOrNull { name.startsWith(it) }
+    return if (hit != null) name.substring(hit.length).trim() else name
+}

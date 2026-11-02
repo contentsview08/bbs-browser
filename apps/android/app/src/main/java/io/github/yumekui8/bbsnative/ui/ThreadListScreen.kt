@@ -315,7 +315,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" }
             } else {
                 HeaderBar(
-                    page.board.name, onNav = { vm.drawerOpen = true },
+                    vm.prefs.boardMeta[page.board.url]?.alias ?: page.board.name, onNav = { vm.drawerOpen = true },
                     leading = { BoardIcon(page.board.url, 22.dp) { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp)) } },
                     onTitle = { titleSheet = true },
                 ) {

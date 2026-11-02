@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Swipe
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.AlertDialog
@@ -219,6 +220,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
             "見た目", p.postStyle,
             POST_STYLES,
         ) { p.postStyle = it }
+        SamplePosts(vm)
     }
     if (LocalAdvanced.current) Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), if (p.customScheme.isEmpty()) "自分の配色を作る" else "自分の配色を直す") { open("custom") }
@@ -284,12 +286,7 @@ private fun TextPage(vm: AppViewModel) {
         SliderRow("レスの本文", p.bodyScale, 0.8f..1.4f, steps = 11, label = "${(p.bodyScale * 100).toInt()}%") { p.bodyScale = (it * 20).toInt() / 20f }
         if (LocalAdvanced.current) SliderRow("レスの本文の行間", p.lineHeight, 1.2f..1.9f, steps = 13, label = "%.2f".format(p.lineHeight)) { p.lineHeight = (it * 20).toInt() / 20f }
     }
-    Group("見本") {
-        Text(
-            "1  名無し  2026/10/26(月) 12:34:56.78  ID:AbCdEfGh\nスレ表示の本文はこの大きさと行間で出ます。\n長い文は画面の幅で折り返します。",
-            Modifier.padding(16.dp), color = Palette.textBody, fontSize = (15 * p.bodyScale).sp, lineHeight = p.lineHeight.em,
-        )
-    }
+    Group("見本") { SamplePosts(vm) }
 }
 
 @Composable
@@ -321,7 +318,7 @@ private fun ListPage(vm: AppViewModel) {
         for ((k, name) in all.filter { it.first !in on }) TabRow(k, name, false, null)
     }
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
-        WordList(p.keywords, "キーワードを足す", "まだありません") { p.keywords = it }
+        EditableWordList(p.keywords, "キーワード", "キーワードを足す", "まだありません", sortable = true) { p.keywords = it }
     }
     if (LocalAdvanced.current) Group("ログ", note = "お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
         ChoiceRow(
@@ -335,6 +332,7 @@ private fun ListPage(vm: AppViewModel) {
 @Composable
 private fun ThreadPage(vm: AppViewModel) {
     val p = vm.prefs
+    Group("見本", note = "変えるとすぐ映ります") { SamplePosts(vm) }
     Group("開いたとき") {
         ChoiceRow("開く位置", p.openPosition, listOf("unread" to "最初の未読", "top" to "先頭", "bottom" to "いちばん下")) { p.openPosition = it }
     }
@@ -371,11 +369,13 @@ private fun MediaPage(vm: AppViewModel) {
     Group("サムネイル") {
         SwitchRow("本文の画像をサムネイルで出す", p.showThumbnails) { p.showThumbnails = it }
         ChoiceRow("サムネイルを読み込む", p.thumbMode.name, ThumbMode.entries.map { it.name to it.label }) { p.thumbMode = ThumbMode.valueOf(it) }
-        ChoiceRow("大きさ", p.thumbSize.toString(), listOf("72" to "小", "96" to "中", "128" to "大")) { p.thumbSize = it.toInt() }
+        // 大きさは 8dp ずつ。動かすと下の枠がその大きさになる
+        SliderRow("大きさ", p.thumbSize.toFloat(), 56f..200f, steps = 17, label = "${p.thumbSize}dp") { p.thumbSize = ((it / 8).toInt() * 8).coerceIn(56, 200) }
+        ThumbSample(p.thumbSize)
     }
     if (LocalAdvanced.current) Group("グロ注意", note = "この言葉を含むレスと、そのアンカー先の画像を、押すまでぼかします") {
         SwitchRow("グロ注意の画像をぼかす", p.blurGross) { p.blurGross = it }
-        if (p.blurGross) WordList(p.grossWords, "言葉を足す", "言葉がありません") { p.grossWords = it }
+        if (p.blurGross) EditableWordList(p.grossWords, "目印の言葉", "言葉を足す", "言葉がありません") { p.grossWords = it }
     }
 }
 
@@ -386,7 +386,7 @@ private fun WritePage(vm: AppViewModel) {
         TextRow("名前", p.postName, "名無し") { p.postName = it }
     }
     Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
-        WordList(p.quickPhrases, "定型文を足す", "定型文はありません") { p.quickPhrases = it }
+        EditableWordList(p.quickPhrases, "定型文", "定型文を足す", "定型文はありません", sortable = true) { p.quickPhrases = it }
         if (LocalAdvanced.current) SwitchRow("書いている間、定型文のバーを出す", p.phraseBar, desc = "本文の欄の上に並べ、押すとカーソルの所に入ります") { p.phraseBar = it }
     }
     if (LocalAdvanced.current) Group("送るとき") {
@@ -642,13 +642,19 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
 @Composable
 private fun SitesPage(vm: AppViewModel) {
     var adding by remember { mutableStateOf(false) }
-    Group("お気に入り板", note = "左のメニューに出る順です。≡ を掴んで並べ替えます(左のメニューでも、長押しして動かせます)") {
+    /** 設定を開いている板(URL と板名) */
+    var editingBoard by remember { mutableStateOf<Pair<String, String>?>(null) }
+    editingBoard?.let { (url, name) -> BoardMetaSheet(vm, url, name) { editingBoard = null } }
+    Group("お気に入り板", note = "左のメニューに出る順です。≡ を掴んで並べ替えます(左のメニューでも、長押しして動かせます)。⚙ でその板だけの設定(別名・名前欄・名無しの扱い)") {
         if (vm.favorites.isEmpty()) Text("お気に入り板はありません(板を探す・スレ一覧の ︙ から足せます)", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
         ReorderableColumn(vm.favorites, { it.url }, { from, to -> vm.moveFavorite(from, to) }) { b, handle, _ ->
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(b.name, color = Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(vm.prefs.boardMeta[b.url]?.alias ?: b.name, color = Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(b.url.removePrefix("https://"), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(onClick = { editingBoard = b.url to b.name }) {
+                    Icon(Icons.Filled.Tune, "この板の設定", tint = if (vm.prefs.boardMeta[b.url] != null) Palette.accent else Palette.textMuted)
                 }
                 IconButton(onClick = { vm.toggleFavorite(b) }) { Icon(Icons.Filled.Close, "外す", tint = Palette.textMuted) }
                 DragHandleIcon(handle)
@@ -806,26 +812,6 @@ private fun TextRow(label: String, value: String, placeholder: String, onChange:
             confirmButton = { TextButton(onClick = { onChange(text); open = false }) { Text("決める") } },
             dismissButton = { TextButton(onClick = { open = false }) { Text("やめる") } },
         )
-    }
-}
-
-/** 言葉の一覧(改行区切りの文字列で持つ)。× で外し、下の欄で足す */
-@Composable
-private fun WordList(value: String, placeholder: String, empty: String, onChange: (String) -> Unit) {
-    val words = value.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    if (words.isEmpty()) Text(empty, Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
-    for (w in words) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(w, Modifier.weight(1f), color = Palette.textBody, fontSize = 15.sp)
-            IconButton(onClick = { onChange((words - w).joinToString("\n")) }) { Icon(Icons.Filled.Close, "外す", tint = Palette.textMuted) }
-        }
-    }
-    var text by remember { mutableStateOf("") }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(text, { text = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text(placeholder) })
-        IconButton(onClick = { if (text.isNotBlank() && text.trim() !in words) onChange((words + text.trim()).joinToString("\n")); text = "" }) {
-            Icon(Icons.Filled.Add, "足す", tint = Palette.accent)
-        }
     }
 }
 

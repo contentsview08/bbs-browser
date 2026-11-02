@@ -648,8 +648,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         forwardPage = null
         navDir = 1
         stack.add(page)
-        page.reply.name = prefs.postName
-        page.reply.mail = prefs.postMail
+        // 板ごとの設定に名前欄・メール欄の既定値があれば、そちらを入れる
+        val meta = prefs.boardMeta[t.boardUrl]
+        page.reply.name = meta?.defaultName ?: prefs.postName
+        page.reply.mail = meta?.defaultMail ?: prefs.postMail
         viewModelScope.launch {
             // 手元のログを先に出し、そのあと新着を取りに行く
             val log = db.loadThread(t)
@@ -715,9 +717,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val seq = (renderSeq[page]?.first ?: 0) + 1
         renderSeq[page] = seq to posts
         val rules = prefs.ngRules
-        // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま
-        val noname = if (prefs.omitNoname) TwoCh.cachedNoname(page.summary.boardUrl) else null
-        val o = renderOptions(noname)
+        // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま。
+        // 板ごとの設定で、省くかどうかと、ほかに名無しとみなす名前を変えられる
+        val meta = prefs.boardMeta[page.summary.boardUrl]
+        val omit = meta?.omitNoname ?: prefs.omitNoname
+        val noname = if (omit) TwoCh.cachedNoname(page.summary.boardUrl) else null
+        val o = renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() else emptyList())
         val collapse = prefs.collapseBlankLines
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val result = withContext(Dispatchers.Default) {
@@ -760,6 +765,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reapplyNg()
     }
 
+    /** 設定画面の見本のレス(ui/SettingParts.kt)を、スレ表示と同じ設定で組み立てる */
+    fun sampleRenderOptions(noname: String?) = renderOptions(noname)
+
     private fun renderOptions(noname: String?) = RenderOptions(
         noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, idColor = prefs.idColor, urlShorten = prefs.urlShorten,
         imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
@@ -771,7 +779,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun renderKey() = listOf(
         prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.idColor, prefs.dateStyle, prefs.idShort, prefs.urlShorten, prefs.imageUrlOmit,
-        prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle,
+        prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
     )
 
     private fun rerenderAll() {

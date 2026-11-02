@@ -68,7 +68,7 @@ fun DrawerContent(vm: AppViewModel) {
                 // 長押しして掴むと、上下に動かして並べ替えられる
                 ReorderableColumn(vm.favorites, { it.url }, { from, to -> vm.moveFavorite(from, to) }, longPress = true) { b, handle, _ ->
                     val active = current is Page.Threads && current.board.url == b.url
-                    Box(handle) { DrawerRow(Icons.Filled.Forum, boardUrl = b.url, label = b.name, tint = Palette.textMuted, sub = true, active = active) { vm.openBoard(b) } }
+                    Box(handle) { DrawerRow(Icons.Filled.Forum, boardUrl = b.url, label = vm.prefs.boardMeta[b.url]?.alias ?: b.name, tint = Palette.textMuted, sub = true, active = active) { vm.openBoard(b) } }
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }

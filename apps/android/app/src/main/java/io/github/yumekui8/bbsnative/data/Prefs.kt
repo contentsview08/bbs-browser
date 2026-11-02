@@ -291,6 +291,24 @@ class Prefs(context: Context) {
         sp.edit().putString("ngRules", arr.toString()).apply()
     }
 
+    /** 板ごとの設定(板の URL → 設定)。PC 版・Web の settings.boardMeta と同じ項目 */
+    var boardMeta by mutableStateOf(loadBoardMeta())
+        private set
+
+    /** 板の設定を入れる。全部空なら消す */
+    fun setBoardMeta(url: String, m: BoardMeta) {
+        val next = if (m.isEmpty) boardMeta - url else boardMeta + (url to m)
+        boardMeta = next
+        val o = JSONObject()
+        for ((u, v) in next) o.put(u, v.toJson())
+        sp.edit().putString("boardMeta", o.toString()).apply()
+    }
+
+    private fun loadBoardMeta(): Map<String, BoardMeta> = runCatching {
+        val o = JSONObject(sp.getString("boardMeta", "{}") ?: "{}")
+        o.keys().asSequence().associateWith { BoardMeta.fromJson(o.getJSONObject(it)) }
+    }.getOrDefault(emptyMap())
+
     /** バックアップ: 設定を全部 JSON に(最後に開いた板は除く) */
     fun export(): JSONObject {
         val o = JSONObject()

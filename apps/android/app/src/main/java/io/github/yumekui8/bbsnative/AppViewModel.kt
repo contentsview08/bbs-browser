@@ -42,6 +42,17 @@ import kotlinx.coroutines.withContext
 data class ScrollPos(val no: Int, val offset: Int, val bottom: Boolean)
 
 /** 書き込み欄の状態(スレごと、スレ立てでも使う) */
+/**
+ * 読み込めなかった理由を、人に分かる言葉にする(通信の失敗は英語の決まり文句なので言い換える)
+ */
+fun loadErrorText(e: Throwable): String = when (e) {
+    is java.net.UnknownHostException -> "ネットにつながっていないか、掲示板のサーバーが見つかりません(${e.message?.substringAfter('"')?.substringBefore('"') ?: ""})"
+    is java.net.ConnectException -> "掲示板のサーバーにつながりませんでした"
+    is java.net.SocketTimeoutException -> "掲示板のサーバーから時間内に返事がありませんでした"
+    is javax.net.ssl.SSLException -> "安全な通信を始められませんでした(${e.message ?: "SSL"})"
+    else -> e.message ?: e.toString()
+}
+
 /** boardUrl: 書き込む板(画像の上げ先を板で選ぶ。hono-bbs の板は、その掲示板の画像の置き場) */
 class ReplyState(val boardUrl: String = "") {
     /** 本文の欄に入っている(書いている)。書いている間はフッターを隠さない */

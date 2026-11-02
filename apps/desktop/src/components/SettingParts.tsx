@@ -42,8 +42,8 @@ const SAMPLE_HANDLERS: PostHandlers = {
 /** 見本のレス。設定の値をそのまま使って描くので、変えたものがすぐ映る(押しても何もしない) */
 export function SamplePosts(props: { settings: AppSettings; title?: string; compact?: boolean; onHide?: () => void }) {
   const s = props.settings
-  // compact: 2 つ目と 3 つ目だけ(設定画面の上に置いたまま、下の設定を見られるように)
-  const posts = props.compact ? SAMPLE.slice(1) : SAMPLE
+  // compact: 2 つ目だけ(設定画面の上に置いたまま、下の設定を見られるように。アンカー・名前・ID・本文の行間が分かる)
+  const posts = props.compact ? SAMPLE.slice(1, 2) : SAMPLE
   const variant = effectivePostStyle(s)
   const idCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -311,5 +311,65 @@ export function ManagerDialog(props: { title: string; onClose: () => void; child
       </div>
     </div>,
     document.body,
+  )
+}
+
+/**
+ * 数を入れる欄(日数・件数など)。よく使う値はボタンでも選べる。zeroLabel があれば 0 はその意味(「消さない」など)。
+ * 入れている途中は保存せず、欄から離れたとき・Enter で保存する(範囲の外は端に寄せる)
+ */
+export function NumberField(props: {
+  value: number
+  onChange: (v: number) => void
+  min: number
+  max: number
+  unit: string
+  presets?: number[]
+  zeroLabel?: string
+}) {
+  const [text, setText] = useState(String(props.value))
+  const [last, setLast] = useState(props.value)
+  if (last !== props.value) {
+    setLast(props.value)
+    setText(String(props.value))
+  }
+  const commit = () => {
+    const n = Math.round(Number(text))
+    if (!Number.isFinite(n)) return setText(String(props.value))
+    const v = Math.min(props.max, Math.max(props.min, n))
+    setText(String(v))
+    if (v !== props.value) props.onChange(v)
+  }
+  const label = (n: number) => (n === 0 && props.zeroLabel ? props.zeroLabel : `${n} ${props.unit}`)
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        type="number"
+        inputMode="numeric"
+        min={props.min}
+        max={props.max}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+        className={`${INPUT} w-24 text-right tabular-nums`}
+      />
+      <span className="text-sm text-c-text-body">{props.unit}</span>
+      {props.value === 0 && props.zeroLabel && <span className="text-xs text-c-text-muted">({props.zeroLabel})</span>}
+      {props.presets && (
+        <span className="flex flex-wrap gap-1.5 ml-2">
+          {props.presets.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => props.onChange(n)}
+              className={`px-2 py-0.5 text-xs rounded-[var(--chip-radius)] border ${props.value === n ? 'border-c-accent text-c-accent' : 'border-c-border text-c-text-muted hover:text-c-text-body'}`}
+            >
+              {label(n)}
+            </button>
+          ))}
+        </span>
+      )}
+    </div>
   )
 }

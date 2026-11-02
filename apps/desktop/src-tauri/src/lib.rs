@@ -6,7 +6,6 @@ use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod chosen_paths;
-mod connector_files;
 mod post_http;
 
 use chosen_paths::ChosenPaths;
@@ -443,9 +442,7 @@ pub fn run() {
             schedule_db_restore,
             post_http::http_post,
             chosen_paths::pick_save_path,
-            chosen_paths::pick_open_path,
-            connector_files::list_connector_files,
-            connector_files::connectors_dir
+            chosen_paths::pick_open_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

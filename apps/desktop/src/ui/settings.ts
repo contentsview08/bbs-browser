@@ -43,11 +43,13 @@ export function effectivePostStyle(s: Pick<AppSettings, 'postStyle'>): PostStyle
 export function baseVariant(v: PostStyle): 'card' | 'discord' | 'classic' | 'line' {
   return v === 'matome' ? 'card' : v
 }
-/** 実際に使う密度。スマホは見た目で決める: Discord 風は一覧表示(高密度だとスレ一覧が詰まりすぎる)、ほかは高密度 */
-export function effectiveDensity(s: Pick<AppSettings, 'postStyle' | 'density'>): ListDensity {
-  if (!isMobile) return s.density
+/**
+ * 実際に使う密度。PC もスマホも、レスの見た目で決める(2026-11 に「一覧表示・高密度」の設定はやめた)。
+ * 吹き出し・アイコンで並べる Discord 風・LINE 風は一覧表示、カード・専ブラ風・まとめ風は高密度
+ */
+export function effectiveDensity(s: Pick<AppSettings, 'postStyle'>): ListDensity {
   const st = effectivePostStyle(s)
-  return st === 'discord' ? 'list' : 'dense'
+  return st === 'discord' || st === 'line' ? 'list' : 'dense'
 }
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
@@ -300,8 +302,6 @@ export interface AppSettings {
   logRetentionDays: number
   /** 最後にログを整理した時刻(1 日に 1 回だけ整理する) */
   lastLogPruneAt: number
-  /** 外付けのコネクタ(connectors/ のフォルダ)ごとの許可。id → 有効か・確かめた通信の先 */
-  connectors: Record<string, { enabled: boolean; hosts: string[] }>
   /** 続けて並んだあぼーん(NG・自動 NG)を 1 行にまとめる */
   groupNg: boolean
   // 画像のアップロード(catbox.moe)
@@ -476,7 +476,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gestureSensitivity: 3,
   logRetentionDays: 90,
   lastLogPruneAt: 0,
-  connectors: {},
   groupNg: true,
   uploaderEnabled: true,
   uploadStripMetadata: true,

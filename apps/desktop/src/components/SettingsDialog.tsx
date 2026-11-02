@@ -40,10 +40,9 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
-import { ListEditor, SamplePosts, ThumbSample } from './SettingParts'
+import { ListEditor, NumberField, SamplePosts, ThumbSample } from './SettingParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
-import type { ExternalConnectorInfo } from '../host/externalConnectors'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
@@ -77,12 +76,6 @@ export interface SettingsProps {
   onBackupDb: () => Promise<boolean>
   /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */
   onRestoreDb: () => Promise<boolean>
-  /** 外付けのコネクタ(connectors/ のフォルダ)の一覧と、読み込みの結果 */
-  externalConnectors: ExternalConnectorInfo[]
-  /** 外付けのコネクタを読み込み直す(許可を変えたときは、変えたあとの許可を渡す) */
-  onReloadConnectors: (approvals?: Record<string, { enabled: boolean; hosts: string[] }>) => Promise<void>
-  /** connectors/ のフォルダをエクスプローラーで開く */
-  onOpenConnectorsDir: () => void
   /** 古いログを今すぐ整理する(設定の日数で)。消したスレの数を返す */
   onPruneLogs: () => Promise<number>
   /** 最初に開く分類 */
@@ -101,7 +94,7 @@ export type SettingsTab =
   | 'ng'
   | 'boardlist'
   | 'boards'
-  | 'connectors'
+  | 'menus'
   | 'accounts'
   | 'backup'
   | 'about'
@@ -118,8 +111,8 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
   { key: 'toolbars', name: 'ボタンの配置', icon: 'toolbar', advanced: true },
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
-  { key: 'boards', name: '板とサイト', icon: 'dns', advanced: true },
-  { key: 'connectors', name: 'コネクタ', icon: 'extension', advanced: true, desktopOnly: true },
+  { key: 'boards', name: 'お気に入り板', icon: 'star' },
+  { key: 'menus', name: 'BBS メニュー', icon: 'dns' },
   { key: 'accounts', name: '掲示板ごとの設定', icon: 'tune' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
@@ -132,8 +125,8 @@ const MOBILE_GROUPS: { title: string; items: Tab[] }[] = [
   { title: '書く', items: ['write', 'accounts'] },
   { title: '操作', items: ['keys', 'toolbars'] },
   { title: 'NG', items: ['ng'] },
-  { title: '板とデータ', items: ['boardlist', 'boards', 'backup'] },
-  { title: 'その他', items: ['about', 'connectors'] },
+  { title: '板とデータ', items: ['boardlist', 'boards', 'menus', 'backup'] },
+  { title: 'その他', items: ['about'] },
 ]
 /** スマホ: 分類ごとの、何が設定できるかの一行 */
 const TAB_DESC: Record<Tab, string> = {
@@ -146,8 +139,8 @@ const TAB_DESC: Record<Tab, string> = {
   toolbars: 'ヘッダー・フッター・︙ に置くボタン',
   ng: 'NG ワード・名前・ID・スレタイ・自動 NG',
   boardlist: 'お気に入り板・BBS メニュー',
-  boards: '自分で足す掲示板とサイト',
-  connectors: '外付けのコネクタ',
+  boards: '左に並べる板・別名・並び',
+  menus: '板一覧を取る掲示板(bbsmenu)',
   accounts: '5ch のアカウント・板ごとの名前と名無しの扱い',
   backup: '設定の書き出し・まるごとバックアップ',
   about: '版',
@@ -167,7 +160,7 @@ const TAB_COLORS: Record<Tab, string> = {
   boards: '#0891b2',
   backup: '#64748b',
   about: '#6b7280',
-  connectors: '#6b7280',
+  menus: '#0e7490',
 }
 
 /** スマホ: 分類の中の項目が少なければ(3 つまで)、題の一覧を挟まず、中身をそのまま並べる(段を深くしすぎない) */
@@ -298,12 +291,32 @@ function StickySample({ settings }: { settings: AppSettings }) {
 /** 見本を隠したか(設定画面を開き直しても覚えておく。アプリを起動し直したら出す) */
 let sampleHidden = false
 
-/** 横に並べる択一ボタン */
+/**
+ * 1 つを選ぶ。少なくて短い(4 つまで・どれも 12 文字まで)ものは横に並べたボタン、それより多い・長いものはドロップダウン
+ * (ボタンが何行にも折り返すと、どれを選んでいるか見にくいため)
+ */
 function Choice<T extends string | number>(props: {
   value: T
   options: { key: T; name: string }[]
   onChange: (v: T) => void
 }) {
+  if (props.options.length > 4 || props.options.some((o) => o.name.length > 12)) {
+    const i = props.options.findIndex((o) => o.key === props.value)
+    return (
+      <select
+        value={i < 0 ? '' : String(i)}
+        onChange={(e) => props.onChange(props.options[Number(e.target.value)].key)}
+        className={`${INPUT} w-full max-w-md`}
+      >
+        {i < 0 && <option value="">選んでいません</option>}
+        {props.options.map((o, n) => (
+          <option key={String(o.key)} value={String(n)}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    )
+  }
   return (
     <div className="flex flex-wrap gap-2">
       {props.options.map((o) => {
@@ -698,18 +711,6 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           onCommit={(px) => update(FONT_PX_KEY, px)}
         />
       </Section>
-      {!isMobile && (
-      <Section title="密度" note="高密度は余白を詰めた専ブラ風の表示です">
-        <Choice
-          value={s.density}
-          options={[
-            { key: 'list', name: '一覧表示' },
-            { key: 'dense', name: '高密度' },
-          ]}
-          onChange={(v) => update('density', v)}
-        />
-      </Section>
-      )}
       <Section title="スレ一覧の行の形">
         <Choice
           value={s.listShape}
@@ -722,7 +723,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
       </Section>
       <Section
         title="レスの見た目"
-        note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}${isMobile ? '(スマホでは、Discord 風は一覧表示、ほかは高密度で出します)' : ''}`}
+        note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}(Discord 風・LINE 風は一覧表示、ほかは高密度で並べます)`}
       >
         <Choice value={effectivePostStyle(s)} options={isMobile ? MOBILE_POST_STYLES : POST_STYLES} onChange={(v) => update('postStyle', v)} />
       </Section>
@@ -1800,7 +1801,12 @@ export function AccountsTab(
   props: Pick<SettingsProps, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount' | 'favorites' | 'settings' | 'update'>,
 ) {
   const key = (connectorId: string, accountId: string) => `${connectorId}:${accountId}`
-  const services = allConnectors().filter((c) => (c.accounts ?? []).length > 0)
+  // サイト(5ch など)ごとに、アカウントの種類(BE など)をまとめる
+  const sites = [
+    ...allConnectors()
+      .flatMap((c) => (c.accounts ?? []).map((kind) => ({ c, kind })))
+      .reduce((m, x) => m.set(x.kind.site, [...(m.get(x.kind.site) ?? []), x]), new Map<string, { c: ReturnType<typeof allConnectors>[number]; kind: AccountKind }[]>()),
+  ]
   const [editing, setEditing] = useState<string>()
   const [query, setQuery] = useState('')
   const [addUrl, setAddUrl] = useState('')
@@ -1836,32 +1842,44 @@ export function AccountsTab(
   return (
     <>
       <p className="mb-5 text-xs text-c-text-muted leading-relaxed">
-        ほかの分類の設定はすべての掲示板に効きます。ここでは、掲示板(サービス)ごと・板ごとに変えたいものだけを決めます。決めていないものは全体の設定のままです。
+        ほかの分類の設定はすべての掲示板に効きます。ここでは、サイトごと・板ごとに変えたいものだけを決めます。決めていないものは全体の設定のままです。
       </p>
-      {services.map((c) => (
+      {/* サイトごとの設定: サイト(5ch など)ごとに、そのサイトのアカウント(5ch なら BE)を並べる */}
+      {sites.length > 0 && (
         <Section
-          key={c.id}
-          title={`${c.name}のアカウント`}
-          note="ログインすると、この掲示板に書き込むときに自動で使われます(5ch の BE なら、BE に対応した板でアイコンやポイントが付きます)。パスワードはこのアプリの DB にそのまま保存します。設定の書き出し(JSON)には入りませんが、まるごとバックアップのファイルには入ります"
+          title="サイトごとの設定"
+          note="ログインすると、そのサイトに書き込むときに自動で使われます(5ch の BE なら、BE に対応した板でアイコンやポイントが付きます)。パスワードはこのアプリの DB にそのまま保存します。設定の書き出し(JSON)には入りませんが、まるごとバックアップのファイルには入ります"
         >
-          <div className="space-y-3">
-            {(c.accounts ?? []).map((kind) => (
-              <AccountForm
-                key={key(c.id, kind.id)}
-                connectorId={c.id}
-                kind={kind}
-                saved={props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)}
-                status={props.loginStatus.get(key(c.id, kind.id))}
-                onLogin={props.onLogin}
-                onDelete={() => props.onDeleteAccount(c.id, kind.id)}
-              />
+          <div className="space-y-5">
+            {sites.map(([site, list]) => (
+              <div key={site}>
+                <p className="mb-2 text-sm font-bold text-c-text-strong flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base text-c-text-muted">language</span>
+                  {site}
+                </p>
+                <div className="space-y-3 pl-6">
+                  {list.map(({ c, kind }) => (
+                    <div key={key(c.id, kind.id)}>
+                      <p className="mb-1.5 text-xs font-bold text-c-text-muted">{kind.name} アカウント</p>
+                      <AccountForm
+                        connectorId={c.id}
+                        kind={kind}
+                        saved={props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)}
+                        status={props.loginStatus.get(key(c.id, kind.id))}
+                        onLogin={props.onLogin}
+                        onDelete={() => props.onDeleteAccount(c.id, kind.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
           <p className="mt-3 text-xs text-c-text-muted">
             ログインで受け取った Cookie は、ふだんの通信の Cookie と一緒に保存されます。保存したものを消しても、受け取った Cookie はその期限まで残ります。
           </p>
         </Section>
-      ))}
+      )}
       <Section title="板ごとの設定" note="別名・名前欄とメール欄の既定値・名無しの扱いを、板ごとに決めます。お気に入りの板と、設定のある板が並びます">
         {boards.length > 8 && (
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`${boards.length} 板から絞り込む`} className={`${INPUT} w-full mb-2`} />
@@ -1960,18 +1978,16 @@ export function BackupTab({
         </p>
       )}
       <Section
-        title="古いログの整理"
-        note="この日数より長く開いていないスレのログ(レス)を、起動したときに消します(1 日に 1 回)。お気に入りのスレ・自分が書き込んだスレ・開いているタブは残します。消したスレは、もう一度開けば取り直します(dat 落ちしていれば読めません)"
+        title="閲覧履歴(ログ)を残す日数"
+        note="この日数より長く開いていないスレのログ(閲覧履歴とレス)を、起動したときに消します(1 日に 1 回)。0 なら消しません。お気に入りのスレ・自分が書き込んだスレ・開いているタブは残します。消したスレは、もう一度開けば取り直します(dat 落ちしていれば読めません)"
       >
-        <Choice
+        <NumberField
           value={s.logRetentionDays}
-          options={[
-            { key: 30, name: '30 日' },
-            { key: 90, name: '90 日' },
-            { key: 180, name: '180 日' },
-            { key: 365, name: '1 年' },
-            { key: 0, name: '消さない' },
-          ]}
+          min={0}
+          max={3650}
+          unit="日"
+          zeroLabel="消さない"
+          presets={[7, 30, 90, 365, 0]}
           onChange={(v) => update('logRetentionDays', v)}
         />
         {s.logRetentionDays > 0 && (
@@ -2358,8 +2374,9 @@ export function BoardsTab(
   props: Pick<
     SettingsProps,
     'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite' | 'settings' | 'update'
-  > & { onShowBoardList: (menuUrl: string) => void },
+  > & { onShowBoardList: (menuUrl: string) => void; part?: 'favorites' | 'menus' },
 ) {
+  const part = props.part
   const [editing, setEditing] = useState<string>()
   const metaOf = (url: string) => props.settings.boardMeta[url] ?? {}
   const setMeta = (url: string, m: BoardMeta) => {
@@ -2389,7 +2406,7 @@ export function BoardsTab(
 
   return (
     <>
-      <Section title="お気に入り板" note="サイドバーの「お気に入り」に並ぶ板です。「板一覧」で ☆ を押すか、板の URL を貼って登録します">
+      {part !== 'menus' && <Section title="お気に入り板" note="サイドバーの「お気に入り」に並ぶ板です。「板一覧」で ☆ を押すか、板の URL を貼って登録します">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {props.favorites.map((b) => (
             <div key={b.url}>
@@ -2438,9 +2455,9 @@ export function BoardsTab(
             追加
           </button>
         </form>
-      </Section>
+      </Section>}
 
-      <Section title="BBS メニュー" note="掲示板の板一覧(bbsmenu.html か bbsmenu.json)です。hono-bbs は web の板の一覧の URL(https://〜/boards)を入れます。「板一覧を見る」から、お気に入りに登録する板を探せます">
+      {part !== 'favorites' && <Section title="BBS メニュー" note="掲示板の板一覧(bbsmenu.html か bbsmenu.json)です。hono-bbs は web の板の一覧の URL(https://〜/boards)を入れます。「板一覧を見る」から、お気に入りに登録する板を探せます">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
           {props.sites.map((s) => (
             <div key={s.menuUrl}>
@@ -2480,142 +2497,8 @@ export function BoardsTab(
             追加
           </button>
         </form>
-      </Section>
+      </Section>}
       {message && <p className="text-sm text-c-heat-very-hot">{message}</p>}
-    </>
-  )
-}
-
-/** 外付けのコネクタ(MOD のように、フォルダに置いて有効にする) */
-function ConnectorsTab({
-  settings: s,
-  update,
-  externalConnectors,
-  onReloadConnectors,
-  onOpenConnectorsDir,
-}: Pick<SettingsProps, 'settings' | 'update' | 'externalConnectors' | 'onReloadConnectors' | 'onOpenConnectorsDir'>) {
-  /** 通信の先を確かめてもらっているコネクタ */
-  const [asking, setAsking] = useState<string>()
-  const [busy, setBusy] = useState(false)
-  const reload = async (approvals?: Record<string, { enabled: boolean; hosts: string[] }>) => {
-    setBusy(true)
-    await onReloadConnectors(approvals)
-    setBusy(false)
-  }
-  const setApproval = (id: string, approval: { enabled: boolean; hosts: string[] } | undefined) => {
-    const next = { ...s.connectors }
-    if (approval) next[id] = approval
-    else delete next[id]
-    update('connectors', next)
-    setAsking(undefined)
-    void reload(next)
-  }
-  const STATUS: Record<ExternalConnectorInfo['status'], { label: string; color: string }> = {
-    loaded: { label: '使えます', color: 'var(--c-mark-new)' },
-    disabled: { label: '無効', color: 'var(--c-text-muted)' },
-    needsApproval: { label: '通信の先が変わりました', color: 'var(--c-mark-fav)' },
-    error: { label: '読み込めません', color: 'var(--c-error)' },
-  }
-  return (
-    <>
-      <Section
-        title="外付けのコネクタ"
-        note="アプリのデータフォルダの connectors に、コネクタを 1 つずつフォルダで置きます(manifest.json と connector.js)。置いたら「読み込み直す」を押し、ここで有効にします。コネクタは外と切り離した囲いの中で動き、manifest.json に書いた先とだけ通信できます"
-      >
-        <div className="flex gap-2 mb-3">
-          <button type="button" className={BTN} onClick={onOpenConnectorsDir}>
-            フォルダを開く
-          </button>
-          <button type="button" className={BTN} disabled={busy} onClick={() => void reload()}>
-            {busy ? '読み込み中…' : '読み込み直す'}
-          </button>
-        </div>
-        {externalConnectors.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
-        <div className="flex flex-col gap-2">
-          {externalConnectors.map((c) => {
-            const m = c.manifest
-            const st = STATUS[c.status]
-            const approval = m ? s.connectors[m.id] : undefined
-            return (
-              <div key={c.dir} className="rounded-lg border border-c-border px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-lg text-c-text-muted">extension</span>
-                  <span className="text-sm font-bold text-c-text-strong">{m?.name ?? c.dir}</span>
-                  {m && <span className="text-xs text-c-text-muted">v{m.version}</span>}
-                  {m?.author && <span className="text-xs text-c-text-muted">{m.author}</span>}
-                  <span className="text-[11px] font-bold ml-auto" style={{ color: st.color }}>
-                    {st.label}
-                  </span>
-                  {m && (c.status === 'disabled' || c.status === 'needsApproval') && (
-                    <button type="button" className={BTN} onClick={() => setAsking(m.id)}>
-                      {c.status === 'disabled' ? '有効にする' : '確かめ直す'}
-                    </button>
-                  )}
-                  {m && approval?.enabled && c.status !== 'needsApproval' && (
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border hover:bg-c-surface2"
-                      onClick={() => setApproval(m.id, undefined)}
-                    >
-                      無効にする
-                    </button>
-                  )}
-                </div>
-                {m?.description && <p className="mt-1 text-xs text-c-text-body">{m.description}</p>}
-                <p className="mt-1 text-[11px] text-c-text-muted break-all">
-                  フォルダ: {c.dir}
-                  {m && ` ・ 通信する先: ${m.hosts.join('、')}`}
-                </p>
-                {c.error && (
-                  <p className="mt-1 text-xs break-all" style={{ color: 'var(--c-error)' }}>
-                    {c.error}
-                  </p>
-                )}
-                {m && asking === m.id && (
-                  <div className="mt-2 p-3 rounded-lg bg-c-surface2 text-sm text-c-text-body">
-                    <p className="font-bold">このコネクタは、次の先と通信します</p>
-                    <ul className="my-1.5 list-disc pl-5 font-mono text-xs">
-                      {m.hosts.map((h) => (
-                        <li key={h}>{h}</li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-c-text-muted">
-                      コネクタは、あなたがフォルダに置いたファイルのコードです。囲いの中で動くので、アプリのログ・設定・パスワードには触れませんが、
-                      上の先へは、読んでいるスレの情報や書き込みを送れます。作った人を信頼できるものだけを有効にしてください。
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <button type="button" className={BTN} onClick={() => setApproval(m.id, { enabled: true, hosts: m.hosts })}>
-                        許可して有効にする
-                      </button>
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border hover:bg-c-surface"
-                        onClick={() => setAsking(undefined)}
-                      >
-                        やめる
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </Section>
-      <Section title="コネクタの書き方" note="connector.js の中で defineConnector({ ... }) を 1 回呼びます。中身は組み込みのコネクタと同じ形です(リポジトリの docs/connectors.md に、見本と決まりの説明があります)">
-        <pre className="text-[11px] leading-relaxed bg-c-surface2 rounded-lg p-3 overflow-x-auto custom-scrollbar">{`// manifest.json
-{ "id": "my-bbs", "name": "自作の掲示板", "version": "1.0.0", "api": 1, "hosts": ["bbs.example.com"] }
-
-// connector.js
-defineConnector({
-  canHandle: (url) => url.startsWith('https://bbs.example.com/'),
-  threadWebUrl: (t) => 'https://bbs.example.com/t/' + t.key,
-  async resolveUrl(url, ctx) { ... },
-  async listBoards(site, ctx) { return [] },
-  async listThreads(board, ctx) { ... },
-  async fetchPosts(thread, cursor, ctx) { ... },
-})`}</pre>
-      </Section>
     </>
   )
 }
@@ -2630,8 +2513,7 @@ export function AboutTab() {
     <>
       <Section title={`bbs-browser ${version ?? ''}`}>
         <p className="text-sm text-c-text-body leading-relaxed">
-          コネクタで掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・ふたばを読めます。
-          ほかの掲示板は、外付けのコネクタ(設定 → コネクタ)で足せます。
+          掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・ふたば・hono-bbs を読めます。
         </p>
       </Section>
       <Section desktopOnly title="データの保存場所">
@@ -2644,6 +2526,26 @@ export function AboutTab() {
       </Section>
     </>
   )
+}
+
+/** PC の設定画面の置き場所と大きさ(この端末のブラウザの保存に。消えても既定に戻るだけ) */
+const RECT_KEY = 'bbs:settings-dialog-rect'
+type DialogRect = { x: number; y: number; w: number; h: number }
+function loadDialogRect(): DialogRect {
+  const def = { x: 0, y: 0, w: Math.min(896, window.innerWidth - 48), h: Math.min(720, window.innerHeight - 48) }
+  try {
+    const v = JSON.parse(localStorage.getItem(RECT_KEY) ?? 'null') as DialogRect | null
+    return v && [v.x, v.y, v.w, v.h].every(Number.isFinite) ? v : def
+  } catch {
+    return def
+  }
+}
+function storeDialogRect(r: DialogRect) {
+  try {
+    localStorage.setItem(RECT_KEY, JSON.stringify(r))
+  } catch {
+    // 保存できなくても困らない(次は既定の大きさで開く)
+  }
 }
 
 export default function SettingsDialog(props: SettingsProps) {
@@ -2669,6 +2571,39 @@ export default function SettingsDialog(props: SettingsProps) {
 
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
+  // PC: 置き場所(真ん中からのずれ)と大きさ。動かした・大きさを変えたら覚えておく
+  const [rect, setRect] = useState(loadDialogRect)
+  /** 外(暗い所)で押し始めたか */
+  const downOutside = useRef(false)
+  const saveRect = () => {
+    const el = boxRef.current
+    if (!el) return
+    const next = { ...rect, w: el.offsetWidth, h: el.offsetHeight }
+    if (next.w === rect.w && next.h === rect.h) return
+    setRect(next)
+    storeDialogRect(next)
+  }
+  const startMove = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
+    const sx = e.clientX - rect.x
+    const sy = e.clientY - rect.y
+    let last = rect
+    const move = (ev: MouseEvent) => {
+      // 帯が画面の外へ出きらないように、真ん中から画面の大きさの半分までに抑える
+      const lx = window.innerWidth / 2
+      const ly = window.innerHeight / 2
+      last = { ...last, x: Math.max(-lx, Math.min(lx, ev.clientX - sx)), y: Math.max(-ly + 40, Math.min(ly - 40, ev.clientY - sy)) }
+      setRect(last)
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      storeDialogRect(last)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
   // スマホ: Esc(戻るボタン)は、検索 → 分類の画面 → 一覧 の順に 1 つずつ戻り、一覧で閉じる
   /** スマホ: 1 段戻る(検索 → 項目 → 分類 → 一覧 → 閉じる) */
   const goBack = () => {
@@ -2712,17 +2647,17 @@ export default function SettingsDialog(props: SettingsProps) {
           />
         )
       case 'boards':
+      case 'menus':
         return (
           <BoardsTab
             {...props}
+            part={key === 'boards' ? 'favorites' : 'menus'}
             onShowBoardList={(menuUrl) => {
               setListSite(menuUrl)
               enterTab('boardlist')
             }}
           />
         )
-      case 'connectors':
-        return <ConnectorsTab {...props} />
       case 'accounts':
         return <AccountsTab {...props} />
       case 'backup':
@@ -2833,11 +2768,28 @@ export default function SettingsDialog(props: SettingsProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
+    <div
+      className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6"
+      // 外を押したら閉じる。ただし、中で押し始めた(動かす・大きさを変える)指を外で離したときは閉じない
+      onMouseDown={(e) => (downOutside.current = e.target === e.currentTarget)}
+      onClick={(e) => e.target === e.currentTarget && downOutside.current && props.onClose()}
+    >
       <div
         ref={boxRef}
-        className="w-full max-w-4xl h-full max-h-[720px] flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
+        // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)
+        className="flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
+        style={{
+          width: rect.w,
+          height: rect.h,
+          minWidth: 560,
+          minHeight: 360,
+          maxWidth: 'calc(100vw - 16px)',
+          maxHeight: 'calc(100vh - 16px)',
+          resize: 'both',
+          transform: `translate(${rect.x}px, ${rect.y}px)`,
+        }}
         onClick={(e) => e.stopPropagation()}
+        onMouseUp={saveRect}
       >
         <nav className="w-52 flex-shrink-0 flex flex-col bg-c-surface2 border-r border-c-border py-3">
           <h2 className="px-5 pb-3 text-lg font-bold text-c-text-strong">設定</h2>
@@ -2879,7 +2831,7 @@ export default function SettingsDialog(props: SettingsProps) {
           </label>
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex items-center justify-between px-6 py-3 border-b border-c-border">
+          <div className="flex items-center justify-between px-6 py-3 border-b border-c-border cursor-move select-none" onMouseDown={startMove} title="つかんで動かす">
             <h3 className="text-base font-bold text-c-text-strong">{searching ? '設定の検索' : TABS.find((t) => t.key === tab)?.name}</h3>
             <button type="button" onClick={props.onClose} className={ICON_BTN} title="閉じる">
               <span className="material-symbols-outlined text-xl">close</span>

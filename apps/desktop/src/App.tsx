@@ -6,7 +6,7 @@ import { loadErrorText } from './components/LoadFailed'
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { onBackButtonPress } from '@tauri-apps/api/app'
-import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   allConnectors,
   demoConnector,
@@ -55,7 +55,6 @@ import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
-import { connectorsDir, loadExternalConnectors, type ExternalConnectorInfo } from './host/externalConnectors'
 import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
@@ -1148,12 +1147,6 @@ export default function App() {
       })),
       ...PICKABLE_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickSchemeNow(settings, c.key)) })),
       ...POST_STYLES.map((p) => ({ group: 'レスの見た目', label: p.name, keywords: p.note, icon: 'style', run: () => updateSetting('postStyle', p.key) })),
-      ...(isMobile
-        ? []
-        : [
-            { group: '表示の密度', label: '一覧表示', icon: 'view_list', run: () => updateSetting('density', 'list') },
-            { group: '表示の密度', label: '高密度', icon: 'density_small', run: () => updateSetting('density', 'dense') },
-          ]),
     ]
   }
 
@@ -1347,18 +1340,8 @@ export default function App() {
     }
   }, [])
 
-  // 外付けのコネクタ(connectors/ のフォルダ)を読み込む。タブを戻す・起動時の板を開くのは、読み込み終えてから
-  // (外付けのコネクタのスレを開いたまま閉じていたとき、コネクタがまだないと開けないため)
-  const [externalConnectors, setExternalConnectors] = useState<ExternalConnectorInfo[]>([])
-  const [externalReady, setExternalReady] = useState(false)
-  const reloadExternalConnectors = (approvals = settingsRef.current.connectors) =>
-    loadExternalConnectors(ctx, approvals)
-      .then(setExternalConnectors)
-      .catch(backgroundError('外付けのコネクタの読み込み'))
-  useEffect(() => {
-    if (!settingsLoaded || externalReady) return
-    void reloadExternalConnectors(settings.connectors).finally(() => setExternalReady(true))
-  }, [settingsLoaded])
+  // 外付けのコネクタはやめた(2026-11。組み込みのコネクタだけで掲示板に対応する)。タブを戻す・起動時の板を開くのは、設定を読んでから
+  const externalReady = settingsLoaded
 
   // 開いていたタブを次の起動で戻す。戻したタブは、選んだときに読み込む
   const restored = useRef(false)
@@ -2517,9 +2500,6 @@ export default function App() {
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}
           onPruneLogs={pruneLogs}
-          externalConnectors={externalConnectors}
-          onReloadConnectors={(approvals) => reloadExternalConnectors(approvals)}
-          onOpenConnectorsDir={() => undefined}
           onClose={() => setSettingsTab(undefined)}
         />
       )}
@@ -2553,9 +2533,6 @@ export default function App() {
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}
           onPruneLogs={pruneLogs}
-          externalConnectors={externalConnectors}
-          onReloadConnectors={(approvals) => reloadExternalConnectors(approvals)}
-          onOpenConnectorsDir={() => void connectorsDir().then(revealItemInDir).catch(backgroundError('コネクタのフォルダを開く'))}
           onClose={() => setSettingsTab(undefined)}
         />
       )}

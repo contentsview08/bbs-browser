@@ -3,12 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { PICKABLE_SCHEMES, ACCENTS, isDarkScheme, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type ListDensity, type UpdateSetting } from '../ui/settings'
-
-const DESIGN_CHOICES: { key: ListDensity; name: string; icon: string }[] = [
-  { key: 'list', name: '一覧表示', icon: 'view_list' },
-  { key: 'dense', name: '高密度', icon: 'density_small' },
-]
+import { PICKABLE_SCHEMES, ACCENTS, isDarkScheme, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type UpdateSetting } from '../ui/settings'
 
 const MENU_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2 text-c-text-body hover:bg-c-surface2 transition-colors'
 const GROUP_LABEL = 'px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tracking-wide'
@@ -60,18 +55,6 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
           )
         })}
       </div>
-
-      <div className="my-1 border-t border-c-border" />
-
-      {/* スマホは密度を選ばない(レスの見た目で決まる) */}
-      {!isMobile && <p className={GROUP_LABEL}>デザイン</p>}
-      {!isMobile && DESIGN_CHOICES.map((d) => (
-        <button key={d.key} type="button" onClick={() => update('density', d.key)} className={MENU_ITEM}>
-          <span className="material-symbols-outlined text-base flex-shrink-0">{d.icon}</span>
-          <span className="flex-1 text-left truncate">{d.name}</span>
-          {settings.density === d.key && check}
-        </button>
-      ))}
 
       <div className="my-1 border-t border-c-border" />
 

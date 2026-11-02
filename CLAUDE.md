@@ -53,7 +53,7 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - 選んでいるタブ・1 画面でスレ一覧を出しているか・戻る/進むの履歴は、`src/utils/viewState.ts` の関数でいっしょに変える(別々に書き換えるとずれる)。
 - J・K などで選ぶレス・スレの決め方は `src/utils/cursor.ts`(スレ表示・スレ一覧・ポップアップで共通、テストあり)。
 - キー操作は `src/utils/keymap.ts` の操作の表(`KeyAction`)に割り当てる。ジェスチャーなどを足すときも、この表に割り当てる。
-- 外付けのコネクタ(MOD): `%APPDATA%/…/connectors/<フォルダ>/{manifest.json,connector.js}` を Rust(`connector_files.rs`)が読むだけ、本体は `src/host/connectorSandbox.ts` の QuickJS(WebAssembly)の囲いで動かす(window・fetch・Tauri なし、通信は manifest の hosts だけ。テストあり)。許可は設定の `connectors`。書き方は `docs/connectors.md`、見本は `examples/connectors/sample-offline`(テストで読み込んでいる)。レスへの反応・操作・印は `Connector.reactions/postActions`・`Badge` で一般化してある(ふたばのそうだねもこの形)。
+- 外付けのコネクタ(MOD)は 2026-11 にやめた(組み込みのコネクタだけで掲示板に対応する方針)。前の作り(QuickJS の囲い・manifest の hosts の許可)は git の履歴(コミット `d7465cb` の前まで)にある。レスへの反応・操作・印は `Connector.reactions/postActions`・`Badge` で一般化してある(ふたばのそうだねもこの形)。
 - 自動 NG(荒らしの判定)は `src/utils/autoNg.ts`(決まりの境目は手でラベルを付けた 340 件で合わせた。テストあり)。ユーザーの印は DB の `troll_marks`(migration 014)に本文ごと貯め、印から育つ判定は `src/utils/trollModel.ts`(判断軸 = でたらめ度・スレをまたいだ重複(長文はコピペ、短文はスラング)・繰り返し・URL・長さ + 文字の 1〜3 文字の並び → ロジスティック回帰。コーパスは DB のログ、荒らしの印 3 件から使う)。Laya の特徴を足すのは次の段。
 - レスを描く数が多いと重い。1 レスの要素を増やさない(操作バーはマウスを乗せたときだけ作る、ID アイコンは背景の絵 1 つ)。
   スレ表示とスレ一覧は、見える所から先に作り、残りは手の空いたときに作り足す。

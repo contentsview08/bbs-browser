@@ -1,9 +1,0 @@
-{
-  "id": "sample-offline",
-  "name": "見本の掲示板(通信しない)",
-  "version": "1.0.0",
-  "api": 1,
-  "hosts": ["sample.bbs-browser.invalid"],
-  "description": "外付けのコネクタの見本。通信せずに、手元の中身だけでスレ一覧・レス・書き込み・いいね・通報・印を試せます。https://sample.bbs-browser.invalid/board/ を URL 欄に入れて開きます",
-  "author": "bbs-browser"
-}

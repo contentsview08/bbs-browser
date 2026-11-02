@@ -504,7 +504,12 @@ article.post-discord {
 .card-thread[data-variant='line'] {
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 0;
+}
+/* スレ一覧の行は、どの見た目・どの端末でも角を丸めない(行は区切り線で分ける。スマホのアプリと同じ) */
+.card-thread {
+  --thread-card-radius: 0px;
+  border-radius: 0;
 }
 /* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
 @media (hover: hover) {

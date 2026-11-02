@@ -31,7 +31,7 @@ export function parseCustom(json: string): CustomDef | null {
   if (!json) return null
   try {
     const o = JSON.parse(json) as Record<string, unknown>
-    const d = { from: typeof o.from === 'string' ? o.from : 'soft-light' } as CustomDef
+    const d = { from: typeof o.from === 'string' ? o.from : 'light-gray' } as CustomDef
     for (const k of CUSTOM_KEYS) {
       const v = o[k]
       if (typeof v !== 'string' || !HEX.test(v.trim())) return null

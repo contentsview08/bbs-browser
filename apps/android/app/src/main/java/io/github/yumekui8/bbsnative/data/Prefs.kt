@@ -55,6 +55,12 @@ class Prefs(context: Context) {
     init {
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
         if (sp.getString("postStyle", null) == "timeline") sp.edit().putString("postStyle", "discord").apply()
+        // やめた配色(2026-11)を選んでいたら、いちばん近い配色に書き換える(ui/Theme.kt の retiredScheme)
+        for (k in listOf("scheme", "darkScheme", "lightScheme")) {
+            val v = sp.getString(k, null) ?: continue
+            val to = io.github.yumekui8.bbsnative.ui.retiredScheme(v)
+            if (to != v) sp.edit().putString(k, to).apply()
+        }
     }
 
     var lastBoardUrl: String?
@@ -72,7 +78,7 @@ class Prefs(context: Context) {
     var darkScheme by pref("darkScheme", "soft-dark")
     /** 差し色(ACCENTS のキー)。空ならテーマの色 */
     var accent by pref("accent", "")
-    var lightScheme by pref("lightScheme", "soft-light")
+    var lightScheme by pref("lightScheme", "light-gray")
     /** レスの見た目: card(カード)/ discord(Discord 風)/ line(LINE 風) */
     var postStyle by pref("postStyle", "card")
     /** 画面全体の文字の倍率(0.85〜1.3) */

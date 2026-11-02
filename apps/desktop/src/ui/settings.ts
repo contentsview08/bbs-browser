@@ -377,7 +377,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
   followOsTheme: false,
   darkScheme: 'soft-dark',
-  lightScheme: 'soft-light',
+  lightScheme: 'light-gray',
   pattern: 'tonal',
   postStyle: 'card',
   density: 'dense',
@@ -516,29 +516,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; border: string }[] = [
   { key: 'indigo', name: 'インディゴ', accent: '#7566e6', border: '#242933' },
   { key: 'amber-teal', name: 'アンバー×ティール', accent: '#e0993f', border: '#2a3247' },
-  { key: '2ch-classic', name: '2chクラシック', accent: '#0000ff', border: '#545454' },
-  // 専ブラで足した、コントラストを抑えた配色(app.css)。web 版のライト('light')は見にくいので外し、これをライトとする
+  // 専ブラで足した、コントラストを抑えた配色(app.css)
   { key: 'soft-dark', name: 'ダーク', accent: '#8b93d9', border: '#343a44' },
-  { key: 'soft-light', name: 'ライト', accent: '#4f6f8f', border: '#d2cdc5' },
   // レスの見た目のスタイル(Discord 風・LINE 風)と組み合わせる配色と、夜用の真っ黒
   { key: 'discord-dark', name: 'Discord ダーク', accent: '#5865f2', border: '#29292d' },
   { key: 'line-light', name: 'LINE ライト', accent: '#06c755', border: '#dfe2e7' },
   { key: 'oled', name: '真っ黒', accent: '#7aa2ff', border: '#222222' },
   // スマホのアプリ(ネイティブ版)で足した配色
   { key: 'gray', name: 'グレー', accent: '#dcdcdc', border: '#232323' },
-  { key: 'light-gray', name: 'ライトグレー', accent: '#4e5a68', border: '#d2d2d4' },
-  { key: 'sepia', name: '紙(セピア)', accent: '#8b5e34', border: '#dccfae' },
+  // 前のライト(soft-light)・紙・Discord ライト・2ch クラシック・夜間はやめた(2026-11)。ライトグレーをライトとする
+  { key: 'light-gray', name: 'ライト', accent: '#4e5a68', border: '#d2d2d4' },
   { key: 'nord', name: 'Nord', accent: '#88c0d0', border: '#3b4252' },
   { key: 'contrast', name: 'ハイコントラスト', accent: '#ffd400', border: '#5c5c5c' },
-  { key: 'night', name: '夜間(暖色)', accent: '#ff9e57', border: '#3a2c22' },
   { key: 'line-dark', name: 'LINE ダーク', accent: '#06c755', border: '#323a45' },
-  { key: 'discord-light', name: 'Discord ライト', accent: '#5865f2', border: '#e3e5e8' },
   { key: 'x-dim', name: 'X(Twitter)ディム', accent: '#1d9bf0', border: '#38444d' },
   { key: 'mono', name: 'モノクロ', accent: '#e8e8e8', border: '#2e2e2e' },
 ]
 
-/** 選べる配色(スマホでは 2ch クラシックを除く) */
-export const PICKABLE_SCHEMES = isMobile ? COLOR_SCHEMES.filter((c) => c.key !== '2ch-classic') : COLOR_SCHEMES
+/** 選べる配色 */
+export const PICKABLE_SCHEMES = COLOR_SCHEMES
 
 /**
  * 顔文字用の予備フォント(app.css)。日本語フォントで描けない「文字 + 重ねる記号」の組(･᷄ など)を描く。
@@ -630,11 +626,13 @@ export function effectiveScheme(s: AppSettings): ColorScheme {
 }
 
 /**
- * 外した web 版のライトを選んでいた人(設定の読み込みや、古い設定ファイル)は、いまのライトにする。
- * スマホでは 2ch クラシックも出さない(専ブラ風の見た目と組で、スマホの画面には合わない)ので、ライトにする
+ * やめた配色を選んでいた人(設定の読み込みや、古い設定ファイル)は、いちばん近い配色にする。
+ * 明るいもの(web 版のライト・前のライト・紙・Discord ライト・2ch クラシック)はライト(ライトグレー)、夜間(暖色)はダーク
  */
 function withoutOldLight(scheme: ColorScheme): ColorScheme {
-  return scheme === 'light' || (isMobile && scheme === '2ch-classic') ? 'soft-light' : scheme
+  if (scheme === 'light' || scheme === 'soft-light' || scheme === 'sepia' || scheme === 'discord-light' || scheme === '2ch-classic') return 'light-gray'
+  if (scheme === 'night') return 'soft-dark'
+  return scheme
 }
 
 /** 前の既定だったスレ表示の ←↑「タブを閉じる」(スマホにはタブがない)は、いまの既定の「ログを削除して閉じる」にする */
@@ -741,7 +739,7 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
         const next = { ...s, ...(saved as Partial<AppSettings>) }
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
         const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle
-        return { ...next, postStyle, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
+        return { ...next, postStyle, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
       })
       setLoaded(true)
     })

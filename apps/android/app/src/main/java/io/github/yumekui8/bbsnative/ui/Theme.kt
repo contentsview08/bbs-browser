@@ -29,7 +29,7 @@ class Scheme(
 private fun c(hex: Long) = Color(hex or 0xFF000000)
 private fun wash(hex: Long, a: Float) = c(hex).copy(alpha = a)
 
-/** 選べる配色(今のスマホ版の PICKABLE_SCHEMES と同じ並び。2ch クラシックはスマホでは出さない) */
+/** 選べる配色(PC 版・Web の PICKABLE_SCHEMES と同じ並び)。前のライト・紙・夜間・Discord ライトはやめた(2026-11)。ライトグレーをライトとする */
 val SCHEMES = listOf(
     Scheme(
         "indigo", "インディゴ", true,
@@ -48,12 +48,6 @@ val SCHEMES = listOf(
         c(0x1B1D22), c(0x202329), c(0x202329), c(0x262A31), c(0x2E333B), c(0x343A44), c(0x434A56),
         c(0xD4D7DD), c(0xB4B9C2), c(0x7D8491), c(0x8B93D9), c(0x15172A), wash(0x8B93D9, 0.14f),
         c(0xD08AA3), c(0x2B0A17), c(0x7FB0E8), c(0x5F9C8A), c(0xA9C4E8), c(0xD9B062), c(0xD9925F), c(0xD96A66),
-    ),
-    Scheme(
-        "soft-light", "ライト", false,
-        c(0xF0EDE8), c(0xE3E7EC), c(0xF7F5F1), c(0xE9E6E0), c(0xDFDBD4), c(0xD2CDC5), c(0xB8B2A8),
-        c(0x2E2C29), c(0x45423D), c(0x85817A), c(0x4F6F8F), c(0xFFFFFF), wash(0x4F6F8F, 0.10f),
-        c(0x2F74C0), c(0xFFFFFF), c(0x3A6AA8), c(0x5F8F7D), c(0x3A5F96), c(0xB57A2A), c(0xBB6236), c(0xB04242),
     ),
     Scheme(
         "discord-dark", "Discord ダーク", true,
@@ -76,19 +70,13 @@ val SCHEMES = listOf(
         c(0xFF8FA3), c(0x2A0B12), c(0x9CC8FF), c(0x9FDDB8), c(0xC8D6E8), c(0xF2C14E), c(0xF2914B), c(0xFF6B6B),
     ),
     Scheme(
-        "light-gray", "ライトグレー", false,
+        "light-gray", "ライト", false,
         c(0xECECEC), c(0xE2E2E3), c(0xF6F6F6), c(0xE4E4E5), c(0xD9D9DB), c(0xD2D2D4), c(0xB4B5B8),
         c(0x222222), c(0x3E3E40), c(0x7E7F83), c(0x4E5A68), c(0xFFFFFF), wash(0x4E5A68, 0.10f),
         c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0xA8721E), c(0xB25A2E), c(0xA83A3A),
     ),
     // ── 提案書(2026-10-31)から足した配色。どれも 字と地のコントラスト比 4.5 以上 ──
     // 紙(セピア): 読書アプリのような生成りの地にこげ茶の字
-    Scheme(
-        "sepia", "紙(セピア)", false,
-        c(0xF4ECD8), c(0xE9DFC4), c(0xF8F2E3), c(0xEDE3C9), c(0xE2D6B6), c(0xDCCFAE), c(0xC4B48E),
-        c(0x2E2418), c(0x3B2F20), c(0x7E6C50), c(0x8B5E34), c(0xFFFFFF), wash(0x8B5E34, 0.10f),
-        c(0xC2410C), c(0xFFFFFF), c(0x2F5E9E), c(0x5B7F2A), c(0x6B4E2E), c(0xA86512), c(0xB4531A), c(0xA8321E),
-    ),
     // Nord: 青みの灰色の地に淡い水色の強調。彩度が低く色がうるさくない
     Scheme(
         // 地を一段暗く、字を一段明るくして、全体が薄く見えないように(Nord の色味は保つ)
@@ -105,12 +93,6 @@ val SCHEMES = listOf(
         c(0xFF4D6D), c(0x000000), c(0x7CC4FF), c(0x7DFFB3), c(0xE6F0FF), c(0xFFD400), c(0xFF9F1C), c(0xFF4D6D),
     ),
     // 夜間(暖色): 青い色を使わない、オレンジがかった暗い配色。寝る前用
-    Scheme(
-        "night", "夜間(暖色)", true,
-        c(0x1B1410), c(0x231A14), c(0x211812), c(0x2A1F18), c(0x33261D), c(0x3A2C22), c(0x4A382B),
-        c(0xF2DFC8), c(0xE6D0B5), c(0xA98F74), c(0xFF9E57), c(0x241406), wash(0xFF9E57, 0.14f),
-        c(0xFF6B5E), c(0x240A06), c(0xF0B37E), c(0xC9B458), c(0xE7C9A4), c(0xFFB347), c(0xFF8F4D), c(0xFF6B5E),
-    ),
     // LINE ダーク: LINE のダークモードに近い。地は濃い紺、自分の吹き出しは深い緑
     Scheme(
         "line-dark", "LINE ダーク", true,
@@ -119,12 +101,6 @@ val SCHEMES = listOf(
         c(0xFF5B5B), c(0x2A0707), c(0x6FB1FF), c(0x7FD0A0), c(0xAFC0D6), c(0xFFB020), c(0xFF8A3D), c(0xFF5B5B),
     ),
     // Discord ライト: 白い地に青紫の強調
-    Scheme(
-        "discord-light", "Discord ライト", false,
-        c(0xFFFFFF), c(0xF2F3F5), c(0xF8F9FA), c(0xEBEDEF), c(0xE3E5E8), c(0xE3E5E8), c(0xC7CCD1),
-        c(0x060607), c(0x2E3338), c(0x6D7581), c(0x5865F2), c(0xFFFFFF), wash(0x5865F2, 0.10f),
-        c(0xED4245), c(0xFFFFFF), c(0x0068E0), c(0x3E8E5E), c(0x4E5D94), c(0xC27C0E), c(0xD9622B), c(0xD83C3E),
-    ),
     // X(Twitter)ディム: 濃紺の地に青の強調。X の「ディム」と同じ色合い(未読は X のピンク)
     Scheme(
         "x-dim", "X(Twitter)ディム", true,
@@ -165,7 +141,7 @@ fun accentOf(key: String) = ACCENTS.firstOrNull { it.key == key }
 
 fun schemeOf(key: String) =
     if (key == "custom") CustomSchemes.def?.let { buildScheme(it) } ?: SCHEMES[0]
-    else SCHEMES.firstOrNull { it.key == key } ?: SCHEMES[0]
+    else SCHEMES.firstOrNull { it.key == retiredScheme(key) } ?: SCHEMES[0]
 
 /** 選べる配色(自分の配色を作っていれば、最後に足す) */
 fun allSchemes(): List<Scheme> = CustomSchemes.def?.let { SCHEMES + buildScheme(it) } ?: SCHEMES
@@ -328,4 +304,11 @@ fun BbsTheme(content: @Composable () -> Unit) {
         labelLarge = base.labelLarge.tight(), labelMedium = base.labelMedium.tight(), labelSmall = base.labelSmall.tight(),
     )
     MaterialTheme(colorScheme = scheme, shapes = shapes, typography = typography, content = content)
+}
+
+/** やめた配色を選んでいた人は、いちばん近い配色にする(明るいものはライト、夜間はダーク。PC 版の withoutOldLight と同じ) */
+fun retiredScheme(key: String): String = when (key) {
+    "soft-light", "sepia", "discord-light", "light", "2ch-classic" -> "light-gray"
+    "night" -> "soft-dark"
+    else -> key
 }

@@ -65,7 +65,7 @@ data class CustomDef(
         fun parse(json: String): CustomDef? = runCatching {
             val o = JSONObject(json)
             fun c(k: String) = Color(android.graphics.Color.parseColor(o.getString(k)))
-            CustomDef(o.optString("from", "soft-light"), c("base"), c("surface"), c("text"), c("accent"), c("unread"), c("own"))
+            CustomDef(o.optString("from", "light-gray"), c("base"), c("surface"), c("text"), c("accent"), c("unread"), c("own"))
         }.getOrNull()
 
         /** 今ある配色から 6 色を写して始める */

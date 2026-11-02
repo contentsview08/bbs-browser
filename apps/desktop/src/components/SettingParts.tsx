@@ -40,8 +40,10 @@ const SAMPLE_HANDLERS: PostHandlers = {
 }
 
 /** 見本のレス。設定の値をそのまま使って描くので、変えたものがすぐ映る(押しても何もしない) */
-export function SamplePosts(props: { settings: AppSettings; title?: string }) {
+export function SamplePosts(props: { settings: AppSettings; title?: string; compact?: boolean; onHide?: () => void }) {
   const s = props.settings
+  // compact: 2 つ目と 3 つ目だけ(設定画面の上に置いたまま、下の設定を見られるように)
+  const posts = props.compact ? SAMPLE.slice(1) : SAMPLE
   const variant = effectivePostStyle(s)
   const idCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -50,13 +52,20 @@ export function SamplePosts(props: { settings: AppSettings; title?: string }) {
   }, [])
   return (
     <div className="mb-4">
-      <p className="text-xs text-c-text-muted mb-1.5">{props.title ?? '見本'}</p>
+      <p className="flex items-center text-xs text-c-text-muted mb-1.5">
+        <span className="flex-1">{props.title ?? '見本'}</span>
+        {props.onHide && (
+          <button type="button" onClick={props.onHide} className="px-1.5 hover:text-c-accent underline">
+            見本を隠す
+          </button>
+        )}
+      </p>
       <div
         className="pointer-events-none select-none rounded-[var(--card-radius)] border border-c-border bg-panel-view overflow-hidden flex flex-col"
         style={{ gap: 'var(--list-gap-post)' }}
         aria-hidden
       >
-        {SAMPLE.map((p, i) => (
+        {posts.map((p, i) => (
           <PostArticle
             key={p.no}
             post={p}

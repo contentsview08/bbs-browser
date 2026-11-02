@@ -275,13 +275,27 @@ function Section({
 function StickySample({ settings }: { settings: AppSettings }) {
   const query = useContext(SearchContext)
   const nav = useContext(SectionNavContext)
+  const [hidden, setHidden] = useState(sampleHidden)
   if (query.trim() !== '' || nav.mode === 'index') return null
+  if (hidden)
+    return (
+      <button
+        type="button"
+        onClick={() => setHidden((sampleHidden = false))}
+        className="mb-4 text-xs text-c-text-muted hover:text-c-accent underline"
+      >
+        見本のレスを出す
+      </button>
+    )
   return (
-    <div className={`sticky top-0 z-10 -mx-1 px-1 pb-1 bg-c-surface ${isMobile ? '-mt-2' : '-mt-1'}`}>
-      <SamplePosts settings={settings} title="見本(変えるとすぐ映ります)" />
+    // 入れ物の上の余白(PC は 20px・スマホは 24px)まで地で覆い、スクロールした設定が見本の上に透けないようにする
+    <div className={`sticky z-10 -mx-1 px-1 pb-1 bg-c-surface ${isMobile ? '-top-6 -mt-6 pt-6' : '-top-5 -mt-5 pt-5'}`}>
+      <SamplePosts settings={settings} compact title="見本(変えるとすぐ映ります)" onHide={() => setHidden((sampleHidden = true))} />
     </div>
   )
 }
+/** 見本を隠したか(設定画面を開き直しても覚えておく。アプリを起動し直したら出す) */
+let sampleHidden = false
 
 /** 横に並べる択一ボタン */
 function Choice<T extends string | number>(props: {

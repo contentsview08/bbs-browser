@@ -1,106 +1,66 @@
-// NG を登録する画面。元の文字(スレタイや本文)を入れた状態で開くので、要らない部分を削ってそのまま登録できる
+// NG を足す・直す画面。元の文字(スレタイや本文)を入れた状態で開くので、要らない部分を削ってそのまま登録できる。
+// 中身の欄は NgEditor(PC の管理表・スマホの NG の画面と共通)
 
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { createPortal } from 'react-dom'
-import { NG_TARGETS, isValidPattern, newRule, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
-
-const INPUT =
-  'w-full bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted focus:ring-c-accent focus:border-c-accent'
+import { isValidPattern, newRule, type NgRule, type NgTarget } from '../utils/ng'
+import NgEditor, { type NgDraftRule } from './NgEditor'
 
 export interface NgDraft {
   target: NgTarget
   pattern: string
   /** 種類ごとの、元の文字(本文・名前・ID・スレタイ)。種類を切り替えたら、その種類の文字を欄に入れる */
   values?: Partial<Record<NgTarget, string>>
+  /** 「この板だけ」にできる板(スレ・スレ一覧から開いたとき) */
+  board?: { url: string; name: string }
+  /** 直すときの、もとの NG */
+  rule?: NgRule
 }
 
-export default function NgRuleDialog(props: { draft: NgDraft; onSubmit: (rule: NgRule) => void; onClose: () => void }) {
-  const [target, setTarget] = useState<NgTarget>(props.draft.target)
-  const [pattern, setPattern] = useState(props.draft.pattern)
-  const [isRegex, setIsRegex] = useState(false)
-  const [todayOnly, setTodayOnly] = useState(false)
-  const valid = isValidPattern(pattern.trim(), isRegex)
+export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: string; name: string }; onSubmit: (rule: NgRule) => void; onClose: () => void }) {
+  const d = props.draft
+  const [rule, setRule] = useState<NgDraftRule>(() => d.rule ?? { target: d.target, pattern: d.pattern, isRegex: false, enabled: true })
+  // 試し欄: 元のレスの本文(なければスレタイ・名前など、いまの種類の元の文字)
+  const [sample, setSample] = useState(d.values?.content ?? d.values?.[d.target] ?? d.pattern)
+  const valid = isValidPattern(rule.pattern.trim(), rule.isRegex)
 
   const submit = () => {
     if (!valid) return
-    props.onSubmit(newRule(target, pattern.trim(), { isRegex, expiresOnDate: todayOnly ? todayDateString() : undefined }))
+    const pattern = rule.pattern.trim()
+    props.onSubmit(rule.id ? ({ ...rule, pattern } as NgRule) : newRule(rule.target, pattern, { ...rule, pattern }))
     props.onClose()
   }
 
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
-
   const boxRef = useRef<HTMLDivElement>(null)
-
   useFocusTrap(boxRef, props.onClose)
 
   return createPortal(
-    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-4" onClick={props.onClose}>
       <div
         ref={boxRef}
-        className="w-full max-w-lg bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-lg max-h-full flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pl-5 pr-2 py-2.5 border-b border-c-border">
-          <h2 className="text-base font-bold text-c-text-strong">NG に追加</h2>
+          <h2 className="text-base font-bold text-c-text-strong">{d.rule ? 'NG を直す' : 'NG に追加'}</h2>
           <button type="button" onClick={props.onClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
             <span className="material-symbols-outlined text-lg">close</span>
           </button>
         </div>
-        <div className="px-5 py-4 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {NG_TARGETS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => {
-                  setTarget(t.key)
-                  // その種類の元の文字が分かっていれば入れ替える(ID を押したら、そのレスの ID が入る)
-                  const v = props.draft.values?.[t.key]
-                  if (v) setPattern(v)
-                }}
-                className={`px-3 py-1 text-sm border rounded-[var(--chip-radius)] transition-colors ${
-                  t.key === target ? 'border-c-accent text-c-accent bg-[var(--c-accent-wash)]' : 'border-c-border text-c-text-body hover:border-c-border-strong'
-                }`}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-c-text-muted">要らない部分を削って、NG にしたい言葉だけを残してください{target === 'posterId' ? '(ID は完全一致)' : '(部分一致)'}</p>
-          <textarea
-            value={pattern}
-            onChange={(e) => setPattern(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault()
-                submit()
-              }
-            }}
-            autoFocus
-            rows={Math.min(6, Math.max(2, pattern.split('\n').length))}
-            className={`${INPUT} resize-y ${pattern.trim() && !valid ? 'border-c-heat-very-hot' : ''}`}
-          />
-          <div className="flex items-center gap-4 text-sm text-c-text-body">
-            <label className="flex items-center gap-1.5 select-none">
-              <input type="checkbox" checked={isRegex} onChange={(e) => setIsRegex(e.target.checked)} className="rounded" />
-              正規表現
-            </label>
-            <label className="flex items-center gap-1.5 select-none">
-              <input type="checkbox" checked={todayOnly} onChange={(e) => setTodayOnly(e.target.checked)} className="rounded" />
-              今日だけ
-            </label>
-          </div>
+        <div className="px-5 py-4 overflow-y-auto">
+          <NgEditor rule={rule} onChange={setRule} board={d.board ?? props.board} values={d.values} sample={sample} onSampleChange={setSample} onSubmit={submit} />
         </div>
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
-          <span className="text-[10px] text-c-text-muted">Ctrl+Enter で追加</span>
+          <span className="text-[10px] text-c-text-muted">Ctrl+Enter で{d.rule ? '直す' : '追加'}</span>
           <button
             type="button"
             onClick={submit}
             disabled={!valid}
             className="px-4 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
           >
-            NG に追加
+            {d.rule ? '直す' : 'NG に追加'}
           </button>
         </div>
       </div>

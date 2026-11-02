@@ -1,6 +1,7 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
 import { UPLOAD_HOSTS } from '../host/uploader'
+import NgManager from './NgManager'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
 import { isCustomDark, parseCustom } from '../ui/customScheme'
 import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -28,7 +29,6 @@ import { POST_STYLES,
   type AppSettings,
   type UpdateSetting,
 } from '../ui/settings'
-import { isValidPattern, newRule, todayDateString, type NgTarget } from '../utils/ng'
 import { loadSystemFonts, type SystemFont } from '../host/systemFonts'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -1962,23 +1962,9 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
   )
 }
 
-const NG_TABS: { key: NgTarget; name: string; placeholder: string; note: string }[] = [
-  { key: 'content', name: 'NG ワード', placeholder: '本文に含まれる言葉', note: '本文に含むレスを NG にします(部分一致)' },
-  { key: 'posterName', name: 'NG ネーム', placeholder: '名前', note: '名前に含むレスを NG にします(部分一致)' },
-  { key: 'posterId', name: 'NG ID', placeholder: 'ID', note: 'その ID のレスを NG にします(完全一致)' },
-  { key: 'threadTitle', name: 'NG スレタイ', placeholder: 'スレタイに含まれる言葉', note: 'スレタイに含むスレを、スレ一覧に出しません(部分一致)' },
-]
-
 /** NG の管理。種類(本文・名前・ID・スレタイ)ごとのタブに分け、それぞれに追加欄と一覧を置く */
 export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
-  const [target, setTarget] = useState<NgTarget>('content')
-  const [pattern, setPattern] = useState('')
-  const [isRegex, setIsRegex] = useState(false)
-  const [todayOnly, setTodayOnly] = useState(false)
-  const valid = isValidPattern(pattern.trim(), isRegex)
   const rules = s.ngRules
-  const tab = NG_TABS.find((t) => t.key === target)!
-  const shown = rules.filter((r) => r.target === target)
 
   return (
     <>
@@ -2009,86 +1995,9 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
         />
       </Section>
 
-      <div className="flex border-b border-c-border mb-4">
-        {NG_TABS.map((t) => {
-          const active = t.key === target
-          const count = rules.filter((r) => r.target === t.key).length
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTarget(t.key)}
-              className={`relative px-4 py-2 text-sm font-medium transition-colors ${active ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-body'}`}
-            >
-              {t.name}
-              <span className="ml-1.5 text-xs tabular-nums opacity-70">{count}</span>
-              {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
-            </button>
-          )
-        })}
-      </div>
-
-      <p className="text-xs text-c-text-muted mb-2">{tab.note}。レスの ⋯ やスレ一覧の NG ボタンからも追加できます</p>
-      <form
-        className="flex flex-wrap items-center gap-2 mb-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!valid) return
-          update('ngRules', [
-            ...rules,
-            newRule(target, pattern.trim(), { isRegex, expiresOnDate: todayOnly ? todayDateString() : undefined }),
-          ])
-          setPattern('')
-        }}
-      >
-        <input
-          type="text"
-          value={pattern}
-          onChange={(e) => setPattern(e.target.value)}
-          placeholder={isRegex ? '正規表現' : tab.placeholder}
-          className={`${INPUT} flex-1 min-w-48 ${pattern.trim() && !valid ? 'border-c-heat-very-hot' : ''}`}
-        />
-        <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
-          <input type="checkbox" checked={isRegex} onChange={(e) => setIsRegex(e.target.checked)} className="rounded" />
-          正規表現
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-c-text-body select-none">
-          <input type="checkbox" checked={todayOnly} onChange={(e) => setTodayOnly(e.target.checked)} className="rounded" />
-          今日だけ
-        </label>
-        <button type="submit" className={BTN} disabled={!valid}>
-          追加
-        </button>
-      </form>
-
-      {shown.length === 0 ? (
-        <p className="text-sm text-c-text-muted">まだありません</p>
-      ) : (
-        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
-          {shown.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                checked={r.enabled}
-                onChange={(e) => update('ngRules', rules.map((x) => (x.id === r.id ? { ...x, enabled: e.target.checked } : x)))}
-                className="rounded"
-                title="有効"
-              />
-              <span
-                className={`flex-1 min-w-0 truncate ${r.isRegex ? 'font-mono' : ''} ${r.enabled ? 'text-c-text-body' : 'text-c-text-muted line-through'}`}
-                title={r.pattern}
-              >
-                {r.pattern}
-              </span>
-              {r.isRegex && <span className="text-[10px] text-c-text-muted">正規表現</span>}
-              {r.expiresOnDate && <span className="text-[10px] text-c-text-muted">{r.expiresOnDate} まで</span>}
-              <button type="button" className={ICON_BTN} title="削除" onClick={() => update('ngRules', rules.filter((x) => x.id !== r.id))}>
-                <span className="material-symbols-outlined text-base">delete</span>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <Section title="NG の一覧" note="レスの ⋯・スレの NG ボタンからも足せます。正規表現・効く板(すべて / この板だけ)・期限・メモを決められます">
+        <NgManager rules={rules} onChange={(v) => update('ngRules', v)} />
+      </Section>
     </>
   )
 }

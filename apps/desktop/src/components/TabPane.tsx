@@ -93,7 +93,8 @@ interface Props {
   /** キー操作を受け取るか(2 画面でスレ一覧を触っているときは false) */
   keyFocus: boolean
   settings: AppSettings
-  isNg: (p: Post) => boolean
+  /** レスの NG。boardUrl はそのスレの板(「この板だけ」の NG を当てる) */
+  isNg: (p: Post, boardUrl?: string) => boolean
   /** 自動 NG にユーザーが付けた印 */
   trollMarks: TrollMarks
   /** 印から学んだ判定(印が少ないうちは undefined) */
@@ -171,6 +172,8 @@ function TabPane({
   const { id, thread } = tab
   const onSavePosition = useCallback((pos: ScrollPosition) => ev.savePosition(id, pos), [ev, id])
   const onRead = useCallback((no: number) => ev.markRead(thread, no), [ev, thread])
+  // NG は、このスレの板を添えて当てる(「この板だけ」の NG)
+  const isNgHere = useCallback((p: Post) => isNg(p, thread.boardUrl), [isNg, thread.boardUrl])
   const onOpenInBrowser = useCallback(() => ev.openInBrowser(thread), [ev, thread])
   const onDeleteLog = useCallback(() => ev.deleteLog(id), [ev, id])
   const title = tab.log.title || thread.title
@@ -197,7 +200,7 @@ function TabPane({
       loading={tab.loading}
       errorText={tab.error}
       settings={settings}
-      isNg={isNg}
+      isNg={isNgHere}
       trollMarks={trollMarks}
       trollJudge={trollJudge}
       onMarkTroll={onMarkTroll}

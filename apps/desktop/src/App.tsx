@@ -1806,8 +1806,10 @@ export default function App() {
     notify,
     openThread: (t) => latest.current.openThread(t),
   })
+  // NG を足す。同じ id のものがあれば差し替える(NG の画面から直したとき)
   const addNg = useCallback(
-    (rule: NgRule) => updateSetting('ngRules', [...settings.ngRules, rule]),
+    (rule: NgRule) =>
+      updateSetting('ngRules', settings.ngRules.some((r) => r.id === rule.id) ? settings.ngRules.map((r) => (r.id === rule.id ? rule : r)) : [...settings.ngRules, rule]),
     [settings.ngRules, updateSetting],
   )
 
@@ -2137,9 +2139,9 @@ export default function App() {
           favoriteIds={favIds}
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
-          onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId } })}
+          onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId }, board: { url: t.boardUrl, name: board?.url === t.boardUrl ? board.name : t.boardUrl } })}
           // 立てた人を NG: ID の NG(その人が立てたスレも、書いたレスも隠れる)。入れる前に欄で直せる
-          onNgAuthor={(t) => t.authorId && setNgDraft({ target: 'posterId', pattern: t.authorId, values: { threadTitle: t.title, posterId: t.authorId } })}
+          onNgAuthor={(t) => t.authorId && setNgDraft({ target: 'posterId', pattern: t.authorId, values: { threadTitle: t.title, posterId: t.authorId }, board: { url: t.boardUrl, name: board?.url === t.boardUrl ? board.name : t.boardUrl } })}
           onDeleteThreadLog={(t) => void deleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={favView || history ? undefined : settings.keywords}
@@ -2418,7 +2420,19 @@ export default function App() {
           />
         </SliderDialog>
       )}
-      {ngDraft && <NgRuleDialog draft={ngDraft} onSubmit={addNg} onClose={() => setNgDraft(undefined)} />}
+      {ngDraft && (
+        <NgRuleDialog
+          draft={ngDraft}
+          // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
+          board={
+            activeTab
+              ? { url: activeTab.thread.boardUrl, name: favorites?.find((f) => f.url === activeTab.thread.boardUrl)?.name ?? (board?.url === activeTab.thread.boardUrl ? board.name : activeTab.thread.boardUrl) }
+              : board && { url: board.url, name: board.name }
+          }
+          onSubmit={addNg}
+          onClose={() => setNgDraft(undefined)}
+        />
+      )}
 
       {newThreadOpen && board && (
         <NewThreadDialog

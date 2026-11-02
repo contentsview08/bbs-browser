@@ -59,7 +59,8 @@ function isNgRule(v: unknown): v is NgRule {
     r.pattern !== '' &&
     NG_TARGET_KEYS.includes(r.target as NgTarget) &&
     typeof r.isRegex === 'boolean' &&
-    (r.expiresOnDate === undefined || typeof r.expiresOnDate === 'string')
+    (r.expiresOnDate === undefined || typeof r.expiresOnDate === 'string') &&
+    (r.boardUrl === undefined || typeof r.boardUrl === 'string')
   )
 }
 
@@ -102,9 +103,9 @@ export function importableSettings(file: SettingsFile, defaults: AppSettings): P
   return out
 }
 
-/** NG を今のものに足す。同じもの(種類・言葉・正規表現か)は重ねない。足した数も返す */
+/** NG を今のものに足す。同じもの(種類・言葉・正規表現か・効く板)は重ねない。足した数も返す */
 export function mergeNgRules(current: NgRule[], incoming: NgRule[], newId: () => string): { rules: NgRule[]; added: number } {
-  const key = (r: NgRule) => `${r.target}\n${r.isRegex ? 1 : 0}\n${r.pattern}`
+  const key = (r: NgRule) => `${r.target}\n${r.isRegex ? 1 : 0}\n${r.pattern}\n${r.boardUrl ?? ''}`
   const seen = new Set(current.map(key))
   const add: NgRule[] = []
   for (const r of incoming) {

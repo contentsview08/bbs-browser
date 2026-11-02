@@ -28,6 +28,7 @@ import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { HeatStyle, NgMode } from '../ui/settings'
 import { idColorOf } from '../utils/idColor'
+import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 
@@ -42,6 +43,9 @@ export interface PostHandlers extends BodyHandlers {
   heatStyle?: HeatStyle
   /** レスをダブルタップで返信する(設定 doubleTapReply。スマホ)。オンだと 1 回のタップ(ツリーを開く)は少し遅れる */
   doubleTapReply?: boolean
+  /** 頭の日時の出し方・ID を短く出すか(設定 dateStyle・idShort) */
+  dateStyle?: DateStyle
+  idShort?: boolean
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -525,6 +529,8 @@ function PostArticle(props: Props) {
   )
   // 書き込みの多い ID は暖色(設定 idHeat)。それ以外で 2 回以上書いた ID は、ID ごとの色(設定 idColor)
   const idHeatClass = handlers.idHeat ? heatClass(idCount) : ''
+  /** 頭の日時(設定の出し方で。元の形は title で見られる) */
+  const shownDate = displayDate(post.date, handlers.dateStyle ?? 'full')
   const idTint = !idHeatClass && handlers.idColor && post.id && idCount >= 2 ? idColorOf(post.id, handlers.idColor.dark, handlers.idColor.sky) : null
   const idBtn =
     post.id &&
@@ -537,7 +543,7 @@ function PostArticle(props: Props) {
         onClick={(e) => handlers.onId(post.id!, e.currentTarget)}
         title="この ID の書き込みを表示"
       >
-        <span>ID:{post.id}</span>
+        <span title={`ID:${post.id}`}>{displayId(post.id, !!handlers.idShort)}</span>
         {/* 書き込み数。Discord 風・LINE 風は、色はアイコンの右下の数で付けるので、ここは色を付けない */}
         {idCount >= 2 && (
           <span className={`text-xs ${variant === 'discord' || variant === 'line' || variant === 'timeline' ? 'text-c-text-muted font-normal' : ''}`}>({idCount})</span>
@@ -651,7 +657,7 @@ function PostArticle(props: Props) {
         {nameBtn('text-sm')}
         {post.mail && <span className="text-c-text-muted text-xs">[{post.mail}]</span>}
         <span className="text-c-text-muted">：</span>
-        <span className="text-c-text-muted text-xs whitespace-nowrap">{post.date}</span>
+        <span className="text-c-text-muted text-xs whitespace-nowrap" title={post.date}>{shownDate}</span>
         {idBtn}
         {voteChip}
         {opChip}
@@ -673,7 +679,7 @@ function PostArticle(props: Props) {
           <span className="flex-shrink-0 text-xs">{numBtn('#', isMobile ? 'text-[11px]' : 'text-sm')}</span>
           {/* スマホは日付を短く(「10/19 12:34」)して、頭を 1〜2 行に収める */}
           <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>
-            {isMobile ? shortDate(post.date) : post.date}
+            {isMobile ? shortDate(post.date) : shownDate}
           </span>
           {idBtn}
           {repliesBtn}
@@ -693,7 +699,7 @@ function PostArticle(props: Props) {
         {ownChip}
             {badgeChips}
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
-        <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`}>{post.date}</span>
+        <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>{shownDate}</span>
         {idBtn}
         {voteChip}
         {toOwnChip}

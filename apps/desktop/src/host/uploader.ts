@@ -1,11 +1,14 @@
-// 画像のアップロード(catbox.moe)。公式の API(https://catbox.moe/user/api.php)に、匿名で 1 枚ずつ上げる。
+// 画像のアップロード。catbox.moe(公式の API https://catbox.moe/user/api.php)に匿名で 1 枚ずつ上げ、
+// 受け付けていなければ 0x0.st に上げ直す(catbox は 2026-11 に「保存先の不具合で止めている」と断るようになった。スマホ版と同じ)。
 // 上げたファイルは公開され、匿名なら消せない。EXIF もそのまま残るので、既定では描き直して取り除いてから上げる。
-// 利用規約(https://catbox.moe/legal.php): 商用でなければ使える。公開されている窓口だけを使い、負荷をかけないこと
+// 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。0x0.st(https://0x0.st)はプログラムを名乗る User-Agent で使い、
+// ポルノ・グロ・暗号資産などは上げない。どちらも公開されている窓口だけを使い、負荷をかけないこと
 
 import { fetch } from '@tauri-apps/plugin-http'
 
 const ENDPOINT = 'https://catbox.moe/user/api.php'
-const USER_AGENT = 'bbs-browser/0.1.0'
+const NULL_POINTER = 'https://0x0.st'
+const USER_AGENT = 'bbs-browser/0.1.0 (+https://red-edge.net)'
 /**
  * catbox の上限は 200MB だが、plugin-http は送る中身を数値の配列(JSON)にして Rust 側へ渡すので、
  * 大きすぎると固まる。アプリ側では 50MB までにする。GIF は catbox の決まりで 20MB まで
@@ -82,20 +85,64 @@ async function multipart(fields: [string, string][], file: { name: string; fileN
   return { bytes, contentType: `multipart/form-data; boundary=${boundary}` }
 }
 
-/** 上げて、ファイルの URL を返す */
-export async function uploadToCatbox(file: File, options: UploadOptions): Promise<string> {
+/** 上げた結果。host は上げ先の名前(知らせに出す) */
+export interface UploadResult {
+  url: string
+  host: string
+}
+
+/** 置き場の返事を、人に分かる言葉にする(スマホ版の Uploader.explain と同じ) */
+export function explainUploadError(status: number, text: string): string {
+  const t = text.slice(0, 200)
+  if (/paused/i.test(t) && /storage/i.test(t)) return `今は受け付けを止めています(置き場の不具合。「${t}」)`
+  if (status === 413 || /too large/i.test(t)) return 'ファイルが大きすぎます'
+  if (status === 429) return '続けて上げすぎました。少し待ってから上げてください'
+  if (status >= 500) return `置き場が落ちています(HTTP ${status})`
+  if (!t) return `HTTP ${status}`
+  if (t.startsWith('<')) return `受け付けませんでした(HTTP ${status})`
+  return `${t}(HTTP ${status})`
+}
+
+/** 1 つの置き場に上げる。成功すると、本文にファイルの URL だけが返る(urlPattern に合う)。それ以外はエラーの文面 */
+async function postTo(endpoint: string, fields: [string, string][], fileField: string, body: Blob, file: File, urlPattern: RegExp): Promise<string> {
+  const { bytes, contentType } = await multipart(fields, { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
+  let res: Response
+  try {
+    res = await fetch(endpoint, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType } })
+  } catch (e) {
+    throw new Error(`つながりませんでした(${e instanceof Error ? e.message : String(e)})`)
+  }
+  const text = (await res.text()).trim()
+  if (res.ok && urlPattern.test(text)) return text
+  throw new Error(explainUploadError(res.status, text))
+}
+
+/**
+ * 上げて、ファイルの URL と上げ先を返す。catbox → だめなら 0x0.st の順に試し、どちらもだめなら両方の理由を出す。
+ * 上げた URL が本当に画像を返すかは、呼ぶ側(useMediaInput)が確かめる
+ */
+export async function uploadMedia(file: File, options: UploadOptions): Promise<UploadResult> {
   const problem = checkUpload(file)
   if (problem) throw new Error(problem)
   const body = await prepare(file, options)
-  const fields: [string, string][] = [['reqtype', 'fileupload']]
-  if (options.userhash) fields.push(['userhash', options.userhash])
-  const { bytes, contentType } = await multipart(fields, { name: 'fileToUpload', fileName: file.name || 'image', type: body.type || file.type, data: body })
-  const res = await fetch(ENDPOINT, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType } })
-  const text = (await res.text()).trim()
-  // 成功すると、本文にファイルの URL だけが返る。それ以外はエラーの文面
-  if (res.ok && /^https:\/\/files\.catbox\.moe\/\S+$/.test(text)) return text
-  throw new Error(`アップロードできませんでした: ${text || `HTTP ${res.status}`}`)
+  const catboxFields: [string, string][] = [['reqtype', 'fileupload']]
+  if (options.userhash) catboxFields.push(['userhash', options.userhash])
+  const reasons: string[] = []
+  try {
+    return { url: await postTo(ENDPOINT, catboxFields, 'fileToUpload', body, file, /^https:\/\/files\.catbox\.moe\/\S+$/), host: 'catbox' }
+  } catch (e) {
+    reasons.push(`catbox: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  try {
+    return { url: await postTo(NULL_POINTER, [], 'file', body, file, /^https:\/\/0x0\.st\/\S+$/), host: '0x0.st' }
+  } catch (e) {
+    reasons.push(`0x0.st: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  throw new Error(reasons.join(' / '))
 }
+
+/** はじめに試す上げ先(ここ以外に上げたときは、書き込み欄で知らせる) */
+export const PRIMARY_HOST = 'catbox'
 
 /**
  * アカウントで上げたファイルを、サーバー上から消す。消せるのは、そのアカウント(userhash)で上げたものだけ。

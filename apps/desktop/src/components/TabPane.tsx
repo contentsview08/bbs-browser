@@ -25,6 +25,8 @@ export interface Tab {
   /** 別のタブへ移ったときに覚えておく、読んでいた位置 */
   scroll?: ScrollPosition
   loading: boolean
+  /** 読み込めなかった理由(取り直し始めたら消す) */
+  error?: string
   /** 手で更新したあとのクールダウンが明ける時刻 */
   refreshReadyAt?: number
   /** レスへの反応の数(ふたばのそうだねなど)。キーはレスの画面の番号(ref があれば ref)、中は反応の id → 数 */
@@ -193,6 +195,7 @@ function TabPane({
       onSavePosition={onSavePosition}
       unreadFrom={tab.unreadFrom}
       loading={tab.loading}
+      errorText={tab.error}
       settings={settings}
       isNg={isNg}
       trollMarks={trollMarks}

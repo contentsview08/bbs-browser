@@ -6,6 +6,7 @@ import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import ThreadCard from './ThreadCard'
 import LoadingCenter from './LoadingCenter'
+import LoadFailed from './LoadFailed'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
@@ -61,6 +62,8 @@ interface Props {
   activeId?: string
   loading: boolean
   emptyText: string
+  /** 読み込めなかった理由。一覧が空のときは、取り直しのボタンと一緒に出す */
+  errorText?: string
   onOpen: (t: ThreadSummary) => void
   onRefresh?: () => Promise<unknown> | void
   width: number
@@ -992,7 +995,11 @@ export default function ThreadListPanel(props: Props) {
             props.loading ? (
               <LoadingCenter />
             ) : (
-              <div className="p-8 text-center text-c-text-muted text-sm">{props.emptyText}</div>
+              props.errorText ? (
+                <LoadFailed message={props.errorText} onRetry={props.onRefresh && (() => void props.onRefresh?.())} />
+              ) : (
+                <div className="p-8 text-center text-c-text-muted text-sm">{props.emptyText}</div>
+              )
             )
           ) : (
             <div

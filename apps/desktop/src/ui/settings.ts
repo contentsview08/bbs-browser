@@ -1,6 +1,7 @@
 // アプリの設定。SQLite の settings 表に 1 項目 1 行(JSON)で保存する。
 import { setHaptics } from '../utils/haptics'
 import { customLineBg, customVars, isCustomDark, parseCustom } from './customScheme'
+import type { DateStyle } from '../utils/displayDate'
 // 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
 // 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
 
@@ -348,6 +349,10 @@ export interface AppSettings {
   haptics: boolean
   /** 自分の配色(地・面・字・強調・未読・自分の 6 色。CustomScheme の JSON)。空なら作っていない */
   customScheme: string
+  /** レスの頭の日時の出し方(utils/displayDate.ts) */
+  dateStyle: DateStyle
+  /** レスの頭の ID を短く出す(先頭の 6 文字。「ID:」も省く) */
+  idShort: boolean
   // 書き込み(最後に使った名前とメールを覚えておく)
   postName: string
   postMail: string
@@ -480,6 +485,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   doubleTapReply: false,
   haptics: true,
   customScheme: '',
+  // スマホは頭を短く(アプリと同じ。年と秒の下の桁を省く・ID は 6 文字)、PC は今までどおり
+  dateStyle: isMobile ? 'md_w_hms' : 'full',
+  idShort: isMobile,
   postName: '',
   postMail: '',
 }

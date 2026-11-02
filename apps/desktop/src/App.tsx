@@ -2,6 +2,7 @@
 // データの流れはここに集め、見た目は components/ の各部品(web 版から移植)に任せる。
 // ログは SQLite(LogStore)に保存し、開いたスレは手元のログを先に出してから差分を取りに行く。
 
+import { loadErrorText } from './components/LoadFailed'
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { onBackButtonPress } from '@tauri-apps/api/app'
@@ -349,14 +350,19 @@ export default function App() {
     )
   }, [])
   const nextUnreadRef = useRef<{ thread: ThreadSummary; unread: number } | undefined>(undefined)
+  /** スレ一覧を読めなかった理由(一覧が空のとき、取り直しのボタンと一緒に出す) */
+  const [listError, setListError] = useState<string>()
 
   const run = async (kind: Loading | null, fn: () => Promise<void>) => {
     if (kind) setLoading((s) => new Set(s).add(kind))
     setError(undefined)
+    if (kind === 'threads') setListError(undefined)
     try {
       await fn()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(loadErrorText(e))
+      // スレ一覧が読めなかったときは、一覧の所にも取り直しのボタンと一緒に出す
+      if (kind === 'threads') setListError(loadErrorText(e))
     } finally {
       if (kind)
         setLoading((s) => {
@@ -737,7 +743,7 @@ export default function App() {
       if (!opts.force) return
     }
     const job = (async () => {
-      patchTab(id, { loading: true })
+      patchTab(id, { loading: true, error: undefined })
       try {
         // 手元のログ(タブで開いていればそれ、なければ DB)に、取ってきた差分を当てはめる。
         // 取得のたびにスレ全体を DB から読み直さないため(1000 レスのスレほど効く)
@@ -784,6 +790,10 @@ export default function App() {
             const cur = m.get(t.key)
             return new Map(m).set(t.key, { postCount: saved.postCount, readNo: cur?.readNo ?? saved.readNo, status: saved.status })
           })
+      } catch (e) {
+        // 読めなかった理由をタブに覚える(レスがまだないときは、スレ表示に取り直しのボタンと一緒に出す)
+        patchTab(id, { error: loadErrorText(e) })
+        throw e
       } finally {
         patchTab(id, { loading: false })
       }
@@ -2066,6 +2076,7 @@ export default function App() {
           stateOf={stateOf}
           activeId={activeId}
           loading={loading.has('threads')}
+          errorText={listError}
           emptyText={
             favView
               ? 'お気に入りのスレはありません(スレの ☆ で足せます)'

@@ -2,16 +2,56 @@
 // 書き込みにファイルを付けられる掲示板(コネクタの attachments。ふたば)では、アップロードの代わりに、書き込みに付ける
 // (付けたファイルは小さく並べて × で外せる。書き込むときに takeFiles で中身を渡す)。
 // 書き込み欄とスレ立ての画面で共通に使う。
-// - アップローダー(catbox.moe)に負担をかけないよう、まとめて貼られても 1 枚ずつ順番に上げ、一度に 10 枚まで
+// - アップローダーに負担をかけないよう、まとめて貼られても 1 枚ずつ順番に上げ、一度に 10 枚まで
+// - 1 枚ずつ、待ち・上げ中・済み・失敗を持つ(スマホのアプリの UploadItem と同じ)。失敗したものは押すと上げ直す
+// - 上げたら URL を画像として開いて確かめる(置き場の不具合で、URL だけ返して中身がないことがあった)
 // - 上げ終わったら本文のカーソルの位置に URL を入れ、アップロード履歴に残す
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
-import { uploadToCatbox, type UploadOptions } from '../host/uploader'
+import { PRIMARY_HOST, uploadMedia, type UploadOptions } from '../host/uploader'
 
 /** 一度に上げられる数 */
 const MAX_FILES = 10
+
+/** 書き込み欄で選んだ画像 1 枚 */
+export interface UploadItem {
+  id: number
+  file: File
+  /** 端末の画像の見本(object URL)。上げ終わったあとも、本文のサムネイルをすぐ出すのに使う */
+  preview: string
+  state: 'waiting' | 'uploading' | 'done' | 'failed'
+  url?: string
+  error?: string
+}
+
+/**
+ * 上げた URL が本当に画像を返すか、画像として読み込んで確かめる(CORS に関係なく読める)。
+ * 動画は確かめない。決まった時間で返事がなければ、上げられたとみなす(遅い回線で失敗にしない)
+ */
+function verifyImage(url: string, host: string, file: File): Promise<void> {
+  if (!file.type.startsWith('image/')) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.referrerPolicy = 'no-referrer'
+    const timer = setTimeout(() => {
+      img.src = ''
+      resolve()
+    }, 15000)
+    img.onload = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    img.onerror = () => {
+      clearTimeout(timer)
+      reject(new Error(`上げた URL を開いても画像が返りませんでした(${host} の置き場の不具合)`))
+    }
+    img.src = url
+  })
+}
+
+let nextItemId = 1
 
 /** 貼り付け・ドラッグされたもののうち、画像と動画のファイルだけ */
 function mediaFiles(list: FileList | null | undefined): File[] {
@@ -43,10 +83,20 @@ export function useMediaInput(o: {
    */
   pick?: () => void
   fileInput: ReactNode
-  /** アップロードしている数 */
+  /** アップロードしている数(待っているものも含む) */
   uploading: number
   /** まとめて上げているとき、いま何枚目か(1 始まり)と全部で何枚か */
   progress?: { current: number; total: number }
+  /** 選んだ画像の上げ具合(選んだ順)。上げ終わったものも、本文のサムネイルを端末の画像で出すために残す */
+  items: UploadItem[]
+  /** 上げ終わった URL → 端末の画像の見本 */
+  localOf: (url: string) => string | undefined
+  /** 失敗した画像を上げ直す */
+  retry: (id: number) => void
+  /** 失敗した画像を外す */
+  dismiss: (id: number) => void
+  /** 上げられたときの知らせ(代わりの置き場に上げたときなど)。少しで消える */
+  notice?: string
   /** 本文の欄に付ける。画像を貼り付け・ドロップしたら上げる */
   textareaProps: {
     onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void
@@ -57,9 +107,26 @@ export function useMediaInput(o: {
   error?: string
 } {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(0)
-  const [progress, setProgress] = useState<{ current: number; total: number }>()
   const [error, setError] = useState<string>()
+  const [notice, setNotice] = useState<string>()
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(undefined), 5000)
+    return () => clearTimeout(t)
+  }, [notice])
+  // 上げ具合。並びの本当の中身は ref に持ち、変えるたびに描き直す(順番に上げる処理が、いつも最新の並びを見られるように)
+  const itemsRef = useRef<UploadItem[]>([])
+  const [items, setItems] = useState<UploadItem[]>([])
+  const setAll = (next: UploadItem[]) => {
+    itemsRef.current = next
+    setItems(next)
+  }
+  const patch = (id: number, p: Partial<UploadItem>) => setAll(itemsRef.current.map((i) => (i.id === id ? { ...i, ...p } : i)))
+  // 消えるときに見本の object URL を返す
+  useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.preview)), [])
+  const running = useRef(false)
+  const oRef = useRef(o)
+  oRef.current = o
 
   // ── 書き込みに付けるファイル(attach のとき) ──
   const [attached, setAttached] = useState<File[]>([])
@@ -110,29 +177,61 @@ export function useMediaInput(o: {
       </div>
     )
 
-  const upload = async (all: File[]) => {
-    const uploader = o.uploader
-    if (!uploader || all.length === 0) return
-    setError(all.length > MAX_FILES ? `一度に上げられるのは ${MAX_FILES} 枚までです(先頭の ${MAX_FILES} 枚だけ上げます)` : undefined)
-    const files = all.slice(0, MAX_FILES)
-    for (const [i, file] of files.entries()) {
-      setProgress({ current: i + 1, total: files.length })
-      setUploading((n) => n + 1)
-      try {
-        const url = await uploadToCatbox(file, uploader)
-        o.insert(`${url}\n`, { ownLine: true })
-        o.onUploaded?.({ url, name: file.name || 'image', size: file.size, withAccount: !!uploader.userhash })
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-      } finally {
-        setUploading((n) => n - 1)
+  /** 待っている画像を 1 枚ずつ順番に上げる(上げている途中に選び足したら、列の後ろに並べて続けて上げる) */
+  const pump = async () => {
+    if (running.current) return
+    running.current = true
+    try {
+      for (;;) {
+        const uploader = oRef.current.uploader
+        const next = itemsRef.current.find((i) => i.state === 'waiting')
+        if (!uploader || !next) break
+        patch(next.id, { state: 'uploading', error: undefined })
+        try {
+          const r = await uploadMedia(next.file, uploader)
+          await verifyImage(r.url, r.host, next.file)
+          patch(next.id, { state: 'done', url: r.url })
+          oRef.current.insert(`${r.url}\n`, { ownLine: true })
+          oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST })
+          if (r.host !== PRIMARY_HOST) setNotice(`${PRIMARY_HOST} が受け付けていないので、${r.host} に上げました`)
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          patch(next.id, { state: 'failed', error: msg })
+          setError(`画像を上げられませんでした: ${msg}。画像を押すと上げ直します`)
+        }
       }
+    } finally {
+      running.current = false
     }
-    setProgress(undefined)
   }
+  const upload = (all: File[]) => {
+    if (!o.uploader || all.length === 0) return
+    setError(all.length > MAX_FILES ? `一度に上げられるのは ${MAX_FILES} 枚までです(先頭の ${MAX_FILES} 枚だけ上げます)` : undefined)
+    // 前に失敗したものは、新しく選んだら片づける(押して上げ直す代わりに選び直した)
+    for (const i of itemsRef.current) if (i.state === 'failed') URL.revokeObjectURL(i.preview)
+    const kept = itemsRef.current.filter((i) => i.state !== 'failed')
+    const added = all.slice(0, MAX_FILES).map((file): UploadItem => ({ id: nextItemId++, file, preview: URL.createObjectURL(file), state: 'waiting' }))
+    setAll([...kept, ...added])
+    void pump()
+  }
+  const retry = (id: number) => {
+    patch(id, { state: 'waiting', error: undefined })
+    setError(undefined)
+    void pump()
+  }
+  const dismiss = (id: number) => {
+    const it = itemsRef.current.find((i) => i.id === id)
+    if (it) URL.revokeObjectURL(it.preview)
+    setAll(itemsRef.current.filter((i) => i.id !== id))
+  }
+  const uploading = items.filter((i) => i.state === 'waiting' || i.state === 'uploading').length
+  // 何枚目か: 今回の並び(失敗したものを除く)のうち、済んだ数 + 1
+  const batch = items.filter((i) => i.state !== 'failed')
+  const progress = uploading > 0 ? { current: Math.min(batch.length, batch.filter((i) => i.state === 'done').length + 1), total: batch.length } : undefined
+  const localOf = (url: string) => items.find((i) => i.url === url)?.preview
 
   /** ボタン・貼り付け・ドラッグで選んだファイル: 付けられる掲示板なら付け、そうでなければアップロードする */
-  const take = (files: File[]) => (o.attach ? attach(files) : void upload(files))
+  const take = (files: File[]) => (o.attach ? attach(files) : upload(files))
   const buttons = (
     <>
       {o.attach && (
@@ -165,7 +264,7 @@ export function useMediaInput(o: {
             onClick={() => fileRef.current?.click()}
             disabled={o.disabled}
             className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40"
-            title="画像をアップロード(catbox.moe)。本文の欄に貼り付け・ドラッグしても上げられます"
+            title="画像をアップロード。本文の欄に貼り付け・ドラッグしても上げられます"
           >
             <span className={`material-symbols-outlined text-lg leading-none ${uploading > 0 ? 'animate-spin' : ''}`}>
               {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
@@ -178,7 +277,7 @@ export function useMediaInput(o: {
             multiple
             hidden
             onChange={(e) => {
-              void upload(mediaFiles(e.target.files))
+              upload(mediaFiles(e.target.files))
               e.target.value = ''
             }}
           />
@@ -226,12 +325,12 @@ export function useMediaInput(o: {
       multiple
       hidden
       onChange={(e) => {
-        void upload(mediaFiles(e.target.files))
+        upload(mediaFiles(e.target.files))
         e.target.value = ''
       }}
     />
   ) : null
   const pick = o.attach || o.uploader ? () => fileRef.current?.click() : undefined
 
-  return { buttons, pick, fileInput, uploading, progress, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
+  return { buttons, pick, fileInput, uploading, progress, items, localOf, retry, dismiss, notice, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
 }

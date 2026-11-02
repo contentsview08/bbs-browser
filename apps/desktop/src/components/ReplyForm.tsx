@@ -311,22 +311,80 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   // 家の中のアドレスの画像は、書いただけでは読みに行かない
   const loadableImages = previewImages.filter(isAutoLoadable)
   const previewVideos = youtubeIdsIn(body)
-  const hasPreview = previewImages.length + previewVideos.length > 0
-  /** 本文に入れた画像・動画のリンクのサムネイル(PC は欄の下、スマホの入力欄は欄の上) */
+  // 上げる前・上げている途中・上げられなかった画像(上げ終わったものは本文の URL の方で出す)
+  const pendingItems = media.items.filter((it) => it.state !== 'done')
+  const hasPreview = previewImages.length + previewVideos.length + pendingItems.length > 0
+  /** 本文から画像の URL を外す(サムネイルの ×)。その URL だけの行は行ごと消す */
+  const removeUrl = (url: string) => {
+    const lines = body.split('\n')
+    changeBody(lines.some((l) => l.trim() === url) ? lines.filter((l) => l.trim() !== url).join('\n') : body.replace(url, ''))
+  }
+  /**
+   * 本文に入れた画像・動画のリンクのサムネイル(PC は欄の下、スマホの入力欄は欄の上)。スマホのアプリの UploadStrip と同じ:
+   * 本文の画像は押すと画像ビューアー、× で本文から外す。上げ終わった画像は端末の画像をそのまま出す(すぐ見える)。
+   * 待っている・上げている・上げられなかった画像は、暗くして印を重ねる。上げられなかった画像は押すと上げ直す
+   */
   const previewStrip = (
     <div className="flex gap-2 overflow-x-auto no-scrollbar">
       {loadableImages.map((url, i) => (
-        <img
-          key={url}
-          src={url}
-          alt=""
-          referrerPolicy="no-referrer"
-          onClick={() => props.onImage?.(loadableImages, i)}
-          className="h-14 w-14 flex-shrink-0 object-cover rounded border border-c-border bg-c-surface2 cursor-pointer hover:border-c-border-strong"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-          }}
-        />
+        <div key={url} className="relative h-14 w-14 flex-shrink-0">
+          <img
+            src={media.localOf(url) ?? url}
+            alt=""
+            referrerPolicy="no-referrer"
+            onClick={() => props.onImage?.(loadableImages, i)}
+            className="h-full w-full object-cover rounded border border-c-border bg-c-surface2 cursor-pointer hover:border-c-border-strong"
+            title="押すと大きく見る"
+          />
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => removeUrl(url)}
+            className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center"
+            title="本文から外す"
+          >
+            <span className="material-symbols-outlined text-[13px] leading-none">close</span>
+          </button>
+        </div>
+      ))}
+      {pendingItems.map((it) => (
+        <div
+          key={it.id}
+          role={it.state === 'failed' ? 'button' : undefined}
+          onClick={it.state === 'failed' ? () => media.retry(it.id) : undefined}
+          className={`relative h-14 w-14 flex-shrink-0 rounded overflow-hidden border border-c-border bg-c-surface2 ${it.state === 'failed' ? 'cursor-pointer' : ''}`}
+          title={it.error ?? (it.state === 'uploading' ? '上げています' : '待っています')}
+        >
+          {it.file.type.startsWith('video/') ? <video src={it.preview} muted className="w-full h-full object-cover" /> : <img src={it.preview} alt="" className="w-full h-full object-cover" />}
+          <span className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-0.5 text-white">
+            {it.state === 'uploading' ? (
+              <>
+                <span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>
+                <span className="text-[9px] leading-none">上げ中</span>
+              </>
+            ) : it.state === 'failed' ? (
+              <>
+                <span className="material-symbols-outlined text-lg" style={{ color: 'var(--c-mark-danger)' }}>refresh</span>
+                <span className="text-[9px] leading-none">再送</span>
+              </>
+            ) : (
+              <span className="text-[10px] leading-none text-white/85">待ち</span>
+            )}
+          </span>
+          {it.state === 'failed' && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                media.dismiss(it.id)
+              }}
+              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center"
+              title="外す"
+            >
+              <span className="material-symbols-outlined text-[13px] leading-none">close</span>
+            </button>
+          )}
+        </div>
       ))}
       {previewVideos.map((id) => (
         <div key={id} className="relative h-14 w-20 flex-shrink-0 rounded overflow-hidden border-2" style={{ borderColor: '#ff0000' }}>
@@ -389,9 +447,15 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           </p>
         )}
         {media.error && (
-          <p className="px-3 pt-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
+          <p className="px-3 pt-2 flex items-start gap-1 text-xs text-c-heat-very-hot">
             <span className="material-symbols-outlined text-sm">error</span>
-            {media.error}
+            <span className="flex-1">{media.error}</span>
+          </p>
+        )}
+        {media.notice && (
+          <p className="px-3 pt-2 flex items-start gap-1 text-xs" style={{ color: 'var(--c-mark-new)' }}>
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+            <span className="flex-1">{media.notice}</span>
           </p>
         )}
         {/* 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す。出ている間はフッターを隠さない(data-post-result) */}
@@ -505,9 +569,15 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden">
       {media.error && (
-        <p className="mb-2 flex items-center gap-1 text-xs text-c-heat-very-hot">
+        <p className="mb-2 flex items-start gap-1 text-xs text-c-heat-very-hot">
           <span className="material-symbols-outlined text-sm">error</span>
-          {media.error}
+          <span className="flex-1">{media.error}</span>
+        </p>
+      )}
+      {media.notice && (
+        <p className="mb-2 flex items-start gap-1 text-xs" style={{ color: 'var(--c-mark-new)' }}>
+          <span className="material-symbols-outlined text-sm">check_circle</span>
+          <span className="flex-1">{media.notice}</span>
         </p>
       )}
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}

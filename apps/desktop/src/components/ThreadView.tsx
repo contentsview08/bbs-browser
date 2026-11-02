@@ -18,6 +18,7 @@ import Lightbox from './Lightbox'
 import Minimap from './Minimap'
 import AnchorTree from './AnchorTree'
 import LoadingCenter from './LoadingCenter'
+import LoadFailed from './LoadFailed'
 import ReplyForm, { type ReplyFormHandle } from './ReplyForm'
 import NextThreadBox from './NextThreadBox'
 import NextUnreadButton from './NextUnreadButton'
@@ -79,6 +80,8 @@ interface Props {
   /** 開いた時点の「最初の未読」のレス番号。ここに「ここから未読」の線を引く */
   unreadFrom: number
   loading: boolean
+  /** 読み込めなかった理由。レスがまだないときは、取り直しのボタンと一緒に出す */
+  errorText?: string
   settings: AppSettings
   isNg: (p: Post) => boolean
   /** 自動 NG にユーザーが付けた印 */
@@ -1640,6 +1643,8 @@ export default function ThreadView(props: Props) {
           : undefined,
         heatStyle: settings.heatStyle,
         doubleTapReply: settings.doubleTapReply,
+        dateStyle: settings.dateStyle,
+        idShort: settings.idShort,
         thumbAuto: settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi()),
         onReact: props.onReact,
         reactionDefs: props.reactionDefs,
@@ -1651,7 +1656,7 @@ export default function ThreadView(props: Props) {
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
-    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
+    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -2009,7 +2014,13 @@ export default function ThreadView(props: Props) {
           }}
         >
           {log.posts.length === 0 ? (
-            props.loading ? <LoadingCenter /> : <div className="text-c-text-muted text-sm">投稿がありません</div>
+            props.loading ? (
+              <LoadingCenter />
+            ) : props.errorText ? (
+              <LoadFailed message={props.errorText} onRetry={() => void props.onRefresh()} />
+            ) : (
+              <div className="text-c-text-muted text-sm">投稿がありません</div>
+            )
           ) : (
             <>
               {log.posts.map((p, i) => {

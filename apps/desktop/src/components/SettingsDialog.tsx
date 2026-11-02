@@ -917,6 +917,12 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
         />
         <Toggle
+          checked={s.idShort}
+          onChange={(v) => update('idShort', v)}
+          label="ID を短く出す"
+          note="先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)"
+        />
+        <Toggle
           checked={s.idColor}
           onChange={(v) => update('idColor', v)}
           label="ID ごとに色を付ける"
@@ -933,6 +939,17 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           onChange={(v) => update('highlightOp', v)}
           label="スレ主を強調する"
           note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
+        />
+      </Section>
+      <Section title="日時の出し方" note="レスの頭の日時です。元の形は、日時にマウスを乗せると出ます">
+        <Choice
+          value={s.dateStyle}
+          options={[
+            { key: 'md_w_hms' as const, name: '月日・曜日・時刻(11/02(月) 19:01:15)' },
+            { key: 'md_hm' as const, name: '月日と時分(11/02 19:01)' },
+            { key: 'full' as const, name: 'すべて(年・秒の下の桁まで)' },
+          ]}
+          onChange={(v) => update('dateStyle', v)}
         />
       </Section>
       <Section title="人気のレスの示し方" note="返信が 3 件からのレス。多いほど赤くします">

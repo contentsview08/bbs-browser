@@ -205,6 +205,15 @@ describe('自分の書き込み', () => {
     await store.addOwnPost({ ...thread, key: '1' }, 3)
     expect(await store.getOwnPosts(thread)).toEqual([5, 12])
   })
+
+  it('印を外せる(ほかのスレの同じ番号は残す)', async () => {
+    await store.addOwnPost(thread, 3)
+    await store.addOwnPost(thread, 7)
+    await store.addOwnPost({ ...thread, key: '1' }, 3)
+    await store.removeOwnPost(thread, 3)
+    expect(await store.getOwnPosts(thread)).toEqual([7])
+    expect(await store.getOwnPosts({ ...thread, key: '1' })).toEqual([3])
+  })
 })
 
 describe('ログの削除', () => {

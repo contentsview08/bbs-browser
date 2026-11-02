@@ -66,6 +66,8 @@ export interface TabEvents {
   openBoardOf: (t: ThreadSummary) => void
   /** 自分の書き込みを消す(確かめてから) */
   deletePost: (thread: ThreadSummary, post: Post) => void
+  /** 自分のレスの印を手で付ける・外す */
+  markOwn: (thread: ThreadSummary, nos: number[], own: boolean) => void
   /** レスへの反応を押す(ふたばの「そうだね」など)。新しい数をタブに写す */
   react: (thread: ThreadSummary, post: Post, reactionId: string) => void
   /** レスへの操作(通報など)を実行する(確かめる文があれば確かめてから) */
@@ -183,6 +185,7 @@ function TabPane({
   const onReact = useCallback((p: Post, id: string) => ev.react(thread, p, id), [ev, thread])
   const onPostAction = useCallback((p: Post, id: string) => ev.postAction(thread, p, id), [ev, thread])
   const onDeletePost = useCallback((p: Post) => ev.deletePost(thread, p), [ev, thread])
+  const onMarkOwn = useCallback((nos: number[], own: boolean) => ev.markOwn(thread, nos, own), [ev, thread])
   const onMarkTroll = useCallback((p: Post, troll: boolean | null, reason?: string) => ev.markTroll(thread, p, troll, reason), [ev, thread])
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
@@ -257,6 +260,7 @@ function TabPane({
       onReact={canReact ? onReact : undefined}
       onPostAction={postActions?.length ? onPostAction : undefined}
       onDeletePost={canDeletePost ? onDeletePost : undefined}
+      onMarkOwn={onMarkOwn}
       splitPostIcon={splitPostIcon}
       onTogglePostAccount={ev.togglePostAccount}
       onOpenAccountSettings={ev.openAccountSettings}

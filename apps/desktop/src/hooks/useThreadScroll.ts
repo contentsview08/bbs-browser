@@ -31,6 +31,8 @@ const JUMP_MS = 300
 const SETTLE_MS = 250
 /** 追いかけるのは長くてもここまで */
 const FOLLOW_MAX_MS = 1500
+/** レスへ飛んだあと、そのレスを画面の同じ位置に留めておく時間(サムネイル・リンクのプレビューが読み込まれて高さが変わるため) */
+const PIN_MS = 8000
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
 /** 新着を若い番号から順に出すときの 1 件ごとのずらしと、全体の長さの上限(app.css の .post-enter) */
@@ -46,14 +48,20 @@ const READ_DELAY_MS = 300
 /** 描いたことのあるレスの高さ。タブを作り直しても使えるよう、スレ表示の外に置く */
 const heights = new HeightCache()
 
+/** スクロール領域ごとの、いま動かしている(留めている)のをやめる関数。新しく動かすときに前のをやめる */
+const moving = new WeakMap<HTMLElement, () => void>()
+
 /**
  * 決めた時間で、素早く(終わりだけゆっくり)スクロールする。ms が 0 ならその場で移る。
  * ブラウザのなめらかなスクロールは、距離が長いと遅く、途中で別のスクロールに割り込まれると止まるので使わない。
  * 行き先は関数で受け取り、動いている間に中身が増えても、毎回その時点の行き先へ向かう。
  * 着いたあとも、画面の外で省いていたレス(.post-cv)が本当の高さで描かれて行き先がずれるので、
- * 行き先が SETTLE_MS 動かなくなるまで追いかける。そのあいだにホイールやクリック、キーを押したらやめる
+ * 行き先が SETTLE_MS 動かなくなるまで追いかける。そのあいだにホイールやクリック、キーを押したらやめる。
+ * 同じ領域で別の動きを始めたら、前の動きはやめる(開いたときに一番下を追いかけている間に新着が届き、
+ * 未読の頭へ動かすと、2 つが引っぱり合って一番下までガクガク送られていた)
  */
 export function animateScroll(root: HTMLElement, target: () => number, ms = JUMP_MS) {
+  moving.get(root)?.()
   const clamped = () => Math.max(0, Math.min(target(), root.scrollHeight - root.clientHeight))
   const from = root.scrollTop
   const start = performance.now()
@@ -63,7 +71,9 @@ export function animateScroll(root: HTMLElement, target: () => number, ms = JUMP
     root.removeEventListener('wheel', stop)
     root.removeEventListener('pointerdown', stop)
     window.removeEventListener('keydown', stop)
+    if (moving.get(root) === stop) moving.delete(root)
   }
+  moving.set(root, stop)
   root.addEventListener('wheel', stop, { passive: true })
   root.addEventListener('pointerdown', stop)
   window.addEventListener('keydown', stop)
@@ -83,6 +93,42 @@ export function animateScroll(root: HTMLElement, target: () => number, ms = JUMP
     else stop()
   }
   requestAnimationFrame(step)
+}
+
+/**
+ * 行き先へすぐ移り、そのあとも中身の高さが変わるたびに(サムネイル・リンクのプレビューが読み込まれた、
+ * 画面の外で省いていたレスが本当の高さで描かれた)行き先へ合わせ直す。描く前(ResizeObserver の中)に合わせるので、
+ * 別の所が一瞬見えることもない。
+ * 本人がスクロールしたら(ホイール・キー・スワイプ・スクロールバー・ミニマップ)やめる。レスを押しただけではやめない
+ */
+export function pinScroll(root: HTMLElement, target: () => number, ms = PIN_MS) {
+  moving.get(root)?.()
+  const apply = () => {
+    const to = Math.max(0, Math.min(target(), root.scrollHeight - root.clientHeight))
+    if (Math.abs(root.scrollTop - to) >= 1) root.scrollTop = to
+  }
+  apply()
+  const observer = new ResizeObserver(apply)
+  for (const child of root.children) observer.observe(child)
+  // スクロールバー(スクロール領域そのもの)と、領域の外(ミニマップなど)を押したらやめる
+  const onPointer = (e: PointerEvent) => {
+    if (e.target === root || !(e.target instanceof Node && root.contains(e.target))) stop()
+  }
+  const timer = setTimeout(() => stop(), ms)
+  const stop = () => {
+    observer.disconnect()
+    clearTimeout(timer)
+    root.removeEventListener('wheel', stop)
+    root.removeEventListener('touchstart', stop)
+    window.removeEventListener('keydown', stop)
+    window.removeEventListener('pointerdown', onPointer, true)
+    if (moving.get(root) === stop) moving.delete(root)
+  }
+  root.addEventListener('wheel', stop, { passive: true })
+  root.addEventListener('touchstart', stop, { passive: true })
+  window.addEventListener('keydown', stop)
+  window.addEventListener('pointerdown', onPointer, true)
+  moving.set(root, stop)
 }
 
 /** レスを包む枠(.post-cv)。番号は枠に持たせてある(NG で中身を描かないレスも数えるため) */
@@ -245,14 +291,16 @@ export function useThreadScroll(o: Options) {
 
   // ── 動かす ──
 
-  /** レスの頭がヘッダーの下に来るようにスクロールする */
+  /**
+   * レスの頭がヘッダーの下に来るようにスクロールする(ミニマップの印から飛ぶとき)。
+   * 飛んだあとに上のレスのサムネイルなどが読み込まれて高さが変わっても、そのレスを同じ位置に留める
+   */
   const scrollToPost = useCallback(
-    (no: number, behavior: ScrollBehavior = 'instant') => {
+    (no: number) => {
       const root = rootRef.current
       const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)
       if (!root || !el) return
-      const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - 8
-      root.scrollTo({ top, behavior })
+      pinScroll(root, () => root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - 8)
     },
     [rootRef, headerOffset],
   )

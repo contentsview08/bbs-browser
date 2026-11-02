@@ -398,6 +398,11 @@ export class LogStore {
     ])
   }
 
+  /** 自分の書き込みの印を外す(手で付けた印・書き込みで付いた印のどちらも) */
+  async removeOwnPost(thread: ThreadSummary, no: number): Promise<void> {
+    await this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2 AND no = $3', [thread.boardUrl, thread.key, no])
+  }
+
   async getOwnPosts(thread: ThreadSummary): Promise<number[]> {
     const rows = await this.db.select<{ no: number }>(
       'SELECT no FROM own_posts WHERE board_url = $1 AND key = $2 ORDER BY no',

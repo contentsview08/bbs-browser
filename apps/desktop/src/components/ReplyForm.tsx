@@ -6,7 +6,7 @@ import { stashGet, stashSet } from '../utils/draftStash'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { AttachmentRules, PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
-import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
+import { imageUrlsIn, looksLikeAA, youtubeIdsIn } from '../utils/postBody'
 import { useCountdown } from '../hooks/useCountdown'
 import type { UploadOptions } from '../host/uploader'
 import { useMediaInput } from '../hooks/useMediaInput'
@@ -76,6 +76,8 @@ interface Props {
   accounts?: PostAccountOption[]
   onToggleAccount?: (id: string, on: boolean) => void
   onOpenAccountSettings?: () => void
+  /** 空白が続く本文を、AA 用の字で出す(設定の「AA を自動で見分ける」)。ボタンで個別に切り替えられる */
+  aaAutoDetect?: boolean
   /** 送る前に 3 秒待つ(設定 sendDelay)。その間は「取り消す」で止められる */
   sendDelay?: boolean
   /** 書いている間、本文の欄の上に並べる定型文(設定 phraseBar がオンのときだけ渡す)。押すとカーソルの所に入る */
@@ -105,6 +107,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [plusMenu, setPlusMenu] = useState(false)
   /** 画像のアップロードが無効のときに「画像」を押したら、設定のことを知らせる */
   const [imageHint, setImageHint] = useState(false)
+  /** 本文の欄を AA 用の字で出すか(ボタンで選んだもの。選んでいなければ本文から見分ける) */
+  const [aaOverride, setAaOverride] = useState<boolean>()
+  const isAA = aaOverride ?? (!!props.aaAutoDetect && looksLikeAA(body))
+  /** AA のときは、レスの表示と同じ字で、折り返さずに出す(折り返すと崩れて見えるため) */
+  const aaClass = isAA ? 'aa-font whitespace-pre overflow-x-auto' : ''
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   // ── 下書き ──
@@ -160,6 +167,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   /** 書き込めたら、本文も下書きも消す */
   const clearBody = () => {
     setBody('')
+    setAaOverride(undefined)
     // スマホ: 書き込めたらキーボードをしまう(書いたレスと返事が見えるように)。伸ばした入力欄の高さも戻す
     if (props.variant === 'chat' && textRef.current) {
       textRef.current.blur()
@@ -523,6 +531,17 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
                   <span className="material-symbols-outlined text-xl text-c-text-muted">tune</span>
                   {lineOptions ? 'オプションを閉じる' : 'オプション(名前・メール)'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlusMenu(false)
+                    setAaOverride(!isAA)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
+                >
+                  <span className="material-symbols-outlined text-xl text-c-text-muted">{isAA ? 'notes' : 'grid_on'}</span>
+                  {isAA ? '文字列として表示' : 'AAとして表示'}
+                </button>
               </div>
             )}
             <textarea
@@ -544,7 +563,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
               {...media.textareaProps}
               placeholder={props.disabled ?? '書き込む'}
               disabled={!!props.disabled}
-              className="flex-1 min-w-0 max-h-40 resize-none border-0 bg-transparent pl-0 pr-3.5 py-2 text-[15px] leading-snug text-c-text-body placeholder-c-text-muted focus:ring-0"
+              wrap={isAA ? 'off' : undefined}
+              className={`flex-1 min-w-0 max-h-40 resize-none border-0 bg-transparent pl-0 pr-3.5 py-2 text-[15px] leading-snug text-c-text-body placeholder-c-text-muted focus:ring-0 ${aaClass}`}
             />
           </div>
           <button
@@ -615,6 +635,15 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <PostAccountMenu options={props.accounts} onToggle={props.onToggleAccount} onOpenSettings={() => props.onOpenAccountSettings?.()} />
         )}
         <div className="ml-auto flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setAaOverride(!isAA)}
+            className={`flex-shrink-0 p-1 rounded hover:bg-c-surface2 ${isAA ? 'text-c-accent' : 'text-c-text-muted hover:text-c-text-strong'}`}
+            title={isAA ? '文字列として表示' : 'AAとして表示'}
+            aria-pressed={isAA}
+          >
+            <span className="material-symbols-outlined text-lg leading-none">grid_on</span>
+          </button>
           {media.buttons}
           {props.onCollapse && (
             <button
@@ -642,7 +671,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}
           disabled={!!props.disabled}
-          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed pb-6`}
+          wrap={isAA ? 'off' : undefined}
+          className={`${INPUT} flex-1 min-h-0 resize-none leading-relaxed pb-6 ${aaClass}`}
         />
           {measure && (measure.over.length > 0 || measure.messageBytes > 0) && (
             <span
@@ -683,6 +713,8 @@ function textHeight(ta: HTMLTextAreaElement, text: string): number {
     letterSpacing: cs.letterSpacing,
     padding: cs.padding,
     wordBreak: cs.wordBreak,
+    // AA のときは折り返さない(欄と同じにする)
+    whiteSpace: cs.whiteSpace,
   })
   // 最後の改行のあとの空の行も 1 行に数える
   mirror.textContent = `${text}\u200b`

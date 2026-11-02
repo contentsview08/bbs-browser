@@ -61,6 +61,8 @@ export interface PostHandlers extends BodyHandlers {
   onReply?: (no: number) => void
   /** 自分の書き込みを消す。消せない掲示板は undefined */
   onDeletePost?: (post: Post) => void
+  /** 自分のレスの印を手で付ける・外す。sameId なら、このスレの同じ ID のレスすべてに */
+  onMarkOwn?: (post: Post, own: boolean, sameId: boolean) => void
   /** レスへの反応を押す(ふたばの「そうだね」など)。押せない掲示板は undefined */
   onReact?: (post: Post, reactionId: string) => void
   /** レスへの反応の種類(コネクタの reactions)。数だけ出して押せない掲示板もある */
@@ -469,6 +471,21 @@ function PostArticle(props: Props) {
       icon: isAA ? 'notes' : 'grid_on',
       onClick: () => setAaOverride(!isAA),
     },
+    // 自分のレスの印(書き込んだときに付くもの)を手で付け外しする。ほかの専ブラ・ブラウザから書いたレスにも付けられるように
+    ...(handlers.onMarkOwn
+      ? [
+          props.isOwn
+            ? { label: '自分のレスの印を外す', icon: 'person_remove', onClick: () => handlers.onMarkOwn!(post, false, false) }
+            : { label: '自分のレスの印を付ける', icon: 'how_to_reg', onClick: () => handlers.onMarkOwn!(post, true, false) },
+          ...(post.id
+            ? [
+                props.isOwn
+                  ? { label: '同じ ID のレスすべての印を外す', icon: 'group_remove', onClick: () => handlers.onMarkOwn!(post, false, true) }
+                  : { label: '同じ ID のレスすべてに印を付ける', icon: 'group', onClick: () => handlers.onMarkOwn!(post, true, true) },
+              ]
+            : []),
+        ]
+      : []),
     ...ngActions,
     // 掲示板ごとの操作(通報など)。自分の書き込みにだけ出すものもある
     ...(handlers.onPostAction

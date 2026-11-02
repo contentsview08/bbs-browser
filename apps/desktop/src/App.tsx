@@ -1463,6 +1463,13 @@ export default function App() {
     return r
   }
 
+  /** 自分のレスの印を手で付ける・外す(ほかの専ブラ・ブラウザから書いたレスにも印を付けられるように) */
+  const markOwn = async (t: ThreadSummary, nos: number[], own: boolean) => {
+    if (!store) return
+    for (const no of nos) await (own ? store.addOwnPost(t, no) : store.removeOwnPost(t, no))
+    patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
+  }
+
   /**
    * スレ立て。成功したらスレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く。
    * サーバーの一覧に載るまで少しかかることがあるので、見つからなければ間を置いて探し直す
@@ -1899,6 +1906,7 @@ export default function App() {
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
     // 自分の書き込みを消す(確かめてから)
     deletePost: useEvent((t: ThreadSummary, p: Post) => setPostDeleteConfirm({ t, p })),
+    markOwn: useEvent((t: ThreadSummary, nos: number[], own: boolean) => void markOwn(t, nos, own).catch(backgroundError('自分のレスの印の保存'))),
     // 反応(そうだね・いいねなど)を押した: 返ってきた新しい数をタブに写す
     react: useEvent((t: ThreadSummary, p: Post, reactionId: string) => {
       const c = findConnector(t.connectorId)

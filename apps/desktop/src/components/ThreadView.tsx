@@ -137,6 +137,8 @@ interface Props {
   onPostAction?: (post: Post, actionId: string) => void
   /** 自分の書き込みを消す。消せない掲示板は undefined */
   onDeletePost?: (post: Post) => void
+  /** 自分のレスの印を手で付ける・外す(このスレのレス番号) */
+  onMarkOwn?: (nos: number[], own: boolean) => void
   /** レスへの反応の数(キーはレスの画面の番号、中は反応の id → 数)と、反応・操作の種類 */
   reactions?: Map<number, Record<string, number>>
   reactionDefs?: ReactionDef[]
@@ -1670,12 +1672,16 @@ export default function ThreadView(props: Props) {
         onPostAction: props.onPostAction,
         postActions: props.postActions,
         onDeletePost: props.onDeletePost,
+        onMarkOwn: props.onMarkOwn
+          ? (post, own, sameId) =>
+              props.onMarkOwn!(sameId && post.id ? log.posts.filter((p) => p.id === post.id).map((p) => p.no) : [post.no], own)
+          : undefined,
         onQuickReply: canReply ? (no, text) => void quickPostRef.current(`${replyText(no)}${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
-    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, grossNos],
+    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -2221,6 +2227,7 @@ export default function ThreadView(props: Props) {
               byteLength={props.postByteLength}
               onToggleAccount={props.onTogglePostAccount}
               onOpenAccountSettings={props.onOpenAccountSettings}
+              aaAutoDetect={settings.aaAutoDetect}
               onImage={(urls, index) => setLightbox({ urls, index })}
               uploader={
                 settings.uploaderEnabled
@@ -2298,6 +2305,7 @@ export default function ThreadView(props: Props) {
               byteLength={props.postByteLength}
               onToggleAccount={props.onTogglePostAccount}
               onOpenAccountSettings={props.onOpenAccountSettings}
+              aaAutoDetect={settings.aaAutoDetect}
               onImage={(urls, index) => setLightbox({ urls, index })}
               uploader={
                 settings.uploaderEnabled

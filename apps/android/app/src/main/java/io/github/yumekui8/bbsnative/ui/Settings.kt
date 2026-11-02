@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Swipe
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
@@ -88,7 +89,7 @@ import io.github.yumekui8.bbsnative.data.ThumbMode
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "ng" to "NG",
-    "sites" to "お気に入り板とサイト", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -122,13 +123,14 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "gestures" -> GesturesPage(vm)
                 "behavior" -> BehaviorPage(vm)
                 "ng" -> NgPage(vm)
-                "sites" -> SitesPage(vm)
+                "sites" -> SitesPage(vm, menus = false)
+                "menus" -> SitesPage(vm, menus = true)
                 "backup" -> BackupPage(vm)
                 "about" -> AboutPage()
                 "custom" -> CustomSchemeEditor(vm.prefs)
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
-            if (sub != null && sub !in setOf("about", "backup", "custom", "sites") && !(vm.prefs.showAdvanced || viaSearch)) {
+            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus") && !(vm.prefs.showAdvanced || viaSearch)) {
                 Text(
                     "詳しい設定も出す",
                     Modifier.padding(16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
@@ -195,7 +197,8 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG", value = "${p.ngRules.size} 件") { open("ng") }
     }
     Group("板") {
-        NavRow(Icons.Filled.Star, Color(0xFF14B8A6), "お気に入り板とサイト", value = "${vm.favorites.size} 板") { vm.reloadSites(); open("sites") }
+        NavRow(Icons.Filled.Star, Color(0xFF14B8A6), "お気に入り板", value = "${vm.favorites.size} 板") { open("sites") }
+        NavRow(Icons.Filled.Dns, Color(0xFF0E7490), "BBS メニュー", value = "${vm.sites.size} サイト") { vm.reloadSites(); open("menus") }
         NavRow(Icons.Filled.TravelExplore, Color(0xFF0891B2), "板を探す", desc = "BBS メニューから板を選ぶ") { vm.openRoot(Page.Boards()) }
     }
     Group {
@@ -320,11 +323,8 @@ private fun ListPage(vm: AppViewModel) {
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
         EditableWordList(p.keywords, "キーワード", "キーワードを足す", "まだありません", sortable = true) { p.keywords = it }
     }
-    if (LocalAdvanced.current) Group("ログ", note = "お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
-        ChoiceRow(
-            "開いていないスレのログを消す", p.logRetentionDays.toString(),
-            listOf(30 to "30 日たったら", 90 to "90 日たったら", 180 to "180 日たったら", 365 to "1 年たったら", 0 to "消さない").map { it.first.toString() to it.second },
-        ) { p.logRetentionDays = it.toInt() }
+    if (LocalAdvanced.current) Group("閲覧履歴(ログ)", note = "この日数より長く開いていないスレのログ(閲覧履歴とレス)を消します。0 なら消しません。お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
+        NumberRow("残す日数", p.logRetentionDays, unit = "日", range = 0..3650, zeroLabel = "消さない", presets = listOf(7, 30, 90, 365, 0)) { p.logRetentionDays = it }
         ActionRow("今すぐ消す") { vm.pruneLogsNow() }
     }
 }
@@ -640,12 +640,12 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
 }
 
 @Composable
-private fun SitesPage(vm: AppViewModel) {
+private fun SitesPage(vm: AppViewModel, menus: Boolean) {
     var adding by remember { mutableStateOf(false) }
     /** 設定を開いている板(URL と板名) */
     var editingBoard by remember { mutableStateOf<Pair<String, String>?>(null) }
     editingBoard?.let { (url, name) -> BoardMetaSheet(vm, url, name) { editingBoard = null } }
-    Group("お気に入り板", note = "左のメニューに出る順です。≡ を掴んで並べ替えます(左のメニューでも、長押しして動かせます)。⚙ でその板だけの設定(別名・名前欄・名無しの扱い)") {
+    if (!menus) Group("お気に入り板", note = "左のメニューに出る順です。≡ を掴んで並べ替えます(左のメニューでも、長押しして動かせます)。⚙ でその板だけの設定(別名・名前欄・名無しの扱い)") {
         if (vm.favorites.isEmpty()) Text("お気に入り板はありません(板を探す・スレ一覧の ︙ から足せます)", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
         ReorderableColumn(vm.favorites, { it.url }, { from, to -> vm.moveFavorite(from, to) }) { b, handle, _ ->
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -661,7 +661,7 @@ private fun SitesPage(vm: AppViewModel) {
             }
         }
     }
-    Group("サイト(BBS メニュー)", note = "「板を探す」で板を選べる掲示板です。bbsmenu.json か bbsmenu.html の URL を足せます。hono-bbs はサイトの URL(https://red-edge.net など)") {
+    if (menus) Group("サイト(BBS メニュー)", note = "「板を探す」で板を選べる掲示板です。bbsmenu.json か bbsmenu.html の URL を足せます。hono-bbs はサイトの URL(https://red-edge.net など)") {
         for ((url, name) in vm.sites) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 8.dp)) {

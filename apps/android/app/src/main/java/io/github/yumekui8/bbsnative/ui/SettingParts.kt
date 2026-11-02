@@ -221,3 +221,44 @@ fun BoardMetaSheet(vm: AppViewModel, url: String, name: String, onDismiss: () ->
         confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
     )
 }
+
+/**
+ * 数を決める行(日数など。PC 版・Web の NumberField と同じ)。押すと数を入れる画面が出て、よく使う値はボタンでも選べる。
+ * zeroLabel があれば 0 はその意味(「消さない」など)
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun NumberRow(label: String, value: Int, unit: String, range: IntRange, zeroLabel: String? = null, presets: List<Int> = emptyList(), onChange: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val shown = if (value == 0 && zeroLabel != null) zeroLabel else "$value $unit"
+    Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
+        Text(shown, color = Palette.accent, fontSize = 14.sp)
+    }
+    if (open) {
+        var text by remember { mutableStateOf(value.toString()) }
+        val n = text.trim().toIntOrNull()
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text(label) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        text, { text = it.filter(Char::isDigit).take(5) }, singleLine = true, suffix = { Text(unit) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    )
+                    if (presets.isNotEmpty()) FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (v in presets) Text(
+                            if (v == 0 && zeroLabel != null) zeroLabel else "$v $unit",
+                            Modifier.padding(vertical = 4.dp).border(1.dp, if (n == v) Palette.accent else Palette.border, RoundedCornerShape(16.dp))
+                                .clickable { text = v.toString() }.padding(horizontal = 12.dp, vertical = 6.dp),
+                            color = if (n == v) Palette.accent else Palette.textBody, fontSize = 13.sp,
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(enabled = n != null, onClick = { onChange(n!!.coerceIn(range)); open = false }) { Text("決める") } },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("やめる") } },
+        )
+    }
+}

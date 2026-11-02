@@ -16,7 +16,7 @@ val SETTINGS_INDEX = listOf(
     Triple("list", "板を開いたときの並び", ""),
     Triple("list", "引っぱって更新", "いちばん上で下へ引くと、スレ一覧を取り直します"),
     Triple("list", "行の形", ""),
-    Triple("list", "開いていないスレのログを消す", ""),
+    Triple("list", "閲覧履歴(ログ)を残す日数", "この日数より長く開いていないスレのログを消します"),
     Triple("list", "今すぐ消す", ""),
     Triple("thread", "開く位置", ""),
     Triple("thread", "名無しの名前を省く", "板の既定の名前(「名無しさん」など)を出しません"),
@@ -59,7 +59,7 @@ val SETTINGS_INDEX = listOf(
     Triple("behavior", "開いているスレの自動更新", ""),
     Triple("ng", "NG のレス", ""),
     Triple("ng", "NG を足す", ""),
-    Triple("sites", "サイトを足す", ""),
+    Triple("menus", "サイトを足す", "BBS メニュー"),
     Triple("backup", "バックアップを書き出す", ""),
     Triple("backup", "バックアップから戻す", ""),
 )

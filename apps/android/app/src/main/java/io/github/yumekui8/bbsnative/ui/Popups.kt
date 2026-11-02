@@ -137,12 +137,9 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
         LazyColumn(state = state) {
             itemsIndexed(tree, key = { _, r -> r.no }) { i, r ->
                 val p = byNo[r.no] ?: return@itemsIndexed
-                // 親: 上へさかのぼって、最初に 1 段浅い行
-                val parentNo = if (r.depth == 0) null else (i - 1 downTo 0).firstOrNull { tree[it].depth == r.depth - 1 }?.let { tree[it].no }
                 val edge = remember(r.no) { EdgeBar() }
                 androidx.compose.runtime.CompositionLocalProvider(LocalEdgeBar provides edge) { TreeStep(
                     r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = r.no == e.focusNo, hasChild = (tree.getOrNull(i + 1)?.depth ?: -1) > r.depth,
-                    prevIsParent = i > 0 && r.depth > 0 && tree[i - 1].depth == r.depth - 1, parentNo = parentNo,
                 ) {
                     androidx.compose.runtime.CompositionLocalProvider(LocalInTree provides true) { post(p) }
                 } }
@@ -165,8 +162,6 @@ val LocalEdgeBar = androidx.compose.runtime.compositionLocalOf<EdgeBar?> { null 
 @Composable
 private fun TreeStep(
     r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild: Boolean = false,
-    /** すぐ上の行が親(X 風で線をつなぐ) と、親の番号 */
-    prevIsParent: Boolean = false, parentNo: Int? = null,
     content: @Composable () -> Unit,
 ) {
     // 深い段は 5 段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)
@@ -176,33 +171,6 @@ private fun TreeStep(
     val edgeMod = Modifier.drawWithContent { drawContent(); edge?.color?.let { drawRect(it, size = androidx.compose.ui.geometry.Size(5.dp.toPx(), size.height)) } }
     // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
     // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
-    // X 風: X の会話の表示のように、段を下げずに並べ、親と子のアイコンを縦の線でつなぐ。
-    // すぐ上が親でないときは「>>N への返信」と書く
-    if (LocalPrefs.current.postStyle == "timeline") {
-        val prefs = LocalPrefs.current
-        val line = Palette.borderStrong
-        val label = !prevIsParent && r.depth > 0 && parentNo != null
-        val labelH = 22.dp
-        val avatarTop = prefs.postPad.dp + 2.dp + (if (label) labelH else 0.dp)
-        Column(
-            Modifier.fillMaxWidth().then(if (focus) Modifier.background(Palette.accentWash) else Modifier).then(edgeMod).drawBehind {
-                val x = (12.dp + AVATAR / 2).toPx()
-                val w = 2.dp.toPx()
-                if (prevIsParent) drawLine(line, Offset(x, 0f), Offset(x, avatarTop.toPx() - 3.dp.toPx()), w)
-                if (hasChild) drawLine(line, Offset(x, (avatarTop + AVATAR + 3.dp).toPx()), Offset(x, size.height), w)
-            },
-        ) {
-            if (label) Text(
-                "↳ >>$parentNo への返信", Modifier.height(labelH).padding(start = 12.dp + AVATAR + 10.dp, top = 6.dp),
-                color = Palette.textMuted, fontSize = 11.sp,
-            )
-            content()
-            if (r.alsoTo.isNotEmpty()) Text(r.alsoTo.joinToString(" ") { ">>$it" } + " にも", Modifier.padding(start = 12.dp + AVATAR + 10.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 10.sp)
-        }
-        // 次が自分の子でなければ、会話の切れ目に線
-        if (!hasChild) HorizontalDivider(color = Palette.border)
-        return
-    }
     if (isChatStyle(LocalPrefs.current.postStyle)) {
         // 線はアイコンに合わせて引く: 縦線はアイコンの左寄り(左端から 8dp)を通り、子のアイコンの真ん中の高さで曲がって、子のアイコンの左端へ届く。
         // 子への線は、自分のアイコンの下から下ろす。アイコンの上端は見た目ごとに違う(LINE 風は名前の行の下、ほかは頭と同じ高さ)

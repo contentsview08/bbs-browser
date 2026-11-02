@@ -816,7 +816,7 @@ export default function ThreadView(props: Props) {
    */
   const replyPreviews = useMemo(() => {
     const m = new Map<number, { no: number; text: string; id?: string }>()
-    if (variant !== 'discord' && variant !== 'line' && variant !== 'timeline') return m
+    if (variant !== 'discord' && variant !== 'line') return m
     for (const p of log.posts) {
       // 本文がアンカーで始まるか、文章で引用しているレス(ふたば)の、最初の引用元
       const no = /^\s*(?:>>|＞＞)\d/.test(p.body) ? anchorTargets(p.body, resolveAnchor)[0] : quoteLinks?.get(p.no)?.values().next().value
@@ -839,27 +839,6 @@ export default function ThreadView(props: Props) {
     }
     return map
   }, [log.posts, resolveAnchor, quoteLinks])
-  /**
-   * タイムライン(X 風): レスごとの返信(返信の多い順)。本文の下に小さく出す。レスごとに 1 回だけ作って使い回す
-   */
-  const replyItemsMap = useMemo(() => {
-    const m = new Map<number, { no: number; text: string; id?: string; name: string }[]>()
-    if (variant !== 'timeline') return m
-    for (const [no, list] of replies) {
-      const items = list
-        .map((n) => byNo.get(n))
-        .filter((r): r is Post => !!r && !isNg(r))
-        .sort((a, b) => (replies.get(b.no)?.length ?? 0) - (replies.get(a.no)?.length ?? 0))
-        .map((r) => ({
-          no: r.no,
-          id: r.id,
-          name: r.name.replace(/<[^>]+>/g, '') || '名無し',
-          text: r.body.split('\n').map((l) => l.trim()).find((l) => l && !/^(>>|＞＞)\d/.test(l)) ?? '',
-        }))
-      if (items.length) m.set(no, items)
-    }
-    return m
-  }, [variant, replies, byNo, isNg])
 
 
   const {
@@ -1715,7 +1694,7 @@ export default function ThreadView(props: Props) {
             blurMedia={grossNos?.has(p.no)}
             anchorCount={anchorCounts.get(p.no) ?? 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-            showTopDivider={i > 0 && (variant === 'card' || variant === 'timeline' || variant === 'matome')}
+            showTopDivider={i > 0 && (variant === 'card' || variant === 'matome')}
             variant={variant}
             ng={isNg(p)}
               autoNg={autoNg.get(p.no)}
@@ -1731,7 +1710,7 @@ export default function ThreadView(props: Props) {
             isOwn={ownNos.has(p.no)}
             isReplyToOwn={replyToOwn.has(p.no)}
             // Discord・LINE 風は、ポップアップの中でも返信元を頭に出し、本文の頭のアンカーを省く
-            replyPreview={variant === 'discord' || variant === 'line' || variant === 'timeline' ? replyPreviewOf(p) : undefined}
+            replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
             handlers={handlers}
           />
         ))}
@@ -2089,13 +2068,13 @@ export default function ThreadView(props: Props) {
                         blurMedia={grossNos?.has(p.no)}
                         anchorCount={anchorCounts.get(p.no) ?? 0}
                         idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-                        showTopDivider={i > 0 && !firstUnread && (variant === 'card' || variant === 'timeline' || variant === 'matome')}
+                        showTopDivider={i > 0 && !firstUnread && (variant === 'card' || variant === 'matome')}
                         variant={variant}
                         // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
                         continued={
                           (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
                         }
-                        replyPreview={variant === 'discord' || variant === 'line' || variant === 'timeline' ? replyPreviewOf(p) : undefined}
+                        replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
                         ng={isNg(p)}
               autoNg={autoNg.get(p.no)}
                         ngMode={settings.ngMode}
@@ -2110,7 +2089,6 @@ export default function ThreadView(props: Props) {
                         flash={flashNos.has(p.no)}
                         isOwn={ownNos.has(p.no)}
                         isReplyToOwn={replyToOwn.has(p.no)}
-                        replyItems={replyItemsMap.get(p.no)}
                         handlers={mainHandlers}
                       />
                     )}

@@ -332,11 +332,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
         return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.yumekui8.bbsnative.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
-    fun replyOf(r: RenderedPost?): ReplyPreview? {
-        val no = r?.replyTo ?: return null
-        val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
-        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.yumekui8.bbsnative.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
-    }
+    fun replyOf(r: RenderedPost?): ReplyPreview? = r?.replyTo?.let { previewOf(it) }
     val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->
         // この行の、頭の行の位置(長押しした所が ID・名前の上かを調べる)
         val hit = remember(p.no) { HeaderHit() }
@@ -427,13 +423,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     it, style = style, id = p.id, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
-                    // タイムライン: 本文の下に返信を 2 件まで(それ以上は「ほか N 件」)
-                    // 返信の多い(人気の)返信から出す
-                    replies = if (style == "timeline" && !LocalInTree.current) (index.replies[p.no] ?: emptyList()).sortedByDescending { n -> index.replyCount[n] ?: 0 }.mapNotNull { n -> previewOf(n) } else emptyList(),
-                    replyTotal = if (LocalInTree.current) 0 else index.replies[p.no]?.size ?: 0,
                     // アイコンを押すと、その ID のレス
                     onAvatar = p.id?.let { pid -> { openPopup(index.posts.filter { it.id == pid }, focus = p.no) } },
-                    onReplies = { page.links.onTag("r:${p.no}") },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             } }
             }

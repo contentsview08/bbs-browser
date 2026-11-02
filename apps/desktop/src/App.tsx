@@ -2123,6 +2123,8 @@ export default function App() {
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
           onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId } })}
+          // 立てた人を NG: ID の NG(その人が立てたスレも、書いたレスも隠れる)。入れる前に欄で直せる
+          onNgAuthor={(t) => t.authorId && setNgDraft({ target: 'posterId', pattern: t.authorId, values: { threadTitle: t.title, posterId: t.authorId } })}
           onDeleteThreadLog={(t) => void deleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={favView || history ? undefined : settings.keywords}

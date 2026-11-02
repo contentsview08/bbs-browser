@@ -25,6 +25,8 @@ interface Props {
   onOpen: (t: ThreadSummary) => void
   /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
   onNg?: (t: ThreadSummary) => void
+  /** 立てた人を NG に追加(立てた人が分かるスレだけ出す。スマホのアプリと同じ) */
+  onNgAuthor?: (t: ThreadSummary) => void
   onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
@@ -62,6 +64,7 @@ function ThreadCard({
   momentumRank,
   onOpen,
   onNg,
+  onNgAuthor,
   onCopy,
   onDeleteLog,
   isFavorite,
@@ -493,6 +496,7 @@ function ThreadCard({
               ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
               : []),
             ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
+            ...(onNgAuthor && thread.authorId ? [{ label: `立てた人を NG に追加(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread), danger: true }] : []),
             ...(onNg ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread), danger: true }] : []),
             ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread), danger: true }] : []),
           ]}
@@ -517,6 +521,11 @@ function ThreadCard({
           {onCopy && (
             <button type="button" onClick={() => onCopy(thread)} className={`${TOOL} hover:!text-mark-link`} title="スレタイと URL をコピー">
               <span className="material-symbols-outlined text-base leading-none">content_copy</span>
+            </button>
+          )}
+          {onNgAuthor && thread.authorId && (
+            <button type="button" onClick={() => onNgAuthor(thread)} className={`${TOOL} hover:!text-mark-danger`} title={`立てた人を NG に追加(${thread.authorId})`}>
+              <span className="material-symbols-outlined text-base leading-none">person_off</span>
             </button>
           )}
           {onNg && (

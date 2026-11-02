@@ -20,14 +20,12 @@ export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 's
   | 'custom'
 export type DesignPattern = 'tonal' | 'bordered'
 /** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
-export type PostStyle = 'card' | 'discord' | 'classic' | 'line' | 'timeline' | 'matome'
+export type PostStyle = 'card' | 'discord' | 'classic' | 'line' | 'matome'
 export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
   { key: 'card', name: 'カード', note: 'レスを区切り線で並べる、いままでの見た目' },
   { key: 'discord', name: 'Discord 風', note: '丸い ID のアイコンと平らな並び。同じ人の連投をまとめ、返信元を上に出す' },
   { key: 'classic', name: '専ブラ風', note: '「12 ：名前：日付 ID」を 1 行にした、昔ながらの 2ch の見た目' },
   { key: 'line', name: 'LINE 風', note: '吹き出しで会話のように並べる。自分の書き込みは右に緑の吹き出し' },
-  // スマホのアプリ(ネイティブ版)・hono-bbs の web と同じ見た目
-  { key: 'timeline', name: 'タイムライン(X 風)', note: 'アイコン左、本文の下に返信を小さく字下げして(返信の多い順に 2 件、「ほか N 件」でその場に全部)' },
   { key: 'matome', name: 'まとめ風', note: '返信の多いレスは字を大きく濃く、ほかは小さめに。レスの間の線はごく薄く' },
 ]
 /**
@@ -39,15 +37,15 @@ export const MOBILE_POST_STYLES = POST_STYLES.filter((p) => p.key !== 'classic')
 export function effectivePostStyle(s: Pick<AppSettings, 'postStyle'>): PostStyle {
   return isMobile && s.postStyle === 'classic' ? 'card' : s.postStyle
 }
-/** スレ一覧・アンカーツリーの見た目(レスの見た目のうち、一覧とツリーにない X 風・まとめ風は、近いものにする) */
+/** スレ一覧・アンカーツリーの見た目(レスの見た目のうち、一覧とツリーにない まとめ風は、カードにする) */
 export function baseVariant(v: PostStyle): 'card' | 'discord' | 'classic' | 'line' {
-  return v === 'timeline' ? 'discord' : v === 'matome' ? 'card' : v
+  return v === 'matome' ? 'card' : v
 }
 /** 実際に使う密度。スマホは見た目で決める: Discord 風は一覧表示(高密度だとスレ一覧が詰まりすぎる)、ほかは高密度 */
 export function effectiveDensity(s: Pick<AppSettings, 'postStyle' | 'density'>): ListDensity {
   if (!isMobile) return s.density
   const st = effectivePostStyle(s)
-  return st === 'discord' || st === 'timeline' ? 'list' : 'dense'
+  return st === 'discord' ? 'list' : 'dense'
 }
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
@@ -718,7 +716,9 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
     void store.getSettings().then((saved) => {
       setSettings((s) => {
         const next = { ...s, ...(saved as Partial<AppSettings>) }
-        return { ...next, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
+        // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
+        const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle
+        return { ...next, postStyle, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
       })
       setLoaded(true)
     })

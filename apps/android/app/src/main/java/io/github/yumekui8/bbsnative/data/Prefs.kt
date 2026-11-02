@@ -53,6 +53,11 @@ class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> = Pref(sp, key, def)
 
+    init {
+        // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
+        if (sp.getString("postStyle", null) == "timeline") sp.edit().putString("postStyle", "discord").apply()
+    }
+
     var lastBoardUrl: String?
         get() = sp.getString("lastBoardUrl", null)
         set(v) = sp.edit().putString("lastBoardUrl", v).apply()

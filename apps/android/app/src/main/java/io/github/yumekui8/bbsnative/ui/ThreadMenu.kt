@@ -25,7 +25,7 @@ import io.github.yumekui8.bbsnative.data.NgRule
 
 /**
  * スレを長押ししたときのメニュー(今のスマホ版の ThreadCard と同じ): 開く・お気に入りのスレ・スレタイと URL をコピー・
- * スレタイを NG・ログを削除(ログがあるときだけ)
+ * 立てた人を NG(立てた人が分かるスレだけ)・スレタイを NG・ログを削除(ログがあるときだけ)
  */
 @Composable
 fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: () -> Unit) {
@@ -44,6 +44,10 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
                     MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, "${t.title}\n${TwoCh.webUrl(t)}"); vm.toast = "コピーしました" },
                 ),
                 listOfNotNull(
+                    // 立てた人(エッヂ・hono-bbs の ID、BE 番号、スレタイの後ろの [名前])が分かれば、その人を NG に(ID の NG。その人が立てたスレも、書いたレスも隠れる)
+                    t.authorId?.let { a ->
+                        MenuItem("立てた人を NG に追加($a)", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("id", a)); vm.toast = "立てた人を NG にしました" }
+                    },
                     // メニューを閉じたあと、言葉を直せる欄を出す
                     MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
                     if (hasLog) MenuItem("ログを削除", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDel = true else vm.deleteLogOf(t) } else null,

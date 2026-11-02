@@ -123,6 +123,8 @@ interface Props {
   /** スレタイを NG に追加する画面を開く */
   /** スレを NG にする画面を出す(スレタイと、分かれば立てた人の ID を入れて) */
   onNgThread?: (t: ThreadSummary) => void
+  /** 立てた人を NG に追加 */
+  onNgAuthor?: (t: ThreadSummary) => void
   /** スレのログ(閲覧履歴)を消す */
   onDeleteThreadLog?: (t: ThreadSummary) => void
   /** スレのブラウザ用の URL(コピーに使う) */
@@ -581,6 +583,7 @@ export default function ThreadListPanel(props: Props) {
     props.onOpen(t)
   })
   const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t))
+  const onNgAuthorCard = useEvent((t: ThreadSummary) => props.onNgAuthor?.(t))
   const onCopyCard = useEvent(
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
   )
@@ -734,6 +737,7 @@ export default function ThreadListPanel(props: Props) {
         momentumRank={ranks.get(id) ?? 0}
         onOpen={onOpenCard}
         onNg={props.onNgThread ? onNgCard : undefined}
+        onNgAuthor={props.onNgAuthor ? onNgAuthorCard : undefined}
         onCopy={onCopyCard}
         onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
         isFavorite={props.favoriteIds?.has(id) ?? false}

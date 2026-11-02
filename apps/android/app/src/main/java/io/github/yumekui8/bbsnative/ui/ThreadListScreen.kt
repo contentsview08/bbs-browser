@@ -142,11 +142,14 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         sorted.mapIndexed { i, (k, _) -> k to (1.0 - i.toDouble() / maxOf(1, sorted.size)) }.toMap()
     }
     val ngTitles = vm.prefs.ngRules.filter { it.target == "title" }.map { it.pattern }
+    // ID の NG に当たる人が立てたスレも出さない(長押しの「立てた人を NG に追加」)
+    val ngIds = vm.prefs.ngRules.filter { it.target == "id" }.map { it.pattern }.toSet()
     val sort = vm.prefs.threadSort
     val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val shown = remember(page.threads, page.states, tab, query, ngTitles, sort, keywords, page.reversed, page.only) {
-        // スレタイの NG に当たるスレは出さない
-        var list = if (ngTitles.isEmpty()) page.threads else page.threads.filter { t -> ngTitles.none { t.title.contains(it, ignoreCase = true) } }
+    val shown = remember(page.threads, page.states, tab, query, ngTitles, ngIds, sort, keywords, page.reversed, page.only) {
+        // スレタイの NG・立てた人の NG に当たるスレは出さない
+        var list = if (ngTitles.isEmpty() && ngIds.isEmpty()) page.threads
+        else page.threads.filter { t -> ngTitles.none { t.title.contains(it, ignoreCase = true) } && (t.authorId == null || t.authorId !in ngIds) }
         if (query.isNotBlank()) list = list.filter { it.title.contains(query.trim(), ignoreCase = true) }
         // 差分の行から「新しいスレ」だけに絞った
         if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }

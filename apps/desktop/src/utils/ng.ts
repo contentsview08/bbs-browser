@@ -72,9 +72,15 @@ export function postMatcher(rules: NgRule[]): (p: Post) => boolean {
     (p.id !== undefined && (idExact.has(p.id) || idRegex.some((m) => m(p.id!))))
 }
 
+/** スレ一覧の NG: スレタイの NG と、立てた人の ID の NG(ID は正規表現でなければ完全一致。postMatcher と同じ) */
 export function threadMatcher(rules: NgRule[]): (t: ThreadSummary) => boolean {
   const title = compile(rules, 'threadTitle')
-  return (t) => title.some((m) => m(t.title))
+  const idRegex = compile(rules.filter((r) => r.isRegex), 'posterId')
+  const today = todayDateString()
+  const idExact = new Set(
+    rules.filter((r) => r.enabled && r.target === 'posterId' && !r.isRegex && (!r.expiresOnDate || r.expiresOnDate >= today)).map((r) => r.pattern),
+  )
+  return (t) => title.some((m) => m(t.title)) || (t.authorId !== undefined && (idExact.has(t.authorId) || idRegex.some((m) => m(t.authorId!))))
 }
 
 /** 期限の切れた一時 NG を取り除く */

@@ -83,12 +83,12 @@ class PostLinks : LinkInteractionListener {
 private val plain = TextLinkStyles(null)
 
 /** レスの見た目のうち、会話の形(アイコン・短い頭・返信先の 1 行)にするもの */
-fun isChatStyle(style: String) = style == "discord" || style == "line" || style == "timeline"
+fun isChatStyle(style: String) = style == "discord" || style == "line"
 
 /** 選べるレスの見た目(キーと名前) */
 val POST_STYLES = listOf(
     "card" to "カード", "classic" to "専ブラ風(詰めて)", "matome" to "まとめ風(人気を大きく)",
-    "discord" to "Discord 風", "line" to "LINE 風", "timeline" to "タイムライン(X 風)",
+    "discord" to "Discord 風", "line" to "LINE 風",
 )
 
 /** ID の字の色: ID ごとの色(設定がオンで 2 回以上書いた ID)か、薄い字 */

@@ -92,8 +92,6 @@ fun PostItem(
     style: String = "card", id: String? = null, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
     /** 人気のレス(返信 3 件から)の色。左に線、淡い地 */
     heat: Color? = null,
-    /** タイムライン: 本文の下に出す返信(2 件まで)と、返信の数・押したとき */
-    replies: List<ReplyPreview> = emptyList(), replyTotal: Int = 0, onReplies: () -> Unit = {},
     /** アイコンを押したとき(その ID のレスを出す)。null なら押せない */
     onAvatar: (() -> Unit)? = null,
 ) {
@@ -177,44 +175,6 @@ fun PostItem(
                         if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
                     }
                     Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
-                }
-            }
-        }
-        "timeline" -> {
-            // 返信は人気順に 2 件まで。「ほか N 件」を押すと、その場で下に全部を広げる(ポップアップは出さない)
-            var expanded by androidx.compose.runtime.saveable.rememberSaveable(r.hashCode()) { androidx.compose.runtime.mutableStateOf(false) }
-            val shownReplies = if (expanded) replies else replies.take(2)
-            // X 風: アイコン左、名前と時刻・本文。返信先は頭の上に 1 行、返信は本文の下に字下げして小さく
-            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = pad + 2.dp, bottom = pad)) {
-                Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.width(AVATAR)) { Avatar(id, r.beIcon, AVATAR, avatarMod) }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        // 返信先は、Discord 風・LINE 風と同じく頭の上に 1 行で
-                        if (reply != null) ReplyLine(reply, indent = 0.dp) { onReply(reply.no) }
-                        header()
-                        body(Modifier.padding(top = 2.dp))
-                        media()
-                        // 返信は本文の下に字下げして小さく(人気順に 2 件、「ほか N 件」でその場に全部)。左に細い線
-                        if (shownReplies.isNotEmpty()) {
-                            val lineC = Palette.borderStrong
-                            Column(Modifier.padding(top = 8.dp).fillMaxWidth().drawBehind { drawRect(lineC, size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height)) }.padding(start = 10.dp)) {
-                                for (rp in shownReplies) Row(Modifier.fillMaxWidth().clickable { onReply(rp.no) }.padding(vertical = 4.dp)) {
-                                    Identicon(rp.id, 22.dp)
-                                    Spacer(Modifier.width(8.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(rp.name, color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
-                                        Text(rp.text, color = Palette.textBody, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                    }
-                                }
-                            }
-                        }
-                        if (replyTotal > shownReplies.size) Text(
-                            "ほか ${replyTotal - shownReplies.size} 件の返信を見る",
-                            Modifier.padding(start = 12.dp, top = 2.dp).clickable { if (replies.size > shownReplies.size) expanded = true else onReplies() }.padding(vertical = 2.dp),
-                            color = Palette.link, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        )
-                    }
                 }
             }
         }
@@ -362,7 +322,7 @@ private fun BeIcon(url: String?) {
     )
 }
 
-/** アイコンの列(Discord 風・LINE 風・X 風): BE のアイコンがあれば ID の模様の代わりに出す(枠に収まるよう縮める・縦横の比は保つ) */
+/** アイコンの列(Discord 風・LINE 風): BE のアイコンがあれば ID の模様の代わりに出す(枠に収まるよう縮める・縦横の比は保つ) */
 @Composable
 private fun Avatar(id: String?, beIcon: String?, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
     if (beIcon == null) return Identicon(id, size, modifier)

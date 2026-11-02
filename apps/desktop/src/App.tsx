@@ -340,6 +340,31 @@ export default function App() {
   const [focusPane, setFocusPane] = useState<'list' | 'thread'>('thread')
   const listFocused = single ? !threadShown : focusPane === 'list' || activeId === undefined
 
+  // Ctrl + ホイール: キーを受け取っている方(スレ一覧かスレ表示)の文字の大きさを 1px ずつ変える(WebView の画面ごとの拡大は止める)
+  const wheelZoom = useRef({ listFocused, acc: 0, update: updateSetting })
+  wheelZoom.current.listFocused = listFocused
+  // DB を開くと設定を変える関数が替わるので、いつも新しい方を使う
+  wheelZoom.current.update = updateSetting
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      const z = wheelZoom.current
+      // タッチパッドの細かい動きは、たまってから 1 段
+      z.acc += e.deltaY
+      if (Math.abs(z.acc) < 60) return
+      const step = z.acc < 0 ? 1 : -1
+      z.acc = 0
+      const s = settingsRef.current
+      const base = baseFontPx(s)
+      const clamp = (v: number) => Math.min(FONT_PX_MAX, Math.max(FONT_PX_MIN, v))
+      if (z.listFocused) z.update('listFontPx', clamp((s.listFontPx || base) + step))
+      else z.update('postBodyPx', clamp((s.postBodyPx || base) + step))
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [])
+
   // 非同期の処理の途中で最新の値を見るための控え
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs

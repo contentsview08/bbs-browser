@@ -51,7 +51,17 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
           <span className="material-symbols-outlined text-base text-c-accent">psychology</span>
           <span className="flex-1">
             {status.kind === 'ready' && '判定モデルを使えます'}
-            {status.kind === 'loading' && (status.total > 0 ? `判定モデルを取っています(${mb(status.loaded)} / ${mb(status.total)})` : '判定モデルを用意しています…')}
+            {status.kind === 'loading' &&
+              (status.total > 0 ? (
+                <>
+                  判定モデルを取っています {Math.floor((status.loaded / status.total) * 100)}%({mb(status.loaded)} / {mb(status.total)})
+                  <span className="block mt-1.5 h-1.5 rounded-full bg-c-surface3 overflow-hidden">
+                    <span className="block h-full bg-c-accent transition-[width]" style={{ width: `${Math.min(100, (status.loaded / status.total) * 100)}%` }} />
+                  </span>
+                </>
+              ) : (
+                '判定モデルを用意しています…'
+              ))}
             {status.kind === 'error' && `判定モデルを使えませんでした: ${status.message}`}
             {status.kind === 'off' && '止まっています'}
           </span>

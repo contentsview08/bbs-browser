@@ -33,6 +33,21 @@ let version = 0
 const listeners = new Set<() => void>()
 const progress = new Map<string, { loaded: number; total: number }>()
 
+/** 取っている途中の量を、ファイルをまとめて出す(取り終えたあとは止めない: 読み込みの途中でも出す) */
+let lastShown = 0
+function showProgress() {
+  const now = Date.now()
+  if (now - lastShown < 200) return
+  lastShown = now
+  let loaded = 0
+  let total = 0
+  for (const p of progress.values()) {
+    loaded += p.loaded
+    total += p.total
+  }
+  if (status.kind === 'loading' || status.kind === 'off') setStatus({ kind: 'loading', loaded, total })
+}
+
 function emit() {
   version++
   for (const l of listeners) l()
@@ -49,20 +64,20 @@ function ensureWorker(): Worker {
     const m = e.data
     if (m.type === 'fetch') {
       try {
-        const r = await fetchModelFile(m.url)
+        const r = await fetchModelFile(m.url, (loaded, total) => {
+          progress.set(m.url, { loaded, total })
+          showProgress()
+        })
         w.postMessage({ type: 'fetched', reqId: m.reqId, ...r } satisfies AiWorkerRequest, [r.body])
       } catch (err) {
         w.postMessage({ type: 'fetched', reqId: m.reqId, ok: false, status: 0, headers: [], error: err instanceof Error ? err.message : String(err) } satisfies AiWorkerRequest)
       }
     } else if (m.type === 'progress') {
-      progress.set(m.file, { loaded: m.loaded, total: m.total })
-      let loaded = 0
-      let total = 0
-      for (const p of progress.values()) {
-        loaded += p.loaded
-        total += p.total
+      // 取ったファイルは、上で URL ごとに数えている。ここ(読み込みの知らせ)は、数えていないときだけ使う
+      if (![...progress.keys()].some((k) => k.endsWith(m.file))) {
+        progress.set(m.file, { loaded: m.loaded, total: m.total })
+        showProgress()
       }
-      setStatus({ kind: 'loading', loaded, total })
     } else if (m.type === 'ready') {
       setStatus({ kind: 'ready' })
       pump()

@@ -2528,14 +2528,27 @@ export function AboutTab() {
   )
 }
 
-/** PC の設定画面の置き場所と大きさ(この端末のブラウザの保存に。消えても既定に戻るだけ) */
-const RECT_KEY = 'bbs:settings-dialog-rect'
+/**
+ * PC の設定画面の置き場所(左上の角)と大きさ(この端末のブラウザの保存に。消えても既定に戻るだけ)。
+ * ふつうのウィンドウと同じく、大きさを変えると左上の角は動かず、右と下へ広がる
+ */
+const RECT_KEY = 'bbs:settings-dialog-rect2'
 type DialogRect = { x: number; y: number; w: number; h: number }
+/** 画面に収める: 上の帯(つかんで動かす所)がいつも見えるように、上は 8px から、左右・下も少しは画面に残す */
+function fitRect(r: DialogRect): DialogRect {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const w = Math.min(Math.max(560, r.w), vw - 16)
+  const h = Math.min(Math.max(360, r.h), vh - 16)
+  return { w, h, x: Math.min(Math.max(8 - w + 120, r.x), vw - 120), y: Math.min(Math.max(8, r.y), vh - 48) }
+}
 function loadDialogRect(): DialogRect {
-  const def = { x: 0, y: 0, w: Math.min(896, window.innerWidth - 48), h: Math.min(720, window.innerHeight - 48) }
+  const w = Math.min(896, window.innerWidth - 48)
+  const h = Math.min(720, window.innerHeight - 48)
+  const def = { x: (window.innerWidth - w) / 2, y: (window.innerHeight - h) / 2, w, h }
   try {
     const v = JSON.parse(localStorage.getItem(RECT_KEY) ?? 'null') as DialogRect | null
-    return v && [v.x, v.y, v.w, v.h].every(Number.isFinite) ? v : def
+    return fitRect(v && [v.x, v.y, v.w, v.h].every(Number.isFinite) ? v : def)
   } catch {
     return def
   }
@@ -2590,10 +2603,8 @@ export default function SettingsDialog(props: SettingsProps) {
     const sy = e.clientY - rect.y
     let last = rect
     const move = (ev: MouseEvent) => {
-      // 帯が画面の外へ出きらないように、真ん中から画面の大きさの半分までに抑える
-      const lx = window.innerWidth / 2
-      const ly = window.innerHeight / 2
-      last = { ...last, x: Math.max(-lx, Math.min(lx, ev.clientX - sx)), y: Math.max(-ly + 40, Math.min(ly - 40, ev.clientY - sy)) }
+      // 上の帯が画面の外へ出ないように収める
+      last = fitRect({ ...last, x: ev.clientX - sx, y: ev.clientY - sy })
       setRect(last)
     }
     const up = () => {
@@ -2769,7 +2780,7 @@ export default function SettingsDialog(props: SettingsProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6"
+      className="fixed inset-0 z-[9500] bg-black/50"
       // 外を押したら閉じる。ただし、中で押し始めた(動かす・大きさを変える)指を外で離したときは閉じない
       onMouseDown={(e) => (downOutside.current = e.target === e.currentTarget)}
       onClick={(e) => e.target === e.currentTarget && downOutside.current && props.onClose()}
@@ -2777,16 +2788,18 @@ export default function SettingsDialog(props: SettingsProps) {
       <div
         ref={boxRef}
         // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)
-        className="flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
+        className="absolute flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
         style={{
+          left: rect.x,
+          top: rect.y,
           width: rect.w,
           height: rect.h,
           minWidth: 560,
           minHeight: 360,
-          maxWidth: 'calc(100vw - 16px)',
-          maxHeight: 'calc(100vh - 16px)',
+          // 右と下へ広げても、画面の外にはみ出さない(下の端が隠れて縮められなくならないように)
+          maxWidth: `calc(100vw - ${Math.max(0, rect.x)}px - 8px)`,
+          maxHeight: `calc(100vh - ${rect.y}px - 8px)`,
           resize: 'both',
-          transform: `translate(${rect.x}px, ${rect.y}px)`,
         }}
         onClick={(e) => e.stopPropagation()}
         onMouseUp={saveRect}

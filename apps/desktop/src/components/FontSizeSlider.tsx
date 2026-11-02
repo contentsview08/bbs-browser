@@ -1,11 +1,30 @@
 // 文字の大きさを 1px ずつ変えるスライダー(︙ の「文字の大きさ」と、設定の「文字サイズ」)。
 // 動かしている間は、画面の変数(CSS)だけを書き換えて、その場で大きさを変える。設定に保存するのは指(マウス)を離したとき
 // (動かすたびに保存すると、そのたびに DB へ書いて重い)
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { FONT_PX_MAX, FONT_PX_MIN, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
+
+/**
+ * 小さな画面(SliderDialog)の中で、いまつかんで動かしているスライダーの行。動かしている間は、その行だけを残して
+ * 画面のほかの所(題・ほかのスライダー・暗い背景)を消し、後ろの画面が変わっていく様子を見られるようにする(スマホのアプリと同じ)
+ */
+const SliderDrag = createContext<{ active: HTMLElement | null; set: (el: HTMLElement | null) => void } | null>(null)
+
+/** つかんでいる間だけ行を残す(SliderDialog の中のときだけ効く) */
+function useSliderDrag() {
+  const drag = useContext(SliderDrag)
+  const rowRef = useRef<HTMLDivElement>(null)
+  const on = drag !== null && drag.active !== null && drag.active === rowRef.current
+  return {
+    rowRef,
+    rowStyle: on ? ({ visibility: 'visible', background: 'var(--c-surface)', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,.35)' } as const) : undefined,
+    start: () => drag?.set(rowRef.current),
+    end: () => drag?.set(null),
+  }
+}
 
 export default function FontSizeSlider(props: {
   label: string
@@ -36,7 +55,9 @@ export default function FontSizeSlider(props: {
   useEffect(() => {
     setPx(shown)
   }, [shown])
+  const drag = useSliderDrag()
   const commit = () => {
+    drag.end()
     if (px !== shown) props.onCommit(px)
   }
   const min = props.min ?? FONT_PX_MIN
@@ -53,7 +74,7 @@ export default function FontSizeSlider(props: {
   // スマホ: 指で扱いやすいよう、字・つまみ・線を大きくし、左右に − ・ ＋ を置く
   if (isMobile)
     return (
-      <div className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+      <div ref={drag.rowRef} style={drag.rowStyle} className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-2">
           <span className="flex-1 min-w-0 text-[16px] text-c-text-strong">{props.label}</span>
           <span className="tabular-nums text-[18px] font-bold text-c-accent">{label}</span>
@@ -85,6 +106,7 @@ export default function FontSizeSlider(props: {
               setPx(v)
               props.preview(v)
             }}
+            onPointerDown={drag.start}
             onPointerUp={commit}
             onTouchEnd={commit}
             onBlur={commit}
@@ -98,7 +120,7 @@ export default function FontSizeSlider(props: {
       </div>
     )
   return (
-    <div className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+    <div ref={drag.rowRef} style={drag.rowStyle} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-1 text-xs text-c-text-muted">
         <span className="flex-1">{props.label}</span>
         <span className="tabular-nums font-bold text-c-text-strong">{label}</span>
@@ -129,6 +151,7 @@ export default function FontSizeSlider(props: {
             setPx(v)
             props.preview(v)
           }}
+          onPointerDown={drag.start}
           onPointerUp={commit}
           onKeyUp={commit}
           onBlur={commit}
@@ -157,16 +180,31 @@ export const setCssVar = (name: string, value: string) => document.documentEleme
 export function SliderDialog(props: { title: string; onClose: () => void; children: ReactNode }) {
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
+  // つかんでいるスライダーの行。あるときは、その行のほか(題・ほかの行・暗い背景)を見えなくする
+  const [active, setActive] = useState<HTMLElement | null>(null)
+  // 指(マウス)を画面の外で離したときも戻す
+  useEffect(() => {
+    if (!active) return
+    const up = () => setActive(null)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [active])
   return createPortal(
+    <SliderDrag.Provider value={{ active, set: setActive }}>
     // スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)
     <div
-      className={`fixed inset-0 z-[9800] bg-black/25 flex ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`}
+      className={`fixed inset-0 z-[9800] flex transition-colors ${active ? 'bg-transparent' : 'bg-black/25'} ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`}
       onClick={props.onClose}
     >
       <div
         ref={boxRef}
+        // つかんでいる間は、入れ物ごと見えなくし、つかんでいる行だけを visibility: visible で残す
+        style={active ? { visibility: 'hidden', ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : {}) } : isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
         className={`w-full overflow-y-auto bg-c-surface shadow-2xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
-        style={isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         {isMobile && (
@@ -182,7 +220,8 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
         </div>
         {props.children}
       </div>
-    </div>,
+    </div>
+    </SliderDrag.Provider>,
     document.body,
   )
 }

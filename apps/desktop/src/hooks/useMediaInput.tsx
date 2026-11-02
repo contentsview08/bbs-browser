@@ -11,6 +11,8 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEve
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
 import { PRIMARY_HOST, uploadMedia, type UploadOptions } from '../host/uploader'
+import { openWebUpload, webUploadAvailable } from '../host/webUpload'
+import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
 
 /** 一度に上げられる数 */
 const MAX_FILES = 10
@@ -234,6 +236,27 @@ export function useMediaInput(o: {
 
   /** ボタン・貼り付け・ドラッグで選んだファイル: 付けられる掲示板なら付け、そうでなければアップロードする */
   const take = (files: File[]) => (o.attach ? attach(files) : upload(files))
+  // 置き場のサイトの画面で上げる(host/webUpload.ts)。開いている間、拾ったリンクを本文に入れる
+  const [siteMenu, setSiteMenu] = useState(false)
+  const [webSite, setWebSite] = useState<WebUploadSite>()
+  const stopWeb = useRef<() => void>(undefined)
+  useEffect(() => () => stopWeb.current?.(), [])
+  const startWebUpload = async (site: WebUploadSite) => {
+    setSiteMenu(false)
+    stopWeb.current?.()
+    try {
+      stopWeb.current = await openWebUpload(site, (url) => {
+        insertRef.current(url)
+        setNotice(`${site.name}のリンクを本文に入れました`)
+      })
+      setWebSite(site)
+    } catch (e) {
+      setNotice(`${site.name}の画面を開けませんでした: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  const insertRef = useRef(o.insert)
+  insertRef.current = (t: string) => o.insert(t)
+
   const buttons = (
     <>
       {o.attach && (
@@ -284,6 +307,30 @@ export function useMediaInput(o: {
             }}
           />
         </>
+      )}
+      {!o.attach && o.uploader && webUploadAvailable && (
+        <span className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setSiteMenu((v) => !v)}
+            disabled={o.disabled}
+            className={`p-1 rounded hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40 ${webSite ? 'text-c-accent' : 'text-c-text-muted'}`}
+            title={webSite ? `${webSite.name}の画面を開いています(上げたらリンクを本文に入れます)` : '置き場のサイトの画面で上げる(API を使わず、上げたあとのリンクを本文に入れる)'}
+          >
+            <span className="material-symbols-outlined text-lg leading-none">open_in_browser</span>
+          </button>
+          {siteMenu && (
+            <span className="absolute bottom-full left-0 mb-1 z-20 min-w-[15rem] py-1 bg-c-surface border border-c-border rounded-lg shadow-lg flex flex-col">
+              <span className="px-3 py-1 text-[10px] font-bold text-c-text-muted">サイトの画面で上げる</span>
+              {WEB_UPLOAD_SITES.map((site) => (
+                <button key={site.key} type="button" onClick={() => void startWebUpload(site)} className="px-3 py-1.5 text-left text-sm text-c-text-body hover:bg-c-surface2">
+                  {site.name}
+                  <span className="block text-[10px] text-c-text-muted">{site.note}</span>
+                </button>
+              ))}
+            </span>
+          )}
+        </span>
       )}
       <EmojiPicker onPick={o.insert} disabled={o.disabled} />
     </>

@@ -7,6 +7,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod chosen_paths;
 mod post_http;
+mod web_upload;
 
 use chosen_paths::ChosenPaths;
 
@@ -442,7 +443,8 @@ pub fn run() {
             schedule_db_restore,
             post_http::http_post,
             chosen_paths::pick_save_path,
-            chosen_paths::pick_open_path
+            chosen_paths::pick_open_path,
+            web_upload::open_web_upload
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

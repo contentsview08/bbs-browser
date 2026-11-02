@@ -943,6 +943,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * (書き込みとスレ立てで共通)。上げている途中に選び足したら、列の後ろに並べる。
      * 上げ先は板で決める(hono-bbs の板はその掲示板の置き場、ほかは catbox。catbox がだめなら 0x0.st。data/Uploader.kt)
      */
+    /** サイトの画面で上げたリンクを、本文の終わりに 1 行で入れる(ui/WebUpload.kt) */
+    fun insertLink(r: ReplyState, url: String) {
+        if (r.body.contains(url)) return
+        r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
+        toast = "リンクを本文に入れました"
+    }
+
     fun attach(r: ReplyState, uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
         r.notice = null

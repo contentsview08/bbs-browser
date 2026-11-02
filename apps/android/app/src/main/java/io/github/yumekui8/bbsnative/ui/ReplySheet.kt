@@ -71,6 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.focus.onFocusChanged
@@ -103,6 +104,9 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val context = LocalContext.current
     var plusMenu by remember { mutableStateOf(false) }
+    /** サイトの画面で上げる: 置き場を選んでいる・開いている置き場 */
+    var sitePick by remember { mutableStateOf(false) }
+    var webSite by remember { mutableStateOf<WebUploadSite?>(null) }
     var options by remember { mutableStateOf(false) }
     var imageHint by remember { mutableStateOf(false) }
     var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body)) }
@@ -229,6 +233,21 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     }
                 }
                 // ＋ のメニュー(欄の上にふわっと出る)
+                if (sitePick) AlertDialog(
+                    onDismissRequest = { sitePick = false },
+                    title = { Text("サイトの画面で上げる") },
+                    text = {
+                        Column {
+                            Text("置き場のサイトの画面を開きます。そこで画像を上げると、出てきたリンクを本文に入れます(API を使わずに上げられます)", color = Palette.textMuted, fontSize = 13.sp)
+                            for (site in WEB_UPLOAD_SITES) Column(Modifier.fillMaxWidth().clickable { sitePick = false; webSite = site }.padding(vertical = 10.dp)) {
+                                Text(site.name, color = Palette.textStrong, fontSize = 15.sp)
+                                Text(site.note, color = Palette.textMuted, fontSize = 12.sp)
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { sitePick = false }) { Text("やめる") } },
+                )
+                webSite?.let { site -> WebUploadScreen(site, onLink = { vm.insertLink(r, it) }, onDismiss = { webSite = null }) }
                 if (plusMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { plusMenu = false }) {
                         val rise = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -241,6 +260,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                                 plusMenu = false
                                 if (vm.prefs.uploadEnabled) picker() else imageHint = true
                             }
+                            PlusItem(Icons.Filled.Public, "サイトの画面で上げる") { plusMenu = false; sitePick = true }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
                             PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
                             val aaNow = isAA(r, vm.prefs.aaAutoDetect)

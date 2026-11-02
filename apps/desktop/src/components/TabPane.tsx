@@ -222,6 +222,8 @@ function TabPane({
       onOpenDrawer={ev.openDrawer}
       onDeleteLog={onDeleteLog}
       nonameName={nonameName}
+      omitNoname={meta?.omitNoname}
+      extraNonames={meta?.nonames}
       jumpTo={jumpTo}
       onUploaded={ev.uploaded}
       onFindNext={onFindNext}

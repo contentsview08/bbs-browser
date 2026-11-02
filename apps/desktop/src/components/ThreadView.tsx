@@ -181,6 +181,9 @@ interface Props {
   jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
   nonameName?: string
+  /** 板ごとの設定: 名無しを省くか(なければ全体の設定)と、名無しとみなす名前 */
+  omitNoname?: boolean
+  extraNonames?: string[]
 }
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
@@ -659,12 +662,13 @@ export default function ThreadView(props: Props) {
   const display = useMemo(
     () => ({
       nonameName: props.nonameName,
-      omitNoname: settings.omitNoname,
+      extraNonames: props.extraNonames,
+      omitNoname: props.omitNoname ?? settings.omitNoname,
       collapseBlankLines: settings.collapseBlankLines,
       trimTrailingBlank: settings.trimTrailingBlank,
       splitIcon: props.splitPostIcon,
     }),
-    [props.nonameName, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
+    [props.nonameName, props.extraNonames, props.omitNoname, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──

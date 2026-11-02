@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_KEYMAP, actionFor, keyEventsOf, createKeyReader, keyString, resolveKeymap } from '../src/utils/keymap'
+import { DEFAULT_KEYMAP, actionFor, keyEventsOf, createKeyReader, keyString, reservedKeyName, resolveKeymap } from '../src/utils/keymap'
 
 const k = (key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}) => ({
   key,
@@ -75,5 +75,17 @@ describe('keyEventsOf: 割り当てたキーを、押したことにするキー
       expect(keyString(e)).toBe(k)
     }
     expect(keyEventsOf('G G').map((e) => e.key)).toEqual(['g', 'g'])
+  })
+})
+
+describe('決め打ちのキー', () => {
+  it('既定の割り当てに、決め打ちのキーは入っていない', () => {
+    for (const keys of Object.values(DEFAULT_KEYMAP)) for (const key of keys) expect(reservedKeyName(key), key).toBeUndefined()
+  })
+  it('Esc・Ctrl+W・数字は割り当てられない', () => {
+    expect(reservedKeyName('Escape')).toBeDefined()
+    expect(reservedKeyName(keyString(k('w', { ctrl: true }))!)).toBe('タブを閉じる')
+    expect(reservedKeyName('3')).toBeDefined()
+    expect(reservedKeyName('J')).toBeUndefined()
   })
 })

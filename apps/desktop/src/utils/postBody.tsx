@@ -249,6 +249,8 @@ export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[]
 export interface DisplayOptions {
   /** 板の既定の名前(SETTING.TXT の BBS_NONAME_NAME) */
   nonameName?: string
+  /** 板の既定の名前のほかに、名無しとみなす名前(板ごとの設定) */
+  extraNonames?: string[]
   omitNoname: boolean
   collapseBlankLines: boolean
   trimTrailingBlank: boolean
@@ -269,8 +271,11 @@ export function displayBody(body: string, o: DisplayOptions): string {
 
 /** 名前の見せ方: 板の既定の名前で始まるなら、その部分を省く(後ろのトリップなどは残す) */
 export function displayName(name: string, o: DisplayOptions): string {
-  if (!o.omitNoname || !o.nonameName || !name.startsWith(o.nonameName)) return name
-  return name.slice(o.nonameName.length).trim()
+  if (!o.omitNoname) return name
+  // 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)
+  const nonames = [o.nonameName, ...(o.extraNonames ?? [])].filter((n): n is string => !!n).sort((a, b) => b.length - a.length)
+  const hit = nonames.find((n) => name.startsWith(n))
+  return hit ? name.slice(hit.length).trim() : name
 }
 
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i

@@ -202,6 +202,8 @@ export default function App() {
   const [refreshingAll, setRefreshingAll] = useState(false)
   /** 閲覧履歴を取り直した回数(「未読」で絞り込んだ顔ぶれを控え直すきっかけ) */
   const [historyVersion, setHistoryVersion] = useState(0)
+  /** サイドバーの「未読のスレ」を押した回数(閲覧履歴を未読で絞り込むきっかけ) */
+  const [unreadRequest, setUnreadRequest] = useState(0)
   /** 板ごとの設定(名無しの名前など)。板ごとに一度だけ取る */
   const [boardInfos, setBoardInfos] = useState(new Map<string, BoardInfo>())
   const boardInfoAsked = useRef(new Set<string>())
@@ -550,14 +552,17 @@ export default function App() {
       await reloadRecent(store)
     })
 
-  const openHistory = (record = true) =>
-    run('threads', async () => {
+  const openHistory = (record = true) => {
+    // 「未読のスレ」から開くときは、このあとで 1 にする(ほかの開き方で、前の頼みが残って未読に絞らないように)
+    setUnreadRequest(0)
+    return run('threads', async () => {
       updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
       if (record) setFocusPane('list')
       setFavView(false)
       if (store) setHistory(await store.history())
       setHistoryVersion((v) => v + 1)
     })
+  }
 
   /** いまスレ一覧に出しているもの(戻る・進むで覚える) */
   const currentListTarget = (): ListTarget | undefined =>
@@ -2046,6 +2051,10 @@ export default function App() {
         boardMeta={settings.boardMeta}
         historyActive={history !== undefined}
         onOpenHistory={() => void openHistory()}
+        onOpenUnread={() => {
+          void openHistory()
+          setUnreadRequest((n) => n + 1)
+        }}
         favThreadsActive={favView}
         favThreadsNew={favNewTotal}
         onOpenFavThreads={() => void openFavThreads()}
@@ -2146,6 +2155,7 @@ export default function App() {
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={favView || history ? undefined : settings.keywords}
           snapshotKey={favView ? favVersion : history ? historyVersion : undefined}
+          unreadRequest={history ? unreadRequest : undefined}
           onNewThread={!favView && !history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           style={{
             button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,

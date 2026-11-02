@@ -101,6 +101,10 @@ export interface BoardMeta {
   /** その板での名前欄・メール欄の既定値 */
   defaultName?: string
   defaultMail?: string
+  /** 名無しの名前を省くか。なければ全体の設定(レス表示の「名無しの名前を省く」)に合わせる */
+  omitNoname?: boolean
+  /** 板の既定の名前のほかに、名無しとみなす名前(「風吹けば名無し」など、名前を変えた名無し) */
+  nonames?: string[]
 }
 
 /** 不透明度を変えられるパネル */

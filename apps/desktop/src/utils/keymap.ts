@@ -142,6 +142,30 @@ export const FIXED_KEYS: { keys: string; name: string }[] = [
   { keys: 'Alt+← →・マウスの戻る/進む', name: '戻る・進む' },
 ]
 
+/** 決め打ちのキー(keyString の形)と、その役目。設定でここに割り当てようとしたら断る */
+const RESERVED_KEYS: Record<string, string> = {
+  F5: '更新',
+  'Ctrl+R': '更新',
+  Escape: '閉じる・外す',
+  'Ctrl+Enter': '書き込む',
+  'Ctrl+Tab': '次のタブ',
+  'Ctrl+Shift+Tab': '前のタブ',
+  'Ctrl+PageDown': '次のタブ',
+  'Ctrl+PageUp': '前のタブ',
+  'Ctrl+W': 'タブを閉じる',
+  'Ctrl+Shift+W': 'すべてのタブを閉じる',
+  Delete: 'タブを閉じる',
+  'Shift+Delete': 'ログを削除してタブを閉じる',
+  'Alt+ArrowLeft': '戻る',
+  'Alt+ArrowRight': '進む',
+  ...Object.fromEntries([...'123456789'].map((d) => [d, '絞り込み・スレ一覧のタブ'])),
+}
+
+/** 決め打ちのキーなら、その役目。割り当てられるキーなら undefined */
+export function reservedKeyName(key: string): string | undefined {
+  return RESERVED_KEYS[key]
+}
+
 /** 保存してある割り当てに、あとから増えた操作の既定値を足す */
 export function resolveKeymap(saved: Partial<Keymap> | undefined): Keymap {
   return { ...DEFAULT_KEYMAP, ...saved }

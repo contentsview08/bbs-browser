@@ -118,6 +118,8 @@ interface Props {
    * 渡さなければ、スレ一覧(threads)を取り直したときに控え直す
    */
   snapshotKey?: unknown
+  /** これが変わったら「未読」の絞り込みにする(サイドバーの「未読のスレ」から開いたとき) */
+  unreadRequest?: number
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
   keywords?: string[]
   /** スレタイを NG に追加する画面を開く */
@@ -214,6 +216,13 @@ export default function ThreadListPanel(props: Props) {
   }
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
+  useEffect(() => {
+    if (!props.unreadRequest) return
+    setUnreadOnly(true)
+    setVisitedOnly(false)
+    setSort(defaultSort)
+    setReversed(false)
+  }, [props.unreadRequest])
 
   // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
   // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
@@ -388,6 +397,8 @@ export default function ThreadListPanel(props: Props) {
   // 「未読」を押した時点(と、一覧を取り直した時点)の未読のスレを控える。
   // 読むたびに絞り込み直すと、読み終えたスレが急に一覧から消えてしまうので
   const [unreadSnapshot, setUnreadSnapshot] = useState<Set<string>>()
+  /** 「読んだスレを片づける」を押した回数(控え直すきっかけ) */
+  const [sweepCount, setSweepCount] = useState(0)
   const stateOfRef = useRef(stateOf)
   stateOfRef.current = stateOf
   const snapshotKey = props.snapshotKey ?? threads
@@ -405,7 +416,15 @@ export default function ThreadListPanel(props: Props) {
       ),
     )
     // threads は snapshotKey を渡さないときのきっかけとして入っている
-  }, [unreadOnly, snapshotKey])
+  }, [unreadOnly, snapshotKey, sweepCount])
+  /** 「未読」に残っている、読み終えたスレの数(「読んだスレを片づける」で外す) */
+  const readInSnapshot = unreadSnapshot
+    ? threads.filter((t) => {
+        if (!unreadSnapshot.has(threadId(t))) return false
+        const st = stateOf(t)
+        return st !== undefined && st.readNo >= t.postCount
+      }).length
+    : 0
 
   // 並べ替え・一覧の入れ替えは、タブの印(どれを選んだか)を先に描き、並べ直したカードの組み立ては後回しにする。
   // カードが多いと組み立てに時間がかかり、押してから印が変わるまで固まったように見えるため
@@ -988,6 +1007,15 @@ export default function ThreadListPanel(props: Props) {
             )}
             {!isMobile && tabGrid}
           </div>
+          {/* 未読の一覧は、読み終えても並びから消さない(開いただけで一覧が動かないように)。消すのは本人が押したときだけ */}
+          {unreadOnly && readInSnapshot > 0 && (
+            <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-c-text-muted border-b border-c-border">
+              <span className="flex-1">読み終えたスレ {readInSnapshot} 件も並べています</span>
+              <button type="button" onClick={() => setSweepCount((n) => n + 1)} className="px-2 py-0.5 rounded border border-c-border hover:border-c-accent hover:text-c-accent">
+                読んだスレを片づける
+              </button>
+            </div>
+          )}
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}

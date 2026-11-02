@@ -39,6 +39,7 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
+import { ListEditor, SamplePosts, ThumbSample } from './SettingParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import type { ExternalConnectorInfo } from '../host/externalConnectors'
@@ -49,7 +50,7 @@ import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } f
 import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement } from '../utils/toolbar'
-import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
+import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
 export interface SettingsProps {
   settings: AppSettings
@@ -118,7 +119,7 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: '板とサイト', icon: 'dns', advanced: true },
   { key: 'connectors', name: 'コネクタ', icon: 'extension', advanced: true, desktopOnly: true },
-  { key: 'accounts', name: 'アカウント', icon: 'badge' },
+  { key: 'accounts', name: '掲示板ごとの設定', icon: 'tune' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
 ]
@@ -146,7 +147,7 @@ const TAB_DESC: Record<Tab, string> = {
   boardlist: 'お気に入り板・BBS メニュー',
   boards: '自分で足す掲示板とサイト',
   connectors: '外付けのコネクタ',
-  accounts: 'BE などのアカウント',
+  accounts: '5ch のアカウント・板ごとの名前と名無しの扱い',
   backup: '設定の書き出し・まるごとバックアップ',
   about: '版',
 }
@@ -267,6 +268,18 @@ function Section({
       {note && <p className={`${isMobile ? 'text-[13px] leading-relaxed mb-3' : 'text-xs mb-2'} text-c-text-muted`}>{note}</p>}
       <div className="mt-2">{children}</div>
     </section>
+  )
+}
+
+/** 見本のレス(表示・レス表示の分類の上)。検索の結果と、スマホの分類の画面(題の一覧)では出さない */
+function StickySample({ settings }: { settings: AppSettings }) {
+  const query = useContext(SearchContext)
+  const nav = useContext(SectionNavContext)
+  if (query.trim() !== '' || nav.mode === 'index') return null
+  return (
+    <div className={`sticky top-0 z-10 -mx-1 px-1 pb-1 bg-c-surface ${isMobile ? '-mt-2' : '-mt-1'}`}>
+      <SamplePosts settings={settings} title="見本(変えるとすぐ映ります)" />
+    </div>
   )
 }
 
@@ -486,6 +499,7 @@ function SystemFontPicker({ value, onPick }: { value: string; onPick: (family: s
 function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
     <>
+      <StickySample settings={s} />
       <Section title="テーマ">
         <Toggle
           checked={s.followOsTheme}
@@ -702,13 +716,6 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
 }
 
 function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'favorites'>) {
-  const [keyword, setKeyword] = useState('')
-  const addKeyword = () => {
-    const k = keyword.trim()
-    if (!k || s.keywords.includes(k)) return
-    update('keywords', [...s.keywords, k])
-    setKeyword('')
-  }
   return (
     <>
       <Section advanced desktopOnly title="更新">
@@ -723,38 +730,15 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'set
         title="キーワード"
         note="スレタイに含むスレを、スレ一覧の上にキーワードの帯をつけてまとめます。上に並んでいるキーワードほど先に出ます"
       >
-        <form
-          className="flex gap-2 mb-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            addKeyword()
-          }}
-        >
-          <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例: 実況" className={`${INPUT} flex-1`} />
-          <button type="submit" className={BTN} disabled={!keyword.trim()}>
-            追加
-          </button>
-        </form>
-        <div className="flex flex-wrap gap-2">
-          {s.keywords.map((k) => (
-            <span
-              key={k}
-              className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-sm text-c-accent border border-c-accent rounded-[var(--chip-radius)]"
-              style={{ background: 'var(--c-accent-wash)' }}
-            >
-              {k}
-              <button
-                type="button"
-                className="p-0.5 rounded-full hover:bg-c-surface2"
-                title="外す"
-                onClick={() => update('keywords', s.keywords.filter((x) => x !== k))}
-              >
-                <span className="material-symbols-outlined text-sm leading-none">close</span>
-              </button>
-            </span>
-          ))}
-          {s.keywords.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
-        </div>
+        <ListEditor noun="キーワード" sortable items={s.keywords} onChange={(v) => update('keywords', v)} placeholder="例: 実況" />
+      </Section>
+      <Section title="スレ一覧の見せ方">
+        <Toggle
+          checked={s.threadAuthorIcon}
+          onChange={(v) => update('threadAuthorIcon', v)}
+          label="スレ一覧で、立てた人の ID を模様で出す"
+          note="スレ一覧に立てた人の ID が付いてくる掲示板(エッジ)だけです。切っているときは、スレの右下に ID を小さく出します"
+        />
       </Section>
       <Section title="最初の並び順" note="板を開いたときの並び順です。スレ一覧のタブでその場で変えられます">
         <Choice
@@ -817,6 +801,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'set
 function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
     <>
+      <StickySample settings={s} />
       <Section title="スレを開いたときの位置">
         <Choice
           value={s.openPosition}
@@ -837,6 +822,215 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           ]}
           onChange={(v) => update('anchorPopup', v)}
         />
+      </Section>
+      <Section title="名前と ID" note="名前の省き方は、板ごとにも変えられます(設定 → 掲示板ごとの設定)">
+        <Toggle
+          checked={s.omitNoname}
+          onChange={(v) => update('omitNoname', v)}
+          label="名無しの名前を省く"
+          note="名前が板の既定の名前(「名無しさん」など)なら省きます。後ろのトリップなどは残します"
+        />
+        <Toggle
+          checked={s.highlightOp}
+          onChange={(v) => update('highlightOp', v)}
+          label="スレ主を強調する"
+          note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
+        />
+        <Toggle
+          checked={s.idShort}
+          onChange={(v) => update('idShort', v)}
+          label="ID を短く出す"
+          note="先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)"
+        />
+        <Toggle
+          checked={s.idColor}
+          onChange={(v) => update('idColor', v)}
+          label="ID ごとに色を付ける"
+          note="2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます"
+        />
+        <Toggle
+          checked={s.idHeat}
+          onChange={(v) => update('idHeat', v)}
+          label="書き込みの多い ID を赤くする"
+          note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
+        />
+        <Toggle
+          checked={s.showIdenticon}
+          onChange={(v) => update('showIdenticon', v)}
+          label="ID のアイコンを出す"
+          note="ID から作る GitHub 風の模様を、レス番号の左に出します(同じ ID はいつも同じ模様)。右下の数字はその ID の書き込み数です"
+        />
+      </Section>
+      <Section title="本文">
+        <FontSizeSlider
+          label="本文の行間"
+          value={s.postLineHeight}
+          base={1.625}
+          min={1}
+          max={2.4}
+          step={0.05}
+          format={(v) => `${v.toFixed(2)} 倍`}
+          icons={['format_line_spacing', 'format_line_spacing']}
+          preview={(v) => document.documentElement.style.setProperty('--post-line-height', String(v))}
+          onCommit={(v) => update('postLineHeight', v)}
+          resettable
+        />
+        <Toggle
+          checked={s.collapseBlankLines}
+          onChange={(v) => update('collapseBlankLines', v)}
+          label="3 行以上続く空行を 1 行にまとめる"
+        />
+        <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
+        <Toggle
+          checked={s.aaAutoDetect}
+          onChange={(v) => update('aaAutoDetect', v)}
+          label="AA を自動で見分ける"
+          note="空白が続く本文を AA 用のフォントで表示します。レスの ⋯ から個別に切り替えられます"
+        />
+        <Toggle
+          checked={s.urlShorten}
+          onChange={(v) => update('urlShorten', v)}
+          label="URL を短く見せる"
+          note="https:// を外し、長い URL は後ろを「…」で省きます。押すと元の URL を開きます"
+        />
+        <Toggle
+          checked={s.imageUrlOmit}
+          onChange={(v) => update('imageUrlOmit', v)}
+          label="画像の URL を「画像」の札にする"
+          note="画像はサムネイルで見えるので、長い URL を出しません。押すと画像を開きます"
+        />
+        <Toggle
+          checked={s.imageUrlCollapse}
+          onChange={(v) => update('imageUrlCollapse', v)}
+          label="続いて並んだ画像の URL をまとめる"
+          note="改行や空白だけをはさんで並んだ画像の URL を、「画像 ×3」のように 1 つにまとめます"
+        />
+        <Toggle
+          checked={s.showLinkPreview}
+          onChange={(v) => update('showLinkPreview', v)}
+          label="リンクの埋め込みを出す"
+          note="画像でも動画でもないリンクに、ページのタイトル・説明・画像のカードを出します(画面に見えたときにページを取りに行きます)"
+        />
+        <Toggle
+          checked={s.openLinksInApp}
+          onChange={(v) => update('openLinksInApp', v)}
+          label="リンクをアプリの中で開く"
+          note="掲示板でないリンクを、外のブラウザではなくアプリの中で開きます。ウェブページは題・本文・画像だけを抜き出して出し(読めないページは右上からブラウザで開けます)、画像・動画・YouTube はそのまま見られます"
+        />
+      </Section>
+      <Section title="日時の出し方" note="レスの頭の日時です。元の形は、日時にマウスを乗せると出ます">
+        <Choice
+          value={s.dateStyle}
+          options={[
+            { key: 'md_w_hms' as const, name: '月日・曜日・時刻(11/02(月) 19:01:15)' },
+            { key: 'md_hm' as const, name: '月日と時分(11/02 19:01)' },
+            { key: 'full' as const, name: 'すべて(年・秒の下の桁まで)' },
+          ]}
+          onChange={(v) => update('dateStyle', v)}
+        />
+      </Section>
+      <Section title="人気のレスの示し方" note="返信が 3 件からのレス。多いほど赤くします">
+        <Choice
+          value={s.heatStyle}
+          options={[
+            { key: 'left' as const, name: '左の帯' },
+            { key: 'right' as const, name: '右の帯' },
+            { key: 'text' as const, name: '本文の色' },
+            { key: 'none' as const, name: '示さない' },
+          ]}
+          onChange={(v) => update('heatStyle', v)}
+        />
+      </Section>
+      <Section title="画像とサムネイル">
+        <Toggle
+          checked={s.showThumbnails}
+          onChange={(v) => update('showThumbnails', v)}
+          label="画像のサムネイルを出す"
+          note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
+        />
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">サムネイルを読みに行く</p>
+        <Choice
+          value={s.thumbLoad}
+          options={[
+            { key: 'always' as const, name: 'いつも' },
+            { key: 'wifi' as const, name: 'Wi-Fi のときだけ' },
+            { key: 'tap' as const, name: '押したら' },
+          ]}
+          onChange={(v) => update('thumbLoad', v)}
+        />
+        <p className="text-xs text-c-text-muted mt-1">
+          読みに行かないときは、サムネイルの枠だけを出します。押すとそのサムネイルを読み、もう一度押すと大きく見られます
+        </p>
+        <div className="mt-4">
+        <ThumbSample kind="post" />
+        <FontSizeSlider
+          label="スレ表示(本文の画像・動画・YouTube)"
+          value={s.postThumbSize}
+          base={80}
+          unset={-1}
+          min={48}
+          max={240}
+          step={4}
+          icons={['photo_size_select_small', 'photo_size_select_large']}
+          preview={(px) => document.documentElement.style.setProperty('--post-thumb-size', `${px}px`)}
+          onCommit={(px) => update('postThumbSize', px)}
+        />
+        <div className="mt-3">
+          <ThumbSample kind="list" />
+        </div>
+        <FontSizeSlider
+          label="スレ一覧(ふたばのカタログの絵など)"
+          value={s.listThumbScale}
+          base={1}
+          unset={-1}
+          min={0.5}
+          max={3}
+          step={0.25}
+          format={(v) => `${v.toFixed(2)} 倍`}
+          icons={['photo_size_select_small', 'photo_size_select_large']}
+          preview={(v) => document.documentElement.style.setProperty('--list-thumb-scale', String(v))}
+          onCommit={(v) => update('listThumbScale', v)}
+        />
+        </div>
+        <Toggle
+          checked={s.blurGross}
+          onChange={(v) => update('blurGross', v)}
+          label="グロ注意の画像をぼかす"
+          note="下の言葉を含む返信が付いたレス(画像を貼った本人がそう書いたレスも)の、サムネイルと画像一覧をぼかします。押せばいつもどおり開けます"
+        />
+        {s.blurGross && (
+          <div className="pl-1 mt-1 mb-3">
+            <p className="text-xs text-c-text-muted mb-1.5">目印の言葉</p>
+            <ListEditor noun="目印の言葉" items={s.grossWords} onChange={(v) => update('grossWords', v)} placeholder="例: 閲覧注意" />
+          </div>
+        )}
+      </Section>
+      <Section title="スレ表示の画面">
+        <Toggle
+          checked={s.showMinimap}
+          onChange={(v) => update('showMinimap', v)}
+          label="ミニマップを出す"
+          note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
+        />
+        {isMobile && (
+          <Toggle
+            checked={s.showRefreshFab}
+            onChange={(v) => update('showRefreshFab', v)}
+            label="書き込み欄の右に更新ボタンを出す"
+            note="スレ表示のフッターの右端(送るボタンの右)に、更新ボタンを出します"
+          />
+        )}
+        {isMobile && (
+          <Toggle
+            checked={s.hideBarsOnScroll}
+            onChange={(v) => update('hideBarsOnScroll', v)}
+            label="下へスクロールしたら、ヘッダーとフッターを隠す"
+            note="切ると、スレ一覧・スレ表示のヘッダーとフッターをいつも出しておきます"
+          />
+        )}
+      </Section>
+      <Section title="絞り込みのタブの見せ方" note="スレ表示の上の、人気・画像・動画・リンク・すべて のタブです">
+        <Choice value={s.filterTabLabel} options={TAB_LABELS} onChange={(v) => update('filterTabLabel', v)} />
       </Section>
       <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
         <div className="flex items-center gap-2">
@@ -863,220 +1057,6 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
             </button>
           )}
         </div>
-      </Section>
-      <Section title="絞り込みのタブの見せ方" note="スレ表示の上の、人気・画像・動画・リンク・すべて のタブです">
-        <Choice value={s.filterTabLabel} options={TAB_LABELS} onChange={(v) => update('filterTabLabel', v)} />
-      </Section>
-      <Section title="レスの見せ方">
-        <Toggle
-          checked={s.omitNoname}
-          onChange={(v) => update('omitNoname', v)}
-          label="名無しの名前を省く"
-          note="名前が板の既定の名前(「名無しさん」など)なら省きます。後ろのトリップなどは残します"
-        />
-        <Toggle
-          checked={s.collapseBlankLines}
-          onChange={(v) => update('collapseBlankLines', v)}
-          label="3 行以上続く空行を 1 行にまとめる"
-        />
-        <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
-        <FontSizeSlider
-          label="本文の行間"
-          value={s.postLineHeight}
-          base={1.625}
-          min={1}
-          max={2.4}
-          step={0.05}
-          format={(v) => `${v.toFixed(2)} 倍`}
-          icons={['format_line_spacing', 'format_line_spacing']}
-          preview={(v) => document.documentElement.style.setProperty('--post-line-height', String(v))}
-          onCommit={(v) => update('postLineHeight', v)}
-          resettable
-        />
-        <Toggle
-          checked={s.urlShorten}
-          onChange={(v) => update('urlShorten', v)}
-          label="URL を短く見せる"
-          note="https:// を外し、長い URL は後ろを「…」で省きます。押すと元の URL を開きます"
-        />
-        <Toggle
-          checked={s.imageUrlOmit}
-          onChange={(v) => update('imageUrlOmit', v)}
-          label="画像の URL を「画像」の札にする"
-          note="画像はサムネイルで見えるので、長い URL を出しません。押すと画像を開きます"
-        />
-        <Toggle
-          checked={s.imageUrlCollapse}
-          onChange={(v) => update('imageUrlCollapse', v)}
-          label="続いて並んだ画像の URL をまとめる"
-          note="改行や空白だけをはさんで並んだ画像の URL を、「画像 ×3」のように 1 つにまとめます"
-        />
-        <Toggle
-          checked={s.idHeat}
-          onChange={(v) => update('idHeat', v)}
-          label="書き込みの多い ID を赤くする"
-          note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
-        />
-        <Toggle
-          checked={s.idShort}
-          onChange={(v) => update('idShort', v)}
-          label="ID を短く出す"
-          note="先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)"
-        />
-        <Toggle
-          checked={s.idColor}
-          onChange={(v) => update('idColor', v)}
-          label="ID ごとに色を付ける"
-          note="2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます"
-        />
-        <Toggle
-          checked={s.threadAuthorIcon}
-          onChange={(v) => update('threadAuthorIcon', v)}
-          label="スレ一覧で、立てた人の ID を模様で出す"
-          note="スレ一覧に立てた人の ID が付いてくる掲示板(エッジ)だけです。切っているときは、スレの右下に ID を小さく出します"
-        />
-        <Toggle
-          checked={s.highlightOp}
-          onChange={(v) => update('highlightOp', v)}
-          label="スレ主を強調する"
-          note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
-        />
-      </Section>
-      <Section title="日時の出し方" note="レスの頭の日時です。元の形は、日時にマウスを乗せると出ます">
-        <Choice
-          value={s.dateStyle}
-          options={[
-            { key: 'md_w_hms' as const, name: '月日・曜日・時刻(11/02(月) 19:01:15)' },
-            { key: 'md_hm' as const, name: '月日と時分(11/02 19:01)' },
-            { key: 'full' as const, name: 'すべて(年・秒の下の桁まで)' },
-          ]}
-          onChange={(v) => update('dateStyle', v)}
-        />
-      </Section>
-      <Section title="人気のレスの示し方" note="返信が 3 件からのレス。多いほど赤くします">
-        <Choice
-          value={s.heatStyle}
-          options={[
-            { key: 'left' as const, name: '左の帯' },
-            { key: 'right' as const, name: '右の帯' },
-            { key: 'text' as const, name: '本文の色' },
-            { key: 'none' as const, name: '示さない' },
-          ]}
-          onChange={(v) => update('heatStyle', v)}
-        />
-      </Section>
-      <Section title="本文">
-        <Toggle
-          checked={s.showLinkPreview}
-          onChange={(v) => update('showLinkPreview', v)}
-          label="リンクの埋め込みを出す"
-          note="画像でも動画でもないリンクに、ページのタイトル・説明・画像のカードを出します(画面に見えたときにページを取りに行きます)"
-        />
-        <Toggle
-          checked={s.openLinksInApp}
-          onChange={(v) => update('openLinksInApp', v)}
-          label="リンクをアプリの中で開く"
-          note="掲示板でないリンクを、外のブラウザではなくアプリの中で開きます。ウェブページは題・本文・画像だけを抜き出して出し(読めないページは右上からブラウザで開けます)、画像・動画・YouTube はそのまま見られます"
-        />
-        <Toggle
-          checked={s.showThumbnails}
-          onChange={(v) => update('showThumbnails', v)}
-          label="画像のサムネイルを出す"
-          note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
-        />
-        <p className="text-xs text-c-text-muted mt-3 mb-1.5">サムネイルを読みに行く</p>
-        <Choice
-          value={s.thumbLoad}
-          options={[
-            { key: 'always' as const, name: 'いつも' },
-            { key: 'wifi' as const, name: 'Wi-Fi のときだけ' },
-            { key: 'tap' as const, name: '押したら' },
-          ]}
-          onChange={(v) => update('thumbLoad', v)}
-        />
-        <p className="text-xs text-c-text-muted mt-1">
-          読みに行かないときは、サムネイルの枠だけを出します。押すとそのサムネイルを読み、もう一度押すと大きく見られます
-        </p>
-      </Section>
-      <Section title="サムネイルの大きさ">
-        <p className="text-xs text-c-text-muted mb-1.5">スレ表示(本文の画像・動画・YouTube)</p>
-        <Choice
-          value={s.postThumbSize}
-          options={[
-            { key: 64, name: '小' },
-            { key: 80, name: '標準' },
-            { key: 120, name: '大' },
-            { key: 160, name: '特大' },
-            { key: 220, name: '最大' },
-          ]}
-          onChange={(v) => update('postThumbSize', v)}
-        />
-        <p className="text-xs text-c-text-muted mt-3 mb-1.5">スレ一覧(ふたばのカタログの絵など)</p>
-        <Choice
-          value={s.listThumbScale}
-          options={[
-            { key: 0.75, name: '小' },
-            { key: 1, name: '標準' },
-            { key: 1.5, name: '大' },
-            { key: 2, name: '特大' },
-            { key: 3, name: '最大' },
-          ]}
-          onChange={(v) => update('listThumbScale', v)}
-        />
-      </Section>
-      <Section title="本文の画像">
-        <Toggle
-          checked={s.blurGross}
-          onChange={(v) => update('blurGross', v)}
-          label="グロ注意の画像をぼかす"
-          note="下の言葉を含む返信が付いたレス(画像を貼った本人がそう書いたレスも)の、サムネイルと画像一覧をぼかします。押せばいつもどおり開けます"
-        />
-        {s.blurGross && (
-          <label className="flex items-center gap-2 pl-1 text-sm text-c-text-body">
-            目印の言葉
-            <input
-              type="text"
-              defaultValue={s.grossWords.join('、')}
-              onBlur={(e) => update('grossWords', e.target.value.split(/[、,，\s]+/).map((w) => w.trim()).filter(Boolean))}
-              placeholder="例: グロ、閲覧注意"
-              className={`${INPUT} flex-1`}
-            />
-          </label>
-        )}
-        <Toggle
-          checked={s.showIdenticon}
-          onChange={(v) => update('showIdenticon', v)}
-          label="ID のアイコンを出す"
-          note="ID から作る GitHub 風の模様を、レス番号の左に出します(同じ ID はいつも同じ模様)。右下の数字はその ID の書き込み数です"
-        />
-        <Toggle
-          checked={s.showMinimap}
-          onChange={(v) => update('showMinimap', v)}
-          label="ミニマップを出す"
-          note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
-        />
-        {isMobile && (
-          <Toggle
-            checked={s.showRefreshFab}
-            onChange={(v) => update('showRefreshFab', v)}
-            label="書き込み欄の右に更新ボタンを出す"
-            note="スレ表示のフッターの右端(送るボタンの右)に、更新ボタンを出します"
-          />
-        )}
-        {isMobile && (
-          <Toggle
-            checked={s.hideBarsOnScroll}
-            onChange={(v) => update('hideBarsOnScroll', v)}
-            label="下へスクロールしたら、ヘッダーとフッターを隠す"
-            note="切ると、スレ一覧・スレ表示のヘッダーとフッターをいつも出しておきます"
-          />
-        )}
-        <Toggle
-          checked={s.aaAutoDetect}
-          onChange={(v) => update('aaAutoDetect', v)}
-          label="AA を自動で見分ける"
-          note="空白が続く本文を AA 用のフォントで表示します。レスの ⋯ から個別に切り替えられます"
-        />
       </Section>
     </>
   )
@@ -1112,17 +1092,6 @@ export function UserhashInput({ value, onChange }: { value: string; onChange: (v
 }
 
 function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
-  const [phrase, setPhrase] = useState('')
-  const addPhrase = () => {
-    const p = phrase.trim()
-    if (!p || s.quickPhrases.includes(p)) return
-    update('quickPhrases', [...s.quickPhrases, p])
-    setPhrase('')
-  }
-  const removePhrase = (p: string) => {
-    update('quickPhrases', s.quickPhrases.filter((x) => x !== p))
-    update('postToolbar', s.postToolbar.filter((x) => x !== `phrase:${p}`))
-  }
   // 並べられるもの全部(いま並べているものを先に、並びのとおりに)
   const all = [
     ...TOOLBAR_ITEMS,
@@ -1151,29 +1120,18 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         />
       </Section>
       <Section title="定型文" note="レスの操作バーや ⋯ から、そのレスへのアンカーを付けて、押すとすぐ書き込みます">
-        <form
-          className="flex gap-2 mb-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            addPhrase()
+        <ListEditor
+          noun="定型文"
+          sortable
+          items={s.quickPhrases}
+          onChange={(v) => {
+            update('quickPhrases', v)
+            // 消した定型文は、操作バーからも外す
+            update('postToolbar', s.postToolbar.filter((x) => !x.startsWith('phrase:') || v.includes(x.slice('phrase:'.length))))
           }}
-        >
-          <input type="text" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="例: ワロタ" className={`${INPUT} flex-1`} />
-          <button type="submit" className={BTN} disabled={!phrase.trim()}>
-            追加
-          </button>
-        </form>
-        <div className="flex flex-wrap gap-2">
-          {s.quickPhrases.map((p) => (
-            <span key={p} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 text-sm text-c-text-body border border-c-border rounded-[var(--chip-radius)]">
-              {p}
-              <button type="button" className="p-0.5 rounded-full hover:bg-c-surface2" title="外す" onClick={() => removePhrase(p)}>
-                <span className="material-symbols-outlined text-sm leading-none">close</span>
-              </button>
-            </span>
-          ))}
-          {s.quickPhrases.length === 0 && <p className="text-sm text-c-text-muted">まだありません</p>}
-        </div>
+          onRename={(from, to) => update('postToolbar', s.postToolbar.map((x) => (x === `phrase:${from}` ? `phrase:${to}` : x)))}
+          placeholder="例: ワロタ"
+        />
         <Toggle checked={s.phraseBar} onChange={(v) => update('phraseBar', v)} label="書いている間、定型文のバーを出す" note="本文の欄の上に並べ、押すとカーソルの所に入ります" />
       </Section>
       <Section advanced title="送るとき">
@@ -1342,12 +1300,12 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           onChange={(v) => update('autoScrollOnNew', v)}
           label="いちばん下を見ているときは、新着まで自動でスクロールする"
         />
-        <Toggle
+        {s.autoScrollOnNew && <Toggle
           checked={s.followToEnd}
           onChange={(v) => update('followToEnd', v)}
           label="新着が多くても、いちばん下まで送る"
-          note="上の設定がオンのときに効きます。オフなら新着の頭(最初の新しいレス)まで、オンなら一番下まで送ります。実況のように速いスレで、いつも最新を見ていたいとき向け"
-        />
+          note="オフなら新着の頭(最初の新しいレス)まで、オンなら一番下まで送ります。実況のように速いスレで、いつも最新を見ていたいとき向け"
+        />}
         <Toggle
           checked={s.notifyReplies}
           onChange={(v) => update('notifyReplies', v)}
@@ -1507,12 +1465,20 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
   )
 }
 
+/**
+ * キー操作の割り当て(管理画面)。操作の名前・キーで探す、変えたもの・キーのないものだけを出す、押したキーから操作を探す。
+ * 同じキーをほかの操作に使っていたら、そちらから外して付け替える(すぐ「元に戻す」で戻せる)。
+ * 決め打ちのキー(Esc・Ctrl+W など)には割り当てない
+ */
 function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const keymap = resolveKeymap(s.keymap)
-  // キーを待っている操作
-  const [waiting, setWaiting] = useState<KeyAction>()
-  /** 直前の割り当てで、ほかの操作から外したキー(気づけるように知らせる) */
-  const [moved, setMoved] = useState<string>()
+  /** キーを待っている操作('find' は押したキーから操作を探す) */
+  const [waiting, setWaiting] = useState<KeyAction | 'find'>()
+  /** 直前の変更の知らせと、その前の割り当て(元に戻す用) */
+  const [notice, setNotice] = useState<{ text: string; before?: Partial<Keymap> }>()
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<'all' | 'changed' | 'empty'>('all')
+  const [found, setFound] = useState<string>()
 
   const save = (next: Keymap) => {
     // 既定と同じものは保存しない(あとで既定が変わったときに追いつけるように)
@@ -1520,6 +1486,7 @@ function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upda
     for (const { key } of KEY_ACTIONS) if (next[key].join('\n') !== DEFAULT_KEYMAP[key].join('\n')) changed[key] = next[key]
     update('keymap', changed)
   }
+  const isChanged = (a: KeyAction) => keymap[a].join('\n') !== DEFAULT_KEYMAP[a].join('\n')
 
   useEffect(() => {
     if (!waiting) return
@@ -1529,11 +1496,30 @@ function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upda
       if (e.key === 'Escape') return setWaiting(undefined)
       const k = keyString(e)
       if (!k) return
+      if (waiting === 'find') {
+        setFound(k)
+        setQuery('')
+        setFilter('all')
+        setWaiting(undefined)
+        return
+      }
+      const reserved = reservedKeyName(k)
+      if (reserved) {
+        setNotice({ text: `${keyLabel(k)} は「${reserved}」に決まっているので、割り当てられません` })
+        setWaiting(undefined)
+        return
+      }
       const next = { ...keymap }
       const from = KEY_ACTIONS.filter(({ key }) => key !== waiting && next[key].includes(k))
       for (const { key } of KEY_ACTIONS) next[key] = next[key].filter((x) => x !== k)
-      next[waiting] = [...next[waiting], k]
-      setMoved(from.length > 0 ? `${keyLabel(k)} は「${from.map((a) => a.name).join('」「')}」から外して、こちらに付け替えました` : undefined)
+      next[waiting] = [...next[waiting].filter((x) => x !== k), k]
+      setNotice({
+        text:
+          from.length > 0
+            ? `${keyLabel(k)} は「${from.map((a) => a.name).join('」「')}」から外して、「${KEY_ACTIONS.find((a) => a.key === waiting)!.name}」に付け替えました`
+            : `${keyLabel(k)} を「${KEY_ACTIONS.find((a) => a.key === waiting)!.name}」に割り当てました`,
+        before: s.keymap,
+      })
       save(next)
       setWaiting(undefined)
     }
@@ -1542,68 +1528,153 @@ function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upda
     return () => window.removeEventListener('keydown', onKey, true)
   }, [waiting, keymap])
 
+  const q = normalizeForSearch(query.trim())
+  const rows = KEY_ACTIONS.filter(
+    (a) =>
+      (filter === 'all' || (filter === 'changed' ? isChanged(a.key) : keymap[a.key].length === 0)) &&
+      (!found || keymap[a.key].includes(found)) &&
+      (!q || normalizeForSearch(a.name).includes(q) || keymap[a.key].some((k) => normalizeForSearch(keyLabel(k)).includes(q))),
+  )
+  const changedCount = KEY_ACTIONS.filter((a) => isChanged(a.key)).length
+
+  if (isMobile) return <GestureSettings settings={s} update={update} />
   return (
     <>
-      {moved && (
-        <p className="mb-3 px-3 py-2 text-xs rounded-lg border border-c-border bg-c-surface2 text-c-text-body flex items-center gap-2">
-          <span className="material-symbols-outlined text-base text-c-accent">swap_horiz</span>
-          <span className="flex-1">{moved}</span>
-          <button type="button" onClick={() => setMoved(undefined)} className="p-0.5 rounded-full hover:bg-c-surface3" title="閉じる">
-            <span className="material-symbols-outlined text-sm leading-none">close</span>
-          </button>
-        </p>
-      )}
-      {(['view', 'app'] as const).map((where) => (
       <Section
-        key={where}
-        desktopOnly
-        title={where === 'view' ? 'スレ表示・スレ一覧のキー操作' : 'アプリ全体のキー操作'}
-        note={
-          where === 'view'
-            ? 'キーを受け取っている方(2 画面なら上に線が出ている方。既定では Ctrl+E で入れ替え)で効きます。入力欄にカーソルがあるときは効きません。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)'
-            : 'スレ一覧・スレ表示のどちらを触っていても効きます。入力欄の中では Ctrl 付きのキーだけ効きます'
-        }
+        title="キーの割り当て"
+        note="キーを受け取っている方(2 画面なら上に線が出ている方。既定では Ctrl+E で入れ替え)で効きます。入力欄の中では Ctrl 付きのキーだけ効きます。「+」を押してから、割り当てたいキーを押してください(Esc でやめる)"
       >
-        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
-          {KEY_ACTIONS.filter((a) => a.where === where).map(({ key, name }) => (
-            <div key={key} className="flex items-center gap-3 px-3 py-2">
-              <span className="w-56 flex-shrink-0 text-sm text-c-text-body">{name}</span>
-              <div className="flex-1 flex flex-wrap items-center gap-1.5">
-                {keymap[key].map((k) => (
-                  <span key={k} className="inline-flex items-center gap-0.5 pl-2 pr-0.5 py-0.5 text-xs font-mono rounded border border-c-border bg-c-surface2 text-c-text-strong">
-                    {keyLabel(k)}
-                    <button
-                      type="button"
-                      className={ICON_BTN}
-                      title="外す"
-                      onClick={() => save({ ...keymap, [key]: keymap[key].filter((x) => x !== k) })}
-                    >
-                      <span className="material-symbols-outlined text-sm leading-none">close</span>
-                    </button>
-                  </span>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setWaiting(waiting === key ? undefined : key)}
-                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${
-                    waiting === key ? 'border-c-accent text-c-accent animate-pulse' : 'border-dashed border-c-border text-c-text-muted hover:text-c-text-strong'
-                  }`}
-                >
-                  {waiting === key ? 'キーを押してください' : '+'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        {where === 'app' && (
-          <button type="button" onClick={() => update('keymap', {})} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
-            すべて既定に戻す
-          </button>
+        {notice && (
+          <p className="mb-3 px-3 py-2 text-xs rounded-lg border border-c-border bg-c-surface2 text-c-text-body flex items-center gap-2">
+            <span className="material-symbols-outlined text-base text-c-accent">swap_horiz</span>
+            <span className="flex-1">{notice.text}</span>
+            {notice.before !== undefined && (
+              <button
+                type="button"
+                className="px-2 py-0.5 rounded border border-c-border hover:border-c-accent hover:text-c-accent"
+                onClick={() => {
+                  update('keymap', notice.before!)
+                  setNotice(undefined)
+                }}
+              >
+                元に戻す
+              </button>
+            )}
+            <button type="button" onClick={() => setNotice(undefined)} className="p-0.5 rounded-full hover:bg-c-surface3" title="閉じる">
+              <span className="material-symbols-outlined text-sm leading-none">close</span>
+            </button>
+          </p>
         )}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setFound(undefined)
+            }}
+            placeholder="操作の名前・キーで探す"
+            className={`${INPUT} flex-1 min-w-48`}
+          />
+          <button
+            type="button"
+            onClick={() => setWaiting(waiting === 'find' ? undefined : 'find')}
+            className={`px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border ${waiting === 'find' ? 'border-c-accent text-c-accent animate-pulse' : 'border-c-border text-c-text-body hover:border-c-border-strong'}`}
+          >
+            {waiting === 'find' ? 'キーを押してください' : '押したキーで探す'}
+          </button>
+          <Choice
+            value={filter}
+            options={[
+              { key: 'all' as const, name: `すべて(${KEY_ACTIONS.length})` },
+              { key: 'changed' as const, name: `変えたもの(${changedCount})` },
+              { key: 'empty' as const, name: 'キーのないもの' },
+            ]}
+            onChange={(v) => setFilter(v)}
+          />
+        </div>
+        {found && (
+          <p className="mb-2 text-xs text-c-text-body flex items-center gap-2">
+            {keyLabel(found)} の割り当て: {rows.length > 0 ? rows.map((a) => `「${a.name}」`).join('') : reservedKeyName(found) ? `決まっているキー(${reservedKeyName(found)})` : 'なし'}
+            <button type="button" className="text-c-text-muted hover:text-c-accent underline" onClick={() => setFound(undefined)}>
+              解除
+            </button>
+          </p>
+        )}
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
+          {(['view', 'app'] as const).map((where) => {
+            const list = rows.filter((a) => a.where === where)
+            if (list.length === 0) return null
+            return (
+              <div key={where}>
+                <p className="px-3 py-1.5 text-[11px] font-bold text-c-text-muted bg-c-surface2">
+                  {where === 'view' ? 'スレ表示・スレ一覧(キーを受け取っている方)' : 'アプリ全体(どちらを触っていても)'}
+                </p>
+                {list.map(({ key, name }) => (
+                  <div key={key} className="flex items-center gap-3 px-3 py-2 border-t border-c-border">
+                    <span className="w-64 flex-shrink-0 text-sm text-c-text-body">
+                      {name}
+                      {isChanged(key) && <span className="ml-1.5 text-[10px] px-1 rounded border border-c-accent text-c-accent">変更</span>}
+                    </span>
+                    <div className="flex-1 flex flex-wrap items-center gap-1.5">
+                      {keymap[key].map((k) => (
+                        <span key={k} className="inline-flex items-center gap-0.5 pl-2 pr-0.5 py-0.5 text-xs font-mono rounded border border-c-border bg-c-surface2 text-c-text-strong">
+                          {keyLabel(k)}
+                          <button
+                            type="button"
+                            className={ICON_BTN}
+                            title="外す"
+                            onClick={() => {
+                              setNotice({ text: `${keyLabel(k)} を「${name}」から外しました`, before: s.keymap })
+                              save({ ...keymap, [key]: keymap[key].filter((x) => x !== k) })
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-sm leading-none">close</span>
+                          </button>
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setWaiting(waiting === key ? undefined : key)}
+                        className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                          waiting === key ? 'border-c-accent text-c-accent animate-pulse' : 'border-dashed border-c-border text-c-text-muted hover:text-c-text-strong'
+                        }`}
+                      >
+                        {waiting === key ? 'キーを押してください' : '+'}
+                      </button>
+                    </div>
+                    {isChanged(key) && (
+                      <button
+                        type="button"
+                        className={ICON_BTN}
+                        title={`既定(${DEFAULT_KEYMAP[key].map(keyLabel).join('・') || 'なし'})に戻す`}
+                        onClick={() => {
+                          setNotice({ text: `「${name}」を既定に戻しました`, before: s.keymap })
+                          save({ ...keymap, [key]: DEFAULT_KEYMAP[key] })
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-base">restart_alt</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+          {rows.length === 0 && <p className="px-3 py-3 text-sm text-c-text-muted">見つかりません</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setNotice({ text: 'すべて既定に戻しました', before: s.keymap })
+            update('keymap', {})
+          }}
+          className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline"
+        >
+          すべて既定に戻す
+        </button>
       </Section>
-      ))}
-      {isMobile && <GestureSettings settings={s} update={update} />}
-      <Section desktopOnly title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
+      <Section title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
         <ul className="text-sm text-c-text-body space-y-1">
           {FIXED_KEYS.map((f) => (
             <li key={f.keys}>
@@ -1705,32 +1776,118 @@ function AccountForm(props: {
   )
 }
 
-/** サイトのアカウント。コネクタが申告したものだけ並べる */
-export function AccountsTab(props: Pick<SettingsProps, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount'>) {
-  const kinds = allConnectors().flatMap((c) => (c.accounts ?? []).map((kind) => ({ connectorId: c.id, kind })))
+/**
+ * 掲示板ごとの設定。全体の設定(ほかの分類)の上に、掲示板(サービス)ごと・板ごとに上書きするもの。
+ * - 掲示板ごと: アカウント(5ch の BE など。コネクタが申告したものだけ)
+ * - 板ごと: 別名・名前欄とメール欄の既定値・名無しの扱い
+ */
+export function AccountsTab(
+  props: Pick<SettingsProps, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount' | 'favorites' | 'settings' | 'update'>,
+) {
   const key = (connectorId: string, accountId: string) => `${connectorId}:${accountId}`
+  const services = allConnectors().filter((c) => (c.accounts ?? []).length > 0)
+  const [editing, setEditing] = useState<string>()
+  const [query, setQuery] = useState('')
+  const [addUrl, setAddUrl] = useState('')
+  /** URL で足した板(設定を入れるまでは保存しないので、ここで覚えておく) */
+  const [added, setAdded] = useState<string[]>([])
+  const meta = props.settings.boardMeta
+  const setMeta = (url: string, m: BoardMeta) => {
+    const next = { ...meta }
+    // 全部空になったら消す
+    if (Object.values(m).some((v) => v !== undefined)) next[url] = m
+    else delete next[url]
+    props.update('boardMeta', next)
+  }
+  // 板の一覧: お気に入りの板と、設定のある板(お気に入りでない板は名前が分からないので URL で出す)
+  const boards: Board[] = [
+    ...props.favorites,
+    ...[...new Set([...Object.keys(meta), ...added])]
+      .filter((u) => !props.favorites.some((b) => b.url === u))
+      .map((u): Board => ({ connectorId: '', url: u, name: u.replace(/^https?:\/\//, '').replace(/\/$/, '') })),
+  ]
+  const q = normalizeForSearch(query.trim())
+  const shown = q ? boards.filter((b) => normalizeForSearch(`${meta[b.url]?.alias ?? ''} ${b.name} ${b.url}`).includes(q)) : boards
+  const summary = (m: BoardMeta | undefined) =>
+    [
+      m?.alias && `別名「${m.alias}」`,
+      m?.defaultName && `名前「${m.defaultName}」`,
+      m?.defaultMail && `メール「${m.defaultMail}」`,
+      m?.omitNoname !== undefined && (m.omitNoname ? '名無しを省く' : '名無しを省かない'),
+      m?.nonames?.length && `名無し扱い ${m.nonames.length} 件`,
+    ]
+      .filter(Boolean)
+      .join('・')
   return (
     <>
-      <Section
-        title="アカウント"
-        note="ログインすると、そのサイトに書き込むときに自動で使われます(5ch の BE なら、BE に対応した板でアイコンやポイントが付きます)。パスワードはこのアプリの DB にそのまま保存します。設定の書き出し(JSON)には入りませんが、まるごとバックアップのファイルには入ります"
-      >
-        <div className="space-y-3">
-          {kinds.map(({ connectorId, kind }) => (
-            <AccountForm
-              key={key(connectorId, kind.id)}
-              connectorId={connectorId}
-              kind={kind}
-              saved={props.accounts.find((a) => a.connectorId === connectorId && a.accountId === kind.id)}
-              status={props.loginStatus.get(key(connectorId, kind.id))}
-              onLogin={props.onLogin}
-              onDelete={() => props.onDeleteAccount(connectorId, kind.id)}
-            />
-          ))}
+      <p className="mb-5 text-xs text-c-text-muted leading-relaxed">
+        ほかの分類の設定はすべての掲示板に効きます。ここでは、掲示板(サービス)ごと・板ごとに変えたいものだけを決めます。決めていないものは全体の設定のままです。
+      </p>
+      {services.map((c) => (
+        <Section
+          key={c.id}
+          title={`${c.name}のアカウント`}
+          note="ログインすると、この掲示板に書き込むときに自動で使われます(5ch の BE なら、BE に対応した板でアイコンやポイントが付きます)。パスワードはこのアプリの DB にそのまま保存します。設定の書き出し(JSON)には入りませんが、まるごとバックアップのファイルには入ります"
+        >
+          <div className="space-y-3">
+            {(c.accounts ?? []).map((kind) => (
+              <AccountForm
+                key={key(c.id, kind.id)}
+                connectorId={c.id}
+                kind={kind}
+                saved={props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)}
+                status={props.loginStatus.get(key(c.id, kind.id))}
+                onLogin={props.onLogin}
+                onDelete={() => props.onDeleteAccount(c.id, kind.id)}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-c-text-muted">
+            ログインで受け取った Cookie は、ふだんの通信の Cookie と一緒に保存されます。保存したものを消しても、受け取った Cookie はその期限まで残ります。
+          </p>
+        </Section>
+      ))}
+      <Section title="板ごとの設定" note="別名・名前欄とメール欄の既定値・名無しの扱いを、板ごとに決めます。お気に入りの板と、設定のある板が並びます">
+        {boards.length > 8 && (
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`${boards.length} 板から絞り込む`} className={`${INPUT} w-full mb-2`} />
+        )}
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
+          {shown.map((b) => {
+            const m = meta[b.url]
+            return (
+              <div key={b.url}>
+                <button
+                  type="button"
+                  onClick={() => setEditing((e) => (e === b.url ? undefined : b.url))}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left hover:bg-c-surface2"
+                >
+                  <BoardIcon boardUrl={b.url} override={m?.icon} />
+                  <span className="text-c-text-strong">{m?.alias || b.name}</span>
+                  <span className="flex-1 min-w-0 truncate text-xs text-c-text-muted">{summary(m) || '全体の設定のまま'}</span>
+                  <span className="material-symbols-outlined text-lg text-c-text-muted">{editing === b.url ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                {editing === b.url && <BoardMetaEditor board={b} meta={m ?? {}} onChange={(next) => setMeta(b.url, next)} />}
+              </div>
+            )
+          })}
+          {shown.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">{boards.length === 0 ? 'お気に入りの板がまだありません' : '見つかりません'}</p>}
         </div>
-        <p className="mt-3 text-xs text-c-text-muted">
-          ログインで受け取った Cookie は、ふだんの通信の Cookie と一緒に保存されます。保存したものを消しても、受け取った Cookie はその期限まで残ります。
-        </p>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const u = addUrl.trim().replace(/\/?$/, '/')
+            if (!/^https?:\/\//.test(u)) return
+            setAdded((a) => (a.includes(u) ? a : [...a, u]))
+            setEditing(u)
+            setAddUrl('')
+          }}
+        >
+          <input type="text" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="お気に入りでない板の URL(例: https://eagle.5ch.net/livejupiter/)" className={`${INPUT} flex-1`} />
+          <button type="submit" className={BTN} disabled={!/^https?:\/\//.test(addUrl.trim())}>
+            設定する
+          </button>
+        </form>
       </Section>
     </>
   )
@@ -1977,8 +2134,6 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
           ]}
           onChange={(v) => update('ngMode', v)}
         />
-      </Section>
-      <Section title="続けて並んだあぼーん">
         <Toggle
           checked={s.groupNg}
           onChange={(v) => update('groupNg', v)}
@@ -2132,32 +2287,47 @@ export function BoardListTab(props: {
   )
 }
 
-/** お気に入り板 1 つぶんの情報の編集欄。入力はすぐに反映・保存し、空にすれば既定に戻る */
+/** 板 1 つぶんの設定の欄(見せ方・書き込みの既定・名無しの扱い)。入力はすぐに反映・保存し、空にすれば全体の設定に戻る */
 function BoardMetaEditor({ board, meta, onChange }: { board: Board; meta: BoardMeta; onChange: (m: BoardMeta) => void }) {
-  const field = (key: keyof BoardMeta, label: string, placeholder: string, note?: string) => (
+  const field = (key: 'alias' | 'icon' | 'defaultName' | 'defaultMail', label: string, placeholder: string, note?: string) => (
     <label className="block">
       <span className="block text-xs text-c-text-muted mb-1">{label}</span>
       <input
         type="text"
         value={meta[key] ?? ''}
         placeholder={placeholder}
-        onChange={(e) => {
-          const next = { ...meta, [key]: e.target.value || undefined }
-          onChange(next)
-        }}
+        onChange={(e) => onChange({ ...meta, [key]: e.target.value || undefined })}
         className={`${INPUT} w-full`}
       />
       {note && <span className="block text-[10px] text-c-text-muted mt-0.5">{note}</span>}
     </label>
   )
   return (
-    <div className="px-3 pb-3 pt-1 grid grid-cols-2 gap-3 bg-c-surface2">
-      {field('alias', '別名(板名の代わりに出す名前)', board.name)}
-      <div>
+    <div className="px-3 pb-3 pt-2 bg-c-surface2 space-y-3">
+      <p className="text-[11px] font-bold text-c-text-muted">見せ方</p>
+      <div className="grid grid-cols-2 gap-3">
+        {field('alias', '別名(板名の代わりに出す名前)', board.name)}
         {field('icon', 'ファビコン(画像の URL)', '自動(板のページから探す)')}
       </div>
-      {field('defaultName', 'この板での名前欄の既定値', 'ふだんの名前のまま')}
-      {field('defaultMail', 'この板でのメール欄の既定値', 'ふだんのメールのまま', 'sage にしておきたい板など')}
+      <p className="text-[11px] font-bold text-c-text-muted">書き込み</p>
+      <div className="grid grid-cols-2 gap-3">
+        {field('defaultName', '名前欄の既定値', 'ふだんの名前のまま')}
+        {field('defaultMail', 'メール欄の既定値', 'ふだんのメールのまま', 'sage にしておきたい板など')}
+      </div>
+      <p className="text-[11px] font-bold text-c-text-muted">名無しの扱い</p>
+      <Choice
+        value={meta.omitNoname === undefined ? 'global' : meta.omitNoname ? 'omit' : 'keep'}
+        options={[
+          { key: 'global' as const, name: '全体の設定に合わせる' },
+          { key: 'omit' as const, name: '名無しの名前を省く' },
+          { key: 'keep' as const, name: '省かない' },
+        ]}
+        onChange={(v) => onChange({ ...meta, omitNoname: v === 'global' ? undefined : v === 'omit' })}
+      />
+      <div>
+        <span className="block text-xs text-c-text-muted mb-1">板の既定の名前のほかに、名無しとみなす名前(名前を変えた名無し・ワッチョイの頭など)</span>
+        <ListEditor noun="名無しとみなす名前" items={meta.nonames ?? []} onChange={(v) => onChange({ ...meta, nonames: v.length ? v : undefined })} placeholder="例: 風吹けば名無し" />
+      </div>
     </div>
   )
 }

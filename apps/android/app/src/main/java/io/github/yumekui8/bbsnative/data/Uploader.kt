@@ -15,15 +15,19 @@ import java.io.ByteArrayOutputStream
 /**
  * 画像のアップロード(PC 版の host/uploader.ts・hono-bbs の web と同じ考え方)。上げ先は板で決める:
  * - hono-bbs の板: その掲示板の画像の置き場(web の書き込み欄と同じ。受け付け → 置き場へ送る → 確定。Turnstile は書き込みと同じつなぎの Cookie)
- * - ほかの板: catbox.moe に上げ、受け付けていなければ 0x0.st に上げ直す(catbox は 2026-11 に「保存先の不具合で止めている」と断るようになった)
+ * - ほかの板: 設定の上げ先(uploadHost)。自動なら catbox.moe → 0x0.st → imgur(Client-ID があれば)→ uguu.se の順に試す
+ *   (2026-11 に catbox が「保存先の不具合で止めている」、0x0.st が 503 で止まったことがあった)
  * どこに上げても、返ってきた URL を開いて画像が返るかを確かめる(URL だけ返して中身がない、ということがあった)。
  * JPEG・PNG・WebP は描き直して EXIF(撮影場所など)を取り除き、長い辺が決めた大きさを超えれば縮める。GIF・動画はそのまま。
  * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。0x0.st(https://0x0.st)はプログラムを名乗る User-Agent で使い、
- * ポルノ・グロ・暗号資産などは上げない。どちらも公開されている窓口だけを使い、負荷をかけない
+ * ポルノ・グロ・暗号資産などは上げない。uguu.se(https://uguu.se)は 3 時間で消える。imgur(https://api.imgur.com)は本人が登録した Client-ID で使う。
+ * どれも公開されている窓口だけを使い、負荷をかけない
  */
 object Uploader {
     private const val CATBOX = "https://catbox.moe/user/api.php"
     private const val NULL_POINTER = "https://0x0.st"
+    private const val UGUU = "https://uguu.se/upload?output=json"
+    private const val IMGUR = "https://api.imgur.com/3/image"
     private const val USER_AGENT = "bbs-native/0.1.0 (+https://red-edge.net)"
     private const val MAX_BYTES = 50L * 1024 * 1024
     private const val MAX_GIF_BYTES = 20L * 1024 * 1024
@@ -39,15 +43,30 @@ object Uploader {
      * 上げて URL を返す。honoApi は hono-bbs の板のときの API の場所(それ以外は null)。
      * maxDimension: 長い辺がこれを超える画像は縮める(0 なら縮めない)
      */
-    suspend fun upload(context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, honoApi: String? = null): Result {
+    suspend fun upload(
+        context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, honoApi: String? = null,
+        /** 上げ先(設定の uploadHost): auto / catbox / 0x0 / imgur / uguu */
+        host: String = "auto", imgurClientId: String = "",
+    ): Result {
         val (name, type, bytes) = withContext(Dispatchers.IO) { prepare(context, uri, maxDimension) }
         if (honoApi != null) return toHono(honoApi, name, type, bytes)
-        // catbox → 0x0.st の順に試す。どちらもだめなら、両方の理由を出す
-        val reasons = ArrayList<String>()
-        for ((host, up) in listOf<Pair<String, suspend () -> String>>(
+        val all = listOf<Pair<String, suspend () -> String>>(
             "catbox" to { toCatbox(name, type, bytes) },
             "0x0.st" to { toNullPointer(name, type, bytes) },
-        )) {
+            "imgur" to { toImgur(name, type, bytes, imgurClientId) },
+            "uguu.se" to { toUguu(name, type, bytes) },
+        )
+        // 自動なら上から順に試す(imgur は Client-ID があるときだけ)。選んだ上げ先だけなら、それだけ
+        val tries = when (host) {
+            "catbox" -> all.filter { it.first == "catbox" }
+            "0x0" -> all.filter { it.first == "0x0.st" }
+            "imgur" -> all.filter { it.first == "imgur" }
+            "uguu" -> all.filter { it.first == "uguu.se" }
+            else -> all.filter { it.first != "imgur" || imgurClientId.isNotBlank() }
+        }
+        // どこもだめなら、全部の理由を出す
+        val reasons = ArrayList<String>()
+        for ((host, up) in tries) {
             try {
                 val url = up()
                 verify(url, host)
@@ -82,6 +101,34 @@ object Uploader {
         // 成功すると、本文にファイルの URL だけが返る(https://0x0.st/XXXX.png)
         if (res.status in 200..299 && Regex("^https://0x0\\.st/\\S+$").matches(text)) return text
         throw UploadException(explain(res.status, text))
+    }
+
+    /** uguu.se: 3 時間で消える。返事は JSON(files[0].url) */
+    private suspend fun toUguu(name: String, type: String, bytes: ByteArray): String {
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("files[]", name, bytes.toRequestBody(type.toMediaType()))
+            .build()
+        val res = Http.postMultipart(UGUU, body, USER_AGENT)
+        val text = String(res.body).trim()
+        val url = runCatching { JSONObject(text).getJSONArray("files").getJSONObject(0).getString("url") }.getOrNull()
+        if (res.status in 200..299 && url != null && url.startsWith("https://")) return url
+        throw UploadException(explain(res.status, runCatching { JSONObject(text).optString("description") }.getOrNull()?.ifEmpty { null } ?: text))
+    }
+
+    /** imgur: 本人が登録した Client-ID で、匿名の画像として上げる。返事は JSON(data.link) */
+    private suspend fun toImgur(name: String, type: String, bytes: ByteArray, clientId: String): String {
+        if (clientId.isBlank()) throw UploadException("Client-ID が設定されていません(設定 → 書き込み → 画像のアップロード)")
+        if (!type.startsWith("image/") && !type.startsWith("video/")) throw UploadException("画像か動画だけを上げられます")
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart(if (type.startsWith("video/")) "video" else "image", name, bytes.toRequestBody(type.toMediaType()))
+            .build()
+        val res = Http.postMultipart(IMGUR, body, USER_AGENT, mapOf("Authorization" to "Client-ID $clientId"))
+        val j = runCatching { JSONObject(String(res.body)) }.getOrNull()
+        val link = j?.optJSONObject("data")?.optString("link").orEmpty()
+        if (res.status in 200..299 && link.startsWith("https://")) return link
+        val err = j?.optJSONObject("data")?.opt("error")?.let { e -> (e as? JSONObject)?.optString("message") ?: e.toString() }.orEmpty()
+        if (res.status == 403 || res.status == 401) throw UploadException("Client-ID が通りませんでした(${err.ifEmpty { "HTTP ${res.status}" }})")
+        throw UploadException(explain(res.status, err))
     }
 
     /** hono-bbs の画像の置き場: 受け付け(署名付きの送り先をもらう)→ 置き場へ送る → 確定(公開の URL をもらう) */

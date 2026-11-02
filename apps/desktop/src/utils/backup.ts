@@ -11,6 +11,7 @@ const VERSION = 1
 /** 書き出さない設定。秘密の値と、その端末・そのときだけの状態 */
 const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'catboxUserhash',
+  'imgurClientId',
   'openTabs',
   'activeTab',
   'lastBoardUrl',

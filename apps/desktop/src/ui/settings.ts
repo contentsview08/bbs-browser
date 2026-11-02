@@ -12,6 +12,7 @@ import type { NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
+import type { UploadHost } from '../host/uploader'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
   // スマホのアプリ(ネイティブ版)で足した配色。色は theme/native-schemes.css
@@ -302,6 +303,10 @@ export interface AppSettings {
   uploadMaxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げ、アップロード履歴からサーバー上のファイルも消せる */
   catboxUserhash: string
+  /** 画像の上げ先(host/uploader.ts の UploadHost)。auto は catbox → 0x0.st → imgur → uguu.se の順に試す */
+  uploadHost: UploadHost
+  /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で本人が登録したもの)。空なら imgur は使わない */
+  imgurClientId: string
   /** 書き込むときにアカウント(BE など)を使うか。アカウントの id → 使うか。書いていなければ使う(登録してあれば) */
   postAccounts: Record<string, boolean>
   /** 書き込み欄をしまっておく(スレ表示が狭いときは、これに関係なく自動でしまう) */
@@ -462,6 +467,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uploadStripMetadata: true,
   uploadMaxDimension: 2560,
   catboxUserhash: '',
+  uploadHost: 'auto',
+  imgurClientId: '',
   postCooldownSec: 10,
   replyCollapsed: false,
   postAccounts: {},

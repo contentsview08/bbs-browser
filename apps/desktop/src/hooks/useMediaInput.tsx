@@ -193,7 +193,9 @@ export function useMediaInput(o: {
           patch(next.id, { state: 'done', url: r.url })
           oRef.current.insert(`${r.url}\n`, { ownLine: true })
           oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST })
-          if (r.host !== PRIMARY_HOST) setNotice(`${PRIMARY_HOST} が受け付けていないので、${r.host} に上げました`)
+          // uguu.se は 3 時間で消える。自動のときに初めの置き場以外に上げたら、どこに上げたかを知らせる
+          if (r.host === 'uguu.se') setNotice('uguu.se に上げました(3 時間で消えます)')
+          else if ((uploader.host ?? 'auto') === 'auto' && r.host !== PRIMARY_HOST) setNotice(`${PRIMARY_HOST} が受け付けていないので、${r.host} に上げました`)
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           patch(next.id, { state: 'failed', error: msg })

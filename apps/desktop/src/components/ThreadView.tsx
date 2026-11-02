@@ -2185,6 +2185,8 @@ export default function ThreadView(props: Props) {
                       stripMetadata: settings.uploadStripMetadata,
                       maxDimension: settings.uploadMaxDimension,
                       userhash: settings.catboxUserhash.trim() || undefined,
+                      host: settings.uploadHost,
+                      imgurClientId: settings.imgurClientId.trim() || undefined,
                     }
                   : undefined
               }
@@ -2260,6 +2262,8 @@ export default function ThreadView(props: Props) {
                       stripMetadata: settings.uploadStripMetadata,
                       maxDimension: settings.uploadMaxDimension,
                       userhash: settings.catboxUserhash.trim() || undefined,
+                      host: settings.uploadHost,
+                      imgurClientId: settings.imgurClientId.trim() || undefined,
                     }
                   : undefined
               }

@@ -67,8 +67,10 @@ object Http {
     }
 
     /** multipart/form-data で送る(画像のアップロード)。OkHttp が区切り(boundary)を付ける */
-    suspend fun postMultipart(url: String, body: okhttp3.MultipartBody, userAgent: String = USER_AGENT): HttpResponse = withContext(Dispatchers.IO) {
-        execute(Request.Builder().url(url).header("User-Agent", userAgent).post(body).build())
+    suspend fun postMultipart(url: String, body: okhttp3.MultipartBody, userAgent: String = USER_AGENT, headers: Map<String, String> = emptyMap()): HttpResponse = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url).header("User-Agent", userAgent).post(body)
+        for ((k, v) in headers) req.header(k, v)
+        execute(req.build())
     }
 
     /** 置き場(R2 などの署名付き URL)へファイルをそのまま送る(hono-bbs の画像のアップロード) */

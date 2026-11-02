@@ -1,13 +1,16 @@
-// 画像のアップロード。catbox.moe(公式の API https://catbox.moe/user/api.php)に匿名で 1 枚ずつ上げ、
-// 受け付けていなければ 0x0.st に上げ直す(catbox は 2026-11 に「保存先の不具合で止めている」と断るようになった。スマホ版と同じ)。
+// 画像のアップロード。設定の上げ先(uploadHost)に 1 枚ずつ上げる。自動なら catbox.moe(公式の API https://catbox.moe/user/api.php)
+// → 0x0.st → imgur(Client-ID があれば)→ uguu.se の順に試す(2026-11 に catbox・0x0.st が止まったことがあった。スマホ版と同じ)。
 // 上げたファイルは公開され、匿名なら消せない。EXIF もそのまま残るので、既定では描き直して取り除いてから上げる。
 // 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。0x0.st(https://0x0.st)はプログラムを名乗る User-Agent で使い、
-// ポルノ・グロ・暗号資産などは上げない。どちらも公開されている窓口だけを使い、負荷をかけないこと
+// ポルノ・グロ・暗号資産などは上げない。uguu.se(https://uguu.se)は 3 時間で消える。imgur(https://api.imgur.com)は本人が登録した Client-ID で使う。
+// どれも公開されている窓口だけを使い、負荷をかけないこと
 
 import { fetch } from '@tauri-apps/plugin-http'
 
 const ENDPOINT = 'https://catbox.moe/user/api.php'
 const NULL_POINTER = 'https://0x0.st'
+const UGUU = 'https://uguu.se/upload?output=json'
+const IMGUR = 'https://api.imgur.com/3/image'
 const USER_AGENT = 'bbs-browser/0.1.0 (+https://red-edge.net)'
 /**
  * catbox の上限は 200MB だが、plugin-http は送る中身を数値の配列(JSON)にして Rust 側へ渡すので、
@@ -34,7 +37,21 @@ export interface UploadOptions {
   maxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げる(あとでサーバー上でも消せる) */
   userhash?: string
+  /** 上げ先(設定 uploadHost)。auto は catbox → 0x0.st → imgur → uguu.se の順に試す */
+  host?: UploadHost
+  /** imgur の Client-ID(なければ imgur は使わない) */
+  imgurClientId?: string
 }
+
+export type UploadHost = 'auto' | 'catbox' | '0x0' | 'imgur' | 'uguu'
+/** 設定に出す上げ先(スマホ版の設定と同じ並び・言葉) */
+export const UPLOAD_HOSTS: { key: UploadHost; name: string }[] = [
+  { key: 'auto', name: '自動(catbox → 0x0.st → imgur → uguu.se の順に試す)' },
+  { key: 'catbox', name: 'catbox.moe(消えない)' },
+  { key: '0x0', name: '0x0.st(30 日〜1 年で消える)' },
+  { key: 'imgur', name: 'imgur(消えない。Client-ID が要る)' },
+  { key: 'uguu', name: 'uguu.se(3 時間で消える)' },
+]
 
 /**
  * 画像を描き直す。EXIF などは描き直すと付かなくなり、大きすぎる画像はついでに縮める。
@@ -103,6 +120,36 @@ export function explainUploadError(status: number, text: string): string {
   return `${t}(HTTP ${status})`
 }
 
+/** JSON で返事をする置き場(uguu.se・imgur)に上げる。pick で返事から URL を取り出す。だめなら、返事の文面から理由を作る */
+async function postJsonTo(
+  endpoint: string,
+  fileField: string,
+  body: Blob,
+  file: File,
+  headers: Record<string, string>,
+  pick: (j: unknown) => string | undefined,
+  errorOf: (j: unknown) => string | undefined,
+): Promise<string> {
+  const { bytes, contentType } = await multipart([], { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
+  let res: Response
+  try {
+    res = await fetch(endpoint, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType, ...headers } })
+  } catch (e) {
+    throw new Error(`つながりませんでした(${e instanceof Error ? e.message : String(e)})`)
+  }
+  const text = await res.text()
+  let j: unknown
+  try {
+    j = JSON.parse(text)
+  } catch {
+    j = undefined
+  }
+  const url = j !== undefined ? pick(j) : undefined
+  if (res.ok && url?.startsWith('https://')) return url
+  if (res.status === 401 || res.status === 403) throw new Error(`Client-ID が通りませんでした(${(j !== undefined && errorOf(j)) || `HTTP ${res.status}`})`)
+  throw new Error(explainUploadError(res.status, (j !== undefined && errorOf(j)) || text))
+}
+
 /** 1 つの置き場に上げる。成功すると、本文にファイルの URL だけが返る(urlPattern に合う)。それ以外はエラーの文面 */
 async function postTo(endpoint: string, fields: [string, string][], fileField: string, body: Blob, file: File, urlPattern: RegExp): Promise<string> {
   const { bytes, contentType } = await multipart(fields, { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
@@ -127,16 +174,42 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
   const body = await prepare(file, options)
   const catboxFields: [string, string][] = [['reqtype', 'fileupload']]
   if (options.userhash) catboxFields.push(['userhash', options.userhash])
+  const clientId = options.imgurClientId?.trim()
+  type J = { files?: { url?: string }[]; description?: string; data?: { link?: string; error?: string | { message?: string } } }
+  const all: { key: UploadHost; host: string; up: () => Promise<string> }[] = [
+    { key: 'catbox', host: 'catbox', up: () => postTo(ENDPOINT, catboxFields, 'fileToUpload', body, file, /^https:\/\/files\.catbox\.moe\/\S+$/) },
+    { key: '0x0', host: '0x0.st', up: () => postTo(NULL_POINTER, [], 'file', body, file, /^https:\/\/0x0\.st\/\S+$/) },
+    {
+      key: 'imgur',
+      host: 'imgur',
+      up: () => {
+        if (!clientId) return Promise.reject(new Error('Client-ID が設定されていません(設定 → 書き込み → 画像のアップロード)'))
+        return postJsonTo(
+          IMGUR,
+          file.type.startsWith('video/') ? 'video' : 'image',
+          body,
+          file,
+          { Authorization: `Client-ID ${clientId}` },
+          (j) => (j as J).data?.link,
+          (j) => {
+            const e = (j as J).data?.error
+            return typeof e === 'string' ? e : e?.message
+          },
+        )
+      },
+    },
+    { key: 'uguu', host: 'uguu.se', up: () => postJsonTo(UGUU, 'files[]', body, file, {}, (j) => (j as J).files?.[0]?.url, (j) => (j as J).description) },
+  ]
+  const host = options.host ?? 'auto'
+  // 自動なら上から順に試す(imgur は Client-ID があるときだけ)。選んだ上げ先だけなら、それだけ
+  const tries = host === 'auto' ? all.filter((h) => h.key !== 'imgur' || !!clientId) : all.filter((h) => h.key === host)
   const reasons: string[] = []
-  try {
-    return { url: await postTo(ENDPOINT, catboxFields, 'fileToUpload', body, file, /^https:\/\/files\.catbox\.moe\/\S+$/), host: 'catbox' }
-  } catch (e) {
-    reasons.push(`catbox: ${e instanceof Error ? e.message : String(e)}`)
-  }
-  try {
-    return { url: await postTo(NULL_POINTER, [], 'file', body, file, /^https:\/\/0x0\.st\/\S+$/), host: '0x0.st' }
-  } catch (e) {
-    reasons.push(`0x0.st: ${e instanceof Error ? e.message : String(e)}`)
+  for (const t of tries) {
+    try {
+      return { url: await t.up(), host: t.host }
+    } catch (e) {
+      reasons.push(`${t.host}: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
   throw new Error(reasons.join(' / '))
 }

@@ -42,6 +42,8 @@ val SETTINGS_INDEX = listOf(
     Triple("write", "書いている間、定型文のバーを出す", "本文の欄の上に並べ、押すとカーソルの所に入ります"),
     Triple("write", "送る前に 3 秒待つ", "その間は「取り消す」で止められます(誤爆を防ぐ)。送るボタンを長押しすると、送る前の見た目を確かめられます"),
     Triple("write", "画像のアップロードを使う", ""),
+    Triple("write", "上げ先", "画像のアップロード。catbox・0x0.st・imgur・uguu.se"),
+    Triple("write", "imgur の Client-ID", "画像のアップロード"),
     Triple("write", "大きい画像を縮める", ""),
     Triple("gestures", "なぞって操作する", "左右になぞり、続けて上下になぞると、別の操作になります"),
     Triple("gestures", "振動で知らせる", "ジェスチャー・引っぱって更新が決まったとき、長押しのメニューで軽く振動します"),

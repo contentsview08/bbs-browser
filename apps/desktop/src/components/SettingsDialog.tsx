@@ -1,5 +1,6 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
+import { UPLOAD_HOSTS } from '../host/uploader'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
 import { isCustomDark, parseCustom } from '../ui/customScheme'
 import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -1208,10 +1209,36 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         </div>
       </Section>
       <Section
-        advanced title="画像のアップロード(catbox.moe)"
-        note="書き込み欄のボタン・貼り付け・ドラッグで画像や動画を catbox.moe に上げ、本文に URL を入れます"
+        advanced title="画像のアップロード"
+        note="書き込み欄のボタン・貼り付け・ドラッグで画像や動画を置き場に上げ、本文に URL を入れます。上げた画像は誰でも見られます"
       >
         <Toggle checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} label="画像のアップロードを使う" />
+        <div className="mt-3">
+          <p className="text-sm text-c-text-body mb-1.5">上げ先</p>
+          <Choice value={s.uploadHost} options={UPLOAD_HOSTS} onChange={(v) => update('uploadHost', v)} />
+          <p className="text-[10px] text-c-text-muted mt-1">
+            自動では、受け付けていない置き場を飛ばして次の置き場に上げます(どこに上げたかは書き込み欄に出ます)。uguu.se は 3 時間で消えるので、最後に使います
+          </p>
+        </div>
+        {(s.uploadHost === 'auto' || s.uploadHost === 'imgur') && (
+          <div className="mt-3">
+            <p className="text-sm text-c-text-body mb-1.5">imgur の Client-ID</p>
+            <input
+              type="text"
+              value={s.imgurClientId}
+              onChange={(e) => update('imgurClientId', e.target.value.trim())}
+              placeholder="api.imgur.com で登録した Client-ID"
+              spellCheck={false}
+              className={`${INPUT} w-full font-mono`}
+            />
+            <p className="text-[10px] text-c-text-muted mt-1 leading-relaxed">
+              <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://api.imgur.com/oauth2/addclient')}>
+                imgur でアプリを登録し
+              </button>
+              (Authorization type は「Anonymous usage without user authorization」)、表示された Client-ID を入れます。空なら imgur は使いません
+            </p>
+          </div>
+        )}
         <Toggle
           checked={s.uploadStripMetadata}
           onChange={(v) => update('uploadStripMetadata', v)}

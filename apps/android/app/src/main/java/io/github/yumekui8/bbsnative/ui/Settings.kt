@@ -387,12 +387,25 @@ private fun WritePage(vm: AppViewModel) {
     if (LocalAdvanced.current) Group("送るとき") {
         SwitchRow("送る前に 3 秒待つ", p.sendDelay, desc = "その間は「取り消す」で止められます(誤爆を防ぐ)。送るボタンを長押しすると、送る前の見た目を確かめられます") { p.sendDelay = it }
     }
-    if (LocalAdvanced.current) Group("画像のアップロード(catbox.moe)", note = "画像を catbox.moe に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます") {
+    if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます") {
         SwitchRow("画像のアップロードを使う", p.uploadEnabled) { p.uploadEnabled = it }
-        if (p.uploadEnabled) ChoiceRow(
-            "大きい画像を縮める", p.uploadMaxDimension.toString(),
-            listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },
-        ) { p.uploadMaxDimension = it.toInt() }
+        if (p.uploadEnabled) {
+            ChoiceRow(
+                "上げ先", p.uploadHost,
+                listOf(
+                    "auto" to "自動(catbox → 0x0.st → imgur → uguu.se の順に試す)",
+                    "catbox" to "catbox.moe(消えない)",
+                    "0x0" to "0x0.st(30 日〜1 年で消える)",
+                    "imgur" to "imgur(消えない。Client-ID が要る)",
+                    "uguu" to "uguu.se(3 時間で消える)",
+                ),
+            ) { p.uploadHost = it }
+            if (p.uploadHost == "auto" || p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID") { p.imgurClientId = it.trim() }
+            ChoiceRow(
+                "大きい画像を縮める", p.uploadMaxDimension.toString(),
+                listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },
+            ) { p.uploadMaxDimension = it.toInt() }
+        }
     }
 }
 

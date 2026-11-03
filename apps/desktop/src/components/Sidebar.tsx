@@ -32,10 +32,6 @@ interface Props {
   onOpenSettings: () => void
   /** 画像のアップロード履歴を開く。アップロードを使っていなければ undefined(行を出さない) */
   onOpenUploads?: () => void
-  /** 書き込み履歴を開く */
-  onOpenPostHistory: () => void
-  /** 未読のあるスレ(閲覧履歴を未読で絞り込んだもの)を開く */
-  onOpenUnread?: () => void
   /** スマホ: URL を入れて開く(PC は URL 欄の帯があるので出さない) */
   onOpenUrl?: () => void
   /** 設定画面の板一覧を開く(板を足したいとき) */
@@ -439,10 +435,9 @@ export default function Sidebar(props: Props) {
               />
             </div>
           )}
-          {props.onOpenUnread && <Row icon="mark_email_unread" label="未読のスレ" onClick={props.onOpenUnread} />}
           {props.onOpenUrl && <Row icon="link" label="URL を開く" onClick={props.onOpenUrl} />}
-          <Row icon="edit_note" label="書き込み履歴" onClick={props.onOpenPostHistory} />
-          {props.onOpenUploads && <Row icon="photo_library" label="アップロード履歴" onClick={props.onOpenUploads} />}
+          {/* 未読のスレ・書き込んだスレは「履歴」の一覧のタブで絞り込む(行は置かない)。画像の履歴は独立したポップアップ */}
+          {props.onOpenUploads && <Row icon="photo_library" label="上げた画像" onClick={props.onOpenUploads} />}
         </nav>
         </div>
 

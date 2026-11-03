@@ -20,7 +20,7 @@ import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
-import { LIST_TABS, VIEWED_TAB, type ListTabKey, type TabLabel, type ThreadSort } from '../ui/settings'
+import { LIST_FILTERS, tabDefOf, type ListFilter, type ListTabKey, type TabLabel, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -128,8 +128,12 @@ interface Props {
    * 渡さなければ、スレ一覧(threads)を取り直したときに控え直す
    */
   snapshotKey?: unknown
-  /** これが変わったら「未読」の絞り込みにする(サイドバーの「未読のスレ」から開いたとき) */
-  unreadRequest?: number
+  /** これが変わったら、その絞り込みにする(サイドバーの「お気に入りのスレ」・「次の未読スレ」から開いたとき)。null なら外す */
+  filterRequest?: { key: ListFilter | null; seq: number }
+  /** 絞り込みが変わった(履歴の画面で、どの絞り込みを見ているかを App が覚える) */
+  onFilterChange?: (f: ListFilter | null) => void
+  /** 自分が書き込んだスレ(「書き込んだ」の絞り込み) */
+  postedIds?: Set<string>
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
   keywords?: string[]
   /** スレタイを NG に追加する画面を開く */
@@ -195,9 +199,17 @@ export default function ThreadListPanel(props: Props) {
   useEffect(() => {
     onSortChange.current?.(sort)
   }, [sort])
-  const [unreadOnly, setUnreadOnly] = useState(false)
-  /** 閲覧済み(ログのある)スレだけを出す */
-  const [visitedOnly, setVisitedOnly] = useState(false)
+  /** 絞り込み(未読・閲覧済み・書き込んだ・お気に入り)。どれか 1 つか、なし。開いたときの頼み(filterRequest)があればそれで始める */
+  const [filter, setFilterState] = useState<ListFilter | null>(props.filterRequest?.key ?? null)
+  const onFilterChange = useRef(props.onFilterChange)
+  onFilterChange.current = props.onFilterChange
+  const setFilter = (f: ListFilter | null) => {
+    setFilterState(f)
+    onFilterChange.current?.(f)
+  }
+  const unreadOnly = filter === 'unread'
+  const visitedOnly = filter === 'visited'
+  const filtering = filter !== null
   /** 上に出すタブ(設定の並び) */
   const tabs = props.tabs ?? ['unread', 'momentum', 'newest']
   /** タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び */
@@ -205,10 +217,9 @@ export default function ThreadListPanel(props: Props) {
   const [reversed, setReversed] = useState(false)
   // タブはどれか 1 つだけを選ぶ(未読を選んでいて勢い順を押したら、未読の絞り込みは外れる)
   const pressTab = (key: ListTabKey) => {
-    if (key === 'unread' || key === 'visited') {
-      const on = !(key === 'unread' ? unreadOnly : visitedOnly)
-      setUnreadOnly(key === 'unread' && on)
-      setVisitedOnly(key === 'visited' && on)
+    if (LIST_FILTERS.has(key)) {
+      const on = filter !== key
+      setFilter(on ? (key as ListFilter) : null)
       // 絞り込みを選んだら、並べ替えは元の並びに戻す
       if (on) {
         setSort(defaultSort)
@@ -216,23 +227,26 @@ export default function ThreadListPanel(props: Props) {
       }
       return
     }
-    setUnreadOnly(false)
-    setVisitedOnly(false)
+    setFilter(null)
     if (key === 'viewed') {
       // 見た順: 選んでいなければ選ぶだけ、選んでいれば上下を入れ替える
-      if (!sort && !unreadOnly && !visitedOnly) setReversed((v) => !v)
+      if (!sort && !filtering) setReversed((v) => !v)
       setSort(null)
-    } else setSort((s) => cycleSort(s, key))
+    } else setSort((s) => cycleSort(s, key as SortMode))
   }
   const [searchActive, setSearchActive] = useState(false)
   const [query, setQuery] = useState('')
+  // 開いたあとに来た頼み(サイドバーの「お気に入りのスレ」など)。開いたときの頼みは useState の初めの値で済ませている
+  const seenRequest = useRef(props.filterRequest?.seq)
   useEffect(() => {
-    if (!props.unreadRequest) return
-    setUnreadOnly(true)
-    setVisitedOnly(false)
+    const r = props.filterRequest
+    if (!r || r.seq === seenRequest.current) return
+    seenRequest.current = r.seq
+    setFilter(r.key)
     setSort(defaultSort)
     setReversed(false)
-  }, [props.unreadRequest])
+    // defaultSort は固定
+  }, [props.filterRequest])
 
   // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
   // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
@@ -245,10 +259,9 @@ export default function ThreadListPanel(props: Props) {
       return true
     }
     const sorted = JSON.stringify(sort) !== JSON.stringify(defaultSort)
-    if (!unreadOnly && !visitedOnly && !sorted && !query && !searchActive && !reversed) return false
+    if (!filtering && !sorted && !query && !searchActive && !reversed) return false
     setReversed(false)
-    setUnreadOnly(false)
-    setVisitedOnly(false)
+    setFilter(null)
     setSort(defaultSort)
     setQuery('')
     setSearchActive(false)
@@ -439,6 +452,8 @@ export default function ThreadListPanel(props: Props) {
       if (q && !t.title.toLowerCase().includes(q)) return false
       if (unreadOnly && !(unreadSnapshot?.has(threadId(t)) ?? false)) return false
       if (visitedOnly && stateOf(t) === undefined) return false
+      if (filter === 'posted' && !props.postedIds?.has(threadId(t))) return false
+      if (filter === 'fav' && !props.favoriteIds?.has(threadId(t))) return false
       return true
     })
     const so = shownServerOrder
@@ -456,7 +471,7 @@ export default function ThreadListPanel(props: Props) {
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, unreadOnly, visitedOnly, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder, reversed])
+  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
   // visible は App が描き直すたびに作り直される(stateOf が毎回新しい)ので、顔ぶれ・並び・レス数が変わったときだけ知らせる。
@@ -743,7 +758,7 @@ export default function ThreadListPanel(props: Props) {
   const [renderLimit, setRenderLimit] = useState(FIRST_CARDS)
   // 並べ替え・絞り込み・検索を変えたら、描く数を最初の分まで戻して先頭へ(1000 枚のカードの DOM を一度に並べ直すと重い。
   // 少しずつ描く仕組みが、並べ替えでは効いていなかった)。一覧の取り直し(threads が変わる)では戻さない(並びを保つ)
-  const orderBasis = `${shownSort?.mode ?? ''}:${shownSort?.dir ?? ''}:${unreadOnly}:${visitedOnly}:${reversed}:${query}`
+  const orderBasis = `${shownSort?.mode ?? ''}:${shownSort?.dir ?? ''}:${filter ?? ''}:${reversed}:${query}`
   const firstBasis = useRef(orderBasis)
   useLayoutEffect(() => {
     if (firstBasis.current === orderBasis) return
@@ -805,10 +820,10 @@ export default function ThreadListPanel(props: Props) {
               style={isMobile ? undefined : { gridTemplateColumns: `repeat(${Math.max(1, tabs.length)}, minmax(0, 1fr))` }}
             >
               {tabs.map((key, i) => {
-                const def = key === 'viewed' ? VIEWED_TAB : LIST_TABS.find((t) => t.key === key)!
-                const filter = key === 'unread' || key === 'visited'
+                const def = tabDefOf(key)
+                const isFilter = LIST_FILTERS.has(key)
                 // 見た順は、並べ替えていないあいだずっと選んでいる(閲覧履歴のいつもの並び)
-                const active = key === 'unread' ? unreadOnly : key === 'visited' ? visitedOnly : key === 'viewed' ? !sort && !unreadOnly && !visitedOnly : sort?.mode === key && !unreadOnly && !visitedOnly
+                const active = isFilter ? filter === key : key === 'viewed' ? !sort && !filtering : sort?.mode === key && !filtering
                 return (
                   <button
                     key={key}
@@ -816,7 +831,7 @@ export default function ThreadListPanel(props: Props) {
                     onClick={() => pressTab(key)}
                     // 選んでいるタブは、文字の色に加えて、強調色を薄く敷く(ひと目で分かるように)
                     className={`${TAB} ${isMobile ? 'px-2' : ''} ${active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'}`}
-                    title={`${def.note}${filter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
+                    title={`${def.note}${isFilter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
                   >
                     {props.tabLabel !== 'text' && <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>}
                     {props.tabLabel !== 'icon' && <span className="truncate">{def.name}</span>}
@@ -829,7 +844,7 @@ export default function ThreadListPanel(props: Props) {
                         {unreadTotal > 999 ? '+999+' : `+${unreadTotal}`}
                       </span>
                     )}
-                    {!filter && (
+                    {!isFilter && (
                       <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
                         {key === 'viewed' ? (reversed ? 'arrow_upward' : 'arrow_downward') : active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
                       </span>
@@ -845,7 +860,7 @@ export default function ThreadListPanel(props: Props) {
   return (
     <section
       // 絞り込み・検索をしている印(スマホの戻る操作は、まずこれを外す。App の backRef)
-      data-filtering={props.active !== false && (unreadOnly || visitedOnly || query || searchActive) ? 'list' : undefined}
+      data-filtering={props.active !== false && (filtering || query || searchActive) ? 'list' : undefined}
       // 選んでいる途中の印。戻るで選ぶのをやめる(絞り込みとは別にして、メニューのジェスチャーは止めない)
       data-selecting={selected.size > 0 || undefined}
       style={props.fill ? { width: '100%', maxWidth: props.fill === 'centered' ? FILL_MAX_WIDTH : undefined } : { width }}

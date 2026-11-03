@@ -78,7 +78,10 @@ export const FONT_FAMILY_KEYS = [
 ] as const
 export type ThreadSort = 'subject' | 'momentum' | 'newest' | 'count'
 /** スレ一覧の上のタブ。unread・visited は絞り込み(押すとその条件のスレだけ)、ほかは並べ替え */
-export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count' | 'viewed'
+export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count' | 'viewed' | 'posted' | 'fav'
+/** スレ一覧の絞り込み(タブのうち、並べ替えではないもの) */
+export type ListFilter = 'unread' | 'visited' | 'posted' | 'fav'
+export const LIST_FILTERS: ReadonlySet<ListTabKey> = new Set(['unread', 'visited', 'posted', 'fav'])
 export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
   { key: 'unread', name: '未読', icon: 'mark_email_unread', note: 'ログがあり、新着レスのあるスレだけを出す' },
   { key: 'visited', name: '閲覧済み', icon: 'history', note: '一度でも開いた(ログのある)スレだけを出す' },
@@ -86,8 +89,16 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
   { key: 'newest', name: '新しい順', icon: 'schedule', note: '立った時刻の新しい順に並べる' },
   { key: 'count', name: 'レス数順', icon: 'format_list_numbered', note: 'レス数の多い順に並べる' },
 ]
-/** 閲覧履歴だけのタブ: 見た順(最近見たものが上。押すたびに上下を入れ替える)。設定のタブの並びには出さない */
-export const VIEWED_TAB = { key: 'viewed' as const, name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' }
+/** 「履歴」だけのタブ(設定のタブの並びには出さない): 見た順(最近見たものが上。押すたびに上下を入れ替える)・書き込んだ・お気に入り */
+export const HISTORY_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
+  { key: 'viewed', name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' },
+  { key: 'posted', name: '書き込んだ', icon: 'edit_note', note: '自分が書き込んだスレだけを出す' },
+  { key: 'fav', name: 'お気に入り', icon: 'star', note: 'お気に入りのスレ(☆ を付けたスレ)だけを出す' },
+]
+/** 「履歴」の一覧のタブ(PC)。見た順・未読・書き込んだ・お気に入り・レス数順・新しい順 */
+export const HISTORY_LIST_TABS: ListTabKey[] = ['viewed', 'unread', 'posted', 'fav', 'count', 'newest']
+/** タブの定義(板のタブと履歴のタブのどちらからも引ける) */
+export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key) ?? HISTORY_TABS.find((t) => t.key === key)!
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 /** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色・示さない(スマホのアプリの heatStyle と同じ) */
 export type HeatStyle = 'left' | 'right' | 'text' | 'none'

@@ -25,6 +25,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -101,7 +103,8 @@ fun WebUploadScreen(site: WebUploadSite, onLink: (String) -> Unit, onDismiss: ()
         fileCallback?.onReceiveValue(uris.toTypedArray())
         fileCallback = null
     }
-    // 1 秒ごとに、見つかったリンクを取り出す
+    // 1 秒ごとに、見つかったリンクを取り出す。上げ終わったら(最後のリンクから 4 秒、新しいリンクが来なければ)画面を閉じる
+    var lastFoundAt by remember { mutableStateOf(0L) }
     LaunchedEffect(web) {
         val w = web ?: return@LaunchedEffect
         while (true) {
@@ -110,9 +113,10 @@ fun WebUploadScreen(site: WebUploadSite, onLink: (String) -> Unit, onDismiss: ()
                 val arr = runCatching { JSONArray(JSONArray("[$r]").getString(0)) }.getOrNull() ?: return@evaluateJavascript
                 for (i in 0 until arr.length()) {
                     val u = arr.getString(i)
-                    if (u !in found) { found += u; onLink(u) }
+                    if (u !in found) { found += u; onLink(u); lastFoundAt = System.currentTimeMillis() }
                 }
             }
+            if (found.isNotEmpty() && System.currentTimeMillis() - lastFoundAt > 4000) { onDismiss(); break }
         }
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {

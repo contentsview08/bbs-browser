@@ -241,7 +241,7 @@ private fun boardName(vm: AppViewModel, url: String) = vm.favorites.firstOrNull 
 @Composable
 fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null) {
     val refresh = onRefresh ?: { vm.checkNew(entries) }
-    val tab = when (title) { "全板の未読" -> "unread"; "お気に入りのスレ" -> "fav"; else -> "history" }
+    val tab = when (title) { "未読のスレ" -> "unread"; "お気に入りのスレ" -> "fav"; else -> "history" }
     var menuFor by remember { mutableStateOf<io.github.yumekui8.bbsnative.bbs.ThreadSummary?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }

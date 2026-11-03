@@ -297,25 +297,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 全板の未読(お気に入り板すべての、新着のある読んだスレ)。板ごとに subject.txt を 1 回ずつ取るだけ(スレの本文は取らない) */
     var allUnread by mutableStateOf<List<HistoryEntry>>(emptyList())
+    /**
+     * 未読: 閲覧履歴のうち、新着のあるスレ(PC 版・Web と同じ意味。2026-11-03 に「お気に入り板の読んだスレ」からそろえた)。
+     * 板ごとにスレ一覧を 1 回だけ取り、載っていればそのレス数を新しい数にする(dat を 1 つずつ取りに行かない)
+     */
     fun loadAllUnread() {
         if (checking) return
         viewModelScope.launch {
             checking = true
             try {
-                val readAt = history.associate { it.thread.id to it.readAt }
-                val out = ArrayList<HistoryEntry>()
+                val hist = db.history()
+                history = hist
                 val counts = remoteCounts.toMutableMap()
-                for (b in favorites) {
-                    val threads = runCatching { TwoCh.listThreads(b) }.getOrNull() ?: continue
-                    val states = db.threadStates(b.url)
-                    for (t in threads) {
-                        val st = states[t.key] ?: continue
-                        if (t.postCount > st.readNo) { out += HistoryEntry(t, st.readNo, readAt[t.id] ?: 0L); counts[t.id] = t.postCount }
+                val byBoard = hist.groupBy { it.thread.boardUrl }
+                for ((boardUrl, entries) in byBoard) {
+                    val board = favorites.firstOrNull { it.url == boardUrl } ?: Board(boardUrl, boardUrl)
+                    val threads = runCatching { TwoCh.listThreads(board) }.getOrNull() ?: continue
+                    val live = threads.associateBy { it.key }
+                    for (h in entries) {
+                        val t = live[h.thread.key]
+                        if (t != null) counts[h.thread.id] = t.postCount
                     }
                 }
-                // 未読の多い順
-                allUnread = out.sortedByDescending { it.thread.postCount - it.readNo }
                 remoteCounts = counts
+                // 新着のあるものだけ、未読の多い順
+                allUnread = hist.filter { (counts[it.thread.id] ?: it.thread.postCount) > it.readNo }
+                    .sortedByDescending { (counts[it.thread.id] ?: it.thread.postCount) - it.readNo }
             } finally {
                 checking = false
             }
@@ -409,7 +416,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         is Page.Boards -> "板を探す"
         is Page.History -> "閲覧履歴"
         is Page.FavThreads -> "お気に入りのスレ"
-        is Page.AllUnread -> "全板の未読"
+        is Page.AllUnread -> "未読のスレ"
         is Page.PostHistory -> "書き込み履歴"
         is Page.Uploads -> "上げた画像"
         is Page.Settings -> "設定"
@@ -870,7 +877,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             is Page.Threads -> under.board.name to under.threads.map { t -> t to (under.states[t.key]?.let { maxOf(0, t.postCount - it.readNo) } ?: 0) }
             is Page.History -> "閲覧履歴" to history.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
             is Page.FavThreads -> "お気に入りのスレ" to favThreads.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
-            is Page.AllUnread -> "全板の未読" to allUnread.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
+            is Page.AllUnread -> "未読のスレ" to allUnread.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
             else -> return null
         }
         val at = list.indexOfFirst { it.first.id == page.summary.id }

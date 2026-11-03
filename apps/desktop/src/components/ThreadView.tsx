@@ -29,6 +29,7 @@ import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
+import { inBar, type Placement } from '../utils/toolbar'
 import { mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
@@ -1048,7 +1049,7 @@ export default function ThreadView(props: Props) {
             label: '表示スタイル',
             icon: 'palette',
             tint: 'var(--c-mark-purple)',
-            render: (where: 'header' | 'footer') => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={where === 'footer'} />,
+            render: (where: Placement) => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={inBar(where, 'footer')} />,
             submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} />,
           },
           {
@@ -1103,7 +1104,7 @@ export default function ThreadView(props: Props) {
   const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), barOrder)
   // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
   const refreshFab = isMobile && settings.showRefreshFab
-  const hasFooter = barActions.some((a) => placements[a.id] === 'footer') || (isMobile && !!props.onSubmitPost)
+  const hasFooter = barActions.some((a) => inBar(placements[a.id], 'footer')) || (isMobile && !!props.onSubmitPost)
   // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
   const footerRef = useRef<HTMLDivElement>(null)
   // 一番下へ・新着の札は、フッターが出ている間はその上に上げる(重ならないように)。--footer-offset で動かす
@@ -1843,6 +1844,7 @@ export default function ThreadView(props: Props) {
                 <span className="material-symbols-outlined text-xl leading-none">arrow_back</span>
               </button>
             )}
+            {!isMobile && <ActionButtons actions={barActions} placements={placements} where="headerStart" btnClass={ICON_BTN} iconClass="text-xl" />}
             {/* スレタイが長いときに省くのはスレタイだけ。後ろのレス数は別の情報なので、いつも出す */}
             <h2
               className={`min-w-0 flex items-baseline font-bold text-base cursor-pointer transition-colors ${isMobile ? '' : 'hover:text-c-accent'}`}
@@ -2176,7 +2178,9 @@ export default function ThreadView(props: Props) {
       </div>
       {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
       {hasFooter && !isMobile && (
-        <div className="flex-shrink-0 h-10 px-3 flex items-center justify-end gap-1 border-t border-c-border bg-panel-thread-header">
+        <div className="flex-shrink-0 h-10 px-3 flex items-center gap-1 border-t border-c-border bg-panel-thread-header">
+          <ActionButtons actions={barActions} placements={placements} where="footerStart" btnClass={ICON_BTN} iconClass="text-xl" />
+          <span className="flex-1" />
           <ActionButtons actions={barActions} placements={placements} where="footer" btnClass={ICON_BTN} iconClass="text-xl" />
         </div>
       )}

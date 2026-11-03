@@ -573,6 +573,8 @@ export default function App() {
 
   /** 閲覧履歴の更新で、スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
   const [historyCounts, setHistoryCounts] = useState(new Map<string, number>())
+  /** 閲覧履歴の新着を板ごとに確かめている進み具合(確かめていないときは undefined) */
+  const [historyProgress, setHistoryProgress] = useState<{ done: number; total: number }>()
 
   /**
    * 閲覧履歴の更新。dat を 1 つずつ取りに行くとサーバーの負担が大きいので、
@@ -587,7 +589,10 @@ export default function App() {
       const byBoard = new Map<string, HistoryEntry[]>()
       for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
       const counts = new Map(historyCounts)
+      let done = 0
+      setHistoryProgress({ done, total: byBoard.size })
       for (const [boardUrl, entries] of byBoard) {
+        setHistoryProgress({ done: done++, total: byBoard.size })
         const connectorId = entries[0].thread.connectorId
         let subject: Map<string, ThreadSummary> | undefined
         try {
@@ -605,6 +610,7 @@ export default function App() {
         setHistoryCounts(new Map(counts))
         setHistory(await store.history())
       }
+      setHistoryProgress(undefined)
       setHistoryVersion((v) => v + 1)
       await reloadRecent(store)
     })
@@ -1008,7 +1014,13 @@ export default function App() {
       await loadTab(store, t)
       // 読み込んでいる間にログを削除したら、閲覧履歴を読み直さない(消す前の DB から、消したスレが戻ってくる)
       if (deletedIds.current.has(id)) return
-      if (history) setHistory(await store.history())
+      // 閲覧履歴を出していても、開いただけでは並びを変えない(見た順に動かすのは、本人が更新したとき)。
+      // まだ並びにないスレ(板から開いた)だけ、末尾に足す
+      if (history && !history.some((h) => threadId(h.thread) === id)) {
+        const fresh = await store.history()
+        const added = fresh.find((h) => threadId(h.thread) === id)
+        if (added) setHistory((list) => (list ? [...list, added] : list))
+      }
       await reloadRecent(store)
     })
 
@@ -1991,6 +2003,21 @@ export default function App() {
   const historyStates = new Map(history?.map((h) => [threadId(h.thread), h as ThreadState]))
   // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
   // スレ一覧から分かったレス数があれば、それを使う(手元のレス数より多いぶんが未読として出る)
+  /** 板の URL → 画面に出す名前(別名 → お気に入り板の名前 → URL の最後) */
+  const boardNameOf = (url: string): string => {
+    const alias = settings.boardMeta[url]?.alias
+    if (alias) return alias
+    const fav = favorites?.find((f) => f.url === url)
+    if (fav) return fav.name
+    try {
+      return new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
+    } catch {
+      return url
+    }
+  }
+  const historyReadAt = new Map(history?.map((h) => [threadId(h.thread), h.readAt]))
+  /** 閲覧履歴の行に出すもの(板の名前・いつ見たか) */
+  const historyMetaOf = (t: ThreadSummary) => ({ boardName: boardNameOf(t.boardUrl), readAt: historyReadAt.get(threadId(t)), icon: settings.boardMeta[t.boardUrl]?.icon })
   const historyThreads = useMemo(
     () =>
       history?.map((h) => {
@@ -2070,13 +2097,6 @@ export default function App() {
           await store.removeUpload(url)
           setUploads(await store.listUploads())
         }}
-        onRemoveFromHistory={(url) =>
-          void run(null, async () => {
-            if (!store) return
-            await store.removeUpload(url)
-            setUploads(await store.listUploads())
-          })
-        }
       />
     ) : undefined
   // スレの最後の「次の未読スレへ」。いまのスレ一覧に見えている並びで、いまのスレの次に未読のあるスレ。
@@ -2250,8 +2270,10 @@ export default function App() {
           onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
           serverOrder={!favView && !history && listOrder ? orderOf(listOrder) : undefined}
           onSortChange={!favView && !history ? onListSort : undefined}
-          // 閲覧履歴は見た順だけ(未読は上の「履歴」の帯で。新しい順・勢い順は、見たスレを並べるのには要らない)
-          tabs={history ? ['viewed'] : settings.listTabs}
+          // 閲覧履歴は 見た順・レス数順・新しい順(未読は上の「履歴」の帯で)
+          tabs={history ? ['viewed', 'count', 'newest'] : settings.listTabs}
+          historyMetaOf={history ? historyMetaOf : undefined}
+          progressText={history && historyProgress ? `${historyProgress.done}/${historyProgress.total} 板の新着を確かめています` : undefined}
           tabLabel={settings.listTabLabel}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
@@ -2445,13 +2467,6 @@ export default function App() {
         <UploadHistoryDialog
           uploads={uploads}
           postedIn={postedIn}
-          onRemoveFromHistory={(url) =>
-            void run(null, async () => {
-              if (!store) return
-              await store.removeUpload(url)
-              setUploads(await store.listUploads())
-            })
-          }
           onOpen={(url) => void (isMobile ? openUrlInApp(url) : openUrl(url))}
           canDelete={settings.catboxUserhash.trim() !== ''}
           onDelete={async (url) => {

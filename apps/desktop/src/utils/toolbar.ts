@@ -3,7 +3,17 @@
 // スマホでは画面の幅が狭いので、ヘッダーとフッターの両方を使う。置き場所は PC とは別に持ち、既定も別(mobile)。
 // スマホだけの操作(一覧に戻る・書き込む・引き出しを開くなど)もある(mobileOnly)
 
-export type Placement = 'header' | 'footer' | 'menu'
+/** 置き場所。headerStart・footerStart は帯の左端(題の左)、header・footer は右端 */
+export type Placement = 'headerStart' | 'header' | 'footerStart' | 'footer' | 'menu'
+export const PLACEMENTS: { key: Placement; name: string }[] = [
+  { key: 'headerStart', name: 'ヘッダーの左' },
+  { key: 'header', name: 'ヘッダーの右' },
+  { key: 'footerStart', name: 'フッターの左' },
+  { key: 'footer', name: 'フッターの右' },
+  { key: 'menu', name: '︙ の中だけ' },
+]
+/** 帯(ヘッダーかフッター)に出ているか */
+export const inBar = (p: Placement, bar: 'header' | 'footer') => p === bar || p === `${bar}Start`
 
 export type BarArea = 'thread' | 'list'
 

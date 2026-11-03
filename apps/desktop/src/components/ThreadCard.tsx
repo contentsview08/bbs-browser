@@ -12,6 +12,7 @@ import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
 import Identicon from './Identicon'
 import { isAutoLoadable } from '../utils/safeUrl'
+import BoardIcon from './BoardIcon'
 
 interface Props {
   thread: ThreadSummary
@@ -52,6 +53,8 @@ interface Props {
   authorIcon?: boolean
   /** 行の形がコンパクト: スレタイ 1 行と、右端にレス数(勢いの色)と未読だけ(スマホのアプリの listDensity = compact と同じ)。専ブラ風の表は元から 1 行なので変えない */
   compact?: boolean
+  /** 閲覧履歴の行(板の名前・いつ見たか)。渡すと、見た目によらず履歴用の形で描く(スマホのアプリの過去のスレの行と同じ並び) */
+  historyMeta?: { boardName: string; readAt?: number; icon?: string }
 }
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
@@ -78,6 +81,7 @@ function ThreadCard({
   variant = 'card',
   authorIcon = false,
   compact = false,
+  historyMeta,
 }: Props) {
   /** 立てた人の ID を模様で出すか(出さないときは、右下に ID の文字を出す) */
   const authorIconId = authorIcon ? thread.authorId : undefined
@@ -251,8 +255,48 @@ function ThreadCard({
     </div>
   )
 
+  /**
+   * 閲覧履歴の行: 左に未読の帯、スレタイ、下に 板・いつ見たか・dat落ち、右に レス数と未読。
+   * チェックの列は幅を決めて置く(チェックを入れても行がずれないように)
+   */
+  const historyRow = historyMeta && (
+    <div className="flex items-center gap-2 min-w-0">
+      {onSelect && !isMobile && (
+        <label className="w-5 flex-shrink-0 flex items-center justify-center self-stretch cursor-pointer" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
+        </label>
+      )}
+      <span
+        className="w-[3px] self-stretch flex-shrink-0 rounded-full"
+        style={{ background: unreadCount > 0 ? 'var(--c-unread)' : 'transparent', opacity: unreadCount > 0 ? 0.35 + 0.65 * Math.min(1, Math.log10(unreadCount + 1) / 2.5) : 1 }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px] leading-snug truncate" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
+          {favStar}
+          {threadBadges}
+          {thread.title || thread.key}
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-c-text-muted min-w-0">
+          <BoardIcon boardUrl={thread.boardUrl} override={historyMeta.icon} size={14} />
+          <span className="truncate">{historyMeta.boardName}</span>
+          {historyMeta.readAt && <span className="flex-shrink-0 whitespace-nowrap">・{relativeTime(new Date(historyMeta.readAt))}に見た</span>}
+          {archived && <span className="flex-shrink-0">・dat落ち</span>}
+        </div>
+      </div>
+      <span className="flex-shrink-0 flex flex-col items-end gap-0.5">
+        <span className="text-[12px] tabular-nums text-c-text-muted" title="レス数">
+          {thread.postCount}
+          <span className="ml-0.5 text-[10px]">レス</span>
+        </span>
+        {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded-full text-center leading-tight')}
+      </span>
+    </div>
+  )
+
   const content =
-    compact && variant !== 'classic' ? (
+    historyRow ? (
+      historyRow
+    ) : compact && variant !== 'classic' ? (
       compactRow
     ) : isMobile && variant !== 'classic' ? (
       unified

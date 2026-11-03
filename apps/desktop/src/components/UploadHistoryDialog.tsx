@@ -25,8 +25,6 @@ interface Props {
   canDelete: boolean
   /** サーバー上のファイルを消して、履歴からも外す */
   onDelete: (url: string) => Promise<void>
-  /** 履歴からだけ外す(サーバー上のファイルは残る。匿名で上げたものはこれだけ) */
-  onRemoveFromHistory?: (url: string) => void
   /** その画像を貼ったレス(書き込み履歴から探したもの)。分かればスレタイと番号を出し、押すとそのレスへ */
   postedIn?: (url: string) => { title: string; no?: number; open: () => void } | undefined
   onOpen: (url: string) => void
@@ -44,98 +42,96 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
   const [copied, setCopied] = useState<string>()
   const [deleting, setDeleting] = useState<string>()
   const [error, setError] = useState<string>()
+  // 置き場からも消せるもの(アカウントで上げた)と、消せないもの(匿名で上げた)を分けて並べる
+  const deletable = props.uploads.filter((u) => u.withAccount)
+  const fixed = props.uploads.filter((u) => !u.withAccount)
+  const card = (u: UploadRecord) => {
+    const posted = props.postedIn?.(u.url)
+    return (
+      <div key={u.url} className="group flex flex-col bg-c-surface2 border border-c-border rounded-[var(--card-radius)] overflow-hidden">
+        <button type="button" onClick={() => props.onOpen(u.url)} className="h-28 bg-c-surface3" title="ブラウザで開く">
+          <img src={u.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+        </button>
+        <div className="px-2 pt-1.5">
+          <p className="text-xs text-c-text-body truncate" title={u.name}>
+            {u.name}
+          </p>
+          <p className="text-[10px] text-c-text-muted">
+            {new Date(u.uploadedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })} ・ {formatSize(u.size)}
+          </p>
+          {/* 貼ったレス(書き込み履歴にあれば)。押すとそのレスへ */}
+          {posted ? (
+            <button type="button" onClick={posted.open} className="mt-1 w-full text-left text-[11px] text-c-accent truncate hover:underline" title="貼ったレスへ">
+              <span className="material-symbols-outlined text-[13px] align-[-2px] mr-0.5">reply</span>
+              {posted.title || '(スレタイ不明)'}
+              {posted.no !== undefined && <span className="ml-1 font-bold">&gt;&gt;{posted.no}</span>}
+            </button>
+          ) : (
+            <p className="mt-1 text-[11px] text-c-text-muted">貼ったレスは見つかりません</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-0.5 px-1 pb-1">
+          <button
+            type="button"
+            className={TOOL}
+            title="URL をコピー"
+            onClick={() => {
+              void navigator.clipboard.writeText(u.url)
+              setCopied(u.url)
+            }}
+          >
+            <span className="material-symbols-outlined text-base leading-none">{copied === u.url ? 'check' : 'content_copy'}</span>
+          </button>
+          <button type="button" className={TOOL} title="ブラウザで開く" onClick={() => props.onOpen(u.url)}>
+            <span className="material-symbols-outlined text-base leading-none">open_in_new</span>
+          </button>
+          {u.withAccount && props.canDelete && (
+            <button
+              type="button"
+              className={`${TOOL} hover:text-c-heat-very-hot`}
+              title="catbox から削除"
+              disabled={deleting === u.url}
+              onClick={async () => {
+                setDeleting(u.url)
+                setError(undefined)
+                try {
+                  await props.onDelete(u.url)
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : String(e))
+                } finally {
+                  setDeleting(undefined)
+                }
+              }}
+            >
+              <span className={`material-symbols-outlined text-base leading-none ${deleting === u.url ? 'animate-spin' : ''}`}>
+                {deleting === u.url ? 'progress_activity' : 'delete'}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+  const group = (title: string, note: string, list: UploadRecord[]) =>
+    list.length > 0 && (
+      <div className="mb-5">
+        <p className="mb-2 text-xs font-bold text-c-text-strong">
+          {title} <span className="ml-1 font-normal text-c-text-muted">{list.length} 件・{note}</span>
+        </p>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">{list.map(card)}</div>
+      </div>
+    )
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <p className="flex-shrink-0 px-4 py-2 text-xs text-c-text-muted border-b border-c-border">
-        {props.canDelete
-          ? 'アカウント(userhash)で上げたものは、catbox 上のファイルごと消せます。匿名で上げたものは履歴からだけ消せます'
-          : '匿名で上げたものは履歴からだけ消せます。catbox 上のファイルも消すには、設定 → 書き込み で catbox のアカウント(userhash)を登録してください'}
-      </p>
       {error && <p className="flex-shrink-0 px-4 py-2 text-xs text-c-heat-very-hot border-b border-c-border">{error}</p>}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4">
         {props.uploads.length === 0 ? (
           <p className="text-sm text-c-text-muted">まだありません</p>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
-            {props.uploads.map((u) => {
-              const posted = props.postedIn?.(u.url)
-              return (
-                <div key={u.url} className="group flex flex-col bg-c-surface2 border border-c-border rounded-[var(--card-radius)] overflow-hidden">
-                  <button type="button" onClick={() => props.onOpen(u.url)} className="h-28 bg-c-surface3" title="ブラウザで開く">
-                    <img src={u.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                  </button>
-                  <div className="px-2 pt-1.5">
-                    <p className="text-xs text-c-text-body truncate" title={u.name}>
-                      {u.name}
-                    </p>
-                    <p className="text-[10px] text-c-text-muted">
-                      {new Date(u.uploadedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })} ・ {formatSize(u.size)}
-                    </p>
-                    {/* 貼ったレス(書き込み履歴にあれば)。押すとそのレスへ */}
-                    {posted ? (
-                      <button type="button" onClick={posted.open} className="mt-1 w-full text-left text-[11px] text-c-accent truncate hover:underline" title="貼ったレスへ">
-                        <span className="material-symbols-outlined text-[13px] align-[-2px] mr-0.5">reply</span>
-                        {posted.title || '(スレタイ不明)'}
-                        {posted.no !== undefined && <span className="ml-1 font-bold">&gt;&gt;{posted.no}</span>}
-                      </button>
-                    ) : (
-                      <p className="mt-1 text-[11px] text-c-text-muted">貼ったレスは見つかりません</p>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-end gap-0.5 px-1 pb-1">
-                    <button
-                      type="button"
-                      className={TOOL}
-                      title="URL をコピー"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(u.url)
-                        setCopied(u.url)
-                      }}
-                    >
-                      <span className="material-symbols-outlined text-base leading-none">{copied === u.url ? 'check' : 'content_copy'}</span>
-                    </button>
-                    <button type="button" className={TOOL} title="ブラウザで開く" onClick={() => props.onOpen(u.url)}>
-                      <span className="material-symbols-outlined text-base leading-none">open_in_new</span>
-                    </button>
-                    {props.canDelete && u.withAccount ? (
-                      <button
-                        type="button"
-                        className={`${TOOL} hover:text-c-heat-very-hot`}
-                        title="catbox から削除"
-                        disabled={deleting === u.url}
-                        onClick={async () => {
-                          setDeleting(u.url)
-                          setError(undefined)
-                          try {
-                            await props.onDelete(u.url)
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : String(e))
-                          } finally {
-                            setDeleting(undefined)
-                          }
-                        }}
-                      >
-                        <span className={`material-symbols-outlined text-base leading-none ${deleting === u.url ? 'animate-spin' : ''}`}>
-                          {deleting === u.url ? 'progress_activity' : 'delete'}
-                        </span>
-                      </button>
-                    ) : (
-                      props.onRemoveFromHistory && (
-                        <button
-                          type="button"
-                          className={`${TOOL} hover:text-c-heat-very-hot`}
-                          title={u.withAccount ? '履歴から消す(ファイルは残ります)' : '履歴から消す(匿名で上げたファイルは消せません)'}
-                          onClick={() => props.onRemoveFromHistory!(u.url)}
-                        >
-                          <span className="material-symbols-outlined text-base leading-none">playlist_remove</span>
-                        </button>
-                      )
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <>
+            {group('消せる画像', props.canDelete ? 'アカウントで上げたもの。置き場からも消せます' : 'アカウントで上げたもの。消すには userhash の登録が要ります', deletable)}
+            {group('消せない画像', '匿名で上げたもの。置き場から消せません', fixed)}
+          </>
         )}
       </div>
     </div>

@@ -78,22 +78,25 @@ function useDragSort<Z extends string>(zones: ZoneDef<Z>[], onDrop: (id: string,
       const d = dragRef.current
       if (!d) return
       const { clientX: x, clientY: y } = e
-      // 指のある箱(箱の外なら、いちばん近い箱)
+      // 指のある箱(箱の外なら、いちばん近い箱。横に並ぶ箱もあるので、上下と左右の両方で測る)
       let zone = d.zone
       let best = Infinity
+      let horizontal = false
       for (const [key, el] of boxes.current) {
         const r = el.getBoundingClientRect()
-        const dist = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0
+        const dist = Math.max(0, r.top - y, y - r.bottom) + Math.max(0, r.left - x, x - r.right)
         if (dist < best) {
           best = dist
           zone = key
+          horizontal = el.dataset.horizontal !== undefined
         }
       }
-      // その箱の中で、指より上にある行の数 = 置く所
+      // その箱の中で、指より上(横に並ぶ箱なら左)にある行の数 = 置く所
       const items = (zonesRef.current.find((z) => z.key === zone)?.items ?? []).filter((id) => id !== d.id)
       const index = items.filter((id) => {
         const r = rows.current.get(id)?.getBoundingClientRect()
-        return r !== undefined && r.top + r.height / 2 < y
+        if (!r) return false
+        return horizontal ? r.left + r.width / 2 < x : r.top + r.height / 2 < y
       }).length
       setDrag({ ...d, x, y, zone, index })
     }
@@ -211,6 +214,11 @@ export function DragZones<Z extends string>(props: {
   render: (id: string, handle: HandleProps, dragging: boolean) => ReactNode
   /** index は、動かした先の箱の中で何番目に入れるか(動かしたもの自身を除いて数える) */
   onMove: (id: string, zone: Z, index: number) => void
+  /**
+   * 横に並べる箱の組(ヘッダーの左と右など)。組ごとに 1 本の帯として描き、箱の中の行も横に並べる。
+   * 実際の画面と同じ向きに置けるように。組に入っていない箱は、これまでどおり縦に並ぶ
+   */
+  bars?: { title: string; zones: Z[]; between?: string }[]
 }) {
   const d = useDragSort(props.zones, (id, zone, index) => {
     // 元の箱の元の位置に戻しただけなら、何もしない
@@ -218,9 +226,45 @@ export function DragZones<Z extends string>(props: {
     if (from?.key === zone && from.items.indexOf(id) === index) return
     props.onMove(id, zone, index)
   })
+  const shown = d.shown()
+  const inBars = new Set(props.bars?.flatMap((b) => b.zones) ?? [])
+  const barOf = (z: ZoneDef<Z>, align: 'start' | 'end') => (
+    <div
+      key={z.key}
+      ref={d.boxRef(z.key)}
+      data-horizontal
+      className={`flex-1 min-w-0 min-h-[44px] flex flex-wrap items-center gap-1 p-1 rounded-lg border-2 border-dashed transition-colors ${
+        align === 'end' ? 'justify-end' : ''
+      } ${d.drag?.zone === z.key ? 'border-c-accent bg-[var(--c-accent-wash)]' : 'border-c-border'}`}
+      title={z.title}
+    >
+      {z.items.length === 0 && <span className="px-2 text-[11px] text-c-text-muted">{z.title}</span>}
+      {z.items.map((id) => (
+        <div key={id} {...d.rowProps(id)}>
+          {props.render(id, d.handleFor(id), d.drag?.id === id)}
+        </div>
+      ))}
+    </div>
+  )
   return (
     <div className="flex flex-col gap-4">
-      {d.shown().map((z) => (
+      {props.bars?.map((bar) => (
+        <div key={bar.title}>
+          <p className="mb-1.5 text-xs font-bold text-c-text-muted">{bar.title}</p>
+          {/* 帯の見た目: 左の箱・(題などの場所)・右の箱 を横に */}
+          <div className="flex items-stretch gap-2 px-2 py-1.5 rounded-xl bg-panel-thread-header border border-c-border">
+            {bar.zones.map((key, i) => (
+              <span key={key} className="contents">
+                {i > 0 && bar.between && (
+                  <span className="self-center flex-shrink-0 px-3 text-xs text-c-text-muted select-none">{bar.between}</span>
+                )}
+                {barOf(shown.find((z) => z.key === key)!, i === bar.zones.length - 1 ? 'end' : 'start')}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+      {shown.filter((z) => !inBars.has(z.key)).map((z) => (
         <div key={z.key}>
           <p className="mb-1.5 text-xs font-bold text-c-text-muted">
             {z.title}

@@ -11,7 +11,7 @@ import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
-import { mobileMenuActions, orderBy, type Placement } from '../utils/toolbar'
+import { inBar, mobileMenuActions, orderBy, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { SliderDialog } from './FontSizeSlider'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
@@ -111,6 +111,10 @@ interface Props {
   subHeader?: ReactNode
   /** 一覧の代わりに出す中身(履歴の書き込み・画像)。渡したときは、スレの並び・タブ・検索を出さない */
   body?: ReactNode
+  /** 閲覧履歴の行に出すもの(板の名前・いつ見たか)。渡すと、行が履歴用の形になる */
+  historyMetaOf?: (t: ThreadSummary) => { boardName: string; readAt?: number; icon?: string }
+  /** ヘッダーの下に出す進み具合の文(閲覧履歴の新着を板ごとに確かめている間など) */
+  progressText?: string
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
   /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ) */
@@ -645,7 +649,7 @@ export default function ThreadListPanel(props: Props) {
             label: '表示スタイル',
             icon: 'palette',
             tint: 'var(--c-mark-purple)',
-            render: (where: 'header' | 'footer') => props.style!.button(where === 'footer'),
+            render: (where: Placement) => props.style!.button(inBar(where, 'footer')),
             submenu: props.style.items,
           },
         ]
@@ -676,7 +680,7 @@ export default function ThreadListPanel(props: Props) {
   ]
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), props.barOrder)
-  const hasFooter = barActions.some((a) => placements[a.id] === 'footer')
+  const hasFooter = barActions.some((a) => inBar(placements[a.id], 'footer'))
 
   const onSelectCard = useEvent((t: ThreadSummary, on: boolean) =>
     setSelected((s) => {
@@ -774,6 +778,7 @@ export default function ThreadListPanel(props: Props) {
         onSelect={selectable ? onSelectCard : undefined}
         selecting={selected.size > 0}
         onSelectStart={selectable && isMobile ? onSelectStart : undefined}
+        historyMeta={props.historyMetaOf?.(t)}
       />
     )
   }
@@ -891,6 +896,7 @@ export default function ThreadListPanel(props: Props) {
                   <span className={`material-symbols-outlined ${MOBILE_HEAD_ICON}`}>menu</span>
                 </button>
               )}
+              {!isMobile && <ActionButtons actions={barActions} placements={placements} where="headerStart" btnClass={LIST_BTN} iconClass="text-lg" />}
               <div
                 ref={titleRowRef}
                 className={`relative flex-1 min-w-0 ${isMobile ? '' : 'h-11'}`}
@@ -951,6 +957,12 @@ export default function ThreadListPanel(props: Props) {
           </div>
 
           {props.subHeader}
+          {props.progressText && (
+            <div className="flex items-center gap-2 px-4 py-1 text-[11px] text-c-text-muted border-b border-c-border bg-c-surface2">
+              <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+              {props.progressText}
+            </div>
+          )}
 
           {selectable && selected.size > 0 && isMobile && (
             // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる。
@@ -1111,6 +1123,12 @@ export default function ThreadListPanel(props: Props) {
           )}
           {/* スマホ: 未読・勢い順などのタブを、フッターの左に */}
           {isMobile && <div className="flex-1 min-w-0 flex self-stretch text-[13px] font-medium">{tabGrid}</div>}
+          {!isMobile && (
+            <>
+              <ActionButtons actions={barActions} placements={placements} where="footerStart" btnClass={LIST_BTN} iconClass="text-lg" />
+              <span className="flex-1" />
+            </>
+          )}
           <ActionButtons
             actions={barActions}
             placements={placements}

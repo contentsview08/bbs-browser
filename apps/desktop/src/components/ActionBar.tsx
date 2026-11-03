@@ -22,7 +22,7 @@ export interface BarAction {
   tint?: string
   disabled?: boolean
   /** 帯に置くときの見た目を自分で描く(更新ボタンの残り秒数、テーマのメニューなど) */
-  render?: (where: 'header' | 'footer') => ReactNode
+  render?: (where: Placement) => ReactNode
   /** ︙ の中で押したときに、メニューの中に出す中身(テーマの選び方など)。なければ onClick を呼んで閉じる */
   submenu?: ReactNode
 }
@@ -35,7 +35,7 @@ export const MOBILE_HEAD_ICON = 'text-[26px]'
 export function ActionButtons(props: {
   actions: BarAction[]
   placements: Record<string, Placement>
-  where: 'header' | 'footer'
+  where: Placement
   btnClass: string
   iconClass: string
 }) {

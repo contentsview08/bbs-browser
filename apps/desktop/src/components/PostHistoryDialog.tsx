@@ -39,7 +39,8 @@ export default function PostHistoryDialog(props: Props) {
   return <DesktopPostHistory {...props} />
 }
 
-function DesktopPostHistory(props: Props) {
+/** 書き込み履歴の一覧(PC)。絞り込みの欄と、押すとスレを開いてそのレスへ飛ぶ行。履歴の画面に埋め込む */
+export function PostHistoryList(props: Omit<Props, 'onClose'>) {
   const [query, setQuery] = useState('')
   const [copied, setCopied] = useState<number>()
   const shown = useMemo(() => {
@@ -47,14 +48,77 @@ function DesktopPostHistory(props: Props) {
     if (!q) return props.entries
     return props.entries.filter((e) => normalizeForSearch(`${e.thread.title} ${e.name} ${e.body}`).includes(q))
   }, [props.entries, query])
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 border-b border-c-border">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="本文・スレタイ・名前で絞り込む"
+          className="flex-1 min-w-0 bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1 focus:ring-c-accent focus:border-c-accent"
+        />
+        <span className="text-xs text-c-text-muted tabular-nums whitespace-nowrap">{shown.length} 件</span>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        {shown.length === 0 ? (
+          <p className="p-5 text-sm text-c-text-muted">{props.entries.length === 0 ? 'まだ書き込んでいません' : '見つかりません'}</p>
+        ) : (
+          <ul className="divide-y divide-c-border">
+            {shown.map((e) => (
+              <li key={e.id} className="group relative hover:bg-c-surface2 transition-colors">
+                <button type="button" onClick={() => props.onOpen(e)} className="w-full text-left px-4 py-3 pr-24" title="スレを開いて、このレスへ飛ぶ">
+                  <div className="flex items-baseline gap-2 text-xs text-c-text-muted">
+                    <span className="whitespace-nowrap tabular-nums">
+                      {new Date(e.postedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                    <span className="whitespace-nowrap">{boardLabel(e.thread.boardUrl)}</span>
+                    {e.no !== undefined && <span className="font-bold text-c-accent">&gt;&gt;{e.no}</span>}
+                    {(e.name || e.mail) && (
+                      <span className="truncate">
+                        {e.name}
+                        {e.mail && <span className="ml-1">[{e.mail}]</span>}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-sm font-bold text-c-text-strong truncate">{e.thread.title || '(スレタイ不明)'}</p>
+                  <p className="mt-1 text-sm text-c-text-body whitespace-pre-wrap break-words line-clamp-3">{e.body || '(本文なし)'}</p>
+                </button>
+                <div className="absolute top-2 right-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    className={TOOL}
+                    title="本文をコピー"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(e.body)
+                      setCopied(e.id)
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-base leading-none">{copied === e.id ? 'check' : 'content_copy'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${TOOL} hover:text-c-heat-very-hot`}
+                    title="履歴から消す(掲示板の書き込みは消えません)"
+                    onClick={() => props.onDelete(e.id)}
+                  >
+                    <span className="material-symbols-outlined text-base leading-none">delete</span>
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
 
+function DesktopPostHistory(props: Props) {
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
-
   const boxRef = useRef<HTMLDivElement>(null)
-
   useFocusTrap(boxRef, props.onClose)
   const backdrop = useBackdropClose(props.onClose)
-
   return createPortal(
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" {...backdrop}>
       <div
@@ -63,71 +127,14 @@ function DesktopPostHistory(props: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 pl-5 pr-2 py-2.5 border-b border-c-border">
-          <h2 className="text-base font-bold text-c-text-strong whitespace-nowrap">
+          <h2 className="flex-1 text-base font-bold text-c-text-strong whitespace-nowrap">
             書き込み履歴 <span className="ml-1 text-sm font-normal text-c-text-muted">{props.entries.length}</span>
           </h2>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="本文・スレタイ・名前で絞り込む"
-            autoFocus
-            className="flex-1 min-w-0 bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1 focus:ring-c-accent focus:border-c-accent"
-          />
           <button type="button" onClick={props.onClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
             <span className="material-symbols-outlined text-lg">close</span>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {shown.length === 0 ? (
-            <p className="p-5 text-sm text-c-text-muted">{props.entries.length === 0 ? 'まだありません' : '見つかりません'}</p>
-          ) : (
-            <ul className="divide-y divide-c-border">
-              {shown.map((e) => (
-                <li key={e.id} className="group relative hover:bg-c-surface2 transition-colors">
-                  <button type="button" onClick={() => props.onOpen(e)} className="w-full text-left px-5 py-3 pr-24" title="スレを開いて、このレスへ飛ぶ">
-                    <div className="flex items-baseline gap-2 text-xs text-c-text-muted">
-                      <span className="whitespace-nowrap tabular-nums">
-                        {new Date(e.postedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })}
-                      </span>
-                      <span className="whitespace-nowrap">{boardLabel(e.thread.boardUrl)}</span>
-                      {e.no !== undefined && <span className="font-bold text-c-accent">&gt;&gt;{e.no}</span>}
-                      {(e.name || e.mail) && (
-                        <span className="truncate">
-                          {e.name}
-                          {e.mail && <span className="ml-1">[{e.mail}]</span>}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-sm font-bold text-c-text-strong truncate">{e.thread.title || '(スレタイ不明)'}</p>
-                    <p className="mt-1 text-sm text-c-text-body whitespace-pre-wrap break-words line-clamp-3">{e.body || '(本文なし)'}</p>
-                  </button>
-                  <div className="absolute top-2 right-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      className={TOOL}
-                      title="本文をコピー"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(e.body)
-                        setCopied(e.id)
-                      }}
-                    >
-                      <span className="material-symbols-outlined text-base leading-none">{copied === e.id ? 'check' : 'content_copy'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`${TOOL} hover:text-c-heat-very-hot`}
-                      title="履歴から消す(掲示板の書き込みは消えません)"
-                      onClick={() => props.onDelete(e.id)}
-                    >
-                      <span className="material-symbols-outlined text-base leading-none">delete</span>
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <PostHistoryList entries={props.entries} onOpen={props.onOpen} onDelete={props.onDelete} />
       </div>
     </div>,
     document.body,

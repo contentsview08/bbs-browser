@@ -107,6 +107,10 @@ interface Props {
   onSortChange?: (sort: { mode: SortMode; dir: 'desc' | 'asc' } | null) => void
   /** 見えているスレの並び(絞り込み・並べ替えのあと)が変わった。スレの最後の「次の未読スレへ」がこの順で探す */
   onShownChange?: (list: ThreadSummary[]) => void
+  /** ヘッダーの下に置く帯(履歴の切り替えなど)。スマホではヘッダーと一緒に隠れる */
+  subHeader?: ReactNode
+  /** 一覧の代わりに出す中身(履歴の書き込み・画像)。渡したときは、スレの並び・タブ・検索を出さない */
+  body?: ReactNode
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
   /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ) */
@@ -946,6 +950,8 @@ export default function ThreadListPanel(props: Props) {
             </div>
           </div>
 
+          {props.subHeader}
+
           {selectable && selected.size > 0 && isMobile && (
             // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる。
             // ヘッダーに重ねて出す(差し込むと、一覧が下にずれて、なぞっている所が分からなくなる)
@@ -990,7 +996,7 @@ export default function ThreadListPanel(props: Props) {
               </button>
             </div>
           )}
-          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile ? 'hidden' : ''}`}>
+          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile || props.body ? 'hidden' : ''}`}>
             {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
             {selectable && (
               <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">
@@ -1023,7 +1029,9 @@ export default function ThreadListPanel(props: Props) {
           {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {/* 帯は、取り直し(通信)のときだけ。手元の並べ替え(2ch の勢い順など)は通信しないので出さない */}
           {props.loading && visible.length > 0 && <div className="list-progress" aria-label="読み込み中" />}
-          {visible.length === 0 ? (
+          {props.body ? (
+            props.body
+          ) : visible.length === 0 ? (
             props.loading ? (
               <LoadingCenter />
             ) : (

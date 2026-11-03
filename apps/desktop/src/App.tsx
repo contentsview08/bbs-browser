@@ -41,6 +41,9 @@ import Notifications from './components/Notifications'
 import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
+import PastTabs, { type PastTab } from './components/PastTabs'
+import { PostHistoryList } from './components/PostHistoryDialog'
+import { UploadGrid } from './components/UploadHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
 import FontSizeSlider, { BarSliders, SliderDialog, cssPx, setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
@@ -88,7 +91,7 @@ import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } 
 const CLOSED_TABS_MAX = 20
 
 /** 戻る・進むで行き来する場所 */
-type ListTarget = { kind: 'board'; board: Board } | { kind: 'history' } | { kind: 'fav' }
+type ListTarget = { kind: 'board'; board: Board } | { kind: 'history' } | { kind: 'fav' } | { kind: 'posts' } | { kind: 'uploads' }
 type NavValue = { type: 'list'; list: ListTarget } | { type: 'thread'; thread: ThreadSummary }
 const listEntry = (list: ListTarget) => ({
   key: list.kind === 'board' ? `board:${list.board.url}` : list.kind,
@@ -323,6 +326,7 @@ export default function App() {
     if (same) updateView((s) => showList(s, undefined))
     else if (v.list.kind === 'board') void openBoard(v.list.board, false)
     else if (v.list.kind === 'history') void openHistory(false)
+    else if (v.list.kind === 'posts' || v.list.kind === 'uploads') void openLibrary(v.list.kind, false)
     else void openFavThreads(false)
   }
   /** いま出しているスレ一覧へ戻る(1 画面のとき。スレタイの左の ← や、削除したあと) */
@@ -551,6 +555,7 @@ export default function App() {
       listOrderRef.current = order
       setHistory(undefined)
       setFavView(false)
+      setLibrary(undefined)
       if (!sameBoard) {
         setThreads([])
         setListOrder(order)
@@ -611,6 +616,7 @@ export default function App() {
       updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
       if (record) setFocusPane('list')
       setFavView(false)
+      setLibrary(undefined)
       if (store) setHistory(await store.history())
       setHistoryVersion((v) => v + 1)
     })
@@ -618,7 +624,30 @@ export default function App() {
 
   /** いまスレ一覧に出しているもの(戻る・進むで覚える) */
   const currentListTarget = (): ListTarget | undefined =>
-    favView ? { kind: 'fav' } : history ? { kind: 'history' } : board ? { kind: 'board', board } : undefined
+    library ? { kind: library } : favView ? { kind: 'fav' } : history ? { kind: 'history' } : board ? { kind: 'board', board } : undefined
+
+  /** 履歴の「書き込み」「画像」を、スレ一覧の所に出す(PC)。画像には貼ったレスを添えるので、書き込み履歴も一緒に読む */
+  const openLibrary = (kind: 'posts' | 'uploads', record = true) =>
+    run('threads', async () => {
+      updateView((s) => showList(s, record ? listEntry({ kind }) : undefined))
+      if (record) setFocusPane('list')
+      setHistory(undefined)
+      setFavView(false)
+      setLibrary(kind)
+      if (!store) return
+      setPostHistory(await store.listPostHistory())
+      if (kind === 'uploads') setUploads(await store.listUploads())
+    })
+  /** 書き込み履歴の行から: スレを開いてから、番号が分かっていればそのレスへ飛ぶ(開いたときの位置合わせのあとに) */
+  const openPostEntry = (e: PostHistoryEntry) =>
+    void openThread(e.thread).then(() => {
+      if (e.no !== undefined) setJump({ tabId: threadId(e.thread), no: e.no, seq: Date.now() })
+    })
+  /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
+  const postedIn = (url: string) => {
+    const e = postHistory?.find((p) => p.body.includes(url))
+    return e ? { title: e.thread.title, no: e.no, open: () => openPostEntry(e) } : undefined
+  }
 
   // ── お気に入りのスレ ──
 
@@ -633,6 +662,10 @@ export default function App() {
     })
   /** スレ一覧に、お気に入りのスレを出しているか */
   const [favView, setFavView] = useState(false)
+  /** スレ一覧の所に、履歴の「書き込み」「画像」を出しているか(PC。スマホは全画面のページ) */
+  const [library, setLibrary] = useState<'posts' | 'uploads'>()
+  /** 履歴の「未読」を選んでいるか(閲覧履歴のうち、新着のあるスレだけ) */
+  const [pastUnread, setPastUnread] = useState(false)
   /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
   const [favCounts, setFavCounts] = useState(new Map<string, number>())
   /** 自動 NG にユーザーが付けた印。起動時に DB から読む */
@@ -782,6 +815,8 @@ export default function App() {
       if (record) setFocusPane('list')
       setHistory(undefined)
       setFavView(true)
+      setLibrary(undefined)
+      setPastUnread(false)
       if (store) await reloadFavThreads(store)
       setFavVersion((v) => v + 1)
     })
@@ -2014,7 +2049,64 @@ export default function App() {
       ? (t: ThreadSummary) => historyStates.get(threadId(t))
       : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
-  const listTitle = favView ? 'お気に入りのスレ' : history ? '閲覧履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
+  // 閲覧履歴・未読・お気に入りのスレ・書き込み履歴・画像は「履歴」の 1 つの画面にまとめ、上の帯で切り替える(スマホのアプリと同じ)
+  const pastView = library !== undefined || favView || history !== undefined
+  const listTitle = pastView ? '履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
+  const pastTab: PastTab = library ?? (favView ? 'fav' : pastUnread ? 'unread' : 'history')
+  const pickPastTab = (k: PastTab) => {
+    if (k === 'posts' || k === 'uploads') return void openLibrary(k)
+    if (k === 'fav') return void openFavThreads()
+    setPastUnread(k === 'unread')
+    // 未読: 閲覧履歴を開いて、未読だけに絞る(読み終えても並びから消さない。「読んだスレを片づける」で外す)
+    void openHistory()
+    if (k === 'unread') setUnreadRequest((n) => n + 1)
+  }
+  const pastHeader = pastView && (
+    <PastTabs
+      current={pastTab}
+      unreadCount={
+        historyThreads?.filter((t) => {
+          const st = historyStates.get(threadId(t))
+          return !!st && t.postCount > st.readNo
+        }).length ?? 0
+      }
+      favCount={favNewTotal}
+      onPick={pickPastTab}
+    />
+  )
+  const libraryBody =
+    library === 'posts' ? (
+      <PostHistoryList
+        entries={postHistory ?? []}
+        onOpen={openPostEntry}
+        onDelete={async (id) => {
+          if (!store) return
+          await store.deletePostHistory(id)
+          setPostHistory(await store.listPostHistory())
+        }}
+      />
+    ) : library === 'uploads' ? (
+      <UploadGrid
+        uploads={uploads ?? []}
+        onOpen={(url) => void openUrl(url)}
+        canDelete={settings.catboxUserhash.trim() !== ''}
+        postedIn={postedIn}
+        onDelete={async (url) => {
+          if (!store) return
+          // サーバー上で消せてから、履歴からも外す
+          await deleteFromCatbox(url, settings.catboxUserhash.trim())
+          await store.removeUpload(url)
+          setUploads(await store.listUploads())
+        }}
+        onRemoveFromHistory={(url) =>
+          void run(null, async () => {
+            if (!store) return
+            await store.removeUpload(url)
+            setUploads(await store.listUploads())
+          })
+        }
+      />
+    ) : undefined
   // スレの最後の「次の未読スレへ」。いまのスレ一覧に見えている並びで、いまのスレの次に未読のあるスレ。
   // 未読の数は一覧の「+n」と同じ見方(読んだことのないスレは数えない)。タブで開いているスレは、タブの既読・レス数のほうが新しい
   const nextUnread = nextUnreadThread(shownList, activeId, threadId, (t) => {
@@ -2091,8 +2183,8 @@ export default function App() {
         onOpenThread={(t) => void openThread(t)}
         onDeleteHistory={(t) => void deleteLogs([], [t])}
         showStripNames={settings.showStripNames}
-        onOpenUploads={settings.uploaderEnabled || hasUploads ? () => void openUploads() : undefined}
-        onOpenPostHistory={() => void openPostHistory()}
+        onOpenUploads={settings.uploaderEnabled || hasUploads ? () => void (isMobile ? openUploads() : openLibrary('uploads')) : undefined}
+        onOpenPostHistory={() => void (isMobile ? openPostHistory() : openLibrary('posts'))}
         activeBoardUrl={board?.url}
         onOpenBoard={openBoard}
         onToggleFavorite={toggleFavorite}
@@ -2100,11 +2192,8 @@ export default function App() {
         onToggleCollapsed={() => updateSetting('sidebarCollapsed', !settings.sidebarCollapsed)}
         boardMeta={settings.boardMeta}
         historyActive={history !== undefined}
-        onOpenHistory={() => void openHistory()}
-        onOpenUnread={() => {
-          void openHistory()
-          setUnreadRequest((n) => n + 1)
-        }}
+        onOpenHistory={() => pickPastTab('history')}
+        onOpenUnread={() => pickPastTab('unread')}
         favThreadsActive={favView}
         favThreadsNew={favNewTotal}
         onOpenFavThreads={() => void openFavThreads()}
@@ -2136,7 +2225,7 @@ export default function App() {
         >
         {!single && <FocusLine on={listFocused} />}
         <ThreadListPanel
-          key={favView ? 'favorites' : history ? 'history' : board?.url}
+          key={library ?? (favView ? 'favorites' : history ? (pastUnread ? 'history:unread' : 'history') : board?.url)}
           active={listFocused}
           keymap={keymap}
           headerHeight={settings.listHeaderHeight}
@@ -2149,6 +2238,8 @@ export default function App() {
           title={listTitle ?? '板を選択'}
           onShownChange={onShownChange}
           threads={favView ? favListThreads : (historyThreads ?? threads)}
+          subHeader={pastHeader || undefined}
+          body={libraryBody}
           stateOf={stateOf}
           activeId={activeId}
           loading={loading.has('threads')}
@@ -2164,7 +2255,9 @@ export default function App() {
           }
           onOpen={(t) => void openThread(t)}
           onRefresh={
-            favView
+            library
+              ? manualListRefresh(() => openLibrary(library, false))
+              : favView
               ? manualListRefresh(refreshFavThreads)
               : history
                 ? // 閲覧履歴の更新は時間がかかるので、引っぱったときの丸い矢印は待たずに引っ込め、ヘッダーの下の帯だけで知らせる
@@ -2185,8 +2278,8 @@ export default function App() {
           onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
           serverOrder={!favView && !history && listOrder ? orderOf(listOrder) : undefined}
           onSortChange={!favView && !history ? onListSort : undefined}
-          // 閲覧履歴は、見た順と未読だけ(新しい順・勢い順は、見たスレを並べるのには要らない)
-          tabs={history ? ['viewed', 'unread'] : settings.listTabs}
+          // 閲覧履歴は見た順だけ(未読は上の「履歴」の帯で。新しい順・勢い順は、見たスレを並べるのには要らない)
+          tabs={history ? ['viewed'] : settings.listTabs}
           tabLabel={settings.listTabLabel}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}
@@ -2361,15 +2454,12 @@ export default function App() {
       </div>
       </div>
 
-      {postHistory && (
+      {isMobile && postHistory && (
         <PostHistoryDialog
           entries={postHistory}
           onOpen={(e) => {
             setPostHistory(undefined)
-            // スレを開いてから、番号が分かっていればそのレスへ飛ぶ(開いたときの位置合わせのあとに)
-            void openThread(e.thread).then(() => {
-              if (e.no !== undefined) setJump({ tabId: threadId(e.thread), no: e.no, seq: Date.now() })
-            })
+            openPostEntry(e)
           }}
           onDelete={async (id) => {
             if (!store) return
@@ -2379,9 +2469,17 @@ export default function App() {
           onClose={() => setPostHistory(undefined)}
         />
       )}
-      {uploads && (
+      {isMobile && uploads && (
         <UploadHistoryDialog
           uploads={uploads}
+          postedIn={postedIn}
+          onRemoveFromHistory={(url) =>
+            void run(null, async () => {
+              if (!store) return
+              await store.removeUpload(url)
+              setUploads(await store.listUploads())
+            })
+          }
           onOpen={(url) => void (isMobile ? openUrlInApp(url) : openUrl(url))}
           canDelete={settings.catboxUserhash.trim() !== ''}
           onDelete={async (url) => {

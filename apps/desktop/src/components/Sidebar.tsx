@@ -428,7 +428,7 @@ export default function Sidebar(props: Props) {
                         type="button"
                         onClick={() => props.onDeleteHistory(t)}
                         className="p-0.5 flex-shrink-0 text-c-text-muted opacity-0 group-hover:opacity-100 hover:text-c-heat-very-hot"
-                        title="この閲覧履歴(ログ)を削除"
+                        title="履歴から消す(ログも消えます)"
                       >
                         <span className="material-symbols-outlined text-base leading-none">delete</span>
                       </button>

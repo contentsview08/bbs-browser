@@ -228,6 +228,8 @@ const RENDER_CHUNK = 150
  */
 // 勢いよくはじいても空箱が見えないよう、先(下)は多めに作っておき、端まで 1/3 ほどに近づいたら早めに動かす
 // (はじめ 25・45・10 にしたら、はじいたときに中身を作る前に空箱が見え、「表示が遅れる」と言われた)
+/** PC で、手の空いたときに全部のレスを作り足すか(やめた。見えている所の前後だけ作る) */
+const PC_GROW_ALL = false
 const WIN_BEFORE = 40
 const WIN_AFTER = 100
 const WIN_MARGIN = 35
@@ -759,9 +761,10 @@ export default function ThreadView(props: Props) {
     setRenderWin(firstWindow())
     // レスが初めて届いたときだけ
   }, [log.posts.length])
-  // 手の空いたときに、上下へ少しずつ作り足す(全部作り終えたら止まる)。スマホは作り足さず、見えている所の前後だけ(下の仮想スクロール)
+  // 見えている所の前後だけ中身を作り、スクロールに合わせて範囲を動かす(下の仮想スクロール)。PC もスマホも同じ。
+  // 以前の PC は手の空いたときに全部(1000 件)作り足していたので、DOM が大きくなり、設定を変える・タブを切り替えるたびに重かった
   useEffect(() => {
-    if (isMobile) return
+    if (!PC_GROW_ALL) return
     const n = log.posts.length
     // レスが届くまでは広げない(0 件のうちに「最後まで」になると、届いた瞬間に全部作ってしまう)
     if (n === 0 || windowPending.current) return
@@ -940,13 +943,13 @@ export default function ThreadView(props: Props) {
     jumpTo: props.jumpTo,
   })
 
-  // スマホ: 仮想スクロール。スクロールしたら、見えているレスの前後だけ中身を作るよう、範囲を動かす(WIN_BEFORE・WIN_AFTER)
+  // 仮想スクロール: スクロールしたら、見えているレスの前後だけ中身を作るよう、範囲を動かす(WIN_BEFORE・WIN_AFTER)。
+  // 範囲の外のレスは、覚えた高さ(なければ見積もり)の空の箱にする(枠は全部あるので、既読・ミニマップ・キー操作はそのまま効く)
   const renderWinRef = useRef(renderWin)
   renderWinRef.current = renderWin
   const filteringRef = useRef(false)
   filteringRef.current = visibleNos !== undefined
   useEffect(() => {
-    if (!isMobile) return
     const root = ref.current
     if (!root) return
     let raf = 0

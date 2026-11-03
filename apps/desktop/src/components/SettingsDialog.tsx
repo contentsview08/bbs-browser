@@ -39,7 +39,7 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider, { ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCssVar } from './FontSizeSlider'
-import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
+import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle, TextSetting } from './SettingParts'
 import { canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
@@ -1036,13 +1036,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
       </Section>
       <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={s.imageSaveDir}
-            onChange={(e) => update('imageSaveDir', e.target.value)}
-            placeholder="ダウンロードフォルダ"
-            className={`${INPUT} flex-1`}
-          />
+          <TextSetting value={s.imageSaveDir} onChange={(v) => update('imageSaveDir', v)} placeholder="ダウンロードフォルダ" className="flex-1" />
           <button
             type="button"
             className={BTN}
@@ -1102,14 +1096,7 @@ function UploadHostDialog({ host, settings: s, update, onClose }: Pick<SettingsP
         {host === 'imgur' && (
           <>
             <p className="text-sm text-c-text-body">Client-ID</p>
-            <input
-              type="text"
-              value={s.imgurClientId}
-              onChange={(e) => update('imgurClientId', e.target.value.trim())}
-              placeholder="api.imgur.com で登録した Client-ID"
-              spellCheck={false}
-              className={`${INPUT} w-full font-mono`}
-            />
+            <TextSetting value={s.imgurClientId} onChange={(v) => update('imgurClientId', v)} placeholder="api.imgur.com で登録した Client-ID" trim mono className="w-full" />
             <p className="text-xs text-c-text-muted leading-relaxed">
               <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://api.imgur.com/oauth2/addclient')}>
                 imgur でアプリを登録し
@@ -1142,14 +1129,7 @@ function UploadHostDialog({ host, settings: s, update, onClose }: Pick<SettingsP
         {host === 'imgbb' && (
           <>
             <p className="text-sm text-c-text-body">API キー</p>
-            <input
-              type="text"
-              value={s.imgbbApiKey}
-              onChange={(e) => update('imgbbApiKey', e.target.value.trim())}
-              placeholder="api.imgbb.com で発行した API キー"
-              spellCheck={false}
-              className={`${INPUT} w-full font-mono`}
-            />
+            <TextSetting value={s.imgbbApiKey} onChange={(v) => update('imgbbApiKey', v)} placeholder="api.imgbb.com で発行した API キー" trim mono className="w-full" />
             <p className="text-xs text-c-text-muted leading-relaxed">
               <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://api.imgbb.com/')}>
                 imgbb でアカウントを作って API キーを発行し

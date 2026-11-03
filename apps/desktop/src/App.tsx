@@ -49,6 +49,8 @@ import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleM
 import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
 /** Ctrl+ホイールを回し終えてから、文字の大きさを設定に書くまで待つ時間 */
 const WHEEL_ZOOM_COMMIT_MS = 300
+/** Ctrl+ホイールの大きさの表示を、回し終えてから消すまでの時間 */
+const WHEEL_ZOOM_HINT_MS = 900
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -221,7 +223,16 @@ export default function App() {
   const [newThreadOpen, setNewThreadOpen] = useState(false)
   /** サイドバーに出す直近の閲覧履歴 */
   const [recentHistory, setRecentHistory] = useState<ThreadSummary[]>([])
-  const reloadRecent = async (s: LogStore) => setRecentHistory((await s.history(10)).map((h) => h.thread))
+  /** 閲覧履歴の控え(最後に DB から読んだもの)。「履歴」のタブを切り替えたとき、DB から読み直す前にまずこれを出す(直前の板の一覧が一瞬映らないように) */
+  const historyCache = useRef<HistoryEntry[] | undefined>(undefined)
+  /** 閲覧履歴を DB から読み、控えも新しくする */
+  const loadHistory = async (s: LogStore) => {
+    const list = await s.history()
+    historyCache.current = list
+    return list
+  }
+  /** サイドバーの最近のスレ(10 件)。閲覧履歴の全部を読んで控えにし、その先頭を使う(「履歴」を開くときの先読みを兼ねる) */
+  const reloadRecent = async (s: LogStore) => setRecentHistory((await loadHistory(s)).slice(0, 10).map((h) => h.thread))
   /** 画像のアップロード履歴(開いているときだけ中身を持つ) */
   const [uploads, setUploads] = useState<UploadRecord[]>()
   const [hasUploads, setHasUploads] = useState(false)
@@ -359,7 +370,10 @@ export default function App() {
     pending: undefined as { key: 'listFontPx' | 'postBodyPx'; px: number } | undefined,
     frame: 0,
     commitTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+    hintTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   })
+  /** Ctrl+ホイールで回している間に出す、いまの大きさの表示 */
+  const zoomHintRef = useRef<HTMLDivElement>(null)
   wheelZoom.current.listFocused = listFocused
   // DB を開くと設定を変える関数が替わるので、いつも新しい方を使う
   wheelZoom.current.update = updateSetting
@@ -373,13 +387,20 @@ export default function App() {
       z.pending = undefined
       if (p) z.update(p.key, p.px)
     }
-    /** 溜めた大きさを画面に映す(1 コマに 1 回) */
+    /** 溜めた大きさを画面に映す(1 コマに 1 回)。回している間は、いまの大きさを小さく出す(ブラウザの拡大の表示と同じ。React の状態は触らない) */
     const paint = () => {
       z.frame = 0
       const p = z.pending
       if (!p) return
       if (p.key === 'listFontPx') applyCssVar('--list-zoom', String(p.px / baseFontPx(settingsRef.current)))
       else applyCssVar('--post-body-size', `${p.px}px`)
+      const hint = zoomHintRef.current
+      if (hint) {
+        hint.textContent = `${p.key === 'listFontPx' ? 'スレ一覧の文字' : 'レスの本文'} ${p.px}px`
+        hint.style.opacity = '1'
+        if (z.hintTimer) clearTimeout(z.hintTimer)
+        z.hintTimer = setTimeout(() => (hint.style.opacity = '0'), WHEEL_ZOOM_HINT_MS)
+      }
     }
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return
@@ -634,7 +655,7 @@ export default function App() {
   /** 閲覧履歴の新着を、板ごとのスレ一覧で確かめる(dat を 1 つずつ取りに行かない) */
   const crawlHistory = async (store: LogStore) => {
     {
-      const list = await store.history()
+      const list = await loadHistory(store)
       setHistory(list)
       const byBoard = new Map<string, HistoryEntry[]>()
       for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
@@ -658,7 +679,7 @@ export default function App() {
           else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
         }
         setHistoryCounts(new Map(counts))
-        setHistory(await store.history())
+        setHistory(await loadHistory(store))
       }
       setHistoryProgress(undefined)
       setHistoryVersion((v) => v + 1)
@@ -672,9 +693,11 @@ export default function App() {
     return run('threads', async () => {
       updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
       if (record) setFocusPane('list')
+      // DB から読み直す前に、控え(なければ空)をすぐ出す。ここで履歴を undefined のままにすると、読み終えるまで直前の板の一覧が映る
+      setHistory((h) => h ?? historyCache.current ?? [])
       setFavView(false)
       setLibrary(undefined)
-      if (store) setHistory(await store.history())
+      if (store) setHistory(await loadHistory(store))
       setHistoryVersion((v) => v + 1)
     })
   }
@@ -1073,7 +1096,7 @@ export default function App() {
       // 閲覧履歴を出していても、開いただけでは並びを変えない(見た順に動かすのは、本人が更新したとき)。
       // まだ並びにないスレ(板から開いた)だけ、末尾に足す
       if (history && !history.some((h) => threadId(h.thread) === id)) {
-        const fresh = await store.history()
+        const fresh = await loadHistory(store)
         const added = fresh.find((h) => threadId(h.thread) === id)
         if (added) setHistory((list) => (list ? [...list, added] : list))
       }
@@ -2549,6 +2572,15 @@ export default function App() {
       )}
 
       <Notifications items={notifications} onClose={dismiss} />
+      {/* Ctrl+ホイールで文字の大きさを変えている間の表示(中身と出し入れは wheelZoom が DOM に直に書く。描き直しを起こさないため) */}
+      {!isMobile && (
+        <div
+          ref={zoomHintRef}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9700] px-3 py-1.5 rounded-lg bg-c-surface border border-c-border shadow-lg text-sm font-bold tabular-nums text-c-text-strong pointer-events-none transition-opacity duration-150"
+          style={{ opacity: 0 }}
+          aria-live="polite"
+        />
+      )}
 
       {readerUrl && (
         <ReaderView

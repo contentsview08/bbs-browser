@@ -1,8 +1,11 @@
 // 設定の「自分の配色」の画面。スマホのアプリ(ui/CustomScheme.kt の CustomSchemeEditor)と同じ:
 // 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・もとにする配色を選び直す
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { PICKABLE_SCHEMES, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
 import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
+
+/** 色選びで動かし終えてから、設定に書くまで待つ時間 */
+const COLOR_COMMIT_MS = 150
 
 export default function CustomSchemeEditor(props: { settings: AppSettings; update: UpdateSetting }) {
   const { settings: s, update } = props
@@ -15,7 +18,21 @@ export default function CustomSchemeEditor(props: { settings: AppSettings; updat
     [s.customScheme],
   )
   const save = (d: CustomDef) => update('customScheme', customToJson(d))
-  const vars = customVars(def)
+  // 色選びの中でつまみを動かしている間は、動くたびに色の値が来る。そのたびに設定へ書くとアプリ全体が描き直されるので、
+  // ここで持って見本だけを変え、少し止まってから書く
+  const [draft, setDraft] = useState<Partial<CustomDef>>({})
+  const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const pick = (k: keyof CustomDef, v: string) => {
+    const next = { ...draft, [k]: v }
+    setDraft(next)
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      setDraft({})
+      save({ ...def, ...next })
+    }, COLOR_COMMIT_MS)
+  }
+  const shown: CustomDef = { ...def, ...draft }
+  const vars = customVars(shown)
   const using = s.scheme === 'custom' && !s.followOsTheme
   const BTN = 'px-4 py-2.5 rounded-md text-[14px]'
 
@@ -85,8 +102,8 @@ export default function CustomSchemeEditor(props: { settings: AppSettings; updat
           <label key={k} className="flex items-center gap-3 min-h-[50px] px-3.5 border-b border-c-border last:border-b-0">
             <input
               type="color"
-              value={def[k]}
-              onChange={(e) => save({ ...def, [k]: e.target.value })}
+              value={shown[k]}
+              onChange={(e) => pick(k, e.target.value)}
               className="w-[26px] h-[26px] p-0 rounded-md border border-c-border-strong cursor-pointer"
             />
             <span className="flex-1 text-[15px] text-c-text-strong">{CUSTOM_LABELS[k]}</span>

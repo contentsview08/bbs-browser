@@ -421,6 +421,48 @@ export function ManagerDialog(props: { title: string; onClose: () => void; child
  * 数を入れる欄(日数・件数など)。よく使う値はボタンでも選べる。zeroLabel があれば 0 はその意味(「消さない」など)。
  * 入れている途中は保存せず、欄から離れたとき・Enter で保存する(範囲の外は端に寄せる)
  */
+/** 文字の欄の設定を、打ち終えてから書くまで待つ時間 */
+const TEXT_COMMIT_MS = 500
+
+/**
+ * 文字の欄の設定(保存先・API キーなど)。1 文字打つたびに設定へ書くと、そのたびにアプリ全体の描き直し(別ウィンドウなら知らせ)が走るので、
+ * 欄の中はここで持ち、打ち終えて少し経ったとき・欄を抜けたとき・Enter で書く
+ */
+export function TextSetting(props: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; trim?: boolean; className?: string }) {
+  const [text, setText] = useState(props.value)
+  const [last, setLast] = useState(props.value)
+  if (last !== props.value) {
+    setLast(props.value)
+    setText(props.value)
+  }
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const commit = (raw: string) => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = undefined
+    const v = props.trim ? raw.trim() : raw
+    if (v !== props.value) props.onChange(v)
+  }
+  return (
+    <input
+      type="text"
+      value={text}
+      onChange={(e) => {
+        const v = e.target.value
+        setText(v)
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => commit(v), TEXT_COMMIT_MS)
+      }}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) commit(e.currentTarget.value)
+      }}
+      placeholder={props.placeholder}
+      spellCheck={false}
+      className={`${INPUT} ${props.mono ? 'font-mono' : ''} ${props.className ?? ''}`}
+    />
+  )
+}
+
 export function NumberField(props: {
   value: number
   onChange: (v: number) => void

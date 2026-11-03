@@ -205,6 +205,11 @@ export class LogStore {
     )
   }
 
+  /** お気に入り板の名前を直す(掲示板側で板名が変わったとき。板の情報を取ったら写す) */
+  async renameFavorite(url: string, name: string): Promise<void> {
+    await this.db.execute('UPDATE favorite_boards SET name = $1 WHERE url = $2', [name, url])
+  }
+
   /** お気に入り板を、渡した URL の並びにする */
   async reorderFavorites(urls: string[]): Promise<void> {
     for (const [i, url] of urls.entries()) {

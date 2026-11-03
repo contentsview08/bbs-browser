@@ -1958,7 +1958,16 @@ export default function App() {
       if (!connector?.boardInfo) continue
       void connector
         .boardInfo({ connectorId: b.connectorId, url: b.url, name: '' }, ctx)
-        .then((info) => setBoardInfos((m) => new Map(m).set(b.url, info)))
+        .then((info) => {
+          setBoardInfos((m) => new Map(m).set(b.url, info))
+          // 掲示板側で板名が変わっていたら、手元(お気に入り板・開いている板)の名前も直す。
+          // お気に入りの名前は足したときのものを DB に持っているので、取り直さないと古いままだった
+          if (!info.title) return
+          const title = info.title
+          setFavorites((list) => (list?.some((f) => f.url === b.url && f.name !== title) ? list.map((f) => (f.url === b.url ? { ...f, name: title } : f)) : list))
+          setBoard((cur) => (cur && cur.url === b.url && cur.name !== title ? { ...cur, name: title } : cur))
+          void store?.renameFavorite(b.url, title).catch(backgroundError('板名の更新'))
+        })
         .catch(() => undefined)
     }
   }, [activeTab?.thread, board])

@@ -14,6 +14,8 @@ import EmojiPicker from '../components/EmojiPicker'
 import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadOptions } from '../host/uploader'
 import { closeWebUpload, openWebUpload, showWebUpload } from '../host/webUpload'
 import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
+import { hashFile, lookupUploaded } from '../utils/uploadIndex'
+import { canStamp, stampImage, type StampCorner } from '../utils/stampImage'
 
 /** 一度に上げられる数 */
 const MAX_FILES = 10
@@ -62,6 +64,16 @@ const WEB_SHOW_AFTER_MS = 20000
 
 let nextItemId = 1
 
+/** 覚えてある「画像にスレタイと URL を入れる」(left / right。入れないなら undefined) */
+function readStamp(): StampCorner | undefined {
+  try {
+    const v = localStorage.getItem('bbs:upload-stamp')
+    return v === 'left' || v === 'right' ? v : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** 貼り付け・ドラッグされたもののうち、画像と動画のファイルだけ */
 function mediaFiles(list: FileList | null | undefined): File[] {
   return [...(list ?? [])].filter((f) => /^(image|video)\//.test(f.type))
@@ -73,10 +85,12 @@ export function useMediaInput(o: {
   /** 本文のカーソルの位置に文字を入れる(ownLine: 行の途中なら改行してから入れる。画像の URL) */
   insert: (text: string, opts?: { ownLine?: boolean }) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => void
   /** 書き込みにファイルを付けられる掲示板の決まり。あれば、アップロードの代わりに書き込みに付ける */
   attach?: AttachmentRules
   disabled?: boolean
+  /** 上げる前の確かめで「画像にスレタイと URL を入れる」を選べるように、いまのスレタイと URL(スレ立てはスレタイの欄と板の URL)。なければ出さない */
+  stamp?: () => { title?: string; url?: string } | undefined
 }): {
   /** 書き込みに付けたファイルの並び(小さい見本と ×)。付けていなければ null */
   attachedView: ReactNode
@@ -128,6 +142,18 @@ export function useMediaInput(o: {
   const closePending = () => {
     pending?.previews.forEach((u) => URL.revokeObjectURL(u))
     setPending(undefined)
+  }
+  /** 「画像にスレタイと URL を入れる」(最後に選んだものを覚える: bbs:upload-stamp = "left" / "right" / "") */
+  const [stampOn, setStampOn] = useState(() => !!readStamp())
+  const [stampCorner, setStampCorner] = useState<StampCorner>(() => readStamp() || 'right')
+  const saveStamp = (on: boolean, corner: StampCorner) => {
+    setStampOn(on)
+    setStampCorner(corner)
+    try {
+      localStorage.setItem('bbs:upload-stamp', on ? corner : '')
+    } catch {
+      // 覚えられなくても困らない
+    }
   }
   useEffect(() => {
     if (!notice) return
@@ -208,11 +234,20 @@ export function useMediaInput(o: {
         if (!uploader || !next) break
         patch(next.id, { state: 'uploading', error: undefined })
         try {
+          // 同じ中身の画像を前に上げていれば、上げずにその URL を使う(アップロード履歴の hash で引く)
+          const hash = await hashFile(next.file)
+          const known = hash ? await lookupUploaded(hash) : undefined
+          if (known) {
+            patch(next.id, { state: 'done', url: known })
+            oRef.current.insert(`${known}\n`, { ownLine: true })
+            oRef.current.onUploaded?.({ url: known, name: next.file.name || 'image', size: next.file.size, withAccount: false, hash })
+            continue
+          }
           const r = await uploadMedia(next.file, uploader)
           await verifyImage(r.url, r.host, next.file)
           patch(next.id, { state: 'done', url: r.url })
           oRef.current.insert(`${r.url}\n`, { ownLine: true })
-          oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST })
+          oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST, hash })
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           patch(next.id, { state: 'failed', error: msg })
@@ -269,9 +304,9 @@ export function useMediaInput(o: {
     }
     upload(files)
   }
-  /** 貼り付け・ドロップで来たファイル。2 枚以上なら、上げる前に確かめる */
+  /** 貼り付け・ドロップで来たファイル。上げる前に確かめる(1 枚でも。本人の指示) */
   const take = (files: File[]) => {
-    if (files.length <= 1) return takeNow(files)
+    if (files.length === 0) return
     setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)), go: takeNow })
   }
   const confirmView: ReactNode = pending
@@ -288,18 +323,23 @@ export function useMediaInput(o: {
               }
             }}
           >
-            <div className="px-5 py-3 border-b border-c-border text-sm font-bold text-c-text-strong">
-              {pending.files.length} 枚の画像を{o.attach ? '付けます' : '上げます'}。{o.attach ? '付けない' : '上げない'}ものはチェックを外してください
-            </div>
+            <div className="px-5 py-3 border-b border-c-border text-sm font-bold text-c-text-strong">{o.attach ? '書き込みに付ける' : '画像を上げる'}</div>
             <div className="px-5 py-3 max-h-72 overflow-y-auto custom-scrollbar space-y-2">
               {pending.files.map((f, i) => (
                 <label key={i} className="flex items-center gap-3 cursor-pointer">
+                  {/* チェックは差し色の塗りで(ブラウザ標準のチェックは暗い配色で薄く見える) */}
                   <input
                     type="checkbox"
                     checked={pending.on[i]}
                     onChange={(e) => setPending((p) => p && { ...p, on: p.on.map((v, j) => (j === i ? e.target.checked : v)) })}
-                    className="accent-[var(--c-accent)]"
+                    className="sr-only"
                   />
+                  <span
+                    className="w-5 h-5 rounded flex items-center justify-center border flex-shrink-0"
+                    style={pending.on[i] ? { background: 'var(--c-accent)', borderColor: 'var(--c-accent)', color: 'var(--c-accent-text)' } : { borderColor: 'var(--c-border-strong)' }}
+                  >
+                    {pending.on[i] && <span className="material-symbols-outlined text-base leading-none font-bold">check</span>}
+                  </span>
                   {f.type.startsWith('video/') ? (
                     <video src={pending.previews[i]} muted className="w-12 h-12 object-cover rounded border border-c-border bg-c-surface2 flex-shrink-0" />
                   ) : (
@@ -310,6 +350,35 @@ export function useMediaInput(o: {
                 </label>
               ))}
             </div>
+            {/* 画像の隅にスレタイと URL を描き込む(JPEG・PNG・WebP だけ。どこから来た画像か分かるように) */}
+            {!o.attach && o.stamp?.() && pending.files.some(canStamp) && (
+              <div className="px-5 py-2 border-t border-c-border flex items-center gap-3 text-sm">
+                <label className="flex items-center gap-2 cursor-pointer text-c-text-body">
+                  <input type="checkbox" checked={stampOn} onChange={(e) => saveStamp(e.target.checked, stampCorner)} className="sr-only" />
+                  <span
+                    className="w-5 h-5 rounded flex items-center justify-center border flex-shrink-0"
+                    style={stampOn ? { background: 'var(--c-accent)', borderColor: 'var(--c-accent)', color: 'var(--c-accent-text)' } : { borderColor: 'var(--c-border-strong)' }}
+                  >
+                    {stampOn && <span className="material-symbols-outlined text-base leading-none font-bold">check</span>}
+                  </span>
+                  画像にスレタイと URL を入れる
+                </label>
+                {stampOn && (
+                  <span className="ml-auto flex gap-1">
+                    {(['left', 'right'] as const).map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => saveStamp(true, c)}
+                        className={`px-2 py-0.5 text-xs rounded border ${stampCorner === c ? 'border-c-accent text-c-accent bg-[var(--c-accent-wash)]' : 'border-c-border text-c-text-muted'}`}
+                      >
+                        {c === 'left' ? '左下' : '右下'}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="px-5 py-3 border-t border-c-border flex items-center justify-end gap-2">
               <button type="button" onClick={closePending} className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:bg-c-surface2">
                 やめる
@@ -321,8 +390,11 @@ export function useMediaInput(o: {
                 onClick={() => {
                   const chosen = pending.files.filter((_, i) => pending.on[i])
                   const go = pending.go
+                  const st = !o.attach && stampOn ? o.stamp?.() : undefined
                   closePending()
-                  go(chosen)
+                  if (!st) return go(chosen)
+                  // 描き込んでから上げる(描き込めない種類はそのまま)
+                  void Promise.all(chosen.map((f) => stampImage(f, [st.title ?? '', st.url ?? ''], stampCorner))).then(go)
                 }}
                 className="px-4 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
               >

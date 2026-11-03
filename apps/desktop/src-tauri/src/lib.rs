@@ -216,6 +216,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/015_post_badges.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 16,
+            description: "upload_hash",
+            sql: include_str!("../../../../packages/logstore/migrations/016_upload_hash.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

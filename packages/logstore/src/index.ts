@@ -20,6 +20,8 @@ export interface UploadRecord {
   uploadedAt: number
   /** catbox のアカウント(userhash)で上げたか。アカウントで上げたものだけ、サーバー上でも消せる */
   withAccount: boolean
+  /** 中身の SHA-256(16 進)。同じ画像をもう一度貼ったら、上げずにこの URL を使う。昔の履歴にはない */
+  hash?: string
 }
 
 export interface ThreadState {
@@ -214,9 +216,15 @@ export class LogStore {
 
   async addUpload(u: Omit<UploadRecord, 'uploadedAt'>, now = Date.now()): Promise<void> {
     await this.db.execute(
-      'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account) VALUES ($1, $2, $3, $4, $5)',
-      [u.url, u.name, u.size, now, u.withAccount ? 1 : 0],
+      'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account, hash) VALUES ($1, $2, $3, $4, $5, $6)',
+      [u.url, u.name, u.size, now, u.withAccount ? 1 : 0, u.hash ?? null],
     )
+  }
+
+  /** 同じ中身(hash)の画像を前に上げていれば、その URL(いちばん新しいもの) */
+  async findUploadByHash(hash: string): Promise<string | undefined> {
+    const [row] = await this.db.select<{ url: string }>('SELECT url FROM uploads WHERE hash = $1 ORDER BY uploaded_at DESC LIMIT 1', [hash])
+    return row?.url
   }
 
   async listUploads(limit = 200): Promise<UploadRecord[]> {

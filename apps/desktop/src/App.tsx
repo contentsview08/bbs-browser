@@ -69,6 +69,7 @@ import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, a
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
+import { setUploadLookup } from './utils/uploadIndex'
 import { useViewState } from './hooks/useViewState'
 import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
@@ -2118,7 +2119,7 @@ export default function App() {
       void deleteLogs([id], [], true)
       returnToList()
     }),
-    uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean }) => {
+    uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => {
       setHasUploads(true)
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
     }),
@@ -2179,6 +2180,11 @@ export default function App() {
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const tabEventsRef = useRef(tabEvents)
+  // 同じ画像をもう一度貼ったら上げない(アップロード履歴の hash で引く。utils/uploadIndex)
+  useEffect(() => {
+    setUploadLookup(store ? (h) => store.findUploadByHash(h) : undefined)
+    return () => setUploadLookup(undefined)
+  }, [store])
   const stableTabEvents = tabEventsRef.current
 
   const historyStates = useMemo(() => new Map(history?.map((h) => [threadId(h.thread), h as ThreadState])), [history])
@@ -2780,6 +2786,7 @@ export default function App() {
         <NewThreadDialog
           attach={findConnector(board.connectorId)?.attachments}
           boardName={settings.boardMeta[board.url]?.alias || board.name}
+          boardUrl={board.url}
           draftKey={`new:${board.url}`}
           initialName={settings.boardMeta[board.url]?.defaultName ?? settings.postName}
           initialMail={settings.boardMeta[board.url]?.defaultMail ?? settings.postMail}

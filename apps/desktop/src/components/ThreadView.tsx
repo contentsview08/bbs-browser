@@ -178,7 +178,7 @@ interface Props {
   isFavorite: boolean
   onToggleFavorite: () => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  onUploaded: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
   jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
@@ -2230,6 +2230,7 @@ export default function ThreadView(props: Props) {
             // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
             <ReplyForm
               ref={replyRef}
+              stamp={{ title: log.title, url: props.threadUrl }}
               phraseBar={settings.quickPhrases}
               variant="chat"
               // フッターの右端(送るボタンの右)に更新ボタン(設定で消せる)
@@ -2316,6 +2317,7 @@ export default function ThreadView(props: Props) {
           >
             <ReplyForm
               ref={replyRef}
+              stamp={{ title: log.title, url: props.threadUrl }}
               phraseBar={settings.quickPhrases}
               layout={replyLayout}
               onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}

@@ -32,7 +32,7 @@ interface Props {
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined(絵文字だけ) */
   uploader?: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => void
   /** 板の書き込みの上限と、その掲示板での数え方 */
   limits?: PostLimits
   byteLength?: (text: string) => number
@@ -44,6 +44,8 @@ interface Props {
   draftKey?: string
   /** 画像ビューアーの保存先(設定の imageSaveDir。空ならダウンロードフォルダ) */
   imageSaveDir?: string
+  /** 板の URL(上げる前の確かめで「画像にスレタイと URL を入れる」に使う。スレはまだないので板の URL) */
+  boardUrl?: string
 }
 
 interface NewThreadDraft {
@@ -92,7 +94,7 @@ export default function NewThreadDialog(props: Props) {
       el.selectionStart = el.selectionEnd = start + text.length
     })
   }
-  const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded })
+  const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded, stamp: () => ({ title: title.trim(), url: props.boardUrl }) })
   // ファイルを付けていれば、本文が空でも立てられる(画像だけのスレ)
   const ready = title.trim() !== '' && (body.trim() !== '' || !!media.attachedView) && !sending
 

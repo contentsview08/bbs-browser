@@ -75,6 +75,8 @@ interface Props {
   onOpenAccountSettings?: () => void
   /** 書いている間、本文の欄の上に並べる定型文(設定の定型文。あれば出す)。押すとカーソルの所に入る */
   phraseBar?: string[]
+  /** 上げる前の確かめで「画像にスレタイと URL を入れる」に使う、このスレのスレタイと URL */
+  stamp?: { title?: string; url?: string }
 }
 
 const INPUT =
@@ -206,7 +208,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   useImperativeHandle(ref, () => ({ insert, focus: () => textRef.current?.focus() }))
 
   // 画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字
-  const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded, disabled: !!props.disabled })
+  const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded, disabled: !!props.disabled, stamp: () => props.stamp })
 
   const sage = mail.trim().toLowerCase() === 'sage'
 

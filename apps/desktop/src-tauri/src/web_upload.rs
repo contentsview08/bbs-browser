@@ -53,7 +53,16 @@ const PASTE: &str = r#"
     }
     return dt
   }
+  // 上げている間の案内。画面の上に大きく出す(上げ終わってこの画面が閉じるまで、少し間があるため)
+  const banner = () => {
+    const b = document.createElement('div')
+    b.id = 'bbs-browser-upload-banner'
+    b.textContent = 'アップロードしています。少々お待ちください(終わると自動で閉じます。閉じないときは、この画面で上げてください)'
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;padding:14px 20px;background:#4757c9;color:#fff;font:bold 17px/1.5 system-ui,sans-serif;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.35);pointer-events:none'
+    ;(document.body || document.documentElement).appendChild(b)
+  }
   const fire = () => {
+    banner()
     const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body
     try { document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: build() })) } catch {}
     try {

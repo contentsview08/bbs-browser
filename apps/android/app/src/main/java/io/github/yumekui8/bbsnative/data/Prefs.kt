@@ -134,6 +134,10 @@ class Prefs(context: Context) {
         val list = listOf(url to System.currentTimeMillis()) + uploads().filter { it.first != url }
         uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.first).put("t", it.second) }).toString()
     }
+    /** 履歴からだけ外す(置き場のファイルは残る) */
+    fun removeUpload(url: String) {
+        uploadsJson = org.json.JSONArray(uploads().filter { it.first != url }.map { org.json.JSONObject().put("url", it.first).put("t", it.second) }).toString()
+    }
 
     // スレ立ての書きかけ(板ごと)。閉じても・板を開き直しても・認証の間にアプリが閉じられても消えないように
     private var newThreadDraftsJson by pref("newThreadDrafts", "{}")

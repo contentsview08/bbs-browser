@@ -282,6 +282,11 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         }
     }
 
+    /** 書き込み履歴から 1 件消す(同じスレに同じ時刻で書いたものは 1 つしかない) */
+    suspend fun deletePostHistory(e: PostHistoryEntry) = io {
+        writableDatabase.delete("post_history", "board_url = ? AND key = ? AND posted_at = ?", arrayOf(e.thread.boardUrl, e.thread.key, e.postedAt.toString()))
+    }
+
     suspend fun deleteThread(t: ThreadSummary) = io {
         val db = writableDatabase
         db.delete("posts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))

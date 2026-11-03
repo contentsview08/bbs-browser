@@ -19,6 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
@@ -168,16 +173,16 @@ private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: (
 }
 
 /**
- * 過去のスレの画面の上: 題「過去のスレ」と、未読(全板)・閲覧履歴・お気に入り・書き込みの切り替え。
- * どれも「前に見たスレ」の一覧なので、1 つの画面のタブとしてまとめる
+ * 履歴の画面の上: 題「履歴」と、未読(全板)・閲覧履歴・お気に入り・書き込み・画像の切り替え。
+ * どれも「前に見た・書いた・上げたもの」の一覧なので、1 つの画面のタブとしてまとめる(PC 版・Web と同じ並び)
  */
 @Composable
 private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit)?) {
-    HeaderBar("過去のスレ", onNav = { vm.drawerOpen = true }) {
+    HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
         if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
     }
     Row(Modifier.fillMaxWidth().background(Palette.bar).padding(horizontal = 10.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((k, label) in listOf("unread" to "未読", "history" to "閲覧", "fav" to "お気に入り", "posts" to "書き込み")) {
+        for ((k, label) in listOf("unread" to "未読", "history" to "閲覧", "fav" to "お気に入り", "posts" to "書き込み", "uploads" to "画像")) {
             val on = k == current
             val count = when (k) { "unread" -> vm.allUnread.size; "fav" -> vm.favThreads.size; else -> 0 }
             Row(
@@ -198,11 +203,11 @@ private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit
 @Composable
 private fun PastRow(
     vm: AppViewModel, t: io.github.yumekui8.bbsnative.bbs.ThreadSummary, meta: String, total: Int?, unread: Int,
-    archived: Boolean = false, own: String? = null, ownNo: Int? = null, onLongClick: (() -> Unit)? = null,
+    archived: Boolean = false, own: String? = null, ownNo: Int? = null, onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null,
 ) {
     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick) { vm.openThread(t) }.graphicsLayer { alpha = if (archived) 0.6f else 1f },
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick) { if (onClick != null) onClick() else vm.openThread(t) }.graphicsLayer { alpha = if (archived) 0.6f else 1f },
     ) {
         // 左の帯: 未読があれば未読の色(未読が多いほど濃く)
         Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread.copy(alpha = 0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f)) else Color.Transparent))
@@ -268,20 +273,101 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
     }
 }
 
-/** 過去のスレの「書き込み」のタブ(新しい順)。行の形はほかのタブと同じで、書いた本文を足す */
+/** 履歴の「書き込み」のタブ(新しい順)。行の形はほかのタブと同じで、書いた本文を足す。押すとスレを開いてそのレスへ、長押しでメニュー */
 @Composable
 fun PostHistoryScreen(vm: AppViewModel) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hv = androidx.compose.ui.platform.LocalView.current
+    var menuFor by remember { mutableStateOf<io.github.yumekui8.bbsnative.data.PostHistoryEntry?>(null) }
+    menuFor?.let { e ->
+        MenuSheet(
+            listOf(
+                listOf(
+                    MenuItem("スレを開いて、このレスへ", Icons.AutoMirrored.Filled.OpenInNew, Palette.accent) { vm.openThread(e.thread, e.no) },
+                    MenuItem("本文をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, e.body); vm.toast = "コピーしました" },
+                ),
+                listOf(MenuItem("履歴から消す(掲示板の書き込みは消えません)", Icons.Filled.Delete, danger = true) { vm.deletePostHistory(e) }),
+            ),
+            MenuAt.Center,
+        ) { menuFor = null }
+    }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         PastHeader(vm, "posts", null)
-        if (vm.postHistory.isEmpty()) Hint("書き込み履歴はありません")
+        if (vm.postHistory.isEmpty()) Hint("まだ書き込んでいません")
         else LazyColumn(Modifier.fillMaxSize(), state = listState) {
             items(vm.postHistory) { e ->
-                PastRow(vm, e.thread, "${boardName(vm, e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた", null, 0, own = e.body.lines().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: e.body.trim(), ownNo = e.no)
+                PastRow(
+                    vm, e.thread, "${boardName(vm, e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた", null, 0,
+                    own = e.body.lines().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: e.body.trim(), ownNo = e.no,
+                    onLongClick = { Haptics.longPress(hv); menuFor = e },
+                    onClick = { vm.openThread(e.thread, e.no) },
+                )
             }
             item { Spacer(Modifier.navigationBarsPadding()) }
+        }
+    }
+    SwipeLabel(swipe)
+    }
+}
+
+/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ・履歴から消す */
+@Composable
+fun UploadsScreen(vm: AppViewModel) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val swipe = rememberSwipeState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hv = androidx.compose.ui.platform.LocalView.current
+    var version by remember { mutableStateOf(0) }
+    val ups = remember(version) { vm.prefs.uploads() }
+    var viewerUrl by remember { mutableStateOf<String?>(null) }
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    viewerUrl?.let { u -> ImageViewer(ups.map { it.first }, u, onClose = { viewerUrl = null }) }
+    menuFor?.let { url ->
+        val posted = vm.postedIn(url)
+        MenuSheet(
+            listOf(
+                listOfNotNull(
+                    MenuItem("見る", Icons.AutoMirrored.Filled.OpenInNew, Palette.accent) { viewerUrl = url },
+                    MenuItem("URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, url); vm.toast = "URL をコピーしました" },
+                    posted?.let { e -> MenuItem("貼ったレスへ(${e.thread.title.ifEmpty { "スレタイ不明" }}${e.no?.let { " >>$it" } ?: ""})", Icons.Filled.Reply, Palette.own) { vm.openThread(e.thread, e.no) } },
+                ),
+                listOf(MenuItem("履歴から消す(置き場のファイルは残ります)", Icons.Filled.Delete, danger = true) { vm.prefs.removeUpload(url); version++ }),
+            ),
+            MenuAt.Center,
+        ) { menuFor = null }
+    }
+    Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
+    Column(Modifier.fillMaxSize().background(Palette.base)) {
+        PastHeader(vm, "uploads", null)
+        if (ups.isEmpty()) Hint("まだありません(書き込み欄の ＋ の「画像」から上げた画像が並びます)")
+        else {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                androidx.compose.foundation.lazy.grid.GridCells.Fixed(3), Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                items(ups.size) { i ->
+                    val url = ups[i].first
+                    val posted = vm.postedIn(url)
+                    Column(Modifier.padding(3.dp)) {
+                        @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+                        StoredImage(
+                            url,
+                            Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(Palette.surface2)
+                                .combinedClickable(onLongClick = { Haptics.longPress(hv); menuFor = url }) { viewerUrl = url },
+                        )
+                        // 貼ったレスがあれば、その印(押すとそのレスへ)
+                        Text(
+                            if (posted != null) "→ ${posted.thread.title.ifEmpty { "スレ" }}" else relativeTime(ups[i].second),
+                            Modifier.fillMaxWidth().padding(top = 2.dp).then(if (posted != null) Modifier.clickable { vm.openThread(posted.thread, posted.no) } else Modifier),
+                            color = if (posted != null) Palette.accent else Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(3) }) { Spacer(Modifier.navigationBarsPadding()) }
+            }
         }
     }
     SwipeLabel(swipe)

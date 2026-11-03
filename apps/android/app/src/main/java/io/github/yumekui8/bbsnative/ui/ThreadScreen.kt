@@ -249,6 +249,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
         scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
+        // 書き込み履歴・画像の「貼ったレス」から開いたときは、そのレスへ飛んで光らせる
+        page.jumpNo?.let { no ->
+            page.jumpNo = null
+            if (index.posts.any { it.no == no }) {
+                scroller.toUnreadNow(no)
+                ctl.jumpFlash = no to System.nanoTime()
+            }
+        }
         reportRead(ctl, scroller, vm, page)
     }
     // 一覧へ戻って「進む」で開き直したとき: 一番下まで読んでいたなら一番下へ(戻る前と同じ所から続けて読めるように)

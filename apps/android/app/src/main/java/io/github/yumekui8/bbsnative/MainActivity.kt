@@ -54,6 +54,7 @@ import io.github.yumekui8.bbsnative.ui.BoardsScreen
 import io.github.yumekui8.bbsnative.ui.DrawerContent
 import io.github.yumekui8.bbsnative.ui.Palette
 import io.github.yumekui8.bbsnative.ui.PostHistoryScreen
+import io.github.yumekui8.bbsnative.ui.UploadsScreen
 import io.github.yumekui8.bbsnative.ui.SettingsScreen
 import io.github.yumekui8.bbsnative.ui.ThreadEntryList
 import io.github.yumekui8.bbsnative.ui.ThreadListScreen
@@ -166,6 +167,7 @@ class MainActivity : ComponentActivity() {
                                 is Page.AllUnread -> io.github.yumekui8.bbsnative.ui.ThreadEntryList(vm, "全板の未読", vm.allUnread, "お気に入り板に、新着のある読んだスレはありません", onRefresh = { vm.loadAllUnread() })
                                 is Page.FavThreads -> ThreadEntryList(vm, "お気に入りのスレ", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)")
                                 is Page.PostHistory -> PostHistoryScreen(vm)
+                                is Page.Uploads -> UploadsScreen(vm)
                                 is Page.Settings -> SettingsScreen(vm, page.start)
                                 null -> {}
                             }

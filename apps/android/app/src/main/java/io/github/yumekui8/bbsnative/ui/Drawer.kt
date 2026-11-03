@@ -73,8 +73,8 @@ fun DrawerContent(vm: AppViewModel) {
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
             // 過去に見たスレの一覧(未読・閲覧履歴・お気に入りのスレ・書き込み履歴)は 1 つの画面にまとめ、上のタブで切り替える
-            val past = current is Page.History || current is Page.AllUnread || current is Page.FavThreads || current is Page.PostHistory
-            DrawerRow(Icons.Filled.History, "過去のスレ", Palette.textMuted, active = past, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
+            val past = current is Page.History || current is Page.AllUnread || current is Page.FavThreads || current is Page.PostHistory || current is Page.Uploads
+            DrawerRow(Icons.Filled.History, "履歴", Palette.textMuted, active = past, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
                 vm.openPast(vm.prefs.pastTab)
             }
             if (histOpen) {
@@ -177,7 +177,7 @@ fun BottomTabs(vm: io.github.yumekui8.bbsnative.AppViewModel, current: Page?, mo
                     Text(label, color = if (on) Palette.accent else Palette.textMuted, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
                 }
             }
-            tab(Icons.Filled.History, "履歴", current is Page.History || current is Page.FavThreads || current is Page.PostHistory) { vm.openPast(if (vm.prefs.pastTab == "unread") "history" else vm.prefs.pastTab) }
+            tab(Icons.Filled.History, "履歴", current is Page.History || current is Page.FavThreads || current is Page.PostHistory || current is Page.Uploads) { vm.openPast(if (vm.prefs.pastTab == "unread") "history" else vm.prefs.pastTab) }
             tab(Icons.Filled.MarkEmailUnread, "未読", current is Page.AllUnread) { vm.openPast("unread") }
             tab(Icons.Filled.Forum, "スレ", current is Page.Threads) {
                 val url = vm.prefs.lastBoardUrl

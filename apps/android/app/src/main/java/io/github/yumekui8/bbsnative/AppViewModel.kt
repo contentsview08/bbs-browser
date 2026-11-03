@@ -152,6 +152,8 @@ sealed interface Page {
         /** 自分の書き込みのレス番号 */
         var ownNos by mutableStateOf<Set<Int>>(emptySet())
         var favorite by mutableStateOf(false)
+        /** 開いたらこのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」から)。飛んだら null */
+        var jumpNo by mutableStateOf<Int?>(null)
         /** 次スレの候補(探したら入る。null はまだ探していない) */
         var nextCandidates by mutableStateOf<List<NextThreadCandidate>?>(null)
         val reply = ReplyState(summary.boardUrl)
@@ -167,6 +169,8 @@ sealed interface Page {
     /** お気に入り板すべての、新着のある読んだスレ */
     class AllUnread : Page
     class PostHistory : Page
+    /** 上げた画像(履歴の「画像」) */
+    class Uploads : Page
     /** start: 開いたときに出すページ("sites" など) */
     class Settings(val start: String? = null) : Page
 }
@@ -325,9 +329,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "unread" -> { openRoot(Page.AllUnread()); loadAllUnread() }
             "fav" -> openRoot(Page.FavThreads())
             "posts" -> openRoot(Page.PostHistory())
+            "uploads" -> openRoot(Page.Uploads())
             else -> openRoot(Page.History())
         }
     }
+
+    /** 書き込み履歴から 1 件消す(掲示板の書き込みは消えない) */
+    fun deletePostHistory(e: PostHistoryEntry) {
+        postHistory = postHistory.filter { it !== e }
+        viewModelScope.launch { db.deletePostHistory(e); postHistory = db.postHistory() }
+    }
+
+    /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
+    fun postedIn(url: String): PostHistoryEntry? = postHistory.firstOrNull { it.body.contains(url) }
 
     /** 全板の未読を、手元の既読で数え直す(読んだスレは外す。通信はしない) */
     private fun recountAllUnread() {
@@ -397,6 +411,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         is Page.FavThreads -> "お気に入りのスレ"
         is Page.AllUnread -> "全板の未読"
         is Page.PostHistory -> "書き込み履歴"
+        is Page.Uploads -> "上げた画像"
         is Page.Settings -> "設定"
     }
 
@@ -431,7 +446,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         when (page) {
             is Page.History, is Page.FavThreads -> reloadSide()
             is Page.AllUnread -> recountAllUnread()
-            is Page.PostHistory -> viewModelScope.launch { postHistory = db.postHistory() }
+            is Page.PostHistory, is Page.Uploads -> viewModelScope.launch { postHistory = db.postHistory() }
             is Page.Boards -> if (boards.isEmpty()) loadBoards()
             else -> {}
         }
@@ -644,9 +659,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── スレ ──
 
-    fun openThread(t: ThreadSummary) {
+    /** no: 開いたらそのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」から) */
+    fun openThread(t: ThreadSummary, no: Int? = null) {
         drawerOpen = false
         val page = Page.Thread(t)
+        page.jumpNo = no
         forwardPage = null
         navDir = 1
         stack.add(page)

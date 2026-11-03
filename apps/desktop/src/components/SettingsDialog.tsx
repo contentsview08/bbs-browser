@@ -45,7 +45,8 @@ import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePost
 import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
 import { GESTURE_ACTIONS, MOUSE_GESTURE_ACTIONS, mouseActionName } from '../utils/gestures'
-import { MOUSE_MAX_SEGMENTS } from '../hooks/useMouseGesture'
+import { PIE_DIRS, PIE_DIR_NAMES, type PieDir } from '../hooks/useMouseGesture'
+import MouseGesturePie from './MouseGesturePie'
 import { getVersion } from '@tauri-apps/api/app'
 import { getDataPaths, type DataPaths } from '../host/logStore'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -1340,115 +1341,49 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
 }
 
 /**
- * PC: マウスジェスチャー。ふつうのマウスジェスチャーの設定と同じ形: 「ジェスチャー(矢印) → 操作」の表に、矢印のボタンでジェスチャーを組んで足す。
- * 操作はキー操作と同じ(キーを受け取っている方に効く)
+ * PC: マウスジェスチャー(円盤)。8 方向それぞれに操作を割り当てる。左の円盤の区画を押すと、その方向の行が選ばれる。
+ * 操作はキー操作すべてと、画面を開く操作(設定・履歴など)
  */
 function MouseGestureSettings({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const map = s.mouseGestures
-  /** 足そうとしている動き(向きの並び)と操作 */
-  const [seq, setSeq] = useState<string[]>([])
-  const [action, setAction] = useState('')
-  const nameOf = (a: string) => mouseActionName(a) ?? a
-  const rows = Object.entries(map).sort(([a], [b]) => a.length - b.length || a.localeCompare(b))
-  const draft = seq.join(',')
-  const taken = draft ? map[draft] : undefined
-  const canAdd = seq.length > 0 && action !== ''
-  const add = () => {
-    if (!canAdd) return
-    update('mouseGestures', { ...map, [draft]: action })
-    setSeq([])
-    setAction('')
+  const [picked, setPicked] = useState<PieDir>('n')
+  const labels = Object.fromEntries(PIE_DIRS.map((d) => [d, map[d] ? mouseActionName(map[d]) : undefined])) as Partial<Record<PieDir, string | undefined>>
+  const setDir = (d: PieDir, action: string) => {
+    const next = { ...map }
+    if (action) next[d] = action
+    else delete next[d]
+    update('mouseGestures', next)
   }
-  const ARROWS: { dir: string; icon: string; name: string }[] = [
-    { dir: 'up', icon: 'arrow_upward', name: '上' },
-    { dir: 'down', icon: 'arrow_downward', name: '下' },
-    { dir: 'left', icon: 'arrow_back', name: '左' },
-    { dir: 'right', icon: 'arrow_forward', name: '右' },
-  ]
-  const push = (dir: string) => setSeq((q) => (q.length >= MOUSE_MAX_SEGMENTS || q[q.length - 1] === dir ? q : [...q, dir]))
-  const ACTION_OPTIONS = MOUSE_GESTURE_ACTIONS.map((a) => (
-    <option key={a.key} value={a.key}>
-      {a.name}
-    </option>
-  ))
   return (
     <Section
       title="マウスジェスチャー"
-      note="Ctrl(または右ボタン)を押しながらマウスを動かすと、その形に割り当てた操作をします。操作はキー操作と同じで、キーを受け取っている方に効きます。動かしている間、画面の真ん中に矢印と操作の名前が出ます"
+      note="Ctrl(または右ボタン)を押しながらマウスを少し動かすと、そこを中心に 8 方向の円盤が出ます。向けた区画の操作が、離したときに実行されます(中心に戻して離せば何もしません)。操作はキー操作と同じで、キーを受け取っている方に効きます"
     >
       <div className="mb-3 flex items-center gap-3 text-sm">
         <span className="text-c-text-body">始め方</span>
         <Choice value={s.mouseGestureTrigger} options={MOUSE_GESTURE_TRIGGERS} onChange={(v) => update('mouseGestureTrigger', v)} />
       </div>
-      <table className="w-full max-w-xl text-sm border-collapse">
-        <thead>
-          <tr className="text-left text-xs text-c-text-muted">
-            <th className="font-normal py-1 pr-3 w-28">ジェスチャー</th>
-            <th className="font-normal py-1">操作</th>
-            <th className="w-8" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-c-border/60">
-          {rows.map(([g, a]) => (
-            <tr key={g}>
-              <td className="py-1.5 pr-3 text-lg tracking-widest text-c-text-strong font-mono">{gestureArrows(g)}</td>
-              <td className="py-1.5">
-                <select value={a} onChange={(e) => update('mouseGestures', { ...map, [g]: e.target.value })} className={`${INPUT} w-full`}>
-                  {ACTION_OPTIONS}
-                </select>
-              </td>
-              <td className="py-1.5 text-right">
-                <button
-                  type="button"
-                  className={ICON_BTN}
-                  title="このジェスチャーを外す"
-                  onClick={() => update('mouseGestures', Object.fromEntries(Object.entries(map).filter(([k]) => k !== g)))}
-                >
-                  <span className="material-symbols-outlined text-base">close</span>
-                </button>
-              </td>
-            </tr>
+      <div className="flex flex-wrap gap-6 items-start">
+        <MouseGesturePie labels={labels} active={picked} onPick={setPicked} className="flex-shrink-0" />
+        <div className="flex-1 min-w-[18rem] flex flex-col divide-y divide-c-border/60">
+          {PIE_DIRS.map((d) => (
+            <label
+              key={d}
+              className={`flex items-center gap-3 py-1.5 px-2 -mx-2 rounded text-sm cursor-pointer ${picked === d ? 'bg-c-accent-wash' : ''}`}
+              onClick={() => setPicked(d)}
+            >
+              <span className={`w-10 flex-shrink-0 ${picked === d ? 'text-c-accent font-bold' : 'text-c-text-strong'}`}>{PIE_DIR_NAMES[d]}</span>
+              <select value={map[d] ?? ''} onChange={(e) => setDir(d, e.target.value)} onFocus={() => setPicked(d)} className={`${INPUT} flex-1 min-w-0`}>
+                <option value="">なし</option>
+                {MOUSE_GESTURE_ACTIONS.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={3} className="py-3 text-c-text-muted">
-                ジェスチャーはありません
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      {/* 足す: 矢印のボタンで動きを組み、操作を選んで「足す」 */}
-      <div className="mt-3 p-3 rounded-lg border border-dashed border-c-border max-w-xl">
-        <p className="mb-2 text-xs text-c-text-muted">矢印を押して動きを組み(3 回まで。同じ向きは続けられません)、操作を選んで足します</p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1">
-            {ARROWS.map((d) => (
-              <button
-                key={d.dir}
-                type="button"
-                title={d.name}
-                onClick={() => push(d.dir)}
-                disabled={seq.length >= MOUSE_MAX_SEGMENTS || seq[seq.length - 1] === d.dir}
-                className="w-8 h-8 rounded border border-c-border text-c-text-strong hover:border-c-accent hover:text-c-accent disabled:opacity-40 disabled:hover:border-c-border disabled:hover:text-c-text-strong flex items-center justify-center"
-              >
-                <span className="material-symbols-outlined text-lg leading-none">{d.icon}</span>
-              </button>
-            ))}
-            <button type="button" title="1 つ戻す" onClick={() => setSeq((q) => q.slice(0, -1))} disabled={seq.length === 0} className={`${ICON_BTN} disabled:opacity-40`}>
-              <span className="material-symbols-outlined text-lg leading-none">backspace</span>
-            </button>
-          </div>
-          <span className="min-w-[4rem] text-lg tracking-widest font-mono text-c-text-strong">{draft ? gestureArrows(draft) : <span className="text-sm text-c-text-muted">(なし)</span>}</span>
-          <select value={action} onChange={(e) => setAction(e.target.value)} className={`${INPUT} flex-1 min-w-[12rem]`}>
-            <option value="">操作を選ぶ…</option>
-            {ACTION_OPTIONS}
-          </select>
-          <button type="button" onClick={add} disabled={!canAdd} className={`${BTN_PRIMARY} disabled:opacity-40`}>
-            {taken ? '付け替える' : '足す'}
-          </button>
         </div>
-        {taken && <p className="mt-2 text-xs text-c-text-muted">{gestureArrows(draft)} はいま「{nameOf(taken)}」です(足すと、そちらから付け替えます)</p>}
       </div>
       <button type="button" onClick={() => update('mouseGestures', DEFAULT_SETTINGS.mouseGestures)} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
         すべて既定に戻す

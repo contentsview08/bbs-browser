@@ -1,43 +1,56 @@
-// PC: マウスジェスチャー。Ctrl を押しながら(または右ボタンを押しながら)マウスを動かした向きの並び(「right」「right,up」など)を、
-// 登録した操作に結びつける。向きの読み取り方はスマホのスワイプ(useSwipeGesture)と同じ:
-// 少し動いたら最初の向きを決め、そのあとは一定以上ほかの向きへ動いたときだけ次の向きを足す(手のぶれで増えないように)。
-// - Ctrl のとき: Ctrl を離した時点で確定する。Ctrl を押したまま別のキーを押したら(Ctrl+C など)ジェスチャーにはしない
-// - 右ボタンのとき: 右ボタンを離した時点で確定する。動かしていたら、離したときのコンテキストメニューは出さない
+// PC: マウスジェスチャー(パイメニュー)。Ctrl を押しながら(または右ボタンを押しながら)マウスを少し動かすと、動かし始めた所を中心に
+// 8 方向の円盤(MouseGesturePie)が出る。マウスのある方向の区画が光り、Ctrl(右ボタン)を離すとその区画の操作をする。
+// 中心の近く(DEAD_PX の中)に戻して離せば何もしない。
+// - Ctrl のとき: Ctrl を押したまま別のキー(Ctrl+C など)・クリック・ホイールをしたらジェスチャーにしない
+// - 右ボタンのとき: 動かしていたら、離したときのコンテキストメニューは出さない。入力欄の中で始めた右ボタンは取らない(文字を選ぶ・貼り付けるためのもの)
 // - 動きは document で受ける(レスのポップアップ・スレ立てなど、body の直下に出した画面の上でも効くように)
-// - 入力欄の中で始めた右ボタンのなぞりは、文字を選ぶためのものなので取らない
 import { useEffect, useRef, useState } from 'react'
-import type { SwipeDirection } from './useSwipeGesture'
 import type { MouseGestureTrigger } from '../ui/settings'
 
+/** 8 方向(時計回りに 上 から) */
+export type PieDir = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
+export const PIE_DIRS: PieDir[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
+export const PIE_DIR_NAMES: Record<PieDir, string> = { n: '上', ne: '右上', e: '右', se: '右下', s: '下', sw: '左下', w: '左', nw: '左上' }
+
 export interface MouseGestureBinding {
-  /** 動かしている間、画面の真ん中に出す名前 */
+  /** 区画に出す名前 */
   label?: string
   onCommit: () => void
 }
 
-/** キーは向きの並びを , でつないだもの(「right」「right,up」) */
-export type MouseGestureMap = Record<string, MouseGestureBinding>
+/** 方向 → 操作(割り当てのない方向は入れない) */
+export type MouseGestureMap = Partial<Record<PieDir, MouseGestureBinding>>
 
-/** 最初の向きを決めるまでの距離(px) */
-const LOCK_PX = 16
-/** 次の向きを足すのに要る距離(px) */
-const SEGMENT_PX = 32
-/** 覚えられる向きの数(設定の画面で覚えさせるときと同じ) */
-export const MOUSE_MAX_SEGMENTS = 3
+/** 円盤を出すまでの動き(px) */
+const SHOW_PX = 8
+/** 中心のこの半径の中では、どの区画でもない(離しても何もしない) */
+export const DEAD_PX = 28
 
-const ARROW: Record<SwipeDirection, string> = { right: '→', left: '←', up: '↑', down: '↓' }
+/** 中心からの向きを 8 方向にする。中心の近くなら null */
+export function pieDirOf(dx: number, dy: number): PieDir | null {
+  if (Math.hypot(dx, dy) < DEAD_PX) return null
+  // 上を 0° として時計回り。45° ごとに区画、区画の真ん中が方向になるように 22.5° ずらす
+  const deg = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360 + 22.5) % 360
+  return PIE_DIRS[Math.floor(deg / 45)]
+}
 
-const dominant = (dx: number, dy: number): SwipeDirection => (Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : dy >= 0 ? 'down' : 'up')
+export interface PieState {
+  /** 中心(画面の座標) */
+  x: number
+  y: number
+  /** いま向いている区画。中心の近くなら null */
+  dir: PieDir | null
+}
 
 /**
- * @param map 向きの並び → 操作
+ * @param map 方向 → 操作
  * @param trigger 何を押しながら動かすか
  * @param enabled 使うか(スマホでは使わない)
- * @returns label: 動かしている間に出す文字(矢印と操作の名前)。何もなぞっていなければ null
+ * @returns pie: 円盤を出している間の中心と向き。出していなければ null
  */
 export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigger, enabled: boolean) {
-  const [label, setLabel] = useState<string | null>(null)
-  // 設定が変わっても、document のリスナーを付け直さなくて済むように、いまの値を ref で持つ
+  const [pie, setPie] = useState<PieState | null>(null)
+  // 設定が変わっても document のリスナーを付け直さなくて済むように、いまの値を ref で持つ
   const mapRef = useRef(map)
   mapRef.current = map
   const triggerRef = useRef(trigger)
@@ -45,58 +58,51 @@ export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigg
 
   useEffect(() => {
     if (!enabled) return
-    /** なぞっている途中の状態。null なら何もしていない */
-    let st: { origin: { x: number; y: number } | null; segStart: { x: number; y: number } | null; segs: SwipeDirection[]; spoiled: boolean } | null = null
-    /** 右ボタンのなぞりで操作したあと、続けて来るコンテキストメニューを 1 回だけ止める */
+    /** 押している途中の状態。null なら何もしていない。origin は動かし始めた所(Ctrl のときは押してから最初に動いた所) */
+    let st: { origin: { x: number; y: number } | null; shown: boolean; dir: PieDir | null; spoiled: boolean } | null = null
+    /** 右ボタンのなぞりで円盤を出したあと、続けて来るコンテキストメニューを 1 回だけ止める */
     let eatContextMenu = false
 
-    const show = () => {
-      const s = st
-      if (!s || s.segs.length === 0 || s.spoiled) return setLabel(null)
-      const arrows = s.segs.map((d) => ARROW[d]).join('')
-      const name = mapRef.current[s.segs.join(',')]?.label
-      setLabel(name ? `${arrows}  ${name}` : arrows)
-    }
     const begin = (x: number | null, y: number | null) => {
-      st = { origin: x === null || y === null ? null : { x, y }, segStart: x === null || y === null ? null : { x, y }, segs: [], spoiled: false }
+      st = { origin: x === null || y === null ? null : { x, y }, shown: false, dir: null, spoiled: false }
     }
     const reset = () => {
       st = null
-      setLabel(null)
+      setPie(null)
     }
-    /** 離したとき: 登録した並びなら実行する。動かしていたら true */
+    /** 離したとき: 向いている区画の操作をする。円盤を出していたら true */
     const finish = (): boolean => {
       const s = st
       reset()
-      if (!s || s.segs.length === 0 || s.spoiled) return false
-      mapRef.current[s.segs.join(',')]?.onCommit()
+      if (!s || !s.shown || s.spoiled) return false
+      if (s.dir) mapRef.current[s.dir]?.onCommit()
       return true
+    }
+    /** Ctrl を押したままクリック・ホイール・別のキーをしたら、ジェスチャーにしない */
+    const spoil = () => {
+      if (triggerRef.current === 'ctrl' && st) {
+        st.spoiled = true
+        setPie(null)
+      }
     }
 
     const onMove = (e: MouseEvent) => {
       const s = st
-      if (!s) return
-      // Ctrl のときは、Ctrl を押してから最初に動いた所を始点にする
-      if (!s.origin || !s.segStart) {
+      if (!s || s.spoiled) return
+      if (!s.origin) {
         s.origin = { x: e.clientX, y: e.clientY }
-        s.segStart = { x: e.clientX, y: e.clientY }
         return
       }
       // 右ボタンのときに、ボタンを離したのを取りこぼしていたら(画面の外で離したなど)やめる
       if (triggerRef.current === 'right' && (e.buttons & 2) === 0) return reset()
-      const dx = e.clientX - s.segStart.x
-      const dy = e.clientY - s.segStart.y
-      const dist = Math.hypot(dx, dy)
-      if (s.segs.length === 0) {
-        if (dist < LOCK_PX) return
-        s.segs = [dominant(dx, dy)]
-        s.segStart = { x: e.clientX, y: e.clientY }
-      } else if (dist >= SEGMENT_PX) {
-        const d = dominant(dx, dy)
-        if (d !== s.segs[s.segs.length - 1] && s.segs.length < MOUSE_MAX_SEGMENTS) s.segs = [...s.segs, d]
-        s.segStart = { x: e.clientX, y: e.clientY }
-      } else return
-      show()
+      const dx = e.clientX - s.origin.x
+      const dy = e.clientY - s.origin.y
+      if (!s.shown) {
+        if (Math.hypot(dx, dy) < SHOW_PX) return
+        s.shown = true
+      }
+      s.dir = pieDirOf(dx, dy)
+      setPie({ x: s.origin.x, y: s.origin.y, dir: s.dir })
     }
 
     // ── Ctrl を押しながら ──
@@ -106,39 +112,24 @@ export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigg
         if (!e.repeat && !st) begin(null, null)
         return
       }
-      // Ctrl を押したまま別のキー(Ctrl+C など)を押したら、このあと離してもジェスチャーにしない
-      if (st && e.ctrlKey) {
-        st.spoiled = true
-        setLabel(null)
-      }
+      if (st && e.ctrlKey) spoil()
     }
     const onKeyUp = (e: KeyboardEvent) => {
       if (triggerRef.current !== 'ctrl') return
       if (e.key === 'Control') finish()
     }
 
-    /** Ctrl を押したままクリック・ホイール(Ctrl+クリックで開く、Ctrl+ホイールで拡大など)をしたら、ジェスチャーにしない */
-    const spoil = () => {
-      if (triggerRef.current === 'ctrl' && st) {
-        st.spoiled = true
-        setLabel(null)
-      }
-    }
-
     // ── 右ボタンを押しながら ──
     const onMouseDown = (e: MouseEvent) => {
       spoil()
       if (triggerRef.current !== 'right' || e.button !== 2) return
-      // 入力欄の中は、右ボタンで文字を選ぶ・貼り付けるためのもの
       if ((e.target as Element | null)?.closest?.('input, textarea, [contenteditable]')) return
       begin(e.clientX, e.clientY)
     }
     const onMouseUp = (e: MouseEvent) => {
       if (triggerRef.current !== 'right' || e.button !== 2 || !st) return
-      // 動かしていたら(操作の有無によらず)コンテキストメニューは出さない。動かしていなければふつうのメニュー
-      const moved = st.segs.length > 0 && !st.spoiled
-      finish()
-      eatContextMenu = moved
+      // 円盤を出していたら(操作の有無によらず)コンテキストメニューは出さない。出していなければふつうのメニュー
+      eatContextMenu = finish()
     }
     const onContextMenu = (e: MouseEvent) => {
       if (!eatContextMenu) return
@@ -168,5 +159,5 @@ export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigg
     }
   }, [enabled])
 
-  return { label }
+  return { pie }
 }

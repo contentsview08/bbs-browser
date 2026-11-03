@@ -63,7 +63,8 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
-import { useMouseGesture, type MouseGestureMap } from './hooks/useMouseGesture'
+import { useMouseGesture, PIE_DIRS, type MouseGestureMap, type PieDir } from './hooks/useMouseGesture'
+import { MouseGesturePieOverlay } from './components/MouseGesturePie'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName, mouseActionName } from './utils/gestures'
 import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, applyCssVar, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
@@ -1804,6 +1805,12 @@ export default function App() {
     }
     if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
+    // マウスジェスチャー(円盤)だけの操作: 画面を開く
+    if (action === 'settings') return openSettings('display')
+    if (action === 'history') return openHistory()
+    if (action === 'favThreads') return openFavThreads()
+    if (action === 'notifications') return openNotifications()
+    if (action === 'openUrl') return setUrlPrompt('')
     // 設定で確かめることにしていれば、確かめてから消す(Shift+Delete と同じ)
     if (action === 'deleteLog') {
       const targets = targetTabs()
@@ -1843,12 +1850,12 @@ export default function App() {
     ]),
   )
   const swipe = useSwipeGesture(swipeMap, settings.gestureSensitivity)
-  // ── PC: マウスジェスチャー(Ctrl か右ボタンを押しながら動かす)。操作はスワイプと同じく runAction で、キーを受け取っている方に効く ──
+  // ── PC: マウスジェスチャー(Ctrl か右ボタンを押しながら動かすと 8 方向の円盤)。操作はスワイプと同じく runAction で、キーを受け取っている方に効く ──
   const mouseMap: MouseGestureMap = Object.fromEntries(
     Object.entries(settings.mouseGestures)
-      .filter(([, a]) => a)
-      .map(([seq, action]) => [
-        seq,
+      .filter(([dir, a]) => a && (PIE_DIRS as string[]).includes(dir))
+      .map(([dir, action]) => [
+        dir,
         {
           label: mouseActionName(action),
           onCommit: () => {
@@ -1863,6 +1870,7 @@ export default function App() {
       ]),
   )
   const mouse = useMouseGesture(mouseMap, settings.mouseGestureTrigger, !isMobile)
+  const mouseLabels = Object.fromEntries(PIE_DIRS.map((d) => [d, mouseMap[d]?.label])) as Partial<Record<PieDir, string | undefined>>
   // 指の動きは画面全体(document)で受ける。アプリの枠の中だけで受けると、body の直下に出した
   // レスのポップアップ・スレ立てなどの上でなぞったときに届かない。
   // 画像ビューアー(自分で指の操作を受け、外へ伝えない)と引き出しの中は除く
@@ -2368,12 +2376,14 @@ export default function App() {
       {/* スマホ: 横になぞる動きをスクロールにしない(縦のスクロールと、2 本指の拡大だけ任せる)。
           こうしないと、なぞっている途中でスクロールが始まり、→↓ のような折れ曲がるなぞりが取れない */}
       <div className="flex-1 min-h-0 flex" style={isMobile ? { touchAction: 'pan-y pinch-zoom' } : undefined}>
-      {/* スマホ: なぞっている間(PC: マウスを動かしている間)、何の操作になるかを真ん中に出す */}
-      {(swipe.label || mouse.label) && (
+      {/* スマホ: なぞっている間、何の操作になるかを真ん中に出す */}
+      {swipe.label && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none">
-          <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{swipe.label ?? mouse.label}</span>
+          <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{swipe.label}</span>
         </div>
       )}
+      {/* PC: マウスジェスチャーの円盤(動かし始めた所を中心に) */}
+      {mouse.pie && <MouseGesturePieOverlay x={mouse.pie.x} y={mouse.pie.y} dir={mouse.pie.dir} labels={mouseLabels} />}
       {/* スマホでは、サイドバーは画面の上に重ねる引き出しにする(ふだんは出さない)。
           画面の部品の重なりに巻き込まれないよう、body の直下に出す */}
       {(!isMobile || drawerOpen) &&

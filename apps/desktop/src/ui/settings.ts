@@ -315,7 +315,7 @@ export interface AppSettings {
   swipeGestures: { list: Record<string, string>; thread: Record<string, string> }
   /** スマホ: スワイプの感度(1 = 鈍い 〜 5 = 敏感) */
   gestureSensitivity: number
-  /** PC: マウスジェスチャー。動かした向きの並び(「right」「right,up」)→ 操作(キー操作と同じ名前 KeyAction)。空なら何もしない */
+  /** PC: マウスジェスチャー(円盤)。8 方向(n・ne・e・se・s・sw・w・nw)→ 操作(キー操作と同じ名前か、マウスだけの操作 utils/gestures の MOUSE_ONLY_ACTIONS)。空なら何もしない */
   mouseGestures: Record<string, string>
   /** PC: マウスジェスチャーを、何を押しながら動かすか */
   mouseGestureTrigger: MouseGestureTrigger
@@ -477,8 +477,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'deleteLog' },
   },
   gestureSensitivity: 3,
-  // ← 戻る・→ 進む・↑ 先頭・↓ 一番下・↓→ タブを閉じる(ブラウザの慣わし)・↑↓ 更新
-  mouseGestures: { left: 'back', right: 'forward', up: 'top', down: 'bottom', 'down,right': 'closeTab', 'up,down': 'refresh' },
+  // 上 先頭へ・下 一番下へ・左 戻る・右 進む・右上 更新・左上 タブを閉じる・右下 書き込み欄へ・左下 設定を開く
+  mouseGestures: { n: 'top', s: 'bottom', w: 'back', e: 'forward', ne: 'refresh', nw: 'closeTab', se: 'reply', sw: 'settings' },
   mouseGestureTrigger: 'ctrl',
   logRetentionDays: 90,
   lastLogPruneAt: 0,
@@ -679,6 +679,20 @@ function migrateOld(saved: Record<string, unknown>): Partial<AppSettings> {
   return out
 }
 
+/**
+ * マウスジェスチャーは、向きの並び(left・right,up など)から 8 方向の円盤(n・e・…)に変えた(2026-11-05)。
+ * 1 つの向きだけの割り当ては同じ方向に移し、折れ曲がる並びは捨てる。円盤の形の割り当てはそのまま
+ */
+function migrateMouseGestures(g: Record<string, string> | undefined): Record<string, string> {
+  if (!g) return DEFAULT_SETTINGS.mouseGestures
+  const dirs = new Set(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'])
+  if (Object.keys(g).every((k) => dirs.has(k))) return g
+  const old: Record<string, string> = { up: 'n', down: 's', left: 'w', right: 'e' }
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(g)) if (old[k] && v) out[old[k]] = v
+  return Object.keys(out).length > 0 ? out : DEFAULT_SETTINGS.mouseGestures
+}
+
 /** 前の既定だったスレ表示の ←↑「タブを閉じる」(スマホにはタブがない)は、いまの既定の「ログを削除して閉じる」にする */
 function withoutOldGestures(g: AppSettings['swipeGestures']): AppSettings['swipeGestures'] {
   return g.thread?.['left,up'] === 'closeTab' ? { ...g, thread: { ...g.thread, 'left,up': 'deleteLog' } } : g
@@ -807,7 +821,7 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
         const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
         const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle
-        return { ...next, postStyle, uploadHost: migrateUploadHost(next.uploadHost as string), scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
+        return { ...next, postStyle, uploadHost: migrateUploadHost(next.uploadHost as string), scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures), mouseGestures: migrateMouseGestures(next.mouseGestures) }
       })
       setLoaded(true)
     })

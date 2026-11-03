@@ -562,9 +562,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             if (style == "matome") HorizontalDivider(color = Palette.border.copy(alpha = 0.3f))
                             else if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
                         }
-                        // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)
+                        // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)。押すと自分の書き込みをレス抽出のポップアップで出す(本人の要望 2026-11-05)
                         item(key = "end") {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    val mine = index.posts.filter { it.no in own }
+                                    if (mine.isEmpty()) vm.toast = "このスレに自分の書き込みはありません" else openPopup(mine)
+                                }.padding(horizontal = 6.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 val sky = Palette.onSky(style)
                                 Box(Modifier.weight(1f).height(3.dp).background(if (sky) Palette.skyMuted.copy(alpha = 0.5f) else Palette.border))
                                 Text(

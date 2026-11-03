@@ -345,6 +345,12 @@ object HonoBbs {
     /** サイトの入口(https://<web>/boards)から origin */
     fun originOfSite(siteUrl: String): String? = SITE_URL.find(siteUrl.trim())?.groupValues?.get(1)
 
+    /** 板の URL から origin(hono-bbs の板でなければ null) */
+    fun originOfBoard(boardUrl: String): String? = BOARD_URL.find(boardUrl)?.groupValues?.get(1)
+
+    /** この起動で読んだことのある hono-bbs のサイト(origin)。設定のアカウントで「ログインして確かめる」先に使う */
+    fun knownOrigins(): List<String> = synchronized(apiBases) { apiBases.keys.toList() }
+
     // ── 書き込み ──
 
     private fun input(input: PostInput) = JSONObject().apply {

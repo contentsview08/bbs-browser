@@ -697,6 +697,8 @@ private fun AccountsPage(vm: AppViewModel) {
     var busy by remember { mutableStateOf(false) }
     var auth by remember { mutableStateOf<io.github.yumekui8.bbsnative.bbs.PostResult.Auth?>(null) }
     var register by remember { mutableStateOf(false) }
+    // サイトの一覧は開いたときに取り直す(BBS メニューの画面を開いていないと空のことがある)
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.reloadSites() }
     val origins = remember(vm.sites, vm.favorites) { vm.honoOrigins() }
     Group("hono-bbs(red-edge.net など)", note = "ログインすると、hono-bbs の掲示板に書き込むときに自動で使われます(名前にアカウントの表示名が付きます)。パスワードはこの端末にそのまま保存します") {
         TextRow("ユーザー ID", p.honoUser, "まだ登録していません") { vm.setHonoAccount(it, p.honoPassword); status = null }

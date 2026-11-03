@@ -490,9 +490,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         HonoBbs.clearSessions()
     }
 
-    /** 知っている hono-bbs のサイト(web の origin)。サイト(BBS メニュー)に登録したものと、お気に入り板から */
+    /** 知っている hono-bbs のサイト(web の origin)。この起動で読んだもの・開いている板・お気に入り板・サイト(BBS メニュー)に登録したものから */
     fun honoOrigins(): List<String> =
-        (sites.map { it.first }.mapNotNull { HonoBbs.originOfSite(it) } + favorites.mapNotNull { b -> HonoBbs.normalizeBoardUrl(b.url)?.let { Regex("^(https?://[^/]+)").find(it)?.groupValues?.get(1) } }).distinct()
+        (HonoBbs.knownOrigins() + listOfNotNull(prefs.lastBoardUrl?.let { HonoBbs.originOfBoard(it) }) +
+            favorites.mapNotNull { HonoBbs.originOfBoard(it.url) } + sites.map { it.first }.mapNotNull { HonoBbs.originOfSite(it) }).distinct()
 
     fun selectSite(url: String) {
         siteUrl = url

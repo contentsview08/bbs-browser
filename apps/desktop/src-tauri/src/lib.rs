@@ -12,6 +12,77 @@ mod web_upload;
 
 use chosen_paths::ChosenPaths;
 
+// ── データの置き場 ──
+//
+// ふつう(インストーラー版)は OS の決まりの場所(%APPDATA%\<identifier>\)。
+// ZIP 版は「展開したフォルダがインストール先」: exe と同じフォルダに portable.txt か data フォルダがあれば、
+// DB・設定・Cookie・背景画像をそのフォルダの data\ に置く(フォルダごと消せばまっさら、別の場所に展開すれば別のデータ)。
+// 置き場を決めるのはここだけ。ほかの所は app_data_dir()/app_config_dir() を直に呼ばず、data_dir()/db_dir() を使う
+
+/// ZIP 版(ポータブル)のデータフォルダ。exe の隣に portable.txt か data\ があればそこ(なければ None)
+fn portable_dir() -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let data = exe_dir.join("data");
+    if data.is_dir() || exe_dir.join("portable.txt").is_file() {
+        let _ = std::fs::create_dir_all(&data);
+        Some(data)
+    } else {
+        None
+    }
+}
+
+/// DB・バックアップの置き場(tauri-plugin-sql の既定は app_config_dir)
+fn db_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    match portable_dir() {
+        Some(d) => Ok(d),
+        None => app.path().app_config_dir().map_err(|e| e.to_string()),
+    }
+}
+
+/// 背景画像・Cookie の置き場(既定は app_data_dir。Windows では app_config_dir と同じ場所)
+pub(crate) fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    match portable_dir() {
+        Some(d) => Ok(d),
+        None => app.path().app_data_dir().map_err(|e| e.to_string()),
+    }
+}
+
+/// フロントの `Database.load()` に渡す接続文字列。migration の登録の鍵でもあるので、JS は db_url コマンドで同じ文字列を受け取る。
+/// ポータブルなら絶対パス(tauri-plugin-sql は app_config_dir に push するだけなので、絶対パスを渡せばそこになる)
+fn db_url() -> String {
+    match portable_dir() {
+        Some(d) => format!("sqlite:{}", d.join(DB_FILE).display()),
+        None => format!("sqlite:{DB_FILE}"),
+    }
+}
+
+/// JS に渡す、データの置き場(設定 → このアプリについて の「データの保存場所」と、DB を開く URL)
+#[derive(serde::Serialize)]
+struct DataPaths {
+    db_url: String,
+    db: String,
+    backups: String,
+    portable: bool,
+}
+
+#[tauri::command]
+fn data_paths(app: tauri::AppHandle) -> Result<DataPaths, String> {
+    let dir = db_dir(&app)?;
+    Ok(DataPaths {
+        db_url: db_url(),
+        db: dir.join(DB_FILE).to_string_lossy().into_owned(),
+        backups: dir.join("backups").to_string_lossy().into_owned(),
+        portable: portable_dir().is_some(),
+    })
+}
+
+/// 背景画像をアセット(asset:)で読めるようにする。tauri.conf.json の許可は %APPDATA% の中だけなので、ポータブルでは起動時と差し替え時にここで許す
+fn allow_background_asset(app: &tauri::AppHandle, path: &Path) {
+    if portable_dir().is_some() {
+        let _ = app.asset_protocol_scope().allow_file(path);
+    }
+}
+
 /// OS に入っているフォント 1 ファミリーぶん
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,9 +122,6 @@ async fn list_system_fonts() -> Vec<SystemFont> {
     .await
     .unwrap_or_default()
 }
-
-/// フロントの `Database.load()` に渡す接続文字列。DB は %APPDATA%\<identifier>\ に置かれる
-const DB_URL: &str = "sqlite:bbs-browser.db";
 
 fn migrations() -> Vec<Migration> {
     // SQL は packages/logstore にあり、vitest のテストでも同じファイルを使う
@@ -211,7 +279,7 @@ async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<S
 #[tauri::command]
 fn set_background_image(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, source: String) -> Result<String, String> {
     let source = chosen.take(&source)?;
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = data_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
@@ -230,12 +298,13 @@ fn set_background_image(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPa
         .unwrap_or_default();
     let dest = dir.join(format!("background-{stamp}.{ext}"));
     std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+    allow_background_asset(&app, &dest);
     Ok(dest.to_string_lossy().into_owned())
 }
 
 // ── バックアップ ──
 
-/// DB のファイル名(DB_URL の sqlite: の後ろ)。tauri-plugin-sql はアプリの設定フォルダに置く
+/// DB のファイル名(db_url() の sqlite: の後ろ)。置き場は db_dir()
 const DB_FILE: &str = "bbs-browser.db";
 /// 復元を頼まれた DB の置き場。次に起動したとき、DB を開く前に入れ替える
 const RESTORE_FILE: &str = "restore-pending.db";
@@ -308,7 +377,7 @@ fn schedule_db_restore(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPat
     if &head != b"SQLite format 3\0" {
         return Err("SQLite のファイルではありません".into());
     }
-    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let dir = db_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::copy(&source, dir.join(RESTORE_FILE)).map_err(|e| e.to_string())?;
     app.restart();
@@ -317,7 +386,7 @@ fn schedule_db_restore(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPat
 /// 復元を頼まれていたら、DB を開く前に入れ替える。
 /// いまの DB は消さずに「bbs-browser.before-restore-時刻.db」として残す(-wal / -shm も一緒に)
 fn apply_pending_restore(app: &tauri::AppHandle) {
-    let Ok(dir) = app.path().app_config_dir() else { return };
+    let Ok(dir) = db_dir(app) else { return };
     let pending = dir.join(RESTORE_FILE);
     if !pending.exists() {
         return;
@@ -345,7 +414,7 @@ const SCHEMA_BACKUP_PREFIX: &str = "bbs-browser.before-schema-";
 /// 写しは設定フォルダの backups/ に「bbs-browser.before-schema-<新しい形>-<時刻>.db」(と -wal)で置き、新しいものから 3 つ残す。
 /// migration が途中で失敗して DB が壊れても、ここから戻せるようにするため
 fn backup_before_migrations(app: &tauri::AppHandle) {
-    let Ok(dir) = app.path().app_config_dir() else { return };
+    let Ok(dir) = db_dir(app) else { return };
     let current = migrations().len().to_string();
     let mark = dir.join(SCHEMA_MARK);
     if std::fs::read_to_string(&mark).unwrap_or_default().trim() == current {
@@ -420,7 +489,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations(DB_URL, migrations())
+                .add_migrations(&db_url(), migrations())
                 .build(),
         )
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
@@ -429,11 +498,22 @@ pub fn run() {
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
+            // ポータブルでは、前に置いた背景画像もアセットで読めるように許す
+            if let Ok(dir) = data_dir(app.handle()) {
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    for entry in entries.flatten() {
+                        if entry.file_name().to_string_lossy().starts_with("background-") {
+                            allow_background_asset(app.handle(), &entry.path());
+                        }
+                    }
+                }
+            }
             #[cfg(windows)]
             disable_browser_accelerator_keys(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            data_paths,
             list_system_fonts,
             save_image,
             set_background_image,

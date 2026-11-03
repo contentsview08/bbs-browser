@@ -44,6 +44,7 @@ import { canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
+import { getDataPaths, type DataPaths } from '../host/logStore'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
 import BoardIcon from './BoardIcon'
 import type { BoardMeta } from '../ui/settings'
@@ -2343,8 +2344,10 @@ export function BoardsTab(
 export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // 版はインストーラーの版(apps/desktop/package.json。tauri.conf.json がそこを読む)
   const [version, setVersion] = useState<string>()
+  const [paths, setPaths] = useState<DataPaths>()
   useEffect(() => {
     void getVersion().then(setVersion, () => setVersion(undefined))
+    void getDataPaths().then(setPaths, () => setPaths(undefined))
   }, [])
   return (
     <>
@@ -2354,10 +2357,10 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         </p>
       </Section>
       {canCheckUpdate && <UpdateSection version={version} token={s.githubToken} onToken={(v) => update('githubToken', v)} />}
-      <Section desktopOnly title="データの保存場所">
-        <p className="text-sm font-mono text-c-text-body break-all">%APPDATA%\io.github.yumekui8.bbs-browser\bbs-browser.db</p>
+      <Section desktopOnly title="データの保存場所" note={paths?.portable ? 'ZIP 版: 展開したフォルダの data に置きます。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります' : undefined}>
+        <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.yumekui8.bbs-browser\\bbs-browser.db'}</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>
-        <p className="text-sm font-mono text-c-text-body break-all mt-3">%APPDATA%\io.github.yumekui8.bbs-browser\backups\</p>
+        <p className="text-sm font-mono text-c-text-body break-all mt-3">{paths?.backups ?? '%APPDATA%\\io.github.yumekui8.bbs-browser\\backups\\'}</p>
         <p className="text-xs text-c-text-muted mt-1">
           DB の形が変わる版に上げたとき、上げる前の DB の写しを自動で置きます(新しいものから 3 つ)。困ったときは、設定 → バックアップ の「バックアップから戻す」で、ここのファイルを選んで戻せます
         </p>

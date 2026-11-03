@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use cookie_store::CookieStore;
-use tauri::{Manager, Url};
+use tauri::Url;
 use tauri_plugin_http::reqwest;
 
 const COOKIE_FILE: &str = "post-cookies.json";
@@ -26,7 +26,7 @@ pub struct PostCookies {
 impl PostCookies {
     /// 保存してある Cookie を読む(なければ空)
     pub fn load(app: &tauri::AppHandle) -> Self {
-        let dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let dir = crate::data_dir(app).map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(COOKIE_FILE);
         let store = std::fs::File::open(&path)

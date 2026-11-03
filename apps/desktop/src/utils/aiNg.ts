@@ -46,6 +46,22 @@ export interface AiNgRule {
   /** この板だけ(なければすべての板) */
   boardUrl?: string
   boardName?: string
+  /** スレの話題(スレタイと 1 レス目の頭)を添えて判定する(「スレの話題と関係ない」のような、文脈で決まる条件に) */
+  withContext?: boolean
+  /** 同じ ID がこのスレで 2 回以上当たったら、その ID の書き込みをすべて当てる(煽りを続けている人) */
+  sameId?: boolean
+}
+
+/** スレの話題として判定に添える文(スレタイと 1 レス目の頭)。長すぎるとモデルが本文を読めなくなるので短く */
+export function threadContextOf(title: string, firstBody: string | undefined): string {
+  const head = firstBody ? aiTextOf(firstBody).slice(0, 120) : ''
+  return `スレ「${title.slice(0, 60)}」${head ? `(${head})` : ''}`
+}
+
+/** モデルに渡す文: 文脈つきの条件なら、スレの話題を頭に添える */
+export function aiInputOf(body: string, context: string | undefined): string {
+  const text = aiTextOf(body)
+  return context ? `${context}への書き込み: ${text}` : text
 }
 
 /** 手で付けた「当たる(hit)・当たらない(miss)」。本文の鍵(bodyKey)で持つ。examples は学ぶための本文(頭だけ) */
@@ -65,9 +81,11 @@ export const OVERRIDE_MAX = 2000
 
 /** はじめに入れておく条件の見本(どれも切ってある) */
 export const AI_NG_SAMPLES: Omit<AiNgRule, 'id'>[] = [
-  { name: '煽り', prompt: '他人を煽ったり、見下したりしている', threshold: DEFAULT_THRESHOLD, show: 'mark', enabled: false },
+  // スレの話題を添えて判定する(話題そのもの(政治の板で政治の話 など)は当てない。話題から外れた書き込みだけ)
+  { name: 'スレ違い', prompt: 'スレの話題と関係のない話をしている', threshold: DEFAULT_THRESHOLD, show: 'mark', enabled: false, withContext: true },
+  // 同じ ID が続けて煽っていたら、その ID の書き込みをまとめて当てる
+  { name: '煽り', prompt: '特定の相手を繰り返し煽ったり、見下したりしている', threshold: DEFAULT_THRESHOLD, show: 'mark', enabled: false, withContext: true, sameId: true },
   { name: '宣伝', prompt: '商品やサイトの宣伝・勧誘をしている', threshold: DEFAULT_THRESHOLD, show: 'mark', enabled: false },
-  { name: '政治', prompt: '政治や政党の話をしている', threshold: DEFAULT_THRESHOLD, show: 'mark', enabled: false },
 ]
 
 /** 仮説の形: 条件の文をそのまま(「この書き込みは〜」を付けると、日本語の見本では外れが増えた) */
@@ -87,14 +105,18 @@ export function aiTextOf(body: string): string {
     .slice(0, 300)
 }
 
-/** 当たり具合を覚えておく鍵(本文と条件の文の組) */
-export function scoreKey(body: string, prompt: string): string {
-  return `${bodyKey(body)}|${bodyKey(hypothesisOf(prompt))}`
+/** 当たり具合を覚えておく鍵(本文と条件の文の組。文脈を添えた判定は、文脈ごとに別) */
+export function scoreKey(body: string, prompt: string, context = ''): string {
+  return `${bodyKey(body)}|${bodyKey(hypothesisOf(prompt))}${context ? `|${bodyKey(context)}` : ''}`
 }
 
-/** 1 レスの判定の結果。p は当たり具合(手で付けたときはない) */
+/** 1 レスの判定の結果。p は当たり具合(手で付けたときはない)。sameId は同じ ID の続きとして当てたもの */
 export interface AiNgHit {
   rule: AiNgRule
+  sameId?: boolean
+  /** 数えるときに使う(判定の中だけ) */
+  no?: number
+  id?: string
   p?: number
   manual: boolean
 }
@@ -114,32 +136,53 @@ export function activeRules(rules: AiNgRule[], boardUrl: string | undefined): Ai
 export function judgeAiNg(
   posts: Post[],
   rules: AiNgRule[],
-  scoreOf: (body: string, prompt: string) => number | undefined,
+  scoreOf: (body: string, prompt: string, context?: string) => number | undefined,
   overrides: Record<string, AiNgOverride>,
   learned: Map<string, RuleModel> = new Map(),
+  /** スレの話題(withContext の条件に添える) */
+  context = '',
 ): Map<number, AiNgHit> {
   const out = new Map<number, AiNgHit>()
   if (rules.length === 0) return out
   const sets = new Map(rules.map((r) => [r.id, { hit: new Set(overrides[r.id]?.hit ?? []), miss: new Set(overrides[r.id]?.miss ?? []) }]))
+  /** 条件ごとの、当たったレス(sameId のために数える) */
+  const hitsByRule = new Map<string, AiNgHit[]>()
+  const hitOf = new Map<number, AiNgHit[]>()
   for (const p of posts) {
     if (aiTextOf(p.body) === '') continue
     const key = bodyKey(p.body)
-    let best: AiNgHit | undefined
     for (const r of rules) {
       const o = sets.get(r.id)!
       if (o.miss.has(key)) continue
       let hit: AiNgHit | undefined
       if (o.hit.has(key)) hit = { rule: r, manual: true }
       else {
-        const m = scoreOf(p.body, r.prompt)
+        const m = scoreOf(p.body, r.prompt, r.withContext ? context : undefined)
         // 印から学んでいれば、モデルの当たり具合と半々に混ぜる
         const lm = learned.get(r.id)
         const s = m === undefined ? undefined : lm ? (m + predictRule(lm, p.body)) / 2 : m
         if (s !== undefined && s >= r.threshold) hit = { rule: r, p: s, manual: false }
       }
-      if (hit && (!best || STRENGTH[hit.rule.show] > STRENGTH[best.rule.show])) best = hit
+      if (!hit) continue
+      hitOf.set(p.no, [...(hitOf.get(p.no) ?? []), hit])
+      hitsByRule.set(r.id, [...(hitsByRule.get(r.id) ?? []), { ...hit, no: p.no, id: p.id }])
     }
-    if (best) out.set(p.no, best)
+  }
+  // 同じ ID が 2 回以上当たった条件は、その ID の書き込みをすべて当てる(手で「当たらない」を付けたものは除く)
+  for (const r of rules) {
+    if (!r.sameId) continue
+    const ids = new Map<string, number>()
+    for (const h of hitsByRule.get(r.id) ?? []) if (h.id) ids.set(h.id, (ids.get(h.id) ?? 0) + 1)
+    for (const p of posts) {
+      if (!p.id || (ids.get(p.id) ?? 0) < 2 || hitOf.get(p.no)?.some((h) => h.rule.id === r.id)) continue
+      if (sets.get(r.id)!.miss.has(bodyKey(p.body))) continue
+      hitOf.set(p.no, [...(hitOf.get(p.no) ?? []), { rule: r, manual: false, sameId: true }])
+    }
+  }
+  for (const [no, hits] of hitOf) {
+    let best = hits[0]
+    for (const h of hits) if (STRENGTH[h.rule.show] > STRENGTH[best.rule.show]) best = h
+    out.set(no, best)
   }
   return out
 }
@@ -165,7 +208,7 @@ export function setOverride(
 
 /** 画面に出す理由(「AI NG・煽り 87%」) */
 export function aiHitLabel(h: AiNgHit): string {
-  return `AI NG・${h.rule.name || h.rule.prompt}${h.manual ? '(手で)' : h.p !== undefined ? ` ${Math.round(h.p * 100)}%` : ''}`
+  return `AI NG・${h.rule.name || h.rule.prompt}${h.manual ? '(手で)' : h.sameId ? '(同じ ID の続き)' : h.p !== undefined ? ` ${Math.round(h.p * 100)}%` : ''}`
 }
 
 // ── 印から学ぶ判定(条件ごと)。文字の 1〜3 文字の並びを数え、ロジスティック回帰で学ぶ(utils/trollModel.ts と同じ作り) ──

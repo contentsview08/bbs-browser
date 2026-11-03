@@ -454,17 +454,20 @@ export function useThreadScroll(o: Options) {
       unreadFrom,
       hasUnreadPost: byNo.has(unreadFrom),
     })
+    // 開いたあとも、上のレスの画像・リンクのカードが読み込まれて高さが変わるので、見ていたレスをしばらく同じ位置に留める(pinScroll)。
+    // 本人がスクロールしたらやめる
     if (t.kind === 'bottom') {
       animateScroll(root, () => root.scrollHeight, 0)
       pendingUnread.current = t.pendingUnread
-    } else if (t.kind === 'unread') scrollToUnread(t.no)
-    else if (t.kind === 'saved' && savedEl) {
+    } else if (t.kind === 'unread') {
+      const target = [...postFrames(root)].find((w) => !w.hidden && Number(w.dataset.post) >= t.no)
+      if (target) {
+        const headerH = headerOffset()
+        pinScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - (root.clientHeight - headerH) * UNREAD_AT)
+      } else scrollToUnread(t.no)
+    } else if (t.kind === 'saved' && savedEl) {
       // 行き先は毎回測り直す(大きさが決まる前や、上のレスが描かれて高さが変わっても合うように)
-      animateScroll(
-        root,
-        () => root.scrollTop + savedEl.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - t.position.offset,
-        0,
-      )
+      pinScroll(root, () => root.scrollTop + savedEl.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - t.position.offset)
     }
     // この描画で届いたレスは「新着」として扱わない(下の effect が追いかけないように)
     prevCount.current = log.posts.length

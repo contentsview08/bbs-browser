@@ -195,6 +195,18 @@ function RuleEditor(props: {
             ))}
           </div>
         </div>
+        <Toggle
+          checked={!!r.withContext}
+          onChange={(v) => setR({ ...r, withContext: v })}
+          label="スレの話題を踏まえて判定する"
+          note="スレタイと 1 レス目の頭を添えて判定します。「スレの話題と関係ない」のように、文脈で決まる条件に"
+        />
+        <Toggle
+          checked={!!r.sameId}
+          onChange={(v) => setR({ ...r, sameId: v })}
+          label="同じ ID が 2 回以上当たったら、その ID の書き込みをすべて当てる"
+          note="煽りを続けている人をまとめて畳むとき。手で「当たらない」を付けた書き込みは除きます"
+        />
         <label className="block">
           <span className="block text-xs text-c-text-muted mb-1">効く板(空ならすべての板)</span>
           <input

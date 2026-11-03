@@ -73,7 +73,7 @@ export function distinctRatio(text: string): number {
 }
 
 /** スレのレスを判定する。荒らしとみなしたレスの番号と理由 */
-export function judgeAutoNg(posts: Post[], marks: TrollMarks, learned?: (body: string) => Judgement): Map<number, AutoNgReason> {
+export function judgeAutoNg(posts: Post[], marks: TrollMarks, learned?: (body: string) => Judgement | undefined): Map<number, AutoNgReason> {
   const norms = posts.map((p) => normalizeBody(p.body))
   const counts = new Map<string, number>()
   for (const t of norms) if (Array.from(t).length >= DUP_MIN_LENGTH) counts.set(t, (counts.get(t) ?? 0) + 1)

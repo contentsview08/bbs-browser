@@ -8,7 +8,7 @@ import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
 import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg'
-import { activeRules, judgeAiNg, setOverride, trainRules } from '../utils/aiNg'
+import { activeRules, judgeAiNg, setOverride, trainRules, threadContextOf } from '../utils/aiNg'
 import { scoreOf as aiScoreOf, useAiNgScores } from '../hooks/useAiNg'
 import type { Judgement } from '../utils/trollModel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -90,7 +90,7 @@ interface Props {
   /** 自動 NG にユーザーが付けた印 */
   trollMarks: TrollMarks
   /** 印から学んだ判定(印が少ないうちは undefined) */
-  trollJudge?: (body: string) => Judgement
+  trollJudge?: (body: string) => Judgement | undefined
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
   onMarkTroll: (p: Post, troll: boolean | null, reason?: string) => void
   onRead: (no: number) => void
@@ -361,13 +361,21 @@ export default function ThreadView(props: Props) {
   )
   // AI NG: 本人の条件に当たったレス。畳む・隠すものは自動 NG と同じ並びに入れ、印だけのものは別に持つ
   const aiRules = useMemo(() => (settings.aiNgEnabled ? activeRules(settings.aiNgRules, props.boardUrl) : []), [settings.aiNgEnabled, settings.aiNgRules, props.boardUrl])
-  const aiVersion = useAiNgScores(log.posts, aiRules.map((r) => r.prompt), aiRules.length > 0, props.active)
+  // スレの話題(スレタイと 1 レス目の頭)。文脈つきの条件に添える
+  const aiContext = useMemo(() => threadContextOf(log.title, log.posts[0]?.body), [log.title, log.posts[0]?.body])
+  const aiVersion = useAiNgScores(
+    log.posts,
+    aiRules.map((r) => r.prompt),
+    aiRules.length > 0,
+    props.active,
+    aiRules.map((r) => (r.withContext ? aiContext : undefined)),
+  )
   // 手の印から学んだ判定(印が変わったときだけ学び直す)
   const aiLearned = useMemo(() => trainRules(aiRules, settings.aiNgOverrides), [aiRules, settings.aiNgOverrides])
   const aiNg = useMemo(
-    () => judgeAiNg(log.posts, aiRules, aiScoreOf, settings.aiNgOverrides, aiLearned),
+    () => judgeAiNg(log.posts, aiRules, aiScoreOf, settings.aiNgOverrides, aiLearned, aiContext),
     // aiVersion: 当たり具合が届いたら判定し直す
-    [log.posts, aiRules, settings.aiNgOverrides, aiLearned, aiVersion],
+    [log.posts, aiRules, settings.aiNgOverrides, aiLearned, aiVersion, aiContext],
   )
   const autoNg = useMemo(() => {
     if (aiNg.size === 0) return autoNgBase

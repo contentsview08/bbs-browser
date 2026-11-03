@@ -4,7 +4,7 @@
 // - モデルは本人が「使う」にしたときだけ取る(約 125MB)。取ったものは Cache Storage に残る
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { Post } from '@bbs-browser/connectors'
-import { aiTextOf, hypothesisOf, scoreKey } from '../utils/aiNg'
+import { aiInputOf, aiTextOf, hypothesisOf, scoreKey } from '../utils/aiNg'
 import { bodyKey } from '../utils/autoNg'
 import { fetchModelFile } from '../host/modelFetch'
 import type { AiWorkerRequest, AiWorkerResponse } from '../workers/aiNgWorker'
@@ -26,7 +26,7 @@ const scores = new Map<string, number>()
 /** 頼んであって、まだ返っていない組 */
 const pending = new Set<string>()
 /** 頼む順に並べた本文(鍵 → 本文と、まだ当たり具合のない仮説) */
-const queue = new Map<string, { text: string; body: string; prompts: Set<string> }>()
+const queue = new Map<string, { text: string; body: string; prompts: Set<string>; ctx: string }>()
 let busy = false
 let reqSeq = 0
 let version = 0
@@ -101,7 +101,7 @@ function ensureWorker(): Worker {
         const item = inFlight.get(m.keys[i])
         if (!item) continue
         item.prompts.forEach((prompt, j) => {
-          const k = scoreKey(item.body, prompt)
+          const k = scoreKey(item.body, prompt, item.ctx)
           scores.set(k, m.scores[i][j])
           pending.delete(k)
         })
@@ -112,7 +112,7 @@ function ensureWorker(): Worker {
       pump()
     } else if (m.type === 'error') {
       busy = false
-      for (const it of inFlight.values()) for (const p of it.prompts) pending.delete(scoreKey(it.body, p))
+      for (const it of inFlight.values()) for (const p of it.prompts) pending.delete(scoreKey(it.body, p, it.ctx))
       inFlight.clear()
       setStatus({ kind: 'error', message: m.message })
     }
@@ -122,7 +122,7 @@ function ensureWorker(): Worker {
 }
 
 /** いまモデルに頼んでいる本文(鍵 → 本文と仮説の並び) */
-const inFlight = new Map<string, { body: string; prompts: string[] }>()
+const inFlight = new Map<string, { body: string; prompts: string[]; ctx: string }>()
 
 /** 待っている本文を、まとめてモデルに頼む */
 function pump() {
@@ -134,7 +134,7 @@ function pump() {
   const batch = [...queue.entries()].filter(([, v]) => [...v.prompts].join('\n') === sig).slice(0, BATCH)
   for (const [k, v] of batch) {
     queue.delete(k)
-    inFlight.set(k, { body: v.body, prompts })
+    inFlight.set(k, { body: v.body, prompts, ctx: v.ctx })
   }
   busy = true
   ensureWorker().postMessage({
@@ -171,25 +171,29 @@ export async function deleteAiModelFiles(): Promise<void> {
 }
 
 /** レスの当たり具合を頼む(まだのものだけ。前に頼んだものより先に回す) */
-export function requestScores(posts: Post[], prompts: string[]) {
+export function requestScores(posts: Post[], prompts: string[], contexts: (string | undefined)[] = []) {
   if (prompts.length === 0) return
-  const fresh = new Map<string, { text: string; body: string; prompts: Set<string> }>()
+  const fresh = new Map<string, { text: string; body: string; prompts: Set<string>; ctx: string }>()
   for (const p of posts) {
-    const text = aiTextOf(p.body)
-    if (!text) continue
-    const need = prompts.filter((pr) => {
-      const k = scoreKey(p.body, pr)
-      return !scores.has(k) && !pending.has(k)
-    })
-    if (need.length === 0) continue
-    const key = bodyKey(p.body)
-    const cur = fresh.get(key) ?? queue.get(key) ?? { text, body: p.body, prompts: new Set<string>() }
-    for (const pr of need) {
-      cur.prompts.add(pr)
-      pending.add(scoreKey(p.body, pr))
+    if (!aiTextOf(p.body)) continue
+    // 文脈つきの条件は、文脈を添えた文で別に頼む(鍵も別)
+    for (const ctx of [...new Set(contexts.map((c) => c ?? ''))]) {
+      const text = aiInputOf(p.body, ctx || undefined)
+      const need = prompts.filter((pr, i) => {
+        if ((contexts[i] ?? '') !== ctx) return false
+        const k = scoreKey(p.body, pr, ctx)
+        return !scores.has(k) && !pending.has(k)
+      })
+      if (need.length === 0) continue
+      const key = `${bodyKey(p.body)}|${ctx ? bodyKey(ctx) : ''}`
+      const cur = fresh.get(key) ?? queue.get(key) ?? { text, body: p.body, prompts: new Set<string>(), ctx }
+      for (const pr of need) {
+        cur.prompts.add(pr)
+        pending.add(scoreKey(p.body, pr, ctx))
+      }
+      fresh.set(key, cur)
+      queue.delete(key)
     }
-    fresh.set(key, cur)
-    queue.delete(key)
   }
   if (fresh.size === 0) return
   // 新しく頼んだもの(いま開いているスレ)を前に
@@ -221,8 +225,8 @@ export function testScore(text: string, prompt: string): Promise<number> {
   })
 }
 
-export function scoreOf(body: string, prompt: string): number | undefined {
-  return scores.get(scoreKey(body, prompt))
+export function scoreOf(body: string, prompt: string, context?: string): number | undefined {
+  return scores.get(scoreKey(body, prompt, context ?? ''))
 }
 
 function subscribe(l: () => void) {
@@ -248,16 +252,16 @@ const zero = () => 0
  * スレのレスの当たり具合を頼み、当たり具合が届いたら描き直す。enabled でなければ何もしない(購読もしない)。
  * 頼むのは見えているタブ(active)だけ。残してある隠れたタブのぶんまで頼むと、モデルがずっと動き続ける
  */
-export function useAiNgScores(posts: Post[], prompts: string[], enabled: boolean, active = true): number {
+export function useAiNgScores(posts: Post[], prompts: string[], enabled: boolean, active = true, contexts: (string | undefined)[] = []): number {
   const v = useSyncExternalStore(enabled ? subscribe : noSubscribe, enabled ? () => version : zero)
   const st = useSyncExternalStore(enabled ? subscribe : noSubscribe, () => status)
-  const sig = prompts.join('\n')
+  const sig = prompts.map((p, i) => `${p}|${contexts[i] ?? ''}`).join('\n')
   // 新しいレスから(下にあるほど新しく、いま読んでいる所に近い)
   const ordered = useMemo(() => [...posts].reverse(), [posts])
   useEffect(() => {
     if (!enabled || !active || st.kind !== 'ready') return
-    requestScores(ordered, prompts)
-    // prompts は sig で見る
+    requestScores(ordered, prompts, contexts)
+    // prompts・contexts は sig で見る
   }, [enabled, active, st.kind, ordered, sig])
   return v
 }

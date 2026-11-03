@@ -100,7 +100,7 @@ interface Props {
   /** 自動 NG にユーザーが付けた印 */
   trollMarks: TrollMarks
   /** 印から学んだ判定(印が少ないうちは undefined) */
-  trollJudge?: (body: string) => Judgement
+  trollJudge?: (body: string) => Judgement | undefined
   nonameName?: string
   jumpTo?: { no: number; seq: number }
   /** お気に入りのスレか */

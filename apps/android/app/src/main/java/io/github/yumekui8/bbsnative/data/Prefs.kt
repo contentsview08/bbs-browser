@@ -143,18 +143,28 @@ class Prefs(context: Context) {
 
     /** 上げた画像(新しい順、100 まで)。クイックアクセスから URL をもう一度使えるように */
     private var uploadsJson by pref("uploads", "[]")
-    fun uploads(): List<Pair<String, Long>> = runCatching {
+    /** 上げた画像 1 件(url・時刻・中身のハッシュ。ハッシュは昔の履歴にはない) */
+    data class Upload(val url: String, val t: Long, val hash: String?)
+    private fun readUploads(): List<Upload> = runCatching {
         val a = org.json.JSONArray(uploadsJson)
-        (0 until a.length()).map { a.getJSONObject(it).let { o -> o.getString("url") to o.getLong("t") } }
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> Upload(o.getString("url"), o.getLong("t"), o.optString("h").ifEmpty { null }) } }
     }.getOrDefault(emptyList())
-    fun addUpload(url: String) {
-        val list = listOf(url to System.currentTimeMillis()) + uploads().filter { it.first != url }
-        uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.first).put("t", it.second) }).toString()
+    private fun writeUploads(list: List<Upload>) {
+        uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.url).put("t", it.t).put("h", it.hash ?: "") }).toString()
     }
+    fun uploads(): List<Pair<String, Long>> = readUploads().map { it.url to it.t }
+    /** 履歴に残す。hash は中身の SHA-256(同じ画像をもう一度選んだら、上げずにこの URL を使う) */
+    fun addUpload(url: String, hash: String? = null) {
+        writeUploads(listOf(Upload(url, System.currentTimeMillis(), hash)) + readUploads().filter { it.url != url })
+    }
+    /** 同じ中身(hash)の画像を前に上げていれば、その URL */
+    fun findUploadByHash(hash: String): String? = readUploads().firstOrNull { it.hash == hash }?.url
     /** 履歴からだけ外す(置き場のファイルは残る) */
     fun removeUpload(url: String) {
-        uploadsJson = org.json.JSONArray(uploads().filter { it.first != url }.map { org.json.JSONObject().put("url", it.first).put("t", it.second) }).toString()
+        writeUploads(readUploads().filter { it.url != url })
     }
+    /** 上げる前の確かめの「画像にスレタイと URL を入れる」(left / right。入れないなら空。最後に選んだものを覚える) */
+    var uploadStamp by pref("uploadStamp", "")
 
     // スレ立ての書きかけ(板ごと)。閉じても・板を開き直しても・認証の間にアプリが閉じられても消えないように
     private var newThreadDraftsJson by pref("newThreadDrafts", "{}")

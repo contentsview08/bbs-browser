@@ -77,6 +77,8 @@ class ReplyState(val boardUrl: String = "") {
     var sending by mutableStateOf(false)
     /** 選んだ画像の上げ具合(選んだ順。上げ終わったものも、本文のサムネイルを端末の画像で出すために残す) */
     val uploads = androidx.compose.runtime.mutableStateListOf<UploadItem>()
+    /** 選んだばかりで、上げる前の確かめ(どれを上げるか・スレタイと URL を描き込むか)を待っている画像 */
+    var pendingPick by mutableStateOf<List<android.net.Uri>?>(null)
     /** 画像を上げているところ(待っている画像も含む) */
     val uploading: Boolean get() = uploads.any { it.state is UploadItem.State.Waiting || it.state is UploadItem.State.Uploading }
     /** 上げ終わった URL → 端末の画像(サムネイルをすぐ出すため) */
@@ -90,8 +92,8 @@ class ReplyState(val boardUrl: String = "") {
     var draftLoaded = false
 }
 
-/** 書き込み欄で選んだ画像 1 枚 */
-class UploadItem(val uri: android.net.Uri) {
+/** 書き込み欄で選んだ画像 1 枚(stamp は上げる前の確かめで選んだ描き込み) */
+class UploadItem(val uri: android.net.Uri, val stamp: io.github.yumekui8.bbsnative.data.Uploader.Stamp? = null) {
     sealed interface State {
         data object Waiting : State
         data object Uploading : State
@@ -1050,12 +1052,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast = "リンクを本文に入れました"
     }
 
-    fun attach(r: ReplyState, uris: List<android.net.Uri>) {
+    fun attach(r: ReplyState, uris: List<android.net.Uri>, stamp: io.github.yumekui8.bbsnative.data.Uploader.Stamp? = null) {
         if (uris.isEmpty()) return
         r.notice = null
         val running = r.uploading
         r.uploads.removeAll { it.state is UploadItem.State.Failed }
-        r.uploads += uris.take(10).map { UploadItem(it) }
+        r.uploads += uris.take(10).map { UploadItem(it, stamp) }
         if (uris.size > 10) r.notice = "一度に上げられるのは 10 枚までです(先頭の 10 枚だけ上げます)"
         if (running) return
         viewModelScope.launch {
@@ -1064,11 +1066,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 item.state = UploadItem.State.Uploading
                 try {
                     val api = HonoBbs.apiFor(r.boardUrl)
-                    val res = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), item.uri, prefs.uploadMaxDimension, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey)
-                    val url = res.url
+                    val up = io.github.yumekui8.bbsnative.data.Uploader
+                    val (name, type, bytes) = up.prepareFor(getApplication(), item.uri, prefs.uploadMaxDimension, item.stamp)
+                    // 同じ中身の画像を前に上げていれば、上げずにその URL を使う(履歴のハッシュで引く)
+                    val hash = up.sha256(bytes)
+                    val url = prefs.findUploadByHash(hash) ?: up.send(name, type, bytes, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey).url
                     // いつも最新の本文に足す(前の画像の URL を消さない)
                     r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
-                    prefs.addUpload(url)
+                    prefs.addUpload(url, hash)
                     item.state = UploadItem.State.Done(url)
                 } catch (e: Exception) {
                     // 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む
@@ -1087,7 +1092,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 上げられなかった画像を、もう一度上げる */
     fun retryUpload(r: ReplyState, item: UploadItem) {
         r.uploads.remove(item)
-        attach(r, listOf(item.uri))
+        attach(r, listOf(item.uri), item.stamp)
     }
 
     /** 本文から画像の URL を外す(サムネイルの ×) */

@@ -46,8 +46,24 @@ object Uploader {
         context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, honoApi: String? = null,
         /** 上げ先(設定の uploadHost)。API のもの: catbox / imgur / imgbb */
         host: String = DEFAULT_HOST, imgurClientId: String = "", imgbbApiKey: String = "",
+        stamp: Stamp? = null,
     ): Result {
-        val (name, type, bytes) = withContext(Dispatchers.IO) { prepare(context, uri, maxDimension) }
+        val (name, type, bytes) = prepareFor(context, uri, maxDimension, stamp)
+        return send(name, type, bytes, honoApi, host, imgurClientId, imgbbApiKey)
+    }
+
+    /** 画像の隅に描き込む文字(スレタイと URL)。corner は left(左下)か right(右下) */
+    class Stamp(val lines: List<String>, val corner: String)
+
+    /** 上げる前に画像を整える(縮める・向きを直す・描き込む)。name・type・中身 */
+    suspend fun prepareFor(context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, stamp: Stamp? = null): Triple<String, String, ByteArray> =
+        withContext(Dispatchers.IO) { prepare(context, uri, maxDimension, stamp) }
+
+    /** 中身の SHA-256(16 進)。同じ画像の判定に使う */
+    fun sha256(bytes: ByteArray): String = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    /** 整えた画像を上げて URL を返す */
+    suspend fun send(name: String, type: String, bytes: ByteArray, honoApi: String?, host: String, imgurClientId: String, imgbbApiKey: String): Result {
         if (honoApi != null) return toHono(honoApi, name, type, bytes)
         val up: suspend () -> String = when (host) {
             "catbox" -> { { toCatbox(name, type, bytes) } }
@@ -62,6 +78,35 @@ object Uploader {
         } catch (e: java.io.IOException) {
             throw UploadException("$host: つながりませんでした(${e.message ?: e.javaClass.simpleName})")
         }
+    }
+
+    /**
+     * 画像の隅(左下か右下)に文字を描き込む(PC 版の utils/stampImage.ts と同じ見た目)。
+     * 文字の大きさは幅の 2.2%(12px から)。半透明の黒い帯の上に白い字。長い行は後ろを「…」で省く
+     */
+    private fun stampOn(src: Bitmap, stamp: Stamp): Bitmap {
+        val bmp = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true).also { src.recycle() }
+        val canvas = android.graphics.Canvas(bmp)
+        val size = maxOf(12f, bmp.width * 0.022f)
+        val pad = size * 0.6f
+        val lineH = size * 1.35f
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = size; color = android.graphics.Color.WHITE }
+        val maxW = bmp.width - pad * 4
+        val fit = { t: String ->
+            var s = t.trim()
+            if (paint.measureText(s) <= maxW) s
+            else { while (s.length > 1 && paint.measureText("$s…") > maxW) s = s.dropLast(1); "$s…" }
+        }
+        val lines = stamp.lines.map { it.trim() }.filter { it.isNotEmpty() }.map(fit)
+        val boxW = lines.maxOf { paint.measureText(it) } + pad * 2
+        val boxH = lineH * lines.size + pad * 2 - (lineH - size)
+        val x = if (stamp.corner == "left") pad else bmp.width - pad - boxW
+        val y = bmp.height - pad - boxH
+        canvas.drawRect(x, y, x + boxW, y + boxH, android.graphics.Paint().apply { color = android.graphics.Color.argb(140, 0, 0, 0) })
+        paint.textAlign = if (stamp.corner == "left") android.graphics.Paint.Align.LEFT else android.graphics.Paint.Align.RIGHT
+        val tx = if (stamp.corner == "left") x + pad else x + boxW - pad
+        lines.forEachIndexed { i, t -> canvas.drawText(t, tx, y + pad + size + lineH * i, paint) }
+        return bmp
     }
 
     const val DEFAULT_HOST = "imgur-web"
@@ -183,7 +228,7 @@ object Uploader {
         }
     }
 
-    private fun prepare(context: Context, uri: Uri, maxDimension: Int): Triple<String, String, ByteArray> {
+    private fun prepare(context: Context, uri: Uri, maxDimension: Int, stamp: Stamp?): Triple<String, String, ByteArray> {
         val cr = context.contentResolver
         val type = cr.getType(uri) ?: "application/octet-stream"
         if (!type.startsWith("image/") && !type.startsWith("video/")) throw UploadException("画像か動画だけを上げられます")
@@ -223,6 +268,7 @@ object Uploader {
             val s = maxDimension.toFloat() / long
             bmp = Bitmap.createScaledBitmap(bmp, (bmp.width * s).toInt(), (bmp.height * s).toInt(), true).also { if (it !== bmp) bmp.recycle() }
         }
+        if (stamp != null && stamp.lines.any { it.isNotBlank() }) bmp = stampOn(bmp, stamp)
         val out = ByteArrayOutputStream()
         bmp.compress(format, 90, out)
         bmp.recycle()

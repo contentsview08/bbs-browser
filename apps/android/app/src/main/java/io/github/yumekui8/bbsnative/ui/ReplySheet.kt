@@ -126,6 +126,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     // 「書き込みました」は少しで消す(出ている間はフッターを隠さないので、出しっぱなしにしない)
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
     val picker = rememberImagePicker(vm, r)
+    PickConfirm(vm, r, page.title, io.github.yumekui8.bbsnative.bbs.TwoCh.webUrl(page.summary))
     val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
     var preview by remember { mutableStateOf(false) }
     val canSend = !r.sending && r.body.isNotBlank() && disabled == null
@@ -490,6 +491,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
             val rise = remember { androidx.compose.animation.core.Animatable(1f) }
             LaunchedEffect(Unit) { rise.animateTo(0f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))) }
             val picker = rememberImagePicker(vm, r)
+            PickConfirm(vm, r, r.title, page.board.url)
             var options by remember { mutableStateOf(false) }
             val titleFocus = remember { FocusRequester() }
             LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
@@ -575,8 +577,56 @@ fun copyText(context: Context, text: String) {
 /** 写真の選択画面(何枚でも選べる。一度に 10 枚まで)を開く関数。選んだ画像は順番に上げる */
 @Composable
 fun rememberImagePicker(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyState): () -> Unit {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> vm.attach(r, uris) }
+    // 選んだら、すぐ上げずに確かめの窓(PickConfirm)へ。どれを上げるか・スレタイと URL を描き込むかを決めてから上げる
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> if (uris.isNotEmpty()) r.pendingPick = uris }
     return { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
+}
+
+/**
+ * 上げる前の確かめ(PC 版の useMediaInput の confirmView と同じ): 選んだ画像をサムネイルで並べ、上げないものはチェックを外す。
+ * 「画像にスレタイと URL を入れる」(左下 / 右下。最後の選びを覚える)。title・url はこのスレ(スレ立てはスレタイの欄と板)
+ */
+@Composable
+fun PickConfirm(vm: AppViewModel, r: io.github.yumekui8.bbsnative.ReplyState, title: String, url: String) {
+    val uris = r.pendingPick ?: return
+    val p = vm.prefs
+    val on = remember(uris) { androidx.compose.runtime.mutableStateListOf(*Array(uris.size) { true }) }
+    var stampOn by remember { mutableStateOf(p.uploadStamp.isNotEmpty()) }
+    var corner by remember { mutableStateOf(p.uploadStamp.ifEmpty { "right" }) }
+    val close = { r.pendingPick = null }
+    val accentBox = CheckboxDefaults.colors(checkedColor = Palette.accent, checkmarkColor = Palette.accentText, uncheckedColor = Palette.borderStrong)
+    CenterPanel("画像を上げる", close) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+            uris.forEachIndexed { i, u ->
+                Row(Modifier.fillMaxWidth().clickable { on[i] = !on[i] }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = on[i], onCheckedChange = { on[i] = it }, colors = accentBox)
+                    coil3.compose.AsyncImage(u, null, Modifier.size(56.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface2), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    Spacer(Modifier.width(12.dp))
+                    Text("${i + 1} 枚目", color = Palette.textBody, fontSize = 14.sp)
+                }
+            }
+        }
+        HorizontalDivider(color = Palette.border)
+        // 画像の隅にスレタイと URL を描き込む(JPEG・PNG・WebP だけ)
+        Row(Modifier.fillMaxWidth().clickable { stampOn = !stampOn; p.uploadStamp = if (stampOn) corner else "" }.padding(start = 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = stampOn, onCheckedChange = { stampOn = it; p.uploadStamp = if (it) corner else "" }, colors = accentBox)
+            Text("画像にスレタイと URL を入れる", Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
+            if (stampOn) for ((k, label) in listOf("left" to "左下", "right" to "右下")) Text(
+                label,
+                Modifier.padding(start = 6.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, if (corner == k) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
+                    .background(if (corner == k) Palette.accentWash else Color.Transparent).clickable { corner = k; p.uploadStamp = k }.padding(horizontal = 10.dp, vertical = 4.dp),
+                color = if (corner == k) Palette.accent else Palette.textMuted, fontSize = 13.sp,
+            )
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = close) { Text("やめる", color = Palette.textMuted) }
+            val chosen = uris.filterIndexed { i, _ -> on[i] }
+            TextButton(enabled = chosen.isNotEmpty(), onClick = {
+                close()
+                vm.attach(r, chosen, if (stampOn) io.github.yumekui8.bbsnative.data.Uploader.Stamp(listOf(title, url), corner) else null)
+            }) { Text("${chosen.size} 枚を上げる", color = Palette.accent, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
+        }
+    }
 }
 
 /**

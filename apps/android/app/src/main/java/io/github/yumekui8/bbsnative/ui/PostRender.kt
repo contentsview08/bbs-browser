@@ -12,6 +12,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.unit.sp
+import io.github.yumekui8.bbsnative.bbs.Post
 import io.github.yumekui8.bbsnative.bbs.PostIndex
 import io.github.yumekui8.bbsnative.bbs.Span
 
@@ -284,6 +285,24 @@ private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.
  * 名前の見せ方: 板の既定の名前(と、名無しとみなす名前)で始まるなら、その部分を省く(後ろのトリップなどは残す)。
  * 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)。PC 版の utils/postBody.tsx の displayName と同じ
  */
+/** 名前の、トリップ・キャップ(◆・★・◇ から後ろ)を除いた頭の部分 */
+fun nameHead(name: String): String = name.split('◆', '★', '◇')[0].trim()
+
+/**
+ * スレで一番多い名前(名無し)。トリップ・キャップを除いた頭で数え、10 件以上のスレでレスの 3 割以上を占めるときだけ。なければ null
+ * (PC・Web の utils/postBody の mostCommonName と同じ決まり)
+ */
+fun mostCommonName(posts: List<Post>): String? {
+    if (posts.size < 10) return null
+    val counts = HashMap<String, Int>()
+    for (p in posts) {
+        val h = nameHead(p.name)
+        if (h.isNotEmpty()) counts[h] = (counts[h] ?: 0) + 1
+    }
+    val best = counts.maxByOrNull { it.value } ?: return null
+    return if (best.value >= posts.size * 0.3) best.key else null
+}
+
 fun displayName(name: String, noname: String?, extra: List<String>): String {
     if (noname == null && extra.isEmpty()) return name
     val hit = (listOfNotNull(noname) + extra).filter { it.isNotEmpty() }.sortedByDescending { it.length }.firstOrNull { name.startsWith(it) }

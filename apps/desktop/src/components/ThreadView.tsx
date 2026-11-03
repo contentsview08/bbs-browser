@@ -61,8 +61,7 @@ import {
   imageUrlsIn,
   normalizeForSearch,
   videoFileUrlsIn,
-  youtubeLinksIn,
-} from '../utils/postBody'
+  youtubeLinksIn, mostCommonName } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { baseFontPx, effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
@@ -712,17 +711,22 @@ export default function ThreadView(props: Props) {
     return set
   }, [log.posts, ownNos, resolveAnchor, quoteLinks])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
+  /**
+   * このスレで一番多い名前(名無し)。板の setting.txt の既定の名前は、使っていない掲示板が多いので、スレの中で数えて決める。
+   * トリップ・キャップ(◆・★ から後ろ)は除いて数え、レスの 3 割以上(10 件以上のスレ)がその名前なら名無しとみなす
+   */
+  const commonName = useMemo(() => mostCommonName(log.posts), [log.posts])
   // レスの見せ方(名無しの省略・空行の扱い)と、スレ主の ID
   const display = useMemo(
     () => ({
       nonameName: props.nonameName,
-      extraNonames: props.extraNonames,
+      extraNonames: commonName ? [...(props.extraNonames ?? []), commonName] : props.extraNonames,
       omitNoname: props.omitNoname ?? settings.omitNoname,
       collapseBlankLines: settings.collapseBlankLines,
       trimTrailingBlank: settings.trimTrailingBlank,
       splitIcon: props.splitPostIcon,
     }),
-    [props.nonameName, props.extraNonames, props.omitNoname, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
+    [props.nonameName, props.extraNonames, commonName, props.omitNoname, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──

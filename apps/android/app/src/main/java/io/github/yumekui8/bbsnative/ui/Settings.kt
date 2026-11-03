@@ -337,7 +337,7 @@ private fun ThreadPage(vm: AppViewModel) {
         ChoiceRow("開く位置", p.openPosition, listOf("unread" to "最初の未読", "top" to "先頭", "bottom" to "いちばん下")) { p.openPosition = it }
     }
     Group("本文") {
-        SwitchRow("名無しの名前を省く", p.omitNoname, desc = "板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
+        SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
         if (LocalAdvanced.current) SwitchRow("続いた空行を 1 行にまとめる", p.collapseBlankLines) { p.collapseBlankLines = it }
         if (LocalAdvanced.current) SwitchRow("AA を見分けて、AA 用の字で出す", p.aaAutoDetect) { p.aaAutoDetect = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }

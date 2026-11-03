@@ -17,6 +17,7 @@ import io.github.yumekui8.bbsnative.bbs.PostResult
 import io.github.yumekui8.bbsnative.bbs.ThreadSummary
 import io.github.yumekui8.bbsnative.bbs.HonoBbs
 import io.github.yumekui8.bbsnative.bbs.TwoCh
+import io.github.yumekui8.bbsnative.ui.mostCommonName
 import io.github.yumekui8.bbsnative.bbs.findNextThreads
 import io.github.yumekui8.bbsnative.data.HistoryEntry
 import io.github.yumekui8.bbsnative.data.Http
@@ -748,7 +749,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val meta = prefs.boardMeta[page.summary.boardUrl]
         val omit = meta?.omitNoname ?: prefs.omitNoname
         val noname = if (omit) TwoCh.cachedNoname(page.summary.boardUrl) else null
-        val o = renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() else emptyList())
+        // そのスレで一番多い名前も名無しとみなす(板の既定の名前は、使っていない掲示板が多い。PC・Web と同じ)
+        val common = if (omit) mostCommonName(posts) else null
+        val o = renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() + listOfNotNull(common) else emptyList())
         val collapse = prefs.collapseBlankLines
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val result = withContext(Dispatchers.Default) {

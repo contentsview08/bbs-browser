@@ -840,7 +840,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           checked={s.omitNoname}
           onChange={(v) => update('omitNoname', v)}
           label="名無しの名前を省く"
-          note="名前が板の既定の名前(「名無しさん」など)なら省きます。後ろのトリップなどは残します"
+          note="そのスレで一番多い名前(レスの 3 割以上)と、板の既定の名前(「名無しさん」など)を名無しとみなして省きます。後ろのトリップなどは残します"
         />
         <Toggle
           checked={s.highlightOp}

@@ -270,6 +270,32 @@ export function displayBody(body: string, o: DisplayOptions): string {
 }
 
 /** 名前の見せ方: 板の既定の名前で始まるなら、その部分を省く(後ろのトリップなどは残す) */
+/** 名前の、トリップ・キャップ(◆・★・◇ から後ろ)を除いた頭の部分 */
+export function nameHead(name: string): string {
+  return name.split(/[◆★◇]/)[0].trim()
+}
+
+/** 一番多い名前が名無しとみなせる、レスに占める割合と、数えるのに要るレスの数 */
+const COMMON_NAME_RATIO = 0.3
+const COMMON_NAME_MIN_POSTS = 10
+
+/**
+ * スレで一番多い名前(名無し)。板の既定の名前(setting.txt)を使っていない掲示板が多いので、スレの中で数えて決める。
+ * トリップ・キャップを除いた頭で数え、10 件以上のスレでレスの 3 割以上を占めるときだけ。なければ undefined
+ */
+export function mostCommonName(posts: { name: string }[]): string | undefined {
+  if (posts.length < COMMON_NAME_MIN_POSTS) return undefined
+  const counts = new Map<string, number>()
+  for (const p of posts) {
+    const h = nameHead(p.name)
+    if (h) counts.set(h, (counts.get(h) ?? 0) + 1)
+  }
+  let best: string | undefined
+  let n = 0
+  for (const [name, c] of counts) if (c > n) [best, n] = [name, c]
+  return best && n >= posts.length * COMMON_NAME_RATIO ? best : undefined
+}
+
 export function displayName(name: string, o: DisplayOptions): string {
   if (!o.omitNoname) return name
   // 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)

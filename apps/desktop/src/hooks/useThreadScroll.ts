@@ -506,6 +506,10 @@ export function useThreadScroll(o: Options) {
     const prevLastNo = lastMax.current
     lastMax.current = log.posts.at(-1)?.no ?? 0
     if (!root || !grew || !positioned.current) return
+    // 空のログで開いて、手元のログが届いたとき(最初の中身)は新着ではない。位置は上の「開いたとき」が合わせている。
+    // ここを新着として扱うと pendingUnread(未読の頭はまだ手元にない)を消してしまい、あとで本当の新着が届いても未読の頭へ移らず、
+    // 一番下に飛んだままになっていた(「次の未読スレへ」で開いたとき)
+    if (prevLastNo === 0) return
     const fresh = log.posts.filter((p) => p.no > prevLastNo).map((p) => p.no)
     setFlashNos(staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS))
     clearTimeout(flashTimer.current)

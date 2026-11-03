@@ -135,8 +135,8 @@ export function MouseGesturePieOverlay(props: { dx: number; dy: number; dir: Pie
   const name = props.dir ? props.labels[props.dir] : undefined
   const size = Math.min(OVERLAY_SIZE, window.innerWidth - 32, window.innerHeight - 80)
   const scale = size / SIZE
-  // 印は円盤の外側の縁まで(起点からの動きそのまま。縁を越えたら縁に留める)
-  const reach = (R_OUT - 8) * scale
+  // 丸は円盤の外側の縁まで(起点からの動きそのまま。縁を越えたら縁に留める)
+  const reach = (R_OUT - 14) * scale
   const dist = Math.hypot(props.dx, props.dy)
   const k = dist > reach ? reach / dist : 1
   // 出ている間はポインターを隠す(子要素の cursor より強く)
@@ -152,10 +152,22 @@ export function MouseGesturePieOverlay(props: { dx: number; dy: number; dir: Pie
     <div className="fixed inset-0 z-[9950] pointer-events-none flex flex-col items-center justify-center">
       <div className="relative" style={{ width: size, height: size, opacity: 0.86 }}>
         <MouseGesturePie labels={props.labels} active={props.dir} center={props.dir ? (name ? '' : 'なし') : 'なし'} size={size} />
-        <div
-          className="absolute w-3 h-3 rounded-full bg-white shadow-[0_0_0_2px_rgba(0,0,0,0.5)]"
-          style={{ left: size / 2 + props.dx * k - 6, top: size / 2 + props.dy * k - 6 }}
-        />
+        {/* ポインターの代わり: 中心から、マウスの動きに合わせて動く丸(配色の差し色、半透明)。中心からの線で向きも見える */}
+        <svg className="absolute inset-0" width={size} height={size} style={{ overflow: 'visible' }}>
+          <line
+            x1={size / 2}
+            y1={size / 2}
+            x2={size / 2 + props.dx * k}
+            y2={size / 2 + props.dy * k}
+            stroke="var(--c-accent)"
+            strokeWidth={3}
+            strokeLinecap="round"
+            opacity={0.55}
+          />
+          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={14} fill="var(--c-accent)" opacity={0.7} />
+          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={14} fill="none" stroke="#fff" strokeWidth={2.5} opacity={0.9} />
+          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={4} fill="#fff" />
+        </svg>
       </div>
       <div className="mt-2">
         <span className="px-4 py-1.5 rounded-full bg-black/70 text-white text-sm font-bold whitespace-nowrap">{name ?? (props.dir ? '割り当てなし' : '離すと何もしない')}</span>

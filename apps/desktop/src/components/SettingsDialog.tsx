@@ -21,6 +21,7 @@ import { POST_STYLES,
   ACCENTS,
   effectiveScheme,
   DEFAULT_SETTINGS,
+  MOUSE_GESTURE_TRIGGERS,
   isDarkScheme,
   pickScheme,
   FONT_FAMILIES,
@@ -43,7 +44,7 @@ import FontSizeSlider, { ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCs
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle, TextSetting } from './SettingParts'
 import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
-import { GESTURE_ACTIONS } from '../utils/gestures'
+import { GESTURE_ACTIONS, MOUSE_GESTURE_ACTIONS, mouseActionName } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { getDataPaths, type DataPaths } from '../host/logStore'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -1338,6 +1339,81 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
 }
 
 /**
+ * PC: マウスジェスチャー。操作ごとに割り当てた動かし方(矢印)を並べ、＋ を押して枠の中で実際に動かして覚えさせる。
+ * 操作はキー操作と同じ(キーを受け取っている方に効く)
+ */
+function MouseGestureSettings({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  /** 動かし方を覚えさせている操作 */
+  const [recording, setRecording] = useState<string>()
+  const map = s.mouseGestures
+  const nameOf = (action: string) => mouseActionName(action) ?? action
+  const assigned = [...new Set(Object.values(map).filter(Boolean))]
+  const free = MOUSE_GESTURE_ACTIONS.filter((a) => !assigned.includes(a.key))
+  return (
+    <>
+      <Section
+        title="マウスジェスチャー"
+        note="Ctrl(または右ボタン)を押しながらマウスを動かした形に、操作を割り当てます。操作はキー操作と同じで、キーを受け取っている方に効きます。動かしている間、画面の真ん中に矢印と操作の名前が出ます"
+      >
+        <div className="mb-3">
+          <Choice value={s.mouseGestureTrigger} options={MOUSE_GESTURE_TRIGGERS} onChange={(v) => update('mouseGestureTrigger', v)} />
+        </div>
+        <div className="flex flex-col divide-y divide-c-border/60">
+          {assigned.map((action) => (
+            <div key={action} className="flex items-center gap-2 py-1.5 text-sm">
+              <span className="flex-1 min-w-0 text-c-text-strong">{nameOf(action)}</span>
+              {Object.entries(map)
+                .filter(([, a]) => a === action)
+                .map(([seq]) => (
+                  <button
+                    key={seq}
+                    type="button"
+                    onClick={() => update('mouseGestures', Object.fromEntries(Object.entries(map).filter(([k]) => k !== seq)))}
+                    className="flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-lg bg-c-surface2 border border-c-border text-base text-c-text-strong hover:border-c-accent"
+                    title="この動かし方を外す"
+                  >
+                    {gestureArrows(seq)}
+                    <span className="material-symbols-outlined text-sm text-c-text-muted">close</span>
+                  </button>
+                ))}
+              <button type="button" onClick={() => setRecording(action)} className={ICON_BTN} title="動かし方を足す">
+                <span className="material-symbols-outlined text-xl text-c-accent">add_circle</span>
+              </button>
+            </div>
+          ))}
+        </div>
+        <select value="" onChange={(e) => e.target.value && setRecording(e.target.value)} className={`${INPUT} mt-3 w-full max-w-md`}>
+          <option value="">操作を足す…</option>
+          {free.map((a) => (
+            <option key={a.key} value={a.key}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => update('mouseGestures', DEFAULT_SETTINGS.mouseGestures)} className="mt-3 ml-3 text-xs text-c-text-muted hover:text-c-accent underline">
+          すべて既定に戻す
+        </button>
+      </Section>
+      {recording && (
+        <GestureRecorder
+          mouse
+          action={nameOf(recording)}
+          usedBy={(seq) => {
+            const a = map[seq]
+            return a && a !== recording ? nameOf(a) : undefined
+          }}
+          onClose={() => setRecording(undefined)}
+          onDone={(seq) => {
+            update('mouseGestures', { ...map, [seq]: recording })
+            setRecording(undefined)
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+/**
  * キー操作の割り当て(管理画面)。操作の名前・キーで探す、変えたもの・キーのないものだけを出す、押したキーから操作を探す。
  * 同じキーをほかの操作に使っていたら、そちらから外して付け替える(すぐ「元に戻す」で戻せる)。
  * 決め打ちのキー(Esc・Ctrl+W など)には割り当てない
@@ -1546,6 +1622,7 @@ function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upda
           すべて既定に戻す
         </button>
       </Section>
+      <MouseGestureSettings settings={s} update={update} />
       <Section title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
         <ul className="text-sm text-c-text-body space-y-1">
           {FIXED_KEYS.map((f) => (

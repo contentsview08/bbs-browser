@@ -17,3 +17,11 @@ export const GESTURE_ACTIONS: { key: string; name: string }[] = [...GESTURE_ONLY
 export function gestureActionName(action: string): string | undefined {
   return GESTURE_ACTIONS.find((a) => a.key === action)?.name.replace(/\(.*\)$/, '')
 }
+
+/** PC: マウスジェスチャーに割り当てられる操作(キー操作と同じ。タブの操作も含む) */
+export const MOUSE_GESTURE_ACTIONS: { key: string; name: string }[] = KEY_ACTIONS
+
+/** マウスを動かしている間に出す、操作の短い名前(説明の括弧書きを除く) */
+export function mouseActionName(action: string): string | undefined {
+  return MOUSE_GESTURE_ACTIONS.find((a) => a.key === action)?.name.replace(/\(.*\)$/, '')
+}

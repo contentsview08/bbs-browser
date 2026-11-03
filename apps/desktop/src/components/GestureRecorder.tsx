@@ -1,7 +1,8 @@
 // スマホの設定: ジェスチャーを、実際に枠の中でなぞって覚えさせる画面。
 // なぞった線を描きながら、向きの並び(→↑ など)を読み取る。読み取り方は、画面のジェスチャー(hooks/useSwipeGesture.ts)と同じ:
 // 少し動いたら最初の向きを決め、そのあとは一定以上ほかの向きへ動いたときだけ次の向きを足す。
-// 縦(↑・↓)から始まるなぞり方は、ふつうのスクロールとぶつかるので受け付けない
+// 縦(↑・↓)から始まるなぞり方は、ふつうのスクロールとぶつかるので受け付けない。
+// PC のマウスジェスチャー(mouse)にも使う。マウスはスクロールとぶつからないので、上下から始めてもよい
 import { useRef, useState } from 'react'
 import type { SwipeDirection } from '../hooks/useSwipeGesture'
 import { SliderDialog } from './FontSizeSlider'
@@ -24,23 +25,27 @@ export default function GestureRecorder(props: {
   usedBy: (seq: string) => string | undefined
   onDone: (seq: string) => void
   onClose: () => void
+  /** PC のマウスジェスチャー用(左ボタンを押しながらなぞる。上下から始めてよい) */
+  mouse?: boolean
 }) {
   const [points, setPoints] = useState<{ x: number; y: number }[]>([])
   const [segs, setSegs] = useState<SwipeDirection[]>([])
   const state = useRef<{ segStart: { x: number; y: number }; segs: SwipeDirection[] } | null>(null)
   const padRef = useRef<HTMLDivElement>(null)
   const seq = segs.join(',')
-  const bad = segs.length > 0 && (segs[0] === 'up' || segs[0] === 'down')
+  const bad = !props.mouse && segs.length > 0 && (segs[0] === 'up' || segs[0] === 'down')
   const local = (e: React.PointerEvent) => {
     const r = padRef.current!.getBoundingClientRect()
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
   const other = seq && !bad ? props.usedBy(seq) : undefined
   return (
-    <SliderDialog title={`「${props.action}」のなぞり方`} onClose={props.onClose}>
+    <SliderDialog title={props.mouse ? `「${props.action}」の動かし方` : `「${props.action}」のなぞり方`} onClose={props.onClose}>
       <div className="px-4 pb-3">
         <p className="mb-3 text-[13px] leading-relaxed text-c-text-muted">
-          下の枠の中で、割り当てたい形をなぞってください(左右どちらかから始めて、向きを 3 回まで変えられます)。
+          {props.mouse
+            ? '下の枠の中で、左ボタンを押しながら、割り当てたい形にマウスを動かしてください(向きを 3 回まで変えられます)。'
+            : '下の枠の中で、割り当てたい形をなぞってください(左右どちらかから始めて、向きを 3 回まで変えられます)。'}
         </p>
         <div
           ref={padRef}
@@ -87,7 +92,9 @@ export default function GestureRecorder(props: {
               strokeLinejoin="round"
             />
           </svg>
-          {segs.length === 0 && <p className="absolute inset-0 flex items-center justify-center text-sm text-c-text-muted pointer-events-none">ここをなぞる</p>}
+          {segs.length === 0 && (
+            <p className="absolute inset-0 flex items-center justify-center text-sm text-c-text-muted pointer-events-none">{props.mouse ? 'ここで動かす' : 'ここをなぞる'}</p>
+          )}
         </div>
         <div className="mt-3 min-h-[3rem] flex items-center justify-center text-3xl tracking-widest text-c-text-strong">{seq && gestureArrows(seq)}</div>
         {bad && <p className="text-center text-[13px] text-c-heat-very-hot">上下から始めると、ふつうのスクロールとぶつかります。左右どちらかから始めてください</p>}

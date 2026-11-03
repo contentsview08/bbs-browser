@@ -315,6 +315,10 @@ export interface AppSettings {
   swipeGestures: { list: Record<string, string>; thread: Record<string, string> }
   /** スマホ: スワイプの感度(1 = 鈍い 〜 5 = 敏感) */
   gestureSensitivity: number
+  /** PC: マウスジェスチャー。動かした向きの並び(「right」「right,up」)→ 操作(キー操作と同じ名前 KeyAction)。空なら何もしない */
+  mouseGestures: Record<string, string>
+  /** PC: マウスジェスチャーを、何を押しながら動かすか */
+  mouseGestureTrigger: MouseGestureTrigger
   /** この日数より長く開いていないスレのログを、起動したときに消す(0 なら消さない)。お気に入り・自分が書いたスレ・開いているタブは残す */
   logRetentionDays: number
   /** 最後にログを整理した時刻(1 日に 1 回だけ整理する) */
@@ -381,6 +385,13 @@ export interface AppSettings {
   postName: string
   postMail: string
 }
+
+/** PC: マウスジェスチャーを何を押しながら動かすか */
+export type MouseGestureTrigger = 'ctrl' | 'right'
+export const MOUSE_GESTURE_TRIGGERS: { key: MouseGestureTrigger; name: string }[] = [
+  { key: 'ctrl', name: 'Ctrl を押しながら' },
+  { key: 'right', name: '右ボタンを押しながら' },
+]
 
 export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
@@ -466,6 +477,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'deleteLog' },
   },
   gestureSensitivity: 3,
+  // ← 戻る・→ 進む・↑ 先頭・↓ 一番下・↓→ タブを閉じる(ブラウザの慣わし)・↑↓ 更新
+  mouseGestures: { left: 'back', right: 'forward', up: 'top', down: 'bottom', 'down,right': 'closeTab', 'up,down': 'refresh' },
+  mouseGestureTrigger: 'ctrl',
   logRetentionDays: 90,
   lastLogPruneAt: 0,
   groupNg: true,

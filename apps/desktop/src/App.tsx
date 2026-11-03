@@ -63,8 +63,9 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
+import { useMouseGesture, type MouseGestureMap } from './hooks/useMouseGesture'
 import UrlPrompt from './components/UrlPrompt'
-import { gestureActionName } from './utils/gestures'
+import { gestureActionName, mouseActionName } from './utils/gestures'
 import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, applyCssVar, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
@@ -1842,6 +1843,26 @@ export default function App() {
     ]),
   )
   const swipe = useSwipeGesture(swipeMap, settings.gestureSensitivity)
+  // ── PC: マウスジェスチャー(Ctrl か右ボタンを押しながら動かす)。操作はスワイプと同じく runAction で、キーを受け取っている方に効く ──
+  const mouseMap: MouseGestureMap = Object.fromEntries(
+    Object.entries(settings.mouseGestures)
+      .filter(([, a]) => a)
+      .map(([seq, action]) => [
+        seq,
+        {
+          label: mouseActionName(action),
+          onCommit: () => {
+            // ダイアログの上では、戻るで閉じるだけにする
+            if (modalOpen()) {
+              if (action === 'back') (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+              return
+            }
+            runAction(action)
+          },
+        },
+      ]),
+  )
+  const mouse = useMouseGesture(mouseMap, settings.mouseGestureTrigger, !isMobile)
   // 指の動きは画面全体(document)で受ける。アプリの枠の中だけで受けると、body の直下に出した
   // レスのポップアップ・スレ立てなどの上でなぞったときに届かない。
   // 画像ビューアー(自分で指の操作を受け、外へ伝えない)と引き出しの中は除く
@@ -2347,10 +2368,10 @@ export default function App() {
       {/* スマホ: 横になぞる動きをスクロールにしない(縦のスクロールと、2 本指の拡大だけ任せる)。
           こうしないと、なぞっている途中でスクロールが始まり、→↓ のような折れ曲がるなぞりが取れない */}
       <div className="flex-1 min-h-0 flex" style={isMobile ? { touchAction: 'pan-y pinch-zoom' } : undefined}>
-      {/* スマホ: なぞっている間、何の操作になるかを真ん中に出す */}
-      {swipe.label && (
+      {/* スマホ: なぞっている間(PC: マウスを動かしている間)、何の操作になるかを真ん中に出す */}
+      {(swipe.label || mouse.label) && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none">
-          <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{swipe.label}</span>
+          <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-bold">{swipe.label ?? mouse.label}</span>
         </div>
       )}
       {/* スマホでは、サイドバーは画面の上に重ねる引き出しにする(ふだんは出さない)。

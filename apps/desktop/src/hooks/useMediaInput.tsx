@@ -438,7 +438,8 @@ export function useMediaInput(o: {
     clearTimeout(closeTimer.current)
     clearTimeout(showTimer.current)
     let got = 0
-    const background = files.length > 0
+    // 画面は見せたまま上げる(裏で上げると、いま上げているのか分からなかった。本人の指示)。画像を渡すと、そのページに貼り付けたことにして上がる
+    const background = false
     try {
       stopWeb.current = await openWebUpload(
         site,

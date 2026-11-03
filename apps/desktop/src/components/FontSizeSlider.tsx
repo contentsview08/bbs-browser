@@ -58,8 +58,9 @@ export default function FontSizeSlider(props: {
     setPx(shown)
   }, [shown])
   const drag = useSliderDrag()
+  // 値を保存する(つかんでいる印は、離した(pointerup)ときに SliderDialog 側が外す。blur で外すと、つかんだ直後に焦点が動いたときに
+  // 幕が透けないことがあった)
   const commit = () => {
-    drag.end()
     if (px !== shown) props.onCommit(px)
   }
   const min = props.min ?? FONT_PX_MIN
@@ -112,6 +113,7 @@ export default function FontSizeSlider(props: {
             onPointerUp={commit}
             onTouchEnd={commit}
             onBlur={commit}
+            onLostPointerCapture={commit}
             className="big-range flex-1 min-w-0"
             style={{ touchAction: 'pan-y' }}
           />
@@ -157,6 +159,7 @@ export default function FontSizeSlider(props: {
           onPointerUp={commit}
           onKeyUp={commit}
           onBlur={commit}
+          onLostPointerCapture={commit}
           className="flex-1 accent-[var(--c-accent)] h-8"
         />
         <span className="material-symbols-outlined text-lg text-c-text-muted">{props.icons?.[1] ?? 'text_increase'}</span>

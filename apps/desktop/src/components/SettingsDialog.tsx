@@ -12,6 +12,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { allConnectors, type AccountKind, type Board, type LoginResult, type SiteConfig } from '@bbs-browser/connectors'
 import type { AccountRecord } from '@bbs-browser/logstore'
 import { POST_STYLES,
+  POST_DOUBLE_CLICKS,
   MOBILE_POST_STYLES,
   effectivePostStyle,
   FONT_PX_KEY,
@@ -40,7 +41,7 @@ import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider, { ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCssVar } from './FontSizeSlider'
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle, TextSetting } from './SettingParts'
-import { canOpenToolWindow, openToolWindow } from '../host/crossWindow'
+import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
@@ -852,6 +853,9 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           ]}
           onChange={(v) => update('dateStyle', v)}
         />
+      </Section>
+      <Section desktopOnly title="レスをダブルクリックしたとき" note="1 回押したときは、今までどおりアンカーツリー(ダブルクリックに操作を割り当てると、1 回の押しは少し遅れます)">
+        <Choice value={s.postDoubleClick} options={POST_DOUBLE_CLICKS} onChange={(v) => update('postDoubleClick', v)} />
       </Section>
       <Section title="人気のレスの示し方" note="返信が 3 件からのレス。多いほど赤くします">
         <Choice
@@ -2354,6 +2358,9 @@ export function BoardsTab(
   )
 }
 
+/** 運営要望板(この製品の掲示板)。要望・不具合はここか GitHub の Issues へ */
+export const OPERATION_BOARD_URL = 'https://red-edge.net/boards/operation01/'
+
 export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // 版はインストーラーの版(apps/desktop/package.json。tauri.conf.json がそこを読む)
   const [version, setVersion] = useState<string>()
@@ -2370,6 +2377,9 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         </p>
       </Section>
       {canCheckUpdate && <UpdateSection version={version} />}
+      <Section title="掲示板" note="要望や不具合は、運営要望板か GitHub の Issues へ">
+        <OpenRow label="運営要望板を開く" value="red-edge.net" onOpen={() => void broadcast('open-in-app', OPERATION_BOARD_URL)} />
+      </Section>
       <Section desktopOnly title="データの保存場所" note={paths?.portable ? 'ZIP 版: 展開したフォルダの data に置きます。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります' : undefined}>
         <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.yumekui8.bbs-browser\\bbs-browser.db'}</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>

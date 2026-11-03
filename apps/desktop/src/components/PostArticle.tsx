@@ -26,7 +26,7 @@ import LinkPreview from './LinkPreview'
 import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
-import type { HeatStyle, NgMode } from '../ui/settings'
+import type { HeatStyle, NgMode, PostDoubleClick } from '../ui/settings'
 import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
@@ -42,6 +42,8 @@ export interface PostHandlers extends BodyHandlers {
   heatStyle?: HeatStyle
   /** レスをダブルタップで返信する(設定 doubleTapReply。スマホ)。オンだと 1 回のタップ(ツリーを開く)は少し遅れる */
   doubleTapReply?: boolean
+  /** PC: ダブルクリックの操作(設定 postDoubleClick)。none か未指定なら、1 回の押しですぐツリー */
+  doubleClick?: PostDoubleClick
   /** 頭の日時の出し方・ID を短く出すか(設定 dateStyle・idShort) */
   dateStyle?: DateStyle
   idShort?: boolean
@@ -795,6 +797,25 @@ function PostArticle(props: Props) {
     if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
     if (window.getSelection()?.toString().trim()) return
     const el = e.currentTarget
+    // PC: ダブルクリックの操作(設定)。2 回目が来るまで少し待ち、来たらその操作、来なければツリー
+    const dbl = !isMobile && handlers.doubleClick && handlers.doubleClick !== 'none' ? handlers.doubleClick : undefined
+    if (dbl) {
+      if (tapTimer.current !== undefined) {
+        clearTimeout(tapTimer.current)
+        tapTimer.current = undefined
+        if (dbl === 'reply') handlers.onReply?.(post.no)
+        else if (dbl === 'tree') { if (hasConnections) handlers.onBody(post.no, el) }
+        else if (dbl === 'copy') copy(post.body)
+        else if (dbl === 'copyHeader') copy(`${header}\n${post.body}`)
+        else if (dbl === 'id' && post.id) handlers.onId(post.id, el)
+        return
+      }
+      tapTimer.current = setTimeout(() => {
+        tapTimer.current = undefined
+        if (hasConnections) handlers.onBody(post.no, el)
+      }, DOUBLE_TAP_MS)
+      return
+    }
     // ダブルタップで返信(設定): 2 回目が来るまで少し待ち、来たら返信、来なければツリー(スマホのアプリと同じ)
     if (handlers.doubleTapReply && handlers.onReply && isMobile) {
       if (tapTimer.current !== undefined) {

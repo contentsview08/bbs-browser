@@ -29,10 +29,19 @@ const WATCH: &str = r#"
     }
   }
   setTimeout(() => { scan(); ready = true }, 3000)
+  // 取れたリンクは、画面の上の帯にも出す(押すとコピー。アプリ側でも本文に入れている)
+  const showLink = (u) => {
+    const b = document.getElementById('bbs-browser-upload-banner')
+    if (!b) return
+    b.style.pointerEvents = 'auto'
+    b.style.cursor = 'pointer'
+    b.textContent = 'リンクを取りました(本文に入れました): ' + u + ' ― 押すとコピー'
+    b.onclick = () => { try { navigator.clipboard.writeText(u); b.textContent = 'コピーしました: ' + u } catch {} }
+  }
   setInterval(() => {
     if (ready) scan()
     const u = queue.shift()
-    if (u) location.href = '__FOUND__?u=' + encodeURIComponent(u)
+    if (u) { showLink(u); location.href = '__FOUND__?u=' + encodeURIComponent(u) }
   }, 700)
 })()
 "#;

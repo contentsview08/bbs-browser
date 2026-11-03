@@ -2058,6 +2058,8 @@ export default function App() {
       onBroadcast('favorites-changed', () => void reloadFavorites(store)),
       onBroadcast('sites-changed', () => void store.listSites().then(setSites)),
       onBroadcast('accounts-changed', () => void reloadAccounts()),
+      // 設定(別のウィンドウのこともある)から、板やスレの URL をアプリの中で開く(運営要望板など)
+      onBroadcast<string>('open-in-app', (url) => void openUrlInApp(url)),
     ]
     return () => offs.forEach((o) => void o.then((f) => f()))
     // store が開いたら 1 回

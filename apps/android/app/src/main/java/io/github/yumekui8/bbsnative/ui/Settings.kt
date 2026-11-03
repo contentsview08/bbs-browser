@@ -129,7 +129,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "menus" -> SitesPage(vm, menus = true)
                 "accounts" -> AccountsPage(vm)
                 "backup" -> BackupPage(vm)
-                "about" -> AboutPage()
+                "about" -> AboutPage(vm)
                 "custom" -> CustomSchemeEditor(vm.prefs)
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
@@ -831,9 +831,12 @@ private fun BackupPage(vm: AppViewModel) {
 }
 
 @Composable
-private fun AboutPage() {
+private fun AboutPage(vm: AppViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
+    Group("掲示板", note = "要望や不具合は、運営要望板か GitHub の Issues へ") {
+        ActionRow("運営要望板を開く") { vm.openUrl("https://red-edge.net/boards/operation01/") }
+    }
     Group {
         InfoRow("名前", "bbs N(専ブラのネイティブ版)")
         InfoRow("版", version)

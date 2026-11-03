@@ -112,6 +112,16 @@ export const ID_STYLES: { key: IdStyle; name: string; note: string }[] = [
 /** スレ一覧の行の形: ふつう・コンパクト(スレタイ 1 行と数だけ。スマホのアプリの listDensity と同じ) */
 export type ListShape = 'normal' | 'compact'
 export type AnchorPopup = 'hover' | 'click'
+/** PC: レスのダブルクリックの操作 */
+export type PostDoubleClick = 'none' | 'reply' | 'tree' | 'copy' | 'copyHeader' | 'id'
+export const POST_DOUBLE_CLICKS: { key: PostDoubleClick; name: string }[] = [
+  { key: 'none', name: 'なし' },
+  { key: 'reply', name: '返信(書き込み欄に >>番号)' },
+  { key: 'tree', name: 'アンカーツリー' },
+  { key: 'copy', name: '本文をコピー' },
+  { key: 'copyHeader', name: 'ヘッダ含めてコピー' },
+  { key: 'id', name: 'その ID のレスを出す' },
+]
 export type NgMode = 'aborn' | 'hide'
 /** 書き込み欄の置き場所: bottom はレスの下、right はレスの右 */
 export type ReplyLayout = 'bottom' | 'right'
@@ -357,6 +367,8 @@ export interface AppSettings {
   listShape: ListShape
   /** レスをダブルタップで返信(スマホ) */
   doubleTapReply: boolean
+  /** PC: レスをダブルクリックしたときの操作(none なら何もしない。1 回の押しは今までどおりアンカーツリー) */
+  postDoubleClick: PostDoubleClick
   /** 振動で知らせる(ジェスチャー・引っぱって更新が決まったとき、長押しのメニュー。スマホ) */
   haptics: boolean
   /** 自分の配色(地・面・字・強調・未読・自分の 6 色。CustomScheme の JSON)。空なら作っていない */
@@ -479,6 +491,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   heatStyle: 'left',
   listShape: 'normal',
   doubleTapReply: false,
+  postDoubleClick: 'none',
   haptics: true,
   customScheme: '',
   // スマホは頭を短く(アプリと同じ。年と秒の下の桁を省く・ID は 6 文字)、PC は今までどおり

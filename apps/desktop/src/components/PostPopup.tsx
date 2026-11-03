@@ -109,6 +109,7 @@ function PopupWindow(props: {
     <div
       ref={ref}
       data-popup-top={props.isTop || undefined}
+      data-index={props.stackIndex}
       className={`post-popup bg-c-surface border rounded-lg shadow-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
       style={{ ...style, borderColor: 'var(--c-border-strong)' }}
       onClick={(e) => e.stopPropagation()}
@@ -136,11 +137,20 @@ function PopupWindow(props: {
 
 /** 点がどれかのポップアップの上か(下の段のポップアップは pointer-events: none なので、イベントの的では分からない) */
 function overPopup(x: number, y: number): boolean {
+  return popupIndexAt(x, y) !== undefined
+}
+
+/** 点の下にあるポップアップのうち、いちばん上の段(data-index)。どのポップアップの上でもなければ undefined */
+function popupIndexAt(x: number, y: number): number | undefined {
+  let found: number | undefined
   for (const el of document.querySelectorAll<HTMLElement>('.post-popup')) {
     const r = el.getBoundingClientRect()
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      const i = Number(el.dataset.index)
+      if (found === undefined || i > found) found = i
+    }
   }
-  return false
+  return found
 }
 
 export default function PostPopup(props: Props) {
@@ -150,15 +160,19 @@ export default function PostPopup(props: Props) {
     <div
       className="fixed inset-0"
       style={{ zIndex: 9000 }}
-      // 外を押したら一番上を閉じる。ただし、中で押し始めて外で離した・文字を選んでいるときは閉じない
-      onMouseDown={(e) => (down.current = e.target === e.currentTarget && !overPopup(e.clientX, e.clientY))}
+      // 一番上の外を押したら閉じる。ただし、中で押し始めて外で離した・文字を選んでいるときは閉じない。
+      // 下の段のポップアップの上を押したときは、その段より上をまとめて閉じる(その段が一番上になる)。
+      // 以前は「どれかのポップアップの上」なら何もしなかったので、小さいポップアップの外(大きい下の段の上)を押しても閉じなかった
+      onMouseDown={(e) => (down.current = e.target === e.currentTarget)}
       onClick={(e) => {
         const wasDown = down.current
         down.current = false
         if (e.target !== e.currentTarget || !wasDown) return
         const sel = window.getSelection()
         if (sel && !sel.isCollapsed) return
-        props.onCloseTop()
+        const under = popupIndexAt(e.clientX, e.clientY)
+        if (under !== undefined && under < props.popups.length - 1) props.onCloseAt(under + 1)
+        else props.onCloseTop()
       }}
       // 外でホイールを回したら全部閉じる(後ろのスレを読みに戻る)。ポップアップの上(下の段も)では閉じない
       onWheel={(e) => {

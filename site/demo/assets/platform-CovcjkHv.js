@@ -1,0 +1,1 @@
+var e=typeof navigator<`u`&&/Android|iPhone|iPad|iPod/i.test(navigator.userAgent),t=/\s*[(（][^()（）]*(?:Shift|Ctrl|Alt|Esc|Enter|Delete|Tab|キー|F\d+)[^()（）]*[)）]/g;function n(n){return e?n.replace(t,``):n}export{n,e as t};

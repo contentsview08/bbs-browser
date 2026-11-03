@@ -865,14 +865,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun renderOptions(noname: String?) = RenderOptions(
         noname = noname, highlightOp = prefs.highlightOp, idColor = prefs.idStyle == "color", urlShorten = prefs.urlShorten,
         style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
-        dateStyle = prefs.dateStyle, idShort = prefs.idShort,
+        dateStyle = prefs.dateStyle, idShort = prefs.idShort, idPosition = prefs.idPosition,
     )
 
     /**
      * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
      */
     private fun renderKey() = listOf(
-        prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.urlShorten,
+        prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.idPosition, prefs.urlShorten,
         prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
     )
 

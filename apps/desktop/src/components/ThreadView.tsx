@@ -1701,6 +1701,7 @@ export default function ThreadView(props: Props) {
         doubleClick: settings.postDoubleClick,
         dateStyle: settings.dateStyle,
         idShort: settings.idShort,
+        idPosition: settings.idPosition,
         thumbAuto: settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi()),
         onReact: props.onReact,
         reactionDefs: props.reactionDefs,
@@ -1717,7 +1718,7 @@ export default function ThreadView(props: Props) {
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
     // レスのデータ(byNo・replies・posts・anchorCounts など)は dataRef で読むので、ここには入れない
-    [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.thumbLoad, settings.urlShorten, isNg, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
+    [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.thumbLoad, settings.urlShorten, isNg, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */

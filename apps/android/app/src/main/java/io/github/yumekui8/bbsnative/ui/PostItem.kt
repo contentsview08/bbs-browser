@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -114,12 +115,24 @@ fun PostItem(
     // 頭の行の字の並びと位置を覚えておく(長押しした所が ID・名前の上か、スレ表示が調べる)
     val hit = LocalHeaderHit.current
     val track = Modifier.onGloballyPositioned { hit?.coords = it }
+    // ID の位置(設定): 日時の後ろは頭の中(r.header)。右上は頭の行の右端、右下は本文の下の右端(r.idText)
+    val idTopRight = r.idText?.takeIf { prefs.idPosition == "topRight" }
+    val idBottomRight = r.idText?.takeIf { prefs.idPosition == "bottomRight" }
+    val idLine = @Composable {
+        if (idBottomRight != null) Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.End) { Text(idBottomRight, fontSize = headSize) }
+    }
     val header = @Composable {
-        if (own || toOwn) {
+        if (own || toOwn || idTopRight != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
-                Spacer(Modifier.width(6.dp))
-                OwnChip(if (own) "自分" else "→あなた宛")
+                if (own || toOwn) {
+                    Spacer(Modifier.width(6.dp))
+                    OwnChip(if (own) "自分" else "→あなた宛")
+                }
+                if (idTopRight != null) {
+                    Spacer(Modifier.weight(1f))
+                    Text(idTopRight, Modifier.padding(start = 6.dp), fontSize = headSize)
+                }
             }
         } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
     }
@@ -154,6 +167,7 @@ fun PostItem(
                     Column(Modifier.weight(1f)) {
                         if (!continued) header()
                         body(Modifier.padding(top = if (continued) 0.dp else 2.dp))
+                        idLine()
                     }
                 }
                 Box(Modifier.padding(start = AVATAR - 4.dp)) { Column { media() } }
@@ -174,6 +188,7 @@ fun PostItem(
                     ) {
                         if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
                         if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+                        idLine()
                     }
                     Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
                 }
@@ -188,6 +203,7 @@ fun PostItem(
                     if (own || toOwn) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
+                    idLine()
                 }
                 media()
             }
@@ -201,6 +217,7 @@ fun PostItem(
                     if (aa) AaBody(r)
                     else if (heat != null) Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                     else Text(r.body, Modifier.padding(top = 2.dp), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em)
+                    idLine()
                 }
                 media()
             }
@@ -211,6 +228,7 @@ fun PostItem(
                     header()
                     BeIcon(r.beIcon)
                     body(Modifier.padding(top = 4.dp))
+                    idLine()
                 }
                 media()
             }

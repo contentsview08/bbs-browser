@@ -7,6 +7,7 @@ import type { DateStyle } from '../utils/displayDate'
 // 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
 
 import { isMobile } from '../utils/platform'
+import { ensureFont } from '../host/fonts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { ThreadSummary } from '@bbs-browser/connectors'
@@ -315,6 +316,10 @@ export interface AppSettings {
   swipeGestures: { list: Record<string, string>; thread: Record<string, string> }
   /** スマホ: スワイプの感度(1 = 鈍い 〜 5 = 敏感) */
   gestureSensitivity: number
+  /** ID の位置(日時の後ろ・レスの右上・レスの右下) */
+  idPosition: IdPosition
+  /** 更新(新しい版)を最後に確かめた時刻(ms)。1 日に 1 回だけ GitHub を見に行く */
+  lastUpdateCheckAt: number
   /** PC: マウスジェスチャー(円盤)。8 方向(n・ne・e・se・s・sw・w・nw)→ 操作(キー操作と同じ名前か、マウスだけの操作 utils/gestures の MOUSE_ONLY_ACTIONS)。空なら何もしない */
   mouseGestures: Record<string, string>
   /** PC: マウスジェスチャーを、何を押しながら動かすか */
@@ -385,6 +390,14 @@ export interface AppSettings {
   postName: string
   postMail: string
 }
+
+/** ID の位置: 日時の後ろ(頭の中)/ レスの右上(頭の右端)/ レスの右下(本文の下の右端) */
+export type IdPosition = 'header' | 'topRight' | 'bottomRight'
+export const ID_POSITIONS: { key: IdPosition; name: string }[] = [
+  { key: 'header', name: '日時の後ろ' },
+  { key: 'topRight', name: 'レスの右上' },
+  { key: 'bottomRight', name: 'レスの右下' },
+]
 
 /** PC: マウスジェスチャーを何を押しながら動かすか */
 export type MouseGestureTrigger = 'ctrl' | 'right'
@@ -478,6 +491,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   gestureSensitivity: 3,
   // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空(本人の指示 2026-11-05)
+  idPosition: 'header',
+  lastUpdateCheckAt: 0,
   mouseGestures: { n: 'top', s: 'bottom', ne: 'refresh', nw: 'closeAllTabs', sw: 'settings' },
   mouseGestureTrigger: 'ctrl',
   logRetentionDays: 90,
@@ -771,6 +786,8 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
     root.removeAttribute('data-list-pad')
   }
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
+  // 同梱をやめた Web フォントは、選んだときだけ取りに行く(host/fonts.ts)
+  if (s.fontFamily !== 'custom') ensureFont(preset.key)
   // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く
   const css =
     s.fontFamily === 'custom' && s.customFont

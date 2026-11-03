@@ -285,7 +285,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         }
         Box(Modifier.fillMaxSize().graphicsLayer { translationY = pullPx.value }) {
             when {
-                page.error != null && page.threads.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }) { vm.refreshBoard(page) }
+                page.error != null && page.threads.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }, onBack = if (vm.stack.size > 1) ({ vm.back() }) else null) { vm.refreshBoard(page) }
                 page.threads.isEmpty() && page.loading -> Skeleton(with(density) { bars.topHeight.toDp() }, post = false)
                 else -> LazyColumn(
                     Modifier.fillMaxSize(), state = listState,

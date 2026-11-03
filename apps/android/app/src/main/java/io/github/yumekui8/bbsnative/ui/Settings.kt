@@ -349,6 +349,7 @@ private fun ThreadPage(vm: AppViewModel) {
         ) { p.dateStyle = it }
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
+        ChoiceRow("ID の位置", p.idPosition, listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")) { p.idPosition = it }
         ChoiceRow(
             "人気のレスの示し方", p.heatStyle,
             listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色"),

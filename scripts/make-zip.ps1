@@ -5,26 +5,26 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content (Join-Path $root 'apps/desktop/package.json') -Raw | ConvertFrom-Json).version
-$exe = Join-Path $root 'apps/desktop/src-tauri/target/release/bbs-browser.exe'
+$exe = Join-Path $root 'apps/desktop/src-tauri/target/release/BBSN.exe'
 if (-not (Test-Path $exe)) { throw "先に npm run build を実行してください($exe がありません)" }
 
 $outDir = Join-Path $root 'apps/desktop/src-tauri/target/release/bundle/zip'
-$stage = Join-Path $outDir "bbs-browser_$version"
+$stage = Join-Path $outDir "BBSN_$version"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe $stage
 @"
-このファイルが bbs-browser.exe と同じフォルダにあると、ログ・設定をこのフォルダの data に置きます(ZIP 版の印)。
+このファイルが BBSN.exe と同じフォルダにあると、ログ・設定をこのフォルダの data に置きます(ZIP 版の印)。
 消すと、インストーラー版と同じ %APPDATA%\io.github.yumekui8.bbs-browser\ を使います。
 "@ | Set-Content -Encoding UTF8 (Join-Path $stage 'portable.txt')
 @"
-bbs-browser $version(ZIP 版)
+BBSN $version(ZIP 版)
 
-このフォルダがそのままインストール先です。bbs-browser.exe を起動するだけで使えます(インストールは要りません)。
+このフォルダがそのままインストール先です。BBSN.exe を起動するだけで使えます(インストールは要りません)。
 ログ・既読・設定・Cookie はこのフォルダの data に入ります。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります。
 Windows 10/11 に入っている WebView2 を使います。起動しないときは、Microsoft の「WebView2 ランタイム」を入れてください。
 "@ | Set-Content -Encoding UTF8 (Join-Path $stage 'はじめにお読みください.txt')
 
-$zip = Join-Path $outDir "bbs-browser_${version}_x64_portable.zip"
+$zip = Join-Path $outDir "BBSN_${version}_x64_portable.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
 Remove-Item -Recurse -Force $stage

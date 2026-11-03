@@ -26,7 +26,7 @@ import LinkPreview from './LinkPreview'
 import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
-import type { HeatStyle, NgMode, PostDoubleClick } from '../ui/settings'
+import type { HeatStyle, IdPosition, NgMode, PostDoubleClick } from '../ui/settings'
 import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
@@ -47,6 +47,8 @@ export interface PostHandlers extends BodyHandlers {
   /** 頭の日時の出し方・ID を短く出すか(設定 dateStyle・idShort) */
   dateStyle?: DateStyle
   idShort?: boolean
+  /** ID の位置(設定): 日時の後ろ(既定)・レスの右上・レスの右下 */
+  idPosition?: IdPosition
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -696,6 +698,11 @@ function PostArticle(props: Props) {
   )
 
   // ── レスの頭 ──
+  // ID の位置(設定): 日時の後ろ(頭の中)・レスの右上(頭の右端)・レスの右下(本文の下の右端)
+  const idPosition = handlers.idPosition ?? 'header'
+  const idInHeader = idPosition === 'header' ? idBtn : null
+  const idAtTopRight = idPosition === 'topRight' && idBtn ? <span className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null
+  const idAtBottomRight = idPosition === 'bottomRight' && idBtn ? <div className="flex justify-end mt-0.5 text-xs">{idBtn}</div> : null
   const headerBlock =
     variant === 'classic' ? (
       // 専ブラ風: 「12 ：名前 [sage]：日付 ID:xxx」を 1 行に。色の面も枠もなし
@@ -706,13 +713,14 @@ function PostArticle(props: Props) {
         {post.mail && <span className="text-c-text-muted text-xs">[{post.mail}]</span>}
         <span className="text-c-text-muted">：</span>
         <span className="text-c-text-muted text-xs whitespace-nowrap" title={post.date}>{shownDate}</span>
-        {idBtn}
+        {idInHeader}
         {voteChip}
         {opChip}
         {ownChip}
             {badgeChips}
         {ngChip}
         {toOwnChip}
+        {idAtTopRight}
       </div>
     ) : variant === 'discord' ? (
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
@@ -729,11 +737,12 @@ function PostArticle(props: Props) {
           <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>
             {isMobile ? shortDate(post.date) : shownDate}
           </span>
-          {idBtn}
+          {idInHeader}
           {repliesBtn}
           {voteChip}
           {post.mail && <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
+          {idAtTopRight}
         </div>
       )
     ) : (
@@ -748,9 +757,10 @@ function PostArticle(props: Props) {
             {badgeChips}
         {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
         <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>{shownDate}</span>
-        {idBtn}
+        {idInHeader}
         {voteChip}
         {toOwnChip}
+        {idAtTopRight}
       </div>
     )
 
@@ -1185,6 +1195,7 @@ function PostArticle(props: Props) {
           <div className="flex-1 min-w-0">
             {headerBlock}
             {bodyBlock}
+            {idAtBottomRight}
             {/* 続けて書いたレス(頭を省いたもの)は、返信の数を本文の下に */}
             {props.continued && repliesBtn && <div className="mt-0.5">{repliesBtn}</div>}
           </div>
@@ -1194,6 +1205,7 @@ function PostArticle(props: Props) {
         <>
           {headerBlock}
           {bodyBlock}
+          {idAtBottomRight}
         </>
       )}
       {sheet && <ActionSheet title={`${post.ref ?? post.no} ${post.name}`} items={sheetItems} onClose={() => setSheet(false)} />}

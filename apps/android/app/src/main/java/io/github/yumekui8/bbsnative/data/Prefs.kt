@@ -206,6 +206,8 @@ class Prefs(context: Context) {
     var dateStyle by pref("dateStyle", "md_w_hms")
     /** レスの頭の ID を短く出す(先頭の 6 文字。「ID:」も省く) */
     var idShort by pref("idShort", true)
+    /** ID の位置: header(日時の後ろ)/ topRight(レスの右上)/ bottomRight(レスの右下)。PC 版の idPosition と同じ */
+    var idPosition by pref("idPosition", "header")
     /** 動きを減らす(画面の移り方・新着の光り方・数字の繰り上がりを省く)。端末の「アニメーションを削除」でも同じになる */
     var reduceMotion by pref("reduceMotion", false)
     /** 字(Fonts.CHOICES のキー)。空なら端末の標準 */

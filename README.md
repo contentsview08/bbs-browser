@@ -1,6 +1,11 @@
-# bbs-browser
+# BBSN(bbs-browser)
 
-コネクタで掲示板を読む、PC 向けの専用ブラウザ(Tauri v2)。
+掲示板を読み書きする専用ブラウザ。PC 版(Tauri v2)とスマホ版(Android。`apps/android`)。
+
+- 公式サイト: https://contentsview08.github.io/bbs-browser/
+- 要望・不具合は GitHub の Issues か、掲示板(red-edge.net の運営板): https://red-edge.net/boards/operation01/
+
+掲示板の形式ごとの違いはコネクタで吸収する。
 掲示板の形式ごとの違いはコネクタで吸収する。いまのコネクタは次の 3 つ。
 
 | コネクタ | 対象 | できること |

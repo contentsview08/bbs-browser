@@ -27,6 +27,7 @@ import { POST_STYLES,
   FONT_FAMILIES,
   LIST_TABS,
   ID_STYLES,
+  ID_POSITIONS,
   type ListTabKey,
   type AppSettings,
   type UpdateSetting,
@@ -816,6 +817,8 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の見せ方</p>
         <Choice value={s.idStyle} options={ID_STYLES} onChange={(v) => update('idStyle', v)} />
         <p className="text-[10px] text-c-text-muted mt-1">{ID_STYLES.find((x) => x.key === s.idStyle)?.note}</p>
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の位置</p>
+        <Choice value={s.idPosition} options={ID_POSITIONS} onChange={(v) => update('idPosition', v)} />
       </Section>
       <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。画面全体の文字の大きさは「表示」にあります">
         <PostFontSliders settings={s} update={update} />
@@ -1167,7 +1170,7 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
             onChange={(v) => {
               update('osNotify', v)
               // オンにしたら、Android に通知の許可を求める(断られたら、Android の設定から許可してもらう)
-              if (v) void ensureNotifyPermission().then((ok) => !ok && alert('通知が許可されていません。Android の設定 → アプリ → bbs-browser → 通知 から許可してください'))
+              if (v) void ensureNotifyPermission().then((ok) => !ok && alert('通知が許可されていません。Android の設定 → アプリ → BBSN → 通知 から許可してください'))
             }}
             label="スマホの通知の欄にも出す"
             note="アプリを裏に回しているときは、下の知らせを Android の通知でも出します。アプリを完全に閉じている間は、新着を確かめられないので知らせません"
@@ -2439,7 +2442,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
   }, [])
   return (
     <>
-      <Section title={`bbs-browser ${version ?? ''}`}>
+      <Section title={`BBSN ${version ?? ''}`}>
         <p className="text-sm text-c-text-body leading-relaxed">
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・まちBBS・ふたば・hono-bbs を読めます。
         </p>

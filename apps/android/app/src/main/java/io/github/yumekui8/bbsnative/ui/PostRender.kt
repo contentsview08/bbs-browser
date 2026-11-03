@@ -19,7 +19,10 @@ import io.github.yumekui8.bbsnative.bbs.Span
 /** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
 /** aa: アスキーアートらしい本文(スペースが 5 つ以上続く。今のスマホ版と同じ判定)。AA 用の字で、折り返さず画面の幅に収める */
 /** replyTo: Discord 風・LINE 風で、本文の頭のアンカーを「返信」として頭の上に出すときの返信先(その分は本文から省いてある) */
-class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null, val beIcon: String? = null)
+class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null, val beIcon: String? = null) {
+    /** ID の位置が「日時の後ろ」でないとき、頭から外した ID(押せる)。PostItem が右上か右下に置く */
+    var idText: AnnotatedString? = null
+}
 
 /** 本文の頭の 1 つだけのアンカー(PC 版の dropLeadingAnchor と同じ形)。範囲や並び(>>1-3、>>1,2)は対象にしない */
 private val LEADING_ANCHOR = Regex("^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)([0-9０-９]+)(?![0-9０-９,，\\-－ー〜~、])[ \t　]*")
@@ -116,6 +119,8 @@ data class RenderOptions(
     val dateStyle: String = "md_w_hms",
     /** ID を短く出す(displayId) */
     val idShort: Boolean = true,
+    /** ID の位置(header / topRight / bottomRight)。header 以外は頭に入れず、RenderedPost.idText に別に作る */
+    val idPosition: String = "header",
 )
 
 /**
@@ -153,7 +158,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             append("  ")
             // 日付の途中で折り返さない(日と時刻の間の空白を、折り返さない空白に)
             withStyle(SpanStyle(color = mutedC(o))) { append(displayDate(p.date, o.dateStyle).replace(' ', '\u00A0')) }
-            if (p.id != null) {
+            if (p.id != null && o.idPosition == "header") {
                 append("  ")
                 // ID は ID ごとの色(設定)。押すと同じ ID のレスを出す。5 回以上書いた ID は太字
                 withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
@@ -217,7 +222,17 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             if (bodyStyle != null) pop()
         }
         // 空白が続く本文は AA とみなす(AA 用の字で出す)
-        out[p.no] = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
+        val rp = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
+        // ID を頭の外(右上・右下)に出すとき: 頭と同じ色・押せる形で別に作る
+        if (p.id != null && o.idPosition != "header") rp.idText = buildAnnotatedString {
+            withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
+                withStyle(SpanStyle(color = idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
+                    append(displayId(p.id, o.idShort))
+                    if (idCount >= 2) append("($idCount)")
+                }
+            }
+        }
+        out[p.no] = rp
     }
     return out
 }
@@ -248,7 +263,7 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
         withStyle(small) { append("#${p.no}") }
         append("  ")
         withStyle(small) { append(shortDate(p.date).replace(' ', '\u00A0')) }
-        if (p.id != null) {
+        if (p.id != null && o.idPosition == "header") {
             append("  ")
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
                 withStyle(SpanStyle(color = idC(p.id, idCount, o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {

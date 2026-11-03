@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
-        android:label="bbs N"
+        android:label="BBSN"
         android:allowBackup="false"
         android:supportsRtl="false"
         android:enableOnBackInvokedCallback="true"

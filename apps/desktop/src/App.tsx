@@ -64,6 +64,8 @@ import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import { useMouseGesture, PIE_DIRS, type MouseGestureMap, type PieDir } from './hooks/useMouseGesture'
+import { canCheckUpdate, compareVersions, fetchLatestRelease } from './host/update'
+import { getVersion } from '@tauri-apps/api/app'
 import { MouseGesturePieOverlay } from './components/MouseGesturePie'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName, mouseActionName } from './utils/gestures'
@@ -567,6 +569,27 @@ export default function App() {
         notify({ icon: 'error', title: `${a.accountId.toUpperCase()} にログインできませんでした`, body: r.message }),
       )
     })
+  }, [])
+  // PC: 起動して少ししたら、1 日に 1 回だけ GitHub の最新のリリースと版を比べ、新しければ知らせる(押すと 設定 → このアプリについて → 更新)
+  useEffect(() => {
+    if (!canCheckUpdate || isMobile) return
+    const t = setTimeout(async () => {
+      if (Date.now() - settingsRef.current.lastUpdateCheckAt < 20 * 3600 * 1000) return
+      updateSetting('lastUpdateCheckAt', Date.now())
+      try {
+        const [release, current] = await Promise.all([fetchLatestRelease(), getVersion()])
+        if (compareVersions(release.version, current) > 0)
+          notify({
+            icon: 'system_update',
+            title: `新しい版 v${release.version} があります`,
+            body: '押すと 設定 → このアプリについて → 更新 を開きます。インストーラーを落としてそのまま入れ替えられます',
+            onClick: () => openSettings('about'),
+          })
+      } catch {
+        // つながらないときは黙っておく(次の起動で確かめる)
+      }
+    }, 20000)
+    return () => clearTimeout(t)
   }, [])
 
   /** BBS メニューの板一覧(設定画面の板選びで使う)。保存してあるものを返し、なければ・refresh なら取りに行く */

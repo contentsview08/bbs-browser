@@ -74,8 +74,9 @@ fun DrawerContent(vm: AppViewModel) {
             }
             // 過去に見たスレの一覧(未読・閲覧履歴・お気に入りのスレ・書き込み履歴)は 1 つの画面にまとめ、上のタブで切り替える
             val past = current is Page.History || current is Page.AllUnread || current is Page.FavThreads || current is Page.PostHistory || current is Page.Uploads
+            // 行を押すと小項目(最近見たスレ)を広げる。画面へは一番下の「すべて見る」から(本人の要望 2026-11-05)
             DrawerRow(Icons.Filled.History, "履歴", Palette.textMuted, active = past, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
-                vm.openPast(vm.prefs.pastTab)
+                histOpen = !histOpen
             }
             if (histOpen) {
                 for (h in vm.history.take(8)) {
@@ -84,6 +85,7 @@ fun DrawerContent(vm: AppViewModel) {
                         color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
+                DrawerRow(Icons.Filled.History, "すべて見る", Palette.textMuted, sub = true, muted = true) { vm.openPast(vm.prefs.pastTab) }
             }
             DrawerRow(Icons.Filled.Link, "URL を開く", Palette.textMuted) { urlDialog = true }
         }

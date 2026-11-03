@@ -444,7 +444,8 @@ pub fn run() {
             post_http::http_post,
             chosen_paths::pick_save_path,
             chosen_paths::pick_open_path,
-            web_upload::open_web_upload
+            web_upload::open_web_upload,
+            web_upload::close_web_upload
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

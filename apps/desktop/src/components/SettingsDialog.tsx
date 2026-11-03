@@ -679,6 +679,13 @@ function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<Settin
   const [pruning, setPruning] = useState(false)
   return (
     <>
+      <Section title="1 ページの件数" note="多い板はページに分けて出します(軽くなります)。絞り込み・検索はページをまたいで当たります">
+        <Choice
+          value={s.listPageSize}
+          options={[50, 100, 200, 500, 0].map((n) => ({ key: n, name: n === 0 ? 'すべて(分けない)' : `${n} スレ` }))}
+          onChange={(v) => update('listPageSize', v)}
+        />
+      </Section>
       <Section title="行の形">
         <Choice
           value={s.listShape}

@@ -2273,6 +2273,7 @@ export default function App() {
           // 閲覧履歴は 見た順・レス数順・新しい順(未読は上の「履歴」の帯で)
           tabs={history ? ['viewed', 'count', 'newest'] : settings.listTabs}
           historyMetaOf={history ? historyMetaOf : undefined}
+          pageSize={settings.listPageSize}
           progressText={history && historyProgress ? `${historyProgress.done}/${historyProgress.total} 板の新着を確かめています` : undefined}
           tabLabel={settings.listTabLabel}
           isNg={isNgThread}
@@ -2401,7 +2402,7 @@ export default function App() {
             // 1 画面でスレ一覧に戻っているあいだは、隠れているスレ表示を開いていないタブと同じに扱う(キー操作・既読を受けない)
             const isActive = id === paneId && (!single || threadShown)
             return (
-              <div key={id} className={`absolute inset-0 flex ${id === paneId ? '' : 'invisible pointer-events-none'}`}>
+              <div key={id} className={`absolute inset-0 flex ${id === paneId ? '' : 'invisible pointer-events-none'}`} style={id === paneId ? undefined : { contentVisibility: 'hidden' }}>
                 <TabPane
                   tab={t as Tab & { log: ThreadLog }}
                   active={isActive}

@@ -197,6 +197,8 @@ export interface AppSettings {
   threadSort: ThreadSort
   /** スレ一覧の上に出すタブと、その並び(左から) */
   listTabs: ListTabKey[]
+  /** スレ一覧の 1 ページの件数(0 なら全部)。多い板では分けたほうが軽い */
+  listPageSize: number
   /** 板ごとの情報(板の URL → 別名・ファビコン・名前とメールの既定値) */
   boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
@@ -421,6 +423,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   listTabs: ['unread', 'momentum', 'newest'],
+  listPageSize: 100,
   boardMeta: {},
   keywords: [],
   pullToRefreshList: true,

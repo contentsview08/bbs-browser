@@ -33,6 +33,8 @@ const SETTLE_MS = 250
 const FOLLOW_MAX_MS = 1500
 /** レスへ飛んだあと、そのレスを画面の同じ位置に留めておく時間(サムネイル・リンクのプレビューが読み込まれて高さが変わるため) */
 const PIN_MS = 8000
+/** これより多い新着は、なめらかに追いかけずにすぐ移る */
+const MANY_NEW = 30
 /** 新着を光らせておく時間(app.css の .flash-new の長さと揃える) */
 const FLASH_MS = 1000
 /** 新着を若い番号から順に出すときの 1 件ごとのずらしと、全体の長さの上限(app.css の .post-enter) */
@@ -522,8 +524,10 @@ export function useThreadScroll(o: Options) {
       atBottom: atBottom.current,
     })
     pendingUnread.current = false
-    if (target && 'bottom' in target) jumpToBottom(true)
-    else if (target) scrollToUnread(target.no, target.animate ? 'animate' : 'instant')
+    // 新着が多いときは、なめらかに追いかけず(描きながらの追いかけはカクつく)、すぐ移る
+    const many = fresh.length > MANY_NEW
+    if (target && 'bottom' in target) jumpToBottom(!many)
+    else if (target) scrollToUnread(target.no, target.animate && !many ? 'animate' : 'instant')
   }, [log.posts.length, byNo, unreadFrom, rootRef, scrollToUnread, jumpToBottom])
 
   // ── 見張り ──

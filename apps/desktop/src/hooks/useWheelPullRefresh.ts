@@ -42,8 +42,8 @@ interface UseWheelPullRefreshOptions {
  */
 export function useWheelPullRefresh({
   onRefresh,
-  revealThreshold = 200,
-  commitThreshold = 400,
+  revealThreshold = 120,
+  commitThreshold = 240,
   sign = 1,
   armDelayMs = 500,
   cooldownMs = 0,

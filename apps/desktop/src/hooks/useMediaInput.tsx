@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEve
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
 import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadOptions } from '../host/uploader'
-import { openWebUpload } from '../host/webUpload'
+import { closeWebUpload, openWebUpload } from '../host/webUpload'
 import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
 
 /** 一度に上げられる数 */
@@ -52,6 +52,10 @@ function verifyImage(url: string, host: string, file: File): Promise<void> {
     img.src = url
   })
 }
+
+/** サイトの画面を閉じるまで: 渡した画像のぶんのリンクがそろってから / 最後のリンクから */
+const WEB_CLOSE_SOON_MS = 1200
+const WEB_CLOSE_IDLE_MS = 4000
 
 let nextItemId = 1
 
@@ -238,30 +242,55 @@ export function useMediaInput(o: {
   const take = (files: File[]) => {
     if (o.attach) return attach(files)
     if (webSiteDef) {
-      // サイトの画面で上げる上げ先には、ファイルを渡せない。画面を開いて、そこで選んでもらう
-      setNotice(`${webSiteDef.name}の画面で上げてください(設定の上げ先が「サイトの画面」のため)`)
-      return void startWebUpload(webSiteDef)
+      // サイトの画面で上げる上げ先: 画面を開き、貼り付け・ドラッグした画像はそのページに貼り付けたことにして、そのまま上げてもらう
+      setNotice(`${webSiteDef.name}の画面で上げます`)
+      return void startWebUpload(webSiteDef, files)
     }
     upload(files)
   }
-  // 置き場のサイトの画面で上げる(host/webUpload.ts)。開いている間、拾ったリンクを本文に入れる
+  // 置き場のサイトの画面で上げる(host/webUpload.ts)。開いている間、拾ったリンクを本文に入れる。
+  // 上げ終わったら(渡した画像の数だけリンクが来た、または最後のリンクから少し経った)画面を閉じる
   const [webSite, setWebSite] = useState<WebUploadSite>()
   const stopWeb = useRef<() => void>(undefined)
-  useEffect(() => () => stopWeb.current?.(), [])
-  const startWebUpload = async (site: WebUploadSite) => {
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(
+    () => () => {
+      stopWeb.current?.()
+      clearTimeout(closeTimer.current)
+    },
+    [],
+  )
+  const finishWebUpload = () => {
+    clearTimeout(closeTimer.current)
     stopWeb.current?.()
+    stopWeb.current = undefined
+    setWebSite(undefined)
+    void closeWebUpload()
+  }
+  const startWebUpload = async (site: WebUploadSite, files: File[] = []) => {
+    stopWeb.current?.()
+    clearTimeout(closeTimer.current)
+    let got = 0
     try {
-      stopWeb.current = await openWebUpload(site, (url) => {
-        insertRef.current(url)
-        setNotice(`${site.name}のリンクを本文に入れました`)
-      })
+      stopWeb.current = await openWebUpload(
+        site,
+        (url) => {
+          // URL は 1 行に 1 つ(改行で区切る)
+          insertRef.current(`${url}\n`, { ownLine: true })
+          got++
+          setNotice(`${site.name}のリンクを本文に入れました(${got} 件)`)
+          clearTimeout(closeTimer.current)
+          closeTimer.current = setTimeout(finishWebUpload, files.length > 0 && got >= files.length ? WEB_CLOSE_SOON_MS : WEB_CLOSE_IDLE_MS)
+        },
+        files,
+      )
       setWebSite(site)
     } catch (e) {
       setNotice(`${site.name}の画面を開けませんでした: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
   const insertRef = useRef(o.insert)
-  insertRef.current = (t: string) => o.insert(t)
+  insertRef.current = (t: string, opts?: { ownLine?: boolean }) => o.insert(t, opts)
 
   const buttons = (
     <>

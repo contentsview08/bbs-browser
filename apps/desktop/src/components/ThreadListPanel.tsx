@@ -115,6 +115,8 @@ interface Props {
   historyMetaOf?: (t: ThreadSummary) => { boardName: string; readAt?: number; icon?: string }
   /** ヘッダーの下に出す進み具合の文(閲覧履歴の新着を板ごとに確かめている間など) */
   progressText?: string
+  /** 1 ページに出すスレの数(0 なら全部)。絞り込み・検索のあとで分ける */
+  pageSize?: number
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
   /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ) */
@@ -369,9 +371,9 @@ export default function ThreadListPanel(props: Props) {
   const pull = useWheelPullRefresh({
     onRefresh: () => props.onRefresh?.(),
     sign: 1,
-    // スレ表示(200 / 400)の 1.7 倍
-    revealThreshold: 340,
-    commitThreshold: 680,
+    // スレ表示(120 / 240)の 1.4 倍
+    revealThreshold: 170,
+    commitThreshold: 340,
     canRefresh: () => Date.now() >= (refreshReadyRef.current ?? 0),
   })
   // スマホ: 指で引っぱって更新する(上の端で下へ。しきい値がスレ表示の 1.7 倍なので、指の量も多めに掛ける)
@@ -499,6 +501,20 @@ export default function ThreadListPanel(props: Props) {
     () => (keywordGroups ? [...keywordGroups.groups.flatMap((g) => g.threads), ...keywordGroups.rest] : visible),
     [keywordGroups, visible],
   )
+  // ページ: 並び(ordered)を pageSize ごとに分ける。並び・絞り込み・検索が変わったら 1 ページ目へ
+  const [page, setPage] = useState(0)
+  const pageSize = props.pageSize ?? 0
+  const paged = pageSize > 0 && ordered.length > pageSize
+  const pageCount = paged ? Math.ceil(ordered.length / pageSize) : 1
+  const pageSafe = Math.min(page, pageCount - 1)
+  const pageItems = paged ? ordered.slice(pageSafe * pageSize, (pageSafe + 1) * pageSize) : undefined
+  useEffect(() => {
+    setPage(0)
+  }, [visible])
+  const goPage = (n: number) => {
+    setPage(Math.max(0, Math.min(pageCount - 1, n)))
+    scrollRef.current?.scrollTo({ top: 0 })
+  }
   const [cursorId, setCursorId] = useState<string>()
   /** 中身をのぞいているスレ(P) */
   const [peek, setPeek] = useState<ThreadSummary>()
@@ -992,22 +1008,6 @@ export default function ThreadListPanel(props: Props) {
               </button>
             </div>
           )}
-          {selectable && selected.size > 0 && !isMobile && (
-            <div className="flex items-center gap-2 px-4 py-1.5 border-b border-c-border text-xs">
-              <span className="text-c-text-muted">{selected.size} 件選択中</span>
-              <button
-                type="button"
-                className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
-                onClick={() => {
-                  props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
-                  setSelected(new Set())
-                }}
-              >
-                <span className="material-symbols-outlined text-sm">delete</span>
-                ログを削除
-              </button>
-            </div>
-          )}
           <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile || props.body ? 'hidden' : ''}`}>
             {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
             {selectable && (
@@ -1023,7 +1023,28 @@ export default function ThreadListPanel(props: Props) {
                 />
               </label>
             )}
-            {!isMobile && tabGrid}
+            {/* 選んでいる間は、タブの代わりに「n 件選択中・ログを削除」(行の高さは変えない。チェックがずれないように) */}
+            {!isMobile && selectable && selected.size > 0 ? (
+              <div className="flex-1 flex items-center gap-3 py-1.5 text-xs">
+                <span className="text-c-text-body">{selected.size} 件選択中</span>
+                <button type="button" className="text-c-text-muted hover:text-c-text-strong" onClick={() => setSelected(new Set())}>
+                  やめる
+                </button>
+                <button
+                  type="button"
+                  className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
+                  onClick={() => {
+                    props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
+                    setSelected(new Set())
+                  }}
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                  ログを削除
+                </button>
+              </div>
+            ) : (
+              !isMobile && tabGrid
+            )}
           </div>
           {/* 未読の一覧は、読み終えても並びから消さない(開いただけで一覧が動かないように)。消すのは本人が押したときだけ */}
           {unreadOnly && readInSnapshot > 0 && (
@@ -1066,7 +1087,9 @@ export default function ThreadListPanel(props: Props) {
                     : { padding: '4px 6px', gap: props.variant === 'classic' ? 0 : 1 }
               }
             >
-              {keywordGroups ? (
+              {pageItems ? (
+                pageItems.map(renderLimited)
+              ) : keywordGroups ? (
                 <>
                   {keywordGroups.groups.map((g) => (
                     <div key={g.keyword} className="flex flex-col" style={{ gap: 'var(--list-gap-thread)' }}>
@@ -1081,7 +1104,22 @@ export default function ThreadListPanel(props: Props) {
                 visible.map(renderLimited)
               )}
               {/* まだ作っていないスレの分の高さ(スクロールバーの長さが、作り足すたびに変わらないように) */}
-              {renderLimit < ordered.length && <div aria-hidden style={{ height: (ordered.length - renderLimit) * CARD_ESTIMATE, flexShrink: 0 }} />}
+              {renderLimit < (pageItems ?? ordered).length && <div aria-hidden style={{ height: ((pageItems ?? ordered).length - renderLimit) * CARD_ESTIMATE, flexShrink: 0 }} />}
+            </div>
+          )}
+          {/* ページの切り替え(件数が多いとき) */}
+          {paged && (
+            <div className="flex items-center justify-center gap-2 py-3 text-sm text-c-text-body">
+              <button type="button" disabled={pageSafe === 0} onClick={() => goPage(pageSafe - 1)} className="p-1 rounded hover:bg-c-surface2 disabled:opacity-30" title="前のページ">
+                <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
+              </button>
+              <span className="tabular-nums">
+                {pageSafe + 1} / {pageCount}
+                <span className="ml-2 text-xs text-c-text-muted">{ordered.length} スレ</span>
+              </span>
+              <button type="button" disabled={pageSafe >= pageCount - 1} onClick={() => goPage(pageSafe + 1)} className="p-1 rounded hover:bg-c-surface2 disabled:opacity-30" title="次のページ">
+                <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
+              </button>
             </div>
           )}
         </div>

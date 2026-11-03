@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja" class="dark h-full" data-scheme="indigo" data-pattern="tonal">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 専ブラ(アプリ)が web の URL から API の場所を見つけるための印(bbs-browser の hono-bbs コネクタが読む) -->
+    <meta name="bbs-api" content="https://contentsview08.github.io/bbs-browser/demo/api/v1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- interactive-widget=resizes-content: Android等でソフトキーボード表示時にレイアウト
+         ビューポート自体を縮めさせる。無指定だとキーボード表示中はビジュアルビューポートだけが
+         縮み、100%/100vh基準の高さがキーボード分ズレたまま残ってしまい、キーボードを閉じた後も
+         下に不要な空白ができてスクロールできてしまう不具合の原因になっていた。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <title>AnonBoard</title>
+    <script type="module" crossorigin src="/bbs-browser/demo/assets/index-CNeE1sI-.js"></script>
+    <link rel="modulepreload" crossorigin href="/bbs-browser/demo/assets/jsx-runtime-DbPMZkE_.js">
+    <link rel="stylesheet" crossorigin href="/bbs-browser/demo/assets/index-DxBVlmdl.css">
+  <script>// 公式サイトの「さわってみる」(読むだけのデモ)。API を呼ぶ代わりに、同じ場所に置いた静的な JSON(scripts/demo-generate.mjs の作り物)を読む。
+// vite.config.ts が --mode demo のときだけ index.html に入れる
+;(() => {
+  const api = document.querySelector('meta[name="bbs-api"]')?.content
+  if (!api) return
+  const base = new URL(api, location.href)
+  const orig = window.fetch.bind(window)
+  const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } })
+  const statusMap = orig(`${base.href}/threads/status.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
+  window.fetch = async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href)
+    if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname + '/')) return orig(input, init)
+    const path = url.pathname.slice(base.pathname.length) // /boards/x/threads など
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+    if (method === 'GET') {
+      const res = await orig(`${base.href}${path}.json`)
+      if (!res.ok) return json({ error: 'NOT_FOUND', message: 'デモにはありません' }, 404)
+      // レスの続き(cursor = {"postNumber": n} の base64url)は、その番号より後だけ返す
+      const cursor = url.searchParams.get('cursor')
+      if (cursor && /\/posts$/.test(path)) {
+        const body = await res.json()
+        const n = Number(JSON.parse(atob(cursor.replace(/-/g, '+').replace(/_/g, '/'))).postNumber ?? 0)
+        return json({ ...body, data: body.data.filter((p) => p.postNumber > n), nextCursor: null })
+      }
+      return res
+    }
+    if (path === '/threads/status') {
+      const ids = JSON.parse(init?.body ?? '{}').ids ?? []
+      const map = await statusMap
+      return json({ data: ids.map((id) => map[id]).filter(Boolean), serverTime: new Date().toISOString() })
+    }
+    if (path === '/auth/logout') return json(undefined, 204)
+    return json({ error: 'DEMO', message: 'これは読むだけのデモです。書き込み・ログインは本物の掲示板で(red-edge.net)' }, 403)
+  }
+})()
+</script></head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+  </body>
+</html>

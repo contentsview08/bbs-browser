@@ -749,7 +749,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (!firstOpen) page.unreadFrom = page.readNo + 1
                 if (r.posts.isNotEmpty() || r.status == FetchStatus.RESET) {
                     val old = if (r.status == FetchStatus.RESET) emptyList() else renderSeq[page]?.second ?: page.index.posts
-                    val all: List<Post> = old + r.posts
+                    // 同じ番号が 2 回入らないように(差分の取得で重なって返る掲示板があると、スレ表示の LazyColumn のキーが重なって落ちる)
+                    val all: List<Post> = (old + r.posts).distinctBy { it.no }
                     // 手で更新したときは、届いた新着の頭に「ここから未読」を引き直す
 
                     setPosts(page, all)

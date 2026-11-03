@@ -549,7 +549,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         Modifier.fillMaxSize(), state = listState,
                         // ミニマップの幅だけ右を空けて、レスが下に潜らないようにする
                         contentPadding = PaddingValues(
-                            top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp,
+                            top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && shown.size > 1) 20.dp else 0.dp,
                             // 重ねたフッターの下に、最後のレスが隠れないように
                             bottom = with(density) { footerH.toDp() },
                         ),
@@ -707,7 +707,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
         // ポップアップは本文のスクロールの外に置く(ポップアップの中をスクロールしても、後ろの帯が隠れたり、引っぱって更新が動いたりしないように)
         PopupLayer(
-            popups, bg = Palette.threadBg(style), topInset = bars.topHeight * (1f - bars.hidden), endInset = if (vm.prefs.showMinimap && shown.size > 1) 24.dp else 0.dp,
+            popups, bg = Palette.threadBg(style), topInset = bars.topHeight * (1f - bars.hidden), endInset = 0.dp,
             onCloseTop = { popups.removeAt(popups.lastIndex) },
         ) { postRow(it, null, false) }
     }

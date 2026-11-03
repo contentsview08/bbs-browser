@@ -36,12 +36,9 @@ export function pieDirOf(dx: number, dy: number): PieDir | null {
 }
 
 export interface PieState {
-  /** 動かし始めた所(画面の座標) */
+  /** 動かし始めた所(画面の座標)。円盤の上の丸は、ここからの動きで overlay が自分で動かす(mousemove ごとに React を通すと遅れる) */
   x: number
   y: number
-  /** 動かし始めた所からの動き(px)。円盤の上のポインターの印に使う */
-  dx: number
-  dy: number
   /** いま向いている区画。起点の近くなら null */
   dir: PieDir | null
 }
@@ -66,12 +63,15 @@ export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigg
     let st: { origin: { x: number; y: number } | null; shown: boolean; dir: PieDir | null; spoiled: boolean } | null = null
     /** 右ボタンのなぞりで円盤を出したあと、続けて来るコンテキストメニューを 1 回だけ止める */
     let eatContextMenu = false
+    /** 円盤を出しているか(state に出したか) */
+    let pieShown = false
 
     const begin = (x: number | null, y: number | null) => {
       st = { origin: x === null || y === null ? null : { x, y }, shown: false, dir: null, spoiled: false }
     }
     const reset = () => {
       st = null
+      pieShown = false
       setPie(null)
     }
     /** 離したとき: 向いている区画の操作をする。円盤を出していたら true */
@@ -105,8 +105,13 @@ export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigg
         if (Math.hypot(dx, dy) < SHOW_PX) return
         s.shown = true
       }
-      s.dir = pieDirOf(dx, dy)
-      setPie({ x: s.origin.x, y: s.origin.y, dx, dy, dir: s.dir })
+      // state を変えるのは、円盤を出すときと向きが変わったときだけ(動くたびに App を描き直すと丸が遅れる)
+      const dir = pieDirOf(dx, dy)
+      const first = s.dir === null && !pieShown
+      if (dir === s.dir && !first) return
+      s.dir = dir
+      pieShown = true
+      setPie({ x: s.origin.x, y: s.origin.y, dir })
     }
 
     // ── Ctrl を押しながら ──

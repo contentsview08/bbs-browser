@@ -105,7 +105,7 @@ fun Minimap(
     val shape = RoundedCornerShape(4.dp)
     // なぞっている間の位置(指の高さと、そこにあるレス)。指の左に「#523 名無し: 本文の頭」の札を出す(どこへ飛ぶか分かるように)
     var drag by remember { androidx.compose.runtime.mutableStateOf<Pair<Float, Int>?>(null) }
-    Box(modifier.width(22.dp).fillMaxHeight()) {
+    Box(modifier.width(18.dp).fillMaxHeight()) {
     Canvas(
         Modifier.fillMaxSize().background(Palette.surface2.copy(alpha = 0.85f), shape).border(1.dp, Palette.border, shape)
             .pointerInput(n, marks) { detectTapGestures { tap(it.y, size.height.toFloat(), 14.dp.toPx()) } }

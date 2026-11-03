@@ -127,7 +127,8 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
     }
     if (tree == null) {
         LazyColumn(state = state) {
-            itemsIndexed(e.posts, key = { _, p -> p.no }) { i, p ->
+            // 同じレスが 2 回並ぶことがある(抽出・ツリーで別の枝に同じレス)ので、番号だけをキーにすると落ちる(Key "1" was already used)。並びの位置も付ける
+            itemsIndexed(e.posts, key = { i, p -> "$i:${p.no}" }) { i, p ->
                 if (i > 0) HorizontalDivider(color = Palette.border)
                 Box(if (p.no == e.focusNo) Modifier.background(Palette.accentWash) else Modifier) { post(p) }
             }
@@ -135,7 +136,7 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
     } else {
         val byNo = remember(e.posts) { e.posts.associateBy { it.no } }
         LazyColumn(state = state) {
-            itemsIndexed(tree, key = { _, r -> r.no }) { i, r ->
+            itemsIndexed(tree, key = { i, r -> "$i:${r.no}" }) { i, r ->
                 val p = byNo[r.no] ?: return@itemsIndexed
                 val edge = remember(r.no) { EdgeBar() }
                 androidx.compose.runtime.CompositionLocalProvider(LocalEdgeBar provides edge) { TreeStep(

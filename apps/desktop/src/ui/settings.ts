@@ -477,8 +477,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'deleteLog' },
   },
   gestureSensitivity: 3,
-  // 上 先頭へ・下 一番下へ・左 戻る・右 進む・右上 更新・左上 タブを閉じる・右下 書き込み欄へ・左下 設定を開く
-  mouseGestures: { n: 'top', s: 'bottom', w: 'back', e: 'forward', ne: 'refresh', nw: 'closeTab', se: 'reply', sw: 'settings' },
+  // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空(本人の指示 2026-11-05)
+  mouseGestures: { n: 'top', s: 'bottom', ne: 'refresh', nw: 'closeAllTabs', sw: 'settings' },
   mouseGestureTrigger: 'ctrl',
   logRetentionDays: 90,
   lastLogPruneAt: 0,

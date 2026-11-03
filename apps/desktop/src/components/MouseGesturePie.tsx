@@ -1,6 +1,6 @@
 // PC: マウスジェスチャーの円盤(パイメニュー)。中心から 8 方向の区画に操作の名前を書き、向いている区画を差し色で光らせる。
 // 画面に出すとき(useMouseGesture の pie)と、設定で割り当てを見せる・選ぶとき(interactive)の両方で使う
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { PIE_DIRS, type PieDir } from '../hooks/useMouseGesture'
 
@@ -131,14 +131,12 @@ const OVERLAY_SIZE = 440
  * 向きは動かし始めた所からの動き(dx・dy)で決まるので、ポインターがどこにあっても、円盤の中心を起点に動かしたのと同じ。
  * その動きを円盤の上に小さな印で出す。下に向いている操作の名前。body の直下に出す(transform のある親の中だと fixed の位置がずれる)
  */
-export function MouseGesturePieOverlay(props: { dx: number; dy: number; dir: PieDir | null; labels: Partial<Record<PieDir, string | undefined>> }) {
+export function MouseGesturePieOverlay(props: { x: number; y: number; dir: PieDir | null; labels: Partial<Record<PieDir, string | undefined>> }) {
   const name = props.dir ? props.labels[props.dir] : undefined
   const size = Math.min(OVERLAY_SIZE, window.innerWidth - 32, window.innerHeight - 80)
   const scale = size / SIZE
   // 丸は円盤の外側の縁まで(起点からの動きそのまま。縁を越えたら縁に留める)
   const reach = (R_OUT - 14) * scale
-  const dist = Math.hypot(props.dx, props.dy)
-  const k = dist > reach ? reach / dist : 1
   // 出ている間はポインターを隠す(子要素の cursor より強く)
   useEffect(() => {
     const style = document.createElement('style')
@@ -148,25 +146,36 @@ export function MouseGesturePieOverlay(props: { dx: number; dy: number; dir: Pie
       style.remove()
     }
   }, [])
+  // 丸と線は、React を通さずに mousemove ごとに直に動かす(state を経由すると描き直しの分だけ遅れて、引きずる感じになる)
+  const dotRef = useRef<SVGGElement>(null)
+  const lineRef = useRef<SVGLineElement>(null)
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      const dx = e.clientX - props.x
+      const dy = e.clientY - props.y
+      const dist = Math.hypot(dx, dy)
+      const k = dist > reach ? reach / dist : 1
+      const x = size / 2 + dx * k
+      const y = size / 2 + dy * k
+      dotRef.current?.setAttribute('transform', `translate(${x} ${y})`)
+      lineRef.current?.setAttribute('x2', String(x))
+      lineRef.current?.setAttribute('y2', String(y))
+    }
+    document.addEventListener('mousemove', move, true)
+    return () => document.removeEventListener('mousemove', move, true)
+  }, [props.x, props.y, reach, size])
   return createPortal(
     <div className="fixed inset-0 z-[9950] pointer-events-none flex flex-col items-center justify-center">
       <div className="relative" style={{ width: size, height: size, opacity: 0.86 }}>
         <MouseGesturePie labels={props.labels} active={props.dir} center={props.dir ? (name ? '' : 'なし') : 'なし'} size={size} />
         {/* ポインターの代わり: 中心から、マウスの動きに合わせて動く丸(白に配色の差し色の縁、半透明)。中心からの線で向きも見える */}
         <svg className="absolute inset-0" width={size} height={size} style={{ overflow: 'visible' }}>
-          <line
-            x1={size / 2}
-            y1={size / 2}
-            x2={size / 2 + props.dx * k}
-            y2={size / 2 + props.dy * k}
-            stroke="#fff"
-            strokeWidth={3}
-            strokeLinecap="round"
-            opacity={0.6}
-          />
+          <line ref={lineRef} x1={size / 2} y1={size / 2} x2={size / 2} y2={size / 2} stroke="#fff" strokeWidth={3} strokeLinecap="round" opacity={0.6} />
           {/* 光っている区画(差し色)の上でも見えるように、白い丸に差し色の縁 */}
-          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={14} fill="#fff" opacity={0.85} stroke="var(--c-accent)" strokeWidth={3} />
-          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={5} fill="var(--c-accent)" />
+          <g ref={dotRef} transform={`translate(${size / 2} ${size / 2})`}>
+            <circle r={14} fill="#fff" opacity={0.85} stroke="var(--c-accent)" strokeWidth={3} />
+            <circle r={5} fill="var(--c-accent)" />
+          </g>
         </svg>
       </div>
       <div className="mt-2">

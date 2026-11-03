@@ -15,7 +15,6 @@ import { POST_STYLES,
   MOBILE_POST_STYLES,
   effectivePostStyle,
   FONT_PX_KEY,
-  TAB_LABELS,
   baseFontPx,
   PICKABLE_SCHEMES,
   ACCENTS,
@@ -25,6 +24,7 @@ import { POST_STYLES,
   pickScheme,
   FONT_FAMILIES,
   LIST_TABS,
+  ID_STYLES,
   type ListTabKey,
   type AppSettings,
   type UpdateSetting,
@@ -647,14 +647,6 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           onChange={(v) => update('paneMode', v)}
         />
       </Section>
-      <Section advanced desktopOnly title="サイドバー">
-        <Toggle
-          checked={s.showStripNames}
-          onChange={(v) => update('showStripNames', v)}
-          label="畳んだサイドバーに板名を出す"
-          note="お気に入り板のアイコンの下に、板名を小さく出します(別名があれば別名)"
-        />
-      </Section>
       <Section title="文字の大きさ">
         {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
         <FontSizeSlider
@@ -675,7 +667,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
   )
 }
 
-function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<SettingsProps, 'settings' | 'update' | 'favorites' | 'onPruneLogs'>) {
+function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsProps, 'settings' | 'update' | 'onPruneLogs'>) {
   const [pruneMessage, setPruneMessage] = useState<string>()
   const [pruning, setPruning] = useState(false)
   return (
@@ -700,27 +692,11 @@ function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<Settin
           onChange={(v) => update('listShape', v)}
         />
       </Section>
-      <Section advanced desktopOnly title="ホイールで更新">
-        <Toggle
-          checked={s.pullToRefreshList}
-          onChange={(v) => update('pullToRefreshList', v)}
-          label="一番上でさらにホイールを上に回したら更新する"
-          note="一番上に着いてから、さらに大きく回したときだけ。一度更新したら 5 秒はしません"
-        />
-      </Section>
       <Section
         title="キーワード"
         note="スレタイに含むスレを、スレ一覧の上にキーワードの帯をつけてまとめます。上に並んでいるキーワードほど先に出ます"
       >
         <ListEditor noun="キーワード" sortable items={s.keywords} onChange={(v) => update('keywords', v)} placeholder="例: 実況" />
-      </Section>
-      <Section title="立てた人の ID">
-        <Toggle
-          checked={s.threadAuthorIcon}
-          onChange={(v) => update('threadAuthorIcon', v)}
-          label="スレ一覧で、立てた人の ID を模様で出す"
-          note="スレ一覧に立てた人の ID が付いてくる掲示板(エッヂなど)だけ。切ると、ID をスレの右下に小さく出します"
-        />
       </Section>
       <Section title="板を開いたときの並び" note="スレ一覧のタブで、その場でも変えられます">
         <Choice
@@ -736,8 +712,6 @@ function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<Settin
       </Section>
       <Section title="スレ一覧のタブ" note="スレ一覧の上に出すタブと、その並び(上が左)です。数字キーの 1・2・3… は左から順に当たります">
         <ListTabsEditor value={s.listTabs} onChange={(v) => update('listTabs', v)} />
-        <p className="text-xs text-c-text-muted mt-3 mb-1.5">タブの見せ方</p>
-        <Choice value={s.listTabLabel} options={TAB_LABELS} onChange={(v) => update('listTabLabel', v)} />
       </Section>
       <Section title="ログの削除">
         <Toggle
@@ -749,32 +723,11 @@ function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<Settin
       </Section>
       <Section advanced desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
-          checked={s.tabsEnabled}
-          onChange={(v) => update('tabsEnabled', v)}
-          label="タブを使う"
-          note="オフにすると、タブ列を出さず、スレを開くたびに今のスレを置き換えます(開いているスレ以外のタブは閉じます)"
-        />
-        <Toggle
           checked={s.openInNewTab}
           onChange={(v) => update('openInNewTab', v)}
           label="スレ一覧から開くときは新しいタブで開く"
           note="オフにすると、いま見ているタブを置き換えます"
         />
-      </Section>
-      <Section advanced title="起動時に開く板" note="前回開いていた板か、お気に入りの板から選べます">
-        <select
-          value={s.startupBoardUrl}
-          onChange={(e) => update('startupBoardUrl', e.target.value)}
-          className={`${INPUT} w-72`}
-        >
-          <option value="@last">前回開いていた板</option>
-          <option value="">開かない</option>
-          {favorites.map((b) => (
-            <option key={b.url} value={b.url}>
-              {b.name}
-            </option>
-          ))}
-        </select>
       </Section>
       <Section
         title="閲覧履歴(ログ)を残す日数"
@@ -855,58 +808,25 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           label="ID を短く出す"
           note="先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)"
         />
-        <Toggle
-          checked={s.idColor}
-          onChange={(v) => update('idColor', v)}
-          label="ID ごとに色を付ける"
-          note="2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます"
-        />
-        <Toggle
-          checked={s.idHeat}
-          onChange={(v) => update('idHeat', v)}
-          label="書き込みの多い ID を赤くする"
-          note="同じ ID の書き込みが 3 つ以上で色を付け、多いほど赤くします"
-        />
-        <Toggle
-          checked={s.showIdenticon}
-          onChange={(v) => update('showIdenticon', v)}
-          label="ID のアイコンを出す"
-          note="ID から作る GitHub 風の模様を、レス番号の左に出します(同じ ID はいつも同じ模様)。右下の数字はその ID の書き込み数です"
-        />
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の見せ方</p>
+        <Choice value={s.idStyle} options={ID_STYLES} onChange={(v) => update('idStyle', v)} />
+        <p className="text-[10px] text-c-text-muted mt-1">{ID_STYLES.find((x) => x.key === s.idStyle)?.note}</p>
       </Section>
       <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。画面全体の文字の大きさは「表示」にあります">
         <PostFontSliders settings={s} update={update} />
       </Section>
       <Section title="本文">
         <Toggle
-          checked={s.collapseBlankLines}
-          onChange={(v) => update('collapseBlankLines', v)}
-          label="続いた空行を 1 行にまとめる"
-        />
-        <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
-        <Toggle
-          checked={s.aaAutoDetect}
-          onChange={(v) => update('aaAutoDetect', v)}
-          label="AA を見分けて、AA 用の字で出す"
-          note="空白が続く本文を AA 用の字で出します。レスの ⋯ から個別に切り替えられます"
+          checked={s.tidyBlankLines}
+          onChange={(v) => update('tidyBlankLines', v)}
+          label="空行を整える"
+          note="3 行以上続いた空行を 1 行にまとめ、本文の最後の空行を消します"
         />
         <Toggle
           checked={s.urlShorten}
           onChange={(v) => update('urlShorten', v)}
           label="URL を短く見せる"
-          note="https:// を外し、長い URL は後ろを「…」で省きます。押すと元の URL を開きます"
-        />
-        <Toggle
-          checked={s.imageUrlOmit}
-          onChange={(v) => update('imageUrlOmit', v)}
-          label="画像の URL を「画像」の札にする"
-          note="画像はサムネイルで見えるので、長い URL を出しません。押すと画像を開きます"
-        />
-        <Toggle
-          checked={s.imageUrlCollapse}
-          onChange={(v) => update('imageUrlCollapse', v)}
-          label="続いて並んだ画像の URL をまとめる"
-          note="改行や空白だけをはさんで並んだ画像の URL を、「画像 ×3」のように 1 つにまとめます"
+          note="https:// を外し、長い URL は後ろを「…」で省きます。画像の URL は「画像」の札にし、続いて並んだものは「画像 ×3」のようにまとめます。押すと元の URL を開きます"
         />
         <Toggle
           checked={s.showLinkPreview}
@@ -939,25 +859,19 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
             { key: 'left' as const, name: '左の帯' },
             { key: 'right' as const, name: '右の帯' },
             { key: 'text' as const, name: '本文の色' },
-            { key: 'none' as const, name: '示さない' },
           ]}
           onChange={(v) => update('heatStyle', v)}
         />
       </Section>
-      <Section title="画像とサムネイル">
-        <Toggle
-          checked={s.showThumbnails}
-          onChange={(v) => update('showThumbnails', v)}
-          label="本文の画像をサムネイルで出す"
-          note="本文中の画像 URL(jpg・png・gif・webp)を小さく出します"
-        />
-        <p className="text-xs text-c-text-muted mt-3 mb-1.5">サムネイルを読み込む</p>
+      <Section title="画像とサムネイル" note="本文中の画像 URL(jpg・png・gif・webp)と動画を小さく出します">
+        <p className="text-xs text-c-text-muted mb-1.5">サムネイルを読み込む</p>
         <Choice
           value={s.thumbLoad}
           options={[
             { key: 'always' as const, name: 'いつも' },
             { key: 'wifi' as const, name: 'Wi-Fi のときだけ' },
             { key: 'tap' as const, name: '押したら' },
+            { key: 'never' as const, name: '出さない' },
           ]}
           onChange={(v) => update('thumbLoad', v)}
         />
@@ -1031,9 +945,6 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
             note="切ると、スレ一覧・スレ表示のヘッダーとフッターをいつも出しておきます"
           />
         )}
-      </Section>
-      <Section title="絞り込みのタブの見せ方" note="スレ表示の上の、人気・画像・動画・リンク・すべて のタブです">
-        <Choice value={s.filterTabLabel} options={TAB_LABELS} onChange={(v) => update('filterTabLabel', v)} />
       </Section>
       <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
         <div className="flex items-center gap-2">
@@ -1150,10 +1061,7 @@ function UploadTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'up
   const registered = (h: (typeof UPLOAD_HOSTS)[number]) => (h.setting ? s[h.setting].trim() !== '' : false)
   return (
     <>
-      <Section title="画像のアップロード" note="書き込み欄の画像ボタン・貼り付け・ドラッグで画像を置き場に上げ、本文に URL を入れます。上げた画像は誰でも見られます。hono-bbs の板では、いつもその掲示板の置き場に上げます">
-        <Toggle checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} label="画像のアップロードを使う" />
-      </Section>
-      <Section title="上げ先" note="「サイトの画面」は、画像ボタンを押すとそのサイトの画面が開き、そこで上げたリンクを本文に入れます。「API」は、キーを登録すると画像ボタンからそのまま上げます">
+      <Section title="上げ先" note="書き込み欄の画像ボタン・貼り付け・ドラッグで画像を置き場に上げ、本文に URL を入れます。上げた画像は誰でも見られます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」は、画像ボタンを押すとそのサイトの画面が開き、そこで上げたリンクを本文に入れます。「API」は、キーを登録すると画像ボタンからそのまま上げます">
         <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
           {UPLOAD_HOSTS.map((h) => {
             const on = s.uploadHost === h.key
@@ -1183,13 +1091,7 @@ function UploadTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'up
           })}
         </div>
       </Section>
-      <Section advanced title="上げる前に">
-        <Toggle
-          checked={s.uploadStripMetadata}
-          onChange={(v) => update('uploadStripMetadata', v)}
-          label="上げる前に、画像の位置情報など(EXIF)を消す"
-          note="JPEG・PNG・WebP は描き直して取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます"
-        />
+      <Section advanced title="上げる前に" note="JPEG・PNG・WebP は描き直して、位置情報など(EXIF)をいつも取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます">
         <div className="mt-3">
           <p className="text-sm text-c-text-body mb-1.5">大きい画像を縮めて上げる(長い辺)</p>
           <Choice
@@ -1215,12 +1117,6 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
   ]
   return (
     <>
-      <Section
-        advanced title="書き込んだあとに待つ時間"
-        note="この秒数は書き込むボタンを押せません(連投で規制されないように)"
-      >
-        <NumberField value={s.postCooldownSec} min={0} max={600} unit="秒" zeroLabel="待たない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('postCooldownSec', v)} />
-      </Section>
       <Section title="定型文" note="レスの操作バーや ⋯ から、そのレスへのアンカーを付けて、押すとすぐ書き込みます">
         <ListEditor
           noun="定型文"
@@ -1234,10 +1130,6 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           onRename={(from, to) => update('postToolbar', s.postToolbar.map((x) => (x === `phrase:${from}` ? `phrase:${to}` : x)))}
           placeholder="例: ワロタ"
         />
-        <Toggle checked={s.phraseBar} onChange={(v) => update('phraseBar', v)} label="書いている間、定型文のバーを出す" note="本文の欄の上に並べ、押すとカーソルの所に入ります" />
-      </Section>
-      <Section advanced title="送るとき">
-        <Toggle checked={s.sendDelay} onChange={(v) => update('sendDelay', v)} label="送る前に 3 秒待つ" note="その間は「取り消す」で止められます(誤爆を防ぐ)" />
       </Section>
 
       <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。上から順に左から並びます(⋯ はいつも一番右)">
@@ -1273,18 +1165,6 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
             note="アプリを裏に回しているときは、下の知らせを Android の通知でも出します。アプリを完全に閉じている間は、新着を確かめられないので知らせません"
           />
         )}
-        <Toggle
-          checked={s.notifyReplies}
-          onChange={(v) => update('notifyReplies', v)}
-          label="自分宛てのレスが届いたら知らせる"
-          note="右下に出し、押すとそのレスへ飛びます。裏のタブは更新したときに知らせます"
-        />
-        <Toggle
-          checked={s.notifyFavThreads}
-          onChange={(v) => update('notifyFavThreads', v)}
-          label="お気に入りのスレに新着があったら知らせる"
-          note="新着の数を確かめたときに増えていたら、右下に出します"
-        />
         <div className="mt-3">
           <p className="text-sm text-c-text-body mb-1.5">キーワードに合うスレが立ったら知らせる</p>
           <p className="text-xs text-c-text-muted mb-2">
@@ -1299,12 +1179,6 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           onChange={(v) => update('autoScrollOnNew', v)}
           label="いちばん下を見ているときは、新着まで自動でスクロールする"
         />
-        {s.autoScrollOnNew && <Toggle
-          checked={s.followToEnd}
-          onChange={(v) => update('followToEnd', v)}
-          label="新着が多くても、いちばん下まで送る"
-          note="オフなら新着の頭(最初の新しいレス)まで、オンなら一番下まで送ります。実況のように速いスレで、いつも最新を見ていたいとき向け"
-        />}
       </Section>
     </>
   )

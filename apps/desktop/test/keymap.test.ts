@@ -82,9 +82,10 @@ describe('決め打ちのキー', () => {
   it('既定の割り当てに、決め打ちのキーは入っていない', () => {
     for (const keys of Object.values(DEFAULT_KEYMAP)) for (const key of keys) expect(reservedKeyName(key), key).toBeUndefined()
   })
-  it('Esc・Ctrl+W・数字は割り当てられない', () => {
+  it('Esc・Ctrl+Enter・数字は割り当てられない(Ctrl+W は「タブを閉じる」の割り当てで変えられる)', () => {
     expect(reservedKeyName('Escape')).toBeDefined()
-    expect(reservedKeyName(keyString(k('w', { ctrl: true }))!)).toBe('タブを閉じる')
+    expect(reservedKeyName('Ctrl+Enter')).toBe('書き込む')
+    expect(reservedKeyName(keyString(k('w', { ctrl: true }))!)).toBeUndefined()
     expect(reservedKeyName('3')).toBeDefined()
     expect(reservedKeyName('J')).toBeUndefined()
   })

@@ -30,8 +30,6 @@ export function checkUpload(file: File): string | undefined {
 }
 
 export interface UploadOptions {
-  /** 描き直して EXIF(撮影場所など)を取り除く */
-  stripMetadata: boolean
   /** 長い辺がこれを超える画像は縮小する(px)。0 なら縮小しない */
   maxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げる(あとでサーバー上でも消せる) */
@@ -91,10 +89,6 @@ async function prepare(file: File, o: UploadOptions): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
   const long = Math.max(bitmap.width, bitmap.height)
   const scale = o.maxDimension > 0 && long > o.maxDimension ? o.maxDimension / long : 1
-  if (!o.stripMetadata && scale === 1) {
-    bitmap.close()
-    return file
-  }
   const w = Math.round(bitmap.width * scale)
   const h = Math.round(bitmap.height * scale)
   const canvas = new OffscreenCanvas(w, h)

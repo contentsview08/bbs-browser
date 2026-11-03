@@ -158,8 +158,6 @@ interface Options {
   onRead: (no: number) => void
   openPosition: OpenPosition
   autoScrollOnNew: boolean
-  /** 一番下を見ているときに届いた新着は、多くても一番下まで送る */
-  followToEnd?: boolean
   showThumbnails: boolean
   /** 通知などから指定されたレスへ飛ぶ。seq が変わったときだけ飛ぶ */
   jumpTo?: { no: number; seq: number }
@@ -558,7 +556,6 @@ export function useThreadScroll(o: Options) {
       readNo: sent.current,
       opening,
       autoScrollOnNew: latest.current.autoScrollOnNew,
-      followToEnd: latest.current.followToEnd,
       atBottom: atBottom.current,
     })
     pendingUnread.current = false

@@ -36,8 +36,6 @@ import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
 export interface PostHandlers extends BodyHandlers {
   /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
   thumbAuto?: boolean
-  /** 書き込みの多い ID を赤くする */
-  idHeat?: boolean
   /** ID ごとに色を付ける(設定 idColor)。dark は暗い配色か、sky は空色の地(LINE ライトの LINE 風)か。付けないときは undefined */
   idColor?: { dark: boolean; sky: boolean }
   /** 人気のレス(返信 3 件から)の示し方(設定 heatStyle)。既定は左の帯 */
@@ -99,7 +97,6 @@ interface Props {
   aiMark?: AiNgHit
   ngMode: NgMode
   showThumbnails: boolean
-  aaAutoDetect: boolean
   showIdenticon?: boolean
   showLinkPreview?: boolean
   /** 名無しの省略・空行の扱い */
@@ -392,7 +389,8 @@ function PostArticle(props: Props) {
   const numHeat = heatClass(anchorCount)
   // アンカーを付けている・付けられているレスは、本文を押すとツリーを出せる
   const hasConnections = anchorCount > 0 || (props.quotes?.size ?? 0) > 0 || anchorTargets(post.body, handlers.toNo).some((n) => n !== post.no)
-  const isAA = aaOverride ?? (props.aaAutoDetect && looksLikeAA(body))
+  // 空白が続く本文は AA とみなして AA 用の字で出す(⋯ から個別に切り替えられる)
+  const isAA = aaOverride ?? looksLikeAA(body)
   // 本文は一番明るい文字色だと背景との差が強すぎてチカチカするので、一段落とした色にする。
   // 人気のレスを「本文の色」で示すときだけ、本文を暖色に(5 件から太字。スマホのアプリと同じ)
   const heatStyle = handlers.heatStyle ?? 'left'
@@ -569,17 +567,16 @@ function PostArticle(props: Props) {
       自分
     </span>
   )
-  // 書き込みの多い ID は暖色(設定 idHeat)。それ以外で 2 回以上書いた ID は、ID ごとの色(設定 idColor)
-  const idHeatClass = handlers.idHeat ? heatClass(idCount) : ''
+  // 2 回以上書いた ID は、ID ごとの色(設定 idStyle が「色」のとき)
   /** 頭の日時(設定の出し方で。元の形は title で見られる) */
   const shownDate = displayDate(post.date, handlers.dateStyle ?? 'full')
-  const idTint = !idHeatClass && handlers.idColor && post.id && idCount >= 2 ? idColorOf(post.id, handlers.idColor.dark, handlers.idColor.sky) : null
+  const idTint = handlers.idColor && post.id && idCount >= 2 ? idColorOf(post.id, handlers.idColor.dark, handlers.idColor.sky) : null
   const idBtn =
     post.id &&
     (
       <button
         type="button"
-        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${idHeatClass || (idTint ? '' : 'text-c-text-muted')}`}
+        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${idTint ? '' : 'text-c-text-muted'}`}
         style={idTint ? { color: idTint } : undefined}
         data-head-target="id"
         onClick={(e) => handlers.onId(post.id!, e.currentTarget)}

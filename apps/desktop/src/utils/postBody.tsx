@@ -252,8 +252,8 @@ export interface DisplayOptions {
   /** 板の既定の名前のほかに、名無しとみなす名前(板ごとの設定) */
   extraNonames?: string[]
   omitNoname: boolean
-  collapseBlankLines: boolean
-  trimTrailingBlank: boolean
+  /** 空行を整える(3 行以上続く空行は 1 行にまとめ、文末の空行は消す) */
+  tidyBlankLines: boolean
   /**
    * 本文からアイコン(5ch の BE アイコンなど)を取り出す。掲示板ごとの書き方なので、コネクタが持っている。
    * 返す body はアイコンの部分を除いた本文
@@ -263,10 +263,8 @@ export interface DisplayOptions {
 
 /** 本文の見せ方: 3 行以上続く空行は 1 行にまとめ、文末の空行は消す */
 export function displayBody(body: string, o: DisplayOptions): string {
-  let s = body
-  if (o.collapseBlankLines) s = s.replace(/\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}/g, '\n\n')
-  if (o.trimTrailingBlank) s = s.replace(/[\s\u3000]+$/, '')
-  return s
+  if (!o.tidyBlankLines) return body
+  return body.replace(/\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}/g, '\n\n').replace(/[\s\u3000]+$/, '')
 }
 
 /** 名前の見せ方: 板の既定の名前で始まるなら、その部分を省く(後ろのトリップなどは残す) */

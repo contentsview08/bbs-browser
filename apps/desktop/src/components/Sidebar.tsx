@@ -50,8 +50,6 @@ interface Props {
   onResize: (width: number) => void
   /** 板ごとの別名・ファビコン */
   boardMeta: Record<string, BoardMeta>
-  /** しまったときに、板のアイコンの下に板名を小さく出す */
-  showStripNames: boolean
 }
 
 const COLLAPSED = 64
@@ -211,11 +209,8 @@ export default function Sidebar(props: Props) {
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const collapsed = props.collapsed && !peek
   const nameOf = (b: Board) => props.boardMeta[b.url]?.alias || b.name
-  // 板名を出す設定なら、アイコンの下に名前が入るぶん行を高くする。
-  // 開いたときも高さを変えない(変えるとファビコンの縦の位置がずれる)。小さな板名は、開いたら薄く消すだけ
-  const stripNames = collapsed && props.showStripNames
-  // 板の行(小項目)は大項目より小さく
-  const rowH = props.showStripNames ? 52 : 36
+  // 板の行(小項目)は大項目より小さく(しまったときはアイコンだけ。板名を小さく出す設定は 2026-11 にやめた)
+  const rowH = 36
   /** ファビコンの大きさ。開閉で変えない */
   const ICON = 20
 
@@ -353,26 +348,10 @@ export default function Sidebar(props: Props) {
                     {!dragging && <NavNotch on={active} />}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
                     <span className="relative w-[64px] self-stretch flex-shrink-0 flex items-center justify-center overflow-hidden">
-                      {/* ファビコンは板名の字と同じ高さ(行の真ん中)。しまったときの小さな板名は、場所を取らずにその下に重ねる
-                          (縦に並べると、開いたときも板名の分だけファビコンが上にずれていた) */}
-                      <span className={`flex items-center justify-center transition-transform duration-200 ${stripNames ? '-translate-y-2' : ''}`}>
+                      {/* ファビコンは板名の字と同じ高さ(行の真ん中) */}
+                      <span className="flex items-center justify-center">
                         <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
                       </span>
-                      {/* 板名は列の真ん中に置き、入りきらなければ末尾を「…」で略す。
-                          幅いっぱいの箱で中央寄せにすると、長い名前は左右両側へはみ出して切れるので、
-                          文字の幅に縮む箱を列の幅までに抑えて真ん中に置く */}
-                      {props.showStripNames && (
-                        <span
-                          className={`absolute inset-x-0 bottom-1 px-1 flex justify-center transition-opacity duration-200 ${
-                            stripNames ? 'opacity-100' : 'opacity-0'
-                          }`}
-                        >
-                          {/* 小さい字でも読めるよう、太字で、薄い色にしない(選んでいる板はいちばん濃く) */}
-                          <span className={`max-w-full truncate text-[10px] font-bold leading-tight ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
-                            {nameOf(b)}
-                          </span>
-                        </span>
-                      )}
                     </span>
                     <span className={`relative flex-1 min-w-0 text-sm truncate ${active ? 'text-c-text-strong font-medium' : 'text-c-text-body'}`}>
                       {nameOf(b)}

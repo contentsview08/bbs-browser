@@ -147,13 +147,12 @@ describe('HeightCache', () => {
   })
 })
 
-describe('newPostsTarget: 一番下まで送る設定', () => {
+describe('newPostsTarget: 一番下を見ているときの新着', () => {
   const base = { pendingUnread: false, unreadFrom: 11, hasUnreadPost: true, prevLastNo: 10, readNo: 10, opening: false, autoScrollOnNew: true, atBottom: true }
-  it('オンなら一番下まで、オフなら新着の頭まで', () => {
-    expect(newPostsTarget({ ...base, followToEnd: true })).toEqual({ bottom: true, animate: true })
-    expect(newPostsTarget({ ...base, followToEnd: false })).toEqual({ no: 11, animate: true })
+  it('新着の頭まで送る(一番下まで送る設定は 2026-11 にやめた)', () => {
+    expect(newPostsTarget(base)).toEqual({ no: 11, animate: true })
   })
-  it('一番下を見ていなければ、どちらでも動かさない', () => {
-    expect(newPostsTarget({ ...base, followToEnd: true, atBottom: false })).toBeUndefined()
+  it('一番下を見ていなければ動かさない', () => {
+    expect(newPostsTarget({ ...base, atBottom: false })).toBeUndefined()
   })
 })

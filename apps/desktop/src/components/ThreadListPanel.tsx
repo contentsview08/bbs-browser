@@ -20,7 +20,7 @@ import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
-import { LIST_FILTERS, tabDefOf, type ListFilter, type ListTabKey, type TabLabel, type ThreadSort } from '../ui/settings'
+import { LIST_FILTERS, tabDefOf, type ListFilter, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -119,8 +119,6 @@ interface Props {
   pageSize?: number
   /** 上に出すタブと、その並び(設定の listTabs) */
   tabs?: ListTabKey[]
-  /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ) */
-  tabLabel?: TabLabel
   /** スレタイの NG に当たるスレは出さない */
   isNg: (t: ThreadSummary) => boolean
   /**
@@ -160,8 +158,6 @@ interface Props {
   refreshReadyAt?: number
   /** この時刻より後に立ったスレに「新」の印を付ける(前回その板の一覧を取った時刻) */
   newSince?: number
-  /** 一番上でさらにホイールを回したら更新する(設定) */
-  pullToRefresh: boolean
   /** スマホ: 下へスクロールしたらヘッダーとフッターを隠す */
   hideBarsOnScroll?: boolean
   /** 板を開いているときだけ ★ を出す */
@@ -399,7 +395,7 @@ export default function ThreadListPanel(props: Props) {
   })
   // スマホ: 指で引っぱって更新する(上の端で下へ。しきい値がスレ表示の 1.7 倍なので、指の量も多めに掛ける)
   // 選んでいる間(閲覧履歴を長押しで選んで、なぞっているときなど)は、引っぱって更新しない
-  const touchPull = useTouchPull(scrollRef, props.pullToRefresh && props.onRefresh && selected.size === 0 ? pull : undefined, undefined)
+  const touchPull = useTouchPull(scrollRef, props.onRefresh && selected.size === 0 ? pull : undefined, undefined)
 
   useEffect(() => {
     setWidth(props.width)
@@ -841,8 +837,8 @@ export default function ThreadListPanel(props: Props) {
                     className={`${TAB} ${isMobile ? 'px-2' : ''} ${active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'}`}
                     title={`${def.note}${isFilter ? '' : '。押すたびに 逆順 → 元の並び'}(${i + 1} キー)`}
                   >
-                    {props.tabLabel !== 'text' && <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>}
-                    {props.tabLabel !== 'icon' && <span className="truncate">{def.name}</span>}
+                    <span className="material-symbols-outlined text-base leading-none">{def.icon}</span>
+                    <span className="truncate">{def.name}</span>
                     {key === 'unread' && unreadTotal > 0 && (
                       <span
                         className="font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
@@ -909,7 +905,7 @@ export default function ThreadListPanel(props: Props) {
         onTouchEnd={isMobile ? touchPull.onTouchEnd : undefined}
         onTouchCancel={isMobile ? touchPull.onTouchCancel : undefined}
         onWheel={(e) => {
-          if (props.pullToRefresh && props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
+          if (props.onRefresh && e.deltaY < 0 && (scrollRef.current?.scrollTop ?? 1) < 1) pull.pull(-e.deltaY)
         }}
       >
         {/* スマホ: ヘッダーはフッターと同じ色にし、下に線を引く(一覧と同じ色だと境目が分からないため) */}

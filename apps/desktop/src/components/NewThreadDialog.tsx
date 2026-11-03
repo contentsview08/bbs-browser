@@ -8,7 +8,6 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { DialogHeader } from './DialogParts'
 import type { AttachmentRules, NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
-import { useCountdown } from '../hooks/useCountdown'
 import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
@@ -26,8 +25,6 @@ interface Props {
   onOpenUrl: (url: string) => void
   onClose: () => void
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ */
-  readyAt?: number
-  cooldownMs: number
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined(絵文字だけ) */
   uploader?: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
@@ -90,10 +87,8 @@ export default function NewThreadDialog(props: Props) {
     })
   }
   const media = useMediaInput({ uploader: props.uploader, attach: props.attach, insert, onUploaded: props.onUploaded })
-  const cooldown = useCountdown(props.readyAt, props.cooldownMs)
-  const cooling = cooldown.left > 0
   // ファイルを付けていれば、本文が空でも立てられる(画像だけのスレ)
-  const ready = title.trim() !== '' && (body.trim() !== '' || !!media.attachedView) && !sending && !cooling
+  const ready = title.trim() !== '' && (body.trim() !== '' || !!media.attachedView) && !sending
 
   // 書き込みの長さ。板の上限を超えていたら、送る前に止める
   const measure = props.byteLength ? measurePost({ body, name, mail, subject: title }, props.limits, props.byteLength) : undefined
@@ -129,10 +124,10 @@ export default function NewThreadDialog(props: Props) {
 
   const submitIcon = (
     <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
-      {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'edit_square'}
+      {sending ? 'progress_activity' : 'edit_square'}
     </span>
   )
-  const submitLabel = <span className="tabular-nums">{cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : 'スレを立てる'}</span>
+  const submitLabel = <span className="tabular-nums">スレを立てる</span>
 
   return (
     <div
@@ -280,7 +275,7 @@ export default function NewThreadDialog(props: Props) {
         {!isMobile && (
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
           <span className="text-[10px] text-c-text-muted">
-            {cooling ? `続けて書き込まないよう、あと ${Math.ceil(cooldown.left / 1000)} 秒あけています` : 'Ctrl+Enter で立てる'}
+            Ctrl+Enter で立てる
           </span>
           <button
             type="button"

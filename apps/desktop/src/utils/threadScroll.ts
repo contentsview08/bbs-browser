@@ -67,15 +67,14 @@ export function newPostsTarget(input: {
   /** 開いてから最初に届いた新着で、本人がまだスレ表示を触っていない */
   opening: boolean
   autoScrollOnNew: boolean
-  /** 一番下を見ているときは、新着が多くても一番下まで送る(新着の頭ではなく) */
-  followToEnd?: boolean
   atBottom: boolean
 }): NewPostsTarget {
   if (input.pendingUnread && input.hasUnreadPost) return { no: input.unreadFrom, animate: false }
   const head = input.prevLastNo + 1
   if (input.opening) return input.readNo >= input.prevLastNo ? { no: head, animate: false } : undefined
   if (!input.autoScrollOnNew || !input.atBottom) return undefined
-  return input.followToEnd ? { bottom: true, animate: true } : { no: head, animate: true }
+  // 新着の頭に固定する(一番下まで送る設定は 2026-11 にやめた)
+  return { no: head, animate: true }
 }
 
 /** 既読の判定に使う、レス 1 件ぶんの枠の位置(スクロール領域の画面上の座標) */

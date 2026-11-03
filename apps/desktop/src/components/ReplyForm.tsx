@@ -7,7 +7,6 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, us
 import type { AttachmentRules, PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { imageUrlsIn, looksLikeAA, youtubeIdsIn } from '../utils/postBody'
-import { useCountdown } from '../hooks/useCountdown'
 import type { UploadOptions } from '../host/uploader'
 import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
@@ -55,8 +54,6 @@ interface Props {
   /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
   uploader?: UploadOptions
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ。明けるまで書き込むボタンを押せなくし、残りを出す */
-  readyAt?: number
-  cooldownMs?: number
   /** 書き込み欄をしまう(しまうボタンを出す) */
   onCollapse?: () => void
   /** 下のサムネイルを押した(画像ビューアーで開く) */
@@ -76,11 +73,7 @@ interface Props {
   accounts?: PostAccountOption[]
   onToggleAccount?: (id: string, on: boolean) => void
   onOpenAccountSettings?: () => void
-  /** 空白が続く本文を、AA 用の字で出す(設定の「AA を自動で見分ける」)。ボタンで個別に切り替えられる */
-  aaAutoDetect?: boolean
-  /** 送る前に 3 秒待つ(設定 sendDelay)。その間は「取り消す」で止められる */
-  sendDelay?: boolean
-  /** 書いている間、本文の欄の上に並べる定型文(設定 phraseBar がオンのときだけ渡す)。押すとカーソルの所に入る */
+  /** 書いている間、本文の欄の上に並べる定型文(設定の定型文。あれば出す)。押すとカーソルの所に入る */
   phraseBar?: string[]
 }
 
@@ -107,9 +100,9 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [plusMenu, setPlusMenu] = useState(false)
   /** 画像のアップロードが無効のときに「画像」を押したら、設定のことを知らせる */
   const [imageHint, setImageHint] = useState(false)
-  /** 本文の欄を AA 用の字で出すか(ボタンで選んだもの。選んでいなければ本文から見分ける) */
+  /** 本文の欄を AA 用の字で出すか(ボタンで選んだもの。選んでいなければ本文から見分ける。空白が続く本文は AA とみなす) */
   const [aaOverride, setAaOverride] = useState<boolean>()
-  const isAA = aaOverride ?? (!!props.aaAutoDetect && looksLikeAA(body))
+  const isAA = aaOverride ?? looksLikeAA(body)
   /** AA のときは、レスの表示と同じ字で、折り返さずに出す(折り返すと崩れて見えるため) */
   const aaClass = isAA ? 'aa-font whitespace-pre overflow-x-auto' : ''
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -232,13 +225,11 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     }
   }
 
-  const cooldown = useCountdown(props.readyAt, props.cooldownMs ?? 0)
-  const cooling = cooldown.left > 0
   // 書き込みの長さ。板の上限を超えていたら、送る前に止める
   const measure = props.byteLength ? measurePost({ body, name, mail }, props.limits, props.byteLength) : undefined
   const submit = async () => {
     // ファイルを付けていれば、本文が空でも書き込める(画像だけのレス)
-    if ((!body.trim() && !media.attachedView) || sending || props.disabled || cooling) return
+    if ((!body.trim() && !media.attachedView) || sending || props.disabled) return
     if (measure && measure.over.length > 0) return setResult({ status: 'error', message: measure.over.join(' / ') })
     setSending(true)
     setResult(undefined)
@@ -257,34 +248,8 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     }
   }
 
-  // 送る前の待ち(設定 sendDelay。スマホのアプリと同じ 3 秒)。残りの秒数。0 より大きい間は「取り消す」を出す
-  const [pending, setPending] = useState(0)
-  const submitRef = useRef(submit)
-  submitRef.current = submit
-  useEffect(() => {
-    if (pending <= 0) return
-    const timer = setTimeout(() => {
-      setPending((n) => {
-        if (n === 1) void submitRef.current()
-        return Math.max(0, n - 1)
-      })
-    }, 1000)
-    return () => clearTimeout(timer)
-  }, [pending])
-  /** 送るボタン・Ctrl+Enter。待つ設定なら数え始める(数えている間にもう一度押しても数え直さない) */
-  const requestSend = () => {
-    if (pending > 0) return
-    if (props.sendDelay && body.trim() && !sending && !props.disabled && !cooling) setPending(3)
-    else void submit()
-  }
-  const pendingBar = pending > 0 && (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-surface2 text-[13px]">
-      <span className="flex-1 text-c-text-strong tabular-nums">{pending} 秒後に送ります</span>
-      <button type="button" onClick={() => setPending(0)} className="px-2 py-0.5 font-bold text-c-accent">
-        取り消す
-      </button>
-    </div>
-  )
+  /** 送るボタン・Ctrl+Enter(送る前に待つ設定は 2026-11 にやめた) */
+  const requestSend = () => void submit()
   /** 定型文のバー。押すとカーソルの所に入れる(選んでいた字は置き換える) */
   const insertPhrase = (ph: string) => {
     const el = textRef.current
@@ -402,25 +367,18 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       ))}
     </div>
   )
-  // クールダウン中は押せなくし、残りの秒数と、減っていく帯を出す(続けて書き込めないことが分かるように)
   const sendButton = (
     <button
       type="button"
       onClick={requestSend}
-      disabled={sending || !body.trim() || !!props.disabled || cooling || pending > 0}
-      title={cooling ? `続けて書き込まないよう、あと ${Math.ceil(cooldown.left / 1000)} 秒あけています(設定 → 書き込み で変えられます)` : 'Ctrl+Enter でも書き込めます'}
+      disabled={sending || !body.trim() || !!props.disabled}
+      title="Ctrl+Enter でも書き込めます"
       className={`btn-thread-create relative overflow-hidden px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
     >
-      {cooling && (
-        <span
-          className="absolute inset-y-0 left-0 bg-black/25 pointer-events-none"
-          style={{ width: `${cooldown.ratio * 100}%` }}
-        />
-      )}
       <span className={`relative material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
-        {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
+        {sending ? 'progress_activity' : 'send'}
       </span>
-      <span className="relative tabular-nums">{cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '書き込む'}</span>
+      <span className="relative tabular-nums">書き込む</span>
     </button>
   )
 
@@ -434,7 +392,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }
 
   if (props.variant === 'chat') {
-    const canSend = !sending && !!body.trim() && !props.disabled && !cooling && pending === 0
+    const canSend = !sending && !!body.trim() && !props.disabled
     return (
       <div data-composer className="w-full flex flex-col">
         {media.fileInput}
@@ -479,7 +437,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         {hasPreview && <div className="px-3 pt-2">{previewStrip}</div>}
         {/* 定型文のバーは書いている間だけ(本文の欄に入っているか、書きかけがあるとき。アプリと同じ) */}
         {phraseBar && (chatFocused || body) && <div className="px-2.5 pt-1.5">{phraseBar}</div>}
-        {pendingBar && <div className="px-3 pt-1.5">{pendingBar}</div>}
         {/* オプション: 名前・メール・アカウント */}
         {lineOptions && (
           <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
@@ -573,10 +530,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
             disabled={!canSend}
             className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
             style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
-            title={cooling ? `あと ${Math.ceil(cooldown.left / 1000)} 秒` : '送る'}
+            title="送る"
           >
             <span className={`material-symbols-outlined text-xl ${sending ? 'animate-spin' : ''}`}>
-              {sending ? 'progress_activity' : cooling ? 'hourglass_top' : 'send'}
+              {sending ? 'progress_activity' : 'send'}
             </span>
           </button>
           {props.trailing}
@@ -603,7 +560,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
       {/* 書き込みに付けたファイル(ふたば) */}
       {media.attachedView && <div className="mb-2">{media.attachedView}</div>}
-      {pendingBar && <div className="mb-2 flex-shrink-0">{pendingBar}</div>}
       {phraseBar && <div className="mb-2 flex-shrink-0">{phraseBar}</div>}
 
       {/* 名前・メールの行と本文の欄を一つの列にまとめ、書き込むボタンはその右(右レイアウトでは下)に置く。

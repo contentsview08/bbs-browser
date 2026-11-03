@@ -11,7 +11,7 @@ import {
   FONT_PX_KEY,
   MOBILE_POST_STYLES,
   PICKABLE_SCHEMES,
-  TAB_LABELS,
+  ID_STYLES,
   baseFontPx,
   effectivePostStyle,
   effectiveScheme,
@@ -262,10 +262,6 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           <Group title="ヘッダーとフッター">
             <BarSliders settings={s} update={update} />
           </Group>
-          <Group title="タブの見せ方">
-            <ChoiceRow label="スレ一覧のタブ" desc="未読・勢い順など" value={s.listTabLabel} options={TAB_LABELS} onChange={(v) => update('listTabLabel', v)} />
-            <ChoiceRow label="スレ表示の絞り込み" desc="人気・画像・動画など" value={s.filterTabLabel} options={TAB_LABELS} onChange={(v) => update('filterTabLabel', v)} />
-          </Group>
         </>
       )
     }
@@ -289,14 +285,6 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           </Group>
           <Group title="キーワード" note="スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します">
             <WordList items={s.keywords} placeholder="キーワードを足す" empty="まだありません" onChange={(v) => update('keywords', v)} />
-          </Group>
-          <Group title="見た目">
-            <SwitchRow
-              label="立てた人の ID を模様で出す"
-              desc="スレ一覧に立てた人の ID が付いてくる掲示板(エッジ)だけ。オフのときは ID を文字で出します"
-              checked={s.threadAuthorIcon}
-              onChange={(v) => update('threadAuthorIcon', v)}
-            />
           </Group>
           <Group title="ログ" note="お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します">
             <ChoiceRow
@@ -342,20 +330,15 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           </Group>
           <Group title="本文">
             <SwitchRow label="名無しの名前を省く" desc="板の既定の名前(「名無しさん」など)を出しません" checked={s.omitNoname} onChange={(v) => update('omitNoname', v)} />
-            <SwitchRow label="続いた空行を 1 行にまとめる" checked={s.collapseBlankLines} onChange={(v) => update('collapseBlankLines', v)} />
-            <SwitchRow label="本文の最後の空行を消す" checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} />
-            <SwitchRow label="AA を見分けて、AA 用の字で出す" checked={s.aaAutoDetect} onChange={(v) => update('aaAutoDetect', v)} />
+            <SwitchRow label="空行を整える" desc="3 行以上続いた空行を 1 行にまとめ、最後の空行を消します" checked={s.tidyBlankLines} onChange={(v) => update('tidyBlankLines', v)} />
           </Group>
           <Group title="印">
             <SwitchRow label="スレ主に「主」の印" desc=">>1 と同じ ID のレス" checked={s.highlightOp} onChange={(v) => update('highlightOp', v)} />
-            <SwitchRow label="ID の模様を出す" desc="カード表示のとき、番号の左に ID から作る模様" checked={s.showIdenticon} onChange={(v) => update('showIdenticon', v)} />
-            <SwitchRow label="書き込みの多い ID を赤く" checked={s.idHeat} onChange={(v) => update('idHeat', v)} />
+            <ChoiceRow label="ID の見せ方" desc="色は 2 回以上書いた ID を ID ごとの色に。模様は ID から作るアイコンを番号の左と、スレ一覧の立てた人に" value={s.idStyle} options={ID_STYLES.map((x) => ({ key: x.key, name: x.name }))} onChange={(v) => update('idStyle', v)} />
             <SwitchRow label="ミニマップを出す" desc="右端に、人気レス・自分のレス・画像の位置を示します" checked={s.showMinimap} onChange={(v) => update('showMinimap', v)} />
           </Group>
           <Group title="リンク">
-            <SwitchRow label="URL を短く見せる" desc="https:// を外し、長いものは後ろを省きます" checked={s.urlShorten} onChange={(v) => update('urlShorten', v)} />
-            <SwitchRow label="画像の URL を「画像」の札に" checked={s.imageUrlOmit} onChange={(v) => update('imageUrlOmit', v)} />
-            <SwitchRow label="続いた画像の URL をまとめる" desc="「画像 ×3」のように 1 つの札に" checked={s.imageUrlCollapse} onChange={(v) => update('imageUrlCollapse', v)} />
+            <SwitchRow label="URL を短く見せる" desc="https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます" checked={s.urlShorten} onChange={(v) => update('urlShorten', v)} />
             <SwitchRow label="リンクのカードを出す" desc="ページの題と画像を、本文の下に小さく" checked={s.showLinkPreview} onChange={(v) => update('showLinkPreview', v)} />
             <SwitchRow label="リンクをアプリの中で開く" desc="オフにすると、ブラウザで開きます" checked={s.openLinksInApp} onChange={(v) => update('openLinksInApp', v)} />
           </Group>
@@ -366,7 +349,6 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
       return (
         <>
           <Group title="サムネイル">
-            <SwitchRow label="本文の画像をサムネイルで出す" checked={s.showThumbnails} onChange={(v) => update('showThumbnails', v)} />
             <ChoiceRow
               label="サムネイルを読み込む"
               value={s.thumbLoad}
@@ -374,6 +356,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
                 { key: 'always', name: 'いつも' },
                 { key: 'wifi', name: 'Wi-Fi のときだけ', desc: 'モバイルの回線では枠だけ出し、押したら読みます' },
                 { key: 'tap', name: '押したら', desc: 'いつも枠だけ出し、押したら読みます' },
+                { key: 'never', name: '出さない', desc: '本文の画像をサムネイルにしません' },
               ]}
               onChange={(v) => update('thumbLoad', v)}
             />
@@ -404,25 +387,10 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
             <TextRow label="名前" value={s.postName} placeholder="名無し" onChange={(v) => update('postName', v)} />
             <TextRow label="メール" value={s.postMail} placeholder="sage など" onChange={(v) => update('postMail', v)} />
           </Group>
-          <Group title="続けて書き込まない" note="連投で規制されないよう、書き込んだあとしばらく送るボタンを押せなくします">
-            <ChoiceRow
-              label="あける時間"
-              value={s.postCooldownSec}
-              options={[0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'あけない' : `${n} 秒` }))}
-              onChange={(v) => update('postCooldownSec', v)}
-            />
-          </Group>
           <Group title="定型文" note="レスを長押ししたメニューから、そのレスへのアンカーを付けて、すぐ書き込めます">
             <WordList items={s.quickPhrases} placeholder="定型文を足す" empty="まだありません" onChange={(v) => update('quickPhrases', v)} />
           </Group>
-          <Group title="画像のアップロード(catbox.moe)" note="書き込み欄の ＋ → 画像 で選んだ画像を catbox.moe に上げ、本文に URL を入れます">
-            <SwitchRow label="画像のアップロードを使う" checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} />
-            <SwitchRow
-              label="位置情報などを消してから上げる"
-              desc="写真に入っている撮った場所・機種などの情報を消します"
-              checked={s.uploadStripMetadata}
-              onChange={(v) => update('uploadStripMetadata', v)}
-            />
+          <Group title="画像のアップロード" note="書き込み欄の ＋ → 画像 で選んだ画像を上げ先に上げ、本文に URL を入れます。位置情報など(EXIF)はいつも消してから上げます">
             <ChoiceRow
               label="大きい画像を縮める"
               value={s.uploadMaxDimension}
@@ -447,7 +415,6 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           </Group>
           <Group title="更新">
             <SwitchRow label="書き込み欄の右に更新ボタン" checked={s.showRefreshFab} onChange={(v) => update('showRefreshFab', v)} />
-            <SwitchRow label="スレ一覧も引っぱって更新" desc="いちばん上で下へ引くと、スレ一覧を取り直します" checked={s.pullToRefreshList} onChange={(v) => update('pullToRefreshList', v)} />
             <ChoiceRow
               label="開いているスレの自動更新"
               desc="実況など、流れの速いスレ向け"
@@ -483,8 +450,6 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
             />
           </Group>
           <Group title="知らせること">
-            <SwitchRow label="お気に入りのスレの新着" desc="「スクロールと更新」で決めた間隔で確かめます" checked={s.notifyFavThreads} onChange={(v) => update('notifyFavThreads', v)} />
-            <SwitchRow label="自分の書き込みへの返信" checked={s.notifyReplies} onChange={(v) => update('notifyReplies', v)} />
             <ChoiceRow
               label="キーワードに合うスレが立った"
               desc="お気に入り板を見に行き、スレ一覧のキーワードを含むスレを知らせます"

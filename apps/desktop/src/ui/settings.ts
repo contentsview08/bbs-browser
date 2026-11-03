@@ -55,7 +55,6 @@ export function effectiveDensity(s: Pick<AppSettings, 'postStyle'>): ListDensity
 }
 /** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
-export type FontSize = 1 | 2 | 3 | 4 | 5
 /** custom は OS に入っているフォントから選んだもの(customFont に名前を持つ) */
 /** フォント。同梱のもの(FONT_FAMILIES)・OS のもの(custom) */
 export type FontFamily = (typeof FONT_FAMILY_KEYS)[number] | 'custom'
@@ -101,17 +100,17 @@ export const HISTORY_LIST_TABS: ListTabKey[] = ['viewed', 'unread', 'posted', 'f
 /** タブの定義(板のタブと履歴のタブのどちらからも引ける) */
 export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key) ?? HISTORY_TABS.find((t) => t.key === key)!
 export type OpenPosition = 'unread' | 'top' | 'bottom'
-/** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色・示さない(スマホのアプリの heatStyle と同じ) */
-export type HeatStyle = 'left' | 'right' | 'text' | 'none'
+/** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色(スマホのアプリの heatStyle と同じ。「示さない」は 2026-11 にやめた) */
+export type HeatStyle = 'left' | 'right' | 'text'
+/** ID の見せ方: なし / 色(2 回以上書いた ID を ID ごとの色に) / 模様(ID から作るアイコンを番号の左と、スレ一覧の立てた人に) */
+export type IdStyle = 'none' | 'color' | 'icon'
+export const ID_STYLES: { key: IdStyle; name: string; note: string }[] = [
+  { key: 'none', name: 'なし', note: 'ID は文字だけ' },
+  { key: 'color', name: '色', note: '2 回以上書いた ID を ID ごとの色で。同じ人の書き込みを目で追えます' },
+  { key: 'icon', name: '模様', note: 'ID から作る GitHub 風の模様を、レス番号の左と、スレ一覧の立てた人(ID の付く掲示板)に出します' },
+]
 /** スレ一覧の行の形: ふつう・コンパクト(スレタイ 1 行と数だけ。スマホのアプリの listDensity と同じ) */
 export type ListShape = 'normal' | 'compact'
-/** タブの見せ方: both はアイコンと文字、icon はアイコンだけ、text は文字だけ */
-export type TabLabel = 'both' | 'icon' | 'text'
-export const TAB_LABELS: { key: TabLabel; name: string }[] = [
-  { key: 'both', name: 'アイコンと文字' },
-  { key: 'icon', name: 'アイコンだけ' },
-  { key: 'text', name: '文字だけ' },
-]
 export type AnchorPopup = 'hover' | 'click'
 export type NgMode = 'aborn' | 'hide'
 /** 書き込み欄の置き場所: bottom はレスの下、right はレスの右 */
@@ -170,10 +169,7 @@ export interface AppSettings {
   darkScheme: ColorScheme
   lightScheme: ColorScheme
   postStyle: PostStyle
-  fontSize: FontSize
-  /** スマホの文字の大きさ(PC とは別。画面が狭いので、既定は 1 段小さい) */
-  mobileFontSize: FontSize
-  /** 文字の大きさ(px)。1px ずつ変えられる。0 なら上の段階(fontSize・mobileFontSize)で決める。スマホは mobileFontPx */
+  /** 文字の大きさ(px)。1px ずつ変えられる。スマホは mobileFontPx(画面が狭いので既定は小さい)。前の 5 段階(fontSize)は px に写した */
   fontPx: number
   mobileFontPx: number
   /** スレ一覧の文字の大きさ(px)。0 なら画面全体の大きさのまま */
@@ -184,9 +180,6 @@ export interface AppSettings {
   /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
   listPadPx: number
   postPadPx: number
-  /** タブの見せ方(アイコンと文字・アイコンだけ・文字だけ)。スレ一覧のタブ(未読・勢い順など)と、スレ表示の絞り込み(人気・画像など) */
-  listTabLabel: TabLabel
-  filterTabLabel: TabLabel
   /** スマホ: 知らせ(お気に入りの新着・キーワード・自分への返信)を、アプリを裏に回しているときは OS の通知でも出す */
   osNotify: boolean
   /** 通知センターに溜めた知らせ(あなた宛てのレス・お気に入りの新着など。新しいものが後ろ。NOTIFICATION_LOG_MAX まで) */
@@ -199,8 +192,8 @@ export interface AppSettings {
   barFontPx: number
   /** レスの本文の行間(字の大きさの何倍か)。0 なら既定(1.625) */
   postLineHeight: number
-  /** 画像・動画のサムネイルを読みに行くか。always: いつも / wifi: Wi-Fi のときだけ / tap: 押したら読む(押して出るまではビューアーを開かない) */
-  thumbLoad: 'always' | 'wifi' | 'tap'
+  /** 画像・動画のサムネイル。always: いつも読む / wifi: Wi-Fi のときだけ / tap: 押したら読む(押して出るまではビューアーを開かない) / never: 出さない */
+  thumbLoad: 'always' | 'wifi' | 'tap' | 'never'
   fontFamily: FontFamily
   customFont: string
   threadPanelWidth: number
@@ -222,16 +215,12 @@ export interface AppSettings {
   panelOpacity: number
   /** サイドバーをしまって、アイコンだけの細い帯にする */
   sidebarCollapsed: boolean
-  /** しまった帯で、板のアイコンの下に板名(別名があれば別名)を小さく出す */
-  showStripNames: boolean
   replyLayout: ReplyLayout
   /** 書き込み欄の高さ(下に置くとき)と幅(右に置くとき) */
   replyHeight: number
   replyWidth: number
   // 起動
-  /** 起動時に開く板の URL。'@last' なら前回開いていた板、空なら何も開かない */
-  startupBoardUrl: string
-  /** 前回開いていた板(startupBoardUrl が '@last' のときに使う) */
+  /** 前回開いていた板(起動時に開く) */
   lastBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
@@ -250,11 +239,7 @@ export interface AppSettings {
    * auto: ウィンドウが狭い・縦長のときだけ single
    */
   paneMode: PaneMode
-  /** スレ一覧の一番上で、さらにホイールを上に回したら更新する */
-  pullToRefreshList: boolean
   // タブ
-  /** タブを使う。false ならタブ列を出さず、スレを開くたびに置き換える */
-  tabsEnabled: boolean
   /** スレ一覧から開くとき、新しいタブで開く(false なら今のタブを置き換える) */
   openInNewTab: boolean
   openTabs: SavedTab[]
@@ -263,7 +248,6 @@ export interface AppSettings {
   // レス表示
   openPosition: OpenPosition
   anchorPopup: AnchorPopup
-  showThumbnails: boolean
   /** スレ表示の画像のサムネイルの一辺(px) */
   postThumbSize: number
   /** スレ一覧のサムネイル(ふたばのカタログの絵など)の大きさの倍率。見た目ごとの元の大きさに掛ける */
@@ -272,31 +256,20 @@ export interface AppSettings {
   blurGross: boolean
   /** ぼかす目印にする言葉 */
   grossWords: string[]
-  aaAutoDetect: boolean
   /** 画像でも動画でもないリンクに、埋め込みのカード(タイトル・説明・画像)を出す */
   showLinkPreview: boolean
   /** 掲示板でないリンク(ウェブページ・画像・動画)を、アプリの中で開く(リーダー表示。ReaderView)。スマホの既定 */
   openLinksInApp: boolean
   /** 名前が板の既定の名前(名無し)なら省く */
   omitNoname: boolean
-  /** 3 行以上続く空行を 1 行にまとめる */
-  collapseBlankLines: boolean
-  /** 本文の最後の空行を消す */
-  trimTrailingBlank: boolean
-  /** 本文の URL を短く見せる(https:// を外し、長いものは「…」で省く) */
+  /** 空行を整える(3 行以上続く空行は 1 行にまとめ、本文の最後の空行は消す) */
+  tidyBlankLines: boolean
+  /** 本文の URL を短く見せる(https:// を外し、長いものは「…」で省く。画像の URL は「画像」の札にし、続いて並んだものは 1 つにまとめる) */
   urlShorten: boolean
-  /** 本文の画像の URL は「画像」の札にする */
-  imageUrlOmit: boolean
-  /** 続いて並んだ画像の URL を 1 つにまとめる */
-  imageUrlCollapse: boolean
-  /** 同じ ID の書き込みが多いほど、ID を赤くする */
-  idHeat: boolean
-  /** スレ一覧で、立てた人の ID(エッジ)を模様で出す。切っているときは、カードの右下に ID を小さく出す */
-  threadAuthorIcon: boolean
+  /** ID の見せ方(なし・色・模様) */
+  idStyle: IdStyle
   /** >>1 と同じ ID のレスに「主」の印を付ける */
   highlightOp: boolean
-  /** レスの番号の左に、ID から作るアイコン(GitHub 風の Identicon)を出す */
-  showIdenticon: boolean
   /** スレ表示の右端に、人気レス・自分のレス・画像の位置を示す縮図を出す */
   showMinimap: boolean
   /** スマホ: スレ表示のフッターの右端(送るボタンの右)に、更新ボタンを出す */
@@ -310,18 +283,12 @@ export interface AppSettings {
   autoRefreshSec: number
   /** いちばん下を見ているときに新着が来たら、新着まで自動でスクロールする */
   autoScrollOnNew: boolean
-  /** 一番下を見ているときに届いた新着は、多くても一番下まで送る(オフなら新着の頭まで) */
-  followToEnd: boolean
   /** お気に入りのスレの新着の数を確かめる間隔(分)。0 なら確かめない(スレ一覧だけ取るので軽い) */
   favCheckMin: number
-  /** お気に入りのスレに新着があったら、右下に知らせる */
-  notifyFavThreads: boolean
   /** お気に入り板のスレ一覧を見に行き、キーワードに合うスレが立ったら知らせる間隔(分)。0 なら見に行かない */
   keywordWatchMin: number
   /** 板ごとの、キーワードのスレを最後に確かめた時刻(ms)。それより後に立ったスレを知らせる */
   keywordWatchSince: Record<string, number>
-  /** 自分宛てのレスが届いたら、右下に通知を出す */
-  notifyReplies: boolean
   // NG
   ngRules: NgRule[]
   /** aborn: 「あぼーん」と出す / hide: 何も出さない(透明あぼーん) */
@@ -346,11 +313,7 @@ export interface AppSettings {
   lastLogPruneAt: number
   /** 続けて並んだあぼーん(NG・自動 NG)を 1 行にまとめる */
   groupNg: boolean
-  // 画像のアップロード(catbox.moe)
-  /** 書き込み欄から画像をアップロードできるようにする(上げた画像は公開され、匿名なら消せない) */
-  uploaderEnabled: boolean
-  /** 上げる前に、画像を描き直して EXIF(撮影場所など)を取り除く */
-  uploadStripMetadata: boolean
+  // 画像のアップロード(上げる前にいつも描き直して EXIF(撮影場所など)を取り除く)
   /** 上げる前に、長い辺がこれを超える画像を縮小する(px)。0 なら縮小しない */
   uploadMaxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げ、アップロード履歴からサーバー上のファイルも消せる */
@@ -367,8 +330,6 @@ export interface AppSettings {
   postAccounts: Record<string, boolean>
   /** 書き込み欄をしまっておく(スレ表示が狭いときは、これに関係なく自動でしまう) */
   replyCollapsed: boolean
-  /** 書き込んだあと、続けて書き込めないようにあける秒数。0 ならあけない */
-  postCooldownSec: number
   /** 定型文。操作バーや ⋯ から、そのレスへのアンカーを付けてすぐ書き込む */
   quickPhrases: string[]
   /**
@@ -394,14 +355,8 @@ export interface AppSettings {
   reduceMotion: boolean
   /** 人気のレスの示し方 */
   heatStyle: HeatStyle
-  /** 2 回以上書いた ID を、ID ごとの色にする */
-  idColor: boolean
   /** スレ一覧の行の形 */
   listShape: ListShape
-  /** 書いている間、本文の欄の上に定型文のバーを出す(押すとカーソルの所に入る) */
-  phraseBar: boolean
-  /** 送る前に 3 秒待つ(その間は取り消せる) */
-  sendDelay: boolean
   /** レスをダブルタップで返信(スマホ) */
   doubleTapReply: boolean
   /** 振動で知らせる(ジェスチャー・引っぱって更新が決まったとき、長押しのメニュー。スマホ) */
@@ -423,10 +378,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   darkScheme: 'soft-dark',
   lightScheme: 'light-gray',
   postStyle: 'card',
-  fontSize: 3,
-  mobileFontSize: 3,
-  fontPx: 0,
-  mobileFontPx: 0,
+  fontPx: 16,
+  mobileFontPx: 14,
   listFontPx: 0,
   postBodyPx: 0,
   postHeadPx: 0,
@@ -439,8 +392,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   headerPx: 0,
   footerPx: 0,
   barFontPx: 0,
-  listTabLabel: 'both',
-  filterTabLabel: 'both',
   thumbLoad: 'always',
   fontFamily: 'system',
   customFont: '',
@@ -455,54 +406,40 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundOpacity: 1,
   panelOpacity: PANEL_OPACITY_DEFAULT,
   sidebarCollapsed: false,
-  showStripNames: false,
   replyLayout: 'bottom',
   replyHeight: 170,
   replyWidth: 380,
-  startupBoardUrl: '@last',
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   listTabs: ['unread', 'momentum', 'newest'],
   listPageSize: 100,
   boardMeta: {},
   keywords: [],
-  pullToRefreshList: true,
   paneMode: 'auto',
   boardVisits: {},
-  tabsEnabled: true,
   openInNewTab: true,
   openTabs: [],
   activeTab: '',
   openPosition: 'unread',
   anchorPopup: 'click',
-  showThumbnails: true,
   postThumbSize: 80,
   listThumbScale: 1,
   blurGross: true,
   grossWords: ['グロ'],
-  aaAutoDetect: true,
   showMinimap: true,
   showRefreshFab: true,
   hideBarsOnScroll: true,
-  showIdenticon: false,
   showLinkPreview: true,
   openLinksInApp: isMobile,
   omitNoname: true,
-  collapseBlankLines: true,
-  trimTrailingBlank: true,
+  tidyBlankLines: true,
   urlShorten: true,
-  imageUrlOmit: true,
-  imageUrlCollapse: true,
-  idHeat: false,
-  threadAuthorIcon: false,
+  idStyle: 'none',
   highlightOp: true,
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
-  followToEnd: false,
-  notifyReplies: true,
   favCheckMin: 5,
-  notifyFavThreads: true,
   keywordWatchMin: 10,
   keywordWatchSince: {},
   ngRules: [],
@@ -522,15 +459,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   logRetentionDays: 90,
   lastLogPruneAt: 0,
   groupNg: true,
-  uploaderEnabled: true,
-  uploadStripMetadata: true,
   uploadMaxDimension: 2560,
   catboxUserhash: '',
   uploadHost: DEFAULT_UPLOAD_HOST,
   imgbbApiKey: '',
   imgurClientId: '',
   presetsApplied: [],
-  postCooldownSec: 10,
   replyCollapsed: false,
   postAccounts: {},
   quickPhrases: ['草'],
@@ -544,10 +478,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accent: '',
   reduceMotion: false,
   heatStyle: 'left',
-  idColor: false,
   listShape: 'normal',
-  phraseBar: false,
-  sendDelay: false,
   doubleTapReply: false,
   haptics: true,
   customScheme: '',
@@ -614,18 +545,14 @@ export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; 
 
 const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled', 'gray', 'nord', 'contrast', 'night', 'line-dark', 'x-dim', 'mono'])
 
-/** 文字の大きさ(px)。極小・小・標準・大・特大。スマホは画面が小さいので 1 段ずつ小さくし、PC の「小」をスマホの「標準」にする */
-const FONT_SIZES = isMobile ? [12, 13, 14, 16, 18] : [13, 14, 16, 18, 20]
-/** 文字の大きさの設定の名前(スマホは PC と別に持つ)。文字の大きさを変える所は、どこもこれを使う */
-export const FONT_SIZE_KEY = isMobile ? 'mobileFontSize' : 'fontSize'
-/** 文字の大きさ(px)の設定の名前(スマホは PC と別に持つ) */
+/** 文字の大きさ(px)の設定の名前(スマホは PC と別に持つ)。文字の大きさを変える所は、どこもこれを使う */
 export const FONT_PX_KEY = isMobile ? 'mobileFontPx' : 'fontPx'
 /** 選べる文字の大きさ(px) */
 export const FONT_PX_MIN = 9
 export const FONT_PX_MAX = 26
 /** いまの画面全体の文字の大きさ(px) */
 export function baseFontPx(s: AppSettings): number {
-  return s[FONT_PX_KEY] || FONT_SIZES[s[FONT_SIZE_KEY] - 1]
+  return s[FONT_PX_KEY] || DEFAULT_SETTINGS[FONT_PX_KEY]
 }
 
 /**
@@ -692,6 +619,38 @@ function withoutOldLight(scheme: ColorScheme): ColorScheme {
   if (scheme === 'light' || scheme === 'soft-light' || scheme === 'sepia' || scheme === 'discord-light' || scheme === '2ch-classic') return 'light-gray'
   if (scheme === 'night') return 'soft-dark'
   return scheme
+}
+
+/**
+ * 2026-11-04 に消した・まとめた設定を、いまの設定に写す(保存してある古い値は、読んだあと使わない。DB の行は残っても害がない)。
+ * 消したもの(起動時に開く板・ホイールで更新・タブを使う・AA の自動判定・一番下まで送る・知らせる 2 つ・アップロードを使う・EXIF を消す・
+ * 書き込んだあとに待つ・畳んだサイドバーの板名・送る前に待つ・定型文のバー・タブの見せ方)は、いつもオンかサーバー任せ
+ */
+function migrateOld(saved: Record<string, unknown>): Partial<AppSettings> {
+  const out: Partial<AppSettings> = {}
+  // 文字の大きさ: 5 段階(fontSize・mobileFontSize)は px に写す(px を決めていなければ)
+  const steps: { from: string; to: 'fontPx' | 'mobileFontPx'; px: number[] }[] = [
+    { from: 'fontSize', to: 'fontPx', px: [13, 14, 16, 18, 20] },
+    { from: 'mobileFontSize', to: 'mobileFontPx', px: [12, 13, 14, 16, 18] },
+  ]
+  for (const { from, to, px } of steps) {
+    const n = saved[from]
+    if (!saved[to] && typeof n === 'number' && px[n - 1]) out[to] = px[n - 1]
+  }
+  // サムネイルを出さない → 読み込まない
+  if (saved.showThumbnails === false) out.thumbLoad = 'never'
+  // 空行の整え方 2 つ → 1 つ(どちらかがオンならオン)
+  if (saved.tidyBlankLines === undefined && (saved.collapseBlankLines !== undefined || saved.trimTrailingBlank !== undefined)) {
+    out.tidyBlankLines = !!(saved.collapseBlankLines || saved.trimTrailingBlank)
+  }
+  // ID の見せ方 4 つ(色・赤く・模様・立てた人の模様)→ 1 つ
+  if (saved.idStyle === undefined) {
+    if (saved.showIdenticon || saved.threadAuthorIcon) out.idStyle = 'icon'
+    else if (saved.idColor || saved.idHeat) out.idStyle = 'color'
+  }
+  // 人気のレス「示さない」はやめた
+  if (saved.heatStyle === 'none') out.heatStyle = 'left'
+  return out
 }
 
 /** 前の既定だったスレ表示の ←↑「タブを閉じる」(スマホにはタブがない)は、いまの既定の「ログを削除して閉じる」にする */
@@ -817,7 +776,9 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
     if (!store) return
     void store.getSettings().then((saved) => {
       setSettings((s) => {
-        const next = { ...s, ...(saved as Partial<AppSettings>) }
+        // いまある項目だけを写し、消した項目は migrateOld で写す
+        const known = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([k]) => k in DEFAULT_SETTINGS)) as Partial<AppSettings>
+        const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
         const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle
         return { ...next, postStyle, uploadHost: migrateUploadHost(next.uploadHost as string), scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }

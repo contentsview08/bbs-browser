@@ -105,9 +105,6 @@ interface Props {
   jumpTo?: { no: number; seq: number }
   /** お気に入りのスレか */
   favorite: boolean
-  /** 書き込んだあとのクールダウンが明ける時刻(どのタブでも同じ) */
-  postReadyAt?: number
-  postCooldownMs: number
   /** この板で使えるアカウント */
   postAccounts?: PostAccountOption[]
   /** 1 画面のとき: スレタイの左に、スレ一覧へ戻るボタンを出す */
@@ -151,8 +148,6 @@ function TabPane({
   nonameName,
   jumpTo,
   favorite,
-  postReadyAt,
-  postCooldownMs,
   postAccounts,
   showBackToList,
   postLimits,
@@ -242,8 +237,6 @@ function TabPane({
       onOpenNextUnread={ev.openNextUnread}
       isFavorite={favorite}
       refreshReadyAt={tab.refreshReadyAt}
-      postReadyAt={postReadyAt}
-      postCooldownMs={postCooldownMs}
       postAccounts={postAccounts}
       draft={draft}
       threadUrl={ev.threadUrl(thread)}

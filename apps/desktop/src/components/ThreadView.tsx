@@ -155,8 +155,6 @@ interface Props {
   /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出す) */
   refreshReadyAt?: number
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
-  postReadyAt?: number
-  postCooldownMs: number
   /** 本文からアイコン(BE アイコンなど)を取り出す。掲示板ごとの書き方なのでコネクタのもの */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   /** 板の書き込みの上限と、その掲示板での数え方(書き込み欄に長さを出す) */
@@ -722,11 +720,10 @@ export default function ThreadView(props: Props) {
       nonameName: props.nonameName,
       extraNonames: commonName ? [...(props.extraNonames ?? []), commonName] : props.extraNonames,
       omitNoname: props.omitNoname ?? settings.omitNoname,
-      collapseBlankLines: settings.collapseBlankLines,
-      trimTrailingBlank: settings.trimTrailingBlank,
+      tidyBlankLines: settings.tidyBlankLines,
       splitIcon: props.splitPostIcon,
     }),
-    [props.nonameName, props.extraNonames, commonName, props.omitNoname, settings.omitNoname, settings.collapseBlankLines, settings.trimTrailingBlank, props.splitPostIcon],
+    [props.nonameName, props.extraNonames, commonName, props.omitNoname, settings.omitNoname, settings.tidyBlankLines, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
@@ -945,8 +942,7 @@ export default function ThreadView(props: Props) {
     onRead,
     openPosition: settings.openPosition,
     autoScrollOnNew: settings.autoScrollOnNew,
-    followToEnd: settings.followToEnd,
-    showThumbnails: settings.showThumbnails,
+    showThumbnails: settings.thumbLoad !== 'never',
     jumpTo: props.jumpTo,
   })
 
@@ -1691,10 +1687,9 @@ export default function ThreadView(props: Props) {
             }
           : undefined,
         toNo: (n: number) => d().resolveAnchor(n),
-        urls: { shorten: settings.urlShorten, omitImages: settings.imageUrlOmit, collapseImageRuns: settings.imageUrlCollapse },
-        idHeat: settings.idHeat,
+        urls: { shorten: settings.urlShorten, omitImages: settings.urlShorten, collapseImageRuns: settings.urlShorten },
         // ID ごとの色は配色の明るさで変える。LINE ライトの LINE 風は空色の地なので、白っぽい字に合う淡い色(スマホのアプリと同じ)
-        idColor: settings.idColor
+        idColor: settings.idStyle === 'color'
           ? { dark: isDarkScheme(effectiveScheme(settings)), sky: effectiveScheme(settings) === 'line-light' && effectivePostStyle(settings) === 'line' }
           : undefined,
         heatStyle: settings.heatStyle,
@@ -1717,7 +1712,7 @@ export default function ThreadView(props: Props) {
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
     // レスのデータ(byNo・replies・posts・anchorCounts など)は dataRef で読むので、ここには入れない
-    [settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
+    [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.thumbLoad, settings.urlShorten, isNg, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1745,9 +1740,8 @@ export default function ThreadView(props: Props) {
               autoNg={autoNg.get(p.no)}
               aiMark={aiMarkOf(p.no)}
               ngMode="aborn"
-              showThumbnails={settings.showThumbnails}
-              aaAutoDetect={settings.aaAutoDetect}
-              showIdenticon={settings.showIdenticon}
+              showThumbnails={settings.thumbLoad !== 'never'}
+              showIdenticon={settings.idStyle === 'icon'}
               showLinkPreview={settings.showLinkPreview}
               display={display}
               toolbar={settings.postToolbar}
@@ -1783,9 +1777,8 @@ export default function ThreadView(props: Props) {
               autoNg={autoNg.get(p.no)}
               aiMark={aiMarkOf(p.no)}
             ngMode="aborn"
-            showThumbnails={settings.showThumbnails}
-            aaAutoDetect={settings.aaAutoDetect}
-            showIdenticon={settings.showIdenticon}
+            showThumbnails={settings.thumbLoad !== 'never'}
+            showIdenticon={settings.idStyle === 'icon'}
             showLinkPreview={settings.showLinkPreview}
             display={display}
             toolbar={settings.postToolbar}
@@ -1949,13 +1942,10 @@ export default function ThreadView(props: Props) {
                 style={{ paddingTop: isMobile ? 8 : 10, paddingBottom: isMobile ? 8 : 10 }}
                 title={key === 'own' ? '自分の書き込みだけを出す(6 キー)' : `${label}だけを出す(${i + 1} キー)`}
               >
-                {/* 見せ方は設定で(アイコンと文字・アイコンだけ・文字だけ) */}
-                {settings.filterTabLabel !== 'text' && (
-                  <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={active ? { color } : undefined}>
+                <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={active ? { color } : undefined}>
                     {icon}
                   </span>
-                )}
-                {settings.filterTabLabel !== 'icon' && label}
+                {label}
                 {isMobile ? (
                   filterCounts[key] > 0 && <span className="text-[10px] tabular-nums opacity-70 -ml-0.5">{filterCounts[key]}</span>
                 ) : (
@@ -1972,7 +1962,7 @@ export default function ThreadView(props: Props) {
             style={{ paddingTop: 10, paddingBottom: 10 }}
             title="絞り込みを外す(5 キー・Esc)"
           >
-            {settings.filterTabLabel === 'icon' ? <span className="material-symbols-outlined text-xl leading-none align-middle">apps</span> : 'すべて'}
+            すべて
             {filters.size === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-c-accent rounded-full" />}
           </button>
           {/* 絞り込んだ数(スマホは等分の並びが崩れるので出さない。数は各ボタンに出ている) */}
@@ -2067,9 +2057,8 @@ export default function ThreadView(props: Props) {
               autoNg={autoNg.get(p.no)}
               aiMark={aiMarkOf(p.no)}
                         ngMode={settings.ngMode}
-                        showThumbnails={settings.showThumbnails}
-                        aaAutoDetect={settings.aaAutoDetect}
-                        showIdenticon={settings.showIdenticon}
+                        showThumbnails={settings.thumbLoad !== 'never'}
+                        showIdenticon={settings.idStyle === 'icon'}
                         showLinkPreview={settings.showLinkPreview}
                         display={display}
                         toolbar={settings.postToolbar}
@@ -2085,7 +2074,7 @@ export default function ThreadView(props: Props) {
                 )
               }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, byNo, quotesOf, grossNos, anchorCounts, idCounts, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.showThumbnails, settings.aaAutoDetect, settings.showIdenticon, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, mainHandlers, props.reactions, toggleRun],
+    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, byNo, quotesOf, grossNos, anchorCounts, idCounts, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, mainHandlers, props.reactions, toggleRun],
   )
 
   return (
@@ -2241,8 +2230,7 @@ export default function ThreadView(props: Props) {
             // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
             <ReplyForm
               ref={replyRef}
-              sendDelay={settings.sendDelay}
-              phraseBar={settings.phraseBar ? settings.quickPhrases : undefined}
+              phraseBar={settings.quickPhrases}
               variant="chat"
               // フッターの右端(送るボタンの右)に更新ボタン(設定で消せる)
               trailing={
@@ -2268,28 +2256,20 @@ export default function ThreadView(props: Props) {
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
               onUploaded={props.onUploaded}
-              readyAt={props.postReadyAt}
-              cooldownMs={props.postCooldownMs}
               accounts={props.postAccounts}
               draft={props.draft}
               limits={props.postLimits}
               byteLength={props.postByteLength}
               onToggleAccount={props.onTogglePostAccount}
               onOpenAccountSettings={props.onOpenAccountSettings}
-              aaAutoDetect={settings.aaAutoDetect}
               onImage={(urls, index) => setLightbox({ urls, index })}
-              uploader={
-                settings.uploaderEnabled
-                  ? {
-                      stripMetadata: settings.uploadStripMetadata,
+              uploader={{
                       maxDimension: settings.uploadMaxDimension,
                       userhash: settings.catboxUserhash.trim() || undefined,
                       host: settings.uploadHost,
                       imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
                       imgurClientId: settings.imgurClientId.trim() || undefined,
-                    }
-                  : undefined
-              }
+              }}
               onOpenUrl={props.onUrl}
 
             />
@@ -2336,8 +2316,7 @@ export default function ThreadView(props: Props) {
           >
             <ReplyForm
               ref={replyRef}
-              sendDelay={settings.sendDelay}
-              phraseBar={settings.phraseBar ? settings.quickPhrases : undefined}
+              phraseBar={settings.quickPhrases}
               layout={replyLayout}
               onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}
               attach={props.attachments}
@@ -2347,28 +2326,20 @@ export default function ThreadView(props: Props) {
               onSubmit={props.onSubmitPost}
               onConfirm={props.onConfirmPost}
               onUploaded={props.onUploaded}
-              readyAt={props.postReadyAt}
-              cooldownMs={props.postCooldownMs}
               accounts={props.postAccounts}
               draft={props.draft}
               limits={props.postLimits}
               byteLength={props.postByteLength}
               onToggleAccount={props.onTogglePostAccount}
               onOpenAccountSettings={props.onOpenAccountSettings}
-              aaAutoDetect={settings.aaAutoDetect}
               onImage={(urls, index) => setLightbox({ urls, index })}
-              uploader={
-                settings.uploaderEnabled
-                  ? {
-                      stripMetadata: settings.uploadStripMetadata,
+              uploader={{
                       maxDimension: settings.uploadMaxDimension,
                       userhash: settings.catboxUserhash.trim() || undefined,
                       host: settings.uploadHost,
                       imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
                       imgurClientId: settings.imgurClientId.trim() || undefined,
-                    }
-                  : undefined
-              }
+              }}
               onOpenUrl={props.onUrl}
               onCollapse={closeReply}
             />

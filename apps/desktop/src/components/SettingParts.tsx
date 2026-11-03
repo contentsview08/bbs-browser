@@ -11,7 +11,7 @@ import { DragHandle, DragList } from './DragSort'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose, useGuardedClose } from '../hooks/useDialogClose'
 import { BTN_PRIMARY, BTN_SECONDARY, DialogHeader } from './DialogParts'
-import { effectivePostStyle, type AppSettings } from '../ui/settings'
+import { effectivePostStyle, effectiveScheme, isDarkScheme, type AppSettings } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
 
@@ -77,18 +77,17 @@ export function SamplePosts(props: { settings: AppSettings; title?: string; comp
             ng={false}
             ngMode="aborn"
             showThumbnails={false}
-            aaAutoDetect={false}
-            showIdenticon={s.showIdenticon}
+            showIdenticon={s.idStyle === 'icon'}
             showLinkPreview={false}
-            display={{ nonameName: '名無しさん', omitNoname: s.omitNoname, collapseBlankLines: s.collapseBlankLines, trimTrailingBlank: s.trimTrailingBlank }}
+            display={{ nonameName: '名無しさん', omitNoname: s.omitNoname, tidyBlankLines: s.tidyBlankLines }}
             isOp={p.id === SAMPLE[0].id}
             handlers={{
               ...SAMPLE_HANDLERS,
-              idHeat: s.idHeat,
+              idColor: s.idStyle === 'color' ? { dark: isDarkScheme(effectiveScheme(s)), sky: false } : undefined,
               heatStyle: s.heatStyle,
               dateStyle: s.dateStyle,
               idShort: s.idShort,
-              urls: { shorten: s.urlShorten, omitImages: s.imageUrlOmit, collapseImageRuns: s.imageUrlCollapse },
+              urls: { shorten: s.urlShorten, omitImages: s.urlShorten, collapseImageRuns: s.urlShorten },
             }}
           />
         ))}

@@ -152,21 +152,21 @@ export function MouseGesturePieOverlay(props: { dx: number; dy: number; dir: Pie
     <div className="fixed inset-0 z-[9950] pointer-events-none flex flex-col items-center justify-center">
       <div className="relative" style={{ width: size, height: size, opacity: 0.86 }}>
         <MouseGesturePie labels={props.labels} active={props.dir} center={props.dir ? (name ? '' : 'なし') : 'なし'} size={size} />
-        {/* ポインターの代わり: 中心から、マウスの動きに合わせて動く丸(配色の差し色、半透明)。中心からの線で向きも見える */}
+        {/* ポインターの代わり: 中心から、マウスの動きに合わせて動く丸(白に配色の差し色の縁、半透明)。中心からの線で向きも見える */}
         <svg className="absolute inset-0" width={size} height={size} style={{ overflow: 'visible' }}>
           <line
             x1={size / 2}
             y1={size / 2}
             x2={size / 2 + props.dx * k}
             y2={size / 2 + props.dy * k}
-            stroke="var(--c-accent)"
+            stroke="#fff"
             strokeWidth={3}
             strokeLinecap="round"
-            opacity={0.55}
+            opacity={0.6}
           />
-          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={14} fill="var(--c-accent)" opacity={0.7} />
-          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={14} fill="none" stroke="#fff" strokeWidth={2.5} opacity={0.9} />
-          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={4} fill="#fff" />
+          {/* 光っている区画(差し色)の上でも見えるように、白い丸に差し色の縁 */}
+          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={14} fill="#fff" opacity={0.85} stroke="var(--c-accent)" strokeWidth={3} />
+          <circle cx={size / 2 + props.dx * k} cy={size / 2 + props.dy * k} r={5} fill="var(--c-accent)" />
         </svg>
       </div>
       <div className="mt-2">

@@ -9,6 +9,7 @@ import type { DateStyle } from '../utils/displayDate'
 import { isMobile } from '../utils/platform'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
+import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
@@ -146,6 +147,21 @@ export const PANEL_ALPHA_VARS = ['--alpha-address-bar', '--alpha-sidebar', '--al
 /** パネルの不透明度の既定(背景画像があるとき) */
 export const PANEL_OPACITY_DEFAULT = 0.8
 
+/** 通知センターに溜める知らせ 1 件。押したときの行き先は link(関数は保存できないので) */
+export interface StoredNotification {
+  id: number
+  /** 届いた時刻(ms) */
+  at: number
+  icon: string
+  title: string
+  body?: string
+  read: boolean
+  /** 押したら開くスレと、分かればそのレス */
+  link?: { thread: ThreadSummary; no?: number }
+}
+/** 通知センターに溜める数 */
+export const NOTIFICATION_LOG_MAX = 200
+
 export interface AppSettings {
   // 表示
   scheme: ColorScheme
@@ -176,6 +192,10 @@ export interface AppSettings {
   filterTabLabel: TabLabel
   /** スマホ: 知らせ(お気に入りの新着・キーワード・自分への返信)を、アプリを裏に回しているときは OS の通知でも出す */
   osNotify: boolean
+  /** 通知センターに溜めた知らせ(あなた宛てのレス・お気に入りの新着など。新しいものが後ろ。NOTIFICATION_LOG_MAX まで) */
+  notificationLog: StoredNotification[]
+  /** GitHub のトークン(更新を確かめるとき。リポジトリが private なので要る。空なら公開のリリースだけ) */
+  githubToken: string
   /** スマホ: ヘッダー・フッターの高さ(px)と、中の文字の大きさ(px)。0 なら既定 */
   headerPx: number
   footerPx: number
@@ -419,6 +439,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postPadPx: -1,
   postLineHeight: 0,
   osNotify: true,
+  notificationLog: [],
+  githubToken: '',
   headerPx: 0,
   footerPx: 0,
   barFontPx: 0,

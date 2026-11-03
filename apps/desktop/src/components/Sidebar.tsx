@@ -30,6 +30,9 @@ interface Props {
   onOpenThread: (t: ThreadSummary) => void
   onDeleteHistory: (t: ThreadSummary) => void
   onOpenSettings: () => void
+  /** 通知センター(溜めた知らせ)。まだ見ていない数を印に */
+  notificationsUnread: number
+  onOpenNotifications: () => void
   /** 画像のアップロード履歴を開く。アップロードを使っていなければ undefined(行を出さない) */
   onOpenUploads?: () => void
   /** スマホ: URL を入れて開く(PC は URL 欄の帯があるので出さない) */
@@ -86,12 +89,13 @@ function Row(props: {
       type="button"
       onClick={props.onClick}
       title={props.label}
-      className={`relative w-full h-10 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
+      // 大項目(お気に入り板・お気に入りのスレ・閲覧履歴・設定)は、中の行(板・スレ)より大きく濃く
+      className={`relative w-full h-11 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
     >
       <NavNotch on={!!props.active} />
       <span className="relative w-[64px] flex-shrink-0 flex items-center justify-center">
         <span className="relative">
-          <span className={`material-symbols-outlined text-[22px] ${props.active ? 'text-c-text-strong' : 'text-c-text-muted'}`}>
+          <span className={`material-symbols-outlined text-2xl ${props.active ? 'text-c-text-strong' : 'text-c-text-muted'}`}>
             {props.icon}
           </span>
           {props.badge !== undefined && props.badge > 0 && (
@@ -104,7 +108,7 @@ function Row(props: {
           )}
         </span>
       </span>
-      <span className={`relative flex-1 min-w-0 text-left text-sm truncate ${props.active ? 'font-medium' : ''}`}>{props.label}</span>
+      <span className={`relative flex-1 min-w-0 text-left text-[15px] font-semibold truncate ${props.active ? 'text-c-text-strong' : ''}`}>{props.label}</span>
       {props.trailing && <span className="relative">{props.trailing}</span>}
     </button>
   )
@@ -123,10 +127,10 @@ function SmallRow(props: {
   trailing?: ReactNode
 }) {
   return (
-    <div className="group flex items-center h-9 pr-2 hover:bg-c-surface2 transition-colors">
+    <div className="group flex items-center h-8 pr-2 hover:bg-c-surface2 transition-colors">
       <button type="button" onClick={props.onClick} className="flex-1 min-w-0 h-full flex items-center text-left" title={props.title ?? props.label}>
         <span className="w-[64px] flex-shrink-0 flex items-center justify-center">{props.icon}</span>
-        <span className={`flex-1 min-w-0 text-sm truncate ${props.muted ? 'text-c-text-muted group-hover:text-c-accent' : 'text-c-text-body'}`}>
+        <span className={`flex-1 min-w-0 text-[13px] truncate ${props.muted ? 'text-c-text-muted group-hover:text-c-accent' : 'text-c-text-body'}`}>
           {props.label}
         </span>
       </button>
@@ -207,9 +211,10 @@ export default function Sidebar(props: Props) {
   // 板名を出す設定なら、アイコンの下に名前が入るぶん行を高くする。
   // 開いたときも高さを変えない(変えるとファビコンの縦の位置がずれる)。小さな板名は、開いたら薄く消すだけ
   const stripNames = collapsed && props.showStripNames
-  const rowH = props.showStripNames ? 56 : 42
+  // 板の行(小項目)は大項目より小さく
+  const rowH = props.showStripNames ? 52 : 36
   /** ファビコンの大きさ。開閉で変えない */
-  const ICON = 24
+  const ICON = 20
 
   // ── お気に入り板の並べ替え(つかんで上下に動かす) ──
   const [drag, setDrag] = useState<{ url: string; from: number; dy: number; over: number }>()
@@ -362,7 +367,7 @@ export default function Sidebar(props: Props) {
                         </span>
                       )}
                     </span>
-                    <span className={`relative flex-1 min-w-0 text-[1.0625rem] truncate ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
+                    <span className={`relative flex-1 min-w-0 text-sm truncate ${active ? 'text-c-text-strong font-medium' : 'text-c-text-body'}`}>
                       {nameOf(b)}
                     </span>
                     <button
@@ -442,6 +447,7 @@ export default function Sidebar(props: Props) {
         </div>
 
         <div className="py-1 border-t border-c-border">
+          <Row icon="notifications" label="通知" badge={props.notificationsUnread} onClick={props.onOpenNotifications} />
           <Row icon="settings" label="設定" onClick={props.onOpenSettings} />
         </div>
       </div>

@@ -50,6 +50,7 @@ import type { BoardMeta } from '../ui/settings'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
 import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
+import { canCheckUpdate, compareVersions, fetchLatestRelease, installUpdate, type ReleaseInfo } from '../host/update'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement, PLACEMENTS } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
@@ -2465,7 +2466,7 @@ export function BoardsTab(
   )
 }
 
-export function AboutTab() {
+export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // 版はインストーラーの版(apps/desktop/package.json。tauri.conf.json がそこを読む)
   const [version, setVersion] = useState<string>()
   useEffect(() => {
@@ -2478,6 +2479,7 @@ export function AboutTab() {
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・ふたば・hono-bbs を読めます。
         </p>
       </Section>
+      {canCheckUpdate && <UpdateSection version={version} token={s.githubToken} onToken={(v) => update('githubToken', v)} />}
       <Section desktopOnly title="データの保存場所">
         <p className="text-sm font-mono text-c-text-body break-all">%APPDATA%\io.github.yumekui8.bbs-browser\bbs-browser.db</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>
@@ -2487,6 +2489,73 @@ export function AboutTab() {
         </p>
       </Section>
     </>
+  )
+}
+
+/**
+ * 更新(設定 → このアプリについて)。GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。
+ * リポジトリは private なので、トークン(repo の読み取り)を入れておく
+ */
+function UpdateSection(props: { version?: string; token: string; onToken: (v: string) => void }) {
+  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'found'; release: ReleaseInfo } | { kind: 'latest'; release: ReleaseInfo } | { kind: 'error'; message: string } | { kind: 'installing' } | { kind: 'installed'; path: string }>({ kind: 'idle' })
+  const check = async () => {
+    setState({ kind: 'checking' })
+    try {
+      const release = await fetchLatestRelease(props.token.trim())
+      setState(props.version && compareVersions(release.version, props.version) > 0 ? { kind: 'found', release } : { kind: 'latest', release })
+    } catch (e) {
+      setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  const install = async (release: ReleaseInfo) => {
+    if (!release.asset) return void openUrl(release.url)
+    setState({ kind: 'installing' })
+    try {
+      setState({ kind: 'installed', path: await installUpdate(release.asset, props.token.trim()) })
+    } catch (e) {
+      setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  const release = state.kind === 'found' || state.kind === 'latest' ? state.release : undefined
+  return (
+    <Section title="更新" note="GitHub の最新のリリースと比べます。新しい版があれば、インストーラーを落としてそのまま実行できます">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={BTN} onClick={() => void check()} disabled={state.kind === 'checking' || state.kind === 'installing'}>
+          {state.kind === 'checking' ? '確かめています…' : '更新を確かめる'}
+        </button>
+        {state.kind === 'found' && (
+          <button type="button" className={BTN} onClick={() => void install(state.release)}>
+            {state.release.asset ? `${state.release.version} に更新する` : 'ダウンロードのページを開く'}
+          </button>
+        )}
+        {state.kind === 'latest' && <span className="text-sm text-c-text-muted">いまが最新です({state.release.version})</span>}
+        {state.kind === 'installing' && <span className="text-sm text-c-text-muted">インストーラーを落としています…</span>}
+        {state.kind === 'installed' && <span className="text-sm text-c-text-body">インストーラーを開きました。このアプリを閉じて進めてください</span>}
+        {state.kind === 'error' && <span className="text-sm" style={{ color: 'var(--c-error)' }}>{state.message}</span>}
+      </div>
+      {release && (
+        <div className="mt-3">
+          <p className="text-sm text-c-text-body">
+            最新: {release.version}
+            <button type="button" className="ml-2 text-c-link hover:underline" onClick={() => void openUrl(release.url)}>
+              リリースのページ
+            </button>
+          </p>
+          {release.notes && <pre className="mt-1 p-3 text-xs text-c-text-body bg-c-surface2 rounded-[var(--card-radius)] whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{release.notes}</pre>}
+        </div>
+      )}
+      <div className="mt-4">
+        <p className="text-sm text-c-text-body mb-1">GitHub のトークン</p>
+        <TextSetting value={props.token} onChange={props.onToken} placeholder="github_pat_…(private のリポジトリを読む権限)" trim mono className="w-full" />
+        <p className="text-xs text-c-text-muted mt-1">
+          リポジトリは private なので、確かめるにはトークンが要ります。
+          <button type="button" className="text-c-link hover:underline ml-1" onClick={() => void openUrl('https://github.com/settings/personal-access-tokens/new')}>
+            GitHub で作る
+          </button>
+          (Fine-grained・contentsview08/bbs-browser の Contents: Read)
+        </p>
+      </div>
+    </Section>
   )
 }
 
@@ -2644,7 +2713,7 @@ export default function SettingsDialog(props: SettingsProps) {
       case 'backup':
         return <BackupTab {...props} />
       case 'about':
-        return <AboutTab />
+        return <AboutTab settings={props.settings} update={props.update} />
     }
   }
   /** 検索の結果: すべての分類を並べ、当てはまる Section だけを出す(板一覧は大きいので入れない) */

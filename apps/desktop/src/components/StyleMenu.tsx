@@ -98,6 +98,8 @@ export default function StyleMenu({ settings, update, up }: { settings: AppSetti
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg flex-shrink-0"
+        // 開いている間は強調色(どのボタンのメニューが開いているか分かるように。︙ と同じ)
+        style={open ? { color: 'var(--c-accent)' } : undefined}
         title="表示スタイル"
       >
         <span className="material-symbols-outlined text-lg">palette</span>

@@ -43,7 +43,8 @@ import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postB
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
-import { HISTORY_LIST_TABS, type ListFilter } from './ui/settings'
+import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, type ListFilter, type StoredNotification } from './ui/settings'
+import NotificationCenter from './components/NotificationCenter'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
 import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
 /** Ctrl+ホイールを回し終えてから、文字の大きさを設定に書くまで待つ時間 */
@@ -198,6 +199,8 @@ export default function App() {
   // 非同期の処理(取得の後始末など)から、いまの設定を見るための控え
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  const updateSettingRef = useRef(updateSetting)
+  updateSettingRef.current = updateSetting
   const [sites, setSites] = useState<SiteConfig[]>([])
   const [favorites, setFavorites] = useState<Board[]>()
   const [board, setBoard] = useState<Board>()
@@ -262,13 +265,23 @@ export default function App() {
    * (失敗の知らせは、アプリを見ているときに分かればよいので OS には出さない)
    */
   const notify = useCallback(
-    (n: Parameters<typeof notifyInApp>[0]) => {
-      notifyInApp(n)
+    (n: Parameters<typeof notifyInApp>[0] & { keep?: StoredNotification['link'] | true }) => {
+      const { keep, ...rest } = n
+      notifyInApp(rest)
       if (isMobile && settingsRef.current.osNotify && n.icon !== 'error' && document.visibilityState === 'hidden')
         void sendOsNotification(n.title, n.body).catch(() => undefined)
+      // あとで見たい知らせ(あなた宛てのレス・お気に入りの新着)は通知センターにも残す
+      if (keep) {
+        const log = settingsRef.current.notificationLog
+        const entry: StoredNotification = { id: Date.now() + Math.random(), at: Date.now(), icon: n.icon, title: n.title, body: n.body, read: false, link: keep === true ? undefined : keep }
+        updateSettingRef.current('notificationLog', [...log, entry].slice(-NOTIFICATION_LOG_MAX))
+      }
     },
     [notifyInApp],
   )
+  /** 通知センターを開いているか */
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notifUnread = settings.notificationLog.reduce((n, x) => n + (x.read ? 0 : 1), 0)
   // スマホ: OS の通知をオンにしていれば、起動したときに一度だけ許可を求める(もう許可していれば聞かない)
   useEffect(() => {
     if (isMobile && settingsLoaded && settingsRef.current.osNotify) void ensureNotifyPermission().catch(() => undefined)
@@ -853,7 +866,7 @@ export default function App() {
       )
       if (added.length === 1) {
         const f = byId.get(added[0].id)!
-        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => latest.current.openThread(f.thread) })
+        notify({ icon: 'bookmark', title: `お気に入りのスレに新着 +${added[0].added}`, body: f.thread.title, onClick: () => latest.current.openThread(f.thread), keep: { thread: f.thread } })
       } else if (added.length > 1) {
         notify({
           icon: 'bookmark',
@@ -863,6 +876,7 @@ export default function App() {
             .map((a) => `+${a.added} ${a.title}`)
             .join('\n') + (added.length > 3 ? `\n(ほか ${added.length - 3} 件)` : ''),
           onClick: () => latest.current.openFavThreads(),
+          keep: true,
         })
       }
     }
@@ -1015,6 +1029,7 @@ export default function App() {
           selectTab(id)
           setJump({ tabId: id, no: p.no, seq: Date.now() })
         },
+        keep: { thread: t, no: p.no },
       }),
     )
   }
@@ -2269,6 +2284,8 @@ export default function App() {
         favThreadsNew={favNewTotal}
         onOpenFavThreads={() => void openFavThreads()}
         onOpenSettings={() => openSettings('display')}
+        notificationsUnread={notifUnread}
+        onOpenNotifications={() => setNotifOpen(true)}
         onManageBoards={() => openSettings('boardlist')}
         onOpenUrl={isMobile ? () => setUrlPrompt('') : undefined}
       />
@@ -2538,6 +2555,23 @@ export default function App() {
       )}
 
       <Notifications items={notifications} onClose={dismiss} />
+      {notifOpen && (
+        <NotificationCenter
+          items={settings.notificationLog}
+          onReadAll={() => updateSetting('notificationLog', settingsRef.current.notificationLog.map((n) => (n.read ? n : { ...n, read: true })))}
+          onClear={() => updateSetting('notificationLog', [])}
+          onOpen={(n) => {
+            setNotifOpen(false)
+            if (!n.link) return
+            const id = threadId(n.link.thread)
+            const no = n.link.no
+            void openThread(n.link.thread).then(() => {
+              if (no !== undefined) setJump({ tabId: id, no, seq: Date.now() })
+            })
+          }}
+          onClose={() => setNotifOpen(false)}
+        />
+      )}
       {/* Ctrl+ホイールで文字の大きさを変えている間の表示(中身と出し入れは wheelZoom が DOM に直に書く。描き直しを起こさないため) */}
       {!isMobile && (
         <div

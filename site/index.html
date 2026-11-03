@@ -44,7 +44,8 @@
   header.top nav { margin-left: auto; display: flex; gap: 18px; font-size: 14px; }
   header.top nav a { color: var(--muted); }
   header.top nav a:hover { color: var(--strong); text-decoration: none; }
-  header.top nav a.board-link { color: var(--accent); font-weight: 700; }
+  header.top nav a.board-link { color: var(--accent-text); background: var(--accent); font-weight: 700; padding: 6px 12px; border-radius: 8px; }
+  header.top nav a.board-link:hover { color: var(--accent-text); filter: brightness(1.08); }
   @media (max-width: 640px) { header.top nav { display: none; } }
 
   .hero { padding: 64px 0 40px; text-align: center; }
@@ -123,7 +124,7 @@
       <a href="#demo">さわってみる</a>
       <a href="#shots">画面</a>
       <a href="#install">入れ方</a>
-      <a href="https://red-edge.net/boards/operation01" class="board-link">掲示板</a>
+      <a href="https://red-edge.net/boards/operation01" class="board-link" title="red-edge.net の運営板。要望や不具合もここへ">掲示板</a>
       <a href="https://github.com/contentsview08/bbs-browser">GitHub</a>
     </nav>
   </div>
@@ -145,7 +146,7 @@
 <section id="features">
   <div class="wrap">
     <h2>できること</h2>
-    <p class="sub">専ブラに欲しいものはひと通り。足りないものは <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a> へ。</p>
+    <p class="sub">専ブラに欲しいものはひと通り。足りないもの・直してほしいものは <a href="https://github.com/contentsview08/bbs-browser/issues">GitHub の Issues</a> か、<a href="https://red-edge.net/boards/operation01">掲示板の運営板</a>へ。</p>
     <div class="grid">
       <div class="card"><div class="icon">⌘</div><h3>キーだけで読める</h3><p>vim 風のキー(J/K で移動、? で一覧)と、Ctrl+K のコマンドパレット。板・スレ・操作を名前で探せます(PC 版)。</p></div>
       <div class="card"><div class="icon">▤</div><h3>タブと履歴</h3><p>PC 版はタブで何本も開く。履歴は「見た順・未読・書き込んだ・お気に入り」の 1 つの画面に。自分の書き込みから元のレスへ飛べます。</p></div>
@@ -193,7 +194,7 @@
 <section id="install">
   <div class="wrap">
     <h2>入れ方</h2>
-    <p class="sub">どちらも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。Android 版は準備中です。</p>
+    <p class="sub">どちらも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。Android 版は準備中です。困ったら <a href="https://red-edge.net/boards/operation01">掲示板の運営板</a>へどうぞ。</p>
     <div class="steps">
       <div class="card"><h3>Windows(インストーラー)</h3><ol>
         <li><code>bbs-browser_x.y.z_x64-setup.exe</code> を落として実行</li>
@@ -216,7 +217,8 @@
   <a href="https://github.com/contentsview08/bbs-browser/releases">Releases</a>
   <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a>
   <a href="https://red-edge.net/boards/operation01">掲示板</a>
-  <div style="margin-top:10px">Apache License 2.0 · <a href="https://github.com/contentsview08/bbs-browser/blob/main/LICENSE">LICENSE</a></div>
+  <div style="margin-top:10px">要望・不具合は <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a> か <a href="https://red-edge.net/boards/operation01">掲示板(運営板)</a>へ</div>
+  <div style="margin-top:6px">Apache License 2.0 · <a href="https://github.com/contentsview08/bbs-browser/blob/main/LICENSE">LICENSE</a></div>
 </footer>
 
 <script>

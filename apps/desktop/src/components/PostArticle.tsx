@@ -417,14 +417,14 @@ function PostArticle(props: Props) {
     ...(post.id
       ? [
           {
-            label: 'NGIDに追加(今日だけ)',
+            label: 'この ID を NG に(今日だけ)',
             icon: 'schedule',
             onClick: () => handlers.onAddNg(newRule('posterId', post.id!, { expiresOnDate: todayDateString() })),
           },
-          { label: 'NGIDに追加', icon: 'person_off', onClick: () => handlers.onAddNg(newRule('posterId', post.id!)) },
+          { label: 'この ID を NG に', icon: 'person_off', onClick: () => handlers.onAddNg(newRule('posterId', post.id!)) },
         ]
       : []),
-    ...(post.name ? [{ label: 'NGNameに追加', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }] : []),
+    ...(post.name ? [{ label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }] : []),
     ...(handlers.onMarkTroll
       ? props.autoNg?.kind === 'marked'
         ? [{ label: '荒らしの印を外す', icon: 'undo', onClick: () => handlers.onMarkTroll!(post, null) }]
@@ -450,7 +450,7 @@ function PostArticle(props: Props) {
         })
       : []),
     ...(handlers.onNgDraft
-      ? [{ label: 'NG ワードを編集して追加', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
+      ? [{ label: '本文の言葉を NG に(直して足す)', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
       : []),
   ]
   const toolbarItems = props.toolbar ?? ['reply', 'copy', 'ng']

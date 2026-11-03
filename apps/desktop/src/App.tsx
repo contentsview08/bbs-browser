@@ -624,6 +624,13 @@ export default function App() {
 
   /** お気に入りのスレ。サイドバーの新着の数と ☆ の印に使うので、いつも読み込んでおく */
   const [favThreads, setFavThreads] = useState<FavoriteThreadEntry[]>([])
+  /** お気に入り板を並べ替える(サイドバーのドラッグ・設定の一覧から)。先に並べ替えて見せてから保存する */
+  const reorderFavorites = (urls: string[]) =>
+    void run(null, async () => {
+      if (!store || !favorites) return
+      setFavorites(urls.map((u) => favorites.find((f) => f.url === u)!).filter(Boolean))
+      await store.reorderFavorites(urls)
+    })
   /** スレ一覧に、お気に入りのスレを出しているか */
   const [favView, setFavView] = useState(false)
   /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
@@ -2079,14 +2086,7 @@ export default function App() {
         width={isMobile ? Math.round(Math.min(340, window.innerWidth * 0.86) / DRAWER_ZOOM) : settings.sidebarWidth}
         onResize={(w) => updateSetting('sidebarWidth', w)}
         favorites={favorites ?? []}
-        onReorderFavorites={(urls) =>
-          void run(null, async () => {
-            if (!store || !favorites) return
-            // 先に並べ替えて見せてから保存する
-            setFavorites(urls.map((u) => favorites.find((f) => f.url === u)!).filter(Boolean))
-            await store.reorderFavorites(urls)
-          })
-        }
+        onReorderFavorites={reorderFavorites}
         recentHistory={recentHistory}
         onOpenThread={(t) => void openThread(t)}
         onDeleteHistory={(t) => void deleteLogs([], [t])}
@@ -2552,6 +2552,7 @@ export default function App() {
               await reloadFavorites(store)
             })
           }
+          onReorderFavorites={reorderFavorites}
           onAddSite={addSite}
           onRemoveSite={removeSite}
           accounts={accounts}
@@ -2586,6 +2587,7 @@ export default function App() {
               await reloadFavorites(store)
             })
           }
+          onReorderFavorites={reorderFavorites}
           onAddSite={addSite}
           onRemoveSite={removeSite}
           accounts={accounts}

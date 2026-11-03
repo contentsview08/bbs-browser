@@ -270,6 +270,56 @@ export function ListEditor(props: {
   )
 }
 
+/** スイッチだけ(行の中で使う) */
+export function Switch(props: { checked: boolean; onChange: (v: boolean) => void; title?: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={props.checked}
+      title={props.title}
+      onClick={() => props.onChange(!props.checked)}
+      className={`relative w-11 h-6 rounded-full flex-shrink-0 transition-all shadow-inner ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}
+    >
+      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm ${props.checked ? 'right-1' : 'left-1'}`} />
+    </button>
+  )
+}
+
+/** オン・オフの設定(説明は左、スイッチは右) */
+export function Toggle(props: { checked: boolean; onChange: (v: boolean) => void; label: string; note?: string }) {
+  // スマホ: 説明を左、スイッチを右に。行の上下を広く取り、指で押しやすくする(行のどこを押しても切り替わる)
+  if (isMobile)
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={props.checked}
+        onClick={() => props.onChange(!props.checked)}
+        className="settings-row w-full flex items-center gap-4 py-3.5 text-left"
+      >
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] leading-snug text-c-text-strong">{props.label}</span>
+          {props.note && <span className="block mt-1 text-[13px] leading-relaxed text-c-text-muted">{props.note}</span>}
+        </span>
+        <span className={`relative w-12 h-7 rounded-full flex-shrink-0 transition-colors ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}>
+          <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${props.checked ? 'left-6' : 'left-1'}`} />
+        </span>
+      </button>
+    )
+  return (
+    <label className="flex items-start gap-3 py-1.5 cursor-pointer">
+      <span className="mt-0.5">
+        <Switch checked={props.checked} onChange={props.onChange} />
+      </span>
+      <span>
+        <span className="text-sm text-c-text-body">{props.label}</span>
+        {props.note && <span className="block text-xs text-c-text-muted">{props.note}</span>}
+      </span>
+    </label>
+  )
+}
+
 /** 多いデータの設定の行: 件数と、管理画面を開くボタン */
 /**
  * 0〜100% のスライダー。動かしている間は画面にだけ映し(onPreview)、離したときに設定に書く(onCommit)。

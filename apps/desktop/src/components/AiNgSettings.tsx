@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { AI_MODEL, AI_NG_SHOWS, DEFAULT_THRESHOLD, MIN_EXAMPLES, hypothesisOf, type AiNgRule } from '../utils/aiNg'
 import { deleteAiModelFiles, testScore, useAiModelStatus } from '../hooks/useAiNg'
 import type { AppSettings, UpdateSetting } from '../ui/settings'
-import { ManagerDialog } from './SettingParts'
+import { ManagerDialog, Switch, Toggle } from './SettingParts'
 import FontSizeSlider from './FontSizeSlider'
 import { isMobile } from '../utils/platform'
 
@@ -36,16 +36,12 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
 
   return (
     <div className="space-y-3">
-      <label className="flex items-start gap-3 py-1.5 cursor-pointer">
-        <input type="checkbox" checked={s.aiNgEnabled} onChange={(e) => update('aiNgEnabled', e.target.checked)} className="mt-1 rounded" />
-        <span>
-          <span className="text-sm text-c-text-body">AI NG を使う</span>
-          <span className="block text-xs text-c-text-muted leading-relaxed">
-            はじめてオンにしたとき、判定モデル({AI_MODEL.size}・{AI_MODEL.license} ライセンス)を一度だけ取ります。そのあとは、この端末の中だけで判定し、レスをどこにも送りません。
-            判定に少し時間がかかるので、レスはまず出し、判定が済んだものから畳みます
-          </span>
-        </span>
-      </label>
+      <Toggle
+        checked={s.aiNgEnabled}
+        onChange={(v) => update('aiNgEnabled', v)}
+        label="AI NG を使う"
+        note={`はじめてオンにしたとき、判定モデル(${AI_MODEL.size}・${AI_MODEL.license} ライセンス)を一度だけ取ります。判定はこの端末の中だけで行い、レスをどこにも送りません。判定が済んだものから畳みます`}
+      />
       {s.aiNgEnabled && (
         <div className="px-3 py-2 rounded-lg border border-c-border bg-c-surface2 text-xs text-c-text-body flex items-center gap-2">
           <span className="material-symbols-outlined text-base text-c-accent">psychology</span>
@@ -85,7 +81,7 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
       <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
         {rules.map((r) => (
           <div key={r.id} className="flex items-center gap-3 px-3 py-2">
-            <input type="checkbox" checked={r.enabled} onChange={(e) => save({ ...r, enabled: e.target.checked })} className="rounded" title="この条件を使う" />
+            <Switch checked={r.enabled} onChange={(v) => save({ ...r, enabled: v })} title="この条件を使う" />
             <button type="button" onClick={() => setEditing(r)} className="flex-1 min-w-0 text-left">
               <span className={`block text-sm ${r.enabled ? 'text-c-text-strong' : 'text-c-text-muted'}`}>
                 {r.name || '(名前なし)'}

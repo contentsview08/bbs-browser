@@ -80,7 +80,7 @@ export default function NgManager(props: { rules: NgRule[]; onChange: (rules: Ng
           onClick={() => setDraft({ target: filter === 'all' ? 'content' : filter, pattern: '' })}
           className="px-3 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover"
         >
-          ＋ NG を追加
+          ＋ NG を足す
         </button>
       </div>
 
@@ -111,7 +111,7 @@ export default function NgManager(props: { rules: NgRule[]; onChange: (rules: Ng
       )}
 
       {shown.length === 0 ? (
-        <p className="py-6 text-center text-sm text-c-text-muted">{rules.length === 0 ? 'NG はまだありません。レスの ⋯・スレの NG ボタン・「＋ NG を追加」から足せます' : '当てはまる NG はありません'}</p>
+        <p className="py-6 text-center text-sm text-c-text-muted">{rules.length === 0 ? 'NG はまだありません。レスの ⋯・スレの NG ボタン・「＋ NG を足す」から足せます' : '当てはまる NG はありません'}</p>
       ) : (
         <div className="border border-c-border rounded-[var(--card-radius)] overflow-hidden">
           <table className="w-full text-sm table-fixed">

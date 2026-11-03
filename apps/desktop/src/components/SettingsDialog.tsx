@@ -40,7 +40,7 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
-import { ListEditor, NumberField, PercentSlider, SamplePosts, ThumbSample } from './SettingParts'
+import { ListEditor, NumberField, PercentSlider, SamplePosts, ThumbSample, Toggle } from './SettingParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -59,6 +59,7 @@ export interface SettingsProps {
   sites: SiteConfig[]
   onAddFavoriteUrl: (url: string) => Promise<void>
   onRemoveFavorite: (url: string) => void
+  onReorderFavorites: (urls: string[]) => void
   onAddSite: (name: string, menuUrl: string) => Promise<void>
   onRemoveSite: (menuUrl: string) => void
   /** BBS メニューの板一覧。refresh なら取り直す(なければ保存してあるものを返す) */
@@ -77,7 +78,7 @@ export interface SettingsProps {
   onBackupDb: () => Promise<boolean>
   /** 書き出しておいた DB に入れ替える(アプリを起動し直す) */
   onRestoreDb: () => Promise<boolean>
-  /** 古いログを今すぐ整理する(設定の日数で)。消したスレの数を返す */
+  /** 古いログを今すぐ消す(設定の日数で)。消したスレの数を返す */
   onPruneLogs: () => Promise<number>
   /** 最初に開く分類 */
   initialTab?: SettingsTab
@@ -103,13 +104,13 @@ type Tab = SettingsTab
 
 const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopOnly?: boolean }[] = [
   { key: 'display', name: '表示', icon: 'palette' },
-  { key: 'threads', name: 'スレッド一覧', icon: 'view_list' },
+  { key: 'threads', name: 'スレ一覧', icon: 'view_list' },
   { key: 'posts', name: 'レス表示', icon: 'forum' },
   { key: 'write', name: '書き込み', icon: 'edit' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
   // スマホにはキーがないので、ここはジェスチャー(なぞる操作)の設定になる
-  isMobile ? { key: 'keys', name: 'ジェスチャー', icon: 'swipe' } : { key: 'keys', name: 'キー操作', icon: 'keyboard', advanced: true },
-  { key: 'toolbars', name: 'ボタンの配置', icon: 'toolbar', advanced: true },
+  isMobile ? { key: 'keys', name: 'ジェスチャー', icon: 'swipe' } : { key: 'keys', name: 'キー操作', icon: 'keyboard' },
+  { key: 'toolbars', name: 'ボタンの配置', icon: 'toolbar' },
   { key: 'ng', name: 'NG', icon: 'block' },
   { key: 'boardlist', name: '板一覧', icon: 'list_alt' },
   { key: 'boards', name: 'お気に入り板', icon: 'star' },
@@ -131,7 +132,7 @@ const MOBILE_GROUPS: { title: string; items: Tab[] }[] = [
 ]
 /** スマホ: 分類ごとの、何が設定できるかの一行 */
 const TAB_DESC: Record<Tab, string> = {
-  display: 'テーマ・文字サイズ',
+  display: 'テーマ・文字の大きさ',
   threads: '最初の並び順・タブ・ログの削除',
   posts: 'レスの見た目・本文・画像とサムネイル',
   write: '名前・続けて書き込まない間・画像のアップロード',
@@ -139,8 +140,8 @@ const TAB_DESC: Record<Tab, string> = {
   keys: 'なぞる向きと操作・感度',
   toolbars: 'ヘッダー・フッター・︙ に置くボタン',
   ng: 'NG ワード・名前・ID・スレタイ・自動 NG',
-  boardlist: 'お気に入り板・BBS メニュー',
-  boards: '左に並べる板・別名・並び',
+  boardlist: '板を探して ☆ でお気に入りに',
+  boards: 'サイドバーに並べる板・並び・板ごとの設定',
   menus: '板一覧を取る掲示板(bbsmenu)',
   accounts: '5ch のアカウント・板ごとの名前と名無しの扱い',
   backup: '設定の書き出し・まるごとバックアップ',
@@ -301,7 +302,12 @@ function Choice<T extends string | number>(props: {
   options: { key: T; name: string }[]
   onChange: (v: T) => void
 }) {
-  if (props.options.length > 4 || props.options.some((o) => o.name.length > 12)) {
+  // 「自動(狭いときだけ 1 画面)」のような括弧の中は説明。ボタンには前だけを出し、説明は選んだものの下に出す
+  const split = (name: string): [string, string] => {
+    const m = name.match(/^(.*?)[((](.*)[))]\s*$/)
+    return m ? [m[1].trim(), m[2]] : [name, '']
+  }
+  if (props.options.length > 4 || props.options.some((o) => split(o.name)[0].length > 12)) {
     const i = props.options.findIndex((o) => o.key === props.value)
     return (
       <select
@@ -318,152 +324,95 @@ function Choice<T extends string | number>(props: {
       </select>
     )
   }
+  const selectedNote = split(props.options.find((o) => o.key === props.value)?.name ?? '')[1]
   return (
-    <div className="flex flex-wrap gap-2">
-      {props.options.map((o) => {
-        const active = o.key === props.value
-        return (
-          <button
-            key={String(o.key)}
-            type="button"
-            onClick={() => props.onChange(o.key)}
-            className={`px-3 py-1.5 text-sm border transition-colors rounded-[var(--chip-radius)] ${
-              active
-                ? 'border-c-accent text-c-accent bg-[var(--c-accent-wash)]'
-                : 'border-c-border text-c-text-body hover:border-c-border-strong'
-            }`}
-          >
-            {o.name}
-          </button>
-        )
-      })}
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {props.options.map((o) => {
+          const active = o.key === props.value
+          const [name, note] = split(o.name)
+          return (
+            <button
+              key={String(o.key)}
+              type="button"
+              onClick={() => props.onChange(o.key)}
+              title={note || undefined}
+              className={`px-3 py-1.5 text-sm border transition-colors rounded-[var(--chip-radius)] ${
+                active
+                  ? 'border-c-accent text-c-accent bg-[var(--c-accent-wash)]'
+                  : 'border-c-border text-c-text-body hover:border-c-border-strong'
+              }`}
+            >
+              {name}
+            </button>
+          )
+        })}
+      </div>
+      {selectedNote && <p className="mt-1 text-xs text-c-text-muted">{selectedNote}</p>}
     </div>
   )
 }
 
-/** スレ一覧のタブを選んで並べる。出すものを上に、出さないものを下に並べる */
-export function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]) => void }) {
-  const shown = props.value.filter((k) => LIST_TABS.some((t) => t.key === k))
-  const rest = LIST_TABS.map((t) => t.key).filter((k) => !shown.includes(k))
-  // スマホ: 出すタブは、右のつまみをつかんで上下に動かして並べる(上が左)。− で外し、下の + で足す
-  if (isMobile) {
-    const def = (k: ListTabKey) => LIST_TABS.find((t) => t.key === k)!
-    return (
-      <div className="flex flex-col gap-4">
-        <DragList
-          items={shown}
-          onChange={props.onChange}
-          render={(k, handle, dragging) => (
-            <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
-              <button type="button" onClick={() => props.onChange(shown.filter((x) => x !== k))} className="text-c-heat-very-hot" title="外す">
-                <span className="material-symbols-outlined fill text-xl">do_not_disturb_on</span>
-              </button>
-              <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-[15px] text-c-text-strong">{def(k).name}</span>
-                <span className="block text-xs text-c-text-muted">{def(k).note}</span>
-              </span>
-              <DragHandle handle={handle} />
-            </div>
-          )}
-        />
-        {rest.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-bold text-c-text-muted">出していないタブ</p>
-            {rest.map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => props.onChange([...shown, k])}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-dashed border-c-border text-left active:bg-c-surface2"
-              >
-                <span className="material-symbols-outlined fill text-xl text-c-accent">add_circle</span>
-                <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
-                <span className="text-[15px] text-c-text-body">{def(k).name}</span>
-              </button>
-            ))}
+/**
+ * 出すものを選んで並べる(スレ一覧のタブ・レスの操作バー)。出しているものは右のつまみをつかんで上下に動かして並べる(上が左)。
+ * − で外し、下の「出していないもの」の + で足す
+ */
+export function OrderEditor<K extends string>(props: {
+  all: { key: K; name: string; icon: string; note?: string }[]
+  value: K[]
+  onChange: (v: K[]) => void
+  /** 出していないものの見出し */
+  restTitle?: string
+}) {
+  const shown = props.value.filter((k) => props.all.some((t) => t.key === k))
+  const rest = props.all.map((t) => t.key).filter((k) => !shown.includes(k))
+  const def = (k: K) => props.all.find((t) => t.key === k)!
+  const pad = isMobile ? 'px-3 py-2.5 rounded-xl' : 'px-3 py-1.5 rounded-lg'
+  const text = isMobile ? 'text-[15px]' : 'text-sm'
+  return (
+    <div className="flex flex-col gap-3">
+      <DragList
+        items={shown}
+        onChange={props.onChange}
+        render={(k, handle, dragging) => (
+          <div className={`flex items-center gap-3 ${pad} border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
+            <button type="button" onClick={() => props.onChange(shown.filter((x) => x !== k))} className="text-c-heat-very-hot" title="外す">
+              <span className="material-symbols-outlined fill text-xl">do_not_disturb_on</span>
+            </button>
+            <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
+            <span className="flex-1 min-w-0">
+              <span className={`block ${text} text-c-text-strong`}>{def(k).name}</span>
+              {def(k).note && <span className="block text-xs text-c-text-muted">{def(k).note}</span>}
+            </span>
+            <DragHandle handle={handle} />
           </div>
         )}
-      </div>
-    )
-  }
-  const move = (i: number, d: -1 | 1) => {
-    const next = [...shown]
-    ;[next[i], next[i + d]] = [next[i + d], next[i]]
-    props.onChange(next)
-  }
-  const row = (key: ListTabKey, on: boolean, i: number) => {
-    const def = LIST_TABS.find((t) => t.key === key)!
-    return (
-      <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border border-c-border ${on ? '' : 'opacity-60'}`}>
-        <input
-          type="checkbox"
-          checked={on}
-          className="accent-[var(--c-accent)]"
-          onChange={() => props.onChange(on ? shown.filter((k) => k !== key) : [...shown, key])}
-          aria-label={`${def.name}を出す`}
-        />
-        <span className="material-symbols-outlined text-base text-c-text-muted">{def.icon}</span>
-        <span className="text-sm text-c-text-strong w-20">{def.name}</span>
-        <span className="flex-1 min-w-0 text-xs text-c-text-muted truncate">{def.note}</span>
-        {on && (
-          <>
-            <button type="button" disabled={i === 0} onClick={() => move(i, -1)} title="左へ" className="p-0.5 rounded hover:bg-c-surface2 disabled:opacity-30">
-              <span className="material-symbols-outlined text-base leading-none">arrow_upward</span>
+      />
+      {shown.length === 0 && <p className="text-xs text-c-text-muted">何も出していません</p>}
+      {rest.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-bold text-c-text-muted">{props.restTitle ?? '出していないもの'}</p>
+          {rest.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => props.onChange([...shown, k])}
+              className={`flex items-center gap-3 ${pad} border border-dashed border-c-border text-left hover:bg-c-surface2 active:bg-c-surface2`}
+            >
+              <span className="material-symbols-outlined fill text-xl text-c-accent">add_circle</span>
+              <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>
+              <span className={`${text} text-c-text-body`}>{def(k).name}</span>
             </button>
-            <button type="button" disabled={i === shown.length - 1} onClick={() => move(i, 1)} title="右へ" className="p-0.5 rounded hover:bg-c-surface2 disabled:opacity-30">
-              <span className="material-symbols-outlined text-base leading-none">arrow_downward</span>
-            </button>
-          </>
-        )}
-      </div>
-    )
-  }
-  return (
-    <div className="flex flex-col gap-1.5">
-      {shown.map((k, i) => row(k, true, i))}
-      {rest.map((k) => row(k, false, -1))}
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-function Toggle(props: { checked: boolean; onChange: (v: boolean) => void; label: string; note?: string }) {
-  // スマホ: 説明を左、スイッチを右に。行の上下を広く取り、指で押しやすくする(行のどこを押しても切り替わる)
-  if (isMobile)
-    return (
-      <button
-        type="button"
-        role="switch"
-        aria-checked={props.checked}
-        onClick={() => props.onChange(!props.checked)}
-        className="settings-row w-full flex items-center gap-4 py-3.5 text-left"
-      >
-        <span className="flex-1 min-w-0">
-          <span className="block text-[15px] leading-snug text-c-text-strong">{props.label}</span>
-          {props.note && <span className="block mt-1 text-[13px] leading-relaxed text-c-text-muted">{props.note}</span>}
-        </span>
-        <span className={`relative w-12 h-7 rounded-full flex-shrink-0 transition-colors ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}>
-          <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${props.checked ? 'left-6' : 'left-1'}`} />
-        </span>
-      </button>
-    )
-  return (
-    <label className="flex items-start gap-3 py-1.5 cursor-pointer">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={props.checked}
-        onClick={() => props.onChange(!props.checked)}
-        className={`relative mt-0.5 w-11 h-6 rounded-full flex-shrink-0 transition-all shadow-inner ${props.checked ? 'bg-c-accent' : 'bg-c-border-strong'}`}
-      >
-        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm ${props.checked ? 'right-1' : 'left-1'}`} />
-      </button>
-      <span>
-        <span className="text-sm text-c-text-body">{props.label}</span>
-        {props.note && <span className="block text-xs text-c-text-muted">{props.note}</span>}
-      </span>
-    </label>
-  )
+/** スレ一覧のタブを選んで並べる */
+export function ListTabsEditor(props: { value: ListTabKey[]; onChange: (v: ListTabKey[]) => void }) {
+  return <OrderEditor all={LIST_TABS} value={props.value} onChange={props.onChange} restTitle="出していないタブ" />
 }
 
 /** OS に入っているフォントから選ぶ。各行をそのフォント自体で描くので、見た目を比べられる */
@@ -664,7 +613,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
         <Toggle
           checked={s.showStripNames}
           onChange={(v) => update('showStripNames', v)}
-          label="しまったサイドバーに板名を出す"
+          label="畳んだサイドバーに板名を出す"
           note="お気に入り板のアイコンの下に、板名を小さく出します(別名があれば別名)"
         />
       </Section>
@@ -694,7 +643,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           すべて 100% に戻す
         </button>
       </Section>
-      <Section title="文字サイズ">
+      <Section title="文字の大きさ">
         {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
         <FontSizeSlider
           label="画面全体"
@@ -702,16 +651,6 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           base={baseFontPx(s)}
           preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
           onCommit={(px) => update(FONT_PX_KEY, px)}
-        />
-      </Section>
-      <Section title="スレ一覧の行の形">
-        <Choice
-          value={s.listShape}
-          options={[
-            { key: 'normal' as const, name: 'ふつう' },
-            { key: 'compact' as const, name: 'コンパクト(スレタイ 1 行と数だけ)' },
-          ]}
-          onChange={(v) => update('listShape', v)}
         />
       </Section>
       <Section
@@ -724,15 +663,27 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
   )
 }
 
-function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'favorites'>) {
+function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<SettingsProps, 'settings' | 'update' | 'favorites' | 'onPruneLogs'>) {
+  const [pruneMessage, setPruneMessage] = useState<string>()
+  const [pruning, setPruning] = useState(false)
   return (
     <>
-      <Section advanced desktopOnly title="更新">
+      <Section title="行の形">
+        <Choice
+          value={s.listShape}
+          options={[
+            { key: 'normal' as const, name: 'ふつう' },
+            { key: 'compact' as const, name: 'コンパクト(スレタイ 1 行と数だけ)' },
+          ]}
+          onChange={(v) => update('listShape', v)}
+        />
+      </Section>
+      <Section advanced desktopOnly title="ホイールで更新">
         <Toggle
           checked={s.pullToRefreshList}
           onChange={(v) => update('pullToRefreshList', v)}
-          label="一番上でさらにホイールを上に回したら、スレ一覧を更新する"
-          note="一番上に着いてから少し待って、さらに大きく回したときだけ更新します。一度更新したら 5 秒はしません。切っても、更新ボタンでは更新できます"
+          label="一番上でさらにホイールを上に回したら更新する"
+          note="一番上に着いてから、さらに大きく回したときだけ。一度更新したら 5 秒はしません"
         />
       </Section>
       <Section
@@ -741,19 +692,19 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'set
       >
         <ListEditor noun="キーワード" sortable items={s.keywords} onChange={(v) => update('keywords', v)} placeholder="例: 実況" />
       </Section>
-      <Section title="スレ一覧の見せ方">
+      <Section title="立てた人の ID">
         <Toggle
           checked={s.threadAuthorIcon}
           onChange={(v) => update('threadAuthorIcon', v)}
           label="スレ一覧で、立てた人の ID を模様で出す"
-          note="スレ一覧に立てた人の ID が付いてくる掲示板(エッジ)だけです。切っているときは、スレの右下に ID を小さく出します"
+          note="スレ一覧に立てた人の ID が付いてくる掲示板(エッヂなど)だけ。切ると、ID をスレの右下に小さく出します"
         />
       </Section>
-      <Section title="最初の並び順" note="板を開いたときの並び順です。スレ一覧のタブでその場で変えられます">
+      <Section title="板を開いたときの並び" note="スレ一覧のタブで、その場でも変えられます">
         <Choice
           value={s.threadSort}
           options={[
-            { key: 'subject', name: 'サーバーの順(更新順)' },
+            { key: 'subject', name: '更新順(掲示板の並び)' },
             { key: 'momentum', name: '勢い順' },
             { key: 'newest', name: '新しい順' },
             { key: 'count', name: 'レス数順' },
@@ -774,7 +725,7 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'set
           note="確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます"
         />
       </Section>
-      <Section advanced desktopOnly title="タブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+      <Section advanced desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
           checked={s.tabsEnabled}
           onChange={(v) => update('tabsEnabled', v)}
@@ -803,6 +754,37 @@ function ThreadsTab({ settings: s, update, favorites }: Pick<SettingsProps, 'set
           ))}
         </select>
       </Section>
+      <Section
+        title="閲覧履歴(ログ)を残す日数"
+        note="この日数より長く開いていないスレのログを、起動したときに消します。お気に入りのスレ・自分が書き込んだスレ・開いているタブは残します"
+      >
+        <NumberField
+          value={s.logRetentionDays}
+          min={0}
+          max={3650}
+          unit="日"
+          zeroLabel="消さない"
+          presets={[7, 30, 90, 365, 0]}
+          onChange={(v) => update('logRetentionDays', v)}
+        />
+        {s.logRetentionDays > 0 && (
+          <button
+            type="button"
+            className={`${BTN} mt-3`}
+            disabled={pruning}
+            onClick={() => {
+              setPruning(true)
+              onPruneLogs()
+                .then((n) => setPruneMessage(n > 0 ? `${n} スレのログを消しました` : '消すログはありませんでした'))
+                .catch((e) => setPruneMessage(e instanceof Error ? e.message : String(e)))
+                .finally(() => setPruning(false))
+            }}
+          >
+            今すぐ消す
+          </button>
+        )}
+        {pruneMessage && <p className="mt-2 text-xs text-c-text-muted">{pruneMessage}</p>}
+      </Section>
     </>
   )
 }
@@ -811,7 +793,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
   return (
     <>
       <StickySample settings={s} />
-      <Section title="スレを開いたときの位置">
+      <Section title="開く位置">
         <Choice
           value={s.openPosition}
           options={[
@@ -842,7 +824,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <Toggle
           checked={s.highlightOp}
           onChange={(v) => update('highlightOp', v)}
-          label="スレ主を強調する"
+          label="スレ主に「主」の印"
           note=">>1 と同じ ID の書き込みに「主」の印を付けます(ID のない板では付きません)"
         />
         <Toggle
@@ -887,14 +869,14 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <Toggle
           checked={s.collapseBlankLines}
           onChange={(v) => update('collapseBlankLines', v)}
-          label="3 行以上続く空行を 1 行にまとめる"
+          label="続いた空行を 1 行にまとめる"
         />
         <Toggle checked={s.trimTrailingBlank} onChange={(v) => update('trimTrailingBlank', v)} label="本文の最後の空行を消す" />
         <Toggle
           checked={s.aaAutoDetect}
           onChange={(v) => update('aaAutoDetect', v)}
-          label="AA を自動で見分ける"
-          note="空白が続く本文を AA 用のフォントで表示します。レスの ⋯ から個別に切り替えられます"
+          label="AA を見分けて、AA 用の字で出す"
+          note="空白が続く本文を AA 用の字で出します。レスの ⋯ から個別に切り替えられます"
         />
         <Toggle
           checked={s.urlShorten}
@@ -917,7 +899,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <Toggle
           checked={s.showLinkPreview}
           onChange={(v) => update('showLinkPreview', v)}
-          label="リンクの埋め込みを出す"
+          label="リンクのカードを出す"
           note="画像でも動画でもないリンクに、ページのタイトル・説明・画像のカードを出します(画面に見えたときにページを取りに行きます)"
         />
         <Toggle
@@ -954,10 +936,10 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <Toggle
           checked={s.showThumbnails}
           onChange={(v) => update('showThumbnails', v)}
-          label="画像のサムネイルを出す"
-          note="本文中の画像 URL(jpg・png・gif・webp)を小さく表示します"
+          label="本文の画像をサムネイルで出す"
+          note="本文中の画像 URL(jpg・png・gif・webp)を小さく出します"
         />
-        <p className="text-xs text-c-text-muted mt-3 mb-1.5">サムネイルを読みに行く</p>
+        <p className="text-xs text-c-text-muted mt-3 mb-1.5">サムネイルを読み込む</p>
         <Choice
           value={s.thumbLoad}
           options={[
@@ -968,7 +950,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           onChange={(v) => update('thumbLoad', v)}
         />
         <p className="text-xs text-c-text-muted mt-1">
-          読みに行かないときは、サムネイルの枠だけを出します。押すとそのサムネイルを読み、もう一度押すと大きく見られます
+          読み込まないときは、サムネイルの枠だけを出します。押すと読み込み、もう一度押すと大きく見られます
         </p>
         <div className="mt-4">
         <ThumbSample kind="post" />
@@ -1106,27 +1088,13 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
     ...TOOLBAR_ITEMS,
     ...s.quickPhrases.map((p) => ({ key: `phrase:${p}`, name: `定型文「${p}」`, icon: 'bolt' })),
   ]
-  const shown = s.postToolbar.filter((k) => all.some((a) => a.key === k))
-  const ordered = [...shown.map((k) => all.find((a) => a.key === k)!), ...all.filter((a) => !shown.includes(a.key))]
-  const move = (key: string, d: number) => {
-    const i = shown.indexOf(key)
-    const j = i + d
-    if (i < 0 || j < 0 || j >= shown.length) return
-    const next = [...shown]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    update('postToolbar', next)
-  }
   return (
     <>
       <Section
-        advanced title="続けて書き込まない"
-        note="書き込んだあと、この秒数は書き込むボタンを押せなくし、残りを出します(連投で規制されないように)。どのスレでも同じです"
+        advanced title="書き込んだあとに待つ時間"
+        note="この秒数は書き込むボタンを押せません(連投で規制されないように)"
       >
-        <Choice
-          value={s.postCooldownSec}
-          options={[0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'あけない' : `${n} 秒` }))}
-          onChange={(v) => update('postCooldownSec', v)}
-        />
+        <NumberField value={s.postCooldownSec} min={0} max={600} unit="秒" zeroLabel="待たない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('postCooldownSec', v)} />
       </Section>
       <Section title="定型文" note="レスの操作バーや ⋯ から、そのレスへのアンカーを付けて、押すとすぐ書き込みます">
         <ListEditor
@@ -1147,33 +1115,8 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <Toggle checked={s.sendDelay} onChange={(v) => update('sendDelay', v)} label="送る前に 3 秒待つ" note="その間は「取り消す」で止められます(誤爆を防ぐ)" />
       </Section>
 
-      <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき右上に出すボタンです。チェックしたものを、上から順に左から並べます(⋯ はいつも一番右)">
-        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
-          {ordered.map((item) => {
-            const on = shown.includes(item.key)
-            return (
-              <div key={item.key} className="flex items-center gap-3 px-3 py-1.5 text-sm">
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={(e) => update('postToolbar', e.target.checked ? [...shown, item.key] : shown.filter((k) => k !== item.key))}
-                />
-                <span className="material-symbols-outlined text-base text-c-text-muted">{item.icon}</span>
-                <span className={`flex-1 ${on ? 'text-c-text-body' : 'text-c-text-muted'}`}>{item.name}</span>
-                {on && (
-                  <>
-                    <button type="button" className={ICON_BTN} title="左へ" onClick={() => move(item.key, -1)}>
-                      <span className="material-symbols-outlined text-base">arrow_upward</span>
-                    </button>
-                    <button type="button" className={ICON_BTN} title="右へ" onClick={() => move(item.key, 1)}>
-                      <span className="material-symbols-outlined text-base">arrow_downward</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            )
-          })}
-        </div>
+      <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。上から順に左から並びます(⋯ はいつも一番右)">
+        <OrderEditor all={all} value={s.postToolbar} onChange={(v) => update('postToolbar', v)} restTitle="出していないボタン" />
       </Section>
       <Section
         advanced title="画像のアップロード"
@@ -1213,10 +1156,10 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           note="JPEG・PNG・WebP は描き直して取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます"
         />
         <div className="mt-3">
-          <p className="text-sm text-c-text-body mb-1.5">大きい画像を縮小してから上げる(長い辺)</p>
+          <p className="text-sm text-c-text-body mb-1.5">大きい画像を縮めて上げる(長い辺)</p>
           <Choice
             value={s.uploadMaxDimension}
-            options={[0, 1280, 1920, 2560, 4096].map((n) => ({ key: n, name: n === 0 ? '縮小しない' : `${n}px まで` }))}
+            options={[0, 1280, 1920, 2560, 4096].map((n) => ({ key: n, name: n === 0 ? '縮めない' : `${n}px まで` }))}
             onChange={(v) => update('uploadMaxDimension', v)}
           />
           <p className="text-[10px] text-c-text-muted mt-1">
@@ -1256,21 +1199,13 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
   return (
     <>
       <Section title="開いているスレの自動更新" note="実況板など、流れの速いスレ向けです。差分だけを取りに行きます">
-        <Choice
-          value={s.autoRefreshSec}
-          options={[0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒` }))}
-          onChange={(v) => update('autoRefreshSec', v)}
-        />
+        <NumberField value={s.autoRefreshSec} min={0} max={3600} unit="秒ごと" zeroLabel="しない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('autoRefreshSec', v)} />
       </Section>
       <Section
         advanced title="お気に入りのスレの新着"
-        note="お気に入りのスレがある板のスレ一覧だけを取りに行き、新着の数を確かめます(本文は取りません)。本文はお気に入りのスレの一覧で更新したときに取ります"
+        note="お気に入りのスレがある板のスレ一覧を取り、新着の数だけ確かめます(本文は、お気に入りのスレの一覧で更新したときに取ります)"
       >
-        <Choice
-          value={s.favCheckMin}
-          options={[0, 3, 5, 10, 30].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 分ごと` }))}
-          onChange={(v) => update('favCheckMin', v)}
-        />
+        <NumberField value={s.favCheckMin} min={0} max={1440} unit="分ごと" zeroLabel="しない" presets={[0, 3, 5, 10, 30]} onChange={(v) => update('favCheckMin', v)} />
       </Section>
       <Section title="通知">
         {isMobile && (
@@ -1286,21 +1221,23 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           />
         )}
         <Toggle
+          checked={s.notifyReplies}
+          onChange={(v) => update('notifyReplies', v)}
+          label="自分宛てのレスが届いたら知らせる"
+          note="右下に出し、押すとそのレスへ飛びます。裏のタブは更新したときに知らせます"
+        />
+        <Toggle
           checked={s.notifyFavThreads}
           onChange={(v) => update('notifyFavThreads', v)}
           label="お気に入りのスレに新着があったら知らせる"
-          note="上の間隔で新着の数を確かめたときに、増えていたら右下に出します"
+          note="新着の数を確かめたときに増えていたら、右下に出します"
         />
         <div className="mt-3">
           <p className="text-sm text-c-text-body mb-1.5">キーワードに合うスレが立ったら知らせる</p>
           <p className="text-xs text-c-text-muted mb-2">
-            お気に入り板のスレ一覧をこの間隔で見に行き、スレッド一覧のキーワード(設定 → スレッド一覧)を含むスレが新しく立っていたら知らせます
+            お気に入り板のスレ一覧をこの間隔で見に行き、「スレ一覧 → キーワード」に合うスレが立っていたら知らせます
           </p>
-          <Choice
-            value={s.keywordWatchMin}
-            options={[0, 5, 10, 30, 60].map((n) => ({ key: n, name: n === 0 ? '知らせない' : `${n} 分ごと` }))}
-            onChange={(v) => update('keywordWatchMin', v)}
-          />
+          <NumberField value={s.keywordWatchMin} min={0} max={1440} unit="分ごと" zeroLabel="知らせない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('keywordWatchMin', v)} />
         </div>
       </Section>
       <Section title="新着">
@@ -1315,12 +1252,6 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           label="新着が多くても、いちばん下まで送る"
           note="オフなら新着の頭(最初の新しいレス)まで、オンなら一番下まで送ります。実況のように速いスレで、いつも最新を見ていたいとき向け"
         />}
-        <Toggle
-          checked={s.notifyReplies}
-          onChange={(v) => update('notifyReplies', v)}
-          label="自分宛てのレスが届いたら通知する"
-          note="画面の右下に出します。押すとそのレスへ飛びます。自動更新は開いているタブだけなので、裏のタブは更新したときに知らせます"
-        />
       </Section>
     </>
   )
@@ -1395,9 +1326,9 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
             value={s.gestureSensitivity}
             options={[
               { key: 1, name: '鈍い' },
-              { key: 2, name: 'やや鈍い' },
+              { key: 2, name: '少し鈍い' },
               { key: 3, name: '標準' },
-              { key: 4, name: 'やや敏感' },
+              { key: 4, name: '少し敏感' },
               { key: 5, name: '敏感' },
             ]}
             onChange={(v) => update('gestureSensitivity', v)}
@@ -1462,9 +1393,9 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
           value={s.gestureSensitivity}
           options={[
             { key: 1, name: '鈍い' },
-            { key: 2, name: 'やや鈍い' },
+            { key: 2, name: '少し鈍い' },
             { key: 3, name: '標準' },
-            { key: 4, name: 'やや敏感' },
+            { key: 4, name: '少し敏感' },
             { key: 5, name: '敏感' },
           ]}
           onChange={(v) => update('gestureSensitivity', v)}
@@ -1982,35 +1913,6 @@ export function BackupTab({
         </p>
       )}
       <Section
-        title="閲覧履歴(ログ)を残す日数"
-        note="この日数より長く開いていないスレのログ(閲覧履歴とレス)を、起動したときに消します(1 日に 1 回)。0 なら消しません。お気に入りのスレ・自分が書き込んだスレ・開いているタブは残します。消したスレは、もう一度開けば取り直します(dat 落ちしていれば読めません)"
-      >
-        <NumberField
-          value={s.logRetentionDays}
-          min={0}
-          max={3650}
-          unit="日"
-          zeroLabel="消さない"
-          presets={[7, 30, 90, 365, 0]}
-          onChange={(v) => update('logRetentionDays', v)}
-        />
-        {s.logRetentionDays > 0 && (
-          <button
-            type="button"
-            className={`${BTN} mt-3`}
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                const n = await onPruneLogs()
-                return n > 0 ? `${n} スレのログを消しました` : '消すログはありませんでした'
-              })
-            }
-          >
-            今すぐ整理する
-          </button>
-        )}
-      </Section>
-      <Section
         title="設定"
         note="表示・スレ一覧・キー操作などの設定を JSON に書き出します。catbox のアカウント、開いていたタブ、背景画像、画像の保存先は入れません"
       >
@@ -2096,8 +1998,8 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
   ]
   const area = (areaKey: BarArea, title: string) => {
     const placements = resolvePlacements(areaKey, layout, isMobile)
-    // スマホ: ボタンをつまんで、ヘッダー・フッター・︙ の箱のあいだで動かす
-    if (isMobile) {
+    // ボタンをつまんで、ヘッダー・フッター・︙ の箱のあいだで動かす(同じ箱の中で動かすと並び順が変わる)
+    {
       const actions = orderBy(barActionsFor(areaKey, isMobile), order[areaKey])
       const nameOf = (id: string) => actions.find((a) => a.id === id)!
       return (
@@ -2122,24 +2024,11 @@ export function ToolbarsTab({ settings: s, update }: Pick<SettingsProps, 'settin
         </Section>
       )
     }
-    return (
-      <Section title={title} note="どのボタンも、ヘッダーの右端の ︙ を押すと出てきます。よく使うものだけヘッダーかフッターに並べてください">
-        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
-          {barActionsFor(areaKey, isMobile).map((a) => (
-            <div key={a.id} className="flex items-center gap-3 px-3 py-2">
-              <span className="material-symbols-outlined text-lg text-c-text-muted">{a.icon}</span>
-              <span className="w-36 flex-shrink-0 text-sm text-c-text-body">{a.name}</span>
-              <Choice value={placements[a.id]} options={PLACES} onChange={(v) => set(areaKey, a.id, v)} />
-            </div>
-          ))}
-        </div>
-      </Section>
-    )
   }
   return (
     <>
       {area('thread', 'スレ表示')}
-      {area('list', 'スレッド一覧')}
+      {area('list', 'スレ一覧')}
       <button
         type="button"
         onClick={() => {
@@ -2160,7 +2049,7 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
 
   return (
     <>
-      <Section title="NG に当たったレスの扱い">
+      <Section title="NG のレス">
         <Choice
           value={s.ngMode}
           options={[
@@ -2181,7 +2070,7 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
           checked={s.autoNg}
           onChange={(v) => update('autoNg', v)}
           label="荒らしらしいレスを自動で畳む"
-          note="同じスレで同じ長い本文が 3 回以上あるレスと、同じ文字の繰り返しばかりのレスを畳みます(理由を出します)。レスの NG メニューの「荒らしとして NG」で同じ本文をスレをまたいで畳み、「荒らし判定を外す」で誤判定を直せます。荒らしの印が 3 件以上になると、印から判定を学び(でたらめな文字の並び・ほかのスレにも同じ長文・繰り返しなどの判断軸と、文字の並びの癖)、印のない似た荒らしも畳むようになります"
+          note="同じ長い本文の連投・同じ文字の繰り返しばかりのレスを、理由を付けて畳みます。レスのメニューの「荒らしとして NG」「荒らしじゃない」の印が 3 件以上たまると、印から学んで似た荒らしも畳みます"
         />
       </Section>
 
@@ -2254,7 +2143,7 @@ export function BoardListTab(props: {
     })
 
   if (props.sites.length === 0) {
-    return <p className="text-sm text-c-text-muted">BBS メニューが登録されていません。「板とサイト」から追加してください</p>
+    return <p className="text-sm text-c-text-muted">BBS メニューがありません。設定の「BBS メニュー」で足してください</p>
   }
 
   return (
@@ -2377,7 +2266,7 @@ function BoardMetaEditor({ board, meta, onChange }: { board: Board; meta: BoardM
 export function BoardsTab(
   props: Pick<
     SettingsProps,
-    'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onAddSite' | 'onRemoveSite' | 'settings' | 'update'
+    'favorites' | 'sites' | 'onAddFavoriteUrl' | 'onRemoveFavorite' | 'onReorderFavorites' | 'onAddSite' | 'onRemoveSite' | 'settings' | 'update'
   > & { onShowBoardList: (menuUrl: string) => void; part?: 'favorites' | 'menus' },
 ) {
   const part = props.part
@@ -2410,31 +2299,39 @@ export function BoardsTab(
 
   return (
     <>
-      {part !== 'menus' && <Section title="お気に入り板" note="サイドバーの「お気に入り」に並ぶ板です。「板一覧」で ☆ を押すか、板の URL を貼って登録します">
-        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)] mb-3">
-          {props.favorites.map((b) => (
-            <div key={b.url}>
-              <div className="flex items-center gap-3 px-3 py-2 text-sm">
-                <BoardIcon boardUrl={b.url} override={metaOf(b.url).icon} />
-                <span className="text-c-text-strong">{metaOf(b.url).alias || b.name}</span>
-                {metaOf(b.url).alias && <span className="text-xs text-c-text-muted">({b.name})</span>}
-                <span className="flex-1 min-w-0 truncate text-xs text-c-text-muted">{b.url}</span>
-                <button
-                  type="button"
-                  onClick={() => setEditing((e) => (e === b.url ? undefined : b.url))}
-                  className={`px-2 py-0.5 text-xs border rounded-[var(--btn-radius)] transition-colors ${
-                    editing === b.url ? 'border-c-accent text-c-accent' : 'border-c-border text-c-text-body hover:border-c-accent hover:text-c-accent'
-                  }`}
-                >
-                  編集
-                </button>
-                <button type="button" className={ICON_BTN} title="外す" onClick={() => props.onRemoveFavorite(b.url)}>
-                  <span className="material-symbols-outlined text-base">delete</span>
-                </button>
-              </div>
-              {editing === b.url && <BoardMetaEditor board={b} meta={metaOf(b.url)} onChange={(m) => setMeta(b.url, m)} />}
-            </div>
-          ))}
+      {part !== 'menus' && <Section title="お気に入り板" note="サイドバーに並ぶ板です。右のつまみをつかんで並べ替えられます。足すのは「板一覧」で ☆ を押すか、板の URL を貼って">
+        <div className="mb-3">
+          <DragList
+            items={props.favorites.map((b) => b.url)}
+            onChange={props.onReorderFavorites}
+            render={(url, handle, dragging) => {
+              const b = props.favorites.find((f) => f.url === url)!
+              return (
+                <div className={`rounded-lg border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
+                  <div className="flex items-center gap-3 px-3 py-1.5 text-sm">
+                    <BoardIcon boardUrl={b.url} override={metaOf(b.url).icon} />
+                    <span className="text-c-text-strong">{metaOf(b.url).alias || b.name}</span>
+                    {metaOf(b.url).alias && <span className="text-xs text-c-text-muted">({b.name})</span>}
+                    <span className="flex-1 min-w-0 truncate text-xs text-c-text-muted">{b.url}</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditing((e) => (e === b.url ? undefined : b.url))}
+                      className={`px-2 py-0.5 text-xs border rounded-[var(--btn-radius)] transition-colors ${
+                        editing === b.url ? 'border-c-accent text-c-accent' : 'border-c-border text-c-text-body hover:border-c-accent hover:text-c-accent'
+                      }`}
+                    >
+                      板の設定
+                    </button>
+                    <button type="button" className={ICON_BTN} title="外す" onClick={() => props.onRemoveFavorite(b.url)}>
+                      <span className="material-symbols-outlined text-base">delete</span>
+                    </button>
+                    <DragHandle handle={handle} />
+                  </div>
+                  {editing === b.url && <BoardMetaEditor board={b} meta={metaOf(b.url)} onChange={(m) => setMeta(b.url, m)} />}
+                </div>
+              )
+            }}
+          />
           {props.favorites.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">まだありません</p>}
         </div>
         <form
@@ -2578,7 +2475,7 @@ export default function SettingsDialog(props: SettingsProps) {
     setSection(undefined)
     setFlat(false)
   }
-  /** 「板とサイト」から板一覧へ移るときに、どの BBS メニューを出すか */
+  /** 「BBS メニュー」から板一覧へ移るときに、どの BBS メニューを出すか */
   const [listSite, setListSite] = useState<string>()
   /** 設定の検索。言葉があるときは、すべての分類から当てはまる設定だけを並べる */
   const [query, setQuery] = useState('')
@@ -2829,22 +2726,18 @@ export default function SettingsDialog(props: SettingsProps) {
             </button>
           ))}
           </div>
-          {/* 高度な設定。オフ(はじめ)のときは、よく使う設定だけを見せる */}
-          <label className="flex-shrink-0 mt-2 mx-3 px-2 py-2 flex items-start gap-2 rounded-lg cursor-pointer hover:bg-c-surface3 select-none">
-            <input
-              type="checkbox"
+          {/* 詳しい設定。オフ(はじめ)のときは、よく使う設定だけを見せる */}
+          <div className="flex-shrink-0 mt-2 mx-3 px-2">
+            <Toggle
               checked={props.settings.showAdvanced}
-              onChange={(e) => {
-                props.update('showAdvanced', e.target.checked)
-                if (!e.target.checked && TABS.find((t) => t.key === tab)?.advanced) setTab('display')
+              onChange={(v) => {
+                props.update('showAdvanced', v)
+                if (!v && TABS.find((t) => t.key === tab)?.advanced) setTab('display')
               }}
-              className="mt-0.5 rounded"
+              label="詳しい設定を出す"
+              note="細かい見た目・通信・置き場など"
             />
-            <span className="text-xs text-c-text-body">
-              高度な設定を表示
-              <span className="block text-[10px] text-c-text-muted">細かい見た目・キー操作・ボタンの配置など</span>
-            </span>
-          </label>
+          </div>
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 border-b border-c-border cursor-move select-none" onMouseDown={startMove} title="つかんで動かす">

@@ -85,7 +85,7 @@ export function useMediaInput(o: {
   /** 本文のカーソルの位置に文字を入れる(ownLine: 行の途中なら改行してから入れる。画像の URL) */
   insert: (text: string, opts?: { ownLine?: boolean }) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => void
+  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string; deleteUrl?: string }) => void
   /** 書き込みにファイルを付けられる掲示板の決まり。あれば、アップロードの代わりに書き込みに付ける */
   attach?: AttachmentRules
   disabled?: boolean
@@ -247,7 +247,7 @@ export function useMediaInput(o: {
           await verifyImage(r.url, r.host, next.file)
           patch(next.id, { state: 'done', url: r.url })
           oRef.current.insert(`${r.url}\n`, { ownLine: true })
-          oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST, hash })
+          oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST, hash, deleteUrl: r.deleteUrl })
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           patch(next.id, { state: 'failed', error: msg })

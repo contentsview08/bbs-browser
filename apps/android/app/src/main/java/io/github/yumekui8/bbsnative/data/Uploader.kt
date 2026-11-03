@@ -33,7 +33,8 @@ object Uploader {
     private const val MAX_DIMENSION = 4096
 
     /** 上げた結果。host は上げ先の名前(知らせに出す) */
-    data class Result(val url: String, val host: String)
+    /** deleteUrl: 置き場から消すためのページ(imgbb の delete_url。API では消せないので、ブラウザで開いて消す)。返さない置き場は null */
+    data class Result(val url: String, val host: String, val deleteUrl: String? = null)
 
     /** 上げられなかった。message は人に見せる理由 */
     class UploadException(message: String) : Exception(message)
@@ -65,16 +66,16 @@ object Uploader {
     /** 整えた画像を上げて URL を返す */
     suspend fun send(name: String, type: String, bytes: ByteArray, honoApi: String?, host: String, imgurClientId: String, imgbbApiKey: String): Result {
         if (honoApi != null) return toHono(honoApi, name, type, bytes)
-        val up: suspend () -> String = when (host) {
-            "catbox" -> { { toCatbox(name, type, bytes) } }
-            "imgur" -> { { toImgur(name, type, bytes, imgurClientId) } }
+        val up: suspend () -> Pair<String, String?> = when (host) {
+            "catbox" -> { { toCatbox(name, type, bytes) to null } }
+            "imgur" -> { { toImgur(name, type, bytes, imgurClientId) to null } }
             "imgbb" -> { { toImgbb(name, type, bytes, imgbbApiKey) } }
             else -> throw UploadException("この上げ先はサイトの画面で上げます")
         }
         try {
-            val url = up()
+            val (url, deleteUrl) = up()
             verify(url, host)
-            return Result(url, host)
+            return Result(url, host, deleteUrl)
         } catch (e: java.io.IOException) {
             throw UploadException("$host: つながりませんでした(${e.message ?: e.javaClass.simpleName})")
         }
@@ -157,8 +158,8 @@ object Uploader {
         throw UploadException(explain(res.status, err))
     }
 
-    /** imgbb: 本人が登録した API キーで上げる(https://api.imgbb.com/)。返事は JSON(data.url) */
-    private suspend fun toImgbb(name: String, type: String, bytes: ByteArray, apiKey: String): String {
+    /** imgbb: 本人が登録した API キーで上げる(https://api.imgbb.com/)。返事は JSON(data.url。data.delete_url は消すためのページ) */
+    private suspend fun toImgbb(name: String, type: String, bytes: ByteArray, apiKey: String): Pair<String, String?> {
         if (apiKey.isBlank()) throw UploadException("API キーが設定されていません(設定 → 画像のアップロード)")
         if (!type.startsWith("image/")) throw UploadException("imgbb に上げられるのは画像だけです")
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -167,7 +168,7 @@ object Uploader {
         val res = Http.postMultipart("$IMGBB?key=${java.net.URLEncoder.encode(apiKey, "UTF-8")}", body, USER_AGENT)
         val j = runCatching { JSONObject(String(res.body)) }.getOrNull()
         val url = j?.optJSONObject("data")?.optString("url").orEmpty()
-        if (res.status in 200..299 && url.startsWith("https://")) return url
+        if (res.status in 200..299 && url.startsWith("https://")) return url to j?.optJSONObject("data")?.optString("delete_url")?.takeIf { it.startsWith("https://") }
         val err = j?.opt("error")?.let { e -> (e as? JSONObject)?.optString("message") ?: e.toString() }.orEmpty()
         if (res.status == 403 || res.status == 401) throw UploadException("API キーが通りませんでした(${err.ifEmpty { "HTTP ${res.status}" }})")
         throw UploadException(explain(res.status, err))

@@ -2151,7 +2151,7 @@ export default function App() {
       void deleteLogs([id], [], true)
       returnToList()
     }),
-    uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => {
+    uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean; hash?: string; deleteUrl?: string }) => {
       setHasUploads(true)
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
     }),

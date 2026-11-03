@@ -22,6 +22,8 @@ export interface UploadRecord {
   withAccount: boolean
   /** 中身の SHA-256(16 進)。同じ画像をもう一度貼ったら、上げずにこの URL を使う。昔の履歴にはない */
   hash?: string
+  /** 置き場から消すためのページの URL(imgbb の delete_url)。ブラウザで開いて消す。ないものは置き場では消せない */
+  deleteUrl?: string
 }
 
 export interface ThreadState {
@@ -221,8 +223,8 @@ export class LogStore {
 
   async addUpload(u: Omit<UploadRecord, 'uploadedAt'>, now = Date.now()): Promise<void> {
     await this.db.execute(
-      'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account, hash) VALUES ($1, $2, $3, $4, $5, $6)',
-      [u.url, u.name, u.size, now, u.withAccount ? 1 : 0, u.hash ?? null],
+      'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account, hash, delete_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [u.url, u.name, u.size, now, u.withAccount ? 1 : 0, u.hash ?? null, u.deleteUrl ?? null],
     )
   }
 
@@ -233,11 +235,11 @@ export class LogStore {
   }
 
   async listUploads(limit = 200): Promise<UploadRecord[]> {
-    const rows = await this.db.select<{ url: string; name: string; size: number; uploaded_at: number; with_account: number }>(
-      'SELECT url, name, size, uploaded_at, with_account FROM uploads ORDER BY uploaded_at DESC LIMIT $1',
+    const rows = await this.db.select<{ url: string; name: string; size: number; uploaded_at: number; with_account: number; delete_url: string | null }>(
+      'SELECT url, name, size, uploaded_at, with_account, delete_url FROM uploads ORDER BY uploaded_at DESC LIMIT $1',
       [limit],
     )
-    return rows.map((r) => ({ url: r.url, name: r.name, size: r.size, uploadedAt: r.uploaded_at, withAccount: r.with_account === 1 }))
+    return rows.map((r) => ({ url: r.url, name: r.name, size: r.size, uploadedAt: r.uploaded_at, withAccount: r.with_account === 1, deleteUrl: r.delete_url ?? undefined }))
   }
 
   /** 履歴から消す(サーバー上のファイルを消すのは呼ぶ側) */

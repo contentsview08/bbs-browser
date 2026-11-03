@@ -222,6 +222,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../../../../packages/logstore/migrations/016_upload_hash.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 17,
+            description: "upload_delete_url",
+            sql: include_str!("../../../../packages/logstore/migrations/017_upload_delete_url.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

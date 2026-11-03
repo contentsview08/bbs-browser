@@ -333,6 +333,8 @@ fun UploadsScreen(vm: AppViewModel) {
                     MenuItem("見る", Icons.AutoMirrored.Filled.OpenInNew, Palette.accent) { viewerUrl = url },
                     MenuItem("URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, url); vm.toast = "URL をコピーしました" },
                     posted?.let { e -> MenuItem("貼ったレスへ(${e.thread.title.ifEmpty { "スレタイ不明" }}${e.no?.let { " >>$it" } ?: ""})", Icons.Filled.Reply, Palette.own) { vm.openThread(e.thread, e.no) } },
+                    // imgbb(API キー)は上げたときに消すためのページが返る。API では消せないので、ブラウザで開いて消す
+                    vm.prefs.uploadDeleteUrl(url)?.let { d -> MenuItem("置き場の削除ページを開く", Icons.Filled.Delete, Palette.markDanger) { openExternal(context, d, false) } },
                 ),
             ),
             MenuAt.Center,

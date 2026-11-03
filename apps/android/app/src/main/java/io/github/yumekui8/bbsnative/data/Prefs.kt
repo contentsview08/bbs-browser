@@ -143,19 +143,21 @@ class Prefs(context: Context) {
 
     /** 上げた画像(新しい順、100 まで)。クイックアクセスから URL をもう一度使えるように */
     private var uploadsJson by pref("uploads", "[]")
-    /** 上げた画像 1 件(url・時刻・中身のハッシュ。ハッシュは昔の履歴にはない) */
-    data class Upload(val url: String, val t: Long, val hash: String?)
+    /** 上げた画像 1 件(url・時刻・中身のハッシュ・置き場から消すページ。ハッシュと消すページは昔の履歴にはない) */
+    data class Upload(val url: String, val t: Long, val hash: String?, val deleteUrl: String? = null)
     private fun readUploads(): List<Upload> = runCatching {
         val a = org.json.JSONArray(uploadsJson)
-        (0 until a.length()).map { a.getJSONObject(it).let { o -> Upload(o.getString("url"), o.getLong("t"), o.optString("h").ifEmpty { null }) } }
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> Upload(o.getString("url"), o.getLong("t"), o.optString("h").ifEmpty { null }, o.optString("d").ifEmpty { null }) } }
     }.getOrDefault(emptyList())
     private fun writeUploads(list: List<Upload>) {
-        uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.url).put("t", it.t).put("h", it.hash ?: "") }).toString()
+        uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.url).put("t", it.t).put("h", it.hash ?: "").put("d", it.deleteUrl ?: "") }).toString()
     }
     fun uploads(): List<Pair<String, Long>> = readUploads().map { it.url to it.t }
-    /** 履歴に残す。hash は中身の SHA-256(同じ画像をもう一度選んだら、上げずにこの URL を使う) */
-    fun addUpload(url: String, hash: String? = null) {
-        writeUploads(listOf(Upload(url, System.currentTimeMillis(), hash)) + readUploads().filter { it.url != url })
+    /** 置き場から消すためのページ(imgbb の delete_url)。なければ null(置き場では消せない) */
+    fun uploadDeleteUrl(url: String): String? = readUploads().firstOrNull { it.url == url }?.deleteUrl
+    /** 履歴に残す。hash は中身の SHA-256(同じ画像をもう一度選んだら、上げずにこの URL を使う)。deleteUrl は置き場から消すページ(imgbb) */
+    fun addUpload(url: String, hash: String? = null, deleteUrl: String? = null) {
+        writeUploads(listOf(Upload(url, System.currentTimeMillis(), hash, deleteUrl)) + readUploads().filter { it.url != url })
     }
     /** 同じ中身(hash)の画像を前に上げていれば、その URL */
     fun findUploadByHash(hash: String): String? = readUploads().firstOrNull { it.hash == hash }?.url

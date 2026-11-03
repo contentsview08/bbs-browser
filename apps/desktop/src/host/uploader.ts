@@ -129,6 +129,8 @@ async function multipart(fields: [string, string][], file: { name: string; fileN
 export interface UploadResult {
   url: string
   host: string
+  /** 置き場から消すためのページの URL(imgbb の delete_url)。ブラウザで開いて消す。返さない置き場は、置き場では消せない */
+  deleteUrl?: string
 }
 
 /** 置き場の返事を、人に分かる言葉にする(スマホ版の Uploader.explain と同じ) */
@@ -152,7 +154,9 @@ async function postJsonTo(
   headers: Record<string, string>,
   pick: (j: unknown) => string | undefined,
   errorOf: (j: unknown) => string | undefined,
-): Promise<string> {
+  /** 返事から、消すためのページの URL を取り出す(imgbb の data.delete_url) */
+  pickDelete?: (j: unknown) => string | undefined,
+): Promise<{ url: string; deleteUrl?: string }> {
   const { bytes, contentType } = await multipart([], { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
   let res: Response
   try {
@@ -168,7 +172,10 @@ async function postJsonTo(
     j = undefined
   }
   const url = j !== undefined ? pick(j) : undefined
-  if (res.ok && url?.startsWith('https://')) return url
+  if (res.ok && url?.startsWith('https://')) {
+    const deleteUrl = j !== undefined ? pickDelete?.(j) : undefined
+    return { url, deleteUrl: deleteUrl?.startsWith('https://') ? deleteUrl : undefined }
+  }
   if (res.status === 401 || res.status === 403) throw new Error(`Client-ID が通りませんでした(${(j !== undefined && errorOf(j)) || `HTTP ${res.status}`})`)
   throw new Error(explainUploadError(res.status, (j !== undefined && errorOf(j)) || text))
 }
@@ -198,10 +205,10 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
   const catboxFields: [string, string][] = [['reqtype', 'fileupload']]
   if (options.userhash) catboxFields.push(['userhash', options.userhash])
   const clientId = options.imgurClientId?.trim()
-  type J = { data?: { link?: string; url?: string; error?: string | { message?: string } }; error?: string | { message?: string } }
+  type J = { data?: { link?: string; url?: string; delete_url?: string; error?: string | { message?: string } }; error?: string | { message?: string } }
   const imgbbKey = options.imgbbApiKey?.trim()
-  const all: { key: UploadHost; host: string; up: () => Promise<string> }[] = [
-    { key: 'catbox', host: 'catbox', up: () => postTo(ENDPOINT, catboxFields, 'fileToUpload', body, file, /^https:\/\/files\.catbox\.moe\/\S+$/) },
+  const all: { key: UploadHost; host: string; up: () => Promise<{ url: string; deleteUrl?: string }> }[] = [
+    { key: 'catbox', host: 'catbox', up: async () => ({ url: await postTo(ENDPOINT, catboxFields, 'fileToUpload', body, file, /^https:\/\/files\.catbox\.moe\/\S+$/) }) },
     {
       key: 'imgur',
       host: 'imgur',
@@ -226,11 +233,20 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
       host: 'imgbb',
       up: () => {
         if (!imgbbKey) return Promise.reject(new Error('API キーが設定されていません(設定 → 画像のアップロード)'))
-        // imgbb の API(https://api.imgbb.com/)。返事の data.url が画像の URL
-        return postJsonTo(`${IMGBB}?key=${encodeURIComponent(imgbbKey)}`, 'image', body, file, {}, (j) => (j as J).data?.url, (j) => {
-          const e = (j as J).error
-          return typeof e === 'string' ? e : e?.message
-        })
+        // imgbb の API(https://api.imgbb.com/)。返事の data.url が画像の URL、data.delete_url が消すためのページ(API では消せない)
+        return postJsonTo(
+          `${IMGBB}?key=${encodeURIComponent(imgbbKey)}`,
+          'image',
+          body,
+          file,
+          {},
+          (j) => (j as J).data?.url,
+          (j) => {
+            const e = (j as J).error
+            return typeof e === 'string' ? e : e?.message
+          },
+          (j) => (j as J).data?.delete_url,
+        )
       },
     },
   ]
@@ -238,7 +254,7 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
   const t = all.find((h) => h.key === host)
   if (!t) throw new Error('この上げ先は、サイトの画面で上げます')
   try {
-    return { url: await t.up(), host: t.host }
+    return { ...(await t.up()), host: t.host }
   } catch (e) {
     throw new Error(`${t.host}: ${e instanceof Error ? e.message : String(e)}`)
   }

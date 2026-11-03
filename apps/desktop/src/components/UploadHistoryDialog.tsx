@@ -1,6 +1,7 @@
 // 画像のアップロード履歴。サムネイル・URL のコピー・開く・削除。
 // 削除できるのは、catbox のアカウント(userhash)で上げたものだけ(サーバー上のファイルを消してから履歴からも外す)。
-// 匿名で上げたものはサーバー上では消せないので、削除ボタンを出さない
+// 匿名で上げたものはサーバー上では消せないので、削除ボタンを出さない。
+// imgbb(API キー)は API では消せないが、上げたときに消すためのページ(delete_url)が返るので、それをブラウザで開くボタンを出す
 
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -86,6 +87,11 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
           <button type="button" className={TOOL} title="ブラウザで開く" onClick={() => props.onOpen(u.url)}>
             <span className="material-symbols-outlined text-base leading-none">open_in_new</span>
           </button>
+          {u.deleteUrl && (
+            <button type="button" className={`${TOOL} hover:text-c-heat-very-hot`} title="置き場の削除ページをブラウザで開く(imgbb)" onClick={() => props.onOpen(u.deleteUrl!)}>
+              <span className="material-symbols-outlined text-base leading-none">delete_forever</span>
+            </button>
+          )}
           {u.withAccount && props.canDelete && (
             <button
               type="button"
@@ -203,6 +209,7 @@ function MobileUploadHistory(props: Props) {
           items={[
             { label: '開く', icon: 'open_in_new', onClick: () => props.onOpen(sheet.url) },
             { label: 'URL をコピー', icon: 'content_copy', onClick: () => void navigator.clipboard.writeText(sheet.url) },
+            ...(sheet.deleteUrl ? [{ label: '置き場の削除ページを開く', icon: 'delete_forever', danger: true, onClick: () => props.onOpen(sheet.deleteUrl!) }] : []),
             ...(props.canDelete && sheet.withAccount
               ? [
                   {

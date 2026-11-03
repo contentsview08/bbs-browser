@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import ErrorBoundary from './components/ErrorBoundary'
 // フォントは通信なしでも同じ見た目になるよう npm パッケージから同梱する(web 版は Google Fonts)
 // 同梱のフォント(設定 → フォント)。どれも文字の範囲ごとに分かれたファイルで、選んだフォントの使う範囲だけを読む(選ばなければ読まない)
 import '@fontsource-variable/noto-sans-jp'
@@ -54,12 +55,14 @@ if (isMobile && window.visualViewport) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {toolKindOfThisWindow() ? (
-      <Suspense fallback={null}>
-        <ToolWindow />
-      </Suspense>
-    ) : (
-      <App />
-    )}
+    <ErrorBoundary>
+      {toolKindOfThisWindow() ? (
+        <Suspense fallback={null}>
+          <ToolWindow />
+        </Suspense>
+      ) : (
+        <App />
+      )}
+    </ErrorBoundary>
   </StrictMode>,
 )

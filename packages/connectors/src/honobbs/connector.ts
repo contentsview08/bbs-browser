@@ -9,7 +9,7 @@
 //   人がブラウザで認証してから送り直すと、その Cookie でセッションが使われる
 // 本番の板への試し書き込みはしない
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, Post, PostResult, ThreadSummary } from '../types'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, Post, PostResult, ThreadSummary, ThreadStatusInfo } from '../types'
 
 const ID = 'honobbs'
 
@@ -218,6 +218,31 @@ export const honoBbsConnector: Connector = {
       name: b.name,
       ...(b.category ? { category: b.category } : {}),
     }))
+  },
+
+  /** スレの状態のまとめ取り(POST /threads/status。200 件ずつ)。サイト(origin)ごとにまとめる */
+  async threadStatus(threads, ctx) {
+    const byOrigin = new Map<string, ThreadSummary[]>()
+    for (const t of threads) {
+      const { origin } = parts(t.boardUrl)
+      byOrigin.set(origin, [...(byOrigin.get(origin) ?? []), t])
+    }
+    const out: ThreadStatusInfo[] = []
+    for (const [origin, list] of byOrigin) {
+      const api = await apiBaseOf(origin, ctx)
+      const byId = new Map(list.map((t) => [t.key, t]))
+      for (let i = 0; i < list.length; i += 200) {
+        const ids = list.slice(i, i + 200).map((t) => t.key)
+        const res = await ctx.http.post(`${api}/threads/status`, JSON.stringify({ ids }), { headers: { 'Content-Type': 'application/json' } })
+        if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${api}/threads/status`)
+        const body = json<{ data: { id: string; postCount: number; isArchived: boolean }[] }>(res, ctx)
+        for (const s of body.data) {
+          const t = byId.get(s.id)
+          if (t) out.push({ boardUrl: t.boardUrl, key: t.key, postCount: s.postCount, archived: s.isArchived })
+        }
+      }
+    }
+    return out
   },
 
   async listThreads(board, ctx) {

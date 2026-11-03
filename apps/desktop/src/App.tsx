@@ -712,10 +712,36 @@ export default function App() {
       const byBoard = new Map<string, HistoryEntry[]>()
       for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
       const counts = new Map(historyCounts)
-      let done = 0
-      setHistoryProgress({ done, total: byBoard.size })
+      // まとめ取りができる掲示板(hono-bbs の POST /threads/status): 板ごとに一覧を取り直さず、コネクタごとに 1 回で確かめる
+      const bulk = new Map<string, HistoryEntry[]>()
       for (const [boardUrl, entries] of byBoard) {
-        setHistoryProgress({ done: done++, total: byBoard.size })
+        const c = connectorOf(entries[0].thread.connectorId)
+        if (!c.threadStatus) continue
+        bulk.set(c.id, [...(bulk.get(c.id) ?? []), ...entries])
+        byBoard.delete(boardUrl)
+      }
+      let done = 0
+      setHistoryProgress({ done, total: byBoard.size + bulk.size })
+      for (const [connectorId, entries] of bulk) {
+        setHistoryProgress({ done: done++, total: byBoard.size + bulk.size })
+        try {
+          const statuses = await connectorOf(connectorId).threadStatus!(entries.map((h) => h.thread), ctx)
+          const got = new Map(statuses.map((s) => [`${s.boardUrl}|${s.key}`, s]))
+          for (const h of entries) {
+            const s = got.get(`${h.thread.boardUrl}|${h.thread.key}`)
+            if (s) counts.set(threadId(h.thread), s.postCount)
+            // 返らなかった = 消えた・見えない。開いて確かめる(dat 落ちの印が付く)
+            else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
+          }
+          setHistoryCounts(new Map(counts))
+          const fresh = await loadHistory(store)
+          setHistory((prev) => mergeHistory(prev, fresh))
+        } catch {
+          // まとめ取りに失敗したら、この掲示板は今回は見送る
+        }
+      }
+      for (const [boardUrl, entries] of byBoard) {
+        setHistoryProgress({ done: done++, total: byBoard.size + bulk.size })
         const connectorId = entries[0].thread.connectorId
         let subject: Map<string, ThreadSummary> | undefined
         try {
@@ -2234,12 +2260,15 @@ export default function App() {
   const listTitle = notifView ? '通知' : pastView ? '履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
   /** 通知の行を押した: そのスレのそのレスへ */
   const openNotification = (n: StoredNotification) => {
-    if (!n.link) return
-    const id = threadId(n.link.thread)
-    const no = n.link.no
-    void openThread(n.link.thread).then(() => {
-      if (no !== undefined) setJump({ tabId: id, no, seq: Date.now() })
-    })
+    const link = n.link
+    if (!link?.thread?.connectorId || !link.thread.boardUrl || !link.thread.key) return notify({ icon: 'error', title: 'この通知には開く先がありません' })
+    const id = threadId(link.thread)
+    const no = link.no
+    openThread(link.thread)
+      .then(() => {
+        if (no !== undefined) setJump({ tabId: id, no, seq: Date.now() })
+      })
+      .catch(backgroundError('通知のスレを開く'))
   }
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
   const pickPastTab = (k: PastTab) => {

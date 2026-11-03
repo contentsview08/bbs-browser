@@ -283,6 +283,14 @@ export interface LoginResult {
   message: string
 }
 
+/** threadStatus の 1 件(どのスレかは boardUrl と key で) */
+export interface ThreadStatusInfo {
+  boardUrl: string
+  key: string
+  postCount: number
+  archived: boolean
+}
+
 export interface ConnectorCapabilities {
   post: boolean
   images: boolean
@@ -335,6 +343,12 @@ export interface Connector {
    * ふたばのカタログは並び順ごとに載るスレが変わる(板のスレ全部から選び直す)ので、手元で並べ替えるのではなくサーバーに頼む
    */
   listThreads(board: Board, ctx: ConnectorContext, opts?: { sort?: ListSort }): Promise<ThreadSummary[]>
+  /**
+   * 持っているスレ(閲覧履歴・お気に入り)のいまのレス数と dat 落ちを、板をまたいでまとめて取る(未読の数)。
+   * できる掲示板(hono-bbs の POST /threads/status)だけ持つ。ないときは、板ごとにスレ一覧を取り直して照合する。
+   * 返らなかったスレは「消えた・見えない」(dat 落ち扱い)
+   */
+  threadStatus?(threads: ThreadSummary[], ctx: ConnectorContext): Promise<ThreadStatusInfo[]>
   /** サーバーに並べ替えを頼める順(なければ、いつも同じ一覧を取り、並べ替えは手元でする) */
   serverSorts?: ListSort[]
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>

@@ -2401,7 +2401,7 @@ export default function App() {
         </div>
       )}
       {/* PC: マウスジェスチャーの円盤(動かし始めた所を中心に) */}
-      {mouse.pie && <MouseGesturePieOverlay x={mouse.pie.x} y={mouse.pie.y} dir={mouse.pie.dir} labels={mouseLabels} />}
+      {mouse.pie && <MouseGesturePieOverlay dx={mouse.pie.dx} dy={mouse.pie.dy} dir={mouse.pie.dir} labels={mouseLabels} />}
       {/* スマホでは、サイドバーは画面の上に重ねる引き出しにする(ふだんは出さない)。
           画面の部品の重なりに巻き込まれないよう、body の直下に出す */}
       {(!isMobile || drawerOpen) &&

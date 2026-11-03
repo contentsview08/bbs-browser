@@ -1,5 +1,6 @@
 // PC: マウスジェスチャーの円盤(パイメニュー)。中心から 8 方向の区画に操作の名前を書き、向いている区画を差し色で光らせる。
 // 画面に出すとき(useMouseGesture の pie)と、設定で割り当てを見せる・選ぶとき(interactive)の両方で使う
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { PIE_DIRS, type PieDir } from '../hooks/useMouseGesture'
 
@@ -61,13 +62,16 @@ export default function MouseGesturePie(props: {
   center?: string
   /** 設定で: 区画を押したとき */
   onPick?: (dir: PieDir) => void
+  /** 描く大きさ(px)。既定は SIZE(設定の絵)。画面に出すときは大きく */
+  size?: number
   className?: string
 }) {
   const interactive = !!props.onPick
+  const size = props.size ?? SIZE
   return (
     <svg
-      width={SIZE}
-      height={SIZE}
+      width={size}
+      height={size}
       viewBox={`0 0 ${SIZE} ${SIZE}`}
       className={props.className}
       style={{ filter: interactive ? undefined : 'drop-shadow(0 4px 16px rgba(0,0,0,0.45))' }}
@@ -119,22 +123,42 @@ export default function MouseGesturePie(props: {
   )
 }
 
+/** 画面に出すときの大きさ(px)。画面が小さければそれに合わせて縮める */
+const OVERLAY_SIZE = 440
+
 /**
- * 画面に出す(useMouseGesture の pie)。中心を動かし始めた所に合わせ、下に向いている操作の名前を出す。
- * body の直下に出す(transform のある親の中だと fixed の位置がずれる)。画面の端で始めたときは、円盤が全部見える所まで寄せる
+ * 画面に出す(useMouseGesture の pie)。画面の真ん中に大きく半透明で出し、ポインターは隠す(本人の指示 2026-11-05)。
+ * 向きは動かし始めた所からの動き(dx・dy)で決まるので、ポインターがどこにあっても、円盤の中心を起点に動かしたのと同じ。
+ * その動きを円盤の上に小さな印で出す。下に向いている操作の名前。body の直下に出す(transform のある親の中だと fixed の位置がずれる)
  */
-export function MouseGesturePieOverlay(props: { x: number; y: number; dir: PieDir | null; labels: Partial<Record<PieDir, string | undefined>> }) {
+export function MouseGesturePieOverlay(props: { dx: number; dy: number; dir: PieDir | null; labels: Partial<Record<PieDir, string | undefined>> }) {
   const name = props.dir ? props.labels[props.dir] : undefined
-  const half = SIZE / 2
-  const x = Math.min(Math.max(half, props.x), window.innerWidth - half)
-  const y = Math.min(Math.max(half, props.y), window.innerHeight - half - 28)
+  const size = Math.min(OVERLAY_SIZE, window.innerWidth - 32, window.innerHeight - 80)
+  const scale = size / SIZE
+  // 印は円盤の外側の縁まで(起点からの動きそのまま。縁を越えたら縁に留める)
+  const reach = (R_OUT - 8) * scale
+  const dist = Math.hypot(props.dx, props.dy)
+  const k = dist > reach ? reach / dist : 1
+  // 出ている間はポインターを隠す(子要素の cursor より強く)
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.textContent = '*, *::before, *::after { cursor: none !important; }'
+    document.head.appendChild(style)
+    return () => {
+      style.remove()
+    }
+  }, [])
   return createPortal(
-    <div className="fixed inset-0 z-[9950] pointer-events-none">
-      <div className="absolute" style={{ left: x - half, top: y - half, width: SIZE }}>
-        <MouseGesturePie labels={props.labels} active={props.dir} center={props.dir ? (name ? '' : 'なし') : 'なし'} />
-        <div className="mt-1 flex justify-center">
-          <span className="px-3 py-1 rounded-full bg-black/70 text-white text-xs font-bold whitespace-nowrap">{name ?? (props.dir ? '割り当てなし' : '離すと何もしない')}</span>
-        </div>
+    <div className="fixed inset-0 z-[9950] pointer-events-none flex flex-col items-center justify-center">
+      <div className="relative" style={{ width: size, height: size, opacity: 0.86 }}>
+        <MouseGesturePie labels={props.labels} active={props.dir} center={props.dir ? (name ? '' : 'なし') : 'なし'} size={size} />
+        <div
+          className="absolute w-3 h-3 rounded-full bg-white shadow-[0_0_0_2px_rgba(0,0,0,0.5)]"
+          style={{ left: size / 2 + props.dx * k - 6, top: size / 2 + props.dy * k - 6 }}
+        />
+      </div>
+      <div className="mt-2">
+        <span className="px-4 py-1.5 rounded-full bg-black/70 text-white text-sm font-bold whitespace-nowrap">{name ?? (props.dir ? '割り当てなし' : '離すと何もしない')}</span>
       </div>
     </div>,
     document.body,

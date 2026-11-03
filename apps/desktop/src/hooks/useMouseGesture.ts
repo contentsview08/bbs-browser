@@ -1,6 +1,7 @@
-// PC: マウスジェスチャー(パイメニュー)。Ctrl を押しながら(または右ボタンを押しながら)マウスを少し動かすと、動かし始めた所を中心に
-// 8 方向の円盤(MouseGesturePie)が出る。マウスのある方向の区画が光り、Ctrl(右ボタン)を離すとその区画の操作をする。
-// 中心の近く(DEAD_PX の中)に戻して離せば何もしない。
+// PC: マウスジェスチャー(パイメニュー)。Ctrl を押しながら(または右ボタンを押しながら)マウスを少し動かすと、画面の真ん中に
+// 8 方向の円盤(MouseGesturePie)が大きく半透明で出て、ポインターは隠れる。向きは「動かし始めた所からどちらへ動いたか」で決める
+// (ポインターが画面のどこにあっても、円盤の中心を起点にしたのと同じ)。向いている区画が光り、Ctrl(右ボタン)を離すとその区画の操作をする。
+// 起点の近く(DEAD_PX の中)に戻して離せば何もしない。
 // - Ctrl のとき: Ctrl を押したまま別のキー(Ctrl+C など)・クリック・ホイールをしたらジェスチャーにしない
 // - 右ボタンのとき: 動かしていたら、離したときのコンテキストメニューは出さない。入力欄の中で始めた右ボタンは取らない(文字を選ぶ・貼り付けるためのもの)
 // - 動きは document で受ける(レスのポップアップ・スレ立てなど、body の直下に出した画面の上でも効くように)
@@ -35,10 +36,13 @@ export function pieDirOf(dx: number, dy: number): PieDir | null {
 }
 
 export interface PieState {
-  /** 中心(画面の座標) */
+  /** 動かし始めた所(画面の座標) */
   x: number
   y: number
-  /** いま向いている区画。中心の近くなら null */
+  /** 動かし始めた所からの動き(px)。円盤の上のポインターの印に使う */
+  dx: number
+  dy: number
+  /** いま向いている区画。起点の近くなら null */
   dir: PieDir | null
 }
 
@@ -102,7 +106,7 @@ export function useMouseGesture(map: MouseGestureMap, trigger: MouseGestureTrigg
         s.shown = true
       }
       s.dir = pieDirOf(dx, dy)
-      setPie({ x: s.origin.x, y: s.origin.y, dir: s.dir })
+      setPie({ x: s.origin.x, y: s.origin.y, dx, dy, dir: s.dir })
     }
 
     // ── Ctrl を押しながら ──

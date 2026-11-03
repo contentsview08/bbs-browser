@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { FONT_PX_MAX, FONT_PX_MIN, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
 
@@ -180,6 +181,7 @@ export const setCssVar = (name: string, value: string) => document.documentEleme
 export function SliderDialog(props: { title: string; onClose: () => void; children: ReactNode }) {
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
+  const backdrop = useBackdropClose(props.onClose)
   // つかんでいるスライダーの行。あるときは、その行のほか(題・ほかの行・暗い背景)を見えなくする
   const [active, setActive] = useState<HTMLElement | null>(null)
   // 指(マウス)を画面の外で離したときも戻す
@@ -198,7 +200,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
     // スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)
     <div
       className={`fixed inset-0 z-[9800] flex transition-colors ${active ? 'bg-transparent' : 'bg-black/25'} ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`}
-      onClick={props.onClose}
+      {...backdrop}
     >
       <div
         ref={boxRef}

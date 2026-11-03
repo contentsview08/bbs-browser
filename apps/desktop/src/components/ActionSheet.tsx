@@ -5,6 +5,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { uiLabel } from '../utils/platform'
 
 export interface SheetItem {
@@ -40,6 +41,7 @@ export default function ActionSheet(props: {
   const setSub = (it: SheetItem | undefined) => setSubLabel(it?.label)
   // 戻る: 中を開いていれば元の一覧へ、そうでなければ閉じる
   useFocusTrap(boxRef, () => (sub ? setSub(undefined) : props.onClose()))
+  const backdrop = useBackdropClose(props.onClose)
   const safe = props.items.filter((it) => !it.danger)
   const danger = props.items.filter((it) => it.danger)
   const row = (it: SheetItem, i: number) => (
@@ -65,7 +67,7 @@ export default function ActionSheet(props: {
     </button>
   )
   return createPortal(
-    <div className="fixed inset-0 bg-black/40 flex items-end drawer-fade" style={{ zIndex: props.zIndex ?? 9600 }} onClick={props.onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-end drawer-fade" style={{ zIndex: props.zIndex ?? 9600 }} {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-h-[80vh] flex flex-col bg-c-surface rounded-t-3xl shadow-2xl sheet-rise"

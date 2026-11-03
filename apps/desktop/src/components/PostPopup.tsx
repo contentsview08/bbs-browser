@@ -134,14 +134,36 @@ function PopupWindow(props: {
   )
 }
 
+/** 点がどれかのポップアップの上か(下の段のポップアップは pointer-events: none なので、イベントの的では分からない) */
+function overPopup(x: number, y: number): boolean {
+  for (const el of document.querySelectorAll<HTMLElement>('.post-popup')) {
+    const r = el.getBoundingClientRect()
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true
+  }
+  return false
+}
+
 export default function PostPopup(props: Props) {
+  const down = useRef(false)
   if (props.popups.length === 0) return null
   return createPortal(
     <div
       className="fixed inset-0"
       style={{ zIndex: 9000 }}
-      onClick={props.onCloseTop}
-      onWheel={props.onCloseAll}
+      // 外を押したら一番上を閉じる。ただし、中で押し始めて外で離した・文字を選んでいるときは閉じない
+      onMouseDown={(e) => (down.current = e.target === e.currentTarget && !overPopup(e.clientX, e.clientY))}
+      onClick={(e) => {
+        const wasDown = down.current
+        down.current = false
+        if (e.target !== e.currentTarget || !wasDown) return
+        const sel = window.getSelection()
+        if (sel && !sel.isCollapsed) return
+        props.onCloseTop()
+      }}
+      // 外でホイールを回したら全部閉じる(後ろのスレを読みに戻る)。ポップアップの上(下の段も)では閉じない
+      onWheel={(e) => {
+        if (!overPopup(e.clientX, e.clientY)) props.onCloseAll()
+      }}
       onMouseMove={(e) => {
         if (e.target === e.currentTarget) props.onOverlayMove?.(e.clientX, e.clientY)
       }}

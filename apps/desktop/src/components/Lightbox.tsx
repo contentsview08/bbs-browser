@@ -499,7 +499,11 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden"
       // スマホ: ブラウザの拡大・スクロールと取り合わないよう、指の操作はすべてここで受ける
       style={isMobile ? { touchAction: 'none', opacity: 1 - dismissProgress * 0.6 } : undefined}
-      onClick={onClose}
+      onClick={() => {
+        // 絵をドラッグして絵の外で離したときは閉じない(click が背景で起きる)
+        if (dragged.current) return
+        onClose()
+      }}
       onTouchStart={isMobile ? onTouchStart : undefined}
       onTouchMove={isMobile ? onTouchMove : undefined}
       onTouchEnd={isMobile ? onTouchEnd : undefined}

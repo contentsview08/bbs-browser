@@ -5,13 +5,15 @@ import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 
 export default function PeekPopup(props: { thread: ThreadSummary; onOpen: () => void; onClose: () => void }) {
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
+  const backdrop = useBackdropClose(props.onClose)
   const posts = props.thread.preview ?? []
   return createPortal(
-    <div className="fixed inset-0 z-[9800] bg-black/30 flex items-center justify-center p-6" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9800] bg-black/30 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-w-2xl max-h-[75vh] flex flex-col bg-c-surface border-2 rounded-xl shadow-2xl rise-in"

@@ -3,6 +3,7 @@
 
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose, useGuardedClose } from '../hooks/useDialogClose'
 import { createPortal } from 'react-dom'
 import { isValidPattern, newRule, type NgRule, type NgTarget } from '../utils/ng'
 import NgEditor, { type NgDraftRule } from './NgEditor'
@@ -34,10 +35,14 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
 
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(boxRef, props.onClose)
+  // 条件を変えていたら、閉じる前に確かめる(外を押しても閉じない。× と Esc だけ)
+  const initial = useRef(JSON.stringify(rule)).current
+  const { requestClose, guard } = useGuardedClose(JSON.stringify(rule) !== initial, props.onClose)
+  useFocusTrap(boxRef, requestClose, { escBlursInputs: true })
+  const backdrop = useBackdropClose(requestClose, false)
 
   return createPortal(
-    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-4" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-4" {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-w-lg max-h-full flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
@@ -45,7 +50,7 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
       >
         <div className="flex items-center justify-between pl-5 pr-2 py-2.5 border-b border-c-border">
           <h2 className="text-base font-bold text-c-text-strong">{d.rule ? 'NG を直す' : 'NG に追加'}</h2>
-          <button type="button" onClick={props.onClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
+          <button type="button" onClick={requestClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
             <span className="material-symbols-outlined text-lg">close</span>
           </button>
         </div>

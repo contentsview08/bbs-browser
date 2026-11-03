@@ -16,7 +16,20 @@ function usesArrows(el: HTMLElement): boolean {
   return type !== 'checkbox' && type !== 'radio' && type !== 'button' && type !== 'submit'
 }
 
-export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () => void) {
+/** 文字を打つ欄か(Esc で 1 回目は欄を抜けるだけにする対象) */
+function isTextField(el: HTMLElement): boolean {
+  if (el.tagName === 'TEXTAREA' || el.isContentEditable) return true
+  if (el.tagName !== 'INPUT') return false
+  const type = (el as HTMLInputElement).type
+  return type === 'text' || type === 'search' || type === 'url' || type === 'email' || type === 'password' || type === 'number'
+}
+
+/**
+ * opts.escBlursInputs: 文字を打っている欄(中身あり)で Esc を押したら、閉じずに欄を抜けるだけにする(2 回目で閉じる)。
+ * 入力をやめるつもりで押した Esc で、ダイアログごと消えて書きかけがなくなるのを防ぐ。直す画面(設定・NG・スレ立て)で使う
+ */
+export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () => void, opts?: { escBlursInputs?: boolean }) {
+  const escBlursInputs = opts?.escBlursInputs ?? false
   useEffect(() => {
     // 開いている間の目印(後ろの画面のキー操作が見る)
     ref.current?.setAttribute('data-modal', '')
@@ -29,6 +42,13 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () =>
         const modals = document.querySelectorAll('[data-modal]')
         if (modals[modals.length - 1] !== box) return
         e.preventDefault()
+        const t = e.target as HTMLElement
+        if (escBlursInputs && box.contains(t) && isTextField(t) && (t as HTMLInputElement).value !== '') {
+          t.blur()
+          return
+        }
+        // 閉じる前に、開いている欄を確定する(離れたときに保存する欄のため)
+        if (box.contains(t) && t !== box) t.blur()
         onEscape()
         return
       }
@@ -46,5 +66,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () =>
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ref, onEscape])
+  }, [ref, onEscape, escBlursInputs])
 }

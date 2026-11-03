@@ -122,7 +122,7 @@ export default function NewThreadDialog(props: Props) {
 
   const boxRef = useRef<HTMLDivElement>(null)
 
-  useFocusTrap(boxRef, props.onClose)
+  useFocusTrap(boxRef, props.onClose, { escBlursInputs: true })
   /** スマホ: 画像のアップロードが無効のときに画像のボタンを押したら、設定のことを知らせる */
   const [imageHint, setImageHint] = useState(false)
 
@@ -137,7 +137,7 @@ export default function NewThreadDialog(props: Props) {
     <div
       className={isMobile ? 'fixed inset-0 z-[9500] flex flex-col bg-c-surface reply-slide' : 'fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6'}
       style={isMobile ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--kb-inset, 0px))' } : undefined}
-      onClick={isMobile ? undefined : props.onClose}
+      // 外を押しても閉じない(長い本文を書く画面なので、うっかり消さない。× と Esc で閉じる)
     >
       <div
         ref={boxRef}

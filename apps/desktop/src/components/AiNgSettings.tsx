@@ -150,7 +150,7 @@ function RuleEditor(props: {
   const [result, setResult] = useState<{ p?: number; error?: string; busy?: boolean }>()
   const valid = r.prompt.trim() !== ''
   return (
-    <ManagerDialog title={props.isNew ? 'AI NG の条件を足す' : 'AI NG の条件'} onClose={props.onClose}>
+    <ManagerDialog title={props.isNew ? 'AI NG の条件を足す' : 'AI NG の条件'} onClose={props.onClose} dirty={JSON.stringify(r) !== JSON.stringify(props.rule)}>
       <div className="space-y-4">
         <label className="block">
           <span className="block text-xs text-c-text-muted mb-1">名前(畳んだレスと、メニューに出す短い名前)</span>

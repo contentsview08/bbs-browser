@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { createPortal } from 'react-dom'
 
 export default function ConfirmDialog(props: {
@@ -19,8 +20,9 @@ export default function ConfirmDialog(props: {
   latestClose.current = props.onClose
   const cancel = useRef(() => latestClose.current(false, false)).current
   useFocusTrap(boxRef, cancel)
+  const backdrop = useBackdropClose(cancel)
   return createPortal(
-    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={() => props.onClose(false, false)}>
+    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-w-md bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"

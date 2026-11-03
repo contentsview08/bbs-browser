@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { FIXED_KEYS, KEY_ACTIONS, keyLabel, type Keymap } from '../utils/keymap'
 
 export default function KeyHelp(props: { keymap: Keymap; onClose: () => void }) {
@@ -16,10 +17,11 @@ export default function KeyHelp(props: { keymap: Keymap; onClose: () => void }) 
   // Tab・矢印はこの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
+  const backdrop = useBackdropClose(props.onClose)
   return createPortal(
     <div
       className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6"
-      onClick={props.onClose}
+      {...backdrop}
       onKeyDown={(e) => {
         if (e.key === '?') {
           e.preventDefault()

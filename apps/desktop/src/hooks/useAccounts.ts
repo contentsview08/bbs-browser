@@ -43,6 +43,13 @@ export function useAccounts(store: LogStore | undefined, postAccounts: Record<st
     return loginWith(a)
   }
 
+  /** 設定画面から: 保存だけする(ログインし直さない。「自動でログイン」を変えたとき) */
+  const saveAccount = async (a: AccountRecord) => {
+    if (!store) return
+    await store.setAccount(a)
+    setAccounts(await store.listAccounts())
+  }
+
   const deleteAccount = async (connectorId: string, accountId: string) => {
     if (!store) return
     await store.deleteAccount(connectorId, accountId)
@@ -85,5 +92,5 @@ export function useAccounts(store: LogStore | undefined, postAccounts: Record<st
       .filter((o) => o.registered && o.on)
       .map((o) => o.id)
 
-  return { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, deleteAccount, postAccountsOf, postAccountIds }
+  return { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, postAccountsOf, postAccountIds }
 }

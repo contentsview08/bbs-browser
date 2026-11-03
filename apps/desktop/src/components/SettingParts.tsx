@@ -9,6 +9,7 @@ import type { Post } from '@bbs-browser/connectors'
 import PostArticle, { type PostHandlers } from './PostArticle'
 import { DragHandle, DragList } from './DragSort'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose, useGuardedClose } from '../hooks/useDialogClose'
 import { effectivePostStyle, type AppSettings } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
@@ -245,7 +246,7 @@ export function ListEditor(props: {
         )}
       </div>
       {bulk !== undefined && (
-        <ManagerDialog title={`${props.noun}をまとめて編集`} onClose={() => setBulk(undefined)}>
+        <ManagerDialog title={`${props.noun}をまとめて編集`} onClose={() => setBulk(undefined)} dirty={bulk !== items.join('\n')}>
           <p className="text-xs text-c-text-muted mb-2">1 行に 1 つ。ほかのアプリから貼り付けたり、ここからコピーして写したりできます(空の行と、同じものは除きます)</p>
           <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={12} className={`${INPUT} w-full font-mono`} spellCheck={false} />
           <div className="mt-3 flex justify-end gap-2">
@@ -325,11 +326,14 @@ export function ManagerRow(props: { label: string; count: number; unit?: string;
 }
 
 /** 管理画面の囲い。PC は真ん中の大きな枠、スマホは画面いっぱい。Esc・外を押して閉じる */
-export function ManagerDialog(props: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function ManagerDialog(props: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; dirty?: boolean; closeOnBackdrop?: boolean }) {
   const boxRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(boxRef, props.onClose)
+  const { requestClose, guard } = useGuardedClose(!!props.dirty, props.onClose)
+  useFocusTrap(boxRef, requestClose, { escBlursInputs: true })
+  // 直す画面(dirty を渡すもの)は、外を押しても閉じない(× と Esc だけ)
+  const backdrop = useBackdropClose(requestClose, props.closeOnBackdrop ?? props.dirty === undefined)
   return createPortal(
-    <div className={`fixed inset-0 z-[9700] bg-black/50 flex ${isMobile ? '' : 'items-center justify-center p-6'}`} onClick={props.onClose}>
+    <div className={`fixed inset-0 z-[9700] bg-black/50 flex ${isMobile ? '' : 'items-center justify-center p-6'}`} {...backdrop}>
       <div
         ref={boxRef}
         className={`flex flex-col bg-c-surface ${isMobile ? 'w-full h-full' : `w-full ${props.wide ? 'max-w-5xl' : 'max-w-2xl'} max-h-full border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in`}`}
@@ -338,11 +342,12 @@ export function ManagerDialog(props: { title: string; onClose: () => void; child
       >
         <div className="flex-shrink-0 flex items-center gap-2 px-5 py-3 border-b border-c-border">
           <h3 className="flex-1 min-w-0 truncate text-base font-bold text-c-text-strong">{props.title}</h3>
-          <button type="button" onClick={props.onClose} className={ICON_BTN} title="閉じる">
+          <button type="button" onClick={requestClose} className={ICON_BTN} title="閉じる">
             <span className="material-symbols-outlined text-xl">close</span>
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-5 py-4">{props.children}</div>
+        {guard}
       </div>
     </div>,
     document.body,

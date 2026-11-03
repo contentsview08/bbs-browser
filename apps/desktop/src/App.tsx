@@ -223,7 +223,7 @@ export default function App() {
       if (store) setUploads(await store.listUploads())
     })
   // アカウント(5ch の BE など)
-  const { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, deleteAccount, postAccountsOf, postAccountIds } = useAccounts(
+  const { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, postAccountsOf, postAccountIds } = useAccounts(
     store,
     settings.postAccounts,
   )
@@ -2557,6 +2557,7 @@ export default function App() {
           accounts={accounts}
           loginStatus={loginStatus}
           onLogin={saveAndLogin}
+          onSaveAccount={(a) => void run(null, () => saveAccount(a))}
           onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}
@@ -2590,6 +2591,7 @@ export default function App() {
           accounts={accounts}
           loginStatus={loginStatus}
           onLogin={saveAndLogin}
+          onSaveAccount={(a) => void run(null, () => saveAccount(a))}
           onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
           onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
           onRestoreDb={restoreDatabase}

@@ -4,6 +4,7 @@
 
 import { useRef, useMemo, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { imageUrlsIn, videoFileUrlsIn, youtubeLinksIn } from '../utils/postBody'
@@ -84,9 +85,10 @@ export default function MediaGallery(props: {
   const boxRef = useRef<HTMLDivElement>(null)
 
   useFocusTrap(boxRef, props.onClose)
+  const backdrop = useBackdropClose(props.onClose)
 
   return createPortal(
-    <div className="fixed inset-0 z-[9600] bg-black/60 flex items-center justify-center p-6" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9600] bg-black/60 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-w-5xl h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"

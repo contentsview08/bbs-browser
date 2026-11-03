@@ -4,6 +4,7 @@
 
 import { useRef, useMemo, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { createPortal } from 'react-dom'
 import type { PostHistoryEntry } from '@bbs-browser/logstore'
 import { normalizeForSearch } from '../utils/postBody'
@@ -52,9 +53,10 @@ function DesktopPostHistory(props: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
 
   useFocusTrap(boxRef, props.onClose)
+  const backdrop = useBackdropClose(props.onClose)
 
   return createPortal(
-    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"

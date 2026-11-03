@@ -4,6 +4,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useBackdropClose } from '../hooks/useDialogClose'
 import { normalizeForSearch } from '../utils/postBody'
 
 export interface PaletteItem {
@@ -48,8 +49,9 @@ export default function CommandPalette(props: { items: PaletteItem[]; onClose: (
     listRef.current?.querySelector<HTMLElement>(`[data-i="${next}"]`)?.scrollIntoView({ block: 'nearest' })
   }
 
+  const backdrop = useBackdropClose(props.onClose)
   return createPortal(
-    <div className="fixed inset-0 z-[9900] bg-black/40 flex justify-center pt-[12vh] px-6" onClick={props.onClose}>
+    <div className="fixed inset-0 z-[9900] bg-black/40 flex justify-center pt-[12vh] px-6" {...backdrop}>
       <div
         ref={boxRef}
         className="w-full max-w-xl h-fit max-h-[70vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"

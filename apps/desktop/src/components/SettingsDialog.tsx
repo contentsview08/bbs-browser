@@ -71,6 +71,7 @@ export interface SettingsProps {
   loginStatus: Map<string, LoginResult>
   /** 保存してログインする */
   onLogin: (a: AccountRecord) => Promise<LoginResult>
+  onSaveAccount: (a: AccountRecord) => void
   onDeleteAccount: (connectorId: string, accountId: string) => void
   /** DB 全体(ログ・設定・NG・履歴)を書き出す。保存先を選ばなかったら false */
   onBackupDb: () => Promise<boolean>
@@ -1702,6 +1703,8 @@ function AccountForm(props: {
   saved?: AccountRecord
   status?: LoginResult
   onLogin: (a: AccountRecord) => Promise<LoginResult>
+  /** ログインし直さずに保存だけする(「自動でログイン」を変えたとき) */
+  onSave: (a: AccountRecord) => void
   onDelete: () => void
 }) {
   const [user, setUser] = useState(props.saved?.user ?? '')
@@ -1741,7 +1744,15 @@ function AccountForm(props: {
           className={`${INPUT} flex-1 min-w-[160px]`}
         />
       </div>
-      <Toggle checked={autoLogin} onChange={setAutoLogin} label="起動したときに自動でログインする" />
+      <Toggle
+        checked={autoLogin}
+        onChange={(v) => {
+          setAutoLogin(v)
+          // 保存してあるアカウントなら、トグルだけ変えたときもすぐ保存する(「保存してログイン」を押さないと消えていた)
+          if (props.saved) props.onSave({ ...props.saved, autoLogin: v })
+        }}
+        label="起動したときに自動でログインする"
+      />
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -1790,7 +1801,7 @@ function AccountForm(props: {
  * - 板ごと: 別名・名前欄とメール欄の既定値・名無しの扱い
  */
 export function AccountsTab(
-  props: Pick<SettingsProps, 'accounts' | 'loginStatus' | 'onLogin' | 'onDeleteAccount' | 'favorites' | 'settings' | 'update'>,
+  props: Pick<SettingsProps, 'accounts' | 'loginStatus' | 'onLogin' | 'onSaveAccount' | 'onDeleteAccount' | 'favorites' | 'settings' | 'update'>,
 ) {
   const key = (connectorId: string, accountId: string) => `${connectorId}:${accountId}`
   // サイト(5ch など)ごとに、アカウントの種類(BE など)をまとめる
@@ -1859,6 +1870,7 @@ export function AccountsTab(
                         saved={props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)}
                         status={props.loginStatus.get(key(c.id, kind.id))}
                         onLogin={props.onLogin}
+                        onSave={props.onSaveAccount}
                         onDelete={() => props.onDeleteAccount(c.id, kind.id)}
                       />
                     </div>
@@ -2581,7 +2593,6 @@ export default function SettingsDialog(props: SettingsProps) {
   // PC: 置き場所(真ん中からのずれ)と大きさ。動かした・大きさを変えたら覚えておく
   const [rect, setRect] = useState(loadDialogRect)
   /** 外(暗い所)で押し始めたか */
-  const downOutside = useRef(false)
   const saveRect = () => {
     const el = boxRef.current
     if (!el) return
@@ -2617,7 +2628,8 @@ export default function SettingsDialog(props: SettingsProps) {
     if (tab) return enterTab(undefined)
     props.onClose()
   }
-  useFocusTrap(boxRef, () => (isMobile ? goBack() : props.onClose()))
+  // Esc は、文字を打っている欄の中では 1 回目は欄を抜けるだけ(検索語・URL を打っている途中で設定ごと消えないように)
+  useFocusTrap(boxRef, () => (isMobile ? goBack() : props.onClose()), { escBlursInputs: true })
 
   // スマホは、PC だけの設定のまとまり(コネクタなど)を出さない
   const tabs = TABS.filter((t) => (showAdvanced || !t.advanced) && !(isMobile && t.desktopOnly))
@@ -2773,16 +2785,13 @@ export default function SettingsDialog(props: SettingsProps) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[9500] bg-black/50"
-      // 外を押したら閉じる。ただし、中で押し始めた(動かす・大きさを変える)指を外で離したときは閉じない
-      onMouseDown={(e) => (downOutside.current = e.target === e.currentTarget)}
-      onClick={(e) => e.target === e.currentTarget && downOutside.current && props.onClose()}
-    >
+    // 設定画面は「置いたまま使える窓」。後ろは暗くせず、外を押しても閉じない(閉じるのは × と Esc)。
+    // 小さくして横に寄せ、後ろの画面で効き具合を見ながら直せる(後ろはスクロールもできる)
+    <div className="fixed inset-0 z-[9500] pointer-events-none">
       <div
         ref={boxRef}
         // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)
-        className="absolute flex bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
+        className="absolute flex pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
         style={{
           left: rect.x,
           top: rect.y,

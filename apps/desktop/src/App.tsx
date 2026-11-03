@@ -47,6 +47,8 @@ import { PostHistoryList } from './components/PostHistoryDialog'
 import { UploadGrid } from './components/UploadHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
 import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
+/** Ctrl+ホイールを回し終えてから、文字の大きさを設定に書くまで待つ時間 */
+const WHEEL_ZOOM_COMMIT_MS = 300
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -60,7 +62,7 @@ import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName } from './utils/gestures'
-import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
+import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, applyCssVar, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -346,16 +348,42 @@ export default function App() {
   const [focusPane, setFocusPane] = useState<'list' | 'thread'>('thread')
   const listFocused = single ? !threadShown : focusPane === 'list' || activeId === undefined
 
-  // Ctrl + ホイール: キーを受け取っている方(スレ一覧かスレ表示)の文字の大きさを 1px ずつ変える(WebView の画面ごとの拡大は止める)
-  const wheelZoom = useRef({ listFocused, acc: 0, update: updateSetting })
+  // Ctrl + ホイール: キーを受け取っている方(スレ一覧かスレ表示)の文字の大きさを 1px ずつ変える(WebView の画面ごとの拡大は止める)。
+  // 刻みは溜めて処理する: 刻みごとに設定を書き換えると、そのたびにアプリ全体の描き直しと DB 書き込みの予約が走って重い。
+  // 見た目は CSS の変数だけをコマごと(requestAnimationFrame)にまとめて変え、設定に書くのは回し終えて少し経ってから 1 回
+  const wheelZoom = useRef({
+    listFocused,
+    acc: 0,
+    update: updateSetting,
+    /** まだ設定に書いていない大きさ(px)。回している間はこれが本当の値 */
+    pending: undefined as { key: 'listFontPx' | 'postBodyPx'; px: number } | undefined,
+    frame: 0,
+    commitTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+  })
   wheelZoom.current.listFocused = listFocused
   // DB を開くと設定を変える関数が替わるので、いつも新しい方を使う
   wheelZoom.current.update = updateSetting
   useEffect(() => {
+    const z = wheelZoom.current
+    /** 溜めた大きさを設定に書く(回し終えたとき・Ctrl を離したとき) */
+    const commit = () => {
+      if (z.commitTimer) clearTimeout(z.commitTimer)
+      z.commitTimer = undefined
+      const p = z.pending
+      z.pending = undefined
+      if (p) z.update(p.key, p.px)
+    }
+    /** 溜めた大きさを画面に映す(1 コマに 1 回) */
+    const paint = () => {
+      z.frame = 0
+      const p = z.pending
+      if (!p) return
+      if (p.key === 'listFontPx') applyCssVar('--list-zoom', String(p.px / baseFontPx(settingsRef.current)))
+      else applyCssVar('--post-body-size', `${p.px}px`)
+    }
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return
       e.preventDefault()
-      const z = wheelZoom.current
       // タッチパッドの細かい動きは、たまってから 1 段
       z.acc += e.deltaY
       if (Math.abs(z.acc) < 60) return
@@ -363,9 +391,16 @@ export default function App() {
       z.acc = 0
       const s = settingsRef.current
       const base = baseFontPx(s)
-      const clamp = (v: number) => Math.min(FONT_PX_MAX, Math.max(FONT_PX_MIN, v))
-      if (z.listFocused) z.update('listFontPx', clamp((s.listFontPx || base) + step))
-      else z.update('postBodyPx', clamp((s.postBodyPx || base) + step))
+      const key = z.listFocused ? 'listFontPx' : 'postBodyPx'
+      // 一覧とスレ表示を行き来したら、前の方の分を先に書く
+      if (z.pending && z.pending.key !== key) commit()
+      const cur = z.pending?.px ?? (s[key] || base)
+      const px = Math.min(FONT_PX_MAX, Math.max(FONT_PX_MIN, cur + step))
+      if (px === cur) return
+      z.pending = { key, px }
+      if (!z.frame) z.frame = requestAnimationFrame(paint)
+      if (z.commitTimer) clearTimeout(z.commitTimer)
+      z.commitTimer = setTimeout(commit, WHEEL_ZOOM_COMMIT_MS)
     }
     // 受け口は Ctrl を押している間だけ付ける。いつも付けておくと(passive でないので)、ホイールのたびにブラウザが JS の返事を待ってから
     // スクロールすることになり、画面の外でなめらかにスクロールする仕組みが効かなくなる(重く感じる)
@@ -378,7 +413,8 @@ export default function App() {
     const detach = () => {
       if (!on) return
       on = false
-      wheelZoom.current.acc = 0
+      z.acc = 0
+      commit()
       window.removeEventListener('wheel', onWheel)
     }
     const onKeyDown = (e: KeyboardEvent) => {

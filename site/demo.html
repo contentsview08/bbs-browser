@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bbs-browser デモ</title>
+<meta name="description" content="bbs-browser の PC 版の操作感を、ブラウザの中で試せるデモ(読むだけ。書き込みはできません)">
+<link rel="icon" href="assets/icon.png">
+<style>
+  /* 本物の PC 版(apps/desktop)の配色「ダーク」「ライト」と部品の形をなぞった、読むだけのデモ。中身は作り物 */
+  :root {
+    --bg: #1b1e24; --surface: #23272f; --surface2: #2c313a; --border: #343a44; --border-strong: #4a5160;
+    --text: #d6d9de; --muted: #8b93a1; --strong: #f1f3f6; --body: #c9cdd4;
+    --accent: #8f9bf5; --accent-text: #111111; --accent-wash: rgba(143,155,245,.18);
+    --own: #a28bff; --to-own: #ff9a4d; --heat1: #e0993f; --heat2: #e8703f; --heat3: #ef4f4f; --link: #7aa2ff; --unread: #ef7470;
+    --radius: 8px; --font: 15px; --sidebar: 232px; --list: 380px;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f4f6; --surface: #ffffff; --surface2: #e9ebef; --border: #d2d2d4; --border-strong: #b4b8c0;
+    --text: #2a2f36; --muted: #6a717e; --strong: #0f1115; --body: #333a44;
+    --accent: #4757c9; --accent-text: #ffffff; --accent-wash: rgba(71,87,201,.12);
+    --own: #6d4fd3; --to-own: #d9641a; --link: #1f6fd1; --unread: #d14b47;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans JP', system-ui, sans-serif; font-size: var(--font); line-height: 1.6; overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+  .app { display: grid; grid-template-columns: var(--sidebar) var(--list) 1fr; grid-template-rows: 100%; height: 100%; }
+  /* 中身が長くても、列(flex)の高さを画面に収める(min-height: auto のままだと一覧とレスが画面の外へ伸びる) */
+  .app > * { min-height: 0; }
+  .boards, .rows, .posts { min-height: 0; }
+  .app.collapsed { --sidebar: 64px; }
+
+  /* ── サイドバー ── */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar .big { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 16px; font-size: 15px; font-weight: 700; color: var(--strong); white-space: nowrap; }
+  .sidebar .big .ic { width: 32px; display: grid; place-items: center; color: var(--muted); flex-shrink: 0; }
+  svg { width: 20px; height: 20px; }
+  .tabs svg { width: 15px; height: 15px; }
+  .sidebar .big.active .ic, .sidebar .big:hover .ic { color: var(--accent); }
+  .sidebar .boards { flex: 1; overflow: auto; }
+  .sidebar .board { position: relative; display: flex; align-items: center; height: 52px; width: 100%; text-align: left; white-space: nowrap; }
+  .sidebar .board:hover { background: var(--surface2); }
+  .sidebar .board.active::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--accent); }
+  .sidebar .board .col { position: relative; width: 64px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; align-self: stretch; }
+  .sidebar .board .fav { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; transition: transform .2s; }
+  .sidebar .board .strip { position: absolute; left: 0; right: 0; bottom: 4px; padding: 0 3px; text-align: center; font-size: 10px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0; transition: opacity .2s; }
+  .collapsed .sidebar .board .fav { transform: translateY(-8px); }
+  .collapsed .sidebar .board .strip { opacity: 1; }
+  .collapsed .sidebar .board .name, .collapsed .sidebar .big span.t { opacity: 0; }
+  .sidebar .board .name { font-size: 14px; color: var(--body); overflow: hidden; text-overflow: ellipsis; }
+  .sidebar .board.active .name { color: var(--strong); font-weight: 500; }
+  .sidebar .foot { border-top: 1px solid var(--border); }
+  .sidebar .small { padding: 8px 16px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .collapsed .sidebar .small { display: none; }
+
+  /* ── スレ一覧 ── */
+  .list { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+  .bar { display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .bar .title { flex: 1; font-weight: 700; color: var(--strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+  .ib svg { width: 19px; height: 19px; }
+  .ib:hover { background: var(--surface2); color: var(--strong); }
+  .ib.on { color: var(--accent); background: var(--accent-wash); }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tabs button { position: relative; flex: 1; padding: 9px 4px; font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .tabs button.on { color: var(--accent); }
+  .tabs button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); border-radius: 2px; }
+  .badge { font-size: 10px; padding: 0 5px; border-radius: 9px; background: var(--unread); color: #fff; font-weight: 700; }
+  .rows { flex: 1; overflow: auto; outline: none; }
+  .row { display: block; width: 100%; text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  .row:hover { background: var(--surface2); }
+  .row.cur { box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-wash); }
+  .row .t { color: var(--strong); font-size: 14px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row.read .t { color: var(--body); }
+  .row .m { display: flex; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .row .m .n { margin-left: auto; }
+  .row .m .mo { color: var(--heat2); }
+  .foot-bar { display: flex; align-items: center; justify-content: flex-end; height: 40px; padding: 0 6px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* ── スレ表示 ── */
+  .thread { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .thread .bar { background: var(--surface); }
+  .posts { flex: 1; overflow: auto; outline: none; padding-bottom: 20px; }
+  .empty { height: 100%; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; line-height: 1.9; }
+  .post { position: relative; padding: 10px 16px 10px 20px; border-bottom: 1px solid var(--border); }
+  .post.cur { background: var(--accent-wash); }
+  .post .heat { position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; }
+  .post .ownbar { position: absolute; right: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--own); }
+  .post.to-own { background: color-mix(in srgb, var(--to-own) 9%, transparent); }
+  .post .head { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .post .head .no { font-weight: 700; color: var(--strong); font-variant-numeric: tabular-nums; }
+  .post .head .no.h1 { color: var(--heat1); } .post .head .no.h2 { color: var(--heat2); } .post .head .no.h3 { color: var(--heat3); }
+  .post .head .name { color: var(--body); }
+  .post .head .id { font-family: Consolas, ui-monospace, monospace; }
+  .post .head .chip { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid; }
+  .post .head .chip.op { color: var(--heat1); } .post .head .chip.own { color: var(--own); }
+  .post .body { margin-top: 4px; color: var(--body); white-space: pre-wrap; word-break: break-word; }
+  .post .body a { color: var(--link); text-decoration: none; } .post .body a:hover { text-decoration: underline; }
+  .post .body .img { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--surface2); color: var(--link); font-size: 12px; }
+  .post .thumb { margin-top: 6px; width: 80px; height: 80px; border-radius: 6px; background: linear-gradient(135deg, #4b5bd6, #2bb3a3); display: grid; place-items: center; color: #fff; font-size: 11px; }
+  .post .replies { margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .post .replies b { color: var(--heat2); }
+  /* Discord 風: 丸いアイコンと平らな並び */
+  [data-style="discord"] .post { border-bottom: 0; padding-left: 68px; }
+  [data-style="discord"] .post .avatar { position: absolute; left: 20px; top: 10px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 13px; }
+  [data-style="discord"] .post .head .name { color: var(--strong); font-weight: 700; font-size: 14px; }
+  .post .avatar { display: none; }
+  [data-style="discord"] .post .avatar { display: grid; }
+  /* 専ブラ風: 1 行の頭と細い線 */
+  [data-style="classic"] .post { padding: 4px 12px 4px 16px; border-bottom: 1px dotted var(--border-strong); }
+  [data-style="classic"] .post .head { gap: 6px; font-size: 13px; }
+  [data-style="classic"] .post .head .name::before { content: '：'; } [data-style="classic"] .post .head .name::after { content: '：'; }
+  [data-style="classic"] .post .body { margin-top: 1px; margin-left: 24px; }
+  [data-style="classic"] .post .heat { display: none; } [data-style="classic"] .post .ownbar { display: none; }
+  [data-style="classic"] .post.hot .body { color: var(--heat2); }
+  .end { text-align: center; color: var(--muted); font-size: 12px; padding: 14px; letter-spacing: .3em; }
+  .reply { border-top: 1px solid var(--border); background: var(--surface); padding: 10px 14px; display: flex; gap: 10px; align-items: flex-end; flex-shrink: 0; }
+  .reply textarea { flex: 1; resize: none; height: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  .reply textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .btn { padding: 9px 16px; border-radius: 8px; background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { filter: brightness(1.08); }
+
+  /* ── ポップアップ・メニュー ── */
+  .pop { position: fixed; z-index: 20; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.35); max-width: 440px; overflow: hidden; }
+  .menu { position: fixed; z-index: 20; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.35); padding: 12px 14px; width: 300px; font-size: 13px; }
+  .menu h4 { margin: 10px 0 6px; font-size: 11px; color: var(--muted); font-weight: 700; } .menu h4:first-child { margin-top: 0; }
+  .seg { display: flex; gap: 4px; }
+  .seg button { flex: 1; padding: 6px 4px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; }
+  .seg button.on { background: var(--accent-wash); color: var(--accent); border-color: var(--accent); }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatches button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; }
+  .swatches button.on { border-color: var(--strong); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 30; background: var(--strong); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.3); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .help { position: fixed; inset: 0; z-index: 25; background: rgba(0,0,0,.5); display: none; place-items: center; }
+  .help.show { display: grid; }
+  .help .box { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 20px 24px; width: 420px; max-width: 92vw; }
+  .help h3 { margin: 0 0 10px; color: var(--strong); font-size: 16px; }
+  .help table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .help td { padding: 4px 0; } .help td:first-child { width: 120px; }
+  kbd { font-family: Consolas, ui-monospace, monospace; background: var(--surface2); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .note { position: fixed; right: 12px; bottom: 100px; z-index: 15; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+  .note a { color: var(--accent); text-decoration: none; }
+  /* 狭い画面(スマホ)は 1 列。一覧かスレ表示のどちらかだけを出し、サイドバーは出さない(本物のスマホ版は引き出し) */
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .list { display: none; border-right: 0; }
+    .app.show-list .list { display: flex; }
+    .app.show-list .thread { display: none; }
+    .note { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <button class="big active" title="板"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v4H4zM4 11h16v4H4zM4 17h16v2H4z"/></svg></span><span class="t">板</span></button>
+    <button class="big" id="nav-history" title="履歴"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span class="t">履歴</span></button>
+    <div class="boards" id="boards"></div>
+    <div class="foot">
+      <button class="big" id="nav-settings"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span><span class="t">設定</span></button>
+      <button class="big" id="collapse" title="サイドバーをしまう"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></svg></span><span class="t">しまう</span></button>
+      <div class="small">デモ: 中身は作り物です</div>
+    </div>
+  </aside>
+
+  <section class="list" id="list">
+    <div class="bar"><span class="title" id="list-title">デモ板</span><button class="ib" title="スレッド検索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg></button><button class="ib" id="style-btn" title="表示スタイル"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button></div>
+    <div class="tabs" id="list-tabs"></div>
+    <div class="rows" id="rows" tabindex="0"></div>
+    <div class="foot-bar"><button class="ib" id="refresh" title="更新"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button></div>
+  </section>
+
+  <section class="thread" id="thread">
+    <div class="bar"><button class="ib" id="back" title="一覧へ" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button><span class="title" id="thread-title">スレを選んでください</span><button class="ib" id="help-btn" title="キーの一覧(?)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg></button></div>
+    <div class="tabs" id="filters"></div>
+    <div class="posts" id="posts" tabindex="0"><div class="empty">左の一覧からスレを開くか、<br><kbd>J</kbd> <kbd>K</kbd> で選んで <kbd>Enter</kbd></div></div>
+    <form class="reply" id="reply"><textarea placeholder="書き込む(デモでは送れません)"></textarea><button class="btn" type="submit">書き込む</button></form>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<div class="help" id="help"><div class="box"><h3>キー操作(本物と同じ)</h3><table>
+  <tr><td><kbd>J</kbd> / <kbd>K</kbd></td><td>次・前のレス(一覧ではスレ)</td></tr>
+  <tr><td><kbd>Enter</kbd></td><td>選んだスレを開く</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>一覧とスレ表示の、キーを受け取る方を入れ替える</td></tr>
+  <tr><td><kbd>1</kbd> 〜 <kbd>3</kbd></td><td>絞り込み(人気・画像・すべて)</td></tr>
+  <tr><td><kbd>Shift</kbd>+<kbd>G</kbd> / <kbd>G</kbd> <kbd>G</kbd></td><td>末尾 / 先頭</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>ホイール</kbd></td><td>文字の大きさ</td></tr>
+  <tr><td><kbd>?</kbd> / <kbd>Esc</kbd></td><td>この一覧を出す / 閉じる</td></tr>
+</table></div></div>
+<div class="note"><a href="index.html">← 公式サイトへ</a>　読むだけのデモ。書き込み・更新はできません</div>
+
+<script>
+const ICONS = {"mail": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"M3 7l9 6 9-6\"/></svg>", "fire": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 2c1 4 5 5.5 5 11a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-6 1-9.5z\"/></svg>", "clock": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7v5l3.5 2\"/></svg>", "image": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"M3 16l5-5 4 4 3-3 6 6\"/><circle cx=\"16\" cy=\"9\" r=\"1.5\"/></svg>", "expand": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M13 7l5 5-5 5M6 7l5 5-5 5\"/></svg>", "collapse": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M11 7l-5 5 5 5M18 7l-5 5 5 5\"/></svg>"}
+// ── 作り物のデータ(実在の掲示板・人物とは関係ありません) ──
+const BOARDS = [
+  { id: 'demo', name: 'デモ板', c: '#4757c9', short: 'デ' },
+  { id: 'live', name: 'なんでも実況', c: '#c8641a', short: '実' },
+  { id: 'chat', name: '雑談', c: '#0e8a7e', short: '雑' },
+  { id: 'tech', name: 'プログラミング', c: '#7e4fc4', short: 'P' },
+]
+const NAMES = ['名無しさん', '名無しさん', '名無しさん', 'ふんわり', 'とおりすがり', '名無しさん', '夜型', 'まる']
+const BODIES = [
+  'このスレは専ブラ bbs-browser のデモです。中身は全部作り物。',
+  '>>{p} それはそう', 'わかる', '>>{p} 詳しく', '今日は暖かいね', '>>{p} 草', 'テスト書き込み',
+  'キー操作で読めるの助かる。J と K だけで一日過ごせる', '>>{p} タブもあるぞ', 'スマホ版もサクサクで草',
+  '画像ってサムネで出る? https://example.com/photo.jpg', '>>{p} 出る。押すとビューアー', 'NG が自動で荒らしを畳むのいい',
+  '>>{p} AI NG は端末の中で判定するから遅くないよ', '配色、ライトにしても目が痛くないのえらい', '>>{p} 差し色も変えられる',
+  '設定は少なめにしてるらしい。自動で決められるものは自動', '>>{p} 定型文は最初から空になった', '通知センターから自分へのレスに飛べる',
+  '>>{p} >>{q} ありがとう', 'ZIP 版は展開するだけ。フォルダごと消せばまっさら', '>>{p} ポータブル最高',
+  'そろそろ次スレ?', '>>{p} まだ 1000 行ってない', '最後まで読んだ', '>>{p} おつ', 'ｷﾀ━━━━(ﾟ∀ﾟ)━━━━!!',
+]
+const TITLES = {
+  demo: ['【デモ】bbs-browser を触ってみるスレ', 'キー操作だけで読むスレ Part3', '配色とレスの見た目を語る', '画像の貼り方教えて', 'NG 設定どうしてる?', 'スマホ版とPC版どっち使ってる', '通知センター便利すぎワロタ', 'ZIP 版とインストーラー版の違い', '次スレの候補が出るの地味に助かる', 'したらばも読めるようになった'],
+  live: ['今夜の試合実況 ★3', '雨すごくない?', '深夜のラジオ聴く', '今から寝るやつ集合', '朝ごはん何食べた'],
+  chat: ['雑談スレ 1101', '最近買ってよかったもの', '散歩コース晒す', 'コーヒーの淹れ方'],
+  tech: ['Kotlin と Compose の話', 'Tauri v2 でデスクトップアプリ', 'Cloudflare Workers で掲示板作った', 'vim キーバインド宗教戦争'],
+}
+let seed = 7
+const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n }
+const idOf = () => { let s = ''; const cs = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz0123456789'; for (let i = 0; i < 8; i++) s += cs[rnd(cs.length)]; return s }
+function makeThread(boardId, title, i) {
+  const count = 12 + rnd(60)
+  const ids = Array.from({ length: 6 }, idOf)
+  const posts = []
+  const now = Date.now() - rnd(5) * 86400000 - i * 3600000
+  for (let no = 1; no <= count; no++) {
+    let body = no === 1 ? BODIES[0] : BODIES[1 + rnd(BODIES.length - 1)]
+    body = body.replace('{p}', String(1 + rnd(no - 1 || 1))).replace('{q}', String(1 + rnd(no - 1 || 1)))
+    const t = new Date(now + no * 60000 * (1 + rnd(9)))
+    posts.push({ no, name: NAMES[rnd(NAMES.length)], id: ids[rnd(ids.length)], date: t, body, own: no === 3 || (no > 10 && no % 17 === 0) })
+  }
+  return { id: `${boardId}-${i}`, boardId, title, posts, count, read: i % 3 === 0 ? Math.max(1, count - 3 - rnd(5)) : i % 3 === 1 ? count : 0, createdAt: new Date(now) }
+}
+const THREADS = Object.fromEntries(Object.entries(TITLES).map(([b, ts]) => [b, ts.map((t, i) => makeThread(b, t, i))]))
+
+// ── 状態 ──
+const state = { board: 'demo', tab: 'unread', thread: null, filter: 'all', cur: -1, listCur: 0, focus: 'list', theme: 'dark', accent: '', style: 'card', font: 15 }
+const $ = (s) => document.querySelector(s)
+const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}(${'日月火水木金土'[d.getDay()]}) ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+let toastTimer
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200) }
+
+// ── サイドバー ──
+function renderBoards() {
+  $('#boards').innerHTML = BOARDS.map((b) => `
+    <button class="board ${b.id === state.board ? 'active' : ''}" data-board="${b.id}" title="${b.name}">
+      <span class="col"><span class="fav" style="background:${b.c}">${b.short}</span><span class="strip">${b.name}</span></span>
+      <span class="name">${b.name}</span>
+    </button>`).join('')
+  $('#boards').querySelectorAll('.board').forEach((el) => el.addEventListener('click', () => { state.board = el.dataset.board; state.listCur = 0; renderBoards(); renderList(); $('#app').classList.add('show-list') }))
+}
+$('#collapse').addEventListener('click', () => { $('#app').classList.toggle('collapsed'); $('#collapse').querySelector('.ic').innerHTML = $('#app').classList.contains('collapsed') ? ICONS.expand : ICONS.collapse })
+$('#nav-history').addEventListener('click', () => toast('本物では、見た順・未読・書き込んだ・お気に入り の 4 つのタブで履歴が出ます'))
+$('#nav-settings').addEventListener('click', () => toast('本物では設定が別の窓で開きます(このデモでは ◐ のメニューだけ)'))
+
+// ── スレ一覧 ──
+const TABS = [['unread', '未読', ICONS.mail], ['momentum', '勢い順', ICONS.fire], ['newest', '新しい順', ICONS.clock]]
+function listThreads() {
+  const all = THREADS[state.board]
+  if (state.tab === 'unread') return all.filter((t) => t.read > 0 && t.read < t.count)
+  if (state.tab === 'momentum') return [...all].sort((a, b) => momentum(b) - momentum(a))
+  return [...all].sort((a, b) => b.createdAt - a.createdAt)
+}
+const momentum = (t) => +(t.count / Math.max(1, (Date.now() - t.createdAt) / 86400000)).toFixed(1)
+function renderList() {
+  $('#list-title').textContent = BOARDS.find((b) => b.id === state.board).name
+  const unread = THREADS[state.board].filter((t) => t.read > 0 && t.read < t.count).length
+  $('#list-tabs').innerHTML = TABS.map(([k, n, ic]) => `<button data-tab="${k}" class="${k === state.tab ? 'on' : ''}">${ic} ${n}${k === 'unread' && unread ? ` <span class="badge">+${unread}</span>` : ''}</button>`).join('')
+  $('#list-tabs').querySelectorAll('button').forEach((el) => el.addEventListener('click', () => { state.tab = el.dataset.tab; state.listCur = 0; renderList() }))
+  const ts = listThreads()
+  $('#rows').innerHTML = ts.map((t, i) => `
+    <button class="row ${t.read ? 'read' : ''} ${i === state.listCur ? 'cur' : ''}" data-i="${i}">
+      <div class="t">${esc(t.title)}</div>
+      <div class="m"><span>${t.createdAt.getMonth() + 1}/${t.createdAt.getDate()}</span><span class="mo">${momentum(t)}</span><span class="n">${t.count} レス${t.read && t.read < t.count ? ` <span class="badge">+${t.count - t.read}</span>` : ''}</span></div>
+    </button>`).join('') || '<div class="empty" style="height:200px">未読のスレはありません</div>'
+  $('#rows').querySelectorAll('.row').forEach((el) => el.addEventListener('click', () => { state.listCur = +el.dataset.i; openThread(ts[state.listCur]) }))
+}
+$('#refresh').addEventListener('click', () => toast('デモでは更新できません(本物は差分だけを取りに行きます)'))
+
+// ── スレ表示 ──
+const FILTERS = [['hot', '人気', ICONS.fire], ['image', '画像', ICONS.image], ['all', 'すべて', '']]
+function openThread(t) {
+  state.thread = t; state.cur = -1; state.filter = 'all'; state.focus = 'thread'
+  t.read = t.count
+  $('#app').classList.remove('show-list')
+  renderThread(); renderList()
+  $('#posts').focus()
+}
+function anchors(body) { return [...body.matchAll(/>>(\d+)/g)].map((m) => +m[1]) }
+function renderThread() {
+  const t = state.thread
+  if (!t) return
+  $('#thread-title').textContent = t.title
+  const replies = new Map()
+  for (const p of t.posts) for (const n of anchors(p.body)) replies.set(n, [...(replies.get(n) ?? []), p.no])
+  const own = new Set(t.posts.filter((p) => p.own).map((p) => p.no))
+  const counts = { hot: t.posts.filter((p) => (replies.get(p.no)?.length ?? 0) >= 3).length, image: t.posts.filter((p) => /https?:\/\/\S+\.(jpg|png|gif)/.test(p.body)).length, all: t.posts.length }
+  $('#filters').innerHTML = FILTERS.map(([k, n, ic], i) => `<button data-f="${k}" class="${k === state.filter ? 'on' : ''}" title="${i + 1} キー">${ic} ${n} <span style="opacity:.7;font-size:11px">(${counts[k]})</span></button>`).join('')
+  $('#filters').querySelectorAll('button').forEach((el) => el.addEventListener('click', () => { state.filter = el.dataset.f; state.cur = -1; renderThread() }))
+  const idCount = {}
+  for (const p of t.posts) idCount[p.id] = (idCount[p.id] ?? 0) + 1
+  const shown = t.posts.filter((p) => state.filter === 'all' || (state.filter === 'hot' && (replies.get(p.no)?.length ?? 0) >= 3) || (state.filter === 'image' && /https?:\/\/\S+\.(jpg|png|gif)/.test(p.body)))
+  const opId = t.posts[0].id
+  $('#posts').innerHTML = shown.map((p, i) => {
+    const r = replies.get(p.no) ?? []
+    const heat = r.length >= 8 ? 3 : r.length >= 5 ? 2 : r.length >= 3 ? 1 : 0
+    const toOwn = anchors(p.body).some((n) => own.has(n)) && !p.own
+    const body = esc(p.body).replace(/&gt;&gt;(\d+)/g, '<a href="#" data-anchor="$1">&gt;&gt;$1</a>').replace(/https?:\/\/\S+\.(jpg|png|gif)/g, '<span class="img">▣ 画像</span>')
+    const hasImg = /https?:\/\/\S+\.(jpg|png|gif)/.test(p.body)
+    return `<article class="post ${i === state.cur ? 'cur' : ''} ${toOwn ? 'to-own' : ''} ${heat ? 'hot' : ''}" data-i="${i}" data-no="${p.no}">
+      ${heat ? `<span class="heat" style="background:var(--heat${heat})"></span>` : ''}${p.own ? '<span class="ownbar"></span>' : ''}
+      <span class="avatar" style="background:${colorOf(p.id)}">${p.name[0]}</span>
+      <div class="head"><span class="no ${heat ? `h${heat}` : ''}">${p.no}</span><span class="name">${esc(p.name)}</span>${p.id === opId ? '<span class="chip op">主</span>' : ''}${p.own ? '<span class="chip own">自分</span>' : ''}<span>${fmt(p.date)}</span><span class="id" style="${idCount[p.id] >= 2 ? `color:${colorOf(p.id)}` : ''}">ID:${p.id}${idCount[p.id] >= 2 ? ` (${idCount[p.id]})` : ''}</span></div>
+      <div class="body">${body}</div>
+      ${hasImg ? '<div class="thumb">サムネイル</div>' : ''}
+      ${r.length ? `<div class="replies">返信 <b>${r.length}</b> 件: ${r.map((n) => `<a href="#" data-anchor="${n}" style="color:var(--link)">&gt;&gt;${n}</a>`).join(' ')}</div>` : ''}
+    </article>`
+  }).join('') + (state.filter === 'all' ? '<div class="end">— END —</div>' : '')
+  $('#posts').querySelectorAll('[data-anchor]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showAnchor(+a.dataset.anchor, a) }))
+  $('#posts').querySelectorAll('.post').forEach((el) => el.addEventListener('click', () => { state.cur = +el.dataset.i; markCur() }))
+}
+function colorOf(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) & 0xffff; return `hsl(${40 + (h % 280)}, 55%, ${state.theme === 'dark' ? 68 : 42}%)` }
+function markCur() { $('#posts').querySelectorAll('.post').forEach((el) => el.classList.toggle('cur', +el.dataset.i === state.cur)); $('#posts').querySelector('.post.cur')?.scrollIntoView({ block: 'nearest' }) }
+function showAnchor(no, at) {
+  closePop()
+  const p = state.thread.posts.find((x) => x.no === no)
+  if (!p) return
+  const pop = document.createElement('div'); pop.className = 'pop'
+  pop.innerHTML = `<article class="post"><div class="head"><span class="no">${p.no}</span><span class="name">${esc(p.name)}</span><span>${fmt(p.date)}</span><span class="id">ID:${p.id}</span></div><div class="body">${esc(p.body)}</div></article>`
+  document.body.appendChild(pop)
+  const r = at.getBoundingClientRect()
+  pop.style.left = Math.min(r.left, innerWidth - 460) + 'px'
+  pop.style.top = (r.bottom + 6 + pop.offsetHeight > innerHeight ? r.top - pop.offsetHeight - 6 : r.bottom + 6) + 'px'
+  setTimeout(() => document.addEventListener('click', closePop, { once: true }))
+}
+function closePop() { document.querySelectorAll('.pop').forEach((p) => p.remove()) }
+$('#back').addEventListener('click', () => $('#app').classList.add('show-list'))
+$('#reply').addEventListener('submit', (e) => { e.preventDefault(); toast('デモなので書き込めません。本物は Ctrl+Enter でも送れます') })
+
+// ── 表示スタイルのメニュー ──
+const ACCENTS = [['', 'テーマの色', '#8f9bf5'], ['#1f9bf0', '青', '#1f9bf0'], ['#0e8a7e', '青緑', '#4fcdbe'], ['#2e8b3e', '緑', '#6ccb7a'], ['#c8641a', '橙', '#f29a55'], ['#c9423a', '朱', '#f07b72'], ['#c23f7e', '桃', '#f08dba'], ['#7e4fc4', '紫', '#b792f2']]
+function applyLook() {
+  document.documentElement.dataset.theme = state.theme
+  document.documentElement.dataset.style = state.style
+  document.documentElement.style.setProperty('--font', state.font + 'px')
+  if (state.accent) { document.documentElement.style.setProperty('--accent', state.accent); document.documentElement.style.setProperty('--accent-text', '#fff'); document.documentElement.style.setProperty('--accent-wash', `color-mix(in srgb, ${state.accent} 16%, transparent)`) }
+  else { ['--accent', '--accent-text', '--accent-wash'].forEach((v) => document.documentElement.style.removeProperty(v)) }
+  if (state.thread) renderThread()
+}
+$('#style-btn').addEventListener('click', (e) => {
+  e.stopPropagation(); closePop()
+  const m = document.createElement('div'); m.className = 'menu pop'
+  const seg = (name, opts, cur) => `<h4>${name}</h4><div class="seg">${opts.map(([k, n]) => `<button data-k="${k}" class="${k === cur ? 'on' : ''}">${n}</button>`).join('')}</div>`
+  m.innerHTML = seg('配色', [['dark', 'ダーク'], ['light', 'ライト']], state.theme).replace(/data-k/g, 'data-theme')
+    + `<h4>差し色</h4><div class="swatches">${ACCENTS.map(([k, n, c]) => `<button data-accent="${k}" class="${k === state.accent ? 'on' : ''}" style="background:${c}" title="${n}"></button>`).join('')}</div>`
+    + seg('レスの見た目', [['card', 'カード'], ['discord', 'Discord 風'], ['classic', '専ブラ風']], state.style).replace(/data-k/g, 'data-style')
+    + `<h4>文字の大きさ <span id="font-v">${state.font}px</span></h4><input type="range" min="11" max="22" value="${state.font}" id="font-r">`
+    + `<p style="margin:10px 0 0;color:var(--muted);font-size:11px">本物にはこのほか、13 の配色・自分の配色・16 書体・余白と行間のスライダーがあります</p>`
+  document.body.appendChild(m)
+  const r = e.currentTarget.getBoundingClientRect(); m.style.left = Math.min(r.left, innerWidth - 320) + 'px'; m.style.top = r.bottom + 6 + 'px'
+  m.addEventListener('click', (ev) => ev.stopPropagation())
+  m.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => { state.theme = b.dataset.theme; applyLook(); m.querySelectorAll('[data-theme]').forEach((x) => x.classList.toggle('on', x === b)) }))
+  m.querySelectorAll('[data-accent]').forEach((b) => b.addEventListener('click', () => { state.accent = b.dataset.accent; applyLook(); m.querySelectorAll('[data-accent]').forEach((x) => x.classList.toggle('on', x === b)) }))
+  m.querySelectorAll('[data-style]').forEach((b) => b.addEventListener('click', () => { state.style = b.dataset.style; applyLook(); m.querySelectorAll('[data-style]').forEach((x) => x.classList.toggle('on', x === b)) }))
+  m.querySelector('#font-r').addEventListener('input', (ev) => { state.font = +ev.target.value; m.querySelector('#font-v').textContent = state.font + 'px'; document.documentElement.style.setProperty('--font', state.font + 'px') })
+  setTimeout(() => document.addEventListener('click', closePop, { once: true }))
+})
+
+// ── キー操作 ──
+let lastG = 0
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return
+  if (e.key === '?') { $('#help').classList.toggle('show'); return }
+  if (e.key === 'Escape') { $('#help').classList.remove('show'); closePop(); return }
+  if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); state.focus = state.focus === 'list' ? 'thread' : 'list'; (state.focus === 'list' ? $('#rows') : $('#posts')).focus(); toast(state.focus === 'list' ? 'キーはスレ一覧へ' : 'キーはスレ表示へ'); return }
+  if (/^[1-3]$/.test(e.key) && state.thread) { state.filter = FILTERS[+e.key - 1][0]; state.cur = -1; renderThread(); return }
+  const list = document.activeElement === $('#rows') || (state.focus === 'list' && document.activeElement !== $('#posts'))
+  if (list) {
+    const ts = listThreads()
+    if (e.key === 'j' || e.key === 'ArrowDown') { state.listCur = Math.min(ts.length - 1, state.listCur + 1); renderList(); $('#rows .row.cur')?.scrollIntoView({ block: 'nearest' }); e.preventDefault() }
+    else if (e.key === 'k' || e.key === 'ArrowUp') { state.listCur = Math.max(0, state.listCur - 1); renderList(); $('#rows .row.cur')?.scrollIntoView({ block: 'nearest' }); e.preventDefault() }
+    else if (e.key === 'Enter') { if (ts[state.listCur]) openThread(ts[state.listCur]) }
+    return
+  }
+  if (!state.thread) return
+  const n = $('#posts').querySelectorAll('.post').length
+  if (e.key === 'j' || e.key === 'ArrowDown') { state.cur = Math.min(n - 1, state.cur + 1); markCur(); e.preventDefault() }
+  else if (e.key === 'k' || e.key === 'ArrowUp') { state.cur = Math.max(0, state.cur - 1); markCur(); e.preventDefault() }
+  else if (e.key === 'G') { state.cur = n - 1; markCur() }
+  else if (e.key === 'g') { if (Date.now() - lastG < 500) { state.cur = 0; markCur() } lastG = Date.now() }
+  else if (e.key === 'r' || e.key === 'R') toast('デモでは更新できません')
+})
+document.addEventListener('wheel', (e) => { if (!e.ctrlKey) return; e.preventDefault(); state.font = Math.max(11, Math.min(22, state.font + (e.deltaY < 0 ? 1 : -1))); document.documentElement.style.setProperty('--font', state.font + 'px'); toast(`文字の大きさ ${state.font}px`) }, { passive: false })
+$('#help-btn').addEventListener('click', () => $('#help').classList.toggle('show'))
+$('#help').addEventListener('click', () => $('#help').classList.remove('show'))
+$('#rows').addEventListener('focus', () => (state.focus = 'list'))
+$('#posts').addEventListener('focus', () => (state.focus = 'thread'))
+
+// 公式サイトに埋め込んでいるときは、案内の帯は要らない
+if (window.self !== window.top) $('.note').style.display = 'none'
+// OS がライトならライトで始める
+if (matchMedia('(prefers-color-scheme: light)').matches) state.theme = 'light'
+if (innerWidth <= 900) { $('#back').style.display = ''; $('#app').classList.add('show-list') }
+applyLook(); renderBoards(); renderList()
+openThread(THREADS.demo[0])
+</script>
+</body>
+</html>

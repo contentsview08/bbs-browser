@@ -85,6 +85,11 @@
   .video video, .video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
   .video .placeholder { display: grid; place-items: center; aspect-ratio: 16 / 9; color: var(--muted); font-size: 14px; background: var(--surface2); }
 
+  .demo-frame { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+  .demo-frame iframe { display: block; width: 100%; height: 640px; border: 0; }
+  @media (max-width: 640px) { .demo-frame iframe { height: 560px; } }
+  .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+  kbd { font-family: Consolas, ui-monospace, monospace; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
   .steps { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
   .steps ol { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
   .steps li { margin: 4px 0; }
@@ -104,6 +109,7 @@
     <span class="name">bbs-browser</span>
     <nav>
       <a href="#features">できること</a>
+      <a href="#demo">さわってみる</a>
       <a href="#shots">画面</a>
       <a href="#install">入れ方</a>
       <a href="#faq">よくある質問</a>
@@ -139,6 +145,15 @@
       <div class="card"><div class="icon">⇄</div><h3>どこで触っても同じ</h3><p>PC 版・スマホ版・red-edge.net の Web は、同じ言葉・同じ設定・同じ見た目。スマホ版はなぞる操作(ジェスチャー)で片手でも読めます。</p></div>
       <div class="card"><div class="icon">▣</div><h3>ZIP 版は展開するだけ</h3><p>展開したフォルダがそのままインストール先。ログも設定もその中の data に入り、フォルダごと消せばまっさらに戻ります。</p></div>
     </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <h2>さわってみる</h2>
+    <p class="sub">PC 版の画面を、ブラウザの中でそのまま。中身は作り物で、読むだけ(書き込み・更新はできません)。<a href="demo.html" target="_blank" rel="noopener">別のタブで大きく開く ↗</a></p>
+    <div class="demo-frame"><iframe src="demo.html" title="bbs-browser のデモ" loading="lazy"></iframe></div>
+    <p class="hint">左の一覧でスレを押す・<kbd>J</kbd> <kbd>K</kbd> で動く・<kbd>?</kbd> でキーの一覧・◐ で配色とレスの見た目を変える・<kbd>Ctrl</kbd>+ホイールで文字の大きさ。</p>
   </div>
 </section>
 
@@ -209,6 +224,7 @@
   <a href="https://github.com/contentsview08/bbs-browser/releases">Releases</a>
   <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a>
   <a href="https://red-edge.net">red-edge.net</a>
+  <div style="margin-top:10px">Apache License 2.0 · <a href="https://github.com/contentsview08/bbs-browser/blob/main/LICENSE">LICENSE</a></div>
 </footer>
 
 <script>

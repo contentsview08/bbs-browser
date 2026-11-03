@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Block
@@ -76,6 +77,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -89,7 +91,7 @@ import io.github.yumekui8.bbsnative.data.ThumbMode
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "ng" to "NG",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "サイトごとの設定", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -125,12 +127,13 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "ng" -> NgPage(vm)
                 "sites" -> SitesPage(vm, menus = false)
                 "menus" -> SitesPage(vm, menus = true)
+                "accounts" -> AccountsPage(vm)
                 "backup" -> BackupPage(vm)
                 "about" -> AboutPage()
                 "custom" -> CustomSchemeEditor(vm.prefs)
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
-            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus") && !(vm.prefs.showAdvanced || viaSearch)) {
+            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus", "accounts") && !(vm.prefs.showAdvanced || viaSearch)) {
                 Text(
                     "詳しい設定も出す",
                     Modifier.padding(16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
@@ -200,6 +203,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         NavRow(Icons.Filled.Star, Color(0xFF14B8A6), "お気に入り板", value = "${vm.favorites.size} 板") { open("sites") }
         NavRow(Icons.Filled.Dns, Color(0xFF0E7490), "BBS メニュー", desc = "板一覧を取る掲示板") { vm.reloadSites(); open("menus") }
         NavRow(Icons.Filled.TravelExplore, Color(0xFF0891B2), "板を探す", desc = "BBS メニューから板を選ぶ") { vm.openRoot(Page.Boards()) }
+        NavRow(Icons.Filled.AccountCircle, Color(0xFF7C3AED), "サイトごとの設定", desc = "アカウント(hono-bbs のユーザー ID とパスワード)", value = if (p.honoUser.isNotEmpty()) "登録済み" else null) { open("accounts") }
     }
     Group {
         SwitchRow("詳しい設定を出す", p.showAdvanced, desc = "オフのときは、よく使う項目だけを出します(検索ではいつも全部から探せます)") { p.showAdvanced = it }
@@ -678,6 +682,142 @@ private fun SitesPage(vm: AppViewModel, menus: Boolean) {
     }
 }
 
+/**
+ * サイトごとの設定(PC 版の 掲示板ごとの設定 → サイトごと と同じ)。いまは hono-bbs のアカウントだけ。
+ * ユーザー ID とパスワードを保存し、書き込むときにそのサイトにログインして使う(bbs/HonoBbs.kt)。
+ * 「ログインして確かめる」は、知っているサイト(BBS メニューに登録した hono-bbs・お気に入り板)に今ログインしてみる。
+ * 登録は、メールに確認コード → コード・ID・パスワードで作る(Turnstile が要れば、書き込みと同じく認証ページとコードを出す)
+ */
+@Composable
+private fun AccountsPage(vm: AppViewModel) {
+    val p = vm.prefs
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var auth by remember { mutableStateOf<io.github.yumekui8.bbsnative.bbs.PostResult.Auth?>(null) }
+    var register by remember { mutableStateOf(false) }
+    val origins = remember(vm.sites, vm.favorites) { vm.honoOrigins() }
+    Group("hono-bbs(red-edge.net など)", note = "ログインすると、hono-bbs の掲示板に書き込むときに自動で使われます(名前にアカウントの表示名が付きます)。パスワードはこの端末にそのまま保存します") {
+        TextRow("ユーザー ID", p.honoUser, "まだ登録していません") { vm.setHonoAccount(it, p.honoPassword); status = null }
+        TextRow("パスワード", p.honoPassword, "", secret = true) { vm.setHonoAccount(p.honoUser, it); status = null }
+        if (p.honoUser.isNotEmpty() && p.honoPassword.isNotEmpty()) {
+            ActionRow(if (busy) "確かめています…" else "ログインして確かめる") {
+                if (busy) return@ActionRow
+                if (origins.isEmpty()) { status = "hono-bbs のサイトをまだ知りません。BBS メニューに red-edge.net などを足すか、その板をお気に入りに入れてください"; return@ActionRow }
+                busy = true
+                scope.launch {
+                    val results = origins.map { o -> o to runCatching { io.github.yumekui8.bbsnative.bbs.HonoBbs.login(o, io.github.yumekui8.bbsnative.bbs.HonoBbs.Account(p.honoUser, p.honoPassword)) } }
+                    status = results.joinToString("\n") { (o, r) -> "${o.removePrefix("https://")}: " + r.fold({ "ログインしました($it)" }, { "ログインできません(${it.message})" }) }
+                    busy = false
+                }
+            }
+            ActionRow("アカウントを消す", Icons.Filled.Delete) { vm.setHonoAccount("", ""); status = null }
+        }
+        ActionRow("新しく登録する(メールの確認コード)") { register = true }
+        if (status != null) Text(status!!, Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 13.sp)
+    }
+    if (register) RegisterDialog(vm, origins, onAuth = { auth = it; register = false }, onDone = { msg -> status = msg; register = false })
+    // Turnstile の認証(書き込みと同じ案内)
+    auth?.let { a ->
+        AlertDialog(
+            onDismissRequest = { auth = null },
+            title = { Text("人の確認が要ります") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("ブラウザで認証のページを開き、下の認証コードを入れてから、もう一度登録してください。", fontSize = 14.sp)
+                    if (a.code != null) Text("認証コード: ${a.code}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Palette.textStrong)
+                    Text(a.message, fontSize = 12.sp, color = Palette.textMuted)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    a.code?.let { copyText(context, it) }
+                    a.url?.let { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(it))) } }
+                    auth = null
+                }) { Text(if (a.code != null) "コードをコピーして開く" else "ブラウザで開く") }
+            },
+            dismissButton = { TextButton(onClick = { auth = null }) { Text("閉じる") } },
+        )
+    }
+}
+
+/** 本人の登録: サイトを選ぶ → メール → 確認コード・ユーザー ID・表示名・パスワード。できたらそのアカウントを保存してログイン済みにする */
+@Composable
+private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.github.yumekui8.bbsnative.bbs.PostResult.Auth) -> Unit, onDone: (String) -> Unit) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var origin by remember { mutableStateOf(origins.firstOrNull() ?: "") }
+    var email by remember { mutableStateOf("") }
+    var sent by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf("") }
+    var id by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val field = Modifier.fillMaxWidth()
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDone("") },
+        title = { Text(if (sent) "確認コードと、ID・パスワード" else "新しく登録する") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (origins.isEmpty()) Text("hono-bbs のサイトをまだ知りません。BBS メニューに red-edge.net などを足してから登録してください", fontSize = 13.sp, color = Palette.textMuted)
+                else if (origins.size > 1) {
+                    Text("どのサイトに登録するか", fontSize = 12.sp, color = Palette.textMuted)
+                    for (o in origins) Row(Modifier.fillMaxWidth().clickable { origin = o }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.RadioButton(selected = origin == o, onClick = { origin = o })
+                        Text(o.removePrefix("https://"), fontSize = 14.sp)
+                    }
+                } else Text(origin.removePrefix("https://"), fontSize = 13.sp, color = Palette.textMuted)
+                OutlinedTextField(email, { email = it }, field, singleLine = true, enabled = !sent, label = { Text("メールアドレス") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email))
+                if (sent) {
+                    OutlinedTextField(code, { code = it.filter { c -> c.isDigit() }.take(6) }, field, singleLine = true, label = { Text("確認コード(6 桁)") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                    OutlinedTextField(id, { id = it }, field, singleLine = true, label = { Text("ユーザー ID(英数字・_・-、7 文字以上)") })
+                    OutlinedTextField(name, { name = it }, field, singleLine = true, label = { Text("表示名(空なら ID)") })
+                    OutlinedTextField(password, { password = it }, field, singleLine = true, label = { Text("パスワード(8 文字以上)") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password))
+                    Text("確認コードは 10 分有効です。届かないときは、閉じてもう一度送ってください", fontSize = 12.sp, color = Palette.textMuted)
+                }
+                if (error != null) Text(error!!, fontSize = 13.sp, color = Palette.markDanger)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && origin.isNotEmpty() && email.isNotBlank(), onClick = {
+                error = null
+                // 足りない所は、押したときに理由を出す(押せない理由が分からないと困るため)
+                if (sent) {
+                    val problem = when {
+                        !Regex("^\\d{6}$").matches(code) -> "確認コード(6 桁の数字)を入れてください"
+                        id.trim().length < 7 -> "ユーザー ID は 7 文字以上にしてください"
+                        !Regex("^[a-zA-Z0-9_-]+$").matches(id.trim()) -> "ユーザー ID に使えるのは英数字・_・- だけです"
+                        password.length < 8 -> "パスワードは 8 文字以上にしてください"
+                        else -> null
+                    }
+                    if (problem != null) { error = problem; return@TextButton }
+                }
+                busy = true
+                scope.launch {
+                    val r = runCatching {
+                        if (!sent) io.github.yumekui8.bbsnative.bbs.HonoBbs.registerRequest(origin, email.trim())
+                        else io.github.yumekui8.bbsnative.bbs.HonoBbs.registerVerify(origin, email.trim(), code, id.trim(), name.trim(), password)
+                    }.getOrElse { io.github.yumekui8.bbsnative.bbs.PostResult.Error(it.message ?: it.toString()) }
+                    busy = false
+                    when (r) {
+                        is io.github.yumekui8.bbsnative.bbs.PostResult.Ok -> if (!sent) sent = true else { vm.setHonoAccount(id.trim(), password); onDone(r.message) }
+                        is io.github.yumekui8.bbsnative.bbs.PostResult.Auth -> onAuth(r)
+                        is io.github.yumekui8.bbsnative.bbs.PostResult.Error -> error = r.message
+                        is io.github.yumekui8.bbsnative.bbs.PostResult.Confirm -> error = r.message
+                    }
+                }
+            }) { Text(if (busy) "送っています…" else if (sent) "登録する" else "確認コードを送る") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = { onDone("") }) { Text("やめる") } },
+    )
+}
+
 @Composable
 private fun BackupPage(vm: AppViewModel) {
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
@@ -784,18 +924,25 @@ private fun SliderRow(title: String, value: Float, range: ClosedFloatingPointRan
 }
 
 @Composable
-private fun TextRow(label: String, value: String, placeholder: String, onChange: (String) -> Unit) {
+private fun TextRow(label: String, value: String, placeholder: String, secret: Boolean = false, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
-        Text(value.ifEmpty { placeholder }, color = if (value.isEmpty()) Palette.textMuted else Palette.accent, fontSize = 14.sp, maxLines = 1)
+        // パスワードは伏せて出す
+        Text(if (value.isEmpty()) placeholder else if (secret) "●".repeat(8) else value, color = if (value.isEmpty()) Palette.textMuted else Palette.accent, fontSize = 14.sp, maxLines = 1)
     }
     if (open) {
         var text by remember { mutableStateOf(value) }
         AlertDialog(
             onDismissRequest = { open = false },
             title = { Text(label) },
-            text = { OutlinedTextField(text, { text = it }, singleLine = true, placeholder = { Text(placeholder) }) },
+            text = {
+                OutlinedTextField(
+                    text, { text = it }, singleLine = true, placeholder = { Text(placeholder) },
+                    visualTransformation = if (secret) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = if (secret) androidx.compose.ui.text.input.KeyboardType.Password else androidx.compose.ui.text.input.KeyboardType.Text),
+                )
+            },
             confirmButton = { TextButton(onClick = { onChange(text); open = false }) { Text("決める") } },
             dismissButton = { TextButton(onClick = { open = false }) { Text("やめる") } },
         )

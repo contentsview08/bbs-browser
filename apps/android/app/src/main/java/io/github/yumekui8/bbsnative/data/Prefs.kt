@@ -239,6 +239,9 @@ class Prefs(context: Context) {
     var postMail by pref("postMail", "")
     /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
     var quickPhrases by pref("quickPhrases", "")
+    /** hono-bbs のアカウント(ユーザー ID とパスワード。設定 → サイトごとの設定)。空なら使わない。パスワードはそのまま保存する(PC 版と同じ) */
+    var honoUser by pref("honoUser", "")
+    var honoPassword by pref("honoPassword", "")
     // 画像のアップロード(上げ先が選んであれば使える。EXIF はいつも取り除く)
     /** 上げる前に縮める、長い辺の大きさ(px。0 なら縮めない) */
     var uploadMaxDimension by pref("uploadMaxDimension", 4096)

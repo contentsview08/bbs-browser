@@ -202,6 +202,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Http.init(app)
+        // hono-bbs のアカウント(保存してあれば、書き込みのときにログインして使う)
+        if (prefs.honoUser.isNotEmpty()) HonoBbs.account = HonoBbs.Account(prefs.honoUser, prefs.honoPassword)
         io.github.yumekui8.bbsnative.data.ImageStore.init(app)
         io.github.yumekui8.bbsnative.data.Favicons.db = db
         // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
@@ -479,6 +481,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var siteUrl by mutableStateOf<String?>(null)
 
     fun reloadSites() { viewModelScope.launch { sites = db.siteMenuUrls() } }
+
+    /** hono-bbs のアカウントを保存する(空なら消す)。セッションは取り直す */
+    fun setHonoAccount(user: String, password: String) {
+        prefs.honoUser = user.trim()
+        prefs.honoPassword = password
+        HonoBbs.account = if (user.isNotBlank()) HonoBbs.Account(user.trim(), password) else null
+        HonoBbs.clearSessions()
+    }
+
+    /** 知っている hono-bbs のサイト(web の origin)。サイト(BBS メニュー)に登録したものと、お気に入り板から */
+    fun honoOrigins(): List<String> =
+        (sites.map { it.first }.mapNotNull { HonoBbs.originOfSite(it) } + favorites.mapNotNull { b -> HonoBbs.normalizeBoardUrl(b.url)?.let { Regex("^(https?://[^/]+)").find(it)?.groupValues?.get(1) } }).distinct()
 
     fun selectSite(url: String) {
         siteUrl = url

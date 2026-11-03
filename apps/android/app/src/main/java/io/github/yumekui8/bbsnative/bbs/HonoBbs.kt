@@ -13,6 +13,8 @@ import java.util.Base64
 // - API の場所は web のページの <meta name="bbs-api" content="…/api/v1"> から見つける(なければ https://api.<web のホスト>/api/v1)
 // - 書き込みで Turnstile が要るときは、エッヂと同じ流れ: POST /auth/turnstile/pair でコードをもらい(Cookie turnstile_pair が付く)、
 //   認証ページの URL とコードを出す。人がブラウザで認証してから送り直すと、その Cookie でセッションが使われる
+// - アカウント(ユーザー ID とパスワード。設定 → サイトごとの設定): 5ch の BE と違って Cookie ではなく、ログインでもらったセッション ID を
+//   Authorization: Bearer で書き込みに付ける。サイト(origin)はいくつもあり得るので、ログインはサイトごとに、書き込みのときに要るぶんだけ行う
 // 本番の板への試し書き込みはしない
 
 private val THREAD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/?(?:[?#].*)?$")
@@ -255,6 +257,94 @@ object HonoBbs {
         return FetchResult(FetchStatus.UPDATED, posts, nextCursor, title, archived)
     }
 
+    // ── アカウント(PC 版の connector.ts の login・authHeader と同じ) ──
+
+    class Account(val user: String, val password: String)
+
+    /** 設定で保存したアカウント(起動時と変えたときに AppViewModel が入れる)。null なら使わない */
+    @Volatile var account: Account? = null
+    /** サイト(origin)ごとのログインのセッション(ID と期限 ms) */
+    private val sessions = HashMap<String, Pair<String, Long>>()
+
+    fun clearSessions() = synchronized(sessions) { sessions.clear() }
+
+    /** 失敗の理由を日本語に */
+    private fun loginError(error: String?, message: String?, status: Int) = when (error) {
+        "INVALID_CREDENTIALS" -> "ユーザー ID かパスワードが違います"
+        "PASSKEY_REQUIRED" -> "このアカウントはパスキーでしか入れません"
+        "TOO_MANY_ATTEMPTS" -> "ログインの失敗が続いたので、しばらく待ってください"
+        else -> message ?: "HTTP $status"
+    }
+
+    /** そのサイト(web の origin)にログインしてセッションをもらう(POST /auth/login)。返すのは表示名。失敗は例外(理由は message) */
+    suspend fun login(origin: String, account: Account): String {
+        val api = apiBaseOf(origin)
+        val body = JSONObject().put("id", account.user).put("password", account.password).toString()
+        val res = Http.postJson("$api/auth/login", body)
+        val j = runCatching { json(res) }.getOrNull()
+        val data = j?.optJSONObject("data")
+        if (res.status != 200 || data == null) throw IllegalStateException(loginError(j?.str("error"), j?.str("message"), res.status))
+        val expires = runCatching { java.time.Instant.parse(data.getString("expiresAt")).toEpochMilli() }.getOrDefault(System.currentTimeMillis() + 3600_000L)
+        synchronized(sessions) { sessions[origin] = data.getString("sessionId") to expires }
+        return data.optString("displayName").ifEmpty { account.user }
+    }
+
+    /** 書き込みに付ける Authorization。アカウントがあれば(セッションがなければ・切れそうならここでログイン) */
+    private suspend fun authHeaders(origin: String): Map<String, String> {
+        val a = account ?: return emptyMap()
+        val s = synchronized(sessions) { sessions[origin] }
+        if (s == null || s.second - System.currentTimeMillis() < 60_000L) {
+            runCatching { login(origin, a) }.getOrElse { throw IllegalStateException("アカウントでログインできませんでした: ${it.message}") }
+        }
+        return mapOf("Authorization" to "Bearer ${synchronized(sessions) { sessions[origin]!!.first }}")
+    }
+
+    /** アカウントを付けて送る。セッションが向こうで切れていたら(401)、一度だけログインし直して送り直す */
+    private suspend fun postWithAuth(origin: String, url: String, body: String): HttpResponse {
+        var res = Http.postJson(url, body, authHeaders(origin))
+        if (res.status == 401 && account != null) {
+            synchronized(sessions) { sessions.remove(origin) }
+            res = Http.postJson(url, body, authHeaders(origin))
+        }
+        return res
+    }
+
+    /** 本人の登録(1 段目): メールに確認コードを送る(POST /auth/register/request)。Turnstile が要れば Auth(認証ページとコード)を返す */
+    suspend fun registerRequest(origin: String, email: String): PostResult {
+        val api = apiBaseOf(origin)
+        val res = Http.postJson("$api/auth/register/request", JSONObject().put("email", email).toString())
+        if (res.status in 200..299) return PostResult.Ok("確認コードを送りました(10 分有効)", null)
+        return readWrite(res, api)
+    }
+
+    /** 本人の登録(2 段目): コードと ID・パスワードでユーザーを作り、そのままログインする(POST /auth/register/verify) */
+    suspend fun registerVerify(origin: String, email: String, code: String, id: String, displayName: String, password: String): PostResult {
+        val api = apiBaseOf(origin)
+        val body = JSONObject().put("email", email).put("code", code).put("id", id).put("displayName", displayName.ifEmpty { id }).put("password", password).toString()
+        val res = Http.postJson("$api/auth/register/verify", body)
+        val j = runCatching { json(res) }.getOrNull()
+        if (res.status in 200..299) {
+            val data = j?.optJSONObject("data")
+            if (data != null) {
+                val expires = runCatching { java.time.Instant.parse(data.getString("expiresAt")).toEpochMilli() }.getOrDefault(System.currentTimeMillis() + 3600_000L)
+                synchronized(sessions) { sessions[origin] = data.getString("sessionId") to expires }
+            }
+            return PostResult.Ok("登録しました(${data?.optString("displayName")?.ifEmpty { id } ?: id})", null)
+        }
+        val why = when (j?.str("error")) {
+            "OTP_EXPIRED" -> "コードの期限が切れたか、5 回間違えました。送り直してください"
+            "OTP_INVALID" -> "コードが違います"
+            "USER_ID_TAKEN" -> "その ID はもう使われています"
+            "EMAIL_TAKEN" -> "そのメールアドレスはもう使われています"
+            "VALIDATION_ERROR" -> j.str("message") ?: "入力の形が違います(ID は英数字・_・- で 7 文字以上、パスワードは 8 文字以上)"
+            else -> null
+        }
+        return if (why != null) PostResult.Error(why) else readWrite(res, api)
+    }
+
+    /** サイトの入口(https://<web>/boards)から origin */
+    fun originOfSite(siteUrl: String): String? = SITE_URL.find(siteUrl.trim())?.groupValues?.get(1)
+
     // ── 書き込み ──
 
     private fun input(input: PostInput) = JSONObject().apply {
@@ -266,13 +356,13 @@ object HonoBbs {
     suspend fun createPost(t: ThreadSummary, input: PostInput): PostResult {
         val (origin, id) = parts(t.boardUrl)
         val api = apiBaseOf(origin)
-        return readWrite(Http.postJson("$api/boards/${enc(id)}/threads/${enc(t.key)}/posts", input(input).toString()), api)
+        return readWrite(postWithAuth(origin, "$api/boards/${enc(id)}/threads/${enc(t.key)}/posts", input(input).toString()), api)
     }
 
     suspend fun createThread(board: Board, title: String, input: PostInput): PostResult {
         val (origin, id) = parts(board.url)
         val api = apiBaseOf(origin)
-        return readWrite(Http.postJson("$api/boards/${enc(id)}/threads", input(input).put("title", title).toString()), api)
+        return readWrite(postWithAuth(origin, "$api/boards/${enc(id)}/threads", input(input).put("title", title).toString()), api)
     }
 
     /** 書き込みの応答を読む。Turnstile が要るときは、つなぎのコードをもらって、認証の案内を返す */

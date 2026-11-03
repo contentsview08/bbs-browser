@@ -109,7 +109,7 @@ interface Props {
   onShownChange?: (list: ThreadSummary[]) => void
   /** ヘッダーの下に置く帯(履歴の切り替えなど)。スマホではヘッダーと一緒に隠れる */
   subHeader?: ReactNode
-  /** 一覧の代わりに出す中身(履歴の書き込み・画像)。渡したときは、スレの並び・タブ・検索を出さない */
+  /** 一覧の代わりに出す中身(履歴の「書き込んだ」の、本文つきの一覧)。タブはそのまま出す(切り替えて戻れるように) */
   body?: ReactNode
   /** 閲覧履歴の行に出すもの(板の名前・いつ見たか)。渡すと、行が履歴用の形になる */
   historyMetaOf?: (t: ThreadSummary) => { boardName: string; readAt?: number; icon?: string }
@@ -1018,9 +1018,9 @@ export default function ThreadListPanel(props: Props) {
               </button>
             </div>
           )}
-          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile || props.body ? 'hidden' : ''}`}>
+          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile ? 'hidden' : ''}`}>
             {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
-            {selectable && (
+            {selectable && !props.body && (
               <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">
                 <input
                   type="checkbox"

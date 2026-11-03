@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEve
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
 import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadOptions } from '../host/uploader'
-import { closeWebUpload, openWebUpload } from '../host/webUpload'
+import { closeWebUpload, openWebUpload, showWebUpload } from '../host/webUpload'
 import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
 
 /** 一度に上げられる数 */
@@ -56,6 +56,8 @@ function verifyImage(url: string, host: string, file: File): Promise<void> {
 /** サイトの画面を閉じるまで: 渡した画像のぶんのリンクがそろってから / 最後のリンクから */
 const WEB_CLOSE_SOON_MS = 1200
 const WEB_CLOSE_IDLE_MS = 4000
+/** 裏で上げていて、これだけ経ってもリンクが来なければ画面を見せる(本人の手が要る: ログイン・確認など) */
+const WEB_SHOW_AFTER_MS = 20000
 
 let nextItemId = 1
 
@@ -229,10 +231,17 @@ export function useMediaInput(o: {
     if (it) URL.revokeObjectURL(it.preview)
     setAll(itemsRef.current.filter((i) => i.id !== id))
   }
-  const uploading = items.filter((i) => i.state === 'waiting' || i.state === 'uploading').length
+  /** サイトの画面で裏で上げている間の進み具合(渡した画像の数と、リンクが来た数) */
+  const [webProgress, setWebProgress] = useState<{ got: number; total: number }>()
+  const uploading = items.filter((i) => i.state === 'waiting' || i.state === 'uploading').length + (webProgress ? 1 : 0)
   // 何枚目か: 今回の並び(失敗したものを除く)のうち、済んだ数 + 1
   const batch = items.filter((i) => i.state !== 'failed')
-  const progress = uploading > 0 ? { current: Math.min(batch.length, batch.filter((i) => i.state === 'done').length + 1), total: batch.length } : undefined
+  const progress =
+    batch.length > 0 && uploading > 0
+      ? { current: Math.min(batch.length, batch.filter((i) => i.state === 'done').length + 1), total: batch.length }
+      : webProgress
+        ? { current: Math.min(webProgress.total, webProgress.got + 1), total: webProgress.total }
+        : undefined
   const localOf = (url: string) => items.find((i) => i.url === url)?.preview
 
   // 上げ先(設定)。サイトの画面で上げるもの(imgur・imgbox・imgbb の画面)なら、画像ボタンでその画面を開く
@@ -260,17 +269,27 @@ export function useMediaInput(o: {
     },
     [],
   )
+  const showTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const finishWebUpload = () => {
     clearTimeout(closeTimer.current)
+    clearTimeout(showTimer.current)
     stopWeb.current?.()
     stopWeb.current = undefined
     setWebSite(undefined)
+    setWebProgress(undefined)
     void closeWebUpload()
   }
+  /**
+   * サイトの画面で上げる。画像を渡すとき(貼り付け・ドラッグ)は画面を見せず裏で上げ、リンクが来たら本文に入れる
+   * (進み具合は書き込み欄の上に出す)。しばらく経ってもリンクが来なければ画面を見せる(ログイン・確認など、本人の手が要る)。
+   * 画像ボタンから開くとき(画像なし)は、本人がその画面で選ぶので見せる
+   */
   const startWebUpload = async (site: WebUploadSite, files: File[] = []) => {
     stopWeb.current?.()
     clearTimeout(closeTimer.current)
+    clearTimeout(showTimer.current)
     let got = 0
+    const background = files.length > 0
     try {
       stopWeb.current = await openWebUpload(
         site,
@@ -278,14 +297,29 @@ export function useMediaInput(o: {
           // URL は 1 行に 1 つ(改行で区切る)
           insertRef.current(`${url}\n`, { ownLine: true })
           got++
-          setNotice(`${site.name}のリンクを本文に入れました(${got} 件)`)
+          const file = files[got - 1]
+          // どの上げ方でも、上げた画像の履歴に残す(大きさは渡した画像のもの。画面で選んだものは 0)
+          oRef.current.onUploaded?.({ url, name: file?.name || 'image', size: file?.size ?? 0, withAccount: false })
+          setNotice(background ? `${site.name}に上げました(${got}/${files.length})` : `${site.name}のリンクを本文に入れました(${got} 件)`)
+          if (background) setWebProgress({ got, total: files.length })
+          clearTimeout(showTimer.current)
           clearTimeout(closeTimer.current)
           closeTimer.current = setTimeout(finishWebUpload, files.length > 0 && got >= files.length ? WEB_CLOSE_SOON_MS : WEB_CLOSE_IDLE_MS)
         },
         files,
+        { background },
       )
       setWebSite(site)
+      if (background) {
+        setWebProgress({ got: 0, total: files.length })
+        setNotice(`${site.name}に上げています(${files.length} 枚)…`)
+        showTimer.current = setTimeout(() => {
+          setNotice(`${site.name}の画面で続けてください(裏では上がりませんでした)`)
+          void showWebUpload()
+        }, WEB_SHOW_AFTER_MS)
+      }
     } catch (e) {
+      setWebProgress(undefined)
       setNotice(`${site.name}の画面を開けませんでした: ${e instanceof Error ? e.message : String(e)}`)
     }
   }

@@ -45,6 +45,7 @@ import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
 import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, type ListFilter, type StoredNotification } from './ui/settings'
 import NotificationCenter from './components/NotificationCenter'
+import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
 import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
 /** Ctrl+ホイールを回し終えてから、文字の大きさを設定に書くまで待つ時間 */
@@ -2327,6 +2328,20 @@ export default function App() {
           onShownChange={onShownChange}
           threads={pastThreads ?? threads}
           subHeader={pastHeader || undefined}
+          // 「書き込んだ」は、本文とどのスレに書いたかが見える前の一覧(スレの行ではなく)
+          body={
+            history && pastFilter === 'posted' ? (
+              <PostHistoryList
+                entries={postHistory ?? []}
+                onOpen={openPostEntry}
+                onDelete={async (id) => {
+                  if (!store) return
+                  await store.deletePostHistory(id)
+                  setPostHistory(await store.listPostHistory())
+                }}
+              />
+            ) : undefined
+          }
           stateOf={stateOf}
           activeId={activeId}
           loading={loading.has('threads')}

@@ -93,11 +93,11 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
 /** 「履歴」だけのタブ(設定のタブの並びには出さない): 見た順(最近見たものが上。押すたびに上下を入れ替える)・書き込んだ・お気に入り */
 export const HISTORY_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
   { key: 'viewed', name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' },
-  { key: 'posted', name: '書き込んだ', icon: 'edit_note', note: '自分が書き込んだスレだけを出す' },
+  { key: 'posted', name: '書き込んだ', icon: 'edit_note', note: '自分の書き込み(本文と、どのスレに書いたか)を新しい順に出す' },
   { key: 'fav', name: 'お気に入り', icon: 'star', note: 'お気に入りのスレ(☆ を付けたスレ)だけを出す' },
 ]
-/** 「履歴」の一覧のタブ(PC)。見た順・未読・書き込んだ・お気に入り・レス数順・新しい順 */
-export const HISTORY_LIST_TABS: ListTabKey[] = ['viewed', 'unread', 'posted', 'fav', 'count', 'newest']
+/** 「履歴」の一覧のタブ(PC)。見た順・未読・書き込んだ・お気に入り(レス数順・新しい順は履歴には要らない) */
+export const HISTORY_LIST_TABS: ListTabKey[] = ['viewed', 'unread', 'posted', 'fav']
 /** タブの定義(板のタブと履歴のタブのどちらからも引ける) */
 export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key) ?? HISTORY_TABS.find((t) => t.key === key)!
 export type OpenPosition = 'unread' | 'top' | 'bottom'

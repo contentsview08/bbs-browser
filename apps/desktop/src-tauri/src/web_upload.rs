@@ -75,6 +75,16 @@ pub struct PasteFile {
     data: String,
 }
 
+/// 裏で開いていた画面を見せる(しばらく経ってもリンクが来ない = 本人の手が要るとき)
+#[tauri::command]
+pub async fn show_web_upload(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window(LABEL) {
+        w.show().map_err(|e| e.to_string())?;
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
 /// アップロードの画面を閉じる(上げ終わったとき)
 #[tauri::command]
 pub async fn close_web_upload(app: AppHandle) -> Result<(), String> {
@@ -87,7 +97,7 @@ pub async fn close_web_upload(app: AppHandle) -> Result<(), String> {
 /// アップロードの画面を開く。url は https のページだけ。pattern は拾うリンクの正規表現(JavaScript の形)。
 /// files を渡すと、ページに貼り付けたことにして、本人が選び直さなくても上がる
 #[tauri::command]
-pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title: String, files: Option<Vec<PasteFile>>) -> Result<(), String> {
+pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title: String, files: Option<Vec<PasteFile>>, background: Option<bool>) -> Result<(), String> {
     let page: Url = url.parse().map_err(|e| format!("URL が読めません: {e}"))?;
     if page.scheme() != "https" {
         return Err("https のページだけ開けます".into());
@@ -108,9 +118,11 @@ pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title
     .map_err(|e| e.to_string())?;
     let paste = PASTE.replace("__FILES__", &files_json);
     let main = app.clone();
+    // background: 画面を見せずに開く(貼り付けた画像をそのまま上げる。JS は見えていなくても動く)。要るときは show_web_upload で見せる
     WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(page))
         .title(title)
         .inner_size(960.0, 780.0)
+        .visible(!background.unwrap_or(false))
         .initialization_script(&script)
         .initialization_script(&paste)
         .on_navigation(move |u| {

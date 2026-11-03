@@ -75,7 +75,11 @@ input[type="range"] {
 }
 
 @layer components {
-  /* custom-scrollbar はグローバルと同じ設定を継承 */
+  /* custom-scrollbar はグローバルと同じ設定を継承。
+     スクロールバーの幅はいつも確保する(行が増えてバーが出た・消えたときに、中身が横にずれないように) */
+  .custom-scrollbar {
+    scrollbar-gutter: stable;
+  }
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;

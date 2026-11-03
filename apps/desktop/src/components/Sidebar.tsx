@@ -349,14 +349,18 @@ export default function Sidebar(props: Props) {
                     {/* 選んでいる板の印。中身を押さないよう、重ねて描く(ファビコンが右へずれないように) */}
                     {!dragging && <NavNotch on={active} />}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
-                    <span className="relative w-[64px] flex-shrink-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden">
-                      <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
+                    <span className="relative w-[64px] self-stretch flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      {/* ファビコンは板名の字と同じ高さ(行の真ん中)。しまったときの小さな板名は、場所を取らずにその下に重ねる
+                          (縦に並べると、開いたときも板名の分だけファビコンが上にずれていた) */}
+                      <span className={`flex items-center justify-center transition-transform duration-200 ${stripNames ? '-translate-y-2' : ''}`}>
+                        <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
+                      </span>
                       {/* 板名は列の真ん中に置き、入りきらなければ末尾を「…」で略す。
                           幅いっぱいの箱で中央寄せにすると、長い名前は左右両側へはみ出して切れるので、
                           文字の幅に縮む箱を列の幅までに抑えて真ん中に置く */}
                       {props.showStripNames && (
                         <span
-                          className={`w-full px-1 flex justify-center transition-opacity duration-200 ${
+                          className={`absolute inset-x-0 bottom-1 px-1 flex justify-center transition-opacity duration-200 ${
                             stripNames ? 'opacity-100' : 'opacity-0'
                           }`}
                         >

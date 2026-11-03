@@ -446,6 +446,7 @@ pub fn run() {
             chosen_paths::pick_save_path,
             chosen_paths::pick_open_path,
             web_upload::open_web_upload,
+            web_upload::show_web_upload,
             web_upload::close_web_upload,
             update::download_update
         ])

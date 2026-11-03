@@ -1,16 +1,15 @@
-// 画像のアップロード。設定の上げ先(uploadHost)に 1 枚ずつ上げる。自動なら catbox.moe(公式の API https://catbox.moe/user/api.php)
-// → 0x0.st → imgur(Client-ID があれば)→ uguu.se の順に試す(2026-11 に catbox・0x0.st が止まったことがあった。スマホ版と同じ)。
+// 画像のアップロード。設定の上げ先(uploadHost)に 1 枚ずつ上げる(API のもの: catbox・imgur・imgbb。スマホ版と同じ)。
+// サイトの画面で上げるもの(imgur・imgbox・imgbb の画面)は useMediaInput がその画面を開く(utils/webUpload.ts)。
 // 上げたファイルは公開され、匿名なら消せない。EXIF もそのまま残るので、既定では描き直して取り除いてから上げる。
-// 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。0x0.st(https://0x0.st)はプログラムを名乗る User-Agent で使い、
-// ポルノ・グロ・暗号資産などは上げない。uguu.se(https://uguu.se)は 3 時間で消える。imgur(https://api.imgur.com)は本人が登録した Client-ID で使う。
+// 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は本人が登録した Client-ID、
+// imgbb(https://api.imgbb.com)は本人が登録した API キーで使う。
 // どれも公開されている窓口だけを使い、負荷をかけないこと
 
 import { fetch } from '@tauri-apps/plugin-http'
 
 const ENDPOINT = 'https://catbox.moe/user/api.php'
-const NULL_POINTER = 'https://0x0.st'
-const UGUU = 'https://uguu.se/upload?output=json'
 const IMGUR = 'https://api.imgur.com/3/image'
+const IMGBB = 'https://api.imgbb.com/1/upload'
 const USER_AGENT = 'bbs-browser/0.1.0 (+https://red-edge.net)'
 /**
  * catbox の上限は 200MB だが、plugin-http は送る中身を数値の配列(JSON)にして Rust 側へ渡すので、
@@ -37,21 +36,51 @@ export interface UploadOptions {
   maxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げる(あとでサーバー上でも消せる) */
   userhash?: string
-  /** 上げ先(設定 uploadHost)。auto は catbox → 0x0.st → imgur → uguu.se の順に試す */
+  /** 上げ先(設定 uploadHost)。サイトの画面で上げるもの(web)は、ここでは上げない(useMediaInput がサイトの画面を開く) */
   host?: UploadHost
   /** imgur の Client-ID(なければ imgur は使わない) */
   imgurClientId?: string
+  /** imgbb の API キー(なければ imgbb は使わない) */
+  imgbbApiKey?: string
 }
 
-export type UploadHost = 'auto' | 'catbox' | '0x0' | 'imgur' | 'uguu'
+/**
+ * 上げ先。-web はその置き場のサイトの画面を開いて本人が上げ、出てきたリンクを本文に入れる(utils/webUpload.ts)。
+ * ほかは API で上げる(キーが要るものは、設定で登録する)。既定は imgur の画面(登録なしで消えない)
+ */
+export type UploadHost = 'imgur-web' | 'imgur' | 'catbox' | 'imgbb' | 'imgbox-web' | 'imgbb-web'
+export interface UploadHostDef {
+  key: UploadHost
+  name: string
+  kind: 'web' | 'api'
+  note: string
+  /** web: utils/webUpload.ts のサイトの key */
+  site?: string
+  /** api: 登録するキーの設定(なければ登録なしで上げられる) */
+  setting?: 'imgurClientId' | 'catboxUserhash' | 'imgbbApiKey'
+  settingName?: string
+}
 /** 設定に出す上げ先(スマホ版の設定と同じ並び・言葉) */
-export const UPLOAD_HOSTS: { key: UploadHost; name: string }[] = [
-  { key: 'auto', name: '自動(catbox → 0x0.st → imgur → uguu.se の順に試す)' },
-  { key: 'catbox', name: 'catbox.moe(消えない)' },
-  { key: '0x0', name: '0x0.st(30 日〜1 年で消える)' },
-  { key: 'imgur', name: 'imgur(消えない。Client-ID が要る)' },
-  { key: 'uguu', name: 'uguu.se(3 時間で消える)' },
+export const UPLOAD_HOSTS: UploadHostDef[] = [
+  { key: 'imgur-web', name: 'imgur', kind: 'web', site: 'imgur', note: '消えない。ログインなしで上げられる' },
+  { key: 'imgur', name: 'imgur', kind: 'api', setting: 'imgurClientId', settingName: 'Client-ID', note: '消えない。Client-ID を登録して、画像ボタンからそのまま上げる' },
+  { key: 'catbox', name: 'catbox.moe', kind: 'api', setting: 'catboxUserhash', settingName: 'userhash', note: '消えない。登録なしでも上げられ、userhash を登録するとあとで消せる' },
+  { key: 'imgbb', name: 'imgbb', kind: 'api', setting: 'imgbbApiKey', settingName: 'API キー', note: '消えない。API キーを登録して、画像ボタンからそのまま上げる' },
+  { key: 'imgbox-web', name: 'imgbox', kind: 'web', site: 'imgbox', note: '消えない。ログインなしで上げられる' },
+  { key: 'imgbb-web', name: 'imgbb', kind: 'web', site: 'imgbb', note: '消えない。ログインなしで上げられる' },
 ]
+export const DEFAULT_UPLOAD_HOST: UploadHost = 'imgur-web'
+/** 前の設定(自動・0x0.st・uguu.se)は imgur の画面に読み替える */
+export function migrateUploadHost(v: string | undefined): UploadHost {
+  if (UPLOAD_HOSTS.some((h) => h.key === v)) return v as UploadHost
+  return v === 'catbox' ? 'catbox' : v === 'imgur' ? 'imgur' : DEFAULT_UPLOAD_HOST
+}
+/** API で上げるときに、登録が要るのにまだ登録していなければ、その理由 */
+export function uploadHostProblem(host: UploadHost, o: { imgurClientId?: string; imgbbApiKey?: string }): string | undefined {
+  if (host === 'imgur' && !o.imgurClientId?.trim()) return 'imgur の Client-ID が登録されていません(設定 → 画像のアップロード)'
+  if (host === 'imgbb' && !o.imgbbApiKey?.trim()) return 'imgbb の API キーが登録されていません(設定 → 画像のアップロード)'
+  return undefined
+}
 
 /**
  * 画像を描き直す。EXIF などは描き直すと付かなくなり、大きすぎる画像はついでに縮める。
@@ -120,7 +149,7 @@ export function explainUploadError(status: number, text: string): string {
   return `${t}(HTTP ${status})`
 }
 
-/** JSON で返事をする置き場(uguu.se・imgur)に上げる。pick で返事から URL を取り出す。だめなら、返事の文面から理由を作る */
+/** JSON で返事をする置き場(imgur・imgbb)に上げる。pick で返事から URL を取り出す。だめなら、返事の文面から理由を作る */
 async function postJsonTo(
   endpoint: string,
   fileField: string,
@@ -165,7 +194,7 @@ async function postTo(endpoint: string, fields: [string, string][], fileField: s
 }
 
 /**
- * 上げて、ファイルの URL と上げ先を返す。catbox → だめなら 0x0.st の順に試し、どちらもだめなら両方の理由を出す。
+ * 上げて、ファイルの URL と上げ先を返す。
  * 上げた URL が本当に画像を返すかは、呼ぶ側(useMediaInput)が確かめる
  */
 export async function uploadMedia(file: File, options: UploadOptions): Promise<UploadResult> {
@@ -175,15 +204,15 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
   const catboxFields: [string, string][] = [['reqtype', 'fileupload']]
   if (options.userhash) catboxFields.push(['userhash', options.userhash])
   const clientId = options.imgurClientId?.trim()
-  type J = { files?: { url?: string }[]; description?: string; data?: { link?: string; error?: string | { message?: string } } }
+  type J = { data?: { link?: string; url?: string; error?: string | { message?: string } }; error?: string | { message?: string } }
+  const imgbbKey = options.imgbbApiKey?.trim()
   const all: { key: UploadHost; host: string; up: () => Promise<string> }[] = [
     { key: 'catbox', host: 'catbox', up: () => postTo(ENDPOINT, catboxFields, 'fileToUpload', body, file, /^https:\/\/files\.catbox\.moe\/\S+$/) },
-    { key: '0x0', host: '0x0.st', up: () => postTo(NULL_POINTER, [], 'file', body, file, /^https:\/\/0x0\.st\/\S+$/) },
     {
       key: 'imgur',
       host: 'imgur',
       up: () => {
-        if (!clientId) return Promise.reject(new Error('Client-ID が設定されていません(設定 → 書き込み → 画像のアップロード)'))
+        if (!clientId) return Promise.reject(new Error('Client-ID が設定されていません(設定 → 画像のアップロード)'))
         return postJsonTo(
           IMGUR,
           file.type.startsWith('video/') ? 'video' : 'image',
@@ -198,20 +227,27 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
         )
       },
     },
-    { key: 'uguu', host: 'uguu.se', up: () => postJsonTo(UGUU, 'files[]', body, file, {}, (j) => (j as J).files?.[0]?.url, (j) => (j as J).description) },
+    {
+      key: 'imgbb',
+      host: 'imgbb',
+      up: () => {
+        if (!imgbbKey) return Promise.reject(new Error('API キーが設定されていません(設定 → 画像のアップロード)'))
+        // imgbb の API(https://api.imgbb.com/)。返事の data.url が画像の URL
+        return postJsonTo(`${IMGBB}?key=${encodeURIComponent(imgbbKey)}`, 'image', body, file, {}, (j) => (j as J).data?.url, (j) => {
+          const e = (j as J).error
+          return typeof e === 'string' ? e : e?.message
+        })
+      },
+    },
   ]
-  const host = options.host ?? 'auto'
-  // 自動なら上から順に試す(imgur は Client-ID があるときだけ)。選んだ上げ先だけなら、それだけ
-  const tries = host === 'auto' ? all.filter((h) => h.key !== 'imgur' || !!clientId) : all.filter((h) => h.key === host)
-  const reasons: string[] = []
-  for (const t of tries) {
-    try {
-      return { url: await t.up(), host: t.host }
-    } catch (e) {
-      reasons.push(`${t.host}: ${e instanceof Error ? e.message : String(e)}`)
-    }
+  const host = options.host ?? DEFAULT_UPLOAD_HOST
+  const t = all.find((h) => h.key === host)
+  if (!t) throw new Error('この上げ先は、サイトの画面で上げます')
+  try {
+    return { url: await t.up(), host: t.host }
+  } catch (e) {
+    throw new Error(`${t.host}: ${e instanceof Error ? e.message : String(e)}`)
   }
-  throw new Error(reasons.join(' / '))
 }
 
 /** はじめに試す上げ先(ここ以外に上げたときは、書き込み欄で知らせる) */

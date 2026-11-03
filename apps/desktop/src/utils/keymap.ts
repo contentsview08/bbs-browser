@@ -1,5 +1,5 @@
 // キー操作の割り当て。設定で変えられる。キーは「Ctrl+Shift+J」のような文字列で表す。
-// Esc(ポップアップを閉じる・絞り込みを解く)と、タブの Ctrl+Tab / Ctrl+W / Delete は決め打ちで、ここでは扱わない。
+// 決め打ちは Esc(閉じる・外す)・Ctrl+Enter(書き込む)・数字(絞り込み・スレ一覧のタブ)だけ。ほかは既定の割り当てで、設定で変えられる。
 
 /** キーで呼べる操作 */
 export type KeyAction =
@@ -33,6 +33,9 @@ export type KeyAction =
   | 'back'
   | 'forward'
   | 'closeTab'
+  | 'closeAllTabs'
+  | 'deleteLogAndClose'
+  | 'reload'
   | 'reopenTab'
   | 'focusUrl'
   | 'toggleSidebar'
@@ -72,6 +75,9 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'back', name: '戻る', where: 'app' },
   { key: 'forward', name: '進む', where: 'app' },
   { key: 'closeTab', name: 'タブを閉じる', where: 'app' },
+  { key: 'closeAllTabs', name: 'すべてのタブを閉じる', where: 'app' },
+  { key: 'deleteLogAndClose', name: 'ログを削除してタブを閉じる(確かめてから)', where: 'app' },
+  { key: 'reload', name: '更新(キーを受け取っている方。スレを開いていなければスレ一覧)', where: 'app' },
   { key: 'reopenTab', name: '閉じたタブを開き直す', where: 'app' },
   { key: 'focusUrl', name: 'URL 欄へ', where: 'app' },
   { key: 'toggleSidebar', name: 'サイドバーを広げる・しまう', where: 'app' },
@@ -101,7 +107,6 @@ export const DEFAULT_KEYMAP: Keymap = {
   top: ['Home', 'G G'],
   bottom: ['End', 'Shift+G'],
   unread: ['N'],
-  // F5・Ctrl+R はアプリ全体で決め打ち(キーを受け取っている方を更新する。App.tsx)
   refresh: ['R'],
   search: ['/', 'Ctrl+F'],
   reply: ['W', 'E'],
@@ -112,11 +117,14 @@ export const DEFAULT_KEYMAP: Keymap = {
   findNext: ['Shift+N'],
   peek: ['P'],
   switchPane: ['Ctrl+E'],
-  nextTab: ['Shift+J'],
-  prevTab: ['Shift+K'],
-  back: ['Shift+H'],
-  forward: ['Shift+L'],
-  closeTab: ['X'],
+  nextTab: ['Shift+J', 'Ctrl+Tab', 'Ctrl+PageDown'],
+  prevTab: ['Shift+K', 'Ctrl+Shift+Tab', 'Ctrl+PageUp'],
+  back: ['Shift+H', 'Alt+ArrowLeft'],
+  forward: ['Shift+L', 'Alt+ArrowRight'],
+  closeTab: ['X', 'Ctrl+W', 'Delete'],
+  closeAllTabs: ['Ctrl+Shift+W'],
+  deleteLogAndClose: ['Shift+Delete'],
+  reload: ['F5', 'Ctrl+R'],
   reopenTab: ['Shift+X'],
   focusUrl: ['Ctrl+L', 'O'],
   toggleSidebar: ['Ctrl+B'],
@@ -127,37 +135,19 @@ export const DEFAULT_KEYMAP: Keymap = {
   palette: ['Ctrl+K', ':'],
 }
 
-/** 割り当ては変えられない、決め打ちのキー(キー操作の一覧と設定の画面に出す) */
+/** 割り当ては変えられない、決め打ちのキー(キー操作の一覧と設定の画面に出す)。画面の作りに結びついているものだけ */
 export const FIXED_KEYS: { keys: string; name: string }[] = [
-  { keys: 'F5・Ctrl+R', name: '更新(キーを受け取っている方)' },
   { keys: 'Esc', name: 'ポップアップを閉じる・絞り込みを外す・書き込み欄をしまう' },
   { keys: '1〜4・5', name: 'スレ表示：人気・画像・動画・リンクで絞り込む・すべて' },
   { keys: '1・2・3…', name: 'スレ一覧：上のタブを左から順に押す(タブは設定で選べる)' },
   { keys: 'Ctrl+Enter', name: '書き込む(書き込み欄で)' },
-  { keys: 'Ctrl+Tab・Ctrl+Shift+Tab', name: '次・前のタブ(Ctrl を離すまで選ぶだけ)' },
-  { keys: 'Ctrl+PageDown・Ctrl+PageUp', name: '次・前のタブ' },
-  { keys: 'Ctrl+W・Ctrl+Shift+W', name: 'タブを閉じる・すべてのタブを閉じる' },
-  { keys: 'Delete', name: 'タブを閉じる' },
-  { keys: 'Shift+Delete', name: 'ログを削除してタブを閉じる(確かめてから)' },
-  { keys: 'Alt+← →・マウスの戻る/進む', name: '戻る・進む' },
+  { keys: 'マウスの戻る/進む', name: '戻る・進む' },
 ]
 
 /** 決め打ちのキー(keyString の形)と、その役目。設定でここに割り当てようとしたら断る */
 const RESERVED_KEYS: Record<string, string> = {
-  F5: '更新',
-  'Ctrl+R': '更新',
   Escape: '閉じる・外す',
   'Ctrl+Enter': '書き込む',
-  'Ctrl+Tab': '次のタブ',
-  'Ctrl+Shift+Tab': '前のタブ',
-  'Ctrl+PageDown': '次のタブ',
-  'Ctrl+PageUp': '前のタブ',
-  'Ctrl+W': 'タブを閉じる',
-  'Ctrl+Shift+W': 'すべてのタブを閉じる',
-  Delete: 'タブを閉じる',
-  'Shift+Delete': 'ログを削除してタブを閉じる',
-  'Alt+ArrowLeft': '戻る',
-  'Alt+ArrowRight': '進む',
   ...Object.fromEntries([...'123456789'].map((d) => [d, '絞り込み・スレ一覧のタブ'])),
 }
 

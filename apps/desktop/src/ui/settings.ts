@@ -13,7 +13,7 @@ import type { NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
-import type { UploadHost } from '../host/uploader'
+import { DEFAULT_UPLOAD_HOST, migrateUploadHost, type UploadHost } from '../host/uploader'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
   // スマホのアプリ(ネイティブ版)で足した配色。色は theme/native-schemes.css
@@ -315,6 +315,8 @@ export interface AppSettings {
   catboxUserhash: string
   /** 画像の上げ先(host/uploader.ts の UploadHost)。auto は catbox → 0x0.st → imgur → uguu.se の順に試す */
   uploadHost: UploadHost
+  /** imgbb の API キー(上げ先が imgbb のとき) */
+  imgbbApiKey: string
   /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で本人が登録したもの)。空なら imgur は使わない */
   imgurClientId: string
   /** 最初から入れておく掲示板・板(packages/presets/sites.json)のうち、もう足したものの id。本人が消したものを戻さないために覚える */
@@ -481,7 +483,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uploadStripMetadata: true,
   uploadMaxDimension: 2560,
   catboxUserhash: '',
-  uploadHost: 'auto',
+  uploadHost: DEFAULT_UPLOAD_HOST,
+  imgbbApiKey: '',
   imgurClientId: '',
   presetsApplied: [],
   postCooldownSec: 10,
@@ -742,7 +745,7 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
         const next = { ...s, ...(saved as Partial<AppSettings>) }
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
         const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle
-        return { ...next, postStyle, scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
+        return { ...next, postStyle, uploadHost: migrateUploadHost(next.uploadHost as string), scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures) }
       })
       setLoaded(true)
     })

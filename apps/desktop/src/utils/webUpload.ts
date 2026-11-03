@@ -12,7 +12,7 @@ export interface WebUploadSite {
 
 export const WEB_UPLOAD_SITES: WebUploadSite[] = [
   { key: 'imgur', name: 'imgur', url: 'https://imgur.com/upload', pattern: String.raw`https://i\.imgur\.com/[A-Za-z0-9]{5,}\.(?:jpe?g|png|gif|webp|mp4)`, note: '消えない。ログインしなくても上げられます' },
-  { key: 'catbox', name: 'catbox.moe', url: 'https://catbox.moe/', pattern: String.raw`https://files\.catbox\.moe/[a-z0-9]{6}\.[a-z0-9]+`, note: '消えない' },
-  { key: 'litterbox', name: 'litterbox(catbox)', url: 'https://litterbox.catbox.moe/', pattern: String.raw`https://litter\.catbox\.moe/[a-z0-9]+\.[a-z0-9]+`, note: '1 時間〜3 日で消える' },
-  { key: 'uguu', name: 'uguu.se', url: 'https://uguu.se/', pattern: String.raw`https://[a-z0-9.]*uguu\.se/[A-Za-z0-9_-]+\.[a-z0-9]+`, note: '3 時間で消える' },
+  { key: 'imgbox', name: 'imgbox', url: 'https://imgbox.com/', pattern: String.raw`https://images\d*\.imgbox\.com/[a-f0-9]{2}/[a-f0-9]{2}/[A-Za-z0-9]+_o\.(?:jpe?g|png|gif|webp)`, note: '消えない。ログインしなくても上げられます' },
+  { key: 'imgbb', name: 'imgbb', url: 'https://imgbb.com/', pattern: String.raw`https://i\.ibb\.co/[A-Za-z0-9]+/[^\s"'<>]+\.(?:jpe?g|png|gif|webp)`, note: '消えない。ログインしなくても上げられます' },
 ]
+

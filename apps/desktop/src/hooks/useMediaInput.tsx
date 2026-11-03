@@ -10,8 +10,8 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
-import { PRIMARY_HOST, uploadMedia, type UploadOptions } from '../host/uploader'
-import { openWebUpload, webUploadAvailable } from '../host/webUpload'
+import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadOptions } from '../host/uploader'
+import { openWebUpload } from '../host/webUpload'
 import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
 
 /** 一度に上げられる数 */
@@ -195,9 +195,6 @@ export function useMediaInput(o: {
           patch(next.id, { state: 'done', url: r.url })
           oRef.current.insert(`${r.url}\n`, { ownLine: true })
           oRef.current.onUploaded?.({ url: r.url, name: next.file.name || 'image', size: next.file.size, withAccount: !!uploader.userhash && r.host === PRIMARY_HOST })
-          // uguu.se は 3 時間で消える。自動のときに初めの置き場以外に上げたら、どこに上げたかを知らせる
-          if (r.host === 'uguu.se') setNotice('uguu.se に上げました(3 時間で消えます)')
-          else if ((uploader.host ?? 'auto') === 'auto' && r.host !== PRIMARY_HOST) setNotice(`${PRIMARY_HOST} が受け付けていないので、${r.host} に上げました`)
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           patch(next.id, { state: 'failed', error: msg })
@@ -234,15 +231,24 @@ export function useMediaInput(o: {
   const progress = uploading > 0 ? { current: Math.min(batch.length, batch.filter((i) => i.state === 'done').length + 1), total: batch.length } : undefined
   const localOf = (url: string) => items.find((i) => i.url === url)?.preview
 
+  // 上げ先(設定)。サイトの画面で上げるもの(imgur・imgbox・imgbb の画面)なら、画像ボタンでその画面を開く
+  const hostDef = UPLOAD_HOSTS.find((h) => h.key === (o.uploader?.host ?? DEFAULT_UPLOAD_HOST))
+  const webSiteDef = hostDef?.kind === 'web' ? WEB_UPLOAD_SITES.find((x) => x.key === hostDef.site) : undefined
   /** ボタン・貼り付け・ドラッグで選んだファイル: 付けられる掲示板なら付け、そうでなければアップロードする */
-  const take = (files: File[]) => (o.attach ? attach(files) : upload(files))
+  const take = (files: File[]) => {
+    if (o.attach) return attach(files)
+    if (webSiteDef) {
+      // サイトの画面で上げる上げ先には、ファイルを渡せない。画面を開いて、そこで選んでもらう
+      setNotice(`${webSiteDef.name}の画面で上げてください(設定の上げ先が「サイトの画面」のため)`)
+      return void startWebUpload(webSiteDef)
+    }
+    upload(files)
+  }
   // 置き場のサイトの画面で上げる(host/webUpload.ts)。開いている間、拾ったリンクを本文に入れる
-  const [siteMenu, setSiteMenu] = useState(false)
   const [webSite, setWebSite] = useState<WebUploadSite>()
   const stopWeb = useRef<() => void>(undefined)
   useEffect(() => () => stopWeb.current?.(), [])
   const startWebUpload = async (site: WebUploadSite) => {
-    setSiteMenu(false)
     stopWeb.current?.()
     try {
       stopWeb.current = await openWebUpload(site, (url) => {
@@ -286,10 +292,21 @@ export function useMediaInput(o: {
         <>
           <button
             type="button"
-            onClick={() => fileRef.current?.click()}
+            onClick={() => {
+              if (webSiteDef) return void startWebUpload(webSiteDef)
+              const problem = uploadHostProblem(o.uploader!.host ?? DEFAULT_UPLOAD_HOST, o.uploader!)
+              if (problem) return setError(problem)
+              fileRef.current?.click()
+            }}
             disabled={o.disabled}
-            className="flex-shrink-0 p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40"
-            title="画像をアップロード。本文の欄に貼り付け・ドラッグしても上げられます"
+            className={`flex-shrink-0 p-1 rounded hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40 ${webSite ? 'text-c-accent' : 'text-c-text-muted'}`}
+            title={
+              webSiteDef
+                ? webSite
+                  ? `${webSite.name}の画面を開いています(上げたらリンクを本文に入れます)`
+                  : `画像をアップロード(${webSiteDef.name}の画面を開きます。上げたらリンクを本文に入れます)`
+                : `画像をアップロード(${hostDef?.name ?? ''})。本文の欄に貼り付け・ドラッグしても上げられます`
+            }
           >
             <span className={`material-symbols-outlined text-lg leading-none ${uploading > 0 ? 'animate-spin' : ''}`}>
               {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
@@ -307,30 +324,6 @@ export function useMediaInput(o: {
             }}
           />
         </>
-      )}
-      {!o.attach && o.uploader && webUploadAvailable && (
-        <span className="relative flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => setSiteMenu((v) => !v)}
-            disabled={o.disabled}
-            className={`p-1 rounded hover:text-c-text-strong hover:bg-c-surface2 disabled:opacity-40 ${webSite ? 'text-c-accent' : 'text-c-text-muted'}`}
-            title={webSite ? `${webSite.name}の画面を開いています(上げたらリンクを本文に入れます)` : '置き場のサイトの画面で上げる(API を使わず、上げたあとのリンクを本文に入れる)'}
-          >
-            <span className="material-symbols-outlined text-lg leading-none">open_in_browser</span>
-          </button>
-          {siteMenu && (
-            <span className="absolute bottom-full left-0 mb-1 z-20 min-w-[15rem] py-1 bg-c-surface border border-c-border rounded-lg shadow-lg flex flex-col">
-              <span className="px-3 py-1 text-[10px] font-bold text-c-text-muted">サイトの画面で上げる</span>
-              {WEB_UPLOAD_SITES.map((site) => (
-                <button key={site.key} type="button" onClick={() => void startWebUpload(site)} className="px-3 py-1.5 text-left text-sm text-c-text-body hover:bg-c-surface2">
-                  {site.name}
-                  <span className="block text-[10px] text-c-text-muted">{site.note}</span>
-                </button>
-              ))}
-            </span>
-          )}
-        </span>
       )}
       <EmojiPicker onPick={o.insert} disabled={o.disabled} />
     </>
@@ -379,7 +372,8 @@ export function useMediaInput(o: {
       }}
     />
   ) : null
-  const pick = o.attach || o.uploader ? () => fileRef.current?.click() : undefined
+  // スマホの入力欄から: サイトの画面で上げる上げ先なら、その画面を開く
+  const pick = o.attach || o.uploader ? () => (webSiteDef && !o.attach ? void startWebUpload(webSiteDef) : fileRef.current?.click()) : undefined
 
   return { buttons, pick, fileInput, uploading, progress, items, localOf, retry, dismiss, notice, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
 }

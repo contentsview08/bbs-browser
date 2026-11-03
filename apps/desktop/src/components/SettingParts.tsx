@@ -320,6 +320,24 @@ export function Toggle(props: { checked: boolean; onChange: (v: boolean) => void
   )
 }
 
+/** 小画面を開く行: 名前と今の値、右に > (背景画像・上げ先の登録など、いくつかの設定をまとめて直す小画面へ) */
+export function OpenRow(props: { label: string; value?: string; note?: string; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onOpen}
+      className={`w-full flex items-center gap-3 px-3 ${isMobile ? 'py-3.5 rounded-xl' : 'py-2.5 rounded-lg'} border border-c-border bg-c-surface hover:border-c-border-strong text-left`}
+    >
+      <span className="flex-1 min-w-0">
+        <span className={`block ${isMobile ? 'text-[15px]' : 'text-sm'} text-c-text-strong`}>{props.label}</span>
+        {props.note && <span className="block text-xs text-c-text-muted mt-0.5">{props.note}</span>}
+      </span>
+      {props.value && <span className="text-sm text-c-text-muted truncate max-w-[40%]">{props.value}</span>}
+      <span className="material-symbols-outlined text-lg text-c-text-muted">chevron_right</span>
+    </button>
+  )
+}
+
 /** 多いデータの設定の行: 件数と、管理画面を開くボタン */
 /**
  * 0〜100% のスライダー。動かしている間は画面にだけ映し(onPreview)、離したときに設定に書く(onCommit)。

@@ -1,6 +1,6 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
-import { UPLOAD_HOSTS } from '../host/uploader'
+import { UPLOAD_HOSTS, type UploadHost } from '../host/uploader'
 import NgManager from './NgManager'
 import AiNgSettings from './AiNgSettings'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
@@ -40,7 +40,7 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
-import { ListEditor, NumberField, PercentSlider, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
+import { ListEditor, ManagerDialog, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -90,6 +90,7 @@ export type SettingsTab =
   | 'threads'
   | 'posts'
   | 'write'
+  | 'upload'
   | 'refresh'
   | 'keys'
   | 'toolbars'
@@ -107,6 +108,7 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
   { key: 'threads', name: 'スレ一覧', icon: 'view_list' },
   { key: 'posts', name: 'レス表示', icon: 'forum' },
   { key: 'write', name: '書き込み', icon: 'edit' },
+  { key: 'upload', name: '画像のアップロード', icon: 'cloud_upload' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
   // スマホにはキーがないので、ここはジェスチャー(なぞる操作)の設定になる
   isMobile ? { key: 'keys', name: 'ジェスチャー', icon: 'swipe' } : { key: 'keys', name: 'キー操作', icon: 'keyboard' },
@@ -124,7 +126,7 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
 const MOBILE_GROUPS: { title: string; items: Tab[] }[] = [
   { title: '見た目', items: ['display', 'posts'] },
   { title: '読む', items: ['threads', 'refresh'] },
-  { title: '書く', items: ['write', 'accounts'] },
+  { title: '書く', items: ['write', 'upload', 'accounts'] },
   { title: '操作', items: ['keys', 'toolbars'] },
   { title: 'NG', items: ['ng'] },
   { title: '板とデータ', items: ['boardlist', 'boards', 'menus', 'backup'] },
@@ -135,7 +137,8 @@ const TAB_DESC: Record<Tab, string> = {
   display: 'テーマ・文字の大きさ',
   threads: '最初の並び順・タブ・ログの削除',
   posts: 'レスの見た目・本文・画像とサムネイル',
-  write: '名前・続けて書き込まない間・画像のアップロード',
+  write: '名前・定型文・書き込んだあとに待つ時間',
+  upload: '上げ先(サイトの画面か API)・キーの登録・上げる前の縮小',
   refresh: '自動更新・通知・新着',
   keys: 'なぞる向きと操作・感度',
   toolbars: 'ヘッダー・フッター・︙ に置くボタン',
@@ -163,6 +166,7 @@ const TAB_COLORS: Record<Tab, string> = {
   backup: '#64748b',
   about: '#6b7280',
   menus: '#0e7490',
+  upload: 'var(--c-mark-purple)',
 }
 
 /** スマホ: 分類の中の項目が少なければ(3 つまで)、題の一覧を挟まず、中身をそのまま並べる(段を深くしすぎない) */
@@ -294,8 +298,8 @@ function StickySample({ settings }: { settings: AppSettings }) {
 let sampleHidden = false
 
 /**
- * 1 つを選ぶ。少なくて短い(4 つまで・どれも 12 文字まで)ものは横に並べたボタン、それより多い・長いものはドロップダウン
- * (ボタンが何行にも折り返すと、どれを選んでいるか見にくいため)
+ * 1 つを選ぶ。少なくて短い(3 つまで・どれも 6 文字まで・説明なし)ものは横に並べたボタン、それより多い・長い・説明つきはドロップダウン
+ * (ボタンが何行にも折り返すと、どれを選んでいるか見にくいため。画面の分け方・日時の出し方・人気の示し方などはドロップダウン)
  */
 function Choice<T extends string | number>(props: {
   value: T
@@ -307,7 +311,7 @@ function Choice<T extends string | number>(props: {
     const m = name.match(/^(.*?)[((](.*)[))]\s*$/)
     return m ? [m[1].trim(), m[2]] : [name, '']
   }
-  if (props.options.length > 4 || props.options.some((o) => split(o.name)[0].length > 12)) {
+  if (props.options.length > 3 || props.options.some((o) => split(o.name)[0].length > 6 || split(o.name)[1] !== '')) {
     const i = props.options.findIndex((o) => o.key === props.value)
     return (
       <select
@@ -474,7 +478,68 @@ function SystemFontPicker({ value, onPick }: { value: string; onPick: (family: s
   )
 }
 
+/** 背景画像の小画面: 画像を選ぶ・濃さ・パネルごとの不透明度(どれも % の数で) */
+function BackgroundDialog({ settings: s, update, onClose }: Pick<SettingsProps, 'settings' | 'update'> & { onClose: () => void }) {
+  const pct = (v: number) => Math.round(v * 100)
+  return (
+    <ManagerDialog title="背景画像と透かし" onClose={onClose}>
+      <div className="space-y-5">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-28 h-20 flex-shrink-0 rounded-[var(--card-radius)] border border-c-border bg-c-surface2 bg-cover bg-center"
+            style={s.backgroundImage ? { backgroundImage: `url("${backgroundImageUrl(s.backgroundImage)}")` } : undefined}
+          />
+          <div className="flex-1 space-y-2">
+            <p className="text-xs text-c-text-muted">パネルの後ろに置きます。選んだ画像はアプリのフォルダにコピーして使います</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={BTN}
+                onClick={async () => {
+                  const file = await pickOpenPath('画像', ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])
+                  if (file) update('backgroundImage', await importBackgroundImage(file))
+                }}
+              >
+                画像を選ぶ
+              </button>
+              {s.backgroundImage && (
+                <button type="button" className="px-3 py-1.5 text-sm text-c-text-muted hover:text-c-text-strong" onClick={() => update('backgroundImage', '')}>
+                  外す
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm text-c-text-body mb-1.5">画像の濃さ</p>
+          <NumberField value={pct(s.backgroundOpacity)} min={0} max={100} unit="%" presets={[100, 70, 40, 20]} onChange={(v) => update('backgroundOpacity', v / 100)} />
+        </div>
+        <div>
+          <p className="text-sm text-c-text-body mb-0.5">パネルの不透明度</p>
+          <p className="text-xs text-c-text-muted mb-2">パネルの背景色だけを透かします(文字は透けません)。100 で透かさない</p>
+          <div className="space-y-2">
+            {PANELS.map((p) => (
+              <div key={p.key} className="flex items-center gap-3">
+                <span className="w-56 flex-shrink-0 truncate text-sm text-c-text-body">{p.name}</span>
+                <NumberField value={pct(s.panelAlpha[p.key] ?? 1)} min={0} max={100} unit="%" onChange={(v) => update('panelAlpha', { ...s.panelAlpha, [p.key]: v / 100 })} />
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="mt-2 text-xs text-c-text-muted hover:text-c-accent"
+            onClick={() => update('panelAlpha', { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 })}
+          >
+            すべて 100 に戻す
+          </button>
+        </div>
+      </div>
+    </ManagerDialog>
+  )
+}
+
 function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  const [bgOpen, setBgOpen] = useState(false)
   return (
     <>
       <StickySample settings={s} />
@@ -558,42 +623,14 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           あのイーハトーヴォのすきとおった風、0123456789 ABCabc
         </p>
       </Section>
-      <Section advanced desktopOnly title="背景画像" note="パネルの後ろに置きます。下の「パネルの不透明度」でパネルを透かすと見えます。選んだ画像はアプリのフォルダにコピーして使います">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-24 h-16 flex-shrink-0 rounded-[var(--card-radius)] border border-c-border bg-c-surface2 bg-cover bg-center"
-            style={s.backgroundImage ? { backgroundImage: `url("${backgroundImageUrl(s.backgroundImage)}")` } : undefined}
-          />
-          <div className="flex-1 space-y-2">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={BTN}
-                onClick={async () => {
-                  const file = await pickOpenPath('画像', ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])
-                  if (file) update('backgroundImage', await importBackgroundImage(file))
-                }}
-              >
-                画像を選ぶ
-              </button>
-              {s.backgroundImage && (
-                <button type="button" className="px-3 py-1.5 text-sm text-c-text-muted hover:text-c-text-strong" onClick={() => update('backgroundImage', '')}>
-                  外す
-                </button>
-              )}
-            </div>
-            <label className="flex items-center gap-3 text-sm text-c-text-body">
-              <span className="w-12 flex-shrink-0">濃さ</span>
-              <PercentSlider
-                value={s.backgroundOpacity}
-                disabled={!s.backgroundImage}
-                onPreview={(v) => document.documentElement.style.setProperty('--bg-image-opacity', String(v))}
-                onCommit={(v) => update('backgroundOpacity', v)}
-              />
-            </label>
-          </div>
-        </div>
+      <Section advanced desktopOnly title="背景画像" note="パネルの後ろに画像を置き、パネルを透かして見せます">
+        <OpenRow
+          label="背景画像と透かし"
+          value={s.backgroundImage ? `画像あり・濃さ ${Math.round(s.backgroundOpacity * 100)}%` : 'なし'}
+          onOpen={() => setBgOpen(true)}
+        />
       </Section>
+      {bgOpen && <BackgroundDialog settings={s} update={update} onClose={() => setBgOpen(false)} />}
       <Section
         desktopOnly
         title="画面の分け方"
@@ -616,32 +653,6 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           label="畳んだサイドバーに板名を出す"
           note="お気に入り板のアイコンの下に、板名を小さく出します(別名があれば別名)"
         />
-      </Section>
-      <Section advanced desktopOnly title="パネルの不透明度" note="パネルの背景色だけを透かします(文字は透けません)。背景画像と組み合わせて使います">
-        <div className="space-y-1.5">
-          {PANELS.map((p) => {
-            const v = s.panelAlpha[p.key] ?? 1
-            return (
-              <label key={p.key} className="flex items-center gap-3 text-sm text-c-text-body">
-                <span className="w-56 flex-shrink-0 truncate">{p.name}</span>
-                <PercentSlider
-                  value={v}
-                  onPreview={(a) => document.documentElement.style.setProperty(p.cssVar, String(a))}
-                  onCommit={(a) => update('panelAlpha', { ...s.panelAlpha, [p.key]: a })}
-                />
-              </label>
-            )
-          })}
-        </div>
-        <button
-          type="button"
-          className="mt-2 text-xs text-c-text-muted hover:text-c-accent"
-          onClick={() =>
-            update('panelAlpha', { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 })
-          }
-        >
-          すべて 100% に戻す
-        </button>
       </Section>
       <Section title="文字の大きさ">
         {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
@@ -909,13 +920,13 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           note="掲示板でないリンクを、外のブラウザではなくアプリの中で開きます。ウェブページは題・本文・画像だけを抜き出して出し(読めないページは右上からブラウザで開けます)、画像・動画・YouTube はそのまま見られます"
         />
       </Section>
-      <Section title="日時の出し方" note="レスの頭の日時です。元の形は、日時にマウスを乗せると出ます">
+      <Section title="日時の出し方" note="レスの頭の日時の形。元の形は、日時にマウスを乗せると出ます">
         <Choice
           value={s.dateStyle}
           options={[
-            { key: 'md_w_hms' as const, name: '月日・曜日・時刻(11/02(月) 19:01:15)' },
-            { key: 'md_hm' as const, name: '月日と時分(11/02 19:01)' },
-            { key: 'full' as const, name: 'すべて(年・秒の下の桁まで)' },
+            { key: 'md_w_hms' as const, name: '11/02(月) 19:01:15' },
+            { key: 'md_hm' as const, name: '11/02 19:01' },
+            { key: 'full' as const, name: '2026/11/02(月) 19:01:15.032' },
           ]}
           onChange={(v) => update('dateStyle', v)}
         />
@@ -1082,6 +1093,139 @@ export function UserhashInput({ value, onChange }: { value: string; onChange: (v
   )
 }
 
+/** 上げ先ごとの登録(Client-ID・userhash・API キー)の小画面 */
+function UploadHostDialog({ host, settings: s, update, onClose }: Pick<SettingsProps, 'settings' | 'update'> & { host: UploadHost; onClose: () => void }) {
+  const def = UPLOAD_HOSTS.find((h) => h.key === host)!
+  return (
+    <ManagerDialog title={`${def.name}(API)の登録`} onClose={onClose}>
+      <div className="space-y-3">
+        {host === 'imgur' && (
+          <>
+            <p className="text-sm text-c-text-body">Client-ID</p>
+            <input
+              type="text"
+              value={s.imgurClientId}
+              onChange={(e) => update('imgurClientId', e.target.value.trim())}
+              placeholder="api.imgur.com で登録した Client-ID"
+              spellCheck={false}
+              className={`${INPUT} w-full font-mono`}
+            />
+            <p className="text-xs text-c-text-muted leading-relaxed">
+              <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://api.imgur.com/oauth2/addclient')}>
+                imgur でアプリを登録し
+              </button>
+              (Authorization type は「Anonymous usage without user authorization」)、出てきた Client-ID を入れます
+            </p>
+          </>
+        )}
+        {host === 'catbox' && (
+          <>
+            <p className="text-sm text-c-text-body">userhash(なくても上げられます)</p>
+            <UserhashInput value={s.catboxUserhash} onChange={(v) => update('catboxUserhash', v)} />
+            <p className="text-xs text-c-text-muted leading-relaxed">
+              <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://catbox.moe/user/register.php')}>
+                catbox.moe でアカウントを作り
+              </button>
+              、ログインしたあとのアカウントの画面にある userhash を貼ります。登録すると、そのアカウントで上げ、履歴から catbox 上のファイルも消せます(登録してから上げたものだけ)。
+              userhash はこのパソコンの中に保存し、catbox に送るときだけ使います
+            </p>
+            <div className="p-3 text-xs leading-relaxed text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
+              <p className="font-bold text-c-text-strong mb-1">catbox を使う前に</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>匿名で上げたものはあとから消せません(2 年間アクセスがなければ消えます)</li>
+                <li>児童ポルノ・マルウェア・アニメやドラマの丸ごとの配信・ひどいグロなどは禁止です。利用規約: catbox.moe/legal.php</li>
+                <li>このアプリから上げられるのは 50MB まで(GIF は 20MB)</li>
+              </ul>
+            </div>
+          </>
+        )}
+        {host === 'imgbb' && (
+          <>
+            <p className="text-sm text-c-text-body">API キー</p>
+            <input
+              type="text"
+              value={s.imgbbApiKey}
+              onChange={(e) => update('imgbbApiKey', e.target.value.trim())}
+              placeholder="api.imgbb.com で発行した API キー"
+              spellCheck={false}
+              className={`${INPUT} w-full font-mono`}
+            />
+            <p className="text-xs text-c-text-muted leading-relaxed">
+              <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://api.imgbb.com/')}>
+                imgbb でアカウントを作って API キーを発行し
+              </button>
+              、ここに入れます。キーはこのパソコンの中に保存し、imgbb に送るときだけ使います
+            </p>
+          </>
+        )}
+      </div>
+    </ManagerDialog>
+  )
+}
+
+/** 画像のアップロード: 使う・上げ先(サイトの画面か API。API は上げ先ごとの小画面で登録)・上げる前の処理 */
+function UploadTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  const [editing, setEditing] = useState<UploadHost>()
+  const registered = (h: (typeof UPLOAD_HOSTS)[number]) => (h.setting ? s[h.setting].trim() !== '' : false)
+  return (
+    <>
+      <Section title="画像のアップロード" note="書き込み欄の画像ボタン・貼り付け・ドラッグで画像を置き場に上げ、本文に URL を入れます。上げた画像は誰でも見られます。hono-bbs の板では、いつもその掲示板の置き場に上げます">
+        <Toggle checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} label="画像のアップロードを使う" />
+      </Section>
+      <Section title="上げ先" note="「サイトの画面」は、画像ボタンを押すとそのサイトの画面が開き、そこで上げたリンクを本文に入れます。「API」は、キーを登録すると画像ボタンからそのまま上げます">
+        <div className="divide-y divide-c-border border border-c-border rounded-[var(--card-radius)]">
+          {UPLOAD_HOSTS.map((h) => {
+            const on = s.uploadHost === h.key
+            return (
+              <div key={h.key} className={`flex items-center gap-3 px-3 py-2 ${on ? 'bg-[var(--c-accent-wash)]' : ''}`}>
+                <input type="radio" name="uploadHost" checked={on} onChange={() => update('uploadHost', h.key)} className="accent-[var(--c-accent)]" />
+                <button type="button" onClick={() => update('uploadHost', h.key)} className="flex-1 min-w-0 text-left">
+                  <span className={`block text-sm ${on ? 'text-c-accent font-bold' : 'text-c-text-strong'}`}>
+                    {h.name}
+                    <span className="ml-1.5 text-[10px] font-normal px-1 py-px rounded bg-c-surface2 text-c-text-muted">{h.kind === 'web' ? 'サイトの画面' : 'API'}</span>
+                    {h.setting && (
+                      <span className={`ml-1.5 text-[10px] font-normal ${registered(h) ? 'text-c-mark-new' : 'text-c-text-muted'}`}>
+                        {registered(h) ? `${h.settingName} 登録済み` : h.key === 'catbox' ? `${h.settingName} なし` : `${h.settingName} が要ります`}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-xs text-c-text-muted">{h.note}</span>
+                </button>
+                {h.setting && (
+                  <button type="button" onClick={() => setEditing(h.key)} className="flex items-center gap-0.5 px-2 py-1 text-xs rounded border border-c-border text-c-text-body hover:border-c-accent hover:text-c-accent">
+                    登録
+                    <span className="material-symbols-outlined text-base">chevron_right</span>
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Section>
+      <Section advanced title="上げる前に">
+        <Toggle
+          checked={s.uploadStripMetadata}
+          onChange={(v) => update('uploadStripMetadata', v)}
+          label="上げる前に、画像の位置情報など(EXIF)を消す"
+          note="JPEG・PNG・WebP は描き直して取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます"
+        />
+        <div className="mt-3">
+          <p className="text-sm text-c-text-body mb-1.5">大きい画像を縮めて上げる(長い辺)</p>
+          <Choice
+            value={s.uploadMaxDimension}
+            options={[0, 1280, 1920, 2560, 4096].map((n) => ({ key: n, name: n === 0 ? '縮めない' : `${n}px まで` }))}
+            onChange={(v) => update('uploadMaxDimension', v)}
+          />
+          <p className="text-[10px] text-c-text-muted mt-1">
+            アップローダーの負担を減らすため、ほどほどの大きさにしてから上げます(JPEG・PNG・WebP)。まとめて貼られても 1 枚ずつ、一度に 10 枚まで上げます
+          </p>
+        </div>
+      </Section>
+      {editing && <UploadHostDialog host={editing} settings={s} update={update} onClose={() => setEditing(undefined)} />}
+    </>
+  )
+}
+
 function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // 並べられるもの全部(いま並べているものを先に、並びのとおりに)
   const all = [
@@ -1118,79 +1262,7 @@ function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
       <Section advanced desktopOnly title="レスの操作バー" note="レスにマウスを乗せたとき、右上に出すボタンです。上から順に左から並びます(⋯ はいつも一番右)">
         <OrderEditor all={all} value={s.postToolbar} onChange={(v) => update('postToolbar', v)} restTitle="出していないボタン" />
       </Section>
-      <Section
-        advanced title="画像のアップロード"
-        note="書き込み欄のボタン・貼り付け・ドラッグで画像や動画を置き場に上げ、本文に URL を入れます。上げた画像は誰でも見られます"
-      >
-        <Toggle checked={s.uploaderEnabled} onChange={(v) => update('uploaderEnabled', v)} label="画像のアップロードを使う" />
-        <div className="mt-3">
-          <p className="text-sm text-c-text-body mb-1.5">上げ先</p>
-          <Choice value={s.uploadHost} options={UPLOAD_HOSTS} onChange={(v) => update('uploadHost', v)} />
-          <p className="text-[10px] text-c-text-muted mt-1">
-            自動では、受け付けていない置き場を飛ばして次の置き場に上げます(どこに上げたかは書き込み欄に出ます)。uguu.se は 3 時間で消えるので、最後に使います
-          </p>
-        </div>
-        {(s.uploadHost === 'auto' || s.uploadHost === 'imgur') && (
-          <div className="mt-3">
-            <p className="text-sm text-c-text-body mb-1.5">imgur の Client-ID</p>
-            <input
-              type="text"
-              value={s.imgurClientId}
-              onChange={(e) => update('imgurClientId', e.target.value.trim())}
-              placeholder="api.imgur.com で登録した Client-ID"
-              spellCheck={false}
-              className={`${INPUT} w-full font-mono`}
-            />
-            <p className="text-[10px] text-c-text-muted mt-1 leading-relaxed">
-              <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://api.imgur.com/oauth2/addclient')}>
-                imgur でアプリを登録し
-              </button>
-              (Authorization type は「Anonymous usage without user authorization」)、表示された Client-ID を入れます。空なら imgur は使いません
-            </p>
-          </div>
-        )}
-        <Toggle
-          checked={s.uploadStripMetadata}
-          onChange={(v) => update('uploadStripMetadata', v)}
-          label="上げる前に、画像の位置情報など(EXIF)を消す"
-          note="JPEG・PNG・WebP は描き直して取り除きます。GIF と動画は描き直すとアニメが崩れるので、そのまま上げます"
-        />
-        <div className="mt-3">
-          <p className="text-sm text-c-text-body mb-1.5">大きい画像を縮めて上げる(長い辺)</p>
-          <Choice
-            value={s.uploadMaxDimension}
-            options={[0, 1280, 1920, 2560, 4096].map((n) => ({ key: n, name: n === 0 ? '縮めない' : `${n}px まで` }))}
-            onChange={(v) => update('uploadMaxDimension', v)}
-          />
-          <p className="text-[10px] text-c-text-muted mt-1">
-            アップローダーの負担を減らすため、ほどほどの大きさにしてから上げます(JPEG・PNG・WebP)。まとめて貼られても 1 枚ずつ、一度に 10 枚まで上げます
-          </p>
-        </div>
-        <div className="mt-3">
-          <p className="text-sm text-c-text-body mb-1.5">catbox のアカウント(userhash)</p>
-          <UserhashInput value={s.catboxUserhash} onChange={(v) => update('catboxUserhash', v)} />
-          <p className="text-[10px] text-c-text-muted mt-1 leading-relaxed">
-            <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://catbox.moe/user/register.php')}>
-              catbox.moe でアカウントを作り
-            </button>
-            、
-            <button type="button" className="text-c-link hover:underline" onClick={() => void openUrl('https://catbox.moe/user/login.php')}>
-              ログイン
-            </button>
-            したあとのアカウントの画面にある userhash を貼ってください。登録すると、そのアカウントで上げ、アップロード履歴から catbox
-            上のファイルも消せるようになります(消せるのは登録してから上げたものだけ)。userhash はこのパソコンの中に保存し、catbox に送るときだけ使います
-          </p>
-        </div>
-        <div className="mt-3 p-3 text-xs leading-relaxed text-c-text-body bg-c-surface2 rounded-[var(--card-radius)]">
-          <p className="font-bold text-c-text-strong mb-1">使う前に</p>
-          <ul className="list-disc pl-4 space-y-0.5">
-            <li>上げたファイルは誰でも見られます。匿名で上げたものはあとから消せません(2 年間アクセスがなければ消えます)</li>
-            <li>catbox は EXIF を残したまま公開します。スマホの写真は撮った場所が分かることがあります(上の設定で消せます)</li>
-            <li>児童ポルノ・マルウェア・アニメやドラマの丸ごとの配信・ひどいグロなどは禁止です。責任は上げた人にあります</li>
-            <li>このアプリから上げられるのは 50MB まで(GIF は 20MB)。利用規約: catbox.moe/legal.php</li>
-          </ul>
-        </div>
-      </Section>
+
     </>
   )
 }
@@ -2540,6 +2612,8 @@ export default function SettingsDialog(props: SettingsProps) {
         return <PostsTab {...props} />
       case 'write':
         return <WriteTab {...props} />
+      case 'upload':
+        return <UploadTab {...props} />
       case 'refresh':
         return <RefreshTab {...props} />
       case 'keys':

@@ -72,7 +72,7 @@ import { useKeywordWatch } from './hooks/useKeywordWatch'
 import { backgroundImageUrl } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
-import { KEY_ACTIONS, modalOpen, actionFor, isReloadKey, keyEventsOf, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
+import { KEY_ACTIONS, modalOpen, actionFor, keyEventsOf, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
 import ConfirmDialog from './components/ConfirmDialog'
 import { findNextThreads, nextUnreadThread } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
@@ -1260,6 +1260,18 @@ export default function App() {
       case 'forward':
         goNav(1)
         return true
+      case 'reload':
+        reload()
+        return true
+      case 'closeAllTabs':
+        setSelectedTabs(new Set())
+        closeTabs(ids)
+        return true
+      case 'deleteLogAndClose': {
+        const targets = targetTabs()
+        if (targets.length > 0) confirmDeleteLogs(targets)
+        return true
+      }
       case 'closeTab':
         // スマホはタブを使わないので、閉じるのは戻ると同じ
         if (isMobile) {
@@ -1354,76 +1366,36 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
-      // F5・Ctrl+R: 画面ごと読み直すのではなく(WebView2 のショートカットは Rust 側で切ってある)、
-      // スレを開いていればそのスレを、開いていなければスレ一覧を更新する(どちらもクールダウンあり)。どちらもなければ何もしない
-      // Alt+← →: 戻る・進む
-      if (e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        e.preventDefault()
-        if (e.key === 'ArrowLeft') keyRef.current.back()
-        else keyRef.current.forward()
-        return
-      }
-      if (isReloadKey(e)) {
-        e.preventDefault()
-        if (e.repeat) return // 押し続けても続けて更新しない
-        keyRef.current.reload()
-        return
-      }
+      if (e.defaultPrevented) return
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
-      // Delete: タブを閉じる。Shift+Delete: 確かめてから、ログを削除して閉じる(取り消せないので 1 キーではしない)
-      if (e.key === 'Delete' && !typing && !e.ctrlKey && !e.altKey) {
-        const { closeTabs, deleteLogs, targetTabs, setSelectedTabs } = keyRef.current
-        const targets = targetTabs()
-        if (targets.length === 0) return
-        e.preventDefault()
-        if (!e.shiftKey) {
-          setSelectedTabs(new Set())
-          return closeTabs(targets)
-        }
-        keyRef.current.confirmDeleteLogs(targets)
-        return
-      }
-      // 割り当てを変えられる、アプリ全体の操作(タブ・戻る/進む・URL 欄 など)。
-      // 入力欄の中では、Ctrl 付きのもの(Ctrl+L・Ctrl+B など)だけ受ける
-      if (!e.defaultPrevented && !e.altKey && (!typing || e.ctrlKey) && !e.repeat) {
-        const { keymap, appKey } = keyRef.current
-        const action = actionFor(keymap, keyString(e))
-        if (action && appKey(action)) {
-          e.preventDefault()
-          return
-        }
-      }
-      if (!e.ctrlKey) return
-      const { closeTabs, selectTab, activeId, targetTabs, setSelectedTabs } = keyRef.current
-      const ids = tabsRef.current.map((t) => t.id)
-      // 押し続けているあいだは、選んでいる印(tabPreview)から数える
-      const from = tabPreviewRef.current ?? activeId
-      const i = from ? ids.indexOf(from) : -1
-      /**
-       * Ctrl+Tab などでタブを切り替える。1 回押しただけならすぐ切り替える。
-       * 押し続けた(キーの自動の連打)ときは、タブ列の印だけを動かし、スレ表示の切り替えは
-       * 指を離すか連打が止まるまで待って 1 回だけにする(1 回ごとに描き直しや読み込みが走って固まるため)
-       */
-      const step = (d: number) => {
+      // 入力欄の中では、Ctrl・Alt 付きのもの(Ctrl+L・Ctrl+W・Alt+← など)と F キーだけ受ける
+      if (typing && !e.ctrlKey && !e.altKey && !/^F\d+$/.test(e.key)) return
+      const { keymap, appKey, selectTab, activeId } = keyRef.current
+      const action = actionFor(keymap, keyString(e))
+      if (!action) return
+      // 次・前のタブ(Ctrl+Tab など): 1 回押しただけならすぐ切り替える。
+      // 押し続けた(キーの自動の連打)ときは、タブ列の印だけを動かし、スレ表示の切り替えは
+      // 指を離すか連打が止まるまで待って 1 回だけにする(1 回ごとに描き直しや読み込みが走って固まるため)
+      if (action === 'nextTab' || action === 'prevTab') {
+        const ids = tabsRef.current.map((t) => t.id)
         if (ids.length === 0) return
         e.preventDefault()
-        const next = ids[(i + d + ids.length) % ids.length]
+        // 押し続けているあいだは、選んでいる印(tabPreview)から数える
+        const from = tabPreviewRef.current ?? activeId
+        const i = from ? ids.indexOf(from) : -1
+        const next = ids[(i + (action === 'nextTab' ? 1 : -1) + ids.length) % ids.length]
         if (!e.repeat && tabPreviewRef.current === undefined) return selectTab(next)
         tabPreviewRef.current = next
         setTabPreview(next)
         clearTimeout(tabCommitTimer.current)
         tabCommitTimer.current = setTimeout(commitTabPreview, TAB_REPEAT_SETTLE_MS)
+        return
       }
-      if (e.key.toLowerCase() === 'w') {
-        e.preventDefault()
-        setSelectedTabs(new Set())
-        if (e.shiftKey) closeTabs(ids)
-        else closeTabs(targetTabs())
-      } else if (e.key === 'Tab') step(e.shiftKey ? -1 : 1)
-      else if (e.key === 'PageDown') step(1)
-      else if (e.key === 'PageUp') step(-1)
+      if (e.repeat) return // 押し続けても続けて動かさない(更新・閉じる など)
+      // 割り当てを変えられる、アプリ全体の操作(タブ・戻る/進む・更新・URL 欄 など)
+      if (appKey(action)) e.preventDefault()
     }
-    // Ctrl を離したら、選んでいたタブにすぐ切り替える
+    // Ctrl を離したら、選んでいたタブにすぐ切り替える(Ctrl+Tab を押し続けていたとき)
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Control' && tabPreviewRef.current !== undefined) commitTabPreview()
     }
@@ -2612,6 +2584,7 @@ export default function App() {
                   maxDimension: settings.uploadMaxDimension,
                   userhash: settings.catboxUserhash.trim() || undefined,
                   host: settings.uploadHost,
+                  imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
                   imgurClientId: settings.imgurClientId.trim() || undefined,
                 }
               : undefined

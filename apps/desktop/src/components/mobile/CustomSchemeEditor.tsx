@@ -2,7 +2,7 @@
 // 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・もとにする配色を選び直す
 import { useMemo } from 'react'
 import { PICKABLE_SCHEMES, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
-import { CUSTOM_KEYS, CUSTOM_LABELS, customChecks, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
+import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
 
 export default function CustomSchemeEditor(props: { settings: AppSettings; update: UpdateSetting }) {
   const { settings: s, update } = props
@@ -104,22 +104,6 @@ export default function CustomSchemeEditor(props: { settings: AppSettings; updat
               className="w-[6.5em] bg-transparent border-0 p-0 text-right font-mono text-[13px] text-c-text-muted focus:ring-0"
             />
           </label>
-        ))}
-      </div>
-
-      {/* 読みやすさ(コントラスト比)。本文 4.5、そのほか 3 が目安 */}
-      <div className="p-4">
-        <div className="text-[12px] font-bold text-c-text-muted">読みやすさ(コントラスト比)</div>
-        {customChecks(def).map((c) => (
-          <div key={c.label} className="flex items-center mt-1 text-[13px]">
-            <span className="flex-1 text-c-text-body">{c.label}</span>
-            <span className="font-mono" style={{ color: c.ratio >= c.min ? 'var(--c-text-muted)' : 'var(--c-mark-danger)' }}>
-              {c.ratio.toFixed(1)}
-            </span>
-            <span className="ml-2 text-[12px]" style={{ color: c.ratio >= c.min ? 'var(--c-mark-new)' : 'var(--c-mark-danger)' }}>
-              {c.ratio >= c.min ? 'ok' : `低い(${c.min} 以上に)`}
-            </span>
-          </div>
         ))}
       </div>
 

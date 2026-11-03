@@ -108,7 +108,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     /** サイトの画面で上げる: 開いている置き場(上げ先が「サイトの画面」のとき、画像を押すと開く) */
     var webSite by remember { mutableStateOf<WebUploadSite?>(null) }
     var options by remember { mutableStateOf(false) }
-    var imageHint by remember { mutableStateOf(false) }
     var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body)) }
     // 本文が外(返信の >>12・書き込めて空になった・下書き)で変わったら、欄に写す(カーソルは最後に)
     LaunchedEffect(r.body) { if (field.text != r.body) field = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
@@ -128,18 +127,12 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     LaunchedEffect(r.done) { if (r.done != null) { kotlinx.coroutines.delay(4000); r.done = null } }
     val picker = rememberImagePicker(vm, r)
     val disabled = if (page.archived) "dat 落ちしたスレには書き込めません" else null
-    // 送る前の待ち(設定)。残り秒数。0 より大きい間は「取り消す」を出す
-    var pending by remember { mutableStateOf(0) }
-    LaunchedEffect(pending > 0) {
-        while (pending > 0) { kotlinx.coroutines.delay(1000); if (pending > 0) pending-- ; if (pending == 0) vm.send(page) }
-    }
     var preview by remember { mutableStateOf(false) }
-    val canSend = !r.sending && r.body.isNotBlank() && disabled == null && pending == 0
+    val canSend = !r.sending && r.body.isNotBlank() && disabled == null
     val shape = RoundedCornerShape(10.dp)
     // キーボードの分はスレ表示ごと持ち上げる(ThreadScreen の imePadding)。ここはナビゲーションバーの分だけ
     Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
         HorizontalDivider(color = Palette.border)
-        if (imageHint) FooterNote(Icons.Filled.Info, "画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください(catbox に上げて URL を本文に入れます)", Palette.textMuted) { imageHint = false }
         if (r.uploading) {
             val done = r.uploads.count { it.state is io.github.yumekui8.bbsnative.UploadItem.State.Done || it.state is io.github.yumekui8.bbsnative.UploadItem.State.Failed }
             FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${r.uploads.size} 枚目", Palette.textMuted, null)
@@ -166,7 +159,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         }
         // 定型文のバー(書いている間)。押すとカーソルの所に入る
         val phrases = vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        if (r.open && vm.prefs.phraseBar && phrases.isNotEmpty()) {
+        if (r.open && phrases.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (ph in phrases) Text(
                     ph,
@@ -179,13 +172,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         }.padding(horizontal = 12.dp, vertical = 5.dp),
                     color = Palette.textStrong, fontSize = 13.sp,
                 )
-            }
-        }
-        // 送るまでの待ち(取り消せる)
-        if (pending > 0) {
-            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp).background(Palette.surface2, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("$pending 秒後に送ります", Modifier.weight(1f), color = Palette.textStrong, fontSize = 13.sp)
-                Text("取り消す", Modifier.clickable { pending = 0 }.padding(horizontal = 8.dp, vertical = 2.dp), color = Palette.accent, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             }
         }
         Row(Modifier.fillMaxWidth().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
@@ -201,7 +187,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     }
                     Box(Modifier.weight(1f).heightIn(min = 40.dp, max = 160.dp).padding(end = 14.dp, top = 10.dp, bottom = 10.dp)) {
                         BodyField(
-                            field, { v -> field = v; r.body = v.text; vm.saveDraftLater(page) }, isAA(r, vm.prefs.aaAutoDetect), disabled ?: "書き込む", 15,
+                            field, { v -> field = v; r.body = v.text; vm.saveDraftLater(page) }, isAA(r), disabled ?: "書き込む", 15,
                             Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { r.open = it.isFocused; if (it.isFocused) plusMenu = false },
                             enabled = disabled == null,
                         )
@@ -249,7 +235,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                                 val site = if (!hono) webUploadSiteFor(vm.prefs.uploadHost) else null
                                 val problem = if (!hono && site == null) io.github.yumekui8.bbsnative.data.Uploader.hostProblem(vm.prefs.uploadHost, vm.prefs.imgurClientId, vm.prefs.imgbbApiKey) else null
                                 when {
-                                    !vm.prefs.uploadEnabled -> imageHint = true
                                     site != null -> webSite = site
                                     problem != null -> r.notice = problem
                                     else -> picker()
@@ -257,7 +242,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                             }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
                             PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
-                            val aaNow = isAA(r, vm.prefs.aaAutoDetect)
+                            val aaNow = isAA(r)
                             PlusItem(if (aaNow) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示") { plusMenu = false; r.aaOverride = !aaNow }
                         }
                     }
@@ -270,7 +255,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     .combinedClickable(
                         enabled = canSend,
                         onLongClick = { preview = true },
-                    ) { if (vm.prefs.sendDelay) pending = 3 else vm.send(page) },
+                    ) { vm.send(page) },
                 contentAlignment = Alignment.Center,
             ) {
                 if (r.sending) CircularProgressIndicator(Modifier.size(18.dp), color = Palette.accentText, strokeWidth = 2.dp)
@@ -353,7 +338,7 @@ private fun PostPreview(vm: AppViewModel, page: Page.Thread, onDismiss: () -> Un
     }
     CenterPanel("送る前の見た目", onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-            if (rendered != null) PostItem(rendered, aa = isAA(r, vm.prefs.aaAutoDetect))
+            if (rendered != null) PostItem(rendered, aa = isAA(r))
             Text(
                 "AA・改行・リンクの見え方を確かめてから送れます", Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 color = Palette.textMuted, fontSize = 12.sp,
@@ -363,7 +348,8 @@ private fun PostPreview(vm: AppViewModel, page: Page.Thread, onDismiss: () -> Un
 }
 
 /** 本文を AA 用の字で出すか: 選んでいればそれ、なければ空白が 5 つ以上続く本文(設定の「AA を見分ける」がオンのとき) */
-private fun isAA(r: ReplyState, auto: Boolean) = r.aaOverride ?: (auto && Regex("[ \t　]{5,}").containsMatchIn(r.body))
+/** AA 用の字で出すか: ボタンで選んだもの。選んでいなければ、空白が続く本文を AA とみなす */
+private fun isAA(r: ReplyState) = r.aaOverride ?: Regex("[ \t　]{5,}").containsMatchIn(r.body)
 
 /**
  * 本文の欄。AA のときは AA 用の字で、折り返さず横にずらせる(レスの表示と同じ字なので、書いたとおりに見える。今のスマホ版の書き込み欄と同じ)
@@ -420,8 +406,7 @@ fun AttachButton(vm: AppViewModel, r: ReplyState) {
     val picker = rememberImagePicker(vm, r)
     IconButton(
         onClick = {
-            if (!vm.prefs.uploadEnabled) r.notice = "画像を付けるには、設定の「書き込み欄から画像を上げる」をオンにしてください"
-            else picker()
+            picker()
         },
         enabled = !r.uploading,
     ) {
@@ -557,7 +542,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                     // 画像の URL など、外から本文が変わったら欄にも映す(映さないと、書き足したときに URL が消える)
                     LaunchedEffect(r.body) { if (bodyField.text != r.body) bodyField = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
                     Box(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        BodyField(bodyField, { bodyField = it; r.body = it.text }, isAA(r, vm.prefs.aaAutoDetect), "本文", 16, Modifier.fillMaxWidth())
+                        BodyField(bodyField, { bodyField = it; r.body = it.text }, isAA(r), "本文", 16, Modifier.fillMaxWidth())
                     }
                     // 本文に入れた画像のサムネイル
                     UploadStrip(vm, r, 72.dp, PaddingValues(horizontal = 16.dp, vertical = 8.dp))
@@ -565,16 +550,13 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                 // キーボードのすぐ上の道具: 画像・オプション(名前・メール)・バイト数
                 HorizontalDivider(color = Palette.border)
                 Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = {
-                        if (vm.prefs.uploadEnabled) picker()
-                        else r.notice = "画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください"
-                    }, enabled = !r.uploading) {
+                    IconButton(onClick = { picker() }, enabled = !r.uploading) {
                         if (r.uploading) CircularProgressIndicator(Modifier.size(20.dp), color = Palette.accent, strokeWidth = 2.dp)
                         else Icon(Icons.Filled.Image, "画像を付ける", tint = Palette.textMuted)
                     }
                     IconButton(onClick = { options = !options }) { Icon(Icons.Filled.Tune, "名前・メール", tint = if (options || r.name.isNotEmpty() || r.mail.isNotEmpty()) Palette.accent else Palette.textMuted) }
                     // AA として表示・文字列として表示
-                    val aaNow = isAA(r, vm.prefs.aaAutoDetect)
+                    val aaNow = isAA(r)
                     IconButton(onClick = { r.aaOverride = !aaNow }) { Icon(Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示", tint = if (aaNow) Palette.accent else Palette.textMuted) }
                     Spacer(Modifier.weight(1f))
                     Text(if (io.github.yumekui8.bbsnative.bbs.HonoBbs.isBoardUrl(page.board.url)) "${r.body.length} 文字" else "${shiftJisByteLength(r.body)} バイト", Modifier.padding(end = 12.dp), color = Palette.textMuted, fontSize = 12.sp)

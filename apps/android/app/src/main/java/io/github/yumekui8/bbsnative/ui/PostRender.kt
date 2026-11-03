@@ -102,13 +102,10 @@ data class RenderOptions(
     /** 板の既定の名前のほかに、名無しとみなす名前(板ごとの設定) */
     val extraNonames: List<String> = emptyList(),
     val highlightOp: Boolean = true,
-    val idHeat: Boolean = true,
-    /** 2 回以上書いた ID に、ID ごとの色を付ける(同じ人の書き込みを目で追えるように) */
+    /** 2 回以上書いた ID に、ID ごとの色を付ける(設定「ID の見せ方」が色のとき。同じ人の書き込みを目で追えるように) */
     val idColor: Boolean = false,
+    /** URL を短く見せる(https:// を外し、長いものは省く。画像の URL は「画像」の札にし、空白だけを挟んで続いたものは「画像 ×3」にまとめる) */
     val urlShorten: Boolean = true,
-    val imageUrlOmit: Boolean = true,
-    val imageUrlCollapse: Boolean = true,
-    val aaAutoDetect: Boolean = true,
     /** 人気のレスの本文に色を付ける(人気のレスの示し方が「本文の色」のとき) */
     val heatText: Boolean = false,
     /** 頭の字(名前・日付・ID)を白っぽくする(空色の地の上で読めるように) */
@@ -158,10 +155,9 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             withStyle(SpanStyle(color = mutedC(o))) { append(displayDate(p.date, o.dateStyle).replace(' ', '\u00A0')) }
             if (p.id != null) {
                 append("  ")
-                // 書き込みの多い ID は暖色。押すと同じ ID のレスを出す
-                val heat = if (o.idHeat) Palette.heat(idCount) else null
+                // ID は ID ごとの色(設定)。押すと同じ ID のレスを出す。5 回以上書いた ID は太字
                 withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                    withStyle(SpanStyle(color = heat ?: idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
+                    withStyle(SpanStyle(color = idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
                         append(displayId(p.id, o.idShort))
                         if (idCount >= 2) append("($idCount)")
                     }
@@ -199,21 +195,16 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                 when {
                     s is Span.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.from}-${s.to}", linkStyle, links)) { append(text) }; at = s.end }
                     // 画像の URL は「画像」の札に。空白だけを挟んで続いたものは「画像 ×3」にまとめる(PC 版と同じ)
-                    s is Span.Url && isImageUrl(s.url) && (o.imageUrlOmit || o.imageUrlCollapse) -> {
+                    s is Span.Url && isImageUrl(s.url) && o.urlShorten -> {
                         var end = s.end
                         var n = 1
-                        while (o.imageUrlCollapse && i + 1 < spans.size) {
+                        while (i + 1 < spans.size) {
                             val next = spans[i + 1]
                             if (next !is Span.Url || !isImageUrl(next.url) || src.substring(end, next.start).isNotBlank()) break
                             end = next.end; n++; i++
                         }
-                        if (o.imageUrlOmit) withLink(LinkAnnotation.Clickable("u:${s.url}", plain, links)) {
+                        withLink(LinkAnnotation.Clickable("u:${s.url}", plain, links)) {
                             withStyle(imageChip) { append("\u00A0▣\u00A0画像" + (if (n > 1) "\u00A0×$n" else "") + "\u00A0") }
-                        }
-                        // 札にしないときは、最初の URL に「ほか n 件」を添える
-                        else withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) {
-                            append(if (o.urlShorten) shortUrl(s.url) else s.url)
-                            if (n > 1) append(" ほか ${n - 1} 件")
                         }
                         at = end
                     }
@@ -225,7 +216,8 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             append(src, at, src.length)
             if (bodyStyle != null) pop()
         }
-        out[p.no] = RenderedPost(header, body, o.aaAutoDetect && AA.containsMatchIn(p.body), replyTo, info?.beIcon)
+        // 空白が続く本文は AA とみなす(AA 用の字で出す)
+        out[p.no] = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
     }
     return out
 }
@@ -258,9 +250,8 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
         withStyle(small) { append(shortDate(p.date).replace(' ', '\u00A0')) }
         if (p.id != null) {
             append("  ")
-            val heat = if (o.idHeat) Palette.heat(idCount) else null
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                withStyle(SpanStyle(color = heat ?: idC(p.id, idCount, o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
+                withStyle(SpanStyle(color = idC(p.id, idCount, o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
                     append(displayId(p.id, o.idShort))
                     if (idCount >= 2) append("($idCount)")
                 }

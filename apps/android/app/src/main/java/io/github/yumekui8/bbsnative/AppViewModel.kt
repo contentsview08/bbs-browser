@@ -762,7 +762,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // そのスレで一番多い名前も名無しとみなす(板の既定の名前は、使っていない掲示板が多い。PC・Web と同じ)
         val common = if (omit) mostCommonName(posts) else null
         val o = renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() + listOfNotNull(common) else emptyList())
-        val collapse = prefs.collapseBlankLines
+        val collapse = prefs.tidyBlankLines
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val result = withContext(Dispatchers.Default) {
             val i = PostIndex.build(posts, collapse, gross)
@@ -842,8 +842,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun sampleRenderOptions(noname: String?) = renderOptions(noname)
 
     private fun renderOptions(noname: String?) = RenderOptions(
-        noname = noname, highlightOp = prefs.highlightOp, idHeat = prefs.idHeat, idColor = prefs.idColor, urlShorten = prefs.urlShorten,
-        imageUrlOmit = prefs.imageUrlOmit, imageUrlCollapse = prefs.imageUrlCollapse, aaAutoDetect = prefs.aaAutoDetect, style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
+        noname = noname, highlightOp = prefs.highlightOp, idColor = prefs.idStyle == "color", urlShorten = prefs.urlShorten,
+        style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
         dateStyle = prefs.dateStyle, idShort = prefs.idShort,
     )
 
@@ -851,8 +851,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
      */
     private fun renderKey() = listOf(
-        prefs.omitNoname, prefs.collapseBlankLines, prefs.highlightOp, prefs.idHeat, prefs.idColor, prefs.dateStyle, prefs.idShort, prefs.urlShorten, prefs.imageUrlOmit,
-        prefs.imageUrlCollapse, prefs.aaAutoDetect, prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
+        prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.urlShorten,
+        prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
     )
 
     private fun rerenderAll() {

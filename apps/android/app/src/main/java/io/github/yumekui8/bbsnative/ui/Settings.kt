@@ -300,7 +300,6 @@ private fun ListPage(vm: AppViewModel) {
             "板を開いたときの並び", p.threadSort,
             listOf("subject" to "更新順(掲示板の並び)", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順"),
         ) { p.threadSort = it }
-        SwitchRow("引っぱって更新", p.pullToRefreshList, desc = "いちばん上で下へ引くと、スレ一覧を取り直します") { p.pullToRefreshList = it }
     }
     if (LocalAdvanced.current) Group("行の見た目") {
         ChoiceRow("行の形", p.listDensity, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listDensity = it }
@@ -338,26 +337,22 @@ private fun ThreadPage(vm: AppViewModel) {
     }
     Group("本文") {
         SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
-        if (LocalAdvanced.current) SwitchRow("続いた空行を 1 行にまとめる", p.collapseBlankLines) { p.collapseBlankLines = it }
-        if (LocalAdvanced.current) SwitchRow("AA を見分けて、AA 用の字で出す", p.aaAutoDetect) { p.aaAutoDetect = it }
+        if (LocalAdvanced.current) SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行にまとめます") { p.tidyBlankLines = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
-        SwitchRow("書き込みの多い ID を赤く", p.idHeat) { p.idHeat = it }
         ChoiceRow(
             "日時の出し方", p.dateStyle,
             listOf("md_w_hms" to "月日・曜日・時刻(11/02(月) 19:01:15)", "md_hm" to "月日と時分(11/02 19:01)", "full" to "すべて(年・秒の下の桁まで)"),
         ) { p.dateStyle = it }
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
-        if (LocalAdvanced.current) SwitchRow("ID ごとに色を付ける", p.idColor, desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idColor = it }
+        SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
         ChoiceRow(
             "人気のレスの示し方", p.heatStyle,
-            listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色", "none" to "示さない"),
+            listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色"),
         ) { p.heatStyle = it }
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
     }
     if (LocalAdvanced.current) Group("リンク") {
-        SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます") { p.urlShorten = it }
-        SwitchRow("画像の URL を「画像」の札に", p.imageUrlOmit) { p.imageUrlOmit = it }
-        SwitchRow("続いた画像の URL をまとめる", p.imageUrlCollapse, desc = "「画像 ×3」のように 1 つの札に") { p.imageUrlCollapse = it }
+        SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます") { p.urlShorten = it }
         SwitchRow("リンクのカードを出す", p.showLinkPreview, desc = "ページの題と画像を、本文の下に小さく") { p.showLinkPreview = it }
         SwitchRow("リンクをアプリの中で開く", p.openLinksInApp, desc = "オフにすると、ブラウザで開きます") { p.openLinksInApp = it }
     }
@@ -367,7 +362,6 @@ private fun ThreadPage(vm: AppViewModel) {
 private fun MediaPage(vm: AppViewModel) {
     val p = vm.prefs
     Group("サムネイル") {
-        SwitchRow("本文の画像をサムネイルで出す", p.showThumbnails) { p.showThumbnails = it }
         ChoiceRow("サムネイルを読み込む", p.thumbMode.name, ThumbMode.entries.map { it.name to it.label }) { p.thumbMode = ThumbMode.valueOf(it) }
         // 大きさは 8dp ずつ。動かすと下の枠がその大きさになる
         SliderRow("大きさ", p.thumbSize.toFloat(), 56f..200f, steps = 17, label = "${p.thumbSize}dp") { p.thumbSize = ((it / 8).toInt() * 8).coerceIn(56, 200) }
@@ -387,14 +381,9 @@ private fun WritePage(vm: AppViewModel) {
     }
     Group("定型文", note = "レスを長押しすると「「草」とすぐ書き込む」のように、その言葉を >>番号 付きですぐ書き込めます") {
         EditableWordList(p.quickPhrases, "定型文", "定型文を足す", "定型文はありません", sortable = true) { p.quickPhrases = it }
-        if (LocalAdvanced.current) SwitchRow("書いている間、定型文のバーを出す", p.phraseBar, desc = "本文の欄の上に並べ、押すとカーソルの所に入ります") { p.phraseBar = it }
-    }
-    if (LocalAdvanced.current) Group("送るとき") {
-        SwitchRow("送る前に 3 秒待つ", p.sendDelay, desc = "その間は「取り消す」で止められます(誤爆を防ぐ)。送るボタンを長押しすると、送る前の見た目を確かめられます") { p.sendDelay = it }
     }
     if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」の上げ先は、画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れます") {
-        SwitchRow("画像のアップロードを使う", p.uploadEnabled) { p.uploadEnabled = it }
-        if (p.uploadEnabled) {
+        run {
             // 上げ先: サイトの画面(画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れる)か API(キーを登録して、そのまま上げる)
             ChoiceRow(
                 "上げ先", p.uploadHost,
@@ -445,7 +434,6 @@ private fun BehaviorPage(vm: AppViewModel) {
     }
     Group("更新") {
         if (LocalAdvanced.current) SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshButton) { p.showRefreshButton = it }
-        if (LocalAdvanced.current) SwitchRow("スレ一覧も引っぱって更新", p.pullToRefreshList) { p.pullToRefreshList = it }
         ChoiceRow(
             "開いているスレの自動更新", p.autoRefreshSec.toString(),
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },

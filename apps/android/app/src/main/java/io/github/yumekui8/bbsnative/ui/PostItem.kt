@@ -98,8 +98,9 @@ fun PostItem(
     val avatarMod = if (onAvatar != null) Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onAvatar) else Modifier
     val chips = chipInlineContent()
     val prefs = LocalPrefs.current
-    val images = if (prefs.showThumbnails) info?.images ?: emptyList() else emptyList()
-    val youtube = if (prefs.showThumbnails) info?.youtube ?: emptyList() else emptyList()
+    val showThumbs = prefs.thumbMode != io.github.yumekui8.bbsnative.data.ThumbMode.NEVER
+    val images = if (showThumbs) info?.images ?: emptyList() else emptyList()
+    val youtube = if (showThumbs) info?.youtube ?: emptyList() else emptyList()
     val bodySize = (15 * prefs.bodyScale).sp
     val headSize = (12 * prefs.postHeadScale).sp
     val pad = prefs.postPad.dp

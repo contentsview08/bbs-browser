@@ -220,7 +220,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         when (vm.prefs.thumbMode) {
             ThumbMode.ALWAYS -> true
             ThumbMode.WIFI -> isWifi(context)
-            ThumbMode.NEVER -> false
+            ThumbMode.TAP, ThumbMode.NEVER -> false
         }
     }
     val counts = remember(index, own) { Filter.entries.associateWith { index.count(it, own) } }

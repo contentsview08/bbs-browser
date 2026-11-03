@@ -62,8 +62,8 @@ fun SamplePosts(vm: AppViewModel) {
     val p = vm.prefs
     val o = vm.sampleRenderOptions(if (p.omitNoname) "名無しさん" else null)
     val links = remember { PostLinks() }
-    val (index, rendered) = remember(o, p.collapseBlankLines, Palette.scheme.key) {
-        val i = PostIndex.build(SAMPLE, p.collapseBlankLines, emptyList())
+    val (index, rendered) = remember(o, p.tidyBlankLines, Palette.scheme.key) {
+        val i = PostIndex.build(SAMPLE, p.tidyBlankLines, emptyList())
         i to renderPosts(i, links, o)
     }
     Column(Modifier.fillMaxWidth().background(Palette.base)) {

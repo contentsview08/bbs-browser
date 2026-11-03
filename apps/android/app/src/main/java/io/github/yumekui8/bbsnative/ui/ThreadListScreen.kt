@@ -227,7 +227,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val listPull = remember(page) {
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
             override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
-                if (!prefs.pullToRefreshList || pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) return androidx.compose.ui.geometry.Offset.Zero
+                if (pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) return androidx.compose.ui.geometry.Offset.Zero
                 if (pullRaw > 0f && available.y < 0f) {
                     val d = minOf(pullRaw, -available.y); pullRaw -= d
                     scope.launch { pullPx.snapTo(damp(pullRaw)) }
@@ -236,7 +236,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 return androidx.compose.ui.geometry.Offset.Zero
             }
             override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
-                if (!prefs.pullToRefreshList || pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput || available.y <= 0f) return androidx.compose.ui.geometry.Offset.Zero
+                if (pullRefreshing || source != androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput || available.y <= 0f) return androidx.compose.ui.geometry.Offset.Zero
                 pulling = true
                 val before = damp(pullRaw) >= commitPull
                 pullRaw += available.y
@@ -596,8 +596,8 @@ private fun rememberListThumb(thumb: String?): String? {
     if (thumb == null) return null
     val prefs = LocalPrefs.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    val allowed = prefs.showThumbnails && remember(prefs.thumbMode) {
-        when (prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(context); ThumbMode.NEVER -> false }
+    val allowed = remember(prefs.thumbMode) {
+        when (prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(context); ThumbMode.TAP, ThumbMode.NEVER -> false }
     }
     val failed = io.github.yumekui8.bbsnative.data.ImageStore.states[thumb] is io.github.yumekui8.bbsnative.data.ImageStore.State.Failed
     return thumb.takeIf { allowed && !failed }

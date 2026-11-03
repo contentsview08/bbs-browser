@@ -16,6 +16,7 @@ import io.github.yumekui8.bbsnative.bbs.PostInput
 import io.github.yumekui8.bbsnative.bbs.PostResult
 import io.github.yumekui8.bbsnative.bbs.ThreadSummary
 import io.github.yumekui8.bbsnative.bbs.HonoBbs
+import io.github.yumekui8.bbsnative.bbs.Shitaraba
 import io.github.yumekui8.bbsnative.bbs.TwoCh
 import io.github.yumekui8.bbsnative.ui.mostCommonName
 import io.github.yumekui8.bbsnative.bbs.findNextThreads
@@ -984,6 +985,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
             if (known != null) openBoard(known, root = true)
             else viewModelScope.launch { openBoard(Board(bu, HonoBbs.boardName(bu) ?: bu.removeSuffix("/").substringAfterLast('/')), root = true) }
+            return true
+        }
+        // したらば(https://jbbs.shitaraba.net/カテゴリ/番号/ と /bbs/read.cgi/カテゴリ/番号/キー/)
+        Shitaraba.parseThreadUrl(u)?.let { openThread(it); return true }
+        Shitaraba.normalizeBoardUrl(u)?.let { bu ->
+            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
+            if (known != null) openBoard(known, root = true)
+            else viewModelScope.launch {
+                val name = runCatching { Shitaraba.boardName(bu) }.getOrElse { toast = it.message ?: "したらばの板を開けません"; return@launch }
+                openBoard(Board(bu, name), root = true)
+            }
             return true
         }
         val thread = Regex("^https?://([^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)

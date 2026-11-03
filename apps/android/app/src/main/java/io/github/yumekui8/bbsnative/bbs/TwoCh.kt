@@ -198,7 +198,7 @@ object TwoCh {
 
     suspend fun setting(boardUrl: String): Map<String, String> {
         synchronized(settingCache) { settingCache[boardUrl]?.let { return it } }
-        val map = if (HonoBbs.isBoardUrl(boardUrl)) HonoBbs.setting(boardUrl) else runCatching {
+        val map = if (HonoBbs.isBoardUrl(boardUrl)) HonoBbs.setting(boardUrl) else if (Shitaraba.isBoardUrl(boardUrl)) Shitaraba.setting(boardUrl) else runCatching {
             val res = Http.get("${boardUrl}SETTING.TXT")
             if (res.status !in 200..299) emptyMap()
             else String(res.body, charsetOf(res)).lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
@@ -214,7 +214,8 @@ object TwoCh {
     suspend fun nonameName(boardUrl: String): String? = setting(boardUrl)["BBS_NONAME_NAME"]?.ifEmpty { null }
 
     /** 本文の長さ(上限と比べる数)。2ch 互換は Shift_JIS のバイト数、hono-bbs は文字数 */
-    fun lengthOf(boardUrl: String, text: String): Int = if (HonoBbs.isBoardUrl(boardUrl)) text.length else shiftJisByteLength(text)
+    fun lengthOf(boardUrl: String, text: String): Int =
+        if (HonoBbs.isBoardUrl(boardUrl)) text.length else if (Shitaraba.isBoardUrl(boardUrl)) Shitaraba.byteLength(text) else shiftJisByteLength(text)
 
     /** 本文の上限(バイト数・行数)。SETTING.TXT にあれば。5ch の BBS_LINE_NUMBER は行数の半分を書くので 2 倍する */
     fun cachedLimits(boardUrl: String): Pair<Int?, Int?> {
@@ -225,6 +226,7 @@ object TwoCh {
     /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
     suspend fun listThreads(board: Board): List<ThreadSummary> {
         if (HonoBbs.isBoardUrl(board.url)) return HonoBbs.listThreads(board)
+        if (Shitaraba.isBoardUrl(board.url)) return Shitaraba.listThreads(board)
         if (board.url.contains("eddibb.cc/")) {
             val meta = runCatching { readSubject("${board.url}subject-metadent.txt") }.getOrNull()
             if (meta != null) return parseSubjectTxt(meta, board.url, true)
@@ -235,6 +237,7 @@ object TwoCh {
     /** dat を取る。cursor があれば、その続き(Range)だけ */
     suspend fun fetchPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult {
         if (HonoBbs.isBoardUrl(thread.boardUrl)) return HonoBbs.fetchPosts(thread, cursor)
+        if (Shitaraba.isBoardUrl(thread.boardUrl)) return Shitaraba.fetchPosts(thread, cursor)
         val url = "${thread.boardUrl}dat/${thread.key}.dat"
         if (cursor?.kako == true) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor, archived = true)
 
@@ -290,6 +293,7 @@ object TwoCh {
     /** 書き込む。5ch はスレの URL を Referer に求める */
     suspend fun createPost(t: ThreadSummary, input: PostInput): PostResult {
         if (HonoBbs.isBoardUrl(t.boardUrl)) return HonoBbs.createPost(t, input)
+        if (Shitaraba.isBoardUrl(t.boardUrl)) return Shitaraba.createPost(t, input)
         val u = java.net.URI(t.boardUrl)
         val fields = linkedMapOf(
             "bbs" to u.path.trim('/'),
@@ -306,6 +310,7 @@ object TwoCh {
     /** スレを立てる */
     suspend fun createThread(board: Board, title: String, input: PostInput): PostResult {
         if (HonoBbs.isBoardUrl(board.url)) return HonoBbs.createThread(board, title, input)
+        if (Shitaraba.isBoardUrl(board.url)) return Shitaraba.createThread(board, title, input)
         val u = java.net.URI(board.url)
         val fields = linkedMapOf(
             "bbs" to u.path.trim('/'),
@@ -339,6 +344,7 @@ object TwoCh {
     /** ブラウザで開く URL */
     fun webUrl(t: ThreadSummary): String {
         if (HonoBbs.isBoardUrl(t.boardUrl)) return HonoBbs.webUrl(t)
+        if (Shitaraba.isBoardUrl(t.boardUrl)) return Shitaraba.webUrl(t)
         val u = java.net.URI(t.boardUrl)
         return "${u.scheme}://${u.host}/test/read.cgi/${u.path.trim('/')}/${t.key}/"
     }

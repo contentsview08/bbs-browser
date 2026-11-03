@@ -374,7 +374,8 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
-  followOsTheme: false,
+  // 既定は OS のダーク・ライトに合わせる(2026-11-04 に本人の指示)
+  followOsTheme: true,
   darkScheme: 'soft-dark',
   lightScheme: 'light-gray',
   postStyle: 'card',
@@ -467,8 +468,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   presetsApplied: [],
   replyCollapsed: false,
   postAccounts: {},
-  quickPhrases: ['草'],
-  postToolbar: ['reply', 'phrase:草', 'copy', 'ng'],
+  // 定型文は最初は空(2026-11-04 に本人の指示)
+  quickPhrases: [],
+  postToolbar: ['reply', 'copy', 'ng'],
   keymap: {},
   barLayout: {},
   mobileBarLayout: {},

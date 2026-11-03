@@ -6,6 +6,7 @@
     { "id": "red-edge", "name": "red-edge.net", "menu": "https://red-edge.net/boards" }
   ],
   "boards": [
-    { "id": "edge-liveedge", "name": "エッヂ", "url": "https://bbs.eddibb.cc/liveedge/" }
+    { "id": "edge-liveedge", "name": "エッヂ", "url": "https://bbs.eddibb.cc/liveedge/" },
+    { "id": "kenmo-poverty", "name": "オルグ", "url": "https://kenmo.org/poverty/" }
   ]
 }

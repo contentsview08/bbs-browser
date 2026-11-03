@@ -64,7 +64,8 @@ export const LIST_ACTIONS: BarActionDef[] = [
   { id: 'style', name: '表示スタイル', icon: 'palette', placement: 'header', mobile: 'menu' },
   { id: 'fontSize', name: '文字の大きさ・余白', icon: 'format_size', placement: 'menu' },
   { id: 'top', name: '先頭へ', icon: 'vertical_align_top', placement: 'menu', mobileOnly: true },
-  { id: 'refresh', name: '更新', icon: 'refresh', placement: 'header', mobile: 'footer' },
+  // スレ一覧の更新は、PC でもフッターの右端(スマホと同じ)
+  { id: 'refresh', name: '更新', icon: 'refresh', placement: 'footer', mobile: 'footer' },
 ]
 
 export const BAR_ACTIONS: Record<BarArea, BarActionDef[]> = { thread: THREAD_ACTIONS, list: LIST_ACTIONS }

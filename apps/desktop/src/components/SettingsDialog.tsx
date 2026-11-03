@@ -1670,6 +1670,8 @@ export function AccountsTab(
       .reduce((m, x) => m.set(x.kind.site, [...(m.get(x.kind.site) ?? []), x]), new Map<string, { c: ReturnType<typeof allConnectors>[number]; kind: AccountKind }[]>()),
   ]
   const [editing, setEditing] = useState<string>()
+  /** ポップアップで開いているサイト(5ch など) */
+  const [openSite, setOpenSite] = useState<string>()
   const [query, setQuery] = useState('')
   const [addUrl, setAddUrl] = useState('')
   /** URL で足した板(設定を入れるまでは保存しないので、ここで覚えておく) */
@@ -1712,36 +1714,47 @@ export function AccountsTab(
           title="サイトごとの設定"
           note="ログインすると、そのサイトに書き込むときに自動で使われます(5ch の BE なら、BE に対応した板でアイコンやポイントが付きます)。パスワードはこのアプリの DB にそのまま保存します。設定の書き出し(JSON)には入りませんが、まるごとバックアップのファイルには入ります"
         >
-          <div className="space-y-5">
+          {/* サイトは行で並べ、押すとそのサイトのポップアップ(アカウントの登録・ログイン)を開く */}
+          <div className="space-y-2">
             {sites.map(([site, list]) => (
-              <div key={site}>
-                <p className="mb-2 text-sm font-bold text-c-text-strong flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-base text-c-text-muted">language</span>
-                  {site}
-                </p>
-                <div className="space-y-3 pl-6">
-                  {list.map(({ c, kind }) => (
-                    <div key={key(c.id, kind.id)}>
-                      <p className="mb-1.5 text-xs font-bold text-c-text-muted">{kind.name} アカウント</p>
-                      <AccountForm
-                        connectorId={c.id}
-                        kind={kind}
-                        saved={props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)}
-                        status={props.loginStatus.get(key(c.id, kind.id))}
-                        onLogin={props.onLogin}
-                        onSave={props.onSaveAccount}
-                        onDelete={() => props.onDeleteAccount(c.id, kind.id)}
-                      />
-                    </div>
-                  ))}
-                </div>
+              <OpenRow
+                key={site}
+                label={site}
+                value={list
+                  .map(({ c, kind }) => {
+                    const saved = props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)
+                    const st = props.loginStatus.get(key(c.id, kind.id))
+                    return `${kind.name}: ${!saved ? '未登録' : st?.ok ? 'ログイン中' : st ? 'ログインできていない' : '登録済み'}`
+                  })
+                  .join('・')}
+                onOpen={() => setOpenSite(site)}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+      {openSite && (
+        <ManagerDialog title={`${openSite} の設定`} onClose={() => setOpenSite(undefined)}>
+          <div className="space-y-5">
+            {(sites.find(([site]) => site === openSite)?.[1] ?? []).map(({ c, kind }) => (
+              <div key={key(c.id, kind.id)}>
+                <p className="mb-1.5 text-xs font-bold text-c-text-muted">{kind.name} アカウント</p>
+                <AccountForm
+                  connectorId={c.id}
+                  kind={kind}
+                  saved={props.accounts.find((a) => a.connectorId === c.id && a.accountId === kind.id)}
+                  status={props.loginStatus.get(key(c.id, kind.id))}
+                  onLogin={props.onLogin}
+                  onSave={props.onSaveAccount}
+                  onDelete={() => props.onDeleteAccount(c.id, kind.id)}
+                />
               </div>
             ))}
           </div>
-          <p className="mt-3 text-xs text-c-text-muted">
+          <p className="mt-4 text-xs text-c-text-muted">
             ログインで受け取った Cookie は、ふだんの通信の Cookie と一緒に保存されます。保存したものを消しても、受け取った Cookie はその期限まで残ります。
           </p>
-        </Section>
+        </ManagerDialog>
       )}
       <Section title="板ごとの設定" note="別名・名前欄とメール欄の既定値・名無しの扱いを、板ごとに決めます。お気に入りの板と、設定のある板が並びます">
         {boards.length > 8 && (

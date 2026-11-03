@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bbs-browser</title>
-<meta name="description" content="5ch・エッヂ・したらば・ふたば・red-edge.net を読み書きする専用ブラウザ。Windows の PC 版と Android のスマホ版。">
+<meta name="description" content="5ch・エッヂ・したらば・ふたば・kenmo.org を読み書きする専用ブラウザ(Windows)。">
 <link rel="icon" href="assets/icon.png">
 <meta property="og:title" content="bbs-browser">
-<meta property="og:description" content="掲示板を読み書きする専用ブラウザ(Windows・Android)">
+<meta property="og:description" content="掲示板を読み書きする専用ブラウザ(Windows)">
 <meta property="og:image" content="https://contentsview08.github.io/bbs-browser/assets/icon.png">
 <style>
   /* 色はアプリの「ダーク」「ライト」と同じ系統(apps/desktop/src/theme)。OS の設定に合わせる */
@@ -44,6 +44,7 @@
   header.top nav { margin-left: auto; display: flex; gap: 18px; font-size: 14px; }
   header.top nav a { color: var(--muted); }
   header.top nav a:hover { color: var(--strong); text-decoration: none; }
+  header.top nav a.board-link { color: var(--accent); font-weight: 700; }
   @media (max-width: 640px) { header.top nav { display: none; } }
 
   .hero { padding: 64px 0 40px; text-align: center; }
@@ -60,6 +61,7 @@
   .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn small { font-weight: 400; opacity: .8; font-size: 12px; }
+  .btn.disabled { opacity: .5; cursor: default; }
   .version { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 1.4em; }
 
   section { padding: 48px 0; }
@@ -77,16 +79,11 @@
   .shots figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .shots img { display: block; width: 100%; height: auto; }
   .shots figcaption { padding: 10px 14px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); }
-  .shots figure.missing img { display: none; }
-  .shots figure.missing::before { content: '画面写真は準備中'; display: grid; place-items: center; height: 180px; color: var(--muted); font-size: 14px; background: var(--surface2); }
-  .shots.phone { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-  .shots.phone figure.missing::before { height: 320px; }
   .video { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .video video, .video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
-  .video .placeholder { display: grid; place-items: center; aspect-ratio: 16 / 9; color: var(--muted); font-size: 14px; background: var(--surface2); }
 
   .demo-frame { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0,0,0,.2); }
-  .demo-frame iframe { display: block; width: 100%; height: 640px; border: 0; }
+  .demo-frame iframe { display: block; width: 100%; height: 720px; border: 0; }
   @media (max-width: 640px) { .demo-frame iframe { height: 560px; } }
   .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
   kbd { font-family: Consolas, ui-monospace, monospace; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
@@ -112,7 +109,7 @@
       <a href="#demo">さわってみる</a>
       <a href="#shots">画面</a>
       <a href="#install">入れ方</a>
-      <a href="#faq">よくある質問</a>
+      <a href="https://red-edge.net/boards/operation01" class="board-link">掲示板</a>
       <a href="https://github.com/contentsview08/bbs-browser">GitHub</a>
     </nav>
   </div>
@@ -121,12 +118,12 @@
 <section class="hero wrap">
   <img src="assets/icon.png" alt="bbs-browser のアイコン">
   <h1>bbs-browser</h1>
-  <p class="lead">掲示板を読み書きする、PC とスマホの専用ブラウザ。<br>軽くて、設定は少なく、どちらを触っても同じ使い心地。</p>
-  <p class="sites">5ch・エッヂ・したらば・ふたば☆ちゃんねる・<a href="https://red-edge.net">red-edge.net</a></p>
+  <p class="lead">掲示板を読み書きする専用ブラウザ。<br>軽くて、設定は少なく、キーだけでも読める。</p>
+  <p class="sites">5ch・エッヂ・したらば・ふたば☆ちゃんねる・kenmo.org</p>
   <div class="buttons">
     <a class="btn primary" id="dl-win" href="https://github.com/contentsview08/bbs-browser/releases/latest">Windows 版(インストーラー)</a>
     <a class="btn" id="dl-zip" href="https://github.com/contentsview08/bbs-browser/releases/latest">ZIP 版 <small>インストール不要</small></a>
-    <a class="btn" id="dl-android" href="https://github.com/contentsview08/bbs-browser/releases/latest">Android 版 <small>APK</small></a>
+    <span class="btn disabled">Android 版 <small>準備中</small></span>
   </div>
   <p class="version" id="version"></p>
 </section>
@@ -138,11 +135,11 @@
     <div class="grid">
       <div class="card"><div class="icon">⌘</div><h3>キーだけで読める</h3><p>vim 風のキー(J/K で移動、? で一覧)と、Ctrl+K のコマンドパレット。板・スレ・操作を名前で探せます(PC 版)。</p></div>
       <div class="card"><div class="icon">▤</div><h3>タブと履歴</h3><p>PC 版はタブで何本も開く。履歴は「見た順・未読・書き込んだ・お気に入り」の 1 つの画面に。自分の書き込みから元のレスへ飛べます。</p></div>
-      <div class="card"><div class="icon">✕</div><h3>NG と自動の荒らし判定</h3><p>ID・名前・本文・スレタイの NG に、同じ本文の連投を畳む自動 NG。条件を日本語で書く AI NG は端末の中だけで判定します。</p></div>
+      <div class="card"><div class="icon">×</div><h3>NG と自動の荒らし判定</h3><p>ID・名前・本文・スレタイの NG に、同じ本文の連投を畳む自動 NG。条件を日本語で書く AI NG は端末の中だけで判定します。</p></div>
       <div class="card"><div class="icon">◐</div><h3>配色とレスの見た目</h3><p>ダーク・ライトを含む 13 の配色と自分の配色、差し色。レスはカード・Discord 風・LINE 風・専ブラ風・まとめ風。書体は同梱 16 書体と OS のフォント。</p></div>
-      <div class="card"><div class="icon">⇡</div><h3>画像を上げて貼る</h3><p>書き込み欄に貼るかドラッグするだけ。上げ先は imgur・catbox・imgbb など 6 つ。位置情報(EXIF)はいつも取り除きます。</p></div>
-      <div class="card"><div class="icon">🔔</div><h3>通知センター</h3><p>自分へのレス・お気に入りのスレの新着・キーワードに合うスレが立ったことを溜めておき、押すとそのレスへ。</p></div>
-      <div class="card"><div class="icon">⇄</div><h3>どこで触っても同じ</h3><p>PC 版・スマホ版・red-edge.net の Web は、同じ言葉・同じ設定・同じ見た目。スマホ版はなぞる操作(ジェスチャー)で片手でも読めます。</p></div>
+      <div class="card"><div class="icon">↑</div><h3>画像を上げて貼る</h3><p>書き込み欄に貼るかドラッグするだけ。上げ先は imgur・catbox・imgbb など 6 つ。位置情報(EXIF)はいつも取り除きます。</p></div>
+      <div class="card"><div class="icon">●</div><h3>通知センター</h3><p>自分へのレス・お気に入りのスレの新着・キーワードに合うスレが立ったことを溜めておき、押すとそのレスへ。</p></div>
+      <div class="card"><div class="icon">=</div><h3>Web でも同じ画面</h3><p><a href="https://red-edge.net/boards/operation01">掲示板</a>の Web はこの専ブラと同じ画面。スマホ版(Android)は準備中です。</p></div>
       <div class="card"><div class="icon">▣</div><h3>ZIP 版は展開するだけ</h3><p>展開したフォルダがそのままインストール先。ログも設定もその中の data に入り、フォルダごと消せばまっさらに戻ります。</p></div>
     </div>
   </div>
@@ -151,27 +148,22 @@
 <section id="demo">
   <div class="wrap">
     <h2>さわってみる</h2>
-    <p class="sub">PC 版の画面を、ブラウザの中でそのまま。中身は作り物で、読むだけ(書き込み・更新はできません)。<a href="demo.html" target="_blank" rel="noopener">別のタブで大きく開く ↗</a></p>
-    <div class="demo-frame"><iframe src="demo.html" title="bbs-browser のデモ" loading="lazy"></iframe></div>
-    <p class="hint">左の一覧でスレを押す・<kbd>J</kbd> <kbd>K</kbd> で動く・<kbd>?</kbd> でキーの一覧・◐ で配色とレスの見た目を変える・<kbd>Ctrl</kbd>+ホイールで文字の大きさ。</p>
+    <p class="sub">本物の Web 版の画面を、ブラウザの中でそのまま。中身は掲示板のある時点の写しで、読むだけ(書き込み・ログインはできません)。<a href="https://bbs-browser-demo.pages.dev/boards/livejupter" target="_blank" rel="noopener">別のタブで大きく開く ↗</a></p>
+    <div class="demo-frame"><iframe src="https://bbs-browser-demo.pages.dev/boards/livejupter" title="bbs-browser のデモ" loading="lazy"></iframe></div>
+    <p class="hint">左の一覧でスレを押す・<kbd>J</kbd> <kbd>K</kbd> で動く・<kbd>?</kbd> でキーの一覧・<kbd>Ctrl</kbd>+<kbd>K</kbd> でコマンドパレット・パレットのボタンで配色とレスの見た目・<kbd>Ctrl</kbd>+ホイールで文字の大きさ。</p>
   </div>
 </section>
 
 <section id="shots">
   <div class="wrap">
     <h2>画面</h2>
-    <p class="sub">PC 版(Windows)とスマホ版(Android)。</p>
+    <p class="sub">レスの見た目と配色は、見ながら変えられます。</p>
     <div class="shots">
-      <figure><img src="assets/pc-main.png" alt="PC 版: スレ一覧とスレ表示" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: スレ一覧とスレ表示を並べて読む</figcaption></figure>
-      <figure><img src="assets/pc-thread.png" alt="PC 版: スレ表示" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: 人気のレスの帯、ID の色、画像のサムネイル</figcaption></figure>
-      <figure><img src="assets/pc-settings.png" alt="PC 版: 設定" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: 設定は別の窓で、見ながら変えられる</figcaption></figure>
-      <figure><img src="assets/pc-light.png" alt="PC 版: 明るい配色" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: 明るい配色</figcaption></figure>
-    </div>
-    <div class="shots phone" style="margin-top:16px">
-      <figure><img src="assets/android-list.png" alt="スマホ版: スレ一覧" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: スレ一覧</figcaption></figure>
-      <figure><img src="assets/android-thread.png" alt="スマホ版: スレ表示" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: スレ表示</figcaption></figure>
-      <figure><img src="assets/android-drawer.png" alt="スマホ版: 引き出し" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: 左の引き出し(お気に入り板・履歴)</figcaption></figure>
-      <figure><img src="assets/android-settings.png" alt="スマホ版: 設定" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: 設定</figcaption></figure>
+      <figure><img src="assets/pc-card.png" alt="カード" loading="lazy"><figcaption>カード: いままでの専ブラに近い、区切り線で並べる見た目</figcaption></figure>
+      <figure><img src="assets/pc-discord.png" alt="Discord 風" loading="lazy"><figcaption>Discord 風: 丸い ID のアイコンと平らな並び。返信元を上に</figcaption></figure>
+      <figure><img src="assets/pc-line.png" alt="LINE 風" loading="lazy"><figcaption>LINE 風: 吹き出しで会話のように。自分の書き込みは右</figcaption></figure>
+      <figure><img src="assets/pc-classic.png" alt="専ブラ風" loading="lazy"><figcaption>専ブラ風: 「12 ：名前：日付 ID」を 1 行にした昔ながらの見た目</figcaption></figure>
+      <figure><img src="assets/pc-light.png" alt="ライト" loading="lazy"><figcaption>ライトの配色。OS のダーク・ライトに自動で合わせます</figcaption></figure>
     </div>
   </div>
 </section>
@@ -180,14 +172,14 @@
   <div class="wrap">
     <h2>動画</h2>
     <p class="sub">起動から書き込みまで。</p>
-    <div class="video" id="video-box"><div class="placeholder">動画は準備中</div></div>
+    <div class="video"><video src="assets/demo.mp4" controls muted playsinline preload="metadata"></video></div>
   </div>
 </section>
 
 <section id="install">
   <div class="wrap">
     <h2>入れ方</h2>
-    <p class="sub">どれも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。</p>
+    <p class="sub">どちらも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。Android 版は準備中です。</p>
     <div class="steps">
       <div class="card"><h3>Windows(インストーラー)</h3><ol>
         <li><code>bbs-browser_x.y.z_x64-setup.exe</code> を落として実行</li>
@@ -199,23 +191,7 @@
         <li><code>bbs-browser.exe</code> を起動(Windows 10/11 の WebView2 を使います)</li>
         <li>ログと設定はそのフォルダの <code>data\</code> に入ります。フォルダごと消せばまっさらに</li>
       </ol></div>
-      <div class="card"><h3>Android</h3><ol>
-        <li>APK を落として開く(「提供元不明のアプリ」の許可が要ります)</li>
-        <li>最初から 5ch・エッヂ・オルグ・red-edge.net が入っています。ほかの板は「URL を開く」から</li>
-        <li>Android 8 以降</li>
-      </ol></div>
     </div>
-  </div>
-</section>
-
-<section id="faq">
-  <div class="wrap">
-    <h2>よくある質問</h2>
-    <details><summary>更新はどうやって知るの?</summary><p>PC 版は 設定 → このアプリについて → 「更新を確かめる」。新しい版があればその場で落として入れ直せます。スマホ版は、このページか GitHub の Releases を見てください。</p></details>
-    <details><summary>データはどこに? 引っ越しできる?</summary><p>PC 版は 1 つの SQLite のファイル(ログ・既読・設定・NG)です。設定 → バックアップ の「まるごとバックアップ」でファイルを書き出し、別の PC で「バックアップから戻す」で戻せます。DB の形が変わる版に上げるときは、自動で写しを取ってから進みます。</p></details>
-    <details><summary>自分の掲示板を読ませたい</summary><p>2ch 互換(subject.txt と dat)の掲示板なら、板の URL を入れるだけで読めます。それ以外の形式は、コネクタ(JavaScript)をフォルダに置いて足せます(ビルドし直し不要。書き方は <a href="https://github.com/contentsview08/bbs-browser/blob/main/docs/connectors.md">docs/connectors.md</a>)。</p></details>
-    <details><summary>red-edge.net とは?</summary><p>この専ブラと同じ画面で読める、自分たちの掲示板です。アカウントを作ると、名前に表示名が付いて書き込めます(専ブラからもログインできます)。</p></details>
-    <details><summary>困ったとき・頼みたいとき</summary><p><a href="https://github.com/contentsview08/bbs-browser/issues">GitHub の Issues</a> へ。落ちたときは、設定 → このアプリについて の版と、何をしたら落ちたかを書いてもらえると助かります。</p></details>
   </div>
 </section>
 
@@ -238,28 +214,14 @@
       const find = (re) => assets.find((a) => re.test(a.name));
       const setup = find(/-setup\.exe$/i) ?? find(/\.msi$/i);
       const zip = find(/portable\.zip$/i) ?? find(/\.zip$/i);
-      const apk = find(/\.apk$/i);
       const mb = (a) => a ? ` <small>${(a.size / 1048576).toFixed(0)} MB</small>` : '';
       if (setup) { const b = document.getElementById('dl-win'); b.href = setup.browser_download_url; b.innerHTML = 'Windows 版(インストーラー)' + mb(setup); }
       if (zip) { const b = document.getElementById('dl-zip'); b.href = zip.browser_download_url; b.innerHTML = 'ZIP 版 <small>インストール不要</small>' + mb(zip); }
-      const a = document.getElementById('dl-android');
-      if (apk) { a.href = apk.browser_download_url; a.innerHTML = 'Android 版 <small>APK</small>' + mb(apk); }
-      else a.innerHTML = 'Android 版 <small>準備中</small>';
       const v = document.getElementById('version');
       v.textContent = `最新: ${j.tag_name}(${new Date(j.published_at).toLocaleDateString('ja-JP')})`;
     } catch {}
   })();
 
-  // 動画: assets/demo.mp4 があればそれ、YOUTUBE_ID があれば YouTube の埋め込み、どちらもなければ「準備中」
-  const YOUTUBE_ID = '';
-  (async () => {
-    const box = document.getElementById('video-box');
-    if (YOUTUBE_ID) { box.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${YOUTUBE_ID}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`; return; }
-    try {
-      const r = await fetch('assets/demo.mp4', { method: 'HEAD' });
-      if (r.ok && (r.headers.get('content-type') ?? '').startsWith('video/')) box.innerHTML = '<video src="assets/demo.mp4" controls muted playsinline preload="metadata"></video>';
-    } catch {}
-  })();
 </script>
 </body>
 </html>

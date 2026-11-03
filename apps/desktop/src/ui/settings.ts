@@ -14,6 +14,7 @@ import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
 import { DEFAULT_UPLOAD_HOST, migrateUploadHost, type UploadHost } from '../host/uploader'
+import { broadcast, onBroadcast } from '../host/crossWindow'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
   // スマホのアプリ(ネイティブ版)で足した配色。色は theme/native-schemes.css
@@ -662,7 +663,7 @@ export function pickSchemeNow(s: AppSettings, key: ColorScheme): Partial<AppSett
   return pickScheme(s, key)
 }
 
-function apply(s: AppSettings) {
+function apply(s: AppSettings, o: { font?: boolean } = {}) {
   const root = document.documentElement
   // 自分の配色を選んでいても、作っていなければ(読めなければ)ダークにしておく
   const custom = parseCustom(s.customScheme)
@@ -691,7 +692,8 @@ function apply(s: AppSettings) {
   root.toggleAttribute('data-reduce-motion', s.reduceMotion)
   setHaptics(s.haptics)
   const base = baseFontPx(s)
-  root.style.fontSize = `${base}px`
+  // 道具のウィンドウ(設定・NG)では、字の大きさは変えない(設定画面の字まで変わると、つまみの位置がずれて使いにくい)
+  if (o.font !== false) root.style.fontSize = `${base}px`
   // スレ一覧・レスの本文・レスの頭の大きさ(px)。一覧と頭は中の字の大きさの比を保ったまま拡大・縮小する(zoom)。
   // 本文は字の大きさそのもの(サムネイルなどは大きさを変えない)
   root.style.setProperty('--list-zoom', s.listFontPx ? String(s.listFontPx / base) : '1')
@@ -737,7 +739,11 @@ export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSett
 const SAVE_DELAY_MS = 400
 
 /** 設定を読み込み、変更を即座に画面へ反映して保存する。loaded は保存済みの値を読み終えたか */
-export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSetting, boolean] {
+/**
+ * opts.font: false なら、字の大きさは画面に当てない(道具のウィンドウ)。
+ * 設定の変更は settings-changed でほかのウィンドウへ知らせ、ほかのウィンドウからの変更は受けて写す(DB に書くのは変えたウィンドウだけ)
+ */
+export function useSettings(store: LogStore | undefined, opts: { font?: boolean } = {}): [AppSettings, UpdateSetting, boolean] {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [loaded, setLoaded] = useState(false)
 
@@ -755,13 +761,21 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
   }, [store])
 
   useEffect(() => {
-    apply(settings)
+    apply(settings, opts)
+    // opts は固定
   }, [settings])
+  // ほかのウィンドウで変えた設定を写す
+  useEffect(() => {
+    const off = onBroadcast<{ key: keyof AppSettings; value: unknown }>('settings-changed', ({ key, value }) =>
+      setSettings((s) => ({ ...s, [key]: value as AppSettings[typeof key] })),
+    )
+    return () => void off.then((f) => f())
+  }, [])
   // OS のダーク・ライトが切り替わったら、合わせて塗り直す
   useEffect(() => {
     if (!settings.followOsTheme) return
     const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => apply(settings)
+    const onChange = () => apply(settings, opts)
     media.addEventListener('change', onChange)
     return () => media.removeEventListener('change', onChange)
   }, [settings])
@@ -790,6 +804,7 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
   const update = useCallback<UpdateSetting>(
     (key, value) => {
       setSettings((s) => ({ ...s, [key]: value }))
+      void broadcast('settings-changed', { key, value })
       pendingWrites.current.set(key, value)
       if (!writeTimer.current) writeTimer.current = setTimeout(flush, SAVE_DELAY_MS)
     },

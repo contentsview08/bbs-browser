@@ -92,5 +92,9 @@ export function useAccounts(store: LogStore | undefined, postAccounts: Record<st
       .filter((o) => o.registered && o.on)
       .map((o) => o.id)
 
-  return { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, postAccountsOf, postAccountIds }
+  /** 別のウィンドウで変えたアカウントを読み直す */
+  const reloadAccounts = async () => {
+    if (store) setAccounts(await store.listAccounts())
+  }
+  return { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, reloadAccounts, postAccountsOf, postAccountIds }
 }

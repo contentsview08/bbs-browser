@@ -25,6 +25,7 @@ import {
   type PostActionDef,
 } from '@bbs-browser/connectors'
 import {
+  type AccountRecord,
   applyFetch,
   type FavoriteThreadEntry,
   type HistoryEntry,
@@ -52,6 +53,7 @@ import ThreadListPanel, { threadId, type SortMode } from './components/ThreadLis
 import TabPane, { type Tab, type TabEvents } from './components/TabPane'
 import type { ScrollPosition } from './components/ThreadView'
 import { openLogStore } from './host/logStore'
+import { canOpenToolWindow, onBroadcast, openToolWindow, serveMain } from './host/crossWindow'
 import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
@@ -226,7 +228,7 @@ export default function App() {
       if (store) setUploads(await store.listUploads())
     })
   // アカウント(5ch の BE など)
-  const { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, postAccountsOf, postAccountIds } = useAccounts(
+  const { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, reloadAccounts, postAccountsOf, postAccountIds } = useAccounts(
     store,
     settings.postAccounts,
   )
@@ -628,6 +630,11 @@ export default function App() {
     })
   }
 
+  /** 設定を開く。PC は自分のウィンドウ(メインの外へ出せる)、スマホ・web 版は画面の中 */
+  const openSettings = (tab: SettingsTab) => {
+    if (isMobile || !canOpenToolWindow) return setSettingsTab(tab)
+    void openToolWindow('settings', { tab }).catch(backgroundError('設定のウィンドウ'))
+  }
   /** いまスレ一覧に出しているもの(戻る・進むで覚える) */
   const currentListTarget = (): ListTarget | undefined =>
     library ? { kind: library } : favView ? { kind: 'fav' } : history ? { kind: 'history' } : board ? { kind: 'board', board } : undefined
@@ -1244,7 +1251,7 @@ export default function App() {
       ...recentHistory.map((t) => ({ group: '最近見たスレ', label: t.title, icon: 'history', run: () => void openThread(t) })),
       { group: '開く', label: '閲覧履歴', icon: 'history', run: () => void openHistory() },
       { group: '開く', label: 'お気に入りのスレ', icon: 'bookmarks', run: () => void openFavThreads() },
-      { group: '開く', label: '設定', icon: 'settings', run: () => setSettingsTab('display') },
+      { group: '開く', label: '設定', icon: 'settings', run: () => openSettings('display') },
       ...KEY_ACTIONS.filter((a) => a.where === 'app' && a.key !== 'palette').map((a) => ({
         group: '操作',
         label: a.name,
@@ -1871,6 +1878,29 @@ export default function App() {
       setSites(list)
     })
 
+  // 道具のウィンドウ(設定・NG)からの頼みごとを受け、向こうで変えたものを読み直す
+  const rpcRef = useRef({ loadBoards, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus })
+  rpcRef.current = { loadBoards, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus }
+  useEffect(() => {
+    if (!store || !canOpenToolWindow) return
+    const offs = [
+      serveMain({
+        loadBoards: ({ site, refresh }: { site: SiteConfig; refresh: boolean }) => rpcRef.current.loadBoards(site, refresh),
+        toggleFavorite: (b: Board) => rpcRef.current.toggleFavorite(b),
+        openBoard: (b: Board) => void rpcRef.current.openBoard(b),
+        addFavoriteUrl: (url: string) => rpcRef.current.addFavoriteUrl(url),
+        addSite: ({ name, menuUrl }: { name: string; menuUrl: string }) => rpcRef.current.addSite(name, menuUrl),
+        login: (a: AccountRecord) => rpcRef.current.saveAndLogin(a),
+        pruneLogs: () => rpcRef.current.pruneLogs(),
+        loginStatus: () => [...rpcRef.current.loginStatus.entries()],
+      }),
+      onBroadcast('favorites-changed', () => void reloadFavorites(store)),
+      onBroadcast('sites-changed', () => void store.listSites().then(setSites)),
+      onBroadcast('accounts-changed', () => void reloadAccounts()),
+    ]
+    return () => offs.forEach((o) => void o.then((f) => f()))
+    // store が開いたら 1 回
+  }, [store])
   // ── NG ──
 
   const isNgPost = useMemo(() => postMatcher(settings.ngRules), [settings.ngRules])
@@ -1954,7 +1984,7 @@ export default function App() {
     openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
     toggleFavoriteThread: useEvent((t: ThreadSummary) => toggleFavoriteThread(t)),
     togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
-    openAccountSettings: useEvent(() => setSettingsTab('accounts')),
+    openAccountSettings: useEvent(() => openSettings('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
     // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
@@ -2203,8 +2233,8 @@ export default function App() {
         favThreadsActive={favView}
         favThreadsNew={favNewTotal}
         onOpenFavThreads={() => void openFavThreads()}
-        onOpenSettings={() => setSettingsTab('display')}
-        onManageBoards={() => setSettingsTab('boardlist')}
+        onOpenSettings={() => openSettings('display')}
+        onManageBoards={() => openSettings('boardlist')}
         onOpenUrl={isMobile ? () => setUrlPrompt('') : undefined}
       />
       </div>
@@ -2626,7 +2656,7 @@ export default function App() {
           onToggleAccount={stableTabEvents.togglePostAccount}
           onOpenAccountSettings={() => {
             setNewThreadOpen(false)
-            setSettingsTab('accounts')
+            openSettings('accounts')
           }}
         />
       )}
@@ -2667,7 +2697,7 @@ export default function App() {
           onClose={() => setSettingsTab(undefined)}
         />
       )}
-      {settingsTab && !isMobile && (
+      {settingsTab && !isMobile && !canOpenToolWindow && (
         <SettingsDialog
           initialTab={settingsTab}
           loadBoards={loadBoards}

@@ -40,7 +40,8 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
-import { ListEditor, ManagerDialog, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
+import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
+import { canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -82,6 +83,10 @@ export interface SettingsProps {
   onPruneLogs: () => Promise<number>
   /** 最初に開く分類 */
   initialTab?: SettingsTab
+  /** 自分のウィンドウに出しているとき(PC)。枠いっぱいに描き、動かす・大きさを変えるのは OS に任せる */
+  windowed?: boolean
+  /** 開いている間に外から分類を変える(seq が変わったら tab にする) */
+  requestedTab?: { tab: SettingsTab; seq: number }
   onClose: () => void
 }
 
@@ -2165,7 +2170,12 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
       </Section>
 
       <Section title="NG の一覧" note="レスの ⋯・スレの NG ボタンからも足せます。正規表現・効く板(すべて / この板だけ)・期限・メモを決められます">
-        <NgManager rules={rules} onChange={(v) => update('ngRules', v)} />
+        {/* PC: 増えると設定の中では見にくいので、管理表は自分のウィンドウに出す(件数だけここに) */}
+        {canOpenToolWindow && !isMobile ? (
+          <ManagerRow label="NG の管理表を開く" note="検索・絞り込み・まとめて操作・書き出し。別のウィンドウで開きます" count={rules.length} onOpen={() => void openToolWindow('ng')} />
+        ) : (
+          <NgManager rules={rules} onChange={(v) => update('ngRules', v)} />
+        )}
       </Section>
     </>
   )
@@ -2548,6 +2558,10 @@ function storeDialogRect(r: DialogRect) {
 export default function SettingsDialog(props: SettingsProps) {
   // スマホは、はじめに分類の一覧(tab が undefined)を出し、押すとその分類の画面に入る
   const [tab, setTab] = useState<Tab | undefined>(props.initialTab ?? (isMobile ? undefined : 'display'))
+  useEffect(() => {
+    if (props.requestedTab) setTab(props.requestedTab.tab)
+    // seq が変わったときだけ
+  }, [props.requestedTab?.seq])
   /** スマホ: 分類の中で開いている項目(Section の題) */
   const [section, setSection] = useState<string>()
   /** スマホ: 項目が少ない分類なので、題の一覧を挟まずに中身をそのまま並べている */
@@ -2769,25 +2783,30 @@ export default function SettingsDialog(props: SettingsProps) {
   return (
     // 設定画面は「置いたまま使える窓」。後ろは暗くせず、外を押しても閉じない(閉じるのは × と Esc)。
     // 小さくして横に寄せ、後ろの画面で効き具合を見ながら直せる(後ろはスクロールもできる)
-    <div className="fixed inset-0 z-[9500] pointer-events-none">
+    <div className={props.windowed ? 'fixed inset-0 z-[9500]' : 'fixed inset-0 z-[9500] pointer-events-none'}>
       <div
         ref={boxRef}
-        // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)
-        className="absolute flex pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in"
-        style={{
-          left: rect.x,
-          top: rect.y,
-          width: rect.w,
-          height: rect.h,
-          minWidth: 560,
-          minHeight: 360,
-          // 右と下へ広げても、画面の外にはみ出さない(下の端が隠れて縮められなくならないように)
-          maxWidth: `calc(100vw - ${Math.max(0, rect.x)}px - 8px)`,
-          maxHeight: `calc(100vh - ${rect.y}px - 8px)`,
-          resize: 'both',
-        }}
+        // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)。
+        // 自分のウィンドウ(windowed)なら枠いっぱいに描き、動かす・大きさを変えるのは OS のウィンドウに任せる
+        className={props.windowed ? 'absolute inset-0 flex bg-c-surface overflow-hidden' : 'absolute flex pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in'}
+        style={
+          props.windowed
+            ? undefined
+            : {
+                left: rect.x,
+                top: rect.y,
+                width: rect.w,
+                height: rect.h,
+                minWidth: 560,
+                minHeight: 360,
+                // 右と下へ広げても、画面の外にはみ出さない(下の端が隠れて縮められなくならないように)
+                maxWidth: `calc(100vw - ${Math.max(0, rect.x)}px - 8px)`,
+                maxHeight: `calc(100vh - ${rect.y}px - 8px)`,
+                resize: 'both',
+              }
+        }
         onClick={(e) => e.stopPropagation()}
-        onMouseUp={saveRect}
+        onMouseUp={props.windowed ? undefined : saveRect}
       >
         <nav className="w-52 flex-shrink-0 flex flex-col bg-c-surface2 border-r border-c-border py-3">
           <h2 className="px-5 pb-3 text-lg font-bold text-c-text-strong">設定</h2>
@@ -2824,7 +2843,7 @@ export default function SettingsDialog(props: SettingsProps) {
           </label>
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex items-center justify-between px-6 py-3 border-b border-c-border cursor-move select-none" onMouseDown={startMove} title="つかんで動かす">
+          <div className={`flex items-center justify-between px-6 py-3 border-b border-c-border select-none ${props.windowed ? '' : 'cursor-move'}`} onMouseDown={props.windowed ? undefined : startMove} title={props.windowed ? undefined : 'つかんで動かす'}>
             <h3 className="text-base font-bold text-c-text-strong">{searching ? '設定の検索' : TABS.find((t) => t.key === tab)?.name}</h3>
             <button type="button" onClick={props.onClose} className={ICON_BTN} title="閉じる">
               <span className="material-symbols-outlined text-xl">close</span>

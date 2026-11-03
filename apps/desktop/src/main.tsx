@@ -6,6 +6,11 @@ import '@fontsource/biz-udpgothic/400.css'
 import '@fontsource/biz-udpgothic/700.css'
 import 'material-symbols/outlined.css'
 import App from './App'
+import { lazy, Suspense } from 'react'
+import { toolKindOfThisWindow } from './host/crossWindow'
+
+// 道具のウィンドウ(設定・NG の管理表。index.html?window=…)は、メインの画面ではなくその道具だけを出す
+const ToolWindow = lazy(() => import('./windows/ToolWindow'))
 import { isMobile } from './utils/platform'
 import './index.css'
 import './app.css'
@@ -27,6 +32,12 @@ if (isMobile && window.visualViewport) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {toolKindOfThisWindow() ? (
+      <Suspense fallback={null}>
+        <ToolWindow />
+      </Suspense>
+    ) : (
+      <App />
+    )}
   </StrictMode>,
 )

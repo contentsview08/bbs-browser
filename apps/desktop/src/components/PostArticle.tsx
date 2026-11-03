@@ -661,7 +661,7 @@ function PostArticle(props: Props) {
   const toOwnChip = props.isReplyToOwn && (
     <span
       className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
-      style={{ color: 'var(--c-own)', background: 'var(--c-own-wash)', border: '1px solid var(--c-own)', borderRadius: 'var(--chip-radius)' }}
+      style={{ color: 'var(--c-to-own)', background: 'var(--c-to-own-wash)', border: '1px solid var(--c-to-own)', borderRadius: 'var(--chip-radius)' }}
     >
       →あなた宛
     </span>
@@ -1142,7 +1142,7 @@ function PostArticle(props: Props) {
       {((props.isOwn && variant !== 'line') || props.isReplyToOwn) && !props.alignLeft && (
         <span
           className={`absolute ${ownRight ? 'right-0' : 'left-0'} top-1 bottom-1 w-[3px] rounded-full pointer-events-none`}
-          style={{ background: 'var(--c-own)', opacity: props.isOwn && variant !== 'line' ? 1 : 0.45 }}
+          style={props.isOwn && variant !== 'line' ? { background: 'var(--c-own)' } : { background: 'var(--c-to-own)' }}
           title={props.isOwn && variant !== 'line' ? '自分の書き込み' : '自分へのレス'}
         />
       )}

@@ -1060,14 +1060,19 @@ html:root.dark[data-scheme] {
   --c-op: #f0b44c;
   --c-op-wash: rgba(240, 180, 76, 0.16);
 }
-/* 自分の書き込み: 未読の色と分けて、緑みの青(スマホのアプリの Palette.own と同じ。どの配色でも同じ) */
+/* 自分の書き込み(--c-own)と自分へのレス(--c-to-own): 名前欄の緑(--c-poster-name)・未読の色と分ける(本人「緑ばかりで似すぎ」2026-11-03)。
+   自分の書き込みは紫、自分へのレスは橙。どの配色でも同じ(スマホのアプリの Palette.own・toOwn と同じ) */
 html:root[data-scheme] {
-  --c-own: #1f9a78;
-  --c-own-wash: rgba(31, 154, 120, 0.16);
+  --c-own: #6d4fd3;
+  --c-own-wash: rgba(109, 79, 211, 0.14);
+  --c-to-own: #d9641a;
+  --c-to-own-wash: rgba(217, 100, 26, 0.14);
 }
 html:root.dark[data-scheme] {
-  --c-own: #3ec7a0;
-  --c-own-wash: rgba(62, 199, 160, 0.16);
+  --c-own: #a28bff;
+  --c-own-wash: rgba(162, 139, 255, 0.16);
+  --c-to-own: #ff9a4d;
+  --c-to-own-wash: rgba(255, 154, 77, 0.16);
 }
 
 /* スマホの設定: 項目の行(題の一覧・オンオフ)のあいだに線を引いて、1 行ずつ見分けやすくする */

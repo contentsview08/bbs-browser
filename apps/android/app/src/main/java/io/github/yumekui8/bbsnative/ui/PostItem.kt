@@ -131,13 +131,13 @@ fun PostItem(
     // 自分への返信は、自分の側に半分の濃さの帯と、うっすら自分の色の地(スクロール中でも目に入るように)
     val leftBar = when {
         own && ownSide == "left" -> Palette.own
-        toOwn && ownSide == "left" -> Palette.own.copy(alpha = 0.6f)
+        toOwn && ownSide == "left" -> Palette.toOwn
         showHeat && heatSide == "left" -> heat
         else -> null
     }
     val rightBar = when {
         own && ownSide == "right" -> Palette.own
-        toOwn && ownSide == "right" -> Palette.own.copy(alpha = 0.6f)
+        toOwn && ownSide == "right" -> Palette.toOwn
         showHeat && heatSide == "right" -> heat
         else -> null
     }

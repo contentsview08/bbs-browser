@@ -174,8 +174,11 @@ object Palette {
     val unread get() = scheme.unread
     val unreadText get() = scheme.unreadText
     /** 自分の書き込み */
-    val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF1F9A78) else if (scheme.dark) Color(0xFF3EC7A0) else Color(0xFF1F9A78)
+    // 自分の書き込みは紫、自分へのレスは橙(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
+    val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF6D4FD3) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF6D4FD3)
     val ownWash get() = own.copy(alpha = 0.16f)
+    val toOwn get() = if (scheme.dark) Color(0xFFFF9A4D) else Color(0xFFD9641A)
+    val toOwnWash get() = toOwn.copy(alpha = 0.16f)
     /** スレ主 */
     val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFFB7791F)
     val opWash get() = op.copy(alpha = 0.16f)

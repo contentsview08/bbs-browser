@@ -2369,7 +2369,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・ふたば・hono-bbs を読めます。
         </p>
       </Section>
-      {canCheckUpdate && <UpdateSection version={version} token={s.githubToken} onToken={(v) => update('githubToken', v)} />}
+      {canCheckUpdate && <UpdateSection version={version} />}
       <Section desktopOnly title="データの保存場所" note={paths?.portable ? 'ZIP 版: 展開したフォルダの data に置きます。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります' : undefined}>
         <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.yumekui8.bbs-browser\\bbs-browser.db'}</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>
@@ -2386,12 +2386,12 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
  * 更新(設定 → このアプリについて)。GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。
  * リポジトリは private なので、トークン(repo の読み取り)を入れておく
  */
-function UpdateSection(props: { version?: string; token: string; onToken: (v: string) => void }) {
+function UpdateSection(props: { version?: string }) {
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'found'; release: ReleaseInfo } | { kind: 'latest'; release: ReleaseInfo } | { kind: 'error'; message: string } | { kind: 'installing' } | { kind: 'installed'; path: string }>({ kind: 'idle' })
   const check = async () => {
     setState({ kind: 'checking' })
     try {
-      const release = await fetchLatestRelease(props.token.trim())
+      const release = await fetchLatestRelease()
       setState(props.version && compareVersions(release.version, props.version) > 0 ? { kind: 'found', release } : { kind: 'latest', release })
     } catch (e) {
       setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
@@ -2401,7 +2401,7 @@ function UpdateSection(props: { version?: string; token: string; onToken: (v: st
     if (!release.asset) return void openUrl(release.url)
     setState({ kind: 'installing' })
     try {
-      setState({ kind: 'installed', path: await installUpdate(release.asset, props.token.trim()) })
+      setState({ kind: 'installed', path: await installUpdate(release.asset) })
     } catch (e) {
       setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
     }
@@ -2434,17 +2434,6 @@ function UpdateSection(props: { version?: string; token: string; onToken: (v: st
           {release.notes && <pre className="mt-1 p-3 text-xs text-c-text-body bg-c-surface2 rounded-[var(--card-radius)] whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{release.notes}</pre>}
         </div>
       )}
-      <div className="mt-4">
-        <p className="text-sm text-c-text-body mb-1">GitHub のトークン</p>
-        <TextSetting value={props.token} onChange={props.onToken} placeholder="github_pat_…(private のリポジトリを読む権限)" trim mono className="w-full" />
-        <p className="text-xs text-c-text-muted mt-1">
-          リポジトリは private なので、確かめるにはトークンが要ります。
-          <button type="button" className="text-c-link hover:underline ml-1" onClick={() => void openUrl('https://github.com/settings/personal-access-tokens/new')}>
-            GitHub で作る
-          </button>
-          (Fine-grained・contentsview08/bbs-browser の Contents: Read)
-        </p>
-      </div>
     </Section>
   )
 }

@@ -184,8 +184,6 @@ export interface AppSettings {
   osNotify: boolean
   /** 通知センターに溜めた知らせ(あなた宛てのレス・お気に入りの新着など。新しいものが後ろ。NOTIFICATION_LOG_MAX まで) */
   notificationLog: StoredNotification[]
-  /** GitHub のトークン(更新を確かめるとき。リポジトリが private なので要る。空なら公開のリリースだけ) */
-  githubToken: string
   /** スマホ: ヘッダー・フッターの高さ(px)と、中の文字の大きさ(px)。0 なら既定 */
   headerPx: number
   footerPx: number
@@ -389,7 +387,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postLineHeight: 0,
   osNotify: true,
   notificationLog: [],
-  githubToken: '',
   headerPx: 0,
   footerPx: 0,
   barFontPx: 0,

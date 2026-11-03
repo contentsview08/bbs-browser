@@ -1,5 +1,5 @@
 // 更新の確かめと取り込み(PC)。GitHub の最新のリリースを見て版を比べ、インストーラーを落として実行する。
-// リポジトリは private なので、GitHub のトークン(設定 → このアプリについて)があればそれを付けて頼む。
+// リポジトリは公開(2026-11-04 から)なので、トークンなしで GitHub の API を読む。
 // 落とすのは Rust 側(update.rs。一時フォルダに置いて開く)。web 版は host/update.ts が何もしない
 import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
@@ -20,16 +20,14 @@ export interface ReleaseInfo {
   asset?: { name: string; url: string; size: number }
 }
 
-function headers(token: string): Record<string, string> {
-  const h: Record<string, string> = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'bbs-browser' }
-  if (token) h.Authorization = `Bearer ${token}`
-  return h
+function headers(): Record<string, string> {
+  return { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'bbs-browser' }
 }
 
 /** 最新のリリースを取る。見つからない・権限がないときは Error */
-export async function fetchLatestRelease(token: string): Promise<ReleaseInfo> {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: headers(token) })
-  if (res.status === 404) throw new Error(token ? 'リリースが見つかりません(まだ 1 つも公開していないか、トークンにこのリポジトリを見る権限がありません)' : 'リリースが見つかりません。private のリポジトリなので、GitHub のトークンを入れてください')
+export async function fetchLatestRelease(): Promise<ReleaseInfo> {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: headers() })
+  if (res.status === 404) throw new Error('リリースが見つかりません(まだ 1 つも公開していません)')
   if (res.status === 401) throw new Error('GitHub のトークンが受け付けられませんでした')
   if (!res.ok) throw new Error(`GitHub から取れませんでした(${res.status})`)
   const j = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets?: { name: string; url: string; size: number; browser_download_url: string }[] }
@@ -44,8 +42,9 @@ export async function fetchLatestRelease(token: string): Promise<ReleaseInfo> {
 }
 
 /** インストーラーを落として開く(インストーラーが立ち上がる。アプリは本人が閉じる) */
-export function installUpdate(asset: NonNullable<ReleaseInfo['asset']>, token: string): Promise<string> {
-  return invoke<string>('download_update', { url: asset.url, name: asset.name, token })
+export function installUpdate(asset: NonNullable<ReleaseInfo['asset']>): Promise<string> {
+  // Rust 側(update.rs)の token は、private だったころの名残。空で渡す
+  return invoke<string>('download_update', { url: asset.url, name: asset.name, token: '' })
 }
 
 /** 版の比べ(1.2.3 の形。a が b より新しければ 1) */

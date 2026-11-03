@@ -75,12 +75,24 @@
   .card p { margin: 0; font-size: 14px; color: var(--muted); }
 
   /* 画面写真。ファイルがなければ「準備中」の枠 */
-  .shots { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .shots { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
+  @media (max-width: 640px) { .shots { grid-template-columns: 1fr; } }
+  .shots figure { cursor: zoom-in; transition: transform .15s; }
+  .shots figure:hover { transform: translateY(-2px); }
   .shots figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .shots img { display: block; width: 100%; height: auto; }
   .shots figcaption { padding: 10px 14px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); }
   .video { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .video video, .video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+  .video { max-width: 1280px; margin: 0 auto; }
+  /* ポップアップ(画面写真を画面いっぱいに) */
+  .lb { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; padding: 24px; }
+  .lb.show { display: flex; }
+  .lb img { max-width: 96vw; max-height: 86vh; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .lb .cap { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: #e6e8ec; font-size: 14px; }
+  .lb .x, .lb .prev, .lb .next { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; font-size: 22px; display: grid; place-items: center; cursor: pointer; user-select: none; }
+  .lb .x { top: 16px; right: 16px; } .lb .prev { left: 16px; top: 50%; transform: translateY(-50%); } .lb .next { right: 16px; top: 50%; transform: translateY(-50%); }
+  .lb .x:hover, .lb .prev:hover, .lb .next:hover { background: rgba(255,255,255,.24); }
 
   .demo-frame { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0,0,0,.2); }
   .demo-frame iframe { display: block; width: 100%; height: min(88vh, 1000px); border: 0; }
@@ -157,9 +169,9 @@
 </section>
 
 <section id="shots">
-  <div class="wrap">
+  <div class="wrap wide">
     <h2>画面</h2>
-    <p class="sub">レスの見た目と配色は、見ながら変えられます。</p>
+    <p class="sub">レスの見た目と配色は、見ながら変えられます。押すと大きく出ます。</p>
     <div class="shots">
       <figure><img src="assets/pc-card.png" alt="カード" loading="lazy"><figcaption>カード: いままでの専ブラに近い、区切り線で並べる見た目</figcaption></figure>
       <figure><img src="assets/pc-discord.png" alt="Discord 風" loading="lazy"><figcaption>Discord 風: 丸い ID のアイコンと平らな並び。返信元を上に</figcaption></figure>
@@ -171,7 +183,7 @@
 </section>
 
 <section id="video">
-  <div class="wrap">
+  <div class="wrap wide">
     <h2>動画</h2>
     <p class="sub">起動から書き込みまで。</p>
     <div class="video"><video src="assets/demo.mp4" controls muted playsinline preload="metadata"></video></div>
@@ -197,6 +209,8 @@
   </div>
 </section>
 
+<div class="lb" id="lb" role="dialog" aria-label="画面写真"><span class="x" id="lb-x" title="閉じる(Esc)">×</span><span class="prev" id="lb-prev" title="前(←)">‹</span><span class="next" id="lb-next" title="次(→)">›</span><img id="lb-img" alt=""><div class="cap" id="lb-cap"></div></div>
+
 <footer>
   <a href="https://github.com/contentsview08/bbs-browser">GitHub</a>
   <a href="https://github.com/contentsview08/bbs-browser/releases">Releases</a>
@@ -206,6 +220,21 @@
 </footer>
 
 <script>
+  // 画面写真のポップアップ: 押した写真を画面いっぱいに。← → で前後、Esc・外側で閉じる
+  (() => {
+    const figs = [...document.querySelectorAll('#shots figure')]
+    const lb = document.getElementById('lb'), img = document.getElementById('lb-img'), cap = document.getElementById('lb-cap')
+    let i = 0
+    const show = (n) => { i = (n + figs.length) % figs.length; const f = figs[i]; img.src = f.querySelector('img').src; img.alt = f.querySelector('img').alt; cap.textContent = f.querySelector('figcaption').textContent; lb.classList.add('show'); document.body.style.overflow = 'hidden' }
+    const hide = () => { lb.classList.remove('show'); document.body.style.overflow = '' }
+    figs.forEach((f, n) => f.addEventListener('click', () => show(n)))
+    document.getElementById('lb-x').addEventListener('click', hide)
+    document.getElementById('lb-prev').addEventListener('click', (e) => { e.stopPropagation(); show(i - 1) })
+    document.getElementById('lb-next').addEventListener('click', (e) => { e.stopPropagation(); show(i + 1) })
+    lb.addEventListener('click', (e) => { if (e.target === lb || e.target === img) hide() })
+    document.addEventListener('keydown', (e) => { if (!lb.classList.contains('show')) return; if (e.key === 'Escape') hide(); else if (e.key === 'ArrowLeft') show(i - 1); else if (e.key === 'ArrowRight') show(i + 1) })
+  })()
+
   // 最新のリリースを GitHub から読み、版と落とす先(インストーラー・ZIP・APK)をボタンに入れる。読めなければ Releases のページのまま
   (async () => {
     try {

@@ -678,7 +678,7 @@ input[type='checkbox']:indeterminate {
   }
 }
 .toast-in {
-  animation: toast-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: toast-in 200ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
 }
 
 /* スレ表示のレス 1 件ぶんの枠。画面の外にあるレスは、配置と描画の計算を省く(content-visibility)。
@@ -818,6 +818,7 @@ input[type='checkbox']:indeterminate {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 0;
   width: 35%;
   background: var(--c-accent);
   border-radius: 9999px;
@@ -825,10 +826,10 @@ input[type='checkbox']:indeterminate {
 }
 @keyframes list-progress {
   from {
-    left: -35%;
+    transform: translateX(-100%);
   }
   to {
-    left: 100%;
+    transform: translateX(286%);
   }
 }
 @media (prefers-reduced-motion: reduce) {

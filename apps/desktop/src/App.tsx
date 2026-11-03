@@ -1829,7 +1829,7 @@ export default function App() {
       })
     patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
     // 閲覧履歴の一覧を出しているときは、その行の既読も進める(開いた時点のまま残り、未読の印が消えなかった)
-    setHistory((list) => list?.map((h) => (threadId(h.thread) === id && no > h.readNo ? { ...h, readNo: no } : h)))
+    setHistory((list) => (list?.some((h) => threadId(h.thread) === id && no > h.readNo) ? list.map((h) => (threadId(h.thread) === id && no > h.readNo ? { ...h, readNo: no } : h)) : list))
     void store.markRead(t, no).catch(backgroundError('既読の保存'))
   })
 
@@ -2000,7 +2000,7 @@ export default function App() {
   const tabEventsRef = useRef(tabEvents)
   const stableTabEvents = tabEventsRef.current
 
-  const historyStates = new Map(history?.map((h) => [threadId(h.thread), h as ThreadState]))
+  const historyStates = useMemo(() => new Map(history?.map((h) => [threadId(h.thread), h as ThreadState])), [history])
   // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
   // スレ一覧から分かったレス数があれば、それを使う(手元のレス数より多いぶんが未読として出る)
   /** 板の URL → 画面に出す名前(別名 → お気に入り板の名前 → URL の最後) */
@@ -2017,7 +2017,16 @@ export default function App() {
   }
   const historyReadAt = new Map(history?.map((h) => [threadId(h.thread), h.readAt]))
   /** 閲覧履歴の行に出すもの(板の名前・いつ見たか) */
-  const historyMetaOf = (t: ThreadSummary) => ({ boardName: boardNameOf(t.boardUrl), readAt: historyReadAt.get(threadId(t)), icon: settings.boardMeta[t.boardUrl]?.icon })
+  // 行ごとに同じ中身なら同じオブジェクトを返す(毎回新しいと、全部の行が描き直される)
+  const historyMetaCache = useRef(new Map<string, { boardName: string; readAt?: number; icon?: string }>())
+  const historyMetaOf = (t: ThreadSummary) => {
+    const next = { boardName: boardNameOf(t.boardUrl), readAt: historyReadAt.get(threadId(t)), icon: settings.boardMeta[t.boardUrl]?.icon }
+    const key = threadId(t)
+    const cur = historyMetaCache.current.get(key)
+    if (cur && cur.boardName === next.boardName && cur.readAt === next.readAt && cur.icon === next.icon) return cur
+    historyMetaCache.current.set(key, next)
+    return next
+  }
   const historyThreads = useMemo(
     () =>
       history?.map((h) => {
@@ -2042,11 +2051,16 @@ export default function App() {
     const n = favCounts.get(threadId(f.thread)) ?? f.postCount
     return sum + Math.max(0, n - f.readNo)
   }, 0)
-  const stateOf = favView
-    ? (t: ThreadSummary) => favStates.get(threadId(t))
-    : history
-      ? (t: ThreadSummary) => historyStates.get(threadId(t))
-      : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined)
+  // 毎回新しい関数にすると、スレ一覧が App の描き直しのたびに全部を並べ直す。使う Map が変わったときだけ作り直す
+  const stateOf = useMemo(
+    () =>
+      favView
+        ? (t: ThreadSummary) => favStates.get(threadId(t))
+        : history
+          ? (t: ThreadSummary) => historyStates.get(threadId(t))
+          : (t: ThreadSummary) => (t.boardUrl === board?.url ? states.get(t.key) : undefined),
+    [favView, history !== undefined, favStates, historyStates, states, board?.url],
+  )
   const isFavorite = !!board && !!favorites?.some((f) => f.url === board.url)
   // 閲覧履歴・未読・お気に入りのスレ・書き込み履歴・画像は「履歴」の 1 つの画面にまとめ、上の帯で切り替える(スマホのアプリと同じ)
   const pastView = library !== undefined || favView || history !== undefined
@@ -2694,7 +2708,7 @@ export default function App() {
           className="fixed bottom-4 right-4 z-[9999] max-w-md flex items-start gap-2 px-4 py-3 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl text-sm"
           role="alert"
         >
-          <span className="material-symbols-outlined text-lg text-c-heat-very-hot">error</span>
+          <span className="material-symbols-outlined text-lg" style={{ color: 'var(--c-error)' }}>error</span>
           <span className="flex-1 text-c-text-body break-all whitespace-pre-wrap">{error}</span>
           <button type="button" onClick={() => setError(undefined)} className="text-c-text-muted hover:text-c-text-strong">
             <span className="material-symbols-outlined text-lg">close</span>

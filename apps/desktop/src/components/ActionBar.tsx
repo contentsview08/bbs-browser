@@ -178,7 +178,7 @@ function DesktopMoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
       {open && (
         <div
           // スマホは、ほかの画面(下から出るメニューなど)に合わせて、字と行を大きく
-          className={`absolute right-0 ${props.up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${isMobile ? 'w-72 rounded-2xl py-2 text-[15px]' : 'w-64 rounded-[var(--card-radius)] py-1 text-sm'} bg-c-surface border border-c-border shadow-xl z-40 max-h-[70vh] overflow-y-auto`}
+          className={`absolute right-0 ${props.up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${isMobile ? 'w-72 rounded-2xl py-2 text-[15px]' : 'w-64 rounded-[var(--card-radius)] py-1 text-sm'} bg-c-surface border border-c-border shadow-lg z-40 max-h-[70vh] overflow-y-auto menu-pop`}
         >
           {sub ? (
             <>
@@ -207,7 +207,7 @@ function DesktopMoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
               >
                 <span
                   className={`material-symbols-outlined text-lg ${a.active && a.fillWhenActive ? 'fill' : ''}`}
-                  style={{ color: a.active ? (a.activeColor ?? 'var(--c-accent)') : (a.tint ?? 'var(--c-text-muted)') }}
+                  style={{ color: a.active ? (a.activeColor ?? 'var(--c-accent)') : a.tint === 'var(--c-mark-danger)' ? a.tint : 'var(--c-text-muted)' }}
                 >
                   {a.icon}
                 </span>

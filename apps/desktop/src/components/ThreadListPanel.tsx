@@ -638,9 +638,9 @@ export default function ThreadListPanel(props: Props) {
   const allBarActions: BarAction[] = [
     ...(props.onOpenDrawer ? [{ id: 'drawer', label: 'メニュー', icon: 'menu', onClick: props.onOpenDrawer }] : []),
     { id: 'top', label: '先頭へ', icon: 'vertical_align_top', onClick: () => scrollRef.current?.scrollTo({ top: 0 }) },
-    { id: 'search', label: 'スレッド検索', icon: 'search', tint: 'var(--c-accent)', active: searchActive, onClick: () => setSearchActive((v) => !v) },
+    { id: 'search', label: 'スレッド検索', icon: 'search', active: searchActive, onClick: () => setSearchActive((v) => !v) },
     ...(props.onNewThread
-      ? [{ id: 'newThread', label: 'スレを立てる', icon: 'edit_square', tint: 'var(--c-mark-new)', onClick: props.onNewThread }]
+      ? [{ id: 'newThread', label: 'スレを立てる', icon: 'edit_square', onClick: props.onNewThread }]
       : []),
     ...(props.favorite
       ? [
@@ -664,7 +664,6 @@ export default function ThreadListPanel(props: Props) {
             id: 'style',
             label: '表示スタイル',
             icon: 'palette',
-            tint: 'var(--c-mark-purple)',
             render: (where: Placement) => props.style!.button(inBar(where, 'footer')),
             submenu: props.style.items,
           },
@@ -676,7 +675,6 @@ export default function ThreadListPanel(props: Props) {
             id: 'refresh',
             label: 'スレッド一覧を更新',
             icon: 'refresh',
-            tint: 'var(--c-accent)',
             // 押せるかは押した時点で決める(クールダウン中なら App が取りに行かない。残りは帯の更新ボタンに出る)
             disabled: props.loading,
             onClick: () => void props.onRefresh?.(),
@@ -894,7 +892,7 @@ export default function ThreadListPanel(props: Props) {
         {/* スマホ: ヘッダーはフッターと同じ色にし、下に線を引く(一覧と同じ色だと境目が分からないため) */}
         <div
           ref={headerRef}
-          className={`sticky top-0 z-10 frosted-glass flex-shrink-0 ${isMobile ? 'bar-zoom bg-panel-thread-header border-b border-c-border transition-transform duration-200' : ''}`}
+          className={`sticky top-0 z-10 bg-panel-thread-header flex-shrink-0 ${isMobile ? 'bar-zoom bg-panel-thread-header border-b border-c-border transition-transform duration-200' : ''}`}
         >
           {/* 下の端をつかんで、板名の行の高さを変える(板名の字も合わせて大きくなる) */}
           <DragEdge
@@ -1136,7 +1134,7 @@ export default function ThreadListPanel(props: Props) {
           ref={footerRef}
           className={`${
             // スマホ: 一覧の上に重ね、下へスクロールすると隠す
-            isMobile ? 'bar-zoom absolute bottom-0 inset-x-0 z-20 pl-1 pr-3 frosted-glass bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
+            isMobile ? 'bar-zoom absolute bottom-0 inset-x-0 z-20 pl-1 pr-3 bg-panel-thread-header transition-transform duration-200' : 'relative flex-shrink-0 h-10 px-3'
           } flex items-center justify-end gap-1 border-t border-c-border`}
           // スマホの高さは設定(--footer-bar-h)で変えられる
           style={isMobile ? { height: 'calc(var(--footer-bar-h, 68px) / var(--bar-zoom, 1))' } : footerDrag.height ? { height: footerDrag.height } : undefined}

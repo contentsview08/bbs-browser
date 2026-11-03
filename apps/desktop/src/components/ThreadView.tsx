@@ -355,9 +355,13 @@ function NgRunRow(props: {
 export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, onRead } = props
   /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
+  // 見えているタブだけ、判定が届くたびに計算し直す(隠れたタブは、見せるときに計算し直す)
+  const trollJudgeRef = useRef(props.trollJudge)
+  if (props.active) trollJudgeRef.current = props.trollJudge
+  const trollJudge = trollJudgeRef.current
   const autoNgBase = useMemo(
-    () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks, props.trollJudge) : new Map<number, AutoNgReason>()),
-    [settings.autoNg, log.posts, props.trollMarks, props.trollJudge],
+    () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks, trollJudge) : new Map<number, AutoNgReason>()),
+    [settings.autoNg, log.posts, props.trollMarks, trollJudge],
   )
   // AI NG: 本人の条件に当たったレス。畳む・隠すものは自動 NG と同じ並びに入れ、印だけのものは別に持つ
   const aiRules = useMemo(() => (settings.aiNgEnabled ? activeRules(settings.aiNgRules, props.boardUrl) : []), [settings.aiNgEnabled, settings.aiNgRules, props.boardUrl])
@@ -393,7 +397,13 @@ export default function ThreadView(props: Props) {
   )
   // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
   const isNgRule = props.isNg
-  const isNg = useCallback((p: Post) => isNgRule(p) || autoNg.has(p.no), [isNgRule, autoNg])
+  // NG の判定は、レスが変わったときに 1 回だけ全レスに当てて番号の Set にする(描くたびに NG 1 件ごとの toLowerCase を繰り返さない)
+  const ngRuleNos = useMemo(() => {
+    const out = new Set<number>()
+    for (const p of log.posts) if (isNgRule(p)) out.add(p.no)
+    return out
+  }, [log.posts, isNgRule])
+  const isNg = useCallback((p: Post) => ngRuleNos.has(p.no) || autoNg.has(p.no), [ngRuleNos, autoNg])
   const ref = useRef<HTMLDivElement>(null)
   /** レス一覧とミニマップの領域。ポップアップの幅をこれに合わせる */
   const viewRef = useRef<HTMLDivElement>(null)
@@ -1004,9 +1014,9 @@ export default function ThreadView(props: Props) {
     ...(props.onBackToList ? [{ id: 'back', label: '一覧に戻る', icon: 'arrow_back', onClick: props.onBackToList }] : []),
     { id: 'top', label: '先頭へ', icon: 'vertical_align_top', onClick: () => jumpToTop() },
     { id: 'bottom', label: '一番下へ', icon: 'vertical_align_bottom', onClick: () => jumpToBottom() },
-    ...(props.onSubmitPost ? [{ id: 'reply', label: '書き込む', icon: 'edit', tint: 'var(--c-accent)', onClick: () => openReply() }] : []),
+    ...(props.onSubmitPost ? [{ id: 'reply', label: '書き込む', icon: 'edit', onClick: () => openReply() }] : []),
     ...(props.onOpenDrawer ? [{ id: 'drawer', label: 'メニュー', icon: 'menu', onClick: props.onOpenDrawer }] : []),
-    { id: 'search', label: 'レス検索', icon: 'search', tint: 'var(--c-accent)', active: searchActive || !!query, onClick: () => setSearchActive((v) => !v) },
+    { id: 'search', label: 'レス検索', icon: 'search', active: searchActive || !!query, onClick: () => setSearchActive((v) => !v) },
     {
       id: 'favorite',
       label: props.isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す',
@@ -1017,14 +1027,13 @@ export default function ThreadView(props: Props) {
       fillWhenActive: true,
       onClick: props.onToggleFavorite,
     },
-    ...(props.onOpenBoard ? [{ id: 'openBoard', label: '板に戻る', icon: 'list', tint: 'var(--c-accent)', onClick: props.onOpenBoard }] : []),
+    ...(props.onOpenBoard ? [{ id: 'openBoard', label: '板に戻る', icon: 'list', onClick: props.onOpenBoard }] : []),
     ...(props.onFindNext
       ? [
           {
             id: 'findNext',
             label: '次スレを探す',
             icon: 'skip_next',
-            tint: 'var(--c-mark-new)',
             active: ended,
             onClick: () => {
               setShowNext(true)
@@ -1049,14 +1058,13 @@ export default function ThreadView(props: Props) {
           },
         ]
       : []),
-    { id: 'gallery', label: '画像一覧', icon: 'photo_library', tint: 'var(--c-mark-image)', active: galleryOpen, onClick: () => setGalleryOpen(true) },
+    { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
     ...(props.onUpdateSetting
       ? [
           {
             id: 'style',
             label: '表示スタイル',
             icon: 'palette',
-            tint: 'var(--c-mark-purple)',
             render: (where: Placement) => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={inBar(where, 'footer')} />,
             submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} />,
           },
@@ -1072,12 +1080,11 @@ export default function ThreadView(props: Props) {
       : []),
     { id: 'delete', label: 'ログを削除して閉じる (Shift+Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
     { id: 'copyUrl', label: 'URL をコピー', icon: 'link', onClick: () => copyText(props.threadUrl, 'URL をコピーしました') },
-    { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', tint: 'var(--c-mark-link)', onClick: props.onOpenInBrowser },
+    { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
     {
       id: 'save',
       label: 'スレを保存(HTML・テキスト)',
       icon: 'save',
-      tint: 'var(--c-mark-link)',
       onClick: () =>
         void saveThread({ title: log.title, url: props.threadUrl, posts: log.posts, savedAt: new Date() }).then(
           (path) => path && showQuick(true, `保存しました: ${path}`),
@@ -1088,7 +1095,6 @@ export default function ThreadView(props: Props) {
       id: 'refresh',
       label: '更新',
       icon: 'refresh',
-      tint: 'var(--c-accent)',
       disabled: props.loading,
       // 押せるかは押した時点で決める(描いた時刻で決めると、クールダウンが明けても描き直すまで押せない)
       // クールダウン中に押したときは、取りに行かずに既読の位置だけ引き直す(App の refreshThread)
@@ -1577,9 +1583,9 @@ export default function ThreadView(props: Props) {
   // 見えなくなったら(別のタブに移ったら)、開いていたポップアップと画像を閉じる
   useEffect(() => {
     if (props.active) return
-    setPopups([])
-    setLightbox(undefined)
-    setGalleryOpen(false)
+    setPopups((ps) => (ps.length ? [] : ps))
+    setLightbox((l) => (l ? undefined : l))
+    setGalleryOpen((g) => (g ? false : g))
   }, [props.active])
 
   // ── ポップアップ ──
@@ -1594,8 +1600,12 @@ export default function ThreadView(props: Props) {
   /** ポップアップの中身を描く関数(いつも最新の設定で描くよう、控えを通して呼ぶ) */
   const renderRef = useRef({ renderPosts, renderTree })
   renderRef.current = { renderPosts, renderTree }
+  // 操作の関数が読むレスのデータ(新着のたびに関数を作り直すと、全レスが描き直される。ref で最新を読む)
+  const dataRef = useRef({ byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts })
+  dataRef.current = { byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts }
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
+      const d = () => dataRef.current
       // 開いたレス(el を含むレス)が一覧の中にあれば、そこを見せる(ID のレス など)
       const open = (title: string, posts: Post[], el: HTMLElement, viaHover: boolean) => {
         // el はレスの中のボタンか、キー操作のときはレスの枠
@@ -1622,7 +1632,7 @@ export default function ThreadView(props: Props) {
       }
       return {
         onAnchor: (nos, el, via) => {
-          const posts = nos.map((n) => byNo.get(n)).filter((p): p is Post => p !== undefined)
+          const posts = nos.map((n) => d().byNo.get(n)).filter((p): p is Post => p !== undefined)
           const title = `>>${nos.length > 1 ? `${refOf(nos[0])}-${refOf(nos.at(-1)!)}` : refOf(nos[0])}`
           if (via === 'click') {
             clearTimeout(hover.current.timer)
@@ -1635,19 +1645,19 @@ export default function ThreadView(props: Props) {
         },
         onAnchorLeave: () => clearTimeout(hover.current.timer),
         onReplies: (no, el) => {
-          const list = (replies.get(no) ?? []).map((n) => byNo.get(n)!).filter(Boolean)
+          const list = (d().replies.get(no) ?? []).map((n) => d().byNo.get(n)!).filter(Boolean)
           open(`>>${refOf(no)} への返信 (${list.length})`, list, el, false)
         },
         onId: (id, el) => {
-          const list = log.posts.filter((p) => p.id === id)
+          const list = d().posts.filter((p) => p.id === id)
           open(`ID:${id} (${list.length})`, list, el, false)
         },
         onName: (name, el) => {
-          const list = log.posts.filter((p) => p.name === name)
+          const list = d().posts.filter((p) => p.name === name)
           open(`${name} (${list.length})`, list, el, false)
         },
         onBody: (no, el) => {
-          const tree = anchorTree(no, log.posts, resolveAnchor, quoteLinks)
+          const tree = anchorTree(no, d().posts, d().resolveAnchor, d().quoteLinks)
           if (tree.length <= 1) return
           openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderRef.current.renderTree(no, level + 1), el, false, no)
         },
@@ -1664,7 +1674,7 @@ export default function ThreadView(props: Props) {
               withReplyRef.current((h) => h.insert(replyText(no)))
             }
           : undefined,
-        toNo: resolveAnchor,
+        toNo: (n: number) => d().resolveAnchor(n),
         urls: { shorten: settings.urlShorten, omitImages: settings.imageUrlOmit, collapseImageRuns: settings.imageUrlCollapse },
         idHeat: settings.idHeat,
         // ID ごとの色は配色の明るさで変える。LINE ライトの LINE 風は空色の地なので、白っぽい字に合う淡い色(スマホのアプリと同じ)
@@ -1683,14 +1693,15 @@ export default function ThreadView(props: Props) {
         onDeletePost: props.onDeletePost,
         onMarkOwn: props.onMarkOwn
           ? (post, own, sameId) =>
-              props.onMarkOwn!(sameId && post.id ? log.posts.filter((p) => p.id === post.id).map((p) => p.no) : [post.no], own)
+              props.onMarkOwn!(sameId && post.id ? d().posts.filter((p) => p.id === post.id).map((p) => p.no) : [post.no], own)
           : undefined,
         onQuickReply: canReply ? (no, text) => void quickPostRef.current(`${replyText(no)}${text}`) : undefined,
       }
     },
     // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
-    [byNo, replies, log.posts, settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, anchorCounts, idCounts, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, resolveAnchor, quoteLinks, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
+    // レスのデータ(byNo・replies・posts・anchorCounts など)は dataRef で読むので、ここには入れない
+    [settings.anchorPopup, settings.idHeat, settings.idColor, settings.heatStyle, settings.doubleTapReply, settings.dateStyle, settings.idShort, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.imageUrlCollapse, settings.imageUrlOmit, settings.thumbLoad, settings.urlShorten, isNg, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1786,7 +1797,7 @@ export default function ThreadView(props: Props) {
     <div
       ref={headerRef}
       // bar-zoom: スマホのヘッダーの文字の大きさ(設定)
-      className={`relative ${headerInScroll ? 'sticky top-0 z-10 frosted-glass' : ''} ${isMobile ? 'bar-zoom transition-transform duration-200' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
+      className={`relative ${headerInScroll ? 'sticky top-0 z-10' : ''} ${isMobile ? 'bar-zoom transition-transform duration-200' : ''} bg-panel-thread-header border-b border-c-border flex-shrink-0`}
     >
         {/* 下の端をつかんで、スレタイの行の高さを変える(スレタイの字も合わせて大きくなる) */}
         <DragEdge
@@ -1924,7 +1935,7 @@ export default function ThreadView(props: Props) {
               >
                 {/* 見せ方は設定で(アイコンと文字・アイコンだけ・文字だけ) */}
                 {settings.filterTabLabel !== 'text' && (
-                  <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={{ color }}>
+                  <span className={`material-symbols-outlined ${isMobile ? 'text-base' : 'text-xl'} leading-none ${active ? 'fill' : ''}`} style={active ? { color } : undefined}>
                     {icon}
                   </span>
                 )}
@@ -1993,7 +2004,7 @@ export default function ThreadView(props: Props) {
           key={newToast.seq}
           type="button"
           onClick={jumpToNew}
-          className="absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-4 py-2 rounded-full shadow-lg text-sm font-bold toast-in hover:brightness-110"
+          className="absolute left-1/2 z-20 flex items-center gap-1.5 px-4 py-2 rounded-full shadow-md text-sm font-bold badge-in hover:brightness-110"
           style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)', bottom: 'calc(var(--footer-offset, 0px) + 20px)' }}
           title="新着の頭へ飛ぶ"
         >
@@ -2056,7 +2067,7 @@ export default function ThreadView(props: Props) {
             ) : props.errorText ? (
               <LoadFailed message={props.errorText} onRetry={() => void props.onRefresh()} />
             ) : (
-              <div className="text-c-text-muted text-sm">投稿がありません</div>
+              <div className="text-c-text-muted text-sm">レスがありません</div>
             )
           ) : (
             <>
@@ -2196,7 +2207,7 @@ export default function ThreadView(props: Props) {
       {hasFooter && isMobile && (
         <div
           ref={footerRef}
-          className="bar-zoom absolute inset-x-0 z-20 border-t border-c-border frosted-glass bg-panel-thread-header transition-transform duration-200"
+          className="bar-zoom absolute inset-x-0 z-20 border-t border-c-border bg-panel-thread-header transition-transform duration-200"
           // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)。高さは設定(--footer-bar-h)で変えられる
           style={{ bottom: 'var(--kb-inset, 0px)', minHeight: `calc(var(--footer-bar-h, ${MOBILE_BAR_H}px) / var(--bar-zoom, 1))` }}
         >
@@ -2348,7 +2359,7 @@ export default function ThreadView(props: Props) {
             borderColor: quickMessage.ok ? 'var(--c-border)' : 'var(--c-error)',
           }}
         >
-          <span className={`material-symbols-outlined text-lg ${quickMessage.ok ? 'text-c-accent' : 'text-c-heat-very-hot'}`}>
+          <span className={`material-symbols-outlined text-lg ${quickMessage.ok ? 'text-c-accent' : 'text-[var(--c-error)]'}`}>
             {quickMessage.ok ? 'check_circle' : 'error'}
           </span>
           <span className="max-w-[60vw] truncate text-c-text-body">{quickMessage.text}</span>

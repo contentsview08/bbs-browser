@@ -7,7 +7,7 @@ import type { DateStyle } from '../utils/displayDate'
 // 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
 
 import { isMobile } from '../utils/platform'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
@@ -718,6 +718,7 @@ function apply(s: AppSettings) {
       : preset.css
   root.style.setProperty('--app-font', css)
   for (const p of PANELS) root.style.setProperty(p.cssVar, String(s.panelAlpha[p.key] ?? 1))
+  root.style.setProperty('--bg-image-opacity', String(s.backgroundOpacity))
   root.style.setProperty('--post-thumb-size', `${s.postThumbSize}px`)
   root.style.setProperty('--list-thumb-scale', String(s.listThumbScale))
 }
@@ -725,6 +726,9 @@ function apply(s: AppSettings) {
 export type PaneMode = 'split' | 'single' | 'auto'
 
 export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
+
+/** 設定を変えてから DB に書くまで待つ時間 */
+const SAVE_DELAY_MS = 400
 
 /** 設定を読み込み、変更を即座に画面へ反映して保存する。loaded は保存済みの値を読み終えたか */
 export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSetting, boolean] {
@@ -756,12 +760,34 @@ export function useSettings(store: LogStore | undefined): [AppSettings, UpdateSe
     return () => media.removeEventListener('change', onChange)
   }, [settings])
 
+  // DB への保存は少し待ってまとめる(スライダーを動かすたび・1 文字打つたびに書かない)。同じ項目は最後の値だけ書く
+  const pendingWrites = useRef(new Map<keyof AppSettings, unknown>())
+  const writeTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const flush = useCallback(() => {
+    if (writeTimer.current) clearTimeout(writeTimer.current)
+    writeTimer.current = undefined
+    if (!store || pendingWrites.current.size === 0) return
+    const writes = [...pendingWrites.current.entries()]
+    pendingWrites.current.clear()
+    for (const [key, value] of writes) void store.setSetting(key, value as AppSettings[typeof key]).catch(backgroundError('設定の保存'))
+  }, [store])
+  // 閉じるとき・裏に回ったときは、待っているぶんを書いてしまう
+  useEffect(() => {
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', flush)
+      flush()
+    }
+  }, [flush])
   const update = useCallback<UpdateSetting>(
     (key, value) => {
       setSettings((s) => ({ ...s, [key]: value }))
-      void store?.setSetting(key, value).catch(backgroundError('設定の保存'))
+      pendingWrites.current.set(key, value)
+      if (!writeTimer.current) writeTimer.current = setTimeout(flush, SAVE_DELAY_MS)
     },
-    [store],
+    [flush],
   )
 
   return [settings, update, loaded]

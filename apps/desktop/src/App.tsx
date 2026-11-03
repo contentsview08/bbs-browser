@@ -361,8 +361,35 @@ export default function App() {
       if (z.listFocused) z.update('listFontPx', clamp((s.listFontPx || base) + step))
       else z.update('postBodyPx', clamp((s.postBodyPx || base) + step))
     }
-    window.addEventListener('wheel', onWheel, { passive: false })
-    return () => window.removeEventListener('wheel', onWheel)
+    // 受け口は Ctrl を押している間だけ付ける。いつも付けておくと(passive でないので)、ホイールのたびにブラウザが JS の返事を待ってから
+    // スクロールすることになり、画面の外でなめらかにスクロールする仕組みが効かなくなる(重く感じる)
+    let on = false
+    const attach = () => {
+      if (on) return
+      on = true
+      window.addEventListener('wheel', onWheel, { passive: false })
+    }
+    const detach = () => {
+      if (!on) return
+      on = false
+      wheelZoom.current.acc = 0
+      window.removeEventListener('wheel', onWheel)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') attach()
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control' || !e.ctrlKey) detach()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', detach)
+    return () => {
+      detach()
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', detach)
+    }
   }, [])
 
   // 非同期の処理の途中で最新の値を見るための控え
@@ -624,11 +651,12 @@ export default function App() {
   }
   // 印から育つ判定(utils/trollModel.ts)。ログの数え上げと学習は画面の外(workers/trollWorker.ts)で行う
   const trollJudge = useTrollModel(store, settings.autoNg, markRecords)
-  // AI NG のモデルは、使う設定のときだけ動かす(取ってあれば通信しない)
+  // AI NG のモデルは、使う設定で、効く条件が 1 つ以上あるときだけ動かす(取ってあれば通信しない)。条件がないのに 355MB を読み込まない
+  const aiNgWanted = settings.aiNgEnabled && settings.aiNgRules.some((r) => r.enabled && r.prompt.trim() !== '')
   useEffect(() => {
-    if (settings.aiNgEnabled) startAiModel()
+    if (aiNgWanted) startAiModel()
     else stopAiModel()
-  }, [settings.aiNgEnabled])
+  }, [aiNgWanted])
   /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
   const [listCounts, setListCounts] = useState(new Map<string, number>())
   useEffect(() => {
@@ -2008,7 +2036,7 @@ export default function App() {
           className="absolute inset-0 -z-10 pointer-events-none bg-cover bg-center"
           style={{
             backgroundImage: `url("${backgroundImageUrl(settings.backgroundImage)}")`,
-            opacity: settings.backgroundOpacity,
+            opacity: 'var(--bg-image-opacity, 1)',
           }}
         />
       )}

@@ -270,6 +270,41 @@ export function ListEditor(props: {
 }
 
 /** 多いデータの設定の行: 件数と、管理画面を開くボタン */
+/**
+ * 0〜100% のスライダー。動かしている間は画面にだけ映し(onPreview)、離したときに設定に書く(onCommit)。
+ * 動かすたびに設定を書くと、残してあるタブまで毎回描き直されて重い
+ */
+export function PercentSlider(props: { value: number; onCommit: (v: number) => void; onPreview?: (v: number) => void; disabled?: boolean }) {
+  const [draft, setDraft] = useState<number>()
+  const v = draft ?? Math.round(props.value * 100)
+  const commit = () => {
+    if (draft === undefined) return
+    setDraft(undefined)
+    if (draft !== Math.round(props.value * 100)) props.onCommit(draft / 100)
+  }
+  return (
+    <>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={v}
+        disabled={props.disabled}
+        onChange={(e) => {
+          const n = Number(e.target.value)
+          setDraft(n)
+          props.onPreview?.(n / 100)
+        }}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+        className="flex-1"
+      />
+      <span className="w-10 text-right tabular-nums text-c-text-muted">{v}%</span>
+    </>
+  )
+}
+
 export function ManagerRow(props: { label: string; count: number; unit?: string; note?: string; onOpen: () => void }) {
   return (
     <button

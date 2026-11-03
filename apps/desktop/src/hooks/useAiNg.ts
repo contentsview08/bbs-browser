@@ -48,13 +48,27 @@ function showProgress() {
   if (status.kind === 'loading' || status.kind === 'off') setStatus({ kind: 'loading', loaded, total })
 }
 
+/** 知らせは少し待ってまとめる(当たり具合は 8 件ずつ届く。届くたびに全タブのレスを判定し直して描き直すと重い) */
+const EMIT_DELAY_MS = 250
+let emitTimer: ReturnType<typeof setTimeout> | undefined
 function emit() {
   version++
+  if (emitTimer) return
+  emitTimer = setTimeout(() => {
+    emitTimer = undefined
+    for (const l of listeners) l()
+  }, EMIT_DELAY_MS)
+}
+/** 知らせをすぐ出す(状態が変わったとき) */
+function emitNow() {
+  version++
+  if (emitTimer) clearTimeout(emitTimer)
+  emitTimer = undefined
   for (const l of listeners) l()
 }
 function setStatus(s: AiModelStatus) {
   status = s
-  emit()
+  emitNow()
 }
 
 function ensureWorker(): Worker {
@@ -227,18 +241,23 @@ export function useAiModelStatus(): AiModelStatus {
 export function useAiScoresVersion(): number {
   return useSyncExternalStore(subscribe, () => version)
 }
+const noSubscribe = () => () => {}
+const zero = () => 0
 
-/** スレのレスの当たり具合を頼み、当たり具合が届いたら描き直す。enabled でなければ何もしない */
-export function useAiNgScores(posts: Post[], prompts: string[], enabled: boolean): number {
-  const v = useAiScoresVersion()
-  const st = useAiModelStatus()
+/**
+ * スレのレスの当たり具合を頼み、当たり具合が届いたら描き直す。enabled でなければ何もしない(購読もしない)。
+ * 頼むのは見えているタブ(active)だけ。残してある隠れたタブのぶんまで頼むと、モデルがずっと動き続ける
+ */
+export function useAiNgScores(posts: Post[], prompts: string[], enabled: boolean, active = true): number {
+  const v = useSyncExternalStore(enabled ? subscribe : noSubscribe, enabled ? () => version : zero)
+  const st = useSyncExternalStore(enabled ? subscribe : noSubscribe, () => status)
   const sig = prompts.join('\n')
   // 新しいレスから(下にあるほど新しく、いま読んでいる所に近い)
   const ordered = useMemo(() => [...posts].reverse(), [posts])
   useEffect(() => {
-    if (!enabled || st.kind !== 'ready') return
+    if (!enabled || !active || st.kind !== 'ready') return
     requestScores(ordered, prompts)
     // prompts は sig で見る
-  }, [enabled, st.kind, ordered, sig])
+  }, [enabled, active, st.kind, ordered, sig])
   return v
 }

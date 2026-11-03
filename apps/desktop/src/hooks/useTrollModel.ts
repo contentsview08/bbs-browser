@@ -11,6 +11,8 @@ import { backgroundError } from '../utils/backgroundError'
 const CORPUS_POSTS = 40000
 /** 起動してからログを読むまで待つ時間 */
 const STARTUP_DELAY_MS = 4000
+/** 覚えておく予測の数(残してあるタブの全レスぶんで足りる) */
+const PREDICT_CACHE_MAX = 20000
 
 export function useTrollModel(store: LogStore | undefined, enabled: boolean, marks: TrollMarkRecord[]): ((body: string) => Judgement) | undefined {
   const worker = useRef<Worker>(undefined)
@@ -63,5 +65,19 @@ export function useTrollModel(store: LogStore | undefined, enabled: boolean, mar
     return () => clearTimeout(timer)
   }, [corpus, marks])
 
-  return useMemo(() => (model && corpus ? (body: string) => predict(model, body, corpus) : undefined), [model, corpus])
+  // 予測は本文ごとに覚える。スレを更新するたびに全レスを判定し直すが、新着のぶんだけ計算すれば済むように。
+  // モデルか数え上げが替わったら(印を付けて学び直した)覚えたものは捨てる
+  return useMemo(() => {
+    if (!model || !corpus) return undefined
+    const cache = new Map<string, Judgement>()
+    return (body: string) => {
+      let j = cache.get(body)
+      if (!j) {
+        j = predict(model, body, corpus)
+        if (cache.size >= PREDICT_CACHE_MAX) cache.delete(cache.keys().next().value as string)
+        cache.set(body, j)
+      }
+      return j
+    }
+  }, [model, corpus])
 }

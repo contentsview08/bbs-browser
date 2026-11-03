@@ -360,7 +360,7 @@ export default function ThreadView(props: Props) {
   )
   // AI NG: 本人の条件に当たったレス。畳む・隠すものは自動 NG と同じ並びに入れ、印だけのものは別に持つ
   const aiRules = useMemo(() => (settings.aiNgEnabled ? activeRules(settings.aiNgRules, props.boardUrl) : []), [settings.aiNgEnabled, settings.aiNgRules, props.boardUrl])
-  const aiVersion = useAiNgScores(log.posts, aiRules.map((r) => r.prompt), aiRules.length > 0)
+  const aiVersion = useAiNgScores(log.posts, aiRules.map((r) => r.prompt), aiRules.length > 0, props.active)
   // 手の印から学んだ判定(印が変わったときだけ学び直す)
   const aiLearned = useMemo(() => trainRules(aiRules, settings.aiNgOverrides), [aiRules, settings.aiNgOverrides])
   const aiNg = useMemo(

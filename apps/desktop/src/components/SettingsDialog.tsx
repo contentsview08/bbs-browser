@@ -5,7 +5,7 @@ import NgManager from './NgManager'
 import AiNgSettings from './AiNgSettings'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
 import { isCustomDark, parseCustom } from '../ui/customScheme'
-import { useRef, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRef, createContext, useContext, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { normalizeForSearch } from '../utils/postBody'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -40,7 +40,7 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
-import { ListEditor, NumberField, SamplePosts, ThumbSample } from './SettingParts'
+import { ListEditor, NumberField, PercentSlider, SamplePosts, ThumbSample } from './SettingParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -634,16 +634,12 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
             </div>
             <label className="flex items-center gap-3 text-sm text-c-text-body">
               <span className="w-12 flex-shrink-0">濃さ</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={Math.round(s.backgroundOpacity * 100)}
-                onChange={(e) => update('backgroundOpacity', Number(e.target.value) / 100)}
-                className="flex-1"
+              <PercentSlider
+                value={s.backgroundOpacity}
                 disabled={!s.backgroundImage}
+                onPreview={(v) => document.documentElement.style.setProperty('--bg-image-opacity', String(v))}
+                onCommit={(v) => update('backgroundOpacity', v)}
               />
-              <span className="w-10 text-right tabular-nums text-c-text-muted">{Math.round(s.backgroundOpacity * 100)}%</span>
             </label>
           </div>
         </div>
@@ -678,15 +674,11 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
             return (
               <label key={p.key} className="flex items-center gap-3 text-sm text-c-text-body">
                 <span className="w-56 flex-shrink-0 truncate">{p.name}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={Math.round(v * 100)}
-                  onChange={(e) => update('panelAlpha', { ...s.panelAlpha, [p.key]: Number(e.target.value) / 100 })}
-                  className="flex-1"
+                <PercentSlider
+                  value={v}
+                  onPreview={(a) => document.documentElement.style.setProperty(p.cssVar, String(a))}
+                  onCommit={(a) => update('panelAlpha', { ...s.panelAlpha, [p.key]: a })}
                 />
-                <span className="w-10 text-right tabular-nums text-c-text-muted">{Math.round(v * 100)}%</span>
               </label>
             )
           })}
@@ -2578,6 +2570,8 @@ export default function SettingsDialog(props: SettingsProps) {
   const [listSite, setListSite] = useState<string>()
   /** 設定の検索。言葉があるときは、すべての分類から当てはまる設定だけを並べる */
   const [query, setQuery] = useState('')
+  // 検索の結果は全分類を描くので重い。打っている間は少し遅らせて、入力の反応を止めない
+  const deferredQuery = useDeferredValue(query)
   const searching = query.trim() !== ''
   // スマホは、はじめから高度な設定も全部出す(分類を開いてから探すので、多くても困らない)
   const showAdvanced = isMobile || props.settings.showAdvanced
@@ -2679,7 +2673,7 @@ export default function SettingsDialog(props: SettingsProps) {
   }
   /** 検索の結果: すべての分類を並べ、当てはまる Section だけを出す(板一覧は大きいので入れない) */
   const searchResults = (
-    <SearchContext.Provider value={query}>
+    <SearchContext.Provider value={deferredQuery}>
       {tabs
         .filter((t) => t.key !== 'boardlist')
         .map((t) => (

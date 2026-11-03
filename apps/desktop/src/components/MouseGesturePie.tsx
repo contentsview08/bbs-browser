@@ -1,5 +1,6 @@
 // PC: マウスジェスチャーの円盤(パイメニュー)。中心から 8 方向の区画に操作の名前を書き、向いている区画を差し色で光らせる。
 // 画面に出すとき(useMouseGesture の pie)と、設定で割り当てを見せる・選ぶとき(interactive)の両方で使う
+import { createPortal } from 'react-dom'
 import { PIE_DIRS, type PieDir } from '../hooks/useMouseGesture'
 
 /** 区画の内側と外側の半径(px) */
@@ -118,17 +119,24 @@ export default function MouseGesturePie(props: {
   )
 }
 
-/** 画面に出す(useMouseGesture の pie)。中心を動かし始めた所に合わせ、下に向いている操作の名前を出す */
+/**
+ * 画面に出す(useMouseGesture の pie)。中心を動かし始めた所に合わせ、下に向いている操作の名前を出す。
+ * body の直下に出す(transform のある親の中だと fixed の位置がずれる)。画面の端で始めたときは、円盤が全部見える所まで寄せる
+ */
 export function MouseGesturePieOverlay(props: { x: number; y: number; dir: PieDir | null; labels: Partial<Record<PieDir, string | undefined>> }) {
   const name = props.dir ? props.labels[props.dir] : undefined
-  return (
-    <div className="fixed inset-0 z-[80] pointer-events-none">
-      <div className="absolute" style={{ left: props.x - SIZE / 2, top: props.y - SIZE / 2, width: SIZE }}>
+  const half = SIZE / 2
+  const x = Math.min(Math.max(half, props.x), window.innerWidth - half)
+  const y = Math.min(Math.max(half, props.y), window.innerHeight - half - 28)
+  return createPortal(
+    <div className="fixed inset-0 z-[9950] pointer-events-none">
+      <div className="absolute" style={{ left: x - half, top: y - half, width: SIZE }}>
         <MouseGesturePie labels={props.labels} active={props.dir} center={props.dir ? (name ? '' : 'なし') : 'なし'} />
         <div className="mt-1 flex justify-center">
           <span className="px-3 py-1 rounded-full bg-black/70 text-white text-xs font-bold whitespace-nowrap">{name ?? (props.dir ? '割り当てなし' : '離すと何もしない')}</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

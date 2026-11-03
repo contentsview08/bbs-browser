@@ -128,6 +128,8 @@ interface Props {
   snapshotKey?: unknown
   /** これが変わったら、その絞り込みにする(サイドバーの「お気に入りのスレ」・「次の未読スレ」から開いたとき)。null なら外す */
   filterRequest?: { key: ListFilter | null; seq: number }
+  /** マウスジェスチャーからの、上のタブの頼み(そのタブを押したのと同じ。next・prev は隣のタブ) */
+  tabRequest?: { key: ListTabKey | 'next' | 'prev'; seq: number }
   /** 絞り込みが変わった(履歴の画面で、どの絞り込みを見ているかを App が覚える) */
   onFilterChange?: (f: ListFilter | null) => void
   /** 見た順(いつもの並び)を選んでいるときにもう一度押した: 並べ直す(閲覧履歴を見た順に読み直す) */
@@ -251,6 +253,19 @@ export default function ThreadListPanel(props: Props) {
     setReversed(false)
     // defaultSort は固定
   }, [props.filterRequest])
+  // マウスジェスチャーからのタブの頼み。隣のタブは、いま選んでいるタブ(絞り込みか並べ替え)の右・左
+  const seenTab = useRef(props.tabRequest?.seq)
+  useEffect(() => {
+    const r = props.tabRequest
+    if (!r || r.seq === seenTab.current) return
+    seenTab.current = r.seq
+    if (r.key === 'next' || r.key === 'prev') {
+      if (tabs.length === 0) return
+      const cur = tabs.findIndex((k) => k === filter || (sort && k === sort.mode && !LIST_FILTERS.has(k)))
+      pressTab(tabs[(cur + (r.key === 'next' ? 1 : -1) + tabs.length) % tabs.length])
+    } else if (tabs.includes(r.key)) pressTab(r.key)
+    // 頼みが来たときだけ
+  }, [props.tabRequest])
 
   // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
   // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
@@ -450,10 +465,14 @@ export default function ThreadListPanel(props: Props) {
   // サーバーの並び(ふたば)は一覧と一緒に変わるので、一緒に遅らせる(ずれると、一瞬だけ並べ替えていない一覧が出る)
   const shownServerOrder = useDeferredValue(props.serverOrder)
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    // 検索: 全角・半角・大文字・小文字・カナを同一視し、空白で区切った言葉はすべて含むもの(AND)。立てた人の ID も探す
+    const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
     let list = shownThreads.filter((t) => {
       if (props.isNg(t)) return false
-      if (q && !t.title.toLowerCase().includes(q)) return false
+      if (terms.length > 0) {
+        const hay = normalizeForSearch(`${t.title} ${t.authorId ?? ''}`)
+        if (!terms.every((w) => hay.includes(w))) return false
+      }
       if (unreadOnly && !(unreadSnapshot?.has(threadId(t)) ?? false)) return false
       if (visitedOnly && stateOf(t) === undefined) return false
       if (filter === 'posted' && !props.postedIds?.has(threadId(t))) return false

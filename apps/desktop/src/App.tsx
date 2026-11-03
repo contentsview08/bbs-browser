@@ -43,7 +43,7 @@ import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postB
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
-import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, type ListFilter, type StoredNotification } from './ui/settings'
+import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, type ListFilter, type ListTabKey, type StoredNotification } from './ui/settings'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
@@ -230,6 +230,8 @@ export default function App() {
   /** サイドバーの「未読のスレ」を押した回数(閲覧履歴を未読で絞り込むきっかけ) */
   /** 「履歴」の一覧の絞り込みの頼み(サイドバーの「お気に入りのスレ」・「次の未読スレ」などから開くとき)。seq が変わると一覧が従う */
   const [filterRequest, setFilterRequest] = useState<{ key: ListFilter | null; seq: number }>()
+  /** マウスジェスチャーからの、スレ一覧の上のタブの頼み(どのタブか、または隣へ) */
+  const [tabRequest, setTabRequest] = useState<{ key: ListTabKey | 'next' | 'prev'; seq: number }>()
   /** 「履歴」の一覧がいま見せている絞り込み(一覧から知らされる。戻る・進む と、スマホの帯の印に使う) */
   const [pastFilter, setPastFilter] = useState<ListFilter | null>(null)
   /** 板ごとの設定(名無しの名前など)。板ごとに一度だけ取る */
@@ -1805,12 +1807,28 @@ export default function App() {
     }
     if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
-    // マウスジェスチャー(円盤)だけの操作: 画面を開く
+    // マウスジェスチャー(円盤)だけの操作: 画面を開く・スレ一覧のタブ・お気に入り板
     if (action === 'settings') return openSettings('display')
     if (action === 'history') return openHistory()
     if (action === 'favThreads') return openFavThreads()
+    if (action === 'postHistory') return openHistory(true, 'posted')
+    if (action === 'uploads') return void openUploads()
     if (action === 'notifications') return openNotifications()
     if (action === 'openUrl') return setUrlPrompt('')
+    if (action === 'newThread') {
+      if (board && !history && connectorOf(board.connectorId).createThread) setNewThreadOpen(true)
+      return
+    }
+    if (action === 'listTabNext' || action === 'listTabPrev' || action.startsWith('listTab:')) {
+      setTabRequest((r) => ({ key: action === 'listTabNext' ? 'next' : action === 'listTabPrev' ? 'prev' : (action.slice(8) as ListTabKey), seq: (r?.seq ?? 0) + 1 }))
+      return
+    }
+    if (action.startsWith('board:')) {
+      const url = action.slice(6)
+      const b = (favorites ?? []).find((f) => f.url === url)
+      if (b) void openBoard(b)
+      return
+    }
     // 設定で確かめることにしていれば、確かめてから消す(Shift+Delete と同じ)
     if (action === 'deleteLog') {
       const targets = targetTabs()
@@ -1857,7 +1875,7 @@ export default function App() {
       .map(([dir, action]) => [
         dir,
         {
-          label: mouseActionName(action),
+          label: mouseActionName(action, favorites ?? undefined),
           onCommit: () => {
             // ダイアログの上では、戻るで閉じるだけにする
             if (modalOpen()) {
@@ -2544,6 +2562,7 @@ export default function App() {
           keywords={history ? undefined : settings.keywords}
           snapshotKey={history ? `${historyVersion}:${favVersion}` : undefined}
           filterRequest={history ? filterRequest : undefined}
+          tabRequest={tabRequest}
           onFilterChange={history ? setPastFilter : undefined}
           postedIds={history ? postedIds : undefined}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}

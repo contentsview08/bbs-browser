@@ -809,14 +809,18 @@ export default function ThreadView(props: Props) {
     return c
   }, [log.posts, matchesFilter, ownNos])
   const visibleNos = useMemo(() => {
-    const q = normalizeForSearch(query.trim())
-    if (filters.size === 0 && !q) return undefined
+    // 検索: 空白で区切った言葉はすべて含むもの(AND)。番号・名前・ID・本文から探す
+    const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
+    if (filters.size === 0 && terms.length === 0) return undefined
     const set = new Set<number>()
     for (const p of log.posts) {
       if (filters.size > 0) {
         if (![...filters].some((f) => matchesFilter(p, f))) continue
       }
-      if (q && !normalizeForSearch(`${p.no} ${p.name} ${p.body}`).includes(q)) continue
+      if (terms.length > 0) {
+        const hay = normalizeForSearch(`${p.no} ${p.name} ${p.id ?? ''} ${p.body}`)
+        if (!terms.every((w) => hay.includes(w))) continue
+      }
       set.add(p.no)
     }
     return set

@@ -44,7 +44,7 @@ import FontSizeSlider, { ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCs
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle, TextSetting } from './SettingParts'
 import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
-import { GESTURE_ACTIONS, MOUSE_GESTURE_ACTIONS, mouseActionName } from '../utils/gestures'
+import { GESTURE_ACTIONS, MOUSE_LIST_ACTIONS, MOUSE_OPEN_ACTIONS, boardAction, mouseActionName } from '../utils/gestures'
 import { PIE_DIRS, PIE_DIR_NAMES, type PieDir } from '../hooks/useMouseGesture'
 import MouseGesturePie from './MouseGesturePie'
 import { getVersion } from '@tauri-apps/api/app'
@@ -1344,10 +1344,18 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
  * PC: マウスジェスチャー(円盤)。8 方向それぞれに操作を割り当てる。左の円盤の区画を押すと、その方向の行が選ばれる。
  * 操作はキー操作すべてと、画面を開く操作(設定・履歴など)
  */
-function MouseGestureSettings({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+function MouseGestureSettings({ settings: s, update, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'favorites'>) {
   const map = s.mouseGestures
   const [picked, setPicked] = useState<PieDir>('n')
-  const labels = Object.fromEntries(PIE_DIRS.map((d) => [d, map[d] ? mouseActionName(map[d]) : undefined])) as Partial<Record<PieDir, string | undefined>>
+  // お気に入り板は別名(boardMeta の alias)があればその名前で
+  const favs = favorites.map((b) => ({ url: b.url, name: s.boardMeta[b.url]?.alias || b.name }))
+  const labels = Object.fromEntries(PIE_DIRS.map((d) => [d, map[d] ? mouseActionName(map[d], favs) : undefined])) as Partial<Record<PieDir, string | undefined>>
+  const groups: { name: string; items: { key: string; name: string }[] }[] = [
+    { name: 'キー操作と同じ', items: KEY_ACTIONS },
+    { name: '画面を開く', items: MOUSE_OPEN_ACTIONS },
+    { name: 'スレ一覧のタブ', items: MOUSE_LIST_ACTIONS },
+    { name: 'お気に入り板を開く', items: favs.map((b) => ({ key: boardAction(b.url), name: b.name })) },
+  ]
   const setDir = (d: PieDir, action: string) => {
     const next = { ...map }
     if (action) next[d] = action
@@ -1375,10 +1383,14 @@ function MouseGestureSettings({ settings: s, update }: Pick<SettingsProps, 'sett
               <span className={`w-10 flex-shrink-0 ${picked === d ? 'text-c-accent font-bold' : 'text-c-text-strong'}`}>{PIE_DIR_NAMES[d]}</span>
               <select value={map[d] ?? ''} onChange={(e) => setDir(d, e.target.value)} onFocus={() => setPicked(d)} className={`${INPUT} flex-1 min-w-0`}>
                 <option value="">なし</option>
-                {MOUSE_GESTURE_ACTIONS.map((a) => (
-                  <option key={a.key} value={a.key}>
-                    {a.name}
-                  </option>
+                {groups.map((g) => (
+                  <optgroup key={g.name} label={g.name}>
+                    {g.items.map((a) => (
+                      <option key={a.key} value={a.key}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </label>
@@ -1397,7 +1409,7 @@ function MouseGestureSettings({ settings: s, update }: Pick<SettingsProps, 'sett
  * 同じキーをほかの操作に使っていたら、そちらから外して付け替える(すぐ「元に戻す」で戻せる)。
  * 決め打ちのキー(Esc・Ctrl+W など)には割り当てない
  */
-function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+function KeysTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settings' | 'update' | 'favorites'>) {
   const keymap = resolveKeymap(s.keymap)
   /** キーを待っている操作('find' は押したキーから操作を探す) */
   const [waiting, setWaiting] = useState<KeyAction | 'find'>()
@@ -1601,7 +1613,7 @@ function KeysTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upda
           すべて既定に戻す
         </button>
       </Section>
-      <MouseGestureSettings settings={s} update={update} />
+      <MouseGestureSettings settings={s} update={update} favorites={favorites} />
       <Section title="決まっているキー" note="ここは変えられません(? キーの一覧にも出ます)">
         <ul className="text-sm text-c-text-body space-y-1">
           {FIXED_KEYS.map((f) => (

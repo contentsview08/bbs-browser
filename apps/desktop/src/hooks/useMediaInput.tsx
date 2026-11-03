@@ -8,6 +8,7 @@
 // - 上げ終わったら本文のカーソルの位置に URL を入れ、アップロード履歴に残す
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
 import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadOptions } from '../host/uploader'
@@ -79,6 +80,8 @@ export function useMediaInput(o: {
 }): {
   /** 書き込みに付けたファイルの並び(小さい見本と ×)。付けていなければ null */
   attachedView: ReactNode
+  /** 貼り付け・ドロップで 2 枚以上来たときの確かめ(出すものがなければ null)。書き込み欄・スレ立ての中に置く */
+  confirmView: ReactNode
   /** 付けたファイルの中身(書き込むときに PostInput.files に渡す) */
   takeFiles: () => Promise<PostFile[]>
   /** 付けたファイルを外す(書き込めたあと) */
@@ -117,6 +120,15 @@ export function useMediaInput(o: {
   const fileRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
+  /**
+   * 貼り付け・ドロップで 2 枚以上来たときの確かめ(「この n 枚を上げていいですか」。上げないものはチェックを外す)。
+   * 1 枚はそのまま上げる。ファイルを選ぶボタンから選んだときは、選んだ時点で決めているので確かめない
+   */
+  const [pending, setPending] = useState<{ files: File[]; on: boolean[]; previews: string[]; go: (files: File[]) => void }>()
+  const closePending = () => {
+    pending?.previews.forEach((u) => URL.revokeObjectURL(u))
+    setPending(undefined)
+  }
   useEffect(() => {
     if (!notice) return
     const t = setTimeout(() => setNotice(undefined), 5000)
@@ -248,7 +260,7 @@ export function useMediaInput(o: {
   const hostDef = UPLOAD_HOSTS.find((h) => h.key === (o.uploader?.host ?? DEFAULT_UPLOAD_HOST))
   const webSiteDef = hostDef?.kind === 'web' ? WEB_UPLOAD_SITES.find((x) => x.key === hostDef.site) : undefined
   /** ボタン・貼り付け・ドラッグで選んだファイル: 付けられる掲示板なら付け、そうでなければアップロードする */
-  const take = (files: File[]) => {
+  const takeNow = (files: File[]) => {
     if (o.attach) return attach(files)
     if (webSiteDef) {
       // サイトの画面で上げる上げ先: 画面を開き、貼り付け・ドラッグした画像はそのページに貼り付けたことにして、そのまま上げてもらう
@@ -257,6 +269,71 @@ export function useMediaInput(o: {
     }
     upload(files)
   }
+  /** 貼り付け・ドロップで来たファイル。2 枚以上なら、上げる前に確かめる */
+  const take = (files: File[]) => {
+    if (files.length <= 1) return takeNow(files)
+    setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)), go: takeNow })
+  }
+  const confirmView: ReactNode = pending
+    ? createPortal(
+        <div className="fixed inset-0 z-[9700] bg-black/40 flex items-center justify-center p-6" onClick={closePending}>
+          <div
+            className="w-full max-w-md flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              // Esc はこの確かめだけ閉じる(後ろの書き込み欄・スレ立ては閉じない)
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                closePending()
+              }
+            }}
+          >
+            <div className="px-5 py-3 border-b border-c-border text-sm font-bold text-c-text-strong">
+              {pending.files.length} 枚の画像を{o.attach ? '付けます' : '上げます'}。{o.attach ? '付けない' : '上げない'}ものはチェックを外してください
+            </div>
+            <div className="px-5 py-3 max-h-72 overflow-y-auto custom-scrollbar space-y-2">
+              {pending.files.map((f, i) => (
+                <label key={i} className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pending.on[i]}
+                    onChange={(e) => setPending((p) => p && { ...p, on: p.on.map((v, j) => (j === i ? e.target.checked : v)) })}
+                    className="accent-[var(--c-accent)]"
+                  />
+                  {f.type.startsWith('video/') ? (
+                    <video src={pending.previews[i]} muted className="w-12 h-12 object-cover rounded border border-c-border bg-c-surface2 flex-shrink-0" />
+                  ) : (
+                    <img src={pending.previews[i]} alt="" className="w-12 h-12 object-cover rounded border border-c-border bg-c-surface2 flex-shrink-0" />
+                  )}
+                  <span className="flex-1 min-w-0 truncate text-sm text-c-text-body">{f.name}</span>
+                  <span className="text-xs text-c-text-muted tabular-nums">{Math.ceil(f.size / 1024)} KB</span>
+                </label>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-c-border flex items-center justify-end gap-2">
+              <button type="button" onClick={closePending} className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:bg-c-surface2">
+                やめる
+              </button>
+              <button
+                type="button"
+                autoFocus
+                disabled={!pending.on.some(Boolean)}
+                onClick={() => {
+                  const chosen = pending.files.filter((_, i) => pending.on[i])
+                  const go = pending.go
+                  closePending()
+                  go(chosen)
+                }}
+                className="px-4 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
+              >
+                {pending.on.filter(Boolean).length} 枚を{o.attach ? '付ける' : '上げる'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null
   // 置き場のサイトの画面で上げる(host/webUpload.ts)。開いている間、拾ったリンクを本文に入れる。
   // 上げ終わったら(渡した画像の数だけリンクが来た、または最後のリンクから少し経った)画面を閉じる
   const [webSite, setWebSite] = useState<WebUploadSite>()
@@ -438,5 +515,5 @@ export function useMediaInput(o: {
   // スマホの入力欄から: サイトの画面で上げる上げ先なら、その画面を開く
   const pick = o.attach || o.uploader ? () => (webSiteDef && !o.attach ? void startWebUpload(webSiteDef) : fileRef.current?.click()) : undefined
 
-  return { buttons, pick, fileInput, uploading, progress, items, localOf, retry, dismiss, notice, textareaProps, error, attachedView, takeFiles, clearAttached: () => setAttached([]) }
+  return { buttons, pick, fileInput, uploading, progress, items, localOf, retry, dismiss, notice, textareaProps, error, attachedView, confirmView, takeFiles, clearAttached: () => setAttached([]) }
 }

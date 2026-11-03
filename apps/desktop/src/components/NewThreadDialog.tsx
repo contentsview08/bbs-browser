@@ -160,6 +160,7 @@ export default function NewThreadDialog(props: Props) {
         onClick={(e) => e.stopPropagation()}
         {...dropProps(media)}
       >
+        {media.confirmView}
         {/* スマホ: 全画面。左上の ← で閉じ、右上で立てる(顔文字のボタン・Ctrl+Enter の案内は出さない) */}
         {isMobile ? (
           <div className="flex-shrink-0 flex items-center gap-1 px-2 border-b border-c-border bg-panel-thread-header" style={{ height: 'var(--header-height, 56px)' }}>
@@ -226,6 +227,13 @@ export default function NewThreadDialog(props: Props) {
           </div>
           {/* 書き込みに付けたファイル(ふたば) */}
           {media.attachedView}
+          {/* 画像を上げている間は、何枚中の何枚目かを出す(書き込み欄と同じ) */}
+          {media.uploading > 0 && (
+            <p className="flex items-center gap-1.5 text-xs text-c-text-muted">
+              <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+              画像をアップロード中…{media.progress && media.progress.total > 1 && ` ${media.progress.current} / ${media.progress.total} 枚目`}
+            </p>
+          )}
           {/* 上げた画像・上げている途中の画像のサムネイル(押すと大きく見る・× で本文から外す) */}
           {hasMediaPreview(body, media) && <MediaPreviewStrip body={body} media={media} onImage={(urls, index) => setLightbox({ urls, index })} onRemoveUrl={removeUrl} />}
           {media.error && (

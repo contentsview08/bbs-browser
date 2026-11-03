@@ -316,6 +316,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     return (
       <div data-composer className="w-full flex flex-col" {...dropProps(media)}>
         {media.fileInput}
+        {media.confirmView}
         {imageHint && (
           <p className="px-3 pt-2 flex items-start gap-1 text-xs text-c-text-muted">
             <span className="material-symbols-outlined text-sm">info</span>
@@ -465,6 +466,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   return (
     <div className="h-full w-full flex flex-col bg-panel-reply px-4 py-3 overflow-hidden" {...dropProps(media)}>
+      {media.confirmView}
       {media.error && (
         <p className="mb-2 flex items-start gap-1 text-xs text-c-heat-very-hot">
           <span className="material-symbols-outlined text-sm">error</span>

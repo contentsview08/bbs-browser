@@ -1,6 +1,7 @@
 // スレ立ての画面。web 版の NewThreadPage の入力項目(スレタイ・名前・メール・本文)に合わせている。
 // 成功したら親がスレ一覧を取り直し、新しいスレをタブで開く。
-// 書き込み欄と同じく、画像のアップロード(ボタン・貼り付け・ドラッグ)と絵文字が使える。
+// 書き込み欄と同じく、画像のアップロード(ボタン・貼り付け・画面のどこかへドラッグ)と絵文字が使え、上げた画像はサムネイルで出て押すと大きく見られる。
+// PC は「置いたまま使える窓」: 上の帯をつかんで動かし、右下の角で大きさを変えられる(覚えておく)
 
 import { useEffect, useRef, useState } from 'react'
 import { stashGet, stashSet } from '../utils/draftStash'
@@ -13,6 +14,9 @@ import { measurePost } from '../utils/postLimit'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
 import type { UploadOptions } from '../host/uploader'
 import { isMobile } from '../utils/platform'
+import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
+import { useDialogRect } from '../hooks/useDialogRect'
+import Lightbox from './Lightbox'
 
 interface Props {
   /** 書き込みにファイルを付けられる掲示板の決まり(ふたば)。あれば画像のボタンはアップロードではなく添付になる */
@@ -38,6 +42,8 @@ interface Props {
   onOpenAccountSettings: () => void
   /** 書きかけを覚えておく名前(板ごと)。閉じても・ページを離れても(Turnstile の確認)消えないように */
   draftKey?: string
+  /** 画像ビューアーの保存先(設定の imageSaveDir。空ならダウンロードフォルダ) */
+  imageSaveDir?: string
 }
 
 interface NewThreadDraft {
@@ -116,9 +122,18 @@ export default function NewThreadDialog(props: Props) {
 
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
 
-  const boxRef = useRef<HTMLDivElement>(null)
+  // PC: 置き場所と大きさ(つかんで動かす・角で広げる)。スマホは全画面
+  const win = useDialogRect('bbs:new-thread-rect', { w: 720, h: 560, minW: 480, minH: 360 })
+  const boxRef = win.boxRef
+  /** サムネイルを押したときの画像ビューアー */
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number }>()
+  /** 本文から画像の URL を外す(サムネイルの ×)。その URL だけの行は行ごと消す */
+  const removeUrl = (url: string) => {
+    const lines = body.split('\n')
+    setBody(lines.some((l) => l.trim() === url) ? lines.filter((l) => l.trim() !== url).join('\n') : body.replace(url, ''))
+  }
 
-  useFocusTrap(boxRef, props.onClose, { escBlursInputs: true })
+  useFocusTrap(boxRef, () => (lightbox ? setLightbox(undefined) : props.onClose()), { escBlursInputs: true })
   /** スマホ: 画像のアップロードが無効のときに画像のボタンを押したら、設定のことを知らせる */
   const [imageHint, setImageHint] = useState(false)
 
@@ -131,16 +146,19 @@ export default function NewThreadDialog(props: Props) {
 
   return (
     <div
-      className={isMobile ? 'fixed inset-0 z-[9500] flex flex-col bg-c-surface reply-slide' : 'fixed inset-0 z-[9500] bg-black/50 flex items-center justify-center p-6'}
+      // PC は後ろを暗くせず、置いたまま使える窓(後ろのスレ一覧も見られる)。外を押しても閉じない(長い本文を書く画面なので、うっかり消さない。× と Esc で閉じる)
+      className={isMobile ? 'fixed inset-0 z-[9500] flex flex-col bg-c-surface reply-slide' : 'fixed inset-0 z-[9500] pointer-events-none'}
       style={isMobile ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--kb-inset, 0px))' } : undefined}
-      // 外を押しても閉じない(長い本文を書く画面なので、うっかり消さない。× と Esc で閉じる)
     >
       <div
         ref={boxRef}
         className={
-          isMobile ? 'flex-1 min-h-0 flex flex-col' : 'w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in'
+          isMobile ? 'flex-1 min-h-0 flex flex-col' : 'absolute flex flex-col pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl overflow-hidden rise-in'
         }
+        style={isMobile ? undefined : win.style}
+        onMouseUp={isMobile ? undefined : win.saveSize}
         onClick={(e) => e.stopPropagation()}
+        {...dropProps(media)}
       >
         {/* スマホ: 全画面。左上の ← で閉じ、右上で立てる(顔文字のボタン・Ctrl+Enter の案内は出さない) */}
         {isMobile ? (
@@ -163,10 +181,12 @@ export default function NewThreadDialog(props: Props) {
             </button>
           </div>
         ) : (
-        <DialogHeader title="スレを立てる" sub={props.boardName} onClose={props.onClose} />
+        <div className="cursor-move select-none" onMouseDown={win.startMove} title="つかんで動かす">
+          <DialogHeader title="スレを立てる" sub={props.boardName} onClose={props.onClose} />
+        </div>
         )}
 
-        <div className={isMobile ? 'flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-3' : 'px-5 py-4 space-y-3'}>
+        <div className={isMobile ? 'flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-3' : 'flex-1 min-h-0 px-5 py-4 flex flex-col gap-3'}>
           {result && (
             <PostResultBox
               result={result}
@@ -206,6 +226,8 @@ export default function NewThreadDialog(props: Props) {
           </div>
           {/* 書き込みに付けたファイル(ふたば) */}
           {media.attachedView}
+          {/* 上げた画像・上げている途中の画像のサムネイル(押すと大きく見る・× で本文から外す) */}
+          {hasMediaPreview(body, media) && <MediaPreviewStrip body={body} media={media} onImage={(urls, index) => setLightbox({ urls, index })} onRemoveUrl={removeUrl} />}
           {media.error && (
             <p className="flex items-center gap-1 text-xs text-c-heat-very-hot">
               <span className="material-symbols-outlined text-sm">error</span>
@@ -224,8 +246,9 @@ export default function NewThreadDialog(props: Props) {
               }
             }}
             placeholder="本文(>>1)"
-            rows={10}
-            className={`${INPUT} ${isMobile ? 'flex-1 min-h-[10rem] resize-none text-[15px]' : 'resize-y'} leading-relaxed`}
+            rows={isMobile ? 10 : 6}
+            // PC は窓の残りをぜんぶ本文の欄に(窓を広げると欄も広がる)
+            className={`${INPUT} ${isMobile ? 'flex-1 min-h-[10rem] resize-none text-[15px]' : 'flex-1 min-h-[6rem] resize-none'} leading-relaxed`}
           />
           {isMobile && (
             <div className="flex-shrink-0 flex items-center gap-2">
@@ -273,9 +296,9 @@ export default function NewThreadDialog(props: Props) {
         )}
 
         {!isMobile && (
-        <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
+        <div className="flex-shrink-0 flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
           <span className="text-[10px] text-c-text-muted">
-            Ctrl+Enter で立てる
+            Ctrl+Enter で立てる ・ 画像はここへドラッグでも
           </span>
           <button
             type="button"
@@ -289,6 +312,16 @@ export default function NewThreadDialog(props: Props) {
         </div>
         )}
       </div>
+      {lightbox && (
+        <Lightbox
+          urls={lightbox.urls}
+          index={lightbox.index}
+          saveDir={props.imageSaveDir ?? ''}
+          onIndex={(index) => setLightbox((l) => l && { ...l, index })}
+          onClose={() => setLightbox(undefined)}
+          onOpenExternal={props.onOpenUrl}
+        />
+      )}
     </div>
   )
 }

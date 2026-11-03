@@ -2795,6 +2795,7 @@ export default function App() {
             imgurClientId: settings.imgurClientId.trim() || undefined,
           }}
           onUploaded={stableTabEvents.uploaded}
+          imageSaveDir={settings.imageSaveDir}
           accounts={postAccountsOf(board.connectorId, board.url)}
           limits={boardInfos.get(board.url)?.limits}
           byteLength={findConnector(board.connectorId)?.postByteLength}

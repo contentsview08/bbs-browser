@@ -92,7 +92,7 @@ export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: str
 ]
 /** 「履歴」だけのタブ(設定のタブの並びには出さない): 見た順(最近見たものが上。押すたびに上下を入れ替える)・書き込んだ・お気に入り */
 export const HISTORY_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
-  { key: 'viewed', name: '見た順', icon: 'history', note: '最近見た順に並べる。押すたびに、最近見たものが上か下かを入れ替える' },
+  { key: 'viewed', name: '見た順', icon: 'history', note: '最近見た順に並べる。もう一度押すと並べ直す(裏で新着を確かめている間は、並びを変えない)' },
   { key: 'posted', name: '書き込んだ', icon: 'edit_note', note: '自分の書き込み(本文と、どのスレに書いたか)を新しい順に出す' },
   { key: 'fav', name: 'お気に入り', icon: 'star', note: 'お気に入りのスレ(☆ を付けたスレ)だけを出す' },
 ]

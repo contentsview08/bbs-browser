@@ -32,6 +32,8 @@ interface Props {
   onOpenSettings: () => void
   /** 通知センター(溜めた知らせ)。まだ見ていない数を印に */
   notificationsUnread: number
+  /** 通知をスレ一覧の所に出しているか(PC) */
+  notificationsActive?: boolean
   onOpenNotifications: () => void
   /** 画像のアップロード履歴を開く。アップロードを使っていなければ undefined(行を出さない) */
   onOpenUploads?: () => void
@@ -95,7 +97,8 @@ function Row(props: {
       <NavNotch on={!!props.active} />
       <span className="relative w-[64px] flex-shrink-0 flex items-center justify-center">
         <span className="relative">
-          <span className={`material-symbols-outlined text-2xl ${props.active ? 'text-c-text-strong' : 'text-c-text-muted'}`}>
+          {/* 見せている(active)・広げている(filled)大項目は、アイコンを強調色に */}
+          <span className={`material-symbols-outlined text-2xl ${props.active || props.filled ? 'text-c-accent' : 'text-c-text-muted'}`}>
             {props.icon}
           </span>
           {props.badge !== undefined && props.badge > 0 && (
@@ -451,7 +454,7 @@ export default function Sidebar(props: Props) {
         </div>
 
         <div className="py-1 border-t border-c-border">
-          <Row icon="notifications" label="通知" badge={props.notificationsUnread} onClick={props.onOpenNotifications} />
+          <Row icon="notifications" label="通知" active={props.notificationsActive} badge={props.notificationsUnread} onClick={props.onOpenNotifications} />
           <Row icon="settings" label="設定" onClick={props.onOpenSettings} />
         </div>
       </div>

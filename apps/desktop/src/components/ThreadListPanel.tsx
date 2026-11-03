@@ -132,6 +132,8 @@ interface Props {
   filterRequest?: { key: ListFilter | null; seq: number }
   /** 絞り込みが変わった(履歴の画面で、どの絞り込みを見ているかを App が覚える) */
   onFilterChange?: (f: ListFilter | null) => void
+  /** 見た順(いつもの並び)を選んでいるときにもう一度押した: 並べ直す(閲覧履歴を見た順に読み直す) */
+  onResort?: () => void
   /** 自分が書き込んだスレ(「書き込んだ」の絞り込み) */
   postedIds?: Set<string>
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
@@ -207,6 +209,11 @@ export default function ThreadListPanel(props: Props) {
     setFilterState(f)
     onFilterChange.current?.(f)
   }
+  // 組み立てたときの絞り込みも知らせる(開くときの頼みで始めたとき、App の控えがずれないように)
+  useEffect(() => {
+    onFilterChange.current?.(filter)
+    // 組み立てたとき 1 回
+  }, [])
   const unreadOnly = filter === 'unread'
   const visitedOnly = filter === 'visited'
   const filtering = filter !== null
@@ -229,9 +236,10 @@ export default function ThreadListPanel(props: Props) {
     }
     setFilter(null)
     if (key === 'viewed') {
-      // 見た順: 選んでいなければ選ぶだけ、選んでいれば上下を入れ替える
-      if (!sort && !filtering) setReversed((v) => !v)
+      // 見た順: 選んでいなければ選ぶだけ、選んでいればもう一度押したことになるので並べ直す(裏の確かめでは並びを変えない)
+      if (!sort && !filtering) props.onResort?.()
       setSort(null)
+      setReversed(false)
     } else setSort((s) => cycleSort(s, key as SortMode))
   }
   const [searchActive, setSearchActive] = useState(false)
@@ -844,9 +852,9 @@ export default function ThreadListPanel(props: Props) {
                         {unreadTotal > 999 ? '+999+' : `+${unreadTotal}`}
                       </span>
                     )}
-                    {!isFilter && (
+                    {!isFilter && key !== 'viewed' && (
                       <span className={`material-symbols-outlined text-sm leading-none ${active ? '' : 'invisible'}`}>
-                        {key === 'viewed' ? (reversed ? 'arrow_upward' : 'arrow_downward') : active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
+                        {active && sort?.dir === 'desc' ? 'arrow_downward' : 'arrow_upward'}
                       </span>
                     )}
                     {/* 選んでいる印の線。フッターに置くスマホは、本文の側(上)に出す */}
@@ -1018,7 +1026,7 @@ export default function ThreadListPanel(props: Props) {
               </button>
             </div>
           )}
-          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile ? 'hidden' : ''}`}>
+          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile || tabs.length === 0 ? 'hidden' : ''}`}>
             {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
             {selectable && !props.body && (
               <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">

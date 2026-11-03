@@ -44,7 +44,7 @@ import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
 import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, type ListFilter, type StoredNotification } from './ui/settings'
-import NotificationCenter from './components/NotificationCenter'
+import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
 import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
@@ -98,7 +98,7 @@ import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } 
 const CLOSED_TABS_MAX = 20
 
 /** 戻る・進むで行き来する場所 */
-type ListTarget = { kind: 'board'; board: Board } | { kind: 'history'; filter?: ListFilter | null }
+type ListTarget = { kind: 'board'; board: Board } | { kind: 'history'; filter?: ListFilter | null } | { kind: 'notifications' }
 type NavValue = { type: 'list'; list: ListTarget } | { type: 'thread'; thread: ThreadSummary }
 const listEntry = (list: ListTarget) => ({
   key: list.kind === 'board' ? `board:${list.board.url}` : list.kind,
@@ -280,8 +280,10 @@ export default function App() {
     },
     [notifyInApp],
   )
-  /** 通知センターを開いているか */
+  /** 通知センター(スマホ: ポップアップ)を開いているか */
   const [notifOpen, setNotifOpen] = useState(false)
+  /** 通知をスレ一覧の所に出しているか(PC) */
+  const [notifView, setNotifView] = useState(false)
   const notifUnread = settings.notificationLog.reduce((n, x) => n + (x.read ? 0 : 1), 0)
   // スマホ: OS の通知をオンにしていれば、起動したときに一度だけ許可を求める(もう許可していれば聞かない)
   useEffect(() => {
@@ -357,7 +359,8 @@ export default function App() {
       cur?.kind === v.list.kind && (v.list.kind !== 'board' || (cur.kind === 'board' && cur.board.url === v.list.board.url))
     if (same) updateView((s) => showList(s, undefined))
     else if (v.list.kind === 'board') void openBoard(v.list.board, false)
-    else void openHistory(false, v.list.filter ?? null)
+    else if (v.list.kind === 'history') void openHistory(false, v.list.filter ?? null)
+    else openNotifications(false)
   }
   /** いま出しているスレ一覧へ戻る(1 画面のとき。スレタイの左の ← や、削除したあと) */
   const returnToList = () => {
@@ -607,6 +610,18 @@ export default function App() {
       rememberList(b.url, list)
       setThreads(list)
       setListOrder(order)
+      mergeKnownCounts(list)
+    })
+  }
+  /**
+   * スレ一覧から分かったレス数を、閲覧履歴(「未読」の絞り込み)にも反映する。
+   * 開いていないスレの未読も、板を見た時点で分かっているものは、裏の確かめを待たずに「未読」に出す
+   */
+  const mergeKnownCounts = (list: ThreadSummary[]) => {
+    setHistoryCounts((m) => {
+      const next = new Map(m)
+      for (const t of list) next.set(threadId(t), Math.max(next.get(threadId(t)) ?? 0, t.postCount))
+      return next
     })
   }
 
@@ -628,6 +643,7 @@ export default function App() {
         : serverSortFor(b, settingsRef.current.threadSort === 'subject' ? null : { mode: settingsRef.current.threadSort, dir: 'desc' })
       listOrderRef.current = order
       setHistory(undefined)
+      setNotifView(false)
       if (!sameBoard) {
         setThreads([])
         setListOrder(order)
@@ -641,6 +657,7 @@ export default function App() {
       setThreads(list)
       setListOrder(order)
       setStates(st)
+      mergeKnownCounts(list)
     })
 
   /** 閲覧履歴の更新で、スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
@@ -666,8 +683,30 @@ export default function App() {
       }
     })
   /** 閲覧履歴の新着を、板ごとのスレ一覧で確かめる(dat を 1 つずつ取りに行かない) */
+  /** 履歴の並びは変えずに、中身(既読・レス数・状態)だけ新しくする。消えたものは外し、新しいものは末尾に */
+  const mergeHistory = (prev: HistoryEntry[] | undefined, fresh: HistoryEntry[]): HistoryEntry[] => {
+    if (!prev) return fresh
+    const byId = new Map(fresh.map((h) => [threadId(h.thread), h]))
+    const seen = new Set<string>()
+    const kept: HistoryEntry[] = []
+    for (const h of prev) {
+      const id = threadId(h.thread)
+      const f = byId.get(id)
+      if (!f) continue
+      seen.add(id)
+      kept.push(f)
+    }
+    return [...kept, ...fresh.filter((h) => !seen.has(threadId(h.thread)))]
+  }
+  /** 履歴を見た順に並べ直す(見た順のタブをもう一度押したとき) */
+  const resortHistory = () =>
+    run(null, async () => {
+      if (store) setHistory(await loadHistory(store))
+      setHistoryVersion((v) => v + 1)
+    })
   const crawlHistory = async (store: LogStore) => {
     {
+      // 更新は本人の操作なので、ここでは見た順に並べ直す。板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
       const list = await loadHistory(store)
       setHistory(list)
       const byBoard = new Map<string, HistoryEntry[]>()
@@ -692,7 +731,8 @@ export default function App() {
           else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
         }
         setHistoryCounts(new Map(counts))
-        setHistory(await loadHistory(store))
+        const fresh = await loadHistory(store)
+        setHistory((prev) => mergeHistory(prev, fresh))
       }
       setHistoryProgress(undefined)
       setHistoryVersion((v) => v + 1)
@@ -705,7 +745,12 @@ export default function App() {
    * filter を渡すと、その絞り込みにして開く(undefined ならいまのまま)
    */
   const openHistory = (record = true, filter?: ListFilter | null) => {
-    if (filter !== undefined) setFilterRequest({ key: filter, seq: Date.now() })
+    if (filter !== undefined) {
+      setFilterRequest({ key: filter, seq: Date.now() })
+      // 一覧がまだないときは onFilterChange が来ないので、ここでもそろえる(前の「書き込んだ」が残っていた)
+      setPastFilter(filter)
+    }
+    setNotifView(false)
     return run('threads', async () => {
       updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
       if (record) setFocusPane('list')
@@ -731,7 +776,17 @@ export default function App() {
   }
   /** いまスレ一覧に出しているもの(戻る・進むで覚える) */
   const currentListTarget = (): ListTarget | undefined =>
-    history ? { kind: 'history', filter: pastFilter } : board ? { kind: 'board', board } : undefined
+    notifView ? { kind: 'notifications' } : history ? { kind: 'history', filter: pastFilter } : board ? { kind: 'board', board } : undefined
+  /** 通知(溜めた知らせ)をスレ一覧の所に出す(PC)。スマホはポップアップ */
+  const openNotifications = (record = true) => {
+    if (isMobile) return setNotifOpen(true)
+    updateView((s) => showList(s, record ? listEntry({ kind: 'notifications' }) : undefined))
+    if (record) setFocusPane('list')
+    setHistory(undefined)
+    setNotifView(true)
+    const log = settingsRef.current.notificationLog
+    if (log.some((n) => !n.read)) updateSetting('notificationLog', log.map((n) => (n.read ? n : { ...n, read: true })))
+  }
   /** 画像のアップロード履歴(独立したポップアップ)。画像には貼ったレスを添えるので、書き込み履歴も一緒に読む */
   const openUploads = () =>
     run(null, async () => {
@@ -2176,7 +2231,16 @@ export default function App() {
   // 閲覧履歴・未読・お気に入りのスレ・書き込んだスレは「履歴」の 1 つの一覧。PC は一覧のタブで絞り込む。
   // スマホは上の帯(未読・閲覧・お気に入り・書き込み・画像。スマホのアプリと同じ)で切り替え、書き込みと画像は全画面のページ
   const pastView = history !== undefined
-  const listTitle = pastView ? '履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
+  const listTitle = notifView ? '通知' : pastView ? '履歴' : board ? settings.boardMeta[board.url]?.alias || board.name : undefined
+  /** 通知の行を押した: そのスレのそのレスへ */
+  const openNotification = (n: StoredNotification) => {
+    if (!n.link) return
+    const id = threadId(n.link.thread)
+    const no = n.link.no
+    void openThread(n.link.thread).then(() => {
+      if (no !== undefined) setJump({ tabId: id, no, seq: Date.now() })
+    })
+  }
   const pastTab: PastTab = pastFilter === 'fav' ? 'fav' : pastFilter === 'unread' ? 'unread' : 'history'
   const pickPastTab = (k: PastTab) => {
     if (k === 'posts') return void openPostHistory()
@@ -2286,7 +2350,8 @@ export default function App() {
         onOpenFavThreads={() => void openFavThreads()}
         onOpenSettings={() => openSettings('display')}
         notificationsUnread={notifUnread}
-        onOpenNotifications={() => setNotifOpen(true)}
+        notificationsActive={notifView}
+        onOpenNotifications={() => openNotifications()}
         onManageBoards={() => openSettings('boardlist')}
         onOpenUrl={isMobile ? () => setUrlPrompt('') : undefined}
       />
@@ -2314,7 +2379,7 @@ export default function App() {
         >
         {!single && <FocusLine on={listFocused} />}
         <ThreadListPanel
-          key={history ? 'history' : board?.url}
+          key={notifView ? 'notifications' : history ? 'history' : board?.url}
           active={listFocused}
           keymap={keymap}
           headerHeight={settings.listHeaderHeight}
@@ -2326,11 +2391,13 @@ export default function App() {
           compact={settings.listShape === 'compact'}
           title={listTitle ?? '板を選択'}
           onShownChange={onShownChange}
-          threads={pastThreads ?? threads}
+          threads={notifView ? [] : (pastThreads ?? threads)}
           subHeader={pastHeader || undefined}
-          // 「書き込んだ」は、本文とどのスレに書いたかが見える前の一覧(スレの行ではなく)
+          // 「書き込んだ」は、本文とどのスレに書いたかが見える前の一覧(スレの行ではなく)。通知は溜めた知らせの一覧
           body={
-            history && pastFilter === 'posted' ? (
+            notifView ? (
+              <NotificationList items={settings.notificationLog} onOpen={openNotification} onClear={() => updateSetting('notificationLog', [])} />
+            ) : history && pastFilter === 'posted' ? (
               <PostHistoryList
                 entries={postHistory ?? []}
                 onOpen={openPostEntry}
@@ -2382,7 +2449,8 @@ export default function App() {
           serverOrder={!history && listOrder ? orderOf(listOrder) : undefined}
           onSortChange={!history ? onListSort : undefined}
           // 閲覧履歴は 見た順・レス数順・新しい順(未読は上の「履歴」の帯で)
-          tabs={history ? (isMobile ? ['viewed', 'count', 'newest'] : HISTORY_LIST_TABS) : settings.listTabs}
+          tabs={notifView ? [] : history ? (isMobile ? ['viewed', 'count', 'newest'] : HISTORY_LIST_TABS) : settings.listTabs}
+          onResort={history ? () => void resortHistory() : undefined}
           historyMetaOf={history ? historyMetaOf : undefined}
           // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
           pageSize={history ? settings.listPageSize : 0}
@@ -2577,12 +2645,7 @@ export default function App() {
           onClear={() => updateSetting('notificationLog', [])}
           onOpen={(n) => {
             setNotifOpen(false)
-            if (!n.link) return
-            const id = threadId(n.link.thread)
-            const no = n.link.no
-            void openThread(n.link.thread).then(() => {
-              if (no !== undefined) setJump({ tabId: id, no, seq: Date.now() })
-            })
+            openNotification(n)
           }}
           onClose={() => setNotifOpen(false)}
         />

@@ -491,6 +491,40 @@ export function useThreadScroll(o: Options) {
     // seq が変わったときだけ飛ぶ
   }, [o.jumpTo?.seq, byNo.size > 0])
 
+  // ── 位置の固定 ──
+
+  /**
+   * 見えている先頭のレスと、その上端の位置(ヘッダーの下からの px)。スクロールのたびに控える。
+   * 描き直しで上のレスの高さが変わっても(描く範囲を動かした・測った高さで仮の高さを補正した・サムネイルが読み込まれた)、
+   * このレスを同じ位置に留める。ブラウザの固定(scroll anchoring)に任せていると、仮の高さの箱がまとめて変わったときに
+   * 効かず、開いた位置から一番下まで流れていた
+   */
+  const anchor = useRef<{ no: number; top: number }>(undefined)
+  const recordAnchor = useCallback(() => {
+    const root = rootRef.current
+    if (!root) return
+    const rootTop = root.getBoundingClientRect().top + headerOffset()
+    for (const el of postFrames(root)) {
+      if (el.hidden) continue
+      const r = el.getBoundingClientRect()
+      if (r.bottom > rootTop) {
+        anchor.current = { no: Number(el.dataset.post), top: r.top - rootTop }
+        return
+      }
+    }
+    anchor.current = undefined
+  }, [rootRef, headerOffset])
+  // 描き直しのたび(依存なし)に、控えたレスが動いていれば戻す。新着で動かす効果(下)より先に並べてあるので、動かす方が勝つ
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    const a = anchor.current
+    if (!root || !a || !positioned.current) return
+    const el = root.querySelector<HTMLElement>(`.post-cv[data-post="${a.no}"]`)
+    if (!el || el.hidden) return
+    const d = el.getBoundingClientRect().top - (root.getBoundingClientRect().top + headerOffset()) - a.top
+    if (Math.abs(d) >= 1) root.scrollTop += d
+  })
+
   // ── 新着 ──
 
   // 新着として光らせ、順に出すレス。届いたときに番号と遅れ(ms)を控え、出し終わったら消す
@@ -562,6 +596,7 @@ export function useThreadScroll(o: Options) {
       const rest = root.scrollHeight - root.scrollTop - root.clientHeight
       atBottom.current = rest < BOTTOM_PX
       setShowJump(rest > root.clientHeight)
+      recordAnchor()
       later()
     }
     // 幅を覚え直すと全部のレスの仮の高さを描き直すので、大きさが変わり続けているあいだは待ち、落ち着いてから 1 回だけ
@@ -599,7 +634,7 @@ export function useThreadScroll(o: Options) {
       root.removeEventListener('pointerdown', touch)
       root.removeEventListener('keydown', touch)
     }
-  }, [rootRef, listRef, updateJump, reportRead])
+  }, [rootRef, listRef, updateJump, reportRead, recordAnchor])
 
   // 裏のタブから表に戻したときも、見えている分を既読にする
   useEffect(() => {

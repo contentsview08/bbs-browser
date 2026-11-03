@@ -242,7 +242,8 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                                 }
                             }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
-                            PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
+                            // 定型文は、設定にあるときだけ(既定は空)
+                            if (phrases.isNotEmpty()) PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
                             val aaNow = isAA(r)
                             PlusItem(if (aaNow) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示") { plusMenu = false; r.aaOverride = !aaNow }
                         }

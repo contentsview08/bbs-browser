@@ -40,7 +40,7 @@ import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
-import { ListEditor, NumberField, PercentSlider, SamplePosts, ThumbSample, Toggle } from './SettingParts'
+import { ListEditor, NumberField, PercentSlider, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -2727,17 +2727,16 @@ export default function SettingsDialog(props: SettingsProps) {
           ))}
           </div>
           {/* 詳しい設定。オフ(はじめ)のときは、よく使う設定だけを見せる */}
-          <div className="flex-shrink-0 mt-2 mx-3 px-2">
-            <Toggle
+          <label className="flex-shrink-0 mt-2 mx-3 px-2 py-2 flex items-center gap-2 rounded-lg cursor-pointer hover:bg-c-surface3 select-none" title="細かい見た目・通信・置き場などの設定も出します">
+            <Switch
               checked={props.settings.showAdvanced}
               onChange={(v) => {
                 props.update('showAdvanced', v)
                 if (!v && TABS.find((t) => t.key === tab)?.advanced) setTab('display')
               }}
-              label="詳しい設定を出す"
-              note="細かい見た目・通信・置き場など"
             />
-          </div>
+            <span className="text-xs text-c-text-body whitespace-nowrap">詳しい設定を出す</span>
+          </label>
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 border-b border-c-border cursor-move select-none" onMouseDown={startMove} title="つかんで動かす">

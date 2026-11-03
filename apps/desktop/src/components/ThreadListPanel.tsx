@@ -1,7 +1,7 @@
 // スレ一覧パネル。web 版の ThreadListPanel.tsx(PC 版)の見た目を移植。
 // 板のスレ一覧と閲覧履歴の両方をこのパネルで出す。
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import ThreadCard from './ThreadCard'
@@ -751,6 +751,16 @@ export default function ThreadListPanel(props: Props) {
   // ── カードは上から少しずつ作る(数百スレある板でも、開いてすぐ出るように) ──
   // 最初は FIRST_CARDS 枚、そのあと手の空いたときに CARD_CHUNK 枚ずつ作り足す。板が変わると作り直す(この部品ごと作り直される)
   const [renderLimit, setRenderLimit] = useState(FIRST_CARDS)
+  // 並べ替え・絞り込み・検索を変えたら、描く数を最初の分まで戻して先頭へ(1000 枚のカードの DOM を一度に並べ直すと重い。
+  // 少しずつ描く仕組みが、並べ替えでは効いていなかった)。一覧の取り直し(threads が変わる)では戻さない(並びを保つ)
+  const orderBasis = `${shownSort?.mode ?? ''}:${shownSort?.dir ?? ''}:${unreadOnly}:${visitedOnly}:${reversed}:${query}`
+  const firstBasis = useRef(orderBasis)
+  useLayoutEffect(() => {
+    if (firstBasis.current === orderBasis) return
+    firstBasis.current = orderBasis
+    setRenderLimit(FIRST_CARDS)
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [orderBasis])
   useEffect(() => {
     if (renderLimit >= ordered.length) return
     const grow = () => setRenderLimit((n) => n + CARD_CHUNK)

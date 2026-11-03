@@ -45,6 +45,7 @@ import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePost
 import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
 import { GESTURE_ACTIONS, MOUSE_GESTURE_ACTIONS, mouseActionName } from '../utils/gestures'
+import { MOUSE_MAX_SEGMENTS } from '../hooks/useMouseGesture'
 import { getVersion } from '@tauri-apps/api/app'
 import { getDataPaths, type DataPaths } from '../host/logStore'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -1339,77 +1340,120 @@ export function GestureSettings({ settings: s, update }: Pick<SettingsProps, 'se
 }
 
 /**
- * PC: マウスジェスチャー。操作ごとに割り当てた動かし方(矢印)を並べ、＋ を押して枠の中で実際に動かして覚えさせる。
+ * PC: マウスジェスチャー。ふつうのマウスジェスチャーの設定と同じ形: 「ジェスチャー(矢印) → 操作」の表に、矢印のボタンでジェスチャーを組んで足す。
  * 操作はキー操作と同じ(キーを受け取っている方に効く)
  */
 function MouseGestureSettings({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
-  /** 動かし方を覚えさせている操作 */
-  const [recording, setRecording] = useState<string>()
   const map = s.mouseGestures
-  const nameOf = (action: string) => mouseActionName(action) ?? action
-  const assigned = [...new Set(Object.values(map).filter(Boolean))]
-  const free = MOUSE_GESTURE_ACTIONS.filter((a) => !assigned.includes(a.key))
+  /** 足そうとしている動き(向きの並び)と操作 */
+  const [seq, setSeq] = useState<string[]>([])
+  const [action, setAction] = useState('')
+  const nameOf = (a: string) => mouseActionName(a) ?? a
+  const rows = Object.entries(map).sort(([a], [b]) => a.length - b.length || a.localeCompare(b))
+  const draft = seq.join(',')
+  const taken = draft ? map[draft] : undefined
+  const canAdd = seq.length > 0 && action !== ''
+  const add = () => {
+    if (!canAdd) return
+    update('mouseGestures', { ...map, [draft]: action })
+    setSeq([])
+    setAction('')
+  }
+  const ARROWS: { dir: string; icon: string; name: string }[] = [
+    { dir: 'up', icon: 'arrow_upward', name: '上' },
+    { dir: 'down', icon: 'arrow_downward', name: '下' },
+    { dir: 'left', icon: 'arrow_back', name: '左' },
+    { dir: 'right', icon: 'arrow_forward', name: '右' },
+  ]
+  const push = (dir: string) => setSeq((q) => (q.length >= MOUSE_MAX_SEGMENTS || q[q.length - 1] === dir ? q : [...q, dir]))
+  const ACTION_OPTIONS = MOUSE_GESTURE_ACTIONS.map((a) => (
+    <option key={a.key} value={a.key}>
+      {a.name}
+    </option>
+  ))
   return (
-    <>
-      <Section
-        title="マウスジェスチャー"
-        note="Ctrl(または右ボタン)を押しながらマウスを動かした形に、操作を割り当てます。操作はキー操作と同じで、キーを受け取っている方に効きます。動かしている間、画面の真ん中に矢印と操作の名前が出ます"
-      >
-        <div className="mb-3">
-          <Choice value={s.mouseGestureTrigger} options={MOUSE_GESTURE_TRIGGERS} onChange={(v) => update('mouseGestureTrigger', v)} />
-        </div>
-        <div className="flex flex-col divide-y divide-c-border/60">
-          {assigned.map((action) => (
-            <div key={action} className="flex items-center gap-2 py-1.5 text-sm">
-              <span className="flex-1 min-w-0 text-c-text-strong">{nameOf(action)}</span>
-              {Object.entries(map)
-                .filter(([, a]) => a === action)
-                .map(([seq]) => (
-                  <button
-                    key={seq}
-                    type="button"
-                    onClick={() => update('mouseGestures', Object.fromEntries(Object.entries(map).filter(([k]) => k !== seq)))}
-                    className="flex items-center gap-0.5 pl-2 pr-1 py-0.5 rounded-lg bg-c-surface2 border border-c-border text-base text-c-text-strong hover:border-c-accent"
-                    title="この動かし方を外す"
-                  >
-                    {gestureArrows(seq)}
-                    <span className="material-symbols-outlined text-sm text-c-text-muted">close</span>
-                  </button>
-                ))}
-              <button type="button" onClick={() => setRecording(action)} className={ICON_BTN} title="動かし方を足す">
-                <span className="material-symbols-outlined text-xl text-c-accent">add_circle</span>
+    <Section
+      title="マウスジェスチャー"
+      note="Ctrl(または右ボタン)を押しながらマウスを動かすと、その形に割り当てた操作をします。操作はキー操作と同じで、キーを受け取っている方に効きます。動かしている間、画面の真ん中に矢印と操作の名前が出ます"
+    >
+      <div className="mb-3 flex items-center gap-3 text-sm">
+        <span className="text-c-text-body">始め方</span>
+        <Choice value={s.mouseGestureTrigger} options={MOUSE_GESTURE_TRIGGERS} onChange={(v) => update('mouseGestureTrigger', v)} />
+      </div>
+      <table className="w-full max-w-xl text-sm border-collapse">
+        <thead>
+          <tr className="text-left text-xs text-c-text-muted">
+            <th className="font-normal py-1 pr-3 w-28">ジェスチャー</th>
+            <th className="font-normal py-1">操作</th>
+            <th className="w-8" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-c-border/60">
+          {rows.map(([g, a]) => (
+            <tr key={g}>
+              <td className="py-1.5 pr-3 text-lg tracking-widest text-c-text-strong font-mono">{gestureArrows(g)}</td>
+              <td className="py-1.5">
+                <select value={a} onChange={(e) => update('mouseGestures', { ...map, [g]: e.target.value })} className={`${INPUT} w-full`}>
+                  {ACTION_OPTIONS}
+                </select>
+              </td>
+              <td className="py-1.5 text-right">
+                <button
+                  type="button"
+                  className={ICON_BTN}
+                  title="このジェスチャーを外す"
+                  onClick={() => update('mouseGestures', Object.fromEntries(Object.entries(map).filter(([k]) => k !== g)))}
+                >
+                  <span className="material-symbols-outlined text-base">close</span>
+                </button>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={3} className="py-3 text-c-text-muted">
+                ジェスチャーはありません
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {/* 足す: 矢印のボタンで動きを組み、操作を選んで「足す」 */}
+      <div className="mt-3 p-3 rounded-lg border border-dashed border-c-border max-w-xl">
+        <p className="mb-2 text-xs text-c-text-muted">矢印を押して動きを組み(3 回まで。同じ向きは続けられません)、操作を選んで足します</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1">
+            {ARROWS.map((d) => (
+              <button
+                key={d.dir}
+                type="button"
+                title={d.name}
+                onClick={() => push(d.dir)}
+                disabled={seq.length >= MOUSE_MAX_SEGMENTS || seq[seq.length - 1] === d.dir}
+                className="w-8 h-8 rounded border border-c-border text-c-text-strong hover:border-c-accent hover:text-c-accent disabled:opacity-40 disabled:hover:border-c-border disabled:hover:text-c-text-strong flex items-center justify-center"
+              >
+                <span className="material-symbols-outlined text-lg leading-none">{d.icon}</span>
               </button>
-            </div>
-          ))}
+            ))}
+            <button type="button" title="1 つ戻す" onClick={() => setSeq((q) => q.slice(0, -1))} disabled={seq.length === 0} className={`${ICON_BTN} disabled:opacity-40`}>
+              <span className="material-symbols-outlined text-lg leading-none">backspace</span>
+            </button>
+          </div>
+          <span className="min-w-[4rem] text-lg tracking-widest font-mono text-c-text-strong">{draft ? gestureArrows(draft) : <span className="text-sm text-c-text-muted">(なし)</span>}</span>
+          <select value={action} onChange={(e) => setAction(e.target.value)} className={`${INPUT} flex-1 min-w-[12rem]`}>
+            <option value="">操作を選ぶ…</option>
+            {ACTION_OPTIONS}
+          </select>
+          <button type="button" onClick={add} disabled={!canAdd} className={`${BTN_PRIMARY} disabled:opacity-40`}>
+            {taken ? '付け替える' : '足す'}
+          </button>
         </div>
-        <select value="" onChange={(e) => e.target.value && setRecording(e.target.value)} className={`${INPUT} mt-3 w-full max-w-md`}>
-          <option value="">操作を足す…</option>
-          {free.map((a) => (
-            <option key={a.key} value={a.key}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={() => update('mouseGestures', DEFAULT_SETTINGS.mouseGestures)} className="mt-3 ml-3 text-xs text-c-text-muted hover:text-c-accent underline">
-          すべて既定に戻す
-        </button>
-      </Section>
-      {recording && (
-        <GestureRecorder
-          mouse
-          action={nameOf(recording)}
-          usedBy={(seq) => {
-            const a = map[seq]
-            return a && a !== recording ? nameOf(a) : undefined
-          }}
-          onClose={() => setRecording(undefined)}
-          onDone={(seq) => {
-            update('mouseGestures', { ...map, [seq]: recording })
-            setRecording(undefined)
-          }}
-        />
-      )}
-    </>
+        {taken && <p className="mt-2 text-xs text-c-text-muted">{gestureArrows(draft)} はいま「{nameOf(taken)}」です(足すと、そちらから付け替えます)</p>}
+      </div>
+      <button type="button" onClick={() => update('mouseGestures', DEFAULT_SETTINGS.mouseGestures)} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
+        すべて既定に戻す
+      </button>
+    </Section>
   )
 }
 

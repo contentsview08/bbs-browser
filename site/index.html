@@ -83,8 +83,10 @@
   .video video, .video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
 
   .demo-frame { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: 0 10px 40px rgba(0,0,0,.2); }
-  .demo-frame iframe { display: block; width: 100%; height: 720px; border: 0; }
+  .demo-frame iframe { display: block; width: 100%; height: min(88vh, 1000px); border: 0; }
   @media (max-width: 640px) { .demo-frame iframe { height: 560px; } }
+  /* デモは本物の画面なので、ほかの節より広く(画面の幅いっぱい近くまで) */
+  .wrap.wide { max-width: min(1560px, 100vw - 32px); }
   .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
   kbd { font-family: Consolas, ui-monospace, monospace; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
   .steps { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
@@ -146,10 +148,10 @@
 </section>
 
 <section id="demo">
-  <div class="wrap">
+  <div class="wrap wide">
     <h2>さわってみる</h2>
-    <p class="sub">本物の Web 版の画面を、ブラウザの中でそのまま。中身は掲示板のある時点の写しで、読むだけ(書き込み・ログインはできません)。<a href="https://bbs-browser-demo.pages.dev/boards/livejupter" target="_blank" rel="noopener">別のタブで大きく開く ↗</a></p>
-    <div class="demo-frame"><iframe src="https://bbs-browser-demo.pages.dev/boards/livejupter" title="bbs-browser のデモ" loading="lazy"></iframe></div>
+    <p class="sub">本物の Web 版の画面を、ブラウザの中でそのまま。板とレスは作り物で、読むだけ(書き込み・ログインはできません)。<a href="https://bbs-browser-demo.pages.dev/boards/live" target="_blank" rel="noopener">別のタブで開く ↗</a></p>
+    <div class="demo-frame"><iframe src="https://bbs-browser-demo.pages.dev/boards/live" title="bbs-browser のデモ" loading="lazy"></iframe></div>
     <p class="hint">左の一覧でスレを押す・<kbd>J</kbd> <kbd>K</kbd> で動く・<kbd>?</kbd> でキーの一覧・<kbd>Ctrl</kbd>+<kbd>K</kbd> でコマンドパレット・パレットのボタンで配色とレスの見た目・<kbd>Ctrl</kbd>+ホイールで文字の大きさ。</p>
   </div>
 </section>

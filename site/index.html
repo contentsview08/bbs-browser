@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bbs-browser</title>
+<meta name="description" content="5ch・エッヂ・したらば・ふたば・red-edge.net を読み書きする専用ブラウザ。Windows の PC 版と Android のスマホ版。">
+<link rel="icon" href="assets/icon.png">
+<meta property="og:title" content="bbs-browser">
+<meta property="og:description" content="掲示板を読み書きする専用ブラウザ(Windows・Android)">
+<meta property="og:image" content="https://contentsview08.github.io/bbs-browser/assets/icon.png">
+<style>
+  /* 色はアプリの「ダーク」「ライト」と同じ系統(apps/desktop/src/theme)。OS の設定に合わせる */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --surface2: #e9ebef; --border: #d2d2d4;
+    --text: #1f2328; --muted: #5a6270; --strong: #0f1115;
+    --accent: #4757c9; --accent-text: #ffffff; --accent-wash: rgba(71, 87, 201, .12);
+    --radius: 12px; --max: 1080px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1e24; --surface: #23272f; --surface2: #2c313a; --border: #343a44;
+      --text: #d6d9de; --muted: #8b93a1; --strong: #f1f3f6;
+      --accent: #8f9bf5; --accent-text: #111111; --accent-wash: rgba(143, 155, 245, .18);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans JP', 'Hiragino Sans', system-ui, sans-serif;
+    font-size: 16px; line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 16px; }
+  header.top {
+    position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px);
+    background: color-mix(in srgb, var(--bg) 85%, transparent); border-bottom: 1px solid var(--border);
+  }
+  header.top .wrap { display: flex; align-items: center; gap: 12px; height: 56px; }
+  header.top img { width: 28px; height: 28px; border-radius: 7px; }
+  header.top .name { font-weight: 700; color: var(--strong); font-size: 17px; }
+  header.top nav { margin-left: auto; display: flex; gap: 18px; font-size: 14px; }
+  header.top nav a { color: var(--muted); }
+  header.top nav a:hover { color: var(--strong); text-decoration: none; }
+  @media (max-width: 640px) { header.top nav { display: none; } }
+
+  .hero { padding: 64px 0 40px; text-align: center; }
+  .hero img { width: 96px; height: 96px; border-radius: 24px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+  .hero h1 { margin: 20px 0 8px; font-size: 40px; letter-spacing: -.5px; color: var(--strong); }
+  .hero .lead { margin: 0 auto; max-width: 640px; font-size: 18px; color: var(--muted); }
+  .hero .sites { margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; font-weight: 700;
+    background: var(--surface); color: var(--strong); border: 1px solid var(--border); font-size: 15px;
+  }
+  .btn:hover { text-decoration: none; border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn small { font-weight: 400; opacity: .8; font-size: 12px; }
+  .version { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+
+  section { padding: 48px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  h2 { font-size: 24px; margin: 0 0 6px; color: var(--strong); }
+  .sub { margin: 0 0 24px; color: var(--muted); }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 18px 16px; }
+  .card .icon { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-size: 20px; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; color: var(--strong); }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* 画面写真。ファイルがなければ「準備中」の枠 */
+  .shots { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .shots figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .shots img { display: block; width: 100%; height: auto; }
+  .shots figcaption { padding: 10px 14px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); }
+  .shots figure.missing img { display: none; }
+  .shots figure.missing::before { content: '画面写真は準備中'; display: grid; place-items: center; height: 180px; color: var(--muted); font-size: 14px; background: var(--surface2); }
+  .shots.phone { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .shots.phone figure.missing::before { height: 320px; }
+  .video { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .video video, .video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+  .video .placeholder { display: grid; place-items: center; aspect-ratio: 16 / 9; color: var(--muted); font-size: 14px; background: var(--surface2); }
+
+  .steps { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .steps ol { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
+  .steps li { margin: 4px 0; }
+  code { font-family: Consolas, 'BIZ UDGothic', ui-monospace, monospace; font-size: 13px; background: var(--surface2); padding: 1px 6px; border-radius: 5px; }
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 700; color: var(--strong); }
+  details p { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
+  footer { padding: 32px 0 48px; font-size: 13px; color: var(--muted); text-align: center; }
+  footer a { margin: 0 8px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <img src="assets/icon.png" alt="">
+    <span class="name">bbs-browser</span>
+    <nav>
+      <a href="#features">できること</a>
+      <a href="#shots">画面</a>
+      <a href="#install">入れ方</a>
+      <a href="#faq">よくある質問</a>
+      <a href="https://github.com/contentsview08/bbs-browser">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero wrap">
+  <img src="assets/icon.png" alt="bbs-browser のアイコン">
+  <h1>bbs-browser</h1>
+  <p class="lead">掲示板を読み書きする、PC とスマホの専用ブラウザ。<br>軽くて、設定は少なく、どちらを触っても同じ使い心地。</p>
+  <p class="sites">5ch・エッヂ・したらば・ふたば☆ちゃんねる・<a href="https://red-edge.net">red-edge.net</a></p>
+  <div class="buttons">
+    <a class="btn primary" id="dl-win" href="https://github.com/contentsview08/bbs-browser/releases/latest">Windows 版(インストーラー)</a>
+    <a class="btn" id="dl-zip" href="https://github.com/contentsview08/bbs-browser/releases/latest">ZIP 版 <small>インストール不要</small></a>
+    <a class="btn" id="dl-android" href="https://github.com/contentsview08/bbs-browser/releases/latest">Android 版 <small>APK</small></a>
+  </div>
+  <p class="version" id="version"></p>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>できること</h2>
+    <p class="sub">専ブラに欲しいものはひと通り。足りないものは <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a> へ。</p>
+    <div class="grid">
+      <div class="card"><div class="icon">⌘</div><h3>キーだけで読める</h3><p>vim 風のキー(J/K で移動、? で一覧)と、Ctrl+K のコマンドパレット。板・スレ・操作を名前で探せます(PC 版)。</p></div>
+      <div class="card"><div class="icon">▤</div><h3>タブと履歴</h3><p>PC 版はタブで何本も開く。履歴は「見た順・未読・書き込んだ・お気に入り」の 1 つの画面に。自分の書き込みから元のレスへ飛べます。</p></div>
+      <div class="card"><div class="icon">✕</div><h3>NG と自動の荒らし判定</h3><p>ID・名前・本文・スレタイの NG に、同じ本文の連投を畳む自動 NG。条件を日本語で書く AI NG は端末の中だけで判定します。</p></div>
+      <div class="card"><div class="icon">◐</div><h3>配色とレスの見た目</h3><p>ダーク・ライトを含む 13 の配色と自分の配色、差し色。レスはカード・Discord 風・LINE 風・専ブラ風・まとめ風。書体は同梱 16 書体と OS のフォント。</p></div>
+      <div class="card"><div class="icon">⇡</div><h3>画像を上げて貼る</h3><p>書き込み欄に貼るかドラッグするだけ。上げ先は imgur・catbox・imgbb など 6 つ。位置情報(EXIF)はいつも取り除きます。</p></div>
+      <div class="card"><div class="icon">🔔</div><h3>通知センター</h3><p>自分へのレス・お気に入りのスレの新着・キーワードに合うスレが立ったことを溜めておき、押すとそのレスへ。</p></div>
+      <div class="card"><div class="icon">⇄</div><h3>どこで触っても同じ</h3><p>PC 版・スマホ版・red-edge.net の Web は、同じ言葉・同じ設定・同じ見た目。スマホ版はなぞる操作(ジェスチャー)で片手でも読めます。</p></div>
+      <div class="card"><div class="icon">▣</div><h3>ZIP 版は展開するだけ</h3><p>展開したフォルダがそのままインストール先。ログも設定もその中の data に入り、フォルダごと消せばまっさらに戻ります。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="shots">
+  <div class="wrap">
+    <h2>画面</h2>
+    <p class="sub">PC 版(Windows)とスマホ版(Android)。</p>
+    <div class="shots">
+      <figure><img src="assets/pc-main.png" alt="PC 版: スレ一覧とスレ表示" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: スレ一覧とスレ表示を並べて読む</figcaption></figure>
+      <figure><img src="assets/pc-thread.png" alt="PC 版: スレ表示" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: 人気のレスの帯、ID の色、画像のサムネイル</figcaption></figure>
+      <figure><img src="assets/pc-settings.png" alt="PC 版: 設定" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: 設定は別の窓で、見ながら変えられる</figcaption></figure>
+      <figure><img src="assets/pc-light.png" alt="PC 版: 明るい配色" onerror="this.parentElement.classList.add('missing')"><figcaption>PC 版: 明るい配色</figcaption></figure>
+    </div>
+    <div class="shots phone" style="margin-top:16px">
+      <figure><img src="assets/android-list.png" alt="スマホ版: スレ一覧" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: スレ一覧</figcaption></figure>
+      <figure><img src="assets/android-thread.png" alt="スマホ版: スレ表示" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: スレ表示</figcaption></figure>
+      <figure><img src="assets/android-drawer.png" alt="スマホ版: 引き出し" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: 左の引き出し(お気に入り板・履歴)</figcaption></figure>
+      <figure><img src="assets/android-settings.png" alt="スマホ版: 設定" onerror="this.parentElement.classList.add('missing')"><figcaption>スマホ版: 設定</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="video">
+  <div class="wrap">
+    <h2>動画</h2>
+    <p class="sub">起動から書き込みまで。</p>
+    <div class="video" id="video-box"><div class="placeholder">動画は準備中</div></div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>入れ方</h2>
+    <p class="sub">どれも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。</p>
+    <div class="steps">
+      <div class="card"><h3>Windows(インストーラー)</h3><ol>
+        <li><code>bbs-browser_x.y.z_x64-setup.exe</code> を落として実行</li>
+        <li>SmartScreen が出たら「詳細情報」→「実行」(署名はまだ付けていません)</li>
+        <li>ログと設定は <code>%APPDATA%\io.github.yumekui8.bbs-browser\</code> に入ります</li>
+      </ol></div>
+      <div class="card"><h3>Windows(ZIP 版)</h3><ol>
+        <li><code>bbs-browser_x.y.z_x64_portable.zip</code> を好きな所に展開</li>
+        <li><code>bbs-browser.exe</code> を起動(Windows 10/11 の WebView2 を使います)</li>
+        <li>ログと設定はそのフォルダの <code>data\</code> に入ります。フォルダごと消せばまっさらに</li>
+      </ol></div>
+      <div class="card"><h3>Android</h3><ol>
+        <li>APK を落として開く(「提供元不明のアプリ」の許可が要ります)</li>
+        <li>最初から 5ch・エッヂ・オルグ・red-edge.net が入っています。ほかの板は「URL を開く」から</li>
+        <li>Android 8 以降</li>
+      </ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>よくある質問</h2>
+    <details><summary>更新はどうやって知るの?</summary><p>PC 版は 設定 → このアプリについて → 「更新を確かめる」。新しい版があればその場で落として入れ直せます。スマホ版は、このページか GitHub の Releases を見てください。</p></details>
+    <details><summary>データはどこに? 引っ越しできる?</summary><p>PC 版は 1 つの SQLite のファイル(ログ・既読・設定・NG)です。設定 → バックアップ の「まるごとバックアップ」でファイルを書き出し、別の PC で「バックアップから戻す」で戻せます。DB の形が変わる版に上げるときは、自動で写しを取ってから進みます。</p></details>
+    <details><summary>自分の掲示板を読ませたい</summary><p>2ch 互換(subject.txt と dat)の掲示板なら、板の URL を入れるだけで読めます。それ以外の形式は、コネクタ(JavaScript)をフォルダに置いて足せます(ビルドし直し不要。書き方は <a href="https://github.com/contentsview08/bbs-browser/blob/main/docs/connectors.md">docs/connectors.md</a>)。</p></details>
+    <details><summary>red-edge.net とは?</summary><p>この専ブラと同じ画面で読める、自分たちの掲示板です。アカウントを作ると、名前に表示名が付いて書き込めます(専ブラからもログインできます)。</p></details>
+    <details><summary>困ったとき・頼みたいとき</summary><p><a href="https://github.com/contentsview08/bbs-browser/issues">GitHub の Issues</a> へ。落ちたときは、設定 → このアプリについて の版と、何をしたら落ちたかを書いてもらえると助かります。</p></details>
+  </div>
+</section>
+
+<footer>
+  <a href="https://github.com/contentsview08/bbs-browser">GitHub</a>
+  <a href="https://github.com/contentsview08/bbs-browser/releases">Releases</a>
+  <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a>
+  <a href="https://red-edge.net">red-edge.net</a>
+</footer>
+
+<script>
+  // 最新のリリースを GitHub から読み、版と落とす先(インストーラー・ZIP・APK)をボタンに入れる。読めなければ Releases のページのまま
+  (async () => {
+    try {
+      const r = await fetch('https://api.github.com/repos/contentsview08/bbs-browser/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+      if (!r.ok) return;
+      const j = await r.json();
+      const assets = j.assets ?? [];
+      const find = (re) => assets.find((a) => re.test(a.name));
+      const setup = find(/-setup\.exe$/i) ?? find(/\.msi$/i);
+      const zip = find(/portable\.zip$/i) ?? find(/\.zip$/i);
+      const apk = find(/\.apk$/i);
+      const mb = (a) => a ? ` <small>${(a.size / 1048576).toFixed(0)} MB</small>` : '';
+      if (setup) { const b = document.getElementById('dl-win'); b.href = setup.browser_download_url; b.innerHTML = 'Windows 版(インストーラー)' + mb(setup); }
+      if (zip) { const b = document.getElementById('dl-zip'); b.href = zip.browser_download_url; b.innerHTML = 'ZIP 版 <small>インストール不要</small>' + mb(zip); }
+      const a = document.getElementById('dl-android');
+      if (apk) { a.href = apk.browser_download_url; a.innerHTML = 'Android 版 <small>APK</small>' + mb(apk); }
+      else a.innerHTML = 'Android 版 <small>準備中</small>';
+      const v = document.getElementById('version');
+      v.textContent = `最新: ${j.tag_name}(${new Date(j.published_at).toLocaleDateString('ja-JP')})`;
+    } catch {}
+  })();
+
+  // 動画: assets/demo.mp4 があればそれ、YOUTUBE_ID があれば YouTube の埋め込み、どちらもなければ「準備中」
+  const YOUTUBE_ID = '';
+  (async () => {
+    const box = document.getElementById('video-box');
+    if (YOUTUBE_ID) { box.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${YOUTUBE_ID}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`; return; }
+    try {
+      const r = await fetch('assets/demo.mp4', { method: 'HEAD' });
+      if (r.ok && (r.headers.get('content-type') ?? '').startsWith('video/')) box.innerHTML = '<video src="assets/demo.mp4" controls muted playsinline preload="metadata"></video>';
+    } catch {}
+  })();
+</script>
+</body>
+</html>

@@ -157,6 +157,31 @@ object HonoBbs {
         }
     }
 
+    // ── スレの状態のまとめ取り ──
+
+    /**
+     * 持っているスレ(閲覧履歴・お気に入り)のいまのレス数と dat 落ちを、板をまたいでまとめて取る(POST /threads/status。200 件ずつ)。
+     * 返す Map の鍵はスレの key(id)。返らなかったスレは「消えた・見えない」(dat 落ち扱い)。docs/endpoints/threads-status.md
+     */
+    suspend fun threadStatus(threads: List<ThreadSummary>): Map<String, Pair<Int, Boolean>> {
+        val out = HashMap<String, Pair<Int, Boolean>>()
+        for ((origin, list) in threads.groupBy { parts(it.boardUrl).first }) {
+            val api = apiBaseOf(origin)
+            val ids = list.map { it.key }.distinct()
+            for (chunk in ids.chunked(200)) {
+                val body = JSONObject().put("ids", JSONArray(chunk)).toString()
+                val res = Http.postJson("$api/threads/status", body)
+                if (res.status != 200) throw IllegalStateException("HTTP ${res.status}: $api/threads/status")
+                val arr = json(res).getJSONArray("data")
+                for (i in 0 until arr.length()) {
+                    val s = arr.getJSONObject(i)
+                    out[s.getString("id")] = s.optInt("postCount") to s.optBoolean("isArchived")
+                }
+            }
+        }
+        return out
+    }
+
     // ── スレ一覧 ──
 
     suspend fun listThreads(board: Board): List<ThreadSummary> {

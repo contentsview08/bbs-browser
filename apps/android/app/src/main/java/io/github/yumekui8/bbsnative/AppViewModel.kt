@@ -310,7 +310,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val hist = db.history()
                 history = hist
                 val counts = remoteCounts.toMutableMap()
-                val byBoard = hist.groupBy { it.thread.boardUrl }
+                // hono-bbs のスレは、板ごとに一覧を取り直さず、まとめて 1 回で確かめる(POST /threads/status)
+                val (hono, others) = hist.partition { HonoBbs.isBoardUrl(it.thread.boardUrl) }
+                if (hono.isNotEmpty()) runCatching { HonoBbs.threadStatus(hono.map { it.thread }) }.onSuccess { st ->
+                    for (h in hono) st[h.thread.key]?.let { counts[h.thread.id] = it.first }
+                }
+                val byBoard = others.groupBy { it.thread.boardUrl }
                 for ((boardUrl, entries) in byBoard) {
                     val board = favorites.firstOrNull { it.url == boardUrl } ?: Board(boardUrl, boardUrl)
                     val threads = runCatching { TwoCh.listThreads(board) }.getOrNull() ?: continue
@@ -374,7 +379,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             checking = true
             val next = remoteCounts.toMutableMap()
             try {
-                for ((boardUrl, list) in entries.groupBy { it.thread.boardUrl }) {
+                // hono-bbs のスレはまとめて 1 回で(POST /threads/status)。返らなかったものは -1(消えた)
+                val (hono, others) = entries.partition { HonoBbs.isBoardUrl(it.thread.boardUrl) }
+                if (hono.isNotEmpty()) runCatching { HonoBbs.threadStatus(hono.map { it.thread }) }.onSuccess { st ->
+                    for (e in hono) next[e.thread.id] = st[e.thread.key]?.first ?: -1
+                }
+                for ((boardUrl, list) in others.groupBy { it.thread.boardUrl }) {
                     val threads = runCatching { TwoCh.listThreads(Board(boardUrl, "")) }.getOrNull() ?: continue
                     val counts = threads.associate { it.key to it.postCount }
                     for (e in list) next[e.thread.id] = counts[e.thread.key] ?: -1

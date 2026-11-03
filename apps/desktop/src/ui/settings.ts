@@ -56,7 +56,26 @@ export function effectiveDensity(s: Pick<AppSettings, 'postStyle'>): ListDensity
 export type ListDensity = 'list' | 'dense'
 export type FontSize = 1 | 2 | 3 | 4 | 5
 /** custom は OS に入っているフォントから選んだもの(customFont に名前を持つ) */
-export type FontFamily = 'noto' | 'biz-ud' | 'system' | 'custom'
+/** フォント。同梱のもの(FONT_FAMILIES)・OS のもの(custom) */
+export type FontFamily = (typeof FONT_FAMILY_KEYS)[number] | 'custom'
+export const FONT_FAMILY_KEYS = [
+  'noto',
+  'biz-ud',
+  'system',
+  'm-plus-1p',
+  'm-plus-2',
+  'm-plus-rounded',
+  'zen-kaku',
+  'zen-maru',
+  'ibm-plex',
+  'murecho',
+  'sawarabi',
+  'kosugi-maru',
+  'noto-serif',
+  'biz-ud-mincho',
+  'shippori-mincho',
+  'zen-old-mincho',
+] as const
 export type ThreadSort = 'subject' | 'momentum' | 'newest' | 'count'
 /** スレ一覧の上のタブ。unread・visited は絞り込み(押すとその条件のスレだけ)、ほかは並べ替え */
 export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count' | 'viewed'
@@ -111,18 +130,10 @@ export interface BoardMeta {
   nonames?: string[]
 }
 
-/** 不透明度を変えられるパネル */
-export type PanelKey = 'addressBar' | 'sidebar' | 'tabs' | 'threadList' | 'threadHeader' | 'threadView' | 'replyForm'
-
-export const PANELS: { key: PanelKey; name: string; cssVar: string }[] = [
-  { key: 'addressBar', name: '一番上の帯(URL バー)', cssVar: '--alpha-address-bar' },
-  { key: 'sidebar', name: 'サイドバー', cssVar: '--alpha-sidebar' },
-  { key: 'tabs', name: 'タブ', cssVar: '--alpha-tabs' },
-  { key: 'threadList', name: 'スレ一覧', cssVar: '--alpha-thread-list' },
-  { key: 'threadHeader', name: 'スレのヘッダー(開いているタブも)', cssVar: '--alpha-thread-header' },
-  { key: 'threadView', name: 'スレ表示', cssVar: '--alpha-thread-view' },
-  { key: 'replyForm', name: '書き込み欄', cssVar: '--alpha-reply-form' },
-]
+/** 背景色を透かすパネルの変数(app.css)。どのパネルも同じ不透明度(panelOpacity)にする */
+export const PANEL_ALPHA_VARS = ['--alpha-address-bar', '--alpha-sidebar', '--alpha-tabs', '--alpha-thread-list', '--alpha-thread-header', '--alpha-thread-view', '--alpha-reply-form']
+/** パネルの不透明度の既定(背景画像があるとき) */
+export const PANEL_OPACITY_DEFAULT = 0.8
 
 export interface AppSettings {
   // 表示
@@ -179,8 +190,8 @@ export interface AppSettings {
   backgroundImage: string
   /** 背景画像の濃さ(0〜1)。画像はパネルの後ろに置くので、パネルを透かしたところに見える */
   backgroundOpacity: number
-  /** パネルごとの不透明度(0〜1)。背景色だけを透かす */
-  panelAlpha: Record<PanelKey, number>
+  /** パネルの不透明度(0〜1)。背景画像があるときだけ効く(ないときは 1)。どのパネルも同じ値で、背景色だけを透かす */
+  panelOpacity: number
   /** サイドバーをしまって、アイコンだけの細い帯にする */
   sidebarCollapsed: boolean
   /** しまった帯で、板のアイコンの下に板名(別名があれば別名)を小さく出す */
@@ -414,7 +425,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postDeleteKey: '',
   backgroundImage: '',
   backgroundOpacity: 1,
-  panelAlpha: { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 },
+  panelOpacity: PANEL_OPACITY_DEFAULT,
   sidebarCollapsed: false,
   showStripNames: false,
   replyLayout: 'bottom',
@@ -548,15 +559,29 @@ export const PICKABLE_SCHEMES = COLOR_SCHEMES
  */
 const KAOMOJI_FALLBACK = "'BBS Kaomoji Fallback'"
 
+/** 同梱のフォント(main.tsx で読み込む)。ゴシック → 丸ゴシック → 明朝 の順。名前は見本に使う(設定のドロップダウンはそのフォントで描く) */
 export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
   { key: 'noto', name: 'Noto Sans JP', css: `'Noto Sans JP Variable', 'Noto Sans JP', ${KAOMOJI_FALLBACK}, sans-serif` },
-  { key: 'biz-ud', name: 'BIZ UDPゴシック(同梱)', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'biz-ud', name: 'BIZ UDPゴシック', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, sans-serif` },
   // Windows に入っている BIZ UDPゴシックは画面表示向けの調整(ヒンティング)が効いていて、小さい字もガタつきにくい
   {
     key: 'system',
     name: 'Windows 標準(BIZ UDPゴシック)',
     css: `'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans CJK JP', ${KAOMOJI_FALLBACK}, sans-serif`,
   },
+  { key: 'm-plus-1p', name: 'M PLUS 1p', css: `'M PLUS 1p', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'm-plus-2', name: 'M PLUS 2', css: `'M PLUS 2 Variable', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'zen-kaku', name: 'Zen Kaku Gothic New', css: `'Zen Kaku Gothic New', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'ibm-plex', name: 'IBM Plex Sans JP', css: `'IBM Plex Sans JP', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'murecho', name: 'Murecho', css: `'Murecho Variable', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'sawarabi', name: 'さわらびゴシック', css: `'Sawarabi Gothic', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'm-plus-rounded', name: 'M PLUS Rounded 1c(丸ゴシック)', css: `'M PLUS Rounded 1c', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'zen-maru', name: 'Zen Maru Gothic(丸ゴシック)', css: `'Zen Maru Gothic', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'kosugi-maru', name: 'Kosugi Maru(丸ゴシック)', css: `'Kosugi Maru', ${KAOMOJI_FALLBACK}, sans-serif` },
+  { key: 'noto-serif', name: 'Noto Serif JP(明朝)', css: `'Noto Serif JP Variable', 'Noto Serif JP', ${KAOMOJI_FALLBACK}, serif` },
+  { key: 'biz-ud-mincho', name: 'BIZ UDP明朝', css: `'BIZ UDPMincho', ${KAOMOJI_FALLBACK}, serif` },
+  { key: 'shippori-mincho', name: 'しっぽり明朝', css: `'Shippori Mincho', ${KAOMOJI_FALLBACK}, serif` },
+  { key: 'zen-old-mincho', name: 'Zen Old Mincho(明朝)', css: `'Zen Old Mincho', ${KAOMOJI_FALLBACK}, serif` },
 ]
 
 const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 'discord-dark', 'oled', 'gray', 'nord', 'contrast', 'night', 'line-dark', 'x-dim', 'mono'])
@@ -725,10 +750,23 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
       ? `'${s.customFont.replace(/'/g, "\\'")}', ${FONT_FAMILIES[0].css}`
       : preset.css
   root.style.setProperty('--app-font', css)
-  for (const p of PANELS) root.style.setProperty(p.cssVar, String(s.panelAlpha[p.key] ?? 1))
+  // 背景画像がないときは透かさない(透かしても後ろは地の色なので、薄く見えるだけ)
+  const alpha = s.backgroundImage ? s.panelOpacity : 1
+  for (const v of PANEL_ALPHA_VARS) root.style.setProperty(v, String(alpha))
   root.style.setProperty('--bg-image-opacity', String(s.backgroundOpacity))
   root.style.setProperty('--post-thumb-size', `${s.postThumbSize}px`)
   root.style.setProperty('--list-thumb-scale', String(s.listThumbScale))
+}
+
+/** 画面全体の文字の大きさを表す、applyCssVar の名前(変数ではなく <html> の font-size) */
+export const ROOT_FONT_SIZE = 'font-size'
+
+/** この画面(ウィンドウ)の変数(CSS)を書き換える(スライダーを動かしている間の見た目。data-* は属性) */
+export function applyCssVar(name: string, value: string) {
+  const root = document.documentElement
+  if (name === ROOT_FONT_SIZE) root.style.fontSize = value
+  else if (name.startsWith('data-')) root.setAttribute(name, value)
+  else root.style.setProperty(name, value)
 }
 
 export type PaneMode = 'split' | 'single' | 'auto'
@@ -770,6 +808,13 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
       setSettings((s) => ({ ...s, [key]: value as AppSettings[typeof key] })),
     )
     return () => void off.then((f) => f())
+  }, [])
+  // 設定のウィンドウでスライダーを動かしている間の見た目(css-preview)を、メインの画面に映す(決めたら settings-changed で来る)
+  useEffect(() => {
+    if (opts.font === false) return
+    const off = onBroadcast<{ name: string; value: string }>('css-preview', ({ name, value }) => applyCssVar(name, value))
+    return () => void off.then((f) => f())
+    // opts は固定
   }, [])
   // OS のダーク・ライトが切り替わったら、合わせて塗り直す
   useEffect(() => {

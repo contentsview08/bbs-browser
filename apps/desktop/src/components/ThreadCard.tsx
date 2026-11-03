@@ -380,7 +380,7 @@ function ThreadCard({
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
           <span className="text-[10px] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
           {unreadCount > 0 && (
-            <span className="min-w-[1.25rem] px-1.5 py-px rounded-full text-[10px] font-bold text-center text-white" style={{ background: '#06c755' }}>
+            <span className="min-w-[1.25rem] px-1.5 py-px rounded-full text-[10px] font-bold text-center text-white" style={{ background: 'var(--c-line-green)' }}>
               {unreadCount}
             </span>
           )}

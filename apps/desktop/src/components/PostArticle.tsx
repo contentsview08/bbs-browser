@@ -976,7 +976,8 @@ function PostArticle(props: Props) {
 
   /**
    * マウスを乗せたレスに出す操作バー(返信・定型文・コピー・NG・︙)。at は置き場所の class。
-   * ふつうはレスの右上、LINE 風は吹き出しのすぐ下(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)
+   * ふつうはレスの右上、LINE 風は吹き出しと同じ側の上(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)。
+   * どれもレスの枠の中に置く(枠は content-visibility で外を切り取るので、はみ出すと見えない)
    */
   const toolbarAt = (at: string) => (
       <div
@@ -1105,8 +1106,6 @@ function PostArticle(props: Props) {
         )}
         <div className={`flex items-end gap-1.5 max-w-full ${right ? 'flex-row-reverse' : ''}`}>
           <div className={`line-bubble relative min-w-0 ${props.isOwn ? 'line-bubble-own' : ''} ${isAA ? 'max-w-full' : 'max-w-[min(85%,42rem)]'}`}>
-            {/* 操作バーは吹き出しのすぐ下に(自分の吹き出しは右端、相手の吹き出しは左端にそろえる) */}
-            {!isMobile && (hovered || menuOpen) && toolbarAt(`top-full mt-1 ${right ? 'right-0' : 'left-0'}`)}
             {lineQuote}
             {bodyBlock}
           </div>
@@ -1147,9 +1146,9 @@ function PostArticle(props: Props) {
           title={props.isOwn && variant !== 'line' ? '自分の書き込み' : '自分へのレス'}
         />
       )}
-      {/* マウスを乗せたレスの右上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする。
+      {/* マウスを乗せたレスの上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする。
           マウスを乗せている間だけ作る(全部のレスに最初から作ると、要素がレスの 4 割ほど増えてスレを開くのが遅くなる) */}
-      {variant !== 'line' && !isMobile && (hovered || menuOpen) && toolbarAt('top-0.5 right-3')}
+      {!isMobile && (hovered || menuOpen) && toolbarAt(variant === 'line' && !(props.isOwn && !props.alignLeft) ? 'top-0.5 left-3' : 'top-0.5 right-3')}
       {variant === 'line' ? (
         lineLayout()
       ) : variant === 'discord' ? (

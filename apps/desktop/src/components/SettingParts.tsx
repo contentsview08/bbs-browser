@@ -429,6 +429,8 @@ export function NumberField(props: {
   unit: string
   presets?: number[]
   zeroLabel?: string
+  /** 効かないとき(背景画像がないときのパネルの不透明度など)。値は出すが変えられない */
+  disabled?: boolean
 }) {
   const [text, setText] = useState(String(props.value))
   const [last, setLast] = useState(props.value)
@@ -445,12 +447,13 @@ export function NumberField(props: {
   }
   const label = (n: number) => (n === 0 && props.zeroLabel ? props.zeroLabel : `${n} ${props.unit}`)
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={`flex flex-wrap items-center gap-2 ${props.disabled ? 'opacity-50 pointer-events-none' : ''}`}>
       <input
         type="number"
         inputMode="numeric"
         min={props.min}
         max={props.max}
+        disabled={props.disabled}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}

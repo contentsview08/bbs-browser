@@ -46,7 +46,7 @@ import PastTabs, { type PastTab } from './components/PastTabs'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import { UploadGrid } from './components/UploadHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { BarSliders, SliderDialog, cssPx, setCssVar } from './components/FontSizeSlider'
+import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -2357,34 +2357,7 @@ export default function App() {
             button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,
             items: <StyleMenuItems settings={settings} update={updateSetting} />,
           }}
-          fontSize={
-            <>
-              <FontSizeSlider
-                label="スレ一覧の文字"
-                value={settings.listFontPx}
-                base={baseFontPx(settings)}
-                preview={(px) => setCssVar('--list-zoom', String(px / baseFontPx(settings)))}
-                onCommit={(px) => updateSetting('listFontPx', px)}
-                resettable
-              />
-              <FontSizeSlider
-                label="スレの上下の余白"
-                value={settings.listPadPx}
-                unset={-1}
-                base={cssPx('--thread-card-padding-y', 8)}
-                min={0}
-                max={24}
-                icons={['density_small', 'density_large']}
-                preview={(px) => {
-                  setCssVar('--list-row-pad', `${px}px`)
-                  document.documentElement.setAttribute('data-list-pad', '')
-                }}
-                onCommit={(px) => updateSetting('listPadPx', px)}
-                resettable
-              />
-              <BarSliders settings={settings} update={updateSetting} />
-            </>
-          }
+          fontSize={<ListFontSliders settings={settings} update={updateSetting} />}
           placements={listPlacements}
           barOrder={(isMobile ? settings.mobileBarOrder : settings.barOrder).list}
         />
@@ -2619,7 +2592,7 @@ export default function App() {
             label="画面全体"
             value={baseFontPx(settings)}
             base={baseFontPx(settings)}
-            preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
+            preview={(px) => setCssVar(ROOT_FONT_SIZE, `${px}px`)}
             onCommit={(px) => updateSetting(FONT_PX_KEY, px)}
           />
         </SliderDialog>

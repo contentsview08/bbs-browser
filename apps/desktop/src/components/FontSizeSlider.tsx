@@ -5,12 +5,13 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
-import { FONT_PX_MAX, FONT_PX_MIN, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { FONT_PX_MAX, FONT_PX_MIN, ROOT_FONT_SIZE, applyCssVar, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
+import { broadcast, toolKindOfThisWindow } from '../host/crossWindow'
 
 /**
  * 小さな画面(SliderDialog)の中で、いまつかんで動かしているスライダーの行。動かしている間は、その行だけを残して
- * 画面のほかの所(題・ほかのスライダー・暗い背景)を消し、後ろの画面が変わっていく様子を見られるようにする(スマホのアプリと同じ)
+ * 画面のほかの所(題・ほかのスライダー)を消し、後ろの画面が変わっていく様子を見られるようにする(スマホのアプリと同じ)
  */
 const SliderDrag = createContext<{ active: HTMLElement | null; set: (el: HTMLElement | null) => void } | null>(null)
 
@@ -170,13 +171,106 @@ export function cssPx(name: string, fallback: number): number {
   return Number.isFinite(v) ? Math.round(v) : fallback
 }
 
-/** 画面の変数(CSS)をすぐ書き換える(スライダーを動かしている間の見た目) */
-export const setCssVar = (name: string, value: string) => document.documentElement.style.setProperty(name, value)
+export { ROOT_FONT_SIZE }
+
+/**
+ * 画面の変数(CSS)をすぐ書き換える(スライダーを動かしている間の見た目)。
+ * 設定のウィンドウ(PC)からは、自分ではなくメインのウィンドウへ送る(設定画面の字まで変わると、つまみの位置がずれて合わせにくい)。
+ * 受けるのはメインの useSettings(css-preview)
+ */
+export const setCssVar = (name: string, value: string) => {
+  if (toolKindOfThisWindow()) void broadcast('css-preview', { name, value })
+  else applyCssVar(name, value)
+}
+
+/** スレ一覧の文字の大きさ・余白(スレ一覧の ︙ と、設定の「スレ一覧」の両方に出す) */
+export function ListFontSliders(props: { settings: AppSettings; update: UpdateSetting }) {
+  const { settings: s, update } = props
+  return (
+    <>
+      <FontSizeSlider
+        label="スレ一覧の文字"
+        value={s.listFontPx}
+        base={baseFontPx(s)}
+        preview={(px) => setCssVar('--list-zoom', String(px / baseFontPx(s)))}
+        onCommit={(px) => update('listFontPx', px)}
+        resettable
+      />
+      <FontSizeSlider
+        label="スレの上下の余白"
+        value={s.listPadPx}
+        unset={-1}
+        base={cssPx('--thread-card-padding-y', 8)}
+        min={0}
+        max={24}
+        icons={['density_small', 'density_large']}
+        preview={(px) => {
+          setCssVar('--list-row-pad', `${px}px`)
+          setCssVar('data-list-pad', '')
+        }}
+        onCommit={(px) => update('listPadPx', px)}
+        resettable
+      />
+      <BarSliders settings={s} update={update} />
+    </>
+  )
+}
+
+/** レスの文字の大きさ・行間・余白(スレ表示の ︙ と、設定の「レス表示」の両方に出す) */
+export function PostFontSliders(props: { settings: AppSettings; update: UpdateSetting }) {
+  const { settings: s, update } = props
+  return (
+    <>
+      <FontSizeSlider
+        label="レスの本文"
+        value={s.postBodyPx}
+        base={baseFontPx(s)}
+        preview={(px) => setCssVar('--post-body-size', `${px}px`)}
+        onCommit={(px) => update('postBodyPx', px)}
+        resettable
+      />
+      <FontSizeSlider
+        label="レスの頭(名前・日付・ID)"
+        value={s.postHeadPx}
+        base={baseFontPx(s)}
+        preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(s)))}
+        onCommit={(px) => update('postHeadPx', px)}
+        resettable
+      />
+      <FontSizeSlider
+        label="レスの本文の行間"
+        value={s.postLineHeight}
+        base={1.625}
+        min={1}
+        max={2.4}
+        step={0.05}
+        format={(v) => `${v.toFixed(2)} 倍`}
+        icons={['format_line_spacing', 'format_line_spacing']}
+        preview={(v) => setCssVar('--post-line-height', String(v))}
+        onCommit={(v) => update('postLineHeight', v)}
+        resettable
+      />
+      <FontSizeSlider
+        label="レスの上下の余白"
+        value={s.postPadPx}
+        unset={-1}
+        base={cssPx('--post-padding-y', 6)}
+        min={0}
+        max={24}
+        icons={['density_small', 'density_large']}
+        preview={(px) => setCssVar('--post-padding-y', `${px}px`)}
+        onCommit={(px) => update('postPadPx', px)}
+        resettable
+      />
+      <BarSliders settings={s} update={update} />
+    </>
+  )
+}
 
 /**
  * 文字の大きさ・余白のスライダーを、画面の真ん中に出す小さな画面。
  * ︙ のメニューの中だと、動かすたびに後ろの画面の大きさが変わって、メニューごとスライダーの位置がずれてしまうので、
- * 後ろの画面に影響されない手前に出す。後ろはうっすら暗くするだけにして、変わっていく様子は見えるようにする
+ * 後ろの画面に影響されない手前に出す。後ろは暗くしない(変わっていく様子をそのまま見るための画面。暗くすると比べられない)
  */
 export function SliderDialog(props: { title: string; onClose: () => void; children: ReactNode }) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -197,11 +291,8 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
   }, [active])
   return createPortal(
     <SliderDrag.Provider value={{ active, set: setActive }}>
-    // スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)
-    <div
-      className={`fixed inset-0 z-[9800] flex transition-colors ${active ? 'bg-transparent' : 'bg-black/25'} ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`}
-      {...backdrop}
-    >
+    // スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)。幕は透明(外を押すと閉じる受け皿としてだけ置く)
+    <div className={`fixed inset-0 z-[9800] flex ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`} {...backdrop}>
       <div
         ref={boxRef}
         // つかんでいる間は、入れ物ごと見えなくし、つかんでいる行だけを visibility: visible で残す

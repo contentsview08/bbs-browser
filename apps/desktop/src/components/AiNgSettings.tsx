@@ -95,7 +95,7 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
             <span className="material-symbols-outlined text-lg text-c-text-muted">chevron_right</span>
           </div>
         ))}
-        {rules.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">条件がありません</p>}
+        {rules.length === 0 && <p className="px-3 py-2 text-sm text-c-text-muted">まだありません</p>}
       </div>
       <button
         type="button"

@@ -174,7 +174,7 @@ html:root[data-scheme='discord-dark'] {
   --c-accent-hover: #00a650;
   --c-accent-text: #ffffff;
   --c-accent-wash: rgba(6, 199, 85, 0.12);
-  --c-accent-self: #06c755;
+  --c-accent-self: var(--c-line-green);
   --c-accent-self-wash: rgba(6, 199, 85, 0.12);
   --c-accent-self-text: #03230f;
   --c-link: #2a62c9;
@@ -290,6 +290,8 @@ html:root[data-scheme]:not([data-scheme='2ch-classic']) .bg-panel-reply {
 /* 意味ごとの色。配色の --c-accent-self(ダークはピンク、ライトは青)を、役目ごとの名前で使い分ける。
    どれかだけ変えたいときは、配色ごとにここの変数を上書きする(ほかの役目に響かない) */
 :root {
+  /* LINE の緑(LINE 風の自分の吹き出し・LINE 風のスレ一覧の未読の数)。配色に関係なく同じ色 */
+  --c-line-green: #06c755;
   --c-unread: var(--c-accent-self); /* 未読・新着(未読の数、「ここから未読」) */
   --c-unread-text: var(--c-accent-self-text);
   --c-own: var(--c-accent-self); /* 自分の書き込み・自分へのレス */
@@ -690,10 +692,10 @@ input[type='checkbox']:indeterminate {
   /* 仮の高さは ThreadView がレスごとに style で入れる。これは入れ忘れたときの値 */
   contain-intrinsic-size: auto 90px;
 }
-/* 操作バーを出しているレスは、描くのを省く仕組み(content-visibility)を外し、次のレスより手前に出す。
-   content-visibility: auto は枠の外を切り取るので、LINE 風で吹き出しの下に出す操作バーが、枠からはみ出た所で見えなくなっていた */
+/* 操作バーを出しているレスは、次のレスより手前に出す(バーの影が次のレスにかかる)。
+   content-visibility は切り替えない: マウスを乗せる・外すたびに auto と visible を行き来すると、そのレスの囲い(containment)が
+   付いたり外れたりして、スレ全体が組み直されてヘッダーや本文が数 px 動いていた。枠の外を切り取られるので、操作バーは枠の中に置く */
 .post-cv:has([data-post-toolbar]) {
-  content-visibility: visible;
   z-index: 5;
 }
 

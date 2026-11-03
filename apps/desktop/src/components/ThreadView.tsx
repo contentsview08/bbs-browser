@@ -34,7 +34,7 @@ import { mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
-import FontSizeSlider, { BarSliders, SliderDialog, cssPx, setCssVar } from './FontSizeSlider'
+import { PostFontSliders, SliderDialog } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -902,7 +902,10 @@ export default function ThreadView(props: Props) {
     const map = new Map<number, number[]>()
     for (const p of log.posts) {
       for (const n of new Set(targetsOfPost(p, resolveAnchor, quoteLinks))) {
-        if (n !== p.no) map.set(n, [...(map.get(n) ?? []), p.no])
+        if (n === p.no) continue
+        const list = map.get(n)
+        if (list) list.push(p.no)
+        else map.set(n, [p.no])
       }
     }
     return map
@@ -2420,50 +2423,7 @@ export default function ThreadView(props: Props) {
       )}
       {fontDialog && props.onUpdateSetting && (
         <SliderDialog title="文字の大きさ・余白" onClose={() => setFontDialog(false)}>
-              <>
-            <FontSizeSlider
-              label="レスの本文"
-              value={settings.postBodyPx}
-              base={baseFontPx(settings)}
-              preview={(px) => setCssVar('--post-body-size', `${px}px`)}
-              onCommit={(px) => props.onUpdateSetting!('postBodyPx', px)}
-              resettable
-            />
-            <FontSizeSlider
-              label="レスの頭(名前・日付・ID)"
-              value={settings.postHeadPx}
-              base={baseFontPx(settings)}
-              preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(settings)))}
-              onCommit={(px) => props.onUpdateSetting!('postHeadPx', px)}
-              resettable
-            />
-<FontSizeSlider
-              label="レスの本文の行間"
-              value={settings.postLineHeight}
-              base={1.625}
-              min={1}
-              max={2.4}
-              step={0.05}
-              format={(v) => `${v.toFixed(2)} 倍`}
-              icons={['format_line_spacing', 'format_line_spacing']}
-              preview={(v) => setCssVar('--post-line-height', String(v))}
-              onCommit={(v) => props.onUpdateSetting!('postLineHeight', v)}
-              resettable
-            />
-            <FontSizeSlider
-              label="レスの上下の余白"
-              value={settings.postPadPx}
-              unset={-1}
-              base={cssPx('--post-padding-y', 6)}
-              min={0}
-              max={24}
-              icons={['density_small', 'density_large']}
-              preview={(px) => setCssVar('--post-padding-y', `${px}px`)}
-              onCommit={(px) => props.onUpdateSetting!('postPadPx', px)}
-              resettable
-            />
-            <BarSliders settings={settings} update={props.onUpdateSetting} />
-          </>
+          <PostFontSliders settings={settings} update={props.onUpdateSetting} />
         </SliderDialog>
       )}
       {titleSheet && (

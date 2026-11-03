@@ -407,8 +407,6 @@ export default function ThreadListPanel(props: Props) {
   // 「未読」を押した時点(と、一覧を取り直した時点)の未読のスレを控える。
   // 読むたびに絞り込み直すと、読み終えたスレが急に一覧から消えてしまうので
   const [unreadSnapshot, setUnreadSnapshot] = useState<Set<string>>()
-  /** 「読んだスレを片づける」を押した回数(控え直すきっかけ) */
-  const [sweepCount, setSweepCount] = useState(0)
   const stateOfRef = useRef(stateOf)
   stateOfRef.current = stateOf
   const snapshotKey = props.snapshotKey ?? threads
@@ -426,15 +424,7 @@ export default function ThreadListPanel(props: Props) {
       ),
     )
     // threads は snapshotKey を渡さないときのきっかけとして入っている
-  }, [unreadOnly, snapshotKey, sweepCount])
-  /** 「未読」に残っている、読み終えたスレの数(「読んだスレを片づける」で外す) */
-  const readInSnapshot = unreadSnapshot
-    ? threads.filter((t) => {
-        if (!unreadSnapshot.has(threadId(t))) return false
-        const st = stateOf(t)
-        return st !== undefined && st.readNo >= t.postCount
-      }).length
-    : 0
+  }, [unreadOnly, snapshotKey])
 
   // 並べ替え・一覧の入れ替えは、タブの印(どれを選んだか)を先に描き、並べ直したカードの組み立ては後回しにする。
   // カードが多いと組み立てに時間がかかり、押してから印が変わるまで固まったように見えるため
@@ -910,6 +900,9 @@ export default function ThreadListPanel(props: Props) {
             onMouseDown={(e) => headerDrag.startDrag(e, titleRowRef.current?.getBoundingClientRect().height ?? 44, 1)}
             onReset={headerDrag.reset}
           />
+          {/* PC の履歴の一覧: 未読・閲覧・お気に入り… のタブは、題(「履歴」)の上に置く(どの一覧かを先に選び、その下に題と操作が続く)。
+              スマホは、題の帯(メニューのボタンと題)の下(スマホのアプリと同じ) */}
+          {!isMobile && props.subHeader}
           {/* スマホ: 端のボタンが画面の縁にくっつかないよう、左右に 12px 空ける */}
           <div className={isMobile ? 'px-3 py-1' : 'p-4'}>
             {/* スマホ: 左上のメニューのボタンと板名の間を、指で押し分けやすいよう広めに */}
@@ -980,7 +973,7 @@ export default function ThreadListPanel(props: Props) {
             </div>
           </div>
 
-          {props.subHeader}
+          {isMobile && props.subHeader}
 
           {selectable && selected.size > 0 && isMobile && (
             // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる。
@@ -1047,22 +1040,12 @@ export default function ThreadListPanel(props: Props) {
             ) : (
               !isMobile && tabGrid
             )}
-            {/* 右端: 裏で取っている印と、未読の一覧の「読んだスレを片づける」(帯を差し込むと一覧がずれるので、同じ行に) */}
-            {!isMobile && (props.busyText || (unreadOnly && readInSnapshot > 0)) && (
-              <div className="flex-shrink-0 flex items-center gap-3 pl-3 text-xs text-c-text-muted">
-                {props.busyText && (
-                  <span className="flex items-center gap-1" title={props.busyText}>
-                    <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                    {props.busyText}
-                  </span>
-                )}
-                {/* 未読の一覧は、読み終えても並びから消さない(開いただけで一覧が動かないように)。消すのは本人が押したときだけ */}
-                {unreadOnly && readInSnapshot > 0 && (
-                  <button type="button" onClick={() => setSweepCount((n) => n + 1)} className="hover:text-c-accent" title={`読み終えたスレ ${readInSnapshot} 件も並べています。押すと外します`}>
-                    読んだ {readInSnapshot} 件を片づける
-                  </button>
-                )}
-              </div>
+            {/* 右端: 裏で取っている印(帯を差し込むと一覧がずれるので、同じ行に)。未読の一覧は、読み終えても並びから消さない(次に一覧を取り直すまで) */}
+            {!isMobile && props.busyText && (
+              <span className="flex-shrink-0 flex items-center gap-1 pl-3 text-xs text-c-text-muted" title={props.busyText}>
+                <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                {props.busyText}
+              </span>
             )}
           </div>
         </div>

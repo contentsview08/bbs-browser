@@ -24,7 +24,6 @@ import { POST_STYLES,
   isDarkScheme,
   pickScheme,
   FONT_FAMILIES,
-  PANELS,
   LIST_TABS,
   type ListTabKey,
   type AppSettings,
@@ -39,7 +38,7 @@ import GestureRecorder, { gestureArrows } from './GestureRecorder'
 import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
-import FontSizeSlider from './FontSizeSlider'
+import FontSizeSlider, { ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCssVar } from './FontSizeSlider'
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
 import { canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
@@ -521,22 +520,18 @@ function BackgroundDialog({ settings: s, update, onClose }: Pick<SettingsProps, 
         </div>
         <div>
           <p className="text-sm text-c-text-body mb-0.5">パネルの不透明度</p>
-          <p className="text-xs text-c-text-muted mb-2">パネルの背景色だけを透かします(文字は透けません)。100 で透かさない</p>
-          <div className="space-y-2">
-            {PANELS.map((p) => (
-              <div key={p.key} className="flex items-center gap-3">
-                <span className="w-56 flex-shrink-0 truncate text-sm text-c-text-body">{p.name}</span>
-                <NumberField value={pct(s.panelAlpha[p.key] ?? 1)} min={0} max={100} unit="%" onChange={(v) => update('panelAlpha', { ...s.panelAlpha, [p.key]: v / 100 })} />
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="mt-2 text-xs text-c-text-muted hover:text-c-accent"
-            onClick={() => update('panelAlpha', { addressBar: 1, sidebar: 1, tabs: 1, threadList: 1, threadHeader: 1, threadView: 1, replyForm: 1 })}
-          >
-            すべて 100 に戻す
-          </button>
+          <p className="text-xs text-c-text-muted mb-2">
+            {s.backgroundImage ? 'どのパネルも同じ割合で、背景色だけを透かします(文字は透けません)。100 で透かさない' : '画像を選ぶと効きます(画像がないときは透かしません)'}
+          </p>
+          <NumberField
+            value={pct(s.panelOpacity)}
+            min={0}
+            max={100}
+            unit="%"
+            presets={[100, 80, 60, 40]}
+            disabled={!s.backgroundImage}
+            onChange={(v) => update('panelOpacity', v / 100)}
+          />
         </div>
       </div>
     </ManagerDialog>
@@ -631,7 +626,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
       <Section advanced desktopOnly title="背景画像" note="パネルの後ろに画像を置き、パネルを透かして見せます">
         <OpenRow
           label="背景画像と透かし"
-          value={s.backgroundImage ? `画像あり・濃さ ${Math.round(s.backgroundOpacity * 100)}%` : 'なし'}
+          value={s.backgroundImage ? `画像あり・濃さ ${Math.round(s.backgroundOpacity * 100)}%・パネル ${Math.round(s.panelOpacity * 100)}%` : 'なし'}
           onOpen={() => setBgOpen(true)}
         />
       </Section>
@@ -665,7 +660,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           label="画面全体"
           value={baseFontPx(s)}
           base={baseFontPx(s)}
-          preview={(px) => (document.documentElement.style.fontSize = `${px}px`)}
+          preview={(px) => setCssVar(ROOT_FONT_SIZE, `${px}px`)}
           onCommit={(px) => update(FONT_PX_KEY, px)}
         />
       </Section>
@@ -690,6 +685,9 @@ function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<Settin
           options={[50, 100, 200, 500, 0].map((n) => ({ key: n, name: n === 0 ? 'すべて(分けない)' : `${n} スレ` }))}
           onChange={(v) => update('listPageSize', v)}
         />
+      </Section>
+      <Section title="文字の大きさ・余白" note="スレ一覧の ︙ の「文字の大きさ・余白」でも、見ながら変えられます">
+        <ListFontSliders settings={s} update={update} />
       </Section>
       <Section title="行の形">
         <Choice
@@ -875,20 +873,10 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           note="ID から作る GitHub 風の模様を、レス番号の左に出します(同じ ID はいつも同じ模様)。右下の数字はその ID の書き込み数です"
         />
       </Section>
+      <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。画面全体の文字の大きさは「表示」にあります">
+        <PostFontSliders settings={s} update={update} />
+      </Section>
       <Section title="本文">
-        <FontSizeSlider
-          label="本文の行間"
-          value={s.postLineHeight}
-          base={1.625}
-          min={1}
-          max={2.4}
-          step={0.05}
-          format={(v) => `${v.toFixed(2)} 倍`}
-          icons={['format_line_spacing', 'format_line_spacing']}
-          preview={(v) => document.documentElement.style.setProperty('--post-line-height', String(v))}
-          onCommit={(v) => update('postLineHeight', v)}
-          resettable
-        />
         <Toggle
           checked={s.collapseBlankLines}
           onChange={(v) => update('collapseBlankLines', v)}
@@ -986,7 +974,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           max={240}
           step={4}
           icons={['photo_size_select_small', 'photo_size_select_large']}
-          preview={(px) => document.documentElement.style.setProperty('--post-thumb-size', `${px}px`)}
+          preview={(px) => setCssVar('--post-thumb-size', `${px}px`)}
           onCommit={(px) => update('postThumbSize', px)}
         />
         <div className="mt-3">
@@ -1002,7 +990,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
           step={0.25}
           format={(v) => `${v.toFixed(2)} 倍`}
           icons={['photo_size_select_small', 'photo_size_select_large']}
-          preview={(v) => document.documentElement.style.setProperty('--list-thumb-scale', String(v))}
+          preview={(v) => setCssVar('--list-thumb-scale', String(v))}
           onCommit={(v) => update('listThumbScale', v)}
         />
         </div>

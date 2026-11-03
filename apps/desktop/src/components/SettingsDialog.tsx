@@ -1712,10 +1712,10 @@ function AccountForm(props: {
       </div>
       <div className="flex flex-wrap gap-2">
         <input
-          type="email"
+          type={props.kind.userLabel ? 'text' : 'email'}
           value={user}
           onChange={(e) => setUser(e.target.value)}
-          placeholder="メールアドレス"
+          placeholder={props.kind.userLabel ?? 'メールアドレス'}
           autoComplete="off"
           className={`${INPUT} flex-1 min-w-[200px]`}
         />

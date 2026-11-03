@@ -73,7 +73,7 @@ export function useAccounts(store: LogStore | undefined, postAccounts: Record<st
       let list = cache.get(key)
       if (!list) {
         list = (findConnector(connectorId)?.accounts ?? [])
-          .filter((k) => k.hosts.some((h) => host === h || host.endsWith(`.${h}`)))
+          .filter((k) => k.hosts.some((h) => h === '*' || host === h || host.endsWith(`.${h}`)))
           .map((k) => ({
             id: k.id,
             name: k.name,

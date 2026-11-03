@@ -274,8 +274,10 @@ export interface AccountKind {
   site: string
   /** 登録の案内などの URL */
   registerUrl?: string
-  /** このアカウントを使える板のホスト(この名前か、その下の名前。例: 5ch.io) */
+  /** このアカウントを使える板のホスト(この名前か、その下の名前。例: 5ch.io)。'*' ならこのコネクタのどの板でも */
   hosts: string[]
+  /** 入力欄の名前(既定は「メールアドレス」。hono-bbs は「ユーザー ID」) */
+  userLabel?: string
 }
 
 export interface LoginResult {

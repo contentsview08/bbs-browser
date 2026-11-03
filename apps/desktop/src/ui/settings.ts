@@ -169,10 +169,7 @@ export interface AppSettings {
   followOsTheme: boolean
   darkScheme: ColorScheme
   lightScheme: ColorScheme
-  /** 前の「枠線スタイル」。いまは postStyle から決める(残っている保存値は使わない) */
-  pattern: DesignPattern
   postStyle: PostStyle
-  density: ListDensity
   fontSize: FontSize
   /** スマホの文字の大きさ(PC とは別。画面が狭いので、既定は 1 段小さい) */
   mobileFontSize: FontSize
@@ -425,9 +422,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   followOsTheme: false,
   darkScheme: 'soft-dark',
   lightScheme: 'light-gray',
-  pattern: 'tonal',
   postStyle: 'card',
-  density: 'dense',
   fontSize: 3,
   mobileFontSize: 3,
   fontPx: 0,

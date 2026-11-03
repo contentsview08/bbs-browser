@@ -9,7 +9,7 @@
 //   人がブラウザで認証してから送り直すと、その Cookie でセッションが使われる
 // 本番の板への試し書き込みはしない
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, Post, PostResult, ThreadSummary, ThreadStatusInfo } from '../types'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, Post, PostResult, ThreadSummary, ThreadStatusInfo, LoginResult, PostInput } from '../types'
 
 const ID = 'honobbs'
 
@@ -80,6 +80,40 @@ export async function apiBaseOf(origin: string, ctx: ConnectorContext): Promise<
   base ??= `${origin.replace(/^(https?:\/\/)/, '$1api.')}/api/v1`
   apiBases.set(origin, base)
   return base
+}
+
+/** アカウントの id(AccountKind) */
+const ACCOUNT_ID = 'user'
+/** 設定で保存してログインしたユーザー ID とパスワード(このプロセスの中だけ。保存は App の DB) */
+let savedCredential: { user: string; password: string } | undefined
+/** サイト(origin)ごとのログインのセッション */
+const sessions = new Map<string, { sessionId: string; expiresAt: number }>()
+
+/** そのサイトにログインしてセッションをもらう(POST /auth/login) */
+async function loginTo(origin: string, credential: { user: string; password: string }, ctx: ConnectorContext): Promise<LoginResult> {
+  const api = await apiBaseOf(origin, ctx)
+  const res = await ctx.http.post(`${api}/auth/login`, JSON.stringify({ id: credential.user, password: credential.password }), {
+    headers: { 'Content-Type': 'application/json' },
+    sameCookiesAsGet: true,
+  })
+  const body = json<{ data?: { sessionId: string; expiresAt: string; displayName: string }; error?: string; message?: string }>(res, ctx)
+  if (res.status !== 200 || !body.data) {
+    const why = body.error === 'INVALID_CREDENTIALS' ? 'ユーザー ID かパスワードが違います' : body.error === 'PASSKEY_REQUIRED' ? 'このアカウントはパスキーでしか入れません' : (body.message ?? `HTTP ${res.status}`)
+    return { ok: false, message: why }
+  }
+  sessions.set(origin, { sessionId: body.data.sessionId, expiresAt: new Date(body.data.expiresAt).getTime() })
+  return { ok: true, message: `ログインしました(${body.data.displayName})` }
+}
+
+/** 書き込みに付ける Authorization。アカウントを使う書き込みで、ログインしてあれば(なければここでログイン) */
+async function authHeader(origin: string, input: PostInput, ctx: ConnectorContext): Promise<Record<string, string>> {
+  if (!input.accounts?.includes(ACCOUNT_ID) || !savedCredential) return {}
+  const s = sessions.get(origin)
+  if (!s || s.expiresAt - Date.now() < 60_000) {
+    const r = await loginTo(origin, savedCredential, ctx)
+    if (!r.ok) throw new Error(`アカウントでログインできませんでした: ${r.message}`)
+  }
+  return { Authorization: `Bearer ${sessions.get(origin)!.sessionId}` }
 }
 
 function json<T>(res: HttpResponse, ctx: ConnectorContext): T {
@@ -315,14 +349,31 @@ export const honoBbsConnector: Connector = {
     return { status: 'updated', posts, cursor: nextCursor, ...(title ? { title } : {}), archived: archived || undefined }
   },
 
+  // ── アカウント(ユーザー ID とパスワード。docs/endpoints/auth-login.md) ──
+  // 5ch の BE と違って Cookie ではなく、ログインでもらったセッション ID を Authorization: Bearer で書き込みに付ける。
+  // サイト(origin)はいくつもあり得るので、ログインは「サイトごと」に、書き込みのときに要るぶんだけ行う
+  accounts: [{ id: ACCOUNT_ID, name: 'アカウント', site: 'hono-bbs(red-edge.net など)', hosts: ['*'], userLabel: 'ユーザー ID' }],
+
+  async login(accountId, credential, ctx) {
+    if (accountId !== ACCOUNT_ID) return { ok: false, message: `知らないアカウントです(${accountId})` }
+    savedCredential = credential
+    sessions.clear()
+    // もう分かっているサイト(板を開いたことがある)には、いまログインして確かめる
+    const origins = [...apiBases.keys()]
+    if (origins.length === 0) return { ok: true, message: '保存しました。この掲示板に書き込むときにログインします' }
+    const results = await Promise.all(origins.map((o) => loginTo(o, credential, ctx).catch((e: unknown) => ({ ok: false, message: e instanceof Error ? e.message : String(e) }))))
+    const ng = results.find((r) => !r.ok)
+    return ng ?? { ok: true, message: `ログインしました(${origins.length} サイト)` }
+  },
+
   async createPost(thread, input, ctx) {
     const { origin, boardId } = parts(thread.boardUrl)
     const api = await apiBaseOf(origin, ctx)
     const res = await ctx.http.post(
       `${api}/boards/${encodeURIComponent(boardId)}/threads/${encodeURIComponent(thread.key)}/posts`,
       JSON.stringify({ content: input.body, ...(input.name ? { posterName: input.name } : {}), ...(input.mail ? { posterOptionInfo: input.mail } : {}) }),
-      // Turnstile のつなぎの Cookie(読む通信で受け取ったもの)を付けて送る
-      { headers: { 'Content-Type': 'application/json' }, sameCookiesAsGet: true },
+      // Turnstile のつなぎの Cookie(読む通信で受け取ったもの)を付けて送る。アカウントを使うならセッションも
+      { headers: { 'Content-Type': 'application/json', ...(await authHeader(origin, input, ctx)) }, sameCookiesAsGet: true },
     )
     return readWrite(res, api, ctx)
   },
@@ -333,7 +384,7 @@ export const honoBbsConnector: Connector = {
     const res = await ctx.http.post(
       `${api}/boards/${encodeURIComponent(boardId)}/threads`,
       JSON.stringify({ title: input.title, content: input.body, ...(input.name ? { posterName: input.name } : {}), ...(input.mail ? { posterOptionInfo: input.mail } : {}) }),
-      { headers: { 'Content-Type': 'application/json' }, sameCookiesAsGet: true },
+      { headers: { 'Content-Type': 'application/json', ...(await authHeader(origin, input, ctx)) }, sameCookiesAsGet: true },
     )
     return readWrite(res, api, ctx)
   },

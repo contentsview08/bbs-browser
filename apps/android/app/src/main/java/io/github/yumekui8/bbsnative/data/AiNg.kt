@@ -23,23 +23,40 @@ data class AiNgRule(
     val enabled: Boolean = true,
     val boardUrl: String? = null,
     val boardName: String? = null,
+    /** スレの話題(スレタイと 1 レス目の頭)を添えて判定する(文脈で決まる条件に) */
+    val withContext: Boolean = false,
+    /** 同じ ID がこのスレで 2 回以上当たったら、その ID の書き込みをすべて当てる */
+    val sameId: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("prompt", prompt).put("threshold", threshold.toDouble())
-        .put("show", show).put("enabled", enabled).put("boardUrl", boardUrl).put("boardName", boardName)
+        .put("show", show).put("enabled", enabled).put("boardUrl", boardUrl).put("boardName", boardName).put("withContext", withContext).put("sameId", sameId)
 
     companion object {
         fun fromJson(o: JSONObject) = AiNgRule(
             o.getString("id"), o.optString("name"), o.optString("prompt"), o.optDouble("threshold", AI_DEFAULT_THRESHOLD.toDouble()).toFloat(),
             o.optString("show", "fold"), o.optBoolean("enabled", true), o.optString("boardUrl").ifEmpty { null }, o.optString("boardName").ifEmpty { null },
+            o.optBoolean("withContext", false), o.optBoolean("sameId", false),
         )
 
-        /** はじめに入れておく条件の見本(どれも切ってある。PC 版の AI_NG_SAMPLES と同じ) */
+        /** はじめに入れておく条件の見本(どれも切ってある。PC 版の AI_NG_SAMPLES と同じ)。話題そのものは当てず、話題から外れたものだけ */
         val SAMPLES = listOf(
-            AiNgRule("sample-0", "煽り", "他人を煽ったり、見下したりしている", show = "mark", enabled = false),
-            AiNgRule("sample-1", "宣伝", "商品やサイトの宣伝・勧誘をしている", show = "mark", enabled = false),
-            AiNgRule("sample-2", "政治", "政治や政党の話をしている", show = "mark", enabled = false),
+            AiNgRule("sample-0", "スレ違い", "スレの話題と関係のない話をしている", show = "mark", enabled = false, withContext = true),
+            AiNgRule("sample-1", "煽り", "特定の相手を繰り返し煽ったり、見下したりしている", show = "mark", enabled = false, withContext = true, sameId = true),
+            AiNgRule("sample-2", "宣伝", "商品やサイトの宣伝・勧誘をしている", show = "mark", enabled = false),
         )
     }
+}
+
+/** スレの話題として判定に添える文(スレタイと 1 レス目の頭)。PC 版の threadContextOf と同じ */
+fun threadContextOf(title: String, firstBody: String?): String {
+    val head = firstBody?.let { aiTextOf(it).take(120) }.orEmpty()
+    return "スレ「${title.take(60)}」" + if (head.isNotEmpty()) "($head)" else ""
+}
+
+/** モデルに渡す文: 文脈つきの条件なら、スレの話題を頭に添える */
+fun aiInputOf(body: String, context: String?): String {
+    val text = aiTextOf(body)
+    return if (context.isNullOrEmpty()) text else "${context}への書き込み: $text"
 }
 
 /** 手で付けた「当たる(hit)・当たらない(miss)」(本文の鍵)と、学ぶための本文 */
@@ -56,9 +73,9 @@ data class AiNgOverride(val hit: List<String> = emptyList(), val miss: List<Stri
     }
 }
 
-data class AiHit(val rule: AiNgRule, val p: Float?, val manual: Boolean) {
+data class AiHit(val rule: AiNgRule, val p: Float?, val manual: Boolean, val sameId: Boolean = false) {
     /** 画面に出す理由(「AI NG・煽り 87%」) */
-    val label get() = "AI NG・${rule.name.ifEmpty { rule.prompt }}${if (manual) "(手で)" else p?.let { " ${(it * 100).toInt()}%" } ?: ""}"
+    val label get() = "AI NG・${rule.name.ifEmpty { rule.prompt }}${if (manual) "(手で)" else if (sameId) "(同じ ID の続き)" else p?.let { " ${(it * 100).toInt()}%" } ?: ""}"
 }
 
 /** 仮説の形: 条件の文をそのまま */
@@ -87,27 +104,43 @@ fun activeRules(rules: List<AiNgRule>, boardUrl: String?) = rules.filter { it.en
 private val STRENGTH = mapOf("hide" to 3, "fold" to 2, "mark" to 1)
 
 /** スレのレスを判定する(手の印が先。scoreOf はモデルの当たり具合で、まだなら null) */
-fun judgeAiNg(posts: List<Post>, rules: List<AiNgRule>, scoreOf: (String, String) -> Float?, overrides: Map<String, AiNgOverride>, learned: Map<String, RuleModel>): Map<Int, AiHit> {
+fun judgeAiNg(
+    posts: List<Post>, rules: List<AiNgRule>, scoreOf: (String, String, String?) -> Float?, overrides: Map<String, AiNgOverride>, learned: Map<String, RuleModel>,
+    /** スレの話題(withContext の条件に添える) */
+    context: String = "",
+): Map<Int, AiHit> {
     if (rules.isEmpty()) return emptyMap()
     val sets = rules.associate { r -> r.id to (overrides[r.id]?.hit.orEmpty().toHashSet() to overrides[r.id]?.miss.orEmpty().toHashSet()) }
-    val out = HashMap<Int, AiHit>()
+    val hitOf = HashMap<Int, MutableList<AiHit>>()
+    /** 条件ごとに、当たった ID の数(sameId のため) */
+    val idHits = HashMap<String, HashMap<String, Int>>()
     for (p in posts) {
         if (aiTextOf(p.body).isEmpty()) continue
         val key = bodyKey(p.body)
-        var best: AiHit? = null
         for (r in rules) {
             val (hit, miss) = sets.getValue(r.id)
             if (key in miss) continue
             val h = if (key in hit) AiHit(r, null, true) else {
-                val m = scoreOf(p.body, r.prompt)
+                val m = scoreOf(p.body, r.prompt, if (r.withContext) context else null)
                 val s = if (m == null) null else learned[r.id]?.let { (m + it.predict(p.body)) / 2 } ?: m
                 if (s != null && s >= r.threshold) AiHit(r, s, false) else null
-            }
-            if (h != null && (best == null || STRENGTH.getValue(h.rule.show) > STRENGTH.getValue(best.rule.show))) best = h
+            } ?: continue
+            hitOf.getOrPut(p.no) { ArrayList() }.add(h)
+            p.id?.let { id -> idHits.getOrPut(r.id) { HashMap() }.merge(id, 1, Int::plus) }
         }
-        if (best != null) out[p.no] = best
     }
-    return out
+    // 同じ ID が 2 回以上当たった条件は、その ID の書き込みをすべて当てる(手で「当たらない」を付けたものは除く)
+    for (r in rules) {
+        if (!r.sameId) continue
+        val counts = idHits[r.id] ?: continue
+        for (p in posts) {
+            val id = p.id ?: continue
+            if ((counts[id] ?: 0) < 2 || hitOf[p.no]?.any { it.rule.id == r.id } == true) continue
+            if (bodyKey(p.body) in sets.getValue(r.id).second) continue
+            hitOf.getOrPut(p.no) { ArrayList() }.add(AiHit(r, null, false, sameId = true))
+        }
+    }
+    return hitOf.mapValues { (_, hs) -> hs.maxBy { STRENGTH.getValue(it.rule.show) } }
 }
 
 /** 手の印を付ける・外す(mark が null なら外す) */

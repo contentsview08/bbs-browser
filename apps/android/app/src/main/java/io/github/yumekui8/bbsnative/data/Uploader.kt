@@ -15,19 +15,18 @@ import java.io.ByteArrayOutputStream
 /**
  * 画像のアップロード(PC 版の host/uploader.ts・hono-bbs の web と同じ考え方)。上げ先は板で決める:
  * - hono-bbs の板: その掲示板の画像の置き場(web の書き込み欄と同じ。受け付け → 置き場へ送る → 確定。Turnstile は書き込みと同じつなぎの Cookie)
- * - ほかの板: 設定の上げ先(uploadHost)。自動なら catbox.moe → 0x0.st → imgur(Client-ID があれば)→ uguu.se の順に試す
- *   (2026-11 に catbox が「保存先の不具合で止めている」、0x0.st が 503 で止まったことがあった)
+ * - ほかの板: 設定の上げ先(uploadHost)のうち API のもの(catbox / imgur / imgbb)。サイトの画面で上げるもの(imgur-web / imgbox-web / imgbb-web)は
+ *   ui/WebUpload.kt がその画面を開くので、ここには来ない
  * どこに上げても、返ってきた URL を開いて画像が返るかを確かめる(URL だけ返して中身がない、ということがあった)。
  * JPEG・PNG・WebP は描き直して EXIF(撮影場所など)を取り除き、長い辺が決めた大きさを超えれば縮める。GIF・動画はそのまま。
- * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。0x0.st(https://0x0.st)はプログラムを名乗る User-Agent で使い、
- * ポルノ・グロ・暗号資産などは上げない。uguu.se(https://uguu.se)は 3 時間で消える。imgur(https://api.imgur.com)は本人が登録した Client-ID で使う。
+ * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は本人が登録した Client-ID、
+ * imgbb(https://api.imgbb.com)は本人が登録した API キーで使う。
  * どれも公開されている窓口だけを使い、負荷をかけない
  */
 object Uploader {
     private const val CATBOX = "https://catbox.moe/user/api.php"
-    private const val NULL_POINTER = "https://0x0.st"
-    private const val UGUU = "https://uguu.se/upload?output=json"
     private const val IMGUR = "https://api.imgur.com/3/image"
+    private const val IMGBB = "https://api.imgbb.com/1/upload"
     private const val USER_AGENT = "bbs-native/0.1.0 (+https://red-edge.net)"
     private const val MAX_BYTES = 50L * 1024 * 1024
     private const val MAX_GIF_BYTES = 20L * 1024 * 1024
@@ -45,39 +44,44 @@ object Uploader {
      */
     suspend fun upload(
         context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, honoApi: String? = null,
-        /** 上げ先(設定の uploadHost): auto / catbox / 0x0 / imgur / uguu */
-        host: String = "auto", imgurClientId: String = "",
+        /** 上げ先(設定の uploadHost)。API のもの: catbox / imgur / imgbb */
+        host: String = DEFAULT_HOST, imgurClientId: String = "", imgbbApiKey: String = "",
     ): Result {
         val (name, type, bytes) = withContext(Dispatchers.IO) { prepare(context, uri, maxDimension) }
         if (honoApi != null) return toHono(honoApi, name, type, bytes)
-        val all = listOf<Pair<String, suspend () -> String>>(
-            "catbox" to { toCatbox(name, type, bytes) },
-            "0x0.st" to { toNullPointer(name, type, bytes) },
-            "imgur" to { toImgur(name, type, bytes, imgurClientId) },
-            "uguu.se" to { toUguu(name, type, bytes) },
-        )
-        // 自動なら上から順に試す(imgur は Client-ID があるときだけ)。選んだ上げ先だけなら、それだけ
-        val tries = when (host) {
-            "catbox" -> all.filter { it.first == "catbox" }
-            "0x0" -> all.filter { it.first == "0x0.st" }
-            "imgur" -> all.filter { it.first == "imgur" }
-            "uguu" -> all.filter { it.first == "uguu.se" }
-            else -> all.filter { it.first != "imgur" || imgurClientId.isNotBlank() }
+        val up: suspend () -> String = when (host) {
+            "catbox" -> { { toCatbox(name, type, bytes) } }
+            "imgur" -> { { toImgur(name, type, bytes, imgurClientId) } }
+            "imgbb" -> { { toImgbb(name, type, bytes, imgbbApiKey) } }
+            else -> throw UploadException("この上げ先はサイトの画面で上げます")
         }
-        // どこもだめなら、全部の理由を出す
-        val reasons = ArrayList<String>()
-        for ((host, up) in tries) {
-            try {
-                val url = up()
-                verify(url, host)
-                return Result(url, host)
-            } catch (e: UploadException) {
-                reasons += "$host: ${e.message}"
-            } catch (e: java.io.IOException) {
-                reasons += "$host: つながりませんでした(${e.message ?: e.javaClass.simpleName})"
-            }
+        try {
+            val url = up()
+            verify(url, host)
+            return Result(url, host)
+        } catch (e: java.io.IOException) {
+            throw UploadException("$host: つながりませんでした(${e.message ?: e.javaClass.simpleName})")
         }
-        throw UploadException(reasons.joinToString(" / "))
+    }
+
+    const val DEFAULT_HOST = "imgur-web"
+    /** 上げ先(設定に出す並び・言葉。PC 版の UPLOAD_HOSTS と同じ)。kind は web(サイトの画面)か api */
+    data class HostDef(val key: String, val name: String, val kind: String, val note: String, val setting: String? = null)
+    val HOSTS = listOf(
+        HostDef("imgur-web", "imgur", "web", "消えない。ログインなしで上げられる"),
+        HostDef("imgur", "imgur", "api", "消えない。Client-ID を登録して、画像からそのまま上げる", "Client-ID"),
+        HostDef("catbox", "catbox.moe", "api", "消えない。登録なしで上げられる"),
+        HostDef("imgbb", "imgbb", "api", "消えない。API キーを登録して、画像からそのまま上げる", "API キー"),
+        HostDef("imgbox-web", "imgbox", "web", "消えない。ログインなしで上げられる"),
+        HostDef("imgbb-web", "imgbb", "web", "消えない。ログインなしで上げられる"),
+    )
+    /** 前の設定(自動・0x0.st・uguu.se)は imgur の画面に読み替える */
+    fun migrateHost(v: String?): String = if (HOSTS.any { it.key == v }) v!! else DEFAULT_HOST
+    /** API で上げるのに登録が要るのに、まだなら理由 */
+    fun hostProblem(host: String, imgurClientId: String, imgbbApiKey: String): String? = when {
+        host == "imgur" && imgurClientId.isBlank() -> "imgur の Client-ID が登録されていません(設定 → 画像のアップロード)"
+        host == "imgbb" && imgbbApiKey.isBlank() -> "imgbb の API キーが登録されていません(設定 → 画像のアップロード)"
+        else -> null
     }
 
     private suspend fun toCatbox(name: String, type: String, bytes: ByteArray): String {
@@ -92,32 +96,9 @@ object Uploader {
         throw UploadException(explain(res.status, text))
     }
 
-    private suspend fun toNullPointer(name: String, type: String, bytes: ByteArray): String {
-        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("file", name, bytes.toRequestBody(type.toMediaType()))
-            .build()
-        val res = Http.postMultipart(NULL_POINTER, body, USER_AGENT)
-        val text = String(res.body).trim()
-        // 成功すると、本文にファイルの URL だけが返る(https://0x0.st/XXXX.png)
-        if (res.status in 200..299 && Regex("^https://0x0\\.st/\\S+$").matches(text)) return text
-        throw UploadException(explain(res.status, text))
-    }
-
-    /** uguu.se: 3 時間で消える。返事は JSON(files[0].url) */
-    private suspend fun toUguu(name: String, type: String, bytes: ByteArray): String {
-        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("files[]", name, bytes.toRequestBody(type.toMediaType()))
-            .build()
-        val res = Http.postMultipart(UGUU, body, USER_AGENT)
-        val text = String(res.body).trim()
-        val url = runCatching { JSONObject(text).getJSONArray("files").getJSONObject(0).getString("url") }.getOrNull()
-        if (res.status in 200..299 && url != null && url.startsWith("https://")) return url
-        throw UploadException(explain(res.status, runCatching { JSONObject(text).optString("description") }.getOrNull()?.ifEmpty { null } ?: text))
-    }
-
     /** imgur: 本人が登録した Client-ID で、匿名の画像として上げる。返事は JSON(data.link) */
     private suspend fun toImgur(name: String, type: String, bytes: ByteArray, clientId: String): String {
-        if (clientId.isBlank()) throw UploadException("Client-ID が設定されていません(設定 → 書き込み → 画像のアップロード)")
+        if (clientId.isBlank()) throw UploadException("Client-ID が設定されていません(設定 → 画像のアップロード)")
         if (!type.startsWith("image/") && !type.startsWith("video/")) throw UploadException("画像か動画だけを上げられます")
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart(if (type.startsWith("video/")) "video" else "image", name, bytes.toRequestBody(type.toMediaType()))
@@ -128,6 +109,22 @@ object Uploader {
         if (res.status in 200..299 && link.startsWith("https://")) return link
         val err = j?.optJSONObject("data")?.opt("error")?.let { e -> (e as? JSONObject)?.optString("message") ?: e.toString() }.orEmpty()
         if (res.status == 403 || res.status == 401) throw UploadException("Client-ID が通りませんでした(${err.ifEmpty { "HTTP ${res.status}" }})")
+        throw UploadException(explain(res.status, err))
+    }
+
+    /** imgbb: 本人が登録した API キーで上げる(https://api.imgbb.com/)。返事は JSON(data.url) */
+    private suspend fun toImgbb(name: String, type: String, bytes: ByteArray, apiKey: String): String {
+        if (apiKey.isBlank()) throw UploadException("API キーが設定されていません(設定 → 画像のアップロード)")
+        if (!type.startsWith("image/")) throw UploadException("imgbb に上げられるのは画像だけです")
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("image", name, bytes.toRequestBody(type.toMediaType()))
+            .build()
+        val res = Http.postMultipart("$IMGBB?key=${java.net.URLEncoder.encode(apiKey, "UTF-8")}", body, USER_AGENT)
+        val j = runCatching { JSONObject(String(res.body)) }.getOrNull()
+        val url = j?.optJSONObject("data")?.optString("url").orEmpty()
+        if (res.status in 200..299 && url.startsWith("https://")) return url
+        val err = j?.opt("error")?.let { e -> (e as? JSONObject)?.optString("message") ?: e.toString() }.orEmpty()
+        if (res.status == 403 || res.status == 401) throw UploadException("API キーが通りませんでした(${err.ifEmpty { "HTTP ${res.status}" }})")
         throw UploadException(explain(res.status, err))
     }
 

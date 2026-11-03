@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.sp
 import io.github.yumekui8.bbsnative.AppViewModel
 import io.github.yumekui8.bbsnative.Page
 import io.github.yumekui8.bbsnative.ReplyState
+import io.github.yumekui8.bbsnative.bbs.HonoBbs
 import io.github.yumekui8.bbsnative.bbs.shiftJisByteLength
 
 /**
@@ -104,8 +105,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val context = LocalContext.current
     var plusMenu by remember { mutableStateOf(false) }
-    /** サイトの画面で上げる: 置き場を選んでいる・開いている置き場 */
-    var sitePick by remember { mutableStateOf(false) }
+    /** サイトの画面で上げる: 開いている置き場(上げ先が「サイトの画面」のとき、画像を押すと開く) */
     var webSite by remember { mutableStateOf<WebUploadSite?>(null) }
     var options by remember { mutableStateOf(false) }
     var imageHint by remember { mutableStateOf(false) }
@@ -233,20 +233,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     }
                 }
                 // ＋ のメニュー(欄の上にふわっと出る)
-                if (sitePick) AlertDialog(
-                    onDismissRequest = { sitePick = false },
-                    title = { Text("サイトの画面で上げる") },
-                    text = {
-                        Column {
-                            Text("置き場のサイトの画面を開きます。そこで画像を上げると、出てきたリンクを本文に入れます(API を使わずに上げられます)", color = Palette.textMuted, fontSize = 13.sp)
-                            for (site in WEB_UPLOAD_SITES) Column(Modifier.fillMaxWidth().clickable { sitePick = false; webSite = site }.padding(vertical = 10.dp)) {
-                                Text(site.name, color = Palette.textStrong, fontSize = 15.sp)
-                                Text(site.note, color = Palette.textMuted, fontSize = 12.sp)
-                            }
-                        }
-                    },
-                    confirmButton = { TextButton(onClick = { sitePick = false }) { Text("やめる") } },
-                )
                 webSite?.let { site -> WebUploadScreen(site, onLink = { vm.insertLink(r, it) }, onDismiss = { webSite = null }) }
                 if (plusMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { plusMenu = false }) {
@@ -258,9 +244,17 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         ) {
                             PlusItem(Icons.Filled.Image, if (r.uploading) "画像(アップロード中)" else "画像") {
                                 plusMenu = false
-                                if (vm.prefs.uploadEnabled) picker() else imageHint = true
+                                // 上げ先が「サイトの画面」なら、その画面を開く(hono-bbs の板はその掲示板の置き場なので、画像を選ぶ)
+                                val hono = HonoBbs.isBoardUrl(r.boardUrl)
+                                val site = if (!hono) webUploadSiteFor(vm.prefs.uploadHost) else null
+                                val problem = if (!hono && site == null) io.github.yumekui8.bbsnative.data.Uploader.hostProblem(vm.prefs.uploadHost, vm.prefs.imgurClientId, vm.prefs.imgbbApiKey) else null
+                                when {
+                                    !vm.prefs.uploadEnabled -> imageHint = true
+                                    site != null -> webSite = site
+                                    problem != null -> r.notice = problem
+                                    else -> picker()
+                                }
                             }
-                            PlusItem(Icons.Filled.Public, "サイトの画面で上げる") { plusMenu = false; sitePick = true }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
                             PlusItem(Icons.Filled.Bolt, "定型文") { plusMenu = false; phraseMenu = true }
                             val aaNow = isAA(r, vm.prefs.aaAutoDetect)

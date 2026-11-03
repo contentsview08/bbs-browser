@@ -780,8 +780,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val result = withContext(Dispatchers.Default) {
                 val models = learned?.takeIf { it.first === overrides }?.second
                     ?: io.github.yumekui8.bbsnative.data.trainRules(rules, overrides).also { learned = overrides to it }
-                io.github.yumekui8.bbsnative.data.AiModel.request(posts.asReversed(), rules.map { it.prompt })
-                io.github.yumekui8.bbsnative.data.judgeAiNg(posts, rules, io.github.yumekui8.bbsnative.data.AiModel::scoreOf, overrides, models)
+                // スレの話題(スレタイと 1 レス目の頭)。文脈つきの条件に添える
+                val context = io.github.yumekui8.bbsnative.data.threadContextOf(page.title, posts.firstOrNull()?.body)
+                io.github.yumekui8.bbsnative.data.AiModel.request(posts.asReversed(), rules.map { it.prompt }, rules.map { if (it.withContext) context else null })
+                io.github.yumekui8.bbsnative.data.judgeAiNg(posts, rules, io.github.yumekui8.bbsnative.data.AiModel::scoreOf, overrides, models, context)
             }
             page.aiNg = result
         }
@@ -992,7 +994,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * 選んだ画像(何枚でも、一度に 10 枚まで)を 1 枚ずつ順番に上げ、上げ終わるたびに本文の最後に URL を足す
      * (書き込みとスレ立てで共通)。上げている途中に選び足したら、列の後ろに並べる。
-     * 上げ先は板で決める(hono-bbs の板はその掲示板の置き場、ほかは catbox。catbox がだめなら 0x0.st。data/Uploader.kt)
+     * 上げ先は板で決める(hono-bbs の板はその掲示板の置き場、ほかは設定の上げ先。data/Uploader.kt)
      */
     /** サイトの画面で上げたリンクを、本文の終わりに 1 行で入れる(ui/WebUpload.kt) */
     fun insertLink(r: ReplyState, url: String) {
@@ -1015,15 +1017,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 item.state = UploadItem.State.Uploading
                 try {
                     val api = HonoBbs.apiFor(r.boardUrl)
-                    val res = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), item.uri, prefs.uploadMaxDimension, api, prefs.uploadHost, prefs.imgurClientId)
+                    val res = io.github.yumekui8.bbsnative.data.Uploader.upload(getApplication(), item.uri, prefs.uploadMaxDimension, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey)
                     val url = res.url
                     // いつも最新の本文に足す(前の画像の URL を消さない)
                     r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
                     prefs.addUpload(url)
                     item.state = UploadItem.State.Done(url)
-                    // catbox が受け付けず、代わりの置き場に上げたときは知らせる(どこに上げたか分かるように)
-                    if (res.host == "uguu.se") r.done = "uguu.se に上げました(3 時間で消えます)"
-                    else if (api == null && prefs.uploadHost == "auto" && res.host != "catbox") r.done = "catbox が受け付けていないので、${res.host} に上げました"
                 } catch (e: Exception) {
                     // 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む
                     val msg = (e as? io.github.yumekui8.bbsnative.data.Uploader.UploadException)?.message

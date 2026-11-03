@@ -122,6 +122,21 @@ private fun AiRuleEditor(vm: AppViewModel, initial: AiNgRule, onDismiss: () -> U
                         )
                     }
                 }
+                // スレの話題を踏まえて判定する・同じ ID の続きも当てる(PC 版と同じ)
+                Row(Modifier.fillMaxWidth().clickable { r = r.copy(withContext = !r.withContext) }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("スレの話題を踏まえて判定する", color = Palette.textStrong, fontSize = 14.sp)
+                        Text("スレタイと 1 レス目の頭を添えて判定します(「スレの話題と関係ない」のような条件に)", color = Palette.textMuted, fontSize = 12.sp)
+                    }
+                    androidx.compose.material3.Switch(r.withContext, { r = r.copy(withContext = it) })
+                }
+                Row(Modifier.fillMaxWidth().clickable { r = r.copy(sameId = !r.sameId) }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("同じ ID が 2 回以上当たったら、その ID をすべて当てる", color = Palette.textStrong, fontSize = 14.sp)
+                        Text("煽りを続けている人をまとめて畳むとき", color = Palette.textMuted, fontSize = 12.sp)
+                    }
+                    androidx.compose.material3.Switch(r.sameId, { r = r.copy(sameId = it) })
+                }
                 OutlinedTextField(sample, { sample = it }, Modifier.fillMaxWidth(), label = { Text("試す(書き込みの文)") })
                 TextButton(
                     enabled = AiModel.status == AiModel.Status.Ready && r.prompt.isNotBlank() && sample.isNotBlank(),

@@ -49,10 +49,17 @@ data class WebUploadSite(val key: String, val name: String, val url: String, val
 
 val WEB_UPLOAD_SITES = listOf(
     WebUploadSite("imgur", "imgur", "https://imgur.com/upload", """https://i\.imgur\.com/[A-Za-z0-9]{5,}\.(?:jpe?g|png|gif|webp|mp4)""", "消えない。ログインしなくても上げられます"),
-    WebUploadSite("catbox", "catbox.moe", "https://catbox.moe/", """https://files\.catbox\.moe/[a-z0-9]{6}\.[a-z0-9]+""", "消えない"),
-    WebUploadSite("litterbox", "litterbox(catbox)", "https://litterbox.catbox.moe/", """https://litter\.catbox\.moe/[a-z0-9]+\.[a-z0-9]+""", "1 時間〜3 日で消える"),
-    WebUploadSite("uguu", "uguu.se", "https://uguu.se/", """https://[a-z0-9.]*uguu\.se/[A-Za-z0-9_-]+\.[a-z0-9]+""", "3 時間で消える"),
+    WebUploadSite("imgbox", "imgbox", "https://imgbox.com/", """https://images\d*\.imgbox\.com/[a-f0-9]{2}/[a-f0-9]{2}/[A-Za-z0-9]+_o\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
+    WebUploadSite("imgbb", "imgbb", "https://imgbb.com/", """https://i\.ibb\.co/[A-Za-z0-9]+/[^\s"'<>]+\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
 )
+
+/** 設定の上げ先(imgur-web など)が「サイトの画面」なら、そのサイト */
+fun webUploadSiteFor(host: String): WebUploadSite? = when (host) {
+    "imgur-web" -> "imgur"
+    "imgbox-web" -> "imgbox"
+    "imgbb-web" -> "imgbb"
+    else -> null
+}?.let { k -> WEB_UPLOAD_SITES.first { it.key == k } }
 
 /**
  * ページに差し込む見張り(PC 版の src-tauri/src/web_upload.rs と同じ考え)。読み込んで 3 秒の間にあったリンクは数えず、

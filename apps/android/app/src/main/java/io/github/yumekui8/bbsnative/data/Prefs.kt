@@ -61,6 +61,8 @@ class Prefs(context: Context) {
             val to = io.github.yumekui8.bbsnative.ui.retiredScheme(v)
             if (to != v) sp.edit().putString(k, to).apply()
         }
+        // 上げ先の 自動・0x0.st・uguu.se はやめた(2026-11)。imgur のサイトの画面に読み替える
+        sp.getString("uploadHost", null)?.let { v -> val to = Uploader.migrateHost(v); if (to != v) sp.edit().putString("uploadHost", to).apply() }
     }
 
     var lastBoardUrl: String?
@@ -232,8 +234,10 @@ class Prefs(context: Context) {
     var uploadEnabled by pref("uploadEnabled", false)
     /** 上げる前に縮める、長い辺の大きさ(px。0 なら縮めない) */
     var uploadMaxDimension by pref("uploadMaxDimension", 4096)
-    /** 画像の上げ先: auto(catbox → 0x0.st → imgur → uguu.se の順に試す)/ catbox / 0x0 / imgur / uguu。hono-bbs の板は、いつもその掲示板の置き場 */
-    var uploadHost by pref("uploadHost", "auto")
+    /** 画像の上げ先(data/Uploader.kt の HOSTS): imgur-web(既定)/ imgur / catbox / imgbb / imgbox-web / imgbb-web。hono-bbs の板は、いつもその掲示板の置き場 */
+    var uploadHost by pref("uploadHost", Uploader.DEFAULT_HOST)
+    /** imgbb の API キー(https://api.imgbb.com/)。空なら imgbb は使わない */
+    var imgbbApiKey by pref("imgbbApiKey", "")
     /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切り)。本人が消したものを戻さないために覚える */
     var presetsApplied by pref("presetsApplied", "")
     /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で登録したもの)。空なら imgur は使わない */

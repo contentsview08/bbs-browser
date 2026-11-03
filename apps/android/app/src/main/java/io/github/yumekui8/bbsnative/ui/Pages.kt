@@ -313,7 +313,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
     }
 }
 
-/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ・履歴から消す */
+/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ(置き場から消せないので、履歴から消す操作はない) */
 @Composable
 fun UploadsScreen(vm: AppViewModel) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -334,7 +334,6 @@ fun UploadsScreen(vm: AppViewModel) {
                     MenuItem("URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, url); vm.toast = "URL をコピーしました" },
                     posted?.let { e -> MenuItem("貼ったレスへ(${e.thread.title.ifEmpty { "スレタイ不明" }}${e.no?.let { " >>$it" } ?: ""})", Icons.Filled.Reply, Palette.own) { vm.openThread(e.thread, e.no) } },
                 ),
-                listOf(MenuItem("履歴から消す(置き場のファイルは残ります)", Icons.Filled.Delete, danger = true) { vm.prefs.removeUpload(url); version++ }),
             ),
             MenuAt.Center,
         ) { menuFor = null }

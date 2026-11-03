@@ -392,20 +392,16 @@ private fun WritePage(vm: AppViewModel) {
     if (LocalAdvanced.current) Group("送るとき") {
         SwitchRow("送る前に 3 秒待つ", p.sendDelay, desc = "その間は「取り消す」で止められます(誤爆を防ぐ)。送るボタンを長押しすると、送る前の見た目を確かめられます") { p.sendDelay = it }
     }
-    if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます") {
+    if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」の上げ先は、画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れます") {
         SwitchRow("画像のアップロードを使う", p.uploadEnabled) { p.uploadEnabled = it }
         if (p.uploadEnabled) {
+            // 上げ先: サイトの画面(画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れる)か API(キーを登録して、そのまま上げる)
             ChoiceRow(
                 "上げ先", p.uploadHost,
-                listOf(
-                    "auto" to "自動(catbox → 0x0.st → imgur → uguu.se の順に試す)",
-                    "catbox" to "catbox.moe(消えない)",
-                    "0x0" to "0x0.st(30 日〜1 年で消える)",
-                    "imgur" to "imgur(消えない。Client-ID が要る)",
-                    "uguu" to "uguu.se(3 時間で消える)",
-                ),
+                io.github.yumekui8.bbsnative.data.Uploader.HOSTS.map { h -> h.key to "${h.name}(${if (h.kind == "web") "サイトの画面" else "API"})・${h.note}" },
             ) { p.uploadHost = it }
-            if (p.uploadHost == "auto" || p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID") { p.imgurClientId = it.trim() }
+            if (p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID") { p.imgurClientId = it.trim() }
+            if (p.uploadHost == "imgbb") TextRow("imgbb の API キー", p.imgbbApiKey, "api.imgbb.com で発行した API キー") { p.imgbbApiKey = it.trim() }
             ChoiceRow(
                 "大きい画像を縮める", p.uploadMaxDimension.toString(),
                 listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },

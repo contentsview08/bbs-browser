@@ -57,13 +57,15 @@ object AiModel {
     private val scores = object : LinkedHashMap<String, Float>(1024, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Float>?) = size > 50000
     }
-    /** 頼まれて、まだ判定していない組(鍵 → 本文と仮説) */
-    private val queue = LinkedHashMap<String, Pair<String, String>>()
+    /** 頼まれて、まだ判定していない組(鍵 → 本文・仮説・文脈) */
+    private val queue = LinkedHashMap<String, Triple<String, String, String?>>()
     private var pumping: Job? = null
 
-    private fun key(body: String, prompt: String) = bodyKey(body) + "|" + bodyKey(hypothesisOf(prompt))
+    /** 当たり具合の鍵(本文と条件の文。文脈を添えた判定は文脈ごとに別。PC 版の scoreKey と同じ) */
+    private fun key(body: String, prompt: String, context: String?) =
+        bodyKey(body) + "|" + bodyKey(hypothesisOf(prompt)) + (if (context.isNullOrEmpty()) "" else "|" + bodyKey(context))
 
-    fun scoreOf(body: String, prompt: String): Float? = synchronized(scores) { scores[key(body, prompt)] }
+    fun scoreOf(body: String, prompt: String, context: String? = null): Float? = synchronized(scores) { scores[key(body, prompt, context)] }
 
     private fun dir(context: Context) = File(context.filesDir, "ai")
 
@@ -135,15 +137,16 @@ object AiModel {
     }
 
     /** レスの当たり具合を頼む(まだのものだけ。新しく頼んだものを先に) */
-    fun request(posts: List<Post>, prompts: List<String>) {
+    fun request(posts: List<Post>, prompts: List<String>, contexts: List<String?> = emptyList()) {
         if (prompts.isEmpty()) return
-        val fresh = LinkedHashMap<String, Pair<String, String>>()
+        val fresh = LinkedHashMap<String, Triple<String, String, String?>>()
         for (p in posts) {
             if (aiTextOf(p.body).isEmpty()) continue
-            for (pr in prompts) {
-                val k = key(p.body, pr)
-                if (synchronized(scores) { scores.containsKey(k) }) continue
-                fresh[k] = p.body to pr
+            prompts.forEachIndexed { i, pr ->
+                val ctx = contexts.getOrNull(i)
+                val k = key(p.body, pr, ctx)
+                if (synchronized(scores) { scores.containsKey(k) }) return@forEachIndexed
+                fresh[k] = Triple(p.body, pr, ctx)
             }
         }
         if (fresh.isEmpty()) return
@@ -162,7 +165,7 @@ object AiModel {
             var n = 0
             while (true) {
                 val (k, v) = synchronized(queue) { queue.entries.firstOrNull()?.let { e -> queue.remove(e.key); e.key to e.value } } ?: break
-                val s = runCatching { score(aiTextOf(v.first), hypothesisOf(v.second)) }.getOrNull() ?: continue
+                val s = runCatching { score(aiInputOf(v.first, v.third), hypothesisOf(v.second)) }.getOrNull() ?: continue
                 synchronized(scores) { scores[k] = s }
                 if (++n % 6 == 0) version++
             }

@@ -5,6 +5,7 @@
 import { useRef, useMemo, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
+import { DialogHeader } from './DialogParts'
 import { createPortal } from 'react-dom'
 import type { PostHistoryEntry } from '@bbs-browser/logstore'
 import { normalizeForSearch } from '../utils/postBody'
@@ -123,17 +124,10 @@ function DesktopPostHistory(props: Props) {
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 pl-5 pr-2 py-2.5 border-b border-c-border">
-          <h2 className="flex-1 text-base font-bold text-c-text-strong whitespace-nowrap">
-            書き込み履歴 <span className="ml-1 text-sm font-normal text-c-text-muted">{props.entries.length}</span>
-          </h2>
-          <button type="button" onClick={props.onClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
-        </div>
+        <DialogHeader title="書き込み履歴" sub={props.entries.length} onClose={props.onClose} />
         <PostHistoryList entries={props.entries} onOpen={props.onOpen} onDelete={props.onDelete} />
       </div>
     </div>,

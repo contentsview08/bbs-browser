@@ -109,8 +109,8 @@ function PopupWindow(props: {
     <div
       ref={ref}
       data-popup-top={props.isTop || undefined}
-      className={`post-popup bg-c-surface border-2 rounded-xl shadow-2xl custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
-      style={{ ...style, borderColor: 'var(--c-accent)' }}
+      className={`post-popup bg-c-surface border rounded-lg shadow-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
+      style={{ ...style, borderColor: 'var(--c-border-strong)' }}
       onClick={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
       onMouseEnter={props.onEnter}

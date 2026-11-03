@@ -583,9 +583,21 @@ export default function App() {
    * 板ごとにスレ一覧(subject.txt)を 1 回だけ取り、載っていればそのレス数を新しい数として使う。
    * 載っていないスレだけ、dat 落ちかもしれないので dat を見に行く(落ちていれば dat 落ちに、残っていれば新着を取る)
    */
+  const historyRefreshing = useRef(false)
   const refreshHistory = () =>
-    run('threads', async () => {
-      if (!store) return
+    run(null, async () => {
+      // 裏で動かす(一覧の読み込み中にはしない。確かめている間もスレを開く・切り替えるが止まらない)。重ねて頼まれたら 1 回だけ
+      if (!store || historyRefreshing.current) return
+      historyRefreshing.current = true
+      try {
+        await crawlHistory(store)
+      } finally {
+        historyRefreshing.current = false
+      }
+    })
+  /** 閲覧履歴の新着を、板ごとのスレ一覧で確かめる(dat を 1 つずつ取りに行かない) */
+  const crawlHistory = async (store: LogStore) => {
+    {
       const list = await store.history()
       setHistory(list)
       const byBoard = new Map<string, HistoryEntry[]>()
@@ -615,7 +627,8 @@ export default function App() {
       setHistoryProgress(undefined)
       setHistoryVersion((v) => v + 1)
       await reloadRecent(store)
-    })
+    }
+  }
 
   const openHistory = (record = true) => {
     // 「未読のスレ」から開くときは、このあとで 1 にする(ほかの開き方で、前の頼みが残って未読に絞らないように)
@@ -2319,7 +2332,7 @@ export default function App() {
           historyMetaOf={history ? historyMetaOf : undefined}
           // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
           pageSize={history || favView ? settings.listPageSize : 0}
-          progressText={history && historyProgress ? `${historyProgress.done}/${historyProgress.total} 板の新着を確かめています` : undefined}
+          busyText={history && historyProgress ? `${historyProgress.done}/${historyProgress.total} 板` : undefined}
           tabLabel={settings.listTabLabel}
           isNg={isNgThread}
           favorite={!favView && !history && board ? { active: isFavorite, onToggle: () => toggleFavorite(board) } : undefined}

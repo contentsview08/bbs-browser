@@ -113,8 +113,8 @@ interface Props {
   body?: ReactNode
   /** 閲覧履歴の行に出すもの(板の名前・いつ見たか)。渡すと、行が履歴用の形になる */
   historyMetaOf?: (t: ThreadSummary) => { boardName: string; readAt?: number; icon?: string }
-  /** ヘッダーの下に出す進み具合の文(閲覧履歴の新着を板ごとに確かめている間など) */
-  progressText?: string
+  /** 裏で取っている間の文(閲覧履歴の新着を板ごとに確かめている など)。タブの行の右に小さく出す(一覧はずらさない) */
+  busyText?: string
   /** 1 ページに出すスレの数(0 なら全部)。絞り込み・検索のあとで分ける */
   pageSize?: number
   /** 上に出すタブと、その並び(設定の listTabs) */
@@ -971,12 +971,6 @@ export default function ThreadListPanel(props: Props) {
           </div>
 
           {props.subHeader}
-          {props.progressText && (
-            <div className="flex items-center gap-2 px-4 py-1 text-[11px] text-c-text-muted border-b border-c-border bg-c-surface2">
-              <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-              {props.progressText}
-            </div>
-          )}
 
           {selectable && selected.size > 0 && isMobile && (
             // スマホ: 選んでいる間の帯(すべて選ぶ・ログを削除・やめる)。戻るでもやめられる。
@@ -1043,16 +1037,24 @@ export default function ThreadListPanel(props: Props) {
             ) : (
               !isMobile && tabGrid
             )}
+            {/* 右端: 裏で取っている印と、未読の一覧の「読んだスレを片づける」(帯を差し込むと一覧がずれるので、同じ行に) */}
+            {!isMobile && (props.busyText || (unreadOnly && readInSnapshot > 0)) && (
+              <div className="flex-shrink-0 flex items-center gap-3 pl-3 text-xs text-c-text-muted">
+                {props.busyText && (
+                  <span className="flex items-center gap-1" title={props.busyText}>
+                    <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                    {props.busyText}
+                  </span>
+                )}
+                {/* 未読の一覧は、読み終えても並びから消さない(開いただけで一覧が動かないように)。消すのは本人が押したときだけ */}
+                {unreadOnly && readInSnapshot > 0 && (
+                  <button type="button" onClick={() => setSweepCount((n) => n + 1)} className="hover:text-c-accent" title={`読み終えたスレ ${readInSnapshot} 件も並べています。押すと外します`}>
+                    読んだ {readInSnapshot} 件を片づける
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          {/* 未読の一覧は、読み終えても並びから消さない(開いただけで一覧が動かないように)。消すのは本人が押したときだけ */}
-          {unreadOnly && readInSnapshot > 0 && (
-            <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-c-text-muted border-b border-c-border">
-              <span className="flex-1">読み終えたスレ {readInSnapshot} 件も並べています</span>
-              <button type="button" onClick={() => setSweepCount((n) => n + 1)} className="px-2 py-0.5 rounded border border-c-border hover:border-c-accent hover:text-c-accent">
-                読んだスレを片づける
-              </button>
-            </div>
-          )}
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}

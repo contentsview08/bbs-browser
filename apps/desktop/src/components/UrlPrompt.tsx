@@ -13,7 +13,7 @@ export default function UrlPrompt(props: { onOpen: (url: string) => void; onClos
     <div className="fixed inset-0 z-[9500] bg-black/40 flex items-start justify-center pt-[15vh] px-4" {...backdrop}>
       <form
         ref={boxRef}
-        className="w-full max-w-lg flex flex-col gap-3 p-4 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-lg flex flex-col gap-3 p-4 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault()

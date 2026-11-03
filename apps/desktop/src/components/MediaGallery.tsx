@@ -91,7 +91,7 @@ export default function MediaGallery(props: {
     <div className="fixed inset-0 z-[9600] bg-black/60 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-w-5xl h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-5xl h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 pl-5 pr-2 py-2.5 border-b border-c-border">

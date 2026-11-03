@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { stashGet, stashSet } from '../utils/draftStash'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { DialogHeader } from './DialogParts'
 import type { AttachmentRules, NewThreadInput, PostConfirm, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { useCountdown } from '../hooks/useCountdown'
@@ -142,7 +143,7 @@ export default function NewThreadDialog(props: Props) {
       <div
         ref={boxRef}
         className={
-          isMobile ? 'flex-1 min-h-0 flex flex-col' : 'w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in'
+          isMobile ? 'flex-1 min-h-0 flex flex-col' : 'w-full max-w-2xl flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in'
         }
         onClick={(e) => e.stopPropagation()}
       >
@@ -167,14 +168,7 @@ export default function NewThreadDialog(props: Props) {
             </button>
           </div>
         ) : (
-        <div className="flex items-center justify-between px-5 py-3 border-b border-c-border">
-          <h2 className="text-base font-bold text-c-text-strong">
-            スレを立てる <span className="ml-2 text-sm font-normal text-c-text-muted">{props.boardName}</span>
-          </h2>
-          <button type="button" onClick={props.onClose} className="p-1 text-c-text-muted hover:text-c-text-strong" title="閉じる">
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
+        <DialogHeader title="スレを立てる" sub={props.boardName} onClose={props.onClose} />
         )}
 
         <div className={isMobile ? 'flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-3' : 'px-5 py-4 space-y-3'}>

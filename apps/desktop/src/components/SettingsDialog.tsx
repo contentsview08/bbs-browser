@@ -42,6 +42,7 @@ import { ensureNotifyPermission } from '../utils/osNotify'
 import FontSizeSlider from './FontSizeSlider'
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle } from './SettingParts'
 import { canOpenToolWindow, openToolWindow } from '../host/crossWindow'
+import { BTN_PRIMARY } from './DialogParts'
 import { GESTURE_ACTIONS } from '../utils/gestures'
 import { getVersion } from '@tauri-apps/api/app'
 import { backgroundImageUrl, importBackgroundImage } from '../host/backgroundImage'
@@ -185,8 +186,7 @@ function SectionAutoOpen(props: { seen: string[]; active: boolean; onFew: () => 
 
 const INPUT =
   'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
-const BTN =
-  'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50'
+const BTN = BTN_PRIMARY
 const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colors rounded'
 
 /** 高度な設定を見せるか(設定画面の左下のチェック) */
@@ -2788,7 +2788,7 @@ export default function SettingsDialog(props: SettingsProps) {
         ref={boxRef}
         // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)。
         // 自分のウィンドウ(windowed)なら枠いっぱいに描き、動かす・大きさを変えるのは OS のウィンドウに任せる
-        className={props.windowed ? 'absolute inset-0 flex bg-c-surface overflow-hidden' : 'absolute flex pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl overflow-hidden rise-in'}
+        className={props.windowed ? 'absolute inset-0 flex bg-c-surface overflow-hidden' : 'absolute flex pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl overflow-hidden rise-in'}
         style={
           props.windowed
             ? undefined

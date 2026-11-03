@@ -10,15 +10,15 @@ import PostArticle, { type PostHandlers } from './PostArticle'
 import { DragHandle, DragList } from './DragSort'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose, useGuardedClose } from '../hooks/useDialogClose'
+import { BTN_PRIMARY, BTN_SECONDARY, DialogHeader } from './DialogParts'
 import { effectivePostStyle, type AppSettings } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
 
 const INPUT =
   'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
-const BTN =
-  'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50'
-const SUB_BTN = 'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:border-c-border-strong disabled:opacity-50'
+const BTN = BTN_PRIMARY
+const SUB_BTN = BTN_SECONDARY
 const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colors rounded'
 
 /** 見本のレス(どの掲示板にもありそうな形。画像は読みに行かない) */
@@ -404,16 +404,11 @@ export function ManagerDialog(props: { title: string; onClose: () => void; child
     <div className={`fixed inset-0 z-[9700] bg-black/50 flex ${isMobile ? '' : 'items-center justify-center p-6'}`} {...backdrop}>
       <div
         ref={boxRef}
-        className={`flex flex-col bg-c-surface ${isMobile ? 'w-full h-full' : `w-full ${props.wide ? 'max-w-5xl' : 'max-w-2xl'} max-h-full border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in`}`}
+        className={`flex flex-col bg-c-surface ${isMobile ? 'w-full h-full' : `w-full ${props.wide ? 'max-w-5xl' : 'max-w-2xl'} max-h-full border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in`}`}
         style={isMobile ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex-shrink-0 flex items-center gap-2 px-5 py-3 border-b border-c-border">
-          <h3 className="flex-1 min-w-0 truncate text-base font-bold text-c-text-strong">{props.title}</h3>
-          <button type="button" onClick={requestClose} className={ICON_BTN} title="閉じる">
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
+        <DialogHeader title={props.title} onClose={requestClose} />
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-5 py-4">{props.children}</div>
         {guard}
       </div>

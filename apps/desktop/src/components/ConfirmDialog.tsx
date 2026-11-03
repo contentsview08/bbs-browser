@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
+import { Button } from './DialogParts'
 import { createPortal } from 'react-dom'
 
 export default function ConfirmDialog(props: {
@@ -25,7 +26,7 @@ export default function ConfirmDialog(props: {
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-w-md bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-md bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-5 py-3 border-b border-c-border">
@@ -44,22 +45,12 @@ export default function ConfirmDialog(props: {
           )}
           <div className="ml-auto flex gap-2">
             {/* 開いたら「やめる」に入る(Enter をうっかり押しても消さない) */}
-            <button
-              type="button"
-              autoFocus
-              onClick={() => props.onClose(false, false)}
-              className="px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:bg-c-surface2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-c-accent"
-            >
+            <Button autoFocus onClick={() => props.onClose(false, false)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-c-accent">
               やめる
-            </button>
-            <button
-              type="button"
-              onClick={() => props.onClose(true, skip)}
-              className="px-3 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-c-accent"
-              style={{ background: 'var(--c-error)' }}
-            >
+            </Button>
+            <Button variant="danger" onClick={() => props.onClose(true, skip)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-c-accent">
               {props.okLabel}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

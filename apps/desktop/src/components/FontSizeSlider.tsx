@@ -206,7 +206,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
         ref={boxRef}
         // つかんでいる間は、入れ物ごと見えなくし、つかんでいる行だけを visibility: visible で残す
         style={active ? { visibility: 'hidden', ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : {}) } : isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
-        className={`w-full overflow-y-auto bg-c-surface shadow-2xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
+        className={`w-full overflow-y-auto bg-c-surface shadow-xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {isMobile && (

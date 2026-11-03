@@ -5,14 +5,14 @@ import { AI_MODEL, AI_NG_SHOWS, DEFAULT_THRESHOLD, MIN_EXAMPLES, hypothesisOf, t
 import { deleteAiModelFiles, testScore, useAiModelStatus } from '../hooks/useAiNg'
 import type { AppSettings, UpdateSetting } from '../ui/settings'
 import { ManagerDialog, Switch, Toggle } from './SettingParts'
+import { BTN_PRIMARY, BTN_SECONDARY } from './DialogParts'
 import FontSizeSlider from './FontSizeSlider'
 import { isMobile } from '../utils/platform'
 
 const INPUT =
   'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
-const BTN =
-  'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50'
-const SUB_BTN = 'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:border-c-border-strong disabled:opacity-50'
+const BTN = BTN_PRIMARY
+const SUB_BTN = BTN_SECONDARY
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(0)}MB`
 

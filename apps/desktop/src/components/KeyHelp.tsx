@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
+import { DialogHeader } from './DialogParts'
 import { FIXED_KEYS, KEY_ACTIONS, keyLabel, type Keymap } from '../utils/keymap'
 
 export default function KeyHelp(props: { keymap: Keymap; onClose: () => void }) {
@@ -31,16 +32,11 @@ export default function KeyHelp(props: { keymap: Keymap; onClose: () => void }) 
     >
       <div
         ref={boxRef}
-        className="w-full max-w-4xl max-h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-4xl max-h-[85vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between pl-5 pr-2 py-2.5 border-b border-c-border">
-          <h2 className="text-base font-bold text-c-text-strong">キー操作</h2>
-          {/* 開いたらここに入って、Esc・? を受け取る */}
-          <button type="button" autoFocus onClick={props.onClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる(Esc)">
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
-        </div>
+        {/* 開いたら × に入って、Esc・? を受け取る */}
+        <DialogHeader title="キー操作" onClose={props.onClose} closeTitle="閉じる(Esc)" closeAutoFocus />
         <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 grid gap-x-8 gap-y-5 md:grid-cols-2">
           {sections.map((sec) => (
             <section key={sec.title} className={sec.title === '決まっているキー' ? 'md:col-span-2' : ''}>

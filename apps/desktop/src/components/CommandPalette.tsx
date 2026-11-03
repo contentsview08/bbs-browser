@@ -54,7 +54,7 @@ export default function CommandPalette(props: { items: PaletteItem[]; onClose: (
     <div className="fixed inset-0 z-[9900] bg-black/40 flex justify-center pt-[12vh] px-6" {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-w-xl h-fit max-h-[70vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-xl h-fit max-h-[70vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-c-border">

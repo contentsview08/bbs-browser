@@ -16,7 +16,7 @@ export default function PeekPopup(props: { thread: ThreadSummary; onOpen: () => 
     <div className="fixed inset-0 z-[9800] bg-black/30 flex items-center justify-center p-6" {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-w-2xl max-h-[75vh] flex flex-col bg-c-surface border-2 rounded-xl shadow-2xl rise-in"
+        className="w-full max-w-2xl max-h-[75vh] flex flex-col bg-c-surface border-2 rounded-xl shadow-xl rise-in"
         style={{ borderColor: 'var(--c-accent)' }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {

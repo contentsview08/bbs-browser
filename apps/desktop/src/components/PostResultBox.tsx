@@ -10,7 +10,7 @@ function ServerResponse({ html, onClose }: { html: string; onClose: () => void }
   return createPortal(
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
       <div
-        className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-3xl h-[80vh] flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pl-4 pr-2 py-2 border-b border-c-border">

@@ -29,7 +29,7 @@ function Toast({ n, onClose }: { n: AppNotification; onClose: () => void }) {
 
   return (
     <div
-      className="toast-in pointer-events-auto w-80 flex items-start gap-3 px-4 py-3 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl cursor-pointer hover:border-c-accent transition-colors"
+      className="toast-in pointer-events-auto w-80 flex items-start gap-3 px-4 py-3 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl cursor-pointer hover:border-c-accent transition-colors"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => {

@@ -90,12 +90,12 @@ function Row(props: {
       type="button"
       onClick={props.onClick}
       title={props.label}
-      className={`relative w-full h-14 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
+      className={`relative w-full h-10 flex items-center transition-colors text-c-text-strong ${props.active ? '' : 'hover:bg-c-surface2'}`}
     >
       <NavNotch on={!!props.active} />
       <span className="relative w-[64px] flex-shrink-0 flex items-center justify-center">
         <span className="relative">
-          <span className={`material-symbols-outlined text-[26px] ${props.filled ? 'fill' : ''} ${props.active ? 'text-c-text-strong' : 'text-c-text-muted'}`}>
+          <span className={`material-symbols-outlined text-[22px] ${props.active ? 'text-c-text-strong' : 'text-c-text-muted'}`}>
             {props.icon}
           </span>
           {props.badge !== undefined && props.badge > 0 && (
@@ -108,7 +108,7 @@ function Row(props: {
           )}
         </span>
       </span>
-      <span className="relative flex-1 min-w-0 text-left text-lg font-medium truncate">{props.label}</span>
+      <span className={`relative flex-1 min-w-0 text-left text-sm truncate ${props.active ? 'font-medium' : ''}`}>{props.label}</span>
       {props.trailing && <span className="relative">{props.trailing}</span>}
     </button>
   )
@@ -262,7 +262,7 @@ export default function Sidebar(props: Props) {
     <aside
       data-neighbor={props.neighbor ?? 'list'}
       className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar ${resizing ? '' : 'transition-[width] duration-200 ease-out'} ${
-        peek ? 'z-40 shadow-2xl' : 'z-30'
+        peek ? 'z-40 shadow-xl' : 'z-30'
       }`}
       // --sb-w: いま見えている幅。選んでいる行の印(NavNotch)を、右の境界線の位置まで伸ばすのに使う
       style={{ width: collapsed ? COLLAPSED : EXPANDED, ['--sb-w' as string]: `${collapsed ? COLLAPSED : EXPANDED}px` }}

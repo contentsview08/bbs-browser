@@ -89,14 +89,8 @@ function ThreadCard({
   const [sheet, setSheet] = useState(false)
   const longPress = useLongPress(isMobile ? (onSelectStart ? () => onSelectStart(thread) : () => setSheet(true)) : undefined)
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
-  const momentumColorClass =
-    momentumRank >= 0.9
-      ? 'text-c-heat-very-hot'
-      : momentumRank >= 0.6
-        ? 'text-c-heat-hot'
-        : momentumRank >= 0.3
-          ? 'text-c-heat-warm'
-          : 'text-c-text-muted'
+  // 勢いの色は「とても多い」の 1 段だけ(3 段に塗り分けると、行の中の色が増えて読みにくい)
+  const momentumColorClass = momentumRank >= 0.9 ? 'text-c-heat-very-hot' : 'text-c-text-muted'
 
   const unreadCount = state ? Math.max(0, thread.postCount - state.readNo) : 0
   // 一度でも開いたスレ(ログがある)は、左に線を引き、スレタイに色を付ける。太字は使わない(目が疲れるので)
@@ -110,14 +104,9 @@ function ThreadCard({
       <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
     </label>
   )
+  // 「新」は塗りの札ではなく、小さな点(札が並びすぎて読みにくかった)
   const newBadge = isNew && (
-    <span
-      className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
-      style={{ background: 'var(--c-new-badge-bg)', color: 'var(--c-new-badge-text)' }}
-      title="前回この板を見たあとに立ったスレ"
-    >
-      新
-    </span>
+    <span className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full align-[3px]" style={{ background: 'var(--c-mark-new)' }} title="前回この板を見たあとに立ったスレ" />
   )
   /** 掲示板がスレに付けた印(「固定」「ロック」など)。スレタイの前に出す */
   const threadBadges = thread.badges?.length ? (
@@ -228,7 +217,7 @@ function ThreadCard({
               {thread.postCount}
               <span className="ml-0.5 text-[10px]">レス</span>
             </span>
-            {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded-full text-center leading-tight')}
+            {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded text-center leading-tight')}
           </span>
         </div>
       </div>
@@ -251,7 +240,7 @@ function ThreadCard({
       <span className={`flex-shrink-0 min-w-[36px] text-right text-[11px] tabular-nums ${momentumColorClass}`} title={`レス数(勢い：${formatMomentum(m)})`}>
         {thread.postCount}
       </span>
-      {unreadBadge('text-[10px] min-w-[30px] px-1.5 py-px rounded-full text-center leading-tight')}
+      {unreadBadge('text-[10px] min-w-[30px] px-1.5 py-px rounded text-center leading-tight')}
     </div>
   )
 
@@ -288,7 +277,7 @@ function ThreadCard({
           {thread.postCount}
           <span className="ml-0.5 text-[10px]">レス</span>
         </span>
-        {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded-full text-center leading-tight')}
+        {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded text-center leading-tight')}
       </span>
     </div>
   )
@@ -335,7 +324,7 @@ function ThreadCard({
               {thread.postCount}
             </span>
             {momentumEl('text-[10px] opacity-80')}
-            {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded-full text-center leading-tight')}
+            {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded text-center leading-tight')}
           </span>
         </span>
       </div>

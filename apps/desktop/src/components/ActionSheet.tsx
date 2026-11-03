@@ -70,7 +70,7 @@ export default function ActionSheet(props: {
     <div className="fixed inset-0 bg-black/40 flex items-end drawer-fade" style={{ zIndex: props.zIndex ?? 9600 }} {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-h-[80vh] flex flex-col bg-c-surface rounded-t-3xl shadow-2xl sheet-rise"
+        className="w-full max-h-[80vh] flex flex-col bg-c-surface rounded-t-3xl shadow-xl sheet-rise"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
         onClick={(e) => e.stopPropagation()}
       >

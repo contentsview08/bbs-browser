@@ -4,6 +4,7 @@
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose, useGuardedClose } from '../hooks/useDialogClose'
+import { BTN_PRIMARY, DialogHeader } from './DialogParts'
 import { createPortal } from 'react-dom'
 import { isValidPattern, newRule, type NgRule, type NgTarget } from '../utils/ng'
 import NgEditor, { type NgDraftRule } from './NgEditor'
@@ -45,15 +46,10 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
     <div className="fixed inset-0 z-[9900] bg-black/50 flex items-center justify-center p-4" {...backdrop}>
       <div
         ref={boxRef}
-        className="w-full max-w-lg max-h-full flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-2xl rise-in"
+        className="w-full max-w-lg max-h-full flex flex-col bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl rise-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between pl-5 pr-2 py-2.5 border-b border-c-border">
-          <h2 className="text-base font-bold text-c-text-strong">{d.rule ? 'NG を直す' : 'NG に追加'}</h2>
-          <button type="button" onClick={requestClose} className="p-1 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
-        </div>
+        <DialogHeader title={d.rule ? 'NG を直す' : 'NG に追加'} onClose={requestClose} />
         <div className="px-5 py-4 overflow-y-auto">
           <NgEditor rule={rule} onChange={setRule} board={d.board ?? props.board} values={d.values} sample={sample} onSampleChange={setSample} onSubmit={submit} />
         </div>
@@ -63,7 +59,7 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
             type="button"
             onClick={submit}
             disabled={!valid}
-            className="px-4 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
+            className={BTN_PRIMARY}
           >
             {d.rule ? '直す' : 'NG に追加'}
           </button>

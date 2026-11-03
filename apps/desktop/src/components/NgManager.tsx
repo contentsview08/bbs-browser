@@ -3,10 +3,11 @@
 import { useMemo, useState } from 'react'
 import { NG_TARGETS, isActive, matchRanges, pruneExpired, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
 import NgRuleDialog, { type NgDraft } from './NgRuleDialog'
+import { BTN_SECONDARY } from './DialogParts'
 
 const INPUT =
   'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted focus:ring-c-accent focus:border-c-accent'
-const BTN = 'px-3 py-1.5 text-sm rounded-[var(--btn-radius)] border border-c-border text-c-text-body hover:border-c-border-strong disabled:opacity-50'
+const BTN = BTN_SECONDARY
 const ICON_BTN = 'p-1 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface2'
 
 type Sort = 'new' | 'pattern' | 'target'

@@ -2494,7 +2494,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
     <>
       <Section title={`bbs-browser ${version ?? ''}`}>
         <p className="text-sm text-c-text-body leading-relaxed">
-          掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・ふたば・hono-bbs を読めます。
+          掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・まちBBS・ふたば・hono-bbs を読めます。
         </p>
       </Section>
       {canCheckUpdate && <UpdateSection version={version} />}

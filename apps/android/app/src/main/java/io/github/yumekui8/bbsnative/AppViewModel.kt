@@ -17,6 +17,7 @@ import io.github.yumekui8.bbsnative.bbs.PostResult
 import io.github.yumekui8.bbsnative.bbs.ThreadSummary
 import io.github.yumekui8.bbsnative.bbs.HonoBbs
 import io.github.yumekui8.bbsnative.bbs.Shitaraba
+import io.github.yumekui8.bbsnative.bbs.Machi
 import io.github.yumekui8.bbsnative.bbs.TwoCh
 import io.github.yumekui8.bbsnative.ui.mostCommonName
 import io.github.yumekui8.bbsnative.bbs.findNextThreads
@@ -545,7 +546,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 // hono-bbs(web のトップ・板・API の URL のどれでも)なら、板の一覧の URL(https://…/boards)にそろえる
-                val url = if (menuUrl.contains("bbsmenu")) menuUrl.trim() else HonoBbs.detectSite(menuUrl) ?: menuUrl.trim()
+                // まちBBS(https://machi.to/)は、トップページから板の一覧を読む
+                val url = if (menuUrl.contains("bbsmenu")) menuUrl.trim() else if (Machi.isSiteUrl(menuUrl)) "https://machi.to/" else HonoBbs.detectSite(menuUrl) ?: menuUrl.trim()
                 val list = TwoCh.listBoards(url)
                 if (list.isEmpty()) throw IllegalStateException("板が 1 つもありません")
                 db.addSite(url, name.trim().ifEmpty { url.removePrefix("https://").substringBefore('/') })
@@ -1000,6 +1002,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             return true
         }
+        // まちBBS(https://machi.to/板/ と /bbs/read.cgi/板/キー/)
+        Machi.parseThreadUrl(u)?.let { openThread(it); return true }
+        Machi.normalizeBoardUrl(u)?.let { bu ->
+            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
+            if (known != null) openBoard(known, root = true)
+            else viewModelScope.launch {
+                val name = runCatching { Machi.boardName(bu) }.getOrElse { toast = it.message ?: "まちBBS の板を開けません"; return@launch }
+                openBoard(Board(bu, name), root = true)
+            }
+            return true
+        }
         val thread = Regex("^https?://([^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
         if (thread != null) {
             val key = thread.groupValues[3]
@@ -1070,10 +1083,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val (name, type, bytes) = up.prepareFor(getApplication(), item.uri, prefs.uploadMaxDimension, item.stamp)
                     // 同じ中身の画像を前に上げていれば、上げずにその URL を使う(履歴のハッシュで引く)
                     val hash = up.sha256(bytes)
-                    val url = prefs.findUploadByHash(hash) ?: up.send(name, type, bytes, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey).url
+                    val sent = prefs.findUploadByHash(hash)?.let { it to null } ?: up.send(name, type, bytes, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey).let { it.url to it.deleteUrl }
+                    val (url, deleteUrl) = sent
                     // いつも最新の本文に足す(前の画像の URL を消さない)
                     r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
-                    prefs.addUpload(url, hash)
+                    prefs.addUpload(url, hash, deleteUrl ?: prefs.uploadDeleteUrl(url))
                     item.state = UploadItem.State.Done(url)
                 } catch (e: Exception) {
                     // 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む

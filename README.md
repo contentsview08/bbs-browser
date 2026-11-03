@@ -7,6 +7,7 @@
 |---|---|---|
 | 2ch 互換 | 5ch、eddist、hono-bbs など | 読む(差分取得・過去ログ)、書き込み、スレ立て、BE ログイン |
 | したらば | jbbs.shitaraba.net | 読む、書き込み、スレ立て |
+| まちBBS | machi.to | 読む、書き込み(スレ立ては依頼制なので不可) |
 | ふたば☆ちゃんねる | *.2chan.net | 読む(カタログ・サムネイル)、「>文章」の引用元へのリンク、そうだね。書き込み・画像の添付・スレ立て・削除は作ってあるが、画像の添付・スレ立て・削除・そうだねを押すことは本番で確かめていない |
 
 板は URL 欄に板(またはスレ)の URL を入れて開き、お気に入りに足す。5ch は板一覧(bbsmenu)からも選べる。
@@ -31,6 +32,7 @@ packages/connectors/   コネクタ(純 TS。Tauri にも DOM にも依存しな
   src/types.ts         Connector / ConnectorContext の定義
   src/twoch/           2ch 互換(bbsmenu / subject.txt / dat、差分取得、過去ログ、書き込み、BE)
   src/shitaraba/       したらば(subject.txt / rawmode.cgi、EUC-JP)
+  src/machi/           まちBBS(subject.txt / offlaw.cgi、Shift_JIS)
   src/futaba/          ふたば(カタログ / スレのページ / JSON、書き込み)
 packages/logstore/     ログの保存(SQLite)。既読位置・Cursor・レス・板一覧・お気に入り・書き込み履歴など
   migrations/          スキーマ。Rust のマイグレーションと vitest の両方がこのファイルを読む

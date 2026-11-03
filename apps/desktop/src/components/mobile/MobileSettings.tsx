@@ -561,7 +561,7 @@ function About() {
       </div>
       <Group>
         <p className="px-4 py-4 text-[13.5px] leading-relaxed text-c-text-body">
-          掲示板を読む専用ブラウザです。5ch・エッジ・bbspink などの 2ch 互換の掲示板、したらば、ふたばを読めます。
+          掲示板を読む専用ブラウザです。5ch・エッジ・bbspink などの 2ch 互換の掲示板、したらば、まちBBS、ふたばを読めます。
         </p>
       </Group>
     </>

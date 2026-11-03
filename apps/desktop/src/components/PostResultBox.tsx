@@ -26,6 +26,9 @@ function ServerResponse({ html, onClose }: { html: string; onClose: () => void }
   )
 }
 
+/** エラーの文をここまでで切る(文字) */
+const ERROR_MAX = 300
+
 export default function PostResultBox({
   result,
   onOpenUrl,
@@ -39,6 +42,8 @@ export default function PostResultBox({
   const [showHtml, setShowHtml] = useState(false)
   if (result.status === 'ok') return <p className="mb-2 text-xs text-c-accent">{result.message}</p>
   const html = result.html
+  // 返答のページがまるごと文になっているとき(スレの中身が返る掲示板など)は、頭だけ出して、全部は「サーバーの返答を見る」で
+  const message = result.status !== 'confirm' && result.message.length > ERROR_MAX ? `${result.message.slice(0, ERROR_MAX).trimEnd()}…` : result.message
   // 失敗は赤、書き込み確認(Cookie の承諾など)は強調色の枠にする
   return (
     <div
@@ -54,7 +59,7 @@ export default function PostResultBox({
           className={`flex-1 text-c-text-body whitespace-pre-wrap break-all ${result.status === 'confirm' ? 'max-h-40 overflow-y-auto custom-scrollbar text-xs' : ''}`}
         >
           {result.status === 'confirm' && <span className="block mb-1 text-sm font-bold text-c-text-strong">書き込み確認</span>}
-          {result.message}
+          {message}
         </p>
         {html && (
           <button

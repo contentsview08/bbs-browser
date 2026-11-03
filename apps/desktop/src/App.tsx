@@ -2317,7 +2317,8 @@ export default function App() {
           // 閲覧履歴は 見た順・レス数順・新しい順(未読は上の「履歴」の帯で)
           tabs={history ? ['viewed', 'count', 'newest'] : settings.listTabs}
           historyMetaOf={history ? historyMetaOf : undefined}
-          pageSize={settings.listPageSize}
+          // ページに分けるのは、閲覧履歴・未読・お気に入りのスレ(履歴の画面)だけ。板のスレ一覧は分けない
+          pageSize={history || favView ? settings.listPageSize : 0}
           progressText={history && historyProgress ? `${historyProgress.done}/${historyProgress.total} 板の新着を確かめています` : undefined}
           tabLabel={settings.listTabLabel}
           isNg={isNgThread}

@@ -684,7 +684,7 @@ function ThreadsTab({ settings: s, update, favorites, onPruneLogs }: Pick<Settin
   const [pruning, setPruning] = useState(false)
   return (
     <>
-      <Section title="1 ページの件数" note="多い板はページに分けて出します(軽くなります)。絞り込み・検索はページをまたいで当たります">
+      <Section title="履歴の 1 ページの件数" note="閲覧履歴・未読・お気に入りのスレの一覧をページに分けて出します(板のスレ一覧は分けません)。絞り込み・検索はページをまたいで当たります">
         <Choice
           value={s.listPageSize}
           options={[50, 100, 200, 500, 0].map((n) => ({ key: n, name: n === 0 ? 'すべて(分けない)' : `${n} スレ` }))}

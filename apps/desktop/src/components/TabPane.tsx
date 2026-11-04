@@ -41,6 +41,8 @@ export interface TabEvents {
   openInBrowser: (t: ThreadSummary) => void
   openUrl: (url: string) => void
   addNg: (rule: NgRule) => void
+  removeNg: (rules: NgRule[]) => void
+  editNg: (rule: NgRule, values: Partial<Record<NgTarget, string>>) => void
   ngDraft: (target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => void
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
   markTroll: (t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => void
@@ -207,6 +209,8 @@ function TabPane({
       onOpenInBrowser={onOpenInBrowser}
       onUrl={ev.openUrl}
       onAddNg={ev.addNg}
+      onRemoveNg={ev.removeNg}
+      onEditNg={ev.editNg}
       onNgDraft={ev.ngDraft}
       ownNos={tab.ownNos}
       onSubmitPost={ev.canPost(thread) ? ev.submitPost : undefined}

@@ -1220,7 +1220,7 @@ export default function App() {
         return
       }
       // スマホはタブを使わない(閲覧履歴が代わり)。いつも今のスレを置き換える
-      const inNew = !isMobile && (opts.newTab ?? settings.openInNewTab)
+      const inNew = settings.tabsEnabled && !isMobile && (opts.newTab ?? settings.openInNewTab)
       const current = view.current.activeId
       setTabs((ts) => {
         const i = ts.findIndex((x) => x.id === current)
@@ -2039,8 +2039,8 @@ export default function App() {
 
   // スマホはタブを使わないので、開いているスレ以外のタブを閉じる(戻したタブも 1 つにする)
   useEffect(() => {
-    if (isMobile && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
-  }, [tabs.length, activeId])
+    if ((isMobile || !settings.tabsEnabled) && tabs.length > 1) setTabs((ts) => ts.filter((t) => t.id === activeId).slice(0, 1))
+  }, [settings.tabsEnabled, tabs.length, activeId])
 
   // 開いているスレの板と、スレ一覧に出している板の設定を、まだ取っていなければ取る
   // (名無しの省略と、書き込みの長さの上限に使う)
@@ -2212,6 +2212,8 @@ export default function App() {
     openInBrowser: useEvent((t: ThreadSummary) => void openUrl(connectorOf(t.connectorId).threadWebUrl(t))),
     openUrl: useEvent((url: string) => void openLink(url)),
     addNg: useEvent((rule: NgRule) => addNg(rule)),
+    removeNg: useEvent((rules: NgRule[]) => updateSetting('ngRules', settings.ngRules.filter((r) => !rules.some((x) => x.id === r.id)))),
+    editNg: useEvent((rule: NgRule, values: Partial<Record<NgTarget, string>>) => setNgDraft({ target: rule.target, pattern: rule.pattern, rule, values })),
     markTroll: useEvent((t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => markTroll(t, p, troll, reason)),
     ngDraft: useEvent((target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => setNgDraft({ target, pattern: text, values })),
     canPost: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).createPost !== undefined),
@@ -2649,7 +2651,7 @@ export default function App() {
         onPointerDownCapture={() => setFocusPane('thread')}
       >
         {!single && <FocusLine on={!listFocused} />}
-        {!isMobile && (
+        {!isMobile && settings.tabsEnabled && (
         <TabBar
           tabs={tabs.map((t) => ({
             id: t.id,
@@ -2890,6 +2892,7 @@ export default function App() {
               : board && { url: board.url, name: board.name }
           }
           onSubmit={addNg}
+          onDelete={(rule) => updateSetting('ngRules', settings.ngRules.filter((r) => r.id !== rule.id))}
           onClose={() => setNgDraft(undefined)}
         />
       )}

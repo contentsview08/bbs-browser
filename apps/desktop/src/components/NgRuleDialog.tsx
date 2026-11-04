@@ -20,7 +20,7 @@ export interface NgDraft {
   rule?: NgRule
 }
 
-export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: string; name: string }; onSubmit: (rule: NgRule) => void; onClose: () => void }) {
+export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: string; name: string }; onSubmit: (rule: NgRule) => void; onDelete?: (rule: NgRule) => void; onClose: () => void }) {
   const d = props.draft
   const [rule, setRule] = useState<NgDraftRule>(() => d.rule ?? { target: d.target, pattern: d.pattern, isRegex: false, enabled: true })
   // 試し欄: 元のレスの本文(なければスレタイ・名前など、いまの種類の元の文字)
@@ -54,6 +54,18 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
           <NgEditor rule={rule} onChange={setRule} board={d.board ?? props.board} values={d.values} sample={sample} onSampleChange={setSample} onSubmit={submit} />
         </div>
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-c-border">
+          {d.rule && props.onDelete && (
+            <button
+              type="button"
+              className="mr-auto px-3 py-1.5 text-sm rounded border border-c-border text-c-text-body hover:text-mark-danger hover:border-mark-danger"
+              onClick={() => {
+                props.onDelete!(d.rule!)
+                props.onClose()
+              }}
+            >
+              この NG を消す
+            </button>
+          )}
           <span className="text-[10px] text-c-text-muted">Ctrl+Enter で{d.rule ? '直す' : '追加'}</span>
           <button
             type="button"

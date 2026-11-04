@@ -64,6 +64,7 @@ import {
   videoFileUrlsIn,
   youtubeLinksIn, mostCommonName } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
+import { ngHitsOf } from '../utils/ng'
 import { baseFontPx, effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
@@ -99,6 +100,8 @@ interface Props {
   onOpenInBrowser: () => void
   onUrl: (url: string) => void
   onAddNg: (rule: NgRule) => void
+  onRemoveNg?: (rules: NgRule[]) => void
+  onEditNg?: (rule: NgRule, values: Partial<Record<NgTarget, string>>) => void
   /** NG の画面を、元の文字を入れた状態で開く */
   onNgDraft: (target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => void
   /** 自分の書き込みのレス番号 */
@@ -400,6 +403,9 @@ export default function ThreadView(props: Props) {
   )
   // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
   const isNgRule = props.isNg
+  // レスのメニューが読む NG の一覧(変わるたびに全部のレスを描き直さないよう、控えを読む)
+  const ngContext = useRef({ rules: settings.ngRules, boardUrl: props.boardUrl })
+  ngContext.current = { rules: settings.ngRules, boardUrl: props.boardUrl }
   // NG の判定は、レスが変わったときに 1 回だけ全レスに当てて番号の Set にする(描くたびに NG 1 件ごとの toLowerCase を繰り返さない)
   const ngRuleNos = useMemo(() => {
     const out = new Set<number>()
@@ -1689,6 +1695,9 @@ export default function ThreadView(props: Props) {
         onUrl: props.onUrl,
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),
         onAddNg: props.onAddNg,
+        ngHits: (post) => ngHitsOf(ngContext.current.rules, post, ngContext.current.boardUrl),
+        onRemoveNg: props.onRemoveNg,
+        onEditNg: props.onEditNg,
         onNgDraft: props.onNgDraft,
         onMarkTroll: props.onMarkTroll,
         onMarkAi: aiRules.length > 0 && props.onUpdateSetting ? onMarkAi : undefined,

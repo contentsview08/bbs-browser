@@ -250,6 +250,8 @@ export interface AppSettings {
   paneMode: PaneMode
   // タブ
   /** スレ一覧から開くとき、新しいタブで開く(false なら今のタブを置き換える) */
+  /** PC: タブを使う。オフならタブの帯を出さず、いつも今のスレを置き換える */
+  tabsEnabled: boolean
   openInNewTab: boolean
   openTabs: SavedTab[]
   /** 開いていたタブ(threadId) */
@@ -472,6 +474,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keywords: [],
   paneMode: 'auto',
   boardVisits: {},
+  tabsEnabled: true,
   openInNewTab: true,
   openTabs: [],
   activeTab: '',

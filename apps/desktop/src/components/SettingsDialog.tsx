@@ -733,12 +733,15 @@ function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsProps, 's
         />
       </Section>
       <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+        <Toggle checked={s.tabsEnabled} onChange={(v) => update('tabsEnabled', v)} label="タブを使う" note="オフにするとタブの帯を出さず、いつも今のスレを置き換えます(開いているスレ以外のタブは閉じます)" />
+        {s.tabsEnabled && (
         <Toggle
           checked={s.openInNewTab}
           onChange={(v) => update('openInNewTab', v)}
           label="スレ一覧から開くときは新しいタブで開く"
           note="オフにすると、いま見ているタブを置き換えます。そのときも、Ctrl を押しながらクリックすると新しいタブで開きます"
         />
+        )}
       </Section>
       <Section
         title="閲覧履歴(ログ)を残す日数"

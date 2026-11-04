@@ -25,7 +25,7 @@ import {
 import LinkPreview from './LinkPreview'
 import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
-import { newRule, todayDateString, type NgRule } from '../utils/ng'
+import { newRule, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
 import type { HeatStyle, IdPosition, NgMode, PostDoubleClick } from '../ui/settings'
 import { watchoiOf } from '../utils/watchoi'
 import { idColorOf } from '../utils/idColor'
@@ -66,6 +66,12 @@ export interface PostHandlers extends BodyHandlers {
   onBody: (no: number, el: HTMLElement) => void
   onImage: (urls: string[], index: number, post: Post) => void
   onAddNg: (rule: NgRule) => void
+  /** このレスに当たっている NG */
+  ngHits?: (post: Post) => { posterId: NgRule[]; posterName: NgRule[]; content: NgRule[] }
+  /** NG を消す */
+  onRemoveNg?: (rules: NgRule[]) => void
+  /** NG の画面を、その NG を直す形で開く */
+  onEditNg?: (rule: NgRule, values: Partial<Record<NgTarget, string>>) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
   /** 自分の書き込みを消す。消せない掲示板は undefined */
@@ -233,7 +239,10 @@ function watchFontLoads() {
 interface MenuItem {
   label: string
   icon: string
-  onClick: () => void
+  /** 押すと、すぐ下に children を広げる項目では使わない */
+  onClick?: () => void
+  /** 押すと小項目を広げる(︙ の「NG」) */
+  children?: MenuItem[]
 }
 
 const TOOL_BTN =
@@ -247,6 +256,8 @@ function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onO
   const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number }>()
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  /** 広げている小項目の親 */
+  const [expanded, setExpanded] = useState<string>()
   const { onOpenChange } = props
   useEffect(() => {
     onOpenChange(pos !== undefined)
@@ -268,6 +279,7 @@ function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onO
 
   const toggle = () => {
     if (pos) return setPos(undefined)
+    setExpanded(undefined)
     const rect = buttonRef.current!.getBoundingClientRect()
     const right = window.innerWidth - rect.right
     // 下に入りきらなければ上に開く
@@ -293,24 +305,30 @@ function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onO
         createPortal(
           <div
             ref={menuRef}
-            className="fixed w-56 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm"
-            style={pos}
+            className="fixed w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm overflow-y-auto"
+            // 小項目を広げても画面からはみ出さないように
+            style={{ ...pos, maxHeight: window.innerHeight - (pos.top ?? pos.bottom ?? 0) - 8 }}
             onClick={(e) => e.stopPropagation()}
           >
-            {props.items.map((it) => (
-              <button
-                key={it.label}
-                type="button"
-                onClick={() => {
-                  it.onClick()
-                  setPos(undefined)
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors"
-              >
-                <span className="material-symbols-outlined text-base">{it.icon}</span>
-                <span className="flex-1 text-left">{it.label}</span>
-              </button>
-            ))}
+            {props.items.flatMap((it) => {
+              const row = (x: MenuItem, sub = false) => (
+                <button
+                  key={x.label}
+                  type="button"
+                  onClick={() => {
+                    if (x.children) return setExpanded(expanded === x.label ? undefined : x.label)
+                    x.onClick?.()
+                    setPos(undefined)
+                  }}
+                  className={`w-full flex items-center gap-2.5 ${sub ? 'pl-7 pr-3' : 'px-3'} py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors`}
+                >
+                  <span className="material-symbols-outlined text-base">{x.icon}</span>
+                  <span className="flex-1 text-left">{x.label}</span>
+                  {x.children && <span className="material-symbols-outlined text-base text-c-text-muted">{expanded === x.label ? 'expand_less' : 'expand_more'}</span>}
+                </button>
+              )
+              return [row(it), ...(it.children && expanded === it.label ? it.children.map((c) => row(c, true)) : [])]
+            })}
           </div>,
           document.body,
         )}
@@ -327,6 +345,9 @@ function PostArticle(props: Props) {
   const menuOpen = ngOpen || moreOpen
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
   const [hovered, setHovered] = useState(false)
+  // フックはここより下の return(NG のレス)より前に置く(レスが NG になった瞬間に数が変わると落ちる)
+  const idRef = useRef<HTMLSpanElement>(null)
+  const [barTop, setBarTop] = useState(-TOOLBAR_H)
   /** ダブルタップで返信: 1 回目のタップのあと、2 回目を待っている間のタイマー */
   const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [sheet, setSheet] = useState(false)
@@ -426,18 +447,42 @@ function PostArticle(props: Props) {
     .filter(Boolean)
     .join(' ')
 
+  // すでに当たっている NG(NG のレスだけ調べる。レスの数だけ毎回は調べない)
+  const ngHits = props.ng ? handlers.ngHits?.(post) : undefined
+  /**
+   * 当たっている NG を外す項目。その文字ちょうどの NG は押すだけで外す。
+   * 正規表現・部分一致は別のレスにも効いているので、NG の画面を開いて、直すか消すかを選んでもらう
+   */
+  const ngOffItems = (rules: NgRule[], what: string, value?: string): MenuItem[] => {
+    const exact = rules.filter((r) => !r.isRegex && r.pattern === value)
+    const others = rules.filter((r) => !exact.includes(r))
+    return [
+      ...(exact.length > 0 ? [{ label: `この${what}を NG から外す`, icon: 'undo', onClick: () => handlers.onRemoveNg?.(exact) }] : []),
+      ...others.map((r) => ({
+        label: `${what.trim()} の NG「${r.pattern.length > 12 ? `${r.pattern.slice(0, 12)}…` : r.pattern}」を開く`,
+        icon: 'edit_note',
+        onClick: () => handlers.onEditNg?.(r, { content: post.body, posterName: post.name, posterId: post.id }),
+      })),
+    ]
+  }
   const ngActions: MenuItem[] = [
-    ...(post.id
-      ? [
-          {
-            label: 'この ID を NG に(今日だけ)',
-            icon: 'schedule',
-            onClick: () => handlers.onAddNg(newRule('posterId', post.id!, { expiresOnDate: todayDateString() })),
-          },
-          { label: 'この ID を NG に', icon: 'person_off', onClick: () => handlers.onAddNg(newRule('posterId', post.id!)) },
-        ]
-      : []),
-    ...(post.name ? [{ label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }] : []),
+    ...(ngHits?.posterId.length
+      ? ngOffItems(ngHits.posterId, ' ID ', post.id)
+      : post.id
+        ? [
+            {
+              label: 'この ID を NG に(今日だけ)',
+              icon: 'schedule',
+              onClick: () => handlers.onAddNg(newRule('posterId', post.id!, { expiresOnDate: todayDateString() })),
+            },
+            { label: 'この ID を NG に', icon: 'person_off', onClick: () => handlers.onAddNg(newRule('posterId', post.id!)) },
+          ]
+        : []),
+    ...(ngHits?.posterName.length
+      ? ngOffItems(ngHits.posterName, '名前', post.name)
+      : post.name
+        ? [{ label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }]
+        : []),
     ...(handlers.onMarkTroll
       ? props.autoNg?.kind === 'marked'
         ? [{ label: '荒らしの印を外す', icon: 'undo', onClick: () => handlers.onMarkTroll!(post, null) }]
@@ -462,6 +507,8 @@ function PostArticle(props: Props) {
             : [{ label: `AI NG「${r.name}」に当たる`, icon: 'psychology', onClick: () => handlers.onMarkAi!(post, r.id, 'hit') }]
         })
       : []),
+    // 本文の NG は、言葉の一部で当たっていることが多いので、いつも NG の画面で直す
+    ...(ngHits ? ngOffItems(ngHits.content, '本文') : []),
     ...(handlers.onNgDraft
       ? [{ label: '本文の言葉を NG に(直して足す)', icon: 'edit_note', onClick: () => handlers.onNgDraft!('content', post.body, { content: post.body, posterName: post.name, posterId: post.id }) }]
       : []),
@@ -499,7 +546,8 @@ function PostArticle(props: Props) {
             : []),
         ]
       : []),
-    ...ngActions,
+    // NG は 1 つの枠にまとめ、押すと小項目を広げる
+    ...(ngActions.length > 0 ? [{ label: 'NG', icon: 'block', children: ngActions }] : []),
     // 掲示板ごとの操作(通報など)。自分の書き込みにだけ出すものもある
     ...(handlers.onPostAction
       ? (handlers.postActions ?? [])
@@ -519,7 +567,8 @@ function PostArticle(props: Props) {
     ...(handlers.onReact
       ? (handlers.reactionDefs ?? []).map((r) => ({ label: r.label, icon: r.icon, onClick: () => handlers.onReact!(post, r.id) }))
       : []),
-    ...actions,
+    // 下から出る一覧は小項目を広げない作りなので、NG も並べて出す
+    ...actions.flatMap((a) => a.children ?? [a]).map((a) => ({ label: a.label, icon: a.icon, onClick: a.onClick ?? (() => undefined) })),
   ]
 
   // ── レスの頭の部品(スタイルごとに並べ方を変える) ──
@@ -718,12 +767,10 @@ function PostArticle(props: Props) {
   const idPosition = handlers.idPosition ?? 'header'
   const idInHeader = idPosition === 'header' ? idBtn : null
   // 右上の ID の幅を覚えておき、マウスを乗せたときの操作バーをその左に置く(重ならないように。枠の外には出せない)
-  const idRef = useRef<HTMLSpanElement>(null)
   /**
    * 操作バーの上端(レスの枠からの px)。ID と重ならないように、ID の上端を測って、バーの下端をその上に置く(上のレスとの線にまたがる)。
    * 上に余裕がない(すぐ上にレスが見えない)行は ID の下
    */
-  const [barTop, setBarTop] = useState(-TOOLBAR_H)
   const placeToolbar = () => {
     const el = articleRef.current
     if (!el || idPosition !== 'topRight') return

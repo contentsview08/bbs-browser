@@ -145,3 +145,9 @@ export function pruneExpired(rules: NgRule[]): NgRule[] {
 export function newRule(target: NgTarget, pattern: string, opts: Partial<NgRule> = {}): NgRule {
   return { id: crypto.randomUUID(), target, pattern, isRegex: false, enabled: true, createdAt: Date.now(), ...opts }
 }
+
+/** このレスに当たっている NG(種類ごと)。「NG から外す」に使う */
+export function ngHitsOf(rules: NgRule[], post: Post, boardUrl?: string): { posterId: NgRule[]; posterName: NgRule[]; content: NgRule[] } {
+  const hit = (t: NgTarget) => rules.filter((r) => r.target === t && postMatcher([r])(post, boardUrl))
+  return { posterId: hit('posterId'), posterName: hit('posterName'), content: hit('content') }
+}

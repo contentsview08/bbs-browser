@@ -303,7 +303,7 @@ export default function Sidebar(props: Props) {
               <span className="material-symbols-outlined text-xl">{collapsed ? 'left_panel_open' : 'left_panel_close'}</span>
             </button>
           </span>
-          <span className="text-base font-bold text-c-text-strong">bbs-browser</span>
+          <span className="text-base font-bold text-c-text-strong">OBB</span>
         </div>
 
         {/* お気に入りや履歴が増えて入りきらないときはスクロールする。スクロールバーは出さず(アイコンがずれるので)、

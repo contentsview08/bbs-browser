@@ -863,7 +863,7 @@ private fun BackupPage(vm: AppViewModel) {
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
     val load = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importBackup(uri) }
     Group(note = "設定・NG・お気に入り板・お気に入りのスレ・サイトを 1 つのファイルに書き出します。スレのログは入りません") {
-        ActionRow("バックアップを書き出す") { save.launch("bbs-native-backup.json") }
+        ActionRow("バックアップを書き出す") { save.launch("OBB-backup.json") }
         ActionRow("バックアップから戻す") { load.launch(arrayOf("application/json", "text/plain", "*/*")) }
     }
 }
@@ -876,7 +876,7 @@ private fun AboutPage(vm: AppViewModel) {
         ActionRow("運営要望板を開く") { vm.openUrl("https://red-edge.net/boards/operation01/") }
     }
     Group {
-        InfoRow("名前", "bbs N(専ブラのネイティブ版)")
+        InfoRow("名前", "OBB(Open BBS Browser)")
         InfoRow("版", version)
         InfoRow("画像のアップロード", "catbox.moe")
         InfoRow("AA の字", "aahub_light")

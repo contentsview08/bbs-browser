@@ -61,7 +61,7 @@ fun DrawerContent(vm: AppViewModel) {
     var urlDialog by rememberSaveable { mutableStateOf(false) }
     val current = vm.stack.lastOrNull()
     Column(Modifier.fillMaxHeight().width(300.dp).background(Palette.surface).safeDrawingPadding()) {
-        Text("bbs N", Modifier.padding(start = 24.dp, top = 20.dp, bottom = 12.dp), color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("OBB", Modifier.padding(start = 24.dp, top = 20.dp, bottom = 12.dp), color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             DrawerRow(Icons.Filled.Star, "お気に入り板", Palette.markFav, trailing = if (favOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore) { favOpen = !favOpen }
             if (favOpen) {

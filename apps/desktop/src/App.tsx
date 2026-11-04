@@ -223,7 +223,12 @@ export default function App() {
   const [board, setBoard] = useState<Board>()
   const [threads, setThreads] = useState<ThreadSummary[]>([])
   const [states, setStates] = useState(new Map<string, ThreadState>())
-  const [history, setHistory] = useState<HistoryEntry[]>()
+  /** 閲覧履歴の中身。裏の更新でも書き換わるので、これが変わっても画面は切り替えない */
+  const [historyList, setHistory] = useState<HistoryEntry[]>()
+  /** スレ一覧の所に閲覧履歴を出しているか。変えるのは、本人が開いたとき・ほかの一覧へ移ったときだけ */
+  const [historyShown, setHistoryShown] = useState(false)
+  /** いま出している閲覧履歴(出していなければ undefined) */
+  const history = historyShown ? historyList : undefined
   const [tabs, setTabs] = useState<Tab[]>([])
   /** Ctrl/Shift+クリックで選んだタブ */
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set())
@@ -684,7 +689,7 @@ export default function App() {
         ? listOrderRef.current
         : serverSortFor(b, settingsRef.current.threadSort === 'subject' ? null : { mode: settingsRef.current.threadSort, dir: 'desc' })
       listOrderRef.current = order
-      setHistory(undefined)
+      setHistoryShown(false)
       setNotifView(false)
       if (!sameBoard) {
         setThreads([])
@@ -713,13 +718,13 @@ export default function App() {
    * 載っていないスレだけ、dat 落ちかもしれないので dat を見に行く(落ちていれば dat 落ちに、残っていれば新着を取る)
    */
   const historyRefreshing = useRef(false)
-  const refreshHistory = () =>
+  const refreshHistory = (resort = true) =>
     run(null, async () => {
       // 裏で動かす(一覧の読み込み中にはしない。確かめている間もスレを開く・切り替えるが止まらない)。重ねて頼まれたら 1 回だけ
       if (!store || historyRefreshing.current) return
       historyRefreshing.current = true
       try {
-        await crawlHistory(store)
+        await crawlHistory(store, resort)
       } finally {
         historyRefreshing.current = false
       }
@@ -746,11 +751,11 @@ export default function App() {
       if (store) setHistory(await loadHistory(store))
       setHistoryVersion((v) => v + 1)
     })
-  const crawlHistory = async (store: LogStore) => {
+  const crawlHistory = async (store: LogStore, resort: boolean) => {
     {
-      // 更新は本人の操作なので、ここでは見た順に並べ直す。板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
+      // 本人が更新したときだけ、見た順に並べ直す。定期の確認(resort が false)と、板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
       const list = await loadHistory(store)
-      setHistory(list)
+      setHistory((prev) => (resort ? list : mergeHistory(prev, list)))
       const byBoard = new Map<string, HistoryEntry[]>()
       for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
       const counts = new Map(historyCounts)
@@ -823,7 +828,8 @@ export default function App() {
       updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
       if (record) setFocusPane('list')
       // DB から読み直す前に、控え(なければ空)をすぐ出す。ここで履歴を undefined のままにすると、読み終えるまで直前の板の一覧が映る
-      setHistory((h) => h ?? historyCache.current ?? [])
+      if (!history) setHistory(historyCache.current ?? historyList ?? [])
+      setHistoryShown(true)
       if (!store) return
       const [list, posts] = await Promise.all([loadHistory(store), store.listPostHistory()])
       setHistory(list)
@@ -850,7 +856,7 @@ export default function App() {
     if (isMobile) return setNotifOpen(true)
     updateView((s) => showList(s, record ? listEntry({ kind: 'notifications' }) : undefined))
     if (record) setFocusPane('list')
-    setHistory(undefined)
+    setHistoryShown(false)
     setNotifView(true)
     const log = settingsRef.current.notificationLog
     if (log.some((n) => !n.read)) updateSetting('notificationLog', log.map((n) => (n.read ? n : { ...n, read: true })))
@@ -1055,7 +1061,7 @@ export default function App() {
     if (!store || settings.historyCheckMin <= 0) return
     const minutes = Math.max(5, settings.historyCheckMin)
     const check = () => {
-      if (isAppVisible()) void refreshHistoryRef.current()
+      if (isAppVisible()) void refreshHistoryRef.current(false)
     }
     const first = setTimeout(check, 30_000)
     const timer = setInterval(check, minutes * 60_000)

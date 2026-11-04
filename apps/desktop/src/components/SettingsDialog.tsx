@@ -2497,7 +2497,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・まちBBS・ふたば・hono-bbs を読めます。
         </p>
       </Section>
-      {canCheckUpdate && <UpdateSection version={version} />}
+      {canCheckUpdate && <UpdateSection version={version} portable={paths?.portable} autoUpdate={s.autoUpdate} onAutoUpdate={(v) => update('autoUpdate', v)} />}
       <Section title="掲示板" note="要望や不具合は、運営要望板か GitHub の Issues へ">
         <OpenRow label="運営要望板を開く" value="red-edge.net" onOpen={() => void broadcast('open-in-app', OPERATION_BOARD_URL)} />
       </Section>
@@ -2514,10 +2514,10 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
 }
 
 /**
- * 更新(設定 → このアプリについて)。GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。
- * リポジトリは private なので、トークン(repo の読み取り)を入れておく
+ * 更新(設定 → このアプリについて)。起動時に自動で入れ替えるかの設定と、手で確かめるボタン。
+ * ボタンは GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。ZIP 版は自動更新の対象にならない
  */
-function UpdateSection(props: { version?: string }) {
+function UpdateSection(props: { version?: string; portable?: boolean; autoUpdate: boolean; onAutoUpdate: (v: boolean) => void }) {
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'found'; release: ReleaseInfo } | { kind: 'latest'; release: ReleaseInfo } | { kind: 'error'; message: string } | { kind: 'installing' } | { kind: 'installed'; path: string }>({ kind: 'idle' })
   const check = async () => {
     setState({ kind: 'checking' })
@@ -2540,6 +2540,16 @@ function UpdateSection(props: { version?: string }) {
   const release = state.kind === 'found' || state.kind === 'latest' ? state.release : undefined
   return (
     <Section title="更新" note="GitHub の最新のリリースと比べます。新しい版があれば、インストーラーを落としてそのまま実行できます">
+      {props.portable ? (
+        <p className="mb-2 text-sm text-c-text-muted">ZIP 版は自動で更新しません。新しい版があれば通知で知らせます</p>
+      ) : (
+        <Toggle
+          checked={props.autoUpdate}
+          onChange={props.onAutoUpdate}
+          label="自動で更新する"
+          note="起動時に新しい版があれば、入れ替えて起動し直します。オフのときは通知で知らせるだけです"
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={BTN} onClick={() => void check()} disabled={state.kind === 'checking' || state.kind === 'installing'}>
           {state.kind === 'checking' ? '確かめています…' : '更新を確かめる'}

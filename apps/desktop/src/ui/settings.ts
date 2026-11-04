@@ -334,6 +334,8 @@ export interface AppSettings {
   historyCheckMin: number
   /** 更新(新しい版)を最後に確かめた時刻(ms)。1 日に 1 回だけ GitHub を見に行く */
   lastUpdateCheckAt: number
+  /** 起動時に新しい版を確かめて、自動で入れ替える(PC のインストーラー版だけ) */
+  autoUpdate: boolean
   /** PC: マウスジェスチャーを使う */
   mouseGestureEnabled: boolean
   /** PC: マウスジェスチャー(円盤)。8 方向(n・ne・e・se・s・sw・w・nw)→ 操作(キー操作と同じ名前か、マウスだけの操作 utils/gestures の MOUSE_ONLY_ACTIONS)。空なら何もしない */
@@ -527,6 +529,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyKinds: {},
   historyCheckMin: 0,
   lastUpdateCheckAt: 0,
+  autoUpdate: true,
   mouseGestures: { n: 'top', s: 'bottom', ne: 'refresh', nw: 'closeAllTabs', sw: 'settings' },
   mouseGestureEnabled: false,
   mouseGestureTrigger: 'ctrl',

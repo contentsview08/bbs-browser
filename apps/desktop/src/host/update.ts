@@ -1,8 +1,12 @@
-// 更新の確かめと取り込み(PC)。GitHub の最新のリリースを見て版を比べ、インストーラーを落として実行する。
+// 更新の確かめと取り込み(PC)。手動の確認は、GitHub の最新のリリースを見て版を比べ、インストーラーを落として開く。
+// 起動時の自動更新(runAutoUpdate)は、リリースの latest.json を見て、署名を確かめてから入れ替える。
 // リポジトリは公開(2026-11-04 から)なので、トークンなしで GitHub の API を読む。
 // 落とすのは Rust 側(update.rs。一時フォルダに置いて開く)。web 版は host/update.ts が何もしない
 import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { check } from '@tauri-apps/plugin-updater'
+import { getDataPaths } from './logStore'
 
 export const canCheckUpdate = true
 
@@ -45,6 +49,54 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
 export function installUpdate(asset: NonNullable<ReleaseInfo['asset']>): Promise<string> {
   // Rust 側(update.rs)の token は、private だったころの名残。空で渡す
   return invoke<string>('download_update', { url: asset.url, name: asset.name, token: '' })
+}
+
+/** 自動更新の進み具合 */
+export interface AutoUpdateProgress {
+  /** 入れる版 */
+  version: string
+  /** 落とした割合(0〜100)。大きさが分からないあいだは undefined */
+  percent?: number
+}
+
+/** 新しい版があるかの確かめを待つ長さ(返事がなければ、そのまま起動する) */
+const CHECK_TIMEOUT_MS = 5000
+/** 落としている途中で、これだけ何も届かなければやめる */
+const DOWNLOAD_STALL_MS = 30000
+
+/**
+ * 起動時の自動更新。新しい版があれば落として入れ替え、起動し直す(Windows は入れ替えの時点でこのアプリが終わり、インストーラーが起動し直す)。
+ * ZIP 版はインストール先がないので何もしない。つながらない・失敗したときは Error で返すので、呼ぶ側はそのまま使い続ける
+ */
+export async function runAutoUpdate(onProgress: (p: AutoUpdateProgress) => void): Promise<void> {
+  if ((await getDataPaths()).portable) return
+  const update = await check({ timeout: CHECK_TIMEOUT_MS })
+  if (!update) return
+  const version = update.version
+  onProgress({ version })
+  await new Promise<void>((resolve, reject) => {
+    let total = 0
+    let got = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const watch = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => reject(new Error('更新の取得が止まりました')), DOWNLOAD_STALL_MS)
+    }
+    watch()
+    update
+      .download((e) => {
+        watch()
+        if (e.event === 'Started') total = e.data.contentLength ?? 0
+        else if (e.event === 'Progress') {
+          got += e.data.chunkLength
+          if (total > 0) onProgress({ version, percent: Math.min(100, Math.floor((got / total) * 100)) })
+        }
+      })
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timer))
+  })
+  await update.install()
+  await relaunch()
 }
 
 /** 版の比べ(1.2.3 の形。a が b より新しければ 1) */

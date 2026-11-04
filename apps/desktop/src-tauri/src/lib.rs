@@ -541,6 +541,12 @@ pub fn run() {
         )
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
         .setup(|app| {
+            // 自動更新(パソコンの版だけ)
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
             migrate_old_data_dir(app.handle());
             apply_pending_restore(app.handle());
             backup_before_migrations(app.handle());

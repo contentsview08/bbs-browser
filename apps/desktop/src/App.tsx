@@ -65,7 +65,7 @@ import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
 import { newRule, todayDateString } from './utils/ng'
 import { useMouseGesture, PIE_DIRS, type MouseGestureMap, type PieDir } from './hooks/useMouseGesture'
-import { canCheckUpdate, compareVersions, fetchLatestRelease } from './host/update'
+import { canCheckUpdate, compareVersions, fetchLatestRelease, runAutoUpdate, type AutoUpdateProgress } from './host/update'
 import { getVersion } from '@tauri-apps/api/app'
 import { MouseGesturePieOverlay } from './components/MouseGesturePie'
 import UrlPrompt from './components/UrlPrompt'
@@ -579,6 +579,18 @@ export default function App() {
       )
     })
   }, [])
+  // PC: 起動時の自動更新。新しい版があれば全面に進み具合を出して入れ替える。つながらない・失敗したときは閉じて、そのまま使える
+  // (失敗したときは、下の 1 日 1 回の確認が新しい版を知らせる)
+  const [autoUpdating, setAutoUpdating] = useState<AutoUpdateProgress>()
+  const autoUpdateStarted = useRef(false)
+  useEffect(() => {
+    if (!settingsLoaded || autoUpdateStarted.current) return
+    autoUpdateStarted.current = true
+    if (!canCheckUpdate || import.meta.env.DEV || !settingsRef.current.autoUpdate) return
+    void runAutoUpdate(setAutoUpdating)
+      .catch((e) => console.warn('自動更新をやめました', e))
+      .finally(() => setAutoUpdating(undefined))
+  }, [settingsLoaded])
   // PC: 起動して少ししたら、1 日に 1 回だけ GitHub の最新のリリースと版を比べ、新しければ知らせる(押すと 設定 → このアプリについて → 更新)
   useEffect(() => {
     if (!canCheckUpdate || isMobile) return
@@ -3011,6 +3023,18 @@ export default function App() {
           onPruneLogs={pruneLogs}
           onClose={() => setSettingsTab(undefined)}
         />
+      )}
+
+      {autoUpdating && (
+        <div role="status" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60">
+          <div className="w-80 max-w-[calc(100vw-32px)] px-6 py-5 bg-c-surface border border-c-border rounded-[var(--card-radius)]">
+            <p className="text-sm font-bold text-c-text-strong">v{autoUpdating.version} に更新しています</p>
+            <div className="mt-3 h-1.5 rounded-full bg-c-surface2 overflow-hidden">
+              <div className="h-full bg-c-accent" style={{ width: `${autoUpdating.percent ?? 0}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-c-text-muted">{autoUpdating.percent !== undefined ? `${autoUpdating.percent}%。` : ''}終わると自動で起動し直します</p>
+          </div>
+        </div>
       )}
 
       {error && (

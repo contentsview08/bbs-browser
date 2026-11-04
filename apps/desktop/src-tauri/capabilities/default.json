@@ -19,6 +19,8 @@
     "opener:default",
     "dialog:allow-open",
     "notification:default",
+    "updater:default",
+    "process:allow-restart",
     "sql:default",
     "sql:allow-execute",
     {

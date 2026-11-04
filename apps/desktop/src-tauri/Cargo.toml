@@ -1,6 +1,6 @@
 [package]
 name = "bbs-browser"
-version = "0.1.0"
+version = "0.2.0"
 description = "コネクタで掲示板を読む専用ブラウザ"
 edition = "2021"
 
@@ -33,6 +33,11 @@ serde_json = "1"
 cookie_store = "0.22"
 # 更新のインストーラーを落とす(update.rs)。plugin-http が使っているものと同じ
 reqwest = "0.12"
+
+# 起動時の自動更新(署名を確かめて入れ替える)と、入れ替えた後の再起動。パソコンの版だけ
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 # WebView2 の設定を直接変える(F5 などのブラウザのショートカットを切る)。版は tauri(wry)が使っているものに合わせる
 [target.'cfg(windows)'.dependencies]

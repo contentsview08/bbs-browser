@@ -143,6 +143,8 @@ interface Props {
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line' | 'matome'
 
 /** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
+/** マウスを乗せたレスの操作バーの高さ(px) */
+const TOOLBAR_H = 34
 const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
 /** ダブルタップで返信: 2 回目のタップを待つ時間(ms) */
 const DOUBLE_TAP_MS = 280
@@ -712,17 +714,20 @@ function PostArticle(props: Props) {
   const idInHeader = idPosition === 'header' ? idBtn : null
   // 右上の ID の幅を覚えておき、マウスを乗せたときの操作バーをその左に置く(重ならないように。枠の外には出せない)
   const idRef = useRef<HTMLSpanElement>(null)
-  /** 操作バーの上端(レスの枠からの px)。ふつうは上のレスとの線にまたがる高さ。上に余裕がない(一覧の一番上の)レスは、ID の下 */
-  const [barTop, setBarTop] = useState(-18)
+  /**
+   * 操作バーの上端(レスの枠からの px)。ID と重ならないように、ID の上端を測って、バーの下端をその上に置く(上のレスとの線にまたがる)。
+   * 上に余裕がない(すぐ上にレスが見えない)行は ID の下
+   */
+  const [barTop, setBarTop] = useState(-TOOLBAR_H)
   const placeToolbar = () => {
     const el = articleRef.current
     if (!el || idPosition !== 'topRight') return
     const rect = el.getBoundingClientRect()
-    // すぐ上に別のレスが見えていれば、またがって出せる(ヘッダーの下や一覧の端なら出せない)
+    const id = idRef.current?.getBoundingClientRect()
+    const idTop = id ? id.top - rect.top : 0
     // (レスの間にすき間のある見た目があるので、少しずつ上を見る)
-    if ([8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(-18)
-    const idBottom = idRef.current?.getBoundingClientRect().bottom
-    setBarTop((idBottom ? idBottom - rect.top : 24) + 2)
+    if ([8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(idTop - TOOLBAR_H - 2)
+    setBarTop((id ? id.bottom - rect.top : 24) + 2)
   }
   const idAtTopRight = idPosition === 'topRight' && idBtn ? <span ref={idRef} className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null
   const idAtBottomRight = idPosition === 'bottomRight' && idBtn ? <div className="flex justify-end mt-0.5 text-xs">{idBtn}</div> : null

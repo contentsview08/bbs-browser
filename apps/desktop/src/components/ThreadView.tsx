@@ -4,6 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
+import { watchoiOf } from '../utils/watchoi'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
@@ -893,15 +894,16 @@ export default function ThreadView(props: Props) {
     if (variant !== 'discord' && variant !== 'line') return m
     for (const p of log.posts) {
       // 本文がアンカーで始まるか、文章で引用しているレス(ふたば)の、最初の引用元
+      // id は引用の行のアイコンの種。レスのアイコンと同じ決め方(設定でワッチョイがあればワッチョイ、なければ ID)
       const no = /^\s*(?:>>|＞＞)\d/.test(p.body) ? anchorTargets(p.body, resolveAnchor)[0] : quoteLinks?.get(p.no)?.values().next().value
       if (no === undefined) continue
       const src = no === undefined || no === p.no ? undefined : byNo.get(no)
       if (!src) continue
       const ng = isNg(src)
-      m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : src.id })
+      m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : (settings.iconFromWatchoi ? watchoiOf(src.name) : undefined) ?? src.id })
     }
     return m
-  }, [variant, log.posts, byNo, isNg, resolveAnchor, quoteLinks])
+  }, [variant, log.posts, byNo, isNg, resolveAnchor, quoteLinks, settings.iconFromWatchoi])
   const replyPreviewOf = useCallback((p: Post) => replyPreviews.get(p.no), [replyPreviews])
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
   const replies = useMemo(() => {

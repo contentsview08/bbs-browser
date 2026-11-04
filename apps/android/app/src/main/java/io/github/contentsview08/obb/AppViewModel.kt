@@ -224,7 +224,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (m <= 0) return@collectLatest
                 kotlinx.coroutines.delay(30_000)
                 while (true) {
-                    if (appVisible) runCatching { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs) }.onSuccess { remoteCounts = remoteCounts + it }
+                    // スレ一覧の読み取りが重いので、画面のスレッドでは動かさない(ANR になる)
+                    if (appVisible) runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs) } }.onSuccess { remoteCounts = remoteCounts + it }
                     kotlinx.coroutines.delay(maxOf(5, m) * 60_000L)
                 }
             }

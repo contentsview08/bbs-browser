@@ -78,6 +78,7 @@ class HeaderHit {
 /** いま描いている行の HeaderHit(スレ表示・ポップアップの行が渡す) */
 val LocalHeaderHit = androidx.compose.runtime.compositionLocalOf<HeaderHit?> { null }
 
+/** id はアイコンの種(設定でワッチョイがあればワッチョイ、なければ ID) */
 class ReplyPreview(val no: Int, val id: String?, val name: String, val text: String)
 
 /**

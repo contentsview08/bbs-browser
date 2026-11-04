@@ -343,7 +343,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 返信先の 1 行に出す中身(Discord 風・LINE 風)
     fun previewOf(no: Int): ReplyPreview? {
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
-        return ReplyPreview(no, t.id, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+        // 引用の行のアイコンも、レスのアイコンと同じ決め方(設定でワッチョイがあればワッチョイ、なければ ID)
+        val seed = if (vm.prefs.iconFromWatchoi) watchoiOf(t.name) ?: t.id else t.id
+        return ReplyPreview(no, seed, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
     fun replyOf(r: RenderedPost?): ReplyPreview? = r?.replyTo?.let { previewOf(it) }
     val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->

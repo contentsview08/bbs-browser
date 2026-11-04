@@ -120,11 +120,19 @@ object Crawler {
     /** 裏の確認を決める: OS の通知がオンで定期確認をしているときだけ。Android の決まりで 15 分より短くはできない(アプリを開いている間は設定の間隔で確かめる) */
     fun schedule(context: Context, prefs: Prefs) {
         val wm = WorkManager.getInstance(context)
+        // 同じ間隔ですでに頼んであれば、頼み直さない
+        val mark = context.getSharedPreferences("crawl", Context.MODE_PRIVATE)
+        val want = if (prefs.osNotify) prefs.historyCheckMin else 0
+        if (mark.getInt("scheduled", -1) == want) return
+        mark.edit().putInt("scheduled", want).apply()
         if (!prefs.osNotify || prefs.historyCheckMin <= 0) {
             wm.cancelUniqueWork(WORK)
             return
         }
-        val req = PeriodicWorkRequestBuilder<CrawlWorker>(maxOf(15, prefs.historyCheckMin).toLong(), TimeUnit.MINUTES)
+        val minutes = maxOf(15, prefs.historyCheckMin).toLong()
+        // 最初の 1 回も 1 周期あとに。すぐ走らせると、起動のたびにアプリの立ち上げとぶつかる(ANR の元)。開いている間は ViewModel が確かめる
+        val req = PeriodicWorkRequestBuilder<CrawlWorker>(minutes, TimeUnit.MINUTES)
+            .setInitialDelay(minutes, TimeUnit.MINUTES)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
         wm.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, req)

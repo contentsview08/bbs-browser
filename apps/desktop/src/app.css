@@ -698,7 +698,7 @@ input[type='checkbox']:indeterminate {
    枠の外は切り取られるので、操作バーを上のレスとの線にまたがらせる分だけ、切り取りの範囲を広げる(囲いは変わらない) */
 .post-cv:has([data-post-toolbar]) {
   z-index: 5;
-  overflow-clip-margin: 40px;
+  overflow-clip-margin: 48px;
 }
 
 /* 並びの続きがあることを示す、端のぼかしの色(サイドバー) */

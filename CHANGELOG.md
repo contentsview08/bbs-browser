@@ -4,9 +4,9 @@
 
 ## 未リリース
 
-## 0.2.0
+## 0.1.1
 
-リリース文は `docs/releases/v0.2.0.md`。
+リリース文は `docs/releases/v0.1.1.md`。
 
 - 名前を OBB に変えた(exe・インストーラー・ZIP も)
 - 起動時の自動更新(tauri-plugin-updater。署名付き。既定オン。Windows のインストーラー版と AppImage。ZIP 版と .deb は通知だけ)

@@ -2520,18 +2520,21 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
  * ボタンは GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。ZIP 版・.deb は自動更新の対象にならない
  */
 function UpdateSection(props: { version?: string; selfUpdate?: boolean; autoUpdate: boolean; onAutoUpdate: (v: boolean) => void }) {
-  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'found'; release: ReleaseInfo } | { kind: 'latest'; release: ReleaseInfo } | { kind: 'error'; message: string } | { kind: 'installing' } | { kind: 'installed'; path: string }>({ kind: 'idle' })
+  const canInstall = props.selfUpdate !== false
+  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'found'; release: ReleaseInfo } | { kind: 'latest'; release: ReleaseInfo; newer: boolean } | { kind: 'error'; message: string } | { kind: 'installing' } | { kind: 'installed'; path: string }>({ kind: 'idle' })
   const check = async () => {
     setState({ kind: 'checking' })
     try {
       const release = await fetchLatestRelease()
-      setState(props.version && compareVersions(release.version, props.version) > 0 ? { kind: 'found', release } : { kind: 'latest', release })
+      const diff = props.version ? compareVersions(release.version, props.version) : 0
+      setState(diff > 0 ? { kind: 'found', release } : { kind: 'latest', release, newer: diff < 0 })
     } catch (e) {
       setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
     }
   }
   const install = async (release: ReleaseInfo) => {
-    if (!release.asset) return void openUrl(release.url)
+    // ZIP 版・.deb にインストーラーを入れると別の場所に入ってしまうので、ページを開いて選んでもらう
+    if (!release.asset || !canInstall) return void openUrl(release.url)
     setState({ kind: 'installing' })
     try {
       setState({ kind: 'installed', path: await installUpdate(release.asset) })
@@ -2541,7 +2544,7 @@ function UpdateSection(props: { version?: string; selfUpdate?: boolean; autoUpda
   }
   const release = state.kind === 'found' || state.kind === 'latest' ? state.release : undefined
   return (
-    <Section title="更新" note="GitHub の最新のリリースと比べます。新しい版があれば、インストーラーを落としてそのまま実行できます">
+    <Section title="更新" note={canInstall ? 'GitHub の最新のリリースと比べます。新しい版があれば、インストーラーを落としてそのまま実行できます' : 'GitHub の最新のリリースと比べます。新しい版があれば、ダウンロードのページを開けます'}>
       {props.selfUpdate === false ? (
         <p className="mb-2 text-sm text-c-text-muted">この入れ方(ZIP 版・.deb)は自動で更新しません。新しい版があれば通知で知らせます</p>
       ) : (
@@ -2558,10 +2561,10 @@ function UpdateSection(props: { version?: string; selfUpdate?: boolean; autoUpda
         </button>
         {state.kind === 'found' && (
           <button type="button" className={BTN} onClick={() => void install(state.release)}>
-            {state.release.asset ? `${state.release.version} に更新する` : 'ダウンロードのページを開く'}
+            {state.release.asset && canInstall ? `${state.release.version} に更新する` : 'ダウンロードのページを開く'}
           </button>
         )}
-        {state.kind === 'latest' && <span className="text-sm text-c-text-muted">いまが最新です({state.release.version})</span>}
+        {state.kind === 'latest' && <span className="text-sm text-c-text-muted">{state.newer ? `公開中の版(${state.release.version})より新しい版を使っています` : `いまが最新です(${state.release.version})`}</span>}
         {state.kind === 'installing' && <span className="text-sm text-c-text-muted">インストーラーを落としています…</span>}
         {state.kind === 'installed' && <span className="text-sm text-c-text-body">インストーラーを開きました。このアプリを閉じて進めてください</span>}
         {state.kind === 'error' && <span className="text-sm" style={{ color: 'var(--c-error)' }}>{state.message}</span>}
@@ -2569,7 +2572,7 @@ function UpdateSection(props: { version?: string; selfUpdate?: boolean; autoUpda
       {release && (
         <div className="mt-3">
           <p className="text-sm text-c-text-body">
-            最新: {release.version}
+            公開中の最新: {release.version}
             <button type="button" className="ml-2 text-c-link hover:underline" onClick={() => void openUrl(release.url)}>
               リリースのページ
             </button>

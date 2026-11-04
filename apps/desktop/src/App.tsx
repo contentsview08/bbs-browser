@@ -603,7 +603,7 @@ export default function App() {
           notify({
             icon: 'system_update',
             title: `新しい版 v${release.version} があります`,
-            body: '押すと 設定 → このアプリについて → 更新 を開きます。インストーラーを落としてそのまま入れ替えられます',
+            body: '押すと 設定 → このアプリについて → 更新 を開きます',
             onClick: () => openSettings('about'),
           })
       } catch {

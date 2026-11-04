@@ -265,6 +265,15 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
         val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
         // Discord 風は Discord らしく名前を濃く大きく。LINE 風は日付と同じ薄さ・大きさ(本人 2026-11-05)
         val discord = o.style == "discord"
+        // 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05)。吹き出しも数と同じ色に。印と数の間では折り返さない
+        if (replies > 0) {
+            withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
+                val icon = when { replies >= 7 -> "replyVeryHot"; replies >= 5 -> "replyHot"; replies >= 3 -> "replyWarm"; o.onSky -> "replySky"; else -> "reply" }
+                appendInlineContent(icon, "[返信]")
+                withStyle(SpanStyle(color = Palette.heat(replies) ?: if (o.onSky) Palette.skyText else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)) { append("\u2060\u202F\u2060$replies") }
+            }
+            append("  ")
+        }
         withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
             withStyle(SpanStyle(color = if (discord) nameC(o) else mutedC(o), fontWeight = FontWeight.Bold, fontSize = if (discord) 13.sp else 11.sp)) { append(name.ifEmpty { "名無し" }) }
         }
@@ -283,14 +292,6 @@ private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String
                     append(displayId(p.id, o.idShort))
                     if (idCount >= 2) append("($idCount)")
                 }
-            }
-        }
-        if (replies > 0) {
-            append("  ")
-            withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
-                // 吹き出しの印と数だけ(返信が多いほど数を暖色に)
-                appendInlineContent("reply", "[返信]")
-                withStyle(SpanStyle(color = Palette.heat(replies) ?: if (o.onSky) Palette.skyText else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)) { append("\u2009$replies") }
             }
         }
         if (p.mail.isNotEmpty()) { append("  "); withStyle(small) { append("[${p.mail}]") } }

@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.AlertDialog
@@ -90,7 +91,7 @@ import io.github.yumekui8.bbsnative.data.ThumbMode
 /** 設定の画面(今のスマホ版の MobileSettings と同じ組み立て: 入口の一覧から、項目ごとの画面へ進む) */
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
-    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "ng" to "NG",
+    "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "サイトごとの設定", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
 )
 
@@ -124,6 +125,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "write" -> WritePage(vm)
                 "gestures" -> GesturesPage(vm)
                 "behavior" -> BehaviorPage(vm)
+                "notify" -> NotifyPage(vm)
                 "ng" -> NgPage(vm)
                 "sites" -> SitesPage(vm, menus = false)
                 "menus" -> SitesPage(vm, menus = true)
@@ -194,7 +196,8 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("操作") {
         NavRow(Icons.Filled.Swipe, Color(0xFFEC4899), "ジェスチャー", desc = "なぞって操作する形") { open("gestures") }
-        NavRow(Icons.Filled.Sync, Color(0xFF10B981), "スクロールと更新", desc = "自動更新・引っぱって更新") { open("behavior") }
+        NavRow(Icons.Filled.Sync, Color(0xFF10B981), "スクロールと更新", desc = "自動更新・閲覧履歴の新着の確認") { open("behavior") }
+        NavRow(Icons.Filled.Notifications, Color(0xFFF43F5E), "通知", desc = "OS の通知・知らせる種類") { open("notify") }
     }
     Group("NG") {
         NavRow(Icons.Filled.Block, Color(0xFFEF4444), "NG", value = "${p.ngRules.size} 件") { open("ng") }
@@ -445,6 +448,37 @@ private fun BehaviorPage(vm: AppViewModel) {
             "開いているスレの自動更新", p.autoRefreshSec.toString(),
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },
         ) { p.autoRefreshSec = it.toInt() }
+    }
+    Group("閲覧履歴(既読のスレ)の新着", note = "閲覧履歴にあるスレの板のスレ一覧を取り、新着の数と dat 落ちを確かめます(本文は開いたときに取ります)。掲示板に負担をかけないよう、5 分より短くはできません。アプリを閉じている間は Android の決まりで 15 分より短くなりません") {
+        ChoiceRow(
+            "確かめる間隔", p.historyCheckMin.toString(),
+            listOf(0, 5, 10, 15, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 分ごと" },
+        ) { p.historyCheckMin = it.toInt() }
+    }
+}
+
+/** 通知: OS の通知に出すか、知らせる種類 */
+@Composable
+private fun NotifyPage(vm: AppViewModel) {
+    val p = vm.prefs
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
+        if (!ok) vm.toast = "通知が許可されていません。Android の設定 → アプリ → OBB → 通知 から許可してください"
+    }
+    Group("OS の通知", note = "新着を Android の通知で知らせます。定期確認の間隔は「スクロールと更新」で変えられます。アプリを閉じている間の確認は、端末の省電力の設定で遅れたり止められたりすることがあります") {
+        SwitchRow("OS の通知に出す", p.osNotify) { on ->
+            p.osNotify = on
+            if (on) {
+                // 定期確認がオフだと何も届かないので、オンにする
+                if (p.historyCheckMin <= 0) p.historyCheckMin = 15
+                if (android.os.Build.VERSION.SDK_INT >= 33 && !io.github.yumekui8.bbsnative.data.Notifier.enabled(context)) ask.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+    Group("知らせる種類") {
+        SwitchRow("あなた宛てのレス", p.notifyReply, desc = "自分が書き込んだスレで、自分の書き込みにアンカーが付いたとき") { p.notifyReply = it }
+        SwitchRow("お気に入りのスレの新着", p.notifyFav, desc = "お気に入りのスレに新しいレスが付いたとき") { p.notifyFav = it }
+        SwitchRow("キーワードに合うスレ", p.notifyKeyword, desc = "お気に入り板に、「スレ一覧 → キーワード」に合うスレが立ったとき") { p.notifyKeyword = it }
     }
 }
 

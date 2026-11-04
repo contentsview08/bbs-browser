@@ -208,6 +208,14 @@ class Prefs(context: Context) {
     var idShort by pref("idShort", true)
     /** ID の位置: header(日時の後ろ)/ topRight(レスの右上)/ bottomRight(レスの右下)。PC 版の idPosition と同じ */
     var idPosition by pref("idPosition", "topRight")
+    /** OS の通知に出す */
+    var osNotify by pref("osNotify", false)
+    /** 知らせる種類 */
+    var notifyReply by pref("notifyReply", true)
+    var notifyFav by pref("notifyFav", true)
+    var notifyKeyword by pref("notifyKeyword", true)
+    /** 閲覧履歴(既読のスレ)の新着を、この分ごとに確かめる(0 ならしない。5 分より短くはしない) */
+    var historyCheckMin by pref("historyCheckMin", 0)
     /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
     var watchoiShort by pref("watchoiShort", true)
     /** アイコン(Discord 風・LINE 風)の種を、ワッチョイがあればワッチョイから(ID は日ごと、ワッチョイは週ごとに変わる) */

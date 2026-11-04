@@ -604,11 +604,14 @@ fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineText
     fun chip(text: String, bg: Color, fg: Color) = androidx.compose.foundation.text.InlineTextContent(
         androidx.compose.ui.text.Placeholder(1.7.em, 1.25.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
     ) { BadgeChip(text, bg, fg) }
-    // 返信の数の印(吹き出しの形)。色は頭の行の薄い字
-    val replyIcon = androidx.compose.foundation.text.InlineTextContent(
+    // 返信の数の印(吹き出しの形)。色は数と同じ(返信が多いほど暖色。Palette.heat と同じ段)
+    fun replyIcon(tint: Color) = androidx.compose.foundation.text.InlineTextContent(
         androidx.compose.ui.text.Placeholder(1.15.em, 1.15.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
-    ) { Icon(Icons.Outlined.ChatBubbleOutline, "返信", tint = Palette.textMuted, modifier = Modifier.fillMaxSize()) }
-    return mapOf("op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg), "reply" to replyIcon)
+    ) { Icon(Icons.Outlined.ChatBubbleOutline, "返信", tint = tint, modifier = Modifier.fillMaxSize()) }
+    return mapOf(
+        "op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg), "reply" to replyIcon(Palette.textMuted), "replySky" to replyIcon(Palette.skyText),
+        "replyWarm" to replyIcon(Palette.heat(3)!!), "replyHot" to replyIcon(Palette.heat(5)!!), "replyVeryHot" to replyIcon(Palette.heat(7)!!),
+    )
 }
 
 /**

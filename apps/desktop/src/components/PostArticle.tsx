@@ -734,6 +734,8 @@ function PostArticle(props: Props) {
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
+          {/* スマホ: 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05) */}
+          {isMobile && repliesBtn}
           {nameBtn(isMobile ? 'text-[13px]' : 'text-sm', true) || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
           {opChip}
           {ownChip}
@@ -746,7 +748,7 @@ function PostArticle(props: Props) {
             {isMobile ? shortDate(post.date) : shownDate}
           </span>
           {idInHeader}
-          {repliesBtn}
+          {!isMobile && repliesBtn}
           {voteChip}
           {post.mail && <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
@@ -1129,13 +1131,16 @@ function PostArticle(props: Props) {
       <div className={`flex-1 min-w-0 flex flex-col ${right ? 'items-end' : 'items-start'}`}>
         {!props.continued && (
           <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : ''}`}>
+            {isMobile && !right && repliesBtn}
             {!right && nameBtn('text-xs')}
             {opChip}
             {ownChip}
             {badgeChips}
             {ngChip}
-            {idBtn}
-            {repliesBtn}
+            {/* ID の位置の設定に従う(右下は吹き出しの下に出す) */}
+            {idInHeader}
+            {idAtTopRight}
+            {(!isMobile || right) && repliesBtn}
             {voteChip}
             {post.mail && <span className="text-c-text-muted">[{post.mail}]</span>}
             {toOwnChip}
@@ -1193,7 +1198,10 @@ function PostArticle(props: Props) {
           idPosition === 'topRight' && idRef.current ? { right: idRef.current.offsetWidth + 12 } : undefined,
         )}
       {variant === 'line' ? (
-        lineLayout()
+        <>
+          {lineLayout()}
+          {idAtBottomRight}
+        </>
       ) : variant === 'discord' ? (
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>

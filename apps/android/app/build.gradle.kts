@@ -59,6 +59,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.core:core-ktx:1.18.0")
+    // 閲覧履歴の定期確認と OS の通知(アプリを閉じている間)
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // 画像(サムネイル・ビューアー)
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")

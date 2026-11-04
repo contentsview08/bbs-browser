@@ -228,8 +228,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         var list = index.posts
         val f = filter
         if (f != null) list = list.filter { index.matches(it, f, own) }
-        val q = query.trim()
-        if (q.isNotEmpty()) list = list.filter { it.body.contains(q, true) || it.name.contains(q, true) || it.id == q }
+        // 全角半角・カナを同一視し、空白で区切った言葉はすべて含むもの。番号・名前・ID・本文から探す(PC 版と同じ)
+        val terms = io.github.yumekui8.bbsnative.data.searchTerms(query)
+        if (terms.isNotEmpty()) list = list.filter { io.github.yumekui8.bbsnative.data.matchesTerms("${it.no} ${it.name} ${it.id ?: ""} ${it.body}", terms) }
         list
     }
     val listState = page.listState

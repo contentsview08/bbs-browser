@@ -64,6 +64,22 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
+    override fun onStart() { super.onStart(); vm.appVisible = true }
+    override fun onStop() { super.onStop(); vm.appVisible = false }
+
+    /** 通知を押して開いたとき: そのスレ・板をアプリの中で開く */
+    private fun openFromNotification(intent: android.content.Intent?) {
+        val url = intent?.getStringExtra(io.github.yumekui8.bbsnative.data.Notifier.OPEN_URL) ?: return
+        intent.removeExtra(io.github.yumekui8.bbsnative.data.Notifier.OPEN_URL)
+        vm.openUrl(url)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openFromNotification(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // 背景は暗いので、時計などのアイコンは明るい色で出す
         enableEdgeToEdge(
@@ -71,6 +87,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        openFromNotification(intent)
         // 本文の画像は ImageStore が取る(待ち行列・進み具合・タイムアウト)。Coil はファイルを絵にするのと、リンクのカードの絵だけに使う
         setContent {
             // 配色: 設定の配色か、スマホのダーク・ライトに合わせた配色

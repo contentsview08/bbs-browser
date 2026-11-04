@@ -125,16 +125,16 @@ fun PostItem(
     }
     val header = @Composable {
         if (own || toOwn || idTopRight != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
-                if (own || toOwn) {
-                    Spacer(Modifier.width(6.dp))
-                    OwnChip(if (own) "自分" else "→あなた宛")
+            // 右上の ID の幅だけを除いて、残りを全部頭に使う(頭と余白の両方に weight を付けると幅を半分ずつ分け合い、まだ入るのに折り返していた)
+            Row(if (idTopRight != null) Modifier.fillMaxWidth() else Modifier, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                    if (own || toOwn) {
+                        Spacer(Modifier.width(6.dp))
+                        OwnChip(if (own) "自分" else "→あなた宛")
+                    }
                 }
-                if (idTopRight != null) {
-                    Spacer(Modifier.weight(1f))
-                    Text(idTopRight, Modifier.padding(start = 6.dp), fontSize = headSize)
-                }
+                if (idTopRight != null) Text(idTopRight, Modifier.padding(start = 6.dp), fontSize = headSize, maxLines = 1, softWrap = false)
             }
         } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
     }
@@ -202,7 +202,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
                     // 頭の行の位置と字の並びを覚える(ID・名前の長押しのメニュー。付けていなかったので、専ブラ風では長押しが効かなかった)
-                    if (own || toOwn) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                    if (own || toOwn || idTopRight != null) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
                     idLine()

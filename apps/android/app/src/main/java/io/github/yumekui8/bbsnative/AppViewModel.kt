@@ -218,6 +218,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
         // 起動したら、しばらく開いていないスレのログを消す(設定)
         if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }
+        // 閲覧履歴の定期確認: アプリを開いている間は設定の間隔で(5 分より短くしない)、閉じている間は WorkManager で
+        viewModelScope.launch {
+            snapshotFlow { prefs.historyCheckMin }.collectLatest { m ->
+                if (m <= 0) return@collectLatest
+                kotlinx.coroutines.delay(30_000)
+                while (true) {
+                    if (appVisible) runCatching { io.github.yumekui8.bbsnative.data.Crawler.run(app, db, prefs) }.onSuccess { remoteCounts = remoteCounts + it }
+                    kotlinx.coroutines.delay(maxOf(5, m) * 60_000L)
+                }
+            }
+        }
+        viewModelScope.launch {
+            snapshotFlow { prefs.osNotify to prefs.historyCheckMin }.collect { runCatching { io.github.yumekui8.bbsnative.data.Crawler.schedule(app, prefs) } }
+        }
     }
 
     /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
@@ -404,6 +418,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** スレ一覧に戻る前に見ていたスレ(「進む」で開き直す) */
     private var forwardPage: Page.Thread? = null
+    /** アプリが見えているか(MainActivity の onStart・onStop)。見えていない間は、開いている間の定期確認を止める */
+    var appVisible = true
     val canForward get() = forwardPage != null
 
     /** 画面の移り方(1: 右から出てくる / -1: 右へ戻る / 0: 入れ替え)。積み重ねを変える直前に決める */

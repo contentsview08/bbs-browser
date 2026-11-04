@@ -149,7 +149,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val shown = remember(page.threads, page.states, tab, query, ngMatcher, sort, keywords, page.reversed, page.only) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
-        if (query.isNotBlank()) list = list.filter { it.title.contains(query.trim(), ignoreCase = true) }
+        // 全角半角・カナを同一視し、空白で区切った言葉はすべて含むもの。立てた人の ID も探す(PC 版と同じ)
+        val terms = io.github.yumekui8.bbsnative.data.searchTerms(query)
+        if (terms.isNotEmpty()) list = list.filter { io.github.yumekui8.bbsnative.data.matchesTerms("${it.title} ${it.authorId ?: ""}", terms) }
         // 差分の行から「新しいスレ」だけに絞った
         if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }
         list = when (tab) {

@@ -29,7 +29,8 @@ interface Props {
   /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
   onNg?: (t: ThreadSummary) => void
   /** 立てた人を NG に追加(立てた人が分かるスレだけ出す。スマホのアプリと同じ) */
-  onNgAuthor?: (t: ThreadSummary) => void
+  /** 立てた人を NG に。today なら今日だけ */
+  onNgAuthor?: (t: ThreadSummary, today?: boolean) => void
   onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
@@ -534,6 +535,7 @@ function ThreadCard({
               : []),
             ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
             ...(onNgAuthor && thread.authorId ? [{ label: `立てた人を NG に追加(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread), danger: true }] : []),
+            ...(onNgAuthor && thread.authorId ? [{ label: '立てた人を NG に追加(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true), danger: true }] : []),
             ...(onNg ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread), danger: true }] : []),
             ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread), danger: true }] : []),
           ]}
@@ -570,6 +572,7 @@ function ThreadCard({
               items={[
                 { label: 'スレタイで NG', icon: 'title', onClick: () => onNg(thread) },
                 { label: `立てた人で NG(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread) },
+                { label: '立てた人で NG(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true) },
               ]}
             />
           ) : onNg ? (

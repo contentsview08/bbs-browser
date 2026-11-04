@@ -142,7 +142,7 @@ interface Props {
   /** スレを NG にする画面を出す(スレタイと、分かれば立てた人の ID を入れて) */
   onNgThread?: (t: ThreadSummary) => void
   /** 立てた人を NG に追加 */
-  onNgAuthor?: (t: ThreadSummary) => void
+  onNgAuthor?: (t: ThreadSummary, today?: boolean) => void
   /** スレのログ(閲覧履歴)を消す */
   onDeleteThreadLog?: (t: ThreadSummary) => void
   /** スレのブラウザ用の URL(コピーに使う) */
@@ -654,7 +654,7 @@ export default function ThreadListPanel(props: Props) {
     props.onOpen(t, newTab)
   })
   const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t))
-  const onNgAuthorCard = useEvent((t: ThreadSummary) => props.onNgAuthor?.(t))
+  const onNgAuthorCard = useEvent((t: ThreadSummary, today?: boolean) => props.onNgAuthor?.(t, today))
   const onCopyCard = useEvent(
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
   )

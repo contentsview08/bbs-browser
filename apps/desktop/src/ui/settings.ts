@@ -510,7 +510,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   gestureSensitivity: 3,
   // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空(本人の指示 2026-11-05)
-  idPosition: 'header',
+  idPosition: 'topRight',
   watchoiShort: true,
   iconFromWatchoi: true,
   notifyKinds: {},

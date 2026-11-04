@@ -201,13 +201,13 @@ class Prefs(context: Context) {
     var tidyBlankLines by pref("collapseBlankLines", true)
     var highlightOp by pref("highlightOp", true)
     /** ID の見せ方: none(文字だけ) / color(2 回以上書いた ID を ID ごとの色に)。PC・Web の idStyle と同じ(模様はスマホにない) */
-    var idStyle by pref("idStyle", "color")
+    var idStyle by pref("idStyle", "none")
     /** レスの頭の日時の出し方: md_w_hms(11/02(月) 19:01:15。既定)/ md_hm(11/02 19:01)/ full(掲示板が出したまま) */
     var dateStyle by pref("dateStyle", "md_w_hms")
     /** レスの頭の ID を短く出す(先頭の 6 文字。「ID:」も省く) */
     var idShort by pref("idShort", true)
     /** ID の位置: header(日時の後ろ)/ topRight(レスの右上)/ bottomRight(レスの右下)。PC 版の idPosition と同じ */
-    var idPosition by pref("idPosition", "header")
+    var idPosition by pref("idPosition", "topRight")
     /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
     var watchoiShort by pref("watchoiShort", true)
     /** アイコン(Discord 風・LINE 風)の種を、ワッチョイがあればワッチョイから(ID は日ごと、ワッチョイは週ごとに変わる) */

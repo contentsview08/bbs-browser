@@ -707,7 +707,9 @@ function PostArticle(props: Props) {
   // ID の位置(設定): 日時の後ろ(頭の中)・レスの右上(頭の右端)・レスの右下(本文の下の右端)
   const idPosition = handlers.idPosition ?? 'header'
   const idInHeader = idPosition === 'header' ? idBtn : null
-  const idAtTopRight = idPosition === 'topRight' && idBtn ? <span className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null
+  // 右上の ID の幅を覚えておき、マウスを乗せたときの操作バーをその左に置く(重ならないように。枠の外には出せない)
+  const idRef = useRef<HTMLSpanElement>(null)
+  const idAtTopRight = idPosition === 'topRight' && idBtn ? <span ref={idRef} className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null
   const idAtBottomRight = idPosition === 'bottomRight' && idBtn ? <div className="flex justify-end mt-0.5 text-xs">{idBtn}</div> : null
   const headerBlock =
     variant === 'classic' ? (
@@ -1013,12 +1015,13 @@ function PostArticle(props: Props) {
    * ふつうはレスの右上、LINE 風は吹き出しと同じ側の上(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)。
    * どれもレスの枠の中に置く(枠は content-visibility で外を切り取るので、はみ出すと見えない)
    */
-  const toolbarAt = (at: string) => (
+  const toolbarAt = (at: string, style?: { right: number }) => (
       <div
         data-post-toolbar
         className={`absolute ${at} z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
           menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
         }`}
+        style={style}
         onClick={(e) => e.stopPropagation()}
       >
         {toolbarItems.map((item) => {
@@ -1182,7 +1185,13 @@ function PostArticle(props: Props) {
       )}
       {/* マウスを乗せたレスの上に浮かぶ操作バー(Discord 風)。メニューを開いている間は出したままにする。
           マウスを乗せている間だけ作る(全部のレスに最初から作ると、要素がレスの 4 割ほど増えてスレを開くのが遅くなる) */}
-      {!isMobile && (hovered || menuOpen) && toolbarAt(variant === 'line' && !(props.isOwn && !props.alignLeft) ? 'top-0.5 left-3' : 'top-0.5 right-3')}
+      {!isMobile &&
+        (hovered || menuOpen) &&
+        toolbarAt(
+          variant === 'line' && !(props.isOwn && !props.alignLeft) ? 'top-0.5 left-3' : 'top-0.5 right-3',
+          // ID を右上に出しているときは、ID の左隣に(ID と重ならないように)
+          idPosition === 'topRight' && idRef.current ? { right: idRef.current.offsetWidth + 12 } : undefined,
+        )}
       {variant === 'line' ? (
         lineLayout()
       ) : variant === 'discord' ? (

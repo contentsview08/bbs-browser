@@ -32,8 +32,9 @@ fn portable_dir() -> Option<PathBuf> {
 }
 
 /// 2026-11-05 に identifier を io.github.yumekui8.bbs-browser から io.github.contentsview08.obb に変えた(名前を OBB に)。
-/// 前の置き場に DB があり、新しい置き場にまだなければ、フォルダごと移す(DB・設定・Cookie・背景画像・バックアップ)。ポータブルは関係ない。
-/// 名前の付け替えで済めばそれで、だめなら(別のドライブなど)写す
+/// 前の置き場に DB があり、新しい置き場にまだなければ、フォルダごと写す(DB・設定・Cookie・背景画像・バックアップ)。ポータブルは関係ない。
+/// 移す(rename)のではなく写す: 前の版(bbs-browser)を残して使い続けても困らないように(移すと前の版が空になり、
+/// そこで取ったバックアップを新しい方へ戻そうとして DB の形が合わない、という行き違いが起きた 2026-11-05)
 fn migrate_old_data_dir(app: &tauri::AppHandle) {
     if portable_dir().is_some() {
         return;
@@ -45,11 +46,6 @@ fn migrate_old_data_dir(app: &tauri::AppHandle) {
     let Some(parent) = new_dir.parent() else { return };
     let old_dir = parent.join("io.github.yumekui8.bbs-browser");
     if !old_dir.join(DB_FILE).exists() {
-        return;
-    }
-    // 新しい置き場は空(か、ない)はず。空なら消してから付け替える
-    let _ = std::fs::remove_dir(&new_dir);
-    if std::fs::rename(&old_dir, &new_dir).is_ok() {
         return;
     }
     let _ = copy_dir_all(&old_dir, &new_dir);

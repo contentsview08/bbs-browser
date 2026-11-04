@@ -26,6 +26,7 @@ val SETTINGS_INDEX = listOf(
     Triple("thread", "書き込みの多い ID を赤く", ""),
     Triple("thread", "日時の出し方", "レスの頭の日時。年と秒の下の桁を省く・時分だけ・すべて"),
     Triple("thread", "ID を短く出す", "先頭の 6 文字だけ"),
+    Triple("thread", "名前欄を目立たなくする", "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします"),
     Triple("thread", "ID ごとに色を付ける", "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます"),
     Triple("thread", "人気のレスの示し方", ""),
     Triple("thread", "ミニマップを出す", "右端に、人気レス・自分のレス・画像の位置を示します"),

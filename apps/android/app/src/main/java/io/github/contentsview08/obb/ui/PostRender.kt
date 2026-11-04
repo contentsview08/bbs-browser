@@ -131,6 +131,8 @@ data class RenderOptions(
     val idPosition: String = "header",
     /** ワッチョイを短く出す */
     val watchoiShort: Boolean = false,
+    /** 名前欄を日付・ID と同じ薄い色・大きさにする */
+    val nameSubtle: Boolean = true,
 )
 
 /**
@@ -159,7 +161,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             else withStyle(noStyle) { append(noText) }
             append("  ")
             // 名前: 板の既定の名前(名無し)は省く(後ろのワッチョイなどは残す)。押すと同じ名前のレスを出す
-            if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = mutedC(o), fontWeight = FontWeight.Bold)) { append(name) } }
+            if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = if (o.nameSubtle) mutedC(o) else nameC(o), fontWeight = FontWeight.Bold)) { append(name) } }
             if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = mutedC(o))) { append("  [${p.mail}]") }
             if (isOp) {
                 append("  ")
@@ -263,8 +265,6 @@ fun shortUrl(url: String, max: Int = 36): String {
 private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks): AnnotatedString =
     buildAnnotatedString {
         val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
-        // Discord 風は Discord らしく名前を濃く大きく。LINE 風は日付と同じ薄さ・大きさ(本人 2026-11-05)
-        val discord = o.style == "discord"
         // 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05)。吹き出しも数と同じ色に。印と数の間では折り返さない
         if (replies > 0) {
             withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
@@ -275,7 +275,7 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
             append("  ")
         }
         withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
-            withStyle(SpanStyle(color = if (discord) nameC(o) else mutedC(o), fontWeight = FontWeight.Bold, fontSize = if (discord) 13.sp else 11.sp)) { append(name.ifEmpty { "名無し" }) }
+            withStyle(SpanStyle(color = if (o.nameSubtle) mutedC(o) else nameC(o), fontWeight = FontWeight.Bold, fontSize = if (o.nameSubtle) 11.sp else 13.sp)) { append(name.ifEmpty { "名無し" }) }
         }
         if (isOp) {
             append(" ")

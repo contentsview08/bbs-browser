@@ -825,6 +825,7 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の位置</p>
         <Choice value={s.idPosition} options={ID_POSITIONS} onChange={(v) => update('idPosition', v)} />
         <div className="mt-3">
+          <Toggle checked={s.nameSubtle} onChange={(v) => update('nameSubtle', v)} label="名前欄を目立たなくする" note="名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます" />
           <Toggle checked={s.watchoiShort} onChange={(v) => update('watchoiShort', v)} label="ワッチョイを短く出す" note="「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)" />
           <Toggle
             checked={s.iconFromWatchoi}

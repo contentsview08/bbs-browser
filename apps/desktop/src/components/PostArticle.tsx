@@ -52,6 +52,8 @@ export interface PostHandlers extends BodyHandlers {
   idPosition?: IdPosition
   /** アイコンの種を、ワッチョイがあればワッチョイから作る */
   iconFromWatchoi?: boolean
+  /** 名前欄(ワッチョイ込み)を日付・ID と同じ薄い色・大きさにする。false なら名前の色で目立たせる */
+  nameSubtle?: boolean
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -535,12 +537,13 @@ function PostArticle(props: Props) {
       )}
     </button>
   )
-  // 名前(ワッチョイ込み)は、日付・ID と同じ薄い色・同じ大きさに(本人 2026-11-05)。Discord 風だけは Discord らしく名前を濃く
-  const nameBtn = (cls: string, strong = false) =>
+  // 名前欄(ワッチョイ込み): 設定で、日付・ID と同じ薄い色・同じ大きさにする(既定オン)。オフなら名前の色で目立たせる
+  const nameSubtle = handlers.nameSubtle !== false
+  const nameBtn = (cls: string) =>
     name && (
       <button
         type="button"
-        className={`font-bold ${strong ? 'text-c-poster-name' : 'text-c-text-muted'} min-w-0 truncate hover:opacity-80 ${cls}`}
+        className={`font-bold ${nameSubtle ? 'text-c-text-muted' : 'text-c-poster-name'} min-w-0 truncate hover:opacity-80 ${cls}`}
         onClick={(e) => handlers.onName(post.name, e.currentTarget)}
         title="同じ名前の書き込みを表示"
       >
@@ -709,6 +712,18 @@ function PostArticle(props: Props) {
   const idInHeader = idPosition === 'header' ? idBtn : null
   // 右上の ID の幅を覚えておき、マウスを乗せたときの操作バーをその左に置く(重ならないように。枠の外には出せない)
   const idRef = useRef<HTMLSpanElement>(null)
+  /** 操作バーの上端(レスの枠からの px)。ふつうは上のレスとの線にまたがる高さ。上に余裕がない(一覧の一番上の)レスは、ID の下 */
+  const [barTop, setBarTop] = useState(-18)
+  const placeToolbar = () => {
+    const el = articleRef.current
+    if (!el || idPosition !== 'topRight') return
+    const rect = el.getBoundingClientRect()
+    // すぐ上に別のレスが見えていれば、またがって出せる(ヘッダーの下や一覧の端なら出せない)
+    // (レスの間にすき間のある見た目があるので、少しずつ上を見る)
+    if ([8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(-18)
+    const idBottom = idRef.current?.getBoundingClientRect().bottom
+    setBarTop((idBottom ? idBottom - rect.top : 24) + 2)
+  }
   const idAtTopRight = idPosition === 'topRight' && idBtn ? <span ref={idRef} className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null
   const idAtBottomRight = idPosition === 'bottomRight' && idBtn ? <div className="flex justify-end mt-0.5 text-xs">{idBtn}</div> : null
   const headerBlock =
@@ -717,7 +732,7 @@ function PostArticle(props: Props) {
       <div data-post-header className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 mb-1 text-sm">
         {numBtn()}
         <span className="text-c-text-muted">：</span>
-        {nameBtn('text-xs')}
+        {nameBtn(nameSubtle ? 'text-xs' : 'text-sm')}
         {post.mail && <span className="text-c-text-muted text-xs">[{post.mail}]</span>}
         <span className="text-c-text-muted">：</span>
         <span className="text-c-text-muted text-xs whitespace-nowrap" title={post.date}>{shownDate}</span>
@@ -734,9 +749,11 @@ function PostArticle(props: Props) {
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
-          {/* スマホ: 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05) */}
-          {isMobile && repliesBtn}
-          {nameBtn(isMobile ? 'text-[13px]' : 'text-sm', true) || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
+          {/* 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05) */}
+          {repliesBtn}
+          {nameBtn(nameSubtle ? (isMobile ? 'text-[11px]' : HEAD_TEXT) : isMobile ? 'text-[13px]' : 'text-sm') || (
+            <span className={`font-bold ${nameSubtle ? `${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted` : 'text-sm text-c-poster-name'}`}>名無し</span>
+          )}
           {opChip}
           {ownChip}
             {badgeChips}
@@ -748,7 +765,6 @@ function PostArticle(props: Props) {
             {isMobile ? shortDate(post.date) : shownDate}
           </span>
           {idInHeader}
-          {!isMobile && repliesBtn}
           {voteChip}
           {post.mail && <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
@@ -1017,7 +1033,7 @@ function PostArticle(props: Props) {
    * ふつうはレスの右上、LINE 風は吹き出しと同じ側の上(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)。
    * どれもレスの枠の中に置く(枠は content-visibility で外を切り取るので、はみ出すと見えない)
    */
-  const toolbarAt = (at: string, style?: { right: number }) => (
+  const toolbarAt = (at: string, style?: { top: number }) => (
       <div
         data-post-toolbar
         className={`absolute ${at} z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md transition-opacity ${
@@ -1130,8 +1146,8 @@ function PostArticle(props: Props) {
       )}
       <div className={`flex-1 min-w-0 flex flex-col ${right ? 'items-end' : 'items-start'}`}>
         {!props.continued && (
-          <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : ''}`}>
-            {isMobile && !right && repliesBtn}
+          <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : idPosition === 'topRight' ? 'w-full' : ''}`}>
+            {repliesBtn}
             {!right && nameBtn('text-xs')}
             {opChip}
             {ownChip}
@@ -1140,7 +1156,6 @@ function PostArticle(props: Props) {
             {/* ID の位置の設定に従う(右下は吹き出しの下に出す) */}
             {idInHeader}
             {idAtTopRight}
-            {(!isMobile || right) && repliesBtn}
             {voteChip}
             {post.mail && <span className="text-c-text-muted">[{post.mail}]</span>}
             {toOwnChip}
@@ -1167,7 +1182,10 @@ function PostArticle(props: Props) {
       className={`relative ${frameClass} ${variant === 'discord' ? 'post-discord' : ''}`}
       // 人気のレスを帯で示すときは、淡い地も敷く(スマホのアプリと同じ 6%)
       style={heatBar ? { ...frame, background: `color-mix(in srgb, ${heatBar} 6%, transparent)` } : frame}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => {
+        placeToolbar()
+        setHovered(true)
+      }}
       onMouseLeave={() => setHovered(false)}
     >
       {/* 自分の書き込み(濃い線)と、自分へのアンカーを含むレス(薄い線)の目印。
@@ -1193,9 +1211,9 @@ function PostArticle(props: Props) {
       {!isMobile &&
         (hovered || menuOpen) &&
         toolbarAt(
-          variant === 'line' && !(props.isOwn && !props.alignLeft) ? 'top-0.5 left-3' : 'top-0.5 right-3',
-          // ID を右上に出しているときは、ID の左隣に(ID と重ならないように)
-          idPosition === 'topRight' && idRef.current ? { right: idRef.current.offsetWidth + 12 } : undefined,
+          variant === 'line' && !(props.isOwn && !props.alignLeft) && idPosition !== 'topRight' ? 'top-0.5 left-3' : 'top-0.5 right-3',
+          // ID を右上に出しているときは、ID と重ならないように上下へずらす(barTop)
+          idPosition === 'topRight' ? { top: barTop } : undefined,
         )}
       {variant === 'line' ? (
         <>

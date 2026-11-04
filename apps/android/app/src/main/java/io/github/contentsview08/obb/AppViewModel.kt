@@ -881,14 +881,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun renderOptions(noname: String?) = RenderOptions(
         noname = noname, highlightOp = prefs.highlightOp, idColor = prefs.idStyle == "color", urlShorten = prefs.urlShorten,
         style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
-        dateStyle = prefs.dateStyle, idShort = prefs.idShort, idPosition = prefs.idPosition, watchoiShort = prefs.watchoiShort,
+        dateStyle = prefs.dateStyle, idShort = prefs.idShort, idPosition = prefs.idPosition, watchoiShort = prefs.watchoiShort, nameSubtle = prefs.nameSubtle,
     )
 
     /**
      * レスの見せ方に関わる設定と配色。変わったら、開いているスレを組み立て直す(設定画面から戻ったときに、もう新しい見た目になっている)
      */
     private fun renderKey() = listOf(
-        prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.idPosition, prefs.watchoiShort, prefs.urlShorten,
+        prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.idPosition, prefs.watchoiShort, prefs.nameSubtle, prefs.urlShorten,
         prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
     )
 
@@ -999,6 +999,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openUrl(url: String): Boolean {
         // 5ch は 5ch.net から 5ch.io へ移った(5ch.net は 301 で 5ch.io へ送る)。書き込み(POST)はリダイレクトをたどれないので、初めから 5ch.io で開く
         val u = url.trim().replace(Regex("^(https?://[a-z0-9]+)\\.5ch\\.net/"), "$1.5ch.io/")
+        // itest(5ch・bbspink のスマホ向けの見え方)は、本当の板・スレの URL に直して開く。PC 版の twoch/connector.ts の fromItest と同じ
+        val itestThread = Regex("^https?://itest\\.(5ch\\.net|5ch\\.io|bbspink\\.com)/(?:([a-z0-9]+)/)?test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
+        val itestBoard = if (itestThread == null) Regex("^https?://itest\\.(5ch\\.net|5ch\\.io|bbspink\\.com)/subback/([^/?#]+)").find(u) else null
+        if (itestThread != null || itestBoard != null) {
+            val g = (itestThread ?: itestBoard)!!.groupValues
+            val domain = g[1]
+            val server = if (itestThread != null) g[2] else ""
+            val board = if (itestThread != null) g[3] else g[2]
+            val key = if (itestThread != null) g[4] else null
+            fun real(host: String) = if (key != null) "https://$host/test/read.cgi/$board/$key/" else "https://$host/$board/"
+            if (server.isNotEmpty()) return openUrl(real("$server.$domain"))
+            // サーバー名が URL にないときは、itest の板のページから探す。分からなければブラウザで開く
+            viewModelScope.launch {
+                runCatching { TwoCh.itestServer(domain, board) }.onSuccess { openUrl(real(it)) }.onFailure {
+                    toast = "アプリでは開けないので、ブラウザで開きます"
+                    runCatching {
+                        getApplication<Application>().startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            }
+            return true
+        }
         // 本文の URL は http:// のことが多い。Android は暗号化しない通信を断るので https:// で開く
         // hono-bbs のスレ・板(https://<web>/boards/<板>/<スレ>)
         HonoBbs.parseThreadUrl(u)?.let { openThread(it); return true }

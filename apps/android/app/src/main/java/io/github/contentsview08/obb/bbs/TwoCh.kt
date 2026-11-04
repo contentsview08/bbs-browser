@@ -172,6 +172,16 @@ private fun looksLikeSubject(text: String): Boolean {
 }
 
 object TwoCh {
+    /** itest の板のページから、その板のあるサーバー(mercury.bbspink.com など)を探す。PC 版の serverOf と同じ */
+    suspend fun itestServer(domain: String, board: String): String {
+        val page = "https://itest.$domain/subback/$board"
+        val res = Http.get(page)
+        ensureOk(res, page)
+        val m = Regex("https?://([a-z0-9]+)\\.${Regex.escape(domain)}/${Regex.escape(board)}/").find(String(res.body, Charsets.UTF_8))
+        if (m == null || m.groupValues[1] == "itest") throw IllegalStateException("板のサーバーが分かりませんでした: $page")
+        return "${m.groupValues[1]}.$domain"
+    }
+
     suspend fun listBoards(menuUrl: String): List<Board> {
         if (HonoBbs.isSiteUrl(menuUrl)) return HonoBbs.listBoards(menuUrl)
         if (Machi.isSiteUrl(menuUrl)) return Machi.listBoards()

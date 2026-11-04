@@ -218,6 +218,8 @@ class Prefs(context: Context) {
     var historyCheckMin by pref("historyCheckMin", 0)
     /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
     var watchoiShort by pref("watchoiShort", true)
+    /** 名前欄(ワッチョイ込み)を日付・ID と同じ薄い色・大きさにする */
+    var nameSubtle by pref("nameSubtle", true)
     /** アイコン(Discord 風・LINE 風)の種を、ワッチョイがあればワッチョイから(ID は日ごと、ワッチョイは週ごとに変わる) */
     var iconFromWatchoi by pref("iconFromWatchoi", true)
     /** 動きを減らす(画面の移り方・新着の光り方・数字の繰り上がりを省く)。端末の「アニメーションを削除」でも同じになる */

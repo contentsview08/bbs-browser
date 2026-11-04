@@ -320,6 +320,8 @@ export interface AppSettings {
   idPosition: IdPosition
   /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
   watchoiShort: boolean
+  /** 名前欄(ワッチョイ込み)を日付・ID と同じ薄い色・大きさにする */
+  nameSubtle: boolean
   /** アイコン(Discord 風・LINE 風・ID の見せ方「模様」)の種を、ワッチョイがあればワッチョイから作る(ID は日ごとに変わるが、ワッチョイは週ごと) */
   iconFromWatchoi: boolean
   /** 知らせの種類ごとのオン・オフ(ないものはオン) */
@@ -512,6 +514,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空(本人の指示 2026-11-05)
   idPosition: 'topRight',
   watchoiShort: true,
+  nameSubtle: true,
   iconFromWatchoi: true,
   notifyKinds: {},
   historyCheckMin: 0,

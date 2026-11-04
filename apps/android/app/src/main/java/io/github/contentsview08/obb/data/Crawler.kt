@@ -105,7 +105,20 @@ object Crawler {
         return counts
     }
 
-    private fun anchorsOf(body: String): Set<Int> {
+    /**
+     * スレを取り直したときに届いた新着から、あなた宛てのレスを知らせる(定期確認より先に取り込むと、定期確認では新着が見えないので、ここでも知らせる)。
+     * 定期確認が同じレスを知らせ直さないよう、ここまで見たことを覚える
+     */
+    fun notifyReplies(context: Context, prefs: Prefs, t: ThreadSummary, title: String, posts: List<io.github.contentsview08.obb.bbs.Post>, own: Set<Int>, justPosted: String?) {
+        val lastNo = posts.maxOfOrNull { it.no } ?: return
+        val seen = context.getSharedPreferences("crawl", Context.MODE_PRIVATE)
+        seen.edit().putInt("o:${t.id}", maxOf(lastNo, seen.getInt("o:${t.id}", -1))).apply()
+        if (!prefs.osNotify || !prefs.notifyReply || own.isEmpty()) return
+        val replies = posts.filter { p -> p.no !in own && p.body.trim() != justPosted && anchorsOf(p.body).any { it in own } }
+        for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.webUrl(t))
+    }
+
+    internal fun anchorsOf(body: String): Set<Int> {
         val out = HashSet<Int>()
         for (m in ANCHOR.findAll(normalizeDigits(body))) {
             val a = m.groupValues[1].toIntOrNull() ?: continue

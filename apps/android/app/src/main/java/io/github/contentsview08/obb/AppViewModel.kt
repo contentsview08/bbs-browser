@@ -156,6 +156,8 @@ sealed interface Page {
         var readNo = 0
         /** 自分の書き込みのレス番号 */
         var ownNos by mutableStateOf<Set<Int>>(emptySet())
+        /** いま書き込んだ本文(その取り直しで、自分宛ての知らせを出さないため) */
+        var justPosted: String? = null
         var favorite by mutableStateOf(false)
         /** 開いたらこのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」から)。飛んだら null */
         var jumpNo by mutableStateOf<Int?>(null)
@@ -760,6 +762,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val title = r.title ?: log?.title ?: t.title
                 db.saveFetch(t, r, title)
                 if (log == null) db.touch(t)
+                // 手元にログのあるスレに届いた新着なら、あなた宛てを知らせる(全部取り直したときと、初めて開くスレは知らせない)
+                if (log != null && r.status != FetchStatus.RESET && r.posts.isNotEmpty()) {
+                    runCatching { io.github.contentsview08.obb.data.Crawler.notifyReplies(getApplication(), prefs, t, title, r.posts, page.ownNos, page.justPosted) }
+                }
                 page.title = title
                 if (r.status == FetchStatus.ARCHIVED || r.archived) page.archived = true
                 // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)。今のスマホ版と同じ
@@ -1221,6 +1227,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         toast = "書き込みました"
                         // 自動更新の最中だと取り直しが飛ばされ、自分のレスが見つからない。終わるのを待ってから取り直す
                         while (page.loading) kotlinx.coroutines.delay(100)
+                        // いま書いたレスが自分のレスへのアンカーでも、自分宛てとして知らせない
+                        page.justPosted = body.trim()
                         refreshThread(page)?.join()
                         // 自分の書き込みを覚える。番号が返らない掲示板では、新着から同じ本文の一番新しいレスを探す
                         val no = res.resNumber ?: page.index.posts.lastOrNull { it.body.trim() == body.trim() }?.no

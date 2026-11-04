@@ -674,6 +674,17 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
       >
         <Choice value={effectivePostStyle(s)} options={isMobile ? MOBILE_POST_STYLES : POST_STYLES} onChange={(v) => update('postStyle', v)} />
       </Section>
+      <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+        <Toggle checked={s.tabsEnabled} onChange={(v) => update('tabsEnabled', v)} label="タブを使う" note="オフにするとタブの帯を出さず、いつも今のスレを置き換えます(開いているスレ以外のタブは閉じます)" />
+        {s.tabsEnabled && (
+        <Toggle
+          checked={s.openInNewTab}
+          onChange={(v) => update('openInNewTab', v)}
+          label="スレ一覧から開くときは新しいタブで開く"
+          note="オフにすると、いま見ているタブを置き換えます。そのときも、Ctrl を押しながらクリックすると新しいタブで開きます"
+        />
+        )}
+      </Section>
     </>
   )
 }
@@ -731,17 +742,6 @@ function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsProps, 's
           label="Shift+Delete でログを消す前に確かめる"
           note="確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます"
         />
-      </Section>
-      <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
-        <Toggle checked={s.tabsEnabled} onChange={(v) => update('tabsEnabled', v)} label="タブを使う" note="オフにするとタブの帯を出さず、いつも今のスレを置き換えます(開いているスレ以外のタブは閉じます)" />
-        {s.tabsEnabled && (
-        <Toggle
-          checked={s.openInNewTab}
-          onChange={(v) => update('openInNewTab', v)}
-          label="スレ一覧から開くときは新しいタブで開く"
-          note="オフにすると、いま見ているタブを置き換えます。そのときも、Ctrl を押しながらクリックすると新しいタブで開きます"
-        />
-        )}
       </Section>
       <Section
         title="閲覧履歴(ログ)を残す日数"
@@ -1411,6 +1411,9 @@ function MouseGestureSettings({ settings: s, update, favorites }: Pick<SettingsP
       title="マウスジェスチャー"
       note="Ctrl(または右ボタン)を押しながらマウスを少し動かすと、そこを中心に 8 方向の円盤が出ます。向けた区画の操作が、離したときに実行されます(中心に戻して離せば何もしません)。操作はキー操作と同じで、キーを受け取っている方に効きます"
     >
+      <Toggle checked={s.mouseGestureEnabled} onChange={(v) => update('mouseGestureEnabled', v)} label="マウスジェスチャーを使う" />
+      {s.mouseGestureEnabled && (
+      <>
       <div className="mb-3 flex items-center gap-3 text-sm">
         <span className="text-c-text-body">始め方</span>
         <Choice value={s.mouseGestureTrigger} options={MOUSE_GESTURE_TRIGGERS} onChange={(v) => update('mouseGestureTrigger', v)} />
@@ -1444,6 +1447,8 @@ function MouseGestureSettings({ settings: s, update, favorites }: Pick<SettingsP
       <button type="button" onClick={() => update('mouseGestures', DEFAULT_SETTINGS.mouseGestures)} className="mt-3 text-xs text-c-text-muted hover:text-c-accent underline">
         すべて既定に戻す
       </button>
+      </>
+      )}
     </Section>
   )
 }

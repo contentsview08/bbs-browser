@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import initSqlJs from 'sql.js'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
 // アプリと同じ順番で全マイグレーションを流す
-const migrations = ['001_init.sql', '002_settings.sql', '003_favorite_boards.sql', '004_own_posts.sql', '005_favicons.sql', '006_uploads.sql', '007_upload_account.sql', '008_ogp.sql', '009_post_history.sql', '010_favorite_threads.sql', '011_accounts.sql', '012_drafts.sql', '013_post_ref.sql', '014_troll_marks.sql', '015_post_badges.sql', '016_upload_hash.sql'].map((f) =>
+// migrations のフォルダの全部を番号順に流す(一覧を手で書くと、足し忘れてアプリと形がずれる)
+const migrations = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort().map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
 )
 const SQL = await initSqlJs()

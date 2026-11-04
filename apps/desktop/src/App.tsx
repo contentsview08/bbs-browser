@@ -63,6 +63,7 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
+import { newRule } from './utils/ng'
 import { useMouseGesture, PIE_DIRS, type MouseGestureMap, type PieDir } from './hooks/useMouseGesture'
 import { canCheckUpdate, compareVersions, fetchLatestRelease } from './host/update'
 import { getVersion } from '@tauri-apps/api/app'
@@ -2608,8 +2609,8 @@ export default function App() {
           onToggleFavoriteThread={toggleFavoriteThread}
           onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
           onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId }, board: { url: t.boardUrl, name: board?.url === t.boardUrl ? board.name : t.boardUrl } })}
-          // 立てた人を NG: ID の NG(その人が立てたスレも、書いたレスも隠れる)。入れる前に欄で直せる
-          onNgAuthor={(t) => t.authorId && setNgDraft({ target: 'posterId', pattern: t.authorId, values: { threadTitle: t.title, posterId: t.authorId }, board: { url: t.boardUrl, name: board?.url === t.boardUrl ? board.name : t.boardUrl } })}
+          // 立てた人を NG: ID の NG(その人が立てたスレも、書いたレスも隠れる)。選んだらそのまま入れる
+          onNgAuthor={(t) => t.authorId && addNg(newRule('posterId', t.authorId))}
           onDeleteThreadLog={(t) => void deleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={history ? undefined : settings.keywords}

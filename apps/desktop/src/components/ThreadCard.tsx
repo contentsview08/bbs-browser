@@ -7,6 +7,7 @@ import ActionSheet from './ActionSheet'
 import { useLongPress } from '../hooks/useLongPress'
 import { isMobile } from '../utils/platform'
 import { memo, useState } from 'react'
+import { MenuButton } from './PostArticle'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
@@ -88,6 +89,8 @@ function ThreadCard({
   const authorIconId = authorIcon ? thread.authorId : undefined
   // スマホ: 長押しで操作の一覧を出す(選べる一覧(閲覧履歴)では、選び始める)
   const [sheet, setSheet] = useState(false)
+  /** 操作バーの NG のメニューを開いているか(開いている間はバーを出したままにする) */
+  const [ngMenu, setNgMenu] = useState(false)
   const longPress = useLongPress(isMobile ? (onSelectStart ? () => onSelectStart(thread) : () => setSheet(true)) : undefined)
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   // 勢いの色は「とても多い」の 1 段だけ(3 段に塗り分けると、行の中の色が増えて読みにくい)
@@ -539,7 +542,7 @@ function ThreadCard({
       {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す(スマホは長押しの一覧) */}
       {!isMobile && (onNg || onCopy || onToggleFavorite || (onDeleteLog && state)) && (
         <div
-          className="absolute -top-3.5 right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
+          className={`absolute -top-3.5 right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity ${ngMenu ? '!opacity-100 !pointer-events-auto' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
           {onToggleFavorite && (
@@ -557,16 +560,23 @@ function ThreadCard({
               <span className="material-symbols-outlined text-base leading-none">content_copy</span>
             </button>
           )}
-          {onNgAuthor && thread.authorId && (
-            <button type="button" onClick={() => onNgAuthor(thread)} className={`${TOOL} hover:!text-mark-danger`} title={`立てた人を NG に追加(${thread.authorId})`}>
-              <span className="material-symbols-outlined text-base leading-none">person_off</span>
-            </button>
-          )}
-          {onNg && (
+          {/* NG: まず「スレタイで」か「立てた人で」を選ぶ。立てた人が分からないスレは、スレタイの NG の画面へすぐ */}
+          {onNg && onNgAuthor && thread.authorId ? (
+            <MenuButton
+              icon="block"
+              title="NG に追加"
+              hoverClass="hover:!text-mark-danger"
+              onOpenChange={setNgMenu}
+              items={[
+                { label: 'スレタイで NG', icon: 'title', onClick: () => onNg(thread) },
+                { label: `立てた人で NG(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread) },
+              ]}
+            />
+          ) : onNg ? (
             <button type="button" onClick={() => onNg(thread)} className={`${TOOL} hover:!text-mark-danger`} title="スレタイを NG に追加">
               <span className="material-symbols-outlined text-base leading-none">block</span>
             </button>
-          )}
+          ) : null}
           {onDeleteLog && state && (
             <button type="button" onClick={() => onDeleteLog(thread)} className={`${TOOL} hover:!text-mark-danger`} title="このスレのログ(閲覧履歴)を削除">
               <span className="material-symbols-outlined text-base leading-none">delete</span>

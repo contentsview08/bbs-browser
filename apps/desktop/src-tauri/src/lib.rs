@@ -66,6 +66,19 @@ fn copy_dir_all(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// このアプリが自分で入れ替えられるか。Windows のインストーラー版と Linux の AppImage だけ。
+/// ZIP 版は入れ替える先がなく、.deb は管理者のパスワードが要るので、新しい版を通知で知らせるだけにする
+#[tauri::command]
+fn can_self_update() -> bool {
+    if portable_dir().is_some() {
+        return false;
+    }
+    if cfg!(target_os = "linux") {
+        return std::env::var_os("APPIMAGE").is_some();
+    }
+    cfg!(windows)
+}
+
 /// DB・バックアップの置き場(tauri-plugin-sql の既定は app_config_dir)
 fn db_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     match portable_dir() {
@@ -567,6 +580,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            can_self_update,
             data_paths,
             list_system_fonts,
             save_image,

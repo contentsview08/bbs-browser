@@ -6,7 +6,6 @@ import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
-import { getDataPaths } from './logStore'
 
 export const canCheckUpdate = true
 
@@ -35,7 +34,9 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
   if (res.status === 401) throw new Error('GitHub のトークンが受け付けられませんでした')
   if (!res.ok) throw new Error(`GitHub から取れませんでした(${res.status})`)
   const j = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets?: { name: string; url: string; size: number; browser_download_url: string }[] }
-  const asset = (j.assets ?? []).find((a) => /-setup\.exe$/i.test(a.name)) ?? (j.assets ?? []).find((a) => /\.(exe|msi)$/i.test(a.name))
+  // インストーラーを落として開くのは Windows だけ。Linux はリリースのページを開く
+  const assets = /windows/i.test(navigator.userAgent) ? (j.assets ?? []) : []
+  const asset = assets.find((a) => /-setup\.exe$/i.test(a.name)) ?? assets.find((a) => /\.(exe|msi)$/i.test(a.name))
   return {
     version: j.tag_name.replace(/^v/i, ''),
     notes: j.body ?? '',
@@ -64,12 +65,15 @@ const CHECK_TIMEOUT_MS = 5000
 /** 落としている途中で、これだけ何も届かなければやめる */
 const DOWNLOAD_STALL_MS = 30000
 
+/** 自動で入れ替えられる入れ方か(Windows のインストーラー版と Linux の AppImage) */
+export const canSelfUpdate = () => invoke<boolean>('can_self_update')
+
 /**
  * 起動時の自動更新。新しい版があれば落として入れ替え、起動し直す(Windows は入れ替えの時点でこのアプリが終わり、インストーラーが起動し直す)。
- * ZIP 版はインストール先がないので何もしない。つながらない・失敗したときは Error で返すので、呼ぶ側はそのまま使い続ける
+ * 入れ替えられない入れ方(ZIP 版・.deb)では何もしない。つながらない・失敗したときは Error で返すので、呼ぶ側はそのまま使い続ける
  */
 export async function runAutoUpdate(onProgress: (p: AutoUpdateProgress) => void): Promise<void> {
-  if ((await getDataPaths()).portable) return
+  if (!(await canSelfUpdate())) return
   const update = await check({ timeout: CHECK_TIMEOUT_MS })
   if (!update) return
   const version = update.version

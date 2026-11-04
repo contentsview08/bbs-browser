@@ -57,7 +57,7 @@ import type { BoardMeta } from '../ui/settings'
 import { importableSettings, mergeNgRules, ngFile, parseBackup, settingsFile } from '../utils/backup'
 import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
-import { canCheckUpdate, compareVersions, fetchLatestRelease, installUpdate, type ReleaseInfo } from '../host/update'
+import { canCheckUpdate, compareVersions, fetchLatestRelease, installUpdate, type ReleaseInfo, canSelfUpdate } from '../host/update'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement, PLACEMENTS } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
 
@@ -2485,9 +2485,11 @@ export const OPERATION_BOARD_URL = 'https://red-edge.net/boards/operation01/'
 export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   // 版はインストーラーの版(apps/desktop/package.json。tauri.conf.json がそこを読む)
   const [version, setVersion] = useState<string>()
+  const [selfUpdate, setSelfUpdate] = useState<boolean>()
   const [paths, setPaths] = useState<DataPaths>()
   useEffect(() => {
     void getVersion().then(setVersion, () => setVersion(undefined))
+    void canSelfUpdate().then(setSelfUpdate, () => setSelfUpdate(false))
     void getDataPaths().then(setPaths, () => setPaths(undefined))
   }, [])
   return (
@@ -2497,7 +2499,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・まちBBS・ふたば・hono-bbs を読めます。
         </p>
       </Section>
-      {canCheckUpdate && <UpdateSection version={version} portable={paths?.portable} autoUpdate={s.autoUpdate} onAutoUpdate={(v) => update('autoUpdate', v)} />}
+      {canCheckUpdate && <UpdateSection version={version} selfUpdate={selfUpdate} autoUpdate={s.autoUpdate} onAutoUpdate={(v) => update('autoUpdate', v)} />}
       <Section title="掲示板" note="要望や不具合は、運営要望板か GitHub の Issues へ">
         <OpenRow label="運営要望板を開く" value="red-edge.net" onOpen={() => void broadcast('open-in-app', OPERATION_BOARD_URL)} />
       </Section>
@@ -2515,9 +2517,9 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
 
 /**
  * 更新(設定 → このアプリについて)。起動時に自動で入れ替えるかの設定と、手で確かめるボタン。
- * ボタンは GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。ZIP 版は自動更新の対象にならない
+ * ボタンは GitHub の最新のリリースと版を比べ、新しければインストーラーを落として実行する。ZIP 版・.deb は自動更新の対象にならない
  */
-function UpdateSection(props: { version?: string; portable?: boolean; autoUpdate: boolean; onAutoUpdate: (v: boolean) => void }) {
+function UpdateSection(props: { version?: string; selfUpdate?: boolean; autoUpdate: boolean; onAutoUpdate: (v: boolean) => void }) {
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'checking' } | { kind: 'found'; release: ReleaseInfo } | { kind: 'latest'; release: ReleaseInfo } | { kind: 'error'; message: string } | { kind: 'installing' } | { kind: 'installed'; path: string }>({ kind: 'idle' })
   const check = async () => {
     setState({ kind: 'checking' })
@@ -2540,8 +2542,8 @@ function UpdateSection(props: { version?: string; portable?: boolean; autoUpdate
   const release = state.kind === 'found' || state.kind === 'latest' ? state.release : undefined
   return (
     <Section title="更新" note="GitHub の最新のリリースと比べます。新しい版があれば、インストーラーを落としてそのまま実行できます">
-      {props.portable ? (
-        <p className="mb-2 text-sm text-c-text-muted">ZIP 版は自動で更新しません。新しい版があれば通知で知らせます</p>
+      {props.selfUpdate === false ? (
+        <p className="mb-2 text-sm text-c-text-muted">この入れ方(ZIP 版・.deb)は自動で更新しません。新しい版があれば通知で知らせます</p>
       ) : (
         <Toggle
           checked={props.autoUpdate}

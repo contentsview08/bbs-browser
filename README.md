@@ -103,7 +103,8 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 
 - インストーラーは、管理者の権限なしで、使う人のフォルダに入れる(NSIS の currentUser)。WebView2 がなければ入れる
 - データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.contentsview08.obb\` にあり、アンインストールしても残る(前の版の置き場にあるものは、起動したときに写す)
-- 自動更新は tauri-plugin-updater。起動時に `releases/latest/download/latest.json` を読み、署名を確かめて入れ替える(インストーラー版だけ。設定でオフにできる)
+- 自動更新は tauri-plugin-updater。起動時に `releases/latest/download/latest.json` を読み、署名を確かめて入れ替える(Windows のインストーラー版と AppImage。ZIP 版と .deb は通知だけ。設定でオフにできる)
+- Linux 版は `npm run build -- --bundles deb,appimage` で作る(Linux の上で。必要なパッケージは `release.yml`)
 - 署名の秘密鍵は GitHub Secrets の `TAURI_SIGNING_PRIVATE_KEY` に置く。リポジトリには公開鍵だけを入れる。鍵をなくすと、入っているアプリに更新を届けられなくなる
 - ZIP 版(インストールしない版)は、`npm run build` のあとに `npm run package:zip` で `bundle/zip/` に作る
 
@@ -114,7 +115,7 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 | ファイル | いつ | 何をする |
 |---|---|---|
 | `ci.yml` | main への push のたび | 型チェックとテスト(Linux。数分) |
-| `release.yml` | 版の印(タグ `v*`)を push したとき | テスト → Windows でビルド → setup.exe・msi・ZIP・latest.json・署名を Releases に**下書き**で置く。確かめてから公開する |
+| `release.yml` | 版の印(タグ `v*`)を push したとき | テスト → Windows と Linux でビルド → setup.exe・msi・ZIP・.deb・AppImage・latest.json・署名を Releases に**下書き**で置く。確かめてから公開する |
 
 リリースの手順: `npm run version:set -- 0.2.0` → CHANGELOG と `docs/releases/v0.2.0.md` を書く → コミット → `git tag v0.2.0` → `git push origin main --tags`。
 

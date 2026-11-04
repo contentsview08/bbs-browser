@@ -42,7 +42,7 @@ import GestureRecorder, { gestureArrows } from './GestureRecorder'
 import ActionSheet from './ActionSheet'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 import { ensureNotifyPermission } from '../utils/osNotify'
-import FontSizeSlider, { ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCssVar } from './FontSizeSlider'
+import FontSizeSlider, { BaseFontSlider, ListFontSliders, PostFontSliders, ROOT_FONT_SIZE, setCssVar } from './FontSizeSlider'
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle, TextSetting } from './SettingParts'
 import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
@@ -660,6 +660,7 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
       </Section>
       <Section title="文字の大きさ">
         {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
+        {isMobile ? (
         <FontSizeSlider
           label="画面全体"
           value={baseFontPx(s)}
@@ -667,6 +668,9 @@ function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           preview={(px) => setCssVar(ROOT_FONT_SIZE, `${px}px`)}
           onCommit={(px) => update(FONT_PX_KEY, px)}
         />
+        ) : (
+          <BaseFontSlider settings={s} update={update} fixedSize />
+        )}
       </Section>
       <Section
         title="レスの見た目"

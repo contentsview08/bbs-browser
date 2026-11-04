@@ -35,7 +35,7 @@ import { mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
-import { PostFontSliders, SliderDialog } from './FontSizeSlider'
+import { BaseFontSlider, PostFontSliders, SliderDialog } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
@@ -2429,6 +2429,7 @@ export default function ThreadView(props: Props) {
       )}
       {fontDialog && props.onUpdateSetting && (
         <SliderDialog title="文字の大きさ・余白" onClose={() => setFontDialog(false)}>
+          {!isMobile && <BaseFontSlider settings={settings} update={props.onUpdateSetting} />}
           <PostFontSliders settings={settings} update={props.onUpdateSetting} />
         </SliderDialog>
       )}

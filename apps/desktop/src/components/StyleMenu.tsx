@@ -66,14 +66,17 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
         </button>
       ))}
 
-      <div className="my-1 border-t border-c-border" />
+      {isMobile && <div className="my-1 border-t border-c-border" />}
 
       {/* 文字サイズのスライダーは、メニューの中ではなく真ん中の小さな画面で(動かすとメニューごと大きさが変わってずれるので) */}
+      {/* PC は ︙ の「文字の大きさ・余白」へ移した */}
+      {isMobile && (
       <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_FONT_DIALOG))} className={MENU_ITEM}>
         <span className="material-symbols-outlined text-base flex-shrink-0">format_size</span>
         <span className="flex-1 text-left truncate">文字サイズ(画面全体)</span>
         <span className="text-xs tabular-nums text-c-text-muted">{baseFontPx(settings)}px</span>
       </button>
+      )}
     </>
   )
 }

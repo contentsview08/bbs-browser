@@ -153,7 +153,7 @@ interface Props {
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line' | 'matome'
 
 /** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
-/** マウスを乗せたレスの操作バーの高さ(px) */
+/** マウスを乗せたレスの操作バーの高さ(基本の文字が 16px のときの px) */
 const TOOLBAR_H = 34
 const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
 /** ダブルタップで返信: 2 回目のタップを待つ時間(ms) */
@@ -778,7 +778,7 @@ function PostArticle(props: Props) {
     const id = idRef.current?.getBoundingClientRect()
     const idTop = id ? id.top - rect.top : 0
     // (レスの間にすき間のある見た目があるので、少しずつ上を見る)
-    if ([8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(idTop - TOOLBAR_H - 2)
+    if ([8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(idTop - (TOOLBAR_H * parseFloat(getComputedStyle(document.documentElement).fontSize)) / 16 - 2)
     setBarTop((id ? id.bottom - rect.top : 24) + 2)
   }
   const idAtTopRight = idPosition === 'topRight' && idBtn ? <span ref={idRef} className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null

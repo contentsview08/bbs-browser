@@ -111,11 +111,11 @@ function ThreadCard({
   )
   // 「新」は塗りの札ではなく、小さな点(札が並びすぎて読みにくかった)
   const newBadge = isNew && (
-    <span className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full align-[3px]" style={{ background: 'var(--c-mark-new)' }} title="前回この板を見たあとに立ったスレ" />
+    <span className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full align-[0.1875rem]" style={{ background: 'var(--c-mark-new)' }} title="前回この板を見たあとに立ったスレ" />
   )
   /** 掲示板がスレに付けた印(「固定」「ロック」など)。スレタイの前に出す */
   const threadBadges = thread.badges?.length ? (
-    <span className="inline-flex gap-1 mr-1 align-[1px]">
+    <span className="inline-flex gap-1 mr-1 align-[0.0625rem]">
       {thread.badges.map((b, i) => (
         <BadgeChip key={i} badge={b} />
       ))}
@@ -126,7 +126,7 @@ function ThreadCard({
       star
     </span>
   )
-  const unreadBadge = (cls = 'text-[9px] px-1.5 py-0.5 rounded') =>
+  const unreadBadge = (cls = 'text-[0.5625rem] px-1.5 py-0.5 rounded') =>
     unreadCount > 0 && (
       <span className={`flex-shrink-0 font-bold whitespace-nowrap ${cls}`} style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}>
         {unreadCount > 999 ? '+999+' : `+${unreadCount}`}
@@ -198,7 +198,7 @@ function ThreadCard({
       {unreadCount > 0 && variant === 'discord' && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
       <div className="flex-1 min-w-0">
         <div
-          className="text-[15px] leading-snug break-words line-clamp-3"
+          className="text-[0.9375rem] leading-snug break-words line-clamp-3"
           style={{ color: titleColor, fontWeight: variant === 'line' || unreadCount > 0 ? 600 : 400 }}
         >
           {newBadge}
@@ -207,8 +207,8 @@ function ThreadCard({
           {thread.title}
         </div>
         {/* 1 レス目ののぞき見(スレ一覧の時点で本文が分かる掲示板だけ。hono-bbs など) */}
-        {previewText && <div className="mt-0.5 text-[12.5px] leading-snug line-clamp-2 break-words text-c-text-muted">{previewText}</div>}
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-c-text-muted min-w-0">
+        {previewText && <div className="mt-0.5 text-[0.78125rem] leading-snug line-clamp-2 break-words text-c-text-muted">{previewText}</div>}
+        <div className="mt-1 flex items-center gap-2 text-[0.6875rem] text-c-text-muted min-w-0">
           {thread.createdAt && <span className="flex-shrink-0 whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
           {thread.authorId && (
             <span className="min-w-0 truncate font-mono" title="立てた人の ID">
@@ -220,9 +220,9 @@ function ThreadCard({
             {momentumEl('min-w-[3ch]')}
             <span className="tabular-nums" title="レス数">
               {thread.postCount}
-              <span className="ml-0.5 text-[10px]">レス</span>
+              <span className="ml-0.5 text-[0.625rem]">レス</span>
             </span>
-            {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded text-center leading-tight')}
+            {unreadBadge('text-[0.625rem] min-w-[1.75rem] px-1.5 py-px rounded text-center leading-tight')}
           </span>
         </div>
       </div>
@@ -234,7 +234,7 @@ function ThreadCard({
     <div className="flex items-center gap-2 min-w-0">
       {checkbox}
       <span
-        className="flex-1 min-w-0 truncate text-[14px]"
+        className="flex-1 min-w-0 truncate text-[0.875rem]"
         style={{ color: visited ? 'var(--c-thread-read-title, var(--c-text-body))' : 'var(--c-text-strong)', fontWeight: visited ? 400 : 600 }}
       >
         {newBadge}
@@ -242,10 +242,10 @@ function ThreadCard({
         {threadBadges}
         {thread.title}
       </span>
-      <span className={`flex-shrink-0 min-w-[36px] text-right text-[11px] tabular-nums ${momentumColorClass}`} title={`レス数(勢い：${formatMomentum(m)})`}>
+      <span className={`flex-shrink-0 min-w-[2.25rem] text-right text-[0.6875rem] tabular-nums ${momentumColorClass}`} title={`レス数(勢い：${formatMomentum(m)})`}>
         {thread.postCount}
       </span>
-      {unreadBadge('text-[10px] min-w-[30px] px-1.5 py-px rounded text-center leading-tight')}
+      {unreadBadge('text-[0.625rem] min-w-[1.875rem] px-1.5 py-px rounded text-center leading-tight')}
     </div>
   )
 
@@ -261,16 +261,16 @@ function ThreadCard({
         </label>
       )}
       <span
-        className="w-[3px] self-stretch flex-shrink-0 rounded-full"
+        className="w-[0.1875rem] self-stretch flex-shrink-0 rounded-full"
         style={{ background: unreadCount > 0 ? 'var(--c-unread)' : 'transparent', opacity: unreadCount > 0 ? 0.35 + 0.65 * Math.min(1, Math.log10(unreadCount + 1) / 2.5) : 1 }}
       />
       <div className="flex-1 min-w-0">
-        <div className="text-[14px] leading-snug truncate" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
+        <div className="text-[0.875rem] leading-snug truncate" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
           {favStar}
           {threadBadges}
           {thread.title || thread.key}
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-c-text-muted min-w-0">
+        <div className="mt-0.5 flex items-center gap-1.5 text-[0.6875rem] text-c-text-muted min-w-0">
           <BoardIcon boardUrl={thread.boardUrl} override={historyMeta.icon} size={14} />
           <span className="truncate">{historyMeta.boardName}</span>
           {historyMeta.readAt && <span className="flex-shrink-0 whitespace-nowrap">・{relativeTime(new Date(historyMeta.readAt))}に見た</span>}
@@ -278,11 +278,11 @@ function ThreadCard({
         </div>
       </div>
       <span className="flex-shrink-0 flex flex-col items-end gap-0.5">
-        <span className="text-[12px] tabular-nums text-c-text-muted" title="レス数">
+        <span className="text-[0.75rem] tabular-nums text-c-text-muted" title="レス数">
           {thread.postCount}
-          <span className="ml-0.5 text-[10px]">レス</span>
+          <span className="ml-0.5 text-[0.625rem]">レス</span>
         </span>
-        {unreadBadge('text-[10px] min-w-[1.75rem] px-1.5 py-px rounded text-center leading-tight')}
+        {unreadBadge('text-[0.625rem] min-w-[1.75rem] px-1.5 py-px rounded text-center leading-tight')}
       </span>
     </div>
   )
@@ -318,26 +318,26 @@ function ThreadCard({
           {thread.title}
           {/* dat落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる
               (右に列で置くと、その分スレタイが手前で折り返して、長いスレタイが 3 行にもなっていた) */}
-          <span className="inline-flex items-center gap-1.5 ml-1.5 align-[1px] whitespace-nowrap font-normal">
-            {archived && <span className="text-[10px] text-c-text-muted">dat落ち</span>}
+          <span className="inline-flex items-center gap-1.5 ml-1.5 align-[0.0625rem] whitespace-nowrap font-normal">
+            {archived && <span className="text-[0.625rem] text-c-text-muted">dat落ち</span>}
             {thread.authorId && !authorIcon && (
-              <span className="font-mono text-[10px] text-c-text-muted" title="立てた人の ID">
+              <span className="font-mono text-[0.625rem] text-c-text-muted" title="立てた人の ID">
                 {thread.authorId}
               </span>
             )}
-            <span className="thread-row-count text-[10px] text-c-text-muted tabular-nums" title="レス数">
+            <span className="thread-row-count text-[0.625rem] text-c-text-muted tabular-nums" title="レス数">
               {thread.postCount}
             </span>
-            {momentumEl('text-[10px] opacity-80')}
-            {unreadBadge('text-[10px] min-w-[1.5rem] px-1.5 py-px rounded text-center leading-tight')}
+            {momentumEl('text-[0.625rem] opacity-80')}
+            {unreadBadge('text-[0.625rem] min-w-[1.5rem] px-1.5 py-px rounded text-center leading-tight')}
           </span>
         </span>
       </div>
     ) : variant === 'classic' ? (
       // 専ブラ風: 印・スレタイ・レス数・新着・勢い・立った時間を 1 行の表に
-      <div className="grid items-center gap-x-2 text-[13px] leading-snug" style={{ gridTemplateColumns: `${onSelect ? 'auto ' : ''}1.5em minmax(0,1fr) 4ch 4ch 6ch 5.5em` }}>
+      <div className="grid items-center gap-x-2 text-[0.8125rem] leading-snug" style={{ gridTemplateColumns: `${onSelect ? 'auto ' : ''}1.5em minmax(0,1fr) 4ch 4ch 6ch 5.5em` }}>
         {checkbox}
-        <span className="text-center text-[11px] font-bold select-none" title={archived ? 'dat落ち' : isNew ? '新しいスレ' : unreadCount > 0 ? '新着あり' : visited ? '既読' : ''}>
+        <span className="text-center text-[0.6875rem] font-bold select-none" title={archived ? 'dat落ち' : isNew ? '新しいスレ' : unreadCount > 0 ? '新着あり' : visited ? '既読' : ''}>
           {archived ? <span className="text-c-text-muted">落</span> : isNew ? <span style={{ color: 'var(--c-new-badge-bg)' }}>新</span> : unreadCount > 0 ? <span style={{ color: 'var(--c-unread)' }}>●</span> : visited ? <span className="text-c-text-muted">○</span> : null}
         </span>
         <span className="thread-row-title min-w-0" style={{ color: titleColor }}>
@@ -348,7 +348,7 @@ function ThreadCard({
         <span className="font-mono tabular-nums text-right text-c-text-muted">{thread.postCount}</span>
         <span className="font-mono tabular-nums text-right font-bold" style={{ color: 'var(--c-unread)' }}>{unreadCount > 0 ? unreadCount : ''}</span>
         {momentumEl()}
-        <span className="text-right text-[11px] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
+        <span className="text-right text-[0.6875rem] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
       </div>
     ) : variant === 'line' ? (
       // LINE 風: トーク一覧のような行。スレタイと「レス数・勢い」、右に時間と新着の数。
@@ -374,7 +374,7 @@ function ThreadCard({
           {threadBadges}
             {thread.title}
           </div>
-          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-c-text-muted">
+          <div className="flex items-center gap-2 mt-0.5 text-[0.6875rem] text-c-text-muted">
             <span className="tabular-nums">{thread.postCount} レス</span>
             <span>·</span>
             {momentumEl()}
@@ -383,9 +383,9 @@ function ThreadCard({
           </div>
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          <span className="text-[10px] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
+          <span className="text-[0.625rem] text-c-text-muted whitespace-nowrap">{thread.createdAt ? relativeTime(thread.createdAt) : ''}</span>
           {unreadCount > 0 && (
-            <span className="min-w-[1.25rem] px-1.5 py-px rounded-full text-[10px] font-bold text-center text-white" style={{ background: 'var(--c-line-green)' }}>
+            <span className="min-w-[1.25rem] px-1.5 py-px rounded-full text-[0.625rem] font-bold text-center text-white" style={{ background: 'var(--c-line-green)' }}>
               {unreadCount}
             </span>
           )}
@@ -403,7 +403,7 @@ function ThreadCard({
           )}
           <div className="flex-1 min-w-0">
             {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
-            <div className="flex items-center gap-3 text-[10px] text-c-text-muted">
+            <div className="flex items-center gap-3 text-[0.625rem] text-c-text-muted">
               {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
               {/* 立てた人の ID(エッジ)。模様は設定でオンのときだけ */}
               {thread.authorId && (
@@ -443,7 +443,7 @@ function ThreadCard({
                 {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
                 {isNew && (
                   <span
-                    className="inline-block px-1 mr-1 rounded text-[10px] font-bold leading-[15px] align-[2px]"
+                    className="inline-block px-1 mr-1 rounded text-[0.625rem] font-bold leading-[0.9375rem] align-[0.125rem]"
                     style={{ background: 'var(--c-new-badge-bg)', color: 'var(--c-new-badge-text)' }}
                     title="前回この板を見たあとに立ったスレ"
                   >
@@ -459,7 +459,7 @@ function ThreadCard({
               </h3>
               {unreadCount > 0 && (
                 <span
-                  className="flex-shrink-0 font-bold text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap"
+                  className="flex-shrink-0 font-bold text-[0.5625rem] px-1.5 py-0.5 rounded whitespace-nowrap"
                   style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
                 >
                   {unreadCount > 999 ? '+999+' : `+${unreadCount}`}
@@ -511,14 +511,14 @@ function ThreadCard({
         <>
           <span className="absolute inset-0 pointer-events-none rounded-[inherit]" style={{ background: 'var(--c-cursor-tint)' }} />
           <span
-            className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none"
+            className="absolute bottom-0 h-[0.125rem] bg-c-accent pointer-events-none"
             style={{ left: 'var(--thread-card-radius, var(--card-radius))', right: 'var(--thread-card-radius, var(--card-radius))' }}
           />
         </>
       )}
       {visited && variant === 'card' && (
         <span
-          className="absolute left-0 top-0 bottom-0 w-[3px]"
+          className="absolute left-0 top-0 bottom-0 w-[0.1875rem]"
           style={{ background: unreadCount > 0 ? 'var(--c-unread)' : 'var(--c-thread-read-title, var(--c-accent))' }}
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
         />

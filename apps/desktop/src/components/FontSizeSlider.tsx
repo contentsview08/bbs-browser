@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
-import { FONT_PX_MAX, FONT_PX_MIN, ROOT_FONT_SIZE, applyCssVar, baseFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, ROOT_FONT_SIZE, applyCssVar, baseFontPx, contentFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
 import { broadcast, toolKindOfThisWindow } from '../host/crossWindow'
 
@@ -49,6 +49,8 @@ export default function FontSizeSlider(props: {
   /** 刻み(既定は 1px)と、値の見せ方(既定は「12px」) */
   step?: number
   format?: (v: number) => string
+  /** 基本の文字を変えても、この行の大きさを変えない(SliderDialog の外に置くとき) */
+  fixedSize?: boolean
 }) {
   const unset = props.unset ?? 0
   const isSet = props.value !== unset
@@ -124,7 +126,7 @@ export default function FontSizeSlider(props: {
       </div>
     )
   return (
-    <div ref={drag.rowRef} style={drag.rowStyle} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+    <div ref={drag.rowRef} style={props.fixedSize ? { ...drag.rowStyle, zoom: 'var(--dialog-zoom, 1)' } : drag.rowStyle} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-1 text-xs text-c-text-muted">
         <span className="flex-1">{props.label}</span>
         <span className="tabular-nums font-bold text-c-text-strong">{label}</span>
@@ -136,7 +138,7 @@ export default function FontSizeSlider(props: {
               props.onCommit(unset)
             }}
             className="px-1.5 py-0.5 rounded border border-c-border hover:border-c-border-strong"
-            title="画面全体の大きさに戻す"
+            title="標準の大きさに戻す"
           >
             元に戻す
           </button>
@@ -170,8 +172,10 @@ export default function FontSizeSlider(props: {
 
 /** 画面の変数(CSS)の、いまの値(px)。決めていない余白の既定を、スライダーの初めの位置にする */
 export function cssPx(name: string, fallback: number): number {
-  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name))
-  return Number.isFinite(v) ? Math.round(v) : fallback
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  const v = parseFloat(raw)
+  // rem で決めた余白もある(スレ一覧)。16px を 1rem として読む
+  return Number.isFinite(v) ? Math.round(raw.endsWith('rem') ? v * 16 : v) : fallback
 }
 
 export { ROOT_FONT_SIZE }
@@ -186,6 +190,31 @@ export const setCssVar = (name: string, value: string) => {
   else applyCssVar(name, value)
 }
 
+/**
+ * PC: 基本の文字(メニュー・ボタン・タブ・ポップアップなどの部品の字とアイコン)。レスの本文・頭、スレ一覧の字は動かない。
+ * 動かしている間は、切り離してある本文・頭・一覧がつられないよう、倍率も一緒に書き換える
+ */
+export function BaseFontSlider(props: { settings: AppSettings; update: UpdateSetting; fixedSize?: boolean }) {
+  const { settings: s, update } = props
+  const content = contentFontPx(s)
+  return (
+    <FontSizeSlider
+      label="基本の文字(メニュー・ボタン・ポップアップ)"
+      value={baseFontPx(s)}
+      base={baseFontPx(s)}
+      fixedSize={props.fixedSize}
+      preview={(px) => {
+        setCssVar(ROOT_FONT_SIZE, `${px}px`)
+        setCssVar('--list-zoom', String((s.listFontPx || content) / px))
+        setCssVar('--post-head-zoom', String((s.postHeadPx || content) / px))
+        setCssVar('--list-unzoom', String(px / 16))
+        setCssVar('--dialog-zoom', String(16 / px))
+      }}
+      onCommit={(px) => update(FONT_PX_KEY, px)}
+    />
+  )
+}
+
 /** スレ一覧の文字の大きさ・余白(スレ一覧の ︙ と、設定の「スレ一覧」の両方に出す) */
 export function ListFontSliders(props: { settings: AppSettings; update: UpdateSetting }) {
   const { settings: s, update } = props
@@ -194,7 +223,7 @@ export function ListFontSliders(props: { settings: AppSettings; update: UpdateSe
       <FontSizeSlider
         label="スレ一覧の文字"
         value={s.listFontPx}
-        base={baseFontPx(s)}
+        base={contentFontPx(s)}
         preview={(px) => setCssVar('--list-zoom', String(px / baseFontPx(s)))}
         onCommit={(px) => update('listFontPx', px)}
         resettable
@@ -208,7 +237,7 @@ export function ListFontSliders(props: { settings: AppSettings; update: UpdateSe
         max={24}
         icons={['density_small', 'density_large']}
         preview={(px) => {
-          setCssVar('--list-row-pad', `${px}px`)
+          setCssVar('--list-row-pad', `${px / 16}rem`)
           setCssVar('data-list-pad', '')
         }}
         onCommit={(px) => update('listPadPx', px)}
@@ -227,7 +256,7 @@ export function PostFontSliders(props: { settings: AppSettings; update: UpdateSe
       <FontSizeSlider
         label="レスの本文"
         value={s.postBodyPx}
-        base={baseFontPx(s)}
+        base={contentFontPx(s)}
         preview={(px) => setCssVar('--post-body-size', `${px}px`)}
         onCommit={(px) => update('postBodyPx', px)}
         resettable
@@ -235,7 +264,7 @@ export function PostFontSliders(props: { settings: AppSettings; update: UpdateSe
       <FontSizeSlider
         label="レスの頭(名前・日付・ID)"
         value={s.postHeadPx}
-        base={baseFontPx(s)}
+        base={contentFontPx(s)}
         preview={(px) => setCssVar('--post-head-zoom', String(px / baseFontPx(s)))}
         onCommit={(px) => update('postHeadPx', px)}
         resettable
@@ -299,7 +328,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
       <div
         ref={boxRef}
         // つかんでいる間は、入れ物ごと見えなくし、つかんでいる行だけを visibility: visible で残す
-        style={active ? { visibility: 'hidden', ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : {}) } : isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
+        style={!isMobile ? { zoom: 'var(--dialog-zoom, 1)', ...(active ? { visibility: 'hidden' as const } : {}) } : active ? { visibility: 'hidden', ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : {}) } : isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
         className={`w-full overflow-y-auto bg-c-surface shadow-xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
         onClick={(e) => e.stopPropagation()}
       >

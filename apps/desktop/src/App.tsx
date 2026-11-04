@@ -47,7 +47,7 @@ import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, type List
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
+import FontSizeSlider, { BaseFontSlider, ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
 /** Ctrl+ホイールを回し終えてから、文字の大きさを設定に書くまで待つ時間 */
 const WHEEL_ZOOM_COMMIT_MS = 300
 /** Ctrl+ホイールの大きさの表示を、回し終えてから消すまでの時間 */
@@ -2624,7 +2624,12 @@ export default function App() {
             button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,
             items: <StyleMenuItems settings={settings} update={updateSetting} />,
           }}
-          fontSize={<ListFontSliders settings={settings} update={updateSetting} />}
+          fontSize={
+            <>
+              {!isMobile && <BaseFontSlider settings={settings} update={updateSetting} />}
+              <ListFontSliders settings={settings} update={updateSetting} />
+            </>
+          }
           placements={listPlacements}
           barOrder={(isMobile ? settings.mobileBarOrder : settings.barOrder).list}
         />

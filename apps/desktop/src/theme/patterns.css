@@ -107,9 +107,9 @@
   --post-quote-padding-own: 13px;
 
   /* 元のTailwindクラス(pl-7/pr-3/py-2/mt-1.5)と同じ値 */
-  --thread-card-padding-left: 28px;
-  --thread-card-padding-right: 12px;
-  --thread-card-padding-y: 8px;
+  --thread-card-padding-left: 1.75rem;
+  --thread-card-padding-right: 0.75rem;
+  --thread-card-padding-y: 0.5rem;
   --thread-card-title-gap: 6px;
   /* ThreadCardは一覧表示/高密度でしか使わない(パネル表示はHomeThreadCardを使い、
      こちらは--card-radiusをそのまま参照するので影響しない)。枠線スタイル
@@ -137,7 +137,7 @@
   --post-quote-padding-own: 0px;
 
   /* 横方向(pl-7/pr-3相当)はデフォルトのまま据え置き、縦方向だけ半分にする */
-  --thread-card-padding-y: 4px;
+  --thread-card-padding-y: 0.25rem;
   --thread-card-title-gap: 3px;
 
   /* ヘッダー(板名/スレタイ/タブの帯)の余白もある程度狭くする */

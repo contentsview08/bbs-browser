@@ -182,6 +182,8 @@ export interface AppSettings {
   postStyle: PostStyle
   /** 文字の大きさ(px)。1px ずつ変えられる。スマホは mobileFontPx(画面が狭いので既定は小さい)。前の 5 段階(fontSize)は px に写した */
   fontPx: number
+  /** PC: レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字(fontPx)を変えても動かない */
+  contentBasePx: number
   mobileFontPx: number
   /** スレ一覧の文字の大きさ(px)。0 なら画面全体の大きさのまま */
   listFontPx: number
@@ -439,6 +441,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lightScheme: 'light-gray',
   postStyle: 'card',
   fontPx: 16,
+  contentBasePx: 16,
   mobileFontPx: 14,
   listFontPx: 0,
   postBodyPx: 0,
@@ -623,6 +626,13 @@ export const FONT_PX_KEY = isMobile ? 'mobileFontPx' : 'fontPx'
 /** 選べる文字の大きさ(px) */
 export const FONT_PX_MIN = 9
 export const FONT_PX_MAX = 26
+/**
+ * レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。PC は基本の文字から切り離す(基本の文字はメニュー・ボタン・ポップアップなどの部品だけ)。
+ * スマホは今までどおり基本の文字に合わせる
+ */
+export function contentFontPx(s: AppSettings): number {
+  return isMobile ? baseFontPx(s) : s.contentBasePx || DEFAULT_SETTINGS.contentBasePx
+}
 /** いまの画面全体の文字の大きさ(px) */
 export function baseFontPx(s: AppSettings): number {
   return s[FONT_PX_KEY] || DEFAULT_SETTINGS[FONT_PX_KEY]
@@ -795,10 +805,14 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   if (o.font !== false) root.style.fontSize = `${base}px`
   // スレ一覧・レスの本文・レスの頭の大きさ(px)。一覧と頭は中の字の大きさの比を保ったまま拡大・縮小する(zoom)。
   // 本文は字の大きさそのもの(サムネイルなどは大きさを変えない)
-  root.style.setProperty('--list-zoom', s.listFontPx ? String(s.listFontPx / base) : '1')
-  root.style.setProperty('--post-head-zoom', s.postHeadPx ? String(s.postHeadPx / base) : '1')
-  if (s.postBodyPx) root.style.setProperty('--post-body-size', `${s.postBodyPx}px`)
-  else root.style.removeProperty('--post-body-size')
+  const content = contentFontPx(s)
+  root.style.setProperty('--list-zoom', String((s.listFontPx || content) / base))
+  // スレ一覧の画像・アイコン(px で大きさを決めるもの)は、基本の文字の分を打ち消す
+  root.style.setProperty('--list-unzoom', isMobile ? '1' : String(base / 16))
+  root.style.setProperty('--post-head-zoom', String((s.postHeadPx || content) / base))
+  root.style.setProperty('--post-body-size', `${s.postBodyPx || content}px`)
+  // スライダーの窓は、基本の文字を変えても大きさを変えない(打ち消す)
+  root.style.setProperty('--dialog-zoom', isMobile ? '1' : String(16 / base))
   // ヘッダー・フッターの高さと文字(スマホ。文字は中身を比のまま拡大・縮小し、高さは拡大の分で割り戻して決めた高さに保つ)
   if (s.headerPx) root.style.setProperty('--header-height', `${s.headerPx}px`)
   else root.style.removeProperty('--header-height')
@@ -811,7 +825,7 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   if (s.postPadPx >= 0) root.style.setProperty('--post-padding-y', `${s.postPadPx}px`)
   else root.style.removeProperty('--post-padding-y')
   if (s.listPadPx >= 0) {
-    root.style.setProperty('--list-row-pad', `${s.listPadPx}px`)
+    root.style.setProperty('--list-row-pad', `${s.listPadPx / 16}rem`)
     root.setAttribute('data-list-pad', '')
   } else {
     root.style.removeProperty('--list-row-pad')
@@ -867,6 +881,11 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
       setSettings((s) => {
         // いまある項目だけを写し、消した項目は migrateOld で写す
         const known = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([k]) => k in DEFAULT_SETTINGS)) as Partial<AppSettings>
+        // 基本の文字を本文から切り離す前に大きさを変えていた人は、見えていた大きさを本文の既定として引き継ぐ(1 回だけ。保存する)
+        if (!('contentBasePx' in saved) && typeof known.fontPx === 'number' && known.fontPx !== DEFAULT_SETTINGS.fontPx) {
+          known.contentBasePx = known.fontPx
+          void store.setSetting('contentBasePx', known.fontPx)
+        }
         const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
         const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle

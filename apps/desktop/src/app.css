@@ -698,7 +698,7 @@ input[type='checkbox']:indeterminate {
    枠の外は切り取られるので、操作バーを上のレスとの線にまたがらせる分だけ、切り取りの範囲を広げる(囲いは変わらない) */
 .post-cv:has([data-post-toolbar]) {
   z-index: 5;
-  overflow-clip-margin: 48px;
+  overflow-clip-margin: 4rem;
 }
 
 /* 並びの続きがあることを示す、端のぼかしの色(サイドバー) */
@@ -1012,6 +1012,10 @@ html[data-platform='mobile'] .frosted-glass {
    スレ一覧と、レスの頭(名前・日付など)は、中の字の大きさの比を保ったまま拡大・縮小する */
 .list-zoom {
   zoom: var(--list-zoom, 1);
+}
+/* 一覧の中の字と余白は rem で書く(基本の文字を変えても --list-zoom で打ち消される)。px で大きさを決める画像・アイコンは別に打ち消す */
+.list-zoom :is(img, svg, canvas) {
+  zoom: var(--list-unzoom, 1);
 }
 [data-post-header] {
   zoom: var(--post-head-zoom, 1);

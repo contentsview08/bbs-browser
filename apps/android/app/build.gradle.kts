@@ -11,7 +11,8 @@ android {
     compileSdk = 37
     defaultConfig {
         // Tauri のスマホ版(io.github.yumekui8.bbs_browser)と別のアプリとして入れ、並べて比べられるようにする
-        applicationId = "io.github.yumekui8.bbsnative"
+        // 2026-11-05 に OBB へ(インストールの場所も変わる。前の bbs N とは別のアプリになるので、設定は入れ直し)
+        applicationId = "io.github.contentsview08.obb"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

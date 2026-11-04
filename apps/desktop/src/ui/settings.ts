@@ -318,6 +318,14 @@ export interface AppSettings {
   gestureSensitivity: number
   /** ID の位置(日時の後ろ・レスの右上・レスの右下) */
   idPosition: IdPosition
+  /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
+  watchoiShort: boolean
+  /** アイコン(Discord 風・LINE 風・ID の見せ方「模様」)の種を、ワッチョイがあればワッチョイから作る(ID は日ごとに変わるが、ワッチョイは週ごと) */
+  iconFromWatchoi: boolean
+  /** 知らせの種類ごとのオン・オフ(ないものはオン) */
+  notifyKinds: Partial<Record<NotifyKind, boolean>>
+  /** 閲覧履歴(既読のスレ)の新着を、この分ごとに確かめる(0 ならしない。5 分より短くはしない) */
+  historyCheckMin: number
   /** 更新(新しい版)を最後に確かめた時刻(ms)。1 日に 1 回だけ GitHub を見に行く */
   lastUpdateCheckAt: number
   /** PC: マウスジェスチャー(円盤)。8 方向(n・ne・e・se・s・sw・w・nw)→ 操作(キー操作と同じ名前か、マウスだけの操作 utils/gestures の MOUSE_ONLY_ACTIONS)。空なら何もしない */
@@ -390,6 +398,17 @@ export interface AppSettings {
   postName: string
   postMail: string
 }
+
+/** 知らせの種類(設定 → 通知 でオン・オフ。アイコンから決める) */
+export type NotifyKind = 'reply' | 'fav' | 'keyword' | 'update'
+export const NOTIFY_KINDS: { key: NotifyKind; name: string; note: string }[] = [
+  { key: 'reply', name: 'あなた宛てのレス', note: '開いているスレで、自分の書き込みにアンカーが付いたとき' },
+  { key: 'fav', name: 'お気に入りのスレの新着', note: 'お気に入りのスレに新しいレスが付いたとき(自動更新の間隔で確かめる)' },
+  { key: 'keyword', name: 'キーワードに合うスレ', note: 'お気に入り板に、キーワードに合うスレが立ったとき' },
+  { key: 'update', name: '新しい版', note: 'アプリの新しい版が出たとき(起動時に 1 日 1 回確かめる)' },
+]
+/** 知らせのアイコン → 種類(notify() が設定を見て止めるのに使う) */
+export const NOTIFY_KIND_BY_ICON: Record<string, NotifyKind> = { alternate_email: 'reply', bookmark: 'fav', sell: 'keyword', system_update: 'update' }
 
 /** ID の位置: 日時の後ろ(頭の中)/ レスの右上(頭の右端)/ レスの右下(本文の下の右端) */
 export type IdPosition = 'header' | 'topRight' | 'bottomRight'
@@ -492,6 +511,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gestureSensitivity: 3,
   // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空(本人の指示 2026-11-05)
   idPosition: 'header',
+  watchoiShort: false,
+  iconFromWatchoi: true,
+  notifyKinds: {},
+  historyCheckMin: 0,
   lastUpdateCheckAt: 0,
   mouseGestures: { n: 'top', s: 'bottom', ne: 'refresh', nw: 'closeAllTabs', sw: 'settings' },
   mouseGestureTrigger: 'ctrl',

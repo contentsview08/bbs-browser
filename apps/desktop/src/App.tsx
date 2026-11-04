@@ -43,7 +43,7 @@ import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postB
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
-import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, type ListFilter, type ListTabKey, type StoredNotification } from './ui/settings'
+import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, type ListFilter, type ListTabKey, type StoredNotification } from './ui/settings'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
@@ -285,9 +285,12 @@ export default function App() {
   const notify = useCallback(
     (n: Parameters<typeof notifyInApp>[0] & { keep?: StoredNotification['link'] | true }) => {
       const { keep, ...rest } = n
+      // 設定 → 通知 でオフにした種類は出さない(種類はアイコンから)
+      const kind = NOTIFY_KIND_BY_ICON[n.icon]
+      if (kind && settingsRef.current.notifyKinds[kind] === false) return
       notifyInApp(rest)
-      if (isMobile && settingsRef.current.osNotify && n.icon !== 'error' && document.visibilityState === 'hidden')
-        void sendOsNotification(n.title, n.body).catch(() => undefined)
+      // OS の通知にも出す(設定。PC でもスマホでも。エラーは出さない)
+      if (settingsRef.current.osNotify && n.icon !== 'error') void sendOsNotification(n.title, n.body).catch(() => undefined)
       // あとで見たい知らせ(あなた宛てのレス・お気に入りの新着)は通知センターにも残す
       if (keep) {
         const log = settingsRef.current.notificationLog
@@ -1044,6 +1047,23 @@ export default function App() {
     }
   }, [store, settings.favCheckMin, hasFavThreads])
 
+  // 閲覧履歴(既読のスレ)の新着を、設定の分ごとに板のスレ一覧で確かめる(本人の要望 2026-11-05。掲示板に負担をかけないよう 5 分より短くしない)
+  const refreshHistoryRef = useRef(refreshHistory)
+  refreshHistoryRef.current = refreshHistory
+  useEffect(() => {
+    if (!store || settings.historyCheckMin <= 0) return
+    const minutes = Math.max(5, settings.historyCheckMin)
+    const check = () => {
+      if (isAppVisible()) void refreshHistoryRef.current()
+    }
+    const first = setTimeout(check, 30_000)
+    const timer = setInterval(check, minutes * 60_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    }
+  }, [store, settings.historyCheckMin])
+
   // ── タブ ──
 
   const patchTab = (id: string, patch: Partial<Tab>) =>
@@ -1776,7 +1796,15 @@ export default function App() {
 
   const openUrlInApp = (url: string) =>
     run(null, async () => {
-      const r = await resolve(url)
+      let r: Awaited<ReturnType<typeof resolve>>
+      try {
+        r = await resolve(url)
+      } catch (e) {
+        // 板やスレとして開けなかった(ない板・404 など)ときは、ブラウザで開く(本人の要望 2026-11-05)
+        notify({ icon: 'open_in_browser', title: 'アプリでは開けないので、ブラウザで開きます', body: e instanceof Error ? e.message : String(e) })
+        await openUrl(url)
+        return
+      }
       await openBoard(r.board)
       if (r.thread) await openThread(r.thread)
     })

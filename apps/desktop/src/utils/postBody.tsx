@@ -2,6 +2,7 @@
 // ここではアンカー(>>1)と URL だけを見つけて部品に分ける(HTML としては扱わない)。
 
 import type { ReactNode } from 'react'
+import { shortWatchoi } from './watchoi'
 import { allConnectors, type Post } from '@bbs-browser/connectors'
 
 /**
@@ -247,6 +248,8 @@ export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[]
 
 /** レスの見せ方の設定(スレ表示のオン・オフ) */
 export interface DisplayOptions {
+  /** ワッチョイを短く出す(utils/watchoi の shortWatchoi) */
+  watchoiShort?: boolean
   /** 板の既定の名前(SETTING.TXT の BBS_NONAME_NAME) */
   nonameName?: string
   /** 板の既定の名前のほかに、名無しとみなす名前(板ごとの設定) */
@@ -295,11 +298,12 @@ export function mostCommonName(posts: { name: string }[]): string | undefined {
 }
 
 export function displayName(name: string, o: DisplayOptions): string {
-  if (!o.omitNoname) return name
+  if (!o.omitNoname) return o.watchoiShort ? shortWatchoi(name) : name
   // 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)
   const nonames = [o.nonameName, ...(o.extraNonames ?? [])].filter((n): n is string => !!n).sort((a, b) => b.length - a.length)
   const hit = nonames.find((n) => name.startsWith(n))
-  return hit ? name.slice(hit.length).trim() : name
+  const shown = hit ? name.slice(hit.length).trim() : name
+  return o.watchoiShort ? shortWatchoi(shown) : shown
 }
 
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i

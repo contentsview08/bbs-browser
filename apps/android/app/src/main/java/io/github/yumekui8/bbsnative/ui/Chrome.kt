@@ -289,7 +289,8 @@ fun Hint(text: String) {
  * (ただの文字だと、引っぱっても指の動きが届かず、取り直せなかった)
  */
 @Composable
-fun LoadError(message: String?, loading: Boolean, topPadding: androidx.compose.ui.unit.Dp, onBack: (() -> Unit)? = null, onRetry: () -> Unit) {
+fun LoadError(message: String?, loading: Boolean, topPadding: androidx.compose.ui.unit.Dp, onBack: (() -> Unit)? = null, externalUrl: String? = null, onRetry: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = topPadding)) {
         item {
             Column(Modifier.fillParentMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -305,9 +306,14 @@ fun LoadError(message: String?, loading: Boolean, topPadding: androidx.compose.u
                     Text(if (loading) "読み込んでいます…" else "もう一度読み込む", color = Palette.accentText, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 }
                 Text("下へ引っぱっても読み込み直せます", Modifier.padding(top = 10.dp), color = Palette.textMuted, fontSize = 12.sp)
+                // 板・スレとして読めなかったときは、ブラウザで開ける(本人の要望 2026-11-05)
+                if (externalUrl != null) Text(
+                    "ブラウザで開く", Modifier.padding(top = 14.dp).clip(RoundedCornerShape(8.dp)).clickable { openExternal(context, externalUrl, false) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                    color = Palette.accent, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
                 // 前の画面へ戻る道(読めないままでも帰れるように。なぞる操作でも戻れる)
                 if (onBack != null) Text(
-                    "前の画面に戻る", Modifier.padding(top = 18.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack).padding(horizontal = 14.dp, vertical = 8.dp),
+                    "前の画面に戻る", Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack).padding(horizontal = 14.dp, vertical = 8.dp),
                     color = Palette.accent, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 )
             }

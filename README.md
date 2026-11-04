@@ -1,6 +1,6 @@
-# BBSN(bbs-browser)
+# OBB(Open BBS Browser)
 
-掲示板を読み書きする専用ブラウザ。PC 版(Tauri v2)とスマホ版(Android。`apps/android`)。
+掲示板を読み書きする、開かれた専用ブラウザ。PC 版(Tauri v2)とスマホ版(Android。`apps/android`)。
 
 - 公式サイト: https://contentsview08.github.io/bbs-browser/
 - 要望・不具合は GitHub の Issues か、掲示板(red-edge.net の運営板): https://red-edge.net/boards/operation01/
@@ -48,7 +48,7 @@ apps/desktop/          Tauri アプリ(React + Vite + Tailwind。見た目は ho
 ```
 
 コネクタは `fetch` を直接呼ばず、ホストから渡される `ctx.http` / `ctx.decode` だけを使う。
-ログの DB は `%APPDATA%\io.github.yumekui8.bbs-browser\bbs-browser.db`。
+ログの DB は `%APPDATA%\io.github.contentsview08.obb\bbs-browser.db`。
 
 ## 開発環境(Windows)
 
@@ -100,7 +100,7 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 ```
 
 - インストーラーは、管理者の権限なしで、使う人のフォルダに入れる(NSIS の currentUser)。WebView2 がなければ入れる
-- データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.yumekui8.bbs-browser\` にあり、アンインストールしても残る
+- データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.contentsview08.obb\` にあり、アンインストールしても残る(2026-11-05 より前の `io.github.yumekui8.bbs-browser\` にあるものは、起動したときに移す)
 - 自動アップデートはまだない(更新ファイルの置き場と、署名の鍵を決めてから足す)
 - ZIP 版(インストールしない版)は、`npm run build` のあとに `npm run package:zip` で `bundle/zip/` に作る
 

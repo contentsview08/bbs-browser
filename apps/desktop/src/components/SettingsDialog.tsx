@@ -28,6 +28,7 @@ import { POST_STYLES,
   LIST_TABS,
   ID_STYLES,
   ID_POSITIONS,
+  NOTIFY_KINDS,
   type ListTabKey,
   type AppSettings,
   type UpdateSetting,
@@ -104,6 +105,7 @@ export type SettingsTab =
   | 'write'
   | 'upload'
   | 'refresh'
+  | 'notify'
   | 'keys'
   | 'toolbars'
   | 'ng'
@@ -122,6 +124,7 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
   { key: 'write', name: '書き込み', icon: 'edit' },
   { key: 'upload', name: '画像のアップロード', icon: 'cloud_upload' },
   { key: 'refresh', name: '自動更新', icon: 'autorenew' },
+  { key: 'notify', name: '通知', icon: 'notifications' },
   // スマホにはキーがないので、ここはジェスチャー(なぞる操作)の設定になる
   isMobile ? { key: 'keys', name: 'ジェスチャー', icon: 'swipe' } : { key: 'keys', name: 'キー操作', icon: 'keyboard' },
   { key: 'toolbars', name: 'ボタンの配置', icon: 'toolbar' },
@@ -137,7 +140,7 @@ const TABS: { key: Tab; name: string; icon: string; advanced?: boolean; desktopO
 /** スマホ: 設定の一覧のまとまり(上から)。分類の並びは TABS と別に、使う場面で分ける */
 const MOBILE_GROUPS: { title: string; items: Tab[] }[] = [
   { title: '見た目', items: ['display', 'posts'] },
-  { title: '読む', items: ['threads', 'refresh'] },
+  { title: '読む', items: ['threads', 'refresh', 'notify'] },
   { title: '書く', items: ['write', 'upload', 'accounts'] },
   { title: '操作', items: ['keys', 'toolbars'] },
   { title: 'NG', items: ['ng'] },
@@ -151,7 +154,8 @@ const TAB_DESC: Record<Tab, string> = {
   posts: 'レスの見た目・本文・画像とサムネイル',
   write: '名前・定型文・書き込んだあとに待つ時間',
   upload: '上げ先(サイトの画面か API)・キーの登録・上げる前の縮小',
-  refresh: '自動更新・通知・新着',
+  refresh: '自動更新・お気に入りと閲覧履歴の新着の確認',
+  notify: 'OS の通知・知らせる種類・キーワード',
   keys: 'なぞる向きと操作・感度',
   toolbars: 'ヘッダー・フッター・︙ に置くボタン',
   ng: 'NG ワード・名前・ID・スレタイ・自動 NG',
@@ -168,6 +172,7 @@ const TAB_COLORS: Record<Tab, string> = {
   posts: '#6366f1',
   threads: '#0ea5e9',
   refresh: '#10b981',
+  notify: '#f43f5e',
   write: '#f59e0b',
   accounts: '#d97706',
   keys: '#ec4899',
@@ -819,6 +824,15 @@ function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'upd
         <p className="text-[10px] text-c-text-muted mt-1">{ID_STYLES.find((x) => x.key === s.idStyle)?.note}</p>
         <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の位置</p>
         <Choice value={s.idPosition} options={ID_POSITIONS} onChange={(v) => update('idPosition', v)} />
+        <div className="mt-3">
+          <Toggle checked={s.watchoiShort} onChange={(v) => update('watchoiShort', v)} label="ワッチョイを短く出す" note="「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)" />
+          <Toggle
+            checked={s.iconFromWatchoi}
+            onChange={(v) => update('iconFromWatchoi', v)}
+            label="ワッチョイがあるときは、アイコンをワッチョイから作る"
+            note="Discord 風・LINE 風・ID の見せ方「模様」のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます"
+          />
+        </div>
       </Section>
       <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。画面全体の文字の大きさは「表示」にあります">
         <PostFontSliders settings={s} update={update} />
@@ -1163,26 +1177,19 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
       >
         <NumberField value={s.favCheckMin} min={0} max={1440} unit="分ごと" zeroLabel="しない" presets={[0, 3, 5, 10, 30]} onChange={(v) => update('favCheckMin', v)} />
       </Section>
-      <Section title="通知">
-        {isMobile && (
-          <Toggle
-            checked={s.osNotify}
-            onChange={(v) => {
-              update('osNotify', v)
-              // オンにしたら、Android に通知の許可を求める(断られたら、Android の設定から許可してもらう)
-              if (v) void ensureNotifyPermission().then((ok) => !ok && alert('通知が許可されていません。Android の設定 → アプリ → BBSN → 通知 から許可してください'))
-            }}
-            label="スマホの通知の欄にも出す"
-            note="アプリを裏に回しているときは、下の知らせを Android の通知でも出します。アプリを完全に閉じている間は、新着を確かめられないので知らせません"
-          />
-        )}
-        <div className="mt-3">
-          <p className="text-sm text-c-text-body mb-1.5">キーワードに合うスレが立ったら知らせる</p>
-          <p className="text-xs text-c-text-muted mb-2">
-            お気に入り板のスレ一覧をこの間隔で見に行き、「スレ一覧 → キーワード」に合うスレが立っていたら知らせます
-          </p>
-          <NumberField value={s.keywordWatchMin} min={0} max={1440} unit="分ごと" zeroLabel="知らせない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('keywordWatchMin', v)} />
-        </div>
+      <Section
+        title="閲覧履歴(既読のスレ)の新着"
+        note="閲覧履歴にあるスレの板のスレ一覧を取り、新着の数と dat 落ちを確かめます(本文は開いたときに取ります)。掲示板に負担をかけないよう、5 分より短くはできません"
+      >
+        <NumberField
+          value={s.historyCheckMin}
+          min={0}
+          max={1440}
+          unit="分ごと"
+          zeroLabel="しない"
+          presets={[0, 5, 10, 30, 60]}
+          onChange={(v) => update('historyCheckMin', v > 0 ? Math.max(5, v) : 0)}
+        />
       </Section>
       <Section title="新着">
         <Toggle
@@ -1190,6 +1197,36 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
           onChange={(v) => update('autoScrollOnNew', v)}
           label="いちばん下を見ているときは、新着まで自動でスクロールする"
         />
+      </Section>
+    </>
+  )
+}
+
+/** 通知: OS の通知に出すか、知らせる種類、キーワードの見張り */
+function NotifyTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  return (
+    <>
+      <Section
+        title="OS の通知"
+        note="オンにすると、知らせをアプリの中だけでなく OS の通知(Windows の通知・Android の通知の欄)にも出します。エラーは出しません。アプリを完全に閉じている間は、新着を確かめられないので知らせません"
+      >
+        <Toggle
+          checked={s.osNotify}
+          onChange={(v) => {
+            update('osNotify', v)
+            // オンにしたら OS に通知の許可を求める(断られたら、OS の設定から許可してもらう)
+            if (v) void ensureNotifyPermission().then((ok) => !ok && alert('通知が許可されていません。OS の設定(Windows: 設定 → システム → 通知、Android: アプリ → OBB → 通知)から許可してください'))
+          }}
+          label="OS の通知にも出す"
+        />
+      </Section>
+      <Section title="知らせる種類" note="オフにした種類は、アプリの中にも OS にも出しません">
+        {NOTIFY_KINDS.map((k) => (
+          <Toggle key={k.key} checked={s.notifyKinds[k.key] !== false} onChange={(v) => update('notifyKinds', { ...s.notifyKinds, [k.key]: v })} label={k.name} note={k.note} />
+        ))}
+      </Section>
+      <Section title="キーワードに合うスレが立ったら知らせる" note="お気に入り板のスレ一覧をこの間隔で見に行き、「スレ一覧 → キーワード」に合うスレが立っていたら知らせます">
+        <NumberField value={s.keywordWatchMin} min={0} max={1440} unit="分ごと" zeroLabel="知らせない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('keywordWatchMin', v)} />
       </Section>
     </>
   )
@@ -2442,7 +2479,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
   }, [])
   return (
     <>
-      <Section title={`BBSN ${version ?? ''}`}>
+      <Section title={`OBB ${version ?? ''}`}>
         <p className="text-sm text-c-text-body leading-relaxed">
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・まちBBS・ふたば・hono-bbs を読めます。
         </p>
@@ -2452,9 +2489,9 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         <OpenRow label="運営要望板を開く" value="red-edge.net" onOpen={() => void broadcast('open-in-app', OPERATION_BOARD_URL)} />
       </Section>
       <Section desktopOnly title="データの保存場所" note={paths?.portable ? 'ZIP 版: 展開したフォルダの data に置きます。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります' : undefined}>
-        <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.yumekui8.bbs-browser\\bbs-browser.db'}</p>
+        <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.contentsview08.obb\\bbs-browser.db'}</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>
-        <p className="text-sm font-mono text-c-text-body break-all mt-3">{paths?.backups ?? '%APPDATA%\\io.github.yumekui8.bbs-browser\\backups\\'}</p>
+        <p className="text-sm font-mono text-c-text-body break-all mt-3">{paths?.backups ?? '%APPDATA%\\io.github.contentsview08.obb\\backups\\'}</p>
         <p className="text-xs text-c-text-muted mt-1">
           DB の形が変わる版に上げたとき、上げる前の DB の写しを自動で置きます(新しいものから 3 つ)。困ったときは、設定 → バックアップ の「バックアップから戻す」で、ここのファイルを選んで戻せます
         </p>
@@ -2638,6 +2675,8 @@ export default function SettingsDialog(props: SettingsProps) {
         return <UploadTab {...props} />
       case 'refresh':
         return <RefreshTab {...props} />
+      case 'notify':
+        return <NotifyTab {...props} />
       case 'keys':
         return <KeysTab {...props} />
       case 'toolbars':

@@ -99,6 +99,8 @@ fun PostItem(
     val avatarMod = if (onAvatar != null) Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onAvatar) else Modifier
     val chips = chipInlineContent()
     val prefs = LocalPrefs.current
+    // アイコンの種: 設定でワッチョイから作ることにしていて、名前にワッチョイがあればそれ。なければ ID
+    val seed = if (prefs.iconFromWatchoi) r.watchoi ?: id else id
     val showThumbs = prefs.thumbMode != io.github.yumekui8.bbsnative.data.ThumbMode.NEVER
     val images = if (showThumbs) info?.images ?: emptyList() else emptyList()
     val youtube = if (showThumbs) info?.youtube ?: emptyList() else emptyList()
@@ -162,7 +164,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
                 if (reply != null) ReplyLine(reply, indent = AVATAR + 10.dp) { onReply(reply.no) }
                 Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.width(AVATAR)) { if (!continued) Avatar(id, r.beIcon, AVATAR, avatarMod) }
+                    Box(Modifier.width(AVATAR)) { if (!continued) Avatar(seed, r.beIcon, AVATAR, avatarMod) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         if (!continued) header()
@@ -180,7 +182,7 @@ fun PostItem(
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
-                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Avatar(id, r.beIcon, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
+                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Avatar(seed, r.beIcon, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
                 Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                     if (!continued || own) Box(Modifier.padding(bottom = 2.dp)) { header() }
                     Column(

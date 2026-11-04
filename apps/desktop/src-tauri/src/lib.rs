@@ -31,6 +31,45 @@ fn portable_dir() -> Option<PathBuf> {
     }
 }
 
+/// 2026-11-05 に identifier を io.github.yumekui8.bbs-browser から io.github.contentsview08.obb に変えた(名前を OBB に)。
+/// 前の置き場に DB があり、新しい置き場にまだなければ、フォルダごと移す(DB・設定・Cookie・背景画像・バックアップ)。ポータブルは関係ない。
+/// 名前の付け替えで済めばそれで、だめなら(別のドライブなど)写す
+fn migrate_old_data_dir(app: &tauri::AppHandle) {
+    if portable_dir().is_some() {
+        return;
+    }
+    let Ok(new_dir) = app.path().app_config_dir() else { return };
+    if new_dir.join(DB_FILE).exists() {
+        return;
+    }
+    let Some(parent) = new_dir.parent() else { return };
+    let old_dir = parent.join("io.github.yumekui8.bbs-browser");
+    if !old_dir.join(DB_FILE).exists() {
+        return;
+    }
+    // 新しい置き場は空(か、ない)はず。空なら消してから付け替える
+    let _ = std::fs::remove_dir(&new_dir);
+    if std::fs::rename(&old_dir, &new_dir).is_ok() {
+        return;
+    }
+    let _ = copy_dir_all(&old_dir, &new_dir);
+}
+
+fn copy_dir_all(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let src = entry.path();
+        let dst = to.join(entry.file_name());
+        if src.is_dir() {
+            copy_dir_all(&src, &dst)?;
+        } else {
+            std::fs::copy(&src, &dst)?;
+        }
+    }
+    Ok(())
+}
+
 /// DB・バックアップの置き場(tauri-plugin-sql の既定は app_config_dir)
 fn db_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     match portable_dir() {
@@ -506,6 +545,7 @@ pub fn run() {
         )
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
         .setup(|app| {
+            migrate_old_data_dir(app.handle());
             apply_pending_restore(app.handle());
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));

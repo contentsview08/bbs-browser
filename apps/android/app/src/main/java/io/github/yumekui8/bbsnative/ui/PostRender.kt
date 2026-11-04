@@ -22,7 +22,15 @@ import io.github.yumekui8.bbsnative.bbs.Span
 class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null, val beIcon: String? = null) {
     /** ID の位置が「日時の後ろ」でないとき、頭から外した ID(押せる)。PostItem が右上か右下に置く */
     var idText: AnnotatedString? = null
+    /** 名前のワッチョイ(1a2b-3c4d)。設定でアイコンの種にする */
+    var watchoi: String? = null
 }
+
+/** ワッチョイ(名前の後ろの「(ワッチョイ 1a2b-3c4d)」。種類の言葉 + 4 桁-4 桁。後ろに [IP] が付くことも。PC 版の utils/watchoi.ts と同じ) */
+private val WATCHOI = Regex("[(（]([^\\s()（）]{1,12})\\s+([0-9A-Za-z]{4})-([0-9A-Za-z]{4})(?:\\s+\\[[^\\]]*\\])?[)）]")
+fun watchoiOf(name: String): String? = WATCHOI.find(name)?.let { "${it.groupValues[2]}-${it.groupValues[3]}" }
+/** ワッチョイを短く「(1a2b-3c4d)」に(種類の言葉と IP を省く) */
+fun shortWatchoi(name: String): String = WATCHOI.replace(name) { "(${it.groupValues[2]}-${it.groupValues[3]})" }
 
 /** 本文の頭の 1 つだけのアンカー(PC 版の dropLeadingAnchor と同じ形)。範囲や並び(>>1-3、>>1,2)は対象にしない */
 private val LEADING_ANCHOR = Regex("^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)([0-9０-９]+)(?![0-9０-９,，\\-－ー〜~、])[ \t　]*")
@@ -121,6 +129,8 @@ data class RenderOptions(
     val idShort: Boolean = true,
     /** ID の位置(header / topRight / bottomRight)。header 以外は頭に入れず、RenderedPost.idText に別に作る */
     val idPosition: String = "header",
+    /** ワッチョイを短く出す */
+    val watchoiShort: Boolean = false,
 )
 
 /**
@@ -139,7 +149,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         val replies = index.replyCount[p.no] ?: 0
         val idCount = p.id?.let { index.idCount[it] } ?: 0
         val replyHeat = Palette.heat(replies)
-        val name = displayName(p.name, noname, o.extraNonames)
+        val name = displayName(p.name, noname, o.extraNonames).let { if (o.watchoiShort) shortWatchoi(it) else it }
         val isOp = o.highlightOp && opId != null && p.id == opId
         val header = if (isChatStyle(o.style)) compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
@@ -149,7 +159,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             else withStyle(noStyle) { append(noText) }
             append("  ")
             // 名前: 板の既定の名前(名無し)は省く(後ろのワッチョイなどは残す)。押すと同じ名前のレスを出す
-            if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = nameC(o), fontWeight = FontWeight.Bold)) { append(name) } }
+            if (name.isNotEmpty()) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) { withStyle(SpanStyle(color = mutedC(o), fontWeight = FontWeight.Bold)) { append(name) } }
             if (p.mail.isNotEmpty()) withStyle(SpanStyle(color = mutedC(o))) { append("  [${p.mail}]") }
             if (isOp) {
                 append("  ")
@@ -223,6 +233,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         }
         // 空白が続く本文は AA とみなす(AA 用の字で出す)
         val rp = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
+        rp.watchoi = watchoiOf(p.name)
         // ID を頭の外(右上・右下)に出すとき: 頭と同じ色・押せる形で別に作る
         if (p.id != null && o.idPosition != "header") rp.idText = buildAnnotatedString {
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
@@ -252,8 +263,10 @@ fun shortUrl(url: String, max: Int = 36): String {
 private fun compactHeader(p: io.github.yumekui8.bbsnative.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks): AnnotatedString =
     buildAnnotatedString {
         val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
+        // Discord 風は Discord らしく名前を濃く大きく。LINE 風は日付と同じ薄さ・大きさ(本人 2026-11-05)
+        val discord = o.style == "discord"
         withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
-            withStyle(SpanStyle(color = nameC(o), fontWeight = FontWeight.Bold, fontSize = 13.sp)) { append(name.ifEmpty { "名無し" }) }
+            withStyle(SpanStyle(color = if (discord) nameC(o) else mutedC(o), fontWeight = FontWeight.Bold, fontSize = if (discord) 13.sp else 11.sp)) { append(name.ifEmpty { "名無し" }) }
         }
         if (isOp) {
             append(" ")

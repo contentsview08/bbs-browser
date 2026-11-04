@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BBSN",
+  "productName": "OBB",
   "version": "../package.json",
-  "identifier": "io.github.yumekui8.bbs-browser",
+  "identifier": "io.github.contentsview08.obb",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "BBSN",
+        "title": "OBB",
         "width": 1280,
         "height": 800,
         "decorations": false,
@@ -63,7 +63,7 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "publisher": "yumekui8",
+    "publisher": "contentsview08",
     "shortDescription": "コネクタで掲示板を読む専用ブラウザ",
     "longDescription": "5ch・したらば・ふたばなどを、掲示板ごとのコネクタで読む PC 向けの専用ブラウザ。外付けのコネクタで自作の掲示板も読める",
     "category": "Utility",

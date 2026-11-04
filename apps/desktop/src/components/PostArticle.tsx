@@ -27,6 +27,7 @@ import LocalAddressMark from './LocalAddressMark'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { newRule, todayDateString, type NgRule } from '../utils/ng'
 import type { HeatStyle, IdPosition, NgMode, PostDoubleClick } from '../ui/settings'
+import { watchoiOf } from '../utils/watchoi'
 import { idColorOf } from '../utils/idColor'
 import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
@@ -49,6 +50,8 @@ export interface PostHandlers extends BodyHandlers {
   idShort?: boolean
   /** ID の位置(設定): 日時の後ろ(既定)・レスの右上・レスの右下 */
   idPosition?: IdPosition
+  /** アイコンの種を、ワッチョイがあればワッチョイから作る */
+  iconFromWatchoi?: boolean
   /** レス番号を押した(このレスへの返信を出す) */
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
@@ -532,11 +535,12 @@ function PostArticle(props: Props) {
       )}
     </button>
   )
-  const nameBtn = (cls: string) =>
+  // 名前(ワッチョイ込み)は、日付・ID と同じ薄い色・同じ大きさに(本人 2026-11-05)。Discord 風だけは Discord らしく名前を濃く
+  const nameBtn = (cls: string, strong = false) =>
     name && (
       <button
         type="button"
-        className={`font-bold text-c-poster-name min-w-0 truncate hover:opacity-80 ${cls}`}
+        className={`font-bold ${strong ? 'text-c-poster-name' : 'text-c-text-muted'} min-w-0 truncate hover:opacity-80 ${cls}`}
         onClick={(e) => handlers.onName(post.name, e.currentTarget)}
         title="同じ名前の書き込みを表示"
       >
@@ -668,16 +672,18 @@ function PostArticle(props: Props) {
     </span>
   )
   /** ID のアイコン。round なら丸く大きく(Discord 風)。書き込み数を右下に重ねる */
+  // アイコンの種: 設定でワッチョイから作ることにしていて、名前にワッチョイがあればそれ(週ごとに変わる)。なければ ID(日ごと)
+  const iconSeed = (handlers.iconFromWatchoi ? watchoiOf(post.name) : undefined) ?? post.id
   const identiconBtn = (size: number, round = false) =>
-    post.id && (
+    iconSeed && (
       <button
         type="button"
         className={`relative flex-shrink-0 hover:opacity-80 ${round ? '' : 'mr-1'}`}
-        onClick={(e) => handlers.onId(post.id!, e.currentTarget)}
-        title={`ID:${post.id} (${idCount})`}
+        onClick={(e) => post.id && handlers.onId(post.id, e.currentTarget)}
+        title={post.id ? `ID:${post.id} (${idCount})` : `ワッチョイ ${iconSeed}`}
       >
         <span className={`block overflow-hidden ${round ? 'rounded-full' : ''}`}>
-          <Identicon seed={post.id} size={size} />
+          <Identicon seed={iconSeed} size={size} />
         </span>
         {idCount >= 2 && (
           <span
@@ -709,7 +715,7 @@ function PostArticle(props: Props) {
       <div data-post-header className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 mb-1 text-sm">
         {numBtn()}
         <span className="text-c-text-muted">：</span>
-        {nameBtn('text-sm')}
+        {nameBtn('text-xs')}
         {post.mail && <span className="text-c-text-muted text-xs">[{post.mail}]</span>}
         <span className="text-c-text-muted">：</span>
         <span className="text-c-text-muted text-xs whitespace-nowrap" title={post.date}>{shownDate}</span>
@@ -726,7 +732,7 @@ function PostArticle(props: Props) {
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
-          {nameBtn(isMobile ? 'text-[13px]' : 'text-sm') || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
+          {nameBtn(isMobile ? 'text-[13px]' : 'text-sm', true) || <span className="font-bold text-sm text-c-poster-name">名無し</span>}
           {opChip}
           {ownChip}
             {badgeChips}

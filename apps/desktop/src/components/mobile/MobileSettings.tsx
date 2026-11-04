@@ -444,7 +444,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
                 update('osNotify', v)
                 if (v)
                   void ensureNotifyPermission().then(
-                    (ok) => !ok && alert('通知が許可されていません。Android の設定 → アプリ → BBSN → 通知 から許可してください'),
+                    (ok) => !ok && alert('通知が許可されていません。Android の設定 → アプリ → OBB → 通知 から許可してください'),
                   )
               }}
             />
@@ -556,7 +556,7 @@ function About() {
         <span className="w-16 h-16 rounded-2xl bg-c-accent flex items-center justify-center text-[var(--c-accent-text)]">
           <span className="material-symbols-outlined text-4xl">forum</span>
         </span>
-        <p className="text-lg font-bold text-c-text-strong">BBSN</p>
+        <p className="text-lg font-bold text-c-text-strong">OBB</p>
         {version && <p className="text-sm text-c-text-muted">版 {version}</p>}
       </div>
       <Group>

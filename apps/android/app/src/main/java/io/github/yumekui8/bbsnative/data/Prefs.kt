@@ -208,6 +208,10 @@ class Prefs(context: Context) {
     var idShort by pref("idShort", true)
     /** ID の位置: header(日時の後ろ)/ topRight(レスの右上)/ bottomRight(レスの右下)。PC 版の idPosition と同じ */
     var idPosition by pref("idPosition", "header")
+    /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
+    var watchoiShort by pref("watchoiShort", false)
+    /** アイコン(Discord 風・LINE 風)の種を、ワッチョイがあればワッチョイから(ID は日ごと、ワッチョイは週ごとに変わる) */
+    var iconFromWatchoi by pref("iconFromWatchoi", true)
     /** 動きを減らす(画面の移り方・新着の光り方・数字の繰り上がりを省く)。端末の「アニメーションを削除」でも同じになる */
     var reduceMotion by pref("reduceMotion", false)
     /** 字(Fonts.CHOICES のキー)。空なら端末の標準 */

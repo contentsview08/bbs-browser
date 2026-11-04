@@ -544,7 +544,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Box(Modifier.fillMaxSize()) {
                 when {
                     !page.loaded -> Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
-                    page.error != null && index.posts.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }, onBack = { if (!localBack()) vm.back() }) { refresh() }
+                    page.error != null && index.posts.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }, onBack = { if (!localBack()) vm.back() }, externalUrl = TwoCh.webUrl(page.summary)) { refresh() }
                     else -> LazyColumn(
                         Modifier.fillMaxSize(), state = listState,
                         // ミニマップの幅だけ右を空けて、レスが下に潜らないようにする

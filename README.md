@@ -100,7 +100,7 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 ```
 
 - インストーラーは、管理者の権限なしで、使う人のフォルダに入れる(NSIS の currentUser)。WebView2 がなければ入れる
-- データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.contentsview08.obb\` にあり、アンインストールしても残る(2026-11-05 より前の `io.github.yumekui8.bbs-browser\` にあるものは、起動したときに移す)
+- データ(DB・設定・外付けのコネクタ)は `%APPDATA%\io.github.contentsview08.obb\` にあり、アンインストールしても残る(前の版の置き場にあるものは、起動したときに写す)
 - 自動アップデートはまだない(更新ファイルの置き場と、署名の鍵を決めてから足す)
 - ZIP 版(インストールしない版)は、`npm run build` のあとに `npm run package:zip` で `bundle/zip/` に作る
 

@@ -7,10 +7,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github.yumekui8.bbsnative"
+    namespace = "io.github.contentsview08.obb"
     compileSdk = 37
     defaultConfig {
-        // Tauri のスマホ版(io.github.yumekui8.bbs_browser)と別のアプリとして入れ、並べて比べられるようにする
+        // Tauri のスマホ版(io.github.contentsview08.bbs_browser)と別のアプリとして入れ、並べて比べられるようにする
         // 2026-11-05 に OBB へ(インストールの場所も変わる。前の bbs N とは別のアプリになるので、設定は入れ直し)
         applicationId = "io.github.contentsview08.obb"
         minSdk = 26

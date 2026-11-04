@@ -41,10 +41,10 @@ android {
             }
         }
     }
-    namespace = "io.github.yumekui8.bbs_browser"
+    namespace = "io.github.contentsview08.bbs_browser"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "io.github.yumekui8.bbs_browser"
+        applicationId = "io.github.contentsview08.bbs_browser"
         minSdk = 24
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

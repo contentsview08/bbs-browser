@@ -8,7 +8,7 @@ import pathlib
 import re
 import sys
 
-THEME = pathlib.Path(__file__).resolve().parent.parent / "app/src/main/java/io/github/yumekui8/bbsnative/ui/Theme.kt"
+THEME = pathlib.Path(__file__).resolve().parent.parent / "app/src/main/java/io/github/contentsview08/obb/ui/Theme.kt"
 NAMES = ("base bar surface surface2 surface3 border borderStrong textStrong textBody textMuted accent accentText accentWash "
          "unread unreadText link posterName threadReadTitle heatWarm heatHot heatVeryHot").split()
 CHECKS = [

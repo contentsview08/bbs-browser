@@ -7,7 +7,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
-const APP_ID = 'io.github.yumekui8.bbs_browser'
+const APP_ID = 'io.github.contentsview08.bbs_browser'
 const root = join(import.meta.dirname, '..')
 const apkDir = join(root, 'apps/desktop/src-tauri/gen/android/app/build/outputs/apk')
 const sdk = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT ?? join(homedir(), 'AppData/Local/Android/Sdk')

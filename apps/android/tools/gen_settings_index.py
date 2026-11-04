@@ -8,7 +8,7 @@ TITLES の対応(ページのキー)と組にする。設定の項目を足し�
 import pathlib
 import re
 
-UI = pathlib.Path(__file__).resolve().parent.parent / "app/src/main/java/io/github/yumekui8/bbsnative/ui"
+UI = pathlib.Path(__file__).resolve().parent.parent / "app/src/main/java/io/github/contentsview08/obb/ui"
 src = (UI / "Settings.kt").read_text(encoding="utf-8")
 
 # when (sub) の "theme" -> ThemePage(vm) から、関数名 → ページのキー
@@ -24,7 +24,7 @@ for m in re.finditer(r"private fun (\w+Page)\(", src):
     for r in re.finditer(r'(?:SwitchRow|ChoiceRow|SliderRow|TextRow|ActionRow|NavRow)\(\s*(?:[^"()]*?,\s*)?"([^"$]+)"(?:[^\n]*?desc = "([^"$]+)")?', body):
         rows.append((keys[fn], r.group(1), r.group(2) or ""))
 
-out = ['package io.github.yumekui8.bbsnative.ui', '',
+out = ['package io.github.contentsview08.obb.ui', '',
        '// tools/gen_settings_index.py で ui/Settings.kt から作ったもの。手で直さない', '',
        '/** 設定の検索の索引: ページのキー・項目の名前・説明 */',
        'val SETTINGS_INDEX = listOf(']

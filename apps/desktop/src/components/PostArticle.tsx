@@ -58,6 +58,8 @@ export interface PostHandlers extends BodyHandlers {
   onReplies: (no: number, el: HTMLElement) => void
   /** ID を押した(その ID の書き込みを出す) */
   onId: (id: string, el: HTMLElement) => void
+  /** ワッチョイから作ったアイコンを押した(同じワッチョイの書き込みを出す) */
+  onWatchoi?: (watchoi: string, el: HTMLElement) => void
   /** 名前を押した(同じ名前の書き込みを出す) */
   onName: (name: string, el: HTMLElement) => void
   /** 本文を押した(アンカーツリーを出す。つながりがなければ何もしない) */
@@ -98,6 +100,8 @@ interface Props {
   post: Post
   anchorCount: number
   idCount: number
+  /** アイコンの右下の数字(設定でワッチョイを使うなら、ワッチョイごとの書き込み数) */
+  iconCount?: number
   showTopDivider: boolean
   ng: boolean
   /** 自動 NG で畳んだときの理由(ユーザーの NG に当たっていなくても ng は true になる) */
@@ -679,23 +683,24 @@ function PostArticle(props: Props) {
   /** ID のアイコン。round なら丸く大きく(Discord 風)。書き込み数を右下に重ねる */
   // アイコンの種: 設定でワッチョイから作ることにしていて、名前にワッチョイがあればそれ(週ごとに変わる)。なければ ID(日ごと)
   const iconSeed = (handlers.iconFromWatchoi ? watchoiOf(post.name) : undefined) ?? post.id
+  const iconCount = props.iconCount ?? idCount
   const identiconBtn = (size: number, round = false) =>
     iconSeed && (
       <button
         type="button"
         className={`relative flex-shrink-0 hover:opacity-80 ${round ? '' : 'mr-1'}`}
-        onClick={(e) => post.id && handlers.onId(post.id, e.currentTarget)}
-        title={post.id ? `ID:${post.id} (${idCount})` : `ワッチョイ ${iconSeed}`}
+        onClick={(e) => (iconSeed === post.id ? handlers.onId(iconSeed, e.currentTarget) : handlers.onWatchoi?.(iconSeed, e.currentTarget))}
+        title={iconSeed === post.id ? `ID:${post.id} (${iconCount})` : `ワッチョイ ${iconSeed} (${iconCount})`}
       >
         <span className={`block overflow-hidden ${round ? 'rounded-full' : ''}`}>
           <Identicon seed={iconSeed} size={size} />
         </span>
-        {idCount >= 2 && (
+        {iconCount >= 2 && (
           <span
             // 右下の数は、アイコンの外(名前や「主」の印の側)にはみ出さないよう、右へは少しだけ
-            className={`absolute -bottom-1 ${round ? '-right-0.5' : '-right-1'} min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(idCount) || 'text-c-text-muted'}`}
+            className={`absolute -bottom-1 ${round ? '-right-0.5' : '-right-1'} min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(iconCount) || 'text-c-text-muted'}`}
           >
-            {idCount}
+            {iconCount}
           </span>
         )}
       </button>

@@ -109,7 +109,8 @@ fun QuickAccess(vm: AppViewModel) {
         ) {
             val sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             Column(
-                Modifier.fillMaxWidth().heightIn(max = maxHeight * 0.78f)
+                // 高さはいつも同じ(タブを替えても項目の数で変わらない。少なければ下が空く。本人 2026-11-05)
+                Modifier.fillMaxWidth().height(maxHeight * 0.78f)
                     .graphicsLayer { translationY = (1f - show.value) * size.height }
                     .shadow(16.dp, sheetShape).clip(sheetShape).background(Palette.surface)
                     .clickable(remember { MutableInteractionSource() }, null) {}
@@ -211,6 +212,7 @@ fun QuickAccess(vm: AppViewModel) {
                         }
                     }
                 val boardIcon = @Composable { url: String -> BoardIcon(url, 18.dp) { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp)) } }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     "boards" -> {
                         val boards = recentBoards.filter { hit(it.second) }
@@ -260,6 +262,7 @@ fun QuickAccess(vm: AppViewModel) {
                             }
                         }
                     }
+                }
                 }
                 Spacer(Modifier.height(8.dp))
             }

@@ -2474,7 +2474,7 @@ export default function App() {
         favorites={favorites ?? []}
         onReorderFavorites={reorderFavorites}
         recentHistory={recentHistory}
-        onOpenThread={(t) => void openThread(t)}
+        onOpenThread={(t, newTab) => void openThread(t, newTab ? { newTab: true } : {})}
         onDeleteHistory={(t) => void deleteLogs([], [t])}
         onOpenUploads={() => void openUploads()}
         activeBoardUrl={board?.url}
@@ -2566,7 +2566,7 @@ export default function App() {
                 ? 'スレッドがありません'
                 : '左のお気に入りから板を選んでください'
           }
-          onOpen={(t) => void openThread(t)}
+          onOpen={(t, newTab) => void openThread(t, newTab ? { newTab: true } : {})}
           onRefresh={
             history
               ? // 閲覧履歴の更新は時間がかかるので、引っぱったときの丸い矢印は待たずに引っ込め、ヘッダーの下の帯だけで知らせる。

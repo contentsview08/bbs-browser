@@ -340,6 +340,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     // レス 1 件(本文とポップアップで共通)。本文を押すとアンカーツリー、長押しでメニュー
     val style = vm.prefs.postStyle
+    // アイコンの右下の数字と押したときの絞り込みの鍵: 設定でワッチョイを使うなら、あればワッチョイ、なければ ID
+    fun iconKey(p: Post): String? = if (vm.prefs.iconFromWatchoi) watchoiOf(p.name) ?: p.id else p.id
+    val iconCounts = remember(index, vm.prefs.iconFromWatchoi) { index.posts.mapNotNull { iconKey(it) }.groupingBy { it }.eachCount() }
     // 返信先の 1 行に出す中身(Discord 風・LINE 風)
     fun previewOf(no: Int): ReplyPreview? {
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
@@ -444,11 +447,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,
                     info = null, autoLoad = false, gross = false,
                 ) } else PostItem(
-                    it, style = style, id = p.id, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
+                    it, style = style, id = p.id, iconCount = iconCounts[iconKey(p)] ?: 0, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
-                    // アイコンを押すと、その ID のレス
-                    onAvatar = p.id?.let { pid -> { openPopup(index.posts.filter { it.id == pid }, focus = p.no) } },
+                    // アイコンを押すと、数字と同じ数え方のレス(設定でワッチョイを使うなら同じワッチョイ、なければ同じ ID)
+                    onAvatar = iconKey(p)?.let { k -> { openPopup(index.posts.filter { iconKey(it) == k }, focus = p.no) } },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             } }
             }

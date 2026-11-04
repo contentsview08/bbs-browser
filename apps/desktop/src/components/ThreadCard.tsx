@@ -23,7 +23,8 @@ interface Props {
   /** 板の中での勢いの相対順位(0〜1)。rankMomentum 参照 */
   momentumRank: number
   /** どのカードにも同じ関数を渡し、押されたスレを引数で受け取る(カードを memo で描き直さずに済むように) */
-  onOpen: (t: ThreadSummary) => void
+  /** 開く。newTab: Ctrl を押しながら押した(設定によらず新しいタブで開く) */
+  onOpen: (t: ThreadSummary, newTab?: boolean) => void
   /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
   onNg?: (t: ThreadSummary) => void
   /** 立てた人を NG に追加(立てた人が分かるスレだけ出す。スマホのアプリと同じ) */
@@ -468,7 +469,7 @@ function ThreadCard({
   return (
     <div
       {...longPress}
-      onClick={() => (isMobile && selecting && onSelect ? onSelect(thread, !selected) : onOpen(thread))}
+      onClick={(e) => (isMobile && selecting && onSelect ? onSelect(thread, !selected) : onOpen(thread, e.ctrlKey || e.metaKey))}
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
       data-variant={variant}

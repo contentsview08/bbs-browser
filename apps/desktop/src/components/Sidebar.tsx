@@ -27,7 +27,7 @@ interface Props {
   onOpenFavThreads: () => void
   /** 直近の閲覧履歴(10 件ほど) */
   recentHistory: ThreadSummary[]
-  onOpenThread: (t: ThreadSummary) => void
+  onOpenThread: (t: ThreadSummary, newTab?: boolean) => void
   onDeleteHistory: (t: ThreadSummary) => void
   onOpenSettings: () => void
   /** 通知センター(溜めた知らせ)。まだ見ていない数を印に */
@@ -124,7 +124,7 @@ function SmallRow(props: {
   label: string
   title?: string
   muted?: boolean
-  onClick: () => void
+  onClick: (e: { ctrlKey: boolean; metaKey: boolean }) => void
   trailing?: ReactNode
 }) {
   return (
@@ -414,7 +414,7 @@ export default function Sidebar(props: Props) {
                   // しまっているときは、スレの板のファビコンが並ぶ
                   icon={<BoardIcon boardUrl={t.boardUrl} override={props.boardMeta[t.boardUrl]?.icon} size={20} />}
                   label={t.title}
-                  onClick={() => props.onOpenThread(t)}
+                  onClick={(e) => props.onOpenThread(t, e.ctrlKey || e.metaKey)}
                   trailing={
                     !collapsed && (
                       <button

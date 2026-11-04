@@ -1,5 +1,6 @@
 package io.github.contentsview08.obb.ui
 
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -91,7 +92,7 @@ class ReplyPreview(val no: Int, val id: String?, val name: String, val text: Str
 fun PostItem(
     r: RenderedPost, aa: Boolean = r.aa, own: Boolean = false, toOwn: Boolean = false,
     info: PostInfo? = null, autoLoad: Boolean = true, onImage: (String) -> Unit = {}, onUrl: (String) -> Unit = {}, gross: Boolean = false,
-    style: String = "card", id: String? = null, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
+    style: String = "card", id: String? = null, /** アイコンの右下の数字(2 以上で出す) */ iconCount: Int = 0, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
     /** 人気のレス(返信 3 件から)の色。左に線、淡い地 */
     heat: Color? = null,
     /** アイコンを押したとき(その ID のレスを出す)。null なら押せない */
@@ -165,7 +166,7 @@ fun PostItem(
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = if (continued) 2.dp else pad + 2.dp, bottom = pad / 2)) {
                 if (reply != null) ReplyLine(reply, indent = AVATAR + 10.dp) { onReply(reply.no) }
                 Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.width(AVATAR)) { if (!continued) Avatar(seed, r.beIcon, AVATAR, avatarMod) }
+                    Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         if (!continued) header()
@@ -183,7 +184,7 @@ fun PostItem(
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
-                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) Avatar(seed, r.beIcon, AVATAR, avatarMod) }; Spacer(Modifier.width(8.dp)) }
+                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
                 Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                     if (!continued || own) Box(Modifier.padding(bottom = 2.dp)) { header() }
                     Column(
@@ -270,7 +271,8 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
         Identicon(reply.id, 16.dp)
         Spacer(Modifier.width(5.dp))
         Text(
-            "${reply.name}  ${reply.text}", color = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted, fontSize = 12.sp,
+            // 本文だけ(名前は出さない。本人 2026-11-05)
+            reply.text, color = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted, fontSize = 12.sp,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
@@ -345,6 +347,18 @@ private fun BeIcon(url: String?) {
 }
 
 /** アイコンの列(Discord 風・LINE 風): BE のアイコンがあれば ID の模様の代わりに出す(枠に収まるよう縮める・縦横の比は保つ) */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.IconCount(n: Int) {
+    if (n < 2) return
+    // アイコンの右下に、その人の書き込み数(多いほど暖色。PC 版と同じ)。押す邪魔をしないよう、アイコンの右下の角に重ねるだけ
+    Box(
+        Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 3.dp).defaultMinSize(minWidth = 15.dp, minHeight = 15.dp)
+            .background(Palette.surface, androidx.compose.foundation.shape.CircleShape).border(1.dp, Palette.border, androidx.compose.foundation.shape.CircleShape)
+            .padding(horizontal = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text("$n", color = Palette.heat(n) ?: Palette.textMuted, fontSize = 9.sp, lineHeight = 9.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1) }
+}
+
 @Composable
 private fun Avatar(id: String?, beIcon: String?, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
     if (beIcon == null) return Identicon(id, size, modifier)

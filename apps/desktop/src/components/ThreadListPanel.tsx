@@ -64,7 +64,7 @@ interface Props {
   emptyText: string
   /** 読み込めなかった理由。一覧が空のときは、取り直しのボタンと一緒に出す */
   errorText?: string
-  onOpen: (t: ThreadSummary) => void
+  onOpen: (t: ThreadSummary, newTab?: boolean) => void
   onRefresh?: () => Promise<unknown> | void
   width: number
   onResize: (width: number) => void
@@ -648,10 +648,10 @@ export default function ThreadListPanel(props: Props) {
 
   // カードに渡す関数は、どのカードにも同じもの(memo で描き直さずに済むように)
   // 押して開いたスレも選んだ状態にする(一覧に戻ったとき、どこを見ていたか分かり、J・K がそこから続く)
-  const onOpenCard = useEvent((t: ThreadSummary) => {
+  const onOpenCard = useEvent((t: ThreadSummary, newTab?: boolean) => {
     setCursorId(threadId(t))
     setCursorHidden(false)
-    props.onOpen(t)
+    props.onOpen(t, newTab)
   })
   const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t))
   const onNgAuthorCard = useEvent((t: ThreadSummary) => props.onNgAuthor?.(t))

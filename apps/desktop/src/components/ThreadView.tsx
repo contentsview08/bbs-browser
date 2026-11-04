@@ -4,7 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
-import { watchoiOf } from '../utils/watchoi'
+import { countIconKeys, iconKeyOf, watchoiOf } from '../utils/watchoi'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
@@ -710,6 +710,8 @@ export default function ThreadView(props: Props) {
     return set
   }, [log.posts, ownNos, resolveAnchor, quoteLinks])
   const idCounts = useMemo(() => countIds(log.posts), [log.posts])
+  // アイコンの右下の数字(設定でワッチョイを使うなら、ワッチョイごとに数える)
+  const iconCounts = useMemo(() => countIconKeys(log.posts, settings.iconFromWatchoi), [log.posts, settings.iconFromWatchoi])
   /**
    * このスレで一番多い名前(名無し)。板の setting.txt の既定の名前は、使っていない掲示板が多いので、スレの中で数えて決める。
    * トリップ・キャップ(◆・★ から後ろ)は除いて数え、レスの 3 割以上(10 件以上のスレ)がその名前なら名無しとみなす
@@ -1671,6 +1673,10 @@ export default function ThreadView(props: Props) {
           const list = d().posts.filter((p) => p.id === id)
           open(`ID:${id} (${list.length})`, list, el, false)
         },
+        onWatchoi: (watchoi, el) => {
+          const list = d().posts.filter((p) => watchoiOf(p.name) === watchoi)
+          open(`ワッチョイ ${watchoi} (${list.length})`, list, el, false)
+        },
         onName: (name, el) => {
           const list = d().posts.filter((p) => p.name === name)
           open(`${name} (${list.length})`, list, el, false)
@@ -1744,6 +1750,7 @@ export default function ThreadView(props: Props) {
               blurMedia={grossNos?.has(p.no)}
               anchorCount={anchorCounts.get(p.no) ?? 0}
               idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
+              iconCount={iconCounts.get(iconKeyOf(p, settings.iconFromWatchoi) ?? '') ?? 0}
               showTopDivider={false}
               variant={variant}
               alignLeft
@@ -1782,6 +1789,7 @@ export default function ThreadView(props: Props) {
             blurMedia={grossNos?.has(p.no)}
             anchorCount={anchorCounts.get(p.no) ?? 0}
             idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
+            iconCount={iconCounts.get(iconKeyOf(p, settings.iconFromWatchoi) ?? '') ?? 0}
             showTopDivider={i > 0 && (variant === 'card' || variant === 'matome')}
             variant={variant}
             ng={isNg(p)}
@@ -2057,6 +2065,7 @@ export default function ThreadView(props: Props) {
                         blurMedia={grossNos?.has(p.no)}
                         anchorCount={anchorCounts.get(p.no) ?? 0}
                         idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
+                        iconCount={iconCounts.get(iconKeyOf(p, settings.iconFromWatchoi) ?? '') ?? 0}
                         showTopDivider={i > 0 && !firstUnread && (variant === 'card' || variant === 'matome')}
                         variant={variant}
                         // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
@@ -2085,7 +2094,7 @@ export default function ThreadView(props: Props) {
                 )
               }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, byNo, quotesOf, grossNos, anchorCounts, idCounts, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, mainHandlers, props.reactions, toggleRun],
+    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, mainHandlers, props.reactions, toggleRun],
   )
 
   return (

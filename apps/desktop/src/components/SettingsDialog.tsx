@@ -732,12 +732,12 @@ function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsProps, 's
           note="確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます"
         />
       </Section>
-      <Section advanced desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
+      <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle
           checked={s.openInNewTab}
           onChange={(v) => update('openInNewTab', v)}
           label="スレ一覧から開くときは新しいタブで開く"
-          note="オフにすると、いま見ているタブを置き換えます"
+          note="オフにすると、いま見ているタブを置き換えます。そのときも、Ctrl を押しながらクリックすると新しいタブで開きます"
         />
       </Section>
       <Section

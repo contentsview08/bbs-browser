@@ -11,3 +11,18 @@ export function watchoiOf(name: string): string | undefined {
 export function shortWatchoi(name: string): string {
   return name.replace(WATCHOI, (_m, _kind: string, a: string, b: string) => `(${a}-${b})`)
 }
+
+/** アイコンの種と数字の数え方の鍵: 設定でワッチョイを使うなら、あればワッチョイ、なければ ID */
+export function iconKeyOf(post: { id?: string; name: string }, fromWatchoi: boolean | undefined): string | undefined {
+  return (fromWatchoi ? watchoiOf(post.name) : undefined) ?? post.id
+}
+
+/** 鍵ごとの書き込み数(アイコンの右下の数字) */
+export function countIconKeys(posts: { id?: string; name: string }[], fromWatchoi: boolean | undefined): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const p of posts) {
+    const k = iconKeyOf(p, fromWatchoi)
+    if (k) counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  return counts
+}

@@ -85,7 +85,7 @@ fun DrawerContent(vm: AppViewModel) {
                         color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                DrawerRow(Icons.Filled.History, "すべて見る", Palette.textMuted, sub = true, muted = true) { vm.openPast(vm.prefs.pastTab) }
+                DrawerRow(Icons.Filled.History, "すべて見る", Palette.textMuted, sub = true, muted = true) { vm.openPast("history") } // 前に見ていたタブではなく、いつも閲覧のタブで開く
             }
             DrawerRow(Icons.Filled.Link, "URL を開く", Palette.textMuted) { urlDialog = true }
         }

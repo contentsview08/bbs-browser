@@ -65,6 +65,9 @@ interface Props {
 
 const TOOL = 'h-7 w-7 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
+/** 操作バーをカードの枠の上へはみ出させられるか。WebKit は overflow-clip-margin がなく、content-visibility の枠で切り取られる */
+const CAN_OVERHANG = typeof CSS !== 'undefined' && CSS.supports('overflow-clip-margin', '1.5rem')
+
 function ThreadCard({
   thread,
   state,
@@ -600,7 +603,7 @@ function ThreadCard({
       {/* 操作バー。スレタイに重ならないよう、パネルの上辺に半分かかる位置に出す(スマホは長押しの一覧) */}
       {!isMobile && (onNg || onCopy || onToggleFavorite || (onDeleteLog && state)) && (
         <div
-          className={`absolute -top-3.5 right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity ${ngMenu ? '!opacity-100 !pointer-events-auto' : ''}`}
+          className={`absolute ${CAN_OVERHANG ? '-top-3.5' : 'top-0.5'} right-2 z-20 flex items-center gap-0.5 p-0.5 bg-c-surface border border-c-border rounded-lg shadow-md opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity ${ngMenu ? '!opacity-100 !pointer-events-auto' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
           {onToggleFavorite && (

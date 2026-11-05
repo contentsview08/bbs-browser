@@ -1082,10 +1082,17 @@ html[data-platform='mobile'] * {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* スマホ: 画面の外のスレのカードは描かずに済ませる(速くスクロールしたとき・タブで並びが変わったときに軽くなる)。
-   描くまでの仮の高さは、描いたことのあるカードはその高さ(auto)、まだなら 60px */
-html[data-platform='mobile'] .card-thread {
+/* 画面の外のスレのカードは描かずに済ませる(1000 スレの板でも、スクロールや描き直しが軽くなる)。
+   描くまでの仮の高さは、描いたことのあるカードはその高さ(auto)、まだなら PC は 38px(これに上下の余白が足されて 48px ほど)・スマホは 60px
+   (実際の高さと違うと、カードが画面に入るたびに一覧の高さが変わり、スクロールバーが動いて組み直しも増える)。
+   枠の外は切り取られるので、操作バーを上のカードにまたがらせる分だけ切り取りの範囲を広げる
+   (overflow-clip-margin の効かない WebKit では、ThreadCard が操作バーを枠の内側に置く) */
+.card-thread {
   content-visibility: auto;
+  contain-intrinsic-size: auto 38px;
+  overflow-clip-margin: 1.5rem;
+}
+html[data-platform='mobile'] .card-thread {
   contain-intrinsic-size: auto 60px;
 }
 

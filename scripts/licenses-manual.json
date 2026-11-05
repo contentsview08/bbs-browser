@@ -1,0 +1,21 @@
+[
+  {"name": "BBS Kaomoji Fallback", "version": "", "license": "OFL-1.1", "url": "https://github.com/notofonts/notofonts.github.io", "kind": "font", "note": "顔文字用の予備フォント。Noto Sans から作っています", "textFile": "apps/desktop/src/assets/fonts/BBSKaomojiFallback-OFL.txt"},
+  {"name": "aahub_light", "version": "0.3.0", "license": "不明", "url": "", "kind": "font", "note": "AA 用のフォント。ファイルの中の表記では Mona フォントの系統(東雲・東風)です", "apps": ["desktop", "android"]},
+  {"name": "SQLite", "version": "", "license": "blessing", "url": "https://www.sqlite.org/copyright.html", "kind": "library", "note": "パブリックドメイン。libsqlite3-sys の中に入っています"},
+  {"name": "WebView2 Loader", "version": "", "license": "Microsoft の使用条件", "url": "https://www.nuget.org/packages/Microsoft.Web.WebView2", "kind": "library", "os": "windows", "note": "webview2-com-sys の中に入っています"},
+  {"name": "WebKitGTK", "version": "", "license": "LGPL-2.1-or-later AND BSD-2-Clause", "url": "https://webkitgtk.org/", "kind": "library", "os": "linux", "note": "画面を描く部品。Linux の AppImage に入っています"},
+  {"name": "GTK 3", "version": "", "license": "LGPL-2.1-or-later", "url": "https://www.gtk.org/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "GStreamer(本体と基本の部品)", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gstreamer.freedesktop.org/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "GLib", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gitlab.gnome.org/GNOME/glib", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "Pango", "version": "", "license": "LGPL-2.1-or-later", "url": "https://pango.gnome.org/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "Cairo", "version": "", "license": "LGPL-2.1-only OR MPL-1.1", "url": "https://cairographics.org/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "GDK-Pixbuf", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gitlab.gnome.org/GNOME/gdk-pixbuf", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "ATK・AT-SPI", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gitlab.gnome.org/GNOME/at-spi2-core", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "libsoup", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gitlab.gnome.org/GNOME/libsoup", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "librsvg", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gitlab.gnome.org/GNOME/librsvg", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "GnuTLS", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gnutls.org/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "libgcrypt", "version": "", "license": "LGPL-2.1-or-later", "url": "https://gnupg.org/software/libgcrypt/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "libsystemd・libudev", "version": "", "license": "LGPL-2.1-or-later", "url": "https://systemd.io/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "OpenSSL", "version": "", "license": "Apache-2.0", "url": "https://www.openssl.org/", "kind": "library", "os": "linux", "note": "Linux の AppImage に入っています"},
+  {"name": "そのほかの Linux の部品", "version": "", "license": "各部品のライセンスによる", "url": "", "kind": "library", "os": "linux", "note": "AppImage の中の usr/share/doc に、部品ごとの著作権表示(全 111 パッケージ)があります。"}
+]

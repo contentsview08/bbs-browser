@@ -37,6 +37,7 @@ import {
   type SettingsProps,
 } from '../SettingsDialog'
 import { ActionRow, ChoiceRow, Group, NavRow, SwitchRow, TextRow, WordList } from './ui'
+import LicensesDialog from '../LicensesDialog'
 
 type PageId =
   | 'home'
@@ -547,6 +548,7 @@ function PruneRow(props: { onPrune: () => Promise<number> }) {
 
 function About() {
   const [version, setVersion] = useState<string>()
+  const [licensesOpen, setLicensesOpen] = useState(false)
   useEffect(() => {
     void getVersion().then(setVersion, () => undefined)
   }, [])
@@ -564,6 +566,10 @@ function About() {
           掲示板を読む専用ブラウザです。5ch・エッジ・bbspink などの 2ch 互換の掲示板、したらば、まちBBS、ふたばを読めます。
         </p>
       </Group>
+      <Group title="ライセンス" note="このアプリに入っているオープンソースのソフトウェアと、そのライセンスを見られます">
+        <ActionRow label="使っているソフトウェア" onClick={() => setLicensesOpen(true)} />
+      </Group>
+      {licensesOpen && <LicensesDialog onClose={() => setLicensesOpen(false)} />}
     </>
   )
 }

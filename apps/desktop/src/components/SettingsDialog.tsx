@@ -46,6 +46,7 @@ import FontSizeSlider, { BaseFontSlider, ListFontSliders, PostFontSliders, ROOT_
 import { ListEditor, ManagerDialog, ManagerRow, NumberField, OpenRow, SamplePosts, Switch, ThumbSample, Toggle, TextSetting } from './SettingParts'
 import { broadcast, canOpenToolWindow, openToolWindow } from '../host/crossWindow'
 import { BTN_PRIMARY } from './DialogParts'
+import LicensesDialog from './LicensesDialog'
 import { GESTURE_ACTIONS, MOUSE_LIST_ACTIONS, MOUSE_OPEN_ACTIONS, boardAction, mouseActionName } from '../utils/gestures'
 import { PIE_DIRS, PIE_DIR_NAMES, type PieDir } from '../hooks/useMouseGesture'
 import MouseGesturePie from './MouseGesturePie'
@@ -2488,6 +2489,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
   const [version, setVersion] = useState<string>()
   const [selfUpdate, setSelfUpdate] = useState<boolean>()
   const [paths, setPaths] = useState<DataPaths>()
+  const [licensesOpen, setLicensesOpen] = useState(false)
   useEffect(() => {
     void getVersion().then(setVersion, () => setVersion(undefined))
     void canSelfUpdate().then(setSelfUpdate, () => setSelfUpdate(false))
@@ -2508,6 +2510,10 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
       )}
       <Section title="掲示板" note="要望や不具合は、運営要望板か GitHub の Issues へ">
         <OpenRow label="運営要望板を開く" value="red-edge.net" onOpen={() => void broadcast('open-in-app', OPERATION_BOARD_URL)} />
+      </Section>
+      <Section title="ライセンス" note="このアプリに入っているオープンソースのソフトウェアと、そのライセンスを見られます">
+        <OpenRow label="使っているソフトウェア" onOpen={() => setLicensesOpen(true)} />
+        {licensesOpen && <LicensesDialog onClose={() => setLicensesOpen(false)} />}
       </Section>
       <Section desktopOnly title="データの保存場所" note={paths?.portable ? 'ZIP 版: 展開したフォルダの data に置きます。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります' : undefined}>
         <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.contentsview08.obb\\bbs-browser.db'}</p>

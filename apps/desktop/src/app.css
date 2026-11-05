@@ -102,8 +102,8 @@ body,
   --c-link-twitter: #2a7ea0;
   --c-link-youtube: #b44a74;
   --c-poster-name: #5f8f7d;
-  --c-heat-warm: #b57a2a;
-  --c-heat-hot: #bb6236;
+  --c-heat-warm: #926222;
+  --c-heat-hot: #a3562f;
   --c-heat-very-hot: #b04242;
   --c-thread-view-bg: #f4f2ee;
   --c-thread-read-title: #3a5f96;
@@ -181,9 +181,9 @@ html:root[data-scheme='discord-dark'] {
   --c-link-twitter: #1d8fd6;
   --c-link-youtube: #d6336c;
   --c-poster-name: #2e8b57;
-  --c-heat-warm: #c98a12;
-  --c-heat-hot: #d9622b;
-  --c-heat-very-hot: #d33a3a;
+  --c-heat-warm: #96670d;
+  --c-heat-hot: #b85121;
+  --c-heat-very-hot: #d23434;
   --c-thread-view-bg: #ffffff;
   --c-thread-read-title: #5b6472;
 }
@@ -468,10 +468,10 @@ article.post-discord {
 }
 /* LINE 風のポップアップ(返信・ID・アンカー・アンカーツリー)は、中身の背景をスレ表示と同じトークの色にする。
    ポップアップの面(--c-surface)のままだと、吹き出し(同じ --c-surface)と同じ色で、吹き出しが見えなくなる */
-[data-post-style='line'] .post-popup {
+.post-popup {
   background: var(--c-thread-view-bg);
 }
-[data-post-style='line'] .post-popup > .sticky {
+.post-popup > .sticky {
   background: var(--c-surface);
 }
 
@@ -620,6 +620,17 @@ article.post-discord {
 :root[data-scheme='line-light'][data-post-style='line'] {
   --c-cursor-tint: color-mix(in srgb, #1f3f73 35%, transparent);
 }
+/* ツリーで押したレスの印 */
+.tree-focus {
+  background: var(--c-cursor-tint);
+}
+/* 「ここから未読」の字。未読の色は札の地に使う明るい色なので、明るい配色では濃くして読めるようにする */
+:root {
+  --c-unread-ink: color-mix(in srgb, var(--c-unread) 45%, #000000);
+}
+:root.dark {
+  --c-unread-ink: var(--c-unread);
+}
 /* スマホ: 抽出のポップアップの一番下のレスが、枠の線に付かないように */
 html[data-platform='mobile'] .post-popup {
   padding-bottom: 8px;
@@ -657,6 +668,11 @@ article.popup-cursor::after {
   height: 2px;
   background: var(--c-accent);
   pointer-events: none;
+}
+
+/* 押したレスの色(ツリーの .tree-focus)と重なったら、2 重に濃くしない */
+.tree-focus article.popup-cursor {
+  background-image: none !important;
 }
 
 /* Tab で選んだ、レスの中のリンク・アンカー・画像(J・K で選んだレスの中を Tab で回る。ThreadView.tsx) */
@@ -725,14 +741,14 @@ input[type='checkbox']:indeterminate {
 /* 意味の色(差し色)。配色の統一感は保ちつつ、ボタンや印を色で見分けられるように、意味のあるところにだけ使う。
    ダーク(.dark)は少し明るく、ライトは少し暗くして、どちらの背景でも浮きすぎないようにする */
 :root {
-  --c-mark-fav: #c9961a; /* お気に入り */
-  --c-mark-danger: #d14b47; /* 削除・NG */
-  --c-mark-new: #2e9a5e; /* 新しい・書き込み(スマホのアプリの markNew と同じ) */
-  --c-mark-video: #d14b47; /* 動画 */
-  --c-mark-image: #2e9a5e; /* 画像 */
-  --c-mark-hot: #d9732a; /* 人気 */
-  --c-mark-link: #3a7bd5; /* リンク・ブラウザ・コピー */
-  --c-mark-purple: #8457c9; /* 見た目・アップロード */
+  --c-mark-fav: #ac8016; /* お気に入り */
+  --c-mark-danger: #c53631; /* 削除・NG */
+  --c-mark-new: #24794a; /* 新しい・書き込み(スマホのアプリの markNew と同じ) */
+  --c-mark-video: #c53631; /* 動画 */
+  --c-mark-image: #24794a; /* 画像 */
+  --c-mark-hot: #a4551d; /* 人気 */
+  --c-mark-link: #2969c2; /* リンク・ブラウザ・コピー */
+  --c-mark-purple: #8051c7; /* 見た目・アップロード */
 }
 :root.dark {
   --c-mark-fav: #f2c14e;
@@ -1065,7 +1081,7 @@ html[data-platform='mobile'] .bar-zoom {
    未読・新着の札は今までどおり(ダークはピンク・赤、ライトは青)。ほかは別の色にする */
 /* 主(スレ主の印): 黄色・橙 */
 html:root[data-scheme] {
-  --c-op: #b7791f;
+  --c-op: #926019;
   --c-op-wash: rgba(183, 121, 31, 0.16);
 }
 html:root.dark[data-scheme] {
@@ -1075,10 +1091,10 @@ html:root.dark[data-scheme] {
 /* 自分の書き込み(--c-own)と自分へのレス(--c-to-own): 名前欄の緑(--c-poster-name)・未読の色と分ける。
    自分の書き込みは紫、自分へのレスは橙。どの配色でも同じ(スマホのアプリの Palette.own・toOwn と同じ) */
 html:root[data-scheme] {
-  --c-own: #6d4fd3;
-  --c-own-wash: rgba(109, 79, 211, 0.14);
-  --c-to-own: #d9641a;
-  --c-to-own-wash: rgba(217, 100, 26, 0.14);
+  --c-own: #5a3cc0;
+  --c-own-wash: rgba(90, 60, 192, 0.14);
+  --c-to-own: #ab4f15;
+  --c-to-own-wash: rgba(171, 79, 21, 0.14);
 }
 html:root.dark[data-scheme] {
   --c-own: #a28bff;
@@ -1236,6 +1252,11 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 :root[data-scheme='mono'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #353535; }
 :root[data-scheme='oled'][data-post-style='line'] { --c-thread-view-bg: #000000; --c-line-bg: #000000; --c-line-bubble: #232323; }
 :root[data-scheme='oled'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #232323; }
+/* 空色の地の上の札は白い地にして読めるようにする */
+:root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] {
+  --c-own-wash: #ffffff;
+  --c-to-own-wash: #ffffff;
+}
 /* LINE ライト × LINE 風: 空色の地の上の字(名前・日付・ID・番号)は白っぽく(スマホのアプリと同じ) */
 :root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header],
 :root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header] button,

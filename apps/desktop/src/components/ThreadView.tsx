@@ -310,11 +310,11 @@ function tabItems(post: HTMLElement): HTMLElement[] {
 }
 
 function Divider({ label, self }: { label: string; self?: boolean }) {
-  const color = self ? 'var(--c-unread)' : 'var(--c-border)'
+  const color = self ? 'var(--c-unread-ink)' : 'var(--c-border)'
   return (
     <div
       className={`flex items-center gap-3 py-1 select-none ${self ? '' : 'text-c-text-muted'}`}
-      style={self ? { color, opacity: 0.6 } : undefined}
+      style={self ? { color } : undefined}
     >
       <div className="flex-1 h-[3px]" style={{ background: color, opacity: self ? 0.4 : 1 }} />
       <span className="text-sm font-extrabold tracking-widest whitespace-nowrap">{label}</span>

@@ -110,7 +110,7 @@ function PopupWindow(props: {
       ref={ref}
       data-popup-top={props.isTop || undefined}
       data-index={props.stackIndex}
-      className={`post-popup bg-c-surface border rounded-lg shadow-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
+      className={`post-popup border rounded-lg shadow-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
       style={{ ...style, borderColor: 'var(--c-border-strong)' }}
       onClick={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}

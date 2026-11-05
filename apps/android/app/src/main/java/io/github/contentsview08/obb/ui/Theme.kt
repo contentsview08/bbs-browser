@@ -60,7 +60,7 @@ val SCHEMES = listOf(
         c(0xF5F6F8), c(0xFFFFFF), c(0xFFFFFF), c(0xEEF0F3), c(0xE4E7EC), c(0xDFE2E7), c(0xC5CAD3),
         // 薄い字・強調(送るボタン)・未読の札は、コントラスト比を満たすよう少し濃く(未読の札の字は濃い緑)
         c(0x111111), c(0x2B2B2B), c(0x747983), c(0x008C45), c(0xFFFFFF), wash(0x06C755, 0.12f),
-        c(0x06C755), c(0x03230F), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0xC98A12), c(0xD9622B), c(0xD33A3A),
+        c(0x06C755), c(0x03230F), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0x96670D), c(0xB85121), c(0xD23434),
     ),
     // グレー(2ch Mate のグレーに近い形): 地は白い字がはっきり読める暗めの灰色、上下の帯はそれより明るい灰色、行の間は黒に近い線
     Scheme(
@@ -73,7 +73,7 @@ val SCHEMES = listOf(
         "light-gray", "ライト", false,
         c(0xECECEC), c(0xE2E2E3), c(0xF6F6F6), c(0xE4E4E5), c(0xD9D9DB), c(0xD2D2D4), c(0xB4B5B8),
         c(0x222222), c(0x3E3E40), c(0x7E7F83), c(0x4E5A68), c(0xFFFFFF), wash(0x4E5A68, 0.10f),
-        c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0xA8721E), c(0xB25A2E), c(0xA83A3A),
+        c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0x90621A), c(0xA6542B), c(0xA83A3A),
     ),
     // ── 提案書(2026-10-31)から足した配色。どれも 字と地のコントラスト比 4.5 以上 ──
     // 紙(セピア): 読書アプリのような生成りの地にこげ茶の字
@@ -173,14 +173,16 @@ object Palette {
     /** 未読(「ここから未読」・未読の数) */
     val unread get() = scheme.unread
     val unreadText get() = scheme.unreadText
+    /** 「ここから未読」の字。未読の色は札の地に使う明るい色なので、明るい配色では濃くして読めるようにする */
+    val unreadInk get() = if (scheme.dark) unread else androidx.compose.ui.graphics.Color(unread.red * 0.45f, unread.green * 0.45f, unread.blue * 0.45f)
     /** 自分の書き込み */
     // 自分の書き込みは紫、自分へのレスは橙(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
-    val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF6D4FD3) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF6D4FD3)
+    val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF5A3CC0) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF5A3CC0)
     val ownWash get() = own.copy(alpha = 0.16f)
-    val toOwn get() = if (scheme.dark) Color(0xFFFF9A4D) else Color(0xFFD9641A)
+    val toOwn get() = if (scheme.dark) Color(0xFFFF9A4D) else Color(0xFFAB4F15)
     val toOwnWash get() = toOwn.copy(alpha = 0.16f)
     /** スレ主 */
-    val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFFB7791F)
+    val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFF926019)
     val opWash get() = op.copy(alpha = 0.16f)
     val link get() = scheme.link
     val posterName get() = scheme.posterName
@@ -189,14 +191,14 @@ object Palette {
     val heatHot get() = scheme.heatHot
     val heatVeryHot get() = scheme.heatVeryHot
     // 意味の色(差し色)。明るい配色では少し濃くする
-    val markFav get() = if (scheme.dark) Color(0xFFF2C14E) else Color(0xFFC9961A)
-    val markDanger get() = if (scheme.dark) Color(0xFFEF7470) else Color(0xFFD14B47)
-    val markNew get() = if (scheme.dark) Color(0xFF5FC28A) else Color(0xFF2E9A5E)
+    val markFav get() = if (scheme.dark) Color(0xFFF2C14E) else Color(0xFFAC8016)
+    val markDanger get() = if (scheme.dark) Color(0xFFEF7470) else Color(0xFFC53631)
+    val markNew get() = if (scheme.dark) Color(0xFF5FC28A) else Color(0xFF24794A)
     val markVideo get() = markDanger
     val markImage get() = markNew
-    val markHot get() = if (scheme.dark) Color(0xFFF0954A) else Color(0xFFD9732A)
-    val markLink get() = if (scheme.dark) Color(0xFF6AA9F0) else Color(0xFF3A7BD5)
-    val markPurple get() = if (scheme.dark) Color(0xFFB48CF0) else Color(0xFF8457C9)
+    val markHot get() = if (scheme.dark) Color(0xFFF0954A) else Color(0xFFA4551D)
+    val markLink get() = if (scheme.dark) Color(0xFF6AA9F0) else Color(0xFF2969C2)
+    val markPurple get() = if (scheme.dark) Color(0xFFB48CF0) else Color(0xFF8051C7)
 
     /**
      * LINE 風の地と吹き出し(今のスマホ版の [data-post-style='line']): 地は配色の背景に青灰を少し混ぜ(明 13%・暗 10%)、
@@ -249,10 +251,10 @@ object Palette {
             return c
         }
         // 黄や緑は同じ明るさでも明るく見えるので、輝度が目安に入るまで明るさをずらす(明るい地で 3:1、暗い地で 3.5:1 を超える)
-        var l = if (scheme.dark) 0.62f else 0.42f
+        var l = if (scheme.dark) 0.62f else 0.36f
         var c = Color.hsl(h, 0.6f, l)
         if (scheme.dark) while (c.luminance() < 0.28f && l < 0.9f) { l += 0.02f; c = Color.hsl(h, 0.6f, l) }
-        else while (c.luminance() > 0.15f && l > 0.1f) { l -= 0.02f; c = Color.hsl(h, 0.6f, l) }
+        else while (c.luminance() > 0.1f && l > 0.1f) { l -= 0.02f; c = Color.hsl(h, 0.6f, l) }
         return c
     }
 

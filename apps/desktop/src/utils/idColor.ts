@@ -50,7 +50,7 @@ export function idColorOf(id: string, dark: boolean, sky = false): string {
     }
   } else {
     // 黄や緑は同じ明るさでも明るく見えるので、輝度が目安に入るまで明るさをずらす(明るい地で 3:1、暗い地で 3.5:1 を超える)
-    let l = Math.fround(dark ? 0.62 : 0.42)
+    let l = Math.fround(dark ? 0.62 : 0.36)
     c = hsl(h, 0.6, l)
     if (dark)
       while (luminance(c) < 0.28 && l < Math.fround(0.9)) {
@@ -58,7 +58,7 @@ export function idColorOf(id: string, dark: boolean, sky = false): string {
         c = hsl(h, 0.6, l)
       }
     else
-      while (luminance(c) > 0.15 && l > Math.fround(0.1)) {
+      while (luminance(c) > 0.1 && l > Math.fround(0.1)) {
         l = Math.fround(l - Math.fround(0.02))
         c = hsl(h, 0.6, l)
       }

@@ -78,8 +78,7 @@ export default function AnchorTree(props: {
           )}
           {/* 押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくいのでやめた) */}
           <div
-            className="tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)]"
-            style={r.no === props.focus && !isMobile ? { background: 'var(--c-cursor-tint)' } : undefined}
+            className={`tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus && !isMobile ? 'tree-focus' : ''}`}
           >
             {props.renderPost(r.no)}
             {r.alsoTo.length > 0 && (
@@ -131,9 +130,8 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
             {hasChildren && line('down', { left: x(r.depth), top: bottomY, bottom: 0, borderLeftWidth: 2 })}
             <div className="flex-shrink-0" style={{ width: r.depth * D_STEP }} />
             <div
-              className="relative flex-1 min-w-0 rounded-[var(--card-radius)]"
               // 押したレスは、選んでいるレスと同じ色(強調色の面は字が読みにくい)
-              style={r.no === props.focus && !isMobile ? { background: 'var(--c-cursor-tint)' } : undefined}
+              className={`relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus && !isMobile ? 'tree-focus' : ''}`}
             >
               {props.renderPost(r.no)}
               {/* 「>>n にも」は本文の始まり(アイコンの右)にそろえる(アイコンの列に置くと線と重なるため) */}

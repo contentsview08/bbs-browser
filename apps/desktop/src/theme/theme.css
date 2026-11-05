@@ -172,8 +172,8 @@
   /* ライトスキームは、明るい背景に馴染むよう元より明るく淡い色にする
      (目立ちすぎるとのフィードバックにより変更) */
   --c-poster-name: #7fab99;
-  --c-heat-warm: #c97f1f;
-  --c-heat-hot: #d1642f;
+  --c-heat-warm: #a16619;
+  --c-heat-hot: #b65728;
   --c-heat-very-hot: #c23b3b;
   --c-thread-view-bg: #ffffff;
   --c-thread-read-title: #2350a0;

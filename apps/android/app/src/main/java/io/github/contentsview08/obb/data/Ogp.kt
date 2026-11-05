@@ -7,8 +7,8 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import io.github.contentsview08.obb.bbs.decodeHtml
 import java.net.URI
-import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 /** リンクのカードに出す情報 */
@@ -44,10 +44,7 @@ object OgpFetcher {
             val type = res.header("Content-Type") ?: ""
             if (!res.isSuccessful || !type.contains("html", true)) return@use null
             val bytes = readHead(res.body?.byteStream() ?: return@use null)
-            val latin = String(bytes, Charsets.ISO_8859_1)
-            val cs = Regex("charset=([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE).find(type)?.groupValues?.get(1)
-                ?: Regex("<meta[^>]+charset\\s*=\\s*[\"']?([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE).find(latin)?.groupValues?.get(1)
-            val html = String(bytes, runCatching { Charset.forName(cs ?: "UTF-8") }.getOrDefault(Charsets.UTF_8))
+            val html = decodeHtml(bytes, type)
             parse(html, res.request.url.toString()).takeIf { it.title != null || it.image != null }
         }
     }

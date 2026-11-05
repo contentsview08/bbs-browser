@@ -33,12 +33,6 @@ function metaTags(html: string): Map<string, string> {
   return map
 }
 
-/** ページの文字コード(<meta charset> か http-equiv)。書かれていなければ undefined */
-export function charsetOfHtml(head: string): string | undefined {
-  const m = /<meta[^>]+charset\s*=\s*["']?([\w-]+)/i.exec(head)
-  return m?.[1].toLowerCase()
-}
-
 export function parseOgp(html: string, pageUrl: string): Ogp {
   // head だけ見れば足りる(本文が大きいページで正規表現を回しすぎないように)
   const head = html.slice(0, 200_000)

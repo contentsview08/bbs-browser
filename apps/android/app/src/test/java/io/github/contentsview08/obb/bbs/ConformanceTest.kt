@@ -99,8 +99,28 @@ class ConformanceTest {
     @Test fun encode() = check("encode.json") { c ->
         val i = c.getJSONObject("input")
         val fields = mapOf("v" to i.getString("value"))
-        val bytes = if (i.getString("encoding") == "euc-jp") encodeEucJpForm(fields) else encodeShiftJisForm(fields)
+        val bytes = when (i.getString("encoding")) {
+            "euc-jp" -> encodeEucJpForm(fields)
+            "utf-8" -> encodeUtf8Form(fields)
+            else -> encodeShiftJisForm(fields)
+        }
         String(bytes, Charsets.US_ASCII)
+    }
+
+    @Test fun charset() = check("charset.json") { c ->
+        val i = c.getJSONObject("input")
+        val hex = i.getString("hex")
+        val bytes = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        val fallback = when (i.optString("fallback")) {
+            "utf-8" -> TextEncoding.UTF8
+            "euc-jp" -> TextEncoding.EUC
+            else -> TextEncoding.SJIS
+        }
+        when (detectEncoding(bytes, i.optString("contentType").ifEmpty { null }, fallback)) {
+            TextEncoding.UTF8 -> "utf-8"
+            TextEncoding.SJIS -> "shift_jis"
+            TextEncoding.EUC -> "euc-jp"
+        }
     }
 
     @Test fun search() = check("search.json") { c -> normalizeForSearch(c.getString("input")) }

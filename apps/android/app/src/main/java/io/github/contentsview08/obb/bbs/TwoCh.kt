@@ -3,21 +3,12 @@ package io.github.contentsview08.obb.bbs
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
 import org.json.JSONObject
-import java.nio.charset.Charset
 
 // 2ch 互換(bbsmenu / subject.txt / dat)。専ブラの packages/connectors/src/twoch(connector.ts・parse.ts)を Kotlin に写したもの
 
-private val SJIS: Charset = runCatching { Charset.forName("windows-31j") }.getOrElse { Charset.forName("Shift_JIS") }
 
-/** Content-Type の charset から文字コードを決める。書かれていなければ 2ch 互換の慣習どおり Shift_JIS(windows-31j) */
-private fun charsetOf(res: HttpResponse): Charset {
-    val cs = Regex("charset=([^;]+)", RegexOption.IGNORE_CASE).find(res.headers["content-type"] ?: "")?.groupValues?.get(1)?.trim()?.lowercase()
-    return when (cs) {
-        "utf-8", "utf8" -> Charsets.UTF_8
-        "euc-jp" -> Charset.forName("EUC-JP")
-        else -> SJIS
-    }
-}
+/** 読み取ったバイト列を文字にする。文字コードは bbs/Encoding.kt で見分ける */
+private fun textOf(res: HttpResponse, body: ByteArray = res.body): String = decodeText(body, res.headers["content-type"])
 
 private val NAMED = mapOf("amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ", "hearts" to "♥")
 private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);")
@@ -192,14 +183,37 @@ object TwoCh {
         ensureOk(res, menuUrl)
         // bbsmenu.json(5ch)は JSON、それ以外は bbsmenu.html(kenmo.org など。文字コードは Content-Type から)
         return if (menuUrl.substringBefore('?').endsWith(".json")) parseBbsMenuJson(String(res.body, Charsets.UTF_8))
-        else parseBbsMenuHtml(String(res.body, charsetOf(res)))
+        else parseBbsMenuHtml(textOf(res))
+    }
+
+    /** 板が UTF-8 か。読んだ本文から覚える(書き込みをその板の文字コードで送るため) */
+    private val utf8Boards = HashMap<String, Boolean>()
+    private fun boardKey(boardUrl: String) = UrlRoute.to5chIo(boardUrl).replace(Regex("^https?://"), "").trimEnd('/') + "/"
+
+    /** ASCII だけの本文は手がかりにならないので覚えない */
+    private fun rememberBoardEncoding(boardUrl: String, body: ByteArray) {
+        if (body.any { it < 0 }) synchronized(utf8Boards) { utf8Boards[boardKey(boardUrl)] = looksLikeUtf8(body) }
+    }
+
+    /** 書き込む前に、板が UTF-8 かを確かめる。まだ分からなければ SETTING.TXT を 1 度だけ見る。読めなければ Shift_JIS で送る */
+    private suspend fun isUtf8Board(postUrl: String, bbs: String?): Boolean {
+        if (bbs.isNullOrEmpty()) return false
+        val boardUrl = postUrl.replace(Regex("test/bbs\\.cgi.*$"), "$bbs/")
+        val key = boardKey(boardUrl)
+        synchronized(utf8Boards) { utf8Boards[key]?.let { return it } }
+        runCatching {
+            val res = Http.get("${boardUrl}SETTING.TXT")
+            if (res.status in 200..299) rememberBoardEncoding(boardUrl, res.body)
+        }
+        return synchronized(utf8Boards) { utf8Boards.getOrPut(key) { false } }
     }
 
     private suspend fun readSubject(url: String): String {
         val res = Http.get(url)
         if (res.status == 404) throw IllegalStateException("板が見つかりません(HTTP 404)")
         ensureOk(res, url)
-        val text = String(res.body, charsetOf(res))
+        val text = textOf(res)
+        rememberBoardEncoding(url.substringBeforeLast('/') + "/", res.body)
         if (!looksLikeSubject(text)) throw IllegalStateException("スレ一覧を読めませんでした(掲示板の板ではないかもしれません)")
         return text
     }
@@ -214,8 +228,9 @@ object TwoCh {
         synchronized(settingCache) { settingCache[boardUrl]?.let { return it } }
         val map = if (HonoBbs.isBoardUrl(boardUrl)) HonoBbs.setting(boardUrl) else if (Shitaraba.isBoardUrl(boardUrl)) Shitaraba.setting(boardUrl) else if (Machi.isBoardUrl(boardUrl)) Machi.setting(boardUrl) else runCatching {
             val res = Http.get("${boardUrl}SETTING.TXT")
+            if (res.status in 200..299) rememberBoardEncoding(boardUrl, res.body)
             if (res.status !in 200..299) emptyMap()
-            else String(res.body, charsetOf(res)).lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
+            else textOf(res).lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
         }.getOrDefault(emptyMap())
         synchronized(settingCache) { settingCache[boardUrl] = map }
         return map
@@ -243,7 +258,7 @@ object TwoCh {
     /** 板があるか。スレ一覧(subject.txt)が読めて、スレ一覧の形なら板(スレが 0 件の板もある。youtu.be/xxx のような板でない URL を見分ける) */
     suspend fun isBoard(boardUrl: String): Boolean = runCatching {
         val res = Http.get("${boardUrl}subject.txt")
-        res.status in 200..299 && looksLikeSubject(String(res.body, charsetOf(res)))
+        res.status in 200..299 && looksLikeSubject(textOf(res))
     }.getOrDefault(false)
 
     /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
@@ -272,7 +287,7 @@ object TwoCh {
                 val res = Http.get(kako)
                 if (res.status == 200 && res.body.isNotEmpty()) {
                     val body = completeLines(res.body)
-                    val (posts, title) = parseDat(String(body, charsetOf(res)), 1)
+                    val (posts, title) = parseDat(textOf(res, body), 1)
                     if (posts.isNotEmpty()) {
                         return FetchResult(
                             if (cursor != null) FetchStatus.RESET else FetchStatus.UPDATED,
@@ -289,7 +304,8 @@ object TwoCh {
             if (res.status == 404 || res.status == 302) return archived()
             ensureOk(res, url)
             val body = completeLines(res.body)
-            val (posts, title) = parseDat(String(body, charsetOf(res)), 1)
+            rememberBoardEncoding(thread.boardUrl, body)
+            val (posts, title) = parseDat(textOf(res, body), 1)
             return FetchResult(
                 if (cursor != null) FetchStatus.RESET else FetchStatus.UPDATED,
                 posts, DatCursor(body.size.toLong(), posts.size, res.headers["last-modified"]), title,
@@ -308,7 +324,7 @@ object TwoCh {
         if (res.status != 206) ensureOk(res, url)
         if (res.body.isEmpty() || res.body[0] != 0x0a.toByte()) return fetchAll()
         val added = completeLines(res.body.copyOfRange(1, res.body.size))
-        val (posts, _) = parseDat(String(added, charsetOf(res)), cursor.postCount + 1)
+        val (posts, _) = parseDat(textOf(res, added), cursor.postCount + 1)
         return FetchResult(
             FetchStatus.UPDATED, posts,
             DatCursor(cursor.bytes + added.size, cursor.postCount + posts.size, res.headers["last-modified"] ?: cursor.lastModified),
@@ -359,8 +375,9 @@ object TwoCh {
         // 前に 5ch.net で開いたスレ・板でも書けるように、送る先と Referer を 5ch.io に直す
         val url = UrlRoute.to5chIo(url0)
         val referer = UrlRoute.to5chIo(referer0)
-        val res = Http.postForm(url, encodeShiftJisForm(fields), mapOf("Referer" to referer))
-        val html = String(res.body, charsetOf(res))
+        val form = if (isUtf8Board(url, fields["bbs"])) encodeUtf8Form(fields) else encodeShiftJisForm(fields)
+        val res = Http.postForm(url, form, mapOf("Referer" to referer))
+        val html = textOf(res)
         val resNumber = res.headers["x-resnum"]?.toIntOrNull()?.takeIf { it > 0 }
         val r = parseBbsCgi(html, url, fields, referer, resNumber)
         if (r is PostResult.Error && res.status >= 400 && r.message.isBlank()) return PostResult.Error("HTTP ${res.status}")

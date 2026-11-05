@@ -2,8 +2,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { allConnectors } from '../src/index'
+import { detectEncoding, encodeUtf8Form } from '../src/encoding'
 import { encodeEucJpForm } from '../src/eucjp'
 import { encodeShiftJisForm } from '../src/sjis'
+import type { Encoding } from '../src/types'
 import { createdAtOf, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
 
 interface Case<I, E> {
@@ -51,8 +53,15 @@ describe('subject-shape.json', () => {
 
 describe('encode.json', () => {
   it.each(load<{ encoding: string; value: string }, string>('encode.json'))('$name', (c) => {
-    const encode = c.input.encoding === 'euc-jp' ? encodeEucJpForm : encodeShiftJisForm
+    const encode = c.input.encoding === 'euc-jp' ? encodeEucJpForm : c.input.encoding === 'utf-8' ? encodeUtf8Form : encodeShiftJisForm
     expect(encode({ v: c.input.value })).toBe(expectedOf(c))
+  })
+})
+
+describe('charset.json', () => {
+  const fromHex = (h: string) => Uint8Array.from(h.match(/../g) ?? [], (x) => parseInt(x, 16))
+  it.each(load<{ hex: string; contentType?: string; fallback?: Encoding }, string>('charset.json'))('$name', (c) => {
+    expect(detectEncoding(fromHex(c.input.hex), c.input.contentType, c.input.fallback)).toBe(expectedOf(c))
   })
 })
 

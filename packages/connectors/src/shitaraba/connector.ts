@@ -11,6 +11,7 @@
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, PostResult, ThreadSummary } from '../types'
 import { encodeEucJpForm, eucJpByteLength } from '../eucjp'
+import { detectEncoding } from '../encoding'
 import { parseRawmode, parseShitarabaSetting, parseShitarabaSubject, parseShitarabaWrite } from './parse'
 
 const ID = 'shitaraba'
@@ -40,7 +41,7 @@ function createdAtOf(key: string): Date | undefined {
   return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
 }
 
-const decode = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, 'euc-jp')
+const decode = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, detectEncoding(res.body, res.headers['content-type'], 'euc-jp'))
 
 /** 応答のヘッダーの ERROR(過去ログ倉庫・スレなし など) */
 const errorOf = (res: HttpResponse) => res.headers['error'] ?? ''

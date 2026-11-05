@@ -7,8 +7,9 @@
 // - スレは時間が来ると消える(ページが 404)。消えたら dat 落ちと同じに扱う。スレの数の上限(1000)はない
 // - 書き込みの送り方はほかの掲示板と違う。詳しいことは非公開の資料に置いている
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, ListSort, PostFile, PostInput, PostResult, ThreadSummary } from '../types'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, ListSort, PostFile, PostInput, PostResult, ThreadSummary } from '../types'
 import { shiftJisByteLength } from '../sjis'
+import { detectEncoding } from '../encoding'
 import { parseCaco, parseCatalog, parseThreadJson, parseThreadPage, parsePostForm, parsePostResult, titleOf } from './parse'
 
 const ID = 'futaba'
@@ -76,7 +77,7 @@ const CATALOG_COOKIE = 'cxyl=20x10x40x0x0'
 
 const boardUrlOf = (server: string, board: string) => `https://${server}.2chan.net/${board}/`
 const originOf = (boardUrl: string) => new URL(boardUrl).origin
-const sjis = (bytes: Uint8Array, ctx: ConnectorContext) => ctx.decode(bytes, 'shift_jis')
+const sjis = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, detectEncoding(res.body, res.headers['content-type'], 'shift_jis'))
 
 /** サムネイルの絵の名前(スレを立てた時刻のミリ秒)から、スレの作られた時刻 */
 function createdAtOfThumb(thumb: string | undefined): Date | undefined {
@@ -109,7 +110,7 @@ async function sendRegist(
   const page = await ctx.http.get(pageUrl, { headers: BROWSER })
   if (page.status === 404) return { status: 'error', message: extra.resto ? 'スレが消えています(もう書き込めません)' : '板のページが見つかりません' }
   if (page.status !== 200) return { status: 'error', message: `ページを開けません(HTTP ${page.status})` }
-  const form = parsePostForm(sjis(page.body, ctx))
+  const form = parsePostForm(sjis(page, ctx))
   if (!form) return { status: 'error', message: '書き込みのフォームが見つかりません(スレが消えたか、ページの形が変わりました)' }
   // 書き込みボタンの JavaScript が入れる値。pthc は /bin/cachemt7.php の時刻
   let caco = ''
@@ -157,7 +158,7 @@ async function sendRegist(
     // ページを見たときに渡された Cookie(posttime など)が要る。ないと「cookieを有効にして…」で断られる
     sameCookiesAsGet: true,
   })
-  const html = sjis(res.body, ctx)
+  const html = sjis(res, ctx)
   const r = parsePostResult(html)
   // 書けたときも、ふたばが何と返したかを添える(書けたのに出てこないときに、手がかりにするため)
   return r.ok
@@ -209,7 +210,7 @@ export const futabaConnector: Connector = {
     }
     if (res.status === 404) throw new Error('ふたばの板が見つかりません(HTTP 404)')
     if (res.status !== 200) throw new Error(`ふたばの板を開けません(HTTP ${res.status})`)
-    const board: Board = { connectorId: ID, url: boardUrl, name: titleOf(sjis(res.body, ctx)) || `${server}/${name}` }
+    const board: Board = { connectorId: ID, url: boardUrl, name: titleOf(sjis(res, ctx)) || `${server}/${name}` }
     if (!t) return { board }
     return { board, thread: { connectorId: ID, boardUrl, key: t[3], title: '', postCount: 0, order: 0 } }
   },
@@ -234,7 +235,7 @@ export const futabaConnector: Connector = {
     const res = await ctx.http.get(url, { headers: { ...BROWSER, Cookie: CATALOG_COOKIE } })
     if (res.status === 404) throw new Error(`ふたばの板が見つかりません(HTTP 404): ${board.url}`)
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${url}`)
-    const html = sjis(res.body, ctx)
+    const html = sjis(res, ctx)
     if (!html.includes("id='cattable'")) throw new Error(`カタログを読めませんでした: ${board.url}`)
     const origin = originOf(board.url)
     return parseCatalog(html).map((e, i) => ({
@@ -258,7 +259,7 @@ export const futabaConnector: Connector = {
       const res = await ctx.http.get(threadWebUrl(thread), { headers: BROWSER })
       if (res.status === 404) return { status: 'archived', posts: [], cursor }
       if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${threadWebUrl(thread)}`)
-      const page = parseThreadPage(sjis(res.body, ctx), origin)
+      const page = parseThreadPage(sjis(res, ctx), origin)
       if (!page) return { status: 'archived', posts: [], cursor }
       const { posts, votes } = page
       const last = posts.at(-1)!
@@ -302,7 +303,7 @@ export const futabaConnector: Connector = {
       headers: { ...BROWSER, 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
       sameCookiesAsGet: true,
     })
-    const text = sjis(res.body, ctx).trim()
+    const text = sjis(res, ctx).trim()
     if (text === 'ok') return { status: 'ok', message: '削除しました' }
     const r = parsePostResult(text)
     return { status: 'error', message: r.ok ? text.slice(0, 100) : r.message, html: text }

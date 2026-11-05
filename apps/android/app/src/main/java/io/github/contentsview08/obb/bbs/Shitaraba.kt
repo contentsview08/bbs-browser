@@ -52,7 +52,7 @@ object Shitaraba {
     /** スレのキーは立った時刻の UNIX 秒(10 桁のときだけ) */
     private fun createdAtOf(key: String): Long? = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
 
-    private fun decode(res: HttpResponse) = String(res.body, EUC)
+    private fun decode(res: HttpResponse) = decodeText(res.body, res.headers["content-type"], TextEncoding.EUC)
     /** 応答のヘッダーの ERROR(過去ログ倉庫・スレなし など) */
     private fun errorOf(res: HttpResponse) = res.headers["error"] ?: ""
 

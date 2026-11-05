@@ -13,6 +13,7 @@
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, ThreadSummary } from '../types'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
+import { detectEncoding } from '../encoding'
 import { machiError, parseMachiSubject, parseMachiTop, parseMachiWrite, parseOfflaw } from './parse'
 
 const ID = 'machi'
@@ -63,7 +64,7 @@ function createdAtOf(key: string): Date | undefined {
   return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
 }
 
-const decode = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, 'shift_jis')
+const decode = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, detectEncoding(res.body, res.headers['content-type'], 'shift_jis'))
 
 function threadWebUrl(thread: ThreadSummary): string {
   return `${ORIGIN}/bbs/read.cgi/${bbsOf(thread.boardUrl)}/${thread.key}/`

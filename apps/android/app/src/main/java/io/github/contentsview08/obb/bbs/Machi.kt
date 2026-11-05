@@ -2,7 +2,6 @@ package io.github.contentsview08.obb.bbs
 
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
-import java.nio.charset.Charset
 
 // まちBBS(machi.to)。専ブラの packages/connectors/src/machi(connector.ts・parse.ts)を Kotlin に写したもの。2026-11-04 に実際の板で確かめた作り:
 // - 板の URL は https://machi.to/板/(kanto・tokyo など。地域ごとに 15 ほど)、スレは /bbs/read.cgi/板/キー/
@@ -15,7 +14,6 @@ import java.nio.charset.Charset
 // - スレ立てはアプリからはできない(まちBBS は依頼制で、板のページにもスレ立てのフォームがない)
 // 板の一覧はトップページ(https://machi.to/)から読める。板は URL で足してもよい。1 つのスレは 1000 レスまで
 
-private val SJIS: Charset = runCatching { Charset.forName("windows-31j") }.getOrElse { Charset.forName("Shift_JIS") }
 private const val ORIGIN = "https://machi.to"
 /** 昔は kanto.machi.to のように板ごとのホストだった(いまは machi.to に集まり、古いホストもそのまま返る) */
 private val HOST = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/")
@@ -63,7 +61,7 @@ object Machi {
     /** スレのキーは立った時刻の UNIX 秒(10 桁のときだけ) */
     private fun createdAtOf(key: String): Long? = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
 
-    private fun decode(res: HttpResponse) = String(res.body, SJIS)
+    private fun decode(res: HttpResponse) = decodeText(res.body, res.headers["content-type"], TextEncoding.SJIS)
 
     // ── 板 ──
 

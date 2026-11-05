@@ -289,3 +289,46 @@ describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
     expect(five.got).toEqual(['https://mevius.5ch.io/x/subject.txt'])
   })
 })
+
+describe('文字コードの違うサイト', () => {
+  const ctxOf = (res: HttpResponse): ConnectorContext => ({
+    http: { get: async () => res, post: async () => res },
+    decode: (bytes, encoding) => new TextDecoder(encoding).decode(bytes),
+  }) as unknown as ConnectorContext
+
+  it('板一覧だけ UTF-8 で charset がヘッダーにないサイトでも、板の名前を読める', async () => {
+    const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"></head><body>
+<a href="/cdn-cgi/content?id=x" aria-hidden="true" style="display:none"></a>
+<br><br><b>庭園板一覧</b><br>
+<a href="https://example.net/garden/">チューリップ庭園</a><br>
+<a href="https://example.net/karesansui/">枯山水</a><br>
+</body></html>`
+    const res = { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode(html) }
+    const boards = await twoChConnector.listBoards!({ menuUrl: 'https://example.net/bbsmenu.html' } as never, ctxOf(res))
+    expect(boards.map((b) => [b.category, b.name, b.url])).toEqual([
+      ['庭園板一覧', 'チューリップ庭園', 'https://example.net/garden/'],
+      ['庭園板一覧', '枯山水', 'https://example.net/karesansui/'],
+    ])
+  })
+
+  it('UTF-8 の板へは UTF-8 で書き、Shift_JIS の板へは Shift_JIS で書く', async () => {
+    const sent: string[] = []
+    const ctxFor = (setting: Uint8Array): ConnectorContext => ({
+      decode: (bytes, encoding) => new TextDecoder(encoding).decode(bytes),
+      http: {
+        get: async () => ({ status: 200, headers: { 'content-type': 'text/plain' }, body: setting }),
+        post: async (_url: string, body: string | Uint8Array) => {
+          sent.push(String(body))
+          return { status: 200, headers: {}, body: new TextEncoder().encode('<html><!-- 2ch_X:true --><title>書きこみました</title></html>') }
+        },
+      },
+    }) as unknown as ConnectorContext
+    const thread = (host: string) => ({ connectorId: '2ch', boardUrl: `https://${host}/b/`, key: '1000000000', title: '', postCount: 0, order: 0 })
+    const input = { name: '', mail: '', body: 'あ' }
+    await twoChConnector.createPost!(thread('utf8.example'), input, ctxFor(new TextEncoder().encode('BBS_TITLE=日本語の板\n')))
+    // 「板」の Shift_JIS は 94 C2
+    await twoChConnector.createPost!(thread('sjis.example'), input, ctxFor(Uint8Array.from([0x42, 0x42, 0x53, 0x3d, 0x94, 0xc2, 0x0a])))
+    expect(sent[0]).toContain('MESSAGE=%E3%81%82')
+    expect(sent[1]).toContain('MESSAGE=%82%A0')
+  })
+})

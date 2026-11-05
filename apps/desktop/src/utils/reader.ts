@@ -2,6 +2,8 @@
 // ページをそのまま埋め込む(iframe)と、多くのサイトが埋め込みを断っているので表示できない。
 // 代わりにページを取ってきて、題・サイト名・本文の段落・見出し・画像だけを抜き出し、アプリの見た目で出す。
 // HTML をそのまま画面に入れることはしない(抜き出した文字と画像の URL だけを使う)
+import { declaredCharset, detectEncoding, looksLikeUtf8 } from '@bbs-browser/connectors'
+
 export type ReaderBlock =
   | { type: 'heading'; text: string }
   | { type: 'text'; text: string }
@@ -116,21 +118,20 @@ export function extractPage(html: string, url: string): ReaderPage {
   return { title, site, image, blocks }
 }
 
-/** 文字コードを見分けて文字にする(Content-Type → <meta charset> → UTF-8) */
+const JAPANESE = /^(utf-?8|shift[-_]jis|x?-?sjis|ms932|cp932|windows-31j|x-ms-cp932|x?-?euc-?jp)$/
+
+/**
+ * 文字コードを見分けて文字にする。UTF-8 の形なら UTF-8、日本語以外の宣言(iso-8859-1 など)はそれに従い、
+ * 残りは中身から決める(宣言が間違っているページ・書いていないページがある)
+ */
 export function decodeHtml(bytes: Uint8Array, contentType: string | undefined): string {
-  const fromHeader = /charset=["']?([\w-]+)/i.exec(contentType ?? '')?.[1]
-  const tryDecode = (label: string) => {
+  const label = declaredCharset(bytes, contentType)
+  if (label && !looksLikeUtf8(bytes) && !JAPANESE.test(label)) {
     try {
       return new TextDecoder(label).decode(bytes)
     } catch {
-      return undefined
+      // 知らない名前なら、中身から決める
     }
   }
-  if (fromHeader) {
-    const text = tryDecode(fromHeader)
-    if (text !== undefined) return text
-  }
-  const head = new TextDecoder('ascii').decode(bytes.subarray(0, 4096))
-  const fromMeta = /<meta[^>]+charset=["']?([\w-]+)/i.exec(head)?.[1]
-  return (fromMeta && tryDecode(fromMeta)) || new TextDecoder('utf-8').decode(bytes)
+  return new TextDecoder(detectEncoding(bytes, contentType, 'utf-8')).decode(bytes)
 }

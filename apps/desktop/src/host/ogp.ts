@@ -6,7 +6,8 @@
 
 import { fetch } from '@tauri-apps/plugin-http'
 import type { LogStore } from '@bbs-browser/logstore'
-import { charsetOfHtml, parseOgp, type Ogp } from '../utils/ogp'
+import { parseOgp, type Ogp } from '../utils/ogp'
+import { decodeHtml } from '../utils/reader'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { fetchHttpsFirst } from '../utils/httpsFirst'
 
@@ -82,16 +83,7 @@ async function download(url: string): Promise<Ogp | null> {
     return null
   }
   const bytes = await readHead(res)
-  // 文字コードは、応答のヘッダー → ページの <meta charset> → UTF-8 の順に決める
-  const fromHeader = /charset=([\w-]+)/i.exec(type)?.[1].toLowerCase()
-  const peek = new TextDecoder('utf-8').decode(bytes.subarray(0, 4096))
-  const charset = fromHeader ?? charsetOfHtml(peek) ?? 'utf-8'
-  let html: string
-  try {
-    html = new TextDecoder(charset).decode(bytes)
-  } catch {
-    html = new TextDecoder('utf-8').decode(bytes)
-  }
+  const html = decodeHtml(bytes, type)
   const ogp = parseOgp(html, url)
   return ogp.title || ogp.description || ogp.image ? ogp : null
 }

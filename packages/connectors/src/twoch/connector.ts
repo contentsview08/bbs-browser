@@ -16,6 +16,7 @@ import type {
 } from '../types'
 import { parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt, splitAuthorId } from './parse'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
+import { detectEncoding, encodeUtf8Form, looksLikeUtf8 } from '../encoding'
 
 /** dat 差分取得の続き */
 interface DatCursor {
@@ -51,11 +52,35 @@ export function to5chIo(url: string): string {
 }
 
 /** Content-Type の charset から文字コードを決める。書かれていなければ 2ch 互換の慣習どおり Shift_JIS */
-function encodingOf(res: HttpResponse): Encoding {
-  const charset = /charset=([^;]+)/i.exec(res.headers['content-type'] ?? '')?.[1].trim().toLowerCase()
-  if (charset === 'utf-8' || charset === 'utf8') return 'utf-8'
-  if (charset === 'euc-jp') return 'euc-jp'
-  return 'shift_jis'
+/** 読み取ったバイト列の文字コード。切り詰めた本文は body で渡す */
+function encodingOf(res: HttpResponse, body: Uint8Array = res.body): Encoding {
+  return detectEncoding(body, res.headers['content-type'])
+}
+
+/** 板が UTF-8 か。読んだ本文から覚える(書き込みをその板の文字コードで送るため) */
+const utf8Boards = new Map<string, boolean>()
+const boardKey = (boardUrl: string) => to5chIo(boardUrl).replace(/^https?:\/\//, '').replace(/\/?$/, '/')
+
+/** ASCII だけの本文は手がかりにならないので覚えない */
+function rememberBoardEncoding(boardUrl: string, body: Uint8Array): void {
+  if (body.some((c) => c >= 0x80)) utf8Boards.set(boardKey(boardUrl), looksLikeUtf8(body))
+}
+
+/** 書き込む前に、板が UTF-8 かを確かめる。まだ分からなければ SETTING.TXT を 1 度だけ見る。読めなければ Shift_JIS で送る */
+async function isUtf8Board(postUrl: string, bbs: string | undefined, ctx: ConnectorContext): Promise<boolean> {
+  if (!bbs) return false
+  const boardUrl = postUrl.replace(/test\/bbs\.cgi.*$/, `${bbs}/`)
+  const key = boardKey(boardUrl)
+  const known = utf8Boards.get(key)
+  if (known !== undefined) return known
+  try {
+    const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
+    if (res.status >= 200 && res.status < 300) rememberBoardEncoding(boardUrl, res.body)
+  } catch {
+    // 確かめられなくても書き込みは止めない
+  }
+  if (!utf8Boards.has(key)) utf8Boards.set(key, false)
+  return utf8Boards.get(key) === true
 }
 
 function ensureOk(res: HttpResponse, url: string): void {
@@ -80,7 +105,8 @@ async function sendBbsCgi(
 ): Promise<PostResult> {
   url = to5chIo(url)
   referer = to5chIo(referer)
-  const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
+  const form = (await isUtf8Board(url, fields.bbs, ctx)) ? encodeUtf8Form(fields) : encodeShiftJisForm(fields)
+  const res = await ctx.http.post(url, form, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer },
     excludeCookies,
   })
@@ -138,6 +164,7 @@ async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<
   try {
     const res = await ctx.http.get(`${to5chIo(boardUrl)}SETTING.TXT`)
     if (res.status < 200 || res.status >= 300) return {}
+    rememberBoardEncoding(boardUrl, res.body)
     const s = parseSettingTxt(ctx.decode(res.body, encodingOf(res)))
     const num = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : undefined)
     const lineNumber = num(s.BBS_LINE_NUMBER)
@@ -186,6 +213,7 @@ async function readSubject(url: string, ctx: ConnectorContext, boardUrl?: string
   if (res.status === 404) throw new Error(`板が見つかりません(HTTP 404): ${boardUrl ?? url}`)
   ensureOk(res, url)
   const text = ctx.decode(res.body, encodingOf(res))
+  rememberBoardEncoding(url.replace(/[^/]*$/, ''), res.body)
   if (!looksLikeSubject(text)) throw new Error(`スレ一覧を読めませんでした(掲示板の板ではないかもしれません): ${boardUrl ?? url}`)
   return text
 }
@@ -376,7 +404,7 @@ export const twoChConnector: Connector = {
         const res = await ctx.http.get(kako)
         if (res.status === 200 && res.body.length > 0) {
           const body = completeLines(res.body)
-          const { posts, title } = parseDat(ctx.decode(body, encodingOf(res)))
+          const { posts, title } = parseDat(ctx.decode(body, encodingOf(res, body)))
           if (posts.length > 0)
             return {
               status: cursor ? 'reset' : 'updated',
@@ -395,7 +423,8 @@ export const twoChConnector: Connector = {
       if (res.status === 404 || res.status === 302) return archived()
       ensureOk(res, url)
       const body = completeLines(res.body)
-      const { posts, title } = parseDat(ctx.decode(body, encodingOf(res)))
+      rememberBoardEncoding(thread.boardUrl, body)
+      const { posts, title } = parseDat(ctx.decode(body, encodingOf(res, body)))
       return {
         status: cursor ? 'reset' : 'updated',
         posts,
@@ -419,7 +448,7 @@ export const twoChConnector: Connector = {
     if (res.body[0] !== LF) return fetchAll()
 
     const added = completeLines(res.body.subarray(1))
-    const { posts } = parseDat(ctx.decode(added, encodingOf(res)), cursor.postCount + 1)
+    const { posts } = parseDat(ctx.decode(added, encodingOf(res, added)), cursor.postCount + 1)
     return {
       status: 'updated',
       posts,

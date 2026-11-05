@@ -35,5 +35,10 @@
   { "name": "EUC: 丸数字の最後", "input": { "encoding": "euc-jp", "value": "⑳" }, "expected": "v=%AD%B4" },
   { "name": "EUC: ローマ数字", "input": { "encoding": "euc-jp", "value": "Ⅰ" }, "expected": "v=%AD%B5" },
   { "name": "EUC: マイナス(U+2212。表にない)", "input": { "encoding": "euc-jp", "value": "−" }, "expected": "v=%26%238722%3B" },
-  { "name": "EUC: 円記号(表にない)", "input": { "encoding": "euc-jp", "value": "¥" }, "expected": "v=%26%23165%3B" }
+  { "name": "EUC: 円記号(表にない)", "input": { "encoding": "euc-jp", "value": "¥" }, "expected": "v=%26%23165%3B" },
+  {"name": "UTF-8: ひらがな", "input": {"encoding": "utf-8", "value": "あ"}, "expected": "v=%E3%81%82"},
+  {"name": "UTF-8: 改行は CR LF", "input": {"encoding": "utf-8", "value": "a\nb"}, "expected": "v=a%0D%0Ab"},
+  {"name": "UTF-8: 空白は +", "input": {"encoding": "utf-8", "value": "a b"}, "expected": "v=a+b"},
+  {"name": "UTF-8: 記号", "input": {"encoding": "utf-8", "value": "*-._~&"}, "expected": "v=*-._%7E%26"},
+  {"name": "UTF-8: 絵文字はそのまま送る", "input": {"encoding": "utf-8", "value": "😀"}, "expected": "v=%F0%9F%98%80"}
 ]

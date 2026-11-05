@@ -1020,6 +1020,7 @@ function PostArticle(props: Props) {
             />
           )}
           <p
+            data-post-body
             ref={isAA && isMobile ? fitAA : undefined}
             // スマホの AA は横にずらさず(スワイプとぶつかる)、字を小さくして 1 画面に収める(fitAA)
             className={`text-base ${bodyClass} ${isAA ? `aa-font whitespace-pre ${isMobile ? 'overflow-hidden' : 'overflow-x-auto'}` : 'whitespace-pre-wrap break-words leading-relaxed'}`}

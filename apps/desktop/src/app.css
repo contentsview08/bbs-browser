@@ -723,6 +723,12 @@ input[type='checkbox']:indeterminate {
   animation: toast-in 200ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
 }
 
+/* スレ表示のスクロール領域。基準のレスを動かさない処理は hooks/useThreadScroll.ts で自前で行う。
+   WebKit に overflow-anchor がなく、ブラウザの固定と二重に効くと動いてしまうため、どのブラウザでも切る */
+.post-scroller {
+  overflow-anchor: none;
+}
+
 /* スレ表示のレス 1 件ぶんの枠。画面の外にあるレスは、配置と描画の計算を省く(content-visibility)。
    大きさは、一度描いたら覚えておいた値(auto)、まだ描いていなければ 90px と見積もる */
 .post-cv {

@@ -3,7 +3,8 @@
 // ここを分けておくのは、開く・読む・タブを切り替える・新着が届く、の流れをテストで確かめるため。
 
 import type { Post } from '@bbs-browser/connectors'
-import { imageUrlsIn, youtubeIdsIn } from './postBody'
+import { cardUrlsIn, looksLikeAA, mediaIn } from './postBody'
+import { isAutoLoadable } from './safeUrl'
 
 /** 読んでいた位置。画面のいちばん上に見えていたレスと、ヘッダーの下端からのずれ */
 export interface ScrollPosition {
@@ -17,7 +18,7 @@ export type OpenPosition = 'unread' | 'top' | 'bottom'
 
 /** 開いたときの行き先 */
 export type OpenTarget =
-  | { kind: 'saved'; position: ScrollPosition }
+  | { kind: 'saved'; position: ScrollPosition; pendingUnread?: boolean }
   | { kind: 'bottom'; pendingUnread: boolean }
   | { kind: 'unread'; no: number }
   | { kind: 'top' }
@@ -25,12 +26,14 @@ export type OpenTarget =
 /**
  * 開いたとき(最初にレスが出たとき)にどこへ置くか。
  * タブを切り替えて戻ってきたときの位置があればそれを優先し、なければ設定どおりにする。
- * 「最初の未読」がまだ手元にない(前回最後まで読んでいた)ときは、一番下に置いて新着を待つ
+ * 「最初の未読」がまだ手元にない(前回最後まで読んでいた)ときは、閉じたときの位置があればそこ、なければ一番下に置いて新着を待つ
  */
 export function openTarget(input: {
   saved?: ScrollPosition
   /** saved のレスが画面にあるか */
   savedFound: boolean
+  /** タブを閉じたときに読んでいた位置。全部読み終えたスレは未読の頭がないので、この位置へ戻す */
+  closed?: ScrollPosition
   openPosition: OpenPosition
   unreadFrom: number
   /** unreadFrom のレスが手元のログにあるか */
@@ -41,7 +44,9 @@ export function openTarget(input: {
   if (saved && input.savedFound) return { kind: 'saved', position: saved }
   if (input.openPosition === 'bottom') return { kind: 'bottom', pendingUnread: false }
   if (input.openPosition === 'unread' && input.unreadFrom > 1) {
-    return input.hasUnreadPost ? { kind: 'unread', no: input.unreadFrom } : { kind: 'bottom', pendingUnread: true }
+    if (input.hasUnreadPost) return { kind: 'unread', no: input.unreadFrom }
+    const closed = input.closed
+    return closed && !closed.bottom ? { kind: 'saved', position: closed, pendingUnread: true } : { kind: 'bottom', pendingUnread: true }
   }
   return { kind: 'top' }
 }
@@ -129,11 +134,15 @@ export interface HeightMetrics {
   lineHeight: number
   /** 名前・日付の行と、レスどうしの余白 */
   chrome: number
-  /** 画像・動画のサムネイルの段 */
+  /** 画像・動画のサムネイルの段(1 段ぶんの高さと、段の上の余白) */
   thumbRow: number
-  /** リンクのプレビュー 1 件 */
+  /** リンクのプレビュー 1 件(札の高さと、札の上の余白) */
   linkPreview: number
   showThumbnails: boolean
+  /** リンクの札を出すか */
+  showLinkPreview?: boolean
+  /** サムネイルが 1 段に何個並ぶか(決めなければ折り返さない) */
+  thumbsPerRow?: number
 }
 
 /**
@@ -141,16 +150,92 @@ export interface HeightMetrics {
  * 一律の値にすると、長いレスや画像の多いスレで飛び先や前の位置への戻しがずれるため
  */
 export function estimatePostHeight(post: Post, m: HeightMetrics): number {
+  // AA は折り返さずに出す
+  const wraps = !looksLikeAA(post.body)
   let lines = 0
   for (const line of post.body.split('\n')) {
+    if (!wraps) {
+      lines++
+      continue
+    }
     // 半角は全角の半分の幅として数える
     let w = 0
     for (const ch of line) w += ch.charCodeAt(0) < 0x80 ? 0.5 : 1
     lines += Math.max(1, Math.ceil(w / Math.max(1, m.charsPerLine)))
   }
   let h = m.chrome + lines * m.lineHeight
-  if (m.showThumbnails && (imageUrlsIn(post.body).length > 0 || youtubeIdsIn(post.body).length > 0)) h += m.thumbRow
+  const { media, links } = postShape(post, m)
+  if (media > 0) h += m.thumbRow * Math.ceil(media / Math.max(1, m.thumbsPerRow ?? media))
+  h += links * m.linkPreview
   return Math.round(h)
+}
+
+/** レスの中で、本文のほかに高さを決めるもの。サムネイルの数と、リンクの札の数(札は 3 件まで。PostArticle と同じ) */
+export function postShape(post: Post, m: Pick<HeightMetrics, 'showThumbnails' | 'showLinkPreview'>): { media: number; links: number } {
+  return {
+    media: m.showThumbnails ? mediaIn(post.body).length : 0,
+    links: m.showLinkPreview ? Math.min(3, cardUrlsIn(post.body).filter(isAutoLoadable).length) : 0,
+  }
+}
+
+/** 見積もりと実測の差を種類ごとに分けるための名前。頭の省略・サムネイル・札の有無で、見積もりの外れ方が違う */
+export function heightKind(flags: { continued?: boolean; media?: boolean; links?: boolean }): string {
+  return `${flags.continued ? 'c' : ''}${flags.media ? 'm' : ''}${flags.links ? 'l' : ''}`
+}
+
+/**
+ * 実測の差(実際の高さ − 見積もり)から、種類ごとの補正を求める。中央値なので、飛び抜けて高いレスには引きずられない。
+ * 数の少ない種類は、全体の中央値を使う
+ */
+export function heightOffsets(samples: readonly { kind: string; diff: number }[], minPerKind = 3): { all: number; byKind: Map<string, number> } {
+  const median = (a: number[]) => [...a].sort((x, y) => x - y)[a.length >> 1]
+  const groups = new Map<string, number[]>()
+  for (const s of samples) {
+    const g = groups.get(s.kind)
+    if (g) g.push(s.diff)
+    else groups.set(s.kind, [s.diff])
+  }
+  const byKind = new Map<string, number>()
+  for (const [kind, g] of groups) if (g.length >= minPerKind) byKind.set(kind, median(g))
+  return { all: samples.length ? median(samples.map((s) => s.diff)) : 0, byKind }
+}
+
+/** 基準のレスをそのまま見せるために scrollTop へ足す量。位置は「画面上の位置 + scrollTop」(スクロールしても変わらない値)で比べる */
+export function anchorCorrection(savedY: number, nowY: number): number {
+  const d = nowY - savedY
+  // 小数の丸めで直し続けないよう、0.5px 未満は直さない
+  return Math.abs(d) < 0.5 ? 0 : d
+}
+
+/**
+ * ジャンプのあとに直し続けるのをやめるか。行き先が quietMs のあいだ動かなければ着いたものとし、
+ * 動き続けても maxMs で打ち切る(読み込みが終わらないときに、利用者のスクロールを奪い続けないように)
+ */
+export function settleDone(t: { now: number; start: number; lastChange: number }, quietMs: number, maxMs: number): boolean {
+  return t.now - t.lastChange >= quietMs || t.now - t.start >= maxMs
+}
+
+/**
+ * ジャンプの途中で、自分ではない誰かが動かしたか(ミニマップ・指の慣性など)。
+ * 中身が縮んで一番下に押し戻されたときは、誰かが動かしたことにしない
+ */
+export function movedByOthers(scrollTop: number, written: number, maxScrollTop: number): boolean {
+  if (Number.isNaN(written) || Math.abs(scrollTop - written) < 2) return false
+  return !(written > maxScrollTop && Math.abs(scrollTop - maxScrollTop) < 2)
+}
+
+/** 読んでいた位置を、スレごとに少しだけ覚えておく入れ物。多すぎたら古いものから捨てる */
+export class PositionMemory {
+  private map = new Map<string, ScrollPosition>()
+  constructor(private limit = 200) {}
+  get(thread: string): ScrollPosition | undefined {
+    return this.map.get(thread)
+  }
+  set(thread: string, pos: ScrollPosition) {
+    this.map.delete(thread)
+    this.map.set(thread, pos)
+    while (this.map.size > this.limit) this.map.delete(this.map.keys().next().value!)
+  }
 }
 
 /**

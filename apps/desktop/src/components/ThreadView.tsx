@@ -40,7 +40,7 @@ import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
-import { animateScroll, framesIn, useThreadScroll } from '../hooks/useThreadScroll'
+import { animateScroll, closedPosition, framesIn, useThreadScroll } from '../hooks/useThreadScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import { firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, stepCursor, type Span } from '../utils/cursor'
@@ -393,6 +393,20 @@ interface FrameShared {
  * レス 1 件ぶんの枠。選んでいるレスなどは枠ごとの真偽値で受け取り、値の変わった枠だけを描き直す
  * (J・K や押したときに動くのは 2〜3 枠で、1000 枠を作り直すと押し続けで詰まる)
  */
+/** 頭(名前の行)を省くレスか。返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため) */
+function continuedHead(
+  p: Post,
+  i: number,
+  variant: PostVariant,
+  anchorCounts: Map<number, number>,
+  ownNos: ReadonlySet<number> | undefined,
+  replyPreviewOf: (p: Post) => unknown,
+  continuedFrom: (i: number) => boolean,
+  firstUnread: boolean,
+): boolean {
+  return ((anchorCounts.get(p.no) ?? 0) === 0 || (variant === 'line' && !!ownNos?.has(p.no))) && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
+}
+
 const PostFrame = memo(function PostFrame(props: {
   post: Post
   index: number
@@ -473,10 +487,7 @@ const PostFrame = memo(function PostFrame(props: {
           iconCount={s.iconCounts.get(iconKeyOf(p, s.iconFromWatchoi) ?? '') ?? 0}
           showTopDivider={i > 0 && !firstUnread && (s.variant === 'card' || s.variant === 'matome')}
           variant={s.variant}
-          // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
-          continued={
-            ((s.anchorCounts.get(p.no) ?? 0) === 0 || (s.variant === 'line' && s.ownNos.has(p.no))) && (s.variant === 'line' || (s.variant === 'discord' && !s.replyPreviewOf(p))) && !firstUnread && s.continuedFrom(i)
-          }
+          continued={continuedHead(p, i, s.variant, s.anchorCounts, s.ownNos, s.replyPreviewOf, s.continuedFrom, firstUnread)}
           replyPreview={s.variant === 'discord' || s.variant === 'line' ? s.replyPreviewOf(p) : undefined}
           ng={s.isNg(p)}
           autoNg={s.autoNg.get(p.no)}
@@ -886,7 +897,9 @@ export default function ThreadView(props: Props) {
     const posts = log.posts
     const n = posts.length
     const at = (no: number) => posts.findIndex((p) => p.no >= no)
-    const pos = props.initialPosition
+    // 全部読み終えたスレは、閉じたときの位置へ戻す
+    const allRead = !posts.some((p) => p.no >= unreadFrom)
+    const pos = props.initialPosition ?? (settings.openPosition === 'unread' && unreadFrom > 1 && allRead ? closedPosition(props.threadKey) : undefined)
     // 開く位置(utils/threadScroll.ts の openTarget と同じ順で決める)
     const anchor =
       pos?.bottom || (!pos && settings.openPosition === 'bottom')
@@ -1071,6 +1084,38 @@ export default function ThreadView(props: Props) {
   }, [log.posts, resolveAnchor, quoteLinks])
 
 
+  /** レス番号 → 並びの位置(頭を省くかの判断を、番号から引くため) */
+  const indexOfNo = useMemo(() => new Map(log.posts.map((p, i) => [p.no, i])), [log.posts])
+  const isContinuedPost = useCallback(
+    (p: Post) => {
+      const i = indexOfNo.get(p.no)
+      return i !== undefined && continuedHead(p, i, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, p.no === unreadFrom && unreadFrom > 1)
+    },
+    [indexOfNo, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, unreadFrom],
+  )
+  /** レスの高さを変える設定。変わったら、覚えた高さと見積もりの補正を使わない */
+  const layoutKey = useMemo(
+    () =>
+      [
+        variant,
+        settings.idPosition,
+        settings.idStyle,
+        settings.fontPx,
+        settings.mobileFontPx,
+        settings.contentBasePx,
+        settings.postBodyPx,
+        settings.postHeadPx,
+        settings.postLineHeight,
+        settings.postPadPx,
+        settings.postThumbSize,
+        settings.thumbLoad === 'never',
+        settings.showLinkPreview,
+        settings.urlShorten,
+        settings.tidyBlankLines,
+      ].join('|'),
+    [variant, settings.idPosition, settings.idStyle, settings.fontPx, settings.mobileFontPx, settings.contentBasePx, settings.postBodyPx, settings.postHeadPx, settings.postLineHeight, settings.postPadPx, settings.postThumbSize, settings.thumbLoad === 'never', settings.showLinkPreview, settings.urlShorten, settings.tidyBlankLines],
+  )
+
   const {
     scrollToPost,
     scrollToUnread,
@@ -1083,6 +1128,8 @@ export default function ThreadView(props: Props) {
     intrinsicHeight,
     getPosition,
     restorePosition,
+    userMoveCount,
+    noteUserMove,
     flushRead,
     rememberRendered,
   } = useThreadScroll({
@@ -1094,6 +1141,8 @@ export default function ThreadView(props: Props) {
     log,
     byNo,
     isCollapsed: isNg,
+    isContinued: isContinuedPost,
+    layoutKey,
     unreadFrom,
     active: props.active,
     initialPosition: props.initialPosition,
@@ -1102,6 +1151,7 @@ export default function ThreadView(props: Props) {
     openPosition: settings.openPosition,
     autoScrollOnNew: settings.autoScrollOnNew,
     showThumbnails: settings.thumbLoad !== 'never',
+    showLinkPreview: settings.showLinkPreview,
     jumpTo: props.jumpTo,
   })
 
@@ -1735,15 +1785,18 @@ export default function ThreadView(props: Props) {
     const root = ref.current
     if (filtering && root) filteredScrollable.current = root.scrollHeight - root.clientHeight > 80
   }, [visibleNos])
+  /** 絞り込みを始めたときの、利用者が動かした回数。絞り込みで縮んで一番下に押し戻されただけなら、読み進めたことにしない */
+  const movesAtFilter = useRef(0)
   useLayoutEffect(() => {
     if (filtering) {
+      if (!beforeFilter.current) movesAtFilter.current = userMoveCount()
       beforeFilter.current ??= getPosition()
       return
     }
     const before = beforeFilter.current
     beforeFilter.current = undefined
     if (!before) return
-    const readToEnd = filteredScrollable.current && getPosition()?.bottom
+    const readToEnd = filteredScrollable.current && userMoveCount() !== movesAtFilter.current && getPosition()?.bottom
     restorePosition(readToEnd ? { ...before, bottom: true } : before)
   }, [filtering])
 
@@ -2293,7 +2346,7 @@ export default function ThreadView(props: Props) {
         onTouchMove={isMobile ? touchPull.onTouchMove : undefined}
         onTouchEnd={isMobile ? touchPull.onTouchEnd : undefined}
         onTouchCancel={isMobile ? touchPull.onTouchCancel : undefined}
-        className={`flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
+        className={`post-scroller flex-1 min-w-0 overflow-y-auto flex flex-col ${settings.showMinimap ? 'no-scrollbar' : 'custom-scrollbar'}`}
       >
         {headerInScroll && headerBlock}
 
@@ -2333,6 +2386,7 @@ export default function ThreadView(props: Props) {
         // スマホ: ミニマップは本文の右端に重ねる(横に並べると、ヘッダーの右に同じ幅の空きができ、本文も狭くなる)
         // フッターの上で終わらせる。フッターが隠れても伸ばさない(伸び縮みすると、縮図がぐにゃぐにゃ動いて見にくい)
         <div
+          onPointerDownCapture={noteUserMove}
           className={isMobile ? 'absolute right-0 z-[5] flex' : 'contents'}
           style={isMobile ? { top: headerInScroll ? headerHeight : 0, bottom: hasFooter ? 'var(--footer-height, 0px)' : 0 } : undefined}
         >

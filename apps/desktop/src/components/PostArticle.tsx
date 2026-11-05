@@ -34,6 +34,7 @@ import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
 import { mediaSrc } from '../utils/httpsFirst'
+import { ThumbImage } from './MediaFailed'
 
 export interface PostHandlers extends BodyHandlers {
   /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
@@ -390,6 +391,8 @@ function PostArticle(props: Props) {
   const [sheet, setSheet] = useState(false)
   const longPress = useLongPress(isMobile ? () => setSheet(true) : undefined)
   const [aaOverride, setAaOverride] = useState<boolean | null>(null)
+  /** 画像の札を押して、URL を本文に広げたか */
+  const [imagesExpanded, setImagesExpanded] = useState(false)
   /** サムネイルを読みに行かない設定のとき、押して読んだサムネイル(何番目か) */
   const [loadedThumbs, setLoadedThumbs] = useState<Set<number>>()
 
@@ -995,7 +998,13 @@ function PostArticle(props: Props) {
             // まとめ風: 返信の多いレスは字を大きく濃く、ほかは小さめに(読み飛ばしながら見どころを拾える)
             style={variant === 'matome' && !isAA ? (anchorCount >= 3 ? { fontSize: 'calc(var(--post-body-size, 1rem) * 1.2)', fontWeight: 500, color: 'var(--c-text-strong)' } : { fontSize: 'calc(var(--post-body-size, 1rem) * 0.88)', opacity: 0.85 }) : undefined}
           >
-            {renderBody(body, handlers, props.quotes)}
+            {renderBody(
+              body,
+              imagesExpanded
+                ? { ...handlers, urls: handlers.urls && { ...handlers.urls, omitImages: false, collapseImageRuns: false } }
+                : { ...handlers, onExpandImages: () => setImagesExpanded(true) },
+              props.quotes,
+            )}
           </p>
 
           {links.length > 0 && (
@@ -1046,20 +1055,7 @@ function PostArticle(props: Props) {
                       {/* 家の中のアドレスは、表示しただけでは読みに行かない(押せば開く) */}
                       {isAutoLoadable(m.url) ? (
                         <>
-                          {/* 読み込んでいる間の印(読み込めたら外す) */}
-                          <ThumbSpinner />
-                          <img
-                            src={mediaSrc(m.url)}
-                            alt=""
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                            className="relative w-full h-full object-cover"
-                            onLoad={(e) => hideSpinner(e.currentTarget)}
-                            onError={(e) => {
-                              hideSpinner(e.currentTarget)
-                              e.currentTarget.style.display = 'none'
-                            }}
-                          />
+                          <ThumbImage src={m.url} className="relative w-full h-full object-cover" />
                         </>
                       ) : (
                         <LocalAddressMark />

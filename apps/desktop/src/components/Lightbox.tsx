@@ -20,6 +20,7 @@ import { isAutoLoadable } from '../utils/safeUrl'
 import { isMobile } from '../utils/platform'
 import MobileImageViewer from './mobile/MobileImageViewer'
 import { mediaSrc } from '../utils/httpsFirst'
+import { ViewerImageFailed } from './MediaFailed'
 
 interface Props {
   urls: string[]
@@ -185,6 +186,9 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
   const youtube = youtubeEmbedUrl(url)
   /** 動画を再生できなかった(HEVC の .mov など、WebView が扱えない形式) */
   const [videoError, setVideoError] = useState(false)
+  /** 画像を取得できなかった。数を変えると取り直す */
+  const [imageError, setImageError] = useState(false)
+  const [imageAttempt, setImageAttempt] = useState(0)
   const [save, setSave] = useState<SaveState>()
   const [panelOpen, setPanelOpen] = useState(true)
   const [zoom, setZoomState] = useState<Zoom>(NO_ZOOM)
@@ -426,6 +430,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
     setDragAnimating(false)
     setDismissing(false)
     setVideoError(false)
+    setImageError(false)
   }, [url])
 
   /** スマホ: 絵をたたいて本文のパネルを隠したら、ボタン類も隠して絵だけにする */
@@ -559,6 +564,14 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
             onError={() => setVideoError(true)}
           />
         )
+      ) : imageError ? (
+        <ViewerImageFailed
+          onRetry={() => {
+            setImageError(false)
+            setImageAttempt((n) => n + 1)
+          }}
+          onOpenExternal={() => onOpenExternal(url)}
+        />
       ) : (
       /* 枠いっぱいに収める(小さい画像は引き伸ばす)。スマホは画面いっぱい */
       <div
@@ -575,8 +588,9 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       >
       <img
         ref={imgRef}
-        key={url}
+        key={`${url}:${imageAttempt}`}
         src={mediaSrc(url)}
+        onError={() => setImageError(true)}
         alt=""
         referrerPolicy="no-referrer"
         draggable={false}

@@ -39,7 +39,7 @@ import {
 import type { SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
-import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
+import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver, toImageUrl } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
@@ -1819,7 +1819,8 @@ export default function App() {
    * それ以外や、開けなかったときは外で開く。板かどうかはスレ一覧が読めるかで決める(8 秒待っても返らなければ板としない)
    */
   const openLink = async (url: string) => {
-    const outside = () => (settingsRef.current.openLinksInApp ? setReaderUrl(url) : openUrl(url))
+    // 画像の URL はブラウザで開く(画像そのものはサムネイルからビューアーで見る)
+    const outside = () => (settingsRef.current.openLinksInApp && !toImageUrl(url) ? setReaderUrl(url) : openUrl(url))
     const thread = isAppThreadUrl(url)
     if (!thread && !isAppBoardUrl(url)) return outside()
     try {

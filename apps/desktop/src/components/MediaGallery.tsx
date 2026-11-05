@@ -12,6 +12,7 @@ import { saveImage } from '../host/saveImage'
 import { isAutoLoadable } from '../utils/safeUrl'
 import LocalAddressMark from './LocalAddressMark'
 import { mediaSrc } from '../utils/httpsFirst'
+import { ThumbImage } from './MediaFailed'
 
 export type MediaKind = 'image' | 'video' | 'youtube'
 
@@ -166,16 +167,7 @@ export default function MediaGallery(props: {
                   ) : m.kind === 'video' ? (
                     <video src={mediaSrc(`${m.url}#t=0.1`)} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none bg-black" />
                   ) : (
-                    <img
-                      src={mediaSrc(m.thumb ?? m.url)}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.visibility = 'hidden'
-                      }}
-                    />
+                    <ThumbImage src={m.thumb ?? m.url} className="w-full h-full object-cover" />
                   )}
                   {m.kind !== 'image' && (
                     <span className="absolute inset-0 flex items-center justify-center pointer-events-none">

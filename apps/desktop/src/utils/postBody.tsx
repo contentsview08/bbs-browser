@@ -440,6 +440,8 @@ export const isAppBoardUrl = memoByText((url) => {
 })
 
 export interface BodyHandlers {
+  /** 画像の札を押したとき。URL を本文に広げる */
+  onExpandImages?: () => void
   /** アンカーを押した(via='click')、またはマウスを乗せた(via='hover') */
   onAnchor: (nos: number[], el: HTMLElement, via: 'click' | 'hover') => void
   /** アンカーからマウスが離れた(ホバーで開く前に離れたら取り消す) */
@@ -542,11 +544,13 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
             key={keyPrefix + start}
             href={first}
             className="inline-flex items-center gap-0.5 px-1.5 rounded bg-c-surface2 text-c-link-image hover:underline align-baseline text-[0.9em] leading-snug"
-            title={run.join('\n')}
+            title={handlers.onExpandImages ? `押すと URL を表示\n${run.join('\n')}` : run.join('\n')}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              handlers.onUrl(first)
+              // 札は URL を本文に広げる(広げた URL はブラウザで開く。画像はサムネイルから見る)
+              if (handlers.onExpandImages) handlers.onExpandImages()
+              else handlers.onUrl(first)
             }}
           >
             <span className="material-symbols-outlined text-[1.1em] leading-none">image</span>

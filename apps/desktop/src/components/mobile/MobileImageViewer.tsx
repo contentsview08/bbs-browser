@@ -342,8 +342,20 @@ export default function MobileImageViewer(props: Props) {
             referrerPolicy="no-referrer"
             className="relative max-w-full max-h-full object-contain select-none"
             onLoad={(e) => hideSpinner(e.currentTarget)}
-            onError={(e) => hideSpinner(e.currentTarget)}
+            onError={(e) => {
+              hideSpinner(e.currentTarget)
+              e.currentTarget.style.display = 'none'
+              const note = e.currentTarget.nextElementSibling as HTMLElement | null
+              if (note) note.hidden = false
+            }}
           />
+          <div hidden className="relative text-center text-sm text-white/80" onClick={(e) => e.stopPropagation()}>
+            <span className="material-symbols-outlined text-5xl block">broken_image</span>
+            画像を取得できませんでした
+            <a href={url} target="_blank" rel="noreferrer" className="block mt-3 underline">
+              ブラウザで開く
+            </a>
+          </div>
         </div>
       )
     return (

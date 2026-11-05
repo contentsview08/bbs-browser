@@ -5,6 +5,7 @@
 import type { useMediaInput } from '../hooks/useMediaInput'
 import { imageUrlsIn, youtubeIdsIn } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
+import { canPlayVideo } from '../utils/videoSupport'
 
 type Media = ReturnType<typeof useMediaInput>
 
@@ -59,7 +60,7 @@ export default function MediaPreviewStrip(props: {
           className={`relative h-14 w-14 flex-shrink-0 rounded overflow-hidden border border-c-border bg-c-surface2 ${it.state === 'failed' ? 'cursor-pointer' : ''}`}
           title={it.error ?? (it.state === 'uploading' ? '上げています' : '待っています')}
         >
-          {it.file.type.startsWith('video/') ? <video src={it.preview} muted className="w-full h-full object-cover" /> : <img src={it.preview} alt="" className="w-full h-full object-cover" />}
+          {it.file.type.startsWith('video/') && !canPlayVideo(it.file.name) ? <span className="material-symbols-outlined text-2xl text-c-text-muted">movie</span> : it.file.type.startsWith('video/') ? <video src={it.preview} muted className="w-full h-full object-cover" /> : <img src={it.preview} alt="" className="w-full h-full object-cover" />}
           <span className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-0.5 text-white">
             {it.state === 'uploading' ? (
               <>

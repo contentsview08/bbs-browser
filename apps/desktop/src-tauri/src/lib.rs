@@ -593,6 +593,26 @@ fn disable_browser_accelerator_keys(app: &tauri::App) {
     });
 }
 
+/// Linux: 描画のプロセス(WebKitWebProcess)が落ちると画面が固まったままになるので、記録して読み直す。
+/// 同じ所ですぐまた落ちるときは読み直しを繰り返さない(1 分に 3 回まで)
+#[cfg(target_os = "linux")]
+fn reload_when_web_process_dies(app: &tauri::App) {
+    use webkit2gtk::WebViewExt;
+    let Some(window) = app.get_webview_window("main") else { return };
+    let _ = window.with_webview(|webview| {
+        let recent = std::cell::RefCell::new(Vec::<std::time::Instant>::new());
+        webview.inner().connect_web_process_terminated(move |view, reason| {
+            eprintln!("描画のプロセスが終了しました: {reason:?}");
+            let mut recent = recent.borrow_mut();
+            recent.retain(|at| at.elapsed() < std::time::Duration::from_secs(60));
+            if recent.len() < 3 {
+                recent.push(std::time::Instant::now());
+                view.reload();
+            }
+        });
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -628,6 +648,8 @@ pub fn run() {
                     }
                 }
             }
+            #[cfg(target_os = "linux")]
+            reload_when_web_process_dies(app);
             #[cfg(windows)]
             disable_browser_accelerator_keys(app);
             Ok(())

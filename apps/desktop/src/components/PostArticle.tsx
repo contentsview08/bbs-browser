@@ -35,6 +35,7 @@ import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
 import { mediaSrc } from '../utils/httpsFirst'
 import { ThumbImage } from './MediaFailed'
+import { canPlayVideo } from '../utils/videoSupport'
 
 export interface PostHandlers extends BodyHandlers {
   /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
@@ -1096,11 +1097,18 @@ function PostArticle(props: Props) {
                     <button
                       key={m.url}
                       type="button"
-                      onClick={open}
+                      onClick={(e) => {
+                        if (canPlayVideo(m.url)) return open(e)
+                        e.stopPropagation()
+                        handlers.onUrl(m.url)
+                      }}
                       className="post-thumb relative bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
                       title="動画を再生する"
                     >
-                      {isAutoLoadable(m.url) ? (
+                      {!canPlayVideo(m.url) ? (
+                        // 再生できない環境では <video> を置かない(描画のプロセスが落ちる)
+                        <span className="absolute inset-x-0 bottom-1 text-center text-[10px] text-white/80">ブラウザで開く</span>
+                      ) : isAutoLoadable(m.url) ? (
                         <video src={mediaSrc(`${m.url}#t=0.1`)} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
                       ) : (
                         <LocalAddressMark />

@@ -12,6 +12,7 @@ import { isAutoLoadable } from '../utils/safeUrl'
 import Lightbox from './Lightbox'
 import LoadingCenter from './LoadingCenter'
 import { mediaSrc } from '../utils/httpsFirst'
+import { canPlayVideo } from '../utils/videoSupport'
 
 /** ページを取る(アプリの通信。CORS に縛られない) */
 export type FetchPage = (url: string) => Promise<{ status: number; headers: Record<string, string>; body: Uint8Array }>
@@ -94,6 +95,8 @@ export default function ReaderView(props: { url: string; fetchPage: FetchPage; s
                 className="w-full border-0"
                 style={{ aspectRatio: '16 / 9' }}
               />
+            ) : video && !canPlayVideo(url) ? (
+              <p className="text-sm text-c-text-muted">この環境ではアプリの中で再生できません。ブラウザで開いてください</p>
             ) : video ? (
               <video src={mediaSrc(url)} controls autoPlay playsInline className="max-w-full max-h-full" />
             ) : isAutoLoadable(image!) ? (

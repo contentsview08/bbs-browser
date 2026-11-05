@@ -39,6 +39,10 @@ reqwest = "0.12"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
+# 描画のプロセスが落ちたことを受け取る。版は tauri(wry)が使っているものに合わせる
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0.2"
+
 # WebView2 の設定を直接変える(F5 などのブラウザのショートカットを切る)。版は tauri(wry)が使っているものに合わせる
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"

@@ -21,6 +21,7 @@ import { isMobile } from '../utils/platform'
 import MobileImageViewer from './mobile/MobileImageViewer'
 import { mediaSrc } from '../utils/httpsFirst'
 import { ViewerImageFailed } from './MediaFailed'
+import { canPlayVideo } from '../utils/videoSupport'
 
 interface Props {
   urls: string[]
@@ -538,7 +539,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
           onClick={(e) => e.stopPropagation()}
         />
       ) : video ? (
-        videoError ? (
+        videoError || !canPlayVideo(url) ? (
           // 再生できない形式。ブラウザ(ふつうは再生できる)で開けるようにする
           <div className="flex flex-col items-center gap-3 text-white/80 text-sm" onClick={(e) => e.stopPropagation()}>
             <span className="material-symbols-outlined text-5xl">videocam_off</span>

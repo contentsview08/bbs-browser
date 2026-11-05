@@ -69,4 +69,5 @@ val SETTINGS_INDEX = listOf(
     Triple("backup", "バックアップを書き出す", ""),
     Triple("backup", "バックアップから戻す", ""),
     Triple("about", "運営要望板を開く", ""),
+    Triple("about", "使っているソフトウェア", ""),
 )

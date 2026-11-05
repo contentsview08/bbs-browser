@@ -86,13 +86,17 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.data.NgRule
+import io.github.contentsview08.obb.data.LicensesFile
 import io.github.contentsview08.obb.data.ThumbMode
+import io.github.contentsview08.obb.data.filterLicenses
+import io.github.contentsview08.obb.data.parseLicenses
+import io.github.contentsview08.obb.data.spdxLinks
 
 /** 設定の画面(今のスマホ版の MobileSettings と同じ組み立て: 入口の一覧から、項目ごとの画面へ進む) */
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "サイトごとの設定", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色",
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "サイトごとの設定", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア",
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -103,16 +107,20 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     var sub by rememberSaveable { mutableStateOf(start) }
     // 検索から開いたページは、探した項目が隠れないよう詳しい設定も出す
     var viaSearch by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = sub != null) { sub = null; viaSearch = false }
+    // 使っているソフトウェアは「このアプリについて」の下の画面なので、戻るとそこへ
+    val goBack = { sub = if (sub == "licenses") "about" else null; viaSearch = false }
+    BackHandler(enabled = sub != null) { goBack() }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
-        else HeaderBar(TITLES[sub] ?: "", onNav = { sub = null; viaSearch = false }, navIsBack = true)
+        else HeaderBar(TITLES[sub] ?: "", onNav = { goBack() }, navIsBack = true)
         HorizontalDivider(color = Palette.border)
         // テーマと色のページは、今の配色の見本を上に止めておく(下で選ぶと、その場で変わる)
         if (sub == "theme") {
             SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
             HorizontalDivider(color = Palette.border)
         }
+        // 一覧は長いので、外のスクロールに入れず自分でスクロールする
+        if (sub == "licenses") { LicensesPage(); return@Column }
         androidx.compose.runtime.CompositionLocalProvider(LocalAdvanced provides (vm.prefs.showAdvanced || viaSearch)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp).navigationBarsPadding()) {
             when (sub) {
@@ -131,7 +139,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "menus" -> SitesPage(vm, menus = true)
                 "accounts" -> AccountsPage(vm)
                 "backup" -> BackupPage(vm)
-                "about" -> AboutPage(vm)
+                "about" -> AboutPage(vm) { sub = it }
                 "custom" -> CustomSchemeEditor(vm.prefs)
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
@@ -882,17 +890,87 @@ private fun BackupPage(vm: AppViewModel) {
 }
 
 @Composable
-private fun AboutPage(vm: AppViewModel) {
+private fun AboutPage(vm: AppViewModel, open: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
     Group("掲示板", note = "要望や不具合は、運営要望板か GitHub の Issues へ") {
         ActionRow("運営要望板を開く") { vm.openUrl("https://red-edge.net/boards/operation01/") }
+    }
+    Group("ライセンス", note = "このアプリに入っているオープンソースのソフトウェアと、そのライセンスを見られます") {
+        ActionRow("使っているソフトウェア") { open("licenses") }
     }
     Group {
         InfoRow("名前", "OBB(Open BBS Browser)")
         InfoRow("版", version)
         InfoRow("画像のアップロード", "catbox.moe")
         InfoRow("AA の字", "aahub_light")
+    }
+}
+
+/** 使っているソフトウェアの一覧。検索でき、押すとその場にライセンスの全文を開く(PC 版の LicensesDialog と同じ) */
+@Composable
+private fun LicensesPage() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    // 大きいので、この画面を開いたときだけ読む
+    val data by androidx.compose.runtime.produceState<LicensesFile?>(null) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { parseLicenses(context.assets.open("licenses.json").bufferedReader().use { it.readText() }) }.getOrNull()
+        }
+    }
+    var q by rememberSaveable { mutableStateOf("") }
+    var opened by rememberSaveable { mutableStateOf<String?>(null) }
+    val file = data ?: return
+    val shown = remember(file, q) { filterLicenses(file.packages, q) }
+    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp)) {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).background(Palette.surface2, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.weight(1f)) {
+                    if (q.isEmpty()) Text("名前・版・ライセンスで探す", color = Palette.textMuted, fontSize = 15.sp)
+                    androidx.compose.foundation.text.BasicTextField(
+                        q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 15.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+                    )
+                }
+                if (q.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(20.dp).clickable { q = "" })
+            }
+            Text("${shown.size} 件。押すとライセンスの全文を開きます", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
+        }
+        items(shown.size, key = { shown[it].id }) { i ->
+            val p = shown[i]
+            val isOpen = opened == p.id
+            Column(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().clickable { opened = if (isOpen) null else p.id }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (p.version.isEmpty()) p.name else "${p.name} ${p.version}", color = Palette.textStrong, fontSize = 15.sp)
+                        Text("${p.license} ・ ${p.kindLabel}", color = Palette.textMuted, fontSize = 12.sp)
+                    }
+                    Icon(if (isOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, tint = Palette.textMuted)
+                }
+                if (isOpen) {
+                    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+                        if (p.note != null) Text(p.note, Modifier.padding(bottom = 8.dp), color = Palette.textBody, fontSize = 13.sp)
+                        if (p.url.isNotEmpty()) Text(p.url, Modifier.padding(bottom = 8.dp).clickable { uri.openUri(p.url) }, color = Palette.accent, fontSize = 13.sp)
+                        for ((name, index) in p.texts) {
+                            Text(name, Modifier.padding(top = 4.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
+                            Text(file.texts[index], Modifier.fillMaxWidth().background(Palette.surface2, RoundedCornerShape(6.dp)).padding(10.dp), color = Palette.textBody, fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                        if (p.texts.isEmpty()) {
+                            val links = spdxLinks(p.license)
+                            Text(if (links.isEmpty()) "全文のファイルは入っていません。" else "全文のファイルは入っていません。ライセンスの標準文:", color = Palette.textMuted, fontSize = 12.sp)
+                            for ((id, url) in links) Text(id, Modifier.padding(top = 4.dp).clickable { uri.openUri(url) }, color = Palette.accent, fontSize = 13.sp)
+                        }
+                    }
+                }
+                HorizontalDivider(color = Palette.border)
+            }
+        }
     }
 }
 

@@ -82,7 +82,7 @@ data class AiHit(val rule: AiNgRule, val p: Float?, val manual: Boolean, val sam
 fun hypothesisOf(prompt: String) = prompt.trim().trimEnd('。', '.') + "。"
 
 /** 判定に渡す本文: アンカーだけの行・URL を除き、長すぎるものは頭だけ */
-fun aiTextOf(body: String): String = body.lines().filter { !Regex("""^\s*>>\d""").containsMatchIn(it) }.joinToString("\n")
+fun aiTextOf(body: String): String = body.lines().filter { !Regex("""^\s*>>[0-9]""").containsMatchIn(it) }.joinToString("\n")
     .replace(Regex("""https?://\S+"""), "").replace(Regex("""\s+"""), " ").trim().take(300)
 
 /** 本文の鍵(PC 版の autoNg.ts の bodyKey と同じ: アンカーの行と空白を除いた本文の cyrb53 を 16 進で) */

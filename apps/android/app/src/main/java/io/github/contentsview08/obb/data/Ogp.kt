@@ -45,8 +45,8 @@ object OgpFetcher {
             if (!res.isSuccessful || !type.contains("html", true)) return@use null
             val bytes = readHead(res.body?.byteStream() ?: return@use null)
             val latin = String(bytes, Charsets.ISO_8859_1)
-            val cs = Regex("charset=([\\w-]+)", RegexOption.IGNORE_CASE).find(type)?.groupValues?.get(1)
-                ?: Regex("<meta[^>]+charset\\s*=\\s*[\"']?([\\w-]+)", RegexOption.IGNORE_CASE).find(latin)?.groupValues?.get(1)
+            val cs = Regex("charset=([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE).find(type)?.groupValues?.get(1)
+                ?: Regex("<meta[^>]+charset\\s*=\\s*[\"']?([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE).find(latin)?.groupValues?.get(1)
             val html = String(bytes, runCatching { Charset.forName(cs ?: "UTF-8") }.getOrDefault(Charsets.UTF_8))
             parse(html, res.request.url.toString()).takeIf { it.title != null || it.image != null }
         }
@@ -66,7 +66,7 @@ object OgpFetcher {
 
     private fun decode(s: String): String = s
         .replace(Regex("&#x([0-9a-fA-F]+);")) { runCatching { String(Character.toChars(it.groupValues[1].toInt(16))) }.getOrDefault("") }
-        .replace(Regex("&#(\\d+);")) { runCatching { String(Character.toChars(it.groupValues[1].toInt())) }.getOrDefault("") }
+        .replace(Regex("&#([0-9]+);")) { runCatching { String(Character.toChars(it.groupValues[1].toInt())) }.getOrDefault("") }
         .replace("&quot;", "\"").replace("&apos;", "'").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ").replace("&amp;", "&")
 
     private fun parse(html: String, pageUrl: String): Ogp {
@@ -101,7 +101,7 @@ fun isAutoLoadable(url: String): Boolean {
     val host = u.host?.lowercase() ?: return false
     if (host == "localhost" || Regex("\\.(?:local|localhost|lan|home|internal|intranet|corp|home\\.arpa)$").containsMatchIn(host)) return false
     if (host.startsWith("[")) return false
-    Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$").find(host)?.let { m ->
+    Regex("^([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})$").find(host)?.let { m ->
         val (a, b) = m.groupValues.drop(1).map { it.toInt() }
         return !(a == 0 || a == 10 || a == 127 || (a == 100 && b in 64..127) || (a == 169 && b == 254) || (a == 172 && b in 16..31) || (a == 192 && b == 168) || a >= 224)
     }

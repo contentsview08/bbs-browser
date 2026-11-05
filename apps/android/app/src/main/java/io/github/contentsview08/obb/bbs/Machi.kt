@@ -20,9 +20,9 @@ private const val ORIGIN = "https://machi.to"
 /** 昔は kanto.machi.to のように板ごとのホストだった(いまは machi.to に集まり、古いホストもそのまま返る) */
 private val HOST = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/")
 private val SITE_URL = Regex("^https?://(?:www\\.)?machi\\.to/?(?:index\\.html)?(?:[?#].*)?$")
-private val THREAD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/bbs/(?:read|offlaw|json)\\.cgi/([a-z0-9]+)/(\\d+)")
+private val THREAD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/bbs/(?:read|offlaw|json)\\.cgi/([a-z0-9]+)/([0-9]+)")
 private val BOARD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/([a-z0-9]+)/?(?:subject\\.txt|index\\.html)?(?:[?#].*)?$")
-private val SUBJECT_LINE = Regex("^(\\d+)\\.cgi,(.*)\\((\\d+)\\)\\s*$")
+private val SUBJECT_LINE = Regex("^([0-9]+)\\.cgi,(.*)\\(([0-9]+)\\)\\s*$")
 private val ERROR_TAG = Regex("<ERROR>([\\s\\S]*?)</ERROR>", RegexOption.IGNORE_CASE)
 private val DATE_ID = Regex("^(.*?)\\s*ID:(\\S+)\\s*$")
 private val TOP_LINK = Regex("<a\\s+href=\"/([a-z0-9]+)/\"[^>]*>([^<]+)", RegexOption.IGNORE_CASE)
@@ -87,7 +87,7 @@ object Machi {
         if (res.status == 404) throw IllegalStateException("まちBBS の板が見つかりません(HTTP 404)")
         if (res.status != 200) throw IllegalStateException("まちBBS の板を開けません(HTTP ${res.status})")
         val first = decode(res).split('\n').firstOrNull { it.isNotBlank() }
-        if (first != null && !Regex("^\\d+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("まちBBS の板ではないようです(スレ一覧が読めません)")
+        if (first != null && !Regex("^[0-9]+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("まちBBS の板ではないようです(スレ一覧が読めません)")
         return boardNameOf(bbs)
     }
 
@@ -122,7 +122,7 @@ object Machi {
         if (res.status != 200) throw IllegalStateException("HTTP ${res.status}: $url")
         val text = decode(res)
         val first = text.split('\n').firstOrNull { it.isNotBlank() }
-        if (first != null && !Regex("^\\d+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: ${board.url}")
+        if (first != null && !Regex("^[0-9]+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: ${board.url}")
         val out = ArrayList<ThreadSummary>()
         val seen = HashSet<String>()
         for (line in text.split('\n')) {

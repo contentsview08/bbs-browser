@@ -830,7 +830,7 @@ private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.
                 // 足りない所は、押したときに理由を出す(押せない理由が分からないと困るため)
                 if (sent) {
                     val problem = when {
-                        !Regex("^\\d{6}$").matches(code) -> "確認コード(6 桁の数字)を入れてください"
+                        !Regex("^[0-9]{6}$").matches(code) -> "確認コード(6 桁の数字)を入れてください"
                         id.trim().length < 7 -> "ユーザー ID は 7 文字以上にしてください"
                         !Regex("^[a-zA-Z0-9_-]+$").matches(id.trim()) -> "ユーザー ID に使えるのは英数字・_・- だけです"
                         password.length < 8 -> "パスワードは 8 文字以上にしてください"

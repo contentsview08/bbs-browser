@@ -7,17 +7,17 @@ import java.text.Normalizer
 /** 番号・記号・空白を除き、全角英数を半角に、英字を小文字にそろえる */
 fun normalizeTitle(title: String): String =
     Normalizer.normalize(title, Normalizer.Form.NFKC).lowercase()
-        .replace(Regex("(part|ｐａｒｔ|その|第|vol\\.?|no\\.?)\\s*\\d+\\s*(弾|章|話|回|スレ|目)?"), "")
-        .replace(Regex("[★☆◆◇■□●○#＃]+\\s*\\d+"), "")
-        .replace(Regex("\\d+"), "")
+        .replace(Regex("(part|ｐａｒｔ|その|第|vol\\.?|no\\.?)\\s*[0-9]+\\s*(弾|章|話|回|スレ|目)?"), "")
+        .replace(Regex("[★☆◆◇■□●○#＃]+\\s*[0-9]+"), "")
+        .replace(Regex("[0-9]+"), "")
         .replace(Regex("[\\s\\p{P}\\p{S}]+"), "")
 
 /** スレタイの通し番号(Part12・その12・★12・末尾の数字の順に探す) */
 fun titleNumber(title: String): Int? {
     val t = Normalizer.normalize(title, Normalizer.Form.NFKC)
-    val m = Regex("(?:part|その|第|vol\\.?|no\\.?)\\s*(\\d+)", RegexOption.IGNORE_CASE).find(t)
-        ?: Regex("[★☆◆◇■□●○#]\\s*(\\d+)").find(t)
-        ?: Regex("(\\d+)\\s*(?:スレ|章|弾|話|回|目)?\\s*(?:【[^】]*】|\\[[^\\]]*]|\\([^)]*\\))?\\s*$").find(t)
+    val m = Regex("(?:part|その|第|vol\\.?|no\\.?)\\s*([0-9]+)", RegexOption.IGNORE_CASE).find(t)
+        ?: Regex("[★☆◆◇■□●○#]\\s*([0-9]+)").find(t)
+        ?: Regex("([0-9]+)\\s*(?:スレ|章|弾|話|回|目)?\\s*(?:【[^】]*】|\\[[^\\]]*]|\\([^)]*\\))?\\s*$").find(t)
     return m?.groupValues?.get(1)?.toIntOrNull()
 }
 

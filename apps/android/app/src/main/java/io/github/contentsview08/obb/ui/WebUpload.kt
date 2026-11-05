@@ -51,7 +51,7 @@ data class WebUploadSite(val key: String, val name: String, val url: String, val
 
 val WEB_UPLOAD_SITES = listOf(
     WebUploadSite("imgur", "imgur", "https://imgur.com/upload", """https://i\.imgur\.com/[A-Za-z0-9]{5,}\.(?:jpe?g|png|gif|webp|mp4)""", "消えない。ログインしなくても上げられます"),
-    WebUploadSite("imgbox", "imgbox", "https://imgbox.com/", """https://images\d*\.imgbox\.com/[a-f0-9]{2}/[a-f0-9]{2}/[A-Za-z0-9]+_o\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
+    WebUploadSite("imgbox", "imgbox", "https://imgbox.com/", """https://images[0-9]*\.imgbox\.com/[a-f0-9]{2}/[a-f0-9]{2}/[A-Za-z0-9]+_o\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
     WebUploadSite("imgbb", "imgbb", "https://imgbb.com/", """https://i\.ibb\.co/[A-Za-z0-9]+/[^\s"'<>]+\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
 )
 

@@ -56,6 +56,8 @@ import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -263,6 +265,26 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         if (terms.isNotEmpty()) list = list.filter { io.github.contentsview08.obb.data.matchesTerms("${it.no} ${it.name} ${it.id ?: ""} ${it.body}", terms) }
         list
     }
+    // 続けて並んだあぼーんのまとまり。絞り込み・検索の間はまとめない。薄く表示の NG は読めるのでまとめない
+    val ngStyleNow = vm.prefs.ngStyle
+    val ngGroups = remember(index, page.ngNos, page.aiNg, ngStyleNow, vm.prefs.groupNg, filter, query, page.unreadFrom) {
+        if (!vm.prefs.groupNg || filter != null || query.isNotBlank()) io.github.contentsview08.obb.data.NgRuns.NONE
+        else io.github.contentsview08.obb.data.ngRuns(index.posts.map { it.no }, page.unreadFrom) { no ->
+            val ai = page.aiNg[no]
+            when {
+                no in page.ngNos -> when (ngStyleNow) {
+                    "fold" -> io.github.contentsview08.obb.data.NgRunKind.RULE
+                    "hide" -> io.github.contentsview08.obb.data.NgRunKind.SKIP
+                    else -> null
+                }
+                ai?.rule?.show == "fold" -> io.github.contentsview08.obb.data.NgRunKind.AI
+                ai?.rule?.show == "hide" -> io.github.contentsview08.obb.data.NgRunKind.SKIP
+                else -> null
+            }
+        }
+    }
+    /** 広げたまとまり(先頭のレス番号) */
+    var openRuns by remember { mutableStateOf(emptySet<Int>()) }
     val listState = page.listState
 
     // スクロールの覚えと操作(今のスマホ版の useThreadScroll と同じ動き)
@@ -594,11 +616,19 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     ) {
                         itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
-                            postRow(p, shown.getOrNull(i - 1), true)
-                            // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
-                            // まとめ風は区切りをごく薄く(まとめサイトのように、レスの切れ目は余白で見せる)
-                            if (style == "matome") HorizontalDivider(color = Palette.border.copy(alpha = 0.3f))
-                            else if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
+                            // まとめているあいだは、先頭に 1 行だけ出し、ほかは高さのない行にする(行の並びはレス番号のまま。スクロールの覚えがレスの並びに頼っているため)
+                            val runFirst = ngGroups.firstOf[p.no]
+                            val runClosed = runFirst != null && runFirst !in openRuns
+                            if (runFirst == p.no) ngGroups.runs[p.no]?.let { run ->
+                                NgRunRow(run, open = !runClosed) { openRuns = if (runClosed) openRuns + p.no else openRuns - p.no }
+                            }
+                            if (!runClosed) postRow(p, shown.getOrNull(i - 1), true)
+                            if (!runClosed || runFirst == p.no) {
+                                // 区切り線はカードだけ(Discord 風・LINE 風は平らに並べる)
+                                // まとめ風は区切りをごく薄く(まとめサイトのように、レスの切れ目は余白で見せる)
+                                if (style == "matome") HorizontalDivider(color = Palette.border.copy(alpha = 0.3f))
+                                else if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
+                            }
                         }
                         // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)。押すと自分の書き込みをレス抽出のポップアップで出す
                         item(key = "end") {
@@ -947,6 +977,20 @@ private fun reportRead(ctl: ThreadScrollCtl, scroller: ThreadScroller, vm: AppVi
     if (last > ctl.sent) {
         ctl.sent = last
         vm.markRead(page, last)
+    }
+}
+
+/** 続けて並んだあぼーんをまとめた 1 行。押すと広げる・まとめ直す */
+@Composable
+private fun NgRunRow(run: io.github.contentsview08.obb.data.NgRun, open: Boolean, onToggle: () -> Unit) {
+    val parts = listOfNotNull(if (run.ai > 0) "AI NG ${run.ai}" else null, if (run.rule > 0) "NG ${run.rule}" else null).joinToString("・")
+    Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (open) Icons.Filled.UnfoldLess else Icons.Filled.UnfoldMore, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "${run.nos.first()}〜${run.nos.last()}  あぼーん × ${run.ai + run.rule}($parts)" + if (open) " — まとめる" else "",
+            color = Palette.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

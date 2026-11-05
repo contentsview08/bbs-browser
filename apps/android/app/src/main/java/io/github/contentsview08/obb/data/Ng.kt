@@ -77,6 +77,43 @@ data class NgHits(val id: List<NgRule>, val name: List<NgRule>, val body: List<N
 fun splitNgHits(rules: List<NgRule>, value: String?): Pair<List<NgRule>, List<NgRule>> =
     rules.partition { !it.isRegex && it.pattern == value }
 
+/** あぼーんをまとめるときの扱い。RULE・AI は数えるもの、SKIP は何も描かないので数えずに飛ばす(間に挟まってもまとまりは切れない) */
+enum class NgRunKind { RULE, AI, SKIP }
+
+/** 続けて並んだあぼーんのまとまり。nos は飛ばしたレスも含む */
+data class NgRun(val nos: List<Int>, val ai: Int, val rule: Int)
+
+/** runs: 先頭の番号 → まとまり。firstOf: レス番号 → 入っているまとまりの先頭の番号 */
+data class NgRuns(val runs: Map<Int, NgRun>, val firstOf: Map<Int, Int>) {
+    companion object { val NONE = NgRuns(emptyMap(), emptyMap()) }
+}
+
+/**
+ * 続けて並んだあぼーんをまとめる(PC 版の ThreadView の ngRuns と同じ)。数えるものが 2 つ以上続いたときだけ。
+ * 「ここから未読」の所では切る(区切りの線が隠れないように)。kindOf が null のレスで切れる
+ */
+fun ngRuns(nos: List<Int>, unreadFrom: Int, kindOf: (Int) -> NgRunKind?): NgRuns {
+    val runs = LinkedHashMap<Int, NgRun>()
+    val firstOf = HashMap<Int, Int>()
+    var cur = ArrayList<Int>()
+    fun close() {
+        val kinds = cur.map(kindOf)
+        val ai = kinds.count { it == NgRunKind.AI }
+        val rule = kinds.count { it == NgRunKind.RULE }
+        if (ai + rule >= 2) {
+            runs[cur[0]] = NgRun(cur, ai, rule)
+            for (no in cur) firstOf[no] = cur[0]
+        }
+        cur = ArrayList()
+    }
+    for (no in nos) {
+        if (no == unreadFrom) close()
+        if (kindOf(no) != null) cur.add(no) else close()
+    }
+    close()
+    return NgRuns(runs, firstOf)
+}
+
 /** ルールを判定関数にしておく(レスの数だけ正規表現を作り直さないため) */
 class NgMatcher(rules: List<NgRule>) {
     private class M(val r: NgRule, val re: Regex?)

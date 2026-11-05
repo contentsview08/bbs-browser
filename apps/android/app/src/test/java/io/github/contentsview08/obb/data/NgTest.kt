@@ -37,4 +37,27 @@ class NgTest {
         // 本文は値を渡さず、いつも編集を開く
         assertEquals(emptyList<NgRule>() to listOf(exact), splitNgHits(listOf(exact), null))
     }
+
+    private val nos = (1..10).toList()
+
+    @Test fun 二つ以上続いたあぼーんをまとめる() {
+        val ng = setOf(2, 3, 4, 7)
+        val r = ngRuns(nos, 0) { if (it in ng) NgRunKind.RULE else null }
+        assertEquals(mapOf(2 to NgRun(listOf(2, 3, 4), 0, 3)), r.runs)
+        assertEquals(mapOf(2 to 2, 3 to 2, 4 to 2), r.firstOf)
+    }
+
+    @Test fun ここから未読の所で切る() {
+        val ng = setOf(2, 3, 4, 5)
+        val r = ngRuns(nos, 4) { if (it in ng) NgRunKind.RULE else null }
+        assertEquals(setOf(2, 4), r.runs.keys)
+    }
+
+    @Test fun 飛ばすものは数えないがまとまりは切らない() {
+        val kinds = mapOf(2 to NgRunKind.RULE, 3 to NgRunKind.SKIP, 4 to NgRunKind.AI)
+        val r = ngRuns(nos, 0) { kinds[it] }
+        assertEquals(NgRun(listOf(2, 3, 4), 1, 1), r.runs[2])
+        // 飛ばすものだけでは、まとめて出す行がない
+        assertEquals(emptyMap<Int, NgRun>(), ngRuns(nos, 0) { if (it in 2..5) NgRunKind.SKIP else null }.runs)
+    }
 }

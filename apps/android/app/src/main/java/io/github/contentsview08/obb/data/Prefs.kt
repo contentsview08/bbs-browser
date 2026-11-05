@@ -244,6 +244,8 @@ class Prefs(context: Context) {
     var showConversations by pref("showConversations", false)
     /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */
     var ngStyle by pref("ngStyle", "fold")
+    /** 2 つ以上続いたあぼーんを 1 行にまとめる(PC 版と同じ既定) */
+    var groupNg by pref("groupNg", true)
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */
     var doubleTapReply by pref("doubleTapReply", false)
     var showMinimap by pref("showMinimap", true)

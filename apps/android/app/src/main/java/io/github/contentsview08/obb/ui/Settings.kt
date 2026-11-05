@@ -506,6 +506,7 @@ private fun NgPage(vm: AppViewModel) {
     val today = io.github.contentsview08.obb.data.today()
     Group("見せ方") {
         ChoiceRow("NG のレス", p.ngStyle, listOf("fold" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngStyle = it }
+        SwitchRow("2 つ以上続いたあぼーんを 1 行にまとめる", p.groupNg, desc = "「あぼーん × 12(NG 12)」のように出します。押すと 1 つずつのあぼーんに広がり、そこから中身を見られます") { p.groupNg = it }
     }
     Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
         AiNgSettings(vm)

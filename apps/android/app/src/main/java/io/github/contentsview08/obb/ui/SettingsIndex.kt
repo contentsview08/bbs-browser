@@ -59,6 +59,7 @@ val SETTINGS_INDEX = listOf(
     Triple("notify", "キーワードに合うスレ", "お気に入り板に、「スレ一覧 → キーワード」に合うスレが立ったとき"),
     Triple("notify", "キーワードを確かめる間隔", ""),
     Triple("ng", "NG のレス", ""),
+    Triple("ng", "2 つ以上続いたあぼーんを 1 行にまとめる", "「あぼーん × 12(NG 12)」のように出します。押すと 1 つずつのあぼーんに広がり、そこから中身を見られます"),
     Triple("ng", "NG を足す", ""),
     Triple("menus", "サイトを足す", ""),
     Triple("accounts", "ユーザー ID", ""),

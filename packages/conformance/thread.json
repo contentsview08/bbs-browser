@@ -1,0 +1,9 @@
+[
+  { "name": "前のレスへのアンカーを数える", "input": [{ "no": 1, "body": "a" }, { "no": 2, "body": ">>1" }, { "no": 3, "body": ">>1,2" }], "expected": { "replyCount": { "1": 2, "2": 1 }, "tree": { "1": [1, 2, 3] } } },
+  { "name": "後ろのレスへのアンカーも数える", "input": [{ "no": 5, "body": ">>10" }, { "no": 10, "body": "a" }], "expected": { "replyCount": { "10": 1 }, "tree": { "5": [5, 10] } } },
+  { "name": "まだないレスへのアンカーは数えるが、たどらない", "input": [{ "no": 1, "body": ">>10" }], "expected": { "replyCount": { "10": 1 }, "tree": { "1": [1] } } },
+  { "name": "自分へのアンカーは数えない", "input": [{ "no": 3, "body": ">>3" }], "expected": { "replyCount": {}, "tree": { "3": [3] } } },
+  { "name": "同じレスから同じ先へは 1 つ", "input": [{ "no": 1, "body": "a" }, { "no": 2, "body": ">>1 >>1" }], "expected": { "replyCount": { "1": 1 } } },
+  { "name": "広い範囲は頭だけ数える", "input": [{ "no": 1, "body": "a" }, { "no": 2, "body": "b" }, { "no": 30, "body": ">>1-20" }], "expected": { "replyCount": { "1": 1 } } },
+  { "name": "6 桁は数えない", "input": [{ "no": 1, "body": ">>123456" }], "expected": { "replyCount": {} } }
+]

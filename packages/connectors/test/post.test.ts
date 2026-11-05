@@ -62,7 +62,8 @@ const EDDIST_AUTH = eddistError(
 describe('Shift_JIS のフォーム', () => {
   it('日本語・記号・空白・改行を往復できる', () => {
     const fields = { FROM: '名無し ◆tripkey', mail: 'sage', MESSAGE: 'テスト①～\n2行目 &<> 半角ｶﾅ 100%' }
-    expect(decodeForm(encodeShiftJisForm(fields))).toEqual(fields)
+    // 改行はブラウザと同じく CR LF で送る
+    expect(decodeForm(encodeShiftJisForm(fields))).toEqual({ ...fields, MESSAGE: fields.MESSAGE.replace('\n', '\r\n') })
   })
 
   it('Shift_JIS にない文字は &#数字; にする', () => {

@@ -22,14 +22,31 @@ function memoByText<T>(fn: (text: string) => T): (text: string) => T {
   }
 }
 
-/** >>1, >>1-3, ＞＞1、URL(2ch 流の ttp:// も) */
-// URL は見えない文字(ゼロ幅スペース、U+2060 のワードジョイナーなど)で切る。URL の直後に入れて書かれることがある。
-// アンカーは >>1 のほか、>1、>>1-3、>>1,2,5、>>1-3,8 も拾う(m[1] に番号の並びが入る)。
-// ふたばの書き方の >No.12345 と、> のない No.1442072291(6 桁以上。「No.1」のようなふつうの文は拾わない)も拾う。
-// 番号は 10 桁まで拾う(4chan などは板全体の通し番号)。どのレスを指すかは AnchorResolver で決める(2ch は 5 桁まで)。
-// > 1 つのものは、「2>1」のような式を拾わないよう、前が英数字や記号のときは除く。
-// 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[3])
-const TOKEN = /(?:(?:>>|＞＞|(?<![\w>＞=-])[>＞])(?:[NnＮｎ][OoＯｏ][.．])?|(?<![A-Za-z0-9])No\.(?=\d{6,10}(?!\d)))(\d{1,10}(?:-\d{1,10})?(?:[,，]\d{1,10}(?:-\d{1,10})?)*)(?!\d)|(h?ttps?:\/\/[^\s<>"、。「」\u200b-\u200f\u2060-\u2064\ufeff]+)|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)/g
+/*
+ * 本文のアンカー・URL・ID を見つける式。スマホ版の bbs/PostBody.kt と同じ決まりで、正は packages/conformance の JSON。
+ * - アンカーは >>1 のほか、>1、>>1-3、>>1,2,5、>>1-3,8 も拾う(m[1] に番号の並びが入る)。
+ *   ふたばの書き方の >No.12345 と、> のない No.1442072291(6 桁以上。「No.1」のようなふつうの文は拾わない)も拾う。
+ *   番号は 10 桁まで拾う(4chan などは板全体の通し番号)。どのレスを指すかは AnchorResolver で決める(2ch は 5 桁まで)。
+ *   > 1 つのものは、「2>1」のような式を拾わないよう、前が英数字や記号のときは除く。
+ * - URL は崩した書き方も拾う(m[2]): h 抜き(ttps://・tps://)、コロンなし(//i.imgur.com/…)、http 抜き(i.imgur.com/a.jpg)。
+ *   コロンなしはホストに . があるものだけ(「//」だけの区切りの文を拾わない)。http 抜きは画像の拡張子で終わるものだけ(ふつうの文と取り違えないため)。
+ *   URL は空白・見えない文字(ゼロ幅スペース、U+2060 のワードジョイナーなど)・日本語の句読点と閉じかっこで切る。
+ * - 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[3])
+ */
+const URL_HOST = String.raw`[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`
+const URL_HEAD = [
+  String.raw`h?ttps?:\/\/`,
+  String.raw`(?<![A-Za-z0-9_])tps?:\/\/`,
+  String.raw`(?<![A-Za-z0-9_/:])\/\/(?=${URL_HOST})`,
+  String.raw`(?<![A-Za-z0-9_./@:-])(?=${URL_HOST}\/[\w\-.~/%]*\.(?:jpe?g|png|gif|webp|avif|JPE?G|PNG|GIF|WEBP|AVIF)(?!\w))`,
+].join('|')
+const URL_BODY = String.raw`[^\s<>"、。「」）』】​-‏⁠-⁤﻿]+`
+const TOKEN = new RegExp(
+  String.raw`(?:(?:>>|＞＞|(?<![\w>＞=-])[>＞])(?:[NnＮｎ][OoＯｏ][.．])?|(?<![A-Za-z0-9])No\.(?=\d{6,10}(?!\d)))(\d{1,10}(?:-\d{1,10})?(?:[,，]\d{1,10}(?:-\d{1,10})?)*)(?!\d)` +
+    `|((?:${URL_HEAD})${URL_BODY})` +
+    String.raw`|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)`,
+  'g',
+)
 
 /** 範囲アンカーは広げすぎない(>>1-1000 で全レスに数が付くのを防ぐ) */
 const MAX_RANGE = 10
@@ -181,8 +198,11 @@ export function heatVar(count: number): string | null {
 /** 画像として扱う URL(拡張子で判定) */
 const IMAGE_URL = /\.(?:jpe?g|png|gif|webp|avif)(?:[?#][^\s]*)?$/i
 
+/** 崩した書き方の URL を、開ける形に直す。http 系の書き方は http のまま */
 function normalizeUrl(raw: string): string {
-  return raw.startsWith('ttp') ? `h${raw}` : raw
+  const m = /^(h?t?tps?:)?\/\//.exec(raw)
+  if (!m) return `https://${raw}`
+  return `${m[1] && !m[1].includes('s:') ? 'http' : 'https'}://${raw.slice(m[0].length)}`
 }
 
 /**
@@ -245,6 +265,25 @@ export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[]
   }
   return urls
 })
+
+/** 本文の URL をすべて(開ける形に直して、出てきた順に) */
+export function urlsIn(text: string): string[] {
+  const urls: string[] = []
+  for (const m of text.matchAll(TOKEN)) if (m[2]) urls.push(normalizeUrl(m[2]))
+  return urls
+}
+
+/** 本文の中の「ID:xxxx」の ID */
+export function idsIn(text: string): string[] {
+  const ids: string[] = []
+  for (const m of text.matchAll(TOKEN)) if (m[3]) ids.push(m[3])
+  return ids
+}
+
+/** リンクのカードに出す URL。アプリの中で開くスレの URL はカードにしない(スマホ版と同じ) */
+export function cardUrlsIn(text: string): string[] {
+  return linkUrlsIn(text).filter((url) => !isAppThreadUrl(url))
+}
 
 /** レスの見せ方の設定(スレ表示のオン・オフ) */
 export interface DisplayOptions {
@@ -386,7 +425,7 @@ export function hasVideo(text: string): boolean {
 export const isAppThreadUrl = memoByText((url) => allConnectors().some((c) => c.isThreadUrl?.(url) ?? false))
 /**
  * 板の URL かもしれない形か(スレの URL ではなく、どれかのコネクタが扱える形)。形だけでは分からない(youtu.be/xxx も同じ形)ので、
- * 開く前に resolve でスレ一覧が読めるかを確かめる。ファイルらしい URL(最後に . のあるもの)は板としない。スマホ版の openUrl と同じ
+ * 開く前に resolve でスレ一覧が読めるかを確かめる。ファイルらしい URL(最後に . のあるもの。subject.txt を除く)は板としない。スマホ版の bbs/UrlRoute.kt と同じ
  */
 export const isAppBoardUrl = memoByText((url) => {
   if (isAppThreadUrl(url)) return false
@@ -396,7 +435,7 @@ export const isAppBoardUrl = memoByText((url) => {
   } catch {
     return false
   }
-  if (!last || last.includes('.')) return false
+  if (!last || (last.includes('.') && last !== 'subject.txt')) return false
   return allConnectors().some((c) => c.canHandle(url))
 })
 

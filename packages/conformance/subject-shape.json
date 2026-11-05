@@ -1,0 +1,9 @@
+[
+  { "name": "2ch の形", "input": "1700000000.dat<>スレタイ (1)\n", "expected": true },
+  { "name": "cgi の形", "input": "1700000000.cgi<>スレタイ (1)\n", "expected": true },
+  { "name": "スレが 0 件の板", "input": "", "expected": true },
+  { "name": "空行だけ", "input": "\n\n", "expected": true },
+  { "name": "頭に空行", "input": "\n1700000000.dat<>スレタイ (1)\n", "expected": true },
+  { "name": "HTML のページ", "input": "<html><body>not found</body></html>", "expected": false },
+  { "name": "ふつうの文", "input": "こんにちは\n", "expected": false }
+]

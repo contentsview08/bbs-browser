@@ -332,6 +332,8 @@ export interface Connector {
   splitPostIcon?(body: string): { icon?: string; body: string }
   /** このコネクタで開けるスレの URL か(本文のリンクを押したとき、ブラウザではなくアプリで開くため) */
   isThreadUrl?(url: string): boolean
+  /** 保存済みの板の URL を、いまの正しい形に直す(掲示板がドメインを移ったときなど)。要らない掲示板は付けない */
+  canonicalBoardUrl?(url: string): string
   /**
    * 板やスレの URL から板(スレの URL ならスレも)を割り出す。扱えない URL なら null。
    * bbsmenu を公開していない板を、URL で直接登録するために使う

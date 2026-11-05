@@ -1,0 +1,6 @@
+[
+  { "name": "カタカナはひらがなに", "input": "グロ注意", "expected": "ぐろ注意" },
+  { "name": "全角英数は半角に", "input": "ＡＢＣ１２３", "expected": "abc123" },
+  { "name": "大文字は小文字に", "input": "ABC", "expected": "abc" },
+  { "name": "半角カナも", "input": "ｸﾞﾛ", "expected": "ぐろ" }
+]

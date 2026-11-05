@@ -45,9 +45,10 @@ export function encodeEucJpComponent(value: string): string {
   return out
 }
 
+/** フォームの本文。改行はブラウザと同じく CR LF で送る(バイト数の数え方とも同じ) */
 export function encodeEucJpForm(fields: Record<string, string>): string {
   return Object.entries(fields)
-    .map(([k, v]) => `${encodeEucJpComponent(k)}=${encodeEucJpComponent(v)}`)
+    .map(([k, v]) => `${encodeEucJpComponent(k)}=${encodeEucJpComponent(v.replace(/\r?\n/g, '\r\n'))}`)
     .join('&')
 }
 

@@ -62,8 +62,9 @@ export function encodeShiftJisComponent(value: string): string {
   return out
 }
 
+/** フォームの本文。改行はブラウザと同じく CR LF で送る(バイト数の数え方とも同じ) */
 export function encodeShiftJisForm(fields: Record<string, string>): string {
   return Object.entries(fields)
-    .map(([k, v]) => `${encodeShiftJisComponent(k)}=${encodeShiftJisComponent(v)}`)
+    .map(([k, v]) => `${encodeShiftJisComponent(k)}=${encodeShiftJisComponent(v.replace(/\r?\n/g, '\r\n'))}`)
     .join('&')
 }

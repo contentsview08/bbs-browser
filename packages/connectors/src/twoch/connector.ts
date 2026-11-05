@@ -34,11 +34,21 @@ interface DatCursor {
 function kakoDatUrl(thread: ThreadSummary): string | undefined {
   const host = new URL(thread.boardUrl).hostname
   if (!/(?:^|\.)(?:5ch\.io|5ch\.net|bbspink\.com)$/.test(host)) return undefined
-  return `${thread.boardUrl}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
+  return `${to5chIo(thread.boardUrl)}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
 }
 
 const ID = '2ch-compat'
 const LF = 0x0a
+
+/**
+ * 5ch は 5ch.net から 5ch.io へ移った。5ch.net への POST は、リダイレクトで本文のない GET に変わって書き込めないので、
+ * 初めから 5ch.io へ送る。5ch・bbspink は https に揃える(http のままだと別の板として覚えてしまう)
+ */
+export function to5chIo(url: string): string {
+  return url
+    .replace(/^https?:\/\/((?:[a-z0-9]+\.)?)5ch\.net(?=[/?#]|$)/, (_, sub: string) => `https://${sub}5ch.io`)
+    .replace(/^http:\/\/((?:[a-z0-9]+\.)?(?:5ch\.io|bbspink\.com))(?=[/?#]|$)/, 'https://$1')
+}
 
 /** Content-Type の charset から文字コードを決める。書かれていなければ 2ch 互換の慣習どおり Shift_JIS */
 function encodingOf(res: HttpResponse): Encoding {
@@ -53,7 +63,7 @@ function ensureOk(res: HttpResponse, url: string): void {
 }
 
 function datUrl(thread: ThreadSummary): string {
-  return `${thread.boardUrl}dat/${thread.key}.dat`
+  return `${to5chIo(thread.boardUrl)}dat/${thread.key}.dat`
 }
 
 /**
@@ -68,6 +78,8 @@ async function sendBbsCgi(
   ctx: ConnectorContext,
   excludeCookies: string[] = [],
 ): Promise<PostResult> {
+  url = to5chIo(url)
+  referer = to5chIo(referer)
   const res = await ctx.http.post(url, encodeShiftJisForm(fields), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: referer },
     excludeCookies,
@@ -98,7 +110,7 @@ async function sendBbsCgi(
 }
 
 /** subject.txt の中身がスレ一覧の形か(空の板もある)。エラーのページなどを、空のスレ一覧と取り違えないため */
-function looksLikeSubject(text: string): boolean {
+export function looksLikeSubject(text: string): boolean {
   const first = text.split('\n').find((l) => l.trim() !== '')
   return first === undefined || /^\d+\.(?:dat|cgi)<>/.test(first)
 }
@@ -124,7 +136,7 @@ async function ensureBoard(boardUrl: string, ctx: ConnectorContext): Promise<voi
 /** SETTING.TXT を読む。取れなくても困らない情報なので、失敗したら空で返す */
 async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<BoardInfo> {
   try {
-    const res = await ctx.http.get(`${boardUrl}SETTING.TXT`)
+    const res = await ctx.http.get(`${to5chIo(boardUrl)}SETTING.TXT`)
     if (res.status < 200 || res.status >= 300) return {}
     const s = parseSettingTxt(ctx.decode(res.body, encodingOf(res)))
     const num = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : undefined)
@@ -147,7 +159,7 @@ async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<
 }
 
 function threadWebUrl(thread: ThreadSummary): string {
-  const u = new URL(thread.boardUrl)
+  const u = new URL(to5chIo(thread.boardUrl))
   const board = u.pathname.replace(/\//g, '')
   return `${u.origin}/test/read.cgi/${board}/${thread.key}/`
 }
@@ -159,7 +171,7 @@ const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000
  * dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する)。
  * 5ch のお知らせスレ(9240230830 など)は番号がわざと未来になっていて、勢いの計算が狂うので、未来の日時は「不明」にする
  */
-function createdAtOf(key: string, now = Date.now()): Date | undefined {
+export function createdAtOf(key: string, now = Date.now()): Date | undefined {
   if (!/^\d{10}$/.test(key)) return undefined
   const date = new Date(Number(key) * 1000)
   return date.getTime() > now + FUTURE_TOLERANCE_MS ? undefined : date
@@ -195,17 +207,29 @@ const ITEST_THREAD = /^https?:\/\/itest\.(5ch\.net|5ch\.io|bbspink\.com)\/(?:([a
 const ITEST_BOARD = /^https?:\/\/itest\.(5ch\.net|5ch\.io|bbspink\.com)\/subback\/([^/?#]+)/
 const BOARD_URL = /^(https?:\/\/[^/]+)\/([^/?#]+)\/?(?:subject\.txt)?(?:[?#].*)?$/
 
-/**
- * itest(スマホ向けの見え方)の URL を、本当の板・スレの URL に直す。itest でなければそのまま返す。
- * サーバー名が URL にないときは、itest の板のページに書かれている本当の板の URL から探す
- */
-async function fromItest(url: string, ctx: ConnectorContext): Promise<string> {
-  const t = ITEST_THREAD.exec(url)
-  const b = t ? null : ITEST_BOARD.exec(url)
-  if (!t && !b) return url
-  const [domain, server, board, key] = t ? [t[1], t[2], t[3], t[4]] : [b![1], undefined, b![2], undefined]
-  const host = server ? `${server}.${domain}` : await serverOf(domain, board, ctx)
-  return key ? `https://${host}/test/read.cgi/${board}/${key}/` : `https://${host}/${board}/`
+/** 通信なしで分かる URL の解釈。スマホ版の bbs/UrlRoute.kt と同じ決まりで、正は packages/conformance/url.json */
+export type TwoChRoute =
+  | { kind: 'thread'; boardUrl: string; key: string }
+  | { kind: 'board'; boardUrl: string }
+  /** itest でサーバー名が URL にないもの。板のページから探す(serverOf) */
+  | { kind: 'itest'; domain: string; board: string; key?: string }
+
+/** 板・スレの URL の形を読む。板が本当にあるかは、このあとスレ一覧を取って確かめる。形が合わなければ null */
+export function routeTwoChUrl(rawUrl: string): TwoChRoute | null {
+  const url = to5chIo(rawUrl.trim())
+  const it = ITEST_THREAD.exec(url)
+  if (it) {
+    const [, domain, server, board, key] = it
+    return server ? { kind: 'thread', boardUrl: `https://${server}.${domain}/${board}/`, key } : { kind: 'itest', domain, board, key }
+  }
+  const ib = ITEST_BOARD.exec(url)
+  if (ib) return { kind: 'itest', domain: ib[1], board: ib[2] }
+  const t = THREAD_URL.exec(url)
+  if (t) return t[2] === 'test' ? null : { kind: 'thread', boardUrl: `${t[1]}/${t[2]}/`, key: t[3] }
+  const b = BOARD_URL.exec(url)
+  // 最後に . のあるものはファイルで、板ではない(a.html など)
+  if (!b || b[2] === 'test' || b[2].includes('.')) return null
+  return { kind: 'board', boardUrl: `${b[1]}/${b[2]}/` }
 }
 
 /** itest の板のページから、その板のあるサーバー(mercury.bbspink.com など)を探す */
@@ -276,6 +300,8 @@ export const twoChConnector: Connector = {
     return twoChConnector.canHandle(url) && THREAD_URL.test(url)
   },
 
+  canonicalBoardUrl: to5chIo,
+
   splitPostIcon: splitBeIcon,
 
   async boardInfo(board, ctx) {
@@ -283,20 +309,22 @@ export const twoChConnector: Connector = {
   },
 
   async resolveUrl(rawUrl, ctx) {
-    const url = await fromItest(rawUrl.trim(), ctx)
-    const t = THREAD_URL.exec(url)
-    const b = t ? null : BOARD_URL.exec(url)
-    const [origin, dir] = t ? [t[1], t[2]] : b ? [b[1], b[2]] : []
-    if (!origin || !dir || dir === 'test') return null
-    const boardUrl = `${origin}/${dir}/`
+    let route = routeTwoChUrl(rawUrl)
+    if (route?.kind === 'itest') {
+      const host = await serverOf(route.domain, route.board, ctx)
+      const boardUrl = `https://${host}/${route.board}/`
+      route = route.key ? { kind: 'thread', boardUrl, key: route.key } : { kind: 'board', boardUrl }
+    }
+    if (!route) return null
+    const { boardUrl } = route
     await ensureBoard(boardUrl, ctx)
 
     // 板名は SETTING.TXT の BBS_TITLE。取れなければディレクトリ名で代用する
-    const name = (await readSettingTxt(boardUrl, ctx)).title || dir
+    const name = (await readSettingTxt(boardUrl, ctx)).title || new URL(boardUrl).pathname.split('/').filter(Boolean).at(-1)!
 
     const board: Board = { connectorId: ID, url: boardUrl, name }
-    if (!t) return { board }
-    const key = t[3]
+    if (route.kind !== 'thread') return { board }
+    const { key } = route
     return {
       board,
       thread: { connectorId: ID, boardUrl, key, title: '', postCount: 0, order: 0, createdAt: createdAtOf(key) },
@@ -306,15 +334,17 @@ export const twoChConnector: Connector = {
   async listBoards(site, ctx) {
     const res = await ctx.http.get(site.menuUrl)
     ensureOk(res, site.menuUrl)
-    const text = ctx.decode(res.body, site.menuUrl.endsWith('.json') ? 'utf-8' : encodingOf(res))
-    const parsed = site.menuUrl.endsWith('.json') ? parseBbsMenuJson(text) : parseBbsMenuHtml(text)
-    return parsed.map((b): Board => ({ connectorId: ID, ...b }))
+    const isJson = site.menuUrl.split('?')[0].endsWith('.json')
+    const text = ctx.decode(res.body, isJson ? 'utf-8' : encodingOf(res))
+    const parsed = isJson ? parseBbsMenuJson(text) : parseBbsMenuHtml(text)
+    return parsed.map((b): Board => ({ connectorId: ID, ...b, url: to5chIo(b.url) }))
   },
 
   async listThreads(board, ctx) {
     // エッジは、スレタイの後ろに立てた人の ID が付いたスレ一覧(subject-metadent.txt)も出している。読めればそちらを使う
-    const meta = hasAuthorSubject(board.url) ? await readSubject(`${board.url}subject-metadent.txt`, ctx).catch(() => undefined) : undefined
-    const text = meta ?? (await readSubject(`${board.url}subject.txt`, ctx, board.url))
+    const base = to5chIo(board.url)
+    const meta = hasAuthorSubject(board.url) ? await readSubject(`${base}subject-metadent.txt`, ctx).catch(() => undefined) : undefined
+    const text = meta ?? (await readSubject(`${base}subject.txt`, ctx, board.url))
     return parseSubjectTxt(text).map((e, order): ThreadSummary => {
       // スレタイの後ろの角かっこは、立てた人(エッジの ID・BE 番号・ほかの板の名前や ID)
       const { title, authorId } = splitAuthorId(e.title)
@@ -402,7 +432,7 @@ export const twoChConnector: Connector = {
   },
 
   async createPost(thread, input, ctx) {
-    const board = new URL(thread.boardUrl)
+    const board = new URL(to5chIo(thread.boardUrl))
     return sendBbsCgi(
       `${board.origin}/test/bbs.cgi`,
       {
@@ -422,7 +452,7 @@ export const twoChConnector: Connector = {
   },
 
   async createThread(board, input, ctx) {
-    const u = new URL(board.url)
+    const u = new URL(to5chIo(board.url))
     return sendBbsCgi(
       `${u.origin}/test/bbs.cgi`,
       {

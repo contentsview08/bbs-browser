@@ -687,9 +687,12 @@ export default function App() {
   /** いちばん新しい openBoard の番号(古い板の遅い応答で、いま開いている板を上書きしない) */
   const boardSeq = useRef(0)
   /** 板のスレ一覧を開く。record が false(一覧の更新・戻る/進む)なら、戻る・進むの履歴には覚えない */
-  const openBoard = (b: Board, record = true) =>
+  const openBoard = (saved: Board, record = true) =>
     run('threads', async () => {
       if (!store) return
+      // 保存済みの板がドメインを移っていれば、いまの URL で開く
+      const url = connectorOf(saved.connectorId).canonicalBoardUrl?.(saved.url) ?? saved.url
+      const b = url === saved.url ? saved : { ...saved, url }
       const seq = ++boardSeq.current
       // 1 画面のとき、選んだ板のスレ一覧を見せる
       updateView((s) => showList(s, record ? listEntry({ kind: 'board', board: b }) : undefined))

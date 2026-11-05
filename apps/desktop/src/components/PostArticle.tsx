@@ -15,7 +15,7 @@ import {
   dropLeadingAnchor,
   heatClass,
   heatVar,
-  linkUrlsIn,
+  cardUrlsIn,
   looksLikeAA,
   renderBody,
   mediaIn,
@@ -476,7 +476,7 @@ function PostArticle(props: Props) {
   const media = mediaItems.map((m) => m.url)
   const thumbReady = (i: number) => handlers.thumbAuto !== false || !!loadedThumbs?.has(i)
   // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
-  const links = props.showLinkPreview ? linkUrlsIn(post.body) : []
+  const links = props.showLinkPreview ? cardUrlsIn(post.body) : []
 
   const copy = (text: string) => void navigator.clipboard.writeText(text)
   const header = [post.ref ?? post.no, post.name, post.mail && `[${post.mail}]`, post.date, post.id && `ID:${post.id}`]
@@ -1247,7 +1247,6 @@ function PostArticle(props: Props) {
             {idAtTopRight}
             {voteChip}
             {post.mail && <span className="text-c-text-muted">[{post.mail}]</span>}
-            {toOwnChip}
           </div>
         )}
         <div className={`flex items-end gap-1.5 max-w-full ${right ? 'flex-row-reverse' : ''}`}>
@@ -1256,6 +1255,8 @@ function PostArticle(props: Props) {
             {bodyBlock}
           </div>
           {lineSide}
+          {/* 番号の外側に置く。並びは吹き出しの側で左右が入れ替わる(左の吹き出しなら番号の右、右の吹き出しなら番号の左) */}
+          {toOwnChip}
         </div>
       </div>
     </div>

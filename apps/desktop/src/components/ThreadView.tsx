@@ -231,7 +231,8 @@ const RENDER_CHUNK = 150
 // (はじめ 25・45・10 にしたら、はじいたときに中身を作る前に空箱が見え、「表示が遅れる」と言われた)
 /** PC で、手の空いたときに全部のレスを作り足すか(やめた。見えている所の前後だけ作る) */
 const PC_GROW_ALL = false
-const WIN_BEFORE = 40
+// 上へ読むときに範囲を動かす間隔は WIN_BEFORE − WIN_MARGIN 件。少ないと数レスごとに全枠を見直すことになる
+const WIN_BEFORE = 80
 const WIN_AFTER = 100
 const WIN_MARGIN = 35
 /** Esc の 2 回押しとみなす間隔 */

@@ -1339,8 +1339,6 @@ function PostArticle(props: Props) {
             {headerBlock}
             {bodyBlock}
             {idAtBottomRight}
-            {/* 続けて書いたレス(頭を省いたもの)は、返信の数を本文の下に */}
-            {props.continued && repliesBtn && <div className="mt-0.5">{repliesBtn}</div>}
           </div>
         </div>
         </div>

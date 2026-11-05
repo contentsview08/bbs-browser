@@ -443,7 +443,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (ai != null && ai.rule.show == "mark") Text(ai.label, Modifier.padding(start = 14.dp, top = 4.dp), color = Palette.markPurple, fontSize = 11.sp)
                 androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
-                val continued = (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
+                val continued = (index.replyCount[p.no] ?: 0) == 0 && (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 // 薄く表示する NG(会話の流れは残して、字を 3 割に)
                 if (p.no in page.ngNos && p.no !in revealed) Box(Modifier.graphicsLayer { alpha = 0.3f }) { PostItem(
                     it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,

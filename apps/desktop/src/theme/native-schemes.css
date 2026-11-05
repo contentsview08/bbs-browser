@@ -54,9 +54,9 @@
   --c-link-twitter: #2f64a8;
   --c-link-youtube: #a83a3a;
   --c-poster-name: #4f7f6d;
-  --c-heat-warm: #90621a;
-  --c-heat-hot: #a6542b;
-  --c-heat-very-hot: #a83a3a;
+  --c-heat-warm: #cc5f00;
+  --c-heat-hot: #d6440f;
+  --c-heat-very-hot: #cf2a2a;
   --c-thread-view-bg: var(--c-base);
   --c-thread-read-title: #3b5576;
 }
@@ -84,9 +84,9 @@
   --c-link-twitter: #2f5e9e;
   --c-link-youtube: #a8321e;
   --c-poster-name: #5b7f2a;
-  --c-heat-warm: #9a5d11;
-  --c-heat-hot: #ad5019;
-  --c-heat-very-hot: #a8321e;
+  --c-heat-warm: #cc5f00;
+  --c-heat-hot: #d6440f;
+  --c-heat-very-hot: #cf2a2a;
   --c-thread-view-bg: var(--c-base);
   --c-thread-read-title: #6b4e2e;
 }
@@ -234,9 +234,9 @@
   --c-link-twitter: #0068e0;
   --c-link-youtube: #d83c3e;
   --c-poster-name: #3e8e5e;
-  --c-heat-warm: #a3680c;
-  --c-heat-hot: #c35523;
-  --c-heat-very-hot: #d83c3e;
+  --c-heat-warm: #cc5f00;
+  --c-heat-hot: #d6440f;
+  --c-heat-very-hot: #cf2a2a;
   --c-thread-view-bg: var(--c-base);
   --c-thread-read-title: #4e5d94;
 }

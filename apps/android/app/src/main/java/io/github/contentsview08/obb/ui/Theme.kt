@@ -60,7 +60,7 @@ val SCHEMES = listOf(
         c(0xF5F6F8), c(0xFFFFFF), c(0xFFFFFF), c(0xEEF0F3), c(0xE4E7EC), c(0xDFE2E7), c(0xC5CAD3),
         // 薄い字・強調(送るボタン)・未読の札は、コントラスト比を満たすよう少し濃く(未読の札の字は濃い緑)
         c(0x111111), c(0x2B2B2B), c(0x747983), c(0x008C45), c(0xFFFFFF), wash(0x06C755, 0.12f),
-        c(0x06C755), c(0x03230F), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0x96670D), c(0xB85121), c(0xD23434),
+        c(0x06C755), c(0x03230F), c(0x2A62C9), c(0x2E8B57), c(0x5B6472), c(0xCC5F00), c(0xD6440F), c(0xCF2A2A),
     ),
     // グレー(2ch Mate のグレーに近い形): 地は白い字がはっきり読める暗めの灰色、上下の帯はそれより明るい灰色、行の間は黒に近い線
     Scheme(
@@ -73,7 +73,7 @@ val SCHEMES = listOf(
         "light-gray", "ライト", false,
         c(0xECECEC), c(0xE2E2E3), c(0xF6F6F6), c(0xE4E4E5), c(0xD9D9DB), c(0xD2D2D4), c(0xB4B5B8),
         c(0x222222), c(0x3E3E40), c(0x7E7F83), c(0x4E5A68), c(0xFFFFFF), wash(0x4E5A68, 0.10f),
-        c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0x90621A), c(0xA6542B), c(0xA83A3A),
+        c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0xCC5F00), c(0xD6440F), c(0xCF2A2A),
     ),
     // ── 提案書(2026-10-31)から足した配色。どれも 字と地のコントラスト比 4.5 以上 ──
     // 紙(セピア): 読書アプリのような生成りの地にこげ茶の字
@@ -179,7 +179,7 @@ object Palette {
     // 自分の書き込みは紫、自分へのレスは橙(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
     val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF5A3CC0) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF5A3CC0)
     val ownWash get() = own.copy(alpha = 0.16f)
-    val toOwn get() = if (scheme.dark) Color(0xFFFF9A4D) else Color(0xFFC2500A)
+    val toOwn get() = if (scheme.dark) Color(0xFF4DD0E1) else Color(0xFF0B7A8C)
     val toOwnWash get() = toOwn.copy(alpha = 0.16f)
     /** スレ主 */
     val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFF926019)
@@ -196,7 +196,7 @@ object Palette {
     val markNew get() = if (scheme.dark) Color(0xFF5FC28A) else Color(0xFF24794A)
     val markVideo get() = markDanger
     val markImage get() = markNew
-    val markHot get() = if (scheme.dark) Color(0xFFF0954A) else Color(0xFFA4551D)
+    val markHot get() = if (scheme.dark) Color(0xFFF0954A) else Color(0xFFCC5F00)
     val markLink get() = if (scheme.dark) Color(0xFF6AA9F0) else Color(0xFF2969C2)
     val markPurple get() = if (scheme.dark) Color(0xFFB48CF0) else Color(0xFF8051C7)
 

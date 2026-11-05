@@ -102,9 +102,9 @@ body,
   --c-link-twitter: #2a7ea0;
   --c-link-youtube: #b44a74;
   --c-poster-name: #5f8f7d;
-  --c-heat-warm: #926222;
-  --c-heat-hot: #a3562f;
-  --c-heat-very-hot: #b04242;
+  --c-heat-warm: #cc5f00;
+  --c-heat-hot: #d6440f;
+  --c-heat-very-hot: #cf2a2a;
   --c-thread-view-bg: #f4f2ee;
   --c-thread-read-title: #3a5f96;
 }
@@ -181,9 +181,9 @@ html:root[data-scheme='discord-dark'] {
   --c-link-twitter: #1d8fd6;
   --c-link-youtube: #d6336c;
   --c-poster-name: #2e8b57;
-  --c-heat-warm: #96670d;
-  --c-heat-hot: #b85121;
-  --c-heat-very-hot: #d23434;
+  --c-heat-warm: #cc5f00;
+  --c-heat-hot: #d6440f;
+  --c-heat-very-hot: #cf2a2a;
   --c-thread-view-bg: #ffffff;
   --c-thread-read-title: #5b6472;
 }
@@ -746,7 +746,7 @@ input[type='checkbox']:indeterminate {
   --c-mark-new: #24794a; /* 新しい・書き込み(スマホのアプリの markNew と同じ) */
   --c-mark-video: #c53631; /* 動画 */
   --c-mark-image: #24794a; /* 画像 */
-  --c-mark-hot: #a4551d; /* 人気 */
+  --c-mark-hot: #cc5f00; /* 人気 */
   --c-mark-link: #2969c2; /* リンク・ブラウザ・コピー */
   --c-mark-purple: #8051c7; /* 見た目・アップロード */
 }
@@ -1093,14 +1093,14 @@ html:root.dark[data-scheme] {
 html:root[data-scheme] {
   --c-own: #5a3cc0;
   --c-own-wash: rgba(90, 60, 192, 0.14);
-  --c-to-own: #c2500a;
-  --c-to-own-wash: rgba(194, 80, 10, 0.1);
+  --c-to-own: #0b7a8c;
+  --c-to-own-wash: rgba(11, 122, 140, 0.1);
 }
 html:root.dark[data-scheme] {
   --c-own: #a28bff;
   --c-own-wash: rgba(162, 139, 255, 0.16);
-  --c-to-own: #ff9a4d;
-  --c-to-own-wash: rgba(255, 154, 77, 0.16);
+  --c-to-own: #4dd0e1;
+  --c-to-own-wash: rgba(77, 208, 225, 0.16);
 }
 
 /* スマホの設定: 項目の行(題の一覧・オンオフ)のあいだに線を引いて、1 行ずつ見分けやすくする */

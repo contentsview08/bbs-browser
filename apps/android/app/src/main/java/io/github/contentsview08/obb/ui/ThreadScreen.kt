@@ -209,6 +209,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var fontOnly by remember { mutableStateOf(false) }
     var titleSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
+    var saveSheet by remember { mutableStateOf(false) }
     // スレを保存(テキスト・HTML)。保存先は端末のファイルの画面で選ぶ
     val safeName = remember(page.title) { page.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60) }
     val saveText = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")) { uri -> if (uri != null) vm.saveThread(page, uri, html = false) }
@@ -749,7 +750,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { postRow(it, null, false) }
     }
 
-    // ︙ のメニュー(今のスマホ版の並び: お気に入り・画像一覧・次スレ・検索・板・先頭・一番下・表示スタイル・文字の大きさ・URL・ブラウザ・更新・削除)
+    // ︙ のメニュー(今のスマホ版の並び: お気に入り・画像一覧・次スレ・検索・板・先頭・一番下・表示スタイル・文字の大きさ・URL・ブラウザ・保存・更新・削除)
     if (menu) {
         MenuSheet(
             listOf(
@@ -769,12 +770,23 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 listOf(
                     MenuItem("URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, TwoCh.webUrl(page.summary), false) },
+                    MenuItem("スレを保存(HTML・テキスト)", Icons.Filled.Save) { saveSheet = true },
                     MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person, Palette.own) { filter = if (filter == Filter.OWN) null else Filter.OWN },
                     MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { refresh() },
                 ),
                 listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }),
             ),
         ) { menu = false }
+    }
+    // 形式を選ぶと、端末のファイルの画面で保存先を選ぶ
+    if (saveSheet) {
+        MenuSheet(
+            listOf(listOf(
+                MenuItem("HTML で保存", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
+                MenuItem("テキストで保存", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
+            )),
+            MenuAt.Center,
+        ) { saveSheet = false }
     }
     // スレタイを押したときのメニュー(今のスマホ版と同じ)
     if (titleSheet) {

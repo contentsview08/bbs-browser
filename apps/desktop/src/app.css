@@ -615,10 +615,10 @@ article.post-discord {
 :root[data-scheme='2ch-classic'] {
   --c-cursor-tint: color-mix(in srgb, #ffffff 75%, transparent);
 }
-/* LINE ライト × LINE 風: 空色の地の上の名前・ID は白い字なので、選んだレスは濃くする(白くすると字が読めなくなった。白い字との差は 3.36:1)。
+/* LINE ライト × LINE 風: 選んだレスはほんの少し白くする。空色の地の上の名前・ID は白い字なので、これ以上白くすると読めなくなる。
    スマホのアプリの Palette.selectionWash と同じ色 */
 :root[data-scheme='line-light'][data-post-style='line'] {
-  --c-cursor-tint: color-mix(in srgb, #1f3f73 35%, transparent);
+  --c-cursor-tint: color-mix(in srgb, #ffffff 12%, transparent);
 }
 /* ツリーで押したレスの印 */
 .tree-focus {

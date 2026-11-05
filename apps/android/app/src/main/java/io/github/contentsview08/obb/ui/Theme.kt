@@ -216,8 +216,8 @@ object Palette {
     }
     /** 地が空色(LINE ライトの LINE 風)で、吹き出しの外の字(名前・日付・ID)を白っぽくするか */
     fun onSky(style: String) = style == "line" && scheme.key == "line-light"
-    /** 選んだレスの地。空色の地は名前・ID が白い字なので、白っぽくせず濃くする(白い字との差は 3.36:1)。PC 版の --c-cursor-tint と同じ */
-    fun selectionWash(style: String): Color = if (onSky(style)) Color(0xFF1F3F73).copy(alpha = 0.35f) else accentWash
+    /** 選んだレスの地。空色の地はほんの少し白くする(名前・ID が白い字なので、これ以上白くすると読めなくなる)。PC 版の --c-cursor-tint と同じ */
+    fun selectionWash(style: String): Color = if (onSky(style)) Color.White.copy(alpha = 0.12f) else accentWash
     /** 空色の地の上で読める字の色 */
     val skyText get() = Color(0xFFF4F8FC)
     val skyMuted get() = Color(0xE6FFFFFF)

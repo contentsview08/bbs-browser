@@ -56,6 +56,9 @@ import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.Group
@@ -218,6 +221,27 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var pinchLabel by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
     val swipe = rememberSwipeState()
+    // 開いて直している NG(レスのメニューの「○○ の NG を開く」)
+    var ngEditing by remember { mutableStateOf<NgRule?>(null) }
+    // このレスに当たっている NG。NG のレスだけ調べる(レスの数だけ毎回は調べない)
+    fun ngHitsOf(p: Post) = if (p.no in page.ngNos) io.github.contentsview08.obb.data.NgMatcher(vm.prefs.ngRules).postHits(p, page.summary.boardUrl) else null
+    // 当たっている NG を外す項目。その文字ちょうどの NG は押すだけで外し、正規表現・部分一致は別のレスにも効いているので編集を開く
+    fun ngOffItems(rules: List<NgRule>, what: String, value: String?): List<MenuItem> {
+        val (exact, others) = io.github.contentsview08.obb.data.splitNgHits(rules, value)
+        return (if (exact.isEmpty()) emptyList() else listOf(MenuItem("この${if (what == "ID") " ID " else what}を NG から外す", Icons.AutoMirrored.Filled.Undo, Palette.markDanger) {
+            exact.forEach { vm.removeNg(it) }
+            vm.toast = "NG から外しました"
+        })) + others.map { r ->
+            MenuItem("$what の NG「${if (r.pattern.length > 12) r.pattern.take(12) + "…" else r.pattern}」を開く", Icons.Filled.EditNote, Palette.markDanger) { ngEditing = r }
+        }
+    }
+    fun idNgItems(p: Post, tint: Color): List<MenuItem> = p.id?.let { id ->
+        listOf(
+            MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule, tint) { vm.addNg(NgRule("id", id, expiresOn = io.github.contentsview08.obb.data.today())) },
+            MenuItem("この ID を NG に", Icons.Filled.Block, tint) { vm.addNg(NgRule("id", id)) },
+        )
+    }.orEmpty()
+    fun nameNgItem(p: Post, tint: Color) = MenuItem("この名前を NG に", Icons.Filled.Block, tint) { vm.addNg(NgRule("name", p.name)) }
     val own = page.ownNos
     // 自分への返信(自分のレスにアンカーを付けたレス)
     val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
@@ -440,7 +464,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             } else if (p.no in page.ngNos && p.no !in revealed && ngStyle != "dim") {
                 // あぼーん(1 行に畳む)か、透明あぼーん(何も出さない)
                 if (ngStyle == "fold") Text(
-                    "${p.no}  あぼーん", Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
+                    // 外の行の長押しは、この押せる行に指を取られて届かないので、ここでも受ける
+                    "${p.no}  あぼーん", Modifier.fillMaxWidth().combinedClickable(onLongClick = { Haptics.longPress(view); postMenu = p }) { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
                     color = Palette.textMuted, fontSize = 13.sp,
                 )
             } else Column {
@@ -777,6 +802,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; fontDialog = true }) { styleSheet = false }
 
+    if (ngEditing != null) {
+        val r = ngEditing!!
+        NgEditSheet(r, page.summary.boardUrl to (vm.favorites.firstOrNull { it.url == page.summary.boardUrl }?.name ?: page.summary.boardUrl), isNew = false, onDismiss = { ngEditing = null }, onDelete = { vm.removeNg(r); ngEditing = null }) { vm.saveNg(it); ngEditing = null }
+    }
+
     postMenu?.let { p ->
         MenuSheet(
             listOf(
@@ -820,11 +850,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         else MenuItem("同じ ID のレスすべてに印を付ける", Icons.Filled.Group, Palette.own) { vm.markOwn(page, p, own = true, sameId = true) },
                     )
                 },
-                listOfNotNull(
-                    p.id?.let { id -> MenuItem("ID を NG(ID:$id)", Icons.Filled.Block, Palette.markDanger) { vm.addNg(NgRule("id", id)) } },
-                    MenuItem("名前を NG(${p.name.take(20)})", Icons.Filled.Block, Palette.markDanger) { vm.addNg(NgRule("name", p.name)) },
-                    MenuItem("言葉を NG…", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p },
-                ),
+                // すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
+                ngHitsOf(p).let { hits ->
+                    (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p, Palette.markDanger)) +
+                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger))) +
+                        ngOffItems(hits?.body.orEmpty(), "本文", null) +
+                        MenuItem("言葉を NG…", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p }
+                },
                 // AI NG: 条件ごとに「当たる」を手で付ける。当たっているものは「当たらない」
                 vm.aiRulesFor(page).map { r ->
                     val on = page.aiNg[p.no]?.rule?.id == r.id
@@ -841,12 +873,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val sameName = if (kind == 'n') index.posts.filter { it.name == p.name } else emptyList()
         MenuSheet(
             listOf(
-                if (kind == 'i' && p.id != null) listOf(
-                    MenuItem("この ID を NG(ID:${p.id})", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("id", p.id)) },
+                if (kind == 'i' && p.id != null) ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p, Palette.markDanger) } + listOf(
                     MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameId, focus = p.no) },
                     MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyText(context, p.id); vm.toast = "コピーしました" },
-                ) else listOf(
-                    MenuItem("この名前を NG(${p.name.take(20)})", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("name", p.name)) },
+                ) else ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger)) } + listOf(
                     MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameName, focus = p.no) },
                     MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyText(context, p.name); vm.toast = "コピーしました" },
                 ),

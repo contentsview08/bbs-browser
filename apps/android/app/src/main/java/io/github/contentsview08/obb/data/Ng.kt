@@ -67,6 +67,16 @@ fun ngMatchRanges(r: NgRule, text: String): List<IntRange> {
     return re.findAll(text).take(200).map { it.range }.filter { !it.isEmpty() }.toList()
 }
 
+/** レスに当たっている NG(種類ごと) */
+data class NgHits(val id: List<NgRule>, val name: List<NgRule>, val body: List<NgRule>)
+
+/**
+ * 当たっている NG を外す項目の分け方。その文字ちょうどの NG(exact)は押すだけで外せる。
+ * 正規表現・部分一致は別のレスにも効いているので(others)、直すか消すかを NG の編集で選ぶ。value が null なら全部 others(本文の NG)
+ */
+fun splitNgHits(rules: List<NgRule>, value: String?): Pair<List<NgRule>, List<NgRule>> =
+    rules.partition { !it.isRegex && it.pattern == value }
+
 /** ルールを判定関数にしておく(レスの数だけ正規表現を作り直さないため) */
 class NgMatcher(rules: List<NgRule>) {
     private class M(val r: NgRule, val re: Regex?)
@@ -79,19 +89,28 @@ class NgMatcher(rules: List<NgRule>) {
         }.groupBy { it.r.target }
     }
 
+    private fun matches(m: M, target: String, text: String, boardUrl: String?) =
+        (m.r.boardUrl == null || m.r.boardUrl == boardUrl) && when {
+            m.re != null -> m.re.containsMatchIn(text)
+            // ID は部分一致だと別の ID まで巻き込むので、完全一致
+            target == "id" -> text == m.r.pattern
+            else -> text.contains(m.r.pattern, ignoreCase = true)
+        }
+
     private fun hit(target: String, text: String?, boardUrl: String?): Boolean {
         if (text == null) return false
-        return byTarget[target]?.any { m ->
-            (m.r.boardUrl == null || m.r.boardUrl == boardUrl) && when {
-                m.re != null -> m.re.containsMatchIn(text)
-                // ID は部分一致だと別の ID まで巻き込むので、完全一致
-                target == "id" -> text == m.r.pattern
-                else -> text.contains(m.r.pattern, ignoreCase = true)
-            }
-        } == true
+        return byTarget[target]?.any { matches(it, target, text, boardUrl) } == true
+    }
+
+    private fun hits(target: String, text: String?, boardUrl: String?): List<NgRule> {
+        if (text == null) return emptyList()
+        return byTarget[target].orEmpty().filter { matches(it, target, text, boardUrl) }.map { it.r }
     }
 
     fun post(p: Post, boardUrl: String?) = hit("body", p.body, boardUrl) || hit("name", p.name, boardUrl) || hit("id", p.id, boardUrl)
+
+    /** このレスに当たっている NG(種類ごと)。レスのメニューから外すために使う */
+    fun postHits(p: Post, boardUrl: String?) = NgHits(hits("id", p.id, boardUrl), hits("name", p.name, boardUrl), hits("body", p.body, boardUrl))
 
     /** スレ一覧: スレタイの NG と、立てた人の ID の NG */
     fun thread(t: ThreadSummary) = hit("title", t.title, t.boardUrl) || hit("id", t.authorId, t.boardUrl)

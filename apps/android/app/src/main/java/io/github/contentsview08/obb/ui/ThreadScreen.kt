@@ -927,10 +927,9 @@ private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, wash: 
 @Composable
 private fun UnreadDivider() {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        // 今のスマホ版の Divider(self): 全体を未読の色の 6 割に、線はさらに 4 割
-        Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.24f)))
-        Text("ここから未読", Modifier.padding(horizontal = 12.dp), color = Palette.unread.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
-        Box(Modifier.weight(1f).height(3.dp).background(Palette.unread.copy(alpha = 0.24f)))
+        Box(Modifier.weight(1f).height(3.dp).background(Palette.unreadInk.copy(alpha = 0.4f)))
+        Text("ここから未読", Modifier.padding(horizontal = 12.dp), color = Palette.unreadInk, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
+        Box(Modifier.weight(1f).height(3.dp).background(Palette.unreadInk.copy(alpha = 0.4f)))
     }
 }
 

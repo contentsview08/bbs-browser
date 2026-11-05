@@ -1259,7 +1259,8 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 }
 /* LINE ライト × LINE 風: 空色の地の上の字(名前・日付・ID・番号)は白っぽく(スマホのアプリと同じ) */
 :root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header],
-:root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header] button,
+/* 人気の色は「レスへの返信の数」の情報なので、白で上書きしない */
+:root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] [data-post-header] button:not(.text-c-heat-warm, .text-c-heat-hot, .text-c-heat-very-hot),
 :root[data-scheme='line-light'][data-post-style='line'] article[data-variant='line'] .line-bubble + div {
   --c-text-muted: rgba(255, 255, 255, 0.9);
   --c-poster-name: #f4f8fc;

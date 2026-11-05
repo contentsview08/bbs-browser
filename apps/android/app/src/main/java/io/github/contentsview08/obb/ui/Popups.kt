@@ -126,16 +126,18 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
         if (at > 0) state.scrollToItem(at, -200)
     }
     if (tree == null) {
-        LazyColumn(state = state) {
+        // 一番下のレスが枠の線に付かないように
+        LazyColumn(state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)) {
             // 同じレスが 2 回並ぶことがある(抽出・ツリーで別の枝に同じレス)ので、番号だけをキーにすると落ちる(Key "1" was already used)。並びの位置も付ける
             itemsIndexed(e.posts, key = { i, p -> "$i:${p.no}" }) { i, p ->
                 if (i > 0) HorizontalDivider(color = Palette.border)
-                Box(if (p.no == e.focusNo) Modifier.background(Palette.accentWash) else Modifier) { post(p) }
+                Box(if (p.no == e.focusNo) Modifier.background(Palette.selectionWash(LocalPrefs.current.postStyle)) else Modifier) { post(p) }
             }
         }
     } else {
         val byNo = remember(e.posts) { e.posts.associateBy { it.no } }
-        LazyColumn(state = state) {
+        // 一番下のレスが枠の線に付かないように
+        LazyColumn(state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)) {
             itemsIndexed(tree, key = { i, r -> "$i:${r.no}" }) { i, r ->
                 val p = byNo[r.no] ?: return@itemsIndexed
                 val edge = remember(r.no) { EdgeBar() }
@@ -182,7 +184,7 @@ private fun TreeStep(
         val avatarTop = if (prefs.postStyle == "line") 6.dp else prefs.postPad.dp + 2.dp
         val padStart = if (prefs.postStyle == "line") 10.dp else 12.dp
         Row(
-            Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier).then(edgeMod)
+            Modifier.then(if (focus) Modifier.background(Palette.selectionWash(LocalPrefs.current.postStyle)) else Modifier).then(edgeMod)
                 .drawBehind {
                     val w = 2.dp.toPx()
                     val s = step.toPx()
@@ -228,7 +230,7 @@ private fun TreeStep(
         val shade = Palette.textMuted.copy(alpha = 0.14f)
         val rule = Palette.textMuted.copy(alpha = 0.8f)
         val gutter = (4 + depth * 10).dp
-        Row(Modifier.then(if (focus) Modifier.background(Palette.accentWash) else Modifier).then(edgeMod).drawBehind {
+        Row(Modifier.then(if (focus) Modifier.background(Palette.selectionWash(LocalPrefs.current.postStyle)) else Modifier).then(edgeMod).drawBehind {
             // 段の分だけ左を塗り、縦線を引く(描くだけ。高さの見積もりはしない)
             drawRect(shade, size = androidx.compose.ui.geometry.Size(gutter.toPx(), size.height))
             drawRect(rule, topLeft = Offset(gutter.toPx(), 0f), size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height))

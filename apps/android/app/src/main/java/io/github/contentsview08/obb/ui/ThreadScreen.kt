@@ -379,7 +379,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 .then(if (anim != null) Modifier.graphicsLayer { alpha = anim.value; translationY = (1f - anim.value) * 8.dp.toPx() } else Modifier)
                 .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = 0.28f * jumpGlow.value)) } else Modifier)
                 // たどったレス(本文側だけ)
-                .then(if (inMain && p.no in traced) Modifier.drawBehind { drawRect(Palette.accent.copy(alpha = 0.14f)); drawRect(Palette.accent, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) } else Modifier)
+                .then(if (inMain && p.no in traced) Modifier.drawBehind { drawRect(if (Palette.onSky(style)) Palette.selectionWash(style) else Palette.accent.copy(alpha = 0.14f)); drawRect(Palette.accent, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) } else Modifier)
                 .then(if (flash != null) Modifier.drawBehind {
                     // 24% → 16%(45% の所)→ 0 と消える
                     val f = flash.value

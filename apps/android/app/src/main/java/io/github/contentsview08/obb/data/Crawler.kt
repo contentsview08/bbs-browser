@@ -16,8 +16,33 @@ import io.github.contentsview08.obb.bbs.TwoCh
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
+/** 1 回の確認で見るもの。アプリを閉じている間は全部(WorkManager の 1 回にまとめる) */
+data class CrawlScope(val history: Boolean = true, val fav: Boolean = true, val keyword: Boolean = true)
+
 /**
- * 閲覧履歴(既読のスレ)の定期確認。板ごとにスレ一覧を 1 回だけ読み、いまのレス数を返す(dat は取らない)。
+ * アプリを開いている間の確認の時計: 閲覧履歴・お気に入りのスレ・キーワードの間隔を別々に数え、そのときに見るものを決める。
+ * 見えていない間は呼ばないので、開き直したときは間隔を過ぎたものだけ見る。掲示板に負担をかけないよう、どれも 5 分より短くしない
+ */
+class CrawlClock {
+    private var history = 0L
+    private var fav = 0L
+    private var keyword = 0L
+
+    /** いま見るもの。何もなければ null。分が 0 のものは見ない */
+    fun due(now: Long, historyMin: Int, favMin: Int, keywordMin: Int): CrawlScope? {
+        fun isDue(last: Long, min: Int) = min > 0 && now - last >= maxOf(MIN_INTERVAL, min) * 60_000L
+        val s = CrawlScope(isDue(history, historyMin), isDue(fav, favMin), isDue(keyword, keywordMin))
+        if (s.history) history = now
+        if (s.fav) fav = now
+        if (s.keyword) keyword = now
+        return s.takeIf { it.history || it.fav || it.keyword }
+    }
+
+    private companion object { const val MIN_INTERVAL = 5 }
+}
+
+/**
+ * 新着の定期確認(閲覧履歴・お気に入りのスレ)。板ごとにスレ一覧を 1 回だけ読み、いまのレス数を返す(dat は取らない)。
  * OS の通知がオンなら、ついでに知らせる:
  * - お気に入りのスレの新着
  * - あなた宛てのレス(自分が書いたスレに新着があるときだけ、その差分を読む。1 回に MAX_REPLY_FETCH スレまで。保存はしない: 開いたときに取り直す)
@@ -29,9 +54,9 @@ object Crawler {
     private const val MAX_NOTIFY = 3
 
     /** スレの id → いまのレス数(-1 は dat 落ち・消えた) */
-    suspend fun run(context: Context, db: LogDb, prefs: Prefs): Map<String, Int> {
-        val favs = db.favoriteThreads()
-        val entries = (favs + db.history()).distinctBy { it.thread.id }
+    suspend fun run(context: Context, db: LogDb, prefs: Prefs, scope: CrawlScope = CrawlScope()): Map<String, Int> {
+        val favs = if (scope.fav) db.favoriteThreads() else emptyList()
+        val entries = (favs + if (scope.history) db.history() else emptyList()).distinctBy { it.thread.id }
         val counts = HashMap<String, Int>()
         val lists = HashMap<String, List<ThreadSummary>>()
         suspend fun listOf(boardUrl: String): List<ThreadSummary>? =
@@ -65,7 +90,7 @@ object Crawler {
             if (hits.size > MAX_NOTIFY) Notifier.show(context, "お気に入りのスレの新着がほかに ${hits.size - MAX_NOTIFY} スレ", null, null)
         }
         // あなた宛てのレス
-        if (prefs.notifyReply) {
+        if (prefs.notifyReply && scope.history) {
             var fetched = 0
             for (t in (db.postHistory().map { it.thread } + db.ownPostThreads()).distinctBy { it.id }) {
                 val c = counts[t.id] ?: continue
@@ -88,7 +113,7 @@ object Crawler {
         }
         // キーワードに合うスレ(お気に入り板)
         val keywords = prefs.keywords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() }
-        if (prefs.notifyKeyword && keywords.isNotEmpty()) {
+        if (scope.keyword && prefs.notifyKeyword && keywords.isNotEmpty()) {
             for (b in db.favorites()) {
                 val list = listOf(b.url) ?: continue
                 val key = "k:${b.url}"
@@ -121,7 +146,10 @@ object Crawler {
     /** 本文のアンカーが指すレスの番号。スレ表示(bbs/PostBody.kt)と同じ解析 */
     internal fun anchorsOf(body: String): Set<Int> = anchorTargets(body).toSet()
 
-    /** 裏の確認を決める: OS の通知がオンで定期確認をしているときだけ。Android の決まりで 15 分より短くはできない(アプリを開いている間は設定の間隔で確かめる) */
+    /**
+     * 裏の確認を決める: OS の通知がオンで、閲覧履歴の定期確認をしているときだけ。Android の決まりで 15 分より短くはできない。
+     * お気に入り・キーワードの間隔では頼まない(電池を使わないよう、それらの間隔はアプリを開いている間だけ効く)
+     */
     fun schedule(context: Context, prefs: Prefs) {
         val wm = WorkManager.getInstance(context)
         // 同じ間隔ですでに頼んであれば、頼み直さない

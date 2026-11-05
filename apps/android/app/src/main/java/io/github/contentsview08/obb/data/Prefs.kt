@@ -216,6 +216,10 @@ class Prefs(context: Context) {
     var notifyKeyword by pref("notifyKeyword", true)
     /** 閲覧履歴(既読のスレ)の新着を、この分ごとに確かめる(0 ならしない。5 分より短くはしない) */
     var historyCheckMin by pref("historyCheckMin", 0)
+    /** お気に入りのスレの新着の数を、アプリを開いている間この分ごとに確かめる(0 ならしない)。PC 版と同じ既定 */
+    var favCheckMin by pref("favCheckMin", 5)
+    /** キーワードに合うスレを、アプリを開いている間この分ごとに確かめる(0 ならしない。OS の通知がオンでキーワードがあるときだけ見に行く)。PC 版と同じ既定 */
+    var keywordWatchMin by pref("keywordWatchMin", 10)
     /** ワッチョイを短く出す(「(ワッチョイ 1a2b-3c4d)」→「(1a2b-3c4d)」) */
     var watchoiShort by pref("watchoiShort", true)
     /** 名前欄(ワッチョイ込み)を日付・ID と同じ薄い色・大きさにする */

@@ -450,6 +450,12 @@ private fun BehaviorPage(vm: AppViewModel) {
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },
         ) { p.autoRefreshSec = it.toInt() }
     }
+    if (LocalAdvanced.current) Group("お気に入りのスレの新着", note = "お気に入りのスレがある板のスレ一覧を取り、新着の数だけ確かめます(本文は開いたときに取ります)。アプリを開いている間だけ確かめます。掲示板に負担をかけないよう、5 分より短くはできません") {
+        ChoiceRow(
+            "お気に入りのスレを確かめる間隔", p.favCheckMin.toString(),
+            listOf(0, 5, 10, 15, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 分ごと" },
+        ) { p.favCheckMin = it.toInt() }
+    }
     Group("閲覧履歴(既読のスレ)の新着", note = "閲覧履歴にあるスレの板のスレ一覧を取り、新着の数と dat 落ちを確かめます(本文は開いたときに取ります)。掲示板に負担をかけないよう、5 分より短くはできません。アプリを閉じている間は Android の決まりで 15 分より短くなりません") {
         ChoiceRow(
             "確かめる間隔", p.historyCheckMin.toString(),
@@ -466,7 +472,7 @@ private fun NotifyPage(vm: AppViewModel) {
     val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
         if (!ok) vm.toast = "通知が許可されていません。Android の設定 → アプリ → OBB → 通知 から許可してください"
     }
-    Group("OS の通知", note = "新着を Android の通知で知らせます。定期確認の間隔は「スクロールと更新」で変えられます。アプリを閉じている間の確認は、端末の省電力の設定で遅れたり止められたりすることがあります") {
+    Group("OS の通知", note = "新着を Android の通知で知らせます。アプリを開いている間は、お気に入りのスレとキーワードをそれぞれの間隔で確かめます。アプリを閉じている間は「スクロールと更新」の閲覧履歴の間隔で確かめます(15 分より短くならず、端末の省電力の設定で遅れたり止められたりすることがあります)") {
         SwitchRow("OS の通知に出す", p.osNotify) { on ->
             p.osNotify = on
             if (on) {
@@ -480,6 +486,12 @@ private fun NotifyPage(vm: AppViewModel) {
         SwitchRow("あなた宛てのレス", p.notifyReply, desc = "自分が書き込んだスレで、自分の書き込みにアンカーが付いたとき") { p.notifyReply = it }
         SwitchRow("お気に入りのスレの新着", p.notifyFav, desc = "お気に入りのスレに新しいレスが付いたとき") { p.notifyFav = it }
         SwitchRow("キーワードに合うスレ", p.notifyKeyword, desc = "お気に入り板に、「スレ一覧 → キーワード」に合うスレが立ったとき") { p.notifyKeyword = it }
+    }
+    Group("キーワードに合うスレが立ったら知らせる", note = "アプリを開いている間、お気に入り板のスレ一覧をこの間隔で見に行きます。OS の通知がオンで、キーワードがあるときだけ見に行きます") {
+        ChoiceRow(
+            "キーワードを確かめる間隔", p.keywordWatchMin.toString(),
+            listOf(0, 5, 10, 30, 60).map { it.toString() to if (it == 0) "知らせない" else "$it 分ごと" },
+        ) { p.keywordWatchMin = it.toInt() }
     }
 }
 

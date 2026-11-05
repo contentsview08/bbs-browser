@@ -59,7 +59,7 @@ function verifyImage(url: string, host: string, file: File): Promise<void> {
 /** サイトの画面を閉じるまで: 渡した画像のぶんのリンクがそろってから / 最後のリンクから */
 const WEB_CLOSE_SOON_MS = 1200
 const WEB_CLOSE_IDLE_MS = 4000
-/** 裏で上げていて、これだけ経ってもリンクが来なければ画面を見せる(本人の手が要る: ログイン・確認など) */
+/** 裏で上げていて、これだけ経ってもリンクが来なければ画面を見せる */
 const WEB_SHOW_AFTER_MS = 20000
 
 let nextItemId = 1
@@ -304,7 +304,7 @@ export function useMediaInput(o: {
     }
     upload(files)
   }
-  /** 貼り付け・ドロップで来たファイル。上げる前に確かめる(1 枚でも。本人の指示) */
+  /** 貼り付け・ドロップで来たファイル。上げる前に確かめる(1 枚でも。要望) */
   const take = (files: File[]) => {
     if (files.length === 0) return
     setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)), go: takeNow })
@@ -430,15 +430,15 @@ export function useMediaInput(o: {
   }
   /**
    * サイトの画面で上げる。画像を渡すとき(貼り付け・ドラッグ)は画面を見せず裏で上げ、リンクが来たら本文に入れる
-   * (進み具合は書き込み欄の上に出す)。しばらく経ってもリンクが来なければ画面を見せる(ログイン・確認など、本人の手が要る)。
-   * 画像ボタンから開くとき(画像なし)は、本人がその画面で選ぶので見せる
+   * (進み具合は書き込み欄の上に出す)。しばらく経ってもリンクが来なければ画面を見せる(ログイン・確認など、利用者の手が要る)。
+   * 画像ボタンから開くとき(画像なし)は、利用者がその画面で選ぶので見せる
    */
   const startWebUpload = async (site: WebUploadSite, files: File[] = []) => {
     stopWeb.current?.()
     clearTimeout(closeTimer.current)
     clearTimeout(showTimer.current)
     let got = 0
-    // 画面は見せたまま上げる(裏で上げると、いま上げているのか分からなかった。本人の指示)。画像を渡すと、そのページに貼り付けたことにして上がる
+    // 画面は見せたまま上げる(裏で上げると、いま上げているのか分からなかった。要望)。画像を渡すと、そのページに貼り付けたことにして上がる
     const background = false
     try {
       stopWeb.current = await openWebUpload(

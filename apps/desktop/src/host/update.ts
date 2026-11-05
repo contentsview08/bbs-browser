@@ -41,15 +41,13 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
     version: j.tag_name.replace(/^v/i, ''),
     notes: j.body ?? '',
     url: j.html_url,
-    // private のリポジトリの asset は API の URL(Accept: application/octet-stream)で落とす
     asset: asset ? { name: asset.name, url: asset.url, size: asset.size } : undefined,
   }
 }
 
-/** インストーラーを落として開く(インストーラーが立ち上がる。アプリは本人が閉じる) */
+/** インストーラーを落として開く(インストーラーが立ち上がる。アプリは利用者が閉じる) */
 export function installUpdate(asset: NonNullable<ReleaseInfo['asset']>): Promise<string> {
-  // Rust 側(update.rs)の token は、private だったころの名残。空で渡す
-  return invoke<string>('download_update', { url: asset.url, name: asset.name, token: '' })
+  return invoke<string>('download_update', { url: asset.url, name: asset.name })
 }
 
 /** 自動更新の進み具合 */

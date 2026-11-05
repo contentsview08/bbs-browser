@@ -1,13 +1,12 @@
 //! 更新のインストーラーを落として開く(設定 → このアプリについて → 更新)。
-//! GitHub の private のリポジトリの asset は、API の URL に Accept: application/octet-stream とトークンを付けて落とす。
-//! 落とした先は一時フォルダ(bbs-browser-update)。開くとインストーラーが立ち上がる(アプリは本人が閉じる)
+//! 落とした先は一時フォルダ(bbs-browser-update)。開くとインストーラーが立ち上がる(アプリは利用者が閉じる)
 
 use std::io::Write;
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
-pub async fn download_update(app: tauri::AppHandle, url: String, name: String, token: String) -> Result<String, String> {
+pub async fn download_update(app: tauri::AppHandle, url: String, name: String) -> Result<String, String> {
     // ファイル名はリリースの asset の名前だけを使う(フォルダをまたぐ名前は受け付けない)
     if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
         return Err("インストーラーの名前が正しくありません".into());
@@ -17,10 +16,7 @@ pub async fn download_update(app: tauri::AppHandle, url: String, name: String, t
     let path = dir.join(&name);
 
     let client = reqwest::Client::builder().user_agent("bbs-browser").build().map_err(|e| e.to_string())?;
-    let mut req = client.get(&url).header("Accept", "application/octet-stream").header("X-GitHub-Api-Version", "2022-11-28");
-    if !token.is_empty() {
-        req = req.bearer_auth(&token);
-    }
+    let req = client.get(&url).header("Accept", "application/octet-stream").header("X-GitHub-Api-Version", "2022-11-28");
     let res = req.send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("落とせませんでした({})", res.status()));

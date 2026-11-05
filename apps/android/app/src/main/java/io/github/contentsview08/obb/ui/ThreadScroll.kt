@@ -57,7 +57,7 @@ private const val NEW_TOAST_MS = 2500L
 @Stable
 class ThreadScrollCtl(val page: Page.Thread) {
     var positioned = false
-    /** 開いてから、まだ本人がスクロールしていない */
+    /** 開いてから、まだ利用者がスクロールしていない */
     var untouched = true
     /** 開いてから、まだ新着を受け取っていない(次に届くのは開いたときの取得の分) */
     var firstGrowth = true
@@ -149,7 +149,7 @@ class ThreadScroller(
     /**
      * 新着が届いたとき(PC 版の newPostsTarget): 光らせ、
      * - 開いたときに未読の頭がなかったなら、届いた未読の頭へすぐ移る
-     * - 開いて最初の取得の分で、本人がまだ触っていなければ、それまでを読み終えていたときだけ新着の頭へすぐ移る
+     * - 開いて最初の取得の分で、利用者がまだ触っていなければ、それまでを読み終えていたときだけ新着の頭へすぐ移る
      * - 読んでいる途中は、設定がオンで一番下を見ているときだけ、新着の頭へ動かして見せる
      */
     fun grew(autoScrollOnNew: Boolean) {

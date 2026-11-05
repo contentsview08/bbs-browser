@@ -1933,8 +1933,7 @@ export function BackupTab({
   update,
   onBackupDb,
   onRestoreDb,
-  onPruneLogs,
-}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb' | 'onPruneLogs'>) {
+}: Pick<SettingsProps, 'settings' | 'update' | 'onBackupDb' | 'onRestoreDb'>) {
   const [message, setMessage] = useState<{ ok: boolean; text: string }>()
   const [busy, setBusy] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)

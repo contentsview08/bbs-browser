@@ -101,7 +101,7 @@ export function animateScroll(root: HTMLElement, target: () => number, ms = JUMP
  * 行き先へすぐ移り、そのあとも中身の高さが変わるたびに(サムネイル・リンクのプレビューが読み込まれた、
  * 画面の外で省いていたレスが本当の高さで描かれた)行き先へ合わせ直す。描く前(ResizeObserver の中)に合わせるので、
  * 別の所が一瞬見えることもない。
- * 本人がスクロールしたら(ホイール・キー・スワイプ・スクロールバー・ミニマップ)やめる。レスを押しただけではやめない
+ * 利用者がスクロールしたら(ホイール・キー・スワイプ・スクロールバー・ミニマップ)やめる。レスを押しただけではやめない
  */
 export function pinScroll(root: HTMLElement, target: () => number, ms = PIN_MS) {
   moving.get(root)?.()
@@ -176,7 +176,7 @@ export function useThreadScroll(o: Options) {
   )
 
   const positioned = useRef(false)
-  /** 開いてから、まだ本人がスクロールの操作(ホイール・クリック・キー)をしていないか */
+  /** 開いてから、まだ利用者がスクロールの操作(ホイール・クリック・キー)をしていないか */
   const untouched = useRef(true)
   /** 開いてから、まだ新着を受け取っていない(次に届くのは開いたときの取得の分) */
   const firstGrowth = useRef(true)
@@ -455,7 +455,7 @@ export function useThreadScroll(o: Options) {
       hasUnreadPost: byNo.has(unreadFrom),
     })
     // 開いたあとも、上のレスの画像・リンクのカードが読み込まれて高さが変わるので、見ていたレスをしばらく同じ位置に留める(pinScroll)。
-    // 本人がスクロールしたらやめる
+    // 利用者がスクロールしたらやめる
     if (t.kind === 'bottom') {
       animateScroll(root, () => root.scrollHeight, 0)
       pendingUnread.current = t.pendingUnread
@@ -614,7 +614,7 @@ export function useThreadScroll(o: Options) {
     })
     observer.observe(root)
     if (list) observer.observe(list)
-    // 本人がスレ表示を触ったら、それ以降の新着へは動かして見せる
+    // 利用者がスレ表示を触ったら、それ以降の新着へは動かして見せる
     const touch = () => {
       untouched.current = false
     }

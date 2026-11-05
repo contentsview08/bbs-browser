@@ -1,7 +1,7 @@
 // AI NG の判定モデルを動かす所(workers/aiNgWorker.ts)と、出た当たり具合を覚えておく所。アプリ全体で 1 つ。
 // - スレ表示は useAiNgScores でレスを渡す。まだ当たり具合のないもの(本文と条件の組)だけを、見えている順にモデルへ頼む
 // - 当たり具合は、出るたびに少しずつ届き、届くと描き直す
-// - モデルは本人が「使う」にしたときだけ取る(約 125MB)。取ったものは Cache Storage に残る
+// - モデルは利用者が「使う」にしたときだけ取る(約 125MB)。取ったものは Cache Storage に残る
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { Post } from '@bbs-browser/connectors'
 import { aiInputOf, aiTextOf, hypothesisOf, scoreKey } from '../utils/aiNg'
@@ -145,7 +145,7 @@ function pump() {
   } satisfies AiWorkerRequest)
 }
 
-/** モデルを取って使えるようにする(本人が「使う」にしたとき) */
+/** モデルを取って使えるようにする */
 export function startAiModel() {
   if (status.kind === 'ready' || status.kind === 'loading') return
   setStatus({ kind: 'loading', loaded: 0, total: 0 })

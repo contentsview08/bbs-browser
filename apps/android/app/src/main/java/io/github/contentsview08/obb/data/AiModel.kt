@@ -25,7 +25,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * AI NG の判定モデル(PC 版・Web と同じ mDeBERTa-v3-base-mnli-xnli の int8)。本人が「AI NG を使う」をオンにしたときだけ、
+ * AI NG の判定モデル(PC 版・Web と同じ mDeBERTa-v3-base-mnli-xnli の int8)。利用者が「AI NG を使う」をオンにしたときだけ、
  * Hugging Face から一度だけ取ってアプリの中(files/ai)に置き、そのあとは通信しない。判定は ONNX Runtime で、画面とは別の 1 本の流れで行う。
  * レスに条件の文を当てた「含意」の確からしさ(含意と矛盾の 2 つで割ったもの)を当たり具合にする(transformers.js の multi_label と同じ)
  */

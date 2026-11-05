@@ -782,7 +782,7 @@ private fun AccountsPage(vm: AppViewModel) {
     }
 }
 
-/** 本人の登録: サイトを選ぶ → メール → 確認コード・ユーザー ID・表示名・パスワード。できたらそのアカウントを保存してログイン済みにする */
+/** 利用者の登録: サイトを選ぶ → メール → 確認コード・ユーザー ID・表示名・パスワード。できたらそのアカウントを保存してログイン済みにする */
 @Composable
 private fun RegisterDialog(vm: AppViewModel, origins: List<String>, onAuth: (io.github.contentsview08.obb.bbs.PostResult.Auth) -> Unit, onDone: (String) -> Unit) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()

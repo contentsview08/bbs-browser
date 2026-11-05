@@ -127,7 +127,7 @@ export default function MouseGesturePie(props: {
 const OVERLAY_SIZE = 440
 
 /**
- * 画面に出す(useMouseGesture の pie)。画面の真ん中に大きく半透明で出し、ポインターは隠す(本人の指示 2026-11-05)。
+ * 画面に出す(useMouseGesture の pie)。画面の真ん中に大きく半透明で出し、ポインターは隠す。
  * 向きは動かし始めた所からの動き(dx・dy)で決まるので、ポインターがどこにあっても、円盤の中心を起点に動かしたのと同じ。
  * その動きを円盤の上に小さな印で出す。下に向いている操作の名前。body の直下に出す(transform のある親の中だと fixed の位置がずれる)
  */

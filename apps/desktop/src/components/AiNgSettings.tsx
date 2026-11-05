@@ -1,4 +1,4 @@
-// 設定 → NG の「AI NG」。モデルの取得と状態、条件(本人が書く文)の一覧と編集、試す欄、手の印の数。
+// 設定 → NG の「AI NG」。モデルの取得と状態、条件の一覧と編集、試す欄、手の印の数。
 // 判定(条件ごとの当たり具合)と見せ方(隠す・畳む・印だけ)を分けて決める。決め方は utils/aiNg.ts
 import { useState } from 'react'
 import { AI_MODEL, AI_NG_SHOWS, DEFAULT_THRESHOLD, MIN_EXAMPLES, hypothesisOf, type AiNgRule } from '../utils/aiNg'

@@ -19,8 +19,8 @@ import java.io.ByteArrayOutputStream
  *   ui/WebUpload.kt がその画面を開くので、ここには来ない
  * どこに上げても、返ってきた URL を開いて画像が返るかを確かめる(URL だけ返して中身がない、ということがあった)。
  * JPEG・PNG・WebP は描き直して EXIF(撮影場所など)を取り除き、長い辺が決めた大きさを超えれば縮める。GIF・動画はそのまま。
- * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は本人が登録した Client-ID、
- * imgbb(https://api.imgbb.com)は本人が登録した API キーで使う。
+ * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は利用者が登録した Client-ID、
+ * imgbb(https://api.imgbb.com)は利用者が登録した API キーで使う。
  * どれも公開されている窓口だけを使い、負荷をかけない
  */
 object Uploader {
@@ -142,7 +142,7 @@ object Uploader {
         throw UploadException(explain(res.status, text))
     }
 
-    /** imgur: 本人が登録した Client-ID で、匿名の画像として上げる。返事は JSON(data.link) */
+    /** imgur: 利用者が登録した Client-ID で、匿名の画像として上げる。返事は JSON(data.link) */
     private suspend fun toImgur(name: String, type: String, bytes: ByteArray, clientId: String): String {
         if (clientId.isBlank()) throw UploadException("Client-ID が設定されていません(設定 → 画像のアップロード)")
         if (!type.startsWith("image/") && !type.startsWith("video/")) throw UploadException("画像か動画だけを上げられます")
@@ -158,7 +158,7 @@ object Uploader {
         throw UploadException(explain(res.status, err))
     }
 
-    /** imgbb: 本人が登録した API キーで上げる(https://api.imgbb.com/)。返事は JSON(data.url。data.delete_url は消すためのページ) */
+    /** imgbb: 利用者が登録した API キーで上げる(https://api.imgbb.com/)。返事は JSON(data.url。data.delete_url は消すためのページ) */
     private suspend fun toImgbb(name: String, type: String, bytes: ByteArray, apiKey: String): Pair<String, String?> {
         if (apiKey.isBlank()) throw UploadException("API キーが設定されていません(設定 → 画像のアップロード)")
         if (!type.startsWith("image/")) throw UploadException("imgbb に上げられるのは画像だけです")

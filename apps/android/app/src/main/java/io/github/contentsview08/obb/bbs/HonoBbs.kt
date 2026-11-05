@@ -309,7 +309,7 @@ object HonoBbs {
         return res
     }
 
-    /** 本人の登録(1 段目): メールに確認コードを送る(POST /auth/register/request)。Turnstile が要れば Auth(認証ページとコード)を返す */
+    /** 利用者の登録(1 段目): メールに確認コードを送る(POST /auth/register/request)。Turnstile が要れば Auth(認証ページとコード)を返す */
     suspend fun registerRequest(origin: String, email: String): PostResult {
         val api = apiBaseOf(origin)
         val res = Http.postJson("$api/auth/register/request", JSONObject().put("email", email).toString())
@@ -317,7 +317,7 @@ object HonoBbs {
         return readWrite(res, api)
     }
 
-    /** 本人の登録(2 段目): コードと ID・パスワードでユーザーを作り、そのままログインする(POST /auth/register/verify) */
+    /** 利用者の登録(2 段目): コードと ID・パスワードでユーザーを作り、そのままログインする(POST /auth/register/verify) */
     suspend fun registerVerify(origin: String, email: String, code: String, id: String, displayName: String, password: String): PostResult {
         val api = apiBaseOf(origin)
         val body = JSONObject().put("email", email).put("code", code).put("id", id).put("displayName", displayName.ifEmpty { id }).put("password", password).toString()

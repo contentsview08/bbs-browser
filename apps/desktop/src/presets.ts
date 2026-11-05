@@ -1,6 +1,6 @@
 // 最初から入れておく掲示板(板一覧ごと)と単独の板。スマホ版と同じ packages/presets/sites.json を読む。
 // 起動したとき(DB と設定がそろったとき)に 1 回、まだ足していない id のものだけを足し、足した id を設定の presetsApplied に覚える
-// (本人が消したものは戻さない)。板一覧は開いたときに取る
+//。板一覧は開いたときに取る
 import raw from '../../../packages/presets/sites.json?raw'
 import { allConnectors } from '@bbs-browser/connectors'
 import type { LogStore } from '@bbs-browser/logstore'

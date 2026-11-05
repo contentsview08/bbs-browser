@@ -18,7 +18,7 @@ export type AutoNgReason =
   | { kind: 'marked' }
   /** 印から学んだ判定(utils/trollModel.ts)。p は確からしさ */
   | { kind: 'learned'; p: number; axis?: Judgement['axis'] }
-  /** AI NG(本人が書いた条件に当たった。utils/aiNg.ts) */
+  /** AI NG */
   | { kind: 'ai'; hit: AiNgHit }
 
 /** ユーザーが付けた印。どちらも本文の鍵(bodyKey)の集まり */

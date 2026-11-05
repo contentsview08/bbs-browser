@@ -278,7 +278,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (ctl.positioned) reportRead(ctl, scroller, vm, page)
             }
     }
-    // 本人がスクロールしたら、それ以降の新着へは動かして見せる
+    // 利用者がスクロールしたら、それ以降の新着へは動かして見せる
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { if (it is androidx.compose.foundation.interaction.DragInteraction.Start) ctl.untouched = false }
     }
@@ -568,7 +568,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             if (style == "matome") HorizontalDivider(color = Palette.border.copy(alpha = 0.3f))
                             else if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
                         }
-                        // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)。押すと自分の書き込みをレス抽出のポップアップで出す(本人の要望 2026-11-05)
+                        // -END-(今のスマホ版の Divider: 両側に線、上下は狭く)。押すと自分の書き込みをレス抽出のポップアップで出す
                         item(key = "end") {
                             Row(
                                 Modifier.fillMaxWidth().clickable {

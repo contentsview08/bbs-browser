@@ -1,5 +1,5 @@
 //! 画像の置き場(imgur・catbox など)の、ふつうのアップロードの画面を別のウィンドウで開き、
-//! 本人が手で上げたあとに画面に出た共有リンクを拾って、書き込み欄へ渡す(API を使わずに上げるため)。
+//! 利用者が手で上げたあとに画面に出た共有リンクを拾って、書き込み欄へ渡す(API を使わずに上げるため)。
 //! 開いたページはアプリの命令を呼べない(capabilities の対象は main だけ)。リンクは、ページに差し込んだ見張りの
 //! スクリプトが「https://bbs-upload.invalid/found?u=…」へ移ろうとするのを on_navigation で止めて受け取る。
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder};
@@ -93,7 +93,7 @@ pub struct PasteFile {
     data: String,
 }
 
-/// 裏で開いていた画面を見せる(しばらく経ってもリンクが来ない = 本人の手が要るとき)
+/// 裏で開いていた画面を見せる(しばらく経ってもリンクが来ない = 利用者の手が要るとき)
 #[tauri::command]
 pub async fn show_web_upload(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window(LABEL) {
@@ -113,7 +113,7 @@ pub async fn close_web_upload(app: AppHandle) -> Result<(), String> {
 }
 
 /// アップロードの画面を開く。url は https のページだけ。pattern は拾うリンクの正規表現(JavaScript の形)。
-/// files を渡すと、ページに貼り付けたことにして、本人が選び直さなくても上がる
+/// files を渡すと、ページに貼り付けたことにして、利用者が選び直さなくても上がる
 #[tauri::command]
 pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title: String, files: Option<Vec<PasteFile>>, background: Option<bool>) -> Result<(), String> {
     let page: Url = url.parse().map_err(|e| format!("URL が読めません: {e}"))?;

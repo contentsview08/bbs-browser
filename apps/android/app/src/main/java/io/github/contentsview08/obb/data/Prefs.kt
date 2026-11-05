@@ -277,7 +277,7 @@ class Prefs(context: Context) {
     var uploadHost by pref("uploadHost", Uploader.DEFAULT_HOST)
     /** imgbb の API キー(https://api.imgbb.com/)。空なら imgbb は使わない */
     var imgbbApiKey by pref("imgbbApiKey", "")
-    /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切り)。本人が消したものを戻さないために覚える */
+    /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切り)。利用者が消したものを戻さないために覚える */
     var presetsApplied by pref("presetsApplied", "")
     /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で登録したもの)。空なら imgur は使わない */
     var imgurClientId by pref("imgurClientId", "")

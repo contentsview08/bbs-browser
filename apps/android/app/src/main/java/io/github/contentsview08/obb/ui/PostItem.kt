@@ -271,7 +271,7 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
         Identicon(reply.id, 16.dp)
         Spacer(Modifier.width(5.dp))
         Text(
-            // 本文だけ(名前は出さない。本人 2026-11-05)
+            // 本文だけ
             reply.text, color = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted, fontSize = 12.sp,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )

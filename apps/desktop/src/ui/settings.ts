@@ -265,7 +265,7 @@ export interface AppSettings {
   postThumbSize: number
   /** スレ一覧のサムネイル(ふたばのカタログの絵など)の大きさの倍率。見た目ごとの元の大きさに掛ける */
   listThumbScale: number
-  /** 「グロ」などの言葉を含む返信が付いた(または本人がそう書いた)レスの画像を、ぼかして出す */
+  /** 「グロ」などの言葉を含む返信が付いた(または利用者がそう書いた)レスの画像を、ぼかして出す */
   blurGross: boolean
   /** ぼかす目印にする言葉 */
   grossWords: string[]
@@ -308,7 +308,7 @@ export interface AppSettings {
   ngMode: NgMode
   /** 自動 NG(同じ本文の連投・繰り返しばかりの文を荒らしとして畳む。utils/autoNg.ts) */
   autoNg: boolean
-  /** AI NG(本人が書いた条件に当たるレスを、端末の中の判定モデルで見つける。utils/aiNg.ts)。オンのときだけモデルを取って動かす */
+  /** AI NG。オンのときだけモデルを取って動かす */
   aiNgEnabled: boolean
   aiNgRules: AiNgRule[]
   /** 手で付けた「当たる・当たらない」(条件の id → 本文の鍵) */
@@ -357,9 +357,9 @@ export interface AppSettings {
   uploadHost: UploadHost
   /** imgbb の API キー(上げ先が imgbb のとき) */
   imgbbApiKey: string
-  /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で本人が登録したもの)。空なら imgur は使わない */
+  /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で利用者が登録したもの)。空なら imgur は使わない */
   imgurClientId: string
-  /** 最初から入れておく掲示板・板(packages/presets/sites.json)のうち、もう足したものの id。本人が消したものを戻さないために覚える */
+  /** 最初から入れておく掲示板・板(packages/presets/sites.json)のうち、もう足したものの id。利用者が消したものを戻さないために覚える */
   presetsApplied: string[]
   /** 書き込むときにアカウント(BE など)を使うか。アカウントの id → 使うか。書いていなければ使う(登録してあれば) */
   postAccounts: Record<string, boolean>
@@ -385,7 +385,7 @@ export interface AppSettings {
   showAdvanced: boolean
   /** 差し色(ACCENTS のキー)。空ならテーマの色 */
   accent: string
-  // ここからスマホのアプリ(bbs N)と同じ設定(名前と意味はアプリの data/Prefs.kt と同じ)
+  // ここからスマホのアプリ(スマホ版)と同じ設定(名前と意味はアプリの data/Prefs.kt と同じ)
   /** 動きを減らす(画面の移り方・新着の光り方などを省く) */
   reduceMotion: boolean
   /** 人気のレスの示し方 */
@@ -437,7 +437,7 @@ export const MOUSE_GESTURE_TRIGGERS: { key: MouseGestureTrigger; name: string }[
 
 export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
-  // 既定は OS のダーク・ライトに合わせる(2026-11-04 に本人の指示)
+  // 既定は OS のダーク・ライトに合わせる(2026-11-04 に要望)
   followOsTheme: true,
   darkScheme: 'soft-dark',
   lightScheme: 'light-gray',
@@ -521,7 +521,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'deleteLog' },
   },
   gestureSensitivity: 3,
-  // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空(本人の指示 2026-11-05)
+  // 上 先頭へ・下 一番下へ・右上 更新・左上 すべてのタブを閉じる・左下 設定を開く。ほかは空
   idPosition: 'topRight',
   watchoiShort: true,
   nameSubtle: true,
@@ -544,7 +544,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   presetsApplied: [],
   replyCollapsed: false,
   postAccounts: {},
-  // 定型文は最初は空(2026-11-04 に本人の指示)
+  // 定型文は最初は空(2026-11-04 に要望)
   quickPhrases: [],
   postToolbar: ['reply', 'copy', 'ng'],
   keymap: {},

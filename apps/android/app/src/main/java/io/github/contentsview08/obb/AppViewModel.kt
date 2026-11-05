@@ -526,7 +526,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * 最初から入れておく掲示板・板(assets の sites.json。PC 版と同じ packages/presets/sites.json)を足す。起動のたびに 1 回。
-     * まだ足していない id のものだけを足し、足した id を覚える(本人が消したものは戻さない)。板一覧は開いたときに取る
+     * まだ足していない id のものだけを足し、足した id を覚える。板一覧は開いたときに取る
      */
     private suspend fun applyPresets() {
         val json = runCatching { getApplication<android.app.Application>().assets.open("sites.json").bufferedReader().use { it.readText() } }.getOrNull() ?: return

@@ -4,7 +4,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 
-/** 勢い = レス数 / スレが立ってからの経過日数(1 日あたりのレス数。2ch の専ブラと、スマホのアプリ bbs N と同じ) */
+/** 勢い = レス数 / スレが立ってからの経過日数(1 日あたりのレス数。2ch の専ブラと、スマホのアプリ スマホ版 と同じ) */
 export function momentum(t: ThreadSummary, now = Date.now()): number {
   if (!t.createdAt) return 0
   // 立って 1 分までは 1 分とみなす(立った直後に大きくなりすぎないように)

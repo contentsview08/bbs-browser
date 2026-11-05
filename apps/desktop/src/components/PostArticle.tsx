@@ -839,7 +839,7 @@ function PostArticle(props: Props) {
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden ${isMobile ? 'mb-1 gap-x-1.5' : 'mb-0.5 gap-2'}`}>
-          {/* 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05) */}
+          {/* 返信の数は頭の一番左に */}
           {repliesBtn}
           {nameBtn(nameSubtle ? (isMobile ? 'text-[11px]' : HEAD_TEXT) : isMobile ? 'text-[13px]' : 'text-sm') || (
             <span className={`font-bold ${nameSubtle ? `${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted` : 'text-sm text-c-poster-name'}`}>名無し</span>

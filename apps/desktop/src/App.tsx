@@ -225,7 +225,7 @@ export default function App() {
   const [states, setStates] = useState(new Map<string, ThreadState>())
   /** 閲覧履歴の中身。裏の更新でも書き換わるので、これが変わっても画面は切り替えない */
   const [historyList, setHistory] = useState<HistoryEntry[]>()
-  /** スレ一覧の所に閲覧履歴を出しているか。変えるのは、本人が開いたとき・ほかの一覧へ移ったときだけ */
+  /** スレ一覧の所に閲覧履歴を出しているか。変えるのは、利用者が開いたとき・ほかの一覧へ移ったときだけ */
   const [historyShown, setHistoryShown] = useState(false)
   /** いま出している閲覧履歴(出していなければ undefined) */
   const history = historyShown ? historyList : undefined
@@ -264,7 +264,6 @@ export default function App() {
   const reloadRecent = async (s: LogStore) => setRecentHistory((await loadHistory(s)).slice(0, 10).map((h) => h.thread))
   /** 画像のアップロード履歴(開いているときだけ中身を持つ) */
   const [uploads, setUploads] = useState<UploadRecord[]>()
-  const [hasUploads, setHasUploads] = useState(false)
   // アカウント(5ch の BE など)
   const { accounts, loginStatus, loadAndAutoLogin, saveAndLogin, saveAccount, deleteAccount, reloadAccounts, postAccountsOf, postAccountIds } = useAccounts(
     store,
@@ -560,10 +559,6 @@ export default function App() {
       initFavicons(s)
       initOgp(s)
       void reloadRecent(s)
-      void s
-        .listUploads(1)
-        .then((u) => setHasUploads(u.length > 0))
-        .catch(backgroundError('アップロード履歴の読み込み'))
       const [list, favs, favThreadList] = await Promise.all([s.listSites(), s.listFavorites(), s.listFavoriteThreads()])
       setStore(s)
       setSites(list)
@@ -765,7 +760,7 @@ export default function App() {
     })
   const crawlHistory = async (store: LogStore, resort: boolean) => {
     {
-      // 本人が更新したときだけ、見た順に並べ直す。定期の確認(resort が false)と、板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
+      // 利用者が更新したときだけ、見た順に並べ直す。定期の確認(resort が false)と、板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
       const list = await loadHistory(store)
       setHistory((prev) => (resort ? list : mergeHistory(prev, list)))
       const byBoard = new Map<string, HistoryEntry[]>()
@@ -998,7 +993,7 @@ export default function App() {
       setFavCounts(new Map(counts))
     }
     await reloadFavThreads(s)
-    // 裏で確かめたときだけ、新着を知らせる(まとめて更新は、本人が一覧を見ているので知らせない)
+    // 裏で確かめたときだけ、新着を知らせる(まとめて更新は、利用者が一覧を見ているので知らせない)
     if (!fetchDats) {
       const byId = new Map(list.map((f) => [threadId(f.thread), f]))
       const added = favIncreases(
@@ -1066,7 +1061,7 @@ export default function App() {
     }
   }, [store, settings.favCheckMin, hasFavThreads])
 
-  // 閲覧履歴(既読のスレ)の新着を、設定の分ごとに板のスレ一覧で確かめる(本人の要望 2026-11-05。掲示板に負担をかけないよう 5 分より短くしない)
+  // 閲覧履歴(既読のスレ)の新着を、設定の分ごとに板のスレ一覧で確かめる
   const refreshHistoryRef = useRef(refreshHistory)
   refreshHistoryRef.current = refreshHistory
   useEffect(() => {
@@ -1254,7 +1249,7 @@ export default function App() {
       await loadTab(store, t)
       // 読み込んでいる間にログを削除したら、閲覧履歴を読み直さない(消す前の DB から、消したスレが戻ってくる)
       if (deletedIds.current.has(id)) return
-      // 閲覧履歴を出していても、開いただけでは並びを変えない(見た順に動かすのは、本人が更新したとき)。
+      // 閲覧履歴を出していても、開いただけでは並びを変えない(見た順に動かすのは、利用者が更新したとき)。
       // まだ並びにないスレ(板から開いた)だけ、末尾に足す
       if (history && !history.some((h) => threadId(h.thread) === id)) {
         const fresh = await loadHistory(store)
@@ -1825,7 +1820,7 @@ export default function App() {
       try {
         r = await resolve(url)
       } catch (e) {
-        // 板やスレとして開けなかった(ない板・404 など)ときは、ブラウザで開く(本人の要望 2026-11-05)
+        // 板やスレとして開けなかった(ない板・404 など)ときは、ブラウザで開く
         notify({ icon: 'open_in_browser', title: 'アプリでは開けないので、ブラウザで開きます', body: e instanceof Error ? e.message : String(e) })
         await openUrl(url)
         return
@@ -2256,7 +2251,6 @@ export default function App() {
       returnToList()
     }),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean; hash?: string; deleteUrl?: string }) => {
-      setHasUploads(true)
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
     }),
     openNextUnread: useEvent(() => {

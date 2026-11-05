@@ -1,8 +1,8 @@
 // 画像のアップロード。設定の上げ先(uploadHost)に 1 枚ずつ上げる(API のもの: catbox・imgur・imgbb。スマホ版と同じ)。
 // サイトの画面で上げるもの(imgur・imgbox・imgbb の画面)は useMediaInput がその画面を開く(utils/webUpload.ts)。
 // 上げたファイルは公開され、匿名なら消せない。EXIF もそのまま残るので、既定では描き直して取り除いてから上げる。
-// 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は本人が登録した Client-ID、
-// imgbb(https://api.imgbb.com)は本人が登録した API キーで使う。
+// 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は利用者が登録した Client-ID、
+// imgbb(https://api.imgbb.com)は利用者が登録した API キーで使う。
 // どれも公開されている窓口だけを使い、負荷をかけないこと
 
 import { fetch } from '@tauri-apps/plugin-http'
@@ -43,7 +43,7 @@ export interface UploadOptions {
 }
 
 /**
- * 上げ先。-web はその置き場のサイトの画面を開いて本人が上げ、出てきたリンクを本文に入れる(utils/webUpload.ts)。
+ * 上げ先。-web はその置き場のサイトの画面を開いて利用者が上げ、出てきたリンクを本文に入れる(utils/webUpload.ts)。
  * ほかは API で上げる(キーが要るものは、設定で登録する)。既定は imgur の画面(登録なしで消えない)
  */
 export type UploadHost = 'imgur-web' | 'imgur' | 'catbox' | 'imgbb' | 'imgbox-web' | 'imgbb-web'

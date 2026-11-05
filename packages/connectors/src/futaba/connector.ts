@@ -5,14 +5,7 @@
 // - スレの中身は、最初はスレのページ(HTML)で全部、そのあとは JSON(futaba.php?mode=json&res=番号&start=最後の番号)で新しい返信だけ
 // - レスの番号は板全体の通し番号(Post.ref)。アンカーは >No.番号 や >番号 の形でこの番号を指す(anchorTarget: 'ref')
 // - スレは時間が来ると消える(ページが 404)。消えたら dat 落ちと同じに扱う。スレの数の上限(1000)はない
-// - 書き込みは、スレのページのフォーム(id="fm"、板/futaba.php?guid=on へ POST)。隠し欄の hash は時刻入りでページごとに変わるので、
-//   書き込む直前にページを取り直して写す。文字だけ(textonly=on)を、ブラウザの FormData と同じく multipart/form-data・UTF-8 で送る
-//   (Shift_JIS の普通のフォームで送ると、受け付けられるのに誰にも見えない書き込みになった)。
-//   ページを見たときに渡される Cookie(posttime など)がないと「cookieを有効にしてもう一度送信してください」で断られるので、
-//   書き込みは読む通信と同じ Cookie の置き場で送る(sameCookiesAsGet)
-//   ふたばの書き込みボタンの JavaScript(/bin/base4esc.js の ptfk)と同じく、
-//   pthc・pthb に /bin/cachemt7.php の値、ptua にブラウザの機能の数、js=on・scsz を入れ、responsemode=ajax を付けて送る。
-//   返事は書けたら「ok」(か JSON)、断られたらエラーの文。2026-10-17 に JavaScript を読んで合わせた
+// - 書き込みの送り方はほかの掲示板と違う。詳しいことは非公開の資料に置いている
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, ListSort, PostFile, PostInput, PostResult, ThreadSummary } from '../types'
 import { shiftJisByteLength } from '../sjis'

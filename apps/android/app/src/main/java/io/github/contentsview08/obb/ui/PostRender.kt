@@ -265,7 +265,7 @@ fun shortUrl(url: String, max: Int = 36): String {
 private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks): AnnotatedString =
     buildAnnotatedString {
         val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
-        // 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05)。吹き出しも数と同じ色に。印と数の間では折り返さない
+        // 返信の数は頭の一番左に。吹き出しも数と同じ色に。印と数の間では折り返さない
         if (replies > 0) {
             withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
                 val icon = when { replies >= 7 -> "replyVeryHot"; replies >= 5 -> "replyHot"; replies >= 3 -> "replyWarm"; o.onSky -> "replySky"; else -> "reply" }

@@ -65,7 +65,7 @@ import {
   youtubeLinksIn, mostCommonName } from '../utils/postBody'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
-import { baseFontPx, effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
+import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -366,7 +366,7 @@ export default function ThreadView(props: Props) {
     () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks, trollJudge) : new Map<number, AutoNgReason>()),
     [settings.autoNg, log.posts, props.trollMarks, trollJudge],
   )
-  // AI NG: 本人の条件に当たったレス。畳む・隠すものは自動 NG と同じ並びに入れ、印だけのものは別に持つ
+  // AI NG: 利用者の条件に当たったレス。畳む・隠すものは自動 NG と同じ並びに入れ、印だけのものは別に持つ
   const aiRules = useMemo(() => (settings.aiNgEnabled ? activeRules(settings.aiNgRules, props.boardUrl) : []), [settings.aiNgEnabled, settings.aiNgRules, props.boardUrl])
   // スレの話題(スレタイと 1 レス目の頭)。文脈つきの条件に添える
   const aiContext = useMemo(() => threadContextOf(log.title, log.posts[0]?.body), [log.title, log.posts[0]?.body])
@@ -419,7 +419,6 @@ export default function ThreadView(props: Props) {
   const headerRef = useRef<HTMLDivElement>(null)
   // スマホは、ヘッダーをいつもスクロールの中に置く(下へスクロールすると隠す。useHideOnScroll)
   const headerInScroll = isMobile || settings.replyLayout === 'bottom'
-  const headerOffset = () => (ref.current?.contains(headerRef.current) ? (headerRef.current?.offsetHeight ?? 0) : 0)
   const listRef = useRef<HTMLDivElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
   useEffect(() => {

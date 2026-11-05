@@ -248,7 +248,7 @@ html:root[data-scheme='oled'] {
   --c-poster-name: #4a9583;
 }
 
-/* ---------- 面の色の役目をスマホのアプリ(bbs N)にそろえる ----------
+/* ---------- 面の色の役目をスマホのアプリ(スマホ版)にそろえる ----------
    スマホのアプリは、スレ一覧・スレ表示 = 地の色(--c-base)、スレ一覧の行は面を敷かずに線で区切る、書き込み欄 = 帯の色。
    web 版から受け継いだ決まり(スレ一覧の地は --c-surface2、カードの行は --c-surface2 に黒を 15% 混ぜた面)のままだと、
    明るい配色ではスレ一覧が灰色にくすみ、黒い字が読みにくかった(Discord ライトでは #c8c9cb ほどの面に黒い字)。
@@ -1072,7 +1072,7 @@ html:root.dark[data-scheme] {
   --c-op: #f0b44c;
   --c-op-wash: rgba(240, 180, 76, 0.16);
 }
-/* 自分の書き込み(--c-own)と自分へのレス(--c-to-own): 名前欄の緑(--c-poster-name)・未読の色と分ける(本人「緑ばかりで似すぎ」2026-11-03)。
+/* 自分の書き込み(--c-own)と自分へのレス(--c-to-own): 名前欄の緑(--c-poster-name)・未読の色と分ける。
    自分の書き込みは紫、自分へのレスは橙。どの配色でも同じ(スマホのアプリの Palette.own・toOwn と同じ) */
 html:root[data-scheme] {
   --c-own: #6d4fd3;
@@ -1200,7 +1200,7 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 :root[data-scheme='gray'][data-post-style='line'] .line-bubble:not(.line-bubble-own) {
   background: var(--c-surface2);
 }
-/* スマホのアプリ(bbs N)の Theme.kt の lineBg・lineBubble と同じ値(Compose の lerp は Oklab で混ぜるので、計算した色をそのまま書く)。
+/* スマホのアプリ(スマホ版)の Theme.kt の lineBg・lineBubble と同じ値(Compose の lerp は Oklab で混ぜるので、計算した色をそのまま書く)。
    scripts で作った値。配色を変えたら作り直す */
 :root[data-scheme='indigo'][data-post-style='line'] { --c-thread-view-bg: #05070a; --c-line-bg: #05070a; --c-line-bubble: #282c35; }
 :root[data-scheme='indigo'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #282c35; }

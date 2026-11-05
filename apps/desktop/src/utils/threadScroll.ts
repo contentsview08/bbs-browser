@@ -52,7 +52,7 @@ export type NewPostsTarget = { no: number; animate: boolean } | { bottom: true; 
 /**
  * 新着が届いたときに、どこへ動かすか。
  * - 開いたときに未読の頭がまだなかった(pendingUnread)なら、届いた未読の頭へすぐ移る
- * - 開いて最初の取得の分で、本人がまだ触っていなければ、それまでを読み終えていたときだけ新着の頭へすぐ移る
+ * - 開いて最初の取得の分で、利用者がまだ触っていなければ、それまでを読み終えていたときだけ新着の頭へすぐ移る
  *   (位置が一番下から少しずれていても送る。前の位置からもう一度動いて見せると遅く感じるため)
  * - 読んでいる途中は、設定がオンで一番下を見ているときだけ、新着の頭へ動かして見せる
  */
@@ -64,7 +64,7 @@ export function newPostsTarget(input: {
   prevLastNo: number
   /** 既読にしたレス番号 */
   readNo: number
-  /** 開いてから最初に届いた新着で、本人がまだスレ表示を触っていない */
+  /** 開いてから最初に届いた新着で、利用者がまだスレ表示を触っていない */
   opening: boolean
   autoScrollOnNew: boolean
   atBottom: boolean

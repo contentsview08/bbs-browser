@@ -38,7 +38,7 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
   const boxRef = useRef<HTMLDivElement>(null)
   // 条件を変えていたら、閉じる前に確かめる(外を押しても閉じない。× と Esc だけ)
   const initial = useRef(JSON.stringify(rule)).current
-  // 新しく足すときは、種類を切り替えて元の文字が入っただけなら書きかけにしない(本人が打った・変えたときだけ確かめる)
+  // 新しく足すときは、種類を切り替えて元の文字が入っただけなら書きかけにしない
   const untouched = !d.rule && JSON.stringify({ ...rule, target: d.target, pattern: d.pattern }) === initial && rule.pattern === (rule.target === d.target ? d.pattern : (d.values?.[rule.target] ?? rule.pattern))
   const { requestClose, guard } = useGuardedClose(!untouched && JSON.stringify(rule) !== initial, props.onClose)
   useFocusTrap(boxRef, requestClose, { escBlursInputs: true })

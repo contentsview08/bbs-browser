@@ -209,7 +209,7 @@ export default function Sidebar(props: Props) {
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const collapsed = props.collapsed && !peek
   const nameOf = (b: Board) => props.boardMeta[b.url]?.alias || b.name
-  // しまったときは、アイコンの下に板名を小さく出す(2026-11-04 に本人の指示でいつも出す。設定にはしない)。
+  // しまったときは、アイコンの下に板名を小さく出す(2026-11-04 に要望でいつも出す。設定にはしない)。
   // 名前が入るぶん行を高くし、開いたときも高さを変えない(変えるとファビコンの縦の位置がずれる)。小さな板名は、開いたら薄く消すだけ
   const rowH = 52
   /** ファビコンの大きさ。開閉で変えない */

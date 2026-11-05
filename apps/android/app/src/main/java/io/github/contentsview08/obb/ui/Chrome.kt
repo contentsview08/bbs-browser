@@ -306,7 +306,7 @@ fun LoadError(message: String?, loading: Boolean, topPadding: androidx.compose.u
                     Text(if (loading) "読み込んでいます…" else "もう一度読み込む", color = Palette.accentText, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 }
                 Text("下へ引っぱっても読み込み直せます", Modifier.padding(top = 10.dp), color = Palette.textMuted, fontSize = 12.sp)
-                // 板・スレとして読めなかったときは、ブラウザで開ける(本人の要望 2026-11-05)
+                // 板・スレとして読めなかったときは、ブラウザで開ける
                 if (externalUrl != null) Text(
                     "ブラウザで開く", Modifier.padding(top = 14.dp).clip(RoundedCornerShape(8.dp)).clickable { openExternal(context, externalUrl, false) }.padding(horizontal = 14.dp, vertical = 8.dp),
                     color = Palette.accent, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,

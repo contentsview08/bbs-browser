@@ -109,7 +109,7 @@ fun QuickAccess(vm: AppViewModel) {
         ) {
             val sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             Column(
-                // 高さはいつも同じ(タブを替えても項目の数で変わらない。少なければ下が空く。本人 2026-11-05)
+                // 高さはいつも同じ
                 Modifier.fillMaxWidth().height(maxHeight * 0.78f)
                     .graphicsLayer { translationY = (1f - show.value) * size.height }
                     .shadow(16.dp, sheetShape).clip(sheetShape).background(Palette.surface)

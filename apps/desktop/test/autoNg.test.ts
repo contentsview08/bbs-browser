@@ -15,7 +15,7 @@ describe('normalizeBody / bodyKey: 比べるための本文', () => {
 
 describe('distinctRatio: 繰り返しの多さ', () => {
   it('繰り返しばかりの文は小さく、普通の文は大きい', () => {
-    expect(distinctRatio('死ね'.repeat(60))).toBeLessThan(0.05)
+    expect(distinctRatio('あほ'.repeat(60))).toBeLessThan(0.05)
     expect(distinctRatio('ガチで詳しい分野を語りたくてもついて来れる奴が居ないから悲しくなるんよな')).toBeGreaterThan(0.9)
   })
 })
@@ -33,13 +33,13 @@ describe('judgeAutoNg: 決まりと印で荒らしを決める', () => {
     expect(r.size).toBe(0)
   })
   it('100 文字以上の繰り返しは 1 回でも荒らし', () => {
-    const r = judgeAutoNg([post(1, '死ね'.repeat(60)), post(2, '死ね死ね')], EMPTY_MARKS)
+    const r = judgeAutoNg([post(1, 'あほ'.repeat(60)), post(2, 'あほあほ')], EMPTY_MARKS)
     expect(r.get(1)).toEqual({ kind: 'repeat' })
     expect(r.has(2)).toBe(false)
   })
   it('「荒らしじゃない」の印は決まりより強く、「荒らし」の印は 1 回でも効く', () => {
-    const marks = { troll: new Set([bodyKey('宣伝の貼り付け')]), notTroll: new Set([bodyKey('死ね'.repeat(60))]) }
-    const r = judgeAutoNg([post(1, '死ね'.repeat(60)), post(2, '>>1\n宣伝の貼り付け'), post(3, '普通')], marks)
+    const marks = { troll: new Set([bodyKey('宣伝の貼り付け')]), notTroll: new Set([bodyKey('あほ'.repeat(60))]) }
+    const r = judgeAutoNg([post(1, 'あほ'.repeat(60)), post(2, '>>1\n宣伝の貼り付け'), post(3, '普通')], marks)
     expect(r.has(1)).toBe(false)
     expect(r.get(2)).toEqual({ kind: 'marked' })
     expect(r.has(3)).toBe(false)

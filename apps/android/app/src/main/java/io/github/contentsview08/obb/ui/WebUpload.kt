@@ -92,7 +92,7 @@ private fun watchScript(pattern: String) = """
 })()
 """
 
-/** 置き場の画面を画面いっぱいに開き、本人が手で上げたあとに出たリンクを onLink に渡す */
+/** 置き場の画面を画面いっぱいに開き、利用者が手で上げたあとに出たリンクを onLink に渡す */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebUploadScreen(site: WebUploadSite, onLink: (String) -> Unit, onDismiss: () -> Unit) {

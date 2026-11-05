@@ -3,7 +3,7 @@
 日本語で応答する。コメントも日本語。
 
 このリポジトリ(PC 版 `apps/desktop`・スマホ版 `apps/android`)は、hono-bbs と合わせて 1 つの製品。3 つをまたぐ決まり・そろえるもの・
-ビルドと本番に出す方法・道具は、入口の `/mnt/c/Users/kbaku/git/bbs-suite`(`CLAUDE.md`・`docs/`・`tools/`)にある。
+ビルドと本番に出す方法・道具は、入口のフォルダ bbs-suite(`CLAUDE.md`・`docs/`・`tools/`)にある。
 見た目・言葉・設定を変えるときは、そちらの `docs/parity.md` を見る。
 
 ## 概要
@@ -34,12 +34,8 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   (BE を使わない書き込みでは DMDM・MDMD を外す)。plugin-http の Cookie 置き場はアプリから中身を触れず、
   Cookie ヘッダーを手で付けると置き場の Cookie が付かなくなる(reqwest の決まり)ので使えない。読む通信(GET)は plugin-http のまま。
   本番の板への試し書き込みはしない。応答の解析は eddist のソースにある文面をテストに写して確かめる。
-- ふたばは書き込みの送り方がほかと違う(`packages/connectors/src/futaba/connector.ts` の先頭に詳しく書いた)。
-  ふたばの書き込みボタンの JavaScript(`/bin/base4esc.js` の `ptfk`)と同じにしないと、受け付けられるのに誰にも見えない書き込みになる:
-  multipart/form-data・UTF-8(`chrenc=文字`)、`pthc` に `/bin/cachemt7.php` の値・`pthb` は初回空、`ptua` は Chromium の値、
-  `responsemode=ajax`(返事は ok か JSON)、ブラウザの User-Agent、Cookie は読む通信と同じ置き場(`sameCookiesAsGet` で plugin-http から POST)。
-  2026-10-17 のテスト中に回線ごと「アクセス規制中」になったので、ふたばへリクエストを送る開発は止めている(再開はユーザーと相談)。
-- 見た目は hono-bbs の web 版(`~/git/contentsview08/hono-bbs/packages/web`)から移植している。
+- ふたばは書き込みの送り方がほかと違う。詳しいことは非公開の資料(bbs-suite の `docs/futaba-notes.md`)にある。ふたばへリクエストを送る開発は止めている(再開はユーザーと相談)。
+- 見た目は hono-bbs の web 版(`packages/web`)から移植している。
   `apps/desktop/src/theme/*.css` と `src/index.css` は web 版の複製なので、中身を勝手に変えない。
   色は `c-*` の Tailwind クラス(CSS 変数)だけを使い、固定色や `slate-*` を新しく書かない。
   表示設定は `<html>` の `data-scheme` / `data-pattern` / `data-density` / `data-post-style` で切り替わる(`src/ui/settings.ts`)。

@@ -7,11 +7,11 @@
 // - 板の設定(SETTING.TXT)は板名も名無しの名前も入っていない。板の名前はトップページの一覧から取る
 // - 書き込みはスレのページのフォームと同じく /bbs/write.cgi?guid=ON へ Shift_JIS で送る
 //   (NAME・MAIL・MESSAGE・BBS・KEY・TIME・READ=TRUE・CC=あ・submit=書き込む)。
-//   書けると「書きこみました」ではなく、スレのページがそのまま返る(本人が 2026-11-04 に確かめた)。parseMachiWrite で読む
+//   書けると「書きこみました」ではなく、スレのページがそのまま返る。parseMachiWrite で読む
 // - スレ立てはアプリからはできない(まちBBS は依頼制で、板のページにもスレ立てのフォームがない)
 // 板の一覧はトップページから読める(handlesSite)。板は URL で足してもよい
 
-import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, PostResult, ThreadSummary } from '../types'
+import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, ThreadSummary } from '../types'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 import { machiError, parseMachiSubject, parseMachiTop, parseMachiWrite, parseOfflaw } from './parse'
 

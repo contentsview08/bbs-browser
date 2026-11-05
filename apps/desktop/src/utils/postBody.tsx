@@ -110,7 +110,7 @@ export function quoteLinksOf(posts: Post[]): QuoteLinks {
     for (const line of lines[i]) {
       const q = quotedText(line)
       if (!q || links?.has(line)) continue
-      // まずは、引用の行ではない所にその文があるレス(書いた本人)を探す。同じ文を引用しただけのレスにつながないように。
+      // まずは、引用の行ではない所にその文があるレス(書いた利用者)を探す。同じ文を引用しただけのレスにつながないように。
       // 見つからなければ(「>>」で引用の引用をしている など)、引用の行も含めて探す
       const find = (ownTextOnly: boolean) => {
         for (let j = i - 1; j >= 0; j--) {

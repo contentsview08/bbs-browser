@@ -4,7 +4,7 @@ import io.github.contentsview08.obb.bbs.Post
 import org.json.JSONArray
 import org.json.JSONObject
 
-// AI NG: 本人が文で書いた条件に、レスが当たるかを端末の中の判定モデル(data/AiModel.kt)で調べる。
+// AI NG: 利用者が文で書いた条件に、レスが当たるかを端末の中の判定モデル(data/AiModel.kt)で調べる。
 // PC 版・Web の utils/aiNg.ts と同じ項目・同じ JSON・同じ決め方(判定と見せ方を分ける・手の印が先・印が 3 件ずつそろうと学んだ判定を半々に混ぜる)
 
 /** 見せ方: hide は出さない、fold は畳む(押せば見られる)、mark は印だけ */

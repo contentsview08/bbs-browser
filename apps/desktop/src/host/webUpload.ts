@@ -20,7 +20,7 @@ async function encodeFiles(files: File[]): Promise<{ name: string; type: string;
 
 /**
  * 画面を開き、リンクを拾うたびに onLink を呼ぶ。返す関数で受け取りをやめる。
- * files を渡すと、開いたページに貼り付けたことにして(paste と drop を起こす)、本人が選び直さなくても上がる
+ * files を渡すと、開いたページに貼り付けたことにして(paste と drop を起こす)、利用者が選び直さなくても上がる
  */
 export async function openWebUpload(site: WebUploadSite, onLink: (url: string) => void, files: File[] = [], o: { background?: boolean } = {}): Promise<() => void> {
   const off = await listen<string>('web-upload-link', (e) => onLink(e.payload))
@@ -30,7 +30,7 @@ export async function openWebUpload(site: WebUploadSite, onLink: (url: string) =
       pattern: site.pattern,
       title: `${site.name}に上げる(上げたら、リンクを本文に入れます)`,
       files: files.length > 0 ? await encodeFiles(files) : null,
-      // 画像を渡すときは画面を見せずに裏で上げる(本人の手が要るときだけ showWebUpload で見せる)
+      // 画像を渡すときは画面を見せずに裏で上げる
       background: o.background ?? false,
     })
   } catch (e) {
@@ -40,7 +40,7 @@ export async function openWebUpload(site: WebUploadSite, onLink: (url: string) =
   return off
 }
 
-/** 裏で開いていた画面を見せる(しばらく経ってもリンクが来ない = 本人の手が要るとき) */
+/** 裏で開いていた画面を見せる(しばらく経ってもリンクが来ない = 利用者の手が要るとき) */
 export async function showWebUpload(): Promise<void> {
   await invoke('show_web_upload').catch(() => undefined)
 }

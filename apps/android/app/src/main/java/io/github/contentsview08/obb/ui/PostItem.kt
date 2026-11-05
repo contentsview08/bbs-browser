@@ -125,15 +125,21 @@ fun PostItem(
     val idLine = @Composable {
         if (idBottomRight != null) Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.End) { Text(idBottomRight, fontSize = headSize) }
     }
+    // LINE 風の「あなた宛」は、頭ではなく吹き出しの隣に置く
+    val headChip = when {
+        own -> "自分"
+        toOwn && style != "line" -> "→あなた宛"
+        else -> null
+    }
     val header = @Composable {
-        if (own || toOwn || idTopRight != null) {
+        if (headChip != null || idTopRight != null) {
             // 右上の ID の幅だけを除いて、残りを全部頭に使う(頭と余白の両方に weight を付けると幅を半分ずつ分け合い、まだ入るのに折り返していた)
             Row(if (idTopRight != null) Modifier.fillMaxWidth() else Modifier, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
                     Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
-                    if (own || toOwn) {
+                    if (headChip != null) {
                         Spacer(Modifier.width(6.dp))
-                        OwnChip(if (own) "自分" else "→あなた宛")
+                        OwnChip(headChip, Palette.onSky(style))
                     }
                 }
                 if (idTopRight != null) Text(idTopRight, Modifier.padding(start = 6.dp), fontSize = headSize, maxLines = 1, softWrap = false)
@@ -187,12 +193,17 @@ fun PostItem(
                 if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
                 Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                     if (!continued || own) Box(Modifier.padding(bottom = 4.dp)) { header() }
-                    Column(
-                        Modifier.widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
-                        if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
-                        if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
-                        idLine()
+                    // 「あなた宛」は吹き出しの外側に置く(左の吹き出しなら右、右の吹き出しなら左)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        if (toOwn && own) { OwnChip("→あなた宛", Palette.onSky(style)); Spacer(Modifier.width(6.dp)) }
+                        Column(
+                            Modifier.weight(1f, fill = false).widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
+                            if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+                            idLine()
+                        }
+                        if (toOwn && !own) { Spacer(Modifier.width(6.dp)); OwnChip("→あなた宛", Palette.onSky(style)) }
                     }
                     Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
                 }
@@ -326,11 +337,14 @@ private fun AaBody(r: RenderedPost) {
 }
 
 @Composable
-private fun OwnChip(label: String) {
+private fun OwnChip(label: String, onSky: Boolean = false) {
+    val isOwn = label == "自分"
+    val color = if (isOwn) Palette.own else Palette.toOwn
+    val wash = if (isOwn) Palette.ownWash else Palette.toOwnWash
     Text(
         label,
-        Modifier.border(1.dp, Palette.own, RoundedCornerShape(4.dp)).background(Palette.ownWash, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
-        color = Palette.own, fontSize = 10.sp, lineHeight = 14.sp,
+        Modifier.border(1.dp, color, RoundedCornerShape(4.dp)).background(if (onSky) Color.White else wash, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+        color = color, fontSize = 10.sp, lineHeight = 14.sp,
     )
 }
 

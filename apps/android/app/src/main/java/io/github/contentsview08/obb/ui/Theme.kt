@@ -179,7 +179,7 @@ object Palette {
     // 自分の書き込みは紫、自分へのレスは橙(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
     val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF5A3CC0) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF5A3CC0)
     val ownWash get() = own.copy(alpha = 0.16f)
-    val toOwn get() = if (scheme.dark) Color(0xFFFF9A4D) else Color(0xFFAB4F15)
+    val toOwn get() = if (scheme.dark) Color(0xFFFF9A4D) else Color(0xFFC2500A)
     val toOwnWash get() = toOwn.copy(alpha = 0.16f)
     /** スレ主 */
     val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFF926019)

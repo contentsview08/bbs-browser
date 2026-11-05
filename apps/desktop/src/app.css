@@ -1093,8 +1093,8 @@ html:root.dark[data-scheme] {
 html:root[data-scheme] {
   --c-own: #5a3cc0;
   --c-own-wash: rgba(90, 60, 192, 0.14);
-  --c-to-own: #ab4f15;
-  --c-to-own-wash: rgba(171, 79, 21, 0.14);
+  --c-to-own: #c2500a;
+  --c-to-own-wash: rgba(194, 80, 10, 0.1);
 }
 html:root.dark[data-scheme] {
   --c-own: #a28bff;

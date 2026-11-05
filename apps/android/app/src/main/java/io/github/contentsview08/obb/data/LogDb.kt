@@ -321,6 +321,21 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         db.delete("threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
     }
 
+    /** 選んだスレのログをまとめて消す(途中で落ちて半分だけ消えないように 1 つのトランザクションで) */
+    suspend fun deleteThreads(list: List<ThreadSummary>) = io {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (t in list) {
+                db.delete("posts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
+                db.delete("threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /**
      * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの。PC 版の pruneLogs と同じ)。
      * お気に入りのスレ・自分が書き込んだスレは残す。消したスレの数を返す。

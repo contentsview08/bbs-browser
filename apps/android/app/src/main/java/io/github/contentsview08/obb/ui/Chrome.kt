@@ -509,17 +509,20 @@ fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onFont: () -> Unit, o
     }
 }
 
-/** ログを削除する前に確かめる。「次回から表示しない」を入れて削除すると、次からは確かめずに消す(設定の「スクロールと更新」で戻せる) */
+/**
+ * ログを削除する前に確かめる。「次回から表示しない」を入れて削除すると、次からは確かめずに消す(設定の「スクロールと更新」で戻せる)。
+ * count を渡すと選んだスレをまとめて消すときの言葉にする。一度に多く消えるので、「次回から表示しない」は出さない
+ */
 @Composable
-fun ConfirmDeleteDialog(prefs: io.github.contentsview08.obb.data.Prefs, onDelete: () -> Unit, onDismiss: () -> Unit) {
+fun ConfirmDeleteDialog(prefs: io.github.contentsview08.obb.data.Prefs, count: Int? = null, onDelete: () -> Unit, onDismiss: () -> Unit) {
     var dontAsk by remember { mutableStateOf(false) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("ログを削除しますか") },
         text = {
             Column {
-                Text("このスレの手元のログを消します。もう一度開けば取り直します。", color = Palette.textBody, fontSize = 14.sp)
-                Row(Modifier.padding(top = 8.dp).clickable { dontAsk = !dontAsk }, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (count == null) "このスレの手元のログを消します。もう一度開けば取り直します。" else "選んだ $count 件のスレの手元のログを消します。もう一度開けば取り直します。", color = Palette.textBody, fontSize = 14.sp)
+                if (count == null) Row(Modifier.padding(top = 8.dp).clickable { dontAsk = !dontAsk }, verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Checkbox(dontAsk, { dontAsk = it }, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
                     Text("次回から表示しない", color = Palette.textBody, fontSize = 14.sp)
                 }

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Public
@@ -39,6 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -204,7 +206,7 @@ private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit
 @Composable
 private fun PastRow(
     vm: AppViewModel, t: io.github.contentsview08.obb.bbs.ThreadSummary, meta: String, total: Int?, unread: Int,
-    archived: Boolean = false, own: String? = null, ownNo: Int? = null, onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null,
+    archived: Boolean = false, own: String? = null, ownNo: Int? = null, checked: Boolean? = null, onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null,
 ) {
     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     Row(
@@ -212,6 +214,8 @@ private fun PastRow(
     ) {
         // 左の帯: 未読があれば未読の色(未読が多いほど濃く)
         Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread.copy(alpha = 0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f)) else Color.Transparent))
+        // 選んでいる間は、行を押すと選ぶ(チェックは飾りで、押した指は行が受ける)
+        if (checked != null) androidx.compose.material3.Checkbox(checked, null, Modifier.align(Alignment.CenterVertically).padding(start = 10.dp), colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
         Column(Modifier.weight(1f).padding(start = 13.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)) {
             Text(
                 t.title.ifEmpty { t.key }, color = if (unread > 0) Palette.textStrong else Palette.threadReadTitle, fontSize = 15.sp, lineHeight = 20.sp,
@@ -260,10 +264,34 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
         if (!searching) entries else (pool ?: entries).filter { io.github.contentsview08.obb.data.matchesTerms(it.thread.title, terms) }
     }
     androidx.activity.compose.BackHandler(enabled = searching) { searching = false; query = "" }
+    // 閲覧のタブで選んでログを消す。選ぶのは見えている行(検索で絞っていれば絞った中)から
+    var selecting by remember(tab) { mutableStateOf(false) }
+    var selected by remember(tab) { mutableStateOf(emptySet<String>()) }
+    var confirmDel by remember(tab) { mutableStateOf(false) }
+    val picked = remember(shown, selected) { shown.filter { it.thread.id in selected }.map { it.thread } }
+    fun stopSelecting() { selecting = false; selected = emptySet() }
+    androidx.activity.compose.BackHandler(enabled = selecting) { stopSelecting() }
+    if (confirmDel) ConfirmDeleteDialog(vm.prefs, count = picked.size, onDelete = { vm.deleteLogsOf(picked); stopSelecting() }) { confirmDel = false }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, refresh, swipe))) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
-        PastHeader(vm, tab, refresh) {
-            if (tab == "history") BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
+        // 選んでいる間の帯はヘッダーに重ねる(差し込むと、一覧が下にずれて押す所が動く)
+        Box {
+            PastHeader(vm, tab, refresh) {
+                if (tab == "history") {
+                    BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
+                    if (entries.isNotEmpty()) BarIcon(Icons.Filled.Checklist, "選んでログを削除") { selecting = true }
+                }
+            }
+            if (selecting) Row(Modifier.matchParentSize().background(Palette.bar).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                BarIcon(Icons.Filled.Close, "選ぶのをやめる") { stopSelecting() }
+                Text("${picked.size} 件", Modifier.weight(1f), color = Palette.textStrong, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                val allOn = shown.isNotEmpty() && picked.size == shown.size
+                TextButton(onClick = { selected = if (allOn) emptySet() else shown.map { it.thread.id }.toSet() }) { Text(if (allOn) "すべて外す" else "すべて選ぶ", color = Palette.textBody) }
+                TextButton(onClick = { confirmDel = true }, enabled = picked.isNotEmpty()) {
+                    Icon(Icons.Filled.Delete, null, tint = if (picked.isNotEmpty()) Palette.markDanger else Palette.textMuted, modifier = Modifier.size(18.dp))
+                    Text("ログを削除", color = if (picked.isNotEmpty()) Palette.markDanger else Palette.textMuted, fontWeight = FontWeight.Bold)
+                }
+            }
         }
         if (searching) SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" }
         if (searching && shown.isEmpty() && pool != null) Hint("見つかりませんでした")
@@ -279,7 +307,10 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
                     if (h.readAt > 0) "${relativeTime(h.readAt)}に見た" else null,
                     if (remote == -1) "dat 落ち" else null,
                 ).joinToString(" ・ ")
-                PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, onLongClick = { Haptics.longPress(hv); menuFor = h.thread })
+                val id = h.thread.id
+                fun toggle() { selected = if (id in selected) selected - id else selected + id }
+                if (selecting) PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, checked = id in selected, onLongClick = { toggle() }, onClick = { toggle() })
+                else PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, onLongClick = { Haptics.longPress(hv); menuFor = h.thread })
             }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }}

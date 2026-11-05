@@ -989,6 +989,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 履歴で選んだスレのログをまとめて削除 */
+    fun deleteLogsOf(list: List<ThreadSummary>) {
+        viewModelScope.launch {
+            db.deleteThreads(list)
+            // スタックの下のスレ一覧も、既読の印を読み直す
+            for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
+            reloadSide()
+            toast = "${list.size} 件のログを削除しました"
+        }
+    }
+
     suspend fun isFavoriteThread(t: ThreadSummary) = db.isFavoriteThread(t)
 
     fun toggleFavoriteThread(page: Page.Thread) {

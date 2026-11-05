@@ -177,8 +177,9 @@ private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: (
  * どれも「前に見た・書いた・上げたもの」の一覧なので、1 つの画面のタブとしてまとめる(PC 版・Web と同じ並び)
  */
 @Composable
-private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit)?) {
+private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit)?, actions: @Composable () -> Unit = {}) {
     HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
+        actions()
         if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
     }
     Row(Modifier.fillMaxWidth().background(Palette.bar).padding(horizontal = 10.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -249,12 +250,26 @@ fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>
     androidx.compose.runtime.LaunchedEffect(title) { if (title == "お気に入りのスレ") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
+    // 閲覧のタブのスレタイ検索。ふだんの一覧は 300 件までなので、探すあいだは全部から探す
+    var searching by remember(tab) { mutableStateOf(false) }
+    var query by remember(tab) { mutableStateOf("") }
+    var pool by remember(tab) { mutableStateOf<List<HistoryEntry>?>(null) }
+    androidx.compose.runtime.LaunchedEffect(searching, entries) { if (searching) pool = vm.allHistory() }
+    val shown = remember(entries, pool, searching, query) {
+        val terms = io.github.contentsview08.obb.data.searchTerms(query)
+        if (!searching) entries else (pool ?: entries).filter { io.github.contentsview08.obb.data.matchesTerms(it.thread.title, terms) }
+    }
+    androidx.activity.compose.BackHandler(enabled = searching) { searching = false; query = "" }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, refresh, swipe))) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
-        PastHeader(vm, tab, refresh)
-        if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
+        PastHeader(vm, tab, refresh) {
+            if (tab == "history") BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
+        }
+        if (searching) SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" }
+        if (searching && shown.isEmpty() && pool != null) Hint("見つかりませんでした")
+        else if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
         else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize(), state = listState) {
-            items(entries, key = { it.thread.id }) { h ->
+            items(shown, key = { it.thread.id }) { h ->
                 // 掲示板で分かったレス数があれば、そちらで未読を数える(-1 は dat 落ち)
                 val remote = vm.remoteCounts[h.thread.id]
                 val total = maxOf(h.thread.postCount, remote ?: 0)

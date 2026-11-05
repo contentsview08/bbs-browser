@@ -243,6 +243,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 閲覧履歴の全部(検索用。ふだんの一覧は新しい方から 300 件だけ) */
+    suspend fun allHistory(): List<HistoryEntry> = db.history(Int.MAX_VALUE)
+
     /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
     /** クイックアクセス(最近見たスレ・書き込んだスレへさっと移る小さな画面)を出しているか */
     var quickOpen by mutableStateOf(false)

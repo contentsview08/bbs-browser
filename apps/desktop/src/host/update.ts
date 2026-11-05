@@ -58,8 +58,11 @@ export interface AutoUpdateProgress {
   percent?: number
 }
 
-/** 新しい版があるかの確かめを待つ長さ(返事がなければ、そのまま起動する) */
-const CHECK_TIMEOUT_MS = 5000
+/**
+ * 新しい版があるかの確かめを待つ長さ。確かめている間も画面は使えるので長めに待つ
+ * (latest.json は GitHub の転送を 2 回はさみ、混んでいると 10 秒近くかかることがある)
+ */
+const CHECK_TIMEOUT_MS = 20000
 /** 落としている途中で、これだけ何も届かなければやめる */
 const DOWNLOAD_STALL_MS = 30000
 

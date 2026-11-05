@@ -33,6 +33,7 @@ import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
+import { mediaSrc } from '../utils/httpsFirst'
 
 export interface PostHandlers extends BodyHandlers {
   /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
@@ -1048,7 +1049,7 @@ function PostArticle(props: Props) {
                           {/* 読み込んでいる間の印(読み込めたら外す) */}
                           <ThumbSpinner />
                           <img
-                            src={m.url}
+                            src={mediaSrc(m.url)}
                             alt=""
                             loading="lazy"
                             referrerPolicy="no-referrer"
@@ -1077,7 +1078,7 @@ function PostArticle(props: Props) {
                       title="動画を再生する"
                     >
                       {isAutoLoadable(m.url) ? (
-                        <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
+                        <video src={mediaSrc(`${m.url}#t=0.1`)} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
                       ) : (
                         <LocalAddressMark />
                       )}

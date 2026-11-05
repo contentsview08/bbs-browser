@@ -69,6 +69,14 @@ pub async fn http_post(
         .build()
         .map_err(|e| e.to_string())?;
     let mut url = Url::parse(&url).map_err(|e| e.to_string())?;
+    // http の URL も先に https で送る。つながらないときだけ http に戻す(届いたあとの失敗で送り直すと二重投稿になる)
+    let mut http_fallback = None;
+    if url.scheme() == "http" {
+        let mut https = url.clone();
+        if https.set_scheme("https").is_ok() {
+            http_fallback = Some(std::mem::replace(&mut url, https));
+        }
+    }
     let mut method = reqwest::Method::POST;
     let mut body = Some(body);
 
@@ -92,7 +100,15 @@ pub async fn http_post(
         if let Some(b) = &body {
             req = req.body(b.clone());
         }
-        let res = req.send().await.map_err(|e| e.to_string())?;
+        let res = match req.send().await {
+            Ok(res) => res,
+            Err(e) if e.is_connect() && http_fallback.is_some() => {
+                url = http_fallback.take().unwrap_or(url);
+                continue;
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        http_fallback = None;
 
         // 受け取った Cookie を置き場に入れる(リダイレクトの途中のものも)
         {

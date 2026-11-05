@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchOgp } from '../host/ogp'
 import type { Ogp } from '../utils/ogp'
 import { isAutoLoadable } from '../utils/safeUrl'
+import { mediaSrc } from '../utils/httpsFirst'
 
 export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen: (url: string) => void; more?: number }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -59,7 +60,7 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
       {ogp?.image && isAutoLoadable(ogp.image) && (
         <div className="w-28 h-full flex-shrink-0 bg-c-surface3">
           <img
-            src={ogp.image}
+            src={mediaSrc(ogp.image)}
             alt=""
             loading="lazy"
             referrerPolicy="no-referrer"

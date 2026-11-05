@@ -5,6 +5,7 @@
 import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import type { ConnectorContext, HttpRequestOptions, HttpResponse } from '@bbs-browser/connectors'
+import { fetchHttpsFirst } from '../utils/httpsFirst'
 
 // 2ch 互換の板は専ブラに Monazilla の UA を求める慣習がある
 const USER_AGENT = 'Monazilla/1.00 (bbs-browser/0.1.0)'
@@ -53,12 +54,15 @@ async function post(url: string, body: string | Uint8Array, opts?: HttpRequestOp
  */
 const REUSE_MS = 3000
 const recent = new Map<string, { at: number; res: Promise<HttpResponse> }>()
+/** 読む通信は https から試し、取れなければ http に戻す */
+const getHttpsFirst = (url: string, opts?: HttpRequestOptions) => fetchHttpsFirst(url, (u) => request(u, { method: 'GET' }, opts), (res) => res.status < 400)
+
 function get(url: string, opts?: HttpRequestOptions): Promise<HttpResponse> {
-  if (opts?.headers && Object.keys(opts.headers).length > 0) return request(url, { method: 'GET' }, opts)
+  if (opts?.headers && Object.keys(opts.headers).length > 0) return getHttpsFirst(url, opts)
   const now = Date.now()
   const hit = recent.get(url)
   if (hit && now - hit.at < REUSE_MS) return hit.res
-  const res = request(url, { method: 'GET' }, opts)
+  const res = getHttpsFirst(url, opts)
   recent.set(url, { at: now, res })
   // 失敗したものは使い回さない
   res.catch(() => recent.delete(url))

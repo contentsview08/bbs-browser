@@ -25,7 +25,7 @@ object OgpFetcher {
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) bbs-native/0.1.0"
     private const val HEAD_BYTES = 256 * 1024
     private val client by lazy {
-        OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).followRedirects(true).build()
+        OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).followRedirects(true).addInterceptor(HttpsFirst).build()
     }
     private val limit = Semaphore(4)
     private val memory = HashMap<String, CompletableDeferred<Ogp?>>()

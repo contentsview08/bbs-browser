@@ -8,6 +8,7 @@ import { fetch } from '@tauri-apps/plugin-http'
 import type { LogStore } from '@bbs-browser/logstore'
 import { charsetOfHtml, parseOgp, type Ogp } from '../utils/ogp'
 import { isAutoLoadable } from '../utils/safeUrl'
+import { fetchHttpsFirst } from '../utils/httpsFirst'
 
 // 掲示板向けの Monazilla ではなく、ふつうのブラウザに近い名乗りにする(OGP を返さないサイトがあるため)
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) bbs-browser/0.1.0'
@@ -73,7 +74,7 @@ async function readHead(res: Response): Promise<Uint8Array> {
 }
 
 async function download(url: string): Promise<Ogp | null> {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' } })
+  const res = await fetchHttpsFirst(url, (u) => fetch(u, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' } }), (r) => r.ok)
   if (!res.ok) return null
   const type = res.headers.get('content-type') ?? ''
   if (!/html/i.test(type)) {

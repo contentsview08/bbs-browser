@@ -14,6 +14,7 @@ import { isVideoFileUrl, youtubeEmbedUrl } from '../../utils/postBody'
 import { isAutoLoadable } from '../../utils/safeUrl'
 import { saveMediaMobile } from '../../utils/saveMediaMobile'
 import ActionSheet from '../ActionSheet'
+import { mediaSrc } from '../../utils/httpsFirst'
 
 /** 動き方。どの動きも、同じ曲線(すっと動いて、やわらかく止まる)と時間でそろえる */
 const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
@@ -325,7 +326,7 @@ export default function MobileImageViewer(props: Props) {
           style={{ aspectRatio: '16 / 9' }}
         />
       ) : null
-    else if (isVideoFileUrl(url)) content = current ? <video src={url} controls autoPlay playsInline className="max-w-full max-h-full" /> : null
+    else if (isVideoFileUrl(url)) content = current ? <video src={mediaSrc(url)} controls autoPlay playsInline className="max-w-full max-h-full" /> : null
     else
       content = (
         <div ref={current ? zoomRef : undefined} className="relative w-full h-full flex items-center justify-center will-change-transform">
@@ -334,7 +335,7 @@ export default function MobileImageViewer(props: Props) {
             <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">progress_activity</span>
           </span>
           <img
-            src={url}
+            src={mediaSrc(url)}
             alt=""
             draggable={false}
             decoding="async"

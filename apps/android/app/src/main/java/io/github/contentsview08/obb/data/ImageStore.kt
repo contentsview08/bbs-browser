@@ -45,7 +45,7 @@ object ImageStore {
     private val client by lazy {
         // タイムアウト: つながるまで 10 秒・データが 15 秒届かなければ切る(止まったまま回り続けないように)・全体で 3 分まで
         OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(3, TimeUnit.MINUTES)
-            .followRedirects(true).followSslRedirects(true).build()
+            .followRedirects(true).followSslRedirects(true).addInterceptor(HttpsFirst).build()
     }
 
     fun init(context: Context) {

@@ -14,6 +14,7 @@ import { formatMomentum, relativeTime } from '../utils/thread'
 import Identicon from './Identicon'
 import { isAutoLoadable } from '../utils/safeUrl'
 import BoardIcon from './BoardIcon'
+import { mediaSrc } from '../utils/httpsFirst'
 
 interface Props {
   thread: ThreadSummary
@@ -153,7 +154,7 @@ function ThreadCard({
     !thumbFailed &&
     isAutoLoadable(thread.thumb) && (
       <img
-        src={thread.thumb}
+        src={mediaSrc(thread.thumb)}
         alt=""
         loading="lazy"
         referrerPolicy="no-referrer"

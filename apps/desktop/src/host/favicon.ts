@@ -4,6 +4,7 @@
 
 import { fetch } from '@tauri-apps/plugin-http'
 import type { LogStore } from '@bbs-browser/logstore'
+import { fetchHttpsFirst } from '../utils/httpsFirst'
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) bbs-browser/0.1.0'
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -35,7 +36,7 @@ function iconFromHtml(html: string, pageUrl: string): string | undefined {
 async function findIconUrl(boardUrl: string): Promise<string> {
   const fallback = new URL('/favicon.ico', boardUrl).href
   try {
-    const res = await fetch(boardUrl, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' } })
+    const res = await fetchHttpsFirst(boardUrl, (u) => fetch(u, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' } }), (r) => r.ok)
     if (!res.ok || !/html/i.test(res.headers.get('content-type') ?? '')) return fallback
     return iconFromHtml(await res.text(), res.url || boardUrl) ?? fallback
   } catch {
@@ -51,7 +52,7 @@ function toBase64(bytes: Uint8Array): string {
 
 /** 画像を取って data: URL にする。画像でなければ undefined */
 async function download(url: string): Promise<string | undefined> {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } })
+  const res = await fetchHttpsFirst(url, (u) => fetch(u, { headers: { 'User-Agent': USER_AGENT } }), (r) => r.ok)
   if (!res.ok) return undefined
   const type = (res.headers.get('content-type') ?? '').split(';')[0].trim() || 'image/x-icon'
   if (!type.startsWith('image/')) return undefined

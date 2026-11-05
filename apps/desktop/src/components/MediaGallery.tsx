@@ -11,6 +11,7 @@ import { imageUrlsIn, videoFileUrlsIn, youtubeLinksIn } from '../utils/postBody'
 import { saveImage } from '../host/saveImage'
 import { isAutoLoadable } from '../utils/safeUrl'
 import LocalAddressMark from './LocalAddressMark'
+import { mediaSrc } from '../utils/httpsFirst'
 
 export type MediaKind = 'image' | 'video' | 'youtube'
 
@@ -163,10 +164,10 @@ export default function MediaGallery(props: {
                   {!isAutoLoadable(m.thumb ?? m.url) ? (
                     <LocalAddressMark />
                   ) : m.kind === 'video' ? (
-                    <video src={`${m.url}#t=0.1`} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none bg-black" />
+                    <video src={mediaSrc(`${m.url}#t=0.1`)} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none bg-black" />
                   ) : (
                     <img
-                      src={m.thumb ?? m.url}
+                      src={mediaSrc(m.thumb ?? m.url)}
                       alt=""
                       loading="lazy"
                       referrerPolicy="no-referrer"

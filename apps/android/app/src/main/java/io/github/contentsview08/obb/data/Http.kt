@@ -32,6 +32,7 @@ object Http {
             .readTimeout(20, TimeUnit.SECONDS)
             .followRedirects(false)
             .cookieJar(jar)
+            .addInterceptor(HttpsFirst)
             .build()
     }
 

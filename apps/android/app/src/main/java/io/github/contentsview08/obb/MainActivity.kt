@@ -81,6 +81,14 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // AsyncImage の画像も https を先に試す
+        coil3.SingletonImageLoader.setSafe { context ->
+            coil3.ImageLoader.Builder(context).components {
+                add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = {
+                    okhttp3.OkHttpClient.Builder().addInterceptor(io.github.contentsview08.obb.data.HttpsFirst).build()
+                }))
+            }.build()
+        }
         // 背景は暗いので、時計などのアイコンは明るい色で出す
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),

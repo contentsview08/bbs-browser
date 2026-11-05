@@ -11,6 +11,7 @@ import { isVideoFileUrl, toImageUrl, youtubeEmbedUrl } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
 import Lightbox from './Lightbox'
 import LoadingCenter from './LoadingCenter'
+import { mediaSrc } from '../utils/httpsFirst'
 
 /** ページを取る(アプリの通信。CORS に縛られない) */
 export type FetchPage = (url: string) => Promise<{ status: number; headers: Record<string, string>; body: Uint8Array }>
@@ -94,9 +95,9 @@ export default function ReaderView(props: { url: string; fetchPage: FetchPage; s
                 style={{ aspectRatio: '16 / 9' }}
               />
             ) : video ? (
-              <video src={url} controls autoPlay playsInline className="max-w-full max-h-full" />
+              <video src={mediaSrc(url)} controls autoPlay playsInline className="max-w-full max-h-full" />
             ) : isAutoLoadable(image!) ? (
-              <img src={image} alt="" referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain" onClick={() => setLightbox({ urls: [image!], index: 0 })} />
+              <img src={mediaSrc(image)} alt="" referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain" onClick={() => setLightbox({ urls: [image!], index: 0 })} />
             ) : (
               <p className="text-white/80 text-sm p-6">家の中のネットワークのアドレスです。ブラウザで開いてください</p>
             )}
@@ -150,7 +151,7 @@ export default function ReaderView(props: { url: string; fetchPage: FetchPage; s
                   return isAutoLoadable(b.src) ? (
                     <img
                       key={i}
-                      src={b.src}
+                      src={mediaSrc(b.src)}
                       alt=""
                       loading="lazy"
                       referrerPolicy="no-referrer"

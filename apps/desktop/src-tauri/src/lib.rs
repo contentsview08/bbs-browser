@@ -279,6 +279,12 @@ fn migrations() -> Vec<Migration> {
     ]
 }
 
+/// http の URL の https 版(http でなければ None)
+fn https_of(url: &str) -> Option<String> {
+    let rest = url.get(..7).filter(|s| s.eq_ignore_ascii_case("http://")).map(|_| &url[7..])?;
+    Some(format!("https://{rest}"))
+}
+
 /// 中身の先頭のバイトから、画像・動画の拡張子を決める。画像でも動画でもなければ None
 fn media_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
@@ -361,15 +367,18 @@ async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<S
         .read_timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
-    let bytes = client
-        .get(&url)
-        .send()
-        .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
-        .map_err(|e| e.to_string())?;
+    // http の URL も先に https で取り、取れなければ書いてあるとおり http で取る
+    let fetch = |target: String| {
+        let client = client.clone();
+        async move { client.get(target).send().await?.error_for_status()?.bytes().await }
+    };
+    let bytes = match https_of(&url) {
+        Some(https) => match fetch(https).await {
+            Ok(bytes) => bytes,
+            Err(_) => fetch(url.clone()).await.map_err(|e| e.to_string())?,
+        },
+        None => fetch(url.clone()).await.map_err(|e| e.to_string())?,
+    };
     let extension = media_extension(&bytes).ok_or("画像でも動画でもないので保存しませんでした")?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = unique_path(&dir, &file_name_from_url(&url, extension));
@@ -662,6 +671,14 @@ mod tests {
         assert_eq!(file_name_from_url("https://a.test/CON.jpg", "jpg"), "image.jpg");
         assert_eq!(file_name_from_url("https://a.test/com1.jpg", "jpg"), "image.jpg");
         assert_eq!(file_name_from_url("https://a.test/", "png"), "a.png");
+    }
+
+    #[test]
+    fn only_http_is_upgraded() {
+        assert_eq!(https_of("http://a.test/x.png").as_deref(), Some("https://a.test/x.png"));
+        assert_eq!(https_of("HTTP://a.test/").as_deref(), Some("https://a.test/"));
+        assert_eq!(https_of("https://a.test/"), None);
+        assert_eq!(https_of("ftp://a.test/"), None);
     }
 
     #[test]

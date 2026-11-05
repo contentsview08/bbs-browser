@@ -19,6 +19,7 @@ import { isVideoFileUrl, youtubeEmbedUrl } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { isMobile } from '../utils/platform'
 import MobileImageViewer from './mobile/MobileImageViewer'
+import { mediaSrc } from '../utils/httpsFirst'
 
 interface Props {
   urls: string[]
@@ -67,7 +68,7 @@ function StripThumb(props: { url: string; current: boolean; onClick: () => void;
         </span>
       ) : (
         <img
-          src={yt ? `https://img.youtube.com/vi/${yt}/default.jpg` : url}
+          src={yt ? `https://img.youtube.com/vi/${yt}/default.jpg` : mediaSrc(url)}
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"
@@ -549,7 +550,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
           <video
             ref={videoRef}
             key={url}
-            src={url}
+            src={mediaSrc(url)}
             controls
             autoPlay
             playsInline
@@ -575,7 +576,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       <img
         ref={imgRef}
         key={url}
-        src={url}
+        src={mediaSrc(url)}
         alt=""
         referrerPolicy="no-referrer"
         draggable={false}

@@ -114,6 +114,8 @@ const threadEntry = (thread: ThreadSummary) => ({ key: `thread:${threadId(thread
 
 /** タブを押し続けて切り替えたとき、連打がこれだけ止まったら、選んでいたタブに切り替える */
 const TAB_REPEAT_SETTLE_MS = 200
+/** 前のタブ送りのキーからこれより短い間に押されたら、押し続けと同じ扱いにする(素早く何度も押すたびに切り替えると固まる) */
+const TAB_QUICK_MS = 200
 /** スマホ: スレ表示がすべり込む・すべって出ていく時間(下の duration-[250ms] と同じ) */
 const SLIDE_MS = 250
 /** スマホ: 引き出し(サイドバー)の中身の拡大率。PC 向けの小さな字のままだと、ほかの画面より小さく見える */
@@ -1413,6 +1415,8 @@ export default function App() {
   const [tabPreview, setTabPreview] = useState<string>()
   const tabPreviewRef = useRef<string | undefined>(undefined)
   const tabCommitTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  /** 最後にタブ送りのキーを押した時刻 */
+  const lastTabKey = useRef(-Infinity)
   const commitTabPreview = () => {
     clearTimeout(tabCommitTimer.current)
     const id = tabPreviewRef.current
@@ -1628,7 +1632,7 @@ export default function App() {
       const action = actionFor(keymap, keyString(e))
       if (!action) return
       // 次・前のタブ(Ctrl+Tab など): 1 回押しただけならすぐ切り替える。
-      // 押し続けた(キーの自動の連打)ときは、タブ列の印だけを動かし、スレ表示の切り替えは
+      // 押し続けた(キーの自動の連打)ときと、素早く続けて押したときは、タブ列の印だけを動かし、スレ表示の切り替えは
       // 指を離すか連打が止まるまで待って 1 回だけにする(1 回ごとに描き直しや読み込みが走って固まるため)
       if (action === 'nextTab' || action === 'prevTab') {
         const ids = tabsRef.current.map((t) => t.id)
@@ -1638,7 +1642,10 @@ export default function App() {
         const from = tabPreviewRef.current ?? activeId
         const i = from ? ids.indexOf(from) : -1
         const next = ids[(i + (action === 'nextTab' ? 1 : -1) + ids.length) % ids.length]
-        if (!e.repeat && tabPreviewRef.current === undefined) return selectTab(next)
+        const now = performance.now()
+        const quick = now - lastTabKey.current < TAB_QUICK_MS
+        lastTabKey.current = now
+        if (!e.repeat && !quick && tabPreviewRef.current === undefined) return selectTab(next)
         tabPreviewRef.current = next
         setTabPreview(next)
         clearTimeout(tabCommitTimer.current)

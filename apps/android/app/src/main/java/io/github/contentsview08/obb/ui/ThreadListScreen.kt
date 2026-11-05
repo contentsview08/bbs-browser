@@ -351,7 +351,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                 // 今のスマホ版のタブ: 選んでいるタブは強調色の文字と薄い色、上に線。未読のタブには未読の合計。
                 // 並べ替えのタブは、押すたびに 逆順 → 元の並び(矢印で向き)。絞り込みのタブは押すたびに入り切り
-                val unreadTotal = remember(page.threads, page.states) { page.threads.sumOf { unreadOf(it, page.states) } }
+                // NG で出していないスレは数えない
+                val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states) } }
                 for (t in tabs) {
                     val active = tab == t
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED

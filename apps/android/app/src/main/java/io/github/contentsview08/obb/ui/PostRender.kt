@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.PostIndex
 import io.github.contentsview08.obb.bbs.Span
+import io.github.contentsview08.obb.bbs.toImageUrl
 
 /** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
 /** aa: アスキーアートらしい本文(スペースが 5 つ以上続く。今のスマホ版と同じ判定)。AA 用の字で、折り返さず画面の幅に収める */
@@ -38,12 +39,12 @@ private val BLANK_AFTER = Regex("^\n(?:[ \t　]*\n)*")
 
 /** 「2026/10/26(月) 07:37:30.214」→「10/26 07:37」(Discord 風・LINE 風の頭を短く) */
 // 日付の読み取り(何度も呼ぶので、作っておいて使い回す)
-private val DATE_TIME = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})[^\\d]*(\\d{1,2}):(\\d{2})")
-private val DATE_DAY = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})(\\([^)]*\\))?")
+private val DATE_TIME = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})[^0-9]*([0-9]{1,2}):([0-9]{2})")
+private val DATE_DAY = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})(\\([^)]*\\))?")
 private val minutesCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
 /** 年・月・日・曜日・時・分・秒(・秒の下の桁)を読む(2026/11/02(月) 19:01:15.960)。曜日と秒はないこともある */
-private val DATE_PARTS = Regex("(\\d{4})/(\\d{1,2})/(\\d{1,2})\\s*(?:\\(([^)]*)\\))?\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
+private val DATE_PARTS = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})\\s*(?:\\(([^)]*)\\))?\\s*([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?")
 
 /**
  * レスの頭の日時(設定「日時の出し方」)。スマホでは頭を短くしたいので、既定は年と秒の下の桁を省く:
@@ -54,7 +55,7 @@ fun displayDate(date: String, style: String): String {
     val m = DATE_PARTS.find(date) ?: return date
     val (_, mo, d, w, h, mi, s) = m.destructured
     val md = "${mo.padStart(2, '0')}/${d.padStart(2, '0')}"
-    val rest = date.substring(m.range.last + 1).replace(Regex("^[.,]\\d+"), "").trim()
+    val rest = date.substring(m.range.last + 1).replace(Regex("^[.,][0-9]+"), "").trim()
     val out = if (style == "md_hm") "$md ${h.padStart(2, '0')}:$mi" else "$md${if (w.isNotEmpty()) "($w)" else ""} ${h.padStart(2, '0')}:$mi${if (s.isNotEmpty()) ":$s" else ""}"
     // 日時の後ろに付く印(BE の番号など)は残す
     return if (rest.isNotEmpty()) "$out $rest" else out
@@ -210,14 +211,15 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                 append(src, at, s.start)
                 val text = src.substring(s.start, s.end)
                 when {
-                    s is Span.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.from}-${s.to}", linkStyle, links)) { append(text) }; at = s.end }
+                    s is Span.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.nos.joinToString(",")}", linkStyle, links)) { append(text) }; at = s.end }
+                    s is Span.Id -> { withLink(LinkAnnotation.Clickable("i:${s.id}", linkStyle, links)) { append(text) }; at = s.end }
                     // 画像の URL は「画像」の札に。空白だけを挟んで続いたものは「画像 ×3」にまとめる(PC 版と同じ)
-                    s is Span.Url && isImageUrl(s.url) && o.urlShorten -> {
+                    s is Span.Url && toImageUrl(s.url) != null && o.urlShorten -> {
                         var end = s.end
                         var n = 1
                         while (i + 1 < spans.size) {
                             val next = spans[i + 1]
-                            if (next !is Span.Url || !isImageUrl(next.url) || src.substring(end, next.start).isNotBlank()) break
+                            if (next !is Span.Url || toImageUrl(next.url) == null || src.substring(end, next.start).isNotBlank()) break
                             end = next.end; n++; i++
                         }
                         withLink(LinkAnnotation.Clickable("u:${s.url}", plain, links)) {
@@ -249,9 +251,6 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
     }
     return out
 }
-
-private val IMAGE_URL = Regex("\\.(?:jpe?g|png|gif|webp|avif)(?:[?#]|$)", RegexOption.IGNORE_CASE)
-private fun isImageUrl(url: String) = IMAGE_URL.containsMatchIn(url)
 
 /** 見せる URL(PC 版の shortUrl と同じ): https:// と www. を外し、36 文字を超えたら後ろを省く */
 fun shortUrl(url: String, max: Int = 36): String {
@@ -314,7 +313,8 @@ fun nameHead(name: String): String = name.split('◆', '★', '◇')[0].trim()
  */
 fun mostCommonName(posts: List<Post>): String? {
     if (posts.size < 10) return null
-    val counts = HashMap<String, Int>()
+    // 同じ数なら先に出た名前(PC 版と同じ)
+    val counts = LinkedHashMap<String, Int>()
     for (p in posts) {
         val h = nameHead(p.name)
         if (h.isNotEmpty()) counts[h] = (counts[h] ?: 0) + 1

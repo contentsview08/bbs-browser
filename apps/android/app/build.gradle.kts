@@ -39,6 +39,8 @@ android {
     }
     // 最初から入れておく掲示板・板(PC 版と同じ packages/presets/sites.json)を assets に同梱する
     sourceSets["main"].assets.srcDir("../../../packages/presets")
+    // PC 版のテストと同じケース(packages/conformance)を単体テストで読む
+    sourceSets["test"].resources.srcDir("../../../packages/conformance")
 }
 
 kotlin {
@@ -71,4 +73,6 @@ dependencies {
     // AI NG の判定モデル(mDeBERTa-v3 の ONNX)を動かす
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     testImplementation("junit:junit:4.13.2")
+    // android.jar の org.json は単体テストでは動かないので、本物を使う
+    testImplementation("org.json:json:20250517")
 }

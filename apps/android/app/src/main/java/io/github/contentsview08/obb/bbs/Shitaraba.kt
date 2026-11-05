@@ -22,9 +22,9 @@ import java.nio.charset.CodingErrorAction
 private val EUC: Charset = Charset.forName("EUC-JP")
 private const val ORIGIN = "https://jbbs.shitaraba.net"
 private val HOST = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/")
-private val THREAD_URL = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/bbs/(?:read|rawmode)\\.cgi/([a-z]+)/(\\d+)/(\\d+)")
-private val BOARD_URL = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/([a-z]+)/(\\d+)/?(?:subject\\.txt)?(?:[?#].*)?$")
-private val SUBJECT_LINE = Regex("^(\\d+)\\.cgi,(.*)\\((\\d+)\\)\\s*$")
+private val THREAD_URL = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/bbs/(?:read|rawmode)\\.cgi/([a-z]+)/([0-9]+)/([0-9]+)")
+private val BOARD_URL = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/([a-z]+)/([0-9]+)/?(?:subject\\.txt)?(?:[?#].*)?$")
+private val SUBJECT_LINE = Regex("^([0-9]+)\\.cgi,(.*)\\(([0-9]+)\\)\\s*$")
 
 object Shitaraba {
     fun canHandle(url: String) = HOST.containsMatchIn(url)
@@ -89,7 +89,7 @@ object Shitaraba {
         if (res.status != 200) throw IllegalStateException("HTTP ${res.status}: $url")
         val text = decode(res)
         val first = text.split('\n').firstOrNull { it.isNotBlank() }
-        if (first != null && !Regex("^\\d+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: ${board.url}")
+        if (first != null && !Regex("^[0-9]+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: ${board.url}")
         val out = ArrayList<ThreadSummary>()
         val seen = HashSet<String>()
         for (line in text.split('\n')) {
@@ -184,6 +184,23 @@ object Shitaraba {
     }
 }
 
+/**
+ * PC 版の表(WHATWG の EUC-JP)で符号の決まっている文字のうち、Java・Android の EUC-JP では別の扱いになるもの。
+ * 記号は同じ符号を別の文字に割り当てていて、丸数字・ローマ数字(13 区)は表にない
+ */
+private val EUC_FIXED: Map<Int, ByteArray> = buildMap {
+    fun put2(cp: Int, code: Int) = put(cp, byteArrayOf((code shr 8).toByte(), code.toByte()))
+    put2(0xFF5E, 0xA1C1) // ～
+    put2(0xFF0D, 0xA1DD) // －
+    put2(0x2225, 0xA1C2) // ∥
+    put2(0x2015, 0xA1BD) // ―
+    put2(0xFFE0, 0xA1F1) // ￠
+    put2(0xFFE1, 0xA1F2) // ￡
+    put2(0xFFE2, 0xA2CC) // ￢
+    for (i in 0 until 20) put2(0x2460 + i, 0xADA1 + i) // ①〜⑳
+    for (i in 0 until 10) put2(0x2160 + i, 0xADB5 + i) // Ⅰ〜Ⅹ
+}
+
 /** EUC-JP にない字は「&#番号;」にして送る(PC 版の eucjp.ts と同じ) */
 private fun encodeEucJp(text: String): ByteArray {
     val enc = EUC.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).onMalformedInput(CodingErrorAction.REPORT)
@@ -192,7 +209,7 @@ private fun encodeEucJp(text: String): ByteArray {
     while (i < text.length) {
         val cp = text.codePointAt(i)
         val ch = String(Character.toChars(cp))
-        val bytes: ByteArray? = runCatching {
+        val bytes: ByteArray? = EUC_FIXED[cp] ?: if (cp in NOT_IN_JIS_TABLE) null else runCatching {
             val bb: ByteBuffer = enc.encode(CharBuffer.wrap(ch))
             ByteArray(bb.remaining()).also { bb.get(it) }
         }.getOrNull()
@@ -203,7 +220,7 @@ private fun encodeEucJp(text: String): ByteArray {
 }
 
 /** application/x-www-form-urlencoded(EUC-JP)。改行は CRLF に */
-private fun encodeEucJpForm(fields: Map<String, String>): ByteArray =
+internal fun encodeEucJpForm(fields: Map<String, String>): ByteArray =
     fields.entries.joinToString("&") { (k, v) ->
         val bytes = encodeEucJp(v.replace("\r\n", "\n").replace("\n", "\r\n"))
         "$k=" + URLEncoder.encode(String(bytes, Charsets.ISO_8859_1), "ISO-8859-1")

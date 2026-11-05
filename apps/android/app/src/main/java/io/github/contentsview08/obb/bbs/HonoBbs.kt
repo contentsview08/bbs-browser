@@ -39,7 +39,7 @@ object HonoBbs {
         val origin = Regex("^(https?://[^/?#]+)").find(url)?.groupValues?.get(1) ?: return null
         if (SITE_URL.matches(url) || BOARD_URL.matches(url) || THREAD_URL.matches(url)) return "$origin/boards"
         // API の URL: web は api. を外したホストと決めてかかり、API の場所を覚えておく
-        val api = Regex("^(https?://[^/?#]+(?:/[^?#]*?)?/api/v\\d+)").find(url)?.groupValues?.get(1)
+        val api = Regex("^(https?://[^/?#]+(?:/[^?#]*?)?/api/v[0-9]+)").find(url)?.groupValues?.get(1)
         if (api != null) {
             val ok = runCatching { val r = Http.get("$api/boards?limit=1"); r.status == 200 && json(r).has("data") }.getOrDefault(false)
             if (!ok) return null
@@ -135,13 +135,13 @@ object HonoBbs {
         return info
     }
 
-    /** 2ch の SETTING.TXT と同じ形にして返す(既定の名前・本文の上限)。BBS_LINE_NUMBER は 2ch に合わせて行数の半分 */
+    /** 2ch の SETTING.TXT と同じ形にして返す(既定の名前・本文の上限) */
     suspend fun setting(boardUrl: String): Map<String, String> {
         val i = runCatching { boardInfo(boardUrl) }.getOrNull() ?: return emptyMap()
         return buildMap {
             i.noname?.let { put("BBS_NONAME_NAME", it) }
             i.maxLength?.let { put("BBS_MESSAGE_COUNT", it.toString()) }
-            i.maxLines?.let { put("BBS_LINE_NUMBER", ((it + 1) / 2).toString()) }
+            i.maxLines?.let { put(TwoCh.MAX_LINES_KEY, it.toString()) }
         }
     }
 

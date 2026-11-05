@@ -130,6 +130,7 @@ import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.bbs.Filter
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.TwoCh
+import io.github.contentsview08.obb.bbs.toImageUrl
 import io.github.contentsview08.obb.data.NgRule
 import io.github.contentsview08.obb.data.ThumbMode
 import kotlinx.coroutines.delay
@@ -295,8 +296,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             val v = tag.drop(2)
             when (tag[0]) {
                 'a' -> {
-                    val (from, to) = v.split('-').map { it.toInt() }
-                    val list = index.posts.filter { it.no in from..to }
+                    val nos = v.split(',').map { it.toInt() }.toSet()
+                    val list = index.posts.filter { it.no in nos }
                     traced = list.map { it.no }.toSet()
                     openPopup(list)
                 }
@@ -310,7 +311,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 'n' -> index.posts.getOrNull(v.toInt() - 1)?.let { src -> openPopup(index.posts.filter { it.name == src.name }, focus = src.no) }
                 // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
                 'u' -> when {
-                    v in index.allImages -> viewer = v
+                    // 拡張子のない画像は、読み替えた URL でビューアーに渡す
+                    toImageUrl(v)?.let { it in index.allImages } == true -> viewer = toImageUrl(v)
                     // mp4・webm はブラウザ(アプリの中のブラウザ)の再生に任せる(ダブルタップで 10 秒送り・速さの切り替えなどがそのまま使える)
                     Regex("\\.(mp4|webm|mov|m4v)(\\?|#|$)", RegexOption.IGNORE_CASE).containsMatchIn(v) -> openExternal(context, v, true)
                     !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
@@ -658,7 +660,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (searching) {
                     SearchBar(query, { query = it }, "レスを探す(本文・名前・ID)") { searching = false; query = "" }
                 } else {
-                    HeaderBar(page.title.replace(Regex("\\s*[\\[［]\\d{6,12}[\\]］]\\s*$"), ""), onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
+                    HeaderBar(page.title.replace(Regex("\\s*[\\[［][0-9]{6,12}[\\]］]\\s*$"), ""), onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
                         BarIcon(Icons.Filled.Search, "探す") { searching = true }
                         MoreButton { menu = true }
                     }

@@ -20,7 +20,7 @@ private fun charsetOf(res: HttpResponse): Charset {
 }
 
 private val NAMED = mapOf("amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ", "hearts" to "♥")
-private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#\\d+|[a-zA-Z]+);")
+private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);")
 
 fun decodeEntities(s: String): String {
     if (!s.contains('&')) return s
@@ -55,7 +55,7 @@ fun parseBbsMenuHtml(html: String): List<Board> {
         if (m.groupValues[1].isNotEmpty()) { category = decodeEntities(m.groupValues[1].trim()); continue }
         val url = m.groupValues[2]
         val c = category
-        if (c != null && isBoardUrl(url)) out += Board(url, decodeEntities(m.groupValues[3].trim()), c)
+        if (c != null && isBoardUrl(url)) out += Board(UrlRoute.to5chIo(url), decodeEntities(m.groupValues[3].trim()), c)
     }
     return out.distinctBy { it.url }
 }
@@ -70,17 +70,17 @@ fun parseBbsMenuJson(text: String): List<Board> {
         for (j in 0 until items.length()) {
             val b = items.getJSONObject(j)
             val url = b.optString("url")
-            if (isBoardUrl(url)) out += Board(url, b.optString("board_name"), b.optString("category_name").ifEmpty { null })
+            if (isBoardUrl(url)) out += Board(UrlRoute.to5chIo(url), b.optString("board_name"), b.optString("category_name").ifEmpty { null })
         }
     }
     return out.distinctBy { it.url }
 }
 
-private val SUBJECT_LINE = Regex("^(\\d+)\\.(?:dat<>|cgi,)(.*)\\((\\d+)\\)\\s*$")
+private val SUBJECT_LINE = Regex("^([0-9]+)\\.(?:dat<>|cgi,)(.*)\\(([0-9]+)\\)\\s*$")
 private const val FUTURE_TOLERANCE_MS = 24L * 60 * 60 * 1000
 
 /** dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する。未来の日時はお知らせスレなので「不明」) */
-private fun createdAtOf(key: String, now: Long): Long? {
+internal fun createdAtOf(key: String, now: Long): Long? {
     if (key.length != 10 || !key.all { it.isDigit() }) return null
     val t = key.toLong() * 1000
     return if (t > now + FUTURE_TOLERANCE_MS) null else t
@@ -106,7 +106,7 @@ fun parseSubjectTxt(text: String, boardUrl: String, @Suppress("UNUSED_PARAMETER"
 
 private val TRAILING_BRACKET = Regex("\\s*[\\[［]([^\\[\\]［］]{1,32})[\\]］]\\s*$")
 private val ID_STAR = Regex("^(\\S{1,20})★$")
-private val BE_DIGITS = Regex("^\\d{6,12}$")
+private val BE_DIGITS = Regex("^[0-9]{6,12}$")
 
 /**
  * スレタイの後ろの角かっこ(「… [xxx]」「… ［xxx］」)を、立てた人として取り出す(PC 版の twoch/parse.ts の splitAuthorId と同じ決まり):
@@ -169,9 +169,9 @@ private fun ensureOk(res: HttpResponse, url: String) {
 }
 
 /** subject.txt の中身がスレ一覧の形か(エラーのページを空のスレ一覧と取り違えないため) */
-private fun looksLikeSubject(text: String): Boolean {
+internal fun looksLikeSubject(text: String): Boolean {
     val first = text.split('\n').firstOrNull { it.isNotBlank() } ?: return true
-    return Regex("^\\d+\\.(?:dat|cgi)<>").containsMatchIn(first)
+    return Regex("^[0-9]+\\.(?:dat|cgi)<>").containsMatchIn(first)
 }
 
 object TwoCh {
@@ -231,11 +231,20 @@ object TwoCh {
     fun lengthOf(boardUrl: String, text: String): Int =
         if (HonoBbs.isBoardUrl(boardUrl)) text.length else if (Shitaraba.isBoardUrl(boardUrl)) Shitaraba.byteLength(text) else shiftJisByteLength(text)
 
+    /** hono-bbs の行数の上限。半分にして持つと奇数が 1 行ずれるので、そのまま持つ */
+    const val MAX_LINES_KEY = "OBB_MAX_LINES"
+
     /** 本文の上限(バイト数・行数)。SETTING.TXT にあれば。5ch の BBS_LINE_NUMBER は行数の半分を書くので 2 倍する */
     fun cachedLimits(boardUrl: String): Pair<Int?, Int?> {
         val m = cachedSetting(boardUrl) ?: return null to null
-        return m["BBS_MESSAGE_COUNT"]?.toIntOrNull() to m["BBS_LINE_NUMBER"]?.toIntOrNull()?.let { it * 2 }
+        return m["BBS_MESSAGE_COUNT"]?.toIntOrNull() to (m[MAX_LINES_KEY]?.toIntOrNull() ?: m["BBS_LINE_NUMBER"]?.toIntOrNull()?.let { it * 2 })
     }
+
+    /** 板があるか。スレ一覧(subject.txt)が読めて、スレ一覧の形なら板(スレが 0 件の板もある。youtu.be/xxx のような板でない URL を見分ける) */
+    suspend fun isBoard(boardUrl: String): Boolean = runCatching {
+        val res = Http.get("${boardUrl}subject.txt")
+        res.status in 200..299 && looksLikeSubject(String(res.body, charsetOf(res)))
+    }.getOrDefault(false)
 
     /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
     suspend fun listThreads(board: Board): List<ThreadSummary> {
@@ -346,12 +355,10 @@ object TwoCh {
     /** 書き込み確認で承諾したときに送り直す */
     suspend fun submitConfirm(c: PostResult.Confirm): PostResult = sendBbsCgi(c.url, c.fields, c.referer)
 
-    /** 5ch は 5ch.net から 5ch.io へ移った。書き込み(POST)はリダイレクトをたどれないので、送る先と Referer を 5ch.io に直す(前に 5ch.net で開いたスレ・板でも書けるように) */
-    private fun to5chIo(url: String) = url.replace(Regex("^(https?://[a-z0-9]+)\\.5ch\\.net/"), "$1.5ch.io/")
-
     private suspend fun sendBbsCgi(url0: String, fields: Map<String, String>, referer0: String): PostResult {
-        val url = to5chIo(url0)
-        val referer = to5chIo(referer0)
+        // 前に 5ch.net で開いたスレ・板でも書けるように、送る先と Referer を 5ch.io に直す
+        val url = UrlRoute.to5chIo(url0)
+        val referer = UrlRoute.to5chIo(referer0)
         val res = Http.postForm(url, encodeShiftJisForm(fields), mapOf("Referer" to referer))
         val html = String(res.body, charsetOf(res))
         val resNumber = res.headers["x-resnum"]?.toIntOrNull()?.takeIf { it > 0 }

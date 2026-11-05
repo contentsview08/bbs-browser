@@ -24,6 +24,12 @@ sealed class PostResult {
 
 private val SJIS: Charset = runCatching { Charset.forName("windows-31j") }.getOrElse { Charset.forName("Shift_JIS") }
 
+/**
+ * Shift_JIS・EUC-JP の表にないものとして &#数字; で送る文字(PC 版の表と同じ)。
+ * Java・Android の文字コード変換は、似た文字に置き換えて送ることがある(¥ を \\ にするなど)ので、ここで先に決める
+ */
+internal val NOT_IN_JIS_TABLE = setOf(0x301C, 0x2212, 0x2016, 0x2014, 0xA2, 0xA3, 0xAC, 0xA5, 0x203E)
+
 /** 1 つの値を Shift_JIS にする。Shift_JIS にない文字(絵文字など)は &#数字; にする */
 private fun encodeShiftJis(text: String): ByteArray {
     val enc = SJIS.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).onMalformedInput(CodingErrorAction.REPORT)
@@ -32,7 +38,7 @@ private fun encodeShiftJis(text: String): ByteArray {
     while (i < text.length) {
         val cp = text.codePointAt(i)
         val ch = String(Character.toChars(cp))
-        val bytes: ByteArray? = runCatching {
+        val bytes: ByteArray? = if (cp in NOT_IN_JIS_TABLE) null else runCatching {
             val bb: ByteBuffer = enc.encode(CharBuffer.wrap(ch))
             ByteArray(bb.remaining()).also { bb.get(it) }
         }.getOrNull()
@@ -54,7 +60,7 @@ fun shiftJisByteLength(text: String): Int = encodeShiftJis(text.replace("\n", "\
 
 private val TITLE = Regex("<title>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE)
 private val BODY = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE)
-private val KIND = Regex("2ch_X:(\\w+)")
+private val KIND = Regex("2ch_X:([A-Za-z0-9_]+)")
 
 /**
  * bbs.cgi の応答を読み分ける。
@@ -83,7 +89,7 @@ fun parseBbsCgi(html: String, url: String, fields: Map<String, String>, referer:
     return PostResult.Error(message.ifEmpty { title.ifEmpty { "書き込めませんでした" } })
 }
 
-private val ATTR = Regex("([a-zA-Z_:][-\\w:.]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))")
+private val ATTR = Regex("([a-zA-Z_:][-A-Za-z0-9_:.]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))")
 
 private fun attrsOf(tag: String): Map<String, String> =
     ATTR.findAll(tag).associate { m -> m.groupValues[1].lowercase() to decodeEntities(m.groupValues[2].ifEmpty { m.groupValues[3].ifEmpty { m.groupValues[4] } }) }

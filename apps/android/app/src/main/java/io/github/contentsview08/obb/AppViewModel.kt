@@ -19,6 +19,7 @@ import io.github.contentsview08.obb.bbs.HonoBbs
 import io.github.contentsview08.obb.bbs.Shitaraba
 import io.github.contentsview08.obb.bbs.Machi
 import io.github.contentsview08.obb.bbs.TwoCh
+import io.github.contentsview08.obb.bbs.UrlRoute
 import io.github.contentsview08.obb.ui.mostCommonName
 import io.github.contentsview08.obb.bbs.findNextThreads
 import io.github.contentsview08.obb.data.HistoryEntry
@@ -1002,83 +1003,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         openBoard(favorites.firstOrNull { it.url == url } ?: boards.firstOrNull { it.url == url } ?: Board(url, url.removePrefix("https://").trimEnd('/')), root = true)
     }
 
-    /** 2ch 互換・hono-bbs のスレ・板の URL なら、アプリの中で開いて true */
+    /** 2ch 互換・hono-bbs・したらば・まちBBS のスレ・板の URL なら、アプリの中で開いて true。形の読み方は bbs/UrlRoute.kt */
     fun openUrl(url: String): Boolean {
-        // 5ch は 5ch.net から 5ch.io へ移った(5ch.net は 301 で 5ch.io へ送る)。書き込み(POST)はリダイレクトをたどれないので、初めから 5ch.io で開く
-        val u = url.trim().replace(Regex("^(https?://[a-z0-9]+)\\.5ch\\.net/"), "$1.5ch.io/")
-        // itest(5ch・bbspink のスマホ向けの見え方)は、本当の板・スレの URL に直して開く。PC 版の twoch/connector.ts の fromItest と同じ
-        val itestThread = Regex("^https?://itest\\.(5ch\\.net|5ch\\.io|bbspink\\.com)/(?:([a-z0-9]+)/)?test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
-        val itestBoard = if (itestThread == null) Regex("^https?://itest\\.(5ch\\.net|5ch\\.io|bbspink\\.com)/subback/([^/?#]+)").find(u) else null
-        if (itestThread != null || itestBoard != null) {
-            val g = (itestThread ?: itestBoard)!!.groupValues
-            val domain = g[1]
-            val server = if (itestThread != null) g[2] else ""
-            val board = if (itestThread != null) g[3] else g[2]
-            val key = if (itestThread != null) g[4] else null
-            fun real(host: String) = if (key != null) "https://$host/test/read.cgi/$board/$key/" else "https://$host/$board/"
-            if (server.isNotEmpty()) return openUrl(real("$server.$domain"))
-            // サーバー名が URL にないときは、itest の板のページから探す。分からなければブラウザで開く
-            viewModelScope.launch {
-                runCatching { TwoCh.itestServer(domain, board) }.onSuccess { openUrl(real(it)) }.onFailure {
+        val u = url.trim()
+        when (val r = UrlRoute.parse(u) ?: return false) {
+            is UrlRoute.Itest -> viewModelScope.launch {
+                // サーバー名が URL にないときは、itest の板のページから探す。分からなければブラウザで開く
+                runCatching { TwoCh.itestServer(r.domain, r.board) }.onSuccess { openUrl(r.realUrl(it)) }.onFailure {
                     toast = "アプリでは開けないので、ブラウザで開きます"
-                    runCatching {
-                        getApplication<Application>().startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
+                    openInOs(u)
                 }
             }
-            return true
-        }
-        // 本文の URL は http:// のことが多い。Android は暗号化しない通信を断るので https:// で開く
-        // hono-bbs のスレ・板(https://<web>/boards/<板>/<スレ>)
-        HonoBbs.parseThreadUrl(u)?.let { openThread(it); return true }
-        HonoBbs.normalizeBoardUrl(u)?.let { bu ->
-            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) openBoard(known, root = false)
-            else viewModelScope.launch { openBoard(Board(bu, HonoBbs.boardName(bu) ?: bu.removeSuffix("/").substringAfterLast('/')), root = false) }
-            return true
-        }
-        // したらば(https://jbbs.shitaraba.net/カテゴリ/番号/ と /bbs/read.cgi/カテゴリ/番号/キー/)
-        Shitaraba.parseThreadUrl(u)?.let { openThread(it); return true }
-        Shitaraba.normalizeBoardUrl(u)?.let { bu ->
-            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) openBoard(known, root = false)
-            else viewModelScope.launch {
-                val name = runCatching { Shitaraba.boardName(bu) }.getOrElse { toast = it.message ?: "したらばの板を開けません"; return@launch }
-                openBoard(Board(bu, name), root = false)
+            is UrlRoute.Thread -> if (r.site != UrlRoute.Site.TWOCH || knownBoard(r.thread.boardUrl) != null) openThread(r.thread) else viewModelScope.launch {
+                // 形だけではスレか分からない。ログがあるか、板があると確かめられたら開く(PC 版の ensureBoard と同じ)。だめなら OS の既定のアプリへ
+                val ok = db.loadThread(r.thread) != null || kotlinx.coroutines.withTimeoutOrNull(8000) { TwoCh.isBoard(r.thread.boardUrl) } == true
+                if (ok) openThread(r.thread) else openInOs(u)
             }
-            return true
+            is UrlRoute.BoardPage -> openBoardPage(r, u)
         }
-        // まちBBS(https://machi.to/板/ と /bbs/read.cgi/板/キー/)
-        Machi.parseThreadUrl(u)?.let { openThread(it); return true }
-        Machi.normalizeBoardUrl(u)?.let { bu ->
-            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) openBoard(known, root = false)
-            else viewModelScope.launch {
-                val name = runCatching { Machi.boardName(bu) }.getOrElse { toast = it.message ?: "まちBBS の板を開けません"; return@launch }
-                openBoard(Board(bu, name), root = false)
+        return true
+    }
+
+    private fun knownBoard(boardUrl: String) = favorites.firstOrNull { it.url == boardUrl } ?: boards.firstOrNull { it.url == boardUrl }
+
+    private fun openBoardPage(r: UrlRoute.BoardPage, u: String) {
+        val bu = r.boardUrl
+        knownBoard(bu)?.let { openBoard(it, root = false); return }
+        val dir = bu.removeSuffix("/").substringAfterLast('/')
+        viewModelScope.launch {
+            val name = when (r.site) {
+                UrlRoute.Site.HONO -> HonoBbs.boardName(bu) ?: dir
+                UrlRoute.Site.SHITARABA -> runCatching { Shitaraba.boardName(bu) }.getOrElse { toast = it.message ?: "したらばの板を開けません"; return@launch }
+                UrlRoute.Site.MACHI -> runCatching { Machi.boardName(bu) }.getOrElse { toast = it.message ?: "まちBBS の板を開けません"; return@launch }
+                UrlRoute.Site.TWOCH -> {
+                    // 形だけでは板か分からない(youtu.be/xxx も同じ形)。スレ一覧の形の応答なら板とする(スレが 0 件の板も開ける)。だめなら OS の既定のアプリへ
+                    if (kotlinx.coroutines.withTimeoutOrNull(8000) { TwoCh.isBoard(bu) } != true) { openInOs(u); return@launch }
+                    kotlinx.coroutines.withTimeoutOrNull(3000) { TwoCh.setting(bu)["BBS_TITLE"] }?.ifEmpty { null } ?: dir
+                }
             }
-            return true
+            openBoard(Board(bu, name), root = false)
         }
-        val thread = Regex("^https?://([^/?#]+)/test/read\\.cgi/([^/?#]+)/(\\d+)").find(u)
-        if (thread != null) {
-            val key = thread.groupValues[3]
-            val created = if (key.length == 10) key.toLong() * 1000 else null
-            openThread(ThreadSummary("https://${thread.groupValues[1]}/${thread.groupValues[2]}/", key, "", 0, 0, created))
-            return true
-        }
-        val board = Regex("^https?://([^/?#]+)/([^/?#]+)/?$").find(u)
-        if (board != null && !board.groupValues[2].contains('.')) {
-            val bu = "https://${board.groupValues[1]}/${board.groupValues[2]}/"
-            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) { openBoard(known, root = false); return true }
-            // 形だけでは板か分からない(youtu.be/xxx も同じ形)。PC 版の ensureBoard と同じく、スレ一覧が読めたら板とする。読めなければ OS の既定のアプリへ
-            viewModelScope.launch {
-                val threads = kotlinx.coroutines.withTimeoutOrNull(8000) { runCatching { TwoCh.listThreads(Board(bu, "")) }.getOrNull() }
-                if (!threads.isNullOrEmpty()) openBoard(Board(bu, board.groupValues[2]), root = false) else openInOs(u)
-            }
-            return true
-        }
-        return false
     }
 
     /** OS の既定のアプリで開く(YouTube のリンクなら YouTube のアプリ) */

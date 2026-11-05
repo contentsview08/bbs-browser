@@ -1,12 +1,15 @@
 package io.github.contentsview08.obb.bbs
 
-// レスの下ごしらえ。アンカー(>>番号)・画像・動画・リンクを見つけ、人気(アンカーの数)と ID の数を数える。
+import io.github.contentsview08.obb.data.normalizeForSearch
+
+// レスの下ごしらえ。本文の解析(PostBody.kt)から、画像・動画・リンクを分け、人気(アンカーの数)と ID の数を数える。
 // 画面とは別のスレッド(Dispatchers.Default)で、レスが届いたときに 1 回だけ作る。絞り込みはこの結果を見るだけなので軽い
 
-/** 本文の中の、押せるところ(アンカー・URL)。start・end は本文の中の位置 */
+/** 本文の中の、押せるところ(アンカー・URL・ID)。start・end は本文の中の位置 */
 sealed class Span(val start: Int, val end: Int) {
-    class Anchor(start: Int, end: Int, val from: Int, val to: Int) : Span(start, end)
+    class Anchor(start: Int, end: Int, val nos: List<Int>) : Span(start, end)
     class Url(start: Int, end: Int, val url: String) : Span(start, end)
+    class Id(start: Int, end: Int, val id: String) : Span(start, end)
 }
 
 enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO("動画"), LINK("リンク"), OWN("自分") }
@@ -25,7 +28,7 @@ class PostInfo(
     val beIcon: String? = null,
 )
 
-private val BE_ICON = Regex("^\\s*sssp://([^\\s/]+/\\S+\\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)", RegexOption.IGNORE_CASE)
+private val BE_ICON = Regex("^[$WS]*sssp://([^$WS/]+/[^$WS]+\\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)", RegexOption.IGNORE_CASE)
 
 /** 本文の 1 行目の BE のアイコン(sssp は https の読み替え)と、その行を除いた本文 */
 fun splitBeIcon(body: String): Pair<String?, String> {
@@ -35,7 +38,7 @@ fun splitBeIcon(body: String): Pair<String?, String> {
 
 /** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
 fun displayBody(body: String): String =
-    body.replace(Regex("\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}"), "\n\n").replace(Regex("[\\s\u3000]+$"), "")
+    body.replace(Regex("\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}"), "\n\n").replace(Regex("[$WS]+$"), "")
 
 /** アンカーツリーの 1 行 */
 /**
@@ -77,11 +80,13 @@ class PostIndex(
 
     /** アンカーでつながるレスを、上下どちらへもたどって全部(start を含む。番号順)。PC 版の anchorTree と同じ */
     fun tree(start: Int): List<Int> {
+        // まだ書かれていないレスへのアンカーもあるので、スレにあるレスだけをたどる
+        val exists = posts.mapTo(HashSet()) { it.no }
         val seen = linkedSetOf(start)
         val queue = ArrayDeque(listOf(start))
         while (queue.isNotEmpty()) {
             val cur = queue.removeFirst()
-            for (n in (targets[cur] ?: emptyList()) + (replies[cur] ?: emptyList())) if (seen.add(n)) queue += n
+            for (n in (targets[cur] ?: emptyList()) + (replies[cur] ?: emptyList())) if (n in exists && seen.add(n)) queue += n
         }
         return seen.sorted()
     }
@@ -114,10 +119,14 @@ class PostIndex(
         return rows
     }
 
-    /** グロ注意のレス(本文に「グロ」があるレスと、そのアンカー先)。サムネイルをぼかす(PC 版と同じ) */
+    /** グロ注意のレス(本文に「グロ」があるレスと、そのアンカー先)。サムネイルをぼかす。言葉の比べ方は検索と同じ(PC 版と同じ) */
     val gross: Set<Int> by lazy {
         val set = HashSet<Int>()
-        for (p in posts) if (grossWords.any { p.body.contains(it, ignoreCase = true) }) { set += p.no; set += targets[p.no] ?: emptyList() }
+        val words = grossWords.map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() }
+        if (words.isNotEmpty()) for (p in posts) {
+            val text = normalizeForSearch(p.body)
+            if (words.any { text.contains(it) }) { set += p.no; set += targets[p.no] ?: emptyList() }
+        }
         set
     }
 
@@ -127,29 +136,6 @@ class PostIndex(
     val allImagePosts: List<Post> by lazy { posts.flatMap { p -> (info[p.no]?.images ?: emptyList()).map { p } } }
 
     companion object {
-        private val ANCHOR = Regex("(?:>>|＞＞|>|＞)(\\d{1,4})(?:[-ー－](\\d{1,4}))?")
-        /**
-         * URL。崩した書き方も拾う: h 抜き(ttps://・tps://)、コロンなし(//i.imgur.com/…)、http 抜き(i.imgur.com/a.jpg)。
-         * http 抜きは、ふつうの文と取り違えないよう、画像の拡張子で終わるものだけ
-         */
-        private val URL = Regex(
-            "(?:(?<![\\w/])(?:h?t?tps?:)?//|(?<![\\w./@:-])(?=[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+/[\\w\\-.~/%]*\\.(?:jpe?g|png|gif|webp)(?![\\w])))[\\w\\-.~:/?#\\[\\]@!$&'()*+,;=%]+",
-            RegexOption.IGNORE_CASE,
-        )
-
-        /** 崩した書き方の URL を、開ける形(https://…)に直す。http:// と書いてあるものは http のまま */
-        fun normalizeUrl(raw: String): String {
-            Regex("^(h?t?tps?:)?//", RegexOption.IGNORE_CASE).find(raw)?.let { m ->
-                val rest = raw.substring(m.range.last + 1)
-                val scheme = m.groupValues[1].lowercase()
-                return (if (scheme.isNotEmpty() && !scheme.contains("s:")) "http://" else "https://") + rest
-            }
-            return "https://$raw"
-        }
-        private val IMAGE = Regex("\\.(?:jpe?g|png|gif|webp|avif)(?:[?#]|$)", RegexOption.IGNORE_CASE)
-        private val YOUTUBE_ID = Regex("(?:v=|youtu\\.be/|shorts/|live/)([\\w-]{6,})")
-        private val VIDEO = Regex("(?:youtube\\.com/(?:watch|shorts|live)|youtu\\.be/|\\.(?:mp4|webm|mov)(?:[?#]|$))", RegexOption.IGNORE_CASE)
-
         /** collapse: 続いた空行をまとめる(設定)。grossWords: グロ注意とみなす言葉 */
         fun build(posts: List<Post>, collapse: Boolean = true, grossWords: List<String> = listOf("グロ")): PostIndex {
             val info = HashMap<Int, PostInfo>(posts.size * 2)
@@ -166,39 +152,39 @@ class PostIndex(
                 val youtube = ArrayList<Pair<String, String>>()
                 val (beIcon, body0) = splitBeIcon(p.body)
                 val text = if (collapse) displayBody(body0) else body0
-                for (m in URL.findAll(text)) {
-                    val raw = m.value
-                    val url = normalizeUrl(raw)
-                    spans += Span.Url(m.range.first, m.range.last + 1, url)
-                    when {
-                        IMAGE.containsMatchIn(url) -> {
-                            image = true
-                            images += url
-                        }
-                        VIDEO.containsMatchIn(url) -> {
-                            video = true
-                            YOUTUBE_ID.find(url)?.groupValues?.get(1)?.let { id -> if (youtube.none { it.first == id }) youtube += id to url }
-                        }
-                        else -> {
-                            link = true
-                            // 掲示板のスレ・板はアプリの中で開くので、カードにしない
-                            if (!url.contains("/test/read.cgi/") && url !in links) links += url
+                val targets = HashSet<Int>()
+                for (t in bodyTokens(text)) when (t) {
+                    is BodyToken.Anchor -> {
+                        spans += Span.Anchor(t.start, t.end, t.nos)
+                        for (n in t.nos) if (n != p.no) targets += n
+                    }
+                    is BodyToken.Id -> spans += Span.Id(t.start, t.end, t.id)
+                    is BodyToken.Url -> {
+                        val url = t.url
+                        spans += Span.Url(t.start, t.end, url)
+                        val img = toImageUrl(url)
+                        when {
+                            img != null -> {
+                                image = true
+                                images += img
+                            }
+                            isVideoFileUrl(url) -> video = true
+                            isYoutubeUrl(url) -> {
+                                video = true
+                                youtubeIdOf(url)?.let { id -> if (youtube.none { it.first == id }) youtube += id to url }
+                            }
+                            else -> {
+                                link = true
+                                // 掲示板のスレはアプリの中で開くので、カードにしない
+                                if (!UrlRoute.isThreadUrl(url) && url !in links) links += url
+                            }
                         }
                     }
-                }
-                val targets = HashSet<Int>()
-                for (m in ANCHOR.findAll(text)) {
-                    if (spans.any { it is Span.Url && m.range.first in it.start until it.end }) continue
-                    val from = m.groupValues[1].toInt()
-                    val to = m.groupValues[2].toIntOrNull()?.coerceAtMost(from + 50) ?: from
-                    spans += Span.Anchor(m.range.first, m.range.last + 1, from, maxOf(from, to))
-                    for (n in from..maxOf(from, to)) if (n != p.no && n < p.no) targets += n
                 }
                 for (n in targets) {
                     replyCount[n] = (replyCount[n] ?: 0) + 1
                     replies.getOrPut(n) { ArrayList() } += p.no
                 }
-                spans.sortBy { it.start }
                 info[p.no] = PostInfo(spans, image, video, link, images, text, links, youtube, beIcon)
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }

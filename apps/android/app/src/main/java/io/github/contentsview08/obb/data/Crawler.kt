@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.bbs.HonoBbs
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.bbs.anchorTargets
 import io.github.contentsview08.obb.bbs.TwoCh
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
@@ -26,7 +27,6 @@ import java.util.concurrent.TimeUnit
 object Crawler {
     private const val MAX_REPLY_FETCH = 5
     private const val MAX_NOTIFY = 3
-    private val ANCHOR = Regex("(?:>>|＞＞)\\s*([0-9０-９]+)(?:[-－ー〜~]([0-9０-９]+))?")
 
     /** スレの id → いまのレス数(-1 は dat 落ち・消えた) */
     suspend fun run(context: Context, db: LogDb, prefs: Prefs): Map<String, Int> {
@@ -118,17 +118,8 @@ object Crawler {
         for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.webUrl(t))
     }
 
-    internal fun anchorsOf(body: String): Set<Int> {
-        val out = HashSet<Int>()
-        for (m in ANCHOR.findAll(normalizeDigits(body))) {
-            val a = m.groupValues[1].toIntOrNull() ?: continue
-            val b = m.groupValues[2].toIntOrNull()
-            if (b != null && b >= a && b - a < 100) out += a..b else out += a
-        }
-        return out
-    }
-
-    private fun normalizeDigits(s: String) = buildString(s.length) { for (c in s) append(if (c in '０'..'９') '0' + (c - '０') else c) }
+    /** 本文のアンカーが指すレスの番号。スレ表示(bbs/PostBody.kt)と同じ解析 */
+    internal fun anchorsOf(body: String): Set<Int> = anchorTargets(body).toSet()
 
     /** 裏の確認を決める: OS の通知がオンで定期確認をしているときだけ。Android の決まりで 15 分より短くはできない(アプリを開いている間は設定の間隔で確かめる) */
     fun schedule(context: Context, prefs: Prefs) {

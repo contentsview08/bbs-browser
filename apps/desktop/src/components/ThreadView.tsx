@@ -2088,7 +2088,7 @@ export default function ThreadView(props: Props) {
                         variant={variant}
                         // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
                         continued={
-                          (anchorCounts.get(p.no) ?? 0) === 0 && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
+                          ((anchorCounts.get(p.no) ?? 0) === 0 || (variant === 'line' && ownNos.has(p.no))) && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
                         }
                         replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
                         ng={isNg(p)}

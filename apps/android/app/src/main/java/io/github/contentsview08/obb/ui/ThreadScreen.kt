@@ -428,7 +428,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             anim.animateTo(1f, tween(180, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
         }
         // 光る色は色みのない白(暗い配色)・黒(明るい配色)。強調色(緑など)だと配色によって見分けにくかった
-        val flashColor = if (Palette.dark) Color.White else Color.Black
+        val whiteFlash = Palette.dark || Palette.onSky(style)
+        val flashColor = if (whiteFlash) Color.White else Color.Black
         Box(
             Modifier
                 .then(if (anim != null) Modifier.graphicsLayer { alpha = anim.value; translationY = (1f - anim.value) * 8.dp.toPx() } else Modifier)
@@ -439,7 +440,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // 24% → 16%(45% の所)→ 0 と消える
                     val f = flash.value
                     val a = if (f > 0.55f) 0.16f + (f - 0.55f) / 0.45f * 0.08f else f / 0.55f * 0.16f
-                    drawRect(flashColor.copy(alpha = a * if (Palette.dark) 0.8f else 0.5f))
+                    drawRect(flashColor.copy(alpha = a * if (whiteFlash) 0.8f else 0.5f))
                 } else Modifier)
                 .onGloballyPositioned { hit.row = it; if (inMain) rowCoords[p.no] = it }
                 .pointerInput(p.no) {
@@ -497,7 +498,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (ai != null && ai.rule.show == "mark") Text(ai.label, Modifier.padding(start = 14.dp, top = 4.dp), color = Palette.markPurple, fontSize = 11.sp)
                 androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { page.rendered[p.no]?.let {
                 // 続けて書いたレス(前のレスと同じ ID で、返信でもない)は、アイコンと頭を省く(Discord 風・LINE 風)
-                val continued = (index.replyCount[p.no] ?: 0) == 0 && (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
+                val continued = ((index.replyCount[p.no] ?: 0) == 0 || (style == "line" && p.no in own)) && (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 // 薄く表示する NG(会話の流れは残して、字を 3 割に)
                 if (p.no in page.ngNos && p.no !in revealed) Box(Modifier.graphicsLayer { alpha = 0.3f }) { PostItem(
                     it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,
@@ -895,19 +896,19 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         else MenuItem("同じ ID のレスすべてに印を付ける", Icons.Filled.Group, Palette.own) { vm.markOwn(page, p, own = true, sameId = true) },
                     )
                 },
-                // すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
-                ngHitsOf(p).let { hits ->
+                // NG は 1 つにまとめ、押すと小項目の画面に切り替える(PC 版と同じ)。すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
+                listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p).let { hits ->
                     (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p, Palette.markDanger)) +
                         (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger))) +
                         ngOffItems(hits?.body.orEmpty(), "本文", null) +
                         MenuItem("本文の言葉を NG に(直して足す)", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p }
-                },
+                } +
                 // AI NG: 条件ごとに「当たる」を手で付ける。当たっているものは「当たらない」
                 vm.aiRulesFor(page).map { r ->
                     val on = page.aiNg[p.no]?.rule?.id == r.id
                     if (on) MenuItem("AI NG「${r.name}」に当たらない(誤判定)", Icons.Filled.Psychology, Palette.markPurple) { vm.markAi(p, r.id, if (page.aiNg[p.no]?.manual == true) null else false) }
                     else MenuItem("AI NG「${r.name}」に当たる", Icons.Filled.Psychology, Palette.markPurple) { vm.markAi(p, r.id, true) }
-                },
+                }) {}),
             ),
             MenuAt.Center,
         ) { postMenu = null }
@@ -918,10 +919,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val sameName = if (kind == 'n') index.posts.filter { it.name == p.name } else emptyList()
         MenuSheet(
             listOf(
-                if (kind == 'i' && p.id != null) ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p, Palette.markDanger) } + listOf(
+                if (kind == 'i' && p.id != null) listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p, Palette.markDanger) }) {}) + listOf(
                     MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameId, focus = p.no) },
                     MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyText(context, p.id); vm.toast = "コピーしました" },
-                ) else ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger)) } + listOf(
+                ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger)) }) {}) + listOf(
                     MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameName, focus = p.no) },
                     MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyText(context, p.name); vm.toast = "コピーしました" },
                 ),

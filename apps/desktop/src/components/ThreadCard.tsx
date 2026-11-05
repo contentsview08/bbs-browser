@@ -580,9 +580,19 @@ function ThreadCard({
               ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
               : []),
             ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
-            ...(onNgAuthor && thread.authorId ? [{ label: `立てた人を NG に追加(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread), danger: true }] : []),
-            ...(onNgAuthor && thread.authorId ? [{ label: '立てた人を NG に追加(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true), danger: true }] : []),
-            ...(onNg ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread), danger: true }] : []),
+            ...(onNg || (onNgAuthor && thread.authorId)
+              ? [
+                  {
+                    label: 'NG',
+                    icon: 'block',
+                    children: [
+                      ...(onNgAuthor && thread.authorId ? [{ label: `立てた人を NG に追加(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread) }] : []),
+                      ...(onNgAuthor && thread.authorId ? [{ label: '立てた人を NG に追加(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true) }] : []),
+                      ...(onNg ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread) }] : []),
+                    ],
+                  },
+                ]
+              : []),
             ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread), danger: true }] : []),
           ]}
         />

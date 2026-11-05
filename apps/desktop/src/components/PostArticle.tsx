@@ -271,9 +271,13 @@ export function wantsNativeMenu(e: React.MouseEvent): boolean {
  */
 export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: () => void; ignore?: React.RefObject<HTMLElement | null> }) {
   const menuRef = useRef<HTMLDivElement>(null)
-  /** 広げている小項目の親 */
-  const [expanded, setExpanded] = useState<string>()
+  /** 開いている小項目の親。押すとメニューの中身が切り替わる */
+  const [sub, setSub] = useState<MenuItem>()
+  /** 小項目から戻ったところか(入ってくる向きを逆にする) */
+  const [back, setBack] = useState(false)
   const { onClose, ignore } = props
+  const subRef = useRef(sub)
+  subRef.current = sub
   useEffect(() => {
     const close = (e: PointerEvent) => {
       const t = e.target as Node
@@ -282,7 +286,11 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
     const closeOnKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
-      onClose()
+      // 小項目を開いていれば、元のメニューへ
+      if (subRef.current) {
+        setBack(true)
+        setSub(undefined)
+      } else onClose()
     }
     document.addEventListener('pointerdown', close)
     window.addEventListener('wheel', onClose, { passive: true })
@@ -294,10 +302,29 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
     }
   }, [onClose, ignore])
   const { pos } = props
+  const menuRow = (x: MenuItem) => (
+    <button
+      key={x.label}
+      type="button"
+      onClick={() => {
+        if (x.children) {
+          setBack(false)
+          return setSub(x)
+        }
+        x.onClick?.()
+        onClose()
+      }}
+      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors"
+    >
+      <span className="material-symbols-outlined text-base">{x.icon}</span>
+      <span className="flex-1 text-left">{x.label}</span>
+      {x.children && <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>}
+    </button>
+  )
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm overflow-y-auto"
+      className="fixed w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm overflow-y-auto overflow-x-hidden"
       // 小項目を広げても画面からはみ出さないように
       style={{ ...pos, maxHeight: window.innerHeight - (pos.top ?? pos.bottom ?? 0) - 8 }}
       onClick={(e) => e.stopPropagation()}
@@ -306,25 +333,26 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
         e.stopPropagation()
       }}
     >
-      {props.items.flatMap((it) => {
-        const row = (x: MenuItem, sub = false) => (
+      {sub ? (
+        <div key={sub.label} className="menu-page-in">
           <button
-            key={x.label}
             type="button"
             onClick={() => {
-              if (x.children) return setExpanded(expanded === x.label ? undefined : x.label)
-              x.onClick?.()
-              onClose()
+              setBack(true)
+              setSub(undefined)
             }}
-            className={`w-full flex items-center gap-2.5 ${sub ? 'pl-7 pr-3' : 'px-3'} py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors`}
+            className="w-full flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-c-border font-bold text-c-text-strong hover:bg-c-surface2 transition-colors"
           >
-            <span className="material-symbols-outlined text-base">{x.icon}</span>
-            <span className="flex-1 text-left">{x.label}</span>
-            {x.children && <span className="material-symbols-outlined text-base text-c-text-muted">{expanded === x.label ? 'expand_less' : 'expand_more'}</span>}
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+            {sub.label}
           </button>
-        )
-        return [row(it), ...(it.children && expanded === it.label ? it.children.map((c) => row(c, true)) : [])]
-      })}
+          {sub.children?.map(menuRow)}
+        </div>
+      ) : (
+        <div key="root" className={back ? 'menu-page-back' : undefined}>
+          {props.items.map(menuRow)}
+        </div>
+      )}
     </div>,
     document.body,
   )
@@ -607,8 +635,7 @@ function PostArticle(props: Props) {
     ...(handlers.onReact
       ? (handlers.reactionDefs ?? []).map((r) => ({ label: r.label, icon: r.icon, onClick: () => handlers.onReact!(post, r.id) }))
       : []),
-    // 下から出る一覧は小項目を広げない作りなので、NG も並べて出す
-    ...actions.flatMap((a) => a.children ?? [a]).map((a) => ({ label: a.label, icon: a.icon, onClick: a.onClick ?? (() => undefined) })),
+    ...actions,
   ]
 
   // ── レスの頭の部品(スタイルごとに並べ方を変える) ──
@@ -766,7 +793,7 @@ function PostArticle(props: Props) {
       className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
       style={{ color: 'var(--c-to-own)', background: 'var(--c-to-own-wash)', border: '1px solid var(--c-to-own)', borderRadius: 'var(--chip-radius)' }}
     >
-      →あなた宛
+      返信
     </span>
   )
   /** ID のアイコン。round なら丸く大きく(Discord 風)。書き込み数を右下に重ねる */
@@ -1177,6 +1204,8 @@ function PostArticle(props: Props) {
   const right = props.isOwn && !props.alignLeft
   const lineSide = (
     <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${right ? 'items-end' : 'items-start'}`}>
+      {/* 右の吹き出しの返信の数は、番号の上に置く */}
+      {right && repliesBtn}
       {/* スマホは横幅が貴重なので、番号も小さくする */}
       <span className="text-[11px]">{numBtn('#', isMobile ? 'text-[10px]' : 'text-[11px]')}</span>
       <span title={post.date}>{time}</span>
@@ -1233,7 +1262,7 @@ function PostArticle(props: Props) {
       <div className={`flex-1 min-w-0 flex flex-col ${right ? 'items-end' : 'items-start'}`}>
         {!props.continued && (
           <div data-post-header className={`flex items-center gap-1.5 mb-1 max-w-full text-xs ${right ? 'flex-row-reverse' : idPosition === 'topRight' ? 'w-full' : ''}`}>
-            {repliesBtn}
+            {!right && repliesBtn}
             {!right && nameBtn('text-xs')}
             {opChip}
             {badgeChips}

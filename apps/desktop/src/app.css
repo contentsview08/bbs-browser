@@ -308,7 +308,8 @@ html:root[data-scheme]:not([data-scheme='2ch-classic']) .bg-panel-reply {
 html:root[data-scheme] {
   --c-flash-new: rgba(0, 0, 0, 0.5);
 }
-html:root.dark[data-scheme] {
+html:root.dark[data-scheme],
+html:root[data-scheme='line-light'][data-post-style='line'] {
   --c-flash-new: rgba(255, 255, 255, 0.8);
 }
 
@@ -619,6 +620,23 @@ article.post-discord {
    スマホのアプリの Palette.selectionWash と同じ色 */
 :root[data-scheme='line-light'][data-post-style='line'] {
   --c-cursor-tint: color-mix(in srgb, #ffffff 12%, transparent);
+}
+/* メニューの小項目は右から入ってくる。戻るときは逆向き */
+@keyframes menu-page-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes menu-page-back {
+  from {
+    transform: translateX(-100%);
+  }
+}
+.menu-page-in {
+  animation: menu-page-in 180ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.menu-page-back {
+  animation: menu-page-back 180ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
 }
 /* ツリーで押したレスの印 */
 .tree-focus {

@@ -17,6 +17,8 @@ export interface SheetItem {
   tint?: string
   /** 押した状態(お気に入りに入っている など)。アイコンを塗る */
   active?: boolean
+  /** 押すと、シートの中にこの小項目を出す(閉じない) */
+  children?: SheetItem[]
   /** 押すと、シートの中にこの中身を出す(閉じない) */
   submenu?: ReactNode
   disabled?: boolean
@@ -50,7 +52,7 @@ export default function ActionSheet(props: {
       type="button"
       disabled={it.disabled}
       onClick={() => {
-        if (it.submenu) return setSub(it)
+        if (it.submenu || it.children) return setSub(it)
         props.onClose()
         it.onClick?.()
       }}
@@ -63,7 +65,7 @@ export default function ActionSheet(props: {
         {it.icon}
       </span>
       <span className="flex-1 min-w-0 truncate">{uiLabel(it.label)}</span>
-      {it.submenu && <span className="material-symbols-outlined text-xl text-c-text-muted">chevron_right</span>}
+      {(it.submenu || it.children) && <span className="material-symbols-outlined text-xl text-c-text-muted">chevron_right</span>}
     </button>
   )
   return createPortal(
@@ -84,7 +86,7 @@ export default function ActionSheet(props: {
               {uiLabel(sub.label)}
             </button>
             <div key={sub.label} className="flex-1 min-h-0 overflow-y-auto pb-2 page-in sheet-sub">
-              {sub.submenu}
+              {sub.children ? sub.children.map(row) : sub.submenu}
             </div>
           </>
         ) : (

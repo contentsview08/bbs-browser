@@ -30,6 +30,8 @@ class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val a
     var headerOwn: AnnotatedString? = null
     /** LINE 風で吹き出しの隣に出す番号と時刻 */
     var sideNo: AnnotatedString? = null
+    /** LINE 風の右の吹き出しで、番号の上に出す返信の数 */
+    var sideReplies: AnnotatedString? = null
     var sideTime: String = ""
     /** 画像の札を押したあとの本文(札を URL に広げたもの)。札のないレスは null */
     var bodyExpanded: AnnotatedString? = null
@@ -250,7 +252,8 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         rp.watchoi = watchoiOf(p.name)
         if (o.urlShorten && info?.spans?.any { it is Span.Url && toImageUrl(it.url) != null } == true) rp.bodyExpanded = buildBody(false)
         if (o.style == "line") {
-            rp.headerOwn = compactHeader(p, name, replies, idCount, isOp, o, links, showName = false)
+            rp.headerOwn = compactHeader(p, name, replies, idCount, isOp, o, links, showName = false, showReplies = false)
+            if (replies > 0) rp.sideReplies = buildAnnotatedString { appendReplies(p, replies, o, links) }
             rp.sideTime = LINE_TIME.find(p.date)?.groupValues?.get(1) ?: p.date
             rp.sideNo = buildAnnotatedString {
                 val style = SpanStyle(fontWeight = FontWeight.Bold, color = replyHeat ?: Color.Unspecified)
@@ -281,16 +284,12 @@ fun shortUrl(url: String, max: Int = 36): String {
 /**
  * Discord 風・LINE 風の頭(PC 版の discord の headerBlock と同じ並び): 名前を大きめに、主・#番号・短い日付・ID・返信の数を小さく横に
  */
-private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks, showName: Boolean = true): AnnotatedString =
+private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks, showName: Boolean = true, showReplies: Boolean = true): AnnotatedString =
     buildAnnotatedString {
         val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
         // 返信の数は頭の一番左に。吹き出しも数と同じ色に。印と数の間では折り返さない
-        if (replies > 0) {
-            withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
-                val icon = when { replies >= 7 -> "replyVeryHot"; replies >= 5 -> "replyHot"; replies >= 3 -> "replyWarm"; o.onSky -> "replySky"; else -> "reply" }
-                appendInlineContent(icon, "[返信]")
-                withStyle(SpanStyle(color = Palette.heat(replies) ?: if (o.onSky) Palette.skyText else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)) { append("\u2060\u202F\u2060$replies") }
-            }
+        if (replies > 0 && showReplies) {
+            appendReplies(p, replies, o, links)
             append("  ")
         }
         if (showName) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
@@ -320,6 +319,15 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
     }
 
 /** 頭の字の色(空色の地の上では白っぽく) */
+/** 返信の数(吹き出しの印と数。多いほど暖色。押すと返信を出す) */
+private fun AnnotatedString.Builder.appendReplies(p: io.github.contentsview08.obb.bbs.Post, replies: Int, o: RenderOptions, links: PostLinks) {
+    withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
+        val icon = when { replies >= 7 -> "replyVeryHot"; replies >= 5 -> "replyHot"; replies >= 3 -> "replyWarm"; o.onSky -> "replySky"; else -> "reply" }
+        appendInlineContent(icon, "[返信]")
+        withStyle(SpanStyle(color = Palette.heat(replies) ?: if (o.onSky) Palette.skyText else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)) { append("\u2060\u202F\u2060$replies") }
+    }
+}
+
 private val LINE_TIME = Regex("([0-9]{1,2}:[0-9]{2})(?::[0-9]{2})?")
 private fun mutedC(o: RenderOptions) = if (o.onSky) Palette.skyMuted else Palette.textMuted
 private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.posterName

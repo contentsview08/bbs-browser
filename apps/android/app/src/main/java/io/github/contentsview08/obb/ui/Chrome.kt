@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
@@ -185,7 +188,7 @@ fun BarIcon(icon: ImageVector, label: String, tint: Color = Palette.textMuted, o
 fun MoreButton(onClick: () -> Unit) = BarIcon(Icons.Filled.MoreVert, "その他", onClick = onClick)
 
 /** 下から出るメニューの 1 行 */
-class MenuItem(val label: String, val icon: ImageVector, val tint: Color = Palette.textMuted, val danger: Boolean = false, val onClick: () -> Unit)
+class MenuItem(val label: String, val icon: ImageVector, val tint: Color = Palette.textMuted, val danger: Boolean = false, /** あれば、押すと小項目の画面に切り替える */ val children: List<MenuItem>? = null, val onClick: () -> Unit)
 
 /** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
 enum class MenuAt { TopEnd, TopStart, Center }
@@ -207,8 +210,11 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
         MenuAt.TopStart -> androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
         MenuAt.Center -> androidx.compose.ui.graphics.TransformOrigin.Center
     }
+    /** 開いている小項目の親 */
+    var sub by remember { mutableStateOf<MenuItem?>(null) }
     androidx.compose.ui.window.Popup(
-        onDismissRequest = { close() },
+        // 戻るは、小項目を開いていれば元のメニューへ
+        onDismissRequest = { if (sub != null) sub = null else close() },
         properties = androidx.compose.ui.window.PopupProperties(focusable = true),
     ) {
         Box(
@@ -232,17 +238,44 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
                     .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {}
                     .padding(vertical = 6.dp),
             ) {
-                groups.filter { it.isNotEmpty() }.forEachIndexed { gi, items ->
-                    if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
-                    for (it in items) {
+                val itemRow = @Composable { it: MenuItem ->
                         Row(
-                            Modifier.fillMaxWidth().clickable { it.onClick(); onDismiss() }.heightIn(min = 46.dp).padding(horizontal = 16.dp),
+                            Modifier.fillMaxWidth().clickable { if (it.children != null) sub = it else { it.onClick(); onDismiss() } }.heightIn(min = 46.dp).padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             // アイコンは色を付けず控えめに(色が多いと、どれが大事か分からなくなる)。危ない項目だけ赤
                             Icon(it.icon, null, tint = if (it.danger) Palette.markDanger else Palette.textMuted, modifier = Modifier.size(21.dp))
                             Text(it.label, color = if (it.danger) Palette.markDanger else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (it.children != null) Icon(Icons.Filled.ChevronRight, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
+                        }
+                }
+                // 小項目は右から入ってくる。戻るときは逆向き(PC 版と同じ)
+                androidx.compose.animation.AnimatedContent(
+                    sub,
+                    transitionSpec = {
+                        val forward = targetState != null
+                        val tween = androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(180)
+                        androidx.compose.animation.slideInHorizontally(tween) { if (forward) it else -it } togetherWith
+                            androidx.compose.animation.slideOutHorizontally(tween) { if (forward) -it else it }
+                    },
+                    label = "menu",
+                ) { parent ->
+                    Column {
+                        if (parent != null) {
+                            Row(
+                                Modifier.fillMaxWidth().clickable { sub = null }.heightIn(min = 44.dp).padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "戻る", tint = Palette.textMuted, modifier = Modifier.size(22.dp))
+                                Text(parent.label, color = Palette.textStrong, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            }
+                            HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
+                            for (it in parent.children.orEmpty()) itemRow(it)
+                        } else groups.filter { it.isNotEmpty() }.forEachIndexed { gi, items ->
+                            if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
+                            for (it in items) itemRow(it)
                         }
                     }
                 }

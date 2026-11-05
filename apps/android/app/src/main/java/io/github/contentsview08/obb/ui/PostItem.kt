@@ -47,6 +47,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 
 /** Discord 風・LINE 風で、頭の上に出す返信先(本文の頭のアンカー) */
 /**
@@ -128,11 +132,11 @@ fun PostItem(
     val idLine = @Composable {
         if (idBottomRight != null) Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.End) { Text(idBottomRight, fontSize = headSize) }
     }
-    // LINE 風の「あなた宛」は、頭ではなく吹き出しの隣に置く
+    // LINE 風の「返信」の札は、頭ではなく吹き出しの隣に置く
     val headChip = when {
         style == "line" -> null
         own -> "自分"
-        toOwn -> "→あなた宛"
+        toOwn -> "返信"
         else -> null
     }
     val header = @Composable {
@@ -194,40 +198,51 @@ fun PostItem(
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
-                if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
-                Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
+                // 自分のレスは右に寄せる。ツリーの中は線でつなぐので左にそろえ、色だけ自分の色にする(PC 版と同じ)
+                val right = own && !LocalInTree.current
+                if (!right) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
+                Column(Modifier.weight(1f), horizontalAlignment = if (right) Alignment.End else Alignment.Start) {
                     if (!continued) Box(Modifier.padding(bottom = 4.dp)) {
                         // 右の吹き出しは、ID と頭をまとめて右へ寄せる(名前は出さない)
-                        if (own) Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (right) Row(verticalAlignment = Alignment.CenterVertically) {
                             if (idTopRight != null) Text(idTopRight, Modifier.padding(end = 6.dp), fontSize = headSize, maxLines = 1, softWrap = false)
                             Text(r.headerOwn ?: r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                         } else header()
                     }
-                    // 番号と時刻、その外側に「あなた宛」を、吹き出しの隣に置く(左の吹き出しなら右、右の吹き出しなら左)
+                    // 番号と時刻、その外側に「返信」の札を、吹き出しの隣に置く(左の吹き出しなら右、右の吹き出しなら左)
+                    var bubbleWidth by remember { mutableStateOf(0) }
                     val side = @Composable {
-                        Column(horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
+                        Column(horizontalAlignment = if (right) Alignment.End else Alignment.Start) {
+                            if (right) r.sideReplies?.let { Text(it, fontSize = headSize, lineHeight = 1.3.em, inlineContent = chips) }
                             r.sideNo?.let { Text(it, color = if (own) Palette.own else if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp) }
                             Text(r.sideTime, color = if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
                         }
                     }
                     Row(verticalAlignment = Alignment.Bottom) {
-                        if (own) {
-                            if (toOwn) { OwnChip("→あなた宛", Palette.onSky(style)); Spacer(Modifier.width(6.dp)) }
+                        if (right) {
+                            if (toOwn) { OwnChip("返信", Palette.onSky(style)); Spacer(Modifier.width(6.dp)) }
                             side(); Spacer(Modifier.width(6.dp))
                         }
                         Column(
-                            Modifier.weight(1f, fill = false).widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+                            Modifier.weight(1f, fill = false).widthIn(max = 320.dp).onSizeChanged { bubbleWidth = it.width }.background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
                             if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
                             if (aa) AaBody(r) else Text(shownBody, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
                             idLine()
                         }
-                        if (!own) {
+                        if (!right) {
                             Spacer(Modifier.width(6.dp)); side()
-                            if (toOwn) { Spacer(Modifier.width(6.dp)); OwnChip("→あなた宛", Palette.onSky(style)) }
+                            if (toOwn) { Spacer(Modifier.width(6.dp)); OwnChip("返信", Palette.onSky(style)) }
                         }
                     }
-                    Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
+                    // 右の吹き出しのリンクの札と画像は、左の端を吹き出しの左にそろえる。吹き出しより広ければ右の端にそろえて、画面の中に収める
+                    if (right) Box(
+                        Modifier.fillMaxWidth().layout { m, c ->
+                            val p = m.measure(c.copy(minWidth = 0))
+                            layout(c.maxWidth, p.height) { p.place((c.maxWidth - maxOf(bubbleWidth, p.width)).coerceAtLeast(0), 0) }
+                        },
+                    ) { Column { media() } }
+                    else Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
                 }
             }
         }

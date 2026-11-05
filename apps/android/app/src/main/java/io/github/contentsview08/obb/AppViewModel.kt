@@ -1033,18 +1033,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         HonoBbs.parseThreadUrl(u)?.let { openThread(it); return true }
         HonoBbs.normalizeBoardUrl(u)?.let { bu ->
             val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) openBoard(known, root = true)
-            else viewModelScope.launch { openBoard(Board(bu, HonoBbs.boardName(bu) ?: bu.removeSuffix("/").substringAfterLast('/')), root = true) }
+            if (known != null) openBoard(known, root = false)
+            else viewModelScope.launch { openBoard(Board(bu, HonoBbs.boardName(bu) ?: bu.removeSuffix("/").substringAfterLast('/')), root = false) }
             return true
         }
         // したらば(https://jbbs.shitaraba.net/カテゴリ/番号/ と /bbs/read.cgi/カテゴリ/番号/キー/)
         Shitaraba.parseThreadUrl(u)?.let { openThread(it); return true }
         Shitaraba.normalizeBoardUrl(u)?.let { bu ->
             val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) openBoard(known, root = true)
+            if (known != null) openBoard(known, root = false)
             else viewModelScope.launch {
                 val name = runCatching { Shitaraba.boardName(bu) }.getOrElse { toast = it.message ?: "したらばの板を開けません"; return@launch }
-                openBoard(Board(bu, name), root = true)
+                openBoard(Board(bu, name), root = false)
             }
             return true
         }
@@ -1052,10 +1052,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         Machi.parseThreadUrl(u)?.let { openThread(it); return true }
         Machi.normalizeBoardUrl(u)?.let { bu ->
             val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
-            if (known != null) openBoard(known, root = true)
+            if (known != null) openBoard(known, root = false)
             else viewModelScope.launch {
                 val name = runCatching { Machi.boardName(bu) }.getOrElse { toast = it.message ?: "まちBBS の板を開けません"; return@launch }
-                openBoard(Board(bu, name), root = true)
+                openBoard(Board(bu, name), root = false)
             }
             return true
         }
@@ -1069,10 +1069,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val board = Regex("^https?://([^/?#]+)/([^/?#]+)/?$").find(u)
         if (board != null && !board.groupValues[2].contains('.')) {
             val bu = "https://${board.groupValues[1]}/${board.groupValues[2]}/"
-            openBoard(favorites.firstOrNull { it.url == bu } ?: Board(bu, board.groupValues[2]), root = true)
+            val known = favorites.firstOrNull { it.url == bu } ?: boards.firstOrNull { it.url == bu }
+            if (known != null) { openBoard(known, root = false); return true }
+            // 形だけでは板か分からない(youtu.be/xxx も同じ形)。PC 版の ensureBoard と同じく、スレ一覧が読めたら板とする。読めなければ OS の既定のアプリへ
+            viewModelScope.launch {
+                val threads = kotlinx.coroutines.withTimeoutOrNull(8000) { runCatching { TwoCh.listThreads(Board(bu, "")) }.getOrNull() }
+                if (!threads.isNullOrEmpty()) openBoard(Board(bu, board.groupValues[2]), root = false) else openInOs(u)
+            }
             return true
         }
         return false
+    }
+
+    /** OS の既定のアプリで開く(YouTube のリンクなら YouTube のアプリ) */
+    private fun openInOs(url: String) {
+        runCatching {
+            getApplication<Application>().startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure { toast = "開けるアプリがありません" }
     }
 
     fun deleteLog(page: Page.Thread) {

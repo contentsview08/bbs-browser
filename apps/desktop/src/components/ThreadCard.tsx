@@ -6,8 +6,8 @@ import BadgeChip from './BadgeChip'
 import ActionSheet from './ActionSheet'
 import { useLongPress } from '../hooks/useLongPress'
 import { isMobile } from '../utils/platform'
-import { memo, useState } from 'react'
-import { MenuButton } from './PostArticle'
+import { memo, useCallback, useState } from 'react'
+import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuPos } from './PostArticle'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
@@ -26,6 +26,8 @@ interface Props {
   /** どのカードにも同じ関数を渡し、押されたスレを引数で受け取る(カードを memo で描き直さずに済むように) */
   /** 開く。newTab: Ctrl を押しながら押した(設定によらず新しいタブで開く) */
   onOpen: (t: ThreadSummary, newTab?: boolean) => void
+  /** タブを使っているか(右クリックの「新しいタブで開く」を出す) */
+  newTabEnabled?: boolean
   /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
   onNg?: (t: ThreadSummary) => void
   /** 立てた人を NG に追加(立てた人が分かるスレだけ出す。スマホのアプリと同じ) */
@@ -69,6 +71,7 @@ function ThreadCard({
   momentum: m,
   momentumRank,
   onOpen,
+  newTabEnabled,
   onNg,
   onNgAuthor,
   onCopy,
@@ -92,6 +95,9 @@ function ThreadCard({
   const [sheet, setSheet] = useState(false)
   /** 操作バーの NG のメニューを開いているか(開いている間はバーを出したままにする) */
   const [ngMenu, setNgMenu] = useState(false)
+  /** 右クリックのメニューを開いている位置 */
+  const [ctxMenu, setCtxMenu] = useState<MenuPos>()
+  const closeCtxMenu = useCallback(() => setCtxMenu(undefined), [])
   const longPress = useLongPress(isMobile ? (onSelectStart ? () => onSelectStart(thread) : () => setSheet(true)) : undefined)
   // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
   // 勢いの色は「とても多い」の 1 段だけ(3 段に塗り分けると、行の中の色が増えて読みにくい)
@@ -474,6 +480,16 @@ function ThreadCard({
     <div
       {...longPress}
       onClick={(e) => (isMobile && selecting && onSelect ? onSelect(thread, !selected) : onOpen(thread, e.ctrlKey || e.metaKey))}
+      // PC: 右クリックで、操作バーと同じ操作に「新しいタブで開く」を足して出す
+      onContextMenu={
+        !isMobile
+          ? (e) => {
+              if (wantsNativeMenu(e)) return
+              e.preventDefault()
+              setCtxMenu(menuPosAt(e.clientX, e.clientY))
+            }
+          : undefined
+      }
       data-cursor={isCursor || undefined}
       data-thread-id={`${thread.boardUrl}${thread.key}`}
       data-variant={variant}
@@ -521,6 +537,35 @@ function ThreadCard({
           className="absolute left-0 top-0 bottom-0 w-[0.1875rem]"
           style={{ background: unreadCount > 0 ? 'var(--c-unread)' : 'var(--c-thread-read-title, var(--c-accent))' }}
           title={unreadCount > 0 ? '既読(新着あり)' : '既読'}
+        />
+      )}
+      {ctxMenu && (
+        <FloatingMenu
+          pos={ctxMenu}
+          onClose={closeCtxMenu}
+          items={[
+            ...(newTabEnabled ? [{ label: '新しいタブで開く', icon: 'open_in_new', onClick: () => onOpen(thread, true) }] : []),
+            ...(onToggleFavorite
+              ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
+              : []),
+            ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
+            ...(onNg && onNgAuthor && thread.authorId
+              ? [
+                  {
+                    label: 'NG',
+                    icon: 'block',
+                    children: [
+                      { label: 'スレタイで NG', icon: 'title', onClick: () => onNg(thread) },
+                      { label: `立てた人で NG(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread) },
+                      { label: '立てた人で NG(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true) },
+                    ],
+                  },
+                ]
+              : onNg
+                ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread) }]
+                : []),
+            ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread) }] : []),
+          ]}
         />
       )}
       {/* スマホ: 長押しで出す操作の一覧(マウスを乗せて出す操作バーの代わり) */}

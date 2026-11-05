@@ -39,7 +39,7 @@ import {
 import type { SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
-import { anchorTargets, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
+import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
@@ -1799,18 +1799,24 @@ export default function App() {
   }
 
   /**
-   * 本文のリンクを開く。アプリで読めるスレの URL なら新しいタブで開き(スレ一覧はそのまま)、
-   * それ以外や、開けなかったときはブラウザで開く
+   * 本文のリンクを開く。アプリで読めるスレの URL なら新しいタブで開き(スレ一覧はそのまま)、板の URL ならスレ一覧に開く。
+   * それ以外や、開けなかったときは外で開く。板かどうかはスレ一覧が読めるかで決める(8 秒待っても返らなければ板としない)
    */
   const openLink = async (url: string) => {
-    if (!isAppThreadUrl(url)) return settingsRef.current.openLinksInApp ? setReaderUrl(url) : openUrl(url)
+    const outside = () => (settingsRef.current.openLinksInApp ? setReaderUrl(url) : openUrl(url))
+    const thread = isAppThreadUrl(url)
+    if (!thread && !isAppBoardUrl(url)) return outside()
     try {
-      const r = await resolve(url)
+      const r = await Promise.race([
+        resolve(url),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('時間切れ')), 8000)),
+      ])
       if (r.thread) return await openThread(r.thread, { newTab: true })
+      if (!thread) return await openBoard(r.board)
     } catch {
-      // 開けなければブラウザで
+      // 開けなければ外で
     }
-    return openUrl(url)
+    return thread ? openUrl(url) : outside()
   }
 
   const openUrlInApp = (url: string) =>
@@ -1957,7 +1963,7 @@ export default function App() {
         },
       ]),
   )
-  const mouse = useMouseGesture(mouseMap, settings.mouseGestureTrigger, !isMobile)
+  const mouse = useMouseGesture(mouseMap, settings.mouseGestureTrigger, !isMobile && settings.mouseGestureEnabled)
   const mouseLabels = Object.fromEntries(PIE_DIRS.map((d) => [d, mouseMap[d]?.label])) as Partial<Record<PieDir, string | undefined>>
   // 指の動きは画面全体(document)で受ける。アプリの枠の中だけで受けると、body の直下に出した
   // レスのポップアップ・スレ立てなどの上でなぞったときに届かない。
@@ -2588,6 +2594,7 @@ export default function App() {
                 : '左のお気に入りから板を選んでください'
           }
           onOpen={(t, newTab) => void openThread(t, newTab ? { newTab: true } : {})}
+          newTabEnabled={settings.tabsEnabled}
           onRefresh={
             history
               ? // 閲覧履歴の更新は時間がかかるので、引っぱったときの丸い矢印は待たずに引っ込め、ヘッダーの下の帯だけで知らせる。

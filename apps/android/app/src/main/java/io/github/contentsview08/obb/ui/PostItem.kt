@@ -170,7 +170,7 @@ fun PostItem(
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         if (!continued) header()
-                        body(Modifier.padding(top = if (continued) 0.dp else 2.dp))
+                        body(Modifier.padding(top = if (continued) 0.dp else 4.dp))
                         idLine()
                     }
                 }
@@ -186,7 +186,7 @@ fun PostItem(
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
                 if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
                 Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
-                    if (!continued || own) Box(Modifier.padding(bottom = 2.dp)) { header() }
+                    if (!continued || own) Box(Modifier.padding(bottom = 4.dp)) { header() }
                     Column(
                         Modifier.widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
@@ -266,7 +266,7 @@ fun PostItem(
 /** 返信先の 1 行(小さいアイコン・名前・本文の頭)。押すと返信先をポップアップで出す */
 @Composable
 private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, onDark: Boolean = false, onClick: () -> Unit) {
-    Row(Modifier.padding(start = indent, bottom = 2.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.padding(start = indent, bottom = 4.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
         Text("↱ ", color = if (onDark) Color.White.copy(alpha = 0.8f) else Palette.textMuted, fontSize = 12.sp)
         Identicon(reply.id, 16.dp)
         Spacer(Modifier.width(5.dp))

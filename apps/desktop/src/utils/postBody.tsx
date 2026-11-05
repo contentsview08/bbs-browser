@@ -384,6 +384,21 @@ export function hasVideo(text: string): boolean {
 
 /** アプリ(専ブラ)で開けるスレの URL か。本文のリンクを緑にするのと、押したときにアプリで開くかの判断に使う */
 export const isAppThreadUrl = memoByText((url) => allConnectors().some((c) => c.isThreadUrl?.(url) ?? false))
+/**
+ * 板の URL かもしれない形か(スレの URL ではなく、どれかのコネクタが扱える形)。形だけでは分からない(youtu.be/xxx も同じ形)ので、
+ * 開く前に resolve でスレ一覧が読めるかを確かめる。ファイルらしい URL(最後に . のあるもの)は板としない。スマホ版の openUrl と同じ
+ */
+export const isAppBoardUrl = memoByText((url) => {
+  if (isAppThreadUrl(url)) return false
+  let last: string | undefined
+  try {
+    last = new URL(url).pathname.split('/').filter(Boolean).at(-1)
+  } catch {
+    return false
+  }
+  if (!last || last.includes('.')) return false
+  return allConnectors().some((c) => c.canHandle(url))
+})
 
 export interface BodyHandlers {
   /** アンカーを押した(via='click')、またはマウスを乗せた(via='hover') */

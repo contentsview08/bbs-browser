@@ -65,6 +65,8 @@ interface Props {
   /** 読み込めなかった理由。一覧が空のときは、取り直しのボタンと一緒に出す */
   errorText?: string
   onOpen: (t: ThreadSummary, newTab?: boolean) => void
+  /** タブを使っているか(右クリックの「新しいタブで開く」を出す) */
+  newTabEnabled?: boolean
   onRefresh?: () => Promise<unknown> | void
   width: number
   onResize: (width: number) => void
@@ -815,6 +817,7 @@ export default function ThreadListPanel(props: Props) {
         momentum={momenta.get(id) ?? 0}
         momentumRank={ranks.get(id) ?? 0}
         onOpen={onOpenCard}
+        newTabEnabled={props.newTabEnabled}
         onNg={props.onNgThread ? onNgCard : undefined}
         onNgAuthor={props.onNgAuthor ? onNgAuthorCard : undefined}
         onCopy={onCopyCard}

@@ -1,7 +1,7 @@
 // レス 1 件。web 版の PostArticle.tsx の見た目を移植。
 // 返信・削除・通報など、web 版の API に依存する機能は外している。
 
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post, PostActionDef, ReactionDef } from '@bbs-browser/connectors'
 import BadgeChip from './BadgeChip'
@@ -248,38 +248,98 @@ interface MenuItem {
 const TOOL_BTN =
   'h-7 min-w-7 px-1.5 flex items-center justify-center rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
+/** メニューの置き場所(画面の座標) */
+export type MenuPos = { top?: number; bottom?: number; left?: number; right?: number }
+
+/** 右クリックした所に開く位置。画面からはみ出す向きなら、反対へ開く */
+export function menuPosAt(x: number, y: number): MenuPos {
+  const side = x + 264 > window.innerWidth ? { right: window.innerWidth - x } : { left: x }
+  return y > window.innerHeight - 300 ? { ...side, bottom: window.innerHeight - y } : { ...side, top: y }
+}
+
+/** OS の標準のメニューに任せる右クリックか(入力欄・リンク・画像の上、文字を選んでいるとき。コピーや保存に使うため) */
+export function wantsNativeMenu(e: React.MouseEvent): boolean {
+  if ((e.target as Element | null)?.closest?.('input, textarea, [contenteditable], a[href], img, video')) return true
+  return !!window.getSelection()?.toString().trim()
+}
+
 /**
- * 押すとメニューを出すボタン。レスのヘッダー行などははみ出しを隠す設定なので、メニューは body の直下に出し、
- * ボタンの位置から場所を決める(ポップアップの中のレスでも使えるよう、ポップアップより手前に出す)
+ * 操作の一覧のメニュー(︙ のボタンと右クリックで共通)。レスのヘッダー行などははみ出しを隠す設定なので、body の直下に出す
+ * (ポップアップの中のレスでも使えるよう、ポップアップより手前に出す)。外を押す・ホイール・Esc で閉じる
  */
-export function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onOpenChange: (open: boolean) => void; hoverClass?: string }) {
-  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number }>()
-  const buttonRef = useRef<HTMLButtonElement>(null)
+export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: () => void; ignore?: React.RefObject<HTMLElement | null> }) {
   const menuRef = useRef<HTMLDivElement>(null)
   /** 広げている小項目の親 */
   const [expanded, setExpanded] = useState<string>()
+  const { onClose, ignore } = props
+  useEffect(() => {
+    const close = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (!menuRef.current?.contains(t) && !ignore?.current?.contains(t)) onClose()
+    }
+    const closeOnKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('pointerdown', close)
+    window.addEventListener('wheel', onClose, { passive: true })
+    window.addEventListener('keydown', closeOnKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      window.removeEventListener('wheel', onClose)
+      window.removeEventListener('keydown', closeOnKey, true)
+    }
+  }, [onClose, ignore])
+  const { pos } = props
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="fixed w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm overflow-y-auto"
+      // 小項目を広げても画面からはみ出さないように
+      style={{ ...pos, maxHeight: window.innerHeight - (pos.top ?? pos.bottom ?? 0) - 8 }}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+    >
+      {props.items.flatMap((it) => {
+        const row = (x: MenuItem, sub = false) => (
+          <button
+            key={x.label}
+            type="button"
+            onClick={() => {
+              if (x.children) return setExpanded(expanded === x.label ? undefined : x.label)
+              x.onClick?.()
+              onClose()
+            }}
+            className={`w-full flex items-center gap-2.5 ${sub ? 'pl-7 pr-3' : 'px-3'} py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors`}
+          >
+            <span className="material-symbols-outlined text-base">{x.icon}</span>
+            <span className="flex-1 text-left">{x.label}</span>
+            {x.children && <span className="material-symbols-outlined text-base text-c-text-muted">{expanded === x.label ? 'expand_less' : 'expand_more'}</span>}
+          </button>
+        )
+        return [row(it), ...(it.children && expanded === it.label ? it.children.map((c) => row(c, true)) : [])]
+      })}
+    </div>,
+    document.body,
+  )
+}
+
+/** 押すとメニューを出すボタン。メニューはボタンの位置から場所を決める */
+export function MenuButton(props: { icon: string; title: string; items: MenuItem[]; onOpenChange: (open: boolean) => void; hoverClass?: string }) {
+  const [pos, setPos] = useState<MenuPos>()
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const { onOpenChange } = props
   useEffect(() => {
     onOpenChange(pos !== undefined)
   }, [pos, onOpenChange])
-  useEffect(() => {
-    if (!pos) return
-    const close = (e: PointerEvent) => {
-      const t = e.target as Node
-      if (!menuRef.current?.contains(t) && !buttonRef.current?.contains(t)) setPos(undefined)
-    }
-    const closeOnScroll = () => setPos(undefined)
-    document.addEventListener('pointerdown', close)
-    window.addEventListener('wheel', closeOnScroll, { passive: true })
-    return () => {
-      document.removeEventListener('pointerdown', close)
-      window.removeEventListener('wheel', closeOnScroll)
-    }
-  }, [pos])
+  const close = useCallback(() => setPos(undefined), [])
 
   const toggle = () => {
     if (pos) return setPos(undefined)
-    setExpanded(undefined)
     const rect = buttonRef.current!.getBoundingClientRect()
     const right = window.innerWidth - rect.right
     // 下に入りきらなければ上に開く
@@ -301,37 +361,7 @@ export function MenuButton(props: { icon: string; title: string; items: MenuItem
       >
         <span className="material-symbols-outlined text-lg leading-none">{props.icon}</span>
       </button>
-      {pos &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className="fixed w-64 bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl py-1 z-[9800] text-sm overflow-y-auto"
-            // 小項目を広げても画面からはみ出さないように
-            style={{ ...pos, maxHeight: window.innerHeight - (pos.top ?? pos.bottom ?? 0) - 8 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {props.items.flatMap((it) => {
-              const row = (x: MenuItem, sub = false) => (
-                <button
-                  key={x.label}
-                  type="button"
-                  onClick={() => {
-                    if (x.children) return setExpanded(expanded === x.label ? undefined : x.label)
-                    x.onClick?.()
-                    setPos(undefined)
-                  }}
-                  className={`w-full flex items-center gap-2.5 ${sub ? 'pl-7 pr-3' : 'px-3'} py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors`}
-                >
-                  <span className="material-symbols-outlined text-base">{x.icon}</span>
-                  <span className="flex-1 text-left">{x.label}</span>
-                  {x.children && <span className="material-symbols-outlined text-base text-c-text-muted">{expanded === x.label ? 'expand_less' : 'expand_more'}</span>}
-                </button>
-              )
-              return [row(it), ...(it.children && expanded === it.label ? it.children.map((c) => row(c, true)) : [])]
-            })}
-          </div>,
-          document.body,
-        )}
+      {pos && <FloatingMenu pos={pos} items={props.items} onClose={close} ignore={buttonRef} />}
     </>
   )
 }
@@ -342,7 +372,10 @@ function PostArticle(props: Props) {
   const articleRef = useRef<HTMLElement>(null)
   const [ngOpen, setNgOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const menuOpen = ngOpen || moreOpen
+  /** 右クリックのメニューを開いている位置 */
+  const [ctxMenu, setCtxMenu] = useState<MenuPos>()
+  const closeCtxMenu = useCallback(() => setCtxMenu(undefined), [])
+  const menuOpen = ngOpen || moreOpen || ctxMenu !== undefined
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
   const [hovered, setHovered] = useState(false)
   // フックはここより下の return(NG のレス)より前に置く(レスが NG になった瞬間に数が変わると落ちる)
@@ -805,7 +838,7 @@ function PostArticle(props: Props) {
     ) : variant === 'discord' ? (
       // Discord 風: 名前を大きめに、番号・日付・ID は小さく横に
       props.continued ? null : (
-        <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden mb-0.5 ${isMobile ? 'gap-x-1.5' : 'gap-2'}`}>
+        <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden ${isMobile ? 'mb-1 gap-x-1.5' : 'mb-0.5 gap-2'}`}>
           {/* 返信の数は頭の一番左に(名前の長さで場所が変わらず押しやすい。本人 2026-11-05) */}
           {repliesBtn}
           {nameBtn(nameSubtle ? (isMobile ? 'text-[11px]' : HEAD_TEXT) : isMobile ? 'text-[13px]' : 'text-sm') || (
@@ -854,11 +887,11 @@ function PostArticle(props: Props) {
    */
   const replyLine = (variant === 'discord') && props.replyPreview && (
     // 本文の始まり(アイコンの幅 + 隙間)にそろえる。スマホはアイコンが小さく隙間も狭いので、決まった値ではなく大きさから出す
-    <div className="relative h-5 mb-0.5 flex items-center" style={{ paddingLeft: AVATAR + AVATAR_GAP }}>
+    <div className={`relative h-5 ${isMobile ? 'mb-1' : 'mb-0.5'} flex items-center`} style={{ paddingLeft: AVATAR + AVATAR_GAP }}>
       {/* 大きいアイコンの真ん中の上から立ち上がり、右へ曲がって小さいアイコンの手前まで */}
       <span
         aria-hidden
-        className="absolute top-1/2 -bottom-0.5 border-l-2 border-t-2 rounded-tl-md pointer-events-none"
+        className={`absolute top-1/2 ${isMobile ? '-bottom-1' : '-bottom-0.5'} border-l-2 border-t-2 rounded-tl-md pointer-events-none`}
         style={{ borderColor: 'var(--c-border-strong)', left: AVATAR / 2, width: AVATAR / 2 + AVATAR_GAP - 4 }}
       />
       <button
@@ -884,10 +917,10 @@ function PostArticle(props: Props) {
     </div>
   )
 
-  /** 本文(LINE 風はレスの行)を押したら、アンカーツリーを出す。文字を選んでいるとき(コピーしようとしているとき)は開かない */
+  /** レスのどこを押しても(頭の空いた所も)、アンカーツリーを出す。文字を選んでいるとき(コピーしようとしているとき)は開かない */
   const openTree = (e: React.MouseEvent<HTMLElement>) => {
     // 名前・ID・リンクなどのボタンを押したときは、そちらだけ(LINE 風は頭もレスの行の中にあるため)
-    if ((e.target as HTMLElement).closest('button, a, [role="button"]')) return
+    if ((e.target as HTMLElement).closest('button, a, [role="button"], video, input, label')) return
     if (window.getSelection()?.toString().trim()) return
     const el = e.currentTarget
     // PC: ダブルクリックの操作(設定)。2 回目が来るまで少し待ち、来たらその操作、来なければツリー
@@ -929,10 +962,6 @@ function PostArticle(props: Props) {
   const bodyBlock = (
         <div
           data-post-body
-          className={hasConnections ? 'cursor-pointer' : ''}
-          // LINE 風は、吹き出しの外(レスの行全体)を押しても開けるよう、行の方で受ける(lineLayout)
-          // Discord 風も、本文の左の空いた所(アイコンの下)を押して開けるよう、行の方で受ける
-          onClick={variant === 'line' || variant === 'discord' ? undefined : openTree}
           style={{
             // 専ブラ風は本文を字下げし、Discord 風は頭の位置から。どちらも本文の左の縦線は引かない(自分の印は別に出る)
             paddingLeft:
@@ -1174,7 +1203,7 @@ function PostArticle(props: Props) {
   )
   // LINE 風のときだけ組み立てる
   const lineLayout = () => (
-    <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''} ${hasConnections ? 'cursor-pointer' : ''}`} onClick={openTree}>
+    <div className={`flex gap-2 items-start ${right ? 'flex-row-reverse' : ''}`}>
       {!right && (
         <div className="flex-shrink-0" style={AVATAR_COL}>
           {props.continued ? null : beIcon ? (
@@ -1236,7 +1265,18 @@ function PostArticle(props: Props) {
       id={`post-${post.no}`}
       data-no={post.no}
       data-variant={variant}
-      className={`relative ${frameClass} ${variant === 'discord' ? 'post-discord' : ''}`}
+      className={`relative ${frameClass} ${variant === 'discord' ? 'post-discord' : ''} ${hasConnections ? 'cursor-pointer' : ''}`}
+      onClick={openTree}
+      // PC: 右クリックで、︙ と同じ操作の一覧を出す
+      onContextMenu={
+        !isMobile
+          ? (e) => {
+              if (wantsNativeMenu(e)) return
+              e.preventDefault()
+              setCtxMenu(menuPosAt(e.clientX, e.clientY))
+            }
+          : undefined
+      }
       // 人気のレスを帯で示すときは、淡い地も敷く(スマホのアプリと同じ 6%)
       style={heatBar ? { ...frame, background: `color-mix(in srgb, ${heatBar} 6%, transparent)` } : frame}
       onMouseEnter={() => {
@@ -1281,7 +1321,7 @@ function PostArticle(props: Props) {
         // Discord 風: 左に丸い ID のアイコン、右に頭・返信・本文。続けて書いたレス(同じ ID)はアイコンと頭を省く
         <div>
         {replyLine}
-        <div className={`flex items-start ${hasConnections ? 'cursor-pointer' : ''}`} style={{ gap: AVATAR_GAP }} onClick={openTree}>
+        <div className="flex items-start" style={{ gap: AVATAR_GAP }}>
           {/* アイコンはレスの頭の高さにそろえる(レスの縦の真ん中に来ないように) */}
           <div className="flex-shrink-0 flex justify-center items-start" style={AVATAR_COL}>
             {props.continued ? (
@@ -1307,6 +1347,7 @@ function PostArticle(props: Props) {
         </>
       )}
       {sheet && <ActionSheet title={`${post.ref ?? post.no} ${post.name}`} items={sheetItems} onClose={() => setSheet(false)} />}
+      {ctxMenu && <FloatingMenu pos={ctxMenu} items={actions} onClose={closeCtxMenu} />}
     </article>
   )
 }

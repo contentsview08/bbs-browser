@@ -25,9 +25,11 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
     return () => observer.disconnect()
   }, [url])
 
-  // 何も取れなかったとき・家の中のアドレスのときは出さない(リンクの文字そのものは本文にある)
-  if ((typeof state === 'object' && !state.ogp) || !isAutoLoadable(url)) return null
+  // 家の中のアドレスは出さない(リンクの文字そのものは本文にある)。
+  // 何も取れなかったときは、札の高さを変えないよう(上のレスが縮むと画面が動く)、アドレスだけの札にする
+  if (!isAutoLoadable(url)) return null
   const ogp = typeof state === 'object' ? state.ogp : undefined
+  const failed = typeof state === 'object' && !state.ogp
   const host = (() => {
     try {
       return new URL(url).hostname
@@ -47,7 +49,12 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
       className="relative flex w-full max-w-xl h-20 text-left bg-c-surface2 border border-c-border rounded-[var(--card-radius)] overflow-hidden hover:border-c-border-strong transition-colors"
     >
       <div className="flex-1 min-w-0 p-2 flex flex-col justify-center gap-0.5">
-        {!ogp ? (
+        {failed ? (
+          <>
+            <p className="text-xs font-medium text-c-text-strong line-clamp-2 leading-snug break-all">{url}</p>
+            <p className="text-[10px] text-c-text-muted truncate">{host}</p>
+          </>
+        ) : !ogp ? (
           <span className="text-[10px] text-c-text-muted">読み込み中...</span>
         ) : (
           <>

@@ -56,6 +56,10 @@ import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.GroupRemove
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
@@ -806,6 +810,16 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     // AA のレスだけ(縮めて収めた AA は字が小さすぎて読めないことがある)
                     if (aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false) MenuItem("AA を拡大して見る", Icons.Filled.ZoomIn, Palette.markPurple) { aaZoom = p.no } else null,
                 ),
+                // 自分のレスの印(書き込んだときに付くもの)を手で付け外しする。ほかの専ブラ・ブラウザから書いたレスにも付けられるように
+                (p.no in own).let { isOwn ->
+                    listOfNotNull(
+                        if (isOwn) MenuItem("自分のレスの印を外す", Icons.Filled.PersonRemove, Palette.own) { vm.markOwn(page, p, own = false, sameId = false) }
+                        else MenuItem("自分のレスの印を付ける", Icons.Filled.HowToReg, Palette.own) { vm.markOwn(page, p, own = true, sameId = false) },
+                        if (p.id == null) null
+                        else if (isOwn) MenuItem("同じ ID のレスすべての印を外す", Icons.Filled.GroupRemove, Palette.own) { vm.markOwn(page, p, own = false, sameId = true) }
+                        else MenuItem("同じ ID のレスすべてに印を付ける", Icons.Filled.Group, Palette.own) { vm.markOwn(page, p, own = true, sameId = true) },
+                    )
+                },
                 listOfNotNull(
                     p.id?.let { id -> MenuItem("ID を NG(ID:$id)", Icons.Filled.Block, Palette.markDanger) { vm.addNg(NgRule("id", id)) } },
                     MenuItem("名前を NG(${p.name.take(20)})", Icons.Filled.Block, Palette.markDanger) { vm.addNg(NgRule("name", p.name)) },

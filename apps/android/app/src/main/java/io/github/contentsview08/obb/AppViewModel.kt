@@ -860,6 +860,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast = when (mark) { true -> "AI NG に当たる、と印を付けました"; false -> "AI NG に当たらない、と印を付けました"; null -> "印を外しました" }
     }
 
+    /** 自分のレスの印を手で付ける・外す。sameId なら、このスレの同じ ID のレスすべて */
+    fun markOwn(page: Page.Thread, p: Post, own: Boolean, sameId: Boolean) {
+        val nos = if (sameId && p.id != null) page.index.posts.filter { it.id == p.id }.map { it.no } else listOf(p.no)
+        viewModelScope.launch {
+            db.setOwnPosts(page.summary, nos, own)
+            page.ownNos = if (own) page.ownNos + nos else page.ownNos - nos.toSet()
+            toast = if (own) "自分のレスの印を付けました" else "自分のレスの印を外しました"
+        }
+    }
+
     /** NG を足して、開いているスレに当て直す */
     fun addNg(rule: NgRule) {
         prefs.addNg(rule)

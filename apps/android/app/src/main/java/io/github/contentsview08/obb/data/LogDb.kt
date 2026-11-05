@@ -219,6 +219,34 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         }
     }
 
+    /** 自分のレスの印を手で付ける・外す(同じ ID のレスすべてのように、まとめて) */
+    suspend fun setOwnPosts(t: ThreadSummary, nos: Collection<Int>, own: Boolean) = io {
+        val db = writableDatabase
+        val now = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            for (no in nos) {
+                if (own) db.execSQL("INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES (?, ?, ?, ?)", arrayOf<Any>(t.boardUrl, t.key, no, now))
+                else db.delete("own_posts", "board_url = ? AND key = ? AND no = ?", arrayOf(t.boardUrl, t.key, no.toString()))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 自分のレスの印があるスレ(手で印を付けたスレは書き込み履歴にないので、あなた宛ての確認はこちらも見る) */
+    suspend fun ownPostThreads(): List<ThreadSummary> = io {
+        readableDatabase.rawQuery(
+            "SELECT DISTINCT t.board_url, t.key, t.title, t.post_count, t.created_at FROM own_posts o JOIN threads t ON t.board_url = o.board_url AND t.key = o.key",
+            emptyArray(),
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(ThreadSummary(c.getString(0), c.getString(1), c.getString(2), c.getInt(3), 0, if (c.isNull(4)) null else c.getLong(4)))
+            }
+        }
+    }
+
     /** 書きかけ(スレごと)。空なら消す */
     suspend fun saveDraft(t: ThreadSummary, body: String) = io {
         if (body.isBlank()) writableDatabase.delete("drafts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))

@@ -67,7 +67,7 @@ object Crawler {
         // あなた宛てのレス
         if (prefs.notifyReply) {
             var fetched = 0
-            for (t in db.postHistory().map { it.thread }.distinctBy { it.id }) {
+            for (t in (db.postHistory().map { it.thread } + db.ownPostThreads()).distinctBy { it.id }) {
                 val c = counts[t.id] ?: continue
                 if (c <= 0) continue
                 val key = "o:${t.id}"

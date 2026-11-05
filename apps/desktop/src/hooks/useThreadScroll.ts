@@ -200,19 +200,52 @@ export function useThreadScroll(o: Options) {
   widthRef.current = width
   const metrics = useRef({ fontSize: 16 })
 
+  /**
+   * 覚えた高さの控え(番号 → 高さ。覚えていなければ null)。レス一覧を作り直すたびに 1000 件の仮の高さを引くので、
+   * 文字列の鍵を作らずに済むようにする。幅が変わったら持ち直す
+   */
+  const knownHeights = useRef({ thread: '', width: -1, byNo: new Map<number, number | null>() })
+  const knownMap = () => {
+    const k = knownHeights.current
+    const thread = latest.current.threadKey
+    const w = widthRef.current
+    if (k.thread !== thread || k.width !== w) Object.assign(k, { thread, width: w, byNo: new Map() })
+    return k.byNo
+  }
+  const knownHeight = (no: number): number | undefined => {
+    const map = knownMap()
+    let h = map.get(no)
+    if (h === undefined) {
+      h = heights.get(latest.current.threadKey, widthRef.current, no) ?? null
+      map.set(no, h)
+    }
+    return h ?? undefined
+  }
+  const keepHeight = (no: number, h: number) => {
+    heights.set(latest.current.threadKey, widthRef.current, no, h)
+    knownMap().set(no, h)
+  }
+
+  /** 見積もった高さの控え。本文を 1 文字ずつ数えるので、レスごとに 1 回で済ませる(幅などが変わったら数え直す) */
+  const estimates = useRef(new WeakMap<Post, { w: number; f: number; thumbs: boolean; h: number }>())
   /** 本文から見積もった高さ(測った高さでの補正の前) */
   const rawEstimate = (p: Post): number => {
     const w = widthRef.current
     const f = metrics.current.fontSize
-    return estimatePostHeight(p, {
+    const thumbs = latest.current.showThumbnails
+    const kept = estimates.current.get(p)
+    if (kept && kept.w === w && kept.f === f && kept.thumbs === thumbs) return kept.h
+    const h = estimatePostHeight(p, {
       // 本文の左右の余白とアイコンの分を除いた幅に、全角が何文字入るか
       charsPerLine: Math.max(10, Math.floor((w - 96) / f)),
       lineHeight: f * 1.625,
       chrome: f * 2.5 + 16,
       thumbRow: 88,
       linkPreview: 88,
-      showThumbnails: latest.current.showThumbnails,
+      showThumbnails: thumbs,
     })
+    estimates.current.set(p, { w, f, thumbs, h })
+    return h
   }
   /**
    * 見積もりの補正。測ったレスの「実際の高さ − 見積もり」を覚え、その中央値を見積もりに足す。
@@ -250,7 +283,7 @@ export function useThreadScroll(o: Options) {
   const intrinsicHeight = useCallback(
     (p: Post): number => {
       const w = widthRef.current
-      const known = heights.get(latest.current.threadKey, w, p.no)
+      const known = knownHeight(p.no)
       if (known !== undefined) return known
       const c = calib.current
       const same = c.width === w
@@ -269,8 +302,8 @@ export function useThreadScroll(o: Options) {
       // まだ中身を作っていないレス(仮の高さの箱)は覚えない
       if (r.hidden || r.placeholder || r.bottom < from || r.top > to) continue
       const h = Math.round(r.bottom - r.top)
-      if (heights.get(latest.current.threadKey, w, r.no) === undefined) learn(r.no, h)
-      heights.set(latest.current.threadKey, w, r.no, h)
+      if (knownHeight(r.no) === undefined) learn(r.no, h)
+      keepHeight(r.no, h)
     }
   }
 
@@ -286,8 +319,8 @@ export function useThreadScroll(o: Options) {
       if (el.hidden || el.dataset.placeholder !== undefined) continue
       const no = Number(el.dataset.post)
       const h = Math.round(el.getBoundingClientRect().height)
-      if (heights.get(latest.current.threadKey, w, no) === undefined) learn(no, h)
-      heights.set(latest.current.threadKey, w, no, h)
+      if (knownHeight(no) === undefined) learn(no, h)
+      keepHeight(no, h)
     }
   }, [rootRef])
 

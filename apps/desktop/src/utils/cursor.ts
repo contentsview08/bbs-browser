@@ -19,6 +19,34 @@ export function isNear(item: Span, view: View): boolean {
   return item.bottom > view.top - room && item.top < view.bottom + room
 }
 
+/**
+ * 上から順に並んだ count 個のうち、posOf(i) が y より大きい最初のものの位置。なければ count。半分ずつ探す。
+ * posOf が undefined を返すものは隠れているものとして飛ばす(測らずに済むので、隠れた枠が多くても測る回数は増えない)
+ */
+export function firstAfter(count: number, posOf: (i: number) => number | undefined, y: number): number {
+  let lo = 0
+  let hi = count
+  let found = count
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    let i = mid
+    let pos = posOf(i)
+    while (pos === undefined && ++i < hi) pos = posOf(i)
+    if (pos === undefined) hi = mid
+    else if (pos > y) {
+      found = i
+      hi = mid
+    } else lo = i + 1
+  }
+  return found
+}
+
+/** 番号の順に並んだ枠の中で、その番号の枠の位置。なければ -1 */
+export function frameIndexOf(frames: readonly HTMLElement[], no: number): number {
+  const i = firstAfter(frames.length, (k) => Number(frames[k].dataset.post), no - 0.5)
+  return i < frames.length && Number(frames[i].dataset.post) === no ? i : -1
+}
+
 /** 少しでも見えているか(端の 4px は見えていないとみなす) */
 export function isSeen(item: Span, view: View): boolean {
   return item.bottom > view.top + 4 && item.top < view.bottom - 4
@@ -77,12 +105,17 @@ export function followDelta(item: Span, view: View, d: 1 | -1, margin = 0.25): n
  * 送れなかった(端だった)ら端のもの。items は送る前の位置
  */
 export function pickAfterPage(items: Span[], y: number, moved: number, dir: 1 | -1): number | undefined {
-  if (items.length === 0) return undefined
-  const edge = dir > 0 ? items.length - 1 : 0
+  return pickAfterPageAt(items.length, (i) => items[i], y, moved, dir)
+}
+
+/** pickAfterPage の、位置を測りながら選ぶ形。spanAt は送る前の位置を返す(上から順に並んでいるので、全部は測らない) */
+export function pickAfterPageAt(count: number, spanAt: (i: number) => Span, y: number, moved: number, dir: 1 | -1): number | undefined {
+  if (count === 0) return undefined
+  const edge = dir > 0 ? count - 1 : 0
   if (moved === 0) return edge
   const at = y + moved
-  const i = items.findIndex((r) => r.top <= at && at < r.bottom)
-  return i >= 0 ? i : edge
+  const i = firstAfter(count, (k) => spanAt(k).bottom, at)
+  return i < count && spanAt(i).top <= at ? i : edge
 }
 
 /** 2 回押し(Esc を素早く 2 回)とみなすか */

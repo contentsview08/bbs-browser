@@ -12,7 +12,7 @@ import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg
 import { activeRules, judgeAiNg, setOverride, trainRules, threadContextOf } from '../utils/aiNg'
 import { scoreOf as aiScoreOf, useAiNgScores } from '../hooks/useAiNg'
 import type { Judgement } from '../utils/trollModel'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react'
 import type { AttachmentRules, Post, PostActionDef, ReactionDef, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers, type PostVariant } from './PostArticle'
@@ -43,7 +43,7 @@ import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
-import { followDelta, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
+import { firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, stepCursor, type Span } from '../utils/cursor'
 import type { ScrollPosition } from '../utils/threadScroll'
 import { createKeyReader, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
@@ -323,6 +323,8 @@ function Divider({ label, self }: { label: string; self?: boolean }) {
   )
 }
 
+type ArticleProps = ComponentProps<typeof PostArticle>
+
 /** 続けて並んだあぼーんをまとめた 1 行。押すと広げる・まとめ直す */
 function NgRunRow(props: {
   run: { nos: number[]; auto: number; ai: number; rule: number }
@@ -354,6 +356,147 @@ function NgRunRow(props: {
     </article>
   )
 }
+
+/** レスの枠すべてに共通の値。どれかが変わったときだけ全部の枠を描き直す */
+interface FrameShared {
+  handlers: PostHandlers
+  onPress: (no: number) => void
+  onToggleRun: (no: number) => void
+  byNo: Map<number, Post>
+  quotesOf: (no: number) => ArticleProps['quotes']
+  grossNos?: Set<number>
+  anchorCounts: Map<number, number>
+  idCounts: Map<string, number>
+  iconCounts: Map<string, number>
+  iconFromWatchoi: boolean
+  variant: PostVariant
+  replyPreviewOf: (p: Post) => ArticleProps['replyPreview']
+  continuedFrom: (i: number) => boolean
+  isNg: (p: Post) => boolean
+  autoNg: Map<number, AutoNgReason>
+  aiMarkOf: (no: number) => ArticleProps['aiMark']
+  ngMode: ArticleProps['ngMode']
+  showThumbnails: boolean
+  showIdenticon: boolean
+  showLinkPreview: boolean
+  toolbar: ArticleProps['toolbar']
+  phrases: ArticleProps['phrases']
+  display: ArticleProps['display']
+  opId?: string
+  ownNos: Set<number>
+  replyToOwn: Set<number>
+  reactions?: { get(no: number): ArticleProps['reactions'] }
+}
+
+/**
+ * レス 1 件ぶんの枠。選んでいるレスなどは枠ごとの真偽値で受け取り、値の変わった枠だけを描き直す
+ * (J・K や押したときに動くのは 2〜3 枠で、1000 枠を作り直すと押し続けで詰まる)
+ */
+const PostFrame = memo(function PostFrame(props: {
+  post: Post
+  index: number
+  shared: FrameShared
+  /** 中身を作る範囲にあるか(外なら仮の高さの箱) */
+  rendered: boolean
+  /** 仮の高さ */
+  height: number
+  firstUnread: boolean
+  /** 「ここから未読」の線を出すか */
+  unreadLine: boolean
+  /** 新着として順に出すときの遅れ(ms)。新着でなければ undefined */
+  enterDelay?: number
+  /** 選んでいるレスの印を出すか */
+  cursorMark: boolean
+  /** 選んでいるレスと同じ ID か */
+  sameIdTint: boolean
+  /** 枠ごと隠すか(絞り込み・まとめたあぼーんの 2 件目以降) */
+  frameHidden: boolean
+  /** 中身を出すか */
+  showArticle: boolean
+  /** あぼーんのまとまりの先頭なら、そのまとまり */
+  runHead?: { nos: number[]; auto: number; ai: number; rule: number }
+  runOpen: boolean
+}) {
+  const { post: p, index: i, shared: s, rendered, height, firstUnread, enterDelay, runHead } = props
+  return (
+    <div
+      className={`post-cv relative ${enterDelay !== undefined ? 'post-enter' : ''}`}
+      // スマホには「選んでいるレス」がない(押したレスに印を付けない)
+      onPointerDown={isMobile ? undefined : () => s.onPress(p.no)}
+      style={
+        {
+          // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
+          containIntrinsicSize: `auto ${height}px`,
+          // まだ中身を作っていないレスは、仮の高さの箱にしておく(画面に入っても高さがつぶれないように)
+          ...(!rendered && { minHeight: height }),
+          ...(enterDelay !== undefined && { '--enter-delay': `${enterDelay}ms` }),
+        } as CSSProperties
+      }
+      data-post={p.no}
+      data-placeholder={rendered ? undefined : ''}
+      hidden={props.frameHidden}>
+      {props.unreadLine && <Divider label="ここから未読" self />}
+      {/* 前のレスから 1 時間以上空いた所・日付が変わった所に、細い区切り(スマホのアプリ・hono-bbs の web と同じ) */}
+      {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
+      {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
+      {props.sameIdTint && (
+        <span
+          className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)] opacity-50"
+          style={{ background: 'var(--c-cursor-tint)' }}
+        />
+      )}
+      {props.cursorMark && (
+        <>
+          {/* うっすら色を敷いて、どのレスか目に入るようにする。中身(本文・吹き出し)の後ろに敷く(上に重ねると、吹き出しの文字まで色がかぶる) */}
+          <span
+            className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)]"
+            style={{ background: 'var(--c-cursor-tint)' }}
+          />
+          <span
+            className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none z-[1]"
+            style={{ left: 'var(--card-radius)', right: 'var(--card-radius)' }}
+          />
+        </>
+      )}
+      {runHead && (
+        <NgRunRow run={runHead} first={p.ref ?? p.no} last={s.byNo.get(runHead.nos.at(-1)!)} open={props.runOpen} onToggle={() => s.onToggleRun(p.no)} />
+      )}
+      {props.showArticle && (
+        <PostArticle
+          post={p}
+          reactions={s.reactions?.get(p.ref ?? p.no)}
+          quotes={s.quotesOf(p.no)}
+          blurMedia={s.grossNos?.has(p.no)}
+          anchorCount={s.anchorCounts.get(p.no) ?? 0}
+          idCount={p.id ? (s.idCounts.get(p.id) ?? 1) : 0}
+          iconCount={s.iconCounts.get(iconKeyOf(p, s.iconFromWatchoi) ?? '') ?? 0}
+          showTopDivider={i > 0 && !firstUnread && (s.variant === 'card' || s.variant === 'matome')}
+          variant={s.variant}
+          // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
+          continued={
+            ((s.anchorCounts.get(p.no) ?? 0) === 0 || (s.variant === 'line' && s.ownNos.has(p.no))) && (s.variant === 'line' || (s.variant === 'discord' && !s.replyPreviewOf(p))) && !firstUnread && s.continuedFrom(i)
+          }
+          replyPreview={s.variant === 'discord' || s.variant === 'line' ? s.replyPreviewOf(p) : undefined}
+          ng={s.isNg(p)}
+          autoNg={s.autoNg.get(p.no)}
+          aiMark={s.aiMarkOf(p.no)}
+          ngMode={s.ngMode}
+          showThumbnails={s.showThumbnails}
+          showIdenticon={s.showIdenticon}
+          showLinkPreview={s.showLinkPreview}
+          display={s.display}
+          toolbar={s.toolbar}
+          phrases={s.phrases}
+          isOp={s.opId !== undefined && p.id === s.opId}
+          flash={enterDelay !== undefined}
+          isOwn={s.ownNos.has(p.no)}
+          isReplyToOwn={s.replyToOwn.has(p.no)}
+          handlers={s.handlers}
+        />
+      )}
+    </div>
+  )
+})
 
 export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, onRead } = props
@@ -1222,15 +1365,21 @@ export default function ThreadView(props: Props) {
     const a = document.activeElement
     if (a instanceof HTMLElement && ref.current?.contains(a)) a.blur()
   }
-  /** 見えているレスの枠(ヘッダーの下から画面の下まで)。上から順 */
+  /**
+   * 隠れていないレスの枠と、見えているもの(ヘッダーの下から画面の下まで)。上から順。
+   * 枠は上から順に並んでいるので、見えているものは半分ずつ探す(全部の枠を測ると、キーを押すたびに 1000 回測る)
+   */
   const visibleFrames = () => {
     const root = ref.current
-    if (!root) return { root: undefined, frames: [] as HTMLElement[], seen: [] as HTMLElement[], viewTop: 0, box: undefined }
+    if (!root) return { root: undefined, frames: [] as HTMLElement[], seen: [] as HTMLElement[], seenFrom: 0, viewTop: 0, box: undefined }
     const box = root.getBoundingClientRect()
     const viewTop = box.top + (headerRef.current?.offsetHeight ?? 0)
     const frames = [...root.querySelectorAll<HTMLElement>('.post-cv')].filter((f) => !f.hidden)
-    const seen = frames.filter((f) => isSeen(spanOf(f), { top: viewTop, bottom: box.bottom }))
-    return { root, frames, seen, viewTop, box }
+    const view = { top: viewTop, bottom: box.bottom }
+    const seenFrom = firstAfter(frames.length, (i) => frames[i].getBoundingClientRect().bottom, viewTop + 4)
+    const seen: HTMLElement[] = []
+    for (let i = seenFrom; i < frames.length && isSeen(spanOf(frames[i]), view); i++) seen.push(frames[i])
+    return { root, frames, seen, seenFrom, viewTop, box }
   }
   /** 先頭へ・末尾へ・未読へ 飛んだあとに、選ぶレスを飛んだ先に合わせる(描き終わってから測る) */
   const selectAfterJump = (pick: 'first' | 'last' | number) =>
@@ -1252,20 +1401,19 @@ export default function ThreadView(props: Props) {
     releaseFocus()
     setCursorHidden(false)
     const { frames, seen, viewTop } = visibleFrames()
-    const cur = frames.find((f) => Number(f.dataset.post) === cursorNo)
+    const cur = cursorNo === undefined ? undefined : frames[frameIndexOf(frames, cursorNo)]
     const y = (cur && seen.includes(cur) ? Math.max(cur.getBoundingClientRect().top, viewTop) : viewTop) + 1
-    // 送る前の位置で測る(page はなめらかに送り始めるだけなので、ここではまだ動いていない)
-    const spans = frames.map(spanOf)
+    // page はなめらかに送り始めるだけなので、ここではまだ動いていない(送る前の位置を測れる)
     const moved = page(dir, half)
-    const i = pickAfterPage(spans, y, moved, dir)
+    const i = pickAfterPageAt(frames.length, (k) => spanOf(frames[k]), y, moved, dir)
     if (i !== undefined) setCursorNo(Number(frames[i].dataset.post))
   }
   const moveCursor = (d: 1 | -1) => {
     releaseFocus()
-    const { root, frames, seen, viewTop, box } = visibleFrames()
+    const { root, frames, seen, seenFrom, viewTop, box } = visibleFrames()
     if (!root || !box || frames.length === 0) return
     const view = { top: viewTop, bottom: box.bottom }
-    const i = frames.findIndex((f) => Number(f.dataset.post) === cursorNo)
+    const i = cursorNo === undefined ? -1 : frameIndexOf(frames, cursorNo)
     // まだ選んでいないとき(新着が届いた・開き直した直後)に J を押したら、「ここから未読」のレスから始める(新着から読む)。
     // 見えていなくても、まだ画面より下にある(一番下まで読んでいて、更新で下に届いた)ならそこへ送る
     const unreadAt =
@@ -1279,7 +1427,7 @@ export default function ThreadView(props: Props) {
       onScreen: i >= 0 && isNear(spanOf(frames[i]), view),
       hidden: cursorHidden,
       d,
-      seen: seen.map((f) => frames.indexOf(f)),
+      seen: seen.map((_, k) => seenFrom + k),
       startAt: unreadAt >= 0 ? unreadAt : undefined,
     })
     setCursorHidden(false)
@@ -2012,107 +2160,78 @@ export default function ThreadView(props: Props) {
       </div>
   )
 
+  const pressPost = useCallback((no: number) => {
+    setCursorNo(no)
+    setCursorHidden(false)
+  }, [])
+  const frameShared = useMemo<FrameShared>(
+    () => ({
+      handlers: mainHandlers,
+      onPress: pressPost,
+      onToggleRun: toggleRun,
+      byNo,
+      quotesOf,
+      grossNos,
+      anchorCounts,
+      idCounts,
+      iconCounts,
+      iconFromWatchoi: settings.iconFromWatchoi,
+      variant,
+      replyPreviewOf,
+      continuedFrom,
+      isNg,
+      autoNg,
+      aiMarkOf,
+      ngMode: settings.ngMode,
+      showThumbnails: settings.thumbLoad !== 'never',
+      showIdenticon: settings.idStyle === 'icon',
+      showLinkPreview: settings.showLinkPreview,
+      toolbar: settings.postToolbar,
+      phrases: settings.quickPhrases,
+      display,
+      opId,
+      ownNos,
+      replyToOwn,
+      reactions: props.reactions,
+    }),
+    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
+  )
   /**
    * レスの枠(1000 件ぶん)。読み込み中の印・既読・ポップアップの開閉で ThreadView が描き直されても作り直さない。
-   * 変わるものだけを依存に並べる(見積もりの高さは intrinsicHeight の関数が変わる)
+   * 変わるものだけを依存に並べる(見積もりの高さは intrinsicHeight の関数が変わる)。
+   * 作り直しても、値の変わらない枠は PostFrame の memo で描き直さない
    */
   const postFrames = useMemo(
     () => log.posts.map((p, i) => {
-                const firstUnread = p.no === unreadFrom && unreadFrom > 1
-                const enterDelay = flashNos.get(p.no)
-                // 続けて並んだあぼーん: まとめているあいだは、先頭に 1 行だけ出し、ほかは隠す
-                const runFirst = ngRuns.firstOf.get(p.no)
-                const run = runFirst === undefined ? undefined : ngRuns.runs.get(runFirst)
-                const runClosed = run !== undefined && !openRuns.has(runFirst!)
-                return (
-                  <div
-                    key={p.no}
-                    className={`post-cv relative ${enterDelay !== undefined ? 'post-enter' : ''}`}
-                    // スマホには「選んでいるレス」がない(押したレスに印を付けない)
-                    onPointerDown={
-                      isMobile
-                        ? undefined
-                        : () => {
-                            setCursorNo(p.no)
-                            setCursorHidden(false)
-                          }
-                    }
-                    style={
-                      {
-                        // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
-                        containIntrinsicSize: `auto ${intrinsicHeight(p)}px`,
-                        // まだ中身を作っていないレスは、仮の高さの箱にしておく(画面に入っても高さがつぶれないように)
-                        ...(!isRendered(i) && { minHeight: intrinsicHeight(p) }),
-                        ...(enterDelay !== undefined && { '--enter-delay': `${enterDelay}ms` }),
-                      } as CSSProperties
-                    }
-                    data-post={p.no}
-                    data-placeholder={isRendered(i) ? undefined : ''}
-                    hidden={(visibleNos !== undefined && !visibleNos.has(p.no)) || (runClosed && p.no !== runFirst)}>
-                    {firstUnread && !visibleNos && <Divider label="ここから未読" self />}
-                    {/* 前のレスから 1 時間以上空いた所・日付が変わった所に、細い区切り(スマホのアプリ・hono-bbs の web と同じ) */}
-                    {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
-                    {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
-                    {!isMobile && cursorId !== undefined && p.id === cursorId && p.no !== cursorNo && (
-                      <span
-                        className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)] opacity-50"
-                        style={{ background: 'var(--c-cursor-tint)' }}
-                      />
-                    )}
-                    {!isMobile && keysOn && !cursorHidden && p.no === cursorNo && (
-                      <>
-                        {/* うっすら色を敷いて、どのレスか目に入るようにする。中身(本文・吹き出し)の後ろに敷く(上に重ねると、吹き出しの文字まで色がかぶる) */}
-                        <span
-                          className="absolute inset-0 pointer-events-none -z-[1] rounded-[var(--card-radius)]"
-                          style={{ background: 'var(--c-cursor-tint)' }}
-                        />
-                        <span
-                          className="absolute bottom-0 h-[2px] bg-c-accent pointer-events-none z-[1]"
-                          style={{ left: 'var(--card-radius)', right: 'var(--card-radius)' }}
-                        />
-                      </>
-                    )}
-                    {run && runFirst === p.no && (
-                      <NgRunRow run={run} first={p.ref ?? p.no} last={byNo.get(run.nos.at(-1)!)} open={!runClosed} onToggle={() => toggleRun(p.no)} />
-                    )}
-                    {isRendered(i) && !runClosed && (visibleNos === undefined || visibleNos.has(p.no)) && (
-                      <PostArticle
-                        post={p}
-                        reactions={props.reactions?.get(p.ref ?? p.no)}
-                        quotes={quotesOf(p.no)}
-                        blurMedia={grossNos?.has(p.no)}
-                        anchorCount={anchorCounts.get(p.no) ?? 0}
-                        idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-                        iconCount={iconCounts.get(iconKeyOf(p, settings.iconFromWatchoi) ?? '') ?? 0}
-                        showTopDivider={i > 0 && !firstUnread && (variant === 'card' || variant === 'matome')}
-                        variant={variant}
-                        // 返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため)
-                        continued={
-                          ((anchorCounts.get(p.no) ?? 0) === 0 || (variant === 'line' && ownNos.has(p.no))) && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
-                        }
-                        replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
-                        ng={isNg(p)}
-              autoNg={autoNg.get(p.no)}
-              aiMark={aiMarkOf(p.no)}
-                        ngMode={settings.ngMode}
-                        showThumbnails={settings.thumbLoad !== 'never'}
-                        showIdenticon={settings.idStyle === 'icon'}
-                        showLinkPreview={settings.showLinkPreview}
-                        display={display}
-                        toolbar={settings.postToolbar}
-                        phrases={settings.quickPhrases}
-                        isOp={opId !== undefined && p.id === opId}
-                        flash={flashNos.has(p.no)}
-                        isOwn={ownNos.has(p.no)}
-                        isReplyToOwn={replyToOwn.has(p.no)}
-                        handlers={mainHandlers}
-                      />
-                    )}
-                  </div>
-                )
-              }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, mainHandlers, props.reactions, toggleRun],
+      const firstUnread = p.no === unreadFrom && unreadFrom > 1
+      // 続けて並んだあぼーん: まとめているあいだは、先頭に 1 行だけ出し、ほかは隠す
+      const runFirst = ngRuns.firstOf.get(p.no)
+      const run = runFirst === undefined ? undefined : ngRuns.runs.get(runFirst)
+      const runClosed = run !== undefined && !openRuns.has(runFirst!)
+      const filteredIn = visibleNos === undefined || visibleNos.has(p.no)
+      const rendered = isRendered(i)
+      return (
+        <PostFrame
+          key={p.no}
+          post={p}
+          index={i}
+          shared={frameShared}
+          rendered={rendered}
+          height={intrinsicHeight(p)}
+          firstUnread={firstUnread}
+          unreadLine={firstUnread && !visibleNos}
+          enterDelay={flashNos.get(p.no)}
+          // スマホには「選んでいるレス」がない(押したレスに印を付けない)
+          cursorMark={!isMobile && keysOn && !cursorHidden && p.no === cursorNo}
+          sameIdTint={!isMobile && cursorId !== undefined && p.id === cursorId && p.no !== cursorNo}
+          frameHidden={!filteredIn || (runClosed && p.no !== runFirst)}
+          showArticle={rendered && !runClosed && filteredIn}
+          runHead={runFirst === p.no ? run : undefined}
+          runOpen={!runClosed}
+        />
+      )
+    }),
+    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared],
   )
 
   return (

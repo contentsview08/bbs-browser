@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { followDelta, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, stepCursor } from '../src/utils/cursor'
+import { firstAfter, followDelta, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, stepCursor } from '../src/utils/cursor'
 
 // 画面: ヘッダーの下 100 から 500 まで(高さ 400)
 const view = { top: 100, bottom: 500 }
@@ -73,6 +73,47 @@ describe('pickAfterPage: 1 画面送ったあとに選ぶもの', () => {
   })
   it('並びの外に出たら端のもの', () => {
     expect(pickAfterPage(items, 110, 5000, 1)).toBe(19)
+  })
+})
+
+describe('pickAfterPageAt: 測りながら選ぶ形', () => {
+  it('並びのすき間に当たったら端のもの(全部を見たときと同じ)', () => {
+    const gaps = [{ top: 0, bottom: 40 }, { top: 50, bottom: 90 }, { top: 100, bottom: 140 }]
+    expect(pickAfterPage(gaps, 0, 45, 1)).toBe(2)
+    expect(pickAfterPageAt(3, (i) => gaps[i], 0, 45, -1)).toBe(0)
+  })
+  it('全部は測らない', () => {
+    const items = rows(1000)
+    let measured = 0
+    const i = pickAfterPageAt(1000, (k) => { measured++; return items[k] }, 110, 400, 1)
+    expect(i).toBe(10)
+    expect(measured).toBeLessThan(25)
+  })
+})
+
+describe('firstAfter: 上から順の並びを半分ずつ探す', () => {
+  const pos = Array.from({ length: 100 }, (_, i) => i * 10)
+  it('y より大きい最初のもの。なければ count', () => {
+    expect(firstAfter(100, (i) => pos[i], -1)).toBe(0)
+    expect(firstAfter(100, (i) => pos[i], 0)).toBe(1)
+    expect(firstAfter(100, (i) => pos[i], 455)).toBe(46)
+    expect(firstAfter(100, (i) => pos[i], 990)).toBe(100)
+    expect(firstAfter(0, () => 0, 0)).toBe(0)
+  })
+  it('隠れたものを飛ばす', () => {
+    const shown = new Set([3, 40, 41, 90])
+    const at = (i: number) => (shown.has(i) ? pos[i] : undefined)
+    expect(firstAfter(100, at, 0)).toBe(3)
+    expect(firstAfter(100, at, 30)).toBe(40)
+    expect(firstAfter(100, at, 400)).toBe(41)
+    expect(firstAfter(100, at, 410)).toBe(90)
+    expect(firstAfter(100, at, 900)).toBe(100)
+    expect(firstAfter(100, () => undefined, 0)).toBe(100)
+  })
+  it('全部隠れていなくても、測る回数は少ない', () => {
+    let measured = 0
+    expect(firstAfter(1000, (i) => { measured++; return i }, 700)).toBe(701)
+    expect(measured).toBeLessThan(15)
   })
 })
 

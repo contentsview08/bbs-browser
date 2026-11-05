@@ -213,7 +213,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const sage = mail.trim().toLowerCase() === 'sage'
 
   /** 書き込み確認で承諾したときも、ふつうの書き込みと同じく結果を出し、成功したら本文を空にする */
-  const confirm = async (c: PostConfirm) => {
+  const sendConfirm = async (c: PostConfirm) => {
     setSending(true)
     setResult(undefined)
     try {
@@ -350,7 +350,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
         {/* 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す。出ている間はフッターを隠さない(data-post-result) */}
         {result && (
           <div data-post-result className="relative mx-2 mt-2 px-3 pt-2 pr-8 max-h-40 overflow-y-auto rounded-xl bg-c-surface border border-c-border shadow-lg">
-            <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />
+            <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void sendConfirm(c)} />
             <button type="button" onClick={() => setResult(undefined)} className="absolute top-1.5 right-1.5 p-1 text-c-text-muted" title="閉じる">
               <span className="material-symbols-outlined text-base leading-none">close</span>
             </button>
@@ -481,7 +481,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           <span className="flex-1">{media.notice}</span>
         </p>
       )}
-      {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void confirm(c)} />}
+      {result && <PostResultBox result={result} onOpenUrl={props.onOpenUrl} onConfirm={(c) => void sendConfirm(c)} />}
       {/* 書き込みに付けたファイル(ふたば) */}
       {media.attachedView && <div className="mb-2">{media.attachedView}</div>}
       {phraseBar && <div className="mb-2 flex-shrink-0">{phraseBar}</div>}

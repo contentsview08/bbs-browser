@@ -214,7 +214,7 @@ export interface AppSettings {
   threadHeaderHeight: number
   listHeaderHeight: number
   listFooterHeight: number
-  /** Shift+Delete でログを消す前に確かめる */
+  /** ログを消す前に確かめる */
   confirmDeleteLog: boolean
   /** 書き込みの削除キー(ふたば)。初めて書き込むときに作り、自分の書き込みを消すときに使う。空ならまだない */
   postDeleteKey: string

@@ -945,6 +945,7 @@ export default function ThreadView(props: Props) {
     rootRef: ref,
     listRef,
     headerRef,
+    filtering: visibleNos !== undefined,
     threadKey: props.threadKey,
     log,
     byNo,
@@ -1000,8 +1001,13 @@ export default function ThreadView(props: Props) {
         first = i
       }
       hint = first
+      // 隠れた枠は高さ 0 で top も 0 なので、飛ばして測る(止まらずに全件まで広がっていた)
       let last = first
-      while (last < n - 1 && frames[last + 1].getBoundingClientRect().top <= box.bottom) last++
+      for (let i = first + 1; i < n; i++) {
+        if (frames[i].hidden) continue
+        if (frames[i].getBoundingClientRect().top > box.bottom) break
+        last = i
+      }
       const w = renderWinRef.current
       const hi = w.hi === Infinity ? n : w.hi
       const nearTop = w.lo > 0 && first < w.lo + WIN_MARGIN
@@ -1025,6 +1031,10 @@ export default function ThreadView(props: Props) {
       if (raf) cancelAnimationFrame(raf)
     }
   }, [rememberRendered])
+  // 絞り込みが変わっても位置が同じなら scroll は来ないので、当たったレスの中身を作るよう範囲を見直す
+  useEffect(() => {
+    ref.current?.dispatchEvent(new Event('scroll'))
+  }, [visibleNos])
 
   // スレが終わったら(dat 落ち・上限(2ch は 1000)到達)、一番下に次スレの候補を出す。ヘッダーのボタンでも出せる
   const ended = log.status === 'archived' || (props.maxPosts !== undefined && log.posts.length >= props.maxPosts)
@@ -2065,7 +2075,7 @@ export default function ThreadView(props: Props) {
                     {run && runFirst === p.no && (
                       <NgRunRow run={run} first={p.ref ?? p.no} last={byNo.get(run.nos.at(-1)!)} open={!runClosed} onToggle={() => toggleRun(p.no)} />
                     )}
-                    {isRendered(i) && !runClosed && (
+                    {isRendered(i) && !runClosed && (visibleNos === undefined || visibleNos.has(p.no)) && (
                       <PostArticle
                         post={p}
                         reactions={props.reactions?.get(p.ref ?? p.no)}

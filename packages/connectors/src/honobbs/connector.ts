@@ -89,9 +89,24 @@ let savedCredential: { user: string; password: string } | undefined
 /** サイト(origin)ごとのログインのセッション */
 const sessions = new Map<string, { sessionId: string; expiresAt: number }>()
 
+/**
+ * パスワードを送ってよいサイト。hono-bbs の板は URL の形だけで判定するので、確かめないと、形を合わせただけの別サイトへパスワードが渡る。
+ * API の場所(<meta name="bbs-api">)も相手のページが決めるので、こちらも確かめる
+ */
+const ACCOUNT_HOST = 'red-edge.net'
+export function isAccountSite(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' && (u.hostname === ACCOUNT_HOST || u.hostname.endsWith(`.${ACCOUNT_HOST}`))
+  } catch {
+    return false
+  }
+}
+
 /** そのサイトにログインしてセッションをもらう(POST /auth/login) */
 async function loginTo(origin: string, credential: { user: string; password: string }, ctx: ConnectorContext): Promise<LoginResult> {
   const api = await apiBaseOf(origin, ctx)
+  if (!isAccountSite(origin) || !isAccountSite(api)) return { ok: false, message: `このサイトにはパスワードを送りません(${origin})` }
   const res = await ctx.http.post(`${api}/auth/login`, JSON.stringify({ id: credential.user, password: credential.password }), {
     headers: { 'Content-Type': 'application/json' },
     sameCookiesAsGet: true,
@@ -107,7 +122,7 @@ async function loginTo(origin: string, credential: { user: string; password: str
 
 /** 書き込みに付ける Authorization。アカウントを使う書き込みで、ログインしてあれば(なければここでログイン) */
 async function authHeader(origin: string, input: PostInput, ctx: ConnectorContext): Promise<Record<string, string>> {
-  if (!input.accounts?.includes(ACCOUNT_ID) || !savedCredential) return {}
+  if (!input.accounts?.includes(ACCOUNT_ID) || !savedCredential || !isAccountSite(origin)) return {}
   const s = sessions.get(origin)
   if (!s || s.expiresAt - Date.now() < 60_000) {
     const r = await loginTo(origin, savedCredential, ctx)
@@ -352,14 +367,14 @@ export const honoBbsConnector: Connector = {
   // ── アカウント(ユーザー ID とパスワード。docs/endpoints/auth-login.md) ──
   // 5ch の BE と違って Cookie ではなく、ログインでもらったセッション ID を Authorization: Bearer で書き込みに付ける。
   // サイト(origin)はいくつもあり得るので、ログインは「サイトごと」に、書き込みのときに要るぶんだけ行う
-  accounts: [{ id: ACCOUNT_ID, name: 'アカウント', site: 'hono-bbs(red-edge.net など)', hosts: ['*'], userLabel: 'ユーザー ID' }],
+  accounts: [{ id: ACCOUNT_ID, name: 'アカウント', site: 'red-edge.net', hosts: [ACCOUNT_HOST], userLabel: 'ユーザー ID' }],
 
   async login(accountId, credential, ctx) {
     if (accountId !== ACCOUNT_ID) return { ok: false, message: `知らないアカウントです(${accountId})` }
     savedCredential = credential
     sessions.clear()
     // もう分かっているサイト(板を開いたことがある)には、いまログインして確かめる
-    const origins = [...apiBases.keys()]
+    const origins = [...apiBases.keys()].filter(isAccountSite)
     if (origins.length === 0) return { ok: true, message: '保存しました。この掲示板に書き込むときにログインします' }
     const results = await Promise.all(origins.map((o) => loginTo(o, credential, ctx).catch((e: unknown) => ({ ok: false, message: e instanceof Error ? e.message : String(e) }))))
     const ng = results.find((r) => !r.ok)

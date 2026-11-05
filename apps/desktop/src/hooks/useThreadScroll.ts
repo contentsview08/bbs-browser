@@ -161,6 +161,8 @@ interface Options {
   showThumbnails: boolean
   /** 通知などから指定されたレスへ飛ぶ。seq が変わったときだけ飛ぶ */
   jumpTo?: { no: number; seq: number }
+  /** 絞り込み・検索で一部のレスだけを出しているか */
+  filtering?: boolean
 }
 
 export function useThreadScroll(o: Options) {
@@ -298,7 +300,7 @@ export function useThreadScroll(o: Options) {
   const scrollToPost = useCallback(
     (no: number) => {
       const root = rootRef.current
-      const el = root?.querySelector<HTMLElement>(`[data-no="${no}"]`)
+      const el = root?.querySelector<HTMLElement>(`[data-post="${no}"]`)
       if (!root || !el) return
       pinScroll(root, () => root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - headerOffset() - 8)
     },
@@ -424,7 +426,8 @@ export function useThreadScroll(o: Options) {
       rects,
       viewTop,
       viewBottom: box.bottom,
-      atBottom: atBottom.current,
+      // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
+      atBottom: atBottom.current && !latest.current.filtering,
       lastNo: latest.current.log.posts.at(-1)?.no ?? 0,
     })
     // 描かれているのは画面とその上下半画面ほど(content-visibility の範囲)なので、そこだけ覚える

@@ -57,7 +57,7 @@ fun parseBbsMenuHtml(html: String): List<Board> {
         val c = category
         if (c != null && isBoardUrl(url)) out += Board(url, decodeEntities(m.groupValues[3].trim()), c)
     }
-    return out
+    return out.distinctBy { it.url }
 }
 
 /** 5ch の bbsmenu.json */
@@ -73,7 +73,7 @@ fun parseBbsMenuJson(text: String): List<Board> {
             if (isBoardUrl(url)) out += Board(url, b.optString("board_name"), b.optString("category_name").ifEmpty { null })
         }
     }
-    return out
+    return out.distinctBy { it.url }
 }
 
 private val SUBJECT_LINE = Regex("^(\\d+)\\.(?:dat<>|cgi,)(.*)\\((\\d+)\\)\\s*$")
@@ -92,10 +92,13 @@ private fun isAnnouncementKey(key: String, now: Long) = key.length == 10 && key.
 fun parseSubjectTxt(text: String, boardUrl: String, @Suppress("UNUSED_PARAMETER") withAuthorId: Boolean): List<ThreadSummary> {
     val now = System.currentTimeMillis()
     val out = ArrayList<ThreadSummary>()
+    val seen = HashSet<String>()
     for (raw in text.split('\n')) {
         val m = SUBJECT_LINE.find(raw.trimEnd()) ?: continue
         val (title, authorId) = splitAuthorId(decodeEntities(m.groupValues[2].trim()))
         val key = m.groupValues[1]
+        // 同じ番号が 2 行あると、一覧のキーが重なって落ちる
+        if (!seen.add(key)) continue
         out += ThreadSummary(boardUrl, key, title, m.groupValues[3].toInt(), out.size, createdAtOf(key, now), authorId, isAnnouncementKey(key, now))
     }
     return out

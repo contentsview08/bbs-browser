@@ -9,14 +9,24 @@ import type { ConnectorContext, HttpRequestOptions, HttpResponse } from '@bbs-br
 // 2ch 互換の板は専ブラに Monazilla の UA を求める慣習がある
 const USER_AGENT = 'Monazilla/1.00 (bbs-browser/0.1.0)'
 
+const READ_TIMEOUT_MS = 30_000
+const UPLOAD_TIMEOUT_MS = 180_000
+
 async function request(url: string, init: RequestInit, opts?: HttpRequestOptions): Promise<HttpResponse> {
   // ファイルを付けた multipart の本文(バイト列)も、そのまま送る
-  const res = await fetch(url, { ...init, headers: { 'User-Agent': USER_AGENT, ...opts?.headers } })
-  const headers: Record<string, string> = {}
-  res.headers.forEach((value, key) => {
-    headers[key.toLowerCase()] = value
-  })
-  return { status: res.status, headers, body: new Uint8Array(await res.arrayBuffer()) }
+  // 返事のないサーバーで、更新や書き込みが止まったままにならないように。ファイルを送るときは長めに待つ
+  const limit = init.body ? UPLOAD_TIMEOUT_MS : READ_TIMEOUT_MS
+  try {
+    const res = await fetch(url, { ...init, headers: { 'User-Agent': USER_AGENT, ...opts?.headers }, signal: AbortSignal.timeout(limit) })
+    const headers: Record<string, string> = {}
+    res.headers.forEach((value, key) => {
+      headers[key.toLowerCase()] = value
+    })
+    return { status: res.status, headers, body: new Uint8Array(await res.arrayBuffer()) }
+  } catch (e) {
+    if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw new Error(`サーバーから返事がありません(${limit / 1000} 秒)`)
+    throw e
+  }
 }
 
 /**

@@ -211,7 +211,9 @@ class ThreadScroller(
         val rest = if (lastItem != null) (lastItem.offset + lastItem.size - end).toFloat() else Float.MAX_VALUE
         ctl.atBottom = !state.canScrollForward || rest < bottomPx
         var last = items.last().key as Int
-        if (ctl.atBottom) last = maxOf(last, ctl.page.index.posts.lastOrNull()?.no ?: 0)
+        // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
+        val filtering = ctl.page.filter != null || (ctl.page.searching && ctl.page.query.isNotBlank())
+        if (ctl.atBottom && !filtering) last = maxOf(last, ctl.page.index.posts.lastOrNull()?.no ?: 0)
         val top = items.firstOrNull { it.offset + it.size > 0 }
         return last to top?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
     }

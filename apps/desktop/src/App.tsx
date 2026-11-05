@@ -256,7 +256,7 @@ export default function App() {
   const historyCache = useRef<HistoryEntry[] | undefined>(undefined)
   /** 閲覧履歴を DB から読み、控えも新しくする */
   const loadHistory = async (s: LogStore) => {
-    const list = await s.history()
+    const list = (await s.history()).filter((h) => findConnector(h.thread.connectorId))
     historyCache.current = list
     return list
   }
@@ -343,7 +343,7 @@ export default function App() {
     )
   }
   /** Shift+Delete で消そうとしているタブ(確かめるダイアログを出している間) */
-  const [deleteConfirm, setDeleteConfirm] = useState<string[]>()
+  const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; extra: ThreadSummary[]; stayOnList?: boolean; after?: () => void }>()
   // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
   const narrow = useNarrow()
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
@@ -528,8 +528,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, settingsLoaded])
 
+  const loadingCount = useRef<Partial<Record<Loading, number>>>({})
   const run = async (kind: Loading | null, fn: () => Promise<void>) => {
-    if (kind) setLoading((s) => new Set(s).add(kind))
+    if (kind) {
+      loadingCount.current[kind] = (loadingCount.current[kind] ?? 0) + 1
+      setLoading((s) => new Set(s).add(kind))
+    }
     setError(undefined)
     if (kind === 'threads') setListError(undefined)
     try {
@@ -539,7 +543,8 @@ export default function App() {
       // スレ一覧が読めなかったときは、一覧の所にも取り直しのボタンと一緒に出す
       if (kind === 'threads') setListError(loadErrorText(e))
     } finally {
-      if (kind)
+      // 同じ種類の読み込みが重なっていたら、全部終わるまで印を残す
+      if (kind && --loadingCount.current[kind]! <= 0)
         setLoading((s) => {
           const next = new Set(s)
           next.delete(kind)
@@ -679,10 +684,13 @@ export default function App() {
     })
   }
 
+  /** いちばん新しい openBoard の番号(古い板の遅い応答で、いま開いている板を上書きしない) */
+  const boardSeq = useRef(0)
   /** 板のスレ一覧を開く。record が false(一覧の更新・戻る/進む)なら、戻る・進むの履歴には覚えない */
   const openBoard = (b: Board, record = true) =>
     run('threads', async () => {
       if (!store) return
+      const seq = ++boardSeq.current
       // 1 画面のとき、選んだ板のスレ一覧を見せる
       updateView((s) => showList(s, record ? listEntry({ kind: 'board', board: b }) : undefined))
       if (record) setFocusPane('list')
@@ -705,8 +713,12 @@ export default function App() {
       // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
-      const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }), store.getThreadStates(b.url)])
-      if (listOrderRef.current !== order) return // 待っているあいだに並びを変えた(そちらの取り直しを使う)
+      const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }), store.getThreadStates(b.url)]).catch((e: unknown) => {
+        if (seq === boardSeq.current) throw e
+        return [undefined, undefined] as const
+      })
+      // 待っているあいだに別の板を開いた・並びを変えた(そちらを使う)
+      if (!list || !st || seq !== boardSeq.current || listOrderRef.current !== order) return
       rememberList(b.url, list)
       setThreads(list)
       setListOrder(order)
@@ -1556,12 +1568,14 @@ export default function App() {
     }
   }
   /** Shift+Delete: 確かめてから(設定で確かめないことにしていれば、すぐ)ログを消して閉じる */
-  const confirmDeleteLogs = (ids: string[]) => {
+  /** ログは dat 落ちすると取り直せないので、どの入口からでも消す前に確かめる */
+  const confirmDeleteLogs = (ids: string[], extra: ThreadSummary[] = [], opts?: { stayOnList?: boolean; after?: () => void }) => {
     if (!settings.confirmDeleteLog) {
       setSelectedTabs(new Set())
-      return void deleteLogs(ids)
+      void deleteLogs(ids, extra, opts?.stayOnList)
+      return opts?.after?.()
     }
-    setDeleteConfirm(ids)
+    setDeleteConfirm({ ids, extra, ...opts })
   }
   const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) })
   keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) }
@@ -1652,7 +1666,8 @@ export default function App() {
   useEffect(() => {
     if (restored.current || !settingsLoaded || !store || !externalReady) return
     restored.current = true
-    const ts = settings.openTabs.map((s) => newTab(fromSaved(s)))
+    // いまは使えないコネクタのスレは戻さない(描画の中で例外になり、起動できなくなる)
+    const ts = settings.openTabs.filter((s) => findConnector(s.connectorId)).map((s) => newTab(fromSaved(s)))
     setTabs(ts)
     const active = ts.find((t) => t.id === settings.activeTab) ?? ts[0]
     if (active) {
@@ -1719,7 +1734,8 @@ export default function App() {
     if (meta?.defaultName === undefined && input.name !== settings.postName) updateSetting('postName', input.name)
     if (meta?.defaultMail === undefined && input.mail !== settings.postMail) updateSetting('postMail', input.mail)
     const before = (await store.loadThread(t))?.postCount ?? 0
-    await fetchThread(store, t, { force: true })
+    // 書き込みは通っている。取り直しの失敗を書き込みの失敗として見せると、送り直して二重投稿になる
+    await fetchThread(store, t, { force: true }).catch(backgroundError('書き込んだあとの取り直し'))
     const after = await store.loadThread(t)
     const normalize = (s: string) => s.replace(/\s+/g, '')
     // 書いたレスの番号: サーバーが教えてくれたもの(ふたばは板の本当の番号 ref)、なければ本文が同じ新しいレス
@@ -1777,7 +1793,9 @@ export default function App() {
     const normalize = (s: string) => s.replace(/\s+/g, '')
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((ok) => setTimeout(ok, 1500))
-      const list = await connector.listThreads(b, ctx)
+      // スレは立っている。一覧の取得の失敗をスレ立ての失敗として見せると、立て直して重複する
+      const list = await connector.listThreads(b, ctx).catch(() => undefined)
+      if (!list) continue
       if (boardRef.current?.url === b.url) setThreads(list)
       const found = list
         .filter((t) => normalize(t.title) === normalize(input.title))
@@ -2246,9 +2264,8 @@ export default function App() {
     openDrawer: isMobile ? () => setDrawerOpen(true) : undefined,
     // スレ表示の削除ボタン。1 画面のときは、消したあとスレ一覧に戻る(タブの × や Delete キーは、隣のタブに移る)
     deleteLog: useEvent((id: string) => {
-      if (!single) return void deleteLogs([id])
-      void deleteLogs([id], [], true)
-      returnToList()
+      if (!single) return confirmDeleteLogs([id])
+      confirmDeleteLogs([id], [], { stayOnList: true, after: returnToList })
     }),
     uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean; hash?: string; deleteUrl?: string }) => {
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
@@ -2496,7 +2513,7 @@ export default function App() {
         onReorderFavorites={reorderFavorites}
         recentHistory={recentHistory}
         onOpenThread={(t, newTab) => void openThread(t, newTab ? { newTab: true } : {})}
-        onDeleteHistory={(t) => void deleteLogs([], [t])}
+        onDeleteHistory={(t) => confirmDeleteLogs([], [t])}
         onOpenUploads={() => void openUploads()}
         activeBoardUrl={board?.url}
         onOpenBoard={openBoard}
@@ -2626,11 +2643,11 @@ export default function App() {
           newSince={!history ? newSince : undefined}
           favoriteIds={favIds}
           onToggleFavoriteThread={toggleFavoriteThread}
-          onDeleteLogs={history ? (list) => void deleteLogs([], list) : undefined}
+          onDeleteLogs={history ? (list) => confirmDeleteLogs([], list) : undefined}
           onNgThread={(t) => setNgDraft({ target: 'threadTitle', pattern: t.title, values: { threadTitle: t.title, posterId: t.authorId }, board: { url: t.boardUrl, name: board?.url === t.boardUrl ? board.name : t.boardUrl } })}
           // 立てた人を NG: ID の NG(その人が立てたスレも、書いたレスも隠れる)。選んだらそのまま入れる
           onNgAuthor={(t, today) => t.authorId && addNg(newRule('posterId', t.authorId, today ? { expiresOnDate: todayDateString() } : {}))}
-          onDeleteThreadLog={(t) => void deleteLogs([], [t])}
+          onDeleteThreadLog={(t) => confirmDeleteLogs([], [t])}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={history ? undefined : settings.keywords}
           snapshotKey={history ? `${historyVersion}:${favVersion}` : undefined}
@@ -2694,10 +2711,7 @@ export default function App() {
           onClose={closeTabs}
           onRefreshAll={() => void refreshAll()}
           refreshingAll={refreshingAll}
-          onDeleteLogs={(ids) => {
-            setSelectedTabs(new Set())
-            void deleteLogs(ids)
-          }}
+          onDeleteLogs={(ids) => confirmDeleteLogs(ids)}
           selectedIds={selectedTabs}
           onSelectionChange={setSelectedTabs}
           onReorder={(id, index) =>
@@ -2881,16 +2895,17 @@ export default function App() {
       {deleteConfirm && (
         <ConfirmDialog
           title="ログを削除"
-          message={`${deleteConfirm.length} 件のスレのログを削除して閉じます。\n読んだ位置や、dat 落ちして取り直せないレスも消えます。`}
+          message={`${deleteConfirm.ids.length + deleteConfirm.extra.length} 件のスレのログを削除して閉じます。\n読んだ位置や、dat 落ちして取り直せないレスも消えます。`}
           okLabel="削除"
           canSkipNext
           onClose={(ok, skipNext) => {
-            const ids = deleteConfirm
+            const { ids, extra, stayOnList, after } = deleteConfirm
             setDeleteConfirm(undefined)
             if (!ok) return
             if (skipNext) updateSetting('confirmDeleteLog', false)
             setSelectedTabs(new Set())
-            void deleteLogs(ids)
+            void deleteLogs(ids, extra, stayOnList)
+            after?.()
           }}
         />
       )}

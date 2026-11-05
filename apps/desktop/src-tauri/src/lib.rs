@@ -279,15 +279,56 @@ fn migrations() -> Vec<Migration> {
     ]
 }
 
-/// URL の最後の部分からファイル名を作る。Windows で使えない文字は _ にする
-fn file_name_from_url(url: &str) -> String {
+/// 中身の先頭のバイトから、画像・動画の拡張子を決める。画像でも動画でもなければ None
+fn media_extension(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some("jpg");
+    }
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        return Some("png");
+    }
+    if bytes.starts_with(b"GIF8") {
+        return Some("gif");
+    }
+    if bytes.starts_with(b"BM") {
+        return Some("bmp");
+    }
+    if bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        return Some("webm");
+    }
+    if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        return Some("webp");
+    }
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        return Some(match &bytes[8..12] {
+            b"avif" | b"avis" => "avif",
+            b"heic" | b"heix" | b"mif1" | b"msf1" => "heic",
+            b"qt  " => "mov",
+            _ => "mp4",
+        });
+    }
+    None
+}
+
+/// URL の最後の部分と中身の形式からファイル名を作る。拡張子は中身で決める(URL の名前のままだと、画像に見せた実行ファイルを保存してしまう)。
+/// Windows で使えない文字と、文字の向きを変える文字は _ にする
+fn file_name_from_url(url: &str, extension: &str) -> String {
     let path = url.split(['?', '#']).next().unwrap_or(url);
     let last = path.rsplit('/').find(|s| !s.is_empty()).unwrap_or("image");
-    let cleaned: String = last
+    let stem = last.rsplit_once('.').map_or(last, |(s, _)| s);
+    let cleaned: String = stem
         .chars()
-        .map(|c| if "\\/:*?\"<>|".contains(c) || c.is_control() { '_' } else { c })
+        .map(|c| {
+            let bidi = matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}');
+            if "\\/:*?\"<>|".contains(c) || c.is_control() || bidi { '_' } else { c }
+        })
         .collect();
-    if cleaned.is_empty() { "image".into() } else { cleaned }
+    let cleaned = cleaned.trim_end_matches(['.', ' ']);
+    let device = cleaned.split('.').next().unwrap_or("").to_ascii_uppercase();
+    let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (device.len() == 4 && (device.starts_with("COM") || device.starts_with("LPT")) && device.ends_with(|c: char| c.is_ascii_digit()));
+    let name = if cleaned.is_empty() || reserved { "image" } else { cleaned };
+    format!("{name}.{extension}")
 }
 
 /// 同じ名前のファイルがあれば「名前 (1).jpg」のようにずらして、上書きしない
@@ -315,7 +356,9 @@ async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<S
         PathBuf::from(dir)
     };
     let client = tauri_plugin_http::reqwest::Client::builder()
-        .user_agent("Monazilla/1.00 (bbs-browser/0.1.0)")
+        .user_agent("Monazilla/1.00 (OBB)")
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
     let bytes = client
@@ -327,8 +370,9 @@ async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<S
         .bytes()
         .await
         .map_err(|e| e.to_string())?;
+    let extension = media_extension(&bytes).ok_or("画像でも動画でもないので保存しませんでした")?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = unique_path(&dir, &file_name_from_url(&url));
+    let path = unique_path(&dir, &file_name_from_url(&url, extension));
     std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
@@ -600,4 +644,30 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn saved_name_uses_the_real_format() {
+        assert_eq!(file_name_from_url("https://a.test/x.hta?.jpg", "jpg"), "x.jpg");
+        assert_eq!(file_name_from_url("https://a.test/photo.jpeg", "png"), "photo.png");
+        assert_eq!(file_name_from_url("https://a.test/a\u{202E}gpj.exe", "jpg"), "a_gpj.jpg");
+    }
+
+    #[test]
+    fn saved_name_avoids_reserved_names() {
+        assert_eq!(file_name_from_url("https://a.test/CON.jpg", "jpg"), "image.jpg");
+        assert_eq!(file_name_from_url("https://a.test/com1.jpg", "jpg"), "image.jpg");
+        assert_eq!(file_name_from_url("https://a.test/", "png"), "a.png");
+    }
+
+    #[test]
+    fn only_media_is_recognized() {
+        assert_eq!(media_extension(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("jpg"));
+        assert_eq!(media_extension(b"MZ\x90\x00"), None);
+        assert_eq!(media_extension(b"<html>"), None);
+    }
 }

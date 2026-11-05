@@ -743,7 +743,7 @@ function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsProps, 's
         <Toggle
           checked={s.confirmDeleteLog}
           onChange={(v) => update('confirmDeleteLog', v)}
-          label="Shift+Delete でログを消す前に確かめる"
+          label="ログを消す前に確かめる"
           note="確かめる画面で「次回から表示しない」を選ぶとオフになります。ここで戻せます"
         />
       </Section>

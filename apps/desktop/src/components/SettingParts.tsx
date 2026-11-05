@@ -3,6 +3,7 @@
 // - SamplePosts: 見た目の設定を、見本のレスで見ながら変える(文字の大きさ・行間・レスの見た目などは CSS の変数なので、動かすとすぐ映る)
 // - ListEditor: 言葉の一覧(定型文・キーワードなど)。足す・直す・消す・つかんで並べ替え・まとめて編集。多くなったら絞り込み
 // - ManagerRow / ManagerDialog: 件数を出す行と、開くと出る管理画面の囲い
+import ConfirmDialog from './ConfirmDialog'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
@@ -137,6 +138,7 @@ export function ListEditor(props: {
   const [editing, setEditing] = useState<string>()
   const [editText, setEditText] = useState('')
   const [query, setQuery] = useState('')
+  const [clearOpen, setClearOpen] = useState(false)
   const [bulk, setBulk] = useState<string>()
   const [message, setMessage] = useState<string>()
   const items = props.items
@@ -239,11 +241,22 @@ export function ListEditor(props: {
           まとめて編集
         </button>
         {items.length > 0 && (
-          <button type="button" className="hover:text-c-heat-very-hot underline" onClick={() => confirm(`${props.noun}を ${items.length} 件すべて消しますか`) && props.onChange([])}>
+          <button type="button" className="hover:text-c-heat-very-hot underline" onClick={() => setClearOpen(true)}>
             すべて消す
           </button>
         )}
       </div>
+      {clearOpen && (
+        <ConfirmDialog
+          title={`${props.noun}をすべて消す`}
+          message={`${props.noun}を ${items.length} 件すべて消します。元に戻せません。`}
+          okLabel="消す"
+          onClose={(ok) => {
+            setClearOpen(false)
+            if (ok) props.onChange([])
+          }}
+        />
+      )}
       {bulk !== undefined && (
         <ManagerDialog title={`${props.noun}をまとめて編集`} onClose={() => setBulk(undefined)} dirty={bulk !== items.join('\n')}>
           <p className="text-xs text-c-text-muted mb-2">1 行に 1 つ。ほかのアプリから貼り付けたり、ここからコピーして写したりできます(空の行と、同じものは除きます)</p>

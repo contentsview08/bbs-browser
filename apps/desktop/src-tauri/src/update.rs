@@ -15,7 +15,11 @@ pub async fn download_update(app: tauri::AppHandle, url: String, name: String) -
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&name);
 
-    let client = reqwest::Client::builder().user_agent("bbs-browser").build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .user_agent("OBB")
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(30))
+        .build().map_err(|e| e.to_string())?;
     let req = client.get(&url).header("Accept", "application/octet-stream").header("X-GitHub-Api-Version", "2022-11-28");
     let res = req.send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {

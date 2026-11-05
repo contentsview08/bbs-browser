@@ -366,6 +366,9 @@ export function MenuButton(props: { icon: string; title: string; items: MenuItem
   )
 }
 
+/** 操作バーをレスの枠の上へはみ出させられるか。WebKit は overflow-clip-margin がなく、content-visibility の枠で切り取られる */
+const CAN_OVERHANG = typeof CSS !== 'undefined' && CSS.supports('overflow-clip-margin', '4rem')
+
 function PostArticle(props: Props) {
   const { post, anchorCount, idCount, handlers } = props
   const [revealed, setRevealed] = useState(false)
@@ -380,7 +383,7 @@ function PostArticle(props: Props) {
   const [hovered, setHovered] = useState(false)
   // フックはここより下の return(NG のレス)より前に置く(レスが NG になった瞬間に数が変わると落ちる)
   const idRef = useRef<HTMLSpanElement>(null)
-  const [barTop, setBarTop] = useState(-TOOLBAR_H)
+  const [barTop, setBarTop] = useState(CAN_OVERHANG ? -TOOLBAR_H : 2)
   /** ダブルタップで返信: 1 回目のタップのあと、2 回目を待っている間のタイマー */
   const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [sheet, setSheet] = useState(false)
@@ -811,7 +814,7 @@ function PostArticle(props: Props) {
     const id = idRef.current?.getBoundingClientRect()
     const idTop = id ? id.top - rect.top : 0
     // (レスの間にすき間のある見た目があるので、少しずつ上を見る)
-    if ([8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(idTop - (TOOLBAR_H * parseFloat(getComputedStyle(document.documentElement).fontSize)) / 16 - 2)
+    if (CAN_OVERHANG && [8, 20, 32].some((d) => document.elementFromPoint(rect.right - 60, rect.top - d)?.closest('article[data-no]'))) return setBarTop(idTop - (TOOLBAR_H * parseFloat(getComputedStyle(document.documentElement).fontSize)) / 16 - 2)
     setBarTop((id ? id.bottom - rect.top : 24) + 2)
   }
   const idAtTopRight = idPosition === 'topRight' && idBtn ? <span ref={idRef} className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null

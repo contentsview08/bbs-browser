@@ -63,6 +63,9 @@ pub async fn http_post(
 ) -> Result<PostResponse, String> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        // 返事のないサーバーで、書き込みが止まったままにならないように
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| e.to_string())?;
     let mut url = Url::parse(&url).map_err(|e| e.to_string())?;

@@ -1,5 +1,6 @@
 // 設定 → NG の「AI NG」。モデルの取得と状態、条件の一覧と編集、試す欄、手の印の数。
 // 判定(条件ごとの当たり具合)と見せ方(隠す・畳む・印だけ)を分けて決める。決め方は utils/aiNg.ts
+import ConfirmDialog from './ConfirmDialog'
 import { useState } from 'react'
 import { AI_MODEL, AI_NG_SHOWS, DEFAULT_THRESHOLD, MIN_EXAMPLES, hypothesisOf, type AiNgRule } from '../utils/aiNg'
 import { deleteAiModelFiles, testScore, useAiModelStatus } from '../hooks/useAiNg'
@@ -18,6 +19,7 @@ const mb = (n: number) => `${(n / 1024 / 1024).toFixed(0)}MB`
 
 export default function AiNgSettings({ settings: s, update }: { settings: AppSettings; update: UpdateSetting }) {
   const status = useAiModelStatus()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [editing, setEditing] = useState<AiNgRule>()
   const rules = s.aiNgRules
   const save = (r: AiNgRule) => update('aiNgRules', rules.some((x) => x.id === r.id) ? rules.map((x) => (x.id === r.id ? r : x)) : [...rules, r])
@@ -64,14 +66,23 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
           <button
             type="button"
             className="text-c-text-muted hover:text-c-heat-very-hot underline"
-            onClick={() => {
-              if (!confirm('取った判定モデルを消しますか(AI NG はオフになります。もう一度オンにすると取り直します)')) return
-              update('aiNgEnabled', false)
-              void deleteAiModelFiles()
-            }}
+            onClick={() => setDeleteOpen(true)}
           >
             モデルを消す
           </button>
+          {deleteOpen && (
+            <ConfirmDialog
+              title="判定モデルを消す"
+              message="取った判定モデルを消します。AI NG はオフになります。もう一度オンにすると取り直します。"
+              okLabel="消す"
+              onClose={(ok) => {
+                setDeleteOpen(false)
+                if (!ok) return
+                update('aiNgEnabled', false)
+                void deleteAiModelFiles()
+              }}
+            />
+          )}
         </div>
       )}
       <p className="text-xs text-c-text-muted leading-relaxed">

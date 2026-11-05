@@ -213,7 +213,7 @@ object HonoBbs {
             }
             cursor = body.str("nextCursor") ?: break
         }
-        return out
+        return out.distinctBy { it.key }
     }
 
     // ── レス ──
@@ -276,9 +276,19 @@ object HonoBbs {
         else -> message ?: "HTTP $status"
     }
 
+    /**
+     * パスワードを送ってよいサイトか。板は URL の形だけで判定するので、確かめないと、形を合わせただけの別サイトへパスワードが渡る。
+     * API の場所(<meta name="bbs-api">)も相手のページが決めるので、こちらも確かめる。PC 版の isAccountSite と同じ
+     */
+    fun isAccountSite(url: String): Boolean = runCatching {
+        val u = java.net.URI(url)
+        u.scheme == "https" && (u.host == "red-edge.net" || u.host.endsWith(".red-edge.net"))
+    }.getOrDefault(false)
+
     /** そのサイト(web の origin)にログインしてセッションをもらう(POST /auth/login)。返すのは表示名。失敗は例外(理由は message) */
     suspend fun login(origin: String, account: Account): String {
         val api = apiBaseOf(origin)
+        if (!isAccountSite(origin) || !isAccountSite(api)) throw IllegalStateException("このサイトにはパスワードを送りません($origin)")
         val body = JSONObject().put("id", account.user).put("password", account.password).toString()
         val res = Http.postJson("$api/auth/login", body)
         val j = runCatching { json(res) }.getOrNull()
@@ -292,6 +302,7 @@ object HonoBbs {
     /** 書き込みに付ける Authorization。アカウントがあれば(セッションがなければ・切れそうならここでログイン) */
     private suspend fun authHeaders(origin: String): Map<String, String> {
         val a = account ?: return emptyMap()
+        if (!isAccountSite(origin)) return emptyMap()
         val s = synchronized(sessions) { sessions[origin] }
         if (s == null || s.second - System.currentTimeMillis() < 60_000L) {
             runCatching { login(origin, a) }.getOrElse { throw IllegalStateException("アカウントでログインできませんでした: ${it.message}") }

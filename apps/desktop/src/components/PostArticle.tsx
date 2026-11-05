@@ -1236,7 +1236,6 @@ function PostArticle(props: Props) {
             {repliesBtn}
             {!right && nameBtn('text-xs')}
             {opChip}
-            {ownChip}
             {badgeChips}
             {ngChip}
             {/* ID の位置の設定に従う(右下は吹き出しの下に出す) */}

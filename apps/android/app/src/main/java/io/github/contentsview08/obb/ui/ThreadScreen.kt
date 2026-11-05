@@ -361,9 +361,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 // 名前: 同じ名前のレス(タグはレス番号。名前に何が入っていてもよいように)
                 'n' -> index.posts.getOrNull(v.toInt() - 1)?.let { src -> openPopup(index.posts.filter { it.name == src.name }, focus = src.no) }
                 // 画像の URL はビューアーで、2ch 互換のスレ・板の URL はアプリの中で、それ以外はブラウザで
+                'x' -> v.toIntOrNull()?.let { if (it !in page.expandedImages) page.expandedImages += it }
                 'u' -> when {
-                    // 拡張子のない画像は、読み替えた URL でビューアーに渡す
-                    toImageUrl(v)?.let { it in index.allImages } == true -> viewer = toImageUrl(v)
+                    // 画像の URL はブラウザで開く(画像はサムネイルから見る)。サムネイルを出さない設定なら、ビューアーでしか見られないので開く
+                    toImageUrl(v)?.let { it in index.allImages } == true && vm.prefs.thumbMode == io.github.contentsview08.obb.data.ThumbMode.NEVER -> viewer = toImageUrl(v)
+                    toImageUrl(v)?.let { it in index.allImages } == true -> openExternal(context, v, vm.prefs.openLinksInApp)
                     // mp4・webm はブラウザ(アプリの中のブラウザ)の再生に任せる(ダブルタップで 10 秒送り・速さの切り替えなどがそのまま使える)
                     Regex("\\.(mp4|webm|mov|m4v)(\\?|#|$)", RegexOption.IGNORE_CASE).containsMatchIn(v) -> openExternal(context, v, true)
                     !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
@@ -504,6 +506,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     it, style = style, id = p.id, iconCount = iconCounts[iconKey(p)] ?: 0, continued = continued, reply = if (LocalInTree.current) null else replyOf(it),
                     onReply = { n -> index.posts.getOrNull(n - 1)?.let { t -> traced = setOf(t.no); openPopup(listOf(t)) } },
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
+                    imagesExpanded = p.no in page.expandedImages,
                     // アイコンを押すと、数字と同じ数え方のレス(設定でワッチョイを使うなら同じワッチョイ、なければ同じ ID)
                     onAvatar = iconKey(p)?.let { k -> { openPopup(index.posts.filter { iconKey(it) == k }, focus = p.no) } },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
@@ -854,7 +857,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             listOf(
                 // 今のスマホ版の長押しと同じ並び: 返信・定型文・アンカーツリー / コピー・AA / NG
                 listOf(
-                    MenuItem("返信(>>${p.no})", Icons.AutoMirrored.Filled.Reply, Palette.accent) { replyWith(">>${p.no}\n") },
+                    MenuItem("返信", Icons.AutoMirrored.Filled.Reply, Palette.accent) { replyWith(">>${p.no}\n") },
                     // 引用して返信: >>番号 と、本文の頭(アンカーの行を除いて 3 行まで)を「>」付きで
                     MenuItem("引用して返信", Icons.Filled.FormatQuote, Palette.accent) {
                         val quote = p.body.lines().filter { it.isNotBlank() && !it.trimStart().startsWith(">>") }.take(3).joinToString("\n") { "> ${it.trim()}" }
@@ -897,7 +900,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p, Palette.markDanger)) +
                         (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger))) +
                         ngOffItems(hits?.body.orEmpty(), "本文", null) +
-                        MenuItem("言葉を NG…", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p }
+                        MenuItem("本文の言葉を NG に(直して足す)", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p }
                 },
                 // AI NG: 条件ごとに「当たる」を手で付ける。当たっているものは「当たらない」
                 vm.aiRulesFor(page).map { r ->

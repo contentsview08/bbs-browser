@@ -80,6 +80,7 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.material.icons.filled.BrokenImage
 
 // 動き方。今のスマホ版の MobileImageViewer と同じ曲線・時間・しきい値
 private val EASE = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
@@ -413,14 +414,21 @@ private fun ZoomPage(
                 painter, null, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = ox; translationY = oy },
                 contentScale = ContentScale.Fit,
             )
-            if (st is coil3.compose.AsyncImagePainter.State.Error) Text("この画像は表示できませんでした", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+            if (st is coil3.compose.AsyncImagePainter.State.Error) Text("画像を取得できませんでした", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
         }
         // 取っている間は進み具合、失敗したら理由と取り直すボタン
         when (ds) {
             is io.github.contentsview08.obb.data.ImageStore.State.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("読み込めませんでした(${ds.message})", color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
+                Icon(androidx.compose.material.icons.Icons.Filled.BrokenImage, null, Modifier.size(48.dp), tint = Color.White.copy(alpha = 0.8f))
+                Text("画像を取得できませんでした", Modifier.padding(top = 8.dp), color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
+                Text(ds.message, Modifier.padding(top = 4.dp), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                 Text(
-                    "取り直す", Modifier.padding(top = 12.dp).background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).clickable { store.request(url, viewer = true) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    "もう一度", Modifier.padding(top = 12.dp).background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).clickable { store.request(url, viewer = true) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = Color.White, fontSize = 14.sp,
+                )
+                val context = LocalContext.current
+                Text(
+                    "ブラウザで開く", Modifier.padding(top = 8.dp).background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).clickable { openExternal(context, url, false) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     color = Color.White, fontSize = 14.sp,
                 )
             }

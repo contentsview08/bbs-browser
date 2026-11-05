@@ -150,6 +150,8 @@ sealed interface Page {
         val links = PostLinks()
         /** 開いた時点の「最初の未読」(「ここから未読」の線を引く位置)。0 なら線を引かない */
         var unreadFrom by mutableStateOf(0)
+        /** 画像の札を押して、URL を本文に広げたレス */
+        val expandedImages = androidx.compose.runtime.mutableStateListOf<Int>()
         /** 開いたときに移る位置(レス番号)。一度移ったら null */
         var loaded by mutableStateOf(false)
         var loading by mutableStateOf(false)

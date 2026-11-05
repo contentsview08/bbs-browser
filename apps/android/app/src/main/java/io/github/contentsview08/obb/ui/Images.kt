@@ -74,6 +74,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
+import androidx.compose.material.icons.filled.BrokenImage
 
 /** Wi-Fi(か有線)につながっているか。画像を「Wi-Fi のときだけ」自動で読むのに使う。分からないときは false(読まない側) */
 fun isWifi(context: Context): Boolean = runCatching {
@@ -119,8 +120,9 @@ fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: Conten
                 Modifier.matchParentSize().clickable { io.github.contentsview08.obb.data.ImageStore.request(url) },
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
             ) {
-                Text("×", color = Palette.textMuted, fontSize = 16.sp)
-                if (showProgress) Text("押して取り直す", color = Palette.textMuted, fontSize = 9.sp)
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.BrokenImage, null, Modifier.size(20.dp), tint = Palette.textMuted)
+                Text("取得できません", color = Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
+                Text("押して再試行", color = Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
             }
             else -> {
                 val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "thumb")

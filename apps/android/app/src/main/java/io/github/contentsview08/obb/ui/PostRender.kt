@@ -1,6 +1,7 @@
 package io.github.contentsview08.obb.ui
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.SpanStyle
@@ -25,6 +26,13 @@ class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val a
     var idText: AnnotatedString? = null
     /** 名前のワッチョイ(1a2b-3c4d)。設定でアイコンの種にする */
     var watchoi: String? = null
+    /** LINE 風の自分のレスの頭(名前を出さない。右の吹き出しに PC 版と同じく名前を付けない) */
+    var headerOwn: AnnotatedString? = null
+    /** LINE 風で吹き出しの隣に出す番号と時刻 */
+    var sideNo: AnnotatedString? = null
+    var sideTime: String = ""
+    /** 画像の札を押したあとの本文(札を URL に広げたもの)。札のないレスは null */
+    var bodyExpanded: AnnotatedString? = null
 }
 
 /** ワッチョイ(名前の後ろの「(ワッチョイ 1a2b-3c4d)」。種類の言葉 + 4 桁-4 桁。後ろに [IP] が付くことも。PC 版の utils/watchoi.ts と同じ) */
@@ -199,7 +207,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                 BLANK_AFTER.find(full.substring(skip))?.let { skip += it.value.length }
             }
         }
-        val body = buildAnnotatedString {
+        fun buildBody(chips: Boolean) = buildAnnotatedString {
             if (bodyStyle != null) pushStyle(bodyStyle)
             val src = full
             val spans = info?.spans ?: emptyList()
@@ -214,7 +222,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                     s is Span.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.nos.joinToString(",")}", linkStyle, links)) { append(text) }; at = s.end }
                     s is Span.Id -> { withLink(LinkAnnotation.Clickable("i:${s.id}", linkStyle, links)) { append(text) }; at = s.end }
                     // 画像の URL は「画像」の札に。空白だけを挟んで続いたものは「画像 ×3」にまとめる(PC 版と同じ)
-                    s is Span.Url && toImageUrl(s.url) != null && o.urlShorten -> {
+                    s is Span.Url && toImageUrl(s.url) != null && o.urlShorten && chips -> {
                         var end = s.end
                         var n = 1
                         while (i + 1 < spans.size) {
@@ -222,7 +230,8 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                             if (next !is Span.Url || toImageUrl(next.url) == null || src.substring(end, next.start).isNotBlank()) break
                             end = next.end; n++; i++
                         }
-                        withLink(LinkAnnotation.Clickable("u:${s.url}", plain, links)) {
+                        // 札は URL を本文に広げる(広げた URL はブラウザで開く。画像はサムネイルから見る)
+                        withLink(LinkAnnotation.Clickable("x:${p.no}", plain, links)) {
                             withStyle(imageChip) { append("\u00A0▣\u00A0画像" + (if (n > 1) "\u00A0×$n" else "") + "\u00A0") }
                         }
                         at = end
@@ -235,9 +244,20 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
             append(src, at, src.length)
             if (bodyStyle != null) pop()
         }
+        val body = buildBody(true)
         // 空白が続く本文は AA とみなす(AA 用の字で出す)
         val rp = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
         rp.watchoi = watchoiOf(p.name)
+        if (o.urlShorten && info?.spans?.any { it is Span.Url && toImageUrl(it.url) != null } == true) rp.bodyExpanded = buildBody(false)
+        if (o.style == "line") {
+            rp.headerOwn = compactHeader(p, name, replies, idCount, isOp, o, links, showName = false)
+            rp.sideTime = LINE_TIME.find(p.date)?.groupValues?.get(1) ?: p.date
+            rp.sideNo = buildAnnotatedString {
+                val style = SpanStyle(fontWeight = FontWeight.Bold, color = replyHeat ?: Color.Unspecified)
+                if (replies > 0) withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) { withStyle(style) { append("#${p.no}") } }
+                else withStyle(style) { append("#${p.no}") }
+            }
+        }
         // ID を頭の外(右上・右下)に出すとき: 頭と同じ色・押せる形で別に作る
         if (p.id != null && o.idPosition != "header") rp.idText = buildAnnotatedString {
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
@@ -261,7 +281,7 @@ fun shortUrl(url: String, max: Int = 36): String {
 /**
  * Discord 風・LINE 風の頭(PC 版の discord の headerBlock と同じ並び): 名前を大きめに、主・#番号・短い日付・ID・返信の数を小さく横に
  */
-private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks): AnnotatedString =
+private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks, showName: Boolean = true): AnnotatedString =
     buildAnnotatedString {
         val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
         // 返信の数は頭の一番左に。吹き出しも数と同じ色に。印と数の間では折り返さない
@@ -273,17 +293,20 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
             }
             append("  ")
         }
-        withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
+        if (showName) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
             withStyle(SpanStyle(color = if (o.nameSubtle) mutedC(o) else nameC(o), fontWeight = FontWeight.Bold, fontSize = if (o.nameSubtle) 11.sp else 13.sp)) { append(name.ifEmpty { "名無し" }) }
         }
         if (isOp) {
             append(" ")
             appendInlineContent("op", "[主]")
         }
-        append("  ")
-        withStyle(small) { append("#${p.no}") }
-        append("  ")
-        withStyle(small) { append(shortDate(p.date).replace(' ', '\u00A0')) }
+        // LINE 風の番号と時刻は、頭ではなく吹き出しの隣に出す(sideNo・sideTime)
+        if (o.style != "line") {
+            append("  ")
+            withStyle(small) { append("#${p.no}") }
+            append("  ")
+            withStyle(small) { append(shortDate(p.date).replace(' ', '\u00A0')) }
+        }
         if (p.id != null && o.idPosition == "header") {
             append("  ")
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
@@ -297,6 +320,7 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
     }
 
 /** 頭の字の色(空色の地の上では白っぽく) */
+private val LINE_TIME = Regex("([0-9]{1,2}:[0-9]{2})(?::[0-9]{2})?")
 private fun mutedC(o: RenderOptions) = if (o.onSky) Palette.skyMuted else Palette.textMuted
 private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.posterName
 

@@ -64,7 +64,7 @@ object HeaderHits {
         val p = runCatching { c.localPositionOf(row, pos) }.getOrNull() ?: return null
         if (p.x < 0 || p.y < 0 || p.x > c.size.width || p.y > c.size.height) return null
         val i = l.getOffsetForPosition(p)
-        return r.header.getLinkAnnotations(maxOf(0, i - 1), i + 1).mapNotNull { (it.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag }
+        return l.layoutInput.text.getLinkAnnotations(maxOf(0, i - 1), i + 1).mapNotNull { (it.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag }
             .firstOrNull { it.startsWith("i:") || it.startsWith("n:") }
     }
 }
@@ -97,6 +97,8 @@ fun PostItem(
     heat: Color? = null,
     /** アイコンを押したとき(その ID のレスを出す)。null なら押せない */
     onAvatar: (() -> Unit)? = null,
+    /** 画像の札を押して、URL を本文に広げたか */
+    imagesExpanded: Boolean = false,
 ) {
     val avatarMod = if (onAvatar != null) Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onAvatar) else Modifier
     val chips = chipInlineContent()
@@ -109,8 +111,9 @@ fun PostItem(
     val bodySize = (15 * prefs.bodyScale).sp
     val headSize = (12 * prefs.postHeadScale).sp
     val pad = prefs.postPad.dp
+    val shownBody = if (imagesExpanded) r.bodyExpanded ?: r.body else r.body
     val body = @Composable { mod: Modifier ->
-        if (aa) AaBody(r) else Text(r.body, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+        if (aa) AaBody(r) else Text(shownBody, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
     }
     val media = @Composable {
         if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.thumbSize)
@@ -127,8 +130,9 @@ fun PostItem(
     }
     // LINE 風の「あなた宛」は、頭ではなく吹き出しの隣に置く
     val headChip = when {
+        style == "line" -> null
         own -> "自分"
-        toOwn && style != "line" -> "→あなた宛"
+        toOwn -> "→あなた宛"
         else -> null
     }
     val header = @Composable {
@@ -192,18 +196,36 @@ fun PostItem(
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
                 if (!own) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
                 Column(Modifier.weight(1f), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
-                    if (!continued || own) Box(Modifier.padding(bottom = 4.dp)) { header() }
-                    // 「あなた宛」は吹き出しの外側に置く(左の吹き出しなら右、右の吹き出しなら左)
+                    if (!continued) Box(Modifier.padding(bottom = 4.dp)) {
+                        // 右の吹き出しは、ID と頭をまとめて右へ寄せる(名前は出さない)
+                        if (own) Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (idTopRight != null) Text(idTopRight, Modifier.padding(end = 6.dp), fontSize = headSize, maxLines = 1, softWrap = false)
+                            Text(r.headerOwn ?: r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
+                        } else header()
+                    }
+                    // 番号と時刻、その外側に「あなた宛」を、吹き出しの隣に置く(左の吹き出しなら右、右の吹き出しなら左)
+                    val side = @Composable {
+                        Column(horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
+                            r.sideNo?.let { Text(it, color = if (own) Palette.own else if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp) }
+                            Text(r.sideTime, color = if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
+                        }
+                    }
                     Row(verticalAlignment = Alignment.Bottom) {
-                        if (toOwn && own) { OwnChip("→あなた宛", Palette.onSky(style)); Spacer(Modifier.width(6.dp)) }
+                        if (own) {
+                            if (toOwn) { OwnChip("→あなた宛", Palette.onSky(style)); Spacer(Modifier.width(6.dp)) }
+                            side(); Spacer(Modifier.width(6.dp))
+                        }
                         Column(
                             Modifier.weight(1f, fill = false).widthIn(max = 320.dp).background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
                             if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
-                            if (aa) AaBody(r) else Text(r.body, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
+                            if (aa) AaBody(r) else Text(shownBody, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
                             idLine()
                         }
-                        if (toOwn && !own) { Spacer(Modifier.width(6.dp)); OwnChip("→あなた宛", Palette.onSky(style)) }
+                        if (!own) {
+                            Spacer(Modifier.width(6.dp)); side()
+                            if (toOwn) { Spacer(Modifier.width(6.dp)); OwnChip("→あなた宛", Palette.onSky(style)) }
+                        }
                     }
                     Box(Modifier.offset(x = (-14).dp)) { Column { media() } }
                 }
@@ -217,7 +239,7 @@ fun PostItem(
                     // 頭の行の位置と字の並びを覚える(ID・名前の長押しのメニュー。付けていなかったので、専ブラ風では長押しが効かなかった)
                     if (own || toOwn || idTopRight != null) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
-                    if (aa) AaBody(r) else Text(r.body, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
+                    if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
                     idLine()
                 }
                 media()
@@ -230,8 +252,8 @@ fun PostItem(
                     header()
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r)
-                    else if (heat != null) Text(r.body, Modifier.padding(top = 4.dp), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                    else Text(r.body, Modifier.padding(top = 2.dp), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em)
+                    else if (heat != null) Text(shownBody, Modifier.padding(top = 4.dp), color = Palette.textStrong, fontSize = bodySize * 1.2f, lineHeight = prefs.lineHeight.em, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                    else Text(shownBody, Modifier.padding(top = 2.dp), color = Palette.textBody.copy(alpha = 0.85f), fontSize = bodySize * 0.88f, lineHeight = prefs.lineHeight.em)
                     idLine()
                 }
                 media()

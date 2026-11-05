@@ -602,7 +602,6 @@ fun newChipColors() = if (Palette.dark) Color(0xFFF2C14E) to Color(0xFF221A00) e
 /** 札を字の中に置くための登録(appendInlineContent の id → 中身)。幅は字の大きさに合わせる */
 @Composable
 fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineTextContent> {
-    val (opBg, opFg) = opChipColors()
     val (nBg, nFg) = newChipColors()
     fun chip(text: String, bg: Color, fg: Color) = androidx.compose.foundation.text.InlineTextContent(
         androidx.compose.ui.text.Placeholder(1.7.em, 1.25.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
@@ -611,8 +610,17 @@ fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineText
     fun replyIcon(tint: Color) = androidx.compose.foundation.text.InlineTextContent(
         androidx.compose.ui.text.Placeholder(1.15.em, 1.15.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
     ) { Icon(Icons.Outlined.ChatBubbleOutline, "返信", tint = tint, modifier = Modifier.fillMaxSize()) }
+    // 主は「自分」「あなた宛」と同じ形(枠と字が同じ色、中は地の色)。PC 版と同じ
+    val opChip = androidx.compose.foundation.text.InlineTextContent(
+        androidx.compose.ui.text.Placeholder(1.7.em, 1.35.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),
+    ) {
+        Box(
+            Modifier.fillMaxSize().border(1.dp, Palette.op, RoundedCornerShape(3.dp)).background(Palette.surface, RoundedCornerShape(3.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Text("主", color = Palette.op, fontSize = 10.sp, lineHeight = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
+    }
     return mapOf(
-        "op" to chip("主", opBg, opFg), "new" to chip("新", nBg, nFg), "reply" to replyIcon(Palette.textMuted), "replySky" to replyIcon(Palette.skyText),
+        "op" to opChip, "new" to chip("新", nBg, nFg), "reply" to replyIcon(Palette.textMuted), "replySky" to replyIcon(Palette.skyText),
         "replyWarm" to replyIcon(Palette.heat(3)!!), "replyHot" to replyIcon(Palette.heat(5)!!), "replyVeryHot" to replyIcon(Palette.heat(7)!!),
     )
 }

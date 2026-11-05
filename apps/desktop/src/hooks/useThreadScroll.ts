@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
+import { firstAfter } from '../utils/cursor'
 import {
   HeightCache,
   estimatePostHeight,
@@ -133,9 +134,16 @@ export function pinScroll(root: HTMLElement, target: () => number, ms = PIN_MS) 
   moving.set(root, stop)
 }
 
-/** レスを包む枠(.post-cv)。番号は枠に持たせてある(NG で中身を描かないレスも数えるため) */
-function postFrames(root: HTMLElement): NodeListOf<HTMLElement> {
-  return root.querySelectorAll<HTMLElement>(':scope .post-cv')
+/**
+ * レスを包む枠(.post-cv)。番号は枠に持たせてある(NG で中身を描かないレスも数えるため)。
+ * 枠はレス一覧の直下に番号の順で並び、後ろに -END- などが続く。DOM 全体を検索すると、スクロールのたびに数千の要素をなめる
+ */
+export function framesIn(list: HTMLElement | null): HTMLElement[] {
+  if (!list) return []
+  const all = list.children
+  let n = all.length
+  while (n > 0 && (all[n - 1] as HTMLElement).dataset.post === undefined) n--
+  return Array.prototype.slice.call(all, 0, n) as HTMLElement[]
 }
 
 interface Options {
@@ -315,7 +323,7 @@ export function useThreadScroll(o: Options) {
     const root = rootRef.current
     const w = widthRef.current
     if (!root || w <= 0) return
-    for (const el of postFrames(root)) {
+    for (const el of framesIn(listRef.current)) {
       if (el.hidden || el.dataset.placeholder !== undefined) continue
       const no = Number(el.dataset.post)
       const h = Math.round(el.getBoundingClientRect().height)
@@ -350,7 +358,7 @@ export function useThreadScroll(o: Options) {
       if (!root) return
       // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
       // その後ろで見えている最初のレスへ送る。なければ一番下に留まる
-      const target = [...postFrames(root)].find((w) => !w.hidden && Number(w.dataset.post) >= no)
+      const target = framesIn(listRef.current).find((w) => !w.hidden && Number(w.dataset.post) >= no)
       const ms = behavior === 'animate' ? JUMP_MS : 0
       if (!target) return animateScroll(root, () => root.scrollHeight, ms)
       // 「ここから未読」の線はレスの直前(枠の中)にあるので、枠ごとの位置で合わせる。
@@ -363,7 +371,7 @@ export function useThreadScroll(o: Options) {
         ms,
       )
     },
-    [rootRef, headerOffset],
+    [rootRef, listRef, headerOffset],
   )
 
   /** 一番下・一番上へ。押して飛ぶときはすぐ移る(長いスレを流れていくのを待たせない)。新着を追いかけるときだけ animate */
@@ -402,11 +410,12 @@ export function useThreadScroll(o: Options) {
       const root = rootRef.current
       if (!root) return undefined
       const viewTop = root.getBoundingClientRect().top + headerOffset()
-      const frames = [...postFrames(root)].filter((w) => !w.hidden)
+      const frames = framesIn(listRef.current).filter((w) => !w.hidden)
+      const topOf = (i: number) => frames[i].getBoundingClientRect().top
       const target =
         dir > 0
-          ? frames.find((w) => w.getBoundingClientRect().top > viewTop + 2)
-          : frames.findLast((w) => w.getBoundingClientRect().top < viewTop - 2)
+          ? frames[firstAfter(frames.length, topOf, viewTop + 2)]
+          : frames[firstAfter(frames.length, topOf, viewTop - 2.001) - 1]
       if (!target) {
         // もう先がなければ、端まで送る(選ぶレスは端のレス)
         if (dir > 0) jumpToBottom()
@@ -417,7 +426,7 @@ export function useThreadScroll(o: Options) {
       animateScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - viewTop, STEP_MS)
       return Number(target.dataset.post)
     },
-    [rootRef, headerOffset, jumpToBottom, jumpToTop],
+    [rootRef, listRef, headerOffset, jumpToBottom, jumpToTop],
   )
 
   /**
@@ -447,9 +456,14 @@ export function useThreadScroll(o: Options) {
     const box = root.getBoundingClientRect()
     const viewTop = box.top + headerOffset()
     const rects: PostRect[] = []
+    const frames = framesIn(listRef.current)
     // 枠を測る(中身を測ると、画面の外で省いた計算をやり直させてしまう)。
-    // 画面より 1 画面ぶん下までで止める(その先は既読にも高さを覚えるのにも要らない)
-    for (const el of postFrames(root)) {
+    // 高さを覚える範囲(画面の上半分ほど)の頭から、画面より 1 画面ぶん下までだけ測る(その外は既読にも高さを覚えるのにも要らない)
+    let from = firstAfter(frames.length, (i) => (frames[i].hidden ? undefined : frames[i].getBoundingClientRect().bottom), box.top - box.height / 2)
+    // 全部の枠より下まで来ていても(-END- の下)、最後のレスまでは読んだことにする
+    if (from === frames.length) while (from > 0 && (from === frames.length || frames[from].hidden)) from--
+    for (let i = from; i < frames.length; i++) {
+      const el = frames[i]
       const r = el.getBoundingClientRect()
       rects.push({ no: Number(el.dataset.post), top: r.top, bottom: r.bottom, hidden: el.hidden, placeholder: el.dataset.placeholder !== undefined })
       if (r.top >= box.bottom + box.height) break
@@ -470,7 +484,7 @@ export function useThreadScroll(o: Options) {
       sent.current = last
       latest.current.onRead(last)
     }
-  }, [rootRef, headerOffset])
+  }, [rootRef, listRef, headerOffset])
 
   // ── 開いたとき ──
 
@@ -496,7 +510,7 @@ export function useThreadScroll(o: Options) {
       animateScroll(root, () => root.scrollHeight, 0)
       pendingUnread.current = t.pendingUnread
     } else if (t.kind === 'unread') {
-      const target = [...postFrames(root)].find((w) => !w.hidden && Number(w.dataset.post) >= t.no)
+      const target = framesIn(listRef.current).find((w) => !w.hidden && Number(w.dataset.post) >= t.no)
       if (target) {
         const headerH = headerOffset()
         pinScroll(root, () => root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top - headerH - (root.clientHeight - headerH) * UNREAD_AT)
@@ -538,16 +552,11 @@ export function useThreadScroll(o: Options) {
     const root = rootRef.current
     if (!root) return
     const rootTop = root.getBoundingClientRect().top + headerOffset()
-    for (const el of postFrames(root)) {
-      if (el.hidden) continue
-      const r = el.getBoundingClientRect()
-      if (r.bottom > rootTop) {
-        anchor.current = { no: Number(el.dataset.post), top: r.top - rootTop }
-        return
-      }
-    }
-    anchor.current = undefined
-  }, [rootRef, headerOffset])
+    const frames = framesIn(listRef.current)
+    // 枠は上から順に並んでいるので半分ずつ探す(先頭から測ると、下の方を読むほど 1 コマごとに測る数が増える)
+    const i = firstAfter(frames.length, (k) => (frames[k].hidden ? undefined : frames[k].getBoundingClientRect().bottom), rootTop)
+    anchor.current = i < frames.length ? { no: Number(frames[i].dataset.post), top: frames[i].getBoundingClientRect().top - rootTop } : undefined
+  }, [rootRef, listRef, headerOffset])
   // 描き直しのたび(依存なし)に、控えたレスが動いていれば戻す。新着で動かす効果(下)より先に並べてあるので、動かす方が勝つ
   useLayoutEffect(() => {
     const root = rootRef.current
@@ -625,11 +634,18 @@ export function useThreadScroll(o: Options) {
         if (latest.current.active) reportRead()
       }, READ_DELAY_MS)
     }
-    const onScroll = () => {
+    // 測るのは 1 コマに 1 回(スクロールのイベントは 1 コマに何度も来ることがある)。
+    // スクロールのイベントと同じコマのうちに走るので、描き直しの位置の固定には遅れない
+    let scrollRaf = 0
+    const onScrollFrame = () => {
+      scrollRaf = 0
       const rest = root.scrollHeight - root.scrollTop - root.clientHeight
       atBottom.current = rest < BOTTOM_PX
       setShowJump(rest > root.clientHeight)
       recordAnchor()
+    }
+    const onScroll = () => {
+      if (!scrollRaf) scrollRaf = requestAnimationFrame(onScrollFrame)
       later()
     }
     // 幅を覚え直すと全部のレスの仮の高さを描き直すので、大きさが変わり続けているあいだは待ち、落ち着いてから 1 回だけ
@@ -662,6 +678,7 @@ export function useThreadScroll(o: Options) {
       observer.disconnect()
       clearTimeout(timer)
       clearTimeout(widthTimer)
+      if (scrollRaf) cancelAnimationFrame(scrollRaf)
       root.removeEventListener('scroll', onScroll)
       root.removeEventListener('wheel', touch)
       root.removeEventListener('pointerdown', touch)

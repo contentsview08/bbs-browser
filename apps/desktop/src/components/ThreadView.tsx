@@ -40,7 +40,7 @@ import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
-import { animateScroll, useThreadScroll } from '../hooks/useThreadScroll'
+import { animateScroll, framesIn, useThreadScroll } from '../hooks/useThreadScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import { firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, stepCursor, type Span } from '../utils/cursor'
@@ -1114,36 +1114,18 @@ export default function ThreadView(props: Props) {
     const root = ref.current
     if (!root) return
     let raf = 0
-    /** 前回見えていた最初のレス(次はその近くから探す。毎回先頭から測ると、1000 レスのスレの下の方で重い) */
-    let hint = 0
     const update = () => {
       raf = 0
-      const frames = root.querySelectorAll<HTMLElement>(':scope .post-cv')
+      const frames = framesIn(listRef.current)
       const n = frames.length
       if (n === 0) return
       const box = root.getBoundingClientRect()
-      const above = (i: number) => frames[i].getBoundingClientRect().bottom < box.top
-      // 見えている最初のレス(log.posts の位置。枠は log.posts と同じ順に並んでいる)
-      let first: number
-      if (filteringRef.current) {
-        // 絞り込み中は隠れた枠(高さ 0)が混ざるので、頭から順に見る(見えている枠は少ない)
-        first = -1
-        for (let i = 0; i < n; i++) {
-          if (frames[i].hidden) continue
-          const r = frames[i].getBoundingClientRect()
-          if (r.bottom >= box.top) {
-            first = i
-            break
-          }
-        }
-        if (first < 0) return
-      } else {
-        let i = Math.min(Math.max(hint, 0), n - 1)
-        if (above(i)) while (i < n - 1 && above(i)) i++
-        else while (i > 0 && !above(i - 1)) i--
-        first = i
+      // 見えている最初のレス(log.posts の位置。枠は log.posts と同じ順に並んでいる)。半分ずつ探す
+      let first = firstAfter(n, (i) => (frames[i].hidden ? undefined : frames[i].getBoundingClientRect().bottom), box.top)
+      if (first === n) {
+        if (filteringRef.current) return
+        first = n - 1
       }
-      hint = first
       // 隠れた枠は高さ 0 で top も 0 なので、飛ばして測る(止まらずに全件まで広がっていた)
       let last = first
       for (let i = first + 1; i < n; i++) {
@@ -1374,7 +1356,7 @@ export default function ThreadView(props: Props) {
     if (!root) return { root: undefined, frames: [] as HTMLElement[], seen: [] as HTMLElement[], seenFrom: 0, viewTop: 0, box: undefined }
     const box = root.getBoundingClientRect()
     const viewTop = box.top + (headerRef.current?.offsetHeight ?? 0)
-    const frames = [...root.querySelectorAll<HTMLElement>('.post-cv')].filter((f) => !f.hidden)
+    const frames = framesIn(listRef.current).filter((f) => !f.hidden)
     const view = { top: viewTop, bottom: box.bottom }
     const seenFrom = firstAfter(frames.length, (i) => frames[i].getBoundingClientRect().bottom, viewTop + 4)
     const seen: HTMLElement[] = []

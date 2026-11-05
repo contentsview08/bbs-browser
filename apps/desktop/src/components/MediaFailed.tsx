@@ -1,5 +1,7 @@
 // 画像を取得できなかったときの表示。サムネイルとビューアーで言葉をそろえる(スマホ版の ui/Images.kt・Viewer.kt と同じ言葉)
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { canSelfUpdate } from '../host/update'
 import { mediaSrc } from '../utils/httpsFirst'
 
 /** サムネイルの中の画像。読めなければ理由の代わりに印を出し、押すと取り直す(ビューアーは開かない) */
@@ -59,6 +61,62 @@ export function ViewerImageFailed(props: { onRetry: () => void; onOpenExternal: 
         <button type="button" onClick={props.onOpenExternal} className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25">
           ブラウザで開く
         </button>
+      </div>
+    </div>
+  )
+}
+
+const VIDEO_PACKAGES_COMMAND = 'sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-good'
+const RELEASES_URL = 'https://github.com/contentsview08/bbs-browser/releases/latest'
+
+/**
+ * 動画を再生する部品がないときの案内。H.264 の部品はアプリに同梱しないので、.deb は OS の部品を入れてもらい、
+ * AppImage は OS の部品を読み込めない(読むと固まる)ので .deb を案内する。どちらもブラウザでは開ける
+ */
+export function VideoPlaybackHelp(props: { onOpenExternal?: () => void; dark?: boolean }) {
+  const [appImage, setAppImage] = useState<boolean>()
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    void canSelfUpdate().then(setAppImage, () => setAppImage(false))
+  }, [])
+  const button = props.dark ? 'px-3 py-1.5 rounded bg-white/15 hover:bg-white/25' : 'px-3 py-1.5 rounded bg-c-surface2 hover:bg-c-surface3 text-c-text-body'
+  const muted = props.dark ? 'text-white/70' : 'text-c-text-muted'
+  return (
+    <div className={`flex flex-col gap-3 text-sm ${props.dark ? 'items-center text-center text-white/85 max-w-md' : 'text-c-text-body'}`} onClick={(e) => e.stopPropagation()}>
+      {appImage ? (
+        <>
+          <p>AppImage 版では、動画をアプリの中で再生できません。</p>
+          <p className={`text-xs ${muted}`}>.deb 版なら、OS の部品を入れると再生できます。</p>
+        </>
+      ) : (
+        <>
+          <p>この動画の再生には、OS の部品が必要です。</p>
+          <p className={`text-xs ${muted}`}>端末で次のコマンドを実行して、アプリを起動し直すと再生できます。</p>
+          <code className={`text-xs px-2 py-1.5 rounded break-all ${props.dark ? 'bg-white/10' : 'bg-c-surface2'}`}>{VIDEO_PACKAGES_COMMAND}</code>
+        </>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {appImage === false && (
+          <button
+            type="button"
+            className={button}
+            onClick={() => {
+              void navigator.clipboard.writeText(VIDEO_PACKAGES_COMMAND).then(() => setCopied(true))
+            }}
+          >
+            {copied ? 'コピーしました' : 'コマンドをコピー'}
+          </button>
+        )}
+        {appImage && (
+          <button type="button" className={button} onClick={() => void openUrl(RELEASES_URL)}>
+            .deb 版のページを開く
+          </button>
+        )}
+        {props.onOpenExternal && (
+          <button type="button" className={button} onClick={props.onOpenExternal}>
+            ブラウザで開く
+          </button>
+        )}
       </div>
     </div>
   )

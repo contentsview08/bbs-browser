@@ -1097,17 +1097,13 @@ function PostArticle(props: Props) {
                     <button
                       key={m.url}
                       type="button"
-                      onClick={(e) => {
-                        if (canPlayVideo(m.url)) return open(e)
-                        e.stopPropagation()
-                        handlers.onUrl(m.url)
-                      }}
+                      onClick={open}
                       className="post-thumb relative bg-black border border-c-border rounded overflow-hidden flex-shrink-0 hover:border-c-border-strong transition-colors"
                       title="動画を再生する"
                     >
                       {!canPlayVideo(m.url) ? (
                         // 再生できない環境では <video> を置かない(描画のプロセスが落ちる)
-                        <span className="absolute inset-x-0 bottom-1 text-center text-[10px] text-white/80">ブラウザで開く</span>
+                        <span className="absolute inset-x-0 bottom-1 text-center text-[10px] text-white/80">動画</span>
                       ) : isAutoLoadable(m.url) ? (
                         <video src={mediaSrc(`${m.url}#t=0.1`)} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none" />
                       ) : (

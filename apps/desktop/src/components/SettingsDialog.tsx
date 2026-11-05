@@ -60,6 +60,8 @@ import { pickOpenPath } from '../host/dialog'
 import { canCheckUpdate, compareVersions, fetchLatestRelease, installUpdate, type ReleaseInfo, canSelfUpdate } from '../host/update'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement, PLACEMENTS } from '../utils/toolbar'
 import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
+import { VideoPlaybackHelp } from './MediaFailed'
+import { canPlayVideo } from '../utils/videoSupport'
 
 export interface SettingsProps {
   settings: AppSettings
@@ -2499,6 +2501,11 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         </p>
       </Section>
       {canCheckUpdate && <UpdateSection version={version} selfUpdate={selfUpdate} autoUpdate={s.autoUpdate} onAutoUpdate={(v) => update('autoUpdate', v)} />}
+      {canCheckUpdate && !canPlayVideo('video.mp4') && (
+        <Section title="動画の再生">
+          <VideoPlaybackHelp />
+        </Section>
+      )}
       <Section title="掲示板" note="要望や不具合は、運営要望板か GitHub の Issues へ">
         <OpenRow label="運営要望板を開く" value="red-edge.net" onOpen={() => void broadcast('open-in-app', OPERATION_BOARD_URL)} />
       </Section>

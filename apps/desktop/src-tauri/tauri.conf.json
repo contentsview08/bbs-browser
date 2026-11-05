@@ -69,6 +69,16 @@
     "shortDescription": "コネクタで掲示板を読む専用ブラウザ",
     "longDescription": "5ch・したらば・ふたばなどを、掲示板ごとのコネクタで読む PC 向けの専用ブラウザ。外付けのコネクタで自作の掲示板も読める",
     "category": "Utility",
+    "linux": {
+      "deb": {
+        "recommends": [
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-libav",
+          "fonts-noto-cjk",
+          "fonts-noto-color-emoji"
+        ]
+      }
+    },
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"

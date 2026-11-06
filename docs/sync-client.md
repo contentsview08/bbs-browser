@@ -129,7 +129,15 @@ CREATE INDEX threads_key ON threads (key);
 | `engine_lease` | エンジンの持ち主と期限 |
 | `last_pull_at`・`last_push_at`・`last_error` | 画面に出す値 |
 | `bad_counts` | 開けなかったレコードの理由ごとの数 |
-| `pending_confirm` | 確認待ちの計画(大量削除など) |
+| `pending_confirm` | 確認待ちの計画(`type` が `join` か `rebase`、`lost` など) |
+| `phase_before` | `blocked` の前の `phase`。手動の同期でそこへ戻す |
+| `recreate_pending` | 作り直しの全件の読み取りがまだ。`since = 0` のまま次の周で読み直す |
+| `recreate_tried_at` | `recreate_waiting` で最後に作成を試した時刻 |
+| `rebase_log` | リベースと作り直しの時刻(1 日 3 回の制限) |
+| `rebase_accepted` | 確認で消してよいと答えた件数。読み直して増えていたらもう一度聞く |
+| `rebase_backup` | リベースで消える項目の一覧 |
+
+値はすべて文字列で持つ。PC のプラグインは数を f64 で束ねるので、TEXT の列に数を渡すと `1.0` の形になる。
 
 `K` はこの表にも `settings` にも置かない(8 章)。
 
@@ -325,7 +333,8 @@ class UserOps {
 
 - `tauri_plugin_sql::DbInstances` と `DbPool::sqlite()` は公開されている(2.6.0 で確認)。`pool.begin()` で 1 つの接続のトランザクションにできる
 - `SqlDb` に `batch(statements)` を足す。テストの sql.js は `BEGIN`・`COMMIT` で同じ動きにする
-- 値の型の変換は `tauri-plugin-sql` の `wrapper.rs` と同じ規則にする
+- 値の型の変換は `tauri-plugin-sql` の `wrapper.rs` と同じ規則にする。数は f64 になるので、INTEGER の列は整数に戻り、TEXT の列には文字列を渡す
+- 同期が無効の間は `sql_batch` を呼ばない。`UserOps` は `sync_state.enabled` が読めないときも無効として扱い、今の関数をそのまま呼ぶ
 - `CLAUDE.md` の「トランザクションに頼らない」は `execute` の話。`sql_batch` を足したら文を直す
 
 読む文は入れない。`sync_ops` への INSERT は読みを要らないので、バッチで足りる。
@@ -334,7 +343,8 @@ class UserOps {
 
 | 場面 | 決まり |
 | --- | --- |
-| 既読 | `ON CONFLICT (op, target) WHERE op = 'read' DO UPDATE SET num = MAX(num, excluded.num), at_ms = excluded.at_ms`。スクロールで行が増えない |
+| 既読 | 同じバッチで `UPDATE sync_ops SET num = MAX(num, ?), at_ms = ? WHERE op = 'read' AND target = ?` と `INSERT OR IGNORE` を流す。スクロールで行が増えない |
+| SQL の書き方 | `ON CONFLICT … DO UPDATE` を使わない。スマホの minSdk 26 の SQLite は 3.18 で、3.24 より前は通らない(API 30 から 3.28)。エミュレーターの新しい版では気づけないので、テストで文を検査する |
 | PC の設定 | `useSettings.update` は 400ms 待って書く。同じ `flush` の中で `setSetting` と `sync_ops` をバッチにする |
 | スマホの設定 | `Pref.setValue` は画面のスレッドで呼ばれ、スライダーで連続する。項目が許可リストにあるときだけメモリの列に入れ、400ms 後に裏で `sync_ops` に積む。SharedPreferences と DB は同じトランザクションにできないので、落ちると最後の変更を送らないことがある。次の起動の照合で直す(下記) |
 | スマホの NG | `saveNg` の前に差分を積む。Prefs に書く前に落ちても、適用で写るので値は揃う |
@@ -356,15 +366,25 @@ class UserOps {
 
 `read` の場合は `recordRead` を 1 回呼ぶ。周期ごとに 1 回なので `steps` の消費は少ない。`view` と合わせて `last_view` を更新する。
 
+### 入れ違いの扱い
+
+適用と利用者の操作は別々に DB へ書くので、順番が前後することがある。後の操作が勝ち、手元も揃うように次を守る。
+
+- `sync_ops` を処理したレコードには `needs_apply = 1` を立て、周の中で写し直す。適用が書いた行を、次の周で操作の結果へ戻せる
+- 適用は、まだ処理していない操作のあるレコードを飛ばし、次の周へ回す(`needs_apply` を残す)
+
 ### 起動時の照合
 
-取りこぼしの保険。お気に入り板・お気に入りのスレ・NG・許可リストの設定は件数が少ないので、起動して同期の前に比べる。
+取りこぼしの保険。お気に入り板・お気に入りのスレ・NG・許可リストの設定は件数が少ないので、起動して同期の前に比べる。段階 1 ではお気に入りのスレだけ。
 
 | 状態 | 動き |
 | --- | --- |
 | 手元にあり、レコードがない | 種まきと同じ低い HLC でレコードを作る(新しい削除には勝たない) |
 | レコードがあり、手元にない | 同期の表が正なので手元に戻す |
+| tombstone があり、手元にある | 同期の表が正なので手元から消す。`trim` の tombstone は消さない |
 | 値が違う | 同期の表の値を手元に写す |
+
+レコードのあるものを手元の値で作り直さない。適用で足した行の `added_at` は適用の時刻なので、まだ届いていない削除に勝ってしまう。手元の値とマージするのは合流のときだけにする。
 
 閲覧履歴と書き込み履歴は対象にしない(手元で消えているのが正しいことがある)。
 
@@ -454,7 +474,9 @@ class UserOps {
 - 足すときは末尾のキーの次
 - 順序のレコードがない項目は、ある項目の後ろに今の順で並べる
 - キーが 256 桁を超えたら、そのリストを一度振り直す(利用者の操作として送る)
-- `favorite_threads` を並べ替える操作は今ない。足した順のキーだけ作る
+- `favorite_threads` を並べ替える操作は今ない。足した順のキーだけ作る。段階 1 では順序のレコードを作らず、適用は末尾に足す(端末で並びが違うことがある)
+- 受信で足す行のスレタイが空なら、キーを入れる(`title` は NOT NULL)
+- 受け取る側の検査に落ちる行(長すぎるキーなど)は種まきで送らない。操作なら捨てて `bad_counts.local` に数える。手元の行は残す
 
 ### サイト
 
@@ -506,7 +528,7 @@ class UserOps {
 | `hash` | 送らない | 手元の値を消さない |
 | `delete_url` | `secret.body.value`(権限系) | 権限系がオンのときだけ |
 
-適用は `INSERT OR REPLACE` を使わない(`hash` が消える)。`ON CONFLICT (url) DO UPDATE` にする。
+適用は `INSERT OR REPLACE` を使わない(`hash` が消える)。同じバッチで `UPDATE` と `INSERT OR IGNORE` を流す。
 
 ### NG
 
@@ -596,7 +618,7 @@ class UserOps {
 | `site` | 足す・消す・名前の更新。`trim` なら何もしない |
 | `order` | リストごとに `sort` を振り直す |
 | `post` | `ref_local` がなければ INSERT し、`own_posts` に足す。tombstone は行を消す。`trim` なら何もしない |
-| `image` | 上の `ON CONFLICT`。tombstone は行を消す |
+| `image` | 上の `UPDATE` と `INSERT OR IGNORE`。tombstone は行を消す |
 | `ng`・`setting` | 検査してから手元に書く |
 | `secret` | `uploads.delete_url` |
 | 知らない種類 | 同期の表にだけ持つ |
@@ -730,8 +752,10 @@ interface SyncApplied {
 2. `GET /changes?since=0` を最後まで読み、`sync_records` に入れる。まだ写さない
 3. 今のデータから種まきと同じ値を作り、同じ ID があれば `mergePayloads`。合わせた結果がサーバーの値と違えば `pending = 1`
 4. 手元で消えるもの・増えるものを数え、計画にする
-5. 消えるものが 10 件以上か、お気に入りが半分以上減るなら確認を出す
+5. 消えるものが 10 件以上か、お気に入りが半分以上減るなら確認を出す(数えるのは手元に行のあるレコードと、そのうち `trim` でない tombstone)。答えは `accept_removal`(進める)か `keep_local`(進まない。同期の表と鍵を消して使っていない状態へ戻す。手元は残る)
 6. 写す。そのあと送る
+
+1 台目も同じ流れを通る。`GET /changes?since=0` が 404 なら `POST /spaces` で作る。`epoch` をまだ持っていないので、合わせ直さない。`capacity_full`・`creation_closed` は `blocked`。
 
 | データ | 合流の結果 |
 | --- | --- |
@@ -833,10 +857,13 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `backoff` | 再送の待ち |
 | `offline` | 通信できない |
 | `rebasing` | `planRebase` の実行 |
+| `recreating` | 領域が消えたあとの全件の読み取りと `planRecreate` の実行 |
 | `recreate_waiting` | 作り直したいが満員。前面に来るたび試す |
 | `blocked` | 新規作成の満員・停止・認証失敗。自動で再開しない |
 
-周の順は必ず draining → pull → apply → push。push の前に受け取るのは、409 を減らすため。
+周の順は必ず draining → pull → apply → push。push の前に受け取るのは、409 を減らすため。push の 409 のマージでサーバーの値が勝ったら、周の最後にもう一度 apply を通す。
+
+`phase` に保存するのは `joining`・`seeding`・`confirm`・`idle`・`recreate_waiting`・`blocked`。ほかは周の中だけの状態で、再送の待ち(`backoff`・`offline`)はメモリに持つ。起動し直すとすぐ試せる。
 
 ### きっかけ
 
@@ -895,12 +922,33 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 | 場面 | 決まり |
 | --- | --- |
-| `request_id` | `push_inflight` に保存する。応答が来ないまま落ちたら、同じ内容・同じ ID で送り直す |
+| `request_id` | `push_inflight` に `request_id` と `record_id`・`hlc` の一覧を保存してから送る。応答が来ないまま落ちたら、同じ ID で送り直す。暗号文は保存せず封をし直す(1 回 1MB を毎回書かないため)。その間に変わったレコードは今の値を送り、`hlc` が一覧と違うので `pending` が残って次でまた送る。pull で片づいたものは送らず、全部片づけば一覧を消す |
 | 応答の成功 | `UPDATE … SET version = ?, pending = 0 WHERE record_id = ? AND hlc = ?`。送信中に変わったレコードは `version` だけ進め、`pending` を残す |
-| 409 | 応答のレコードを `mergePayloads` して、新しい `version` を `base_version` に再送 |
+| 409 | 応答のレコードを `mergePayloads` して、新しい `version` を `base_version` に再送。応答の `record_id` が送ったものと違えば混ぜず、`bad_counts.swapped` に数える(別のレコードの暗号文のすり替え) |
+| 待ち時間 | `backoffDelayMs(回数, jitter)`。1 秒から最大 60 秒を倍々にし、半分をジッターにする。表は `sync-config.json` |
+| 1 周の送信 | 100 件・1MB ずつ、最大 20 回。残りは次の周 |
+| 413 | 段階 1 は `last_error` に書くだけで `pending` を残す。外す処理は段階 3 |
 | 読み取りの上限 | 1 応答 2MB。超えたら捨てて `backoff` |
 | version が進まない | ページングを止める |
 | リダイレクト | 3xx は失敗。たどらない |
+
+### サーバーとの形
+
+全部の形は `packages/conformance/sync-server-rules.json` に例がある。
+
+| 要求 | 応答 |
+| --- | --- |
+| `POST /spaces` 本文 `{}` | 作成は 201、あれば 200。`{ epoch, created }`。断るときは 403 と `{ error }` |
+| `GET /changes?since=N` | `{ records, head, more, epoch, gc_floor }`。最後のページの後は `since = head` |
+| `POST /records` 本文 `{ request_id, records }` | 200 と `{ results, epoch, gc_floor }`。`results` は `{ record_id, status: 200, version }` か `{ record_id, status: 409, record }` |
+| `GET /head` | `{ version, epoch, gc_floor }`。ETag は `"<epoch>:<version>"`。同じなら 304 |
+| `GET /space` | `{ used_bytes, record_count, quota_bytes, quota_records, epoch, gc_floor }` |
+| `DELETE /space` | `{ deleted: true }` |
+
+- `request_id` は `[A-Za-z0-9_-]` の 22 文字(16 バイト)。`epoch` は 128 文字までの文字列で、端末は中身を解釈しない
+- 失敗は `{ error }`。端末は 4xx の `error` を `last_error` に写す
+- `since=0` の回数は、中身のある領域だけ数える。空の領域を数えると、まだ何も送っていない端末が止まる
+- 全件の中の開けないレコードも `version` は数える。開けないものでページングが止まらないように
 
 ### リベース
 
@@ -910,14 +958,17 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `epoch` が変わった | 下の「領域が消えたとき」。何も消さない |
 
 1. 全件を読む(`since=0` は 1 時間に 3 回まで。超えたら `backoff`)
-2. `planRebase` を呼ぶ。最後のページまで読めなかったときは `complete: false` で渡す。届いていないものは消さず、未送信も捨てず、計画に残す。読めた分のマージだけを行い、次の周で続きから読む
+2. `planRebase` を呼ぶ。最後のページまで読めなかったときは `complete: false` で渡す。届いていないものは消さず、未送信も捨てず、計画に残す。読めた分のマージだけを行い、`since` は進めない。消えたものを決めるには全部の ID が要るので、次の周はもう一度最初から読む
 3. `needs_confirmation` なら、計画を `pending_confirm` に保存して `confirm` へ
 4. 消す前に、消える項目の一覧を `sync_state` の `rebase_backup` に保存する
 5. `records`・`pending`・`removed` を 200 件ずつ書く
+6. 終わったら `since = max(head, gc_floor)`。一番新しい version が片づいた tombstone だと、最後のレコードの version では `gc_floor` に届かず、毎周リベースになるため
+
+確認の答えは `accept_removal`(消す)か `keep_local`(消さない。領域が消えたときと同じく `planRecreate` で全部を合わせ直して送る)。`since = 0` の端末は全件を読むのでリベースにしない。
 
 - `removed` のうち、手元のペイロードがすでに tombstone のものは今のデータに触らない。行を消すだけ
 - tombstone の片づけは大量削除の確認に数えない(分子にも、同期済みの分母にも)
-- 連続のリベースは 1 日 3 回まで。超えたら `blocked` にして知らせる
+- 連続のリベースは 1 日 3 回まで。超えたら `blocked`(`too_many_rebases`)にして知らせる。`epoch` の変更と 404 の作り直しも同じ回数に数える(どれもサーバーの応答で起きるので)
 
 ### 領域が消えたとき
 
@@ -1123,6 +1174,10 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 
 `packages/conformance/sync-client.json` を PC とスマホの単体テストで読む。既存の `sync-*.json` と同じ置き場で、`build.gradle.kts` の `sourceSets["test"].resources.srcDir` で届く。
 
+- `steps` の `op` は実行部(`packages/sync/test/scenarioRunner.ts`・`SyncScenarioTest.kt`)の一覧のとおり。途中の確かめは `{ "op": "expect", "expect": { 端末: { … } } }`
+- シナリオの後に、今のデータと同期の表の全列を並べた SHA-256 を比べる。値は `sync-client-digests.json` に置き、PC で `SYNC_UPDATE_DIGESTS=1` を付けて回すと書き直す。スマホは読んで比べるだけなので、同じ行ができたことまで確かめられる
+- `sync-config.json` は定数・待ち時間・サーバーの URL の検査の表
+
 ```json
 {
   "name": "2 台の並べ替えは同じ結果",
@@ -1224,7 +1279,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 段階 | 端末の作業 | 完了の目安 |
 | --- | --- | --- |
 | 0 | 核 | 済み |
-| 1 | `018_sync.sql`、`sql_batch`、`UserOps` の `favorite_thread_*`、アダプター 1 種類、エンジン(手動)、偽サーバー、テストの枠 | 偽サーバーで PC と スマホがお気に入りのスレを往復する。シナリオ 1・2・3・13・31 が両方で通る |
+| 1 | `018_sync.sql`、`sql_batch`、`UserOps` の `favorite_thread_*`、アダプター 1 種類、エンジン(手動)、偽サーバー、テストの枠 | 済み。偽サーバーで PC と スマホがお気に入りのスレを往復する。本番の鍵保管・HTTP・板の判定(`BoardResolver`)はまだつないでいない |
 | 2 | HTTP の実装、鍵、ペアリング、手動の同期ボタン | 検証用の Worker で 2 台が実機で同期する |
 | 3 | きっかけ、まとめ送り、再送、状態の表示、裏に回る瞬間の 1 回の送信、領域の作り直し | 機内モードの復帰で追いつく。シナリオ 30〜38・43〜53 |
 | 4 | 閲覧履歴・既読・板と順序 → 書き込み・画像 → NG → 設定の順に足す。初回の同期 | 全シナリオ。1 万スレの偽データで初回の同期が固まらない |

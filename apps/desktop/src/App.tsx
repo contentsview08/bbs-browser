@@ -36,6 +36,7 @@ import {
   type ThreadState,
   type TrollMarkRecord,
   type UploadRecord,
+  UserOps,
 } from '@bbs-browser/logstore'
 import type { SettingsTab } from './components/SettingsDialog'
 import AddressBar from './components/AddressBar'
@@ -915,7 +916,8 @@ export default function App() {
     if (!store) return
     const on = favIds.has(threadId(t))
     void run(null, async () => {
-      await (on ? store.removeFavoriteThread(t) : store.addFavoriteThread(t))
+      const ops = new UserOps(store)
+      await (on ? ops.favoriteThreadRemove(t) : ops.favoriteThreadAdd(t))
       await reloadFavThreads(store)
     })
   }

@@ -22,5 +22,7 @@ export async function openLogStore(): Promise<LogStore> {
       await db.execute(sql, params)
     },
     select: (sql, params) => db.select(sql, params),
+    // プラグインの execute はプールの別の接続へ行くことがあるので、トランザクションは Rust の命令で行う
+    batch: (statements) => invoke('sql_batch', { statements: statements.map((s) => ({ sql: s.sql, params: s.params ?? [] })) }),
   })
 }

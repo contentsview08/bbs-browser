@@ -14,8 +14,8 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - `packages/connectors` — コネクタ。純 TS で、Tauri・DOM・グローバルの `fetch` に依存させない。
   通信と文字コード変換はホストが渡す `ConnectorContext` 経由で行う(テストで偽サーバーを差し込めるように)。
 - `packages/logstore` — ログの保存。SQL は `SqlDb` 越しに実行し、アプリでは tauri-plugin-sql、テストでは sql.js を使う。
-  tauri-plugin-sql は接続プールなのでトランザクションに頼らない。途中で落ちても次の取得で直る順番で書く
-  (reset は cursor を先に NULL に、updated はレスを書いてから cursor を進める)。
+  tauri-plugin-sql は接続プールなので、`execute` を並べてもトランザクションにならない。途中で落ちても次の取得で直る順番で書く
+  (reset は cursor を先に NULL に、updated はレスを書いてから cursor を進める)。一緒に書く必要があるものだけ `batch`(Rust の `sql_batch`)を使う。
   スキーマを変えるときは `migrations/` に新しい番号のファイルを足し、`src-tauri/src/lib.rs` にも登録する。
 - `apps/desktop` — Tauri アプリ。`src/host/tauriContext.ts` が `ConnectorContext` の実装。
   Rust 側は公式プラグインの登録が中心。WebView でできないこと(OS のフォント一覧など)だけ、`src-tauri/src/lib.rs` に小さな命令として書く。

@@ -1,0 +1,46 @@
+{
+  "constants": {
+    "SCHEMA_VERSION": 1,
+    "PULL_MIN_GAP_MS": 10000,
+    "HTTP_TIMEOUT_MS": 10000,
+    "BACKOFF_MIN_MS": 1000,
+    "BACKOFF_MAX_MS": 60000,
+    "MAX_RESPONSE_BYTES": 2097152,
+    "PUSH_BATCH_RECORDS": 100,
+    "PUSH_BATCH_BYTES": 1048576,
+    "PUSH_MAX_ROUNDS": 20,
+    "APPLY_BATCH": 200,
+    "WRITE_BATCH": 200,
+    "APPLY_SPLIT_AFTER": 3,
+    "REBASE_LIMIT": 3,
+    "REBASE_WINDOW_MS": 86400000,
+    "RECREATE_RETRY_MS": 3600000,
+    "JOIN_CONFIRM_MIN": 10
+  },
+  "backoff": [
+    {"attempt": 0, "jitter": 0, "ms": 500},
+    {"attempt": 0, "jitter": 0.5, "ms": 750},
+    {"attempt": 1, "jitter": 0, "ms": 1000},
+    {"attempt": 3, "jitter": 0.5, "ms": 6000},
+    {"attempt": 6, "jitter": 0, "ms": 30000},
+    {"attempt": 6, "jitter": 0.5, "ms": 45000},
+    {"attempt": 40, "jitter": 0, "ms": 30000}
+  ],
+  "server_url": [
+    {"url": "https://sync.example.test", "ok": "https://sync.example.test"},
+    {"url": "https://sync.example.test/", "ok": "https://sync.example.test"},
+    {"url": "https://sync.example.test:8443/v1/", "ok": "https://sync.example.test:8443/v1"},
+    {"url": "http://sync.example.test", "ok": null},
+    {"url": "ftp://sync.example.test", "ok": null},
+    {"url": "HTTPS://sync.example.test", "ok": null},
+    {"url": "https://user:pw@sync.example.test", "ok": null},
+    {"url": "https://sync.example.test/?a=1", "ok": null},
+    {"url": "https://sync.example.test/#f", "ok": null},
+    {"url": "https://", "ok": null},
+    {"url": "https://a b", "ok": null},
+    {"url": "http://localhost:8787", "ok": null},
+    {"url": "http://localhost:8787", "allow_localhost": true, "ok": "http://localhost:8787"},
+    {"url": "http://127.0.0.1:8787/", "allow_localhost": true, "ok": "http://127.0.0.1:8787"},
+    {"url": "http://localhost.evil.test", "allow_localhost": true, "ok": null}
+  ]
+}

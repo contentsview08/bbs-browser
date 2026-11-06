@@ -10,6 +10,7 @@ import io.github.contentsview08.obb.bbs.FetchResult
 import io.github.contentsview08.obb.bbs.FetchStatus
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.sync.engine.AndroidSyncSql
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -62,6 +63,15 @@ internal object UploadSql {
 
     fun importArgs(u: UploadRecord): Array<Any?> =
         arrayOf(u.url, u.name, u.size, u.uploadedAt, if (u.withAccount) 1 else 0, u.hash, u.deleteUrl)
+}
+
+/** お気に入りのスレの SQL。JVM のテストでも同じ文を流す */
+internal object FavoriteThreadSql {
+    const val ADD = "INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), ?)"
+    const val REMOVE = "DELETE FROM favorite_threads WHERE board_url = ? AND key = ?"
+
+    fun addArgs(t: ThreadSummary, title: String, now: Long): List<Any?> = listOf(t.boardUrl, t.key, connectorOf(t.boardUrl), title, t.createdAt, now)
+    fun removeArgs(t: ThreadSummary): List<Any?> = listOf(t.boardUrl, t.key)
 }
 
 /**
@@ -348,14 +358,8 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         readableDatabase.rawQuery("SELECT 1 FROM favorite_threads WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { it.moveToFirst() }
     }
 
-    suspend fun setFavoriteThread(t: ThreadSummary, title: String, on: Boolean) = io {
-        if (on) {
-            writableDatabase.execSQL(
-                "INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), ?)",
-                arrayOf<Any?>(t.boardUrl, t.key, connectorOf(t.boardUrl), title, t.createdAt, System.currentTimeMillis()),
-            )
-        } else writableDatabase.delete("favorite_threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
-    }
+    /** お気に入りのスレを足す・外す利用者の操作はここだけを通す */
+    val userOps by lazy { UserOps(AndroidSyncSql { writableDatabase }) }
 
     // ── 書き込み履歴 ──
 

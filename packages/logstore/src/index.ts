@@ -1,8 +1,8 @@
 // スレのログ(取得済みのレス・既読位置・差分取得の Cursor)を SQLite に保存する。
 // SQL の実行は SqlDb 越しに行うので、アプリでは tauri-plugin-sql、テストでは sql.js を差し込める。
 //
-// tauri-plugin-sql は接続プールを使うため、BEGIN/COMMIT が同じ接続で走る保証がない。
-// トランザクションに頼らず、「途中で落ちても次の取得で正しい状態に戻る」順番で書き込む。
+// tauri-plugin-sql は接続プールを使うため、execute を並べても BEGIN/COMMIT が同じ接続で走る保証がない。
+// execute では「途中で落ちても次の取得で正しい状態に戻る」順番で書き込む。一緒に書く必要があるものだけ batch を使う。
 
 import type { Badge, Board, Cursor, FetchPostsResult, Post, SiteConfig, ThreadSummary } from '@bbs-browser/connectors'
 
@@ -10,6 +10,13 @@ import type { Badge, Board, Cursor, FetchPostsResult, Post, SiteConfig, ThreadSu
 export interface SqlDb {
   execute(sql: string, params?: unknown[]): Promise<void>
   select<T>(sql: string, params?: unknown[]): Promise<T[]>
+  /** まとめて 1 つのトランザクションで流す。どれかが失敗すれば全部戻る */
+  batch(statements: SqlStatement[]): Promise<void>
+}
+
+export interface SqlStatement {
+  sql: string
+  params?: unknown[]
 }
 
 /** アップロードした画像 1 枚ぶん */
@@ -179,8 +186,20 @@ function threadOfRow(r: { connector_id: string; board_url: string; key: string; 
   }
 }
 
+export function addFavoriteThreadStatement(thread: ThreadSummary, now: number): SqlStatement {
+  return {
+    sql: `INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at)
+       VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), $6)`,
+    params: [thread.boardUrl, thread.key, thread.connectorId, thread.title, nn(thread.createdAt?.getTime()), now],
+  }
+}
+
+export function removeFavoriteThreadStatement(thread: ThreadSummary): SqlStatement {
+  return { sql: 'DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', params: [thread.boardUrl, thread.key] }
+}
+
 export class LogStore {
-  constructor(private db: SqlDb) {}
+  constructor(readonly db: SqlDb) {}
 
   // ── サイトと板 ──
 
@@ -538,15 +557,13 @@ export class LogStore {
   }
 
   async addFavoriteThread(thread: ThreadSummary, now = Date.now()): Promise<void> {
-    await this.db.execute(
-      `INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at)
-       VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), $6)`,
-      [thread.boardUrl, thread.key, thread.connectorId, thread.title, nn(thread.createdAt?.getTime()), now],
-    )
+    const { sql, params } = addFavoriteThreadStatement(thread, now)
+    await this.db.execute(sql, params)
   }
 
   async removeFavoriteThread(thread: ThreadSummary): Promise<void> {
-    await this.db.execute('DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', [thread.boardUrl, thread.key])
+    const { sql, params } = removeFavoriteThreadStatement(thread)
+    await this.db.execute(sql, params)
   }
 
   // ── 書き込みの下書き ──
@@ -685,3 +702,5 @@ export class LogStore {
     await this.db.execute('DELETE FROM post_history WHERE id = $1', [id])
   }
 }
+
+export * from './userOps'

@@ -1,0 +1,5091 @@
+[
+ {
+  "name": "同期を始めない限り、操作は積まれず通信もしない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "2"
+    ],
+    "ops": 0,
+    "records": 0,
+    "state_rows": 0,
+    "state": "off",
+    "requests": {}
+   },
+   "$server": {
+    "spaces": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入りのスレの追加が別の端末へ届く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1",
+    "created_at": 1700000000000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pending": 0,
+      "ops": 0,
+      "records": 1,
+      "trace": [
+       "draining",
+       "pulling",
+       "merging",
+       "applying",
+       "pushing",
+       "idle"
+      ],
+      "pushed": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_rows": [
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "title1",
+      "created_at": 1700000000000
+     }
+    ],
+    "pending": 0,
+    "ops": 0,
+    "records": 1,
+    "applied": true
+   },
+   "pc": {
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "$server": {
+    "spaces": 1,
+    "of": {
+     "pc": {
+      "records": 1,
+      "head": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "削除が届き、もう一度同期しても復活しない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "1"
+      ]
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [],
+      "tombstones": 1,
+      "applied": true
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [],
+    "pending": 0,
+    "records": 1,
+    "tombstones": 1
+   }
+  }
+ },
+ {
+  "name": "足した直後に外すと tombstone だけが伝わる",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [],
+    "tombstones": 1,
+    "applied": false
+   },
+   "phone": {
+    "favorite_threads": [],
+    "ops": 0,
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "同時の追加と削除: 削除の方が新しければ消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "新しい題"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [],
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "同時の追加と削除: 追加の方が新しければ残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "オフラインから戻ると両方の変更が揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "offline"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "offline",
+      "pending": 1,
+      "last_error": "network",
+      "ops": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "3",
+    "title": "title3"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "online"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 120000
+   },
+   {
+    "device": "phone",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "idle",
+      "favorite_threads": [
+       "2",
+       "3"
+      ],
+      "pending": 0,
+      "last_error": null
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "2",
+     "3"
+    ],
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "適用したものを送り返さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "ops": 0,
+      "pending": 0,
+      "favorite_threads": [
+       "1"
+      ],
+      "requests": {
+       "GET /changes": 1
+      },
+      "pushed": 0
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 11000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ops": 0,
+    "pending": 0,
+    "needs_apply": 0,
+    "requests": {
+     "GET /changes": 1
+    },
+    "applied": false
+   }
+  }
+ },
+ {
+  "name": "プリセットと自動の追加は積まれない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "preset_board_add",
+    "url": "https://b.5ch.io/y/",
+    "name": "y"
+   },
+   {
+    "device": "pc",
+    "op": "auto_favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "自動"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0,
+      "pending": 0,
+      "records": 0
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ops": 0,
+    "pending": 0,
+    "records": 0,
+    "pushed": 0,
+    "requests": {
+     "GET /changes": 1
+    },
+    "favorite_threads": [
+     "1"
+    ],
+    "favorite_boards": [
+     "https://b.5ch.io/y/",
+     "https://bbs.eddibb.cc/liveedge/"
+    ]
+   }
+  }
+ },
+ {
+  "name": "起動時の照合: 取りこぼした追加は低い HLC でレコードになり、新しい削除に負ける",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "auto_favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "9",
+    "title": "拾い漏れ"
+   },
+   {
+    "device": "phone",
+    "op": "auto_favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1"
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "9"
+    ]
+   },
+   "phone": {
+    "favorite_threads": [
+     "9"
+    ],
+    "pending": 0,
+    "needs_apply": 0
+   }
+  }
+ },
+ {
+  "name": "起動時の照合: レコードがあり手元にない行は同期の表から戻す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "auto_favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1"
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0,
+    "applied": true
+   }
+  }
+ },
+ {
+  "name": "409: 同じレコードを 2 台が足すと、マージして揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "pc の題"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "phone の題"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "body": {
+     "records": [],
+     "head": 0,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 0
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "conflicts": 1,
+      "pending": 0,
+      "favorite_threads": [
+       "1"
+      ],
+      "requests": {
+       "GET /changes": 1,
+       "POST /records": 2
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_rows": [
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "phone の題",
+      "created_at": null
+     }
+    ],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_rows": [
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "phone の題",
+      "created_at": null
+     }
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 1,
+      "head": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "409: 手元の方が古ければ送り直さず、サーバーの値へ揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "古い"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "新しい"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "body": {
+     "records": [],
+     "head": 0,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 0
+    }
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "conflicts": 1,
+    "pending": 0,
+    "favorite_rows": [
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "新しい",
+      "created_at": null
+     }
+    ],
+    "requests": {
+     "GET /changes": 1,
+     "POST /records": 1
+    }
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "head": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "404 からの作り直し: 確認なしで手元から戻り、削除が復活しない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "spaces": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle",
+      "phase": "idle",
+      "favorite_threads": [
+       "1"
+      ],
+      "pending": 0,
+      "tombstones": 1
+     },
+     "$server": {
+      "spaces": 1,
+      "of": {
+       "pc": {
+        "records": 2
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0,
+    "state": "idle"
+   },
+   "$server": {
+    "spaces": 1,
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "404: 送信待ちは失われず、作り直しで届く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "2 台が同時に作り直しても領域は 1 つで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "spaces": 1,
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "作り直しの途中で切れても次の周で続く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "server_unreachable",
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "offline",
+      "favorite_threads": [
+       "1",
+       "2"
+      ],
+      "pending": 2
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 120000
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "epoch の変更: 何も消さず全部を合わせ直して送る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_bump_epoch"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "1"
+      ],
+      "pending": 0,
+      "requests": {
+       "GET /changes": 2
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0
+   },
+   "pc": {
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 1,
+      "head": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "epoch の繰り返しの変更: 回数を超えると止まり、手元は残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_bump_epoch"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_bump_epoch"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_bump_epoch"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle"
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "server_bump_epoch"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "blocked",
+      "phase": "blocked",
+      "last_error": "too_many_rebases",
+      "favorite_threads": [
+       "1"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "blocked",
+    "requests": {}
+   }
+  }
+ },
+ {
+  "name": "枠 2 で 3 領域: 使っていない領域だけが押し出され、戻ると作り直して揃う",
+  "devices": [
+   "a1",
+   "a2",
+   "b1",
+   "b2",
+   "c1",
+   "c2"
+  ],
+  "server": {
+   "space_limit": 2
+  },
+  "steps": [
+   {
+    "device": "a1",
+    "op": "pair_first"
+   },
+   {
+    "device": "a2",
+    "op": "pair_join",
+    "from": "a1"
+   },
+   {
+    "device": "a1",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "a1",
+    "op": "sync"
+   },
+   {
+    "device": "a2",
+    "op": "sync"
+   },
+   {
+    "device": "b1",
+    "op": "pair_first"
+   },
+   {
+    "device": "b2",
+    "op": "pair_join",
+    "from": "b1"
+   },
+   {
+    "device": "b1",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "b1",
+    "op": "sync"
+   },
+   {
+    "device": "b2",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "spaces": 2
+     }
+    }
+   },
+   {
+    "device": "c1",
+    "op": "pair_first"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "c1": {
+      "state": "blocked",
+      "last_error": "capacity_full",
+      "phase": "blocked"
+     },
+     "a1": {
+      "state": "idle"
+     },
+     "$server": {
+      "spaces": 2
+     }
+    }
+   },
+   {
+    "device": "c1",
+    "op": "mark"
+   },
+   {
+    "device": "c1",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "c1": {
+      "state": "blocked",
+      "requests": {}
+     }
+    }
+   },
+   {
+    "device": "a1",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "a1": {
+      "state": "idle",
+      "pending": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1209600000
+   },
+   {
+    "device": "b1",
+    "op": "sync"
+   },
+   {
+    "device": "c1",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "c1": {
+      "state": "idle"
+     },
+     "$server": {
+      "spaces": 2,
+      "of": {
+       "a1": {
+        "exists": false
+       },
+       "b1": {
+        "exists": true
+       },
+       "c1": {
+        "exists": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "c2",
+    "op": "pair_join",
+    "from": "c1"
+   },
+   {
+    "device": "c1",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "3",
+    "title": "title3"
+   },
+   {
+    "device": "c1",
+    "op": "sync"
+   },
+   {
+    "device": "c2",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "c2": {
+      "favorite_threads": [
+       "3"
+      ]
+     }
+    }
+   },
+   {
+    "device": "a1",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "a1",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "4",
+    "title": "title4"
+   },
+   {
+    "device": "a1",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "a1": {
+      "state": "recreate_waiting",
+      "last_error": "capacity_full",
+      "favorite_threads": [
+       "4"
+      ],
+      "phase": "recreate_waiting"
+     }
+    }
+   },
+   {
+    "device": "a1",
+    "op": "mark"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "a1",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "a1": {
+      "state": "recreate_waiting",
+      "skipped": "waiting",
+      "requests": {}
+     }
+    }
+   },
+   {
+    "device": "b1",
+    "op": "sync"
+   },
+   {
+    "device": "c1",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1209598000
+   },
+   {
+    "device": "b1",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 2000
+   },
+   {
+    "device": "c1",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 3600000
+   },
+   {
+    "device": "a1",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "a1": {
+      "state": "recreate_waiting"
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1209600000
+   },
+   {
+    "device": "c1",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 3600000
+   },
+   {
+    "device": "a1",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "a1": {
+      "state": "idle",
+      "phase": "idle",
+      "pending": 0,
+      "favorite_threads": [
+       "4"
+      ],
+      "last_error": null
+     },
+     "$server": {
+      "spaces": 2,
+      "of": {
+       "a1": {
+        "exists": true,
+        "records": 2
+       },
+       "b1": {
+        "exists": false
+       },
+       "c1": {
+        "exists": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "a2",
+    "op": "sync"
+   },
+   {
+    "device": "a1",
+    "op": "sync"
+   },
+   {
+    "device": "c2",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "a1": {
+    "favorite_threads": [
+     "4"
+    ],
+    "pending": 0
+   },
+   "a2": {
+    "favorite_threads": [
+     "4"
+    ],
+    "pending": 0,
+    "state": "idle"
+   },
+   "c1": {
+    "favorite_threads": [
+     "3"
+    ]
+   },
+   "c2": {
+    "favorite_threads": [
+     "3"
+    ],
+    "pending": 0
+   },
+   "b1": {
+    "favorite_threads": [
+     "2"
+    ]
+   },
+   "b2": {
+    "favorite_threads": [
+     "2"
+    ]
+   }
+  }
+ },
+ {
+  "name": "中断してやり直しても重ならない: 応答が消えたら同じ request_id で採番し直さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_drop_response",
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "offline",
+      "pending": 1,
+      "inflight": true
+     },
+     "$server": {
+      "of": {
+       "pc": {
+        "head": 1
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "body": {
+     "records": [],
+     "head": 0,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 0
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pending": 0,
+      "inflight": false
+     },
+     "$server": {
+      "request_id_repeated": true,
+      "of": {
+       "pc": {
+        "head": 1,
+        "records": 1
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "pc": {
+    "favorite_threads": [
+     "1"
+    ],
+    "records": 1
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "head": 1,
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "中断してやり直しても重ならない: 届かなかった送信は同じ request_id で届く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_unreachable",
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "offline",
+      "inflight": true
+     },
+     "$server": {
+      "of": {
+       "pc": {
+        "head": 0
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "pending": 0,
+    "inflight": false
+   },
+   "$server": {
+    "request_id_repeated": true,
+    "of": {
+     "pc": {
+      "head": 1,
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "中断してやり直しても重ならない: 種まきの途中で落ちてやり直す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "一",
+      "added_ago_ms": 3000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "2",
+      "title": "二",
+      "added_ago_ms": 2000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "op": "server_unreachable",
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "offline",
+      "pending": 2,
+      "records": 2,
+      "favorite_threads": [
+       "1",
+       "2"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pending": 0,
+      "records": 2,
+      "state": "idle"
+     },
+     "$server": {
+      "of": {
+       "pc": {
+        "records": 2,
+        "head": 2
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "records": 2,
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 2,
+      "head": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "中断してやり直しても重ならない: 適用の途中で失敗すると巻き戻り、次の周で続く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "db_fail",
+    "match": "INSERT OR IGNORE INTO favorite_threads"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "backoff",
+      "favorite_threads": [],
+      "needs_apply": 2,
+      "last_error": "internal"
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 120000
+   },
+   {
+    "device": "phone",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "state": "idle",
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "needs_apply": 0,
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "適用が 3 回続けて失敗すると、原因のレコードだけを除ける",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "db_fail",
+    "match": "INSERT OR IGNORE INTO favorite_threads",
+    "times": 4
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 120000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 120000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "state": "idle",
+    "favorite_threads": [],
+    "needs_apply": 0,
+    "bad_counts": {
+     "apply": 1
+    }
+   }
+  }
+ },
+ {
+  "name": "種まき: 既存のお気に入りがレコードになり、もう 1 台へ届く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "一",
+      "added_ago_ms": 3000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "2",
+      "title": "二",
+      "added_ago_ms": 2000,
+      "created_at": 1700000000000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "records": 2,
+      "pending": 0,
+      "trace": [
+       "draining",
+       "joining",
+       "pulling",
+       "joining",
+       "pulling",
+       "merging",
+       "seeding",
+       "applying",
+       "pushing",
+       "idle"
+      ]
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0,
+    "phase": "idle"
+   },
+   "pc": {
+    "records": 2
+   }
+  }
+ },
+ {
+  "name": "種まき: 合流は和集合で、どちらの手元も消えない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "一",
+      "added_ago_ms": 5000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "2",
+      "title": "二",
+      "added_ago_ms": 4000
+     }
+    ]
+   },
+   "phone": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "2",
+      "title": "二の別",
+      "added_ago_ms": 3000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "3",
+      "title": "三",
+      "added_ago_ms": 2000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "1",
+     "2",
+     "3"
+    ],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2",
+     "3"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 3
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "種まき: 古いお気に入りは新しい削除に勝たず、確認の後で消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "phone": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "古い",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "2",
+      "title": "残る",
+      "added_ago_ms": 100000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "confirm",
+      "phase": "confirm",
+      "favorite_threads": [
+       "1",
+       "2"
+      ],
+      "pending_confirm": {
+       "type": "join",
+       "lost": 1,
+       "total": 2
+      },
+      "pending": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "confirm",
+      "favorite_threads": [
+       "1",
+       "2"
+      ]
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "confirm",
+    "choice": "accept_removal"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "phase": "idle",
+    "favorite_threads": [
+     "2"
+    ],
+    "pending": 0
+   },
+   "pc": {
+    "favorite_threads": [
+     "2"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "種まき: 削除より後に足したものは残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "auto_favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "後から"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0,
+    "state": "idle"
+   },
+   "pc": {
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "合流で 10 件以上消えるときは止まり、やめても手元は残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "phone": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k0",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k1",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k2",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k3",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k4",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k5",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k6",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k7",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k8",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k9",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m0",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m1",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m2",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m3",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m4",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m5",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m6",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m7",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m8",
+      "title": "t",
+      "added_ago_ms": 100000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "m9",
+      "title": "t",
+      "added_ago_ms": 100000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k0",
+    "title": "titlek0"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k1",
+    "title": "titlek1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k2",
+    "title": "titlek2"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k3",
+    "title": "titlek3"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k4",
+    "title": "titlek4"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k5",
+    "title": "titlek5"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k6",
+    "title": "titlek6"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k7",
+    "title": "titlek7"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k8",
+    "title": "titlek8"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "k9",
+    "title": "titlek9"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k0",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k2",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k3",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k4",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k5",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k6",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k7",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k8",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "k9",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "z",
+    "title": "titlez"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "confirm",
+      "pending_confirm": {
+       "type": "join",
+       "lost": 10,
+       "total": 20
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "confirm",
+    "choice": "keep_local"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "off",
+      "records": 0,
+      "state_rows": 0,
+      "keys": false
+     }
+    }
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "k0",
+     "k1",
+     "k2",
+     "k3",
+     "k4",
+     "k5",
+     "k6",
+     "k7",
+     "k8",
+     "k9",
+     "m0",
+     "m1",
+     "m2",
+     "m3",
+     "m4",
+     "m5",
+     "m6",
+     "m7",
+     "m8",
+     "m9"
+    ]
+   }
+  }
+ },
+ {
+  "name": "gc_floor の変更: リベースで消えたものが手元から消え、復活しない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "offline"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 3888000000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 3888000000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "2"
+      ]
+     },
+     "$server": {
+      "of": {
+       "pc": {
+        "records": 1,
+        "gc_floor": 3
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "3",
+    "title": "title3"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "online"
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "2",
+       "3"
+      ],
+      "pending": 0,
+      "requests": {
+       "GET /changes": 3
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "2",
+     "3"
+    ],
+    "pending": 0,
+    "records": 2
+   },
+   "pc": {
+    "favorite_threads": [
+     "2",
+     "3"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "gc_floor: サーバーが全件を空に見せると確認で止まり、手元を消さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 2,
+    "body": {
+     "records": [],
+     "head": 9,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 9
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "confirm",
+      "favorite_threads": [
+       "1",
+       "2"
+      ],
+      "records": 2,
+      "pending_confirm": {
+       "type": "rebase",
+       "lost": 2,
+       "empty": true
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "confirm",
+    "choice": "keep_local"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 2
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "gc_floor の繰り返しの変更: 回数を超えると止まる",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 2,
+    "body": {
+     "records": [],
+     "head": 10,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 10
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 2,
+    "body": {
+     "records": [],
+     "head": 20,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 20
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 2,
+    "body": {
+     "records": [],
+     "head": 30,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 30
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 1,
+    "body": {
+     "records": [],
+     "head": 40,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 40
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "blocked",
+    "last_error": "too_many_rebases",
+    "tombstones": 2
+   }
+  }
+ },
+ {
+  "name": "再送: 500 は偽の時計で待ってから試す。待つ間は通信しない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_fail",
+    "status": 500,
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "pending": 1,
+      "last_error": "http_500"
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 100
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "skipped": "backoff",
+      "requests": {}
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 750
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "pending": 0,
+    "last_error": null
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "再送: 続けて失敗すると待ちが延びる",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_fail",
+    "status": 503,
+    "path": "/records",
+    "times": 2
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 750
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff"
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "skipped": "backoff",
+      "requests": {}
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 500
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "429 は待って試す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_fail",
+    "status": 429,
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff"
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 60000
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "送信中に同じレコードを変えると pending が残り、次で送る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_drop_response",
+    "path": "/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "変えた"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "戻した"
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "pending": 0,
+    "inflight": false
+   },
+   "phone": {
+    "favorite_rows": [
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "戻した",
+      "created_at": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "リダイレクトをたどらず、トークンを別の先へ渡さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_redirect",
+    "path": "/records",
+    "location": "https://evil.test/records"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "last_error": "redirect",
+      "pending": 1
+     },
+     "$server": {
+      "hosts": [
+       "sync.test"
+      ]
+     }
+    }
+   }
+  ],
+  "expected": {
+   "$server": {
+    "hosts": [
+     "sync.test"
+    ]
+   }
+  }
+ },
+ {
+  "name": "version が進まない応答はページングを止める",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 5,
+    "body": {
+     "records": [],
+     "head": 9,
+     "more": true,
+     "epoch": "$epoch",
+     "gc_floor": 0
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "backoff",
+    "last_error": "no_progress",
+    "requests": {
+     "GET /changes": 1
+    },
+    "since": 0
+   }
+  }
+ },
+ {
+  "name": "401 は止まり、自動で再開しない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "server_fail",
+    "status": 401,
+    "path": "/changes"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "blocked",
+      "last_error": "auth_failed",
+      "pending": 1
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "blocked",
+      "requests": {}
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "phase": "idle",
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "creation_closed は止まり、手元が残る",
+  "devices": [
+   "pc"
+  ],
+  "server": {
+   "creation_closed": true
+  },
+  "seed": {
+   "pc": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "一",
+      "added_ago_ms": 1000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "blocked",
+    "last_error": "creation_closed",
+    "favorite_threads": [
+     "1"
+    ]
+   }
+  }
+ },
+ {
+  "name": "413 は通知だけで送信待ちを残す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "server": {
+   "quota_records": 2
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "3",
+    "title": "title3"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "last_error": "quota_exceeded",
+    "pending": 3
+   }
+  }
+ },
+ {
+  "name": "HTTP と 5ch.net の揺れは同じレコードで、手元の行を二重に作らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "http://a.5ch.net/x",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_rows": [
+       {
+        "board_url": "https://a.5ch.io/x",
+        "key": "1",
+        "title": "title1",
+        "created_at": null
+       }
+      ]
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x",
+    "key": "1",
+    "title": "揃う"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [],
+    "records": 1,
+    "tombstones": 1
+   },
+   "phone": {
+    "favorite_threads": [],
+    "records": 1
+   }
+  }
+ },
+ {
+  "name": "スマホにないふたばのレコードは手元に入れず、持ち続ける",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://may.2chan.net/b/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [],
+      "records": 1,
+      "needs_apply": 0,
+      "pending": 0
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [],
+    "records": 1,
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "知らない種類とフィールドは保持して作り直しで送り直す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "server_inject",
+    "record": [
+     "future_kind",
+     null,
+     null,
+     "a"
+    ],
+    "payload": {
+     "kind": "future_kind",
+     "hlc": "01a3185c5000.0000.other",
+     "device_id": "other",
+     "body": {
+      "x": 1
+     },
+     "extra": [
+      1,
+      "a"
+     ]
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "records": 1,
+      "needs_apply": 1,
+      "pending": 0,
+      "favorite_threads": []
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "records": 1,
+    "pending": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "読めないレコードはそれだけ捨てて数え、止まらない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_inject",
+    "record": [
+     "favorite",
+     "https://a.5ch.io/x/",
+     "bad"
+    ],
+    "corrupt": true
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "state": "idle",
+    "favorite_threads": [
+     "1"
+    ],
+    "bad_counts": {
+     "decrypt": 1
+    },
+    "since": 2
+   }
+  }
+ },
+ {
+  "name": "種類の検査に落ちる値は捨てて数える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "server_inject",
+    "record": [
+     "favorite",
+     "https://a.5ch.io/x/",
+     "js"
+    ],
+    "payload": {
+     "kind": "favorite",
+     "hlc": "01a3185c5000.0000.other",
+     "device_id": "other",
+     "body": {
+      "board_url": "javascript:alert(1)",
+      "thread": "js"
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "state": "idle",
+    "favorite_threads": [],
+    "records": 0,
+    "bad_counts": {
+     "schema": 1
+    }
+   }
+  }
+ },
+ {
+  "name": "外す印の tombstone では手元を消さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_inject",
+    "record": [
+     "favorite",
+     "https://a.5ch.io/x/",
+     "1"
+    ],
+    "payload": {
+     "kind": "favorite",
+     "hlc": "01a400000000.0000.other",
+     "device_id": "other",
+     "deleted": true,
+     "trim": true
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_threads": [
+     "1"
+    ],
+    "tombstones": 1,
+    "needs_apply": 0,
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "やめると手元が残り、同期の表と鍵が消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "leave"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "records": 0,
+    "ops": 0,
+    "state_rows": 0,
+    "keys": false,
+    "state": "off"
+   }
+  }
+ },
+ {
+  "name": "DB を別の端末から入れると、新しい device_id で合流し直す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "tamper_device_id"
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "device_id": "pc_2",
+    "phase": "idle",
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0,
+    "state": "idle"
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "鍵がなくなっていたら同期の表を消して使わない状態に戻す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "clear_keys"
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "off",
+    "records": 0,
+    "ops": 0,
+    "state_rows": 0,
+    "favorite_threads": [
+     "1",
+     "2"
+    ]
+   }
+  }
+ },
+ {
+  "name": "tombstone は 90 日を過ぎると作り直しで送らず消す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 7776000000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "tombstones": 1
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "tombstones": 1,
+      "records": 2
+     },
+     "$server": {
+      "of": {
+       "pc": {
+        "records": 2
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "tombstones": 0,
+    "records": 1,
+    "favorite_threads": [
+     "2"
+    ]
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "時計が 3 日先の端末の追加も、遅れた端末の削除で消せる",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "skew_ms": {
+   "pc": 259200000
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "先の時計"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_threads": [],
+    "pending": 0
+   },
+   "phone": {
+    "favorite_threads": [],
+    "pending": 0
+   }
+  }
+ },
+ {
+  "name": "受け取る側の検査に落ちる長いキーは送らず、列を止めない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "title": "長い"
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "普通"
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+    "title": "長い"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "普通"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ops": 0,
+    "pending": 0,
+    "records": 2,
+    "bad_counts": {
+     "local": 1
+    }
+   },
+   "phone": {
+    "favorite_threads": [
+     "1",
+     "2"
+    ],
+    "bad_counts": null
+   }
+  }
+ },
+ {
+  "name": "別のレコードの暗号文をすり替えた 409 は混ぜない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "一"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "二"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "一の新"
+   },
+   {
+    "device": "pc",
+    "op": "server_swap_conflict",
+    "other": [
+     "favorite",
+     "https://a.5ch.io/x/",
+     "2"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_rows": [
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "一",
+      "created_at": null
+     },
+     {
+      "board_url": "https://a.5ch.io/x/",
+      "key": "2",
+      "title": "二",
+      "created_at": null
+     }
+    ],
+    "pending": 0,
+    "bad_counts": {
+     "swapped": 1
+    }
+   }
+  }
+ }
+]

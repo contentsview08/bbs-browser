@@ -27,6 +27,16 @@ function sqljs(): SqlDb {
       st.free()
       return rows
     },
+    async batch(statements) {
+      db.exec('BEGIN')
+      try {
+        for (const s of statements) db.run(conv(s.sql), (s.params ?? []) as initSqlJs.BindParams)
+        db.exec('COMMIT')
+      } catch (e) {
+        db.exec('ROLLBACK')
+        throw e
+      }
+    },
   }
 }
 
@@ -377,6 +387,7 @@ describe('saveFetch が途中で落ちたとき', () => {
     let armed = true
     return {
       select: (s, p) => db.select(s, p),
+      batch: (statements) => db.batch(statements),
       async execute(s, p) {
         if (armed && sql.test(s)) {
           armed = false

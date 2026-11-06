@@ -611,7 +611,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val b = io.github.contentsview08.obb.data.parseBackup(text)
                 b.settings?.let { prefs.import(it) }
                 for (x in b.boards) db.setFavorite(x, true)
-                for (t in b.threads) db.setFavoriteThread(t, t.title, true)
+                for (t in b.threads) db.userOps.setFavoriteThread(t, t.title, true)
                 for ((u, n) in b.sites) db.addSite(u, n)
                 db.importUploads(b.uploads)
                 uploads = db.listUploads()
@@ -953,7 +953,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleFavoriteThread(t: ThreadSummary) {
         viewModelScope.launch {
             val on = !db.isFavoriteThread(t)
-            db.setFavoriteThread(t, t.title, on)
+            db.userOps.setFavoriteThread(t, t.title, on)
             favThreads = db.favoriteThreads()
             toast = if (on) "お気に入りのスレに足しました" else "お気に入りのスレから外しました"
         }
@@ -987,7 +987,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleFavoriteThread(page: Page.Thread) {
         viewModelScope.launch {
             val on = !page.favorite
-            db.setFavoriteThread(page.summary, page.title, on)
+            db.userOps.setFavoriteThread(page.summary, page.title, on)
             page.favorite = on
             favThreads = db.favoriteThreads()
             toast = if (on) "お気に入りのスレに足しました" else "お気に入りのスレから外しました"

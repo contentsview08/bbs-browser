@@ -1,0 +1,837 @@
+package io.github.contentsview08.obb.sync.engine
+
+import io.github.contentsview08.obb.sync.DeviceCheck
+import io.github.contentsview08.obb.sync.Hlc
+import io.github.contentsview08.obb.sync.LocalRecord
+import io.github.contentsview08.obb.sync.RecordContext
+import io.github.contentsview08.obb.sync.SyncConfig
+import io.github.contentsview08.obb.sync.SyncError
+import io.github.contentsview08.obb.sync.SyncKeys
+import io.github.contentsview08.obb.sync.SyncPayload
+import io.github.contentsview08.obb.sync.adapters.AdapterContext
+import io.github.contentsview08.obb.sync.adapters.ApplyPlan
+import io.github.contentsview08.obb.sync.adapters.SyncAdapter
+import io.github.contentsview08.obb.sync.body
+import io.github.contentsview08.obb.sync.canonicalJson
+import io.github.contentsview08.obb.sync.checkDeviceId
+import io.github.contentsview08.obb.sync.checkPayload
+import io.github.contentsview08.obb.sync.deriveKeys
+import io.github.contentsview08.obb.sync.generateDeviceId
+import io.github.contentsview08.obb.sync.hlc
+import io.github.contentsview08.obb.sync.kind
+import io.github.contentsview08.obb.sync.mergePayloads
+import io.github.contentsview08.obb.sync.normalizeBoardUrl
+import io.github.contentsview08.obb.sync.openRecords
+import io.github.contentsview08.obb.sync.parseStrictJson
+import io.github.contentsview08.obb.sync.planRebase
+import io.github.contentsview08.obb.sync.planRecreate
+import io.github.contentsview08.obb.sync.sealPayload
+import io.github.contentsview08.obb.sync.settleRecord
+import io.github.contentsview08.obb.sync.spaceId
+import io.github.contentsview08.obb.sync.toBase64Url
+import io.github.contentsview08.obb.sync.toHex
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.security.SecureRandom
+import kotlin.math.ceil
+import kotlin.random.Random
+
+// 同期エンジン。PC 版の packages/sync/src/engine/engine.ts と同じ順番で動く。周の順は必ず draining → pull → apply → push
+
+class SyncKeyMaterial(val k: ByteArray, val deviceId: String)
+
+/** 本番は Android Keystore で包んで専用の Prefs に置く(段階 2)。k を同期の表にも settings の Prefs にも置かない */
+interface SyncKeyStore {
+    suspend fun load(): SyncKeyMaterial?
+    suspend fun save(v: SyncKeyMaterial)
+    suspend fun clear()
+}
+
+class CycleResult {
+    var state = "off"
+    var pulled = 0
+    var pushed = 0
+    var conflicts = 0
+
+    /** 画面が読み直すもの。適用で手元が変わったときだけ立つ */
+    var favoriteThreads = false
+
+    /** 周を始めなかった理由 */
+    var skipped: String? = null
+}
+
+private class SpaceGone(val newEpoch: String? = null) : Exception("space_gone")
+private class NeedsRebase : Exception("needs_rebase")
+private class CycleStop(val state: String) : Exception("stop")
+
+private class ServerMeta(val kindTag: String, val schemaVersion: Long)
+
+private class FullRead {
+    val full = LinkedHashMap<String, LocalRecord>()
+    val meta = HashMap<String, ServerMeta>()
+    var head = 0L
+    var gcFloor = 0L
+    /** 途中で打ち切ったときの原因。読めた分は使う */
+    var failure: Exception? = null
+}
+
+private class Prepared(val requestId: String, val rows: List<StoredRecord>, val sent: Map<String, String>)
+
+private fun refsFromBody(p: SyncPayload): RecordRefs {
+    val board = p.body?.get("board_url") as? String
+    return RecordRefs(board?.let(::normalizeBoardUrl), p.body?.get("thread") as? String)
+}
+
+private fun same(a: SyncPayload, b: SyncPayload) = canonicalJson(a) == canonicalJson(b)
+
+@Suppress("UNCHECKED_CAST")
+class SyncEngine(
+    private val db: SyncSql,
+    private val keyStore: SyncKeyStore,
+    private val transport: SyncTransport,
+    private val serverUrl: String,
+    private val adapters: List<SyncAdapter>,
+    private val now: () -> Long,
+    private val newDeviceId: () -> String = ::generateDeviceId,
+    private val newRequestId: () -> String = { toBase64Url(ByteArray(16).also { SecureRandom().nextBytes(it) }) },
+    /** 0 以上 1 未満 */
+    private val jitter: () -> Double = { Random.nextDouble() },
+    private val allowLocalhost: Boolean = false,
+    private val onState: (String) -> Unit = {},
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) {
+    private val t = SyncTables(db)
+    private val kinds = adapters.map { it.kind }.distinct()
+    private val opNames = adapters.flatMap { it.ops }
+    private val mutex = Mutex()
+
+    @Volatile var state = "off"
+        private set
+
+    @Volatile private var again = false
+    @Volatile private var againManual = false
+    private var last = CycleResult()
+    private var deviceChecked = false
+    private var reconciled = false
+    private var attempts = 0
+    private var retryAt = 0L
+    private var applyFailures = 0
+
+    // 周の間だけ持つ
+    private lateinit var keys: SyncKeys
+    private lateinit var api: SyncApi
+    private var spaceIdValue = ""
+    private var deviceId = ""
+    private lateinit var result: CycleResult
+
+    private fun enter(s: String) {
+        state = s
+        onState(s)
+    }
+
+    /** 走っている間のきっかけは「もう 1 周」の印にする */
+    suspend fun runCycle(manual: Boolean = false): CycleResult = withContext(io) {
+        if (!mutex.tryLock()) {
+            againManual = againManual || manual
+            again = true
+            return@withContext mutex.withLock {
+                if (again) runAgain()
+                last
+            }
+        }
+        try {
+            last = cycle(manual)
+            while (again) runAgain()
+            last
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    private suspend fun runAgain() {
+        val m = againManual
+        again = false
+        againManual = false
+        last = cycle(m)
+    }
+
+    /** 使い始め。鍵と端末 ID を保管してから enabled を立てる。ここから利用者の操作が積まれ始める */
+    suspend fun pair(k: ByteArray) = withContext(io) {
+        val id = newDeviceId()
+        keyStore.save(SyncKeyMaterial(k, id))
+        db.batch(joinStatements(id))
+        deviceChecked = true
+        reconciled = false
+    }
+
+    private fun joinStatements(id: String) = listOf(setState("device_id", id), setState("clock", Hlc.ZERO), setState("since", "0"), setState("phase", "joining"), setState("enabled", "1"))
+
+    /** この端末で同期をやめる。手元のデータは消さない */
+    suspend fun leave() = withContext(io) {
+        clearTables()
+        keyStore.clear()
+        enter("off")
+    }
+
+    private fun clearTables() = db.batch(listOf(SqlStatement("DELETE FROM sync_records"), SqlStatement("DELETE FROM sync_ops"), SqlStatement("DELETE FROM sync_state")))
+
+    /**
+     * 確認の答え。合流で keep_local は「進まない」なのでやめる。
+     * リベースの keep_local は手元を消さず、領域が消えたときと同じく全部を合わせ直して送る
+     */
+    suspend fun resolveConfirm(choice: String) = withContext(io) {
+        val raw = t.state("pending_confirm") ?: return@withContext
+        val plan = parseStrictJson(raw) as Map<String, Any?>
+        if (plan["type"] == "join") {
+            if (choice == "keep_local") {
+                clearTables()
+                keyStore.clear()
+                enter("off")
+            } else db.batch(listOf(delState("pending_confirm"), setState("phase", "idle")))
+        } else if (choice == "accept_removal") {
+            db.batch(listOf(delState("pending_confirm"), setState("phase", "idle"), setState("rebase_accepted", (plan["lost"] as Long).toString())))
+        } else {
+            db.batch(listOf(delState("pending_confirm"), setState("phase", "idle"), setState("recreate_pending", "1"), setState("since", "0")))
+        }
+    }
+
+    private suspend fun cycle(manual: Boolean): CycleResult {
+        val r = CycleResult()
+        result = r
+        fun finish(s: String): CycleResult {
+            enter(s)
+            r.state = s
+            return r
+        }
+        if (!deviceChecked && !checkDevice()) return finish("off")
+        if (t.state("enabled") != "1") return finish("off")
+        val material = keyStore.load() ?: return finish("off")
+        keys = deriveKeys(material.k)
+        spaceIdValue = spaceId(keys.authToken)
+        deviceId = material.deviceId
+
+        var phase = t.state("phase") ?: "joining"
+        if (phase == "confirm") return finish("confirm")
+        if (phase == "blocked") {
+            if (!manual) return finish("blocked")
+            phase = t.state("phase_before") ?: "idle"
+            db.batch(listOf(setState("phase", phase), delState("phase_before")))
+        }
+        if (phase == "recreate_waiting" && !manual) {
+            val tried = t.state("recreate_tried_at")?.toLong() ?: 0
+            if (now() - tried < SyncConfig.RECREATE_RETRY_MS) {
+                r.skipped = "waiting"
+                return finish("recreate_waiting")
+            }
+        }
+        if (!manual && now() < retryAt) {
+            r.skipped = "backoff"
+            return finish(if (state == "offline") "offline" else "backoff")
+        }
+        return try {
+            api = SyncApi(serverUrl, keys.authToken.toHex(), transport, allowLocalhost)
+            enter("draining")
+            drain()
+            flow(manual)
+            attempts = 0
+            retryAt = 0
+            db.exec("DELETE FROM sync_state WHERE key = ?", listOf("last_error"))
+            finish("idle")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            finish(failed(e))
+        }
+    }
+
+    private fun failed(e: Exception): String {
+        if (e is CycleStop) return e.state
+        var code = "internal"
+        var next = "backoff"
+        if (e is SyncApiError) {
+            if (e.kind == "bad_url") return block("bad_url")
+            if (e.kind == "http" && e.status == 401) return block("auth_failed")
+            code = if (e.kind == "http") e.code.ifEmpty { "http_${e.status}" } else e.kind
+            if (e.kind == "network") next = "offline"
+            // 再送しない 4xx。次のきっかけでまた試す
+            if (e.kind == "http" && e.status in 400..499 && e.status != 429) {
+                noteError(code)
+                return "idle"
+            }
+        }
+        noteError(code)
+        retryAt = now() + SyncConfig.backoffDelayMs(attempts++, jitter())
+        return next
+    }
+
+    private fun noteError(code: String) {
+        try {
+            putState("last_error", code)
+        } catch (_: Exception) {
+            // DB が止まっているときは画面に出す値を諦める
+        }
+    }
+
+    private fun block(code: String): String {
+        val phase = t.state("phase") ?: "idle"
+        db.batch(listOfNotNull(setState("phase", "blocked"), if (phase == "blocked") null else setState("phase_before", phase), setState("last_error", code)))
+        return "blocked"
+    }
+
+    /** 別の端末の DB を入れると同じ device_id が 2 台でき、read_dev がぶつかる */
+    private suspend fun checkDevice(): Boolean {
+        deviceChecked = true
+        val material = keyStore.load()
+        return when (checkDeviceId(material?.deviceId, t.state("device_id"))) {
+            DeviceCheck.NONE -> false
+            DeviceCheck.OK -> true
+            DeviceCheck.CLEAR -> {
+                clearTables()
+                false
+            }
+            DeviceCheck.REJOIN -> {
+                val id = newDeviceId()
+                keyStore.save(SyncKeyMaterial(material!!.k, id))
+                clearTables()
+                db.batch(joinStatements(id))
+                true
+            }
+        }
+    }
+
+    private fun putState(key: String, value: String) {
+        val s = setState(key, value)
+        db.exec(s.sql, s.args)
+    }
+
+    private fun ctx() = AdapterContext(keys, deviceId, now())
+
+    /** sync_ops を前から処理する。適用と入れ違った操作でも手元が揃うよう、needs_apply を立てて写し直す */
+    private fun drain() {
+        while (true) {
+            val ops = t.ops(opNames, SyncConfig.WRITE_BATCH)
+            if (ops.isEmpty()) return
+            val c = ctx()
+            var clock = t.state("clock") ?: Hlc.ZERO
+            val stmts = ArrayList<SqlStatement>()
+            val touched = LinkedHashMap<String, StoredRecord>()
+            for (op in ops) {
+                stmts += delOp(op.seq)
+                val adapter = adapters.first { op.op in it.ops }
+                val target = adapter.target(op, c)
+                if (target == null) {
+                    countBad("local")
+                    continue
+                }
+                val existing = touched[target.recordId] ?: t.record(target.recordId)
+                val stamped = Hlc.stamp(clock, op.atMs, deviceId, existing?.payload?.hlc)
+                val payload = adapter.fromOp(op, existing?.payload, stamped.stamp, c) ?: continue
+                if (checkPayload(payload) == null) {
+                    countBad("local")
+                    continue
+                }
+                clock = stamped.clock
+                val settled = settleRecord(payload, existing?.version ?: 0, existing?.asLocal(), c.now)
+                val refs = target.refs.over(existing?.refs)
+                touched[target.recordId] = StoredRecord(
+                    target.recordId, payload.kind, existing?.kindTag ?: "h", existing?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
+                    pending = true, priority = 0, needsApply = true, refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
+                )
+            }
+            for (r in touched.values) stmts += writeRecord(r)
+            stmts += setState("clock", clock)
+            db.batch(stmts)
+        }
+    }
+
+    private fun countBad(reason: String) {
+        val raw = t.state("bad_counts")
+        val counts = LinkedHashMap((if (raw != null) parseStrictJson(raw) as Map<String, Any?> else emptyMap()))
+        counts[reason] = ((counts[reason] as? Long) ?: 0L) + 1
+        putState("bad_counts", canonicalJson(counts))
+    }
+
+    private suspend fun flow(manual: Boolean) {
+        // 作り直しとリベースは周の中で 1 度ずつあれば足りる。それ以上はサーバーがおかしいので次の周へ回す
+        for (i in 0 until 4) {
+            try {
+                step(manual)
+                return
+            } catch (e: SpaceGone) {
+                onSpaceGone(e)
+            } catch (_: NeedsRebase) {
+                rebase()
+            }
+        }
+        throw SyncApiError("bad_response")
+    }
+
+    private suspend fun step(manual: Boolean) {
+        var phase = t.state("phase") ?: "joining"
+        if (phase == "recreate_waiting") throw SpaceGone()
+        var pulled = false
+        if (t.state("recreate_pending") == "1") {
+            finishRecreate()
+            pulled = true
+        }
+        if (phase == "joining") {
+            enter("joining")
+            pull(true)
+            putState("phase", "seeding")
+            phase = "seeding"
+            pulled = true
+        }
+        if (phase == "seeding") {
+            enter("seeding")
+            seedAndPlan()
+        } else if (!reconciled) {
+            reconcile()
+        }
+        reconciled = true
+        if (!pulled && (manual || now() - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS)) pull(false)
+        applyAll()
+        pushAll()
+        // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
+        if (result.conflicts > 0) applyAll()
+    }
+
+    /** pull。joining の全件の読み取りではリベースを見ない(since = 0 がすでに全件なので) */
+    private suspend fun pull(joining: Boolean) {
+        var since = t.state("since")?.toLong() ?: 0
+        while (true) {
+            enter("pulling")
+            val page = call { api.changes(since) }
+            checkEpoch(page.epoch)
+            if (!joining && since > 0 && page.gcFloor > since) throw NeedsRebase()
+            val lastVersion = maxVersion(page.records, since)
+            val next = if (page.more) lastVersion else maxOf(lastVersion, page.head)
+            if (page.more && next <= since) throw SyncApiError("no_progress")
+            enter("merging")
+            mergePage(page.records, next, page.gcFloor)
+            since = next
+            if (!page.more) return
+        }
+    }
+
+    private fun maxVersion(records: List<Map<String, Any?>>, from: Long): Long = records.fold(from) { m, r -> (r["version"] as? Long)?.let { maxOf(m, it) } ?: m }
+
+    /** 404 だけ領域がないと読み替える。ほかの失敗はそのまま周の失敗にする */
+    private suspend fun <T> call(f: suspend () -> T): T = try {
+        f()
+    } catch (e: SyncApiError) {
+        if (e.kind == "http" && e.status == 404) throw SpaceGone() else throw e
+    }
+
+    /** 全応答の epoch を見る。初めて見る値はそのまま覚える */
+    private fun checkEpoch(epoch: String) {
+        val known = t.state("epoch")
+        if (known == null) putState("epoch", epoch) else if (known != epoch) throw SpaceGone(epoch)
+    }
+
+    private fun mergePage(raw: List<Map<String, Any?>>, since: Long, gcFloor: Long) {
+        val at = now()
+        val opened = openRecords(keys, spaceIdValue, raw)
+        val metaOf = raw.associateBy { it["record_id"] as? String }
+        val local = t.records(opened.records.map { it.recordId })
+        var clock = t.state("clock") ?: Hlc.ZERO
+        val stmts = ArrayList<SqlStatement>()
+        for (rec in opened.records) {
+            val m = metaOf.getValue(rec.recordId)
+            val row = merged(local[rec.recordId], rec.recordId, rec.payload, rec.version, ServerMeta(m["kind_tag"] as String, m["schema_version"] as Long), at)
+            local[rec.recordId] = row
+            stmts += writeRecord(row)
+            clock = Hlc.observe(clock, rec.payload.hlc, at)
+        }
+        for (f in opened.failed) countBad(f.reason)
+        // since はレコードと同じバッチで進むので、途中までは有効
+        stmts += listOf(setState("since", since.toString()), setState("clock", clock), setState("gc_floor", gcFloor.toString()), setState("last_pull_at", at.toString()))
+        db.batch(stmts)
+        result.pulled += opened.records.size
+    }
+
+    /** 受け取った 1 件を手元と合わせる。手元の方が新しければ送り直す。変わったものだけ写す */
+    private fun merged(l: StoredRecord?, id: String, server: SyncPayload, version: Long, meta: ServerMeta, at: Long): StoredRecord {
+        val payload = if (l != null) mergePayloads(l.payload, server) else server
+        val fromServer = same(payload, server)
+        val settled = settleRecord(payload, maxOf(l?.version ?: 0, version), l?.asLocal(), at)
+        val refs = refsFromBody(payload).over(l?.refs)
+        return StoredRecord(
+            id, payload.kind, if (fromServer) meta.kindTag else l!!.kindTag, if (fromServer) meta.schemaVersion else l!!.schemaVersion, payload, settled.version,
+            pending = !fromServer, priority = l?.priority ?: 5, needsApply = l == null || !same(l.payload, payload) || l.needsApply,
+            refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
+        )
+    }
+
+    /** 種まきと合流の残り。古い HLC なので新しい削除に勝たない。ID が決まっているのでやり直しても重ならない */
+    private fun seedAndPlan() {
+        val c = ctx()
+        val stmts = ArrayList<SqlStatement>()
+        for (adapter in adapters) {
+            val rows = adapter.seed(c)
+            val local = t.records(rows.map { it.recordId })
+            for (r in rows) {
+                val l = local[r.recordId]
+                val payload = if (l != null) mergePayloads(l.payload, r.payload) else r.payload
+                val changed = l == null || !same(l.payload, payload)
+                val settled = settleRecord(payload, l?.version ?: 0, l?.asLocal(), c.now)
+                val refs = r.refs.over(l?.refs)
+                stmts += writeRecord(
+                    StoredRecord(
+                        r.recordId, payload.kind, l?.kindTag ?: "h", l?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
+                        pending = changed || (l?.pending ?: false), priority = l?.priority ?: r.priority, needsApply = l?.needsApply ?: false,
+                        refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
+                    ),
+                )
+            }
+        }
+        if (stmts.isNotEmpty()) db.batch(stmts)
+        var lost = 0L
+        var total = 0L
+        for (adapter in adapters) {
+            for (r in t.recordsOfKind(adapter.kind)) {
+                if (!adapter.owns(r) || !adapter.exists(r)) continue
+                total++
+                if (r.needsApply && isDeleted(r.payload) && r.payload["trim"] != true) lost++
+            }
+        }
+        if (lost > 0 && (lost >= SyncConfig.JOIN_CONFIRM_MIN || lost * 2 >= total)) {
+            db.batch(listOf(setState("phase", "confirm"), setState("pending_confirm", canonicalJson(mapOf("type" to "join", "lost" to lost, "total" to total)))))
+            throw CycleStop("confirm")
+        }
+        putState("phase", "idle")
+    }
+
+    /**
+     * 起動後 1 回の照合。取りこぼしの保険なので、レコードのないものだけ低い HLC で作り、ほかは同期の表を正として写し直す。
+     * レコードのあるものを手元から作らない(適用の時刻を持つ行が、まだ届いていない削除に勝ってしまう)
+     */
+    private fun reconcile() {
+        val c = ctx()
+        val stmts = ArrayList<SqlStatement>()
+        for (adapter in adapters) {
+            val rows = adapter.seed(c)
+            val local = t.records(rows.map { it.recordId })
+            for (r in rows) {
+                if (r.recordId in local) continue
+                val settled = settleRecord(r.payload, 0, null, c.now)
+                stmts += writeRecord(
+                    StoredRecord(
+                        r.recordId, r.payload.kind, "h", SyncConfig.SCHEMA_VERSION, r.payload, 0, pending = true, priority = r.priority, needsApply = false,
+                        r.refs.board, r.refs.thread, r.refs.detail, r.refs.local, settled.tombAt,
+                    ),
+                )
+            }
+            for (r in t.recordsOfKind(adapter.kind)) {
+                if (r.needsApply || !adapter.owns(r) || r.payload["trim"] == true) continue
+                if (adapter.exists(r) == isDeleted(r.payload)) stmts += SqlStatement("UPDATE sync_records SET needs_apply = 1 WHERE record_id = ?", listOf(r.recordId))
+            }
+        }
+        if (stmts.isNotEmpty()) db.batch(stmts)
+    }
+
+    private fun applyAll() {
+        enter("applying")
+        val c = ctx()
+        // まだ処理していない操作のあるレコードは、次の周に回す(操作の結果を古いレコードで上書きしない)
+        val waiting = t.ops(opNames, 1000).mapNotNull { op -> adapters.firstOrNull { op.op in it.ops }?.target(op, c)?.recordId }.toSet()
+        var after = ""
+        while (true) {
+            val rows = t.toApply(kinds, after, SyncConfig.APPLY_BATCH)
+            if (rows.isEmpty()) return
+            after = rows.last().recordId
+            val items = ArrayList<Pair<String, ApplyPlan>>()
+            for (r in rows) {
+                if (r.recordId in waiting) continue
+                val adapter = adapters.firstOrNull { it.kind == r.kind && it.owns(r) }
+                if (adapter == null) {
+                    // 本文も ref もない tombstone は手元のどれか分からない。後で種まきが同じ ID を作れば ref が埋まって写せる
+                    if (r.refBoard == null && r.payload["body"] == null) items += r.recordId to ApplyPlan(emptyList(), false)
+                    continue
+                }
+                items += r.recordId to adapter.apply(r, c)
+            }
+            writeApplied(items)
+        }
+    }
+
+    private fun writeApplied(items: List<Pair<String, ApplyPlan>>) {
+        if (items.isEmpty()) return
+        try {
+            db.batch(items.flatMap { (id, plan) -> plan.statements + clearNeedsApply(id) })
+            applyFailures = 0
+            if (items.any { it.second.changed }) result.favoriteThreads = true
+        } catch (e: Exception) {
+            // 全部戻っているので needs_apply が残る。続けて失敗するなら 1 件ずつ分けて、原因のレコードだけを除ける
+            if (++applyFailures < SyncConfig.APPLY_SPLIT_AFTER) throw e
+            for ((id, plan) in items) {
+                try {
+                    db.batch(plan.statements + clearNeedsApply(id))
+                    if (plan.changed) result.favoriteThreads = true
+                } catch (_: Exception) {
+                    db.exec("UPDATE sync_records SET needs_apply = 0 WHERE record_id = ?", listOf(id))
+                    countBad("apply")
+                }
+            }
+            applyFailures = 0
+        }
+    }
+
+    private suspend fun pushAll() {
+        enter("pushing")
+        for (round in 0 until SyncConfig.PUSH_MAX_ROUNDS) {
+            val prepared = prepareBatch() ?: return
+            val body = ArrayList<Map<String, Any?>>()
+            for (r in prepared.rows) {
+                try {
+                    val (nonce, ciphertext) = sealPayload(keys, RecordContext(spaceIdValue, r.recordId, r.kindTag, r.schemaVersion), r.payload)
+                    body += mapOf("record_id" to r.recordId, "base_version" to r.version, "kind_tag" to r.kindTag, "schema_version" to r.schemaVersion, "deleted" to isDeleted(r.payload), "nonce" to nonce, "ciphertext" to ciphertext)
+                } catch (e: SyncError) {
+                    // 大きすぎるものは送れない。列を止めない
+                    db.exec("UPDATE sync_records SET pending = 0 WHERE record_id = ?", listOf(r.recordId))
+                    countBad(e.code)
+                }
+            }
+            if (body.isEmpty()) {
+                db.exec("DELETE FROM sync_state WHERE key = ?", listOf("push_inflight"))
+                continue
+            }
+            val res = call { api.pushRecords(prepared.requestId, body) }
+            checkEpoch(res.epoch)
+            settlePush(res.results, prepared.sent)
+        }
+    }
+
+    /** 送信中の一覧を先に保存する。応答が来ないまま落ちたら、同じ request_id で送り直す(サーバーが二重に採番しない) */
+    private fun prepareBatch(): Prepared? {
+        val raw = t.state("push_inflight")
+        if (raw != null) {
+            val inflight = parseStrictJson(raw) as Map<String, Any?>
+            val entries = inflight["records"] as List<Map<String, Any?>>
+            val local = t.records(entries.map { it["record_id"] as String })
+            val rows = entries.mapNotNull { x -> local[x["record_id"] as String]?.takeIf { it.pending } }
+            if (rows.isNotEmpty()) return Prepared(inflight["request_id"] as String, rows, entries.associate { (it["record_id"] as String) to (it["hlc"] as String) })
+            db.exec("DELETE FROM sync_state WHERE key = ?", listOf("push_inflight"))
+        }
+        val candidates = t.pendingRecords(SyncConfig.PUSH_BATCH_RECORDS)
+        if (candidates.isEmpty()) return null
+        var bytes = 0L
+        val rows = ArrayList<StoredRecord>()
+        for (r in candidates) {
+            // 暗号文は平文の 4/3 倍と少しになる
+            bytes += ceil((canonicalJson(r.payload).length + 256 + 16) * 4 / 3.0).toLong() + 256
+            if (rows.isNotEmpty() && bytes > SyncConfig.PUSH_BATCH_BYTES) break
+            rows += r
+        }
+        val requestId = newRequestId()
+        putState("push_inflight", canonicalJson(mapOf("request_id" to requestId, "records" to rows.map { mapOf("record_id" to it.recordId, "hlc" to it.payload.hlc) })))
+        return Prepared(requestId, rows, rows.associate { it.recordId to it.payload.hlc })
+    }
+
+    private fun settlePush(results: List<PushResult>, sent: Map<String, String>) {
+        val at = now()
+        val stmts = ArrayList<SqlStatement>()
+        val local = t.records(results.map { it.recordId })
+        for (res in results) {
+            val l = local[res.recordId] ?: continue
+            if (res.status == 200L) {
+                // 送信中に変わったレコードは version だけ進め、pending を残す
+                stmts += SqlStatement(
+                    "UPDATE sync_records SET version = MAX(version, ?), pending = CASE WHEN hlc = ? THEN 0 ELSE pending END WHERE record_id = ?",
+                    listOf(res.version, sent[res.recordId].orEmpty(), res.recordId),
+                )
+                result.pushed++
+                continue
+            }
+            // 409。応答のレコードとマージして、新しい version で送り直す
+            result.conflicts++
+            val raw = res.record!!
+            val opened = openRecords(keys, spaceIdValue, listOf(raw))
+            val version = raw["version"] as? Long ?: l.version
+            // 別のレコードの暗号文をすり替えて返されても混ぜない。送信待ちのまま次で送り直す
+            if (raw["record_id"] != res.recordId) {
+                countBad("swapped")
+            } else if (opened.records.size == 1) {
+                stmts += writeRecord(merged(l, res.recordId, opened.records[0].payload, opened.records[0].version, ServerMeta(raw["kind_tag"] as String, raw["schema_version"] as Long), at))
+            } else {
+                // 読めないサーバーの値は使えない。手元の値で上書きできるよう version だけ進める
+                for (f in opened.failed) countBad(f.reason)
+                stmts += SqlStatement("UPDATE sync_records SET version = MAX(version, ?) WHERE record_id = ?", listOf(version, res.recordId))
+            }
+        }
+        stmts += listOf(delState("push_inflight"), setState("last_push_at", at.toString()))
+        db.batch(stmts)
+    }
+
+    /** 全件を読む。途中で切れたら読めた分を返し、呼び出す側が complete = false で扱う */
+    private suspend fun readFull(): FullRead {
+        val out = FullRead()
+        var since = 0L
+        while (true) {
+            val page = try {
+                call { api.changes(since) }
+            } catch (e: SpaceGone) {
+                throw e
+            } catch (e: SyncApiError) {
+                out.failure = e
+                return out
+            }
+            checkEpoch(page.epoch)
+            val opened = openRecords(keys, spaceIdValue, page.records)
+            for (f in opened.failed) countBad(f.reason)
+            val metaOf = page.records.associateBy { it["record_id"] as? String }
+            for (r in opened.records) {
+                out.full[r.recordId] = LocalRecord(r.payload, r.version)
+                val m = metaOf.getValue(r.recordId)
+                out.meta[r.recordId] = ServerMeta(m["kind_tag"] as String, m["schema_version"] as Long)
+            }
+            val lastVersion = maxVersion(page.records, since)
+            out.head = maxOf(lastVersion, page.head)
+            out.gcFloor = page.gcFloor
+            if (!page.more) return out
+            if (lastVersion <= since) {
+                out.failure = SyncApiError("no_progress")
+                return out
+            }
+            since = lastVersion
+        }
+    }
+
+    /** gc_floor と epoch の変更はサーバーが決める値なので、回数を制限する */
+    private fun countRebase() {
+        val at = now()
+        val raw = t.state("rebase_log")
+        val log = (if (raw != null) parseStrictJson(raw) as List<Long> else emptyList()).filter { at - it < SyncConfig.REBASE_WINDOW_MS }
+        if (log.size >= SyncConfig.REBASE_LIMIT) throw CycleStop(block("too_many_rebases"))
+        putState("rebase_log", canonicalJson(log + at))
+    }
+
+    private suspend fun onSpaceGone(e: SpaceGone) {
+        val known = t.state("epoch")
+        val epoch = e.newEpoch ?: try {
+            api.createSpace()
+        } catch (err: SyncApiError) {
+            if (err.kind == "http" && err.status == 403) {
+                val code = err.code.ifEmpty { "http_403" }
+                noteError(code)
+                if (known == null) throw CycleStop(block(code))
+                db.batch(listOf(setState("phase", "recreate_waiting"), setState("recreate_tried_at", now().toString()), setState("last_error", code)))
+                throw CycleStop("recreate_waiting")
+            }
+            throw err
+        }
+        val phase = t.state("phase")
+        if (known == null) {
+            // 初めて作った領域。合わせ直すものがない
+            putState("epoch", epoch)
+            return
+        }
+        countRebase()
+        enter("recreating")
+        db.batch(
+            listOf(
+                setState("epoch", epoch),
+                setState("since", "0"),
+                setState("recreate_pending", "1"),
+                setState("phase", if (phase == "recreate_waiting") "idle" else (phase ?: "idle")),
+                delState("push_inflight"),
+                delState("recreate_tried_at"),
+            ),
+        )
+    }
+
+    private fun rowFromPlan(l: StoredRecord?, id: String, settled: LocalRecord, meta: ServerMeta?, pending: Boolean, priority: Long? = null): StoredRecord {
+        val refs = refsFromBody(settled.payload).over(l?.refs)
+        return StoredRecord(
+            id, settled.payload.kind, l?.kindTag ?: meta?.kindTag ?: "h", l?.schemaVersion ?: meta?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, settled.payload, settled.version,
+            pending = pending, priority = priority ?: l?.priority ?: 5, needsApply = l == null || !same(l.payload, settled.payload) || l.needsApply,
+            refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
+        )
+    }
+
+    private fun writeChunks(stmts: List<SqlStatement>, last: List<SqlStatement>) {
+        var i = 0
+        while (stmts.size - i > SyncConfig.WRITE_BATCH) {
+            db.batch(stmts.subList(i, i + SyncConfig.WRITE_BATCH))
+            i += SyncConfig.WRITE_BATCH
+        }
+        db.batch(stmts.subList(i, stmts.size) + last)
+    }
+
+    /** 領域が消えたときの合わせ直し。手元を消さない。途中で切れたら since = 0 のまま次の周で読み直す */
+    private suspend fun finishRecreate() {
+        enter("recreating")
+        val read = readFull()
+        read.failure?.let { throw it }
+        val at = now()
+        val all = t.allRecords()
+        val byId = all.associateBy { it.recordId }
+        val plan = planRecreate(all.associate { it.recordId to it.asLocal() }, read.full, at)
+        val stmts = ArrayList<SqlStatement>()
+        for ((id, settled) in plan.records) {
+            val pending = id in plan.pending
+            // tombstone を先に送る。他の端末の古い値が先に領域へ入っても、すぐ負けるように
+            val priority = if (pending && isDeleted(settled.payload)) 0L else null
+            stmts += writeRecord(rowFromPlan(byId[id], id, settled, read.meta[id], pending, priority))
+        }
+        for (id in plan.expired) stmts += delRecord(id)
+        writeChunks(stmts, listOf(delState("recreate_pending"), setState("since", read.head.toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
+        result.pulled += read.full.size
+    }
+
+    /** since < gc_floor。全件を正にして、消えたものを手元から消す */
+    private suspend fun rebase() {
+        enter("rebasing")
+        countRebase()
+        val read = readFull()
+        val complete = read.failure == null
+        val at = now()
+        val all = t.allRecords()
+        val byId = all.associateBy { it.recordId }
+        val plan = planRebase(
+            all.associate { it.recordId to it.asLocal() },
+            all.filter { it.pending }.associate { it.recordId to it.payload },
+            read.full,
+            complete,
+            at,
+        )
+        val liveRemoved = plan.removed.filter { !isDeleted(byId.getValue(it).payload) }
+        if (complete && plan.needsConfirmation) {
+            val accepted = t.state("rebase_accepted")
+            if (accepted == null || liveRemoved.size > accepted.toInt()) {
+                val confirm = mapOf("type" to "rebase", "lost" to liveRemoved.size.toLong(), "empty" to read.full.isEmpty())
+                db.batch(listOf(setState("phase", "confirm"), setState("pending_confirm", canonicalJson(confirm))))
+                throw CycleStop("confirm")
+            }
+        }
+        val stmts = ArrayList<SqlStatement>()
+        if (plan.removed.isNotEmpty()) {
+            val backup = liveRemoved.map { id -> byId.getValue(id).let { mapOf("record_id" to id, "kind" to it.kind, "ref_board" to it.refBoard, "ref_thread" to it.refThread) } }
+            stmts += setState("rebase_backup", canonicalJson(backup))
+        }
+        for ((id, settled) in plan.records) stmts += writeRecord(rowFromPlan(byId[id], id, settled, read.meta[id], id in plan.pending))
+        for (id in plan.removed) {
+            val r = byId.getValue(id)
+            // すでに tombstone のものは今のデータに触らない。行を消すだけ
+            if (!isDeleted(r.payload)) {
+                val adapter = adapters.firstOrNull { it.kind == r.kind && it.owns(r) }
+                if (adapter != null) {
+                    val removal = adapter.remove(r)
+                    stmts += removal.statements
+                    if (removal.changed) result.favoriteThreads = true
+                }
+            }
+            stmts += delRecord(id)
+        }
+        if (!complete) {
+            // 読めた分のマージだけを残す。since は進めないので、次の周でまた最初から読む
+            if (stmts.isNotEmpty()) writeChunks(stmts, emptyList())
+            throw read.failure!!
+        }
+        writeChunks(stmts, listOf(delState("rebase_accepted"), setState("since", maxOf(read.head, read.gcFloor).toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
+        result.pulled += read.full.size
+    }
+}

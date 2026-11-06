@@ -10,6 +10,7 @@ mod chosen_paths;
 mod fonts;
 mod media_cache;
 mod post_http;
+mod sql_batch;
 mod update;
 mod web_upload;
 
@@ -217,6 +218,7 @@ fn migrations() -> Vec<Migration> {
         m!(15, "post_badges", "015_post_badges.sql"),
         m!(16, "upload_hash", "016_upload_hash.sql"),
         m!(17, "upload_delete_url", "017_upload_delete_url.sql"),
+        m!(18, "sync", "018_sync.sql"),
     ]
 }
 
@@ -687,6 +689,7 @@ pub fn run() {
             prepare_db_backup,
             schedule_db_restore,
             post_http::http_post,
+            sql_batch::sql_batch,
             chosen_paths::pick_save_path,
             chosen_paths::pick_open_path,
             web_upload::open_web_upload,
@@ -700,6 +703,27 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migrations_keep_data_when_the_sync_tables_are_added() {
+        tauri::async_runtime::block_on(async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
+            let all = migrations();
+            let (old, new): (Vec<_>, Vec<_>) = all.into_iter().partition(|m| m.version <= 17);
+            for m in old {
+                sqlx::raw_sql(m.sql).execute(&pool).await.unwrap();
+            }
+            sqlx::query("INSERT INTO favorite_threads (board_url, key, connector_id, title, sort, added_at) VALUES ('https://a.test/b/', '1', '2ch-compat', 't', 1, 2)")
+                .execute(&pool).await.unwrap();
+            for m in new {
+                sqlx::raw_sql(m.sql).execute(&pool).await.unwrap();
+            }
+            let (n,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM favorite_threads").fetch_one(&pool).await.unwrap();
+            assert_eq!(n, 1);
+            let (n,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sync_records").fetch_one(&pool).await.unwrap();
+            assert_eq!(n, 0);
+        });
+    }
 
     #[test]
     fn saving_at_the_same_time_never_overwrites() {

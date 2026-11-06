@@ -14,12 +14,13 @@
 // コーパスから選んだレスを弱い負例として混ぜる(印は荒らしにしか付かないことが多く、負例が足りないため)。
 // 手元の 340 件で試したところ、でたらめ文 3 件に印を付けるだけで残り 29 件を全部当て、普通のレスの誤判定は 0 件だった(2026-10-18)
 
-import { distinctRatio, normalizeBody } from './autoNg'
+import { REPEAT_MIN_LENGTH, REPEAT_RATIO, distinctRatio, normalizeBody } from './autoNg'
+import { ngramFeatures, sigmoid } from './ngram'
 
 const NGRAM_BITS = 16
 const NGRAM_SIZE = 1 << NGRAM_BITS
 /** 名前の付いた判断軸(n-gram の重みの後ろに並べる) */
-export const AXES = ['gibberish', 'crossLong', 'crossShort', 'repeat', 'urls', 'length'] as const
+const AXES = ['gibberish', 'crossLong', 'crossShort', 'repeat', 'urls', 'length'] as const
 export type Axis = (typeof AXES)[number]
 export const AXIS_LABEL: Record<Axis, string> = {
   gibberish: 'でたらめな文字の並び',
@@ -84,14 +85,8 @@ export function gibberishScore(t: string, corpus: Corpus): number {
   return rare / bg.size
 }
 
-function hash(s: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return (h >>> 0) & (NGRAM_SIZE - 1)
-}
-
 /** 疎なベクトル(添字 → 値) */
-export type Features = Map<number, number>
+type Features = Map<number, number>
 
 /** 判断軸の値(0〜1 くらいにそろえる) */
 export function axesOf(body: string, corpus: Corpus): Record<Axis, number> {
@@ -109,19 +104,8 @@ export function axesOf(body: string, corpus: Corpus): Record<Axis, number> {
   }
 }
 
-export function featuresOf(body: string, corpus: Corpus): Features {
-  const f: Features = new Map()
-  const chars = Array.from(normalizeBody(body)).slice(0, 600)
-  for (let n = 1; n <= 3; n++) {
-    for (let i = 0; i + n <= chars.length; i++) {
-      const k = hash(chars.slice(i, i + n).join(''))
-      f.set(k, (f.get(k) ?? 0) + 1)
-    }
-  }
-  let norm = 0
-  for (const v of f.values()) norm += v * v
-  norm = Math.sqrt(norm) || 1
-  for (const [k, v] of f) f.set(k, v / norm)
+function featuresOf(body: string, corpus: Corpus): Features {
+  const f: Features = ngramFeatures(Array.from(normalizeBody(body)).slice(0, 600), NGRAM_SIZE)
   const axes = axesOf(body, corpus)
   AXES.forEach((a, i) => {
     if (axes[a] !== 0) f.set(NGRAM_SIZE + i, axes[a])
@@ -164,7 +148,7 @@ export function train(examples: Example[], corpus: Corpus, epochs = 40): TrollMo
     for (let i = 0; i < data.length; i++) {
       // 正例と負例が交互に近くなるよう、決まった飛び方で回す
       const d = data[(i * 7919 + epoch) % data.length]
-      const p = 1 / (1 + Math.exp(-(dot(w, d.f) + b)))
+      const p = sigmoid(dot(w, d.f) + b)
       const g = (p - d.y) * d.weight * (d.y === 1 ? balance : 1)
       for (const [k, v] of d.f) w[k] -= lr * (g * v + l2 * w[k])
       b -= lr * g
@@ -182,7 +166,7 @@ export interface Judgement {
 
 export function predict(model: TrollModel, body: string, corpus: Corpus): Judgement {
   const f = featuresOf(body, corpus)
-  const p = 1 / (1 + Math.exp(-(dot(model.w, f) + model.b)))
+  const p = sigmoid(dot(model.w, f) + model.b)
   let best: Axis | undefined
   let bestValue = 0.5 // これより小さい寄与なら「文字の並びの癖」とする
   AXES.forEach((a, i) => {
@@ -206,7 +190,7 @@ export function examplesFrom(marks: { body: string; troll: boolean }[], corpus: 
         const t = normalizeBody(body)
         if (marked.has(t)) return false
         const len = Array.from(t).length
-        if (len >= 100 && distinctRatio(t) < 0.25) return false
+        if (len >= REPEAT_MIN_LENGTH && distinctRatio(t) < REPEAT_RATIO) return false
         return !(len >= LONG_TEXT && (corpus.threads.get(t) ?? 1) >= 3)
       })
       .map((body) => ({ body, troll: false, weight: 0.2 })),

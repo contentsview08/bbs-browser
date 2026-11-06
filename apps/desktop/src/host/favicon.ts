@@ -4,9 +4,10 @@
 
 import { fetch } from '@tauri-apps/plugin-http'
 import type { LogStore } from '@bbs-browser/logstore'
+import { toBase64 } from '../utils/base64'
 import { fetchHttpsFirst } from '../utils/httpsFirst'
+import { BROWSER_LIKE_UA as USER_AGENT } from './userAgent'
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) bbs-browser/0.1.0'
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 let store: LogStore | undefined
@@ -42,12 +43,6 @@ async function findIconUrl(boardUrl: string): Promise<string> {
   } catch {
     return fallback
   }
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let s = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return btoa(s)
 }
 
 /** 画像を取って data: URL にする。画像でなければ undefined */

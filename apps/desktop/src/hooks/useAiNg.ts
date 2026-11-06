@@ -34,6 +34,8 @@ const scores = new Map<string, number>()
 const pending = new Set<string>()
 /** 頼む順に並べた本文(鍵 → 本文と、まだ当たり具合のない仮説) */
 const queue = new Map<string, { text: string; body: string; prompts: Set<string>; ctx: string }>()
+/** いまモデルに頼んでいる本文(鍵 → 本文と仮説の並び) */
+const inFlight = new Map<string, { body: string; prompts: string[]; ctx: string }>()
 let busy = false
 let reqSeq = 0
 let version = 0
@@ -138,7 +140,10 @@ function ensureWorker(): Worker {
         })
         inFlight.delete(m.keys[i])
       }
-      if (scores.size > SCORE_MAX) for (const k of [...scores.keys()].slice(0, scores.size - SCORE_MAX)) scores.delete(k)
+      for (const k of scores.keys()) {
+        if (scores.size <= SCORE_MAX) break
+        scores.delete(k)
+      }
       emit()
       pump()
     } else if (m.type === 'error') {
@@ -152,17 +157,25 @@ function ensureWorker(): Worker {
   return w
 }
 
-/** いまモデルに頼んでいる本文(鍵 → 本文と仮説の並び) */
-const inFlight = new Map<string, { body: string; prompts: string[]; ctx: string }>()
-
 /** 待っている本文を、まとめてモデルに頼む */
 function pump() {
   if (busy || status.kind !== 'ready' || queue.size === 0) return
   // 同じ仮説の組のものから BATCH 件ずつ
-  const first = [...queue.entries()][0]
-  const prompts = [...first[1].prompts]
-  const sig = prompts.join('\n')
-  const batch = [...queue.entries()].filter(([, v]) => [...v.prompts].join('\n') === sig).slice(0, BATCH)
+  let prompts: string[] | undefined
+  let sig = ''
+  const batch: [string, { text: string; body: string; ctx: string }][] = []
+  for (const [k, v] of queue) {
+    const list = [...v.prompts]
+    const s = list.join('\n')
+    if (!prompts) {
+      prompts = list
+      sig = s
+    }
+    if (s !== sig) continue
+    batch.push([k, v])
+    if (batch.length === BATCH) break
+  }
+  if (!prompts) return
   for (const [k, v] of batch) {
     queue.delete(k)
     inFlight.set(k, { body: v.body, prompts, ctx: v.ctx })
@@ -205,14 +218,14 @@ export async function deleteAiModelFiles(): Promise<void> {
 }
 
 /** レスの当たり具合を頼む(まだのものだけ。前に頼んだものより先に回す) */
-export function requestScores(posts: Post[], prompts: string[], contexts: (string | undefined)[] = []) {
+function requestScores(posts: Post[], prompts: string[], contexts: (string | undefined)[] = []) {
   if (prompts.length === 0) return
   const fresh = new Map<string, { text: string; body: string; prompts: Set<string>; ctx: string }>()
+  const ctxs = new Set(prompts.map((_, i) => contexts[i] ?? ''))
   for (const p of posts) {
     if (!aiTextOf(p.body)) continue
     // 文脈つきの条件は、文脈を添えた文で別に頼む(鍵も別)
-    for (const ctx of [...new Set(prompts.map((_, i) => contexts[i] ?? ''))]) {
-      const text = aiInputOf(p.body, ctx || undefined)
+    for (const ctx of ctxs) {
       const need = prompts.filter((pr, i) => {
         if ((contexts[i] ?? '') !== ctx) return false
         const k = scoreKey(p.body, pr, ctx)
@@ -220,7 +233,7 @@ export function requestScores(posts: Post[], prompts: string[], contexts: (strin
       })
       if (need.length === 0) continue
       const key = `${bodyKey(p.body)}|${ctx ? bodyKey(ctx) : ''}`
-      const cur = fresh.get(key) ?? queue.get(key) ?? { text, body: p.body, prompts: new Set<string>(), ctx }
+      const cur = fresh.get(key) ?? queue.get(key) ?? { text: aiInputOf(p.body, ctx || undefined), body: p.body, prompts: new Set<string>(), ctx }
       for (const pr of need) {
         cur.prompts.add(pr)
         pending.add(scoreKey(p.body, pr, ctx))
@@ -281,10 +294,6 @@ export function useAiModelStatus(): AiModelStatus {
   return useSyncExternalStore(subscribe, () => status)
 }
 
-/** 当たり具合が増えるたびに変わる数(描き直しのきっかけ) */
-export function useAiScoresVersion(): number {
-  return useSyncExternalStore(subscribe, () => version)
-}
 const noSubscribe = () => () => {}
 const zero = () => 0
 

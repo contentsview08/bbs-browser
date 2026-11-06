@@ -23,17 +23,14 @@ export interface ReleaseInfo {
   asset?: { name: string; url: string; size: number }
 }
 
-function headers(): Record<string, string> {
-  return { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'bbs-browser' }
-}
+const HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'bbs-browser' }
 
 /** 最新のリリースを取る。見つからない・権限がないときは Error */
 export async function fetchLatestRelease(): Promise<ReleaseInfo> {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: headers() })
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: HEADERS })
   if (res.status === 404) throw new Error('リリースが見つかりません(まだ 1 つも公開していません)')
-  if (res.status === 401) throw new Error('GitHub のトークンが受け付けられませんでした')
   if (!res.ok) throw new Error(`GitHub から取れませんでした(${res.status})`)
-  const j = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets?: { name: string; url: string; size: number; browser_download_url: string }[] }
+  const j = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets?: { name: string; url: string; size: number }[] }
   // インストーラーを落として開くのは Windows だけ。Linux はリリースのページを開く
   const assets = /windows/i.test(navigator.userAgent) ? (j.assets ?? []) : []
   const asset = assets.find((a) => /-setup\.exe$/i.test(a.name)) ?? assets.find((a) => /\.(exe|msi)$/i.test(a.name))

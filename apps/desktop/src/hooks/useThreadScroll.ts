@@ -25,10 +25,10 @@ import {
   readProgress,
   settleDone,
   staggerDelays,
-  type OpenPosition,
   type PostRect,
   type ScrollPosition,
 } from '../utils/threadScroll'
+import type { OpenPosition } from '../ui/settings'
 
 /** 未読の頭を置く位置(見えている範囲の上からの割合)。上の 3 割には既読のレスを残す */
 const UNREAD_AT = 0.3
@@ -799,13 +799,18 @@ export function useThreadScroll(o: Options) {
       fixAnchor()
       updateJump()
       if (list) {
-        const apply = () => {
-          setWidth(list.clientWidth)
+        const readFont = () => {
           metrics.current.fontSize = parseFloat(getComputedStyle(list).fontSize) || 16
         }
+        const apply = () => {
+          setWidth(list.clientWidth)
+          readFont()
+        }
         clearTimeout(widthTimer)
+        // 高さだけの変化では幅の覚え直しは要らない(字の大きさは変わったかもしれない)
+        if (list.clientWidth === widthRef.current) readFont()
         // まだ幅を知らない(開いたばかり)ときはすぐ覚える
-        if (widthRef.current === 0) apply()
+        else if (widthRef.current === 0) apply()
         else widthTimer = setTimeout(apply, 150)
       }
       later()

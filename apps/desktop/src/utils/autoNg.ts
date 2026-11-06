@@ -8,6 +8,7 @@
 import type { Post } from '@bbs-browser/connectors'
 import { AXIS_LABEL, type Judgement } from './trollModel'
 import { aiHitLabel, type AiNgHit } from './aiNg'
+import { cyrb53 } from './identicon'
 
 export type AutoNgReason =
   /** 同じスレで同じ本文が count 回 */
@@ -30,8 +31,8 @@ export interface TrollMarks {
 export const EMPTY_MARKS: TrollMarks = { troll: new Set(), notTroll: new Set() }
 
 /** 同じ本文の回数で荒らしとみなす回数と、短すぎて数えない長さ */
-export const DUP_COUNT = 3
-export const DUP_MIN_LENGTH = 60
+const DUP_COUNT = 3
+const DUP_MIN_LENGTH = 60
 /** 繰り返しで荒らしとみなす長さと、違う並びの割合 */
 export const REPEAT_MIN_LENGTH = 100
 export const REPEAT_RATIO = 0.25
@@ -52,18 +53,7 @@ export function normalizeBody(body: string): string {
 
 /** 本文の鍵(印を貯めるときの名前)。正規化した本文の 53 ビットのハッシュを 16 進で */
 export function bodyKey(body: string): string {
-  const s = normalizeBody(body)
-  // cyrb53
-  let h1 = 0xdeadbeef
-  let h2 = 0x41c6ce57
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    h1 = Math.imul(h1 ^ c, 2654435761)
-    h2 = Math.imul(h2 ^ c, 1597334677)
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16)
+  return cyrb53(normalizeBody(body)).toString(16)
 }
 
 /** 4 文字ずつ切った並びのうち、違うものの割合(繰り返しばかりの文ほど小さい) */

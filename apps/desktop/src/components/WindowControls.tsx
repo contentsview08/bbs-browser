@@ -13,8 +13,18 @@ export default function WindowControls() {
     const win = getCurrentWindow()
     void win.isMaximized().then(setMaximized)
     // 最大化はダブルクリックやスナップでも変わるので、大きさが変わるたびに見直す
-    const unlisten = win.onResized(() => void win.isMaximized().then(setMaximized))
-    return () => void unlisten.then((f) => f())
+    // ドラッグで大きさを変えている間は続けて届くので、問い合わせは間引く
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const unlisten = win.onResized(() => {
+      timer ??= setTimeout(() => {
+        timer = undefined
+        void win.isMaximized().then(setMaximized)
+      }, 50)
+    })
+    return () => {
+      clearTimeout(timer)
+      void unlisten.then((f) => f())
+    }
   }, [])
 
   const win = getCurrentWindow()

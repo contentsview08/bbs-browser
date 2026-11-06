@@ -1,5 +1,5 @@
 // 印から育つ判定を、画面の外(workers/trollWorker.ts)で作り、1 レスごとの判定の関数を返す。
-// ログの数え上げは起動時に 1 回、学び直しは印が変わるたびに(続けて付けたときは少し待ってから)。
+// ログの数え上げは荒らしの印が MIN_TROLL_MARKS に届いてから 1 回、学び直しは印が変わるたびに(続けて付けたときは少し待ってから)。
 // 判定そのものも画面の外で行う: 判定の関数は、覚えてある結果を返し、まだない本文は少し待ってまとめて頼む。
 // 結果が届いたら関数を作り直す(スレ表示が判定し直す)。荒らしの印が少ないうちは undefined(決まりだけで判定する)
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -36,8 +36,15 @@ export function useTrollModel(store: LogStore | undefined, enabled: boolean, mar
 
   const post = (msg: TrollWorkerRequest) => worker.current?.postMessage(msg)
 
+  const enoughMarks = marks.filter((m) => m.troll).length >= MIN_TROLL_MARKS
+  /** 印が足りたことがあるか。一度読んだログは、印を外して減っても読み直さないよう持ち続ける */
+  const [corpusNeeded, setCorpusNeeded] = useState(false)
   useEffect(() => {
-    if (!store || !enabled) return
+    if (enoughMarks) setCorpusNeeded(true)
+  }, [enoughMarks])
+
+  useEffect(() => {
+    if (!store || !enabled || !corpusNeeded) return
     const w = new Worker(new URL('../workers/trollWorker.ts', import.meta.url), { type: 'module' })
     worker.current = w
     w.onmessage = (e: MessageEvent<TrollWorkerResponse>) => {
@@ -79,10 +86,10 @@ export function useTrollModel(store: LogStore | undefined, enabled: boolean, mar
       asked.current.clear()
       toAsk.current.clear()
     }
-  }, [store, enabled])
+  }, [store, enabled, corpusNeeded])
 
   useEffect(() => {
-    if (!corpusReady || marks.filter((m) => m.troll).length < MIN_TROLL_MARKS) {
+    if (!corpusReady || !enoughMarks) {
       requested.current++
       setModelMarks(undefined)
       return

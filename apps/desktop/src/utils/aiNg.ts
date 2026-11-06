@@ -12,6 +12,7 @@
 // スマホのアプリは data/AiNg.kt(同じ項目・同じ JSON・同じ決め方)
 import type { Post } from '@bbs-browser/connectors'
 import { LEADING_ANCHORS, bodyKey } from './autoNg'
+import { ngramFeatures, sigmoid } from './ngram'
 
 /** 使うモデル(Hugging Face の置き場の名前と、取る形)。int8 で約 339MB + 字の切り方の表 16MB */
 export const AI_MODEL = {
@@ -72,12 +73,12 @@ export interface AiNgOverride {
 }
 
 /** 学ぶための本文は、条件ごとにこの数まで(古いものから消す) */
-export const EXAMPLE_MAX = 300
+const EXAMPLE_MAX = 300
 /** 印から学ぶのに要る数(当たる・当たらないのそれぞれ) */
 export const MIN_EXAMPLES = 3
 
 /** 手で付けた印は、条件ごとにこの数まで(古いものから消す) */
-export const OVERRIDE_MAX = 2000
+const OVERRIDE_MAX = 2000
 
 /** はじめに入れておく条件の見本(どれも切ってある) */
 export const AI_NG_SAMPLES: Omit<AiNgRule, 'id'>[] = [
@@ -215,24 +216,8 @@ export function aiHitLabel(h: AiNgHit): string {
 
 const DIM = 1 << 14
 
-function hash(s: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return (h >>> 0) & (DIM - 1)
-}
-
 function featuresOf(text: string): Map<number, number> {
-  const f = new Map<number, number>()
-  const chars = Array.from(text.replace(/\s+/g, '')).slice(0, 300)
-  for (let n = 1; n <= 3; n++) for (let i = 0; i + n <= chars.length; i++) {
-    const k = hash(chars.slice(i, i + n).join(''))
-    f.set(k, (f.get(k) ?? 0) + 1)
-  }
-  let norm = 0
-  for (const v of f.values()) norm += v * v
-  norm = Math.sqrt(norm) || 1
-  for (const [k, v] of f) f.set(k, v / norm)
-  return f
+  return ngramFeatures(Array.from(text.replace(/\s+/g, '')).slice(0, 300), DIM)
 }
 
 export interface RuleModel {
@@ -256,7 +241,7 @@ export function trainRule(examples: { text: string; hit: boolean }[]): RuleModel
       const d = data[(i * 7919 + epoch) % data.length]
       let z = b
       for (const [k, v] of d.f) z += w[k] * v
-      const g = (1 / (1 + Math.exp(-z)) - d.y) * (d.y ? wPos : wNeg)
+      const g = (sigmoid(z) - d.y) * (d.y ? wPos : wNeg)
       for (const [k, v] of d.f) w[k] -= 0.3 * (g * v + 1e-4 * w[k])
       b -= 0.3 * g
     }
@@ -264,17 +249,34 @@ export function trainRule(examples: { text: string; hit: boolean }[]): RuleModel
   return { w, b }
 }
 
+/** 学んだ判定ごとの、本文 → 結果。当たり具合が届くたびに全レスを判定し直すので覚えておく(学び直すと判定ごと捨てられる) */
+const predicted = new WeakMap<RuleModel, Map<string, number>>()
+const PREDICT_CACHE_MAX = 20000
+
 export function predictRule(m: RuleModel, body: string): number {
+  let cache = predicted.get(m)
+  if (!cache) predicted.set(m, (cache = new Map()))
+  const hit = cache.get(body)
+  if (hit !== undefined) return hit
   let z = m.b
   for (const [k, v] of featuresOf(aiTextOf(body))) z += m.w[k] * v
-  return 1 / (1 + Math.exp(-z))
+  const p = sigmoid(z)
+  if (cache.size >= PREDICT_CACHE_MAX) cache.delete(cache.keys().next().value as string)
+  cache.set(body, p)
+  return p
 }
+
+/** 印の並び → 学んだ判定。setOverride は印の変わった条件の並びだけを新しくするので、学び直すのはその条件だけ。スレ表示どうしでも使い回す */
+const trained = new WeakMap<object, RuleModel | undefined>()
 
 /** 条件ごとの、印から学んだ判定(学べるだけの印がある条件だけ) */
 export function trainRules(rules: AiNgRule[], overrides: Record<string, AiNgOverride>): Map<string, RuleModel> {
   const out = new Map<string, RuleModel>()
   for (const r of rules) {
-    const m = trainRule(overrides[r.id]?.examples ?? [])
+    const examples = overrides[r.id]?.examples
+    if (!examples) continue
+    if (!trained.has(examples)) trained.set(examples, trainRule(examples))
+    const m = trained.get(examples)
     if (m) out.set(r.id, m)
   }
   return out

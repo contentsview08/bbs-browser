@@ -2,8 +2,7 @@
 // - 外を押して閉じるのは、押し始めも離したのも外のときだけ(中で文字を選び始めて外で離したときは閉じない)
 // - 閉じる前に、開いている欄のフォーカスを外す(数の欄・行の編集が、離れたときに確定する作りのため)
 // - 書きかけがあるときは、捨ててよいか確かめてから閉じる(useGuardedClose)
-import { useCallback, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import { createElement } from 'react'
+import { createElement, useCallback, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 /** 閉じる前に、開いている欄を確定する(フォーカスを外して onBlur を起こす) */

@@ -11,8 +11,15 @@ const REUSE_MS = 60_000
 export function useWatchLists() {
   const lists = useRef(new Map<string, { at: number; list: ThreadSummary[] }>())
 
+  /** 使い回せなくなった一覧を手放す(開いた板の数だけ溜まるので) */
+  const forgetOld = () => {
+    const now = Date.now()
+    for (const [url, e] of lists.current) if (now - e.at >= REUSE_MS) lists.current.delete(url)
+  }
+
   /** 取ったスレ一覧を覚える(手で開いたとき・まとめて更新したとき)。at は取りに行く前の時刻 */
   const remember = useCallback((boardUrl: string, list: ThreadSummary[], at: number) => {
+    forgetOld()
     lists.current.set(boardUrl, { at, list })
   }, [])
 
@@ -25,6 +32,7 @@ export function useWatchLists() {
     const at = Date.now()
     const list = await connector.listThreads(b, ctx)
     const got = { at, list }
+    forgetOld()
     lists.current.set(b.url, got)
     return got
   }, [])

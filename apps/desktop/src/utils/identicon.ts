@@ -13,7 +13,7 @@
 // 文字列から53bit相当の決定的なハッシュ値を作る(cyrb53)。同じ文字列からは常に
 // 同じ値、違う文字列ならなるべく違う値になる分布の良さが目的で、暗号学的な
 // 安全性(衝突困難性等)は要求しない。
-function cyrb53(str: string): number {
+export function cyrb53(str: string): number {
   let h1 = 0xdeadbeef
   let h2 = 0x41c6ce57
   for (let i = 0; i < str.length; i++) {

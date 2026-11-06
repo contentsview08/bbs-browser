@@ -10,9 +10,8 @@ import { parseOgp, type Ogp } from '../utils/ogp'
 import { decodeHtml } from '../utils/reader'
 import { fetchCheckingRedirects, isAutoLoadable, isRedirectStatus } from '../utils/safeUrl'
 import { fetchHttpsFirst } from '../utils/httpsFirst'
+import { BROWSER_LIKE_UA as USER_AGENT } from './userAgent'
 
-// 掲示板向けの Monazilla ではなく、ふつうのブラウザに近い名乗りにする(OGP を返さないサイトがあるため)
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) bbs-browser/0.1.0'
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 /** 何も取れなかったページは、これだけたったら取り直す(一時的に落ちていただけかもしれないので短め) */
 const EMPTY_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -30,6 +29,8 @@ export function initOgp(s: LogStore) {
 
 /** アプリを閉じるまでの控え(同じページを何度も DB に問い合わせないように) */
 const memory = new Map<string, Promise<Ogp | null>>()
+/** 控えの数(使っていないものから忘れる。忘れても DB にある) */
+const MEMORY_MAX = 2000
 
 // 同時に取りに行く数を絞る順番待ち
 let running = 0
@@ -111,10 +112,10 @@ async function load(url: string): Promise<Ogp | null> {
 export function fetchOgp(url: string): Promise<Ogp | null> {
   // 家の中のアドレスは読みに行かない(画面側でも止めているが、念のためここでも)
   if (!isAutoLoadable(url)) return Promise.resolve(null)
-  let p = memory.get(url)
-  if (!p) {
-    p = load(url).catch(() => null)
-    memory.set(url, p)
-  }
+  const p = memory.get(url) ?? load(url).catch(() => null)
+  // Map は入れた順に並ぶので、入れ直すと古い順の後ろへ回る
+  memory.delete(url)
+  memory.set(url, p)
+  if (memory.size > MEMORY_MAX) memory.delete(memory.keys().next().value as string)
   return p
 }

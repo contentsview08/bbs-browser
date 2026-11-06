@@ -1,7 +1,7 @@
 // アプリの設定。SQLite の settings 表に 1 項目 1 行(JSON)で保存する。
 import { AI_NG_SAMPLES, type AiNgOverride, type AiNgRule } from '../utils/aiNg'
 import { setHaptics } from '../utils/haptics'
-import { customLineBg, customVars, isCustomDark, parseCustom } from './customScheme'
+import { customLineBg, customVars, isCustomDark, onColor, parseCustom } from './customScheme'
 import type { DateStyle } from '../utils/displayDate'
 // 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
 // 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
@@ -162,7 +162,7 @@ export interface BoardMeta {
 /** 背景色を透かすパネルの変数(app.css)。どのパネルも同じ不透明度(panelOpacity)にする */
 export const PANEL_ALPHA_VARS = ['--alpha-address-bar', '--alpha-sidebar', '--alpha-tabs', '--alpha-thread-list', '--alpha-thread-header', '--alpha-thread-view', '--alpha-reply-form']
 /** パネルの不透明度の既定(背景画像があるとき) */
-export const PANEL_OPACITY_DEFAULT = 0.8
+const PANEL_OPACITY_DEFAULT = 0.8
 
 /** 通知センターに溜める知らせ 1 件。押したときの行き先は link(関数は保存できないので) */
 export interface StoredNotification {
@@ -595,9 +595,6 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'mono', name: 'モノクロ', accent: '#e8e8e8', border: '#2e2e2e' },
 ]
 
-/** 選べる配色 */
-export const PICKABLE_SCHEMES = COLOR_SCHEMES
-
 /**
  * 顔文字用の予備フォント(app.css)。日本語フォントで描けない「文字 + 重ねる記号」の組(･᷄ など)を描く。
  * どのフォントでも、日本語フォントのすぐ後ろ(sans-serif の前)に置く
@@ -662,14 +659,14 @@ export const ACCENTS: { key: string; name: string; light: string; dark: string }
   { key: 'purple', name: '紫', light: '#7e4fc4', dark: '#b792f2' },
 ]
 
-function luminance(hex: string): number {
-  const n = parseInt(hex.slice(1), 16)
-  const f = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-  return 0.2126 * f(((n >> 16) & 255) / 255) + 0.7152 * f(((n >> 8) & 255) / 255) + 0.0722 * f((n & 255) / 255)
-}
+/** いま <html> に入っている差し色(同じなら入れ直さない) */
+let accentApplied: string | undefined
 
 /** 差し色を <html> に入れる(選んでいなければテーマの色に戻す)。塗った上の字は、白と黒のうち差の大きいほう */
 function applyAccent(key: string, dark: boolean) {
+  const sig = `${key}|${dark}`
+  if (sig === accentApplied) return
+  accentApplied = sig
   const root = document.documentElement
   const a = ACCENTS.find((x) => x.key === key)
   const props = ['--c-accent', '--c-accent-hover', '--c-accent-text', '--c-accent-wash']
@@ -678,11 +675,9 @@ function applyAccent(key: string, dark: boolean) {
     return
   }
   const c = dark ? a.dark : a.light
-  const l = luminance(c)
-  const text = (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? '#111111' : '#ffffff'
   root.style.setProperty('--c-accent', c)
   root.style.setProperty('--c-accent-hover', `color-mix(in srgb, ${c} 85%, ${dark ? '#ffffff' : '#000000'})`)
-  root.style.setProperty('--c-accent-text', text)
+  root.style.setProperty('--c-accent-text', onColor(c))
   root.style.setProperty('--c-accent-wash', `color-mix(in srgb, ${c} ${dark ? 18 : 12}%, transparent)`)
 }
 
@@ -694,6 +689,8 @@ export function isDarkScheme(scheme: ColorScheme): boolean {
 let customDark = false
 /** 自分の配色で、<html> に直に入れた CSS 変数(配色を変えたら外す) */
 let customApplied: string[] = []
+/** customApplied のもとになった設定(同じなら入れ直さない) */
+let customAppliedSig = ''
 
 /** OS がダークモードか */
 const osDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -808,11 +805,19 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   const scheme: ColorScheme = want === 'custom' && !custom ? 'soft-dark' : want
   root.setAttribute('data-scheme', scheme)
   root.classList.toggle('dark', isDarkScheme(scheme))
+  // 自分の配色: 6 色から作った色を <html> に直に入れる(テーマの CSS のどの指定よりも強い)。差し色を選んでいれば、強調の色はそちら。
+  // 入れ直すと文書全体のスタイルを計算し直すので、変わったときだけ(apply はタブの切り替えなどでも走る)
+  const customSig = scheme === 'custom' && custom ? `${s.customScheme}|${effectivePostStyle(s) === 'line'}|${s.accent}` : ''
+  const customChanged = customSig !== customAppliedSig
+  if (customChanged) {
+    for (const n of customApplied) root.style.removeProperty(n)
+    customApplied = []
+    customAppliedSig = customSig
+    // 強調の色は差し色と同じ変数なので、続けて入れ直す
+    accentApplied = undefined
+  }
   applyAccent(s.accent, isDarkScheme(scheme))
-  // 自分の配色: 6 色から作った色を <html> に直に入れる(テーマの CSS のどの指定よりも強い)。差し色を選んでいれば、強調の色はそちら
-  for (const n of customApplied) root.style.removeProperty(n)
-  customApplied = []
-  if (scheme === 'custom' && custom) {
+  if (customChanged && scheme === 'custom' && custom) {
     const vars: Record<string, string> = customVars(custom)
     if (effectivePostStyle(s) === 'line') vars['--c-thread-view-bg'] = customLineBg(custom)
     for (const [n, v] of Object.entries(vars)) {
@@ -906,14 +911,14 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
   useEffect(() => {
     if (!store) return
     void store.getSettings().then((saved) => {
+      // いまある項目だけを写し、消した項目は migrateOld で写す
+      const known = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([k]) => k in DEFAULT_SETTINGS)) as Partial<AppSettings>
+      // 基本の文字を本文から切り離す前に大きさを変えていた人は、見えていた大きさを本文の既定として引き継ぐ(1 回だけ。保存する)
+      if (!('contentBasePx' in saved) && typeof known.fontPx === 'number' && known.fontPx !== DEFAULT_SETTINGS.fontPx) {
+        known.contentBasePx = known.fontPx
+        void store.setSetting('contentBasePx', known.fontPx)
+      }
       setSettings((s) => {
-        // いまある項目だけを写し、消した項目は migrateOld で写す
-        const known = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([k]) => k in DEFAULT_SETTINGS)) as Partial<AppSettings>
-        // 基本の文字を本文から切り離す前に大きさを変えていた人は、見えていた大きさを本文の既定として引き継ぐ(1 回だけ。保存する)
-        if (!('contentBasePx' in saved) && typeof known.fontPx === 'number' && known.fontPx !== DEFAULT_SETTINGS.fontPx) {
-          known.contentBasePx = known.fontPx
-          void store.setSetting('contentBasePx', known.fontPx)
-        }
         const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }
         return { ...next, ...migrateValues(next) }
       })

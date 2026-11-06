@@ -80,18 +80,17 @@ let rpcSeq = 0
 /** メインに頼んで、結果をもらう */
 export async function callMain<T>(kind: string, payload?: unknown): Promise<T> {
   const id = ++rpcSeq
-  return new Promise<T>((resolve, reject) => {
-    void listen<MainRpcDone>('main-rpc-done', (e) => {
-      if (e.payload.id !== id) return
-      void off.then((f) => f())
-      if (e.payload.ok) resolve(e.payload.result as T)
-      else reject(new Error(e.payload.error))
-    }).then((f) => {
-      off = Promise.resolve(f)
-      void emitTo('main', 'main-rpc', { id, from: windowLabel(), kind, payload } satisfies MainRpcRequest)
-    })
-    let off: Promise<UnlistenFn> = Promise.resolve(() => {})
+  let settle!: (done: MainRpcDone) => void
+  const result = new Promise<T>((resolve, reject) => {
+    settle = (d) => (d.ok ? resolve(d.result as T) : reject(new Error(d.error)))
   })
+  const off = await listen<MainRpcDone>('main-rpc-done', (e) => {
+    if (e.payload.id !== id) return
+    off()
+    settle(e.payload)
+  })
+  void emitTo('main', 'main-rpc', { id, from: windowLabel(), kind, payload } satisfies MainRpcRequest)
+  return result
 }
 
 /** メインで、頼みごとを受けて返す */

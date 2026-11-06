@@ -61,7 +61,7 @@ export function SwitchRow(props: { label: string; desc?: ReactNode; checked: boo
   )
 }
 
-export function NavRow(props: { label: string; desc?: ReactNode; value?: ReactNode; icon?: string; color?: string; onClick: () => void; danger?: boolean }) {
+export function NavRow(props: { label: string; desc?: ReactNode; value?: ReactNode; icon?: string; color?: string; onClick: () => void }) {
   return (
     <button type="button" onClick={props.onClick} className={ROW}>
       <RowBody

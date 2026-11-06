@@ -75,25 +75,25 @@ function fromOklab([L, a, b]: Rgb): string {
 }
 
 /** x から y へ t だけ寄せた色(Compose の lerp と同じ Oklab) */
-export function lerp(x: string, y: string, t: number): string {
+function lerp(x: string, y: string, t: number): string {
   const X = toOklab(x)
   const Y = toOklab(y)
   return fromOklab([0, 1, 2].map((i) => X[i] + (Y[i] - X[i]) * t) as Rgb)
 }
 
-export function luminance(h: string): number {
+function luminance(h: string): number {
   const [r, g, b] = toRgb(h).map(lin)
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-export function contrast(a: string, b: string): number {
+function contrast(a: string, b: string): number {
   const x = luminance(a)
   const y = luminance(b)
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
 }
 
 /** 塗った面の上の字: 白と黒のうち、差の大きいほう */
-const onColor = (c: string) => (contrast('#111111', c) >= contrast('#ffffff', c) ? '#111111' : '#ffffff')
+export const onColor = (c: string) => (contrast('#111111', c) >= contrast('#ffffff', c) ? '#111111' : '#ffffff')
 
 const wash = (h: string, a: number) => {
   const [r, g, b] = toRgb(h).map((x) => Math.round(x * 255))
@@ -105,7 +105,7 @@ export const isCustomDark = (d: CustomDef) => luminance(d.base) < 0.4
 /**
  * 配色の CSS 変数を、その配色の印を付けた見えない要素で読む(テーマの CSS は [data-scheme] の付いた要素ならどこにでも効く)
  */
-export function readSchemeVars(key: string, names: string[]): Record<string, string> {
+function readSchemeVars(key: string, names: string[]): Record<string, string> {
   const el = document.createElement('div')
   el.setAttribute('data-scheme', key)
   el.style.display = 'none'

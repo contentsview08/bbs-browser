@@ -6,9 +6,7 @@ import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import type { ConnectorContext, HttpRequestOptions, HttpResponse } from '@bbs-browser/connectors'
 import { fetchHttpsFirst } from '../utils/httpsFirst'
-
-// 2ch 互換の板は専ブラに Monazilla の UA を求める慣習がある
-const USER_AGENT = 'Monazilla/1.00 (bbs-browser/0.1.0)'
+import { MONAZILLA_UA as USER_AGENT } from './userAgent'
 
 const READ_TIMEOUT_MS = 30_000
 const UPLOAD_TIMEOUT_MS = 180_000

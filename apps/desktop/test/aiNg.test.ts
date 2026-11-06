@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Post } from '@bbs-browser/connectors'
-import { aiTextOf, hypothesisOf, judgeAiNg, predictRule, setOverride, trainRule, type AiNgRule } from '../src/utils/aiNg'
+import { aiTextOf, hypothesisOf, judgeAiNg, predictRule, setOverride, trainRule, trainRules, type AiNgRule } from '../src/utils/aiNg'
 
 const post = (no: number, body: string): Post => ({ no, name: '', mail: '', date: '', body })
 const rule = (o: Partial<AiNgRule> = {}): AiNgRule => ({ id: 'r', name: '煽り', prompt: '他人を煽っている', threshold: 0.8, show: 'fold', enabled: true, ...o })
@@ -45,5 +45,19 @@ describe('AI NG の決め方', () => {
     expect(trainRule(ex.slice(0, 5))).toBeUndefined()
     const m = trainRule(ex)!
     expect(predictRule(m, 'ほんと情弱乙ｗｗ')).toBeGreaterThan(predictRule(m, 'ラーメンおいしかった'))
+  })
+})
+
+describe('印から学ぶ判定の使い回し', () => {
+  const examples = ['情弱乙', 'ばかじゃねえの', 'お前ら無能', 'おいしかった', 'ありがとう', '今日は晴れ'].map((text, i) => ({ text, hit: i < 3 }))
+  it('印の並びが同じなら学び直さず、新しい並びなら学び直す', () => {
+    const r = rule()
+    const a = trainRules([r], { r: { hit: [], miss: [], examples } }).get('r')!
+    expect(trainRules([r], { r: { hit: [], miss: [], examples } }).get('r')).toBe(a)
+    expect(trainRules([r], { r: { hit: [], miss: [], examples: [...examples] } }).get('r')).not.toBe(a)
+  })
+  it('覚えた結果も同じ値', () => {
+    const m = trainRule(examples)!
+    expect(predictRule(m, 'ばか')).toBe(predictRule(m, 'ばか'))
   })
 })

@@ -78,7 +78,7 @@ fun DrawerContent(vm: AppViewModel) {
             if (histOpen) {
                 for (h in vm.history.take(8)) {
                     Text(
-                        h.thread.title, Modifier.fillMaxWidth().clickable { vm.openThread(h.thread) }.padding(start = 64.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                        h.thread.title, Modifier.fillMaxWidth().clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                         color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -138,7 +138,7 @@ private fun DrawerRow(
             .background(if (active) Palette.accentWash else Color.Transparent, RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .heightIn(min = if (sub) 44.dp else 54.dp)
-            .padding(start = if (sub) 28.dp else 16.dp, end = 4.dp),
+            .padding(start = if (sub) 20.dp else 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {

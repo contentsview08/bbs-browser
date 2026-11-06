@@ -736,10 +736,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
                 ),
                 listOf(
-                    styleMenuItem(
-                        vm.prefs, onTheme = { styleSheet = true }, onSize = { fontDialog = true },
-                        extra = listOf(MenuItem("名前欄を目立たなくする", Icons.Filled.Person, checked = vm.prefs.nameSubtle) { vm.prefs.nameSubtle = !vm.prefs.nameSubtle }),
-                    ),
+                    styleMenuItem(vm.prefs, onTheme = { styleSheet = true }, onSize = { fontDialog = true }),
                     MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
                         MenuItem("スレタイをコピー", Icons.Filled.ContentCopy) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
                         MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },

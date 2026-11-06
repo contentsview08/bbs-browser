@@ -79,6 +79,8 @@ class ReplyState(val boardUrl: String = "") {
     var sending by mutableStateOf(false)
     /** 選んだ画像の上げ具合(選んだ順。上げ終わったものも、本文のサムネイルを端末の画像で出すために残す) */
     val uploads = androidx.compose.runtime.mutableStateListOf<UploadItem>()
+    /** 開いているサイトの画面(ui/WebUpload.kt) */
+    var webUpload by mutableStateOf<io.github.contentsview08.obb.ui.WebUploadJob?>(null)
     /** 選んだばかりで、上げる前の確かめ(どれを上げるか・スレタイと URL を描き込むか)を待っている画像 */
     var pendingPick by mutableStateOf<List<android.net.Uri>?>(null)
     /** 画像を上げているところ(待っている画像も含む) */
@@ -1087,8 +1089,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** サイトの画面で上げたリンクを、本文の終わりに 1 行で入れる(ui/WebUpload.kt) */
-    fun insertLink(r: ReplyState, url: String) {
+    /** サイトの画面で上げたリンクを履歴に残し、本文の終わりに 1 行で入れる(ui/WebUpload.kt)。hash は渡した画像と結びつくときだけ */
+    fun insertLink(r: ReplyState, url: String, hash: String? = null) {
+        prefs.addUpload(url, hash)
         if (r.body.contains(url)) return
         r.body = withLine(r.body, url + "\n")
         toast = "リンクを本文に入れました"
@@ -1101,6 +1104,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun attach(r: ReplyState, uris: List<android.net.Uri>, stamp: io.github.contentsview08.obb.data.Uploader.Stamp? = null) {
         if (uris.isEmpty()) return
         r.notice = null
+        val site = siteFor(r)
+        if (site != null) { attachViaSite(r, site, uris, stamp); return }
         val running = r.uploading
         if (!running) r.uploads.forEach { it.inBatch = false }
         r.uploads.removeAll { it.state is UploadItem.State.Failed }
@@ -1124,20 +1129,80 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     prefs.addUpload(url, hash, deleteUrl ?: prefs.uploadDeleteUrl(url))
                     item.state = UploadItem.State.Done(url)
                 } catch (e: Exception) {
-                    // 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む
-                    val msg = (e as? io.github.contentsview08.obb.data.Uploader.UploadException)?.message
-                        ?: "${e.javaClass.simpleName}${e.message?.let { ": $it" } ?: ""}"
-                    item.state = UploadItem.State.Failed(msg)
-                    r.notice = "画像を上げられませんでした: $msg。画像を押すと上げ直します"
+                    uploadFailed(r, item, e)
                 } catch (e: OutOfMemoryError) {
-                    item.state = UploadItem.State.Failed("メモリが足りません")
-                    r.notice = "画像が大きすぎて読めませんでした(メモリが足りません)。設定の「大きい画像を縮める」を小さくしてください"
+                    uploadOutOfMemory(r, item)
                 }
             }
         }
     }
 
+    /** この板の上げ先がサイトの画面ならそのサイト(hono-bbs の板はその掲示板の置き場) */
+    private fun siteFor(r: ReplyState) = if (HonoBbs.isBoardUrl(r.boardUrl)) null else io.github.contentsview08.obb.ui.webUploadSiteFor(prefs.uploadHost)
+
+    /** 思いがけない失敗(メモリが足りないなど)も、理由を出して次の画像へ進む */
+    private fun uploadFailed(r: ReplyState, item: UploadItem, e: Exception) {
+        val msg = (e as? io.github.contentsview08.obb.data.Uploader.UploadException)?.message
+            ?: "${e.javaClass.simpleName}${e.message?.let { ": $it" } ?: ""}"
+        item.state = UploadItem.State.Failed(msg)
+        r.notice = "画像を上げられませんでした: $msg。画像を押すと上げ直します"
+    }
+
+    private fun uploadOutOfMemory(r: ReplyState, item: UploadItem) {
+        item.state = UploadItem.State.Failed("メモリが足りません")
+        r.notice = "画像が大きすぎて読めませんでした(メモリが足りません)。設定の「大きい画像を縮める」を小さくしてください"
+    }
+
+    /**
+     * 選んだ画像を整えて、サイトの画面へ渡す。前に上げた画像はその URL を本文に入れ、渡さない。
+     * 合計が上限を超えたら理由を出し、画像を渡さずに開く(サイトの画面から手で選べる)
+     */
+    private fun attachViaSite(r: ReplyState, site: io.github.contentsview08.obb.ui.WebUploadSite, uris: List<android.net.Uri>, stamp: io.github.contentsview08.obb.data.Uploader.Stamp?) {
+        r.uploads.forEach { it.inBatch = false }
+        r.uploads.removeAll { it.state is UploadItem.State.Failed }
+        val items = uris.take(10).map { UploadItem(it, stamp) }
+        r.uploads += items
+        if (uris.size > 10) r.notice = "一度に上げられるのは 10 枚までです(先頭の 10 枚だけ上げます)"
+        viewModelScope.launch {
+            val up = io.github.contentsview08.obb.data.Uploader
+            val files = mutableListOf<io.github.contentsview08.obb.ui.WebUploadFile>()
+            val passing = mutableListOf<UploadItem>()
+            var total = 0L
+            var attempted = 0
+            for (item in items) {
+                item.state = UploadItem.State.Uploading
+                try {
+                    val (name, type, bytes) = up.prepareFor(getApplication(), item.uri, prefs.uploadMaxDimension, item.stamp)
+                    val hash = up.sha256(bytes)
+                    val known = prefs.findUploadByHash(hash)
+                    if (known != null) {
+                        if (!r.body.contains(known)) r.body = withLine(r.body, known + "\n")
+                        prefs.addUpload(known, hash)
+                        item.state = UploadItem.State.Done(known)
+                        continue
+                    }
+                    attempted++
+                    passing += item
+                    total += bytes.size
+                    // 超えると分かったら、読んだ分を持ち続けない
+                    if (total > io.github.contentsview08.obb.ui.WEB_PASS_MAX_BYTES) files.clear()
+                    else files += io.github.contentsview08.obb.ui.WebUploadFile(name, type, bytes, hash)
+                } catch (e: Exception) {
+                    uploadFailed(r, item, e)
+                } catch (e: OutOfMemoryError) {
+                    uploadOutOfMemory(r, item)
+                }
+            }
+            r.uploads.removeAll(passing)
+            val problem = io.github.contentsview08.obb.ui.webPassProblem(total)
+            if (problem != null) r.notice = problem
+            if (attempted > 0) r.webUpload = io.github.contentsview08.obb.ui.WebUploadJob(site, files.toList(), problem)
+        }
+    }
+
     fun retryUpload(r: ReplyState, item: UploadItem) {
+        // サイトの画面へ渡す分は列にできない
+        if (siteFor(r) != null && r.uploading) return
         r.uploads.remove(item)
         attach(r, listOf(item.uri), item.stamp)
     }

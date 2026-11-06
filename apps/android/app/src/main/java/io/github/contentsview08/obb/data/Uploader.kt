@@ -16,7 +16,7 @@ import java.io.ByteArrayOutputStream
  * 画像のアップロード(PC 版の host/uploader.ts・hono-bbs の web と同じ考え方)。上げ先は板で決める:
  * - hono-bbs の板: その掲示板の画像の置き場(web の書き込み欄と同じ。受け付け → 置き場へ送る → 確定。Turnstile は書き込みと同じつなぎの Cookie)
  * - ほかの板: 設定の上げ先(uploadHost)のうち API のもの(catbox / imgur / imgbb)。サイトの画面で上げるもの(imgur-web / imgbox-web / imgbb-web)は
- *   ui/WebUpload.kt がその画面を開くので、ここには来ない
+ *   ui/WebUpload.kt の画面へ渡すので、ここへは整える(prepareFor)ためだけに来る
  * どこに上げても、返ってきた URL を開いて画像が返るかを確かめる(verify)。
  * JPEG・PNG・WebP は描き直して EXIF(撮影場所など)を取り除き、長い辺が決めた大きさを超えれば縮める。GIF・動画はそのまま。
  * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は利用者が登録した Client-ID、

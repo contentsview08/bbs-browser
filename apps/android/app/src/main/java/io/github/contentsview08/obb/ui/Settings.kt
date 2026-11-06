@@ -371,6 +371,7 @@ private fun ThreadPage(vm: AppViewModel) {
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
         ChoiceRow("ID の位置", p.idPosition, listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")) { p.idPosition = it }
+        SwitchRow("名前欄を目立たなくする", p.nameSubtle, desc = "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます") { p.nameSubtle = it }
         SwitchRow("ワッチョイを短く出す", p.watchoiShort, desc = "「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)") { p.watchoiShort = it }
         SwitchRow("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi, desc = "Discord 風・LINE 風のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます") { p.iconFromWatchoi = it }
         ChoiceRow(

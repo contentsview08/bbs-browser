@@ -257,14 +257,14 @@ fun MenuInfo(title: String, detail: String) {
 }
 
 /** ︙ の「表示スタイル」とその小項目(スレ一覧・スレ表示で共通) */
-fun styleMenuItem(p: io.github.contentsview08.obb.data.Prefs, onTheme: () -> Unit, onSize: () -> Unit, extra: List<MenuItem> = emptyList()) =
+fun styleMenuItem(p: io.github.contentsview08.obb.data.Prefs, onTheme: () -> Unit, onSize: () -> Unit) =
     MenuItem("表示スタイル", Icons.Filled.Palette, children = listOf(
         MenuItem("テーマと差し色", Icons.Filled.ColorLens, onClick = onTheme),
         MenuItem("レスの見た目", Icons.Filled.ViewAgenda, children = POST_STYLES.map { (k, name) ->
             MenuItem(name, Icons.Filled.ViewAgenda, checked = p.postStyle == k) { p.postStyle = k }
         }) {},
         MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize, onClick = onSize),
-    ) + extra) {}
+    )) {}
 
 /** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
 enum class MenuAt { TopEnd, TopStart, Center }

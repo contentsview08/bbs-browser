@@ -157,7 +157,10 @@ class Prefs(context: Context) {
     fun uploadDeleteUrl(url: String): String? = readUploads().firstOrNull { it.url == url }?.deleteUrl
     /** 履歴に残す。hash は中身の SHA-256(同じ画像をもう一度選んだら、上げずにこの URL を使う)。deleteUrl は置き場から消すページ(imgbb) */
     fun addUpload(url: String, hash: String? = null, deleteUrl: String? = null) {
-        writeUploads(listOf(Upload(url, System.currentTimeMillis(), hash, deleteUrl)) + readUploads().filter { it.url != url })
+        val all = readUploads()
+        val old = all.firstOrNull { it.url == url }
+        // 同じ URL をもう一度残すときに、前に分かったハッシュと消すページを失わない
+        writeUploads(listOf(Upload(url, System.currentTimeMillis(), hash ?: old?.hash, deleteUrl ?: old?.deleteUrl)) + all.filter { it.url != url })
     }
     /** 同じ中身(hash)の画像を前に上げていれば、その URL */
     fun findUploadByHash(hash: String): String? = readUploads().firstOrNull { it.hash == hash }?.url

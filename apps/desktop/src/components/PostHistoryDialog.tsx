@@ -11,8 +11,8 @@ import type { PostHistoryEntry } from '@bbs-browser/logstore'
 import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
 import { useLongPress } from '../hooks/useLongPress'
-import MobilePage, { dayLabel } from './MobilePage'
-import { relativeTime } from '../utils/thread'
+import MobilePage from './MobilePage'
+import { dayLabel, relativeTime } from '../utils/thread'
 import ActionSheet from './ActionSheet'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
@@ -24,6 +24,15 @@ function boardLabel(url: string): string {
   } catch {
     return url
   }
+}
+
+/** 本文・スレタイ・名前での絞り込み */
+function useFilteredHistory(entries: PostHistoryEntry[], query: string) {
+  return useMemo(() => {
+    const q = normalizeForSearch(query.trim())
+    if (!q) return entries
+    return entries.filter((e) => normalizeForSearch(`${e.thread.title} ${e.name} ${e.body}`).includes(q))
+  }, [entries, query])
 }
 
 interface Props {
@@ -44,11 +53,7 @@ export default function PostHistoryDialog(props: Props) {
 export function PostHistoryList(props: Omit<Props, 'onClose'>) {
   const [query, setQuery] = useState('')
   const [copied, setCopied] = useState<number>()
-  const shown = useMemo(() => {
-    const q = normalizeForSearch(query.trim())
-    if (!q) return props.entries
-    return props.entries.filter((e) => normalizeForSearch(`${e.thread.title} ${e.name} ${e.body}`).includes(q))
-  }, [props.entries, query])
+  const shown = useFilteredHistory(props.entries, query)
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 border-b border-c-border">
@@ -139,11 +144,7 @@ function DesktopPostHistory(props: Props) {
 function MobilePostHistory(props: Props) {
   const [query, setQuery] = useState('')
   const [sheet, setSheet] = useState<PostHistoryEntry>()
-  const shown = useMemo(() => {
-    const q = normalizeForSearch(query.trim())
-    if (!q) return props.entries
-    return props.entries.filter((e) => normalizeForSearch(`${e.thread.title} ${e.name} ${e.body}`).includes(q))
-  }, [props.entries, query])
+  const shown = useFilteredHistory(props.entries, query)
   return (
     <MobilePage title="書き込み履歴" count={props.entries.length} onClose={props.onClose} onQuery={setQuery} placeholder="本文・スレタイ・名前で絞り込む">
       {shown.length === 0 ? (

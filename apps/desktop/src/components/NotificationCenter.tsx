@@ -9,8 +9,7 @@ import { BTN_SECONDARY, DialogHeader } from './DialogParts'
 import type { StoredNotification } from '../ui/settings'
 import { relativeTime } from '../utils/thread'
 import { isMobile } from '../utils/platform'
-
-const ERROR_ICONS = new Set(['error', 'warning', 'report'])
+import { ERROR_ICONS } from './Notifications'
 
 /** 溜めた知らせの一覧(PC はスレ一覧の所に、スマホは下のポップアップの中に) */
 export function NotificationList(props: { items: StoredNotification[]; onOpen: (n: StoredNotification) => void; onClear: () => void }) {

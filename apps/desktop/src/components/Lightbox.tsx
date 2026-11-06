@@ -6,9 +6,6 @@
 // - 動画のファイル(mp4 など)は、その場で再生する(拡大はしない)。再生できない形式なら、ブラウザで開くボタンを出す
 // - YouTube は埋め込みのプレーヤーで再生する
 // - 2 枚以上なら、下に小さい絵を並べる(何枚あって今どれか。押すとその絵へ飛ぶ)
-// - スマホの指の操作は、元の Web アプリ(hono-bbs の ImageLightbox)と同じ:
-//   2 本指で拡大(指の真ん中を中心に)、拡大中は 1 本指で動かす(離すと勢いで少し流れ、端からはみ出したら戻る)、
-//   2 回たたいて拡大・等倍、上下になぞって閉じる、左右になぞって前後の絵へ。絵をたたくと本文のパネルとボタンを隠す
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -20,9 +17,8 @@ import { isAutoLoadable } from '../utils/safeUrl'
 import { isMobile } from '../utils/platform'
 import MobileImageViewer from './mobile/MobileImageViewer'
 import { mediaSrc } from '../utils/httpsFirst'
-import { ViewerImageFailed } from './MediaFailed'
+import { VideoPlaybackHelp, ViewerImageFailed } from './MediaFailed'
 import { canPlayVideo } from '../utils/videoSupport'
-import { VideoPlaybackHelp } from './MediaFailed'
 
 interface Props {
   urls: string[]
@@ -121,44 +117,6 @@ interface Zoom {
 }
 const NO_ZOOM: Zoom = { scale: 1, x: 0, y: 0 }
 
-// ── スマホの指の操作の決まり(元の Web アプリと同じ値) ──
-/** これ未満の動きは、まだ縦・横どちらの操作か決めない */
-const AXIS_LOCK_PX = 10
-/** 画面の高さ(横なら幅)のこの割合だけ動かせば、速さを問わず閉じる */
-const DISMISS_RATIO = 0.22
-/** 速さで閉じるときの、いちばん短い距離(px)と速さ(px/ms) */
-const DISMISS_MIN_PX = 80
-const DISMISS_MIN_VELOCITY = 0.5
-const DISMISS_ANIM_MS = 220
-const TOUCH_MAX_SCALE = 4
-const DOUBLE_TAP_SCALE = 2.5
-const TAP_MAX_MOVE = 10
-const TAP_MAX_MS = 300
-const DOUBLE_TAP_MS = 300
-const DOUBLE_TAP_PX = 40
-/** 端からはみ出した分は、この割合しか動かない(ゴムひも) */
-const RUBBER = 0.3
-/** 離したあとの流れ: 毎フレームこれを速さに掛けて弱め、この速さ(px/ms)を下回ったら止める */
-const FRICTION = 0.95
-const STOP_VELOCITY = 0.1
-const SNAP_MS = 300
-/** この倍率以下で指を離したら、等倍に戻す */
-const RESET_SNAP_SCALE = 1.15
-/** 左右になぞって次の絵へ移る距離 */
-const SWIPE_PX = 40
-
-const rubberBand = (v: number, min: number, max: number) => (v > max ? max + (v - max) * RUBBER : v < min ? min - (min - v) * RUBBER : v)
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
-
-/** 画面いっぱいに object-contain で描いた絵を、scale 倍にしたときに動かせる幅(真ん中から片側) */
-function panBounds(img: HTMLImageElement | null, scale: number): { maxX: number; maxY: number } {
-  if (!img?.naturalWidth || !img.naturalHeight) return { maxX: 0, maxY: 0 }
-  const w = window.innerWidth
-  const h = window.innerHeight
-  const fit = Math.min(w / img.naturalWidth, h / img.naturalHeight)
-  return { maxX: Math.max(0, (img.naturalWidth * fit * scale - w) / 2), maxY: Math.max(0, (img.naturalHeight * fit * scale - h) / 2) }
-}
-
 /**
  * (cx, cy) を中心に、倍率を next にする。画像は画面の真ん中に置いて transform で動かしているので、
  * 指している点が拡大の前後で同じ場所に留まるよう、ずらし量を計算し直す
@@ -194,14 +152,13 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
   const [save, setSave] = useState<SaveState>()
   const [panelOpen, setPanelOpen] = useState(true)
   const [zoom, setZoomState] = useState<Zoom>(NO_ZOOM)
-  // 指の操作の途中は、描き直しを待たずに今の値を読みたいので、控えも同時に書き換える
+  // ホイール・ドラッグの途中は、描き直しを待たずに今の値を読みたいので、控えも同時に書き換える
   const zoomRef = useRef(zoom)
   const setZoom = (z: Zoom | ((z: Zoom) => Zoom)) => {
     const next = typeof z === 'function' ? z(zoomRef.current) : z
     zoomRef.current = next
     setZoomState(next)
   }
-  const imgRef = useRef<HTMLImageElement>(null)
   // 切り替えた向きにすべり込ませる(開いたときは奥から浮かせる)
   const [shown, setShown] = useState({ index, anim: 'lightbox-open-rise' })
   if (shown.index !== index)
@@ -227,219 +184,13 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
     return () => window.removeEventListener('keydown', onKey)
   }, [index, urls.length, many, onIndex, onClose])
 
-  // ── スマホ: 指の操作 ──
-  /** 'interacting'(指で動かしている)・'momentum'(離したあとの流れ)の間は、CSS のなめらかさを挟まず指に合わせる */
-  const [phase, setPhase] = useState<'idle' | 'interacting' | 'momentum' | 'snapping'>('idle')
-  /** 閉じるために上下(先頭・最後で左右)になぞっている量 */
-  const [drag, setDrag] = useState({ x: 0, y: 0 })
-  const [dragAnimating, setDragAnimating] = useState(false)
-  const [dismissing, setDismissing] = useState(false)
-  const touch = useRef<{
-    start: { x: number; y: number; time: number } | null
-    axis: 'h' | 'v' | null
-    pinch: { dist: number; scale: number } | null
-    pan: { x: number; y: number; ox: number; oy: number } | null
-    samples: { x: number; y: number; t: number }[]
-    lastTap: { time: number; x: number; y: number } | null
-    raf: number | null
-    snap: number | null
-  }>({ start: null, axis: null, pinch: null, pan: null, samples: [], lastTap: null, raf: null, snap: null })
-  const gestures = isMobile && !video && !youtube && !blocked
-
-  const cancelAnimations = () => {
-    const t = touch.current
-    if (t.raf !== null) cancelAnimationFrame(t.raf)
-    if (t.snap !== null) clearTimeout(t.snap)
-    t.raf = t.snap = null
-  }
-  /** 指を離した(流れが止まった)あと、はみ出していれば戻す。小さすぎる拡大は等倍に戻す */
-  const settle = () => {
-    const z = zoomRef.current
-    const s0 = clamp(z.scale, 1, TOUCH_MAX_SCALE)
-    const scale = s0 <= RESET_SNAP_SCALE ? 1 : s0
-    const { maxX, maxY } = panBounds(imgRef.current, scale)
-    const next = scale === 1 ? NO_ZOOM : { scale, x: clamp(z.x, -maxX, maxX), y: clamp(z.y, -maxY, maxY) }
-    if (next.scale === z.scale && next.x === z.x && next.y === z.y) return setPhase('idle')
-    setPhase('snapping')
-    setZoom(next)
-    touch.current.snap = window.setTimeout(() => {
-      touch.current.snap = null
-      setPhase('idle')
-    }, SNAP_MS)
-  }
-  /** 離したときの速さで少し流し、弱まったら settle */
-  const momentum = (vx: number, vy: number) => {
-    if (Math.hypot(vx, vy) < STOP_VELOCITY) return settle()
-    setPhase('momentum')
-    let v = { x: vx, y: vy }
-    let last: number | null = null
-    const tick = (ts: number) => {
-      const dt = last === null ? 16 : Math.min(48, ts - last)
-      last = ts
-      v = { x: v.x * FRICTION, y: v.y * FRICTION }
-      if (Math.hypot(v.x, v.y) < STOP_VELOCITY) {
-        touch.current.raf = null
-        return settle()
-      }
-      const z = zoomRef.current
-      const { maxX, maxY } = panBounds(imgRef.current, z.scale)
-      setZoom({ scale: z.scale, x: rubberBand(z.x + v.x * dt, -maxX, maxX), y: rubberBand(z.y + v.y * dt, -maxY, maxY) })
-      touch.current.raf = requestAnimationFrame(tick)
-    }
-    touch.current.raf = requestAnimationFrame(tick)
-  }
-  const dismissFar = (dist: number, ms: number, screen: number) =>
-    dist > screen * DISMISS_RATIO || (dist > DISMISS_MIN_PX && dist / Math.max(1, ms) > DISMISS_MIN_VELOCITY)
-
-  const inPanel = (target: EventTarget) => !!panelRef.current?.contains(target as Node)
-  const onTouchStart = (e: React.TouchEvent) => {
-    // スレ表示のスワイプ(戻るなど)に届かないようにする(ポータルの中の出来事も React では親へ伝わる)
-    e.stopPropagation()
-    if (!gestures || inPanel(e.target)) return
-    cancelAnimations()
-    const t = touch.current
-    if (e.touches.length === 2) {
-      const [a, b] = [e.touches[0], e.touches[1]]
-      t.pinch = { dist: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY), scale: zoomRef.current.scale }
-      t.start = null
-      t.axis = null
-      t.pan = null
-      setPhase('interacting')
-      return
-    }
-    const p = e.touches[0]
-    t.start = { x: p.clientX, y: p.clientY, time: Date.now() }
-    t.axis = null
-    setDragAnimating(false)
-    // 拡大しているときの 1 本指は、いつも絵を動かす(閉じる・切り替えより先)
-    const panning = zoomRef.current.scale > 1
-    t.pan = panning ? { x: p.clientX, y: p.clientY, ox: zoomRef.current.x, oy: zoomRef.current.y } : null
-    t.samples = panning ? [{ x: p.clientX, y: p.clientY, t: performance.now() }] : []
-    setPhase(panning ? 'interacting' : 'idle')
-  }
-  const onTouchMove = (e: React.TouchEvent) => {
-    e.stopPropagation()
-    if (!gestures || inPanel(e.target)) return
-    const t = touch.current
-    if (e.touches.length === 2 && t.pinch) {
-      const [a, b] = [e.touches[0], e.touches[1]]
-      const scale = rubberBand(t.pinch.scale * (Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) / t.pinch.dist), 1, TOUCH_MAX_SCALE)
-      // 2 本の指の真ん中が、拡大の前後で同じ場所に留まるようにずらす
-      const z = zoomRef.current
-      const mx = (a.clientX + b.clientX) / 2 - window.innerWidth / 2
-      const my = (a.clientY + b.clientY) / 2 - window.innerHeight / 2
-      const { maxX, maxY } = panBounds(imgRef.current, scale)
-      setZoom({
-        scale,
-        x: rubberBand(mx - (scale / z.scale) * (mx - z.x), -maxX, maxX),
-        y: rubberBand(my - (scale / z.scale) * (my - z.y), -maxY, maxY),
-      })
-      return
-    }
-    const p = e.touches[0]
-    if (t.pan) {
-      const { maxX, maxY } = panBounds(imgRef.current, zoomRef.current.scale)
-      setZoom({
-        scale: zoomRef.current.scale,
-        x: rubberBand(t.pan.ox + p.clientX - t.pan.x, -maxX, maxX),
-        y: rubberBand(t.pan.oy + p.clientY - t.pan.y, -maxY, maxY),
-      })
-      t.samples.push({ x: p.clientX, y: p.clientY, t: performance.now() })
-      if (t.samples.length > 3) t.samples.shift()
-      return
-    }
-    if (!t.start) return
-    const dx = p.clientX - t.start.x
-    const dy = p.clientY - t.start.y
-    if (!t.axis) {
-      if (Math.hypot(dx, dy) < AXIS_LOCK_PX) return
-      t.axis = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h'
-    }
-    if (t.axis === 'v') setDrag({ x: 0, y: dy })
-    // 絵が 1 枚なら、左右になぞっても閉じる(切り替える先がないので)
-    else if (!many) setDrag({ x: dx, y: 0 })
-  }
-  const onTouchEnd = (e: React.TouchEvent) => {
-    e.stopPropagation()
-    if (!gestures || inPanel(e.target)) return
-    const t = touch.current
-    const p = e.changedTouches[0]
-    if (t.pinch) {
-      t.pinch = null
-      t.start = null
-      t.axis = null
-      t.pan = null
-      return settle()
-    }
-    const wasPanning = !!t.pan
-    t.pan = null
-    const samples = t.samples
-    t.samples = []
-    const releasePan = () => {
-      const a = samples[0]
-      const b = samples[samples.length - 1]
-      const dt = a && b ? Math.max(1, b.t - a.t) : 1
-      momentum(a && b ? (b.x - a.x) / dt : 0, a && b ? (b.y - a.y) / dt : 0)
-    }
-    const start = t.start
-    const axis = t.axis
-    t.start = null
-    t.axis = null
-    if (!start) return wasPanning ? releasePan() : undefined
-    const moved = Math.hypot(p.clientX - start.x, p.clientY - start.y)
-    const ms = Date.now() - start.time
-    if (moved < TAP_MAX_MOVE && ms < TAP_MAX_MS) {
-      const now = Date.now()
-      const last = t.lastTap
-      // 2 回たたいた: 等倍なら、たたいた所を中心に拡大する。拡大していれば戻す
-      if (last && now - last.time < DOUBLE_TAP_MS && Math.hypot(p.clientX - last.x, p.clientY - last.y) < DOUBLE_TAP_PX) {
-        e.preventDefault() // 続けて起きる click(本文パネルの出し入れ)を止める
-        t.lastTap = null
-        setPhase('idle')
-        if (zoomRef.current.scale > 1) return setZoom(NO_ZOOM)
-        const z = zoomAt(NO_ZOOM, DOUBLE_TAP_SCALE, p.clientX, p.clientY)
-        const { maxX, maxY } = panBounds(imgRef.current, z.scale)
-        return setZoom({ scale: z.scale, x: clamp(z.x, -maxX, maxX), y: clamp(z.y, -maxY, maxY) })
-      }
-      t.lastTap = { time: now, x: p.clientX, y: p.clientY }
-      if (wasPanning) releasePan()
-      return
-    }
-    if (wasPanning) return releasePan()
-    if (axis === 'v' || (axis === 'h' && !many)) {
-      const d = axis === 'v' ? p.clientY - start.y : p.clientX - start.x
-      setDragAnimating(true)
-      if (dismissFar(Math.abs(d), ms, axis === 'v' ? window.innerHeight : window.innerWidth)) {
-        setDismissing(true)
-        const far = (d > 0 ? 1 : -1) * (axis === 'v' ? window.innerHeight : window.innerWidth)
-        setDrag(axis === 'v' ? { x: 0, y: far } : { x: far, y: 0 })
-        window.setTimeout(onClose, DISMISS_ANIM_MS)
-      } else setDrag({ x: 0, y: 0 })
-      return
-    }
-    const dx = p.clientX - start.x
-    if (axis === 'h' && Math.abs(dx) >= SWIPE_PX) step(dx > 0 ? -1 : 1)
-  }
-  useEffect(() => cancelAnimations, [])
-
   // 画像を切り替えたら、保存の結果表示と拡大を戻す
   useEffect(() => {
     setSave(undefined)
-    cancelAnimations()
     setZoom(NO_ZOOM)
-    setPhase('idle')
-    setDrag({ x: 0, y: 0 })
-    setDragAnimating(false)
-    setDismissing(false)
     setVideoError(false)
     setImageError(false)
   }, [url])
-
-  /** スマホ: 絵をたたいて本文のパネルを隠したら、ボタン類も隠して絵だけにする */
-  const chromeHidden = isMobile && !panelOpen
-  const hideClass = chromeHidden ? 'opacity-0 pointer-events-none transition-opacity duration-200' : ''
-  /** 閉じる途中は、遠ざかるほど薄く小さく */
-  const dismissProgress = dismissing ? Math.min(1, Math.max(Math.abs(drag.y) / window.innerHeight, Math.abs(drag.x) / window.innerWidth)) : 0
 
   // ホイール: Ctrl つきなら拡大・縮小、なしなら画像の切り替え。
   // Ctrl+ホイールは WebView の画面の拡大と取り合いにならないよう、既定の動きを止める(passive: false が要る)
@@ -505,8 +256,6 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       ref={overlayRef}
       data-lightbox
       className="fixed inset-0 bg-black/90 z-[10000] flex items-center justify-center overflow-hidden"
-      // スマホ: ブラウザの拡大・スクロールと取り合わないよう、指の操作はすべてここで受ける
-      style={isMobile ? { touchAction: 'none', opacity: 1 - dismissProgress * 0.6 } : undefined}
       onMouseDown={() => {
         dragged.current = false
       }}
@@ -515,9 +264,6 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
         if (dragged.current) return
         onClose()
       }}
-      onTouchStart={isMobile ? onTouchStart : undefined}
-      onTouchMove={isMobile ? onTouchMove : undefined}
-      onTouchEnd={isMobile ? onTouchEnd : undefined}
     >
       {blocked ? (
         <div className="flex flex-col items-center gap-3 text-white/80 text-sm text-center" onClick={(e) => e.stopPropagation()}>
@@ -583,33 +329,18 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
           onOpenExternal={() => onOpenExternal(url)}
         />
       ) : (
-      /* 枠いっぱいに収める(小さい画像は引き伸ばす)。スマホは画面いっぱい */
-      <div
-        className={isMobile ? 'absolute inset-0' : 'contents'}
-        style={
-          isMobile
-            ? {
-                transform: `translate(${drag.x}px, ${drag.y}px) scale(${1 - dismissProgress * 0.3})`,
-                transition: dragAnimating ? `transform ${DISMISS_ANIM_MS}ms ease-out` : 'none',
-                pointerEvents: dismissing ? 'none' : undefined,
-              }
-            : undefined
-        }
-      >
+      /* 枠いっぱいに収める(小さい画像は引き伸ばす) */
       <img
-        ref={imgRef}
         key={`${url}:${imageAttempt}`}
         src={mediaSrc(url)}
         onError={() => setImageError(true)}
         alt=""
         referrerPolicy="no-referrer"
         draggable={false}
-        className={`${isMobile ? 'w-full h-full' : 'w-[92vw] h-[86vh]'} object-contain ${shown.anim} select-none ${zoom.scale > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        className={`w-[92vw] h-[86vh] object-contain ${shown.anim} select-none ${zoom.scale > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={{
-          // ずらしてから拡大する(指の動きと絵の動きが、倍率によらず同じになる)
+          // ずらしてから拡大する(マウスの動きと絵の動きが、倍率によらず同じになる)
           transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.scale})`,
-          willChange: isMobile ? 'transform' : undefined,
-          transition: !isMobile ? undefined : phase === 'snapping' ? `transform ${SNAP_MS}ms cubic-bezier(0.34, 1.56, 0.64, 1)` : phase === 'idle' ? 'transform 200ms ease-out' : 'none',
         }}
         onMouseDown={onImageMouseDown}
         onClick={(e) => {
@@ -624,34 +355,13 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
         }}
         onDoubleClick={(e) => {
           e.stopPropagation()
-          if (isMobile) return // スマホは指の操作(2 回たたく)で拡大する
           setZoom((z) => (z.scale > 1 ? NO_ZOOM : zoomAt(z, 2.5, e.clientX, e.clientY)))
         }}
       />
-      </div>
       )}
 
       {/* 本文のパネル。画像の下側に半透明で重ねる(動画と YouTube は、操作バーに重なるので出さない) */}
-      {/* スマホ: 元の Web アプリと同じく、下の端にぴったり付けた黒いパネル。本文は 6 行ほどで止め、その中でスクロールする */}
-      {isMobile && post && !video && !youtube && (
-        <div
-          ref={panelRef}
-          className={`absolute inset-x-0 max-h-[60%] flex flex-col bg-black/80 backdrop-blur-sm px-4 pt-3 pb-4 text-white ${hideClass}`}
-          style={{ bottom: many ? STRIP_H : 0, paddingBottom: many ? undefined : 'calc(env(safe-area-inset-bottom) + 16px)', touchAction: 'pan-y' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1.5 text-xs">
-            <span className="font-bold text-white/70">{post.no}</span>
-            <span className="font-bold" style={{ color: '#a9bbff' }}>
-              {post.name}
-            </span>
-            <span className="text-white/60">{post.date}</span>
-            {post.id && <span className="font-mono text-white/60">ID:{post.id}</span>}
-          </div>
-          <p className="pl-3 border-l-2 border-white/25 text-sm leading-relaxed whitespace-pre-wrap break-words max-h-[9.75em] overflow-y-auto">{post.body}</p>
-        </div>
-      )}
-      {!isMobile && panelOpen && post && !video && !youtube && (
+      {panelOpen && post && !video && !youtube && (
         <div
           ref={panelRef}
           className="absolute left-1/2 -translate-x-1/2 w-[min(92vw,900px)] max-h-[34vh] overflow-y-auto custom-scrollbar rounded-xl px-5 py-3 text-white backdrop-blur-md"
@@ -668,8 +378,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
         </div>
       )}
       <div
-        className={`absolute top-3 right-3 flex items-center gap-1 ${hideClass}`}
-        style={isMobile ? { top: 'calc(env(safe-area-inset-top) + 8px)' } : undefined}
+        className="absolute top-3 right-3 flex items-center gap-1"
         onClick={(e) => e.stopPropagation()}
       >
         {zoom.scale > 1 && (
@@ -726,12 +435,8 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       {/* 下の帯: 何枚あって今どれか。押すとその絵へ飛ぶ */}
       {many && (
         <div
-          className={`absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 px-4 ${hideClass}`}
-          style={
-            isMobile
-              ? { height: `calc(${STRIP_H}px + env(safe-area-inset-bottom))`, paddingBottom: 'env(safe-area-inset-bottom)', background: 'rgba(0,0,0,0.8)' }
-              : { height: STRIP_H, background: 'linear-gradient(transparent, rgba(0,0,0,0.55))' }
-          }
+          className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 px-4"
+          style={{ height: STRIP_H, background: 'linear-gradient(transparent, rgba(0,0,0,0.55))' }}
           onClick={(e) => e.stopPropagation()}
         >
           <span className="flex-shrink-0 text-white/80 text-sm tabular-nums">
@@ -747,7 +452,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       {many && (
         <button
           type="button"
-          className={`${NAV} left-4 ${hideClass}`}
+          className={`${NAV} left-4`}
           onClick={(e) => {
             e.stopPropagation()
             step(-1)
@@ -759,7 +464,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
       {many && (
         <button
           type="button"
-          className={`${NAV} right-4 ${hideClass}`}
+          className={`${NAV} right-4`}
           onClick={(e) => {
             e.stopPropagation()
             step(1)

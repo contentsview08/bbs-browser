@@ -31,7 +31,6 @@ export default function NgEditor(props: {
   onSampleChange: (s: string) => void
   /** Ctrl+Enter で決める */
   onSubmit?: () => void
-  compact?: boolean
 }) {
   const r = props.rule
   const set = (p: Partial<NgDraftRule>) => props.onChange({ ...r, ...p })
@@ -87,7 +86,7 @@ export default function NgEditor(props: {
             }
           }}
           autoFocus
-          rows={props.compact ? 2 : Math.min(6, Math.max(2, r.pattern.split('\n').length))}
+          rows={Math.min(6, Math.max(2, r.pattern.split('\n').length))}
           spellCheck={false}
           placeholder={r.isRegex ? '正規表現(例: ^ｷﾀ━+|ｗ{5,})' : 'NG にする言葉'}
           className={`${INPUT} resize-y ${r.isRegex ? 'font-mono' : ''} ${err ? '!border-c-heat-very-hot' : ''}`}

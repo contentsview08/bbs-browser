@@ -3,7 +3,7 @@
 // 匿名で上げたものはサーバー上では消せないので、削除ボタンを出さない。
 // imgbb(API キー)は API では消せないが、上げたときに消すためのページ(delete_url)が返るので、それをブラウザで開くボタンを出す
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
 import { DialogHeader } from './DialogParts'
@@ -11,7 +11,8 @@ import { createPortal } from 'react-dom'
 import type { UploadRecord } from '@bbs-browser/logstore'
 import { isMobile } from '../utils/platform'
 import { useLongPress } from '../hooks/useLongPress'
-import MobilePage, { dayLabel } from './MobilePage'
+import MobilePage from './MobilePage'
+import { dayLabel } from '../utils/thread'
 import ActionSheet from './ActionSheet'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
@@ -47,8 +48,10 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
   // 置き場からも消せるもの(アカウントで上げた)と、消せないもの(匿名で上げた)を分けて並べる
   const deletable = props.uploads.filter((u) => u.withAccount)
   const fixed = props.uploads.filter((u) => !u.withAccount)
+  // 書き込み履歴を全文で探すので、コピーの印などこの画面の中の変化では探し直さない
+  const postedOf = useMemo(() => new Map(props.uploads.map((u) => [u.url, props.postedIn?.(u.url)])), [props.uploads, props.postedIn])
   const card = (u: UploadRecord) => {
-    const posted = props.postedIn?.(u.url)
+    const posted = postedOf.get(u.url)
     return (
       <div key={u.url} className="group flex flex-col bg-c-surface2 border border-c-border rounded-[var(--card-radius)] overflow-hidden">
         <button type="button" onClick={() => props.onOpen(u.url)} className="h-28 bg-c-surface3" title="ブラウザで開く">

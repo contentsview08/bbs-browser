@@ -5,7 +5,7 @@
 import { loadErrorText } from './components/LoadFailed'
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { onBackButtonPress } from '@tauri-apps/api/app'
+import { getVersion, onBackButtonPress } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   allConnectors,
@@ -43,15 +43,10 @@ import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver, toIma
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
-import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, type ListFilter, type ListTabKey, type StoredNotification } from './ui/settings'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { BaseFontSlider, ListFontSliders, ROOT_FONT_SIZE, SliderDialog, setCssVar } from './components/FontSizeSlider'
-/** Ctrl+ホイールを回し終えてから、文字の大きさを設定に書くまで待つ時間 */
-const WHEEL_ZOOM_COMMIT_MS = 300
-/** Ctrl+ホイールの大きさの表示を、回し終えてから消すまでの時間 */
-const WHEEL_ZOOM_HINT_MS = 900
+import FontSizeSlider, { BaseFontSlider, ListFontSliders, SliderDialog, setCssVar } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -63,14 +58,14 @@ import { tauriContext as ctx } from './host/tauriContext'
 import { lazyComponent } from './utils/lazyComponent'
 import { isMobile } from './utils/platform'
 import { useSwipeGesture, type SwipeMap } from './hooks/useSwipeGesture'
-import { newRule, todayDateString } from './utils/ng'
+import { newRule, postMatcher, pruneExpired, threadMatcher, todayDateString, type NgRule, type NgTarget } from './utils/ng'
+import { useWheelZoom } from './hooks/useWheelZoom'
 import { useMouseGesture, PIE_DIRS, type MouseGestureMap, type PieDir } from './hooks/useMouseGesture'
 import { canCheckUpdate, compareVersions, fetchLatestRelease, runAutoUpdate, type AutoUpdateProgress } from './host/update'
-import { getVersion } from '@tauri-apps/api/app'
 import { MouseGesturePieOverlay } from './components/MouseGesturePie'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName, mouseActionName } from './utils/gestures'
-import { PICKABLE_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, applyCssVar, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ReplyLayout, type SavedTab, type UpdateSetting } from './ui/settings'
+import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, COLOR_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, ROOT_FONT_SIZE, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ListFilter, type ListTabKey, type ReplyLayout, type SavedTab, type StoredNotification, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -96,11 +91,10 @@ import { favUnread, threadUnread, unreadCount } from './utils/unread'
 import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
-import { deleteFromCatbox } from './host/uploader'
+import { deleteFromCatbox, type UploadedFile } from './host/uploader'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
 import { aiModelStatus, deleteAiModelFiles, startAiModel, stopAiModel, testScore } from './hooks/useAiNg'
-import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 /** 閉じたタブを覚えておく数(Shift+X で開き直す) */
 const CLOSED_TABS_MAX = 20
@@ -125,6 +119,65 @@ const DRAWER_ZOOM = 1.15
 
 // 開発中のアプリだけ、お試しの掲示板(通信しない。https://demo.bbs-browser.invalid/board/)を足す
 if (import.meta.env.DEV) registerConnector(demoConnector)
+
+/** スレ一覧の並びを、その掲示板のサーバーに頼める並びにする(頼めなければ undefined = 手元で並べ替える) */
+const serverSortFor = (b: Board, sort: { mode: SortMode; dir: 'desc' | 'asc' } | null): ListSort | undefined => {
+  if (!sort) return undefined
+  const want: ListSort =
+    sort.mode === 'momentum' ? 'momentum' : sort.mode === 'newest' ? (sort.dir === 'desc' ? 'newest' : 'oldest') : sort.dir === 'desc' ? 'most' : 'fewest'
+  return connectorOf(b.connectorId).serverSorts?.includes(want) ? want : undefined
+}
+const orderOf = (order: ListSort): { mode: SortMode; dir: 'desc' | 'asc' } =>
+  order === 'momentum'
+    ? { mode: 'momentum', dir: 'desc' }
+    : order === 'newest' || order === 'oldest'
+      ? { mode: 'newest', dir: order === 'newest' ? 'desc' : 'asc' }
+      : { mode: 'count', dir: order === 'most' ? 'desc' : 'asc' }
+
+/** 履歴の並びは変えずに、中身(既読・レス数・状態)だけ新しくする。消えたものは外し、新しいものは末尾に */
+const mergeHistory = (prev: HistoryEntry[] | undefined, fresh: HistoryEntry[]): HistoryEntry[] => {
+  if (!prev) return fresh
+  const byId = new Map(fresh.map((h) => [threadId(h.thread), h]))
+  const seen = new Set<string>()
+  const kept: HistoryEntry[] = []
+  for (const h of prev) {
+    const id = threadId(h.thread)
+    const f = byId.get(id)
+    if (!f) continue
+    seen.add(id)
+    kept.push(f)
+  }
+  return [...kept, ...fresh.filter((h) => !seen.has(threadId(h.thread)))]
+}
+/** サイドバーの最近のスレ(10 件) */
+const recentOf = (list: HistoryEntry[]) => list.slice(0, 10).map((h) => h.thread)
+/** 板ごとにまとめる(閲覧履歴・お気に入りのスレの巡回) */
+const groupByBoard = <T extends { thread: ThreadSummary }>(list: T[]) => {
+  const out = new Map<string, T[]>()
+  for (const x of list) {
+    const group = out.get(x.thread.boardUrl)
+    if (group) group.push(x)
+    else out.set(x.thread.boardUrl, [x])
+  }
+  return out
+}
+/** スレごとのレス数に、多いほうを残して足す。増えなければ同じ Map を返す(描き直さない) */
+const withMaxCounts = (m: Map<string, number>, counts: Iterable<readonly [string, number]>) => {
+  let next = m
+  for (const [id, n] of counts) {
+    if (n <= (next.get(id) ?? 0)) continue
+    if (next === m) next = new Map(m)
+    next.set(id, n)
+  }
+  return next
+}
+/** map と同じ。1 つも変わらなければ元の配列を返す(描き直さない) */
+const mapKeep = <T,>(list: T[], f: (x: T) => T): T[] => {
+  const next = list.map(f)
+  return next.every((x, i) => x === list[i]) ? list : next
+}
+/** 空白を除く(書き込んだ本文・スレタイを、サーバーの整形を無視して比べる) */
+const squeezeSpaces = (s: string) => s.replace(/\s+/g, '')
 
 /** アプリの中でウェブページを読むときの名乗り(スマホなら Android の Chrome、PC なら Windows の Chrome) */
 const BROWSER_UA = isMobile
@@ -232,6 +285,8 @@ export default function App() {
   const [historyShown, setHistoryShown] = useState(false)
   /** いま出している閲覧履歴(出していなければ undefined) */
   const history = historyShown ? historyList : undefined
+  const historyShownRef = useRef(historyShown)
+  historyShownRef.current = historyShown
   const [tabs, setTabs] = useState<Tab[]>([])
   /** Ctrl/Shift+クリックで選んだタブ */
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set())
@@ -264,7 +319,7 @@ export default function App() {
     return list
   }
   /** サイドバーの最近のスレ(10 件)。閲覧履歴の全部を読んで控えにし、その先頭を使う(「履歴」を開くときの先読みを兼ねる) */
-  const reloadRecent = async (s: LogStore) => setRecentHistory((await loadHistory(s)).slice(0, 10).map((h) => h.thread))
+  const reloadRecent = async (s: LogStore) => setRecentHistory(recentOf(await loadHistory(s)))
   /** 画像のアップロード履歴(開いているときだけ中身を持つ) */
   const [uploads, setUploads] = useState<UploadRecord[]>()
   // アカウント(5ch の BE など)
@@ -407,101 +462,7 @@ export default function App() {
   const [focusPane, setFocusPane] = useState<'list' | 'thread'>('thread')
   const listFocused = single ? !threadShown : focusPane === 'list' || activeId === undefined
 
-  // Ctrl + ホイール: キーを受け取っている方(スレ一覧かスレ表示)の文字の大きさを 1px ずつ変える(WebView の画面ごとの拡大は止める)。
-  // 刻みは溜めて処理する: 刻みごとに設定を書き換えると、そのたびにアプリ全体の描き直しと DB 書き込みの予約が走って重い。
-  // 見た目は CSS の変数だけをコマごと(requestAnimationFrame)にまとめて変え、設定に書くのは回し終えて少し経ってから 1 回
-  const wheelZoom = useRef({
-    listFocused,
-    acc: 0,
-    update: updateSetting,
-    /** まだ設定に書いていない大きさ(px)。回している間はこれが本当の値 */
-    pending: undefined as { key: 'listFontPx' | 'postBodyPx'; px: number } | undefined,
-    frame: 0,
-    commitTimer: undefined as ReturnType<typeof setTimeout> | undefined,
-    hintTimer: undefined as ReturnType<typeof setTimeout> | undefined,
-  })
-  /** Ctrl+ホイールで回している間に出す、いまの大きさの表示 */
-  const zoomHintRef = useRef<HTMLDivElement>(null)
-  wheelZoom.current.listFocused = listFocused
-  // DB を開くと設定を変える関数が替わるので、いつも新しい方を使う
-  wheelZoom.current.update = updateSetting
-  useEffect(() => {
-    const z = wheelZoom.current
-    /** 溜めた大きさを設定に書く(回し終えたとき・Ctrl を離したとき) */
-    const commit = () => {
-      if (z.commitTimer) clearTimeout(z.commitTimer)
-      z.commitTimer = undefined
-      const p = z.pending
-      z.pending = undefined
-      if (p) z.update(p.key, p.px)
-    }
-    /** 溜めた大きさを画面に映す(1 コマに 1 回)。回している間は、いまの大きさを小さく出す(ブラウザの拡大の表示と同じ。React の状態は触らない) */
-    const paint = () => {
-      z.frame = 0
-      const p = z.pending
-      if (!p) return
-      if (p.key === 'listFontPx') applyCssVar('--list-zoom', String(p.px / baseFontPx(settingsRef.current)))
-      else applyCssVar('--post-body-size', `${p.px}px`)
-      const hint = zoomHintRef.current
-      if (hint) {
-        hint.textContent = `${p.key === 'listFontPx' ? 'スレ一覧の文字' : 'レスの本文'} ${p.px}px`
-        hint.style.opacity = '1'
-        if (z.hintTimer) clearTimeout(z.hintTimer)
-        z.hintTimer = setTimeout(() => (hint.style.opacity = '0'), WHEEL_ZOOM_HINT_MS)
-      }
-    }
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
-      e.preventDefault()
-      // タッチパッドの細かい動きは、たまってから 1 段
-      z.acc += e.deltaY
-      if (Math.abs(z.acc) < 60) return
-      const step = z.acc < 0 ? 1 : -1
-      z.acc = 0
-      const s = settingsRef.current
-      const base = baseFontPx(s)
-      const key = z.listFocused ? 'listFontPx' : 'postBodyPx'
-      // 一覧とスレ表示を行き来したら、前の方の分を先に書く
-      if (z.pending && z.pending.key !== key) commit()
-      const cur = z.pending?.px ?? (s[key] || base)
-      const px = Math.min(FONT_PX_MAX, Math.max(FONT_PX_MIN, cur + step))
-      if (px === cur) return
-      z.pending = { key, px }
-      if (!z.frame) z.frame = requestAnimationFrame(paint)
-      if (z.commitTimer) clearTimeout(z.commitTimer)
-      z.commitTimer = setTimeout(commit, WHEEL_ZOOM_COMMIT_MS)
-    }
-    // 受け口は Ctrl を押している間だけ付ける。いつも付けておくと(passive でないので)、ホイールのたびにブラウザが JS の返事を待ってから
-    // スクロールすることになり、画面の外でなめらかにスクロールする仕組みが効かなくなる(重く感じる)
-    let on = false
-    const attach = () => {
-      if (on) return
-      on = true
-      window.addEventListener('wheel', onWheel, { passive: false })
-    }
-    const detach = () => {
-      if (!on) return
-      on = false
-      z.acc = 0
-      commit()
-      window.removeEventListener('wheel', onWheel)
-    }
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Control') attach()
-    }
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || !e.ctrlKey) detach()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    window.addEventListener('blur', detach)
-    return () => {
-      detach()
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-      window.removeEventListener('blur', detach)
-    }
-  }, [])
+  const zoomHintRef = useWheelZoom(listFocused, updateSetting, settingsRef)
 
   // 非同期の処理の途中で最新の値を見るための控え
   const tabsRef = useRef(tabs)
@@ -649,19 +610,6 @@ export default function App() {
   const listOrderRef = useRef<ListSort | undefined>(undefined)
   /** 取り直した一覧を画面にも出すときに頼む並び。その板を開いていれば、いまの並び(違う並びの一覧を出すと順が崩れる) */
   const listOrderOf = (boardUrl: string) => (boardRef.current?.url === boardUrl ? listOrderRef.current : undefined)
-  /** スレ一覧の並びを、その掲示板のサーバーに頼める並びにする(頼めなければ undefined = 手元で並べ替える) */
-  const serverSortFor = (b: Board, sort: { mode: SortMode; dir: 'desc' | 'asc' } | null): ListSort | undefined => {
-    if (!sort) return undefined
-    const want: ListSort =
-      sort.mode === 'momentum' ? 'momentum' : sort.mode === 'newest' ? (sort.dir === 'desc' ? 'newest' : 'oldest') : sort.dir === 'desc' ? 'most' : 'fewest'
-    return connectorOf(b.connectorId).serverSorts?.includes(want) ? want : undefined
-  }
-  const orderOf = (order: ListSort): { mode: SortMode; dir: 'desc' | 'asc' } =>
-    order === 'momentum'
-      ? { mode: 'momentum', dir: 'desc' }
-      : order === 'newest' || order === 'oldest'
-        ? { mode: 'newest', dir: order === 'newest' ? 'desc' : 'asc' }
-        : { mode: 'count', dir: order === 'most' ? 'desc' : 'asc' }
   /** スレ一覧で並びを変えた。サーバーに頼める並びが変わったら、その並びで取り直す */
   const onListSort = (sort: { mode: SortMode; dir: 'desc' | 'asc' } | null) => {
     const b = boardRef.current
@@ -684,13 +632,7 @@ export default function App() {
    * スレ一覧から分かったレス数を、閲覧履歴(「未読」の絞り込み)にも反映する。
    * 開いていないスレの未読も、板を見た時点で分かっているものは、裏の確かめを待たずに「未読」に出す
    */
-  const mergeKnownCounts = (list: ThreadSummary[]) => {
-    setHistoryCounts((m) => {
-      const next = new Map(m)
-      for (const t of list) next.set(threadId(t), Math.max(next.get(threadId(t)) ?? 0, t.postCount))
-      return next
-    })
-  }
+  const mergeKnownCounts = (list: ThreadSummary[]) => setHistoryCounts((m) => withMaxCounts(m, list.map((t) => [threadId(t), t.postCount])))
 
   /** いちばん新しい openBoard の番号(古い板の遅い応答で、いま開いている板を上書きしない) */
   const boardSeq = useRef(0)
@@ -738,7 +680,7 @@ export default function App() {
       mergeKnownCounts(list)
     })
 
-  /** 閲覧履歴の更新で、スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
+  /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数。板を移っても残す)。ログには入れず、未読の数にだけ使う */
   const [historyCounts, setHistoryCounts] = useState(new Map<string, number>())
   /** 閲覧履歴の新着を板ごとに確かめている進み具合(確かめていないときは undefined) */
   const [historyProgress, setHistoryProgress] = useState<{ done: number; total: number }>()
@@ -760,43 +702,28 @@ export default function App() {
         historyRefreshing.current = false
       }
     })
-  /** 閲覧履歴の新着を、板ごとのスレ一覧で確かめる(dat を 1 つずつ取りに行かない) */
-  /** 履歴の並びは変えずに、中身(既読・レス数・状態)だけ新しくする。消えたものは外し、新しいものは末尾に */
-  const mergeHistory = (prev: HistoryEntry[] | undefined, fresh: HistoryEntry[]): HistoryEntry[] => {
-    if (!prev) return fresh
-    const byId = new Map(fresh.map((h) => [threadId(h.thread), h]))
-    const seen = new Set<string>()
-    const kept: HistoryEntry[] = []
-    for (const h of prev) {
-      const id = threadId(h.thread)
-      const f = byId.get(id)
-      if (!f) continue
-      seen.add(id)
-      kept.push(f)
-    }
-    return [...kept, ...fresh.filter((h) => !seen.has(threadId(h.thread)))]
-  }
   /** 履歴を見た順に並べ直す(見た順のタブをもう一度押したとき) */
   const resortHistory = () =>
     run(null, async () => {
       if (store) setHistory(await loadHistory(store))
       setHistoryVersion((v) => v + 1)
     })
+  /** 閲覧履歴の新着を、板ごとのスレ一覧で確かめる(dat を 1 つずつ取りに行かない) */
   const crawlHistory = async (store: LogStore, resort: boolean) => {
     try {
       // 利用者が更新したときだけ、見た順に並べ直す。定期の確認(resort が false)と、板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
       const list = await loadHistory(store)
       setHistory((prev) => (resort ? list : mergeHistory(prev, list)))
-      const byBoard = new Map<string, HistoryEntry[]>()
-      for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
+      const byBoard = groupByBoard(list)
       const counts = new Map<string, number>()
       // 巡回の間に板を開いて分かった数を消さないよう、分かった分だけを足す
-      const publishCounts = () =>
-        setHistoryCounts((m) => {
-          const next = new Map(m)
-          for (const [id, n] of counts) next.set(id, Math.max(next.get(id) ?? 0, n))
-          return next
-        })
+      const publishCounts = () => setHistoryCounts((m) => withMaxCounts(m, counts))
+      // 途中の読み直しは、履歴を出しているときだけ(出していなければ最後に 1 回読めば足りる)
+      const reloadShownHistory = async () => {
+        if (!historyShownRef.current) return
+        const fresh = await loadHistory(store)
+        setHistory((prev) => mergeHistory(prev, fresh))
+      }
       // まとめ取りができる掲示板(hono-bbs の POST /threads/status): 板ごとに一覧を取り直さず、コネクタごとに 1 回で確かめる
       const bulk = new Map<string, HistoryEntry[]>()
       for (const [boardUrl, entries] of byBoard) {
@@ -819,8 +746,7 @@ export default function App() {
             else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
           }
           publishCounts()
-          const fresh = await loadHistory(store)
-          setHistory((prev) => mergeHistory(prev, fresh))
+          await reloadShownHistory()
         } catch {
           // まとめ取りに失敗したら、この掲示板は今回は見送る
         }
@@ -842,11 +768,12 @@ export default function App() {
           else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
         }
         publishCounts()
-        const fresh = await loadHistory(store)
-        setHistory((prev) => mergeHistory(prev, fresh))
+        await reloadShownHistory()
       }
+      const fresh = await loadHistory(store)
+      setHistory((prev) => mergeHistory(prev, fresh))
       setHistoryVersion((v) => v + 1)
-      await reloadRecent(store)
+      setRecentHistory(recentOf(fresh))
     } finally {
       setHistoryProgress(undefined)
     }
@@ -920,6 +847,11 @@ export default function App() {
     void openThread(e.thread).then(() => {
       if (e.no !== undefined) setJump({ tabId: threadId(e.thread), no: e.no, seq: Date.now() })
     })
+  const deletePostEntry = async (id: number) => {
+    if (!store) return
+    await store.deletePostHistory(id)
+    setPostHistory(await store.listPostHistory())
+  }
   /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
   const postedIn = (url: string) => {
     const e = postHistory?.find((p) => p.body.includes(url))
@@ -968,18 +900,8 @@ export default function App() {
     if (aiNgWanted) startAiModel()
     else stopAiModel()
   }, [aiNgWanted])
-  /** スレ一覧を取ったときに分かった、スレごとのレス数(板を移っても残す)。開いているタブの未読の数に使う */
-  const [listCounts, setListCounts] = useState(new Map<string, number>())
-  useEffect(() => {
-    if (threads.length === 0) return
-    setListCounts((m) => {
-      const next = new Map(m)
-      for (const t of threads) next.set(threadId(t), t.postCount)
-      return next
-    })
-  }, [threads])
   /** 一覧・お気に入りスレ・履歴の取り直しで分かったレス数のうち、一番新しいもの(多いもの) */
-  const knownCount = (id: string) => Math.max(listCounts.get(id) ?? 0, favCounts.get(id) ?? 0, historyCounts.get(id) ?? 0)
+  const knownCount = (id: string) => Math.max(favCounts.get(id) ?? 0, historyCounts.get(id) ?? 0)
   const favCountsRef = useRef(favCounts)
   favCountsRef.current = favCounts
   const [favVersion, setFavVersion] = useState(0)
@@ -1008,8 +930,7 @@ export default function App() {
   const checkFavThreads = async (s: LogStore, fetchDats: boolean) => {
     const list = await s.listFavoriteThreads()
     const before = new Map(favCountsRef.current)
-    const byBoard = new Map<string, FavoriteThreadEntry[]>()
-    for (const f of list) byBoard.set(f.thread.boardUrl, [...(byBoard.get(f.thread.boardUrl) ?? []), f])
+    const byBoard = groupByBoard(list)
     const counts = new Map(favCountsRef.current)
     for (const [boardUrl, entries] of byBoard) {
       const connectorId = entries[0].thread.connectorId
@@ -1122,28 +1043,31 @@ export default function App() {
 
   // ── タブ ──
 
-  const patchTab = (id: string, patch: Partial<Tab>) =>
-    setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+  const patchTab = (id: string, patch: Partial<Tab>) => {
+    const keys = Object.keys(patch) as (keyof Tab)[]
+    setTabs((ts) => mapKeep(ts, (t) => (t.id === id && keys.some((k) => t[k] !== patch[k]) ? { ...t, ...patch } : t)))
+  }
 
   /**
    * スレを取りに行って保存し、そのタブの表示を差し替える。
    * 同じスレを取りに行っている最中なら、それを待つ。force なら、待ったあとでもう一度取りに行く
    * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
    */
-  const inflight = useRef(new Map<string, Promise<void>>())
+  const inflight = useRef(new Map<string, Promise<ThreadLog>>())
   /** ログを削除したスレ。削除の前に始まった取得・既読の記録が、あとから一覧の印を書き戻さないように覚えておく(開き直したら外す) */
   const deletedIds = useRef(new Set<string>())
   const fetchThread = async (
     s: LogStore,
     t: ThreadSummary,
     // keepUnread: 「ここから未読」を動かさない(開いたときの取得。線は更新したときだけ引き直す)
-    opts: { force?: boolean; keepUnread?: boolean } = {},
-  ) => {
+    // local: 呼ぶ側で読んだばかりの DB のログ(読み直さないため)
+    opts: { force?: boolean; keepUnread?: boolean; local?: ThreadLog | null } = {},
+  ): Promise<ThreadLog | undefined> => {
     const id = threadId(t)
     const running = inflight.current.get(id)
     if (running) {
       await running
-      if (!opts.force) return
+      if (!opts.force) return undefined
     }
     const job = (async () => {
       patchTab(id, { loading: true, error: undefined })
@@ -1151,7 +1075,8 @@ export default function App() {
         // 手元のログ(タブで開いていればそれ、なければ DB)に、取ってきた差分を当てはめる。
         // 取得のたびにスレ全体を DB から読み直さないため(1000 レスのスレほど効く)
         const inTab = tabsRef.current.find((x) => x.id === id)?.log
-        const before = inTab && inTab.cursor !== null ? inTab : await s.loadThread(t)
+        // 別の取得を待ったときは、local はもう古い
+        const before = inTab && inTab.cursor !== null ? inTab : !running && opts.local !== undefined ? opts.local : await s.loadThread(t)
         const r = await connectorOf(t.connectorId).fetchPosts(t, before?.cursor ?? null, ctx)
         await s.saveFetch(t, r)
         const saved = applyFetch(before, t, r)
@@ -1163,7 +1088,7 @@ export default function App() {
         // レスへの反応(ふたばのそうだねなど)は、新しいレスがなくても増えるので、届いたら写す
         const reactions = r.reactions && new Map(Object.entries(r.reactions).map(([k, v]) => [Number(k), v] as const))
         setTabs((ts) =>
-          ts.map((x) => {
+          mapKeep(ts, (x) => {
             if (x.id !== id) return x
             const unreadFrom = opts.keepUnread ? x.unreadFrom : x.readNo + 1
             if (!changed && x.log && unreadFrom === x.unreadFrom && !reactions) return x
@@ -1181,7 +1106,8 @@ export default function App() {
           patchFav(t, (f) => ({ ...f, postCount: saved.postCount, status: saved.status, thread: { ...f.thread, postCount: saved.postCount } }))
           // 閲覧履歴の一覧の行も、取ってきたレス数と dat 落ちを写す
           setHistory((list) =>
-            list?.map((h) =>
+            list &&
+            mapKeep(list, (h) =>
               threadId(h.thread) === id ? { ...h, postCount: saved.postCount, status: saved.status, thread: { ...h.thread, postCount: saved.postCount } } : h,
             ),
           )
@@ -1193,6 +1119,7 @@ export default function App() {
             const cur = m.get(t.key)
             return new Map(m).set(t.key, { postCount: saved.postCount, readNo: cur?.readNo ?? saved.readNo, status: saved.status })
           })
+        return saved
       } catch (e) {
         // 読めなかった理由をタブに覚える(レスがまだないときは、スレ表示に取り直しのボタンと一緒に出す)
         patchTab(id, { error: loadErrorText(e) })
@@ -1203,7 +1130,7 @@ export default function App() {
     })()
     inflight.current.set(id, job)
     try {
-      await job
+      return await job
     } finally {
       if (inflight.current.get(id) === job) inflight.current.delete(id)
     }
@@ -1250,7 +1177,8 @@ export default function App() {
       readNo: local?.readNo ?? 0,
       ownNos: new Set(own),
     }))
-    await fetchThread(s, t, { keepUnread: true })
+    const fetched = await fetchThread(s, t, { keepUnread: true, local })
+    if (fetched && fetched.posts.length > 0) return
     // 手元にもサーバーにもレスがなければ、ないスレ(番号の間違い・とうに消えたスレ)として知らせる
     const after = await s.loadThread(t)
     if (!after || (after.posts.length === 0 && after.status === 'archived'))
@@ -1544,7 +1472,7 @@ export default function App() {
         icon: 'bolt',
         run: () => appKey(a.key),
       })),
-      ...PICKABLE_SCHEMES.filter((c) => c.key !== 'light').map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickSchemeNow(settings, c.key)) })),
+      ...COLOR_SCHEMES.map((c) => ({ group: '配色', label: c.name, icon: 'palette', run: () => set(pickSchemeNow(settings, c.key)) })),
       ...POST_STYLES.map((p) => ({ group: 'レスの見た目', label: p.name, keywords: p.note, icon: 'style', run: () => updateSetting('postStyle', p.key) })),
     ]
   }
@@ -1632,8 +1560,8 @@ export default function App() {
     }
     setDeleteConfirm({ ids, extra, ...opts })
   }
-  const keyRef = useRef({ closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) })
-  keyRef.current = { closeTabs, selectTab, activeId, deleteLogs, targetTabs, setSelectedTabs, reload, toggleFocus, appKey, keymap, confirmDeleteLogs, back: () => goNav(-1), forward: () => goNav(1) }
+  const keyRef = useRef({ selectTab, activeId, appKey, keymap, back: () => goNav(-1), forward: () => goNav(1) })
+  keyRef.current = { selectTab, activeId, appKey, keymap, back: () => goNav(-1), forward: () => goNav(1) }
   // マウスで押したボタン・リンクには、フォーカスを移さない。フォーカスがボタンに残ると、Space・Enter がそのボタンを押す動きに
   // 取られて、キー操作(J・K など)が効かないことがあるため。押した動き(click)はそのまま起きる。
   // ダイアログの中は Tab で回るので、ふつうどおりフォーカスを移す
@@ -1716,13 +1644,10 @@ export default function App() {
     }
   }, [])
 
-  // 外付けのコネクタはやめた(2026-11。組み込みのコネクタだけで掲示板に対応する)。タブを戻す・起動時の板を開くのは、設定を読んでから
-  const externalReady = settingsLoaded
-
   // 開いていたタブを次の起動で戻す。戻したタブは、選んだときに読み込む
   const restored = useRef(false)
   useEffect(() => {
-    if (restored.current || !settingsLoaded || !store || !externalReady) return
+    if (restored.current || !settingsLoaded || !store) return
     restored.current = true
     // いまは使えないコネクタのスレは戻さない(描画の中で例外になり、起動できなくなる)
     const ts = settings.openTabs.filter((s) => findConnector(s.connectorId)).map((s) => newTab(fromSaved(s)))
@@ -1732,7 +1657,7 @@ export default function App() {
       updateView((s) => selectQuietly(s, active.id))
       void run('posts', () => loadTab(store, active.thread))
     }
-  }, [settingsLoaded, store, externalReady])
+  }, [settingsLoaded, store])
 
   const savedTabs = JSON.stringify(
     tabs.map(
@@ -1791,11 +1716,12 @@ export default function App() {
     const meta = settings.boardMeta[t.boardUrl]
     if (meta?.defaultName === undefined && input.name !== settings.postName) updateSetting('postName', input.name)
     if (meta?.defaultMail === undefined && input.mail !== settings.postMail) updateSetting('postMail', input.mail)
-    const before = (await store.loadThread(t))?.postCount ?? 0
+    const inTab = tabsRef.current.find((x) => x.id === threadId(t))?.log
+    const local = inTab && inTab.cursor !== null ? inTab : await store.loadThread(t)
+    const before = local?.postCount ?? 0
     // 書き込みは通っている。取り直しの失敗を書き込みの失敗として見せると、送り直して二重投稿になる
-    await fetchThread(store, t, { force: true }).catch(backgroundError('書き込んだあとの取り直し'))
-    const after = await store.loadThread(t)
-    const normalize = (s: string) => s.replace(/\s+/g, '')
+    const fetched = await fetchThread(store, t, { force: true, local }).catch(backgroundError('書き込んだあとの取り直し'))
+    const after = fetched ?? (await store.loadThread(t))
     // 書いたレスの番号: サーバーが教えてくれたもの(ふたばは板の本当の番号 ref)、なければ本文が同じ新しいレス
     const no =
       r.resNumber ??
@@ -1803,7 +1729,7 @@ export default function App() {
       after?.posts
         .filter((p) => p.no > before)
         .reverse()
-        .find((p) => normalize(p.body) === normalize(input.body))?.no
+        .find((p) => squeezeSpaces(p.body) === squeezeSpaces(input.body))?.no
     if (no) {
       await store.addOwnPost(t, no)
       patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
@@ -1850,16 +1776,18 @@ export default function App() {
     const meta = settings.boardMeta[b.url]
     if (meta?.defaultName === undefined && input.name !== settings.postName) updateSetting('postName', input.name)
     if (meta?.defaultMail === undefined && input.mail !== settings.postMail) updateSetting('postMail', input.mail)
-    const normalize = (s: string) => s.replace(/\s+/g, '')
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((ok) => setTimeout(ok, 1500))
       // スレは立っている。一覧の取得の失敗をスレ立ての失敗として見せると、立て直して重複する
       const order = listOrderOf(b.url)
       const list = await connector.listThreads(b, ctx, { sort: order }).catch(() => undefined)
       if (!list) continue
-      if (boardRef.current?.url === b.url && listOrderRef.current === order) setThreads(list)
+      if (boardRef.current?.url === b.url && listOrderRef.current === order) {
+        setThreads(list)
+        mergeKnownCounts(list)
+      }
       const found = list
-        .filter((t) => normalize(t.title) === normalize(input.title))
+        .filter((t) => squeezeSpaces(t.title) === squeezeSpaces(input.title))
         .sort((x, y) => (y.createdAt?.getTime() ?? 0) - (x.createdAt?.getTime() ?? 0))[0]
       if (found) {
         await store.addOwnPost(found, 1)
@@ -2118,16 +2046,16 @@ export default function App() {
   }
   // 起動して少し経ってから、1 日に 1 回だけ古いログを整理する(起動の邪魔をしないように)
   useEffect(() => {
-    if (!settingsLoaded || !store || !externalReady) return
+    if (!settingsLoaded || !store) return
     if (settings.logRetentionDays <= 0 || Date.now() - settings.lastLogPruneAt < 86_400_000) return
     const timer = setTimeout(() => void pruneLogs().catch(backgroundError('古いログの整理')), 30_000)
     return () => clearTimeout(timer)
-  }, [settingsLoaded, store, externalReady])
+  }, [settingsLoaded, store])
 
   // 起動時に開く板(設定)。設定とお気に入りを読み終えてから一度だけ
   const startupDone = useRef(false)
   useEffect(() => {
-    if (startupDone.current || !settingsLoaded || !favorites || !externalReady) return
+    if (startupDone.current || !settingsLoaded || !favorites) return
     startupDone.current = true
     // いつも前回の板を開く(開きたくなければ閉じればよい。「起動時に開く板」の設定は 2026-11 にやめた)
     const url = settings.lastBoardUrl
@@ -2139,7 +2067,7 @@ export default function App() {
       void run(null, async () => {
         await openBoard((await resolve(url)).board)
       })
-  }, [settingsLoaded, favorites, settings.lastBoardUrl, externalReady])
+  }, [settingsLoaded, favorites, settings.lastBoardUrl])
 
   // 背景画像のパスは保存した時の置き場のものなので、置き場が変わっていたら読み替える
   useEffect(() => {
@@ -2201,7 +2129,7 @@ export default function App() {
     const id = threadId(t)
     // ログを削除したスレの、閉じるときに届いた既読は数えない
     if (deletedIds.current.has(id)) return
-    setTabs((ts) => ts.map((x) => (x.id === id && no > x.readNo ? { ...x, readNo: no } : x)))
+    setTabs((ts) => mapKeep(ts, (x) => (x.id === id && no > x.readNo ? { ...x, readNo: no } : x)))
     if (boardRef.current?.url === t.boardUrl)
       setStates((m) => {
         const cur = m.get(t.key)
@@ -2347,7 +2275,7 @@ export default function App() {
       if (!single) return confirmDeleteLogs([id])
       confirmDeleteLogs([id], [], { stayOnList: true, after: returnToList })
     }),
-    uploaded: useEvent((u: { url: string; name: string; size: number; withAccount: boolean; hash?: string; deleteUrl?: string }) => {
+    uploaded: useEvent((u: UploadedFile) => {
       void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
     }),
     openNextUnread: useEvent(() => {
@@ -2358,7 +2286,10 @@ export default function App() {
       const order = listOrderOf(t.boardUrl)
       const list = await connectorOf(t.connectorId).listThreads({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx, { sort: order })
       // その板を開いていれば、取り直したスレ一覧も見せる
-      if (boardRef.current?.url === t.boardUrl && listOrderRef.current === order) setThreads(list)
+      if (boardRef.current?.url === t.boardUrl && listOrderRef.current === order) {
+        setThreads(list)
+        mergeKnownCounts(list)
+      }
       return findNextThreads({ key: t.key, title, createdAt: t.createdAt }, list)
     }),
     openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
@@ -2407,13 +2338,12 @@ export default function App() {
     saveDraft: useEvent((t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(backgroundError('下書きの保存'))),
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
-  const tabEventsRef = useRef(tabEvents)
+  const stableTabEvents = useRef(tabEvents).current
   // 同じ画像をもう一度貼ったら上げない(アップロード履歴の hash で引く。utils/uploadIndex)
   useEffect(() => {
     setUploadLookup(store ? (h) => store.findUploadByHash(h) : undefined)
     return () => setUploadLookup(undefined)
   }, [store])
-  const stableTabEvents = tabEventsRef.current
 
   const historyStates = useMemo(() => new Map(history?.map((h) => [threadId(h.thread), h as ThreadState])), [history])
   // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
@@ -2430,7 +2360,7 @@ export default function App() {
       return url
     }
   }
-  const historyReadAt = new Map(history?.map((h) => [threadId(h.thread), h.readAt]))
+  const historyReadAt = useMemo(() => new Map(history?.map((h) => [threadId(h.thread), h.readAt])), [history])
   /** 閲覧履歴の行に出すもの(板の名前・いつ見たか) */
   // 行ごとに同じ中身なら同じオブジェクトを返す(毎回新しいと、全部の行が描き直される)
   const historyMetaCache = useRef(new Map<string, { boardName: string; readAt?: number; icon?: string }>())
@@ -2503,6 +2433,38 @@ export default function App() {
     if (k === 'uploads') return void openUploads()
     void openHistory(true, k === 'fav' ? 'fav' : k === 'unread' ? 'unread' : null)
   }
+  /** スマホの設定画面と PC の設定ダイアログに共通で渡すもの */
+  const settingsProps = () => ({
+    loadBoards,
+    onToggleFavorite: (b: Board) => void toggleFavorite(b),
+    onOpenBoard: (b: Board) => {
+      setSettingsTab(undefined)
+      void openBoard(b)
+    },
+    settings,
+    update: updateSetting,
+    favorites: favorites ?? [],
+    sites,
+    onAddFavoriteUrl: addFavoriteUrl,
+    onRemoveFavorite: (url: string) =>
+      void run(null, async () => {
+        if (!store) return
+        await store.removeFavorite(url)
+        await reloadFavorites(store)
+      }),
+    onReorderFavorites: reorderFavorites,
+    onAddSite: addSite,
+    onRemoveSite: removeSite,
+    accounts,
+    loginStatus,
+    onLogin: saveAndLogin,
+    onSaveAccount: (a: Parameters<typeof saveAccount>[0]) => void run(null, () => saveAccount(a)),
+    onDeleteAccount: (c: Parameters<typeof deleteAccount>[0], a: Parameters<typeof deleteAccount>[1]) => void run(null, () => deleteAccount(c, a)),
+    onBackupDb: () => (store ? backupDatabase(store) : Promise.resolve(false)),
+    onRestoreDb: restoreDatabase,
+    onPruneLogs: pruneLogs,
+    onClose: () => setSettingsTab(undefined),
+  })
   const pastHeader = pastView && isMobile && (
     <PastTabs
       current={pastTab}
@@ -2518,12 +2480,15 @@ export default function App() {
   )
   // スレの最後の「次の未読スレへ」。いまのスレ一覧に見えている並びで、いまのスレの次に未読のあるスレ。
   // 未読の数は一覧の「+n」と同じ見方(読んだことのないスレは数えない)。タブで開いているスレは、タブの既読・レス数のほうが新しい
-  const nextUnread = nextUnreadThread(shownList, activeId, threadId, (t) => {
-    const st = stateOf(t)
-    if (!st) return 0
-    const tab = tabs.find((x) => x.id === threadId(t))
-    return unreadCount(Math.max(st.readNo, tab?.readNo ?? 0), t.postCount, tab?.log?.postCount ?? 0)
-  })
+  const nextUnread = useMemo(() => {
+    const tabById = new Map(tabs.map((x) => [x.id, x]))
+    return nextUnreadThread(shownList, activeId, threadId, (t) => {
+      const st = stateOf(t)
+      if (!st) return 0
+      const tab = tabById.get(threadId(t))
+      return unreadCount(Math.max(st.readNo, tab?.readNo ?? 0), t.postCount, tab?.log?.postCount ?? 0)
+    })
+  }, [shownList, activeId, stateOf, tabs])
   nextUnreadRef.current = nextUnread
   const listPlacements = useMemo(
     () => resolvePlacements('list', isMobile ? settings.mobileBarLayout : settings.barLayout, isMobile),
@@ -2658,11 +2623,7 @@ export default function App() {
               <PostHistoryList
                 entries={postHistory ?? []}
                 onOpen={openPostEntry}
-                onDelete={async (id) => {
-                  if (!store) return
-                  await store.deletePostHistory(id)
-                  setPostHistory(await store.listPostHistory())
-                }}
+                onDelete={deletePostEntry}
               />
             ) : undefined
           }
@@ -2804,6 +2765,7 @@ export default function App() {
             if (!found) return null
             // ログを読み終えるまでは、空のログで外枠(ヘッダー・書き込み欄)だけを出す
             const t = found.log ? found : { ...found, log: placeholderLog(found.thread), loading: true }
+            const connector = findConnector(t.thread.connectorId)
             // 1 画面でスレ一覧に戻っているあいだは、隠れているスレ表示を開いていないタブと同じに扱う(キー操作・既読を受けない)
             const isActive = id === paneId && (!single || threadShown)
             return (
@@ -2822,16 +2784,16 @@ export default function App() {
                   postAccounts={postAccountsOf(t.thread.connectorId, t.thread.boardUrl)}
                   showBackToList={single}
                   postLimits={boardInfos.get(t.thread.boardUrl)?.limits}
-                  postByteLength={findConnector(t.thread.connectorId)?.postByteLength}
-                  maxPosts={findConnector(t.thread.connectorId)?.maxPosts}
-                  anchorTarget={findConnector(t.thread.connectorId)?.anchorTarget}
-                  reactionDefs={findConnector(t.thread.connectorId)?.reactions}
-                  postActions={findConnector(t.thread.connectorId)?.postActions}
-                  textQuotes={findConnector(t.thread.connectorId)?.textQuotes}
-                  attachments={findConnector(t.thread.connectorId)?.attachments}
-                  canReact={!!findConnector(t.thread.connectorId)?.react}
-                  canDeletePost={!!findConnector(t.thread.connectorId)?.deletePost}
-                  splitPostIcon={findConnector(t.thread.connectorId)?.splitPostIcon}
+                  postByteLength={connector?.postByteLength}
+                  maxPosts={connector?.maxPosts}
+                  anchorTarget={connector?.anchorTarget}
+                  reactionDefs={connector?.reactions}
+                  postActions={connector?.postActions}
+                  textQuotes={connector?.textQuotes}
+                  attachments={connector?.attachments}
+                  canReact={!!connector?.react}
+                  canDeletePost={!!connector?.deletePost}
+                  splitPostIcon={connector?.splitPostIcon}
                   // 次の未読スレは、いま開いているタブにだけ渡す(ほかのタブを描き直さないように、中身は文字と数だけ)
                   nextUnreadTitle={isActive && listTitle !== undefined ? (nextUnread?.thread.title ?? '') : undefined}
                   nextUnreadCount={isActive ? nextUnread?.unread : undefined}
@@ -2859,11 +2821,7 @@ export default function App() {
             setPostHistoryOpen(false)
             openPostEntry(e)
           }}
-          onDelete={async (id) => {
-            if (!store) return
-            await store.deletePostHistory(id)
-            setPostHistory(await store.listPostHistory())
-          }}
+          onDelete={deletePostEntry}
           onClose={() => setPostHistoryOpen(false)}
         />
       )}
@@ -3042,71 +3000,13 @@ export default function App() {
         // スマホは、スマホ用に別に作った設定画面。アカウント・板の一覧から開いたときだけその画面から、ほかはトップから
         <MobileSettings
           initialPage={settingsTab === 'accounts' ? 'accounts' : settingsTab === 'boardlist' ? 'boards' : 'home'}
-          loadBoards={loadBoards}
-          onToggleFavorite={(b) => void toggleFavorite(b)}
-          onOpenBoard={(b) => {
-            setSettingsTab(undefined)
-            void openBoard(b)
-          }}
-          settings={settings}
-          update={updateSetting}
-          favorites={favorites ?? []}
-          sites={sites}
-          onAddFavoriteUrl={addFavoriteUrl}
-          onRemoveFavorite={(url) =>
-            void run(null, async () => {
-              if (!store) return
-              await store.removeFavorite(url)
-              await reloadFavorites(store)
-            })
-          }
-          onReorderFavorites={reorderFavorites}
-          onAddSite={addSite}
-          onRemoveSite={removeSite}
-          accounts={accounts}
-          loginStatus={loginStatus}
-          onLogin={saveAndLogin}
-          onSaveAccount={(a) => void run(null, () => saveAccount(a))}
-          onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
-          onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
-          onRestoreDb={restoreDatabase}
-          onPruneLogs={pruneLogs}
-          onClose={() => setSettingsTab(undefined)}
+          {...settingsProps()}
         />
       )}
       {settingsTab && !isMobile && !canOpenToolWindow && (
         <SettingsDialog
           initialTab={settingsTab}
-          loadBoards={loadBoards}
-          onToggleFavorite={(b) => void toggleFavorite(b)}
-          onOpenBoard={(b) => {
-            setSettingsTab(undefined)
-            void openBoard(b)
-          }}
-          settings={settings}
-          update={updateSetting}
-          favorites={favorites ?? []}
-          sites={sites}
-          onAddFavoriteUrl={addFavoriteUrl}
-          onRemoveFavorite={(url) =>
-            void run(null, async () => {
-              if (!store) return
-              await store.removeFavorite(url)
-              await reloadFavorites(store)
-            })
-          }
-          onReorderFavorites={reorderFavorites}
-          onAddSite={addSite}
-          onRemoveSite={removeSite}
-          accounts={accounts}
-          loginStatus={loginStatus}
-          onLogin={saveAndLogin}
-          onSaveAccount={(a) => void run(null, () => saveAccount(a))}
-          onDeleteAccount={(c, a) => void run(null, () => deleteAccount(c, a))}
-          onBackupDb={() => (store ? backupDatabase(store) : Promise.resolve(false))}
-          onRestoreDb={restoreDatabase}
-          onPruneLogs={pruneLogs}
-          onClose={() => setSettingsTab(undefined)}
+          {...settingsProps()}
         />
       )}
 

@@ -6,14 +6,9 @@ import { AI_MODEL, AI_NG_SHOWS, DEFAULT_THRESHOLD, MIN_EXAMPLES, hypothesisOf, t
 import { deleteAiModelFiles, testScore, useAiModelStatus } from '../hooks/useAiNg'
 import type { AppSettings, UpdateSetting } from '../ui/settings'
 import { ManagerDialog, Switch, Toggle } from './SettingParts'
-import { BTN_PRIMARY, BTN_SECONDARY } from './DialogParts'
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT } from './DialogParts'
 import FontSizeSlider from './FontSizeSlider'
 import { isMobile } from '../utils/platform'
-
-const INPUT =
-  'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
-const BTN = BTN_PRIMARY
-const SUB_BTN = BTN_SECONDARY
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(0)}MB`
 
@@ -25,6 +20,9 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
   const save = (r: AiNgRule) => update('aiNgRules', rules.some((x) => x.id === r.id) ? rules.map((x) => (x.id === r.id ? r : x)) : [...rules, r])
   const remove = (id: string) => {
     update('aiNgRules', rules.filter((x) => x.id !== id))
+    clearMarks(id)
+  }
+  const clearMarks = (id: string) => {
     const { [id]: _, ...rest } = s.aiNgOverrides
     update('aiNgOverrides', rest)
   }
@@ -110,7 +108,7 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
       </div>
       <button
         type="button"
-        className={SUB_BTN}
+        className={BTN_SECONDARY}
         onClick={() => setEditing({ id: crypto.randomUUID(), name: '', prompt: '', threshold: DEFAULT_THRESHOLD, show: 'fold', enabled: true })}
       >
         条件を足す
@@ -131,10 +129,7 @@ export default function AiNgSettings({ settings: s, update }: { settings: AppSet
             remove(editing.id)
             setEditing(undefined)
           }}
-          onClearMarks={() => {
-            const { [editing.id]: _, ...rest } = s.aiNgOverrides
-            update('aiNgOverrides', rest)
-          }}
+          onClearMarks={() => clearMarks(editing.id)}
         />
       )}
     </div>
@@ -233,7 +228,7 @@ function RuleEditor(props: {
             <input value={sample} onChange={(e) => setSample(e.target.value)} placeholder="試したい書き込みの文" className={`${INPUT} flex-1 min-w-0`} />
             <button
               type="button"
-              className={BTN}
+              className={BTN_PRIMARY}
               disabled={!props.ready || !valid || !sample.trim() || result?.busy}
               onClick={() => {
                 setResult({ busy: true })
@@ -277,10 +272,10 @@ function RuleEditor(props: {
             </button>
           )}
           <span className="flex-1" />
-          <button type="button" className={SUB_BTN} onClick={props.onClose}>
+          <button type="button" className={BTN_SECONDARY} onClick={props.onClose}>
             やめる
           </button>
-          <button type="button" className={BTN} disabled={!valid} onClick={() => props.onSave({ ...r, name: r.name.trim() || r.prompt.trim().slice(0, 12) })}>
+          <button type="button" className={BTN_PRIMARY} disabled={!valid} onClick={() => props.onSave({ ...r, name: r.name.trim() || r.prompt.trim().slice(0, 12) })}>
             {props.isNew ? '足す' : '決める'}
           </button>
         </div>

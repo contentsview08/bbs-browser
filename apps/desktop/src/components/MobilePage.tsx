@@ -5,8 +5,6 @@ import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from './ActionBar'
 
-export { dayLabel } from '../utils/thread'
-
 export default function MobilePage(props: {
   title: string
   count?: number

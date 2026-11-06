@@ -1,5 +1,5 @@
 // 画像を取得できなかったときの表示。サムネイルとビューアーで言葉をそろえる(スマホ版の ui/Images.kt・Viewer.kt と同じ言葉)
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { canSelfUpdate } from '../host/update'
 import { mediaSrc } from '../utils/httpsFirst'
@@ -45,6 +45,22 @@ export function ThumbImage(props: { src: string; className: string }) {
       />
     </>
   )
+}
+
+/** 動画のサムネイル(最初のコマ)。<video> は置いただけで通信を始めるので、見えてから置く */
+export function LazyVideoThumb(props: { src: string; className: string }) {
+  const [seen, setSeen] = useState(false)
+  const holder = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (seen || !holder.current) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setSeen(true)
+    })
+    observer.observe(holder.current)
+    return () => observer.disconnect()
+  }, [seen])
+  if (!seen) return <span ref={holder} className={`block ${props.className}`} />
+  return <video src={props.src} preload="metadata" muted playsInline className={props.className} />
 }
 
 /** ビューアーの中で、画像を取得できなかったとき */

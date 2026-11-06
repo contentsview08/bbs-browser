@@ -23,13 +23,13 @@ import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
 import { LIST_FILTERS, isListTabActive, tabDefOf, type ListFilter, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
-import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
+import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 import { animateScroll } from '../hooks/useThreadScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import PeekPopup from './PeekPopup'
-import { followDelta, isDoublePress, isNear, isSeen, pickAfterPage, stepCursor, type Span } from '../utils/cursor'
+import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, followDelta, isDoublePress, isNear, isSeen, pickAfterPage, spanOf, stepCursor } from '../utils/cursor'
 
 export type SortMode = 'momentum' | 'newest' | 'count'
 type SortState = { mode: SortMode; dir: 'desc' | 'asc' } | null
@@ -186,12 +186,17 @@ const CARD_ESTIMATE = 64
  * 5ch と同じ「番号が日時にするとずっと先」のスレも数える
  */
 const isAnnouncement = (t: ThreadSummary) => !!t.announcement || (/^\d{10}$/.test(t.key) && Number(t.key) * 1000 > Date.now() + 86_400_000)
-/** J・K で選んだスレへ送るときのスクロールの時間と、画面の上下に残す余白の割合(スレ表示と同じ) */
-const CURSOR_SCROLL_MS = 160
-const CURSOR_MARGIN = 0.25
-/** Esc の 2 回押しとみなす間隔 */
-const DOUBLE_ESC_MS = 500
 const TAB = 'relative flex items-center justify-center gap-1 py-2.5 transition-colors whitespace-nowrap'
+/** 検索用に揃えたスレタイの控え(スレは作り直されるまで中身が変わらないので、絞り込みのたびに揃え直さない) */
+const normalizedCache = new WeakMap<ThreadSummary, { title: string; hay: string }>()
+function normalizedOf(t: ThreadSummary) {
+  let v = normalizedCache.get(t)
+  if (!v) {
+    v = { title: normalizeForSearch(t.title), hay: normalizeForSearch(`${t.title} ${t.authorId ?? ''}`) }
+    normalizedCache.set(t, v)
+  }
+  return v
+}
 
 export default function ThreadListPanel(props: Props) {
   const { threads, stateOf } = props
@@ -306,7 +311,7 @@ export default function ThreadListPanel(props: Props) {
       if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       if (e.key !== 'Escape') return
       const t = e.target as HTMLElement | null
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (isTypingTarget(t)) return
       queueMicrotask(() => {
         if (!e.defaultPrevented && !resetView()) escNothing()
       })
@@ -325,7 +330,7 @@ export default function ThreadListPanel(props: Props) {
     if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
-    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    if (isTypingTarget(t)) return
     // ボタンやリンクにフォーカスがあっても、キー操作は効かせる。Enter だけは、そのボタンを押すのに使う
     if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
     const el = scrollRef.current
@@ -468,17 +473,19 @@ export default function ThreadListPanel(props: Props) {
   const shownThreads = useDeferredValue(threads)
   // サーバーの並び(ふたば)は一覧と一緒に変わるので、一緒に遅らせる(ずれると、一瞬だけ並べ替えていない一覧が出る)
   const shownServerOrder = useDeferredValue(props.serverOrder)
+  /** 既読が進むたびに一覧を作り直さないよう、「見たスレ」の絞り込みのときだけ stateOf を見る */
+  const visitedStateOf = visitedOnly ? stateOf : undefined
   const visible = useMemo(() => {
     // 検索: 全角・半角・大文字・小文字・カナを同一視し、空白で区切った言葉はすべて含むもの(AND)。立てた人の ID も探す
     const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
     let list = shownThreads.filter((t) => {
       if (props.isNg(t)) return false
       if (terms.length > 0) {
-        const hay = normalizeForSearch(`${t.title} ${t.authorId ?? ''}`)
+        const hay = normalizedOf(t).hay
         if (!terms.every((w) => hay.includes(w))) return false
       }
       if (unreadOnly && !(unreadSnapshot?.has(threadId(t)) ?? false)) return false
-      if (visitedOnly && stateOf(t) === undefined) return false
+      if (visitedStateOf && visitedStateOf(t) === undefined) return false
       if (filter === 'posted' && !props.postedIds?.has(threadId(t))) return false
       if (filter === 'fav' && !props.favoriteIds?.has(threadId(t))) return false
       return true
@@ -498,12 +505,11 @@ export default function ThreadListPanel(props: Props) {
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, stateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds])
+  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
-  // visible は App が描き直すたびに作り直される(stateOf が毎回新しい)ので、顔ぶれ・並び・レス数が変わったときだけ知らせる。
-  // visible を見て知らせると、App の描き直し → 新しい visible → また知らせる、が止まらなくなる
-  const shownKey = visible.map((t) => `${threadId(t)}:${t.postCount}`).join('\n')
+  // visible が作り直されても、顔ぶれ・並び・レス数が変わったときだけ知らせる
+  const shownKey = useMemo(() => visible.map((t) => `${threadId(t)}:${t.postCount}`).join('\n'), [visible])
   useEffect(() => {
     onShownChange.current?.(visible)
   }, [shownKey])
@@ -517,6 +523,11 @@ export default function ThreadListPanel(props: Props) {
     })
   }, [shownKey])
 
+  const deleteSelected = () => {
+    props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
+    setSelected(new Set())
+  }
+
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
    * 複数のキーワードに当たるスレは、先に登録したキーワードの方に入れる
@@ -528,7 +539,7 @@ export default function ThreadListPanel(props: Props) {
     const groups: { keyword: string; threads: ThreadSummary[] }[] = []
     for (const keyword of keywords) {
       const k = normalizeForSearch(keyword)
-      const hits = visible.filter((t) => !taken.has(threadId(t)) && normalizeForSearch(t.title).includes(k))
+      const hits = visible.filter((t) => !taken.has(threadId(t)) && normalizedOf(t).title.includes(k))
       hits.forEach((t) => taken.add(threadId(t)))
       if (hits.length > 0) groups.push({ keyword, threads: hits })
     }
@@ -944,7 +955,7 @@ export default function ThreadListPanel(props: Props) {
         {/* スマホ: ヘッダーはフッターと同じ色にし、下に線を引く(一覧と同じ色だと境目が分からないため) */}
         <div
           ref={headerRef}
-          className={`sticky top-0 z-10 bg-panel-thread-header flex-shrink-0 ${isMobile ? 'bar-zoom bg-panel-thread-header border-b border-c-border transition-transform duration-200' : ''}`}
+          className={`sticky top-0 z-10 bg-panel-thread-header flex-shrink-0 ${isMobile ? 'bar-zoom border-b border-c-border transition-transform duration-200' : ''}`}
         >
           {/* 下の端をつかんで、板名の行の高さを変える(板名の字も合わせて大きくなる) */}
           <DragEdge
@@ -1045,61 +1056,57 @@ export default function ThreadListPanel(props: Props) {
               <button
                 type="button"
                 className="flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-c-heat-very-hot active:bg-c-surface2"
-                onClick={() => {
-                  props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
-                  setSelected(new Set())
-                }}
+                onClick={deleteSelected}
               >
                 <span className="material-symbols-outlined text-lg">delete</span>
                 ログを削除
               </button>
             </div>
           )}
-          <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${isMobile || tabs.length === 0 ? 'hidden' : ''}`}>
-            {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
-            {selectable && !props.body && (
-              <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">
-                <input
-                  type="checkbox"
-                  ref={(el) => {
-                    if (el) el.indeterminate = selected.size > 0 && selected.size < visible.length
-                  }}
-                  checked={visible.length > 0 && selected.size === visible.length}
-                  onChange={(e) => setSelected(e.target.checked ? new Set(visible.map(threadId)) : new Set())}
-                  className="rounded"
-                />
-              </label>
-            )}
-            {/* 選んでいる間は、タブの代わりに「n 件選択中・ログを削除」(行の高さは変えない。チェックがずれないように) */}
-            {!isMobile && selectable && selected.size > 0 ? (
-              <div className="flex-1 flex items-center gap-3 py-1.5 text-xs">
-                <span className="text-c-text-body">{selected.size} 件選択中</span>
-                <button type="button" className="text-c-text-muted hover:text-c-text-strong" onClick={() => setSelected(new Set())}>
-                  やめる
-                </button>
-                <button
-                  type="button"
-                  className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
-                  onClick={() => {
-                    props.onDeleteLogs!(visible.filter((t) => selected.has(threadId(t))))
-                    setSelected(new Set())
-                  }}
-                >
-                  <span className="material-symbols-outlined text-sm">delete</span>
-                  ログを削除
-                </button>
-              </div>
-            ) : (
-              !isMobile && tabGrid
-            )}
-            {/* 右端: 裏で取っている印(帯を差し込むと一覧がずれるので、同じ行に)。未読の一覧は、読み終えても並びから消さない(次に一覧を取り直すまで) */}
-            {!isMobile && props.busyText && (
-              <span className="flex-shrink-0 flex items-center gap-1 pl-3 text-xs text-c-text-muted" title={props.busyText}>
-                <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                {props.busyText}
-              </span>
-            )}
-          </div>
+          {!isMobile && (
+            <div className={`flex items-stretch px-4 border-b border-c-border text-sm font-medium ${tabs.length === 0 ? 'hidden' : ''}`}>
+              {/* すべて選ぶ・すべて外す(一部だけのときは「－」)。各スレのチェックボックスと縦にそろうよう、未読の左に置く */}
+              {selectable && !props.body && (
+                <label className="flex items-center pr-3 cursor-pointer" title="すべて選択">
+                  <input
+                    type="checkbox"
+                    ref={(el) => {
+                      if (el) el.indeterminate = selected.size > 0 && selected.size < visible.length
+                    }}
+                    checked={visible.length > 0 && selected.size === visible.length}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(visible.map(threadId)) : new Set())}
+                    className="rounded"
+                  />
+                </label>
+              )}
+              {/* 選んでいる間は、タブの代わりに「n 件選択中・ログを削除」(行の高さは変えない。チェックがずれないように) */}
+              {selectable && selected.size > 0 ? (
+                <div className="flex-1 flex items-center gap-3 py-1.5 text-xs">
+                  <span className="text-c-text-body">{selected.size} 件選択中</span>
+                  <button type="button" className="text-c-text-muted hover:text-c-text-strong" onClick={() => setSelected(new Set())}>
+                    やめる
+                  </button>
+                  <button
+                    type="button"
+                    className="ml-auto flex items-center gap-0.5 font-bold text-c-heat-very-hot hover:opacity-80"
+                    onClick={deleteSelected}
+                  >
+                    <span className="material-symbols-outlined text-sm">delete</span>
+                    ログを削除
+                  </button>
+                </div>
+              ) : (
+                tabGrid
+              )}
+              {/* 右端: 裏で取っている印(帯を差し込むと一覧がずれるので、同じ行に)。未読の一覧は、読み終えても並びから消さない(次に一覧を取り直すまで) */}
+              {props.busyText && (
+                <span className="flex-shrink-0 flex items-center gap-1 pl-3 text-xs text-c-text-muted" title={props.busyText}>
+                  <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                  {props.busyText}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
@@ -1249,10 +1256,4 @@ export default function ThreadListPanel(props: Props) {
       )}
     </section>
   )
-}
-
-/** 要素の縦の位置(画面の座標) */
-function spanOf(el: HTMLElement): Span {
-  const r = el.getBoundingClientRect()
-  return { top: r.top, bottom: r.bottom }
 }

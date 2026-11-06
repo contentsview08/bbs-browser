@@ -177,8 +177,7 @@ function DesktopMoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
       </button>
       {open && (
         <div
-          // スマホは、ほかの画面(下から出るメニューなど)に合わせて、字と行を大きく
-          className={`absolute right-0 ${props.up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${isMobile ? 'w-72 rounded-2xl py-2 text-[15px]' : 'w-64 rounded-[var(--card-radius)] py-1 text-sm'} bg-c-surface border border-c-border shadow-lg z-40 max-h-[70vh] overflow-y-auto menu-pop`}
+          className={`absolute right-0 ${props.up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} w-64 rounded-[var(--card-radius)] py-1 text-sm bg-c-surface border border-c-border shadow-lg z-40 max-h-[70vh] overflow-y-auto menu-pop`}
         >
           {sub ? (
             <>
@@ -203,7 +202,7 @@ function DesktopMoreMenu(props: { actions: BarAction[]; btnClass: string; iconCl
                   setOpen(false)
                   a.onClick?.()
                 }}
-                className={`w-full flex items-center gap-3 ${isMobile ? 'px-4 py-3' : 'px-3 py-2'} text-left text-c-text-body hover:bg-c-surface2 active:bg-c-surface2 disabled:opacity-40 transition-colors`}
+                className="w-full flex items-center gap-3 px-3 py-2 text-left text-c-text-body hover:bg-c-surface2 active:bg-c-surface2 disabled:opacity-40 transition-colors"
               >
                 <span
                   className={`material-symbols-outlined text-lg ${a.active && a.fillWhenActive ? 'fill' : ''}`}

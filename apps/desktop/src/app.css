@@ -33,10 +33,7 @@ body,
 [data-scheme='2ch-classic'] {
   --c-border: #d0d0d0;
   --c-border-strong: #a8a8a8;
-}
-
-/* 2chクラシックはスレ一覧のスレタイを黒に固定しているので、既読のスレタイの色だけ別に持たせる */
-[data-scheme='2ch-classic'] {
+  /* スレ一覧のスレタイを黒に固定しているので、既読のスレタイの色だけ別に持たせる */
   --c-thread-read-title: #1a4fa0;
 }
 
@@ -228,16 +225,10 @@ html:root[data-scheme='oled'] {
   --tab-active-bg: #161616;
 }
 
-/* LINE ライトのカード(スレ一覧のタイル)は白にし、細い枠線で白い背景と分ける(灰色の面だと、画面が灰色っぽくなる) */
+/* LINE ライトのカード(スレ一覧のタイル)は、細い枠線で白い背景と分ける */
 [data-pattern][data-scheme='line-light'] {
-  --card-bg: #ffffff;
   --card-border-color: #e4e7ec;
   --card-selected-bg: #eef7f1;
-}
-
-/* やさしいライトのカードは、トーナルでも枠線でも背景より少しだけ明るい面にする */
-[data-pattern][data-scheme='soft-light'] {
-  --card-bg: #f9f7f4;
 }
 
 /* 書き込んだ人の名前の色は、スマホのアプリ(ui/Theme.kt)と同じ。web 版の暗く落とした色だと、暗い地の上で読みにくい */
@@ -354,11 +345,6 @@ html:root[data-scheme='line-light'][data-post-style='line'] {
 .post-enter {
   animation: post-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) var(--enter-delay, 0ms) backwards;
 }
-@media (prefers-reduced-motion: reduce) {
-  .post-enter {
-    animation: none;
-  }
-}
 
 /* タブ(Chrome 風)。開いていないタブは帯と同じ色(面なし)で、タブの間に短い縦線だけを置く。
    開いているタブとスレのヘッダーは同じ色にして、境界線なしでつなげる。
@@ -434,6 +420,14 @@ input[type='checkbox']:focus {
   outline: none;
   box-shadow: none;
 }
+input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+input[type='checkbox']:checked,
+input[type='checkbox']:indeterminate {
+  border-color: var(--c-accent);
+}
 /* ---------- レスの見た目のスタイル(設定の「レスの見た目」。PostArticle の variant) ---------- */
 /* Discord 風: 囲みのない平らな並び。マウスを乗せた行だけ、うっすら色を付ける */
 article.post-discord {
@@ -450,13 +444,11 @@ article.post-discord {
    強調色に寄せると、黄色・橙の配色(アンバー×ティールなど)で画面全体がチカチカするので、配色に関係なく同じ青灰にする。
    自分の吹き出しは LINE の緑 */
 [data-post-style='line'] {
-  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 87%, #7f9cc0 13%);
   --line-own-bg: #8de055;
   --line-own-text: #10200a;
   --line-own-link: #0b4f9e;
 }
 :root.dark[data-post-style='line'] {
-  --c-thread-view-bg: color-mix(in srgb, var(--c-base) 90%, #6f8fb8 10%);
   --line-own-bg: #3f7d2c;
   --line-own-text: #eef7e8;
   --line-own-link: #d3ebff;
@@ -538,6 +530,7 @@ article.post-discord {
 }
 .card-thread[data-variant='discord'] .thread-row-title {
   font-size: 1.0625rem;
+  overflow-wrap: anywhere;
 }
 /* # は 1 行目の高さ(1.0625rem × 1.45)の真ん中にそろえる */
 .card-thread[data-variant='discord'] .thread-row-hash {
@@ -556,9 +549,6 @@ article.post-discord {
 }
 .card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
   margin-top: 1px;
-}
-.card-thread[data-variant='discord'] .thread-row-title {
-  overflow-wrap: anywhere;
 }
 [data-density='dense'] .card-thread[data-variant='discord'] {
   padding: 5px 10px;
@@ -699,14 +689,6 @@ article.popup-cursor::after {
   outline-offset: 2px;
   border-radius: 3px;
 }
-input[type='checkbox']:focus-visible {
-  outline: 2px solid var(--c-accent);
-  outline-offset: 1px;
-}
-input[type='checkbox']:checked,
-input[type='checkbox']:indeterminate {
-  border-color: var(--c-accent);
-}
 
 /* 通知が右からすべり込む */
 @keyframes toast-in {
@@ -845,11 +827,6 @@ input[type='checkbox']:indeterminate {
   border-top: 1px solid var(--c-border);
   border-top-right-radius: 10px;
   box-shadow: 5px -5px 0 5px var(--c-nav-selected);
-}
-@media (prefers-reduced-motion: reduce) {
-  .nav-notch {
-    transition: none;
-  }
 }
 
 /* 取り直し・並べ直しの途中に、一覧の上に流す細い帯(ThreadListPanel・スレ表示の切り替え)。一覧は消さずに残す */
@@ -1020,8 +997,7 @@ html[data-platform='mobile'] article.popup-cursor::after {
 
 /* スマホ: Discord 風のスレ一覧は、行の頭の # と余白を小さくする(狭い横幅をスレタイに回す) */
 html[data-platform='mobile'] .card-thread[data-variant='discord'] {
-  padding-left: 6px !important;
-  padding-right: 8px !important;
+  padding: 5px 8px 5px 6px !important;
 }
 html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row {
   gap: 5px;
@@ -1033,10 +1009,6 @@ html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row-ha
 /* スマホ: Discord 風のスレ一覧は、字を一回り小さくして 1 画面に多く並べる */
 html[data-platform='mobile'] .card-thread[data-variant='discord'] .thread-row-title {
   font-size: 0.9375rem;
-}
-html[data-platform='mobile'] .card-thread[data-variant='discord'] {
-  padding-top: 5px !important;
-  padding-bottom: 5px !important;
 }
 
 /* スマホ: すりガラス(後ろをぼかす)は、スクロールのたびに後ろを毎コマぼかし直すので、Android の WebView では重く、
@@ -1237,15 +1209,6 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 }
 :root.dark[data-post-style='line'] .line-bubble:not(.line-bubble-own) {
   background: color-mix(in srgb, var(--c-surface2) 92%, #ffffff);
-}
-:root[data-scheme='line-light'][data-post-style='line'] {
-  --c-thread-view-bg: #9db8dc;
-}
-:root[data-scheme='gray'][data-post-style='line'] {
-  --c-thread-view-bg: #1c2838;
-}
-:root[data-scheme='gray'][data-post-style='line'] .line-bubble:not(.line-bubble-own) {
-  background: var(--c-surface2);
 }
 /* スマホのアプリ(スマホ版)の Theme.kt の lineBg・lineBubble と同じ値(Compose の lerp は Oklab で混ぜるので、計算した色をそのまま書く)。
    scripts で作った値。配色を変えたら作り直す */

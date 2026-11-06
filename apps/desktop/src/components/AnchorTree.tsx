@@ -6,13 +6,13 @@ import type { TreeRow } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
 import { AVATAR } from './PostArticle'
 
-/** 1 段の幅(スマホは画面が狭いので詰める) */
-const STEP = isMobile ? 12 : 18
+/** 1 段の幅 */
+const STEP = 18
 /**
  * スマホ: これより深い段は、この段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)。
  * 線のつながりは少し崩れるが、どのレスへの返信かは本文のアンカーで分かる
  */
-const MAX_DEPTH = isMobile ? 5 : Infinity
+const MAX_DEPTH = 5
 /** スマホ: 1 段ごとに右へずらす幅(罫線を引かず、レスの左の縦線を階段のように並べる) */
 const MOBILE_STEP = 10
 /** スマホ: 字下げした所(縦線より左)の色。明るい配色では薄い灰色、暗い配色では少し明るい灰色になる */
@@ -40,12 +40,10 @@ export default function AnchorTree(props: {
   /** Discord 風: 線をアイコン同士をつなぐ形にする */
   variant?: 'card' | 'discord' | 'classic' | 'line'
 }) {
-  // スマホでは深い段を MAX_DEPTH にそろえる
-  if (MAX_DEPTH !== Infinity) props = { ...props, rows: props.rows.map((row) => (row.depth > MAX_DEPTH ? { ...row, depth: MAX_DEPTH } : row)) }
   // スマホは画面の幅が狭く、罫線でつなぐと本文が窮屈になるので、レスの左に縦線を引いて段をずらすだけにする
   if (isMobile) return <StepTree {...props} />
   // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
-  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + (isMobile ? 8 : 12)} />
+  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + 12} />
   if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} />
   return (
     <div className="flex flex-col">
@@ -78,7 +76,7 @@ export default function AnchorTree(props: {
           )}
           {/* 押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくいのでやめた) */}
           <div
-            className={`tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus && !isMobile ? 'tree-focus' : ''}`}
+            className={`tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus ? 'tree-focus' : ''}`}
           >
             {props.renderPost(r.no)}
             {r.alsoTo.length > 0 && (
@@ -131,7 +129,7 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
             <div className="flex-shrink-0" style={{ width: r.depth * D_STEP }} />
             <div
               // 押したレスは、選んでいるレスと同じ色(強調色の面は字が読みにくい)
-              className={`relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus && !isMobile ? 'tree-focus' : ''}`}
+              className={`relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus ? 'tree-focus' : ''}`}
             >
               {props.renderPost(r.no)}
               {/* 「>>n にも」は本文の始まり(アイコンの右)にそろえる(アイコンの列に置くと線と重なるため) */}
@@ -153,14 +151,15 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
  * 縦線が階段のように並ぶので、どのレスへの返信かが分かる(Reddit などのスマホのコメント欄と同じ)
  */
 function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNode }) {
+  const rows = props.rows.map((row) => (row.depth > MAX_DEPTH ? { ...row, depth: MAX_DEPTH } : row))
   return (
     <div className="flex flex-col">
-      {props.rows.map((r, i) => (
+      {rows.map((r, i) => (
         <div
           key={r.no}
           className="flex min-w-0"
           // 段が変わる所にだけ、背景になじむ薄い線を引く(同じ段が続く所は引かない)
-          style={i > 0 && props.rows[i - 1].depth !== r.depth ? { borderTop: '1.5px solid var(--c-border-strong, var(--c-border))' } : undefined}
+          style={i > 0 && rows[i - 1].depth !== r.depth ? { borderTop: '1.5px solid var(--c-border-strong, var(--c-border))' } : undefined}
         >
           {/* 段の分だけ、縦線より左を薄い灰色で塗る(どこまでが字下げか、ひと目で分かるように)。いちばん上の元のレスにも線を引く */}
           <div

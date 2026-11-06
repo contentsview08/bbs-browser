@@ -9,6 +9,19 @@ import { isMobile } from '../utils/platform'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
 import { hasVideo, imageUrlsIn } from '../utils/postBody'
+import { framesIn } from '../hooks/useThreadScroll'
+
+/** 位置がこれ(%)より動いていなければ、印を描き直さない(細い帯の上では 1px に満たない) */
+const PCT_EPSILON = 0.1
+/** 測った位置が前と同じとみなせるか */
+function samePcts(a: Map<number, number>, b: Map<number, number>): boolean {
+  if (a.size !== b.size) return false
+  for (const [no, at] of a) {
+    const other = b.get(no)
+    if (other === undefined || Math.abs(other - at) >= PCT_EPSILON) return false
+  }
+  return true
+}
 
 interface Props {
   posts: Post[]
@@ -48,7 +61,7 @@ export default function Minimap(props: Props) {
       const rootTop = root.getBoundingClientRect().top
       const next = new Map<number, number>()
       // レスの中身ではなく枠(.post-cv)を測る(画面の外で省いた計算をやり直させないように)
-      for (const el of root.querySelectorAll<HTMLElement>(':scope .post-cv')) {
+      for (const el of framesIn(listRef.current)) {
         if (el.hidden) continue // 絞り込みで隠しているレス
         // 番号は枠に持たせてある(NG で中身を描かないレスも数えるため)
         const no = Number(el.dataset.post)
@@ -56,7 +69,7 @@ export default function Minimap(props: Props) {
         const top = el.getBoundingClientRect().top - rootTop + root.scrollTop
         next.set(no, (top / root.scrollHeight) * 100)
       }
-      setPcts(next)
+      setPcts((prev) => (samePcts(prev, next) ? prev : next))
     }
     // 描画が落ち着いてから測る
     let raf = requestAnimationFrame(() => {
@@ -208,75 +221,15 @@ export default function Minimap(props: Props) {
     root.scrollTop = ratio * root.scrollHeight - root.clientHeight / 2
   }
 
-  const jump = (no: number) => (e: React.MouseEvent) => {
-    e.stopPropagation()
-    props.onJump(no)
-  }
-
-  // マウスを乗せた高さ(%)と、そのあたりのレス番号。押すとどこへ飛ぶか分かるように出す
-  const [hover, setHover] = useState<{ at: number; no?: number }>()
-  const onTrackMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const at = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
-    // その高さより上にある最後のレス
-    let no: number | undefined
-    posts.forEach((p, i) => {
-      if (pct(p.no, i) <= at) no = p.no
-    })
-    setHover({ at, no })
-  }
-
-  return (
-    <div className="flex-shrink-0 flex flex-col">
-      {/* スレのヘッダーがスクロールの中にあるとき(すりガラス)、ヘッダーはスクロールする所の幅までしかない。
-          ミニマップの上にも同じ見た目の帯を置いて、ヘッダーが右端まで続いて見えるようにする */}
-      {props.topOffset > 0 && (
-        <div className="flex-shrink-0 frosted-glass bg-panel-thread-header border-b border-c-border" style={{ height: props.topOffset }} />
-      )}
-    {/* スマホは画面の端にぴったり付ける(余白を削って、本文の幅を残す) */}
-    <div className={`flex-1 min-h-0 ${isMobile ? 'py-1 pr-0.5 pl-0' : 'py-2 pr-2 pl-1'}`}>
-      <div
-        className="relative w-[24px] h-full cursor-pointer"
-        style={{
-          background: 'var(--c-surface2)',
-          border: '1px solid var(--c-border)',
-          borderRadius: 'var(--minimap-radius)',
-        }}
-        onClick={onTrackClick}
-        // スマホにはマウスを乗せる操作がない(たたくと、そのときのマウスの動きとして番号が出たまま残る)ので、乗せた所の番号は出さない
-        onMouseMove={isMobile ? undefined : onTrackMove}
-        onMouseLeave={isMobile ? undefined : () => setHover(undefined)}
-      >
-        {/* 未読の範囲(「ここから未読」から下)は、うっすら色を付ける */}
-        {unreadAt !== undefined && (
-          <>
-            <div
-              className="absolute left-0 right-0 bottom-0 pointer-events-none"
-              style={{
-                top: `${unreadAt}%`,
-                background: 'color-mix(in srgb, var(--c-unread) 12%, transparent)',
-                borderRadius: '0 0 var(--minimap-radius) var(--minimap-radius)',
-              }}
-            />
-            <div
-              className="absolute left-0 right-0 h-[2px] pointer-events-none z-[9]"
-              style={{ top: `${unreadAt}%`, background: 'var(--c-unread)' }}
-              title="ここから未読"
-            />
-            <div
-              className="absolute -left-[5px] pointer-events-none z-[9]"
-              style={{
-                top: `calc(${unreadAt}% - 4px)`,
-                width: 0,
-                height: 0,
-                borderTop: '5px solid transparent',
-                borderBottom: '5px solid transparent',
-                borderLeft: '5px solid var(--c-unread)',
-              }}
-            />
-          </>
-        )}
-
+  // 印は数が多いことがあるので、マウスを動かしただけ(hover)では作り直さない
+  const onJump = props.onJump
+  const markerButtons = useMemo(() => {
+    const jump = (no: number) => (e: React.MouseEvent) => {
+      e.stopPropagation()
+      onJump(no)
+    }
+    return (
+      <>
         {/* 真ん中: 人気レス(被アンカー 3 件以上)の帯。多いほど暖かい色 */}
         {markers.heat.map((m) => (
           <button
@@ -349,6 +302,78 @@ export default function Minimap(props: Props) {
             />
           ),
         )}
+      </>
+    )
+  }, [markers, onJump])
+
+  // マウスを乗せた高さ(%)と、そのあたりのレス番号。押すとどこへ飛ぶか分かるように出す
+  const [hover, setHover] = useState<{ at: number; no?: number }>()
+  const onTrackMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const at = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
+    // その高さより上にある最後のレス
+    let no: number | undefined
+    for (let i = posts.length - 1; i >= 0; i--) {
+      if (pct(posts[i].no, i) <= at) {
+        no = posts[i].no
+        break
+      }
+    }
+    setHover({ at, no })
+  }
+
+  return (
+    <div className="flex-shrink-0 flex flex-col">
+      {/* スレのヘッダーがスクロールの中にあるとき(すりガラス)、ヘッダーはスクロールする所の幅までしかない。
+          ミニマップの上にも同じ見た目の帯を置いて、ヘッダーが右端まで続いて見えるようにする */}
+      {props.topOffset > 0 && (
+        <div className="flex-shrink-0 frosted-glass bg-panel-thread-header border-b border-c-border" style={{ height: props.topOffset }} />
+      )}
+    {/* スマホは画面の端にぴったり付ける(余白を削って、本文の幅を残す) */}
+    <div className={`flex-1 min-h-0 ${isMobile ? 'py-1 pr-0.5 pl-0' : 'py-2 pr-2 pl-1'}`}>
+      <div
+        className="relative w-[24px] h-full cursor-pointer"
+        style={{
+          background: 'var(--c-surface2)',
+          border: '1px solid var(--c-border)',
+          borderRadius: 'var(--minimap-radius)',
+        }}
+        onClick={onTrackClick}
+        // スマホにはマウスを乗せる操作がない(たたくと、そのときのマウスの動きとして番号が出たまま残る)ので、乗せた所の番号は出さない
+        onMouseMove={isMobile ? undefined : onTrackMove}
+        onMouseLeave={isMobile ? undefined : () => setHover(undefined)}
+      >
+        {/* 未読の範囲(「ここから未読」から下)は、うっすら色を付ける */}
+        {unreadAt !== undefined && (
+          <>
+            <div
+              className="absolute left-0 right-0 bottom-0 pointer-events-none"
+              style={{
+                top: `${unreadAt}%`,
+                background: 'color-mix(in srgb, var(--c-unread) 12%, transparent)',
+                borderRadius: '0 0 var(--minimap-radius) var(--minimap-radius)',
+              }}
+            />
+            <div
+              className="absolute left-0 right-0 h-[2px] pointer-events-none z-[9]"
+              style={{ top: `${unreadAt}%`, background: 'var(--c-unread)' }}
+              title="ここから未読"
+            />
+            <div
+              className="absolute -left-[5px] pointer-events-none z-[9]"
+              style={{
+                top: `calc(${unreadAt}% - 4px)`,
+                width: 0,
+                height: 0,
+                borderTop: '5px solid transparent',
+                borderBottom: '5px solid transparent',
+                borderLeft: '5px solid var(--c-unread)',
+              }}
+            />
+          </>
+        )}
+
+        {markerButtons}
 
         {/* 乗せた高さの目安線と、そのあたりのレス番号 */}
         {hover && (

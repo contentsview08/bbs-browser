@@ -12,7 +12,7 @@ import { saveImage } from '../host/saveImage'
 import { isAutoLoadable } from '../utils/safeUrl'
 import LocalAddressMark from './LocalAddressMark'
 import { mediaSrc } from '../utils/httpsFirst'
-import { ThumbImage } from './MediaFailed'
+import { LazyVideoThumb, ThumbImage } from './MediaFailed'
 import { canPlayVideo } from '../utils/videoSupport'
 
 export type MediaKind = 'image' | 'video' | 'youtube'
@@ -169,7 +169,7 @@ export default function MediaGallery(props: {
                   {!isAutoLoadable(m.thumb ?? m.url) ? (
                     <LocalAddressMark />
                   ) : m.kind === 'video' && !canPlayVideo(m.url) ? null : m.kind === 'video' ? (
-                    <video src={mediaSrc(`${m.url}#t=0.1`)} preload="metadata" muted playsInline className="w-full h-full object-cover pointer-events-none bg-black" />
+                    <LazyVideoThumb src={mediaSrc(`${m.url}#t=0.1`)} className="w-full h-full object-cover pointer-events-none bg-black" />
                   ) : (
                     <ThumbImage src={m.thumb ?? m.url} className="w-full h-full object-cover" />
                   )}

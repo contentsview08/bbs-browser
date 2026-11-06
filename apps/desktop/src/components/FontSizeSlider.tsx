@@ -24,7 +24,6 @@ function useSliderDrag() {
     rowRef,
     rowStyle: on ? ({ visibility: 'visible', background: 'var(--c-surface)', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,.35)' } as const) : undefined,
     start: () => drag?.set(rowRef.current),
-    end: () => drag?.set(null),
   }
 }
 
@@ -178,8 +177,6 @@ export function cssPx(name: string, fallback: number): number {
   return Number.isFinite(v) ? Math.round(raw.endsWith('rem') ? v * 16 : v) : fallback
 }
 
-export { ROOT_FONT_SIZE }
-
 /**
  * 画面の変数(CSS)をすぐ書き換える(スライダーを動かしている間の見た目)。
  * 設定のウィンドウ(PC)からは、自分ではなくメインのウィンドウへ送る(設定画面の字まで変わると、つまみの位置がずれて合わせにくい)。
@@ -328,7 +325,10 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
       <div
         ref={boxRef}
         // つかんでいる間は、入れ物ごと見えなくし、つかんでいる行だけを visibility: visible で残す
-        style={!isMobile ? { zoom: 'var(--dialog-zoom, 1)', ...(active ? { visibility: 'hidden' as const } : {}) } : active ? { visibility: 'hidden', ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : {}) } : isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}
+        style={{
+          ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : { zoom: 'var(--dialog-zoom, 1)' }),
+          ...(active ? { visibility: 'hidden' as const } : {}),
+        }}
         className={`w-full overflow-y-auto bg-c-surface shadow-xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
         onClick={(e) => e.stopPropagation()}
       >

@@ -7,7 +7,7 @@ import ActionSheet from './ActionSheet'
 import { useLongPress } from '../hooks/useLongPress'
 import { isMobile } from '../utils/platform'
 import { memo, useCallback, useState } from 'react'
-import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuPos } from './PostArticle'
+import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuPos } from './PostMenu'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
@@ -176,34 +176,35 @@ function ThreadCard({
    * スマホ: カード・Discord 風・LINE 風を同じ形にそろえる(見た目ごとに並びがばらばらで読みにくかったので)。
    * 左に見た目ごとのアイコン、1 段目にスレタイ(3 行まで)、2 段目の左に 立った時間・立てた人の ID・dat落ち、右に 勢い・レス数・未読
    */
-  const leading =
-    variant === 'discord'
-      ? thumbImg(28, 'rounded') ||
-        (authorIconId ? (
-          <span className="block overflow-hidden rounded-full" title={`立てた人の ID:${authorIconId}`}>
-            <Identicon seed={authorIconId} size={22} />
-          </span>
-        ) : (
-          <span className="thread-row-hash text-c-text-muted select-none">#</span>
-        ))
-      : variant === 'line'
-        ? thumbImg(40, 'rounded-xl') ||
-          ((authorIconId || beNo) && (
-            <span className="block overflow-hidden rounded-full">
-              <Identicon seed={authorIconId ?? `be:${beNo}`} size={40} />
+  const unified = () => {
+    const leading =
+      variant === 'discord'
+        ? thumbImg(28, 'rounded') ||
+          (authorIconId ? (
+            <span className="block overflow-hidden rounded-full" title={`立てた人の ID:${authorIconId}`}>
+              <Identicon seed={authorIconId} size={22} />
             </span>
+          ) : (
+            <span className="thread-row-hash text-c-text-muted select-none">#</span>
           ))
-        : thumbImg(48)
-  /** 1 レス目の頭(URL とアンカーは除いて 1 行に) */
-  const previewText = thread.preview?.[0]?.body
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/https?:\/\/\S+/g, '')
-    .replace(/(>>|&gt;&gt;|＞＞)\d+/g, '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .join(' ')
-  const unified = (
+        : variant === 'line'
+          ? thumbImg(40, 'rounded-xl') ||
+            ((authorIconId || beNo) && (
+              <span className="block overflow-hidden rounded-full">
+                <Identicon seed={authorIconId ?? `be:${beNo}`} size={40} />
+              </span>
+            ))
+          : thumbImg(48)
+    /** 1 レス目の頭(URL とアンカーは除いて 1 行に) */
+    const previewText = thread.preview?.[0]?.body
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/(>>|&gt;&gt;|＞＞)\d+/g, '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(' ')
+    return (
     <div className="flex items-start gap-2.5 min-w-0">
       {leading && <span className="flex-shrink-0 flex items-center justify-center min-w-[1rem] pt-0.5">{leading}</span>}
       {unreadCount > 0 && variant === 'discord' && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
@@ -238,10 +239,11 @@ function ThreadCard({
         </div>
       </div>
     </div>
-  )
+    )
+  }
 
   // コンパクト: スレタイ 1 行と、右端にレス数(勢いの色)と未読だけ。まだ開いていないスレだけ太字(アプリと同じ)
-  const compactRow = (
+  const compactRow = () => (
     <div className="flex items-center gap-2 min-w-0">
       {checkbox}
       <span
@@ -264,7 +266,7 @@ function ThreadCard({
    * 閲覧履歴の行: 左に未読の帯、スレタイ、下に 板・いつ見たか・dat落ち、右に レス数と未読。
    * チェックの列は幅を決めて置く(チェックを入れても行がずれないように)
    */
-  const historyRow = historyMeta && (
+  const historyRow = (meta: NonNullable<typeof historyMeta>) => (
     <div className="flex items-center gap-2 min-w-0">
       {onSelect && !isMobile && (
         <label className="w-5 flex-shrink-0 flex items-center justify-center self-stretch cursor-pointer" onClick={(e) => e.stopPropagation()}>
@@ -282,9 +284,9 @@ function ThreadCard({
           {thread.title || thread.key}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[0.6875rem] text-c-text-muted min-w-0">
-          <BoardIcon boardUrl={thread.boardUrl} override={historyMeta.icon} size={14} />
-          <span className="truncate">{historyMeta.boardName}</span>
-          {historyMeta.readAt && <span className="flex-shrink-0 whitespace-nowrap">・{relativeTime(new Date(historyMeta.readAt))}に見た</span>}
+          <BoardIcon boardUrl={thread.boardUrl} override={meta.icon} size={14} />
+          <span className="truncate">{meta.boardName}</span>
+          {meta.readAt && <span className="flex-shrink-0 whitespace-nowrap">・{relativeTime(new Date(meta.readAt))}に見た</span>}
           {archived && <span className="flex-shrink-0">・dat落ち</span>}
         </div>
       </div>
@@ -298,13 +300,27 @@ function ThreadCard({
     </div>
   )
 
+  /** メニューの項目: お気に入りとコピー(右クリックのメニューと長押しの一覧で共通) */
+  const favCopyItems = () => [
+    ...(onToggleFavorite
+      ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
+      : []),
+    ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
+  ]
+  /** NG のメニュー: スレタイで・立てた人で(右クリックのメニューと操作バーで共通) */
+  const ngChoices = (ng: NonNullable<typeof onNg>, ngAuthor: NonNullable<typeof onNgAuthor>, authorId: string) => [
+    { label: 'スレタイで NG', icon: 'title', onClick: () => ng(thread) },
+    { label: `立てた人で NG(${authorId})`, icon: 'person_off', onClick: () => ngAuthor(thread) },
+    { label: '立てた人で NG(今日だけ)', icon: 'schedule', onClick: () => ngAuthor(thread, true) },
+  ]
+
   const content =
-    historyRow ? (
-      historyRow
+    historyMeta ? (
+      historyRow(historyMeta)
     ) : compact && variant !== 'classic' ? (
-      compactRow
+      compactRow()
     ) : isMobile && variant !== 'classic' ? (
-      unified
+      unified()
     ) : variant === 'discord' ? (
       // Discord 風: チャンネル一覧のような 1 行。新着のあるスレは左に白い点、スレタイを明るく太く
       <div className="thread-row flex gap-2 min-w-0">
@@ -406,12 +422,7 @@ function ThreadCard({
         <div className="flex items-center gap-3">
           {/* スレの画像(ふたば・4chan のカタログ)があれば左に出す */}
           {thumbImg(48)}
-          {/* スマホはチェックボックスを出さない(長押しで選ぶ) */}
-          {onSelect && !isMobile && (
-            <label className="flex items-center self-stretch -my-1 py-1 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-              <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
-            </label>
-          )}
+          {checkbox}
           <div className="flex-1 min-w-0">
             {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
             <div className="flex items-center gap-3 text-[0.625rem] text-c-text-muted">
@@ -429,12 +440,7 @@ function ThreadCard({
               )}
               {archived && <span className="whitespace-nowrap">dat落ち</span>}
               <div className="flex items-center gap-5 ml-auto">
-                <span
-                  className={`font-mono font-bold tabular-nums text-right min-w-[5ch] ${momentumColorClass}`}
-                  title={`勢い：${formatMomentum(m)}`}
-                >
-                  {formatMomentum(m)}
-                </span>
+                {momentumEl('font-bold min-w-[5ch]')}
                 <span className="font-mono tabular-nums text-right min-w-[4ch]">{thread.postCount}</span>
               </div>
             </div>
@@ -461,21 +467,10 @@ function ThreadCard({
                     新
                   </span>
                 )}
-                {isFavorite && (
-                  <span className="material-symbols-outlined fill text-sm leading-none align-[-2px] mr-1 text-mark-fav" title="お気に入りのスレ">
-                    star
-                  </span>
-                )}
+                {favStar}
                 {thread.title}
               </h3>
-              {unreadCount > 0 && (
-                <span
-                  className="flex-shrink-0 font-bold text-[0.5625rem] px-1.5 py-0.5 rounded whitespace-nowrap"
-                  style={{ background: 'var(--c-unread)', color: 'var(--c-unread-text)' }}
-                >
-                  {unreadCount > 999 ? '+999+' : `+${unreadCount}`}
-                </span>
-              )}
+              {unreadBadge()}
             </div>
           </div>
         </div>
@@ -550,20 +545,13 @@ function ThreadCard({
           onClose={closeCtxMenu}
           items={[
             ...(newTabEnabled ? [{ label: '新しいタブで開く', icon: 'open_in_new', onClick: () => onOpen(thread, true) }] : []),
-            ...(onToggleFavorite
-              ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
-              : []),
-            ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
+            ...favCopyItems(),
             ...(onNg && onNgAuthor && thread.authorId
               ? [
                   {
                     label: 'NG',
                     icon: 'block',
-                    children: [
-                      { label: 'スレタイで NG', icon: 'title', onClick: () => onNg(thread) },
-                      { label: `立てた人で NG(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread) },
-                      { label: '立てた人で NG(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true) },
-                    ],
+                    children: ngChoices(onNg, onNgAuthor, thread.authorId),
                   },
                 ]
               : onNg
@@ -580,10 +568,7 @@ function ThreadCard({
           onClose={() => setSheet(false)}
           items={[
             { label: '開く', icon: 'open_in_new', onClick: () => onOpen(thread) },
-            ...(onToggleFavorite
-              ? [{ label: isFavorite ? 'お気に入りのスレから外す' : 'お気に入りのスレに足す', icon: 'star', onClick: () => onToggleFavorite(thread) }]
-              : []),
-            ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
+            ...favCopyItems(),
             ...(onNg || (onNgAuthor && thread.authorId)
               ? [
                   {
@@ -629,11 +614,7 @@ function ThreadCard({
               title="NG に追加"
               hoverClass="hover:!text-mark-danger"
               onOpenChange={setNgMenu}
-              items={[
-                { label: 'スレタイで NG', icon: 'title', onClick: () => onNg(thread) },
-                { label: `立てた人で NG(${thread.authorId})`, icon: 'person_off', onClick: () => onNgAuthor(thread) },
-                { label: '立てた人で NG(今日だけ)', icon: 'schedule', onClick: () => onNgAuthor(thread, true) },
-              ]}
+              items={ngChoices(onNg, onNgAuthor, thread.authorId)}
             />
           ) : onNg ? (
             <button type="button" onClick={() => onNg(thread)} className={`${TOOL} hover:!text-mark-danger`} title="スレタイを NG に追加">

@@ -12,7 +12,7 @@ import PostResultBox from './PostResultBox'
 import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
 import PostAccountMenu, { type PostAccountOption } from './PostAccountMenu'
-import type { UploadOptions } from '../host/uploader'
+import type { UploadedFile, UploadOptions } from '../host/uploader'
 import { isMobile } from '../utils/platform'
 import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
 import { useDialogRect } from '../hooks/useDialogRect'
@@ -29,10 +29,9 @@ interface Props {
   onOpenUrl: (url: string) => void
   onClose: () => void
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ */
-  /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined(絵文字だけ) */
-  uploader?: UploadOptions
+  uploader: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => void
+  onUploaded?: (u: UploadedFile) => void
   /** 板の書き込みの上限と、その掲示板での数え方 */
   limits?: PostLimits
   byteLength?: (text: string) => number
@@ -62,14 +61,14 @@ const INPUT = `w-full bg-c-surface2 border-c-border text-c-text-body placeholder
 
 export default function NewThreadDialog(props: Props) {
   // 書きかけがあれば戻す
-  const saved = (() => {
+  const [saved] = useState(() => {
     const raw = props.draftKey ? stashGet(props.draftKey) : undefined
     try {
       return raw ? (JSON.parse(raw) as NewThreadDraft) : undefined
     } catch {
       return undefined
     }
-  })()
+  })
   const [title, setTitle] = useState(saved?.title ?? '')
   const [name, setName] = useState(saved?.name ?? props.initialName)
   const [mail, setMail] = useState(saved?.mail ?? props.initialMail)
@@ -137,8 +136,6 @@ export default function NewThreadDialog(props: Props) {
   }
 
   useFocusTrap(boxRef, () => (lightbox ? setLightbox(undefined) : props.onClose()), { escBlursInputs: true })
-  /** スマホ: 画像のアップロードが無効のときに画像のボタンを押したら、設定のことを知らせる */
-  const [imageHint, setImageHint] = useState(false)
 
   const submitIcon = (
     <span className={`material-symbols-outlined text-base ${sending ? 'animate-spin' : ''}`}>
@@ -266,7 +263,7 @@ export default function NewThreadDialog(props: Props) {
               {media.fileInput}
               <button
                 type="button"
-                onClick={() => (media.pick ? media.pick() : setImageHint(true))}
+                onClick={() => media.pick?.()}
                 className="flex items-center gap-2 px-4 py-3 rounded-xl border border-c-border text-base text-c-text-body active:bg-c-surface2"
               >
                 <span className={`material-symbols-outlined text-2xl text-c-text-muted ${media.uploading > 0 ? 'animate-spin' : ''}`}>
@@ -274,9 +271,6 @@ export default function NewThreadDialog(props: Props) {
                 </span>
                 {media.uploading > 0 ? `アップロード中${media.progress && media.progress.total > 1 ? ` ${media.progress.current} / ${media.progress.total}` : '…'}` : '画像'}
               </button>
-              {imageHint && (
-                <span className="flex-1 text-xs text-c-text-muted">画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください</span>
-              )}
             </div>
           )}
           {measure && (

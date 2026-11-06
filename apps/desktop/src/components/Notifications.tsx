@@ -14,7 +14,7 @@ export interface AppNotification {
 /** 出しておく時間 */
 const SHOW_MS = 6000
 /** 失敗を知らせるアイコン(赤で出す)。ほかは未読・新着の色 */
-const ERROR_ICONS = new Set(['error', 'warning', 'report'])
+export const ERROR_ICONS = new Set(['error', 'warning', 'report'])
 
 function Toast({ n, onClose }: { n: AppNotification; onClose: () => void }) {
   const [hover, setHover] = useState(false)

@@ -202,9 +202,10 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
     val show = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        show.animateTo(1f, androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
+        if (Motion.reduced) show.snapTo(1f)
+        else show.animateTo(1f, androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
     }
-    fun close() { scope.launch { show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
+    fun close() { scope.launch { if (!Motion.reduced) show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
     val origin = when (at) {
         MenuAt.TopEnd -> androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
         MenuAt.TopStart -> androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
@@ -425,7 +426,7 @@ fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Floa
 fun BarSliders(p: io.github.contentsview08.obb.data.Prefs) {
     SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 44f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
     SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 44f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
-    SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.8f..1.4f, 11, "${(p.barFontScale * 100).toInt()}%", 1f) { p.barFontScale = (it * 20).toInt() / 20f }
+    SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.8f..1.4f, 11, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
 }
 
 /**
@@ -584,8 +585,8 @@ fun BoardIcon(boardUrl: String, size: androidx.compose.ui.unit.Dp, fallback: @Co
 fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     val show = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    androidx.compose.runtime.LaunchedEffect(Unit) { show.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
-    fun close() { scope.launch { show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (Motion.reduced) show.snapTo(1f) else show.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
+    fun close() { scope.launch { if (!Motion.reduced) show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
     androidx.compose.ui.window.Popup(onDismissRequest = { close() }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f * show.value))

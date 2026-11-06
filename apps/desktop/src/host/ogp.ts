@@ -8,7 +8,7 @@ import { fetch } from '@tauri-apps/plugin-http'
 import type { LogStore } from '@bbs-browser/logstore'
 import { parseOgp, type Ogp } from '../utils/ogp'
 import { decodeHtml } from '../utils/reader'
-import { isAutoLoadable } from '../utils/safeUrl'
+import { fetchCheckingRedirects, isAutoLoadable, isRedirectStatus } from '../utils/safeUrl'
 import { fetchHttpsFirst } from '../utils/httpsFirst'
 
 // 掲示板向けの Monazilla ではなく、ふつうのブラウザに近い名乗りにする(OGP を返さないサイトがあるため)
@@ -75,8 +75,10 @@ async function readHead(res: Response): Promise<Uint8Array> {
 }
 
 async function download(url: string): Promise<Ogp | null> {
-  const res = await fetchHttpsFirst(url, (u) => fetch(u, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' } }), (r) => r.ok)
-  if (!res.ok) return null
+  const res = await fetchCheckingRedirects(url, (target) =>
+    fetchHttpsFirst(target, (u) => fetch(u, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' }, maxRedirections: 0 }), (r) => r.ok || isRedirectStatus(r.status)),
+  )
+  if (!res?.ok) return null
   const type = res.headers.get('content-type') ?? ''
   if (!/html/i.test(type)) {
     void res.body?.cancel().catch(() => undefined)

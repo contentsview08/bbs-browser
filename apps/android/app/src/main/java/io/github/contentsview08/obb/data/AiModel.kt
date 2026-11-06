@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -53,6 +55,8 @@ object AiModel {
     private var session: OrtSession? = null
     private var tokenizer: AiTokenizer? = null
     private var loadJob: Job? = null
+    /** 取っている最中の通信(止めるときに切る。読んでいる間は取り消しに気づけないため) */
+    @Volatile private var loadCall: okhttp3.Call? = null
 
     private val scores = object : LinkedHashMap<String, Float>(1024, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Float>?) = size > 50000
@@ -73,8 +77,11 @@ object AiModel {
     fun start(context: Context) {
         if (status is Status.Ready || loadJob?.isActive == true) return
         val app = context.applicationContext
+        val previous = loadJob
         loadJob = scope.launch {
             try {
+                // 止めた前の分が終わるまで待つ(同じ .part に 2 本で書かないように)
+                previous?.join()
                 val d = dir(app).apply { mkdirs() }
                 val http = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
                 for (f in FILES) {
@@ -82,26 +89,35 @@ object AiModel {
                     if (out.exists() && out.length() > 0) continue
                     val tmp = File(d, out.name + ".part")
                     status = Status.Loading(0, 0, f)
-                    http.newCall(Request.Builder().url(BASE + f).build()).execute().use { res ->
-                        if (!res.isSuccessful) error("取れませんでした(HTTP ${res.code})")
-                        val body = res.body ?: error("中身がありません")
-                        val total = body.contentLength()
-                        body.byteStream().use { input ->
-                            tmp.outputStream().use { o ->
-                                val buf = ByteArray(1 shl 16)
-                                var done = 0L
-                                var last = 0L
-                                while (true) {
-                                    val n = input.read(buf)
-                                    if (n < 0) break
-                                    o.write(buf, 0, n)
-                                    done += n
-                                    if (done - last > (2 shl 20)) { last = done; status = Status.Loading(done, total, f) }
+                    try {
+                        val call = http.newCall(Request.Builder().url(BASE + f).build())
+                        loadCall = call
+                        ensureActive()
+                        call.execute().use { res ->
+                            if (!res.isSuccessful) error("取れませんでした(HTTP ${res.code})")
+                            val body = res.body ?: error("中身がありません")
+                            val total = body.contentLength()
+                            body.byteStream().use { input ->
+                                tmp.outputStream().use { o ->
+                                    val buf = ByteArray(1 shl 16)
+                                    var done = 0L
+                                    var last = 0L
+                                    while (true) {
+                                        ensureActive()
+                                        val n = input.read(buf)
+                                        if (n < 0) break
+                                        o.write(buf, 0, n)
+                                        done += n
+                                        if (done - last > (2 shl 20)) { last = done; status = Status.Loading(done, total, f) }
+                                    }
                                 }
                             }
                         }
+                        ensureActive()
+                        if (!tmp.renameTo(out)) error("置けませんでした")
+                    } finally {
+                        tmp.delete()
                     }
-                    if (!tmp.renameTo(out)) error("置けませんでした")
                 }
                 status = Status.Loading(0, 0, "用意しています")
                 withContext(one) {
@@ -112,7 +128,8 @@ object AiModel {
                 status = Status.Ready
                 pump()
             } catch (e: Throwable) {
-                status = Status.Error(e.message ?: e.toString())
+                // 止められたとき(通信を切ると IOException になる)は stop が Off にしてあるので変えない
+                if (isActive) status = Status.Error(e.message ?: e.toString())
             }
         }
     }
@@ -120,6 +137,7 @@ object AiModel {
     /** 止める(覚えた当たり具合は残す) */
     fun stop() {
         loadJob?.cancel()
+        loadCall?.cancel()
         pumping?.cancel()
         synchronized(queue) { queue.clear() }
         scope.launch(one) {

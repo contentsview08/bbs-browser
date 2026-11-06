@@ -30,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.launch
 
 /**
  * スレの画像一覧。押すとビューアー(閉じるとこの一覧に戻る)。
@@ -51,22 +49,11 @@ import kotlinx.coroutines.launch
  * 選んだ画像は下の帯からまとめて保存できる
  */
 @Composable
-fun GalleryPanel(images: List<String>, onOpen: (String) -> Unit, onToast: (String) -> Unit, onDismiss: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
+fun GalleryPanel(images: List<String>, onOpen: (String) -> Unit, save: (List<String>) -> Unit, onDismiss: () -> Unit) {
     val view = androidx.compose.ui.platform.LocalView.current
     var selected by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val selecting = selected.isNotEmpty()
     val grid = rememberLazyGridState()
-
-    fun save(list: List<String>) {
-        onToast("${list.size} 枚を保存しています…")
-        scope.launch {
-            var ok = 0
-            for (u in list) if (runCatching { io.github.contentsview08.obb.data.ImageSaver.save(context, u) }.isSuccess) ok++
-            onToast("$ok 枚を保存しました" + if (ok < list.size) "(${list.size - ok} 枚は保存できませんでした)" else "")
-        }
-    }
 
     /** 指の位置にある画像の番目(なければ null) */
     fun indexAt(p: Offset): Int? = grid.layoutInfo.visibleItemsInfo.firstOrNull { item ->

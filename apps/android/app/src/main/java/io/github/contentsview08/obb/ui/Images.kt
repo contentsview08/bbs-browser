@@ -97,8 +97,8 @@ fun Thumbnails(
     var blurred by rememberSaveable(urls) { mutableStateOf(blur) }
     FlowRow(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (url in urls) Thumbnail(url, autoLoad, if (blurred) { _ -> blurred = false } else onOpen, blurred, size = size)
-        // YouTube は動画の絵(i.ytimg.com)に再生の印を重ねる。押すと YouTube で開く
-        for ((id, url) in youtube) Thumbnail("https://i.ytimg.com/vi/$id/hqdefault.jpg", autoLoad, { onUrl(url) }, blurred, play = true, size = size)
+        // YouTube は動画の絵(i.ytimg.com)に再生の印を重ねる。押すと YouTube で開く(ぼかしの間は、画像と同じくぼかしを解くだけ)
+        for ((id, url) in youtube) Thumbnail("https://i.ytimg.com/vi/$id/hqdefault.jpg", autoLoad, { if (blurred) blurred = false else onUrl(url) }, blurred, play = true, size = size)
     }
 }
 

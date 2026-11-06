@@ -1,12 +1,18 @@
 package io.github.contentsview08.obb.data
 
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import io.github.contentsview08.obb.bbs.decodeHtml
 import java.net.URI
 import java.util.concurrent.TimeUnit
@@ -17,30 +23,39 @@ class Ogp(val title: String?, val description: String?, val image: String?, val 
 /**
  * リンクのカード用に、ページを取ってきて OGP を読む(PC 版の host/ogp.ts・utils/ogp.ts と同じ)。
  * - 同時に取りに行くのは 4 件まで。ページは頭の部分(256KB まで、</head> が見えたらそこまで)だけ読む
- * - 取ったものはアプリを閉じるまで覚えておく(同じページを何度も取りに行かない)
- * - 家の中のアドレスは、表示しただけでは読みに行かない(isAutoLoadable)
+ * - 取ったものはアプリを閉じるまで覚えておく(同じページを何度も取りに行かない)。取れなかったものは少したったら取り直す
+ * - 家の中のアドレスは、表示しただけでは読みに行かない(isAutoLoadable。リダイレクトの行き先も)
  */
 object OgpFetcher {
     // 掲示板向けの Monazilla ではなく、ふつうのブラウザに近い名乗りにする(OGP を返さないサイトがあるため)
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) bbs-native/0.1.0"
     private const val HEAD_BYTES = 256 * 1024
+    /** 取れなかったページを取り直すまでの時間(スクロールで通るたびに取りに行かないように) */
+    private const val RETRY_MS = 10L * 60 * 1000
     private val client by lazy {
-        OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).followRedirects(true).addInterceptor(HttpsFirst).build()
+        OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).followRedirects(false).addInterceptor(HttpsFirst).build()
     }
     private val limit = Semaphore(4)
-    private val memory = HashMap<String, CompletableDeferred<Ogp?>>()
+    // 取得は画面の行と切り離す(行が画面から外れて取り消されても、取れなかったことにしない)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val memory = HashMap<String, Deferred<Ogp?>>()
 
     suspend fun fetch(url: String): Ogp? {
         if (!isAutoLoadable(url)) return null
-        val (d, first) = synchronized(memory) {
-            memory[url]?.let { it to false } ?: CompletableDeferred<Ogp?>().also { memory[url] = it }.let { it to true }
+        val d = synchronized(memory) {
+            memory.getOrPut(url) {
+                scope.async {
+                    val ogp = runCatching { limit.withPermit { load(url) } }.getOrNull()
+                    if (ogp == null) scope.launch { delay(RETRY_MS); synchronized(memory) { memory.remove(url) } }
+                    ogp
+                }
+            }
         }
-        if (first) d.complete(runCatching { limit.withPermit { load(url) } }.getOrNull())
         return d.await()
     }
 
     private suspend fun load(url: String): Ogp? = withContext(Dispatchers.IO) {
-        client.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).header("Accept", "text/html").build()).execute().use { res ->
+        openCheckingRedirects(client, url) { Request.Builder().url(it).header("User-Agent", USER_AGENT).header("Accept", "text/html").build() }?.use { res ->
             val type = res.header("Content-Type") ?: ""
             if (!res.isSuccessful || !type.contains("html", true)) return@use null
             val bytes = readHead(res.body?.byteStream() ?: return@use null)
@@ -88,6 +103,23 @@ object OgpFetcher {
 }
 
 /**
+ * リダイレクトを 1 段ずつたどり、行き先ごとに isAutoLoadable を確かめて取る(client は followRedirects(false) のもの)。
+ * 読んではいけない行き先・行き先がない・たどりすぎのときは、そこへは通信せずに null
+ */
+internal fun openCheckingRedirects(client: OkHttpClient, url: String, request: (String) -> Request): Response? {
+    var current = url
+    repeat(5 + 1) {
+        val res = client.newCall(request(current)).execute()
+        if (!res.isRedirect) return res
+        val next = res.header("Location")?.let { res.request.url.resolve(it) }?.toString()
+        res.close()
+        if (next == null || !isAutoLoadable(next)) return null
+        current = next
+    }
+    return null
+}
+
+/**
  * レスに書かれた URL を、画面に出しただけで(押さずに)読みに行ってよいか(PC 版の safeUrl.ts と同じ)。
  * 家の中のネットワーク・自分の端末のアドレス・標準以外のポートは読まない(ルーターなどを勝手に叩かないように)
  */
@@ -95,7 +127,8 @@ fun isAutoLoadable(url: String): Boolean {
     val u = runCatching { URI(url) }.getOrNull() ?: return false
     if (u.scheme?.lowercase() !in setOf("http", "https")) return false
     if (u.port != -1) return false
-    val host = u.host?.lowercase() ?: return false
+    // 末尾の点は同じ名前を指す(localhost. も localhost)
+    val host = u.host?.lowercase()?.trimEnd('.') ?: return false
     if (host == "localhost" || Regex("\\.(?:local|localhost|lan|home|internal|intranet|corp|home\\.arpa)$").containsMatchIn(host)) return false
     if (host.startsWith("[")) return false
     Regex("^([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})$").find(host)?.let { m ->

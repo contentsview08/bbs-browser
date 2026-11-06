@@ -1,8 +1,13 @@
 package io.github.contentsview08.obb.data
 
 import android.util.Base64
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,13 +22,24 @@ object Favicons {
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) bbs-native/0.1.0"
     private const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
     private val client by lazy { OkHttpClient.Builder().addInterceptor(HttpsFirst).connectTimeout(8, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).followRedirects(true).build() }
-    private val memory = HashMap<String, CompletableDeferred<ByteArray?>>()
+    /** 取れなかった板を取り直すまでの時間(スクロールで行が出るたびに取りに行かないように) */
+    private const val RETRY_MS = 10L * 60 * 1000
+    // 取得は画面の行と切り離す(行が画面から外れて取り消されても、取れなかったことにしない)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val memory = HashMap<String, Deferred<ByteArray?>>()
     var db: LogDb? = null
 
     /** 板のファビコン(画像のバイト列)。取れなければ null */
     suspend fun of(boardUrl: String): ByteArray? {
-        val (d, first) = synchronized(memory) { memory[boardUrl]?.let { it to false } ?: CompletableDeferred<ByteArray?>().also { memory[boardUrl] = it }.let { it to true } }
-        if (first) d.complete(runCatching { load(boardUrl) }.getOrNull())
+        val d = synchronized(memory) {
+            memory.getOrPut(boardUrl) {
+                scope.async {
+                    val bytes = runCatching { load(boardUrl) }.getOrNull()
+                    if (bytes == null) scope.launch { delay(RETRY_MS); synchronized(memory) { memory.remove(boardUrl) } }
+                    bytes
+                }
+            }
+        }
         return d.await()
     }
 

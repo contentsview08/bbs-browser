@@ -566,7 +566,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
         while (true) {
             delay(prefs.autoRefreshSec * 1000L)
-            if (!page.loading) vm.refreshThread(page, quiet = true)
+            // アプリが裏にある間は掲示板へ取りに行かない
+            if (vm.appVisible && !page.loading) vm.refreshThread(page, quiet = true)
         }
     }
     // 画面全体(本文とポップアップ)で指の動きを受ける: なぞる操作と、押した所の高さ(ポップアップを押した所の真上に出すため)
@@ -942,7 +943,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
 
     // 画像一覧(ビューアーを閉じたら一覧に戻る。一覧は閉じない)
-    if (gallery) GalleryPanel(index.allImages, onOpen = { viewer = it }, onToast = { vm.toast = it }) { gallery = false }
+    if (gallery) GalleryPanel(index.allImages, onOpen = { viewer = it }, save = vm::saveImages) { gallery = false }
 
     if (nextSheet) {
         CenterPanel(onDismiss = { nextSheet = false }) {
@@ -955,12 +956,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 文字の大きさ・余白(︙ から。今のスマホ版と同じ: レスの本文・レスの頭・行間・レスの上下の余白・ヘッダーとフッター)
     if (fontDialog) SizeDialog({ fontDialog = false; fontOnly = false }) {
         val pr = vm.prefs
-        if (fontOnly) SizeSlider("画面全体の文字", pr.fontScale, 0.85f..1.3f, 8, "${(pr.fontScale * 100).toInt()}%", 1f) { pr.fontScale = (it * 20).toInt() / 20f }
+        if (fontOnly) SizeSlider("画面全体の文字", pr.fontScale, 0.85f..1.3f, 8, "${percent(pr.fontScale)}%", 1f) { pr.fontScale = snapTo(it, 20) }
         else {
-            SizeSlider("レスの本文", pr.bodyScale, 0.8f..1.4f, 11, "${(pr.bodyScale * 100).toInt()}%", 1f) { pr.bodyScale = (it * 20).toInt() / 20f }
-            SizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 0.8f..1.4f, 11, "${(pr.postHeadScale * 100).toInt()}%", 1f) { pr.postHeadScale = (it * 20).toInt() / 20f }
-            SizeSlider("レスの本文の行間", pr.lineHeight, 1.2f..1.9f, 13, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = (it * 20).toInt() / 20f }
-            SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..24f, 23, "${pr.postPad}dp", 8f) { pr.postPad = it.toInt() }
+            SizeSlider("レスの本文", pr.bodyScale, 0.8f..1.4f, 11, "${percent(pr.bodyScale)}%", 1f) { pr.bodyScale = snapTo(it, 20) }
+            SizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 0.8f..1.4f, 11, "${percent(pr.postHeadScale)}%", 1f) { pr.postHeadScale = snapTo(it, 20) }
+            SizeSlider("レスの本文の行間", pr.lineHeight, 1.2f..1.9f, 13, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = snapTo(it, 20) }
+            SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..24f, 23, "${pr.postPad}dp", 8f) { pr.postPad = snapInt(it) }
             BarSliders(pr)
         }
     }

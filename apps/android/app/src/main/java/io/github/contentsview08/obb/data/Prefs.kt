@@ -393,10 +393,10 @@ class Prefs(context: Context) {
         o.keys().asSequence().associateWith { BoardMeta.fromJson(o.getJSONObject(it)) }
     }.getOrDefault(emptyMap())
 
-    /** バックアップ: 設定を全部 JSON に(最後に開いた板は除く) */
+    /** バックアップ: 設定を JSON に(最後に開いた板と秘密の値は除く) */
     fun export(): JSONObject {
         val o = JSONObject()
-        for ((k, v) in sp.all) if (k != "lastBoardUrl" && k != "lastBoardName") o.put(k, v)
+        for ((k, v) in sp.all) if (inBackup(k)) o.put(k, v)
         return o
     }
 
@@ -404,6 +404,7 @@ class Prefs(context: Context) {
     fun import(o: JSONObject) {
         val e = sp.edit()
         for (k in o.keys()) {
+            if (!inBackup(k)) continue
             when (val v = o.get(k)) {
                 is Boolean -> e.putBoolean(k, v)
                 is Int -> e.putInt(k, v)
@@ -416,6 +417,11 @@ class Prefs(context: Context) {
     }
 
     companion object {
+        /** バックアップに入れない項目: 最後に開いた板と、アカウント・API キー(ファイルは人に渡したりクラウドに置いたりするので) */
+        private val NOT_IN_BACKUP = setOf("lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId")
+
+        internal fun inBackup(key: String) = key !in NOT_IN_BACKUP
+
         /** なぞる操作の既定(今のスマホ版と同じ) */
         val DEFAULT_GESTURES = mapOf(
             "list" to mapOf("right" to "drawer", "left" to "forward", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "newThread", "left,right" to "quick", "right,left" to "quick"),

@@ -38,7 +38,8 @@ export function isAutoLoadable(url: string): boolean {
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
   // 標準以外のポートは、家の中の機器の管理画面などのことが多いので読まない
   if (u.port !== '') return false
-  const host = u.hostname.toLowerCase()
+  // 末尾の点は同じ名前を指す(localhost. も localhost)
+  const host = u.hostname.toLowerCase().replace(/\.+$/, '')
   if (host === 'localhost' || LOCAL_SUFFIX.test(host)) return false
   // IPv6 は [ ] で囲まれる。自分の PC・家の中・リンクローカルなどを読まない(ふつうのサイトは名前で書かれる)
   if (host.startsWith('[')) return false
@@ -48,4 +49,35 @@ export function isAutoLoadable(url: string): boolean {
   if (/^[0-9.]+$/.test(host) || /^0x/i.test(host) || /\.0x/i.test(host)) return false
   // 点のない名前(家の中の機器の名前)は読まない
   return host.includes('.')
+}
+
+/** リダイレクトの応答か */
+export function isRedirectStatus(status: number): boolean {
+  return [301, 302, 303, 307, 308].includes(status)
+}
+
+const MAX_REDIRECTS = 5
+
+/**
+ * リダイレクトを 1 段ずつたどり、行き先ごとに isAutoLoadable を確かめて取る(send は自動でたどらない通信)。
+ * 読んではいけない行き先・行き先がない・たどりすぎのときは、そこへは通信せずに null
+ */
+export async function fetchCheckingRedirects(url: string, send: (url: string) => Promise<Response>): Promise<Response | null> {
+  let current = url
+  for (let i = 0; i <= MAX_REDIRECTS; i++) {
+    const res = await send(current)
+    if (!isRedirectStatus(res.status)) return res
+    void res.body?.cancel().catch(() => undefined)
+    const location = res.headers.get('location')
+    if (!location) return null
+    let next: string
+    try {
+      next = new URL(location, res.url || current).href
+    } catch {
+      return null
+    }
+    if (!isAutoLoadable(next)) return null
+    current = next
+  }
+  return null
 }

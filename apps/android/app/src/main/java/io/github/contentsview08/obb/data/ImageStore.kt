@@ -15,6 +15,46 @@ import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * 1 つの鍵の仕事を 1 回だけ、サムネイルかビューアーの枠で動かす。サムネイルの枠で待っている間にビューアーから頼まれたら、
+ * ビューアーの枠にも並べ、先に順番が来たほうが動かす(順番が来ても動かしたあとなら、すぐ枠を返す)
+ */
+internal class DownloadLanes<T>(private val scope: CoroutineScope, thumbs: Int, viewers: Int) {
+    private class Entry<T>(var viewer: Boolean) {
+        val result = CompletableDeferred<T>()
+        val taken = AtomicBoolean(false)
+    }
+
+    private val thumbSlots = Semaphore(thumbs)
+    private val viewerSlots = Semaphore(viewers)
+    private val entries = HashMap<String, Entry<T>>()
+
+    fun isRunning(key: String) = synchronized(entries) { key in entries }
+
+    fun start(key: String, viewer: Boolean, work: suspend () -> T): CompletableDeferred<T> = synchronized(entries) {
+        val running = entries[key]
+        if (running == null) {
+            Entry<T>(viewer).also { entries[key] = it; line(key, it, viewer, work) }.result
+        } else {
+            if (viewer && !running.viewer) { running.viewer = true; line(key, running, true, work) }
+            running.result
+        }
+    }
+
+    private fun line(key: String, e: Entry<T>, viewer: Boolean, work: suspend () -> T) {
+        scope.launch {
+            (if (viewer) viewerSlots else thumbSlots).withPermit {
+                if (e.taken.compareAndSet(false, true)) {
+                    val r = work()
+                    synchronized(entries) { entries.remove(key) }
+                    e.result.complete(r)
+                }
+            }
+        }
+    }
+}
 
 /**
  * 画像のダウンロードと置き場(サムネイル・ビューアー・画像一覧・保存で共通)。
@@ -37,9 +77,7 @@ object ImageStore {
 
     private lateinit var dir: File
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val thumbSlots = Semaphore(4)
-    private val viewerSlots = Semaphore(2)
-    private val inFlight = HashMap<String, CompletableDeferred<File?>>()
+    private val lanes = DownloadLanes<File?>(scope, thumbs = 4, viewers = 2)
     private const val MAX_BYTES = 300L * 1024 * 1024
 
     private val client by lazy {
@@ -70,7 +108,11 @@ object ImageStore {
     fun request(url: String, viewer: Boolean = false) {
         cached(url)?.let { f -> if (states[url] !is State.Done) states[url] = State.Done(f); return }
         val s = states[url]
-        if (s is State.Queued || s is State.Loading) return
+        if (s is State.Queued || s is State.Loading) {
+            // サムネイルの順番待ちをビューアーの枠へ移す
+            if (viewer) start(url, viewer = true)
+            return
+        }
         states[url] = State.Queued
         start(url, viewer)
     }
@@ -78,24 +120,11 @@ object ImageStore {
     /** ファイルが取れるまで待つ(保存など)。取れなければ例外 */
     suspend fun get(url: String): File {
         cached(url)?.let { return it }
-        val d = synchronized(inFlight) { inFlight[url] } ?: run {
-            withContext(Dispatchers.Main) { states[url] = State.Queued }
-            start(url, viewer = true)
-        }
-        return d.await() ?: error((states[url] as? State.Failed)?.message ?: "取れませんでした")
+        if (!lanes.isRunning(url)) withContext(Dispatchers.Main) { states[url] = State.Queued }
+        return start(url, viewer = true).await() ?: error((states[url] as? State.Failed)?.message ?: "取れませんでした")
     }
 
-    private fun start(url: String, viewer: Boolean): CompletableDeferred<File?> {
-        synchronized(inFlight) { inFlight[url]?.let { return it } }
-        val d = CompletableDeferred<File?>()
-        synchronized(inFlight) { inFlight[url] = d }
-        scope.launch {
-            val result = (if (viewer) viewerSlots else thumbSlots).withPermit { download(url) }
-            synchronized(inFlight) { inFlight.remove(url) }
-            d.complete(result)
-        }
-        return d
-    }
+    private fun start(url: String, viewer: Boolean): CompletableDeferred<File?> = lanes.start(url, viewer) { download(url) }
 
     private suspend fun setState(url: String, s: State) = withContext(Dispatchers.Main) { states[url] = s }
 

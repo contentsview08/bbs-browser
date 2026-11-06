@@ -117,6 +117,20 @@ describe('fetchPosts の差分取得', () => {
     expect(next.status).toBe('reset')
     expect(next.posts[1].body).toBe('あぼーん')
   })
+
+  it.each([
+    ['空', new Uint8Array()],
+    ['改行なし', new TextEncoder().encode('Service Unavailable')],
+  ])('全件の取り直しで本文が%sなら、手元のログを置き換えない', async (_, body) => {
+    const { ctx, update } = fakeServer(full)
+    const first = await twoChConnector.fetchPosts(thread, null, ctx)
+    update(body, 'Thu, 01 Oct 2026 00:08:00 GMT')
+
+    const next = await twoChConnector.fetchPosts(thread, first.cursor, ctx)
+    expect(next.status).toBe('notModified')
+    expect(next.posts).toHaveLength(0)
+    expect(next.cursor).toEqual(first.cursor)
+  })
 })
 
 describe('resolveUrl', () => {

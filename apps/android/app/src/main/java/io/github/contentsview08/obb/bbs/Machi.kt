@@ -90,7 +90,7 @@ object Machi {
     }
 
     /** 板の設定にあたるもの(SETTING.TXT には板名も名無しの名前も入っていないので、板名だけ) */
-    suspend fun setting(boardUrl: String): Map<String, String> = runCatching { mapOf("BBS_TITLE" to boardNameOf(bbsOf(boardUrl))) }.getOrDefault(emptyMap())
+    suspend fun setting(boardUrl: String): Map<String, String>? = runCatching { mapOf("BBS_TITLE" to boardNameOf(bbsOf(boardUrl))) }.getOrNull()
 
     /** 板の一覧はトップページ(https://machi.to/)から。読めなければ知っている板 */
     suspend fun listBoards(): List<Board> {

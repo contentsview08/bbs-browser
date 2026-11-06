@@ -29,6 +29,12 @@ data class PostHistoryEntry(val thread: ThreadSummary, val no: Int?, val body: S
 /** 閲覧履歴の 1 行 */
 data class HistoryEntry(val thread: ThreadSummary, val readNo: Int, val readAt: Long)
 
+/** 新着のあるスレだけを未読の多い順に。手元のレス数は取得するまで増えないので、掲示板のレス数を確かめてあればその数で比べる */
+internal fun unreadEntries(entries: List<HistoryEntry>, counts: Map<String, Int>): List<HistoryEntry> {
+    fun total(e: HistoryEntry) = counts[e.thread.id] ?: e.thread.postCount
+    return entries.filter { total(it) > it.readNo }.sortedByDescending { total(it) - it.readNo }
+}
+
 /**
  * ログの保存(専ブラの packages/logstore にあたる)。テーブルは専ブラと同じ SQL(assets/migrations、専ブラの
  * packages/logstore/migrations の写し)で作るので、形は PC 版と同じ。版の番号 = 流したマイグレーションの数
@@ -259,10 +265,10 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
 
     // ── お気に入りのスレ ──
 
-    /** お気に入りのスレ(手元の既読・レス数つき。開いたことがなければ 0) */
+    /** お気に入りのスレ(手元の既読・見た時刻・レス数つき。開いたことがなければ 0) */
     suspend fun favoriteThreads(): List<HistoryEntry> = io {
         readableDatabase.rawQuery(
-            "SELECT f.board_url, f.key, f.title, COALESCE(t.post_count, 0), COALESCE(t.read_no, 0), f.added_at, f.created_at FROM favorite_threads f LEFT JOIN threads t ON t.board_url = f.board_url AND t.key = f.key ORDER BY f.sort, f.added_at",
+            "SELECT f.board_url, f.key, f.title, COALESCE(t.post_count, 0), COALESCE(t.read_no, 0), COALESCE(t.read_at, 0), f.created_at FROM favorite_threads f LEFT JOIN threads t ON t.board_url = f.board_url AND t.key = f.key ORDER BY f.sort, f.added_at",
             null,
         ).use { c ->
             buildList {

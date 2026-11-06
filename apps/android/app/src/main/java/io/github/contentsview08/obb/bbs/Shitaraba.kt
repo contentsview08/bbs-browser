@@ -59,11 +59,11 @@ object Shitaraba {
     // ── 板の設定 ──
 
     /** setting.cgi は「キー=値」の行。板名は BBS_TITLE、既定の名前は BBS_NONAME_NAME(2ch の SETTING.TXT と同じ鍵なので、そのまま使える) */
-    suspend fun setting(boardUrl: String): Map<String, String> = runCatching {
+    suspend fun setting(boardUrl: String): Map<String, String>? = runCatching {
         val (dir, bbs) = dirOf(boardUrl)
         val res = Http.get("$ORIGIN/bbs/api/setting.cgi/$dir/$bbs/")
-        if (res.status != 200) emptyMap() else parseSetting(decode(res))
-    }.getOrDefault(emptyMap())
+        if (res.status != 200) null else parseSetting(decode(res))
+    }.getOrNull()
 
     private fun parseSetting(text: String): Map<String, String> =
         text.lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
@@ -170,8 +170,8 @@ object Shitaraba {
         val written = Regex("書き?こみました")
         if (written.containsMatchIn(title) || written.containsMatchIn(text)) return PostResult.Ok("書きこみました", null)
         val err = Regex("ERROR[:：]?\\s*([^\\n]{0,200})", RegexOption.IGNORE_CASE).find(text)
-        val message = err?.value?.trim() ?: title.ifEmpty { text.take(200).ifEmpty { "書き込めませんでした" } }
-        return PostResult.Error(if (res.status >= 400 && message.isBlank()) "HTTP ${res.status}" else message)
+        val message = err?.value?.trim() ?: title.ifEmpty { text.take(200) }
+        return PostResult.Error(message.ifEmpty { if (res.status >= 400) "HTTP ${res.status}" else POST_FAILED })
     }
 
     /** EUC-JP で送ったときのバイト数(書き込む前に長すぎないか確かめる目安) */
@@ -186,10 +186,11 @@ object Shitaraba {
 
 /**
  * PC 版の表(WHATWG の EUC-JP)で符号の決まっている文字のうち、Java・Android の EUC-JP では別の扱いになるもの。
- * 記号は同じ符号を別の文字に割り当てていて、丸数字・ローマ数字(13 区)は表にない
+ * 記号は同じ符号を別の文字に割り当てていて、13 区(丸数字など)と F9〜FC の段(IBM 拡張)は表にないか 3 バイトになる
  */
 private val EUC_FIXED: Map<Int, ByteArray> = buildMap {
     fun put2(cp: Int, code: Int) = put(cp, byteArrayOf((code shr 8).toByte(), code.toByte()))
+    fun putRun(code: Int, chars: String) = chars.forEachIndexed { i, c -> put2(c.code, code + i) }
     put2(0xFF5E, 0xA1C1) // ～
     put2(0xFF0D, 0xA1DD) // －
     put2(0x2225, 0xA1C2) // ∥
@@ -199,6 +200,16 @@ private val EUC_FIXED: Map<Int, ByteArray> = buildMap {
     put2(0xFFE2, 0xA2CC) // ￢
     for (i in 0 until 20) put2(0x2460 + i, 0xADA1 + i) // ①〜⑳
     for (i in 0 until 10) put2(0x2160 + i, 0xADB5 + i) // Ⅰ〜Ⅹ
+    putRun(0xADC0, "㍉㌔㌢㍍㌘㌧㌃㌶㍑㍗㌍㌦㌣㌫㍊㌻㎜㎝㎞㎎㎏㏄㎡")
+    putRun(0xADDF, "㍻〝〟№㏍℡㊤㊥㊦㊧㊨㈱㈲㈹㍾㍽㍼")
+    putRun(0xADF3, "∮∑")
+    putRun(0xADF8, "∟⊿")
+    putRun(0xF9A1, "纊褜鍈銈蓜俉炻昱棈鋹曻彅丨仡仼伀伃伹佖侒侊侚侔俍偀倢俿倞偆偰偂傔僴僘兊兤冝冾凬刕劜劦勀勛匀匇匤卲厓厲叝﨎咜咊咩哿喆坙坥垬埈埇﨏塚增墲夋奓奛奝奣妤妺孖寀甯寘寬尞岦岺峵崧嵓﨑嵂嵭嶸嶹巐弡弴彧德")
+    putRun(0xFAA1, "忞恝悅悊惞惕愠惲愑愷愰憘戓抦揵摠撝擎敎昀昕昻昉昮昞昤晥晗晙晴晳暙暠暲暿曺朎朗杦枻桒柀栁桄棏﨓楨﨔榘槢樰橫橆橳橾櫢櫤毖氿汜沆汯泚洄涇浯涖涬淏淸淲淼渹湜渧渼溿澈澵濵瀅瀇瀨炅炫焏焄煜煆煇凞燁燾犱")
+    putRun(0xFBA1, "犾猤猪獷玽珉珖珣珒琇珵琦琪琩琮瑢璉璟甁畯皂皜皞皛皦益睆劯砡硎硤硺礰礼神祥禔福禛竑竧靖竫箞精絈絜綷綠緖繒罇羡羽茁荢荿菇菶葈蒴蕓蕙蕫﨟薰蘒﨡蠇裵訒訷詹誧誾諟諸諶譓譿賰賴贒赶﨣軏﨤逸遧郞都鄕鄧釚")
+    putRun(0xFCA1, "釗釞釭釮釤釥鈆鈐鈊鈺鉀鈼鉎鉙鉑鈹鉧銧鉷鉸鋧鋗鋙鋐﨧鋕鋠鋓錥錡鋻﨨錞鋿錝錂鍰鍗鎤鏆鏞鏸鐱鑅鑈閒隆﨩隝隯霳霻靃靍靏靑靕顗顥飯飼餧館馞驎髙髜魵魲鮏鮱鮻鰀鵰鵫鶴鸙黑")
+    putRun(0xFCF1, "ⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹ")
+    putRun(0xFCFC, "￤＇＂")
 }
 
 /** EUC-JP にない字は「&#番号;」にして送る(PC 版の eucjp.ts と同じ) */
@@ -212,7 +223,7 @@ private fun encodeEucJp(text: String): ByteArray {
         val bytes: ByteArray? = EUC_FIXED[cp] ?: if (cp in NOT_IN_JIS_TABLE) null else runCatching {
             val bb: ByteBuffer = enc.encode(CharBuffer.wrap(ch))
             ByteArray(bb.remaining()).also { bb.get(it) }
-        }.getOrNull()
+        }.getOrNull()?.takeIf { it.size < 3 } // 3 バイトは補助漢字(PC 版は使わない)
         out.write(bytes ?: "&#$cp;".toByteArray(Charsets.US_ASCII))
         i += Character.charCount(cp)
     }

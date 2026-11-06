@@ -80,14 +80,14 @@ object HonoBbs {
 
     private suspend fun apiBaseOf(origin: String): String {
         synchronized(apiBases) { apiBases[origin]?.let { return it } }
-        val found = runCatching {
-            val res = Http.get("$origin/")
-            if (res.status != 200) null
-            else Regex("<meta\\s+name=[\"']bbs-api[\"']\\s+content=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
-                .find(String(res.body, Charsets.UTF_8))?.groupValues?.get(1)?.takeIf { it.startsWith("http") }?.trimEnd('/')
-        }.getOrNull()
+        val res = runCatching { Http.get("$origin/") }.getOrNull()?.takeIf { it.status == 200 }
+        val found = res?.let {
+            Regex("<meta\\s+name=[\"']bbs-api[\"']\\s+content=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+                .find(String(it.body, Charsets.UTF_8))?.groupValues?.get(1)?.takeIf { u -> u.startsWith("http") }?.trimEnd('/')
+        }
         val base = found ?: "${origin.replaceFirst(Regex("^(https?://)"), "$1api.")}/api/v1"
-        synchronized(apiBases) { apiBases[origin] = base }
+        // ページを読めなかったときの決めつけは覚えない(一時的な失敗で、再起動まで違う API へ行き続けないように)
+        if (res != null) synchronized(apiBases) { apiBases[origin] = base }
         return base
     }
 
@@ -135,9 +135,9 @@ object HonoBbs {
         return info
     }
 
-    /** 2ch の SETTING.TXT と同じ形にして返す(既定の名前・本文の上限) */
-    suspend fun setting(boardUrl: String): Map<String, String> {
-        val i = runCatching { boardInfo(boardUrl) }.getOrNull() ?: return emptyMap()
+    /** 2ch の SETTING.TXT と同じ形にして返す(既定の名前・本文の上限)。読めなければ null */
+    suspend fun setting(boardUrl: String): Map<String, String>? {
+        val i = runCatching { boardInfo(boardUrl) }.getOrNull() ?: return null
         return buildMap {
             i.noname?.let { put("BBS_NONAME_NAME", it) }
             i.maxLength?.let { put("BBS_MESSAGE_COUNT", it.toString()) }
@@ -145,8 +145,8 @@ object HonoBbs {
         }
     }
 
-    /** 板の名前(URL で開いたときに使う) */
-    suspend fun boardName(boardUrl: String): String? = runCatching { boardInfo(boardUrl)?.name }.getOrNull()
+    /** 板の名前(URL で開いたときに使う)。板がなければ例外(404) */
+    suspend fun boardName(boardUrl: String): String? = boardInfo(boardUrl)?.name
 
     /** 板の一覧。サイトの入口は web の URL(https://<web>/boards) */
     suspend fun listBoards(siteUrl: String): List<Board> {

@@ -29,6 +29,7 @@ import io.github.contentsview08.obb.data.NgRule
 import io.github.contentsview08.obb.data.PostHistoryEntry
 import io.github.contentsview08.obb.data.Prefs
 import io.github.contentsview08.obb.data.ThreadState
+import io.github.contentsview08.obb.data.unreadEntries
 import io.github.contentsview08.obb.ui.Palette
 import io.github.contentsview08.obb.ui.PostLinks
 import io.github.contentsview08.obb.ui.RenderOptions
@@ -92,8 +93,12 @@ class ReplyState(val boardUrl: String = "") {
     var auth by mutableStateOf<PostResult.Auth?>(null)
     /** 5ch の書き込み確認(承諾したら送り直す) */
     var confirm by mutableStateOf<PostResult.Confirm?>(null)
+    /** 確認の出た書き込みの中身。承諾で送るのは confirm の fields なので、書き込み欄の本文とは限らない(すぐ書き込むの定型文など) */
+    var confirmPost: ConfirmPost? = null
     var draftLoaded = false
 }
+
+class ConfirmPost(val body: String, val name: String, val mail: String, val quick: Boolean)
 
 /** 書き込み欄で選んだ画像 1 枚(stamp は上げる前の確かめで選んだ描き込み) */
 class UploadItem(val uri: android.net.Uri, val stamp: io.github.contentsview08.obb.data.Uploader.Stamp? = null) {
@@ -104,6 +109,8 @@ class UploadItem(val uri: android.net.Uri, val stamp: io.github.contentsview08.o
         data class Failed(val message: String) : State
     }
     var state by mutableStateOf<State>(State.Waiting)
+    /** 今回まとめて上げている 1 枚か(何枚目かを数える) */
+    var inBatch = true
 }
 
 /** 画面の積み重ね(戻るで 1 つ前へ)。左のメニューから開くものは、積み重ねを入れ替える */
@@ -360,9 +367,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 remoteCounts = counts
-                // 新着のあるものだけ、未読の多い順
-                allUnread = hist.filter { (counts[it.thread.id] ?: it.thread.postCount) > it.readNo }
-                    .sortedByDescending { (counts[it.thread.id] ?: it.thread.postCount) - it.readNo }
+                allUnread = unreadEntries(hist, counts)
             } finally {
                 checking = false
             }
@@ -399,10 +404,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val states = db.threadStates(url)
                 for (e in list) {
                     val r = states[e.thread.key]?.readNo ?: e.readNo
-                    if (e.thread.postCount > r) out += HistoryEntry(e.thread, r, e.readAt)
+                    out += HistoryEntry(e.thread, r, e.readAt)
                 }
             }
-            allUnread = out.sortedByDescending { it.thread.postCount - it.readNo }
+            allUnread = unreadEntries(out, remoteCounts)
         }
     }
 
@@ -605,6 +610,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         list.add(j, list.removeAt(i))
         favorites = list
         viewModelScope.launch { db.reorderFavorites(list.map { it.url }) }
+    }
+
+    /** 画像をまとめて保存する(画像一覧を閉じても続ける) */
+    fun saveImages(urls: List<String>) {
+        toast = "${urls.size} 枚を保存しています…"
+        viewModelScope.launch {
+            val ok = io.github.contentsview08.obb.data.saveEach(urls) { io.github.contentsview08.obb.data.ImageSaver.save(getApplication<Application>(), it) }
+            toast = "$ok 枚を保存しました" + if (ok < urls.size) "(${urls.size - ok} 枚は保存できませんでした)" else ""
+        }
     }
 
     /** バックアップを書き出す: 設定・お気に入り板・お気に入りのスレ・サイト・NG(設定に入っている) */
@@ -851,10 +865,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (rules.isEmpty()) { page.aiNg = emptyMap(); return }
         val posts = page.index.posts
         val overrides = prefs.aiNgOverrides
+        // 学ぶのは全部の条件について(有効な条件だけだと、あとで有効にした条件の判定が印を付け直すまで学ばれない)
+        val allRules = prefs.aiNgRules
         viewModelScope.launch {
             val result = withContext(Dispatchers.Default) {
                 val models = learned?.takeIf { it.first === overrides }?.second
-                    ?: io.github.contentsview08.obb.data.trainRules(rules, overrides).also { learned = overrides to it }
+                    ?: io.github.contentsview08.obb.data.trainRules(allRules, overrides).also { learned = overrides to it }
                 // スレの話題(スレタイと 1 レス目の頭)。文脈つきの条件に添える
                 val context = io.github.contentsview08.obb.data.threadContextOf(page.title, posts.firstOrNull()?.body)
                 io.github.contentsview08.obb.data.AiModel.request(posts.asReversed(), rules.map { it.prompt }, rules.map { if (it.withContext) context else null })
@@ -920,13 +936,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
     )
 
+    /** 組み立て直すスレ(開いているものと、「進む」で開き直すもの) */
+    private fun threadPages() = stack.filterIsInstance<Page.Thread>() + listOfNotNull(forwardPage)
+
     private fun rerenderAll() {
-        for (p in stack.toList()) if (p is Page.Thread && p.loaded) viewModelScope.launch { setPosts(p, renderSeq[p]?.second ?: p.index.posts) }
+        for (p in threadPages()) if (p.loaded) viewModelScope.launch { setPosts(p, renderSeq[p]?.second ?: p.index.posts) }
     }
 
     private fun reapplyNg() {
         val rules = prefs.ngRules
-        for (p in stack) if (p is Page.Thread) viewModelScope.launch { p.ngNos = withContext(Dispatchers.Default) { ngOf(p.index.posts, rules, p.summary.boardUrl) } }
+        for (p in threadPages()) viewModelScope.launch { p.ngNos = withContext(Dispatchers.Default) { ngOf(p.index.posts, rules, p.summary.boardUrl) } }
     }
 
     fun markRead(page: Page.Thread, no: Int) {
@@ -985,6 +1004,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLogOf(t: ThreadSummary) {
         viewModelScope.launch {
             db.deleteThread(t)
+            if (forwardPage?.summary?.id == t.id) forwardPage = null
             (stack.lastOrNull() as? Page.Threads)?.let { it.states = db.threadStates(it.board.url) }
             reloadSide()
             toast = "ログを削除しました"
@@ -995,6 +1015,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLogsOf(list: List<ThreadSummary>) {
         viewModelScope.launch {
             db.deleteThreads(list)
+            if (list.any { it.id == forwardPage?.summary?.id }) forwardPage = null
             // スタックの下のスレ一覧も、既読の印を読み直す
             for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
             reloadSide()
@@ -1063,7 +1084,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val dir = bu.removeSuffix("/").substringAfterLast('/')
         viewModelScope.launch {
             val name = when (r.site) {
-                UrlRoute.Site.HONO -> HonoBbs.boardName(bu) ?: dir
+                UrlRoute.Site.HONO -> runCatching { HonoBbs.boardName(bu) }.getOrElse { toast = it.message ?: "hono-bbs の板を開けません"; return@launch } ?: dir
                 UrlRoute.Site.SHITARABA -> runCatching { Shitaraba.boardName(bu) }.getOrElse { toast = it.message ?: "したらばの板を開けません"; return@launch }
                 UrlRoute.Site.MACHI -> runCatching { Machi.boardName(bu) }.getOrElse { toast = it.message ?: "まちBBS の板を開けません"; return@launch }
                 UrlRoute.Site.TWOCH -> {
@@ -1089,6 +1110,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             db.deleteThread(page.summary)
             back()
+            // 消したスレを「進む」で開き直さない
+            forwardPage = null
             toast = "ログを削除しました"
         }
     }
@@ -1125,6 +1148,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         r.notice = null
         val running = r.uploading
+        if (!running) r.uploads.forEach { it.inBatch = false }
         r.uploads.removeAll { it.state is UploadItem.State.Failed }
         r.uploads += uris.take(10).map { UploadItem(it, stamp) }
         if (uris.size > 10) r.notice = "一度に上げられるのは 10 枚までです(先頭の 10 枚だけ上げます)"
@@ -1196,6 +1220,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (r.sending) return
         val body = ">>$no\n$phrase"
         val mail = r.mail.trim()
+        val over = TwoCh.overLimits(page.summary.boardUrl, body, r.name, mail)
+        if (over.isNotEmpty()) { toast = over.joinToString(" / "); return }
         handlePost(page, body, r.name, mail, quick = true) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
     }
 
@@ -1204,6 +1230,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (r.sending || r.body.isBlank()) return
         val body = r.body
         val mail = r.mail.trim()
+        val over = TwoCh.overLimits(page.summary.boardUrl, body, r.name, mail)
+        if (over.isNotEmpty()) { r.notice = over.joinToString(" / "); return }
         prefs.postName = r.name
         handlePost(page, body, r.name, mail) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
     }
@@ -1212,7 +1240,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun acceptConfirm(page: Page.Thread) {
         val c = page.reply.confirm ?: return
         page.reply.confirm = null
-        handlePost(page, page.reply.body, page.reply.name, page.reply.mail.trim()) { TwoCh.submitConfirm(c) }
+        val p = page.reply.confirmPost ?: return
+        handlePost(page, p.body, p.name, p.mail, p.quick) { TwoCh.submitConfirm(c) }
     }
 
     /** quick: 長押しの「すぐ書き込む」(書き込み欄の下書きは消さず、うまくいかなければ知らせで出す) */
@@ -1249,7 +1278,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         db.addPostHistory(page.summary, page.title, no, name, mail, body)
                     }
                     is PostResult.Auth -> r.auth = res
-                    is PostResult.Confirm -> r.confirm = res
+                    is PostResult.Confirm -> {
+                        r.confirmPost = ConfirmPost(body, name, mail, quick)
+                        r.confirm = res
+                    }
                     is PostResult.Error -> if (quick) toast = res.message else r.notice = res.message
                 }
             } catch (e: Exception) {
@@ -1261,11 +1293,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** スレを立てる。立てたら一覧を取り直し、同じスレタイのスレを開く */
+    /** スレを立てる欄を開く。書きかけがなければ、板ごとの既定値かふだんの名前・メールを入れる */
+    fun openNewThread(page: Page.Threads) {
+        val r = page.newThread
+        if (r.title.isEmpty() && r.body.isEmpty()) {
+            val meta = prefs.boardMeta[page.board.url]
+            r.name = meta?.defaultName ?: prefs.postName
+            r.mail = meta?.defaultMail ?: prefs.postMail
+        }
+        r.open = true
+    }
+
     fun createThread(page: Page.Threads) {
         val r = page.newThread
         if (r.sending || r.title.isBlank() || r.body.isBlank()) return
         val mail = r.mail.trim()
-        prefs.postName = r.name
+        val over = TwoCh.overLimits(page.board.url, r.body, r.name, mail, r.title)
+        if (over.isNotEmpty()) { r.notice = over.joinToString(" / "); return }
+        // 板ごとの既定値がある欄は、ふだんの値を書き換えない
+        val meta = prefs.boardMeta[page.board.url]
+        if (meta?.defaultName == null) prefs.postName = r.name
         viewModelScope.launch {
             r.sending = true
             r.notice = null
@@ -1273,6 +1320,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 when (val res = TwoCh.createThread(page.board, r.title, PostInput(r.name, mail, r.body))) {
                     is PostResult.Ok -> {
                         val title = r.title.trim()
+                        if (meta?.defaultMail == null) prefs.postMail = r.mail
                         r.title = ""
                         r.body = ""; r.uploads.clear()
                         r.open = false

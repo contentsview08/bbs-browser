@@ -14,7 +14,7 @@ import type {
   PostResult,
   ThreadSummary,
 } from '../types'
-import { parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt, splitAuthorId } from './parse'
+import { POST_FAILED, parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt, splitAuthorId } from './parse'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 import { detectEncoding, encodeUtf8Form, looksLikeUtf8 } from '../encoding'
 
@@ -131,7 +131,7 @@ async function sendBbsCgi(
     const n = Number(res.headers['x-resnum'])
     return Number.isInteger(n) && n > 0 ? { ...r, resNumber: n } : r
   }
-  if (r.status === 'error' && res.status >= 400 && !r.message) return { status: 'error', message: `HTTP ${res.status}`, html }
+  if (r.status === 'error' && res.status >= 400 && r.message === POST_FAILED) return { status: 'error', message: `HTTP ${res.status}`, html }
   return { ...r, html }
 }
 
@@ -185,10 +185,17 @@ async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<
   }
 }
 
+/** 板の URL から、板名と書き込み先・スレの URL を作る。板の前に道があれば(https://host/bbs/板/)、test はその下にある */
+export function boardPathOf(boardUrl: string): { bbs: string; postUrl: string; threadUrl: (key: string) => string } {
+  const u = new URL(to5chIo(boardUrl))
+  const parts = u.pathname.split('/').filter(Boolean)
+  const bbs = parts.pop() ?? ''
+  const root = [u.origin, ...parts].join('/')
+  return { bbs, postUrl: `${root}/test/bbs.cgi`, threadUrl: (key) => `${root}/test/read.cgi/${bbs}/${key}/` }
+}
+
 function threadWebUrl(thread: ThreadSummary): string {
-  const u = new URL(to5chIo(thread.boardUrl))
-  const board = u.pathname.replace(/\//g, '')
-  return `${u.origin}/test/read.cgi/${board}/${thread.key}/`
+  return boardPathOf(thread.boardUrl).threadUrl(thread.key)
 }
 
 /** これより先の日時は、スレが立った時刻としては信用しない */
@@ -301,13 +308,17 @@ export function beLoginSucceeded(status: number, html: string): LoginResult {
   return { ok: true, message: 'BE にログインしました' }
 }
 
+/** BE のアイコンを置いているドメイン。名前だけを許す(ポートや user@ の付いたものは当たらない) */
+const BE_ICON_HOST = /^(?:[a-z0-9-]+\.)*(?:5ch\.io|5ch\.net|2ch\.net|bbspink\.com)$/i
+
 /**
  * BE のアイコン。5ch では BE でログインして書き込むと、本文の 1 行目に「sssp://img.5ch.io/ico/nida.gif」のような
  * アイコンの場所が入る(sssp は https の読み替え)。1 行目にあれば、その画像の URL と、その行を除いた本文を返す
  */
 export function splitBeIcon(body: string): { icon?: string; body: string } {
-  const m = /^\s*sssp:\/\/([^\s/]+\/\S+\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)/i.exec(body)
-  if (!m) return { body }
+  const m = /^\s*sssp:\/\/(([^\s/]+)\/\S+\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)/i.exec(body)
+  // アイコンはレスを出しただけで読みに行くので、本文に書けるだけのほかのホストへは送らない
+  if (!m || !BE_ICON_HOST.test(m[2])) return { body }
   return { icon: `https://${m[1]}`, body: body.slice(m[0].length) }
 }
 
@@ -425,6 +436,8 @@ export const twoChConnector: Connector = {
       const body = completeLines(res.body)
       rememberBoardEncoding(thread.boardUrl, body)
       const { posts, title } = parseDat(ctx.decode(body, encodingOf(res, body)))
+      // 空か改行なしの本文で置き換えると、手元のログが全部消える
+      if (cursor && posts.length === 0) return { status: 'notModified', posts: [], cursor }
       return {
         status: cursor ? 'reset' : 'updated',
         posts,
@@ -461,11 +474,11 @@ export const twoChConnector: Connector = {
   },
 
   async createPost(thread, input, ctx) {
-    const board = new URL(to5chIo(thread.boardUrl))
+    const { bbs, postUrl } = boardPathOf(thread.boardUrl)
     return sendBbsCgi(
-      `${board.origin}/test/bbs.cgi`,
+      postUrl,
       {
-        bbs: board.pathname.replace(/\//g, ''),
+        bbs,
         key: thread.key,
         time: String(Math.floor(Date.now() / 1000)),
         FROM: input.name,
@@ -481,11 +494,11 @@ export const twoChConnector: Connector = {
   },
 
   async createThread(board, input, ctx) {
-    const u = new URL(to5chIo(board.url))
+    const { bbs, postUrl } = boardPathOf(board.url)
     return sendBbsCgi(
-      `${u.origin}/test/bbs.cgi`,
+      postUrl,
       {
-        bbs: u.pathname.replace(/\//g, ''),
+        bbs,
         subject: input.title,
         time: String(Math.floor(Date.now() / 1000)),
         FROM: input.name,

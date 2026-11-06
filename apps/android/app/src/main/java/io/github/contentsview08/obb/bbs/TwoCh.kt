@@ -155,6 +155,19 @@ private fun kakoDatUrl(t: ThreadSummary): String? {
     return "${t.boardUrl}oyster/${t.key.take(4)}/${t.key}.dat"
 }
 
+/** 板名と書き込み先・スレの URL。板の前に道があれば(https://host/bbs/板/)、test はその下にある(PC 版の boardPathOf と同じ) */
+internal class BoardPath(val bbs: String, private val root: String) {
+    val postUrl get() = "$root/test/bbs.cgi"
+    fun threadUrl(key: String) = "$root/test/read.cgi/$bbs/$key/"
+}
+
+internal fun boardPathOf(boardUrl: String): BoardPath {
+    val u = java.net.URI(boardUrl)
+    val parts = u.rawPath.split('/').filter { it.isNotEmpty() }
+    val prefix = parts.dropLast(1).joinToString("") { "/$it" }
+    return BoardPath(parts.lastOrNull() ?: "", "${u.scheme}://${u.rawAuthority}$prefix")
+}
+
 private fun ensureOk(res: HttpResponse, url: String) {
     if (res.status !in 200..299) throw IllegalStateException("HTTP ${res.status}: $url")
 }
@@ -226,12 +239,15 @@ object TwoCh {
 
     suspend fun setting(boardUrl: String): Map<String, String> {
         synchronized(settingCache) { settingCache[boardUrl]?.let { return it } }
+        // null は読めなかったとき。覚えず、次に板を開いたときに読み直す
         val map = if (HonoBbs.isBoardUrl(boardUrl)) HonoBbs.setting(boardUrl) else if (Shitaraba.isBoardUrl(boardUrl)) Shitaraba.setting(boardUrl) else if (Machi.isBoardUrl(boardUrl)) Machi.setting(boardUrl) else runCatching {
             val res = Http.get("${boardUrl}SETTING.TXT")
             if (res.status in 200..299) rememberBoardEncoding(boardUrl, res.body)
-            if (res.status !in 200..299) emptyMap()
+            if (res.status == 404) emptyMap<String, String>() // SETTING.TXT のない板
+            else if (res.status !in 200..299) null
             else textOf(res).lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
-        }.getOrDefault(emptyMap())
+        }.getOrNull()
+        if (map == null) return emptyMap()
         synchronized(settingCache) { settingCache[boardUrl] = map }
         return map
     }
@@ -249,11 +265,13 @@ object TwoCh {
     /** hono-bbs の行数の上限。半分にして持つと奇数が 1 行ずれるので、そのまま持つ */
     const val MAX_LINES_KEY = "OBB_MAX_LINES"
 
-    /** 本文の上限(バイト数・行数)。SETTING.TXT にあれば。5ch の BBS_LINE_NUMBER は行数の半分を書くので 2 倍する */
-    fun cachedLimits(boardUrl: String): Pair<Int?, Int?> {
-        val m = cachedSetting(boardUrl) ?: return null to null
-        return m["BBS_MESSAGE_COUNT"]?.toIntOrNull() to (m[MAX_LINES_KEY]?.toIntOrNull() ?: m["BBS_LINE_NUMBER"]?.toIntOrNull()?.let { it * 2 })
-    }
+    /** 書き込みの上限。SETTING.TXT を読み終えていれば */
+    fun cachedLimits(boardUrl: String): PostLimits = cachedSetting(boardUrl)?.let(::postLimitsOf) ?: PostLimits()
+
+    /** 上限を超えているものの説明(なければ空)。したらばは PC 版と同じく止めない */
+    fun overLimits(boardUrl: String, body: String, name: String, mail: String, subject: String? = null): List<String> =
+        if (Shitaraba.isBoardUrl(boardUrl)) emptyList()
+        else postLimitOver(cachedLimits(boardUrl), { lengthOf(boardUrl, it) }, body, name, mail, subject)
 
     /** 板があるか。スレ一覧(subject.txt)が読めて、スレ一覧の形なら板(スレが 0 件の板もある。youtu.be/xxx のような板でない URL を見分ける) */
     suspend fun isBoard(boardUrl: String): Boolean = runCatching {
@@ -306,6 +324,8 @@ object TwoCh {
             val body = completeLines(res.body)
             rememberBoardEncoding(thread.boardUrl, body)
             val (posts, title) = parseDat(textOf(res, body), 1)
+            // 空か改行なしの本文で置き換えると、手元のログが全部消える
+            if (cursor != null && posts.isEmpty()) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor)
             return FetchResult(
                 if (cursor != null) FetchStatus.RESET else FetchStatus.UPDATED,
                 posts, DatCursor(body.size.toLong(), posts.size, res.headers["last-modified"]), title,
@@ -336,9 +356,9 @@ object TwoCh {
         if (HonoBbs.isBoardUrl(t.boardUrl)) return HonoBbs.createPost(t, input)
         if (Shitaraba.isBoardUrl(t.boardUrl)) return Shitaraba.createPost(t, input)
         if (Machi.isBoardUrl(t.boardUrl)) return Machi.createPost(t, input)
-        val u = java.net.URI(t.boardUrl)
+        val path = boardPathOf(t.boardUrl)
         val fields = linkedMapOf(
-            "bbs" to u.path.trim('/'),
+            "bbs" to path.bbs,
             "key" to t.key,
             "time" to (System.currentTimeMillis() / 1000).toString(),
             "FROM" to input.name,
@@ -346,7 +366,7 @@ object TwoCh {
             "MESSAGE" to input.body,
             "submit" to "書き込む",
         )
-        return sendBbsCgi("${u.scheme}://${u.host}/test/bbs.cgi", fields, webUrl(t))
+        return sendBbsCgi(path.postUrl, fields, webUrl(t))
     }
 
     /** スレを立てる */
@@ -355,9 +375,9 @@ object TwoCh {
         if (Shitaraba.isBoardUrl(board.url)) return Shitaraba.createThread(board, title, input)
         // まちBBS は依頼制(アプリからは立てられない)
         if (Machi.isBoardUrl(board.url)) return PostResult.Error("まちBBS のスレは、アプリからは立てられません(まちBBS のスレ立て依頼から)")
-        val u = java.net.URI(board.url)
+        val path = boardPathOf(board.url)
         val fields = linkedMapOf(
-            "bbs" to u.path.trim('/'),
+            "bbs" to path.bbs,
             "subject" to title,
             "time" to (System.currentTimeMillis() / 1000).toString(),
             "FROM" to input.name,
@@ -365,7 +385,7 @@ object TwoCh {
             "MESSAGE" to input.body,
             "submit" to "新規スレッド作成",
         )
-        return sendBbsCgi("${u.scheme}://${u.host}/test/bbs.cgi", fields, board.url)
+        return sendBbsCgi(path.postUrl, fields, board.url)
     }
 
     /** 書き込み確認で承諾したときに送り直す */
@@ -380,7 +400,7 @@ object TwoCh {
         val html = textOf(res)
         val resNumber = res.headers["x-resnum"]?.toIntOrNull()?.takeIf { it > 0 }
         val r = parseBbsCgi(html, url, fields, referer, resNumber)
-        if (r is PostResult.Error && res.status >= 400 && r.message.isBlank()) return PostResult.Error("HTTP ${res.status}")
+        if (r is PostResult.Error && res.status >= 400 && r.message == POST_FAILED) return PostResult.Error("HTTP ${res.status}")
         return r
     }
 
@@ -389,7 +409,6 @@ object TwoCh {
         if (HonoBbs.isBoardUrl(t.boardUrl)) return HonoBbs.webUrl(t)
         if (Shitaraba.isBoardUrl(t.boardUrl)) return Shitaraba.webUrl(t)
         if (Machi.isBoardUrl(t.boardUrl)) return Machi.webUrl(t)
-        val u = java.net.URI(t.boardUrl)
-        return "${u.scheme}://${u.host}/test/read.cgi/${u.path.trim('/')}/${t.key}/"
+        return boardPathOf(t.boardUrl).threadUrl(t.key)
     }
 }

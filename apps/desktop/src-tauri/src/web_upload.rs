@@ -112,6 +112,22 @@ pub async fn close_web_upload(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 開いている画面を閉じて、消えるまで待つ。close はイベントループへ頼むだけで、消えるまでは同じ label で作れない
+async fn close_and_wait(app: &AppHandle) {
+    let Some(w) = app.get_webview_window(LABEL) else { return };
+    let _ = w.close();
+    let app = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        for _ in 0..100 {
+            if app.get_webview_window(LABEL).is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    })
+    .await;
+}
+
 /// アップロードの画面を開く。url は https のページだけ。pattern は拾うリンクの正規表現(JavaScript の形)。
 /// files を渡すと、ページに貼り付けたことにして、利用者が選び直さなくても上がる
 #[tauri::command]
@@ -120,9 +136,7 @@ pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title
     if page.scheme() != "https" {
         return Err("https のページだけ開けます".into());
     }
-    if let Some(w) = app.get_webview_window(LABEL) {
-        let _ = w.close();
-    }
+    close_and_wait(&app).await;
     let script = WATCH
         .replace("__PATTERN__", &serde_json::to_string(&pattern).map_err(|e| e.to_string())?)
         .replace("__FOUND__", FOUND);

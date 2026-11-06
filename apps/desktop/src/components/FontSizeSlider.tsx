@@ -323,7 +323,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
   }, [active])
   return createPortal(
     <SliderDrag.Provider value={{ active, set: setActive }}>
-    // スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)。幕は透明(外を押すと閉じる受け皿としてだけ置く)
+    {/* スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)。幕は透明(外を押すと閉じる受け皿としてだけ置く) */}
     <div className={`fixed inset-0 z-[9800] flex ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`} {...backdrop}>
       <div
         ref={boxRef}

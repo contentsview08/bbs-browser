@@ -31,6 +31,9 @@ fn portable_dir() -> Option<PathBuf> {
     }
 }
 
+/// 前の identifier(この名前のフォルダが前の置き場)
+const OLD_IDENTIFIER: &str = "io.github.yumekui8.bbs-browser";
+
 /// 2026-11-05 に identifier を io.github.yumekui8.bbs-browser から io.github.contentsview08.obb に変えた(名前を OBB に)。
 /// 前の置き場に DB があり、新しい置き場にまだなければ、フォルダごと写す(DB・設定・Cookie・背景画像・バックアップ)。ポータブルは関係ない。
 /// 移す(rename)のではなく写す: 前の版(bbs-browser)を残して使い続けても困らないように(移すと前の版が空になり、
@@ -44,7 +47,7 @@ fn migrate_old_data_dir(app: &tauri::AppHandle) {
         return;
     }
     let Some(parent) = new_dir.parent() else { return };
-    let old_dir = parent.join("io.github.yumekui8.bbs-browser");
+    let old_dir = parent.join(OLD_IDENTIFIER);
     if !old_dir.join(DB_FILE).exists() {
         return;
     }
@@ -316,12 +319,47 @@ fn media_extension(bytes: &[u8]) -> Option<&'static str> {
     None
 }
 
+/// 保存するファイル名の、拡張子を除いた長さの上限。ファイル名の上限は 255(「 (1)」と拡張子の分を残す)
+const MAX_STEM_BYTES: usize = 200;
+
+/// %XX を元の文字に戻す。UTF-8 でない並びは置換文字にし、%XX の形でないものはそのまま残す
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = (bytes[i] == b'%').then(|| bytes.get(i + 1..i + 3)).flatten().and_then(|h| {
+            let hi = (h[0] as char).to_digit(16)?;
+            let lo = (h[1] as char).to_digit(16)?;
+            Some((hi * 16 + lo) as u8)
+        });
+        if let Some(b) = hex {
+            out.push(b);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// 長さを max バイト以内に切る(文字の途中では切らない)
+fn truncate_bytes(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let end = (0..=max).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+    &s[..end]
+}
+
 /// URL の最後の部分と中身の形式からファイル名を作る。拡張子は中身で決める(URL の名前のままだと、画像に見せた実行ファイルを保存してしまう)。
 /// Windows で使えない文字と、文字の向きを変える文字は _ にする
 fn file_name_from_url(url: &str, extension: &str) -> String {
     let path = url.split(['?', '#']).next().unwrap_or(url);
     let last = path.rsplit('/').find(|s| !s.is_empty()).unwrap_or("image");
-    let stem = last.rsplit_once('.').map_or(last, |(s, _)| s);
+    let last = percent_decode(last);
+    let stem = last.rsplit_once('.').map_or(last.as_str(), |(s, _)| s);
     let cleaned: String = stem
         .chars()
         .map(|c| {
@@ -330,6 +368,7 @@ fn file_name_from_url(url: &str, extension: &str) -> String {
         })
         .collect();
     let cleaned = cleaned.trim_end_matches(['.', ' ']);
+    let cleaned = truncate_bytes(cleaned, MAX_STEM_BYTES).trim_end_matches(['.', ' ']);
     let device = cleaned.split('.').next().unwrap_or("").to_ascii_uppercase();
     let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
         || (device.len() == 4 && (device.starts_with("COM") || device.starts_with("LPT")) && device.ends_with(|c: char| c.is_ascii_digit()));
@@ -411,6 +450,31 @@ fn set_background_image(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPa
         .unwrap_or_default();
     let dest = dir.join(format!("background-{stamp}.{ext}"));
     std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+    allow_background_asset(&app, &dest);
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// 設定に残っているパスから、背景画像のファイル名を取り出す(Windows のパスも Linux のパスも読む)。背景画像でなければ None
+fn background_file_name(saved: &str) -> Option<&str> {
+    saved.rsplit(['/', '\\']).next().filter(|name| name.starts_with("background-"))
+}
+
+/// 設定に残っているパスを、いまの置き場のものに読み替える(identifier の変更やポータブル版のフォルダの移動で、前のパスは読めなくなる)。
+/// 見るのはファイル名だけなので、置き場の外のファイルは読めない。Linux の前の置き場は DB と別の場所で migrate_old_data_dir が写さないので、ここで写す
+#[tauri::command]
+fn current_background_image(app: tauri::AppHandle, saved: String) -> Result<String, String> {
+    let Some(name) = background_file_name(&saved) else { return Ok(saved) };
+    let dir = data_dir(&app)?;
+    let dest = dir.join(name);
+    if !dest.is_file() && portable_dir().is_none() {
+        if let Some(old) = dir.parent().map(|p| p.join(OLD_IDENTIFIER).join(name)).filter(|p| p.is_file()) {
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            std::fs::copy(&old, &dest).map_err(|e| e.to_string())?;
+        }
+    }
+    if !dest.is_file() {
+        return Ok(saved);
+    }
     allow_background_asset(&app, &dest);
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -660,6 +724,7 @@ pub fn run() {
             list_system_fonts,
             save_image,
             set_background_image,
+            current_background_image,
             write_json_file,
             write_text_file,
             read_json_file,
@@ -693,6 +758,32 @@ mod tests {
         assert_eq!(file_name_from_url("https://a.test/CON.jpg", "jpg"), "image.jpg");
         assert_eq!(file_name_from_url("https://a.test/com1.jpg", "jpg"), "image.jpg");
         assert_eq!(file_name_from_url("https://a.test/", "png"), "a.png");
+    }
+
+    #[test]
+    fn saved_name_decodes_percent_encoding() {
+        assert_eq!(file_name_from_url("https://a.test/%E7%94%BB%E5%83%8F.jpg", "jpg"), "画像.jpg");
+        assert_eq!(file_name_from_url("https://a.test/a%2Fb%5Cc.jpg", "jpg"), "a_b_c.jpg");
+        assert_eq!(file_name_from_url("https://a.test/a%E2%80%AEb.jpg", "jpg"), "a_b.jpg");
+        assert_eq!(file_name_from_url("https://a.test/CON%2Ejpg", "jpg"), "image.jpg");
+        assert_eq!(file_name_from_url("https://a.test/100%zz.jpg", "jpg"), "100%zz.jpg");
+    }
+
+    #[test]
+    fn saved_name_is_limited_in_length() {
+        let encoded = "%E3%81%82".repeat(100);
+        let name = file_name_from_url(&format!("https://a.test/{encoded}.jpg"), "jpg");
+        assert_eq!(name, format!("{}.jpg", "あ".repeat(66)));
+        let name = file_name_from_url(&format!("https://a.test/{}.jpg", "a".repeat(900)), "jpg");
+        assert_eq!(name.len(), MAX_STEM_BYTES + ".jpg".len());
+    }
+
+    #[test]
+    fn background_name_is_taken_from_any_path() {
+        assert_eq!(background_file_name(r"C:\Users\a\AppData\Roaming\old\background-1.png"), Some("background-1.png"));
+        assert_eq!(background_file_name("/home/a/.local/share/old/background-1.png"), Some("background-1.png"));
+        assert_eq!(background_file_name("/home/a/picture.png"), None);
+        assert_eq!(background_file_name(""), None);
     }
 
     #[test]

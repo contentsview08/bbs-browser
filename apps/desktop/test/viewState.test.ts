@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canBack, canForward, forget, initialView, nextAfterClose, selectQuietly, showList, showThread, step, type ViewState } from '../src/utils/viewState'
+import { canBack, canForward, forget, initialView, nextAfterClose, selectQuietly, showList, showThread, step, updateNearest, type ViewState } from '../src/utils/viewState'
 
 type V = { type: 'list' | 'thread'; id: string }
 const list = (id = 'board') => ({ key: `list:${id}`, value: { type: 'list' as const, id } })
@@ -62,6 +62,10 @@ describe('viewState: 画面の状態', () => {
     expect(nextAfterClose('C', ['A', 'B', 'C'], ['C'])).toEqual({ id: 'B', changed: true })
     expect(nextAfterClose('A', ['A'], ['A'])).toEqual({ id: undefined, changed: true })
     expect(nextAfterClose('A', ['A', 'B'], ['B'])).toEqual({ id: 'A', changed: false })
+    // 複数を閉じる: 左のタブも一緒に閉じても、右隣を選ぶ
+    expect(nextAfterClose('c', ['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c'])).toEqual({ id: 'd', changed: true })
+    expect(nextAfterClose('c', ['a', 'b', 'c', 'd', 'e'], ['c', 'd'])).toEqual({ id: 'e', changed: true })
+    expect(nextAfterClose('c', ['a', 'b', 'c', 'd'], ['c', 'd'])).toEqual({ id: 'b', changed: true })
   })
 
   it('ログを削除したスレは履歴から外し、戻るで開き直さない(並んだ同じ一覧は 1 つに)', () => {
@@ -84,5 +88,31 @@ describe('viewState: 画面の状態', () => {
     t = forget(t, new Set(['thread:A']))
     expect(t.stack.map((e) => e.key)).toEqual(['list:board', 'thread:B'])
     expect(t.index).toBe(1)
+  })
+})
+
+describe('updateNearest(いま出している一覧の中身を変える)', () => {
+  const filtered = (id: string) => ({ key: 'list:history', value: { type: 'list' as const, id } })
+
+  it('いまの場所の項目を新しくする。位置は変わらない', () => {
+    const s = showList(initialView<V>(), filtered('all'))
+    const next = updateNearest(s, filtered('fav'))
+    expect(next.index).toBe(s.index)
+    expect(next.stack[next.index].value.id).toBe('fav')
+    expect(next.stack).toHaveLength(1)
+  })
+
+  it('スレを開いたあと(2 画面で同じ一覧を触っている)は、その前の一覧の項目を新しくする', () => {
+    const s = showThread(showList(initialView<V>(), filtered('all')), 'a', thread('a'))
+    const next = updateNearest(s, filtered('fav'))
+    expect(where(next)).toBe('thread:a')
+    expect(step(next, -1)?.entry.value.id).toBe('fav')
+  })
+
+  it('いまの場所より先の項目と、同じ key のない履歴は変えない', () => {
+    const s = showThread(initialView<V>(), 'a', thread('a'))
+    expect(updateNearest(s, filtered('fav'))).toBe(s)
+    const forward = go(showList(s, filtered('all')), -1)
+    expect(updateNearest(forward, filtered('fav'))).toBe(forward)
   })
 })

@@ -43,6 +43,20 @@ export function showList<T>(s: ViewState<T>, entry: NavEntry<T> | undefined): Vi
   return record({ ...s, listOpen: true }, entry)
 }
 
+/**
+ * いまの場所以前でいちばん近い、同じ key の項目の中身だけを新しくする(いま出している一覧の絞り込みが変わったとき)。
+ * 位置も見せ方も変えない。2 画面ではスレを開いたあとも同じ一覧を触れるので、いまの場所だけを見ない
+ */
+export function updateNearest<T>(s: ViewState<T>, entry: NavEntry<T>): ViewState<T> {
+  for (let i = s.index; i >= 0; i--) {
+    if (s.stack[i].key !== entry.key) continue
+    const stack = s.stack.slice()
+    stack[i] = entry
+    return { ...s, stack }
+  }
+  return s
+}
+
 /** スレを見せる(タブを選んだ、スレを開いた)。1 画面ならスレ表示に切り替わる */
 export function showThread<T>(s: ViewState<T>, id: string, entry: NavEntry<T> | undefined): ViewState<T> {
   return record({ ...s, activeId: id, listOpen: false }, entry)
@@ -61,7 +75,7 @@ export function nextAfterClose(activeId: string | undefined, order: string[], cl
   if (!activeId || !closing.includes(activeId)) return { id: activeId, changed: false }
   const rest = order.filter((id) => !closing.includes(id))
   const idx = order.indexOf(activeId)
-  return { id: rest[Math.min(idx, rest.length - 1)], changed: true }
+  return { id: order.slice(idx).find((id) => !closing.includes(id)) ?? rest[rest.length - 1], changed: true }
 }
 
 /** 戻る(-1)・進む(+1)。動けたら、新しい状態と行き先を返す。行き先を見せるのは呼んだ側(記録はしない) */

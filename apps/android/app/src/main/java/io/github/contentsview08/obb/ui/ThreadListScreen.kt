@@ -512,7 +512,7 @@ private fun ThreadRow(
                 Text(
                     threadTitleText(t, isNew, isFavorite),
                     Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = (14 * k).sp, inlineContent = chipInlineContent(),
-                    color = if (visited) Palette.threadReadTitle else Palette.textStrong, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (visited) Palette.threadReadTitle else Palette.textStrong, fontWeight = FontWeight.Normal,
                 )
                 Text(
                     "${t.postCount}", Modifier.widthIn(min = 36.dp), fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
@@ -537,7 +537,7 @@ private fun ThreadRow(
                 threadTitleText(t, isNew, isFavorite),
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
                 // 開いたスレは新着があっても既読の色にする。新着は右の数の札で分かる
-                color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
+                color = titleColor, fontWeight = FontWeight.Normal,
             )
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {

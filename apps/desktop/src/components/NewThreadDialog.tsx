@@ -112,6 +112,7 @@ export default function NewThreadDialog(props: Props) {
       if (r.status === 'ok') {
         // 立てられたら、書いたものを消す(閉じて開き直しても残らないように)
         media.clearAttached()
+        media.clearUploaded()
         setTitle('')
         setBody('')
       }

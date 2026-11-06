@@ -65,10 +65,45 @@ async function hasGpu(): Promise<boolean> {
     return false
   }
 }
+/** GPU で開けなかった・動かなかったので、この先は CPU で動かす */
+let gpuBroken = false
+/** いまのモデルを GPU で開いたか */
+let onGpu = false
+async function openBest() {
+  if (!gpuBroken && (await hasGpu())) {
+    try {
+      const c = await open('webgpu')
+      onGpu = true
+      return c
+    } catch {
+      gpuBroken = true
+    }
+  }
+  onGpu = false
+  try {
+    return await open('wasm')
+  } catch (err) {
+    // CPU でも開けないなら GPU のせいではない(通信の失敗など)。次はまた GPU から試す
+    gpuBroken = false
+    throw err
+  }
+}
 function load() {
   // GPU が使えればそちらで(何倍も速い)。使えなければ CPU(wasm)で
-  classifier ??= hasGpu().then((gpu) => open(gpu ? 'webgpu' : 'wasm'))
+  classifier ??= openBest()
   return classifier
+}
+async function judge(m: Extract<AiWorkerRequest, { type: 'judge' }>) {
+  const c = await load()
+  const keys: string[] = []
+  const scores: number[][] = []
+  for (const it of m.items) {
+    // 仮説ごとに「含意」の確からしさを別々に出す(multi_label)。条件の文はそのまま仮説にする
+    const r = (await c(it.text, m.hypotheses, { multi_label: true, hypothesis_template: '{}' })) as { labels: string[]; scores: number[] }
+    keys.push(it.key)
+    scores.push(m.hypotheses.map((h) => r.scores[r.labels.indexOf(h)] ?? 0))
+  }
+  send({ type: 'scores', id: m.id, keys, scores })
 }
 
 self.onmessage = async (e: MessageEvent<AiWorkerRequest>) => {
@@ -83,16 +118,17 @@ self.onmessage = async (e: MessageEvent<AiWorkerRequest>) => {
       await load()
       send({ type: 'ready' })
     } else if (m.type === 'judge') {
-      const c = await load()
-      const keys: string[] = []
-      const scores: number[][] = []
-      for (const it of m.items) {
-        // 仮説ごとに「含意」の確からしさを別々に出す(multi_label)。条件の文はそのまま仮説にする
-        const r = (await c(it.text, m.hypotheses, { multi_label: true, hypothesis_template: '{}' })) as { labels: string[]; scores: number[] }
-        keys.push(it.key)
-        scores.push(m.hypotheses.map((h) => r.scores[r.labels.indexOf(h)] ?? 0))
+      try {
+        await judge(m)
+      } catch (err) {
+        if (!onGpu) throw err
+        // 開けても動かせない GPU がある。CPU で開き直して、同じ判定をもう一度
+        const broken = classifier
+        gpuBroken = true
+        classifier = undefined
+        void broken?.then((c) => c.dispose()).catch(() => undefined)
+        await judge(m)
       }
-      send({ type: 'scores', id: m.id, keys, scores })
     }
   } catch (err) {
     classifier = undefined

@@ -12,6 +12,13 @@ const src = {
 }
 
 describe('スレの書き出し', () => {
+  it('HTML のリンクは、URL の直後の記号を取り込まない', () => {
+    const html = (body: string) => threadToHtml({ ...src, posts: [{ no: 1, name: 'n', mail: '', date: '', body }] })
+    expect(html('<https://a.com>')).toContain('&lt;<a href="https://a.com">https://a.com</a>&gt;')
+    expect(html('"https://a.com"')).toContain('&quot;<a href="https://a.com">https://a.com</a>&quot;')
+    expect(html('https://a.com/?x=1&y=2')).toContain('<a href="https://a.com/?x=1&amp;y=2">')
+  })
+
   it('テキストは見出しの行と本文を並べる', () => {
     const t = threadToText(src)
     expect(t).toContain('1 名無し [sage] 2026/10/17 ID:abc\n本文 <b>\nhttps://example.com/a\n')

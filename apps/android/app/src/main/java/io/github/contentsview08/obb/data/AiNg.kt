@@ -81,13 +81,16 @@ data class AiHit(val rule: AiNgRule, val p: Float?, val manual: Boolean, val sam
 /** 仮説の形: 条件の文をそのまま */
 fun hypothesisOf(prompt: String) = prompt.trim().trimEnd('。', '.') + "。"
 
-/** 判定に渡す本文: アンカーだけの行・URL を除き、長すぎるものは頭だけ */
-fun aiTextOf(body: String): String = body.lines().filter { !Regex("""^\s*>>[0-9]""").containsMatchIn(it) }.joinToString("\n")
+/** 行の頭のアンカー(PC 版の autoNg.ts の LEADING_ANCHORS と同じ) */
+private val LEADING_ANCHORS = Regex("""^\s*(?:(?:>>|＞＞)[0-9,，\-]+\s*)+""")
+
+/** 判定に渡す本文: 行の頭のアンカー・URL を除き、長すぎるものは頭だけ */
+fun aiTextOf(body: String): String = body.lines().joinToString("\n") { it.replace(LEADING_ANCHORS, "") }
     .replace(Regex("""https?://\S+"""), "").replace(Regex("""\s+"""), " ").trim().take(300)
 
-/** 本文の鍵(PC 版の autoNg.ts の bodyKey と同じ: アンカーの行と空白を除いた本文の cyrb53 を 16 進で) */
+/** 本文の鍵(PC 版の autoNg.ts の bodyKey と同じ: 行の頭のアンカーと空白を除いた本文の cyrb53 を 16 進で) */
 fun bodyKey(body: String): String {
-    val s = body.lines().filter { !Regex("""^\s*>>""").containsMatchIn(it) }.joinToString("").replace(Regex("""\s+"""), "")
+    val s = body.lines().joinToString("") { it.replace(LEADING_ANCHORS, "") }.replace(Regex("""\s+"""), "")
     var h1 = 0xdeadbeef.toInt()
     var h2 = 0x41c6ce57
     for (ch in s) {

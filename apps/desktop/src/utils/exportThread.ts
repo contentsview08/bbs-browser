@@ -24,7 +24,14 @@ const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
 /** 本文の URL だけリンクにする(ほかは文字のまま) */
 function bodyHtml(body: string): string {
-  return escapeHtml(body).replace(/https?:\/\/[^\s<>"]+/g, (u) => `<a href="${u}">${u}</a>`)
+  // 区切りの < > " を見分けられるよう、エスケープする前に URL で分ける(奇数番目が URL)
+  return body
+    .split(/(https?:\/\/[^\s<>"]+)/)
+    .map((part, i) => {
+      const t = escapeHtml(part)
+      return i % 2 === 1 ? `<a href="${t}">${t}</a>` : t
+    })
+    .join('')
 }
 
 /** HTML。1 つのファイルだけで読めるよう、見た目も中に入れる */

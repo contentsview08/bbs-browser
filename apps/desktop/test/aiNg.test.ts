@@ -13,6 +13,7 @@ describe('AI NG の決め方', () => {
   it('本文はアンカーの行と URL を除く', () => {
     expect(aiTextOf('>>12\nありがとう https://example.com/a')).toBe('ありがとう')
     expect(aiTextOf('>>3')).toBe('')
+    expect(aiTextOf('>>3 死ね\n＞＞4 ばか')).toBe('死ね ばか')
   })
   it('境目以上の当たり具合で当たる。まだ出ていなければ当てない', () => {
     const posts = [post(1, 'あ'), post(2, 'い'), post(3, 'う')]

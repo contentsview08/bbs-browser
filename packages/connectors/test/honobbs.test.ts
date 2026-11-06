@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { honoBbsConnector, formatDate } from '../src/honobbs/connector'
+import { apiBaseOf, honoBbsConnector, formatDate } from '../src/honobbs/connector'
 import { twoChConnector } from '../src/twoch/connector'
 import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types'
 
@@ -46,6 +46,25 @@ describe('hono-bbs のコネクタ', () => {
     expect(honoBbsConnector.isThreadUrl!(`${WEB}/boards/livejupter/${T1}`)).toBe(true)
     expect(honoBbsConnector.canHandle('https://medaka.5ch.io/test/read.cgi/prog/1600000000/')).toBe(false)
     expect(twoChConnector.canHandle('https://medaka.5ch.io/prog/')).toBe(true)
+  })
+
+  it('API の場所: ページを読めなかったときの決めつけは覚えず、読めたら覚える', async () => {
+    const origin = 'https://retry.example.com'
+    const routes: Record<string, { status?: number; body: unknown }> = { [`${origin}/`]: { status: 503, body: 'x' } }
+    const { ctx, got } = fake(routes)
+    expect(await apiBaseOf(origin, ctx)).toBe('https://api.retry.example.com/api/v1')
+    routes[`${origin}/`] = { body: page }
+    expect(await apiBaseOf(origin, ctx)).toBe(API)
+    expect(await apiBaseOf(origin, ctx)).toBe(API)
+    expect(got.filter((u) => u === `${origin}/`)).toHaveLength(2)
+  })
+
+  it('API の場所: ページに印がなければ、決めつけを覚える', async () => {
+    const origin = 'https://nometa.example.com'
+    const { ctx, got } = fake({ [`${origin}/`]: { body: '<html></html>' } })
+    expect(await apiBaseOf(origin, ctx)).toBe('https://api.nometa.example.com/api/v1')
+    expect(await apiBaseOf(origin, ctx)).toBe('https://api.nometa.example.com/api/v1')
+    expect(got).toHaveLength(1)
   })
 
   it('日付は日本時間の 2ch の形にする', () => {

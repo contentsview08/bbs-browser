@@ -11,20 +11,22 @@ const REUSE_MS = 60_000
 export function useWatchLists() {
   const lists = useRef(new Map<string, { at: number; list: ThreadSummary[] }>())
 
-  /** 取ったスレ一覧を覚える(手で開いたとき・まとめて更新したとき) */
-  const remember = useCallback((boardUrl: string, list: ThreadSummary[]) => {
-    lists.current.set(boardUrl, { at: Date.now(), list })
+  /** 取ったスレ一覧を覚える(手で開いたとき・まとめて更新したとき)。at は取りに行く前の時刻 */
+  const remember = useCallback((boardUrl: string, list: ThreadSummary[], at: number) => {
+    lists.current.set(boardUrl, { at, list })
   }, [])
 
-  /** 裏の処理用: 少し前に取った一覧があればそれを、なければ取りに行く */
-  const listForWatch = useCallback(async (b: Board): Promise<ThreadSummary[]> => {
+  /** 裏の処理用: 少し前に取った一覧があればそれを、なければ取りに行く。at はその一覧を取りに行く前の時刻(これより後に立ったスレは、一覧にないことがある) */
+  const listForWatch = useCallback(async (b: Board): Promise<{ at: number; list: ThreadSummary[] }> => {
     const hit = lists.current.get(b.url)
-    if (hit && Date.now() - hit.at < REUSE_MS) return hit.list
+    if (hit && Date.now() - hit.at < REUSE_MS) return hit
     const connector = findConnector(b.connectorId)
     if (!connector) throw new Error(`コネクタ ${b.connectorId} がありません`)
+    const at = Date.now()
     const list = await connector.listThreads(b, ctx)
-    lists.current.set(b.url, { at: Date.now(), list })
-    return list
+    const got = { at, list }
+    lists.current.set(b.url, got)
+    return got
   }, [])
 
   return { remember, listForWatch }

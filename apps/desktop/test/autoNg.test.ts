@@ -11,6 +11,15 @@ describe('normalizeBody / bodyKey: 比べるための本文', () => {
     expect(bodyKey('>>1\n同じ文')).toBe(bodyKey('>>99\n同じ 文'))
     expect(bodyKey('同じ文')).not.toBe(bodyKey('違う文'))
   })
+  it('同じ行の文は残し、頭のアンカーだけ外す(全角・範囲・続けて書いたものも)', () => {
+    expect(normalizeBody('>>3 死ね')).toBe('死ね')
+    expect(normalizeBody('>>3 ばか\nほんとばか')).toBe('ばかほんとばか')
+    expect(normalizeBody('＞＞12\n本文')).toBe('本文')
+    expect(normalizeBody('>>1-3,5 >>7 本文')).toBe('本文')
+    expect(normalizeBody('本文 >>3 の話')).toBe('本文>>3の話')
+    expect(bodyKey('>>3 死ね')).not.toBe(bodyKey('>>3 ばか'))
+    expect(bodyKey('>>3 同じ文')).toBe(bodyKey('>>99\n同じ文'))
+  })
 })
 
 describe('distinctRatio: 繰り返しの多さ', () => {

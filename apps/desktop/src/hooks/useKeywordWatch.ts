@@ -14,7 +14,7 @@ export function useKeywordWatch(o: {
   settings: AppSettings
   updateSetting: UpdateSetting
   favorites: Board[] | undefined
-  listForWatch: (b: Board) => Promise<ThreadSummary[]>
+  listForWatch: (b: Board) => Promise<{ at: number; list: ThreadSummary[] }>
   isNgThread: (t: ThreadSummary) => boolean
   notify: (n: Omit<AppNotification, 'id'>) => void
   openThread: (t: ThreadSummary) => void
@@ -29,15 +29,16 @@ export function useKeywordWatch(o: {
     if (!keywords.some((k) => k.trim())) return
     const since = { ...settings.keywordWatchSince }
     for (const b of favorites ?? []) {
-      const now = Date.now()
-      let list: ThreadSummary[]
+      let got: { at: number; list: ThreadSummary[] }
       try {
-        list = await listForWatch(b)
+        got = await listForWatch(b)
       } catch {
         continue
       }
+      const { at, list } = got
       const prev = since[b.url]
-      since[b.url] = now
+      // 境目は一覧を取った時刻まで(使い回しの一覧を見たとき、取ったあとに立ったスレを次の確認で拾うため)。戻しはしない
+      since[b.url] = Math.max(prev ?? 0, at)
       if (prev === undefined) continue
       const hits = keywordHits(list, keywords, prev).filter((h) => !isNgThread(h.thread))
       const boardName = settings.boardMeta[b.url]?.alias || b.name

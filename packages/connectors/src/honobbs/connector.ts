@@ -67,9 +67,11 @@ export async function apiBaseOf(origin: string, ctx: ConnectorContext): Promise<
   const known = apiBases.get(origin)
   if (known) return known
   let base: string | undefined
+  let read = false
   try {
     const res = await ctx.http.get(`${origin}/`)
     if (res.status === 200) {
+      read = true
       const html = ctx.decode(res.body, 'utf-8')
       const m = /<meta\s+name=["']bbs-api["']\s+content=["']([^"']+)["']/i.exec(html)
       if (m && /^https?:\/\//.test(m[1])) base = m[1].replace(/\/+$/, '')
@@ -78,7 +80,8 @@ export async function apiBaseOf(origin: string, ctx: ConnectorContext): Promise<
     // 読めなければ、決まった形にしておく
   }
   base ??= `${origin.replace(/^(https?:\/\/)/, '$1api.')}/api/v1`
-  apiBases.set(origin, base)
+  // ページを読めなかったときの決めつけは覚えない(一時的な失敗で、再起動まで違う API へ行き続けないように)
+  if (read) apiBases.set(origin, base)
   return base
 }
 

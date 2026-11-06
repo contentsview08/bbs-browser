@@ -19,6 +19,12 @@ describe('設定の書き出しと読み込み', () => {
     expect(f.settings.scheme).toBe('rose')
   })
 
+  it.each(['postDeleteKey', 'notificationLog', 'boardVisits', 'keywordWatchSince', 'lastUpdateCheckAt', 'lastLogPruneAt'] as const)('%s は書き出さず、読み込みもしない', (k) => {
+    expect(settingsFile(DEFAULT_SETTINGS).settings).not.toHaveProperty(k)
+    const file = { ...settingsFile(DEFAULT_SETTINGS), settings: { [k]: DEFAULT_SETTINGS[k] } }
+    expect(importableSettings(file, DEFAULT_SETTINGS)).not.toHaveProperty(k)
+  })
+
   it('書き出したものを読み戻せる', () => {
     const text = JSON.stringify(settingsFile({ ...DEFAULT_SETTINGS, autoRefreshSec: 10 }))
     const parsed = parseBackup(text)

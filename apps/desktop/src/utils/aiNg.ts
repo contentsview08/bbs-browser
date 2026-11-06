@@ -11,7 +11,7 @@
 // 荒らしの判定 utils/trollModel.ts と同じ作り)とモデルの当たり具合を半々に混ぜる。既定の境目は高め(80%)、見本の条件は「印だけ」
 // スマホのアプリは data/AiNg.kt(同じ項目・同じ JSON・同じ決め方)
 import type { Post } from '@bbs-browser/connectors'
-import { bodyKey } from './autoNg'
+import { LEADING_ANCHORS, bodyKey } from './autoNg'
 
 /** 使うモデル(Hugging Face の置き場の名前と、取る形)。int8 で約 339MB + 字の切り方の表 16MB */
 export const AI_MODEL = {
@@ -93,11 +93,11 @@ export function hypothesisOf(prompt: string): string {
   return `${prompt.trim().replace(/[。.]+$/, '')}。`
 }
 
-/** 判定に渡す本文: アンカーだけの行・URL を除き、長すぎるものは頭だけ(モデルが読める長さに) */
+/** 判定に渡す本文: 行の頭のアンカー・URL を除き、長すぎるものは頭だけ(モデルが読める長さに) */
 export function aiTextOf(body: string): string {
   return body
     .split('\n')
-    .filter((l) => !/^\s*>>\d/.test(l))
+    .map((l) => l.replace(LEADING_ANCHORS, ''))
     .join('\n')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/\s+/g, ' ')

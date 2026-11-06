@@ -1,5 +1,5 @@
 // 設定と NG の書き出し・読み込み(JSON)。ファイルの読み書きは host/backup.ts、ここは中身を作る・確かめるだけ。
-// - 設定には、秘密の値(catbox のアカウント)と、その端末だけの状態(開いていたタブ・背景画像のパスなど)を入れない
+// - 設定には、秘密の値(catbox のアカウント・書き込みの削除キー)と、その端末だけの状態(開いていたタブ・背景画像のパスなど)を入れない
 // - NG は、読み込むときに今のものへ足す(同じものは重ねない)
 
 import type { AppSettings } from '../ui/settings'
@@ -19,6 +19,12 @@ const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'backgroundImage',
   'imageSaveDir',
   'customFont',
+  'postDeleteKey',
+  'notificationLog',
+  'boardVisits',
+  'keywordWatchSince',
+  'lastUpdateCheckAt',
+  'lastLogPruneAt',
 ]
 
 export interface SettingsFile {

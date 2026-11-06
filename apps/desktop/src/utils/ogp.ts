@@ -7,10 +7,13 @@ export interface Ogp {
   siteName?: string
 }
 
+/** 文字にならない番号(範囲外)は、例外にせず U+FFFD にする */
+const fromCode = (n: number) => (n <= 0x10ffff ? String.fromCodePoint(n) : '\ufffd')
+
 function decodeEntities(s: string): string {
   return s
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => fromCode(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => fromCode(Number(d)))
     .replace(/&quot;/g, '"')
     .replace(/&apos;|&#39;/g, "'")
     .replace(/&lt;/g, '<')

@@ -38,11 +38,14 @@ export const REPEAT_RATIO = 0.25
 /** 学んだ判定で荒らしとみなす確からしさ(手元の 340 件で、荒らしの印 20 件なら 93% を拾い、普通の誤判定 1% 弱) */
 export const LEARNED_THRESHOLD = 0.7
 
-/** 比べるための本文。アンカーだけの行(>>12 など)と空白を除く(同じ文を別のレスへ向けて貼るので) */
+/** 行の頭のアンカー(>>12・＞＞1-3,5 など。続けて書いたものも) */
+export const LEADING_ANCHORS = /^\s*(?:(?:>>|＞＞)[0-9,，-]+\s*)+/
+
+/** 比べるための本文。行の頭のアンカー(>>12 など)と空白を除く(同じ文を別のレスへ向けて貼るので) */
 export function normalizeBody(body: string): string {
   return body
     .split('\n')
-    .filter((line) => !/^\s*>>/.test(line))
+    .map((line) => line.replace(LEADING_ANCHORS, ''))
     .join('')
     .replace(/\s+/g, '')
 }

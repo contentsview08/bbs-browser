@@ -70,6 +70,7 @@ export function useTrollModel(store: LogStore | undefined, enabled: boolean, mar
     return () => {
       clearTimeout(timer)
       clearTimeout(askTimer.current)
+      askTimer.current = undefined
       w.terminate()
       worker.current = undefined
       setCorpusReady(false)

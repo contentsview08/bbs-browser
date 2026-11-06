@@ -100,6 +100,8 @@ export function useMediaInput(o: {
   takeFiles: () => Promise<PostFile[]>
   /** 付けたファイルを外す(書き込めたあと) */
   clearAttached: () => void
+  /** 上げ終えた画像を並びから外す(書き込めたあと。本文が空になり、サムネイルにも使わない) */
+  clearUploaded: () => void
   /** 画像と絵文字のボタン(右端が絵文字) */
   buttons: ReactNode
   /**
@@ -170,6 +172,12 @@ export function useMediaInput(o: {
   const patch = (id: number, p: Partial<UploadItem>) => setAll(itemsRef.current.map((i) => (i.id === id ? { ...i, ...p } : i)))
   // 消えるときに見本の object URL を返す
   useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.preview)), [])
+  /** 今回まとめて上げている画像(何枚目かを数える)。列が空のときに選び足したら、そこから数え直す */
+  const batchIds = useRef(new Set<number>())
+  const joinBatch = (ids: number[]) => {
+    if (!itemsRef.current.some((i) => i.state === 'waiting' || i.state === 'uploading')) batchIds.current.clear()
+    for (const id of ids) batchIds.current.add(id)
+  }
   const running = useRef(false)
   const oRef = useRef(o)
   oRef.current = o
@@ -265,10 +273,12 @@ export function useMediaInput(o: {
     for (const i of itemsRef.current) if (i.state === 'failed') URL.revokeObjectURL(i.preview)
     const kept = itemsRef.current.filter((i) => i.state !== 'failed')
     const added = all.slice(0, MAX_FILES).map((file): UploadItem => ({ id: nextItemId++, file, preview: URL.createObjectURL(file), state: 'waiting' }))
+    joinBatch(added.map((i) => i.id))
     setAll([...kept, ...added])
     void pump()
   }
   const retry = (id: number) => {
+    joinBatch([id])
     patch(id, { state: 'waiting', error: undefined })
     setError(undefined)
     void pump()
@@ -278,11 +288,15 @@ export function useMediaInput(o: {
     if (it) URL.revokeObjectURL(it.preview)
     setAll(itemsRef.current.filter((i) => i.id !== id))
   }
+  const clearUploaded = () => {
+    for (const i of itemsRef.current) if (i.state === 'done') URL.revokeObjectURL(i.preview)
+    setAll(itemsRef.current.filter((i) => i.state !== 'done'))
+  }
   /** サイトの画面で裏で上げている間の進み具合(渡した画像の数と、リンクが来た数) */
   const [webProgress, setWebProgress] = useState<{ got: number; total: number }>()
   const uploading = items.filter((i) => i.state === 'waiting' || i.state === 'uploading').length + (webProgress ? 1 : 0)
   // 何枚目か: 今回の並び(失敗したものを除く)のうち、済んだ数 + 1
-  const batch = items.filter((i) => i.state !== 'failed')
+  const batch = items.filter((i) => batchIds.current.has(i.id) && i.state !== 'failed')
   const progress =
     batch.length > 0 && uploading > 0
       ? { current: Math.min(batch.length, batch.filter((i) => i.state === 'done').length + 1), total: batch.length }
@@ -588,5 +602,5 @@ export function useMediaInput(o: {
   // スマホの入力欄から: サイトの画面で上げる上げ先なら、その画面を開く
   const pick = o.attach || o.uploader ? () => (webSiteDef && !o.attach ? void startWebUpload(webSiteDef) : fileRef.current?.click()) : undefined
 
-  return { buttons, pick, fileInput, uploading, progress, items, localOf, retry, dismiss, notice, textareaProps, error, attachedView, confirmView, takeFiles, clearAttached: () => setAttached([]) }
+  return { buttons, pick, fileInput, uploading, progress, items, localOf, retry, dismiss, notice, textareaProps, error, attachedView, confirmView, takeFiles, clearAttached: () => setAttached([]), clearUploaded }
 }

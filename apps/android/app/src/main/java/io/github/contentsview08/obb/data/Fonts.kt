@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -52,9 +54,11 @@ object Fonts {
                     val res = Http.get(BASE + path)
                     if (res.status !in 200..299 || res.body.size < 100_000) throw IllegalStateException("取れませんでした(${res.status})")
                     // 途中で切れたファイルを残さないよう、書き終えてから名前を付ける
-                    val tmp = File(f.parentFile, f.name + ".part")
-                    tmp.writeBytes(res.body)
-                    tmp.renameTo(f)
+                    withContext(Dispatchers.IO) {
+                        val tmp = File(f.parentFile, f.name + ".part")
+                        tmp.writeBytes(res.body)
+                        if (!tmp.renameTo(f)) throw IllegalStateException("置けませんでした")
+                    }
                 }
             } catch (e: Exception) {
                 error = "字を取れませんでした: ${e.message ?: e}"

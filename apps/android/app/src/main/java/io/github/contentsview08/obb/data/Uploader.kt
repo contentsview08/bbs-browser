@@ -30,7 +30,6 @@ object Uploader {
     private const val USER_AGENT = "bbs-native/0.1.0 (+https://red-edge.net)"
     private const val MAX_BYTES = 50L * 1024 * 1024
     private const val MAX_GIF_BYTES = 20L * 1024 * 1024
-    private const val MAX_DIMENSION = 4096
 
     /** 上げた結果。host は上げ先の名前(知らせに出す) */
     /** deleteUrl: 置き場から消すためのページ(imgbb の delete_url。API では消せないので、ブラウザで開いて消す)。返さない置き場は null */
@@ -39,25 +38,11 @@ object Uploader {
     /** 上げられなかった。message は人に見せる理由 */
     class UploadException(message: String) : Exception(message)
 
-    /**
-     * 上げて URL を返す。honoApi は hono-bbs の板のときの API の場所(それ以外は null)。
-     * maxDimension: 長い辺がこれを超える画像は縮める(0 なら縮めない)
-     */
-    suspend fun upload(
-        context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, honoApi: String? = null,
-        /** 上げ先(設定の uploadHost)。API のもの: catbox / imgur / imgbb */
-        host: String = DEFAULT_HOST, imgurClientId: String = "", imgbbApiKey: String = "",
-        stamp: Stamp? = null,
-    ): Result {
-        val (name, type, bytes) = prepareFor(context, uri, maxDimension, stamp)
-        return send(name, type, bytes, honoApi, host, imgurClientId, imgbbApiKey)
-    }
-
     /** 画像の隅に描き込む文字(スレタイと URL)。corner は left(左下)か right(右下) */
     class Stamp(val lines: List<String>, val corner: String)
 
-    /** 上げる前に画像を整える(縮める・向きを直す・描き込む)。name・type・中身 */
-    suspend fun prepareFor(context: Context, uri: Uri, maxDimension: Int = MAX_DIMENSION, stamp: Stamp? = null): Triple<String, String, ByteArray> =
+    /** 上げる前に画像を整える(縮める・向きを直す・描き込む)。name・type・中身。maxDimension: 長い辺がこれを超える画像は縮める(0 なら縮めない) */
+    suspend fun prepareFor(context: Context, uri: Uri, maxDimension: Int, stamp: Stamp? = null): Triple<String, String, ByteArray> =
         withContext(Dispatchers.IO) { prepare(context, uri, maxDimension, stamp) }
 
     /** 中身の SHA-256(16 進)。同じ画像の判定に使う */
@@ -229,11 +214,23 @@ object Uploader {
         }
     }
 
+    private fun readUpTo(input: java.io.InputStream, limit: Long): ByteArray {
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (out.size() < limit) {
+            val n = input.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
+    }
+
     private fun prepare(context: Context, uri: Uri, maxDimension: Int, stamp: Stamp?): Triple<String, String, ByteArray> {
         val cr = context.contentResolver
         val type = cr.getType(uri) ?: "application/octet-stream"
         if (!type.startsWith("image/") && !type.startsWith("video/")) throw UploadException("画像か動画だけを上げられます")
-        val raw = cr.openInputStream(uri)?.use { it.readBytes() } ?: throw UploadException("ファイルを読めませんでした")
+        // 上限を超えると分かった所で読むのをやめる(大きな動画でメモリを使い切らないように)
+        val raw = cr.openInputStream(uri)?.use { readUpTo(it, MAX_BYTES + 1) } ?: throw UploadException("ファイルを読めませんでした")
         if (type == "image/gif" && raw.size > MAX_GIF_BYTES) throw UploadException("GIF は 20MB までです")
         if (raw.size > MAX_BYTES) throw UploadException("このアプリから上げられるのは 50MB までです")
         val format = when (type) {

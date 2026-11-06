@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,16 +25,12 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FormatSize
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -52,7 +47,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
+import androidx.compose.ui.unit.offset
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
@@ -73,7 +74,7 @@ import androidx.compose.ui.unit.sp
  * - 向きが変わった所からの合計で 8 を超えて下へ送ると隠し、上へ戻すと(どこにいても)すぐ出す。出し入れは 0.2 秒ですべらせる
  * - 一番上では両方出す。一番下まで来たら、フッターだけは出す(書き込み・更新を押したいはずなので)
  * - 指で触ってからだけ隠す(開いた直後の、未読への飛び・位置の戻しでは隠さない)
- * 帯の高さは onSizeChanged で測って入れる。帯は graphicsLayer で動かすだけなので、スクロール中も描き直しは軽い
+ * 帯の高さは onSizeChanged で測って入れる。動いている値は graphicsLayer と barPadding で描く・置くときにだけ読み、画面を組み直さない
  */
 @Stable
 class HideOnScroll(private val threshold: Float) {
@@ -82,13 +83,25 @@ class HideOnScroll(private val threshold: Float) {
     /** 隠すか(目標)。hidden・footerHidden がそこへ向かって動く */
     var headerOff by mutableStateOf(false)
     var footerOff by mutableStateOf(false)
-    /** 0(出ている)〜1(隠れている)。上の帯 */
-    var hidden by mutableFloatStateOf(0f)
-    /** 0(出ている)〜1(隠れている)。下の帯 */
-    var footerHidden by mutableFloatStateOf(0f)
+    private val headerAnim = androidx.compose.animation.core.Animatable(0f)
+    private val footerAnim = androidx.compose.animation.core.Animatable(0f)
+    /** 0(出ている)〜1(隠れている)。上の帯。読むと毎フレーム変わるので、組み立ての中では読まない */
+    val hidden get() = headerAnim.value
+    /** 0(出ている)〜1(隠れている)。下の帯。読むと毎フレーム変わるので、組み立ての中では読まない */
+    val footerHidden get() = footerAnim.value
+
+    /** 目標(headerOff・footerOff)が変わるたびに、0.2 秒ですべらせる */
+    suspend fun animate() = kotlinx.coroutines.coroutineScope {
+        launch { slide(headerAnim) { headerOff } }
+        launch { slide(footerAnim) { footerOff } }
+    }
+
+    private suspend fun slide(anim: androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>, off: () -> Boolean) {
+        androidx.compose.runtime.snapshotFlow(off).collectLatest { anim.animateTo(if (it) 1f else 0f, androidx.compose.animation.core.tween(200)) }
+    }
 
     /** 設定で切ったら隠さない */
-    var enabled = true
+    var enabled by mutableStateOf(true)
     /** 一番上・一番下にいるか(画面が渡す) */
     var atTop: () -> Boolean = { false }
     var atBottom: () -> Boolean = { false }
@@ -123,11 +136,18 @@ class HideOnScroll(private val threshold: Float) {
 fun rememberHideOnScroll(): HideOnScroll {
     val px = with(androidx.compose.ui.platform.LocalDensity.current) { 8.dp.toPx() }
     val bars = remember { HideOnScroll(px) }
-    val h by androidx.compose.animation.core.animateFloatAsState(if (bars.headerOff) 1f else 0f, androidx.compose.animation.core.tween(200), label = "header")
-    val f by androidx.compose.animation.core.animateFloatAsState(if (bars.footerOff) 1f else 0f, androidx.compose.animation.core.tween(200), label = "footer")
-    bars.hidden = h
-    bars.footerHidden = f
+    androidx.compose.runtime.LaunchedEffect(bars) { bars.animate() }
     return bars
+}
+
+/**
+ * 帯の出し入れに合わせて動く上下の余白(padding と同じ測り方。px で返す)。置く段階で読むので、帯が動いても画面を組み直さない
+ */
+fun Modifier.barPadding(top: androidx.compose.ui.unit.Density.() -> Float = { 0f }, bottom: androidx.compose.ui.unit.Density.() -> Float = { 0f }): Modifier = layout { m, c ->
+    val t = top().roundToInt().coerceAtLeast(0)
+    val b = bottom().roundToInt().coerceAtLeast(0)
+    val p = m.measure(c.offset(vertical = -(t + b)))
+    layout(c.constrainWidth(p.width), c.constrainHeight(p.height + t + b)) { p.place(0, t) }
 }
 
 /**
@@ -188,7 +208,7 @@ fun BarIcon(icon: ImageVector, label: String, tint: Color = Palette.textMuted, o
 fun MoreButton(onClick: () -> Unit) = BarIcon(Icons.Filled.MoreVert, "その他", onClick = onClick)
 
 /** 下から出るメニューの 1 行 */
-class MenuItem(val label: String, val icon: ImageVector, val tint: Color = Palette.textMuted, val danger: Boolean = false, /** あれば、押すと小項目の画面に切り替える */ val children: List<MenuItem>? = null, val onClick: () -> Unit)
+class MenuItem(val label: String, val icon: ImageVector, val danger: Boolean = false, /** あれば、押すと小項目の画面に切り替える */ val children: List<MenuItem>? = null, val onClick: () -> Unit)
 
 /** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
 enum class MenuAt { TopEnd, TopStart, Center }
@@ -474,9 +494,8 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 /**
  * 表示スタイル(今のスマホ版の StyleMenuItems): テーマ・レスの見た目。真ん中に浮かぶ(画面全体の文字の大きさは「文字の大きさ・余白」と設定にあるので、ここには置かない)
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onFont: () -> Unit, onDismiss: () -> Unit) {
+fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onDismiss: () -> Unit) {
     CenterPanel("表示スタイル", onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             @Composable fun group(t: String) = Text(t, Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -629,13 +648,24 @@ fun BadgeChip(text: String, bg: Color, fg: Color) {
     }
 }
 
-/** 札の色: 主(スレ主)は橙、新(新しいスレ)は黄。どちらも塗りつぶして、字は濃い色(暗い配色)・白(明るい配色) */
-fun opChipColors() = if (Palette.dark) Color(0xFFF0B44C) to Color(0xFF241500) else Color(0xFFB7791F) to Color.White
+/** 新(新しいスレ)の札の色。塗りつぶして、字は濃い色(暗い配色)・白(明るい配色) */
 fun newChipColors() = if (Palette.dark) Color(0xFFF2C14E) to Color(0xFF221A00) else Color(0xFFB8860B) to Color.White
 
-/** 札を字の中に置くための登録(appendInlineContent の id → 中身)。幅は字の大きさに合わせる */
-@Composable
+private var chipsScheme: Scheme? = null
+private var chips: Map<String, androidx.compose.foundation.text.InlineTextContent> = emptyMap()
+
+/** 札を字の中に置くための登録(appendInlineContent の id → 中身)。レスごとに呼ばれるので、配色が同じ間は使い回す(画面のスレッドでだけ呼ぶ) */
 fun chipInlineContent(): Map<String, androidx.compose.foundation.text.InlineTextContent> {
+    val scheme = Palette.scheme
+    if (scheme !== chipsScheme) {
+        chips = buildChipInlineContent()
+        chipsScheme = scheme
+    }
+    return chips
+}
+
+/** 幅は字の大きさに合わせる */
+private fun buildChipInlineContent(): Map<String, androidx.compose.foundation.text.InlineTextContent> {
     val (nBg, nFg) = newChipColors()
     fun chip(text: String, bg: Color, fg: Color) = androidx.compose.foundation.text.InlineTextContent(
         androidx.compose.ui.text.Placeholder(1.7.em, 1.25.em, androidx.compose.ui.text.PlaceholderVerticalAlign.TextCenter),

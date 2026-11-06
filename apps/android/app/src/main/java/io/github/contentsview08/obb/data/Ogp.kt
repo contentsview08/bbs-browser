@@ -23,7 +23,7 @@ class Ogp(val title: String?, val description: String?, val image: String?, val 
 /**
  * リンクのカード用に、ページを取ってきて OGP を読む(PC 版の host/ogp.ts・utils/ogp.ts と同じ)。
  * - 同時に取りに行くのは 4 件まで。ページは頭の部分(256KB まで、</head> が見えたらそこまで)だけ読む
- * - 取ったものはアプリを閉じるまで覚えておく(同じページを何度も取りに行かない)。取れなかったものは少したったら取り直す
+ * - 取ったものは新しい方から MEMORY_MAX 件まで覚えておく(同じページを何度も取りに行かない)。取れなかったものは少したったら取り直す
  * - 家の中のアドレスは、表示しただけでは読みに行かない(isAutoLoadable。リダイレクトの行き先も)
  */
 object OgpFetcher {
@@ -38,7 +38,10 @@ object OgpFetcher {
     private val limit = Semaphore(4)
     // 取得は画面の行と切り離す(行が画面から外れて取り消されても、取れなかったことにしない)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val memory = HashMap<String, Deferred<Ogp?>>()
+    private const val MEMORY_MAX = 2000
+    private val memory = object : LinkedHashMap<String, Deferred<Ogp?>>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Deferred<Ogp?>>?) = size > MEMORY_MAX
+    }
 
     suspend fun fetch(url: String): Ogp? {
         if (!isAutoLoadable(url)) return null

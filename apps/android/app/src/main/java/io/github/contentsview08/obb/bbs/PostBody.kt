@@ -4,7 +4,7 @@ package io.github.contentsview08.obb.bbs
 // \d・\w・\s の意味は JavaScript・JVM・Android で同じとは限らないので、文字の種類は明示する
 
 /** JavaScript の \s と同じ文字 */
-internal const val WS = """\t\n\u000B\f\r    -     　﻿"""
+internal const val WS = """\t\n\u000B\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"""
 
 private const val HOST = """[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+"""
 private const val WORD = "[A-Za-z0-9_]"
@@ -19,7 +19,7 @@ private const val URL_HEAD = "h?ttps?://" +
     """|(?<![A-Za-z0-9_./@:\-])(?=$HOST/[A-Za-z0-9_\-.~/%]*\.(?:jpe?g|png|gif|webp|avif|JPE?G|PNG|GIF|WEBP|AVIF)(?!$WORD))"""
 
 /** URL は空白・見えない文字・日本語の句読点と閉じかっこで切る */
-private const val URL_BODY = """[^$WS<>"、。「」）』】​-‏⁠-⁤]+"""
+private const val URL_BODY = """[^$WS<>"、。「」）』】\u200B-\u200F\u2060-\u2064]+"""
 
 /**
  * 1 つ目の組がアンカーの番号の並び、2 つ目が URL、3 つ目が本文の ID。

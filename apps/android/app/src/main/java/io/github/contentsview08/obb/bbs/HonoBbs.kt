@@ -24,9 +24,6 @@ private val SITE_URL = Regex("^(https?://[^/]+)/boards/?(?:[?#].*)?$")
 private val FIRST_IMAGE = Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)(?:\\?\\S*)?(?=\\s|$)", RegexOption.IGNORE_CASE)
 
 object HonoBbs {
-    const val CONNECTOR = "honobbs"
-
-    fun isThreadUrl(url: String) = THREAD_URL.matches(url)
     fun isBoardUrl(url: String) = BOARD_URL.matches(url)
     /** サイトの入口(web の板の一覧 https://<web>/boards) */
     fun isSiteUrl(url: String) = SITE_URL.matches(url.trim())

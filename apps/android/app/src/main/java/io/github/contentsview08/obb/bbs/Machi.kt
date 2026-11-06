@@ -20,7 +20,6 @@ private val HOST = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/")
 private val SITE_URL = Regex("^https?://(?:www\\.)?machi\\.to/?(?:index\\.html)?(?:[?#].*)?$")
 private val THREAD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/bbs/(?:read|offlaw|json)\\.cgi/([a-z0-9]+)/([0-9]+)")
 private val BOARD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/([a-z0-9]+)/?(?:subject\\.txt|index\\.html)?(?:[?#].*)?$")
-private val SUBJECT_LINE = Regex("^([0-9]+)\\.cgi,(.*)\\(([0-9]+)\\)\\s*$")
 private val ERROR_TAG = Regex("<ERROR>([\\s\\S]*?)</ERROR>", RegexOption.IGNORE_CASE)
 private val DATE_ID = Regex("^(.*?)\\s*ID:(\\S+)\\s*$")
 private val TOP_LINK = Regex("<a\\s+href=\"/([a-z0-9]+)/\"[^>]*>([^<]+)", RegexOption.IGNORE_CASE)
@@ -38,7 +37,6 @@ object Machi {
     fun canHandle(url: String) = HOST.containsMatchIn(url)
     fun isSiteUrl(url: String) = SITE_URL.matches(url.trim())
     fun isBoardUrl(url: String) = BOARD_URL.find(url)?.let { it.groupValues[1] !in NOT_BOARD } == true
-    fun isThreadUrl(url: String) = THREAD_URL.containsMatchIn(url)
 
     private fun boardUrlOf(bbs: String) = "$ORIGIN/$bbs/"
 
@@ -57,9 +55,6 @@ object Machi {
         val key = m.groupValues[2]
         return ThreadSummary(boardUrlOf(m.groupValues[1]), key, "", 0, 0, createdAtOf(key))
     }
-
-    /** スレのキーは立った時刻の UNIX 秒(10 桁のときだけ) */
-    private fun createdAtOf(key: String): Long? = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
 
     private fun decode(res: HttpResponse) = decodeText(res.body, res.headers["content-type"], TextEncoding.SJIS)
 
@@ -118,18 +113,7 @@ object Machi {
         val res = Http.get(url)
         if (res.status == 404) throw IllegalStateException("まちBBS の板が見つかりません(HTTP 404)")
         if (res.status != 200) throw IllegalStateException("HTTP ${res.status}: $url")
-        val text = decode(res)
-        val first = text.split('\n').firstOrNull { it.isNotBlank() }
-        if (first != null && !Regex("^[0-9]+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: ${board.url}")
-        val out = ArrayList<ThreadSummary>()
-        val seen = HashSet<String>()
-        for (line in text.split('\n')) {
-            val m = SUBJECT_LINE.find(line) ?: continue
-            val key = m.groupValues[1]
-            if (!seen.add(key)) continue
-            out += ThreadSummary(board.url, key, htmlToText(m.groupValues[2]).trim(), m.groupValues[3].toInt(), out.size, createdAtOf(key))
-        }
-        return out
+        return parseCgiSubject(decode(res), board.url)
     }
 
     // ── レス ──

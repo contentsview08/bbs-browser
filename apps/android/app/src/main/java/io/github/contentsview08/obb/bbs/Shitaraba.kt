@@ -2,11 +2,6 @@ package io.github.contentsview08.obb.bbs
 
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
-import java.net.URLEncoder
-import java.nio.ByteBuffer
-import java.nio.CharBuffer
-import java.nio.charset.Charset
-import java.nio.charset.CodingErrorAction
 
 // したらば(jbbs.shitaraba.net)。専ブラの packages/connectors/src/shitaraba(connector.ts・parse.ts)を Kotlin に写したもの。
 // - 板の URL は https://jbbs.shitaraba.net/カテゴリ/番号/、スレは /bbs/read.cgi/カテゴリ/番号/キー/
@@ -19,17 +14,14 @@ import java.nio.charset.CodingErrorAction
 //   本番の板への試し書き込みはしないので、応答の読み方(書きこみました / ERROR)は確かめていない
 // 板の一覧(bbsmenu)はないので、板は URL で足してもらう。1 つのスレは 1000 レスまで
 
-private val EUC: Charset = Charset.forName("EUC-JP")
 private const val ORIGIN = "https://jbbs.shitaraba.net"
 private val HOST = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/")
 private val THREAD_URL = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/bbs/(?:read|rawmode)\\.cgi/([a-z]+)/([0-9]+)/([0-9]+)")
 private val BOARD_URL = Regex("^https?://jbbs\\.(?:shitaraba\\.net|livedoor\\.jp)/([a-z]+)/([0-9]+)/?(?:subject\\.txt)?(?:[?#].*)?$")
-private val SUBJECT_LINE = Regex("^([0-9]+)\\.cgi,(.*)\\(([0-9]+)\\)\\s*$")
 
 object Shitaraba {
     fun canHandle(url: String) = HOST.containsMatchIn(url)
     fun isBoardUrl(url: String) = BOARD_URL.matches(url)
-    fun isThreadUrl(url: String) = THREAD_URL.containsMatchIn(url)
 
     private fun boardUrlOf(dir: String, bbs: String) = "$ORIGIN/$dir/$bbs/"
 
@@ -49,9 +41,6 @@ object Shitaraba {
         return ThreadSummary(boardUrlOf(m.groupValues[1], m.groupValues[2]), key, "", 0, 0, createdAtOf(key))
     }
 
-    /** スレのキーは立った時刻の UNIX 秒(10 桁のときだけ) */
-    private fun createdAtOf(key: String): Long? = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
-
     private fun decode(res: HttpResponse) = decodeText(res.body, res.headers["content-type"], TextEncoding.EUC)
     /** 応答のヘッダーの ERROR(過去ログ倉庫・スレなし など) */
     private fun errorOf(res: HttpResponse) = res.headers["error"] ?: ""
@@ -62,11 +51,8 @@ object Shitaraba {
     suspend fun setting(boardUrl: String): Map<String, String>? = runCatching {
         val (dir, bbs) = dirOf(boardUrl)
         val res = Http.get("$ORIGIN/bbs/api/setting.cgi/$dir/$bbs/")
-        if (res.status != 200) null else parseSetting(decode(res))
+        if (res.status != 200) null else parseSettingText(decode(res))
     }.getOrNull()
-
-    private fun parseSetting(text: String): Map<String, String> =
-        text.lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
 
     /** 板の名前(URL で開いたときに使う)。板がなければ例外(404) */
     suspend fun boardName(boardUrl: String): String {
@@ -74,7 +60,7 @@ object Shitaraba {
         val res = Http.get("$ORIGIN/bbs/api/setting.cgi/$dir/$bbs/")
         if (res.status == 404) throw IllegalStateException("したらばの板が見つかりません(HTTP 404)")
         if (res.status != 200) throw IllegalStateException("したらばの板を開けません(HTTP ${res.status})")
-        val s = parseSetting(decode(res))
+        val s = parseSettingText(decode(res))
         if (s["BBS"].isNullOrEmpty() && s["TOP"].isNullOrEmpty()) throw IllegalStateException("したらばの板ではないようです(板の設定が読めません)")
         return s["BBS_TITLE"]?.ifEmpty { null } ?: "$dir/$bbs"
     }
@@ -87,18 +73,7 @@ object Shitaraba {
         val res = Http.get(url)
         if (res.status == 404) throw IllegalStateException("したらばの板が見つかりません(HTTP 404)")
         if (res.status != 200) throw IllegalStateException("HTTP ${res.status}: $url")
-        val text = decode(res)
-        val first = text.split('\n').firstOrNull { it.isNotBlank() }
-        if (first != null && !Regex("^[0-9]+\\.cgi,").containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: ${board.url}")
-        val out = ArrayList<ThreadSummary>()
-        val seen = HashSet<String>()
-        for (line in text.split('\n')) {
-            val m = SUBJECT_LINE.find(line) ?: continue
-            val key = m.groupValues[1]
-            if (!seen.add(key)) continue
-            out += ThreadSummary(board.url, key, htmlToText(m.groupValues[2]).trim(), m.groupValues[3].toInt(), out.size, createdAtOf(key))
-        }
-        return out
+        return parseCgiSubject(decode(res), board.url)
     }
 
     // ── レス ──
@@ -214,27 +189,8 @@ private val EUC_FIXED: Map<Int, ByteArray> = buildMap {
     putRun(0xFCFC, "￤＇＂")
 }
 
-/** EUC-JP にない字は「&#番号;」にして送る(PC 版の eucjp.ts と同じ) */
-private fun encodeEucJp(text: String): ByteArray {
-    val enc = EUC.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).onMalformedInput(CodingErrorAction.REPORT)
-    val out = java.io.ByteArrayOutputStream()
-    var i = 0
-    while (i < text.length) {
-        val cp = text.codePointAt(i)
-        val ch = String(Character.toChars(cp))
-        val bytes: ByteArray? = EUC_FIXED[cp] ?: if (cp in NOT_IN_JIS_TABLE) null else runCatching {
-            val bb: ByteBuffer = enc.encode(CharBuffer.wrap(ch))
-            ByteArray(bb.remaining()).also { bb.get(it) }
-        }.getOrNull()?.takeIf { it.size < 3 } // 3 バイトは補助漢字(PC 版は使わない)
-        out.write(bytes ?: "&#$cp;".toByteArray(Charsets.US_ASCII))
-        i += Character.charCount(cp)
-    }
-    return out.toByteArray()
-}
+/** EUC-JP にない字は「&#番号;」にして送る(PC 版の eucjp.ts と同じ)。3 バイトは補助漢字(PC 版は使わない) */
+private fun encodeEucJp(text: String): ByteArray = encodeWithEntities(text, TextEncoding.EUC.charset(), EUC_FIXED, maxBytes = 2)
 
 /** application/x-www-form-urlencoded(EUC-JP)。改行は CRLF に */
-internal fun encodeEucJpForm(fields: Map<String, String>): ByteArray =
-    fields.entries.joinToString("&") { (k, v) ->
-        val bytes = encodeEucJp(v.replace("\r\n", "\n").replace("\n", "\r\n"))
-        "$k=" + URLEncoder.encode(String(bytes, Charsets.ISO_8859_1), "ISO-8859-1")
-    }.toByteArray(Charsets.US_ASCII)
+internal fun encodeEucJpForm(fields: Map<String, String>): ByteArray = encodeForm(fields, ::encodeEucJp)

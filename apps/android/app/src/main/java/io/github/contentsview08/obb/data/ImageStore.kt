@@ -1,7 +1,8 @@
 package io.github.contentsview08.obb.data
 
 import android.content.Context
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,13 +73,18 @@ object ImageStore {
         data class Failed(val message: String) : State
     }
 
-    /** URL → 状態。画面はここを読む(書き換えは画面のスレッドで) */
-    val states = mutableStateMapOf<String, State>()
+    /** URL → 状態(書き換えは画面のスレッドで)。1 枚の進み具合でほかの画像の画面まで組み直さないよう、URL ごとに別の State に持つ */
+    private val states = java.util.concurrent.ConcurrentHashMap<String, MutableState<State?>>()
+    private fun cell(url: String): MutableState<State?> = states.getOrPut(url) { mutableStateOf(null) }
+
+    /** その URL の状態。画面はここを読む */
+    fun stateOf(url: String): State? = cell(url).value
 
     private lateinit var dir: File
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lanes = DownloadLanes<File?>(scope, thumbs = 4, viewers = 2)
     private const val MAX_BYTES = 300L * 1024 * 1024
+    private const val HEX = "0123456789abcdef"
 
     private val client by lazy {
         // タイムアウト: つながるまで 10 秒・データが 15 秒届かなければ切る(止まったまま回り続けないように)・全体で 3 分まで
@@ -93,9 +99,21 @@ object ImageStore {
         scope.launch { trim() }
     }
 
-    private fun fileOf(url: String): File {
-        val h = MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
-        return File(dir, h)
+    /** URL → 置き場のファイル。画面を作るたびに呼ばれるので、ハッシュの計算を覚えておく */
+    private val files = object : LinkedHashMap<String, File>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, File>?) = size > 2000
+    }
+
+    private fun fileOf(url: String): File = synchronized(files) {
+        files.getOrPut(url) {
+            val digest = MessageDigest.getInstance("SHA-1").digest(url.toByteArray())
+            val hex = CharArray(digest.size * 2)
+            digest.forEachIndexed { i, b ->
+                hex[i * 2] = HEX[(b.toInt() and 0xff) ushr 4]
+                hex[i * 2 + 1] = HEX[b.toInt() and 0x0f]
+            }
+            File(dir, String(hex))
+        }
     }
 
     /** もう手元にある画像のファイル(なければ null)。画面を作るときに、読み込み中を出さずに済むように */
@@ -106,27 +124,27 @@ object ImageStore {
      * 失敗していたら、もう一度取り直す
      */
     fun request(url: String, viewer: Boolean = false) {
-        cached(url)?.let { f -> if (states[url] !is State.Done) states[url] = State.Done(f); return }
-        val s = states[url]
+        cached(url)?.let { f -> if (stateOf(url) !is State.Done) cell(url).value = State.Done(f); return }
+        val s = stateOf(url)
         if (s is State.Queued || s is State.Loading) {
             // サムネイルの順番待ちをビューアーの枠へ移す
             if (viewer) start(url, viewer = true)
             return
         }
-        states[url] = State.Queued
+        cell(url).value = State.Queued
         start(url, viewer)
     }
 
     /** ファイルが取れるまで待つ(保存など)。取れなければ例外 */
     suspend fun get(url: String): File {
         cached(url)?.let { return it }
-        if (!lanes.isRunning(url)) withContext(Dispatchers.Main) { states[url] = State.Queued }
-        return start(url, viewer = true).await() ?: error((states[url] as? State.Failed)?.message ?: "取れませんでした")
+        if (!lanes.isRunning(url)) withContext(Dispatchers.Main) { cell(url).value = State.Queued }
+        return start(url, viewer = true).await() ?: error((stateOf(url) as? State.Failed)?.message ?: "取れませんでした")
     }
 
     private fun start(url: String, viewer: Boolean): CompletableDeferred<File?> = lanes.start(url, viewer) { download(url) }
 
-    private suspend fun setState(url: String, s: State) = withContext(Dispatchers.Main) { states[url] = s }
+    private suspend fun setState(url: String, s: State) = withContext(Dispatchers.Main) { cell(url).value = s }
 
     private suspend fun download(url: String): File? {
         val out = fileOf(url)

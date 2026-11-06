@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -37,8 +35,6 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,7 +54,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -68,10 +63,9 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.data.HistoryEntry
-import io.github.contentsview08.obb.data.ThumbMode
 
 /** サイトの見せる名前(5ch の bbsmenu は「5ちゃんねる」と出す) */
-fun siteLabel(url: String, name: String): String = if (url.contains("menu.5ch.") || url.contains("menu.5ch.net")) "5ちゃんねる" else name
+fun siteLabel(url: String, name: String): String = if (url.contains("menu.5ch.")) "5ちゃんねる" else name
 
 /**
  * 板を探す: サイト(5ちゃんねる・red-edge など) → カテゴリ → 板 の順に入っていく(スマホのファイルの選び方と同じ)。
@@ -121,7 +115,7 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
                 item { FolderRow("URL で板・スレを開く", "板の一覧がない掲示板は、板・スレの URL から", Icons.Filled.Link, chevron = false) { urlDialog = true } }
                 item { Spacer(Modifier.navigationBarsPadding()) }
             }
-            vm.boardsLoading && !loaded || vm.boardsLoading && vm.boards.isEmpty() -> Hint("読み込み中…")
+            vm.boardsLoading && (!loaded || vm.boards.isEmpty()) -> Hint("読み込み中…")
             vm.boardsError != null && vm.boards.isEmpty() -> Hint("読み込めませんでした: ${vm.boardsError}")
             // 2 段目: カテゴリ
             page.category == null -> {
@@ -232,7 +226,7 @@ private fun PastRow(
                 if (total != null) Text("${total}レス", color = Palette.textMuted, fontSize = 11.sp)
                 if (unread > 0) {
                     Spacer(Modifier.width(8.dp))
-                    Text(if (unread > 999) "+999+" else "+$unread", Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    UnreadBadge(unread)
                 }
             }
         }
@@ -242,17 +236,25 @@ private fun PastRow(
 
 private fun boardName(vm: AppViewModel, url: String) = vm.favorites.firstOrNull { it.url == url }?.name ?: url.removePrefix("https://").trimEnd('/')
 
+/** 未読の数の札 */
+@Composable
+internal fun UnreadBadge(unread: Int) {
+    Text(if (unread > 999) "+999+" else "+$unread", Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+}
+
+/** 書いた本文の頭の行(アンカーだけの行は飛ばす) */
+internal fun postedHeadLine(body: String): String? = body.lines().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim()
+
 /** 過去のスレの「未読」「閲覧」「お気に入り」のタブ。読んだ位置と、手元で分かっている未読の数 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun ThreadEntryList(vm: AppViewModel, title: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null) {
+fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null) {
     val refresh = onRefresh ?: { vm.checkNew(entries) }
-    val tab = when (title) { "未読のスレ" -> "unread"; "お気に入りのスレ" -> "fav"; else -> "history" }
     var menuFor by remember { mutableStateOf<io.github.contentsview08.obb.bbs.ThreadSummary?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
     // お気に入りのスレは、開いたときに新着を確かめる(今のスマホ版と同じ)
-    androidx.compose.runtime.LaunchedEffect(title) { if (title == "お気に入りのスレ") vm.checkNew(entries) }
+    androidx.compose.runtime.LaunchedEffect(tab) { if (tab == "fav") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
     // 閲覧のタブのスレタイ検索。ふだんの一覧は 300 件までなので、探すあいだは全部から探す
@@ -332,8 +334,8 @@ fun PostHistoryScreen(vm: AppViewModel) {
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem("スレを開いて、このレスへ", Icons.AutoMirrored.Filled.OpenInNew, Palette.accent) { vm.openThread(e.thread, e.no) },
-                    MenuItem("本文をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, e.body); vm.toast = "コピーしました" },
+                    MenuItem("スレを開いて、このレスへ", Icons.AutoMirrored.Filled.OpenInNew) { vm.openThread(e.thread, e.no) },
+                    MenuItem("本文をコピー", Icons.Filled.ContentCopy) { copyText(context, e.body); vm.toast = "コピーしました" },
                 ),
                 listOf(MenuItem("履歴から消す(掲示板の書き込みは消えません)", Icons.Filled.Delete, danger = true) { vm.deletePostHistory(e) }),
             ),
@@ -348,7 +350,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
             items(vm.postHistory) { e ->
                 PastRow(
                     vm, e.thread, "${boardName(vm, e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた", null, 0,
-                    own = e.body.lines().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: e.body.trim(), ownNo = e.no,
+                    own = postedHeadLine(e.body) ?: e.body.trim(), ownNo = e.no,
                     onLongClick = { Haptics.longPress(hv); menuFor = e },
                     onClick = { vm.openThread(e.thread, e.no) },
                 )
@@ -367,8 +369,9 @@ fun UploadsScreen(vm: AppViewModel) {
     val swipe = rememberSwipeState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val hv = androidx.compose.ui.platform.LocalView.current
-    var version by remember { mutableStateOf(0) }
-    val ups = remember(version) { vm.prefs.uploads() }
+    val ups = remember { vm.prefs.uploads() }
+    // セルごとに書き込み履歴をなめないよう、先にまとめて引いておく
+    val postedOf = remember(ups, vm.postHistory) { ups.associate { it.first to vm.postedIn(it.first) } }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<String?>(null) }
     viewerUrl?.let { u -> ImageViewer(ups.map { it.first }, u, onClose = { viewerUrl = null }) }
@@ -377,11 +380,11 @@ fun UploadsScreen(vm: AppViewModel) {
         MenuSheet(
             listOf(
                 listOfNotNull(
-                    MenuItem("見る", Icons.AutoMirrored.Filled.OpenInNew, Palette.accent) { viewerUrl = url },
-                    MenuItem("URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, url); vm.toast = "URL をコピーしました" },
-                    posted?.let { e -> MenuItem("貼ったレスへ(${e.thread.title.ifEmpty { "スレタイ不明" }}${e.no?.let { " >>$it" } ?: ""})", Icons.Filled.Reply, Palette.own) { vm.openThread(e.thread, e.no) } },
+                    MenuItem("見る", Icons.AutoMirrored.Filled.OpenInNew) { viewerUrl = url },
+                    MenuItem("URL をコピー", Icons.Filled.ContentCopy) { copyText(context, url); vm.toast = "URL をコピーしました" },
+                    posted?.let { e -> MenuItem("貼ったレスへ(${e.thread.title.ifEmpty { "スレタイ不明" }}${e.no?.let { " >>$it" } ?: ""})", Icons.Filled.Reply) { vm.openThread(e.thread, e.no) } },
                     // imgbb(API キー)は上げたときに消すためのページが返る。API では消せないので、ブラウザで開いて消す
-                    vm.prefs.uploadDeleteUrl(url)?.let { d -> MenuItem("置き場の削除ページを開く", Icons.Filled.Delete, Palette.markDanger) { openExternal(context, d, false) } },
+                    vm.prefs.uploadDeleteUrl(url)?.let { d -> MenuItem("置き場の削除ページを開く", Icons.Filled.Delete) { openExternal(context, d, false) } },
                 ),
             ),
             MenuAt.Center,
@@ -399,7 +402,7 @@ fun UploadsScreen(vm: AppViewModel) {
             ) {
                 items(ups.size) { i ->
                     val url = ups[i].first
-                    val posted = vm.postedIn(url)
+                    val posted = postedOf[url]
                     Column(Modifier.padding(3.dp)) {
                         @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
                         StoredImage(

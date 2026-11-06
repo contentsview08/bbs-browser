@@ -158,11 +158,7 @@ fun QuickAccess(vm: AppViewModel) {
                                     BoardIcon(h.thread.boardUrl, 14.dp) { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(14.dp)) }
                                     Spacer(Modifier.width(5.dp))
                                     Text(boardName(h.thread.boardUrl), Modifier.weight(1f), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        if (unread > 999) "+999+" else "+$unread",
-                                        Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
-                                        color = Palette.unreadText, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                    )
+                                    UnreadBadge(unread)
                                 }
                                 Text(
                                     h.thread.title.ifEmpty { h.thread.key }, Modifier.padding(top = 6.dp).height(38.dp),
@@ -208,7 +204,7 @@ fun QuickAccess(vm: AppViewModel) {
                         }
                         if (unread > 0 && !here) {
                             Spacer(Modifier.width(8.dp))
-                            Text(if (unread > 999) "+999+" else "+$unread", Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            UnreadBadge(unread)
                         }
                     }
                 val boardIcon = @Composable { url: String -> BoardIcon(url, 18.dp) { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp)) } }
@@ -251,7 +247,7 @@ fun QuickAccess(vm: AppViewModel) {
                         // (スレ, 下の行, 未読)
                         val rows: List<Triple<ThreadSummary, String, Int>> = when (tab) {
                             "posted" -> vm.postHistory.distinctBy { it.thread.id }.take(30).map { e ->
-                                Triple(e.thread, "${boardName(e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた ・ ${e.body.lines().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: ""}", 0)
+                                Triple(e.thread, "${boardName(e.thread.boardUrl)} ・ ${relativeTime(e.postedAt)}に書いた ・ ${postedHeadLine(e.body) ?: ""}", 0)
                             }
                             else -> vm.history.take(30).map { h -> Triple(h.thread, "${boardName(h.thread.boardUrl)} ・ ${relativeTime(h.readAt)}に見た", unreadOf(h.thread, h.readNo)) }
                         }.filter { (t, _, _) -> hit(t.title, boardName(t.boardUrl)) }

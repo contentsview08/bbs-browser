@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,7 +19,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,7 +54,7 @@ fun AiNgSettings(vm: AppViewModel) {
             Text("AI NG を使う", color = Palette.textStrong, fontSize = 15.sp)
             Text("はじめてオンにしたとき、判定モデル(${AiModel.SIZE}・MIT ライセンス)を一度だけ取ります(Wi-Fi のときがおすすめ)。そのあとは、この端末の中だけで判定し、レスをどこにも送りません", color = Palette.textMuted, fontSize = 12.sp)
         }
-        Switch(p.aiNgEnabled, { p.aiNgEnabled = it }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+        Switch(p.aiNgEnabled, { p.aiNgEnabled = it }, colors = accentSwitchColors())
     }
     if (p.aiNgEnabled) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         val mb = { n: Long -> "${n / 1024 / 1024}MB" }

@@ -22,38 +22,41 @@ sealed class PostResult {
     class Error(val message: String) : PostResult()
 }
 
-private val SJIS: Charset = runCatching { Charset.forName("windows-31j") }.getOrElse { Charset.forName("Shift_JIS") }
-
 /**
  * Shift_JIS・EUC-JP の表にないものとして &#数字; で送る文字(PC 版の表と同じ)。
  * Java・Android の文字コード変換は、似た文字に置き換えて送ることがある(¥ を \\ にするなど)ので、ここで先に決める
  */
 internal val NOT_IN_JIS_TABLE = setOf(0x301C, 0x2212, 0x2016, 0x2014, 0xA2, 0xA3, 0xAC, 0xA5, 0x203E)
 
-/** 1 つの値を Shift_JIS にする。Shift_JIS にない文字(絵文字など)は &#数字; にする */
-private fun encodeShiftJis(text: String): ByteArray {
-    val enc = SJIS.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).onMalformedInput(CodingErrorAction.REPORT)
+/** 1 文字ずつ符号化する。その文字コードにない文字(絵文字など)は &#数字; にする。fixed は表より先に見る決まった符号 */
+internal fun encodeWithEntities(text: String, charset: Charset, fixed: Map<Int, ByteArray> = emptyMap(), maxBytes: Int = Int.MAX_VALUE): ByteArray {
+    val enc = charset.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).onMalformedInput(CodingErrorAction.REPORT)
     val out = java.io.ByteArrayOutputStream()
     var i = 0
     while (i < text.length) {
         val cp = text.codePointAt(i)
         val ch = String(Character.toChars(cp))
-        val bytes: ByteArray? = if (cp in NOT_IN_JIS_TABLE) null else runCatching {
+        val bytes: ByteArray? = fixed[cp] ?: if (cp in NOT_IN_JIS_TABLE) null else runCatching {
             val bb: ByteBuffer = enc.encode(CharBuffer.wrap(ch))
             ByteArray(bb.remaining()).also { bb.get(it) }
-        }.getOrNull()
-        if (bytes != null) out.write(bytes) else out.write("&#$cp;".toByteArray(Charsets.US_ASCII))
+        }.getOrNull()?.takeIf { it.size <= maxBytes }
+        out.write(bytes ?: "&#$cp;".toByteArray(Charsets.US_ASCII))
         i += Character.charCount(cp)
     }
     return out.toByteArray()
 }
 
-/** Shift_JIS の application/x-www-form-urlencoded。改行はブラウザと同じく CR LF で送る */
-fun encodeShiftJisForm(fields: Map<String, String>): ByteArray =
+/** application/x-www-form-urlencoded。改行はブラウザと同じく CR LF で送る */
+internal fun encodeForm(fields: Map<String, String>, encode: (String) -> ByteArray): ByteArray =
     fields.entries.joinToString("&") { (k, v) ->
-        val bytes = encodeShiftJis(v.replace("\r\n", "\n").replace("\n", "\r\n"))
+        val bytes = encode(v.replace("\r\n", "\n").replace("\n", "\r\n"))
         "$k=" + URLEncoder.encode(String(bytes, Charsets.ISO_8859_1), "ISO-8859-1")
     }.toByteArray(Charsets.US_ASCII)
+
+private fun encodeShiftJis(text: String): ByteArray = encodeWithEntities(text, TextEncoding.SJIS.charset())
+
+/** Shift_JIS のフォームの本文 */
+fun encodeShiftJisForm(fields: Map<String, String>): ByteArray = encodeForm(fields, ::encodeShiftJis)
 
 /** Shift_JIS で送ったときのバイト数(書き込む前に長すぎないか確かめる目安) */
 fun shiftJisByteLength(text: String): Int = encodeShiftJis(text.replace("\n", "\r\n")).size

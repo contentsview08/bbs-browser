@@ -62,9 +62,9 @@ class ConformanceTest {
         val index = PostIndex.build(listOf(post(100000, text)))
         val i = index.info.getValue(100000)
         mapOf(
-            "anchors" to i.spans.filterIsInstance<Span.Anchor>().flatMap { it.nos },
-            "urls" to i.spans.filterIsInstance<Span.Url>().map { it.url },
-            "ids" to i.spans.filterIsInstance<Span.Id>().map { it.id },
+            "anchors" to i.spans.filterIsInstance<BodyToken.Anchor>().flatMap { it.nos },
+            "urls" to i.spans.filterIsInstance<BodyToken.Url>().map { it.url },
+            "ids" to i.spans.filterIsInstance<BodyToken.Id>().map { it.id },
             "images" to i.images,
             "image" to i.image,
             "video" to i.video,

@@ -217,8 +217,3 @@ fun buildGestures(assign: Map<String, String>, screen: String, actions: Map<Stri
     return assign.mapNotNull { (seq, key) -> actions[key]?.let { run -> seq to SwipeAction(names[key] ?: key, run) } }.toMap()
 }
 
-/** Modifier.swipeGestures を、then の中から呼ぶための入れ物 */
-object SwipeGesturesHolder {
-    @Composable
-    fun Modifier.gestures(state: SwipeState, map: Map<String, SwipeAction>, sensitivity: Int): Modifier = this.swipeGestures(state, map, sensitivity = sensitivity)
-}

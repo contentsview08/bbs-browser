@@ -13,11 +13,9 @@ import io.github.contentsview08.obb.bbs.PostInfo
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -29,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.setValue
@@ -42,7 +39,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.dp
@@ -52,19 +48,20 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 
-/** Discord 風・LINE 風で、頭の上に出す返信先(本文の頭のアンカー) */
-/**
- * 頭の行の置き場所と字の並び(レスごと)。長押しした位置が ID・名前の上なら、その ID・名前の操作を出すために使う
- */
-object HeaderHits {
+/** 描いた 1 行の、行・頭の行の位置と、頭の行の字の並び(長押しした所が ID・名前の上かを調べる) */
+class HeaderHit {
+    var row: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var coords: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var layout: androidx.compose.ui.text.TextLayoutResult? = null
+
     /**
-     * row の中の位置 pos が、レス r の頭の行の押せる所(ID「i:」・名前「n:」)の上なら、そのタグ。
-     * 頭の行の位置は、描いた行ごとに覚える(hit)。同じレスがスレ表示とポップアップの両方に出ても取り違えないように
+     * 行の中の位置 pos が、頭の行の押せる所(ID「i:」・名前「n:」)の上なら、そのタグ。
+     * 頭の行の位置は、描いた行ごとに覚える。同じレスがスレ表示とポップアップの両方に出ても取り違えないように
      */
-    fun tagAt(r: RenderedPost, hit: HeaderHit, pos: androidx.compose.ui.geometry.Offset): String? {
-        val row = hit.row?.takeIf { it.isAttached } ?: return null
-        val c = hit.coords?.takeIf { it.isAttached } ?: return null
-        val l = hit.layout ?: return null
+    fun tagAt(pos: androidx.compose.ui.geometry.Offset): String? {
+        val row = row?.takeIf { it.isAttached } ?: return null
+        val c = coords?.takeIf { it.isAttached } ?: return null
+        val l = layout ?: return null
         val p = runCatching { c.localPositionOf(row, pos) }.getOrNull() ?: return null
         if (p.x < 0 || p.y < 0 || p.x > c.size.width || p.y > c.size.height) return null
         val i = l.getOffsetForPosition(p)
@@ -73,18 +70,11 @@ object HeaderHits {
     }
 }
 
-/** 描いた 1 行の、行・頭の行の位置と、頭の行の字の並び(長押しした所が ID・名前の上かを調べる) */
-class HeaderHit {
-    var row: androidx.compose.ui.layout.LayoutCoordinates? = null
-    var coords: androidx.compose.ui.layout.LayoutCoordinates? = null
-    var layout: androidx.compose.ui.text.TextLayoutResult? = null
-}
-
 /** いま描いている行の HeaderHit(スレ表示・ポップアップの行が渡す) */
 val LocalHeaderHit = androidx.compose.runtime.compositionLocalOf<HeaderHit?> { null }
 
-/** id はアイコンの種(設定でワッチョイがあればワッチョイ、なければ ID) */
-class ReplyPreview(val no: Int, val id: String?, val name: String, val text: String)
+/** Discord 風・LINE 風で、頭の上に出す返信先(本文の頭のアンカー)。id はアイコンの種(設定でワッチョイがあればワッチョイ、なければ ID) */
+class ReplyPreview(val no: Int, val id: String?, val text: String)
 
 /**
  * レス 1 件。組み立て済み(renderPosts)の頭の行と本文を置くだけ。
@@ -311,7 +301,7 @@ fun PostItem(
     }
 }
 
-/** 返信先の 1 行(小さいアイコン・名前・本文の頭)。押すと返信先をポップアップで出す */
+/** 返信先の 1 行(小さいアイコン・本文の頭)。押すと返信先をポップアップで出す */
 @Composable
 private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, onDark: Boolean = false, onClick: () -> Unit) {
     Row(Modifier.padding(start = indent, bottom = 4.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {

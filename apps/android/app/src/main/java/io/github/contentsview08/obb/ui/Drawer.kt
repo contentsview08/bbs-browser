@@ -19,9 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.MarkEmailUnread
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Forum
@@ -52,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
+
+private const val BAD_URL_NOTICE = "開けない URL です(2ch 互換・したらば・まちBBS・hono-bbs のスレ・板の URL を入れてください)"
 
 /** 左から出るメニュー(今のスマホ版のサイドバーの引き出しと同じ並び) */
 @Composable
@@ -111,12 +111,12 @@ fun OpenUrlDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                     url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") },
                     // キーボードの決定でも開く
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Go),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) onDismiss() else vm.toast = "開けない URL です(2ch 互換・したらば・まちBBS・hono-bbs のスレ・板の URL を入れてください)" }),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) onDismiss() else vm.toast = BAD_URL_NOTICE }),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (vm.openUrl(url)) onDismiss() else vm.toast = "開けない URL です(2ch 互換・したらば・まちBBS・hono-bbs のスレ・板の URL を入れてください)"
+                    if (vm.openUrl(url)) onDismiss() else vm.toast = BAD_URL_NOTICE
                 }) { Text("開く") }
             },
             dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },

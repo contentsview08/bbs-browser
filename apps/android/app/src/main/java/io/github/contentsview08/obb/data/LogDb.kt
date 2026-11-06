@@ -321,10 +321,11 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         writableDatabase.delete("post_history", "board_url = ? AND key = ? AND posted_at = ?", arrayOf(e.thread.boardUrl, e.thread.key, e.postedAt.toString()))
     }
 
-    suspend fun deleteThread(t: ThreadSummary) = io {
-        val db = writableDatabase
-        db.delete("posts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
-        db.delete("threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
+    suspend fun deleteThread(t: ThreadSummary) = deleteThreads(listOf(t))
+
+    private fun deleteLog(db: SQLiteDatabase, boardUrl: String, key: String) {
+        db.delete("posts", "board_url = ? AND key = ?", arrayOf(boardUrl, key))
+        db.delete("threads", "board_url = ? AND key = ?", arrayOf(boardUrl, key))
     }
 
     /** 選んだスレのログをまとめて消す(途中で落ちて半分だけ消えないように 1 つのトランザクションで) */
@@ -332,10 +333,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (t in list) {
-                db.delete("posts", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
-                db.delete("threads", "board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key))
-            }
+            for (t in list) deleteLog(db, t.boardUrl, t.key)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -358,10 +356,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) } }
         db.beginTransaction()
         try {
-            for ((b, k) in rows) {
-                db.delete("posts", "board_url = ? AND key = ?", arrayOf(b, k))
-                db.delete("threads", "board_url = ? AND key = ?", arrayOf(b, k))
-            }
+            for ((b, k) in rows) deleteLog(db, b, k)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

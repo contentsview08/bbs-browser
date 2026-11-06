@@ -5,21 +5,14 @@ import io.github.contentsview08.obb.data.normalizeForSearch
 // レスの下ごしらえ。本文の解析(PostBody.kt)から、画像・動画・リンクを分け、人気(アンカーの数)と ID の数を数える。
 // 画面とは別のスレッド(Dispatchers.Default)で、レスが届いたときに 1 回だけ作る。絞り込みはこの結果を見るだけなので軽い
 
-/** 本文の中の、押せるところ(アンカー・URL・ID)。start・end は本文の中の位置 */
-sealed class Span(val start: Int, val end: Int) {
-    class Anchor(start: Int, end: Int, val nos: List<Int>) : Span(start, end)
-    class Url(start: Int, end: Int, val url: String) : Span(start, end)
-    class Id(start: Int, end: Int, val id: String) : Span(start, end)
-}
-
 enum class Filter(val label: String) { POPULAR("人気"), IMAGE("画像"), VIDEO("動画"), LINK("リンク"), OWN("自分") }
 
 /**
- * images: 本文の画像の URL(サムネイルに出す)。display: 画面に出す本文(続いた空行を 1 つにまとめ、最後の空行を消したもの。
+ * spans: 本文の中の、押せるところ。images: 本文の画像の URL(サムネイルに出す)。display: 画面に出す本文(続いた空行を 1 つにまとめ、最後の空行を消したもの。
  * spans の位置はこの文字列の中の位置)
  */
 class PostInfo(
-    val spans: List<Span>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList(), val display: String = "",
+    val spans: List<BodyToken>, val image: Boolean, val video: Boolean, val link: Boolean, val images: List<String> = emptyList(), val display: String = "",
     /** リンクのカードに出す URL(画像・動画・掲示板のスレ以外) */
     val links: List<String> = emptyList(),
     /** YouTube の動画 ID と元の URL(サムネイルに出す) */
@@ -41,9 +34,11 @@ fun splitBeIcon(body: String): Pair<String?, String> {
     return "https://${m.groupValues[1]}" to body.substring(m.range.last + 1)
 }
 
+private val BLANK_LINES = Regex("\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}")
+private val TRAILING_SPACE = Regex("[$WS]+$")
+
 /** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
-fun displayBody(body: String): String =
-    body.replace(Regex("\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}"), "\n\n").replace(Regex("[$WS]+$"), "")
+fun displayBody(body: String): String = body.replace(BLANK_LINES, "\n\n").replace(TRAILING_SPACE, "")
 
 /** アンカーツリーの 1 行 */
 /**
@@ -61,6 +56,8 @@ class PostIndex(
     val replies: Map<Int, List<Int>>,
     val idCount: Map<String, Int>,
     private val grossWords: List<String> = listOf("グロ"),
+    /** 作ったときの設定(build で前の結果を使い回してよいかの判断に使う) */
+    private val collapse: Boolean = true,
 ) {
     /** own: 自分の書き込みのレス番号(「自分」の絞り込み) */
     fun matches(p: Post, f: Filter, own: Set<Int> = emptySet()): Boolean {
@@ -141,59 +138,63 @@ class PostIndex(
     val allImagePosts: List<Post> by lazy { posts.flatMap { p -> (info[p.no]?.images ?: emptyList()).map { p } } }
 
     companion object {
-        /** collapse: 続いた空行をまとめる(設定)。grossWords: グロ注意とみなす言葉 */
-        fun build(posts: List<Post>, collapse: Boolean = true, grossWords: List<String> = listOf("グロ")): PostIndex {
+        /** 1 レスの解析。番号と本文と collapse だけで決まるので、同じなら前の結果を使い回せる */
+        private fun infoOf(p: Post, collapse: Boolean): PostInfo {
+            var image = false
+            var video = false
+            var link = false
+            val images = ArrayList<String>()
+            val links = ArrayList<String>()
+            val youtube = ArrayList<Pair<String, String>>()
+            val (beIcon, body0) = splitBeIcon(p.body)
+            val text = if (collapse) displayBody(body0) else body0
+            val spans = bodyTokens(text)
+            for (t in spans) if (t is BodyToken.Url) {
+                val url = t.url
+                val img = toImageUrl(url)
+                when {
+                    img != null -> {
+                        image = true
+                        images += img
+                    }
+                    isVideoFileUrl(url) -> video = true
+                    isYoutubeUrl(url) -> {
+                        video = true
+                        youtubeIdOf(url)?.let { id -> if (youtube.none { it.first == id }) youtube += id to url }
+                    }
+                    else -> {
+                        link = true
+                        // 掲示板のスレはアプリの中で開くので、カードにしない
+                        if (!UrlRoute.isThreadUrl(url) && url !in links) links += url
+                    }
+                }
+            }
+            return PostInfo(spans, image, video, link, images, text, links, youtube, beIcon)
+        }
+
+        /**
+         * collapse: 続いた空行をまとめる(設定)。grossWords: グロ注意とみなす言葉。
+         * previous: 前の結果。番号と本文が同じレスは解析し直さない(新着が 1 件でも全レスを字句解析しないように)
+         */
+        fun build(posts: List<Post>, collapse: Boolean = true, grossWords: List<String> = listOf("グロ"), previous: PostIndex? = null): PostIndex {
             val info = HashMap<Int, PostInfo>(posts.size * 2)
             val replyCount = HashMap<Int, Int>()
             val replies = HashMap<Int, MutableList<Int>>()
             val idCount = HashMap<String, Int>()
+            val reuse = previous?.takeIf { it.collapse == collapse }
+            val oldPosts = reuse?.posts?.associateBy { it.no }
             for (p in posts) {
-                val spans = ArrayList<Span>()
-                var image = false
-                var video = false
-                var link = false
-                val images = ArrayList<String>()
-                val links = ArrayList<String>()
-                val youtube = ArrayList<Pair<String, String>>()
-                val (beIcon, body0) = splitBeIcon(p.body)
-                val text = if (collapse) displayBody(body0) else body0
+                val i = (if (oldPosts?.get(p.no)?.body == p.body) reuse?.info?.get(p.no) else null) ?: infoOf(p, collapse)
                 val targets = HashSet<Int>()
-                for (t in bodyTokens(text)) when (t) {
-                    is BodyToken.Anchor -> {
-                        spans += Span.Anchor(t.start, t.end, t.nos)
-                        for (n in t.nos) if (n != p.no) targets += n
-                    }
-                    is BodyToken.Id -> spans += Span.Id(t.start, t.end, t.id)
-                    is BodyToken.Url -> {
-                        val url = t.url
-                        spans += Span.Url(t.start, t.end, url)
-                        val img = toImageUrl(url)
-                        when {
-                            img != null -> {
-                                image = true
-                                images += img
-                            }
-                            isVideoFileUrl(url) -> video = true
-                            isYoutubeUrl(url) -> {
-                                video = true
-                                youtubeIdOf(url)?.let { id -> if (youtube.none { it.first == id }) youtube += id to url }
-                            }
-                            else -> {
-                                link = true
-                                // 掲示板のスレはアプリの中で開くので、カードにしない
-                                if (!UrlRoute.isThreadUrl(url) && url !in links) links += url
-                            }
-                        }
-                    }
-                }
+                for (s in i.spans) if (s is BodyToken.Anchor) for (n in s.nos) if (n != p.no) targets += n
                 for (n in targets) {
                     replyCount[n] = (replyCount[n] ?: 0) + 1
                     replies.getOrPut(n) { ArrayList() } += p.no
                 }
-                info[p.no] = PostInfo(spans, image, video, link, images, text, links, youtube, beIcon)
+                info[p.no] = i
                 p.id?.let { idCount[it] = (idCount[it] ?: 0) + 1 }
             }
-            return PostIndex(posts, info, replyCount, replies, idCount, grossWords)
+            return PostIndex(posts, info, replyCount, replies, idCount, grossWords, collapse)
         }
     }
 }

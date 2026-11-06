@@ -39,9 +39,9 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem("開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.accent) { vm.openThread(t) },
-                    MenuItem(if (fav) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (fav) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, Palette.markFav) { vm.toggleFavoriteThread(t) },
-                    MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, "${t.title}\n${TwoCh.webUrl(t)}"); vm.toast = "コピーしました" },
+                    MenuItem("開く", Icons.AutoMirrored.Filled.OpenInNew) { vm.openThread(t) },
+                    MenuItem(if (fav) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (fav) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(t) },
+                    MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy) { copyText(context, "${t.title}\n${TwoCh.webUrl(t)}"); vm.toast = "コピーしました" },
                 ),
                 listOfNotNull(
                     MenuItem("NG", Icons.Filled.Block, children = listOfNotNull(

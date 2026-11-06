@@ -1,7 +1,5 @@
 package io.github.contentsview08.obb.ui
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,26 +10,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Palette
@@ -76,11 +65,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -89,14 +76,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.draw.clip
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.ime
@@ -105,9 +89,6 @@ import androidx.compose.foundation.layout.imePadding
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -125,7 +106,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -133,7 +113,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.bbs.Filter
@@ -146,14 +125,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-/** 絞り込みのタブ(今のスマホ版と同じ 4 つ + すべて。アイコンに意味の色) */
-// 色は配色を変えたら変わるよう、読むたびに Palette から取る(get())
-private val TABS: List<Triple<Filter, ImageVector, Color>> get() = listOf(
-    Triple(Filter.POPULAR, Icons.Filled.LocalFireDepartment, Palette.markHot),
-    Triple(Filter.IMAGE, Icons.Filled.Image, Palette.markImage),
-    Triple(Filter.VIDEO, Icons.Filled.PlayCircle, Palette.markVideo),
-    Triple(Filter.LINK, Icons.Filled.Link, Palette.markLink),
+/** 絞り込みのタブ(今のスマホ版と同じ 4 つ + すべて) */
+private val TABS: List<Pair<Filter, ImageVector>> = listOf(
+    Filter.POPULAR to Icons.Filled.LocalFireDepartment,
+    Filter.IMAGE to Icons.Filled.Image,
+    Filter.VIDEO to Icons.Filled.PlayCircle,
+    Filter.LINK to Icons.Filled.Link,
 )
+
+/** スレタイの後ろの番号([1234567890])。見せるときは省く */
+private val TITLE_THREAD_NO = Regex("\\s*[\\[［][0-9]{6,12}[\\]］]\\s*$")
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -198,17 +179,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var ngWordFor by remember { mutableStateOf<Post?>(null) }
     /** ID・名前を長押ししたときのメニュー(種類「i」「n」と、そのレス) */
     var headMenu by remember { mutableStateOf<Pair<Char, Post>?>(null) }
-    // 長押しの判定のため、レスの行の置き場所と、指を置いた位置(行の中)を覚えておく
-    val rowCoords = remember { HashMap<Int, androidx.compose.ui.layout.LayoutCoordinates>() }
-    var downInRow by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var gallery by remember { mutableStateOf(false) }
     var nextSheet by remember { mutableStateOf(false) }
     /** 中身を見せている NG のレス */
     var revealed by remember { mutableStateOf(emptySet<Int>()) }
     var viewer by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
+    fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
     var fontDialog by remember { mutableStateOf(false) }
-    var fontOnly by remember { mutableStateOf(false) }
     var titleSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
     var saveSheet by remember { mutableStateOf(false) }
@@ -231,20 +210,20 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 当たっている NG を外す項目。その文字ちょうどの NG は押すだけで外し、正規表現・部分一致は別のレスにも効いているので編集を開く
     fun ngOffItems(rules: List<NgRule>, what: String, value: String?): List<MenuItem> {
         val (exact, others) = io.github.contentsview08.obb.data.splitNgHits(rules, value)
-        return (if (exact.isEmpty()) emptyList() else listOf(MenuItem("この${if (what == "ID") " ID " else what}を NG から外す", Icons.AutoMirrored.Filled.Undo, Palette.markDanger) {
+        return (if (exact.isEmpty()) emptyList() else listOf(MenuItem("この${if (what == "ID") " ID " else what}を NG から外す", Icons.AutoMirrored.Filled.Undo) {
             exact.forEach { vm.removeNg(it) }
             vm.toast = "NG から外しました"
         })) + others.map { r ->
-            MenuItem("$what の NG「${if (r.pattern.length > 12) r.pattern.take(12) + "…" else r.pattern}」を開く", Icons.Filled.EditNote, Palette.markDanger) { ngEditing = r }
+            MenuItem("$what の NG「${if (r.pattern.length > 12) r.pattern.take(12) + "…" else r.pattern}」を開く", Icons.Filled.EditNote) { ngEditing = r }
         }
     }
-    fun idNgItems(p: Post, tint: Color): List<MenuItem> = p.id?.let { id ->
+    fun idNgItems(p: Post): List<MenuItem> = p.id?.let { id ->
         listOf(
-            MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule, tint) { vm.addNg(NgRule("id", id, expiresOn = io.github.contentsview08.obb.data.today())) },
-            MenuItem("この ID を NG に", Icons.Filled.Block, tint) { vm.addNg(NgRule("id", id)) },
+            MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule) { vm.addNg(NgRule("id", id, expiresOn = io.github.contentsview08.obb.data.today())) },
+            MenuItem("この ID を NG に", Icons.Filled.Block) { vm.addNg(NgRule("id", id)) },
         )
     }.orEmpty()
-    fun nameNgItem(p: Post, tint: Color) = MenuItem("この名前を NG に", Icons.Filled.Block, tint) { vm.addNg(NgRule("name", p.name)) }
+    fun nameNgItem(p: Post) = MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("name", p.name)) }
     val own = page.ownNos
     // 自分への返信(自分のレスにアンカーを付けたレス)
     val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
@@ -401,9 +380,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     // 返信先の 1 行に出す中身(Discord 風・LINE 風)
     fun previewOf(no: Int): ReplyPreview? {
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
-        // 引用の行のアイコンも、レスのアイコンと同じ決め方(設定でワッチョイがあればワッチョイ、なければ ID)
-        val seed = if (vm.prefs.iconFromWatchoi) watchoiOf(t.name) ?: t.id else t.id
-        return ReplyPreview(no, seed, t.name.let { n -> TwoCh.cachedNoname(page.summary.boardUrl)?.let { nn -> n.removePrefix(nn).trim() } ?: n }.ifEmpty { "名無し" }, io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+        // 引用の行のアイコンも、レスのアイコンと同じ決め方
+        return ReplyPreview(no, iconKey(t), io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
     }
     fun replyOf(r: RenderedPost?): ReplyPreview? = r?.replyTo?.let { previewOf(it) }
     val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->
@@ -442,15 +420,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     val a = if (f > 0.55f) 0.16f + (f - 0.55f) / 0.45f * 0.08f else f / 0.55f * 0.16f
                     drawRect(flashColor.copy(alpha = a * if (whiteFlash) 0.8f else 0.5f))
                 } else Modifier)
-                .onGloballyPositioned { hit.row = it; if (inMain) rowCoords[p.no] = it }
+                .onGloballyPositioned { hit.row = it }
                 .pointerInput(p.no) {
                     awaitEachGesture {
                         val d = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        downNo = p.no; downInRow = d.position
+                        downNo = p.no
                         // ID・名前の上での長押しは、字のリンクより先にここで受ける(リンクが指を受け取り、離したときに押したことになっていた)。
                         // ポップアップ(レス抽出・ツリー)の中でも同じ(行ごとに頭の位置を覚えているので、スレ表示の行と取り違えない)
-                        val tag = page.rendered[p.no]?.let { r -> HeaderHits.tagAt(r, hit, d.position) }
-                        if (tag == null) return@awaitEachGesture
+                        val tag = hit.tagAt(d.position) ?: return@awaitEachGesture
                         val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                             var e: androidx.compose.ui.input.pointer.PointerEvent
                             do {
@@ -545,7 +522,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             "bottom" to { scroller.toBottom(); bars.show() },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
             "refresh" to { refresh(); Unit },
-            "deleteLog" to { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) },
+            "deleteLog" to { askDeleteLog() },
             "drawer" to { vm.drawerOpen = true },
             "search" to { searching = true; bars.show() },
             "quick" to { vm.openQuick() },
@@ -557,7 +534,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     bars.atTop = { !listState.canScrollBackward }
     bars.atBottom = { !listState.canScrollForward }
     // フッター(書き込み欄)は本文の上に重ね、下へスクロールすると隠す(書いている間・返事が出ている間は隠さない)。今のスマホ版と同じ
-    val footerShown = if (page.reply.open || page.reply.done != null || page.reply.notice != null || !bars.enabled) 1f else 1f - bars.footerHidden
+    fun footerShown() = if (page.reply.open || page.reply.done != null || page.reply.notice != null || !bars.enabled) 1f else 1f - bars.footerHidden
     // 上の端で下へ・下の端で上へ引っぱって更新(今のスマホ版の useTouchPull)
     val topPull = remember { PullState { Haptics.confirm(view) } }
     val bottomPull = remember { PullState { Haptics.confirm(view) } }
@@ -572,12 +549,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     // 画面全体(本文とポップアップ)で指の動きを受ける: なぞる操作と、押した所の高さ(ポップアップを押した所の真上に出すため)
     // キーボードが出たら、スレ表示ごとその上に縮め、本文をキーボードの高さだけ送る(LINE と同じく、下のレスが隠れずに上がる)
-    val imeBottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density)
+    val imeInsets = androidx.compose.foundation.layout.WindowInsets.ime
     var lastIme by remember { mutableIntStateOf(0) }
-    LaunchedEffect(imeBottom) {
-        val d = imeBottom - lastIme
-        lastIme = imeBottom
-        if (d != 0) runCatching { listState.scrollBy(d.toFloat()) }
+    // 高さはキーボードの動きの間ずっと変わるので、組み立ての外で見る
+    LaunchedEffect(listState, density) {
+        snapshotFlow { imeInsets.getBottom(density) }.collect { ime ->
+            val d = ime - lastIme
+            lastIme = ime
+            if (d != 0) runCatching { listState.scrollBy(d.toFloat()) }
+        }
     }
     Box(
         // LINE 風のときは、地を吹き出しと区別できる色に
@@ -661,27 +641,22 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 16.dp)
                                     .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
-                                    .clickable(enabled = next != null) { next?.let { vm.openNextUnread(page, it.second) } }
+                                    .clickable { vm.openNextUnread(page, next.second) }
                                     .padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(if (next != null) Icons.AutoMirrored.Filled.ArrowForward else Icons.Filled.DoneAll, null, tint = if (next != null) Palette.accent else Palette.textMuted, modifier = Modifier.size(22.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Palette.accent, modifier = Modifier.size(22.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    if (next == null) Text("この一覧に未読のあるスレはありません", color = Palette.textMuted, fontSize = 12.sp)
-                                    else {
-                                        Text("次の未読スレへ(${next.first})", color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
-                                        Text(next.second.title, color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
+                                    Text("次の未読スレへ(${next.first})", color = Palette.textMuted, fontSize = 11.sp, maxLines = 1)
+                                    Text(next.second.title, color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                if (next != null) {
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        if (next.third > 999) "+999+" else "+${next.third}",
-                                        Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 1.dp),
-                                        color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                    )
-                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (next.third > 999) "+999+" else "+${next.third}",
+                                    Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 1.dp),
+                                    color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                                )
                             }
                         }
                         // スレが終わったら(dat 落ち・1000 到達)、一番下に次スレの候補を出す(今のスマホ版と同じ)
@@ -700,7 +675,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 Minimap(
                     shown, index, own, toOwn, if (filter == null && query.isBlank()) page.unreadFrom else null, listState,
                     // フッターの上で終わらせる(フッターが隠れても伸ばさない。伸び縮みすると縮図が動いて見にくい)
-                    Modifier.align(Alignment.TopEnd).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() } + 4.dp, bottom = with(density) { footerH.toDp() } + 4.dp, end = 2.dp),
+                    Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 4.dp.toPx() }, bottom = { footerH + 4.dp.toPx() }).padding(end = 2.dp),
                     onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show() },
                     readNo = page.readNo,
                 )
@@ -713,7 +688,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     }
                 }
                 Box(
-                    Modifier.align(Alignment.TopStart).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() })
+                    Modifier.align(Alignment.TopStart).barPadding(top = { bars.topHeight * (1f - bars.hidden) })
                         .fillMaxWidth(progress.coerceIn(0f, 1f)).height(2.dp).background(Palette.accent.copy(alpha = 0.7f)),
                 )
             }
@@ -725,7 +700,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (searching) {
                     SearchBar(query, { query = it }, "レスを探す(本文・名前・ID)") { searching = false; query = "" }
                 } else {
-                    HeaderBar(page.title.replace(Regex("\\s*[\\[［][0-9]{6,12}[\\]］]\\s*$"), ""), onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
+                    HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
                         BarIcon(Icons.Filled.Search, "探す") { searching = true }
                         MoreButton { menu = true }
                     }
@@ -737,7 +712,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             // 一番下へ(右下)
             if (!atBottom && index.posts.isNotEmpty()) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).padding(end = if (vm.prefs.showMinimap) 34.dp else 16.dp, bottom = 14.dp + with(density) { (footerH * footerShown).toDp() }).size(48.dp)
+                    Modifier.align(Alignment.BottomEnd).barPadding(bottom = { 14.dp.toPx() + footerH * footerShown() }).padding(end = if (vm.prefs.showMinimap) 34.dp else 16.dp).size(48.dp)
                         .background(Palette.surface2, RoundedCornerShape(6.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(6.dp))
                         .clickable { scroller.toBottom(); bars.show() },
                     contentAlignment = Alignment.Center,
@@ -745,15 +720,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             }
 
             // 引っぱって更新の印(上は上の帯の下から、下はフッターの上の端から出てくる)
-            PullSpinner(topPull, 1, Modifier.align(Alignment.TopCenter).padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() }))
-            PullSpinner(bottomPull, -1, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { (footerH * footerShown).toDp() }))
+            PullSpinner(topPull, 1, Modifier.align(Alignment.TopCenter).barPadding(top = { bars.topHeight * (1f - bars.hidden) }))
+            PullSpinner(bottomPull, -1, Modifier.align(Alignment.BottomCenter).barPadding(bottom = { footerH * footerShown() }))
 
             // 新着の札: 新着の頭が画面の外なら、下から「新着 +N」を少しのあいだ出す。押すと新着の頭へ
             ctl.newToast?.let { (count, first) ->
                 val slide = remember(first) { Animatable(0f) }
                 LaunchedEffect(first) { slide.animateTo(1f, tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
                 Row(
-                    Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { (footerH * footerShown).toDp() } + 20.dp)
+                    Modifier.align(Alignment.BottomCenter).barPadding(bottom = { footerH * footerShown() + 20.dp.toPx() })
                         .graphicsLayer { alpha = slide.value; translationX = (1f - slide.value) * size.width * 1.1f }
                         .shadow(8.dp, RoundedCornerShape(50)).background(Palette.accent, RoundedCornerShape(50))
                         .clickable { ctl.newToast = null; scroller.toUnread(first, animate = true); ctl.jumpFlash = first to System.nanoTime() }.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -768,7 +743,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             // フッター(書き込み欄)。本文の上に重ね、下へスクロールすると隠す
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerH = it.height.toFloat() }
-                    .graphicsLayer { translationY = (1f - footerShown) * footerH },
+                    .graphicsLayer { translationY = (1f - footerShown()) * footerH },
             ) { ThreadFooter(vm, page) { refresh() } }
 
         }
@@ -780,7 +755,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
         // ポップアップは本文のスクロールの外に置く(ポップアップの中をスクロールしても、後ろの帯が隠れたり、引っぱって更新が動いたりしないように)
         PopupLayer(
-            popups, bg = Palette.threadBg(style), topInset = bars.topHeight * (1f - bars.hidden), endInset = 0.dp,
+            popups, bg = Palette.threadBg(style), topInset = { bars.topHeight * (1f - bars.hidden) }, endInset = 0.dp,
             onCloseTop = { popups.removeAt(popups.lastIndex) },
         ) { postRow(it, null, false) }
     }
@@ -790,26 +765,26 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, Palette.markFav) { vm.toggleFavoriteThread(page) },
-                    MenuItem("画像一覧", Icons.Filled.PhotoLibrary, Palette.markImage) { gallery = true },
-                    MenuItem("次スレを探す", Icons.Filled.SkipNext, Palette.accent) { vm.findNext(page); nextSheet = true },
-                    MenuItem("レス検索", Icons.Filled.Search, Palette.accent) { searching = true; bars.show() },
+                    favoriteItem(),
+                    MenuItem("画像一覧", Icons.Filled.PhotoLibrary) { gallery = true },
+                    MenuItem("次スレを探す", Icons.Filled.SkipNext) { vm.findNext(page); nextSheet = true },
+                    MenuItem("レス検索", Icons.Filled.Search) { searching = true; bars.show() },
                     MenuItem("板に戻る", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
                 ),
                 listOf(
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                     MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
-                    MenuItem("表示スタイル", Icons.Filled.Palette, Palette.markPurple) { styleSheet = true },
+                    MenuItem("表示スタイル", Icons.Filled.Palette) { styleSheet = true },
                     MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { fontDialog = true },
                 ),
                 listOf(
-                    MenuItem("URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
-                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, TwoCh.webUrl(page.summary), false) },
+                    MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
+                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, TwoCh.webUrl(page.summary), false) },
                     MenuItem("スレを保存(HTML・テキスト)", Icons.Filled.Save) { saveSheet = true },
-                    MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person, Palette.own) { filter = if (filter == Filter.OWN) null else Filter.OWN },
-                    MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { refresh() },
+                    MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person) { filter = if (filter == Filter.OWN) null else Filter.OWN },
+                    MenuItem("更新", Icons.Filled.Refresh) { refresh() },
                 ),
-                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }),
+                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() }),
             ),
         ) { menu = false }
     }
@@ -829,25 +804,25 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             listOf(
                 listOf(
                     MenuItem("板を開く", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
-                    MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, Palette.markFav) { vm.toggleFavoriteThread(page) },
+                    favoriteItem(),
                 ),
                 listOf(
-                    MenuItem("スレタイをコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
-                    MenuItem("URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
-                    MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, "${page.title}\n${TwoCh.webUrl(page.summary)}"); vm.toast = "スレタイと URL をコピーしました" },
+                    MenuItem("スレタイをコピー", Icons.Filled.ContentCopy) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
+                    MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
+                    MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy) { copyText(context, "${page.title}\n${TwoCh.webUrl(page.summary)}"); vm.toast = "スレタイと URL をコピーしました" },
                     MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("title", page.title)) },
                 ),
                 listOf(
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
-                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, TwoCh.webUrl(page.summary), false) },
+                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, TwoCh.webUrl(page.summary), false) },
                 ),
-                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }),
+                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() }),
             ),
             MenuAt.TopStart,
         ) { titleSheet = false }
     }
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
-    if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; fontDialog = true }) { styleSheet = false }
+    if (styleSheet) StyleSheet(vm.prefs) { styleSheet = false }
 
     if (ngEditing != null) {
         val r = ngEditing!!
@@ -855,60 +830,59 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
 
     postMenu?.let { p ->
+        val isAA = aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false
         MenuSheet(
             listOf(
                 // 今のスマホ版の長押しと同じ並び: 返信・定型文・アンカーツリー / コピー・AA / NG
                 listOf(
-                    MenuItem("返信", Icons.AutoMirrored.Filled.Reply, Palette.accent) { replyWith(">>${p.no}\n") },
+                    MenuItem("返信", Icons.AutoMirrored.Filled.Reply) { replyWith(">>${p.no}\n") },
                     // 引用して返信: >>番号 と、本文の頭(アンカーの行を除いて 3 行まで)を「>」付きで
-                    MenuItem("引用して返信", Icons.Filled.FormatQuote, Palette.accent) {
+                    MenuItem("引用して返信", Icons.Filled.FormatQuote) {
                         val quote = p.body.lines().filter { it.isNotBlank() && !it.trimStart().startsWith(">>") }.take(3).joinToString("\n") { "> ${it.trim()}" }
                         replyWith(">>${p.no}\n$quote\n")
                     },
                 ) +
-                    vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { ph ->
-                        MenuItem("「$ph」とすぐ書き込む", Icons.Filled.Bolt, Palette.markHot) { vm.quickPost(page, p.no, ph) }
+                    vm.prefs.quickPhraseList.map { ph ->
+                        MenuItem("「$ph」とすぐ書き込む", Icons.Filled.Bolt) { vm.quickPost(page, p.no, ph) }
                     } +
                     listOfNotNull(
-                        if (index.tree(p.no).size > 1) MenuItem("アンカーツリーを表示", Icons.Filled.AccountTree, Palette.markPurple) {
+                        if (index.tree(p.no).size > 1) MenuItem("アンカーツリーを表示", Icons.Filled.AccountTree) {
                             val rows = index.treeRows(p.no)
                             openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no)
                         } else null,
                     ),
                 listOf(
-                    MenuItem("ヘッダ含めてコピー", Icons.Filled.ContentCopy, Palette.markLink) {
+                    MenuItem("ヘッダ含めてコピー", Icons.Filled.ContentCopy) {
                         copyText(context, "${p.no} ${p.name} ${p.date}${p.id?.let { " ID:$it" } ?: ""}\n${p.body}"); vm.toast = "コピーしました"
                     },
-                    MenuItem("本文のみコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, p.body); vm.toast = "コピーしました" },
-                    (aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false).let { isAA ->
-                        MenuItem(if (isAA) "文字列として表示" else "AAとして表示", if (isAA) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn) { aaOverride = aaOverride + (p.no to !isAA) }
-                    },
+                    MenuItem("本文のみコピー", Icons.Filled.ContentCopy) { copyText(context, p.body); vm.toast = "コピーしました" },
+                    MenuItem(if (isAA) "文字列として表示" else "AAとして表示", if (isAA) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn) { aaOverride = aaOverride + (p.no to !isAA) },
                 ) + listOfNotNull(
                     // AA のレスだけ(縮めて収めた AA は字が小さすぎて読めないことがある)
-                    if (aaOverride[p.no] ?: page.rendered[p.no]?.aa ?: false) MenuItem("AA を拡大して見る", Icons.Filled.ZoomIn, Palette.markPurple) { aaZoom = p.no } else null,
+                    if (isAA) MenuItem("AA を拡大して見る", Icons.Filled.ZoomIn) { aaZoom = p.no } else null,
                 ),
                 // 自分のレスの印(書き込んだときに付くもの)を手で付け外しする。ほかの専ブラ・ブラウザから書いたレスにも付けられるように
                 (p.no in own).let { isOwn ->
                     listOfNotNull(
-                        if (isOwn) MenuItem("自分のレスの印を外す", Icons.Filled.PersonRemove, Palette.own) { vm.markOwn(page, p, own = false, sameId = false) }
-                        else MenuItem("自分のレスの印を付ける", Icons.Filled.HowToReg, Palette.own) { vm.markOwn(page, p, own = true, sameId = false) },
+                        if (isOwn) MenuItem("自分のレスの印を外す", Icons.Filled.PersonRemove) { vm.markOwn(page, p, own = false, sameId = false) }
+                        else MenuItem("自分のレスの印を付ける", Icons.Filled.HowToReg) { vm.markOwn(page, p, own = true, sameId = false) },
                         if (p.id == null) null
-                        else if (isOwn) MenuItem("同じ ID のレスすべての印を外す", Icons.Filled.GroupRemove, Palette.own) { vm.markOwn(page, p, own = false, sameId = true) }
-                        else MenuItem("同じ ID のレスすべてに印を付ける", Icons.Filled.Group, Palette.own) { vm.markOwn(page, p, own = true, sameId = true) },
+                        else if (isOwn) MenuItem("同じ ID のレスすべての印を外す", Icons.Filled.GroupRemove) { vm.markOwn(page, p, own = false, sameId = true) }
+                        else MenuItem("同じ ID のレスすべてに印を付ける", Icons.Filled.Group) { vm.markOwn(page, p, own = true, sameId = true) },
                     )
                 },
                 // NG は 1 つにまとめ、押すと小項目の画面に切り替える(PC 版と同じ)。すでに当たっている NG があれば、足す項目の代わりに外す項目を出す
                 listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p).let { hits ->
-                    (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p, Palette.markDanger)) +
-                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger))) +
+                    (if (!hits?.id.isNullOrEmpty()) ngOffItems(hits!!.id, "ID", p.id) else idNgItems(p)) +
+                        (if (!hits?.name.isNullOrEmpty()) ngOffItems(hits!!.name, "名前", p.name) else listOf(nameNgItem(p))) +
                         ngOffItems(hits?.body.orEmpty(), "本文", null) +
-                        MenuItem("本文の言葉を NG に(直して足す)", Icons.Filled.Block, Palette.markDanger) { ngWordFor = p }
+                        MenuItem("本文の言葉を NG に(直して足す)", Icons.Filled.Block) { ngWordFor = p }
                 } +
                 // AI NG: 条件ごとに「当たる」を手で付ける。当たっているものは「当たらない」
                 vm.aiRulesFor(page).map { r ->
                     val on = page.aiNg[p.no]?.rule?.id == r.id
-                    if (on) MenuItem("AI NG「${r.name}」に当たらない(誤判定)", Icons.Filled.Psychology, Palette.markPurple) { vm.markAi(p, r.id, if (page.aiNg[p.no]?.manual == true) null else false) }
-                    else MenuItem("AI NG「${r.name}」に当たる", Icons.Filled.Psychology, Palette.markPurple) { vm.markAi(p, r.id, true) }
+                    if (on) MenuItem("AI NG「${r.name}」に当たらない(誤判定)", Icons.Filled.Psychology) { vm.markAi(p, r.id, if (page.aiNg[p.no]?.manual == true) null else false) }
+                    else MenuItem("AI NG「${r.name}」に当たる", Icons.Filled.Psychology) { vm.markAi(p, r.id, true) }
                 }) {}),
             ),
             MenuAt.Center,
@@ -920,11 +894,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val sameName = if (kind == 'n') index.posts.filter { it.name == p.name } else emptyList()
         MenuSheet(
             listOf(
-                if (kind == 'i' && p.id != null) listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p, Palette.markDanger) }) {}) + listOf(
-                    MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameId, focus = p.no) },
+                if (kind == 'i' && p.id != null) listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.id.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "ID", p.id) else idNgItems(p) }) {}) + listOf(
+                    MenuItem("この ID のレスを見る(${sameId.size})", Icons.Filled.Search) { openPopup(sameId, focus = p.no) },
                     MenuItem("ID をコピー", Icons.Filled.ContentCopy) { copyText(context, p.id); vm.toast = "コピーしました" },
-                ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else listOf(nameNgItem(p, Palette.markDanger)) }) {}) + listOf(
-                    MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search, Palette.markLink) { openPopup(sameName, focus = p.no) },
+                ) else listOf(MenuItem("NG", Icons.Filled.Block, children = ngHitsOf(p)?.name.orEmpty().let { hits -> if (hits.isNotEmpty()) ngOffItems(hits, "名前", p.name) else listOf(nameNgItem(p)) }) {}) + listOf(
+                    MenuItem("同じ名前のレスを見る(${sameName.size})", Icons.Filled.Search) { openPopup(sameName, focus = p.no) },
                     MenuItem("名前をコピー", Icons.Filled.ContentCopy) { copyText(context, p.name); vm.toast = "コピーしました" },
                 ),
             ),
@@ -954,16 +928,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
 
     // 文字の大きさ・余白(︙ から。今のスマホ版と同じ: レスの本文・レスの頭・行間・レスの上下の余白・ヘッダーとフッター)
-    if (fontDialog) SizeDialog({ fontDialog = false; fontOnly = false }) {
+    if (fontDialog) SizeDialog({ fontDialog = false }) {
         val pr = vm.prefs
-        if (fontOnly) SizeSlider("画面全体の文字", pr.fontScale, 0.85f..1.3f, 8, "${percent(pr.fontScale)}%", 1f) { pr.fontScale = snapTo(it, 20) }
-        else {
-            SizeSlider("レスの本文", pr.bodyScale, 0.8f..1.4f, 11, "${percent(pr.bodyScale)}%", 1f) { pr.bodyScale = snapTo(it, 20) }
-            SizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 0.8f..1.4f, 11, "${percent(pr.postHeadScale)}%", 1f) { pr.postHeadScale = snapTo(it, 20) }
-            SizeSlider("レスの本文の行間", pr.lineHeight, 1.2f..1.9f, 13, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = snapTo(it, 20) }
-            SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..24f, 23, "${pr.postPad}dp", 8f) { pr.postPad = snapInt(it) }
-            BarSliders(pr)
-        }
+        SizeSlider("レスの本文", pr.bodyScale, 0.8f..1.4f, 11, "${percent(pr.bodyScale)}%", 1f) { pr.bodyScale = snapTo(it, 20) }
+        SizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 0.8f..1.4f, 11, "${percent(pr.postHeadScale)}%", 1f) { pr.postHeadScale = snapTo(it, 20) }
+        SizeSlider("レスの本文の行間", pr.lineHeight, 1.2f..1.9f, 13, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = snapTo(it, 20) }
+        SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..24f, 23, "${pr.postPad}dp", 8f) { pr.postPad = snapInt(it) }
+        BarSliders(pr)
     }
 
     if (confirmDelete) ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLog(page) }) { confirmDelete = false }
@@ -1003,7 +974,7 @@ private fun NgRunRow(run: io.github.contentsview08.obb.data.NgRun, open: Boolean
 @Composable
 private fun FilterTabs(filter: Filter?, counts: Map<Filter, Int>, onSelect: (Filter?) -> Unit) {
     Row(Modifier.fillMaxWidth().background(Palette.bar)) {
-        for ((f, icon, color) in TABS) Tab(Modifier.weight(1f), filter == f, { onSelect(if (filter == f) null else f) }) {
+        for ((f, icon) in TABS) Tab(Modifier.weight(1f), filter == f, { onSelect(if (filter == f) null else f) }) {
             // 絞り込みは大事な情報ではないので、アイコンは色を付けず控えめに(選んでいるときだけ強調色)
             Icon(icon, null, tint = if (filter == f) Palette.accent else Palette.textMuted.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(3.dp))

@@ -84,13 +84,32 @@ fun hypothesisOf(prompt: String) = prompt.trim().trimEnd('。', '.') + "。"
 /** 行の頭のアンカー(PC 版の autoNg.ts の LEADING_ANCHORS と同じ) */
 private val LEADING_ANCHORS = Regex("""^\s*(?:(?:>>|＞＞)[0-9,，\-]+\s*)+""")
 
+private val URL_TEXT = Regex("""https?://\S+""")
+private val SPACES = Regex("""\s+""")
+
+/** 同じ本文を何度も解析しないように覚える(再判定のたびに全レス×全条件で呼ばれる) */
+private class TextMemo(private val compute: (String) -> String) {
+    private val map = object : LinkedHashMap<String, String>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 4096
+    }
+
+    operator fun invoke(s: String): String = synchronized(map) { map[s] } ?: compute(s).also { v -> synchronized(map) { map[s] = v } }
+}
+
+private val aiTexts = TextMemo { body ->
+    body.lines().joinToString("\n") { it.replace(LEADING_ANCHORS, "") }.replace(URL_TEXT, "").replace(SPACES, " ").trim().take(300)
+}
+
 /** 判定に渡す本文: 行の頭のアンカー・URL を除き、長すぎるものは頭だけ */
-fun aiTextOf(body: String): String = body.lines().joinToString("\n") { it.replace(LEADING_ANCHORS, "") }
-    .replace(Regex("""https?://\S+"""), "").replace(Regex("""\s+"""), " ").trim().take(300)
+fun aiTextOf(body: String): String = aiTexts(body)
+
+private val bodyKeys = TextMemo(::computeBodyKey)
 
 /** 本文の鍵(PC 版の autoNg.ts の bodyKey と同じ: 行の頭のアンカーと空白を除いた本文の cyrb53 を 16 進で) */
-fun bodyKey(body: String): String {
-    val s = body.lines().joinToString("") { it.replace(LEADING_ANCHORS, "") }.replace(Regex("""\s+"""), "")
+fun bodyKey(body: String): String = bodyKeys(body)
+
+private fun computeBodyKey(body: String): String {
+    val s = body.lines().joinToString("") { it.replace(LEADING_ANCHORS, "") }.replace(SPACES, "")
     var h1 = 0xdeadbeef.toInt()
     var h2 = 0x41c6ce57
     for (ch in s) {
@@ -172,7 +191,7 @@ private fun hash(s: String): Int {
 
 private fun featuresOf(text: String): Map<Int, Float> {
     val f = HashMap<Int, Float>()
-    val cps = text.replace(Regex("""\s+"""), "").codePoints().toArray().take(300)
+    val cps = text.replace(SPACES, "").codePoints().toArray().take(300)
     for (n in 1..3) for (i in 0..cps.size - n) {
         val sb = StringBuilder()
         for (j in i until i + n) sb.appendCodePoint(cps[j])

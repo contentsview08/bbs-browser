@@ -47,8 +47,11 @@ internal suspend fun saveEach(urls: List<String>, save: suspend (String) -> Unit
 object ImageSaver {
     suspend fun save(context: Context, url: String): String = withContext(Dispatchers.IO) {
         // 画像は ImageStore の置き場から(見たことのある画像は取り直さない)
-        val bytes = ImageStore.get(url).readBytes()
-        val type = sniffImageType(bytes) ?: error("画像ではありません")
+        val file = ImageStore.get(url)
+        // 形式は先頭だけで分かる。大きな画像を全部メモリに読まない
+        val head = ByteArray(12)
+        val n = file.inputStream().use { it.read(head) }
+        val type = sniffImageType(head.copyOf(maxOf(n, 0))) ?: error("画像ではありません")
         val ext = when (type) { "image/png" -> "png"; "image/gif" -> "gif"; "image/webp" -> "webp"; "image/avif" -> "avif"; else -> "jpg" }
         val base = url.substringAfterLast('/').substringBefore('?').substringBeforeLast('.').filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(40).ifEmpty { "image" }
         val name = "${base}_${System.currentTimeMillis() / 1000}.$ext"
@@ -61,14 +64,14 @@ object ImageSaver {
             }
             val cr = context.contentResolver
             val uri = cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: error("保存先を作れませんでした")
-            cr.openOutputStream(uri)?.use { it.write(bytes) } ?: error("書き込めませんでした")
+            cr.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: error("書き込めませんでした")
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
             cr.update(uri, values, null, null)
             "ピクチャ/bbs に保存しました"
         } else {
             val dir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: error("保存先がありません")
-            File(dir, name).writeBytes(bytes)
+            file.copyTo(File(dir, name), overwrite = true)
             "保存しました"
         }
     }

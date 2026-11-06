@@ -38,7 +38,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import io.github.contentsview08.obb.ui.RenderedPost
-import io.github.contentsview08.obb.ui.renderPosts
+import io.github.contentsview08.obb.ui.RenderMemo
+import io.github.contentsview08.obb.ui.renderPostsReusing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -149,6 +150,8 @@ sealed interface Page {
         var index by mutableStateOf(PostIndex.build(emptyList()))
         /** 組み立て済みのレス(レス番号 → 頭の行と本文)。index と一緒に作る */
         var rendered by mutableStateOf<Map<Int, RenderedPost>>(emptyMap())
+        /** 前回の組み立て(次の組み立てで使い回す) */
+        var renderMemo: RenderMemo? = null
         /** NG に当たるレスの番号(あぼーんと出す) */
         var ngNos by mutableStateOf<Set<Int>>(emptySet())
         /** AI NG に当たったレス(data/AiNg.kt)。ふつうの NG とは別に持つ */
@@ -216,41 +219,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var postHistory by mutableStateOf<List<PostHistoryEntry>>(emptyList())
         private set
-
-    init {
-        Http.init(app)
-        // hono-bbs のアカウント(保存してあれば、書き込みのときにログインして使う)
-        if (prefs.honoUser.isNotEmpty()) HonoBbs.account = HonoBbs.Account(prefs.honoUser, prefs.honoPassword)
-        io.github.contentsview08.obb.data.ImageStore.init(app)
-        io.github.contentsview08.obb.data.Favicons.db = db
-        // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
-        val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
-        openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
-        // 最初から入れておく掲示板・板を足してから、左のメニューを読む
-        viewModelScope.launch { runCatching { applyPresets() }; reloadSide() }
-        viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
-        // 起動したら、しばらく開いていないスレのログを消す(設定)
-        if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }
-        // 定期確認: アプリを開いている間は、閲覧履歴・お気に入りのスレ・キーワードをそれぞれの間隔で。閉じている間は WorkManager で
-        viewModelScope.launch {
-            val clock = io.github.contentsview08.obb.data.CrawlClock()
-            kotlinx.coroutines.delay(30_000)
-            while (true) {
-                // 閉じている間は、ここで止まって起きない
-                snapshotFlow { appVisible }.first { it }
-                // キーワードは知らせるだけのものなので、知らせないときはスレ一覧を取りに行かない
-                val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && prefs.keywords.isNotBlank()) prefs.keywordWatchMin else 0
-                clock.due(System.currentTimeMillis(), prefs.historyCheckMin, prefs.favCheckMin, keywordMin)?.let { scope ->
-                    // スレ一覧の読み取りが重いので、画面のスレッドでは動かさない(ANR になる)
-                    runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs, scope) } }.onSuccess { remoteCounts = remoteCounts + it }
-                }
-                kotlinx.coroutines.delay(60_000)
-            }
-        }
-        viewModelScope.launch {
-            snapshotFlow { prefs.osNotify to prefs.historyCheckMin }.collect { runCatching { io.github.contentsview08.obb.data.Crawler.schedule(app, prefs) } }
-        }
-    }
 
     /** 閲覧履歴の全部(検索用。ふだんの一覧は新しい方から 300 件だけ) */
     suspend fun allHistory(): List<HistoryEntry> = db.history(Int.MAX_VALUE)
@@ -451,14 +419,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (stack.size <= 1) return false
         navDir = -1
         forwardPage = stack.removeAt(stack.lastIndex) as? Page.Thread
-        // 戻ったスレ一覧の未読の数を新しくする
+        refreshTopAfterBack()
+        return true
+    }
+
+    /** 戻った先の一覧の未読の数を新しくする */
+    private fun refreshTopAfterBack() {
         when (val top = stack.last()) {
             is Page.Threads -> viewModelScope.launch { top.states = db.threadStates(top.board.url) }
             is Page.History, is Page.FavThreads -> reloadSide()
             is Page.AllUnread -> recountAllUnread()
             else -> {}
         }
-        return true
     }
 
     /** たどってきた画面の名前(戻る先の一覧に出す) */
@@ -480,12 +452,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         navDir = -1
         forwardPage = stack.last() as? Page.Thread
         while (stack.lastIndex > index) stack.removeAt(stack.lastIndex)
-        when (val top = stack.last()) {
-            is Page.Threads -> viewModelScope.launch { top.states = db.threadStates(top.board.url) }
-            is Page.History, is Page.FavThreads -> reloadSide()
-            is Page.AllUnread -> recountAllUnread()
-            else -> {}
-        }
+        refreshTopAfterBack()
     }
 
     /** 戻る前に見ていたスレを開き直す */
@@ -822,12 +789,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val o = renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() + listOfNotNull(common) else emptyList())
         val collapse = prefs.tidyBlankLines
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
+        val oldIndex = page.index
+        val oldMemo = page.renderMemo
         val result = withContext(Dispatchers.Default) {
-            val i = PostIndex.build(posts, collapse, gross)
-            Triple(i, renderPosts(i, page.links, o), ngOf(posts, rules, page.summary.boardUrl))
+            val i = PostIndex.build(posts, collapse, gross, oldIndex)
+            Triple(i, renderPostsReusing(i, page.links, o, oldMemo), ngOf(posts, rules, page.summary.boardUrl))
         }
         if (renderSeq[page]?.first != seq) return
-        page.rendered = result.second
+        page.renderMemo = result.second
+        page.rendered = result.second.rendered
         page.ngNos = result.third
         page.index = result.first
     }
@@ -947,8 +917,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             p.states = p.states + (t.key to (st?.copy(readNo = maxOf(st.readNo, no)) ?: ThreadState(no, page.index.posts.size)))
         }
         if (allUnread.any { it.thread.id == t.id }) allUnread = allUnread.map { if (it.thread.id == t.id) HistoryEntry(it.thread, maxOf(it.readNo, no), it.readAt) else it }
-        history = history.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
-        favThreads = favThreads.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
+        // 変わるものがないときは書き換えない(読み手全員を作り直さない)
+        if (history.any { it.thread.id == t.id && it.readNo < no }) history = history.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
+        if (favThreads.any { it.thread.id == t.id && it.readNo < no }) favThreads = favThreads.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
         viewModelScope.launch { db.markRead(page.summary, no) }
     }
 
@@ -959,11 +930,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun nextUnread(page: Page.Thread): Triple<String, ThreadSummary, Int>? {
         val i = stack.indexOf(page)
         val under = stack.getOrNull(i - 1) ?: return null
+        fun unreadOf(h: HistoryEntry) = h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo)
         val (name, list) = when (under) {
             is Page.Threads -> under.board.name to under.threads.map { t -> t to (under.states[t.key]?.let { maxOf(0, t.postCount - it.readNo) } ?: 0) }
-            is Page.History -> "閲覧履歴" to history.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
-            is Page.FavThreads -> "お気に入りのスレ" to favThreads.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
-            is Page.AllUnread -> "未読のスレ" to allUnread.map { h -> h.thread to maxOf(0, maxOf(h.thread.postCount, remoteCounts[h.thread.id] ?: 0) - h.readNo) }
+            is Page.History -> "閲覧履歴" to history.map(::unreadOf)
+            is Page.FavThreads -> "お気に入りのスレ" to favThreads.map(::unreadOf)
+            is Page.AllUnread -> "未読のスレ" to allUnread.map(::unreadOf)
             else -> return null
         }
         val at = list.indexOfFirst { it.first.id == page.summary.id }
@@ -1030,7 +1002,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val list = TwoCh.listThreads(Board(page.summary.boardUrl, ""))
-                page.nextCandidates = findNextThreads(page.summary, page.title, list)
+                val title = page.title
+                page.nextCandidates = withContext(Dispatchers.Default) { findNextThreads(page.summary, title, list) }
             } catch (e: Exception) {
                 toast = "探せませんでした: ${e.message ?: e}"
                 page.nextCandidates = emptyList()
@@ -1107,6 +1080,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 書き込み ──
 
+    /** 本文の最後に、新しい行として足す */
+    private fun withLine(body: String, line: String) = if (body.isEmpty() || body.endsWith("\n")) body + line else body + "\n" + line
+
     /** 書き込み欄を開く。insert(「>>12」など)があれば本文の最後に足す */
     fun openReply(page: Page.Thread, insert: String? = null) {
         val r = page.reply
@@ -1115,7 +1091,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 r.draftLoaded = true
                 if (r.body.isEmpty()) r.body = db.draft(page.summary)
             }
-            if (insert != null) r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + insert else r.body + "\n" + insert
+            if (insert != null) r.body = withLine(r.body, insert)
             r.notice = null
             r.focusSeq++
         }
@@ -1129,7 +1105,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** サイトの画面で上げたリンクを、本文の終わりに 1 行で入れる(ui/WebUpload.kt) */
     fun insertLink(r: ReplyState, url: String) {
         if (r.body.contains(url)) return
-        r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
+        r.body = withLine(r.body, url + "\n")
         toast = "リンクを本文に入れました"
     }
 
@@ -1155,7 +1131,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val sent = prefs.findUploadByHash(hash)?.let { it to null } ?: up.send(name, type, bytes, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey).let { it.url to it.deleteUrl }
                     val (url, deleteUrl) = sent
                     // いつも最新の本文に足す(前の画像の URL を消さない)
-                    r.body = if (r.body.isEmpty() || r.body.endsWith("\n")) r.body + url + "\n" else r.body + "\n" + url + "\n"
+                    r.body = withLine(r.body, url + "\n")
                     prefs.addUpload(url, hash, deleteUrl ?: prefs.uploadDeleteUrl(url))
                     item.state = UploadItem.State.Done(url)
                 } catch (e: Exception) {
@@ -1332,6 +1308,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 r.sending = false
             }
+        }
+    }
+
+    // 中で画面のスレッドの処理を始めるので、すべてのプロパティを初期化したあとに置く
+    init {
+        Http.init(app)
+        // hono-bbs のアカウント(保存してあれば、書き込みのときにログインして使う)
+        if (prefs.honoUser.isNotEmpty()) HonoBbs.account = HonoBbs.Account(prefs.honoUser, prefs.honoPassword)
+        io.github.contentsview08.obb.data.ImageStore.init(app)
+        io.github.contentsview08.obb.data.Favicons.db = db
+        // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
+        val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
+        openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
+        // 最初から入れておく掲示板・板を足してから、左のメニューを読む
+        viewModelScope.launch { runCatching { applyPresets() }; reloadSide() }
+        viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
+        // 起動したら、しばらく開いていないスレのログを消す(設定)
+        if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }
+        // 定期確認: アプリを開いている間は、閲覧履歴・お気に入りのスレ・キーワードをそれぞれの間隔で。閉じている間は WorkManager で
+        viewModelScope.launch {
+            val clock = io.github.contentsview08.obb.data.CrawlClock()
+            kotlinx.coroutines.delay(30_000)
+            while (true) {
+                // 閉じている間は、ここで止まって起きない
+                snapshotFlow { appVisible }.first { it }
+                // キーワードは知らせるだけのものなので、知らせないときはスレ一覧を取りに行かない
+                val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && prefs.keywords.isNotBlank()) prefs.keywordWatchMin else 0
+                clock.due(System.currentTimeMillis(), prefs.historyCheckMin, prefs.favCheckMin, keywordMin)?.let { scope ->
+                    // スレ一覧の読み取りが重いので、画面のスレッドでは動かさない(ANR になる)
+                    runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs, scope) } }.onSuccess { remoteCounts = remoteCounts + it }
+                }
+                kotlinx.coroutines.delay(60_000)
+            }
+        }
+        viewModelScope.launch {
+            snapshotFlow { prefs.osNotify to prefs.historyCheckMin }.collect { runCatching { io.github.contentsview08.obb.data.Crawler.schedule(app, prefs) } }
         }
     }
 }

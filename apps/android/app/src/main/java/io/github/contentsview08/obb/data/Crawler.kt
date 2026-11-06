@@ -69,7 +69,7 @@ object Crawler {
         val entries = (favs + if (scope.history) db.history() else emptyList()).distinctBy { it.thread.id }
         val counts = HashMap<String, Int>()
         val lists = HashMap<String, List<ThreadSummary>>()
-        suspend fun listOf(boardUrl: String): List<ThreadSummary>? =
+        suspend fun boardThreads(boardUrl: String): List<ThreadSummary>? =
             lists[boardUrl] ?: runCatching { TwoCh.listThreads(Board(boardUrl, "")) }.getOrNull()?.also { lists[boardUrl] = it }
 
         // hono-bbs のスレはまとめて 1 回で(POST /threads/status)。返らなかったものは -1(消えた)
@@ -78,7 +78,7 @@ object Crawler {
             for (e in hono) counts[e.thread.id] = st[e.thread.key]?.first ?: -1
         }
         for ((boardUrl, list) in others.groupBy { it.thread.boardUrl }) {
-            val c = (listOf(boardUrl) ?: continue).associate { it.key to it.postCount }
+            val c = (boardThreads(boardUrl) ?: continue).associate { it.key to it.postCount }
             for (e in list) counts[e.thread.id] = c[e.thread.key] ?: -1
         }
         if (!prefs.osNotify || !Notifier.enabled(context)) return counts
@@ -125,7 +125,7 @@ object Crawler {
         val keywords = prefs.keywords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() }
         if (scope.keyword && prefs.notifyKeyword && keywords.isNotEmpty()) {
             for (b in db.favorites()) {
-                val list = listOf(b.url) ?: continue
+                val list = boardThreads(b.url) ?: continue
                 val key = "k:${b.url}"
                 val since = seen.getLong(key, -1L)
                 val newest = list.mapNotNull { it.createdAt }.maxOrNull() ?: continue
@@ -187,6 +187,11 @@ object Crawler {
 class CrawlWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         Http.init(applicationContext)
-        return runCatching { Crawler.run(applicationContext, LogDb(applicationContext), Prefs(applicationContext)) }.fold({ Result.success() }, { Result.retry() })
+        val db = LogDb(applicationContext)
+        return try {
+            runCatching { Crawler.run(applicationContext, db, Prefs(applicationContext)) }.fold({ Result.success() }, { Result.retry() })
+        } finally {
+            db.close()
+        }
     }
 }

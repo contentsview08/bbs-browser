@@ -30,8 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.togetherWith
@@ -40,7 +40,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
@@ -57,6 +56,7 @@ import io.github.contentsview08.obb.ui.PostHistoryScreen
 import io.github.contentsview08.obb.ui.UploadsScreen
 import io.github.contentsview08.obb.ui.SettingsScreen
 import io.github.contentsview08.obb.ui.ThreadEntryList
+import io.github.contentsview08.obb.ui.swipeGestures
 import io.github.contentsview08.obb.ui.ThreadListScreen
 import io.github.contentsview08.obb.ui.ThreadScreen
 import kotlinx.coroutines.delay
@@ -131,8 +131,7 @@ class MainActivity : ComponentActivity() {
                             vm.stack.toList().withIndex().reversed().drop(1).map { (i, pg) ->
                                 io.github.contentsview08.obb.ui.MenuItem(
                                     "${"› ".repeat(i)}${vm.pageName(pg)}",
-                                    if (pg is Page.Thread) androidx.compose.material.icons.Icons.Filled.Forum else androidx.compose.material.icons.Icons.AutoMirrored.Filled.List,
-                                ) { vm.popTo(i) }
+                                    if (pg is Page.Thread) androidx.compose.material.icons.Icons.Filled.Forum else androidx.compose.material.icons.Icons.AutoMirrored.Filled.List) { vm.popTo(i) }
                             },
                         ),
                         io.github.contentsview08.obb.ui.MenuAt.TopStart,
@@ -181,16 +180,16 @@ class MainActivity : ComponentActivity() {
                             val drawerGesture = mapOf("right" to io.github.contentsview08.obb.ui.SwipeAction("メニュー") { vm.drawerOpen = true })
                             Box(
                                 Modifier.fillMaxSize().background(Palette.base).then(
-                                    if (others && vm.prefs.gesturesEnabled) with(io.github.contentsview08.obb.ui.SwipeGesturesHolder) { Modifier.gestures(swipe, drawerGesture, vm.prefs.gestureSensitivity) } else Modifier,
+                                    if (others && vm.prefs.gesturesEnabled) Modifier.swipeGestures(swipe, drawerGesture, sensitivity = vm.prefs.gestureSensitivity) else Modifier,
                                 ),
                             ) {
                             when (page) {
                                 is Page.Threads -> ThreadListScreen(vm, page)
                                 is Page.Thread -> ThreadScreen(vm, page)
                                 is Page.Boards -> BoardsScreen(vm, page)
-                                is Page.History -> ThreadEntryList(vm, "閲覧履歴", vm.history, "閲覧履歴はありません")
-                                is Page.AllUnread -> io.github.contentsview08.obb.ui.ThreadEntryList(vm, "未読のスレ", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() })
-                                is Page.FavThreads -> ThreadEntryList(vm, "お気に入りのスレ", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)")
+                                is Page.History -> ThreadEntryList(vm, "history", vm.history, "閲覧履歴はありません")
+                                is Page.AllUnread -> io.github.contentsview08.obb.ui.ThreadEntryList(vm, "unread", vm.allUnread, "新着のある読んだスレはありません(更新で確かめます)", onRefresh = { vm.loadAllUnread() })
+                                is Page.FavThreads -> ThreadEntryList(vm, "fav", vm.favThreads, "お気に入りのスレはありません(スレの ︙ から足せます)")
                                 is Page.PostHistory -> PostHistoryScreen(vm)
                                 is Page.Uploads -> UploadsScreen(vm)
                                 is Page.Settings -> SettingsScreen(vm, page.start)
@@ -200,9 +199,11 @@ class MainActivity : ComponentActivity() {
                             }
                             // なぞって戻っている途中は、前の画面を後ろに置く(今の画面は上で指の分だけ右へずれる)
                             val behind = vm.stack.getOrNull(vm.stack.lastIndex - 1)
-                            if (vm.backDrag > 0f && behind != null) Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(1f - vm.backDrag) * size.width * 0.25f }) {
+                            // 指の量は描くときにだけ読む(合成で読むと、指が動くたびに後ろの画面ごと作り直しになる)
+                            val dragging by remember { androidx.compose.runtime.derivedStateOf { vm.backDrag > 0f } }
+                            if (dragging && behind != null) Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(1f - vm.backDrag) * size.width * 0.25f }) {
                                 pageContent(behind)
-                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * (1f - vm.backDrag))))
+                                Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black.copy(alpha = 0.25f * (1f - vm.backDrag))) })
                             }
                             AnimatedContent(
                                 targetState = vm.stack.lastOrNull(),

@@ -8,16 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -60,7 +56,8 @@ fun PopupLayer(
     popups: List<PopupEntry>,
     /** ポップアップの地(LINE 風なら、スレ表示と同じ地) */
     bg: Color = Palette.surface,
-    topInset: Float,
+    /** 帯に合わせて動くので、置くときに読む */
+    topInset: () -> Float,
     endInset: androidx.compose.ui.unit.Dp = 0.dp,
     onCloseTop: () -> Unit,
     post: @Composable (Post) -> Unit,
@@ -80,11 +77,9 @@ fun PopupLayer(
 }
 
 @Composable
-private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, bg: Color, post: @Composable (Post) -> Unit) {
+private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, bg: Color, post: @Composable (Post) -> Unit) {
     val density = LocalDensity.current
     val gap = with(density) { 4.dp.toPx() }
-    val minTop = topInset + gap
-    val limit = (areaH - minTop) * 0.8f
     val shape = RoundedCornerShape(6.dp)
     // 出てくるとき: 少し小さく・少し下から浮き上がる(今のスマホ版の rise-in。200ms)
     val rise = remember(e.id) { androidx.compose.animation.core.Animatable(0f) }
@@ -106,6 +101,8 @@ private fun PopupWindow(e: PopupEntry, topInset: Float, areaH: Float, endInset: 
             ) { PopupContent(e, post) }
         },
     ) { measurables, constraints ->
+        val minTop = topInset() + gap
+        val limit = (areaH - minTop) * 0.8f
         val spaceAbove = e.triggerY - minTop - gap
         val p = measurables.first().measure(Constraints(maxWidth = constraints.maxWidth, maxHeight = limit.toInt().coerceAtLeast(0)))
         // 押した所の真上に収まるなら真上、収まらなければ上の帯のすぐ下

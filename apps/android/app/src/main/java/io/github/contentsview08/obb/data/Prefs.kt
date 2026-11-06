@@ -138,12 +138,12 @@ class Prefs(context: Context) {
     /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */
     private var recentBoardsJson by pref("recentBoards", "[]")
     fun recentBoards(): List<Triple<String, String, Long>> = runCatching {
-        val a = org.json.JSONArray(recentBoardsJson)
+        val a = JSONArray(recentBoardsJson)
         (0 until a.length()).map { a.getJSONObject(it).let { o -> Triple(o.getString("url"), o.getString("name"), o.getLong("t")) } }
     }.getOrDefault(emptyList())
     fun addRecentBoard(url: String, name: String) {
         val list = listOf(Triple(url, name, System.currentTimeMillis())) + recentBoards().filter { it.first != url }
-        recentBoardsJson = org.json.JSONArray(list.take(30).map { org.json.JSONObject().put("url", it.first).put("name", it.second).put("t", it.third) }).toString()
+        recentBoardsJson = JSONArray(list.take(30).map { JSONObject().put("url", it.first).put("name", it.second).put("t", it.third) }).toString()
     }
 
     /** 上げた画像(新しい順、100 まで)。クイックアクセスから URL をもう一度使えるように */
@@ -151,11 +151,11 @@ class Prefs(context: Context) {
     /** 上げた画像 1 件(url・時刻・中身のハッシュ・置き場から消すページ。ハッシュと消すページは昔の履歴にはない) */
     data class Upload(val url: String, val t: Long, val hash: String?, val deleteUrl: String? = null)
     private fun readUploads(): List<Upload> = runCatching {
-        val a = org.json.JSONArray(uploadsJson)
+        val a = JSONArray(uploadsJson)
         (0 until a.length()).map { a.getJSONObject(it).let { o -> Upload(o.getString("url"), o.getLong("t"), o.optString("h").ifEmpty { null }, o.optString("d").ifEmpty { null }) } }
     }.getOrDefault(emptyList())
     private fun writeUploads(list: List<Upload>) {
-        uploadsJson = org.json.JSONArray(list.take(100).map { org.json.JSONObject().put("url", it.url).put("t", it.t).put("h", it.hash ?: "").put("d", it.deleteUrl ?: "") }).toString()
+        uploadsJson = JSONArray(list.take(100).map { JSONObject().put("url", it.url).put("t", it.t).put("h", it.hash ?: "").put("d", it.deleteUrl ?: "") }).toString()
     }
     fun uploads(): List<Pair<String, Long>> = readUploads().map { it.url to it.t }
     /** 置き場から消すためのページ(imgbb の delete_url)。なければ null(置き場では消せない) */
@@ -166,10 +166,6 @@ class Prefs(context: Context) {
     }
     /** 同じ中身(hash)の画像を前に上げていれば、その URL */
     fun findUploadByHash(hash: String): String? = readUploads().firstOrNull { it.hash == hash }?.url
-    /** 履歴からだけ外す(置き場のファイルは残る) */
-    fun removeUpload(url: String) {
-        writeUploads(readUploads().filter { it.url != url })
-    }
     /** 上げる前の確かめの「画像にスレタイと URL を入れる」(left / right。入れないなら空。最後に選んだものを覚える) */
     var uploadStamp by pref("uploadStamp", "")
 
@@ -178,15 +174,15 @@ class Prefs(context: Context) {
 
     /** 板の書きかけ(スレタイ・名前・メール・本文)。なければ null */
     fun newThreadDraft(boardUrl: String): List<String>? = runCatching {
-        val o = org.json.JSONObject(newThreadDraftsJson).optJSONObject(boardUrl) ?: return null
+        val o = JSONObject(newThreadDraftsJson).optJSONObject(boardUrl) ?: return null
         listOf(o.optString("title"), o.optString("name"), o.optString("mail"), o.optString("body"))
     }.getOrNull()
 
     /** 書きかけを覚える(スレタイも本文も空なら消す) */
     fun setNewThreadDraft(boardUrl: String, title: String, name: String, mail: String, body: String) {
-        val all = runCatching { org.json.JSONObject(newThreadDraftsJson) }.getOrDefault(org.json.JSONObject())
+        val all = runCatching { JSONObject(newThreadDraftsJson) }.getOrDefault(JSONObject())
         if (title.isEmpty() && body.isEmpty()) all.remove(boardUrl)
-        else all.put(boardUrl, org.json.JSONObject().put("title", title).put("name", name).put("mail", mail).put("body", body))
+        else all.put(boardUrl, JSONObject().put("title", title).put("name", name).put("mail", mail).put("body", body))
         newThreadDraftsJson = all.toString()
     }
 
@@ -278,6 +274,8 @@ class Prefs(context: Context) {
     var postMail by pref("postMail", "")
     /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
     var quickPhrases by pref("quickPhrases", "")
+    /** 定型文を 1 行ずつ(空の行は除く) */
+    val quickPhraseList: List<String> get() = quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
     /** hono-bbs のアカウント(ユーザー ID とパスワード。設定 → サイトごとの設定)。空なら使わない。パスワードはそのまま保存する(PC 版と同じ) */
     var honoUser by pref("honoUser", "")
     var honoPassword by pref("honoPassword", "")
@@ -324,11 +322,6 @@ class Prefs(context: Context) {
     }
 
     fun resetGestures() { gesturesListJson = ""; gesturesThreadJson = "" }
-
-    // 古い呼び方(画面の側)
-    fun changeFontScale(v: Float) { fontScale = v }
-    fun changeThumbMode(v: ThumbMode) { thumbMode = v }
-    fun changeShowMinimap(v: Boolean) { showMinimap = v }
 
     var ngRules by mutableStateOf(loadNg())
         private set

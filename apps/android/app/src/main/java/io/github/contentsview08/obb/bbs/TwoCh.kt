@@ -2,6 +2,8 @@ package io.github.contentsview08.obb.bbs
 
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 // 2ch 互換(bbsmenu / subject.txt / dat)。専ブラの packages/connectors/src/twoch(connector.ts・parse.ts)を Kotlin に写したもの
@@ -70,6 +72,31 @@ fun parseBbsMenuJson(text: String): List<Board> {
 private val SUBJECT_LINE = Regex("^([0-9]+)\\.(?:dat<>|cgi,)(.*)\\(([0-9]+)\\)\\s*$")
 private const val FUTURE_TOLERANCE_MS = 24L * 60 * 60 * 1000
 
+/** したらば・まちBBS のキーは立った時刻の UNIX 秒(10 桁のときだけ) */
+internal fun createdAtOf(key: String): Long? = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
+
+private val CGI_SUBJECT_HEAD = Regex("^[0-9]+\\.cgi,")
+private val CGI_SUBJECT_LINE = Regex("^([0-9]+)\\.cgi,(.*)\\(([0-9]+)\\)\\s*$")
+
+/** したらば・まちBBS の subject.txt。1 行は「キー.cgi,スレタイ(レス数)」。同じキーは 1 つにする */
+internal fun parseCgiSubject(text: String, boardUrl: String): List<ThreadSummary> {
+    val first = text.split('\n').firstOrNull { it.isNotBlank() }
+    if (first != null && !CGI_SUBJECT_HEAD.containsMatchIn(first)) throw IllegalStateException("スレ一覧を読めませんでした: $boardUrl")
+    val out = ArrayList<ThreadSummary>()
+    val seen = HashSet<String>()
+    for (line in text.split('\n')) {
+        val m = CGI_SUBJECT_LINE.find(line) ?: continue
+        val key = m.groupValues[1]
+        if (!seen.add(key)) continue
+        out += ThreadSummary(boardUrl, key, htmlToText(m.groupValues[2]).trim(), m.groupValues[3].toInt(), out.size, createdAtOf(key))
+    }
+    return out
+}
+
+/** SETTING.TXT の形(「キー=値」の行) */
+internal fun parseSettingText(text: String): Map<String, String> =
+    text.lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
+
 /** dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する。未来の日時はお知らせスレなので「不明」) */
 internal fun createdAtOf(key: String, now: Long): Long? {
     if (key.length != 10 || !key.all { it.isDigit() }) return null
@@ -79,8 +106,8 @@ internal fun createdAtOf(key: String, now: Long): Long? {
 
 private fun isAnnouncementKey(key: String, now: Long) = key.length == 10 && key.all { it.isDigit() } && key.toLong() * 1000 > now + FUTURE_TOLERANCE_MS
 
-/** withAuthorId: エッジの subject-metadent.txt か(今はどちらも同じ読み方。スレタイの後ろの角かっこは立てた人) */
-fun parseSubjectTxt(text: String, boardUrl: String, @Suppress("UNUSED_PARAMETER") withAuthorId: Boolean): List<ThreadSummary> {
+/** subject.txt・エッジの subject-metadent.txt(どちらも同じ読み方。スレタイの後ろの角かっこは立てた人) */
+fun parseSubjectTxt(text: String, boardUrl: String): List<ThreadSummary> {
     val now = System.currentTimeMillis()
     val out = ArrayList<ThreadSummary>()
     val seen = HashSet<String>()
@@ -192,7 +219,9 @@ object TwoCh {
         return "${m.groupValues[1]}.$domain"
     }
 
-    suspend fun listBoards(menuUrl: String): List<Board> {
+    suspend fun listBoards(menuUrl: String): List<Board> = withContext(Dispatchers.Default) { readBoards(menuUrl) }
+
+    private suspend fun readBoards(menuUrl: String): List<Board> {
         if (HonoBbs.isSiteUrl(menuUrl)) return HonoBbs.listBoards(menuUrl)
         if (Machi.isSiteUrl(menuUrl)) return Machi.listBoards()
         val res = Http.get(menuUrl)
@@ -248,7 +277,7 @@ object TwoCh {
             if (res.status in 200..299) rememberBoardEncoding(boardUrl, res.body)
             if (res.status == 404) emptyMap<String, String>() // SETTING.TXT のない板
             else if (res.status !in 200..299) null
-            else textOf(res).lineSequence().mapNotNull { l -> l.indexOf('=').takeIf { it > 0 }?.let { l.substring(0, it).trim() to l.substring(it + 1).trim() } }.toMap()
+            else parseSettingText(textOf(res))
         }.getOrNull()
         if (map == null) return emptyMap()
         synchronized(settingCache) { settingCache[boardUrl] = map }
@@ -283,19 +312,23 @@ object TwoCh {
     }.getOrDefault(false)
 
     /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
-    suspend fun listThreads(board: Board): List<ThreadSummary> {
+    suspend fun listThreads(board: Board): List<ThreadSummary> = withContext(Dispatchers.Default) { readThreads(board) }
+
+    private suspend fun readThreads(board: Board): List<ThreadSummary> {
         if (HonoBbs.isBoardUrl(board.url)) return HonoBbs.listThreads(board)
         if (Shitaraba.isBoardUrl(board.url)) return Shitaraba.listThreads(board)
         if (Machi.isBoardUrl(board.url)) return Machi.listThreads(board)
         if (board.url.contains("eddibb.cc/")) {
             val meta = runCatching { readSubject("${board.url}subject-metadent.txt") }.getOrNull()
-            if (meta != null) return parseSubjectTxt(meta, board.url, true)
+            if (meta != null) return parseSubjectTxt(meta, board.url)
         }
-        return parseSubjectTxt(readSubject("${board.url}subject.txt"), board.url, false)
+        return parseSubjectTxt(readSubject("${board.url}subject.txt"), board.url)
     }
 
     /** dat を取る。cursor があれば、その続き(Range)だけ */
-    suspend fun fetchPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult {
+    suspend fun fetchPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult = withContext(Dispatchers.Default) { readPosts(thread, cursor) }
+
+    private suspend fun readPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult {
         if (HonoBbs.isBoardUrl(thread.boardUrl)) return HonoBbs.fetchPosts(thread, cursor)
         if (Shitaraba.isBoardUrl(thread.boardUrl)) return Shitaraba.fetchPosts(thread, cursor)
         if (Machi.isBoardUrl(thread.boardUrl)) return Machi.fetchPosts(thread, cursor)

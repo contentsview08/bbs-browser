@@ -18,10 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Link
@@ -50,7 +48,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,7 +55,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import io.github.contentsview08.obb.data.ThumbMode
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,14 +99,13 @@ import io.github.contentsview08.obb.bbs.ThreadSummary
 import io.github.contentsview08.obb.data.ThreadState
 import kotlinx.coroutines.launch
 
-/** 一覧のタブ(今のスマホ版の LIST_TABS と同じ)。どれも選ばなければ設定の並び。色は配色に合わせて読むたびに取る */
-private enum class ListTab(val key: String, val label: String, val icon: ImageVector, private val tint: () -> Color) {
-    UNREAD("unread", "未読", Icons.Filled.MarkEmailUnread, { Palette.unread }),
-    VISITED("visited", "閲覧済み", Icons.Filled.History, { Palette.markPurple }),
-    MOMENTUM("momentum", "勢い順", Icons.Filled.LocalFireDepartment, { Palette.markHot }),
-    NEWEST("newest", "新しい順", Icons.Filled.Schedule, { Palette.markLink }),
-    COUNT("count", "レス数順", Icons.Filled.FormatListNumbered, { Palette.markNew });
-    val color get() = tint()
+/** 一覧のタブ(今のスマホ版の LIST_TABS と同じ)。どれも選ばなければ設定の並び */
+private enum class ListTab(val key: String, val label: String, val icon: ImageVector) {
+    UNREAD("unread", "未読", Icons.Filled.MarkEmailUnread),
+    VISITED("visited", "閲覧済み", Icons.Filled.History),
+    MOMENTUM("momentum", "勢い順", Icons.Filled.LocalFireDepartment),
+    NEWEST("newest", "新しい順", Icons.Filled.Schedule),
+    COUNT("count", "レス数順", Icons.Filled.FormatListNumbered),
 }
 
 /** 勢い(1 日あたりのレス数) */
@@ -125,6 +120,11 @@ fun momentum(t: ThreadSummary, now: Long): Double {
 fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = Modifier) {
     // タブ・検索・スクロールの位置はページに持つ(スレを開いて戻っても残す)
     val tab = ListTab.entries.firstOrNull { it.key == page.tab }
+    // サムネイルを読むか(設定)。行ごとに通信の状態を調べないよう、画面で 1 回だけ決める
+    val thumbContext = androidx.compose.ui.platform.LocalContext.current
+    val thumbAllowed = remember(vm.prefs.thumbMode) {
+        when (vm.prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(thumbContext); ThumbMode.TAP, ThumbMode.NEVER -> false }
+    }
     var searching by page::searching
     var query by page::query
     var menu by remember { mutableStateOf(false) }
@@ -162,7 +162,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 "count" -> list.sortedByDescending { it.postCount }
                 else -> list
             }
-            ListTab.UNREAD -> list.filter { unreadOf(it, page.states) > 0 }
+            ListTab.UNREAD -> list.filter { unreadOf(it, page.states[it.key]) > 0 }
             ListTab.VISITED -> list.filter { page.states[it.key] != null }
             // 並べ替えのタブは、押すたびに 逆順 → 元の並び(page.reversed)
             ListTab.COUNT -> list.sortedByDescending { it.postCount }.let { if (page.reversed) it.reversed() else it }
@@ -182,7 +182,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var titleSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
     var sizeDialog by remember { mutableStateOf(false) }
-    var fontOnly by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     // 戻る操作で、まず検索を外す
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.only != null) {
@@ -269,7 +268,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         // 引っぱっている所(伸びたすき間)の案内
         if (pullPx.value > 1f) {
             Box(
-                Modifier.fillMaxWidth().padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() }).height(with(density) { pullPx.value.toDp() }),
+                Modifier.fillMaxWidth().barPadding(top = { bars.topHeight * (1f - bars.hidden) }).height(with(density) { pullPx.value.toDp() }),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -296,16 +295,13 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         bottom = with(density) { bars.bottomHeight.toDp() } + 24.dp,
                     ),
                 ) {
-                    val plain = tab == null && query.isBlank() && page.only == null
-                    run {
-                        items(shown, key = { it.key }, contentType = { 0 }) { t ->
-                            ThreadRow(
-                                t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
-                                isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds,
-                                onLongClick = { Haptics.longPress(hapticView); menuFor = t },
-                            ) { vm.openThread(t) }
-                            HorizontalDivider(color = Palette.border)
-                        }
+                    items(shown, key = { it.key }, contentType = { 0 }) { t ->
+                        ThreadRow(
+                            t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
+                            isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds, thumbAllowed = thumbAllowed,
+                            onLongClick = { Haptics.longPress(hapticView); menuFor = t },
+                        ) { vm.openThread(t) }
+                        HorizontalDivider(color = Palette.border)
                     }
                 }
             }
@@ -333,7 +329,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "progress").animateFloat(
                 -0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing)), label = "x",
             )
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(top = with(density) { (bars.topHeight * (1f - bars.hidden)).toDp() }).height(2.dp).clipToBounds()) {
+            BoxWithConstraints(Modifier.fillMaxWidth().barPadding(top = { bars.topHeight * (1f - bars.hidden) }).height(2.dp).clipToBounds()) {
                 Box(Modifier.width(maxWidth * 0.35f).fillMaxHeight().graphicsLayer { translationX = t.value * constraints.maxWidth }.background(Palette.accent, RoundedCornerShape(1.dp)))
             }
         }
@@ -352,7 +348,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 // 今のスマホ版のタブ: 選んでいるタブは強調色の文字と薄い色、上に線。未読のタブには未読の合計。
                 // 並べ替えのタブは、押すたびに 逆順 → 元の並び(矢印で向き)。絞り込みのタブは押すたびに入り切り
                 // NG で出していないスレは数えない
-                val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states) } }
+                val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
                 for (t in tabs) {
                     val active = tab == t
                     val filterTab = t == ListTab.UNREAD || t == ListTab.VISITED
@@ -416,15 +412,15 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { vm.openNewThread(page) },
-                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star, Palette.markFav) { vm.toggleFavorite(page.board) },
-                    MenuItem("スレッド検索", Icons.Filled.Search, Palette.accent) { searching = true; bars.show() },
+                    MenuItem("スレを立てる", Icons.Filled.EditNote) { vm.openNewThread(page) },
+                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
+                    MenuItem("スレッド検索", Icons.Filled.Search) { searching = true; bars.show() },
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                 ),
                 listOf(
-                    MenuItem("表示スタイル", Icons.Filled.Palette, Palette.markPurple) { styleSheet = true },
+                    MenuItem("表示スタイル", Icons.Filled.Palette) { styleSheet = true },
                     MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { sizeDialog = true },
-                    MenuItem("スレッド一覧を更新", Icons.Filled.Refresh, Palette.accent) { vm.refreshBoard(page) },
+                    MenuItem("スレッド一覧を更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
                 ),
             ),
         ) { menu = false }
@@ -436,38 +432,39 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に足す", if (fav) Icons.Filled.Star else Icons.Outlined.Star, Palette.markFav) { vm.toggleFavorite(page.board) },
-                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { vm.openNewThread(page) },
+                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に足す", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
+                    MenuItem("スレを立てる", Icons.Filled.EditNote) { vm.openNewThread(page) },
                 ),
                 listOf(
-                    MenuItem("板名をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
-                    MenuItem("板の URL をコピー", Icons.Filled.Link, Palette.markLink) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
+                    MenuItem("板名をコピー", Icons.Filled.ContentCopy) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
+                    MenuItem("板の URL をコピー", Icons.Filled.Link) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
                 ),
                 listOf(
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
-                    MenuItem("更新", Icons.Filled.Refresh, Palette.accent) { vm.refreshBoard(page) },
-                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew, Palette.markLink) { openExternal(context, page.board.url, false) },
+                    MenuItem("更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
+                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, page.board.url, false) },
                 ),
             ),
             MenuAt.TopStart,
         ) { titleSheet = false }
     }
-    if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; sizeDialog = true }) { styleSheet = false }
-    if (sizeDialog) SizeDialog({ sizeDialog = false; fontOnly = false }) {
+    if (styleSheet) StyleSheet(vm.prefs) { styleSheet = false }
+    if (sizeDialog) SizeDialog({ sizeDialog = false }) {
         val p = vm.prefs
-        if (fontOnly) SizeSlider("画面全体の文字", p.fontScale, 0.85f..1.3f, 8, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
-        else {
-            SizeSlider("スレ一覧の文字", p.listFontScale, 0.8f..1.4f, 11, "${percent(p.listFontScale)}%", 1f) { p.listFontScale = snapTo(it, 20) }
-            SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..24f, 23, "${p.listPad}dp", 9f) { p.listPad = snapInt(it) }
-            BarSliders(p)
-        }
+        SizeSlider("スレ一覧の文字", p.listFontScale, 0.8f..1.4f, 11, "${percent(p.listFontScale)}%", 1f) { p.listFontScale = snapTo(it, 20) }
+        SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..24f, 23, "${p.listPad}dp", 9f) { p.listPad = snapInt(it) }
+        BarSliders(p)
     }
     NewThreadSheet(vm, page)
 }
 
-private fun unreadOf(t: ThreadSummary, states: Map<String, ThreadState>): Int {
-    val s = states[t.key] ?: return 0
-    return maxOf(0, t.postCount - s.readNo)
+private fun unreadOf(t: ThreadSummary, state: ThreadState?): Int = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
+
+/** スレタイの字(頭に「新」・お気に入りの星) */
+private fun threadTitleText(t: ThreadSummary, isNew: Boolean, isFavorite: Boolean) = buildAnnotatedString {
+    if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
+    if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
+    append(t.title)
 }
 
 /**
@@ -479,9 +476,9 @@ private fun unreadOf(t: ThreadSummary, states: Map<String, ThreadState>): Int {
 @Composable
 private fun ThreadRow(
     t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long,
-    isNew: Boolean, isFavorite: Boolean, onLongClick: () -> Unit, onClick: () -> Unit,
+    isNew: Boolean, isFavorite: Boolean, thumbAllowed: Boolean, onLongClick: () -> Unit, onClick: () -> Unit,
 ) {
-    val unread = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
+    val unread = unreadOf(t, state)
     val prefs = LocalPrefs.current
     val k = prefs.listFontScale
     val pad = prefs.listPad.dp
@@ -508,11 +505,7 @@ private fun ThreadRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    buildAnnotatedString {
-                        if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
-                        if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
-                        append(t.title)
-                    },
+                    threadTitleText(t, isNew, isFavorite),
                     Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = (14 * k).sp, inlineContent = chipInlineContent(),
                     color = if (visited) Palette.threadReadTitle else Palette.textStrong, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
                 )
@@ -529,7 +522,7 @@ private fun ThreadRow(
             return@Box
         }
         // スレの画像(1 レス目の最初の画像。hono-bbs)を左に、行の縦いっぱいに(web 版と同じ)
-        val thumb = rememberListThumb(t.thumb)
+        val thumb = rememberListThumb(t.thumb, thumbAllowed)
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick, onClick = onClick)
                 .padding(start = 14.dp, end = 12.dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
@@ -542,11 +535,7 @@ private fun ThreadRow(
         Column(Modifier.weight(1f).align(Alignment.CenterVertically).padding(vertical = if (thumb != null) (pad - 2.dp).coerceAtLeast(0.dp) else 0.dp)) {
             val titleColor = if (visited) Palette.threadReadTitle else Palette.textStrong
             Text(
-                buildAnnotatedString {
-                    if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
-                    if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
-                    append(t.title)
-                },
+                threadTitleText(t, isNew, isFavorite),
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
                 // まだ開いていないスレだけ太字。開いたスレは新着があっても細く既読の色に(新着は右の +N の札で分かる)
                 color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
@@ -595,14 +584,10 @@ private fun ThreadRow(
 
 /** スレ一覧に出すサムネイルの URL。「サムネイルを読み込む」の設定に従い、取れなかった画像は出さない(×の枠が並ばないように) */
 @Composable
-private fun rememberListThumb(thumb: String?): String? {
+private fun rememberListThumb(thumb: String?, allowed: Boolean): String? {
     if (thumb == null) return null
-    val prefs = LocalPrefs.current
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val allowed = remember(prefs.thumbMode) {
-        when (prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(context); ThumbMode.TAP, ThumbMode.NEVER -> false }
-    }
-    val failed = io.github.contentsview08.obb.data.ImageStore.states[thumb] is io.github.contentsview08.obb.data.ImageStore.State.Failed
+    // 読み込みの進み具合では行を組み直さない
+    val failed by remember(thumb) { androidx.compose.runtime.derivedStateOf { io.github.contentsview08.obb.data.ImageStore.stateOf(thumb) is io.github.contentsview08.obb.data.ImageStore.State.Failed } }
     return thumb.takeIf { allowed && !failed }
 }
 
@@ -617,7 +602,6 @@ fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, on
         TextField(
             value, onChange, Modifier.weight(1f).focusRequester(focus), singleLine = true,
             placeholder = { Text(placeholder) },
-            keyboardOptions = KeyboardOptions.Default,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Palette.surface2, unfocusedContainerColor = Palette.surface2,
                 focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,

@@ -15,7 +15,7 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.PostIndex
-import io.github.contentsview08.obb.bbs.Span
+import io.github.contentsview08.obb.bbs.BodyToken
 import io.github.contentsview08.obb.bbs.toImageUrl
 
 /** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
@@ -26,15 +26,17 @@ class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val a
     var idText: AnnotatedString? = null
     /** 名前のワッチョイ(1a2b-3c4d)。設定でアイコンの種にする */
     var watchoi: String? = null
-    /** LINE 風の自分のレスの頭(名前を出さない。右の吹き出しに PC 版と同じく名前を付けない) */
-    var headerOwn: AnnotatedString? = null
+    /** LINE 風の自分のレスの頭(名前を出さない。右の吹き出しに PC 版と同じく名前を付けない)。使うのは自分のレスだけなので、要るときに作る */
+    var headerOwnLazy: Lazy<AnnotatedString>? = null
+    val headerOwn: AnnotatedString? get() = headerOwnLazy?.value
     /** LINE 風で吹き出しの隣に出す番号と時刻 */
     var sideNo: AnnotatedString? = null
     /** LINE 風の右の吹き出しで、番号の上に出す返信の数 */
     var sideReplies: AnnotatedString? = null
     var sideTime: String = ""
-    /** 画像の札を押したあとの本文(札を URL に広げたもの)。札のないレスは null */
-    var bodyExpanded: AnnotatedString? = null
+    /** 画像の札を押したあとの本文(札を URL に広げたもの)。札のないレスは null。押されたときに作る */
+    var bodyExpandedLazy: Lazy<AnnotatedString>? = null
+    val bodyExpanded: AnnotatedString? get() = bodyExpandedLazy?.value
 }
 
 /** ワッチョイ(名前の後ろの「(ワッチョイ 1a2b-3c4d)」。種類の言葉 + 4 桁-4 桁。後ろに [IP] が付くことも。PC 版の utils/watchoi.ts と同じ) */
@@ -50,11 +52,11 @@ private val BLANK_AFTER = Regex("^\n(?:[ \t　]*\n)*")
 /** 「2026/10/26(月) 07:37:30.214」→「10/26 07:37」(Discord 風・LINE 風の頭を短く) */
 // 日付の読み取り(何度も呼ぶので、作っておいて使い回す)
 private val DATE_TIME = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})[^0-9]*([0-9]{1,2}):([0-9]{2})")
-private val DATE_DAY = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})(\\([^)]*\\))?")
 private val minutesCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
 /** 年・月・日・曜日・時・分・秒(・秒の下の桁)を読む(2026/11/02(月) 19:01:15.960)。曜日と秒はないこともある */
 private val DATE_PARTS = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})\\s*(?:\\(([^)]*)\\))?\\s*([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?")
+private val SUBSECOND = Regex("^[.,][0-9]+")
 
 /**
  * レスの頭の日時(設定「日時の出し方」)。スマホでは頭を短くしたいので、既定は年と秒の下の桁を省く:
@@ -65,7 +67,7 @@ fun displayDate(date: String, style: String): String {
     val m = DATE_PARTS.find(date) ?: return date
     val (_, mo, d, w, h, mi, s) = m.destructured
     val md = "${mo.padStart(2, '0')}/${d.padStart(2, '0')}"
-    val rest = date.substring(m.range.last + 1).replace(Regex("^[.,][0-9]+"), "").trim()
+    val rest = date.substring(m.range.last + 1).replace(SUBSECOND, "").trim()
     val out = if (style == "md_hm") "$md ${h.padStart(2, '0')}:$mi" else "$md${if (w.isNotEmpty()) "($w)" else ""} ${h.padStart(2, '0')}:$mi${if (s.isNotEmpty()) ":$s" else ""}"
     // 日時の後ろに付く印(BE の番号など)は残す
     return if (rest.isNotEmpty()) "$out $rest" else out
@@ -146,13 +148,28 @@ data class RenderOptions(
     val nameSubtle: Boolean = true,
 )
 
+/** 前回の組み立て。colors は組み立てを始めたときの配色(配色が変わったら使い回さない) */
+class RenderMemo(val index: PostIndex, val links: PostLinks, val options: RenderOptions, val colors: List<Any?>, val rendered: Map<Int, RenderedPost>)
+
+private fun renderColors(): List<Any?> = listOf(Palette.scheme, Palette.accent, Palette.link, Palette.posterName)
+
+/** renderPosts を、前回の組み立てを使い回せるなら使い回して行う(新着が来たときに全レスを作り直さない) */
+fun renderPostsReusing(index: PostIndex, links: PostLinks, o: RenderOptions, previous: RenderMemo?): RenderMemo {
+    val colors = renderColors()
+    val reuse = previous?.takeIf {
+        it.links === links && it.options == o && it.colors == colors && it.index.posts.firstOrNull()?.id == index.posts.firstOrNull()?.id
+    }
+    return RenderMemo(index, links, o, colors, renderPosts(index, links, o, reuse))
+}
+
 /**
  * 全部のレスを組み立てる。レスが届いたときに、画面とは別のスレッド(Dispatchers.Default)で 1 回だけ呼ぶ。
  * 1 レスの部品を「頭の行の Text 1 つ・本文の Text 1 つ」にし、スクロールで出てきたときの組み立てを軽くする
  */
-fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOptions()): Map<Int, RenderedPost> {
+fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOptions(), reuse: RenderMemo? = null): Map<Int, RenderedPost> {
     val out = HashMap<Int, RenderedPost>(index.posts.size * 2)
-    val noname = o.noname
+    val oldPosts = reuse?.index?.posts?.associateBy { it.no }
+    val nonames = nonameCandidates(o.noname, o.extraNonames)
     // 色は組み立てるときの配色で決める(配色を変えたら組み立て直す)
     val linkStyle = TextLinkStyles(SpanStyle(color = Palette.link))
     val imageChip = SpanStyle(color = Palette.markImage, background = Palette.surface2, fontSize = 13.sp)
@@ -161,8 +178,15 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
     for (p in index.posts) {
         val replies = index.replyCount[p.no] ?: 0
         val idCount = p.id?.let { index.idCount[it] } ?: 0
+        // 組み立ての入力がすべて前回と同じレスは、前の結果をそのまま使う
+        if (reuse != null && oldPosts?.get(p.no) == p && reuse.index.info[p.no] === index.info[p.no] &&
+            (reuse.index.replyCount[p.no] ?: 0) == replies && (p.id?.let { reuse.index.idCount[it] } ?: 0) == idCount
+        ) {
+            val old = reuse.rendered[p.no]
+            if (old != null) { out[p.no] = old; continue }
+        }
         val replyHeat = Palette.heat(replies)
-        val name = displayName(p.name, noname, o.extraNonames).let { if (o.watchoiShort) shortWatchoi(it) else it }
+        val name = displayName(p.name, nonames).let { if (o.watchoiShort) shortWatchoi(it) else it }
         val isOp = o.highlightOp && opId != null && p.id == opId
         val header = if (isChatStyle(o.style)) compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
@@ -211,25 +235,24 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         }
         fun buildBody(chips: Boolean) = buildAnnotatedString {
             if (bodyStyle != null) pushStyle(bodyStyle)
-            val src = full
             val spans = info?.spans ?: emptyList()
             var at = skip
             var i = 0
             while (i < spans.size) {
                 val s = spans[i]
                 if (s.start < at || s.start < skip) { i++; continue }
-                append(src, at, s.start)
-                val text = src.substring(s.start, s.end)
+                append(full, at, s.start)
+                val text = full.substring(s.start, s.end)
                 when {
-                    s is Span.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.nos.joinToString(",")}", linkStyle, links)) { append(text) }; at = s.end }
-                    s is Span.Id -> { withLink(LinkAnnotation.Clickable("i:${s.id}", linkStyle, links)) { append(text) }; at = s.end }
+                    s is BodyToken.Anchor -> { withLink(LinkAnnotation.Clickable("a:${s.nos.joinToString(",")}", linkStyle, links)) { append(text) }; at = s.end }
+                    s is BodyToken.Id -> { withLink(LinkAnnotation.Clickable("i:${s.id}", linkStyle, links)) { append(text) }; at = s.end }
                     // 画像の URL は「画像」の札に。空白だけを挟んで続いたものは「画像 ×3」にまとめる(PC 版と同じ)
-                    s is Span.Url && toImageUrl(s.url) != null && o.urlShorten && chips -> {
+                    s is BodyToken.Url && toImageUrl(s.url) != null && o.urlShorten && chips -> {
                         var end = s.end
                         var n = 1
                         while (i + 1 < spans.size) {
                             val next = spans[i + 1]
-                            if (next !is Span.Url || toImageUrl(next.url) == null || src.substring(end, next.start).isNotBlank()) break
+                            if (next !is BodyToken.Url || toImageUrl(next.url) == null || full.substring(end, next.start).isNotBlank()) break
                             end = next.end; n++; i++
                         }
                         // 札は URL を本文に広げる(広げた URL はブラウザで開く。画像はサムネイルから見る)
@@ -239,20 +262,20 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                         at = end
                     }
                     // URL は https:// を外し、長いものは後ろを省く。押したときに画面が決める(同じ掲示板のスレならアプリの中で開く)
-                    s is Span.Url -> { withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) { append(if (o.urlShorten) shortUrl(s.url) else text) }; at = s.end }
+                    s is BodyToken.Url -> { withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) { append(if (o.urlShorten) shortUrl(s.url) else text) }; at = s.end }
                 }
                 i++
             }
-            append(src, at, src.length)
+            append(full, at, full.length)
             if (bodyStyle != null) pop()
         }
         val body = buildBody(true)
         // 空白が続く本文は AA とみなす(AA 用の字で出す)
         val rp = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
         rp.watchoi = watchoiOf(p.name)
-        if (o.urlShorten && info?.spans?.any { it is Span.Url && toImageUrl(it.url) != null } == true) rp.bodyExpanded = buildBody(false)
+        if (o.urlShorten && info?.spans?.any { it is BodyToken.Url && toImageUrl(it.url) != null } == true) rp.bodyExpandedLazy = lazy { buildBody(false) }
         if (o.style == "line") {
-            rp.headerOwn = compactHeader(p, name, replies, idCount, isOp, o, links, showName = false, showReplies = false)
+            rp.headerOwnLazy = lazy { compactHeader(p, name, replies, idCount, isOp, o, links, showName = false, showReplies = false) }
             if (replies > 0) rp.sideReplies = buildAnnotatedString { appendReplies(p, replies, o, links) }
             rp.sideTime = LINE_TIME.find(p.date)?.groupValues?.get(1) ?: p.date
             rp.sideNo = buildAnnotatedString {
@@ -275,9 +298,12 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
     return out
 }
 
+private val URL_SCHEME = Regex("^h?ttps?://", RegexOption.IGNORE_CASE)
+private val URL_WWW = Regex("^www\\.", RegexOption.IGNORE_CASE)
+
 /** 見せる URL(PC 版の shortUrl と同じ): https:// と www. を外し、36 文字を超えたら後ろを省く */
 fun shortUrl(url: String, max: Int = 36): String {
-    val s = url.replace(Regex("^h?ttps?://", RegexOption.IGNORE_CASE), "").replace(Regex("^www\\.", RegexOption.IGNORE_CASE), "")
+    val s = url.replace(URL_SCHEME, "").replace(URL_WWW, "")
     return if (s.length > max) s.take(max - 1) + "…" else s
 }
 
@@ -355,8 +381,11 @@ fun mostCommonName(posts: List<Post>): String? {
     return if (best.value >= posts.size * 0.3) best.key else null
 }
 
-fun displayName(name: String, noname: String?, extra: List<String>): String {
-    if (noname == null && extra.isEmpty()) return name
-    val hit = (listOfNotNull(noname) + extra).filter { it.isNotEmpty() }.sortedByDescending { it.length }.firstOrNull { name.startsWith(it) }
+/** 名無しとみなす名前を、長い順に並べたもの(displayName に渡す) */
+private fun nonameCandidates(noname: String?, extra: List<String>): List<String> =
+    (listOfNotNull(noname) + extra).filter { it.isNotEmpty() }.sortedByDescending { it.length }
+
+private fun displayName(name: String, nonames: List<String>): String {
+    val hit = nonames.firstOrNull { name.startsWith(it) }
     return if (hit != null) name.substring(hit.length).trim() else name
 }

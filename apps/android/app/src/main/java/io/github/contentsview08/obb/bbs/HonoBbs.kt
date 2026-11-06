@@ -18,13 +18,16 @@ import java.util.Base64
 //   Authorization: Bearer で書き込みに付ける。サイト(origin)はいくつもあり得るので、ログインはサイトごとに、書き込みのときに要るぶんだけ行う
 // 本番の板への試し書き込みはしない
 
-private val THREAD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/?(?:[?#].*)?$")
+private val THREAD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:/([0-9][0-9,-]*n?))?/?(?:[?#].*)?$")
 private val BOARD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/?(?:[?#].*)?$")
 private val SITE_URL = Regex("^(https?://[^/]+)/boards/?(?:[?#].*)?$")
 private val FIRST_IMAGE = Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)(?:\\?\\S*)?(?=\\s|$)", RegexOption.IGNORE_CASE)
 
 object HonoBbs {
     fun isBoardUrl(url: String) = BOARD_URL.matches(url)
+    /** /boards/板/スレ/番号 の番号(123・123-456・123,456・123n の先頭) */
+    fun resNoIn(url: String): Int? =
+        THREAD_URL.find(url)?.groupValues?.get(4)?.takeWhile { it.isDigit() }?.toIntOrNull()?.takeIf { it > 0 }
     /** サイトの入口(web の板の一覧 https://<web>/boards) */
     fun isSiteUrl(url: String) = SITE_URL.matches(url.trim())
 

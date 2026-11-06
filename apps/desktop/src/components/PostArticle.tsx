@@ -31,7 +31,7 @@ import { displayDate, displayId, type DateStyle } from '../utils/displayDate'
 import Identicon from './Identicon'
 import { reasonLabel, type AutoNgReason } from '../utils/autoNg'
 import { aiHitLabel, type AiNgHit } from '../utils/aiNg'
-import { mediaSrc } from '../utils/httpsFirst'
+import { videoSrc } from '../utils/httpsFirst'
 import { LazyVideoThumb, ThumbImage } from './MediaFailed'
 import { FloatingMenu, MenuButton, TOOL_BTN, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 import { canPlayVideo } from '../utils/videoSupport'
@@ -76,6 +76,8 @@ export interface PostHandlers extends BodyHandlers {
   onEditNg?: (rule: NgRule, values: Partial<Record<NgTarget, string>>) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
+  /** レスの共有の小項目 */
+  shareOf?: (post: Post) => MenuItem[]
   /** 自分の書き込みを消す。消せない掲示板は undefined */
   onDeletePost?: (post: Post) => void
   /** 自分のレスの印を手で付ける・外す。sameId なら、このスレの同じ ID のレスすべてに */
@@ -463,6 +465,7 @@ function PostArticle(props: Props) {
       : []),
     { label: 'ヘッダ含めてコピー', icon: 'content_copy', onClick: () => copy(`${header}\n${post.body}`) },
     { label: '本文のみコピー', icon: 'content_copy', onClick: () => copy(post.body) },
+    ...(handlers.shareOf ? [{ label: '共有', icon: 'share', children: handlers.shareOf(post) }] : []),
     {
       label: isAA ? '文字列として表示' : 'AAとして表示',
       icon: isAA ? 'notes' : 'grid_on',
@@ -972,7 +975,7 @@ function PostArticle(props: Props) {
                         // 再生できない環境では <video> を置かない(描画のプロセスが落ちる)
                         <span className="absolute inset-x-0 bottom-1 text-center text-[10px] text-white/80">動画</span>
                       ) : isAutoLoadable(m.url) ? (
-                        <LazyVideoThumb src={mediaSrc(`${m.url}#t=0.1`)} className="w-full h-full object-cover pointer-events-none" />
+                        <LazyVideoThumb src={videoSrc(`${m.url}#t=0.1`)} className="w-full h-full object-cover pointer-events-none" />
                       ) : (
                         <LocalAddressMark />
                       )}

@@ -11,7 +11,7 @@ import { isVideoFileUrl, youtubeEmbedUrl } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { isMobile } from '../utils/platform'
 import MobileImageViewer from './mobile/MobileImageViewer'
-import { mediaSrc } from '../utils/httpsFirst'
+import { mediaSrc, videoSrc } from '../utils/httpsFirst'
 import { VideoPlaybackHelp, ViewerImageFailed } from './MediaFailed'
 import { canPlayVideo } from '../utils/videoSupport'
 
@@ -237,7 +237,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
   const doSave = async () => {
     setSave({ status: 'saving' })
     try {
-      setSave({ status: 'saved', path: await saveImage(url, saveDir) })
+      setSave({ status: 'saved', path: (await saveImage(url, saveDir)).path })
     } catch (e) {
       setSave({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     }
@@ -305,7 +305,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
           <video
             ref={videoRef}
             key={url}
-            src={mediaSrc(url)}
+            src={videoSrc(url)}
             controls
             autoPlay
             playsInline

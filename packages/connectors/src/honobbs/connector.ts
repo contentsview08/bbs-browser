@@ -9,7 +9,7 @@ import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse
 const ID = 'honobbs'
 
 /** web の板・スレの URL。スレ ID は UUID */
-const THREAD_URL = /^(https?:\/\/[^/]+)\/boards\/([A-Za-z0-9_-]+)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?(?:[?#].*)?$/
+const THREAD_URL = /^(https?:\/\/[^/]+)\/boards\/([A-Za-z0-9_-]+)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/\d[\d,-]*n?)?\/?(?:[?#].*)?$/
 const BOARD_URL = /^(https?:\/\/[^/]+)\/boards\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/
 
 interface RawCursor {

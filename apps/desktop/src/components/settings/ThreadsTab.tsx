@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { clearMediaCache, mediaCacheUsage, type MediaCacheUsage } from '../../host/saveImage'
 import { ListFontSliders } from '../FontSizeSlider'
 import { ListEditor, NumberField, Toggle } from '../SettingParts'
 import { BTN_PRIMARY } from '../DialogParts'
@@ -89,6 +90,43 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
         )}
         {pruneMessage && <p className="mt-2 text-xs text-c-text-muted">{pruneMessage}</p>}
       </Section>
+      <MediaCacheSection />
     </>
+  )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function MediaCacheSection() {
+  const [usage, setUsage] = useState<MediaCacheUsage>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  useEffect(() => {
+    mediaCacheUsage().then(setUsage, (e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+  }, [])
+  return (
+    <Section title="画像のキャッシュ" note="一度読んだ画像を手元に置き、表示と保存で取り直しません。1 GB を超えると古いものから消します。動画は入りません">
+      <p className="text-sm text-c-text-body tabular-nums">{usage ? `${formatBytes(usage.bytes)}(${usage.files} 枚)` : '数えています…'}</p>
+      <button
+        type="button"
+        className={`${BTN_PRIMARY} mt-3`}
+        disabled={busy || !usage || usage.files === 0}
+        onClick={() => {
+          setBusy(true)
+          setError(undefined)
+          clearMediaCache()
+            .then(setUsage)
+            .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+            .finally(() => setBusy(false))
+        }}
+      >
+        キャッシュを消す
+      </button>
+      {error && <p className="mt-2 text-xs text-c-heat-very-hot">{error}</p>}
+    </Section>
   )
 }

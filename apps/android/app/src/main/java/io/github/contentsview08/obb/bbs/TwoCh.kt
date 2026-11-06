@@ -453,4 +453,11 @@ object TwoCh {
         if (Machi.isBoardUrl(t.boardUrl)) return Machi.webUrl(t)
         return boardPathOf(t.boardUrl).threadUrl(t.key)
     }
+
+    /** レスの番号付きの URL。番号で開けない形ならスレの URL のまま(PC 版の utils/share.ts と同じ) */
+    fun postWebUrl(threadUrl: String, no: Int): String {
+        val path = threadUrl.substringBefore('?').substringBefore('#')
+        if ("/read.cgi/" !in path && !Regex("/boards/[^/]+/[^/]+/?$").containsMatchIn(path)) return threadUrl
+        return "${path.trimEnd('/')}/$no"
+    }
 }

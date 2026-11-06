@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use tauri::Manager;
 
@@ -7,11 +8,13 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod chosen_paths;
 mod fonts;
+mod media_cache;
 mod post_http;
 mod update;
 mod web_upload;
 
 use chosen_paths::ChosenPaths;
+use media_cache::MediaCache;
 
 // ── データの置き場 ──
 //
@@ -218,13 +221,13 @@ fn migrations() -> Vec<Migration> {
 }
 
 /// http の URL の https 版(http でなければ None)
-fn https_of(url: &str) -> Option<String> {
+pub(crate) fn https_of(url: &str) -> Option<String> {
     let rest = url.get(..7).filter(|s| s.eq_ignore_ascii_case("http://")).map(|_| &url[7..])?;
     Some(format!("https://{rest}"))
 }
 
 /// 中身の先頭のバイトから、画像・動画の拡張子を決める。画像でも動画でもなければ None
-fn media_extension(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn media_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
         return Some("jpg");
     }
@@ -258,7 +261,7 @@ fn media_extension(bytes: &[u8]) -> Option<&'static str> {
 const MAX_STEM_BYTES: usize = 200;
 
 /// %XX を元の文字に戻す。UTF-8 でない並びは置換文字にし、%XX の形でないものはそのまま残す
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -311,53 +314,73 @@ fn file_name_from_url(url: &str, extension: &str) -> String {
     format!("{name}.{extension}")
 }
 
-/// 同じ名前のファイルがあれば「名前 (1).jpg」のようにずらして、上書きしない
-fn unique_path(dir: &Path, name: &str) -> PathBuf {
-    let candidate = dir.join(name);
-    if !candidate.exists() {
-        return candidate;
-    }
+/// 同じ名前のファイルがあれば「名前 (1).jpg」のようにずらして、上書きしない。
+/// 調べてから作るのでは同時に保存したときにぶつかるので、「ないときだけ作る」で空いている名前を確保する
+fn create_unique(dir: &Path, name: &str) -> std::io::Result<(std::fs::File, PathBuf)> {
     let (stem, ext) = match name.rfind('.') {
         Some(i) if i > 0 => (&name[..i], &name[i..]),
         _ => (name, ""),
     };
-    (1..)
-        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
-        .find(|p| !p.exists())
-        .expect("空いている名前は必ず見つかる")
+    let mut n = 0u32;
+    loop {
+        let path = if n == 0 { dir.join(name) } else { dir.join(format!("{stem} ({n}){ext}")) };
+        match std::fs::File::options().write(true).create_new(true).open(&path) {
+            Ok(file) => return Ok((file, path)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            // Windows では同じ名前のフォルダがあるとこの失敗になる
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && path.exists() => {}
+            Err(e) => return Err(e),
+        }
+        n += 1;
+    }
 }
 
-/// 画像を取得して保存し、保存したファイルのパスを返す。dir が空ならダウンロードフォルダ
+/// 保存先に写す。動画はキャッシュに残さないので移す(1 GB の枠を長い動画で埋めない)
+fn copy_to_save_dir(source: &Path, dir: &Path, url: &str, move_it: bool) -> Result<PathBuf, String> {
+    let head = media_cache::read_head(source).ok_or("保存するファイルを読めませんでした")?;
+    let extension = media_extension(&head).ok_or("画像でも動画でもないので保存しませんでした")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let (mut out, path) = create_unique(dir, &file_name_from_url(url, extension)).map_err(|e| e.to_string())?;
+    let copied = std::fs::File::open(source).and_then(|mut input| std::io::copy(&mut input, &mut out));
+    drop(out);
+    if let Err(e) = copied {
+        let _ = std::fs::remove_file(&path);
+        return Err(e.to_string());
+    }
+    if move_it || media_cache::is_video(&head) {
+        let _ = std::fs::remove_file(source);
+    }
+    Ok(path)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedImage {
+    path: String,
+    /// 通信せず、キャッシュから写した
+    from_cache: bool,
+}
+
+/// 画像を保存し、保存したファイルのパスを返す。dir が空ならダウンロードフォルダ。キャッシュにあれば通信しない
 #[tauri::command]
-async fn save_image(app: tauri::AppHandle, url: String, dir: String) -> Result<String, String> {
+async fn save_image(app: tauri::AppHandle, cache: tauri::State<'_, Arc<MediaCache>>, url: String, dir: String) -> Result<SavedImage, String> {
     let dir = if dir.trim().is_empty() {
         app.path().download_dir().map_err(|e| e.to_string())?
     } else {
         PathBuf::from(dir)
     };
-    let client = tauri_plugin_http::reqwest::Client::builder()
-        .user_agent("Monazilla/1.00 (OBB)")
-        .connect_timeout(std::time::Duration::from_secs(15))
-        .read_timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-    // http の URL も先に https で取り、取れなければ書いてあるとおり http で取る
-    let fetch = |target: String| {
-        let client = client.clone();
-        async move { client.get(target).send().await?.error_for_status()?.bytes().await }
+    let cache = cache.inner().clone();
+    // 自動で読まないアドレスは、押して読むことにしたものだけがここへ来る。キャッシュには置かない
+    let (source, from_cache, temporary) = if cache.is_allowed(&url) {
+        let (path, hit) = cache.ensure(&url).await?;
+        (path, hit, false)
+    } else {
+        (cache.fetch_uncached(&url).await?, false, true)
     };
-    let bytes = match https_of(&url) {
-        Some(https) => match fetch(https).await {
-            Ok(bytes) => bytes,
-            Err(_) => fetch(url.clone()).await.map_err(|e| e.to_string())?,
-        },
-        None => fetch(url.clone()).await.map_err(|e| e.to_string())?,
-    };
-    let extension = media_extension(&bytes).ok_or("画像でも動画でもないので保存しませんでした")?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = unique_path(&dir, &file_name_from_url(&url, extension));
-    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
-    Ok(path.to_string_lossy().into_owned())
+    let saved = tauri::async_runtime::spawn_blocking(move || copy_to_save_dir(&source, &dir, &url, temporary))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(SavedImage { path: saved.to_string_lossy().into_owned(), from_cache })
 }
 
 /// 背景画像を、アプリのデータフォルダにコピーしてそのパスを返す。
@@ -602,6 +625,7 @@ fn reload_when_web_process_dies(app: &tauri::App) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol(media_cache::SCHEME, media_cache::handle_protocol)
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -624,6 +648,9 @@ pub fn run() {
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
             app.manage(fonts::FontJobs::default());
+            // フォルダは最初に保存するときに作る(起動時に読み書きしない)
+            let media_cache = MediaCache::new(data_dir(app.handle())?.join("media-cache"), media_cache::is_auto_loadable)?;
+            app.manage(Arc::new(media_cache));
             fonts::prepare(app.handle());
             // ポータブルでは、前に置いた背景画像もアセットで読めるように許す
             if portable_dir().is_some() {
@@ -648,6 +675,10 @@ pub fn run() {
             fonts::download_font,
             fonts::cancel_font_download,
             save_image,
+            media_cache::media_cached,
+            media_cache::cancel_media,
+            media_cache::media_cache_usage,
+            media_cache::media_cache_clear,
             set_background_image,
             current_background_image,
             write_json_file,
@@ -669,6 +700,31 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saving_at_the_same_time_never_overwrites() {
+        let dir = std::env::temp_dir().join(format!("obb-save-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let threads: Vec<_> = (0..32)
+            .map(|i| {
+                let dir = dir.clone();
+                std::thread::spawn(move || {
+                    use std::io::Write;
+                    let (mut file, path) = create_unique(&dir, "x.png").unwrap();
+                    file.write_all(format!("{i}").as_bytes()).unwrap();
+                    path
+                })
+            })
+            .collect();
+        let mut paths: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        paths.sort();
+        paths.dedup();
+        assert_eq!(paths.len(), 32);
+        assert!(dir.join("x.png").exists());
+        assert!(dir.join("x (31).png").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn saved_name_uses_the_real_format() {

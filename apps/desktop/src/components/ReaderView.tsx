@@ -11,7 +11,7 @@ import { isVideoFileUrl, toImageUrl, youtubeEmbedUrl } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
 import Lightbox from './Lightbox'
 import LoadingCenter from './LoadingCenter'
-import { mediaSrc } from '../utils/httpsFirst'
+import { mediaSrc, videoSrc } from '../utils/httpsFirst'
 import { canPlayVideo } from '../utils/videoSupport'
 import { VideoPlaybackHelp } from './MediaFailed'
 
@@ -99,7 +99,7 @@ export default function ReaderView(props: { url: string; fetchPage: FetchPage; s
             ) : video && !canPlayVideo(url) ? (
               <VideoPlaybackHelp />
             ) : video ? (
-              <video src={mediaSrc(url)} controls autoPlay playsInline className="max-w-full max-h-full" />
+              <video src={videoSrc(url)} controls autoPlay playsInline className="max-w-full max-h-full" />
             ) : isAutoLoadable(image!) ? (
               <img src={mediaSrc(image)} alt="" referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain" onClick={() => setLightbox({ urls: [image!], index: 0 })} />
             ) : (

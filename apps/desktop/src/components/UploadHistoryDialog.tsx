@@ -13,6 +13,8 @@ import { useLongPress } from '../hooks/useLongPress'
 import MobilePage from './MobilePage'
 import { dayLabel } from '../utils/thread'
 import ActionSheet from './ActionSheet'
+import Lightbox from './Lightbox'
+import { isVideoFileUrl, toImageUrl } from '../utils/postBody'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
@@ -30,6 +32,8 @@ interface Props {
   /** その画像を貼ったレス(書き込み履歴から探したもの)。分かればスレタイと番号を出し、押すとそのレスへ */
   postedIn?: (url: string) => { title: string; no?: number; open: () => void } | undefined
   onOpen: (url: string) => void
+  /** ビューアーからの保存先 */
+  saveDir?: string
   onClose: () => void
 }
 
@@ -44,6 +48,10 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
   const [copied, setCopied] = useState<string>()
   const [deleting, setDeleting] = useState<string>()
   const [error, setError] = useState<string>()
+  const [broken, setBroken] = useState<ReadonlySet<string>>(new Set())
+  const [viewing, setViewing] = useState<number>()
+  const viewable = (url: string) => !!toImageUrl(url) && !isVideoFileUrl(url) && !broken.has(url)
+  const viewerUrls = props.uploads.map((u) => u.url).filter(viewable)
   // 置き場からも消せるもの(アカウントで上げた)と、消せないもの(匿名で上げた)を分けて並べる
   const deletable = props.uploads.filter((u) => u.withAccount)
   const fixed = props.uploads.filter((u) => !u.withAccount)
@@ -53,8 +61,20 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
     const posted = postedOf.get(u.url)
     return (
       <div key={u.url} className="group flex flex-col bg-c-surface2 border border-c-border rounded-[var(--card-radius)] overflow-hidden">
-        <button type="button" onClick={() => props.onOpen(u.url)} className="h-28 bg-c-surface3" title="ブラウザで開く">
-          <img src={u.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+        <button
+          type="button"
+          onClick={() => (viewable(u.url) ? setViewing(viewerUrls.indexOf(u.url)) : props.onOpen(u.url))}
+          className="h-28 bg-c-surface3"
+          title={viewable(u.url) ? 'ビューアーで開く' : 'ブラウザで開く'}
+        >
+          <img
+            src={u.url}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+            onError={() => setBroken((s) => new Set(s).add(u.url))}
+          />
         </button>
         <div className="px-2 pt-1.5">
           <p className="text-xs text-c-text-body truncate" title={u.name}>
@@ -142,6 +162,20 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
           </>
         )}
       </div>
+      {/* 開く動きの transform の中に入れない(fixed が画面いっぱいにならない) */}
+      {viewing !== undefined &&
+        viewerUrls.length > 0 &&
+        createPortal(
+          <Lightbox
+            urls={viewerUrls}
+            index={Math.min(viewing, viewerUrls.length - 1)}
+            saveDir={props.saveDir ?? ''}
+            onIndex={setViewing}
+            onClose={() => setViewing(undefined)}
+            onOpenExternal={props.onOpen}
+          />,
+          document.body,
+        )}
     </div>
   )
 }

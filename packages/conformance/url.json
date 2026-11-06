@@ -30,6 +30,7 @@
   { "name": "URL でない", "input": "not a url", "expected": { "kind": "none" } },
   { "name": "ftp", "input": "ftp://host.example/a/", "expected": { "kind": "none" } },
   { "name": "hono-bbs のスレ", "input": "https://red-edge.net/boards/livejupter/6aefe762-1722-4b73-80f5-59db564142c7", "expected": { "kind": "thread", "site": "hono", "boardUrl": "https://red-edge.net/boards/livejupter/", "key": "6aefe762-1722-4b73-80f5-59db564142c7" } },
+  { "name": "hono-bbs のスレ(レス番号)", "input": "https://red-edge.net/boards/livejupter/6aefe762-1722-4b73-80f5-59db564142c7/5", "expected": { "kind": "thread", "site": "hono", "boardUrl": "https://red-edge.net/boards/livejupter/", "key": "6aefe762-1722-4b73-80f5-59db564142c7", "no": 5 } },
   { "name": "hono-bbs の板", "input": "https://red-edge.net/boards/operation01/", "expected": { "kind": "board", "site": "hono", "boardUrl": "https://red-edge.net/boards/operation01/" } },
   { "name": "hono-bbs の板(クエリ)", "input": "https://red-edge.net/boards/operation01?x=1", "expected": { "kind": "board", "site": "hono", "boardUrl": "https://red-edge.net/boards/operation01/" } },
   { "name": "したらばのスレ", "input": "https://jbbs.shitaraba.net/bbs/read.cgi/game/12345/1700000000/", "expected": { "kind": "thread", "site": "shitaraba", "boardUrl": "https://jbbs.shitaraba.net/game/12345/", "key": "1700000000" } },

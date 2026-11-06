@@ -531,6 +531,16 @@ fun copyText(context: Context, text: String) {
     cm.setPrimaryClip(ClipData.newPlainText("bbs", text))
 }
 
+/** 端末の共有シートを開く */
+fun shareText(context: Context, subject: String, text: String) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, subject)
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(android.content.Intent.createChooser(send, "共有"))
+}
+
 /** 画像を付ける: 写真を選ぶ。どこへ渡すかは選んだあとに決まる(AppViewModel.attach) */
 private fun startImagePick(vm: AppViewModel, r: io.github.contentsview08.obb.ReplyState, picker: () -> Unit) {
     val problem = if (HonoBbs.isBoardUrl(r.boardUrl)) null else io.github.contentsview08.obb.data.Uploader.hostProblem(vm.prefs.uploadHost, vm.prefs.imgurClientId, vm.prefs.imgbbApiKey)

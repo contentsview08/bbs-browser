@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fetchHttpsFirst, mediaSrc, toHttps } from '../src/utils/httpsFirst'
+import { fetchHttpsFirst, mediaSrc, toHttps, usesMediaCache, videoSrc } from '../src/utils/httpsFirst'
 
 describe('https を先に試す', () => {
   it('http の URL だけ https にする', () => {
@@ -45,5 +45,27 @@ describe('https を先に試す', () => {
       }, () => true),
     ).rejects.toThrow()
     expect(sent).toEqual(['https://f.test/'])
+  })
+})
+
+describe('画像のキャッシュを通すか', () => {
+  it('自動で読めるアドレスの画像だけ通す', () => {
+    expect(usesMediaCache('https://a.test/x.png')).toBe(true)
+    expect(usesMediaCache('http://a.test/x.png?y=1')).toBe(true)
+  })
+
+  it('家の中のアドレスは、押して読むときも通さない', () => {
+    expect(usesMediaCache('http://192.168.0.1/x.png')).toBe(false)
+    expect(usesMediaCache('http://localhost/x.png')).toBe(false)
+    expect(usesMediaCache('https://a.test:8080/x.png')).toBe(false)
+  })
+
+  it('形式を見分けられないものは WebView に任せる', () => {
+    expect(usesMediaCache('https://a.test/x.svg')).toBe(false)
+    expect(usesMediaCache('https://a.test/favicon.ico?1')).toBe(false)
+  })
+
+  it('動画は通さず https を先に試すだけ', () => {
+    expect(videoSrc('http://v.test/x.mp4')).toBe('https://v.test/x.mp4')
   })
 })

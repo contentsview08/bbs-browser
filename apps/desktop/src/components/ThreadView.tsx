@@ -27,6 +27,8 @@ import NextThreadBox from './NextThreadBox'
 import NextUnreadButton from './NextUnreadButton'
 import RefreshButton from './RefreshButton'
 import { saveThread } from '../host/exportThread'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { postWebUrl, shareItems } from '../utils/share'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarContextMenu, type BarAction } from './ActionBar'
@@ -740,6 +742,11 @@ export default function ThreadView(props: Props) {
     clearTimeout(quickTimer.current)
     quickTimer.current = setTimeout(() => setQuickMessage(undefined), ok ? 2500 : 6000)
   }
+  // レスの手続きは作り直さない(すべてのレスを描き直して重い)ので、今の値はここから読む
+  const shareTarget = useRef({ title: log.title, url: props.threadUrl })
+  shareTarget.current = { title: log.title, url: props.threadUrl }
+  const shareCopy = useRef(copyText)
+  shareCopy.current = copyText
   const quickPost = async (body: string) => {
     if (!props.onSubmitPost) return
     showQuick(true, '書き込み中…')
@@ -1287,6 +1294,14 @@ export default function ThreadView(props: Props) {
       : []),
     { id: 'delete', label: 'ログを削除して閉じる (Shift+Delete)', icon: 'delete', tint: 'var(--c-mark-danger)', onClick: props.onDeleteLog },
     { id: 'copyUrl', label: 'URL をコピー', icon: 'link', onClick: () => copyText(props.threadUrl, 'URL をコピーしました') },
+    {
+      id: 'share',
+      label: '共有',
+      icon: 'share',
+      // 帯に置いたときは、いちばん使うリンクのコピーにする
+      onClick: () => copyText(props.threadUrl, 'リンクをコピーしました'),
+      children: shareItems({ title: log.title, url: props.threadUrl, copy: copyText, open: (url) => void openUrl(url) }),
+    },
     { id: 'openBrowser', label: 'ブラウザで開く', icon: 'open_in_new', onClick: props.onOpenInBrowser },
     {
       id: 'save',
@@ -1906,6 +1921,10 @@ export default function ThreadView(props: Props) {
         reactionDefs: props.reactionDefs,
         onPostAction: props.onPostAction,
         postActions: props.postActions,
+        shareOf: (post) => {
+          const { title, url } = shareTarget.current
+          return shareItems({ title, url: postWebUrl(url, post.no), copy: (text, done) => shareCopy.current(text, done), open: (u) => void openUrl(u) })
+        },
         onDeletePost: props.onDeletePost,
         onMarkOwn: props.onMarkOwn
           ? (post, own, sameId) =>

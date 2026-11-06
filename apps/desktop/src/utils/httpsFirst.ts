@@ -1,5 +1,9 @@
 // http の URL も先に https で取りに行き、取れなければ書いてあるとおり http に戻す。
 // 掲示板に書かれる URL は http のままでも、今のサーバーは https だけのことが多い。https と書いてある URL は http に戻さない。スマホ版の data/HttpsFirst.kt と同じ考え方
+// 画像はアプリのキャッシュ(Rust の media_cache.rs)を通し、同じ画像を二度取らない。https を先に試すのもそちらで行う
+
+import { convertFileSrc, isTauri } from '@tauri-apps/api/core'
+import { isAutoLoadable } from './safeUrl'
 
 /** https で届かなかったホスト(毎回つながるのを待たない) */
 const httpOnlyHosts = new Set<string>()
@@ -39,10 +43,29 @@ export async function fetchHttpsFirst<T>(url: string, send: (url: string) => Pro
   return send(url)
 }
 
-/** <img>・<video> の src。読めなかったら、下の見張りが http に戻す */
+/** キャッシュが扱う形式に入らないもの(中身で見分けて保存するので、形式の分からないものは WebView に任せる) */
+const NOT_CACHED = /\.(?:svg|ico)(?:[?#]|$)/i
+
+/**
+ * キャッシュを通すか。自動で読まないアドレスは、押して読むと決めたものも含めて通さない
+ * (Rust 側も同じ判定で断る。キャッシュが読みに行ってよいのは自動で読めるアドレスだけ)
+ */
+export function usesMediaCache(url: string): boolean {
+  return isAutoLoadable(url) && !NOT_CACHED.test(url)
+}
+
+/** <img> の src。アプリではキャッシュを通す */
 export function mediaSrc(url: string): string
 export function mediaSrc(url: string | undefined): string | undefined
 export function mediaSrc(url: string | undefined): string | undefined {
+  if (url && isTauri() && usesMediaCache(url)) return convertFileSrc(url, 'obb-media')
+  return videoSrc(url)
+}
+
+/** <video> の src と、キャッシュを通さない <img> の src。読めなかったら、下の見張りが http に戻す */
+export function videoSrc(url: string): string
+export function videoSrc(url: string | undefined): string | undefined
+export function videoSrc(url: string | undefined): string | undefined {
   if (!url) return url
   const https = toHttps(url)
   if (!https) return url

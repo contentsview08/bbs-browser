@@ -46,6 +46,7 @@ const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'replyLayout', name: '書き込み欄の位置', icon: 'view_sidebar', placement: 'header', desktopOnly: true },
   { id: 'delete', name: 'ログを削除して閉じる', icon: 'delete', placement: 'header', mobile: 'menu' },
   { id: 'copyUrl', name: 'URL をコピー', icon: 'link', placement: 'menu', mobileOnly: true },
+  { id: 'share', name: '共有', icon: 'share', placement: 'menu' },
   { id: 'openBrowser', name: 'ブラウザで開く', icon: 'open_in_new', placement: 'menu' },
   { id: 'save', name: 'スレを保存', icon: 'save', placement: 'menu', desktopOnly: true },
   { id: 'drawer', name: 'メニュー(引き出し)', icon: 'menu', placement: 'menu', mobileOnly: true },
@@ -76,7 +77,7 @@ const BAR_ACTIONS: Record<BarArea, BarActionDef[]> = { thread: THREAD_ACTIONS, l
  */
 const MOBILE_MENU_HIDDEN = new Set(['drawer', 'back', 'reply'])
 const MOBILE_MENU_ORDER: Record<BarArea, string[]> = {
-  thread: ['favorite', 'gallery', 'findNext', 'search', 'openBoard', 'top', 'bottom', 'style', 'fontSize', 'copyUrl', 'openBrowser', 'refresh', 'delete'],
+  thread: ['favorite', 'gallery', 'findNext', 'search', 'openBoard', 'top', 'bottom', 'style', 'fontSize', 'copyUrl', 'share', 'openBrowser', 'refresh', 'delete'],
   list: ['newThread', 'favorite', 'search', 'top', 'style', 'fontSize', 'refresh'],
 }
 export function mobileMenuActions<T extends { id: string }>(area: BarArea, actions: T[], placements: Record<string, Placement>, custom?: string[]): T[] {

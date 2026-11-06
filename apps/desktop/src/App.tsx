@@ -2839,6 +2839,7 @@ export default function App() {
       {uploads && (
         <UploadHistoryDialog
           uploads={uploads}
+          saveDir={settings.imageSaveDir}
           postedIn={postedIn}
           onOpen={(url) => void (isMobile ? openUrlInApp(url) : openUrl(url))}
           canDelete={settings.catboxUserhash.trim() !== ''}

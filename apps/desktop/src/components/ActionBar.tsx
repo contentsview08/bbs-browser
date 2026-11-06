@@ -95,6 +95,7 @@ const MENU_GROUP: Record<string, string> = {
   fontSize: '見た目',
   copyMenu: '共有',
   copyUrl: '共有',
+  share: '共有',
   openBrowser: '共有',
   delete: '削除',
 }

@@ -23,7 +23,7 @@ export function isCgiSubject(text: string): boolean {
 
 /**
  * スレの URL の後ろのレスの指定(123・123-456・123,456・123n)の先頭の番号を読む。
- * l50・-100 は先頭のレス番号がないので読まない。スマホ版の bbs/UrlRoute.kt と同じ
+ * l50・-100 は先頭のレス番号がないので読まない。hono-bbs は /boards/板/スレ/番号。スマホ版の bbs/UrlRoute.kt と同じ
  */
 export function postNoInUrl(url: string): number | undefined {
   let path: string
@@ -35,7 +35,8 @@ export function postNoInUrl(url: string): number | undefined {
   const parts = /\/read\.cgi\/(.+)$/.exec(path)?.[1].split('/')
   // したらばは カテゴリ/板/キー、ほかは 板/キー
   const keyAt = /(?:^|\.)jbbs\.(?:shitaraba\.net|livedoor\.jp)$/.test(new URL(url.trim()).hostname) ? 2 : 1
-  const m = /^(\d+)(?:[-,][\d,-]*)?n?$/.exec(parts?.[keyAt + 1] ?? '')
+  const spec = parts?.[keyAt + 1] ?? /^\/boards\/[^/]+\/[^/]+\/([^/]+)\/?$/.exec(path)?.[1] ?? ''
+  const m = /^(\d+)(?:[-,][\d,-]*)?n?$/.exec(spec)
   const no = m ? Number(m[1]) : 0
   return no > 0 ? no : undefined
 }

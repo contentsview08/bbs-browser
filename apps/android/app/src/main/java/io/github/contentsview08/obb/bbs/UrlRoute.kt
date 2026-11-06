@@ -42,7 +42,7 @@ sealed class UrlRoute {
         /** 板・スレの URL の形を読む。2ch 互換の板が本当にあるかは、このあとスレ一覧を取って確かめる。形が合わなければ null */
         fun parse(raw: String, now: Long = System.currentTimeMillis()): UrlRoute? {
             val u = to5chIo(raw.trim())
-            HonoBbs.parseThreadUrl(u)?.let { return Thread(Site.HONO, it) }
+            HonoBbs.parseThreadUrl(u)?.let { return Thread(Site.HONO, it, HonoBbs.resNoIn(u)) }
             HonoBbs.normalizeBoardUrl(u)?.let { return BoardPage(Site.HONO, it) }
             Shitaraba.parseThreadUrl(u)?.let { return Thread(Site.SHITARABA, it, resNoOf(u, keyAt = 2)) }
             Shitaraba.normalizeBoardUrl(u)?.let { return BoardPage(Site.SHITARABA, it) }

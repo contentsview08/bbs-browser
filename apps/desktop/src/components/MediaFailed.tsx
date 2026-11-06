@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { canSelfUpdate } from '../host/update'
 import { mediaSrc } from '../utils/httpsFirst'
+import { cancelImageFetch } from '../host/saveImage'
 import { FloatingMenu, menuPosAt, type MenuPos } from './PostMenu'
 
 /** 読み込みをやめたサムネイル。スクロールでレスを作り直しても、勝手に読み直さない */
@@ -18,6 +19,7 @@ export function ThumbImage(props: { src: string; className: string }) {
   const cancel = () => {
     // 要素を外すだけでは通信が残ることがあるので、先に src を外して止める
     imgRef.current?.removeAttribute('src')
+    cancelImageFetch(props.src)
     canceledThumbs.add(props.src)
     setState('canceled')
   }

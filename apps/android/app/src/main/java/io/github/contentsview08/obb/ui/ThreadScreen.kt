@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.FormatSize
@@ -742,6 +743,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
                         MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy) { copyText(context, "${page.title}\n${TwoCh.webUrl(page.summary)}"); vm.toast = "スレタイと URL をコピーしました" },
                     )) {},
+                    MenuItem("共有", Icons.Filled.Share, children = listOf(
+                        MenuItem("共有する", Icons.Filled.Share) { shareText(context, page.title, "${page.title}\n${TwoCh.webUrl(page.summary)}") },
+                        MenuItem("リンクをコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "リンクをコピーしました" },
+                    )) {},
                     MenuItem("スレを保存", Icons.Filled.Save, children = listOf(
                         MenuItem("HTML で保存", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
                         MenuItem("テキストで保存", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
@@ -795,6 +800,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         copyText(context, "${p.no} ${p.name} ${p.date}${p.id?.let { " ID:$it" } ?: ""}\n${p.body}"); vm.toast = "コピーしました"
                     },
                     MenuItem("本文のみコピー", Icons.Filled.ContentCopy) { copyText(context, p.body); vm.toast = "コピーしました" },
+                    MenuItem("共有", Icons.Filled.Share, children = TwoCh.postWebUrl(TwoCh.webUrl(page.summary), p.no).let { url ->
+                        listOf(
+                            MenuItem("共有する", Icons.Filled.Share) { shareText(context, page.title, "${page.title}\n$url") },
+                            MenuItem("リンクをコピー", Icons.Filled.Link) { copyText(context, url); vm.toast = "リンクをコピーしました" },
+                        )
+                    }) {},
                     MenuItem(if (isAA) "文字列として表示" else "AAとして表示", if (isAA) Icons.AutoMirrored.Filled.Notes else Icons.Filled.GridOn) { aaOverride = aaOverride + (p.no to !isAA) },
                 ) + listOfNotNull(
                     // 縮めて収めた AA は字が小さすぎて読めないことがある

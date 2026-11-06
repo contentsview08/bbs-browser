@@ -1838,6 +1838,17 @@ export default function App() {
       }
     })
 
+  // URL のレス番号: 新着で届くことがあるので、取り終えてから確かめる。
+  // レスが 1 つもないときは、スレが見つからない知らせが別に出る
+  const checkedJump = useRef<number>(undefined)
+  useEffect(() => {
+    if (!jump?.flash || checkedJump.current === jump.seq) return
+    const t = tabs.find((x) => x.id === jump.tabId)
+    if (!t?.log || t.loading) return
+    checkedJump.current = jump.seq
+    if (t.log.posts.length > 0 && !t.log.posts.some((p) => p.no === jump.no)) notify({ icon: 'error', title: `${jump.no} 番のレスはありません` })
+  }, [jump, tabs])
+
   // スマホ: 何かを開いたら(板・スレ・履歴・設定・URL)、サイドバーの引き出しを閉じる
   useEffect(() => {
     if (isMobile) setDrawerOpen(false)

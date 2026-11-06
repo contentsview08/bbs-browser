@@ -38,7 +38,7 @@ function routeOf(url: string): Record<string, unknown> {
 
 describe('url.json', () => {
   it.each(load<string, Record<string, unknown>>('url.json'))('$name', (c) => {
-    const actual = { ...routeOf(c.input), no: postNoInUrl(c.input) ?? null }
+    const actual: Record<string, unknown> = { ...routeOf(c.input), no: postNoInUrl(c.input) ?? null }
     const expected = expectedOf(c)
     // 2ch 互換でないコネクタは、PC では形の解釈が通信といっしょになっているので、スレか板かまでを比べる(レス番号は URL だけで読める)
     const keys = actual.site !== undefined && actual.site !== '2ch' ? Object.keys(expected).filter((k) => k === 'kind' || k === 'site' || k === 'no') : Object.keys(expected)

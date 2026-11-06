@@ -286,7 +286,7 @@ describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
 describe('文字コードの違うサイト', () => {
   const ctxOf = (res: HttpResponse): ConnectorContext => ({
     http: { get: async () => res, post: async () => res },
-    decode: (bytes, encoding) => new TextDecoder(encoding).decode(bytes),
+    decode: (bytes: Uint8Array, encoding: string) => new TextDecoder(encoding).decode(bytes),
   }) as unknown as ConnectorContext
 
   it('板一覧だけ UTF-8 で charset がヘッダーにないサイトでも、板の名前を読める', async () => {
@@ -307,7 +307,7 @@ describe('文字コードの違うサイト', () => {
   it('UTF-8 の板へは UTF-8 で書き、Shift_JIS の板へは Shift_JIS で書く', async () => {
     const sent: string[] = []
     const ctxFor = (setting: Uint8Array): ConnectorContext => ({
-      decode: (bytes, encoding) => new TextDecoder(encoding).decode(bytes),
+      decode: (bytes: Uint8Array, encoding: string) => new TextDecoder(encoding).decode(bytes),
       http: {
         get: async () => ({ status: 200, headers: { 'content-type': 'text/plain' }, body: setting }),
         post: async (_url: string, body: string | Uint8Array) => {

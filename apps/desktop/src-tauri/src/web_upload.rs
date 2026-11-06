@@ -12,9 +12,16 @@ const WATCH: &str = r#"
 (() => {
   if (window.top !== window) return
   const re = new RegExp(__PATTERN__, 'g')
-  const seen = new Set()
+  const STORE = 'bbs-upload-seen'
+  const load = () => { try { return JSON.parse(sessionStorage.getItem(STORE) || 'null') } catch { return null } }
+  const stored = load()
+  // 上げたあとに別のページへ移ると、新しいリンクが読み込みの直後から見えている
+  const moved = stored !== null
+  const seen = new Set(stored || [])
+  const save = () => { try { sessionStorage.setItem(STORE, JSON.stringify([...seen])) } catch {} }
   let ready = false
   const queue = []
+  const MOVED_MAX_LINKS = 10
   const scan = () => {
     const texts = []
     document.querySelectorAll('a[href]').forEach((a) => texts.push(a.href))
@@ -28,7 +35,19 @@ const WATCH: &str = r#"
       if (ready) queue.push(u)
     }
   }
-  setTimeout(() => { scan(); ready = true }, 3000)
+  save()
+  setTimeout(() => {
+    if (moved) {
+      // 関連画像の並ぶページを、上げた画像と取り違えない(数が多ければ見本とみなす)
+      ready = true
+      scan()
+      if (queue.length > MOVED_MAX_LINKS) queue.length = 0
+    } else {
+      scan()
+      ready = true
+    }
+    save()
+  }, 3000)
   // 取れたリンクは、画面の上の帯にも出す(押すとコピー。アプリ側でも本文に入れている)
   const showLink = (u) => {
     const b = document.getElementById('bbs-browser-upload-banner')
@@ -41,6 +60,7 @@ const WATCH: &str = r#"
   setInterval(() => {
     if (ready) scan()
     const u = queue.shift()
+    save()
     if (u) { showLink(u); location.href = '__FOUND__?u=' + encodeURIComponent(u) }
   }, 700)
 })()
@@ -52,6 +72,9 @@ const PASTE: &str = r#"
   if (window.top !== window) return
   const files = __FILES__
   if (!files.length) return
+  // 上げたあとに別のページへ移っても、同じ画像をもう一度渡さない
+  const FIRED = 'bbs-upload-fired'
+  if (window.name === FIRED) return
   const build = () => {
     const dt = new DataTransfer()
     for (const f of files) {
@@ -71,9 +94,13 @@ const PASTE: &str = r#"
     ;(document.body || document.documentElement).appendChild(b)
   }
   const fire = () => {
+    window.name = FIRED
     banner()
     const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body
-    try { document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: build() })) } catch {}
+    // 貼り付けを受け付けたサイトへドロップまで送ると、同じ画像が 2 回上がる
+    let pasted = false
+    try { pasted = !document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: build() })) } catch {}
+    if (pasted) return
     try {
       const dt = build()
       target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }))

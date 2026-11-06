@@ -204,8 +204,8 @@ interface Options {
   autoScrollOnNew: boolean
   showThumbnails: boolean
   showLinkPreview: boolean
-  /** 通知などから指定されたレスへ飛ぶ。seq が変わったときだけ飛ぶ */
-  jumpTo?: { no: number; seq: number }
+  /** 通知などから指定されたレスへ飛ぶ。seq が変わったときだけ飛ぶ。flash なら光らせ、新着が届いても動かさない(URL のレス番号) */
+  jumpTo?: { no: number; seq: number; flash?: boolean }
   /** 絞り込み・検索で一部のレスだけを出しているか */
   filtering?: boolean
 }
@@ -232,6 +232,8 @@ export function useThreadScroll(o: Options) {
   const atBottom = useRef(false)
   /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
   const pendingUnread = useRef(false)
+  /** URL のレス番号へ飛んだあと、利用者が触るまで。新着が届いても位置を動かさない */
+  const heldJump = useRef(false)
   const position = useRef<ScrollPosition | undefined>(o.initialPosition)
   /** 前の描画のときの最後のレス番号とレス数(新着を見分ける) */
   const lastMax = useRef(0)
@@ -643,11 +645,22 @@ export function useThreadScroll(o: Options) {
     [],
   )
 
-  // 通知などから指定されたレスへ飛ぶ(開いたときの位置合わせのあとに)
+  // 通知などから指定されたレスへ飛ぶ(開いたときの位置合わせのあとに)。
+  // 飛ぶ先がまだ手元になければ、新着で届いたときに飛ぶ
+  const jumpedSeq = useRef<number>(undefined)
   useEffect(() => {
-    if (o.jumpTo && byNo.has(o.jumpTo.no)) scrollToUnread(o.jumpTo.no, 'animate')
-    // seq が変わったときだけ飛ぶ
-  }, [o.jumpTo?.seq, byNo.size > 0])
+    const j = o.jumpTo
+    if (!j || jumpedSeq.current === j.seq || !byNo.has(j.no)) return
+    jumpedSeq.current = j.seq
+    if (!j.flash) return scrollToUnread(j.no, 'animate')
+    heldJump.current = true
+    pendingUnread.current = false
+    scrollToUnread(j.no)
+    setFlashNos(new Map([[j.no, 0]]))
+    clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS)
+    // seq が変わったときと、レスが届いたときだけ見る
+  }, [o.jumpTo?.seq, byNo.size])
 
   // ── 位置の固定 ──
 
@@ -728,6 +741,15 @@ export function useThreadScroll(o: Options) {
     // 新着として扱うと pendingUnread を消してしまい、あとで本当の新着が届いても未読の頭へ移らない
     if (prevLastNo === 0) return
     const fresh = log.posts.filter((p) => p.no > prevLastNo).map((p) => p.no)
+    if (heldJump.current) {
+      // 飛んだレスの光を消さず、位置も動かさない
+      setFlashNos((m) => new Map([...staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS), ...m]))
+      clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
+      firstGrowth.current = false
+      pendingUnread.current = false
+      return
+    }
     setFlashNos(staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS))
     clearTimeout(flashTimer.current)
     flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
@@ -819,6 +841,7 @@ export function useThreadScroll(o: Options) {
     // 利用者がスレ表示を触ったら、それ以降の新着へは動かして見せる
     const touch = () => {
       untouched.current = false
+      heldJump.current = false
     }
     const moved = () => noteUserMove()
     const onPressRoot = (e: PointerEvent) => {

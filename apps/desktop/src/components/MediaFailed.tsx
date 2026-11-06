@@ -1,13 +1,45 @@
 // 画像を取得できなかったときの表示。サムネイルとビューアーで言葉をそろえる(スマホ版の ui/Images.kt・Viewer.kt と同じ言葉)
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { canSelfUpdate } from '../host/update'
 import { mediaSrc } from '../utils/httpsFirst'
+import { FloatingMenu, menuPosAt, type MenuPos } from './PostMenu'
+
+/** 読み込みをやめたサムネイル。スクロールでレスを作り直しても、勝手に読み直さない */
+const canceledThumbs = new Set<string>()
 
 /** サムネイルの中の画像。読めなければ理由の代わりに印を出し、押すと取り直す(ビューアーは開かない) */
 export function ThumbImage(props: { src: string; className: string }) {
-  const [state, setState] = useState<'loading' | 'done' | 'failed'>('loading')
+  const [state, setState] = useState<'loading' | 'done' | 'failed' | 'canceled'>(() => (canceledThumbs.has(props.src) ? 'canceled' : 'loading'))
   const [attempt, setAttempt] = useState(0)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [menu, setMenu] = useState<MenuPos>()
+  const closeMenu = useCallback(() => setMenu(undefined), [])
+  const cancel = () => {
+    // 要素を外すだけでは通信が残ることがあるので、先に src を外して止める
+    imgRef.current?.removeAttribute('src')
+    canceledThumbs.add(props.src)
+    setState('canceled')
+  }
+  if (state === 'canceled')
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-c-surface2 text-c-text-muted text-center leading-tight"
+        title="読み込みをやめました。押すと読み込みます"
+        onClick={(e) => {
+          e.stopPropagation()
+          canceledThumbs.delete(props.src)
+          setState('loading')
+          setAttempt((n) => n + 1)
+        }}
+      >
+        <span className="material-symbols-outlined text-xl leading-none">image</span>
+        <span className="text-[10px]">やめました</span>
+        <span className="text-[10px]">押して読み込む</span>
+      </span>
+    )
   if (state === 'failed')
     return (
       <span
@@ -29,11 +61,21 @@ export function ThumbImage(props: { src: string; className: string }) {
   return (
     <>
       {state === 'loading' && (
-        <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        // 右クリックは印が受ける(読み込み前の img は大きさがないことがあり、OS のメニューにも渡したくない)。押すのは親のボタンへ通す
+        <span
+          className="absolute inset-0 z-[1] flex items-center justify-center"
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setMenu(menuPosAt(e.clientX, e.clientY))
+          }}
+        >
           <span className="material-symbols-outlined text-xl text-c-text-muted animate-spin">progress_activity</span>
         </span>
       )}
+      {state === 'loading' && menu && <FloatingMenu pos={menu} items={[{ label: '読み込みをやめる', icon: 'cancel', onClick: cancel }]} onClose={closeMenu} />}
       <img
+        ref={imgRef}
         key={attempt}
         src={mediaSrc(props.src)}
         alt=""

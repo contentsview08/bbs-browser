@@ -1,6 +1,7 @@
 // レスの操作のメニュー(︙ のボタンと右クリックで共通)。スレの行(ThreadCard)でも使う
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { openSub } from '../utils/toolbar'
 
 export interface MenuItem {
   label: string
@@ -9,6 +10,12 @@ export interface MenuItem {
   onClick?: () => void
   /** 押すと小項目を広げる(︙ の「NG」) */
   children?: MenuItem[]
+  /** 押すと、小項目の代わりにこの中身を出す(表示スタイルなど) */
+  submenu?: ReactNode
+  disabled?: boolean
+  /** アイコンの色と、塗るか(お気に入りに入っている など) */
+  iconColor?: string
+  iconFill?: boolean
 }
 
 export const TOOL_BTN =
@@ -35,13 +42,17 @@ export function wantsNativeMenu(e: React.MouseEvent): boolean {
  */
 export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: () => void; ignore?: React.RefObject<HTMLElement | null> }) {
   const menuRef = useRef<HTMLDivElement>(null)
-  /** 開いている小項目の親。押すとメニューの中身が切り替わる */
-  const [sub, setSub] = useState<MenuItem>()
+  /**
+   * 開いている小項目までの道。押すとメニューの中身が切り替わる。
+   * 名前だけを覚えて、描くたびに今の項目から引き直す(項目ごと覚えると、選んだ印(✓)などが変わらない)
+   */
+  const [path, setPath] = useState<string[]>([])
+  const sub = openSub(props.items, path)
   /** 小項目から戻ったところか(入ってくる向きを逆にする) */
   const [back, setBack] = useState(false)
   const { onClose, ignore } = props
-  const subRef = useRef(sub)
-  subRef.current = sub
+  const depth = useRef(0)
+  depth.current = path.length
   useEffect(() => {
     const close = (e: PointerEvent) => {
       const t = e.target as Node
@@ -51,9 +62,9 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
       if (e.key !== 'Escape') return
       e.stopPropagation()
       // 小項目を開いていれば、元のメニューへ
-      if (subRef.current) {
+      if (depth.current > 0) {
         setBack(true)
-        setSub(undefined)
+        setPath((p) => p.slice(0, -1))
       } else onClose()
     }
     // メニューの上のホイールは、はみ出したメニューのスクロールなので閉じない
@@ -74,19 +85,23 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
     <button
       key={x.label}
       type="button"
+      disabled={x.disabled}
       onClick={() => {
-        if (x.children) {
+        if (x.children || x.submenu) {
           setBack(false)
-          return setSub(x)
+          return setPath((p) => [...p, x.label])
         }
-        x.onClick?.()
+        // 閉じてから実行する(実行した先で開く画面が、メニューの外を押した扱いにならないように)
         onClose()
+        x.onClick?.()
       }}
-      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-c-text-body hover:bg-c-surface2 transition-colors"
+      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-c-text-body hover:bg-c-surface2 disabled:opacity-40 transition-colors"
     >
-      <span className="material-symbols-outlined text-base">{x.icon}</span>
+      <span className={`material-symbols-outlined text-base ${x.iconFill ? 'fill' : ''}`} style={x.iconColor ? { color: x.iconColor } : undefined}>
+        {x.icon}
+      </span>
       <span className="flex-1 text-left">{x.label}</span>
-      {x.children && <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>}
+      {(x.children || x.submenu) && <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>}
     </button>
   )
   return createPortal(
@@ -102,19 +117,19 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
       }}
     >
       {sub ? (
-        <div key={sub.label} className="menu-page-in">
+        <div key={sub.label} className={back ? 'menu-page-back' : 'menu-page-in'}>
           <button
             type="button"
             onClick={() => {
               setBack(true)
-              setSub(undefined)
+              setPath((p) => p.slice(0, -1))
             }}
             className="w-full flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-c-border font-bold text-c-text-strong hover:bg-c-surface2 transition-colors"
           >
             <span className="material-symbols-outlined text-lg">arrow_back</span>
             {sub.label}
           </button>
-          {sub.children?.map(menuRow)}
+          {sub.children ? sub.children.map(menuRow) : sub.submenu}
         </div>
       ) : (
         <div key="root" className={back ? 'menu-page-back' : undefined}>

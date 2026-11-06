@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
 import { uiLabel } from '../utils/platform'
+import { openSub } from '../utils/toolbar'
 
 export interface SheetItem {
   label: string
@@ -35,14 +36,19 @@ export default function ActionSheet(props: {
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   /**
-   * 中を開いている項目。名前だけを覚えて、描くたびに今の項目から引き直す
+   * 中を開いている項目までの道。名前だけを覚えて、描くたびに今の項目から引き直す
    * (項目ごと覚えると、開いた時点の中身のままになり、選んだ印(✓)などが変わらない)
    */
-  const [subLabel, setSubLabel] = useState<string>()
-  const sub = subLabel === undefined ? undefined : props.items.find((it) => it.label === subLabel)
-  const setSub = (it: SheetItem | undefined) => setSubLabel(it?.label)
-  // 戻る: 中を開いていれば元の一覧へ、そうでなければ閉じる
-  useFocusTrap(boxRef, () => (sub ? setSub(undefined) : props.onClose()))
+  const [path, setPath] = useState<string[]>([])
+  const sub = openSub(props.items, path)
+  /** 小項目から戻ったところか(入ってくる向きを逆にする) */
+  const [back, setBack] = useState(false)
+  const goBack = () => {
+    setBack(true)
+    setPath((p) => p.slice(0, -1))
+  }
+  // 戻る: 中を開いていれば一段上へ、そうでなければ閉じる
+  useFocusTrap(boxRef, () => (sub ? goBack() : props.onClose()))
   const backdrop = useBackdropClose(props.onClose)
   const safe = props.items.filter((it) => !it.danger)
   const danger = props.items.filter((it) => it.danger)
@@ -52,7 +58,10 @@ export default function ActionSheet(props: {
       type="button"
       disabled={it.disabled}
       onClick={() => {
-        if (it.submenu || it.children) return setSub(it)
+        if (it.submenu || it.children) {
+          setBack(false)
+          return setPath((p) => [...p, it.label])
+        }
         props.onClose()
         it.onClick?.()
       }}
@@ -87,18 +96,18 @@ export default function ActionSheet(props: {
         </div>
         {sub ? (
           <>
-            <button type="button" onClick={() => setSub(undefined)} className="flex items-center gap-2 px-4 pt-1 pb-2 text-[15px] font-bold text-c-text-strong">
+            <button type="button" onClick={goBack} className="flex items-center gap-2 px-4 pt-1 pb-2 text-[15px] font-bold text-c-text-strong">
               <span className="material-symbols-outlined text-[22px] text-c-text-muted">arrow_back</span>
               {uiLabel(sub.label)}
             </button>
-            <div key={sub.label} className="flex-1 min-h-0 overflow-y-auto pb-2 page-in sheet-sub">
+            <div key={sub.label} className={`flex-1 min-h-0 overflow-y-auto pb-2 ${sub.children ? '' : 'sheet-sub'} ${back ? 'page-back' : 'page-in'}`}>
               {sub.children ? sub.children.map(row) : sub.submenu}
             </div>
           </>
         ) : (
           <>
             {props.title && <p className="px-6 pt-1 pb-2.5 text-[13px] leading-snug text-c-text-muted whitespace-pre-line break-all line-clamp-3">{props.title}</p>}
-            <div className="flex-1 min-h-0 overflow-y-auto pb-1">
+            <div className={`flex-1 min-h-0 overflow-y-auto pb-1 ${back ? 'page-back' : ''}`}>
               {safe.map((it, i) => (
                 <div key={`${it.label}:${i}`}>
                   {i > 0 && it.group !== safe[i - 1].group && <div className="mx-6 my-1 border-t border-c-border" />}

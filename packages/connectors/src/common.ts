@@ -21,6 +21,25 @@ export function isCgiSubject(text: string): boolean {
   return first === undefined || /^\d+\.cgi,/.test(first)
 }
 
+/**
+ * スレの URL の後ろのレスの指定(123・123-456・123,456・123n)の先頭の番号を読む。
+ * l50・-100 は先頭のレス番号がないので読まない。スマホ版の bbs/UrlRoute.kt と同じ
+ */
+export function postNoInUrl(url: string): number | undefined {
+  let path: string
+  try {
+    path = new URL(url.trim()).pathname
+  } catch {
+    return undefined
+  }
+  const parts = /\/read\.cgi\/(.+)$/.exec(path)?.[1].split('/')
+  // したらばは カテゴリ/板/キー、ほかは 板/キー
+  const keyAt = /(?:^|\.)jbbs\.(?:shitaraba\.net|livedoor\.jp)$/.test(new URL(url.trim()).hostname) ? 2 : 1
+  const m = /^(\d+)(?:[-,][\d,-]*)?n?$/.exec(parts?.[keyAt + 1] ?? '')
+  const no = m ? Number(m[1]) : 0
+  return no > 0 ? no : undefined
+}
+
 /** 「キー=値」の行の並び(SETTING.TXT・setting.cgi) */
 export function parseKeyValue(text: string): Record<string, string> {
   const out: Record<string, string> = {}

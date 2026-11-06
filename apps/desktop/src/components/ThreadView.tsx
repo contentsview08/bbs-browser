@@ -29,7 +29,7 @@ import RefreshButton from './RefreshButton'
 import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
-import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
+import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarContextMenu, type BarAction } from './ActionBar'
 import { inBar, mobileMenuActions, orderBy, resolvePlacements, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
@@ -183,7 +183,7 @@ interface Props {
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded: (u: UploadedFile) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
-  jumpTo?: { no: number; seq: number }
+  jumpTo?: { no: number; seq: number; flash?: boolean }
   /** 板の既定の名前(名無しの省略に使う) */
   nonameName?: string
   /** スレの板(AI NG の「この板だけ」の条件に使う) */
@@ -1270,7 +1270,11 @@ export default function ThreadView(props: Props) {
             label: '表示スタイル',
             icon: 'palette',
             render: (where: Placement) => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={inBar(where, 'footer')} />,
-            submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} />,
+            children: [
+              { id: 'styleTheme', label: 'テーマと差し色', icon: 'color_lens', submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} section="theme" /> },
+              { id: 'stylePost', label: 'レスの見た目', icon: 'view_agenda', submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} section="post" /> },
+              { id: 'styleSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setFontDialog(true) },
+            ],
           },
           {
             id: 'fontSize',
@@ -1319,6 +1323,7 @@ export default function ThreadView(props: Props) {
   const barOrder = (isMobile ? settings.mobileBarOrder : settings.barOrder).thread
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), barOrder)
+  const headerMenu = useBarContextMenu('thread', barActions)
   const refreshFab = isMobile && settings.showRefreshFab
   // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
   const hasFooter = barActions.some((a) => inBar(placements[a.id], 'footer')) || (isMobile && !!props.onSubmitPost)
@@ -1983,6 +1988,7 @@ export default function ThreadView(props: Props) {
           // スマホ: 左上のメニューのボタンとスレタイの間を広めに(gap-3)
           // スマホ: 端のボタン(︙・更新)が画面の縁にくっつくと押しにくいので、左右に 8〜12px 空ける
           className={`flex items-center justify-between ${isMobile ? `gap-3 ${props.onOpenDrawer ? 'pl-2 pr-3' : 'pl-4 pr-3'}` : 'px-6'}`}
+          onContextMenu={headerMenu.onContextMenu}
           // スマホ: スレタイを省かずに折り返すので、長いスレタイでは帯を高くする(既定の高さより低くはしない)
           style={isMobile ? { minHeight: 'calc(var(--header-height, 72px) / var(--bar-zoom, 1))' } : { height: headerDrag.height || 'var(--header-height, 80px)' }}
         >
@@ -2080,8 +2086,9 @@ export default function ThreadView(props: Props) {
               </span>
             )}
             <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
-            <MoreMenu actions={isMobile ? mobileMenuActions('thread', barActions, placements, barOrder) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
+            <MoreMenu area="thread" actions={isMobile ? mobileMenuActions('thread', barActions, placements, barOrder) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : ICON_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-xl'} />
           </div>
+          {headerMenu.menu}
         </header>
         {/* スマホは、左右の端までを等分して並べる(人気・画像・動画・リンク・すべて) */}
         <div className={`items-center font-medium ${isMobile ? 'grid grid-cols-5 text-[13px]' : 'flex overflow-x-auto no-scrollbar gap-5 px-4 text-base'}`}>

@@ -1,7 +1,7 @@
 // 解析の決まりは packages/conformance の JSON が正。スマホ版のテスト(apps/android の ConformanceTest.kt)も同じファイルを読む
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { allConnectors } from '../src/index'
+import { allConnectors, postNoInUrl } from '../src/index'
 import { detectEncoding, encodeUtf8Form } from '../src/encoding'
 import { encodeEucJpForm } from '../src/eucjp'
 import { encodeShiftJisForm } from '../src/sjis'
@@ -38,10 +38,10 @@ function routeOf(url: string): Record<string, unknown> {
 
 describe('url.json', () => {
   it.each(load<string, Record<string, unknown>>('url.json'))('$name', (c) => {
-    const actual = routeOf(c.input)
+    const actual = { ...routeOf(c.input), no: postNoInUrl(c.input) ?? null }
     const expected = expectedOf(c)
-    // 2ch 互換でないコネクタは、PC では形の解釈が通信といっしょになっているので、スレか板かまでを比べる
-    const keys = actual.site !== undefined && actual.site !== '2ch' ? Object.keys(expected).filter((k) => k === 'kind' || k === 'site') : Object.keys(expected)
+    // 2ch 互換でないコネクタは、PC では形の解釈が通信といっしょになっているので、スレか板かまでを比べる(レス番号は URL だけで読める)
+    const keys = actual.site !== undefined && actual.site !== '2ch' ? Object.keys(expected).filter((k) => k === 'kind' || k === 'site' || k === 'no') : Object.keys(expected)
     expect(Object.fromEntries(keys.map((k) => [k, actual[k]]))).toEqual(Object.fromEntries(keys.map((k) => [k, expected[k]])))
   })
 })

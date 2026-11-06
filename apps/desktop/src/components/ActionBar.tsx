@@ -1,10 +1,11 @@
 // ヘッダーとフッターに並べる操作ボタンと、右端の ︙ のメニュー(スレ表示とスレ一覧で共通)。
 // どこに置くかは設定(utils/toolbar.ts)で決まる。︙ の中には、置き場所に関係なくすべての操作を並べる
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Placement } from '../utils/toolbar'
+import { useCallback, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import { foldMenuActions, type BarArea, type Placement } from '../utils/toolbar'
 import { isMobile, uiLabel } from '../utils/platform'
-import ActionSheet from './ActionSheet'
+import ActionSheet, { type SheetItem } from './ActionSheet'
+import { FloatingMenu, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 
 export interface BarAction {
   id: string
@@ -25,7 +26,13 @@ export interface BarAction {
   render?: (where: Placement) => ReactNode
   /** ︙ の中で押したときに、メニューの中に出す中身(テーマの選び方など)。なければ onClick を呼んで閉じる */
   submenu?: ReactNode
+  /** 押すと、メニューの中にこの小項目を出す */
+  children?: BarAction[]
 }
+
+/** ︙ の一覧を大項目と小項目に分ける */
+const foldActions = (area: BarArea, actions: BarAction[]) =>
+  foldMenuActions(area, actions, (f, members): BarAction => ({ id: f.id, label: f.label, icon: f.icon, children: members }))
 
 /** スマホのヘッダーのボタン(メニュー・検索・︙)。押しやすいよう、縦と横を同じにした 44px の正方形 */
 export const MOBILE_HEAD_BTN = 'flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl text-c-text-muted active:bg-c-surface2 transition-colors'
@@ -67,7 +74,7 @@ export function ActionButtons(props: {
 }
 
 /** 右端の ︙。押すとすべての操作をメニューで出す。up ならメニューを上に開く(フッターに置いたとき) */
-export function MoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
+export function MoreMenu(props: { area: BarArea; actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
   // スマホは、下からせり上がるシート(長押しのメニューと同じ)。中に一覧を持つ項目は、シートの中で開く
   if (isMobile) return <MobileMoreMenu {...props} />
   return <DesktopMoreMenu {...props} />
@@ -86,6 +93,7 @@ const MENU_GROUP: Record<string, string> = {
   openBoard: '移動',
   style: '見た目',
   fontSize: '見た目',
+  copyMenu: '共有',
   copyUrl: '共有',
   openBrowser: '共有',
   delete: '削除',
@@ -102,7 +110,23 @@ const MOBILE_LABELS: Record<string, (a: BarAction) => string> = {
   delete: () => 'ログを削除して閉じる',
 }
 
-function MobileMoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string }) {
+function sheetItemOf(a: BarAction): SheetItem {
+  return {
+    label: MOBILE_LABELS[a.id]?.(a) ?? a.label,
+    icon: a.icon,
+    onClick: a.onClick,
+    submenu: a.submenu,
+    children: a.children?.map(sheetItemOf),
+    disabled: a.disabled,
+    active: a.active && a.fillWhenActive,
+    // 色は、選んでいる状態(お気に入りの金色など)のときだけ。ほかは落ち着いた色にそろえる
+    tint: a.active && a.fillWhenActive ? a.activeColor : undefined,
+    danger: a.tint === 'var(--c-mark-danger)',
+    group: MENU_GROUP[a.id] ?? 'その他',
+  }
+}
+
+function MobileMoreMenu(props: { area: BarArea; actions: BarAction[]; btnClass: string; iconClass: string }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -112,111 +136,64 @@ function MobileMoreMenu(props: { actions: BarAction[]; btnClass: string; iconCla
       {open && (
         <ActionSheet
           onClose={() => setOpen(false)}
-          items={props.actions
-            .map((a) => ({
-              label: MOBILE_LABELS[a.id]?.(a) ?? a.label,
-              icon: a.icon,
-              onClick: a.onClick,
-              submenu: a.submenu,
-              disabled: a.disabled,
-              active: a.active && a.fillWhenActive,
-              // 色は、選んでいる状態(お気に入りの金色など)のときだけ。ほかは落ち着いた色にそろえる
-              tint: a.active && a.fillWhenActive ? a.activeColor : undefined,
-              danger: a.tint === 'var(--c-mark-danger)',
-              group: MENU_GROUP[a.id] ?? 'その他',
-            }))
+          items={foldActions(props.area, props.actions)
+            .map(sheetItemOf)
             // まとまりの順に並べる(まとまりの中は、設定で決めた並びのまま)
-            .sort((x, y) => GROUP_ORDER.indexOf(x.group) - GROUP_ORDER.indexOf(y.group))}
+            .sort((x, y) => GROUP_ORDER.indexOf(x.group!) - GROUP_ORDER.indexOf(y.group!))}
         />
       )}
     </>
   )
 }
 
-function DesktopMoreMenu(props: { actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
-  const [open, setOpen] = useState(false)
-  // ︙ の中で開いている、操作の中身(テーマの選び方など)。
-  // 操作そのものを控えると、押した時点の中身(選ばれている印など)のまま変わらなくなるので、id だけ控えて毎回いまの操作から引く
-  const [subId, setSubId] = useState<string>()
-  const sub = subId === undefined ? undefined : props.actions.find((a) => a.id === subId)
-  const setSub = (a: BarAction | undefined) => setSubId(a?.id)
-  const ref = useRef<HTMLDivElement>(null)
+/** PC の ︙ と右クリックに出す項目 */
+function menuItemOf(a: BarAction): MenuItem {
+  const danger = a.tint === 'var(--c-mark-danger)'
+  return {
+    label: uiLabel(a.label),
+    icon: a.icon,
+    onClick: a.onClick,
+    submenu: a.submenu,
+    children: a.children?.map(menuItemOf),
+    disabled: a.disabled,
+    iconColor: a.active ? (a.activeColor ?? 'var(--c-accent)') : danger ? a.tint : 'var(--c-text-muted)',
+    iconFill: a.active && a.fillWhenActive,
+  }
+}
 
-  useEffect(() => {
-    if (!open) return
-    const close = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        setOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', close)
-    window.addEventListener('keydown', esc)
-    return () => {
-      document.removeEventListener('pointerdown', close)
-      window.removeEventListener('keydown', esc)
-    }
-  }, [open])
-
+function DesktopMoreMenu(props: { area: BarArea; actions: BarAction[]; btnClass: string; iconClass: string; up?: boolean }) {
+  const [pos, setPos] = useState<MenuPos>()
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setPos(undefined), [])
+  const toggle = () => {
+    if (pos) return setPos(undefined)
+    const rect = buttonRef.current!.getBoundingClientRect()
+    const right = window.innerWidth - rect.right
+    // 下に入りきらなければ上に開く
+    setPos(props.up || window.innerHeight - rect.bottom < 300 ? { bottom: window.innerHeight - rect.top + 6, right } : { top: rect.bottom + 6, right })
+  }
   return (
-    <div className="relative flex-shrink-0" ref={ref}>
-      <button
-        type="button"
-        onClick={() => {
-          setSub(undefined)
-          setOpen((v) => !v)
-        }}
-        className={props.btnClass}
-        style={open ? { color: 'var(--c-accent)' } : undefined}
-        title="すべての操作"
-      >
+    <div className="relative flex-shrink-0">
+      <button ref={buttonRef} type="button" onClick={toggle} className={props.btnClass} style={pos ? { color: 'var(--c-accent)' } : undefined} title="すべての操作">
         <span className={`material-symbols-outlined ${props.iconClass}`}>more_vert</span>
       </button>
-      {open && (
-        <div
-          className={`absolute right-0 ${props.up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} w-64 rounded-[var(--card-radius)] py-1 text-sm bg-c-surface border border-c-border shadow-lg z-40 max-h-[70vh] overflow-y-auto menu-pop`}
-        >
-          {sub ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setSub(undefined)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-c-text-muted hover:text-c-text-strong"
-              >
-                <span className="material-symbols-outlined text-base">arrow_back</span>
-                {uiLabel(sub.label)}
-              </button>
-              {sub.submenu}
-            </>
-          ) : (
-            props.actions.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                disabled={a.disabled}
-                onClick={() => {
-                  if (a.submenu) return setSub(a)
-                  setOpen(false)
-                  a.onClick?.()
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-left text-c-text-body hover:bg-c-surface2 active:bg-c-surface2 disabled:opacity-40 transition-colors"
-              >
-                <span
-                  className={`material-symbols-outlined text-lg ${a.active && a.fillWhenActive ? 'fill' : ''}`}
-                  style={{ color: a.active ? (a.activeColor ?? 'var(--c-accent)') : a.tint === 'var(--c-mark-danger)' ? a.tint : 'var(--c-text-muted)' }}
-                >
-                  {a.icon}
-                </span>
-                <span className="flex-1">{uiLabel(a.label)}</span>
-                {a.submenu && <span className="material-symbols-outlined text-base text-c-text-muted">chevron_right</span>}
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {pos && <FloatingMenu pos={pos} items={foldActions(props.area, props.actions).map(menuItemOf)} onClose={close} ignore={buttonRef} />}
     </div>
   )
+}
+
+/** ヘッダーの右クリックで ︙ と同じメニューを出す。onContextMenu をヘッダーに付け、menu をその中に描く */
+export function useBarContextMenu(area: BarArea, actions: BarAction[]) {
+  const [pos, setPos] = useState<MenuPos>()
+  const close = useCallback(() => setPos(undefined), [])
+  return {
+    onContextMenu: isMobile
+      ? undefined
+      : (e: MouseEvent) => {
+          if (wantsNativeMenu(e)) return
+          e.preventDefault()
+          setPos(menuPosAt(e.clientX, e.clientY))
+        },
+    menu: pos && <FloatingMenu pos={pos} items={foldActions(area, actions).map(menuItemOf)} onClose={close} />,
+  }
 }

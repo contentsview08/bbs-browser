@@ -88,6 +88,55 @@ export function mobileMenuActions<T extends { id: string }>(area: BarArea, actio
   return inMenu.sort((a, b) => rank(a.id) - rank(b.id))
 }
 
+/** ︙ の小項目のまとまり。中の操作は押してから出す */
+export interface MenuFolder {
+  id: string
+  label: string
+  icon: string
+  ids: string[]
+}
+const MENU_FOLDERS: Record<BarArea, MenuFolder[]> = {
+  thread: [
+    { id: 'replyMenu', label: '書き込み欄', icon: 'edit_note', ids: ['replyToggle', 'replyLayout'] },
+    { id: 'copyMenu', label: 'コピー', icon: 'content_copy', ids: ['copyTitle', 'copyUrl', 'copyTwoChUrl', 'copyTitleUrl'] },
+  ],
+  list: [{ id: 'copyMenu', label: 'コピー', icon: 'content_copy', ids: ['copyBoardName', 'copyBoardUrl'] }],
+}
+
+/**
+ * ︙ の一覧を、大項目と小項目に分ける。まとまりは最初の操作の場所に置き、操作の順は保つ。
+ * 1 つしかないまとまりは、押す手間が増えるだけなので作らない。
+ * 文字の大きさ・余白は表示スタイルの小項目にあるので、並べない
+ */
+export function foldMenuActions<T extends { id: string }>(area: BarArea, actions: T[], make: (folder: MenuFolder, members: T[]) => T): T[] {
+  const out: T[] = []
+  const done = new Set<string>()
+  const hasStyle = actions.some((a) => a.id === 'style')
+  for (const a of actions) {
+    if (a.id === 'fontSize' && hasStyle) continue
+    const folder = MENU_FOLDERS[area].find((f) => f.ids.includes(a.id))
+    const members = folder ? actions.filter((x) => folder.ids.includes(x.id)) : []
+    if (!folder || members.length < 2) out.push(a)
+    else if (!done.has(folder.id)) {
+      done.add(folder.id)
+      out.push(make(folder, members))
+    }
+  }
+  return out
+}
+
+/** 名前の道をたどって、いま開いている小項目の親を引く。なくなっていれば undefined(大項目を出す) */
+export function openSub<T extends { label: string; children?: T[] }>(items: T[], path: string[]): T | undefined {
+  let cur: T | undefined
+  let list = items
+  for (const label of path) {
+    cur = list.find((x) => x.label === label)
+    if (!cur) return undefined
+    list = cur.children ?? []
+  }
+  return cur
+}
+
 /** ボタンの並び(画面ごとの操作 id の順)。並べ替えたときだけ持つ。並びにない操作(あとで増えたもの)は後ろに */
 export type BarOrder = Partial<Record<BarArea, string[]>>
 

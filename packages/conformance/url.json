@@ -38,5 +38,17 @@
   { "name": "まちBBS のスレ", "input": "https://machi.to/bbs/read.cgi/kanto/1700000000/", "expected": { "kind": "thread", "site": "machi", "boardUrl": "https://machi.to/kanto/", "key": "1700000000" } },
   { "name": "まちBBS の板", "input": "https://kanto.machi.to/kanto/", "expected": { "kind": "board", "site": "machi", "boardUrl": "https://machi.to/kanto/" } },
   { "name": "ふたばのスレ", "input": "https://may.2chan.net/b/res/1.htm", "expected": { "kind": "thread", "site": "futaba" }, "knownDiff": { "android": { "kind": "none" }, "reason": "ふたばのコネクタは PC だけ。スマホは外で開く" } },
-  { "name": "ふたばの板", "input": "https://may.2chan.net/b/", "expected": { "kind": "board", "site": "futaba" }, "knownDiff": { "android": { "kind": "board", "site": "2ch" }, "reason": "ふたばのコネクタは PC だけ。スマホはスレ一覧の形でないと確かめて外で開く" } }
+  { "name": "ふたばの板", "input": "https://may.2chan.net/b/", "expected": { "kind": "board", "site": "futaba" }, "knownDiff": { "android": { "kind": "board", "site": "2ch" }, "reason": "ふたばのコネクタは PC だけ。スマホはスレ一覧の形でないと確かめて外で開く" } },
+  {"name": "URL のレス番号", "input": "https://eagle.5ch.io/test/read.cgi/x/1700000000/123", "expected": {"kind": "thread", "key": "1700000000", "no": 123}},
+  {"name": "URL のレス番号(範囲は先頭の番号)", "input": "https://eagle.5ch.io/test/read.cgi/x/1700000000/123-456", "expected": {"kind": "thread", "key": "1700000000", "no": 123}},
+  {"name": "URL のレス番号(後ろに / とクエリ)", "input": "https://eagle.5ch.net/test/read.cgi/x/1700000000/123/?v=pc", "expected": {"kind": "thread", "boardUrl": "https://eagle.5ch.io/x/", "no": 123}},
+  {"name": "URL のレス番号(l50 は番号でない)", "input": "https://eagle.5ch.io/test/read.cgi/x/1700000000/l50", "expected": {"kind": "thread", "key": "1700000000", "no": null}},
+  {"name": "URL のレス番号(-100 は先頭がない)", "input": "https://eagle.5ch.io/test/read.cgi/x/1700000000/-100", "expected": {"kind": "thread", "key": "1700000000", "no": null}},
+  {"name": "URL のレス番号(なし)", "input": "https://eagle.5ch.io/test/read.cgi/x/1700000000/", "expected": {"kind": "thread", "key": "1700000000", "no": null}},
+  {"name": "URL のレス番号(道のあるスレ)", "input": "https://host.example/bbs/test/read.cgi/a/123/45", "expected": {"kind": "thread", "boardUrl": "https://host.example/bbs/a/", "key": "123", "no": 45}},
+  {"name": "URL のレス番号(itest・サーバー名あり)", "input": "https://itest.5ch.net/mercury/test/read.cgi/x/1700000000/5", "expected": {"kind": "thread", "boardUrl": "https://mercury.5ch.io/x/", "no": 5}},
+  {"name": "URL のレス番号(itest・サーバー名なし)", "input": "https://itest.5ch.net/test/read.cgi/x/1700000000/5-9", "expected": {"kind": "itest", "board": "x", "key": "1700000000", "no": 5}},
+  {"name": "URL のレス番号(したらば)", "input": "https://jbbs.shitaraba.net/bbs/read.cgi/game/12345/1700000000/7", "expected": {"kind": "thread", "site": "shitaraba", "no": 7}},
+  {"name": "URL のレス番号(カンマ区切りは先頭の番号)", "input": "https://eagle.5ch.io/test/read.cgi/x/1700000000/8,12", "expected": {"kind": "thread", "key": "1700000000", "no": 8}},
+  {"name": "URL のレス番号(まちBBS)", "input": "https://machi.to/bbs/read.cgi/kanto/1700000000/7-", "expected": {"kind": "thread", "site": "machi", "no": 7}}
 ]

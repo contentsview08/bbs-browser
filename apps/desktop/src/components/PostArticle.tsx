@@ -268,8 +268,8 @@ function PostArticle(props: Props) {
   const articleRef = useRef<HTMLElement>(null)
   const [ngOpen, setNgOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  /** 右クリックのメニューを開いている位置 */
-  const [ctxMenu, setCtxMenu] = useState<MenuPos>()
+  /** 右クリックのメニューを開いている位置。ID・名前の上で開いたなら、その要素 */
+  const [ctxMenu, setCtxMenu] = useState<{ pos: MenuPos; head?: { kind: 'id' | 'name'; el: HTMLElement } }>()
   const closeCtxMenu = useCallback(() => setCtxMenu(undefined), [])
   const menuOpen = ngOpen || moreOpen || ctxMenu !== undefined
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
@@ -398,24 +398,26 @@ function PostArticle(props: Props) {
       })),
     ]
   }
+  const ngIdActions: MenuItem[] = ngHits?.posterId.length
+    ? ngOffItems(ngHits.posterId, ' ID ', post.id)
+    : post.id
+      ? [
+          {
+            label: 'この ID を NG に(今日だけ)',
+            icon: 'schedule',
+            onClick: () => handlers.onAddNg(newRule('posterId', post.id!, { expiresOnDate: todayDateString() })),
+          },
+          { label: 'この ID を NG に', icon: 'person_off', onClick: () => handlers.onAddNg(newRule('posterId', post.id!)) },
+        ]
+      : []
+  const ngNameActions: MenuItem[] = ngHits?.posterName.length
+    ? ngOffItems(ngHits.posterName, '名前', post.name)
+    : post.name
+      ? [{ label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }]
+      : []
   const ngActions: MenuItem[] = [
-    ...(ngHits?.posterId.length
-      ? ngOffItems(ngHits.posterId, ' ID ', post.id)
-      : post.id
-        ? [
-            {
-              label: 'この ID を NG に(今日だけ)',
-              icon: 'schedule',
-              onClick: () => handlers.onAddNg(newRule('posterId', post.id!, { expiresOnDate: todayDateString() })),
-            },
-            { label: 'この ID を NG に', icon: 'person_off', onClick: () => handlers.onAddNg(newRule('posterId', post.id!)) },
-          ]
-        : []),
-    ...(ngHits?.posterName.length
-      ? ngOffItems(ngHits.posterName, '名前', post.name)
-      : post.name
-        ? [{ label: 'この名前を NG に', icon: 'block', onClick: () => handlers.onAddNg(newRule('posterName', post.name)) }]
-        : []),
+    ...ngIdActions,
+    ...ngNameActions,
     ...(handlers.onMarkTroll
       ? props.autoNg?.kind === 'marked'
         ? [{ label: '荒らしの印を外す', icon: 'undo', onClick: () => handlers.onMarkTroll!(post, null) }]
@@ -493,6 +495,20 @@ function PostArticle(props: Props) {
       : []),
   ]
 
+  /** ID・名前の上で右クリックしたときの項目 */
+  const headMenuItems = (head: { kind: 'id' | 'name'; el: HTMLElement }): MenuItem[] =>
+    head.kind === 'id'
+      ? [
+          { label: `この ID のレスを見る(${idCount})`, icon: 'search', onClick: () => handlers.onId(post.id!, head.el) },
+          { label: 'ID をコピー', icon: 'content_copy', onClick: () => copy(post.id ?? '') },
+          ...ngIdActions,
+        ]
+      : [
+          { label: '同じ名前のレスを見る', icon: 'search', onClick: () => handlers.onName(post.name, head.el) },
+          { label: '名前をコピー', icon: 'content_copy', onClick: () => copy(name || post.name) },
+          ...ngNameActions,
+        ]
+
   const variant = props.variant ?? 'card'
 
   // スマホ: 長押しで、反応(そうだね など)と、︙ のメニューと同じ操作の一覧を出す(マウスを乗せて出す操作バーの代わり)
@@ -529,7 +545,8 @@ function PostArticle(props: Props) {
     name && (
       <button
         type="button"
-        className={`font-bold ${nameSubtle ? 'text-c-text-muted' : 'text-c-poster-name'} min-w-0 truncate hover:opacity-80 ${cls}`}
+        className={`font-bold ${nameSubtle ? 'text-c-text-muted' : 'text-c-poster-name'} min-w-0 truncate hover:opacity-80 ${isMobile ? '' : 'hover:underline'} ${cls}`}
+        data-head-target="name"
         onClick={(e) => handlers.onName(post.name, e.currentTarget)}
         title="同じ名前の書き込みを表示"
       >
@@ -573,7 +590,7 @@ function PostArticle(props: Props) {
     (
       <button
         type="button"
-        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${idTint ? '' : 'text-c-text-muted'}`}
+        className={`${HEAD_TEXT} font-mono flex items-center gap-0.5 hover:opacity-80 ${isMobile ? '' : 'hover:underline'} ${idTint ? '' : 'text-c-text-muted'}`}
         style={idTint ? { color: idTint } : undefined}
         data-head-target="id"
         onClick={(e) => handlers.onId(post.id!, e.currentTarget)}
@@ -1147,13 +1164,14 @@ function PostArticle(props: Props) {
       data-variant={variant}
       className={`relative ${frameClass} ${variant === 'discord' ? 'post-discord' : ''} ${hasConnections ? 'cursor-pointer' : ''}`}
       onClick={openTree}
-      // PC: 右クリックで、︙ と同じ操作の一覧を出す
+      // PC: 右クリックで、︙ と同じ操作の一覧を出す。ID・名前の上なら、それ向けの項目
       onContextMenu={
         !isMobile
           ? (e) => {
               if (wantsNativeMenu(e)) return
               e.preventDefault()
-              setCtxMenu(menuPosAt(e.clientX, e.clientY))
+              const el = (e.target as Element).closest<HTMLElement>('[data-head-target]')
+              setCtxMenu({ pos: menuPosAt(e.clientX, e.clientY), head: el ? { kind: el.dataset.headTarget as 'id' | 'name', el } : undefined })
             }
           : undefined
       }
@@ -1224,7 +1242,7 @@ function PostArticle(props: Props) {
         </>
       )}
       {sheet && <ActionSheet title={`${post.ref ?? post.no} ${post.name}`} items={sheetItems} onClose={() => setSheet(false)} />}
-      {ctxMenu && <FloatingMenu pos={ctxMenu} items={actions} onClose={closeCtxMenu} />}
+      {ctxMenu && <FloatingMenu pos={ctxMenu.pos} items={ctxMenu.head ? headMenuItems(ctxMenu.head) : actions} onClose={closeCtxMenu} />}
     </article>
   )
 }

@@ -10,6 +10,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   allConnectors,
   demoConnector,
+  postNoInUrl,
   registerConnector,
   findConnector,
   type Board,
@@ -370,7 +371,7 @@ export default function App() {
     if (isMobile && settingsLoaded && settingsRef.current.osNotify) void ensureNotifyPermission().catch(() => undefined)
   }, [settingsLoaded])
   /** 通知から、そのタブのそのレスへ飛ぶ */
-  const [jump, setJump] = useState<{ tabId: string; no: number; seq: number }>()
+  const [jump, setJump] = useState<{ tabId: string; no: number; seq: number; flash?: boolean }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
   /** 表示スタイルのメニューから開く、画面全体の文字サイズの画面 */
@@ -1788,6 +1789,12 @@ export default function App() {
     return { status: 'ok', message: `${r.message}(スレ一覧ではまだ見つかりません。少し待ってから一覧を更新してください)` }
   }
 
+  /** URL にレス番号があれば、開いたスレのそのレスへ飛んで光らせる */
+  const jumpToUrlPost = (url: string, t: ThreadSummary) => {
+    const no = postNoInUrl(url)
+    if (no !== undefined) setJump({ tabId: threadId(t), no, seq: Date.now(), flash: true })
+  }
+
   /**
    * 本文のリンクを開く。アプリで読めるスレの URL なら新しいタブで開き(スレ一覧はそのまま)、板の URL ならスレ一覧に開く。
    * それ以外や、開けなかったときは外で開く。板かどうかはスレ一覧が読めるかで決める(8 秒待っても返らなければ板としない)
@@ -1802,7 +1809,10 @@ export default function App() {
         resolve(url),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('時間切れ')), 8000)),
       ])
-      if (r.thread) return await openThread(r.thread, { newTab: true })
+      if (r.thread) {
+        await openThread(r.thread, { newTab: true })
+        return jumpToUrlPost(url, r.thread)
+      }
       if (!thread) return await openBoard(r.board)
     } catch {
       // 開けなければ外で
@@ -1822,7 +1832,10 @@ export default function App() {
         return
       }
       await openBoard(r.board)
-      if (r.thread) await openThread(r.thread)
+      if (r.thread) {
+        await openThread(r.thread)
+        jumpToUrlPost(url, r.thread)
+      }
     })
 
   // スマホ: 何かを開いたら(板・スレ・履歴・設定・URL)、サイドバーの引き出しを閉じる
@@ -2674,7 +2687,8 @@ export default function App() {
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           style={{
             button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,
-            items: <StyleMenuItems settings={settings} update={updateSetting} />,
+            theme: <StyleMenuItems settings={settings} update={updateSetting} section="theme" />,
+            post: <StyleMenuItems settings={settings} update={updateSetting} section="post" />,
           }}
           fontSize={
             <>

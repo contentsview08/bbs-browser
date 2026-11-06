@@ -13,11 +13,12 @@ const GROUP_LABEL = 'px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tr
  */
 export const OPEN_FONT_DIALOG = 'bbs:open-font-dialog'
 
-/** メニューの中身(︙ の中でも使う) */
-export function StyleMenuItems({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
+/** メニューの中身(︙ の中でも使う)。section を渡すと、その小項目の分だけ出す */
+export function StyleMenuItems({ settings, update, section }: { settings: AppSettings; update: UpdateSetting; section?: 'theme' | 'post' }) {
   const check = <span className="material-symbols-outlined text-base text-c-accent">check</span>
   return (
     <>
+      {section !== 'post' && <>
       <p className={GROUP_LABEL}>テーマ</p>
       {COLOR_SCHEMES.map((s) => (
         <button
@@ -54,22 +55,25 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
           )
         })}
       </div>
+      </>}
 
-      <div className="my-1 border-t border-c-border" />
+      {!section && <div className="my-1 border-t border-c-border" />}
 
-      <p className={GROUP_LABEL}>レスの見た目</p>
+      {section !== 'theme' && <>
+      {!section && <p className={GROUP_LABEL}>レスの見た目</p>}
       {(isMobile ? MOBILE_POST_STYLES : POST_STYLES).map((b) => (
         <button key={b.key} type="button" onClick={() => update('postStyle', b.key)} className={MENU_ITEM} title={b.note}>
           <span className="flex-1 text-left truncate">{b.name}</span>
           {effectivePostStyle(settings) === b.key && check}
         </button>
       ))}
+      </>}
 
-      {isMobile && <div className="my-1 border-t border-c-border" />}
+      {isMobile && !section && <div className="my-1 border-t border-c-border" />}
 
       {/* 文字サイズのスライダーは、メニューの中ではなく真ん中の小さな画面で(動かすとメニューごと大きさが変わってずれるので) */}
       {/* PC は ︙ の「文字の大きさ・余白」から */}
-      {isMobile && (
+      {isMobile && !section && (
       <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_FONT_DIALOG))} className={MENU_ITEM}>
         <span className="material-symbols-outlined text-base flex-shrink-0">format_size</span>
         <span className="flex-1 text-left truncate">文字サイズ(画面全体)</span>

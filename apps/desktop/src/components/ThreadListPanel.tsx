@@ -9,7 +9,7 @@ import LoadFailed from './LoadFailed'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import RefreshButton from './RefreshButton'
-import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
+import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarContextMenu, type BarAction } from './ActionBar'
 import { inBar, mobileMenuActions, orderBy, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { SliderDialog } from './FontSizeSlider'
@@ -91,7 +91,7 @@ interface Props {
   /** 行の形がコンパクト(スレタイ 1 行と数だけ。設定 listShape) */
   compact?: boolean
   /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
-  style?: { button: (up: boolean) => ReactNode; items: ReactNode }
+  style?: { button: (up: boolean) => ReactNode; theme: ReactNode; post: ReactNode }
   /** ︙ の「文字の大きさ」の中身(スレ一覧の大きさのスライダー) */
   fontSize?: ReactNode
   /** 操作ボタンの置き場所(設定) */
@@ -714,7 +714,11 @@ export default function ThreadListPanel(props: Props) {
             label: '表示スタイル',
             icon: 'palette',
             render: (where: Placement) => props.style!.button(inBar(where, 'footer')),
-            submenu: props.style.items,
+            children: [
+              { id: 'styleTheme', label: 'テーマと差し色', icon: 'color_lens', submenu: props.style.theme },
+              { id: 'stylePost', label: 'レスの見た目', icon: 'view_agenda', submenu: props.style.post },
+              ...(props.fontSize ? [{ id: 'styleSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setFontDialog(true) }] : []),
+            ],
           },
         ]
       : []),
@@ -743,6 +747,7 @@ export default function ThreadListPanel(props: Props) {
   ]
   // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), props.barOrder)
+  const headerMenu = useBarContextMenu('list', barActions)
   const hasFooter = barActions.some((a) => inBar(placements[a.id], 'footer'))
 
   const onSelectCard = useEvent((t: ThreadSummary, on: boolean) =>
@@ -963,7 +968,8 @@ export default function ThreadListPanel(props: Props) {
               スマホは、題の帯(メニューのボタンと題)の下(スマホのアプリと同じ) */}
           {!isMobile && props.subHeader}
           {/* スマホ: 端のボタンが画面の縁にくっつかないよう、左右に 12px 空ける */}
-          <div className={isMobile ? 'px-3 py-1' : 'p-4'}>
+          <div className={isMobile ? 'px-3 py-1' : 'p-4'} onContextMenu={headerMenu.onContextMenu}>
+            {headerMenu.menu}
             {/* スマホ: 左上のメニューのボタンと板名の間を、指で押し分けやすいよう広めに */}
             <div className={`flex items-center ${isMobile ? 'gap-3' : 'gap-2'}`}>
               {/* スマホ: 左上のメニュー(サイドバーの引き出し) */}
@@ -1027,7 +1033,7 @@ export default function ThreadListPanel(props: Props) {
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <ActionButtons actions={barActions} placements={placements} where="header" btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
-                <MoreMenu actions={isMobile ? mobileMenuActions('list', barActions, placements, props.barOrder) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
+                <MoreMenu area="list" actions={isMobile ? mobileMenuActions('list', barActions, placements, props.barOrder) : barActions} btnClass={isMobile ? MOBILE_HEAD_BTN : LIST_BTN} iconClass={isMobile ? MOBILE_HEAD_ICON : 'text-lg'} />
               </div>
             </div>
           </div>

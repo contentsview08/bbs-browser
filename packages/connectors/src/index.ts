@@ -8,6 +8,7 @@ import type { Connector } from './types'
 
 export * from './types'
 export { declaredCharset, detectEncoding, looksLikeUtf8 } from './encoding'
+export { postNoInUrl } from './common'
 export { twoChConnector, shitarabaConnector, machiConnector, futabaConnector, honoBbsConnector, demoConnector }
 
 /** 組み込みコネクタ。URL から選ぶときは先に並べたものから見るので、したらば・まちBBS・ふたばの URL を 2ch 互換が拾わないよう先に置く */

@@ -37,4 +37,11 @@ function setLockVersion(rel, pattern) {
 }
 setLockVersion('../apps/desktop/src-tauri/Cargo.lock', /(name = "bbs-browser"\r?\nversion = )"[^"]*"/)
 setLockVersion('../package-lock.json', /("apps\/desktop": \{\r?\n\s*"name": "@bbs-browser\/desktop",\r?\n\s*"version": )"[^"]*"/)
+const uaPath = new URL('../apps/desktop/src/host/userAgent.ts', import.meta.url)
+const ua = readFileSync(uaPath, 'utf8')
+if (!/const APP = 'OBB\/[^']*'/.test(ua)) {
+  console.error('userAgent.ts の版が見つかりませんでした')
+  process.exit(1)
+}
+writeFileSync(uaPath, ua.replace(/const APP = 'OBB\/[^']*'/, `const APP = 'OBB/${version}'`))
 console.log(`版を ${before} → ${version} にしました(apps/desktop/package.json・Cargo.toml・Cargo.lock・package-lock.json)。CHANGELOG.md も書き足してください`)

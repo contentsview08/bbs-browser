@@ -1,5 +1,5 @@
-// 外へ名乗る User-Agent。版はここだけに書く
-const APP = 'bbs-browser/0.1.0'
+// 外へ名乗る User-Agent。版は npm run version:set が書き換える
+const APP = 'OBB/0.1.3'
 
 /** 2ch 互換の板は専ブラに Monazilla の UA を求める慣習がある */
 export const MONAZILLA_UA = `Monazilla/1.00 (${APP})`

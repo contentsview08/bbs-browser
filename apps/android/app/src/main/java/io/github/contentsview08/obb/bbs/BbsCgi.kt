@@ -69,6 +69,9 @@ private val KIND = Regex("2ch_X:([A-Za-z0-9_]+)")
  * - 本文に認証ページの URL があれば認証待ち(eddist: 「認証コード'xxx'を用いて…/auth-code」)
  * - それ以外はエラー(本文のテキストを理由に)
  */
+/** 応答から理由を読み取れなかったときの言葉 */
+internal const val POST_FAILED = "書き込めませんでした"
+
 fun parseBbsCgi(html: String, url: String, fields: Map<String, String>, referer: String, resNumber: Int?): PostResult {
     val kind = KIND.find(html)?.groupValues?.get(1)
     val title = htmlToText(TITLE.find(html)?.groupValues?.get(1) ?: "").trim()
@@ -86,7 +89,7 @@ fun parseBbsCgi(html: String, url: String, fields: Map<String, String>, referer:
         val code = Regex("認証コード'([^']+)'|再認証コード'([^']+)'").find(message)
         return PostResult.Auth(message, link, code?.groupValues?.get(1)?.ifEmpty { null } ?: code?.groupValues?.get(2))
     }
-    return PostResult.Error(message.ifEmpty { title.ifEmpty { "書き込めませんでした" } })
+    return PostResult.Error(message.ifEmpty { title.ifEmpty { POST_FAILED } })
 }
 
 private val ATTR = Regex("([a-zA-Z_:][-A-Za-z0-9_:.]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))")

@@ -129,7 +129,7 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 | 新しい機能・DB の形の変更(migration を足した) | 2 つ目(0.2.1 → 0.3.0) |
 
 ```powershell
-npm run version:set -- 0.2.0   # apps/desktop/package.json と Cargo.toml をそろえて書き換える
+npm run version:set -- 0.2.0   # apps/desktop/package.json・Cargo.toml と、それぞれの lock をそろえて書き換える
 ```
 
 上げたら `CHANGELOG.md` に書き足し、`git tag v0.2.0` で印を付ける。msi は版に `-beta` などの文字を入れられないので、数字だけにする。

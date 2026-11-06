@@ -13,6 +13,7 @@ import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse
 import { encodeEucJpForm, eucJpByteLength } from '../eucjp'
 import { detectEncoding } from '../encoding'
 import { parseRawmode, parseShitarabaSetting, parseShitarabaSubject, parseShitarabaWrite } from './parse'
+import { POST_FAILED } from '../twoch/parse'
 
 const ID = 'shitaraba'
 const ORIGIN = 'https://jbbs.shitaraba.net'
@@ -68,7 +69,8 @@ async function sendWrite(url: string, fields: Record<string, string>, referer: s
   })
   const html = decode(res, ctx)
   const r = parseShitarabaWrite(html)
-  return r.status === 'ok' ? r : { ...r, html }
+  if (r.status === 'ok') return r
+  return { ...r, message: res.status >= 400 && r.message === POST_FAILED ? `HTTP ${res.status}` : r.message, html }
 }
 
 export const shitarabaConnector: Connector = {

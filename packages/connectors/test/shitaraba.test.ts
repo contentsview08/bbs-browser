@@ -109,6 +109,22 @@ describe('EUC-JP の書き込み', () => {
   })
 })
 
+describe('したらばの書き込みの HTTP エラー', () => {
+  const posting = (status: number, html: string) => {
+    const { ctx } = fake({})
+    ctx.http.post = async () => ({ status, headers: {}, body: new TextEncoder().encode(html) })
+    return shitarabaConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
+  }
+
+  it('本文から理由を読めなければ、番号を伝える', async () => {
+    expect(await posting(500, '')).toMatchObject({ status: 'error', message: 'HTTP 500' })
+  })
+
+  it('本文に理由があれば、それを伝える', async () => {
+    expect(await posting(403, '<html><body>ERROR: 規制中</body></html>')).toMatchObject({ status: 'error', message: 'ERROR: 規制中' })
+  })
+})
+
 describe('したらばの板の確かめ', () => {
   it('ない板は理由を付けて断る', async () => {
     const { ctx } = fake({})

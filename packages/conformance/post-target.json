@@ -1,0 +1,6 @@
+[
+  { "name": "ふつうの板", "input": { "boardUrl": "https://bbs.eddibb.cc/liveedge/", "key": "1700000000" }, "expected": { "bbs": "liveedge", "postUrl": "https://bbs.eddibb.cc/test/bbs.cgi", "threadUrl": "https://bbs.eddibb.cc/test/read.cgi/liveedge/1700000000/" } },
+  { "name": "道のある板", "input": { "boardUrl": "https://host.example/bbs/a/", "key": "123" }, "expected": { "bbs": "a", "postUrl": "https://host.example/bbs/test/bbs.cgi", "threadUrl": "https://host.example/bbs/test/read.cgi/a/123/" } },
+  { "name": "道が深い板", "input": { "boardUrl": "https://host.example/x/y/a/", "key": "123" }, "expected": { "bbs": "a", "postUrl": "https://host.example/x/y/test/bbs.cgi", "threadUrl": "https://host.example/x/y/test/read.cgi/a/123/" } },
+  { "name": "ポートのある板", "input": { "boardUrl": "https://host.example:8080/a/", "key": "123" }, "expected": { "bbs": "a", "postUrl": "https://host.example:8080/test/bbs.cgi", "threadUrl": "https://host.example:8080/test/read.cgi/a/123/" } }
+]

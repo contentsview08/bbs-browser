@@ -2,6 +2,7 @@
 
 import type { Post } from '../types'
 import { htmlToText } from '../html'
+import { POST_FAILED } from '../twoch/parse'
 
 /** subject.txt の 1 行は「キー.cgi,スレタイ(レス数)」。最後の行は最初の行の繰り返しなので、同じキーは 1 つにする */
 export function parseShitarabaSubject(text: string): { key: string; title: string; count: number }[] {
@@ -58,5 +59,5 @@ export function parseShitarabaWrite(html: string): { status: 'ok' | 'error'; mes
   const text = htmlToText(html.replace(/<head>[\s\S]*?<\/head>/i, '')).replace(/\s+/g, ' ').trim()
   if (/書き?こみました/.test(title) || /書き?こみました/.test(text)) return { status: 'ok', message: '書きこみました' }
   const err = /ERROR[:：]?\s*([^\n]{0,200})/i.exec(text)
-  return { status: 'error', message: err ? err[0].trim() : title || text.slice(0, 200) || '書き込めませんでした' }
+  return { status: 'error', message: err ? err[0].trim() : title || text.slice(0, 200) || POST_FAILED }
 }

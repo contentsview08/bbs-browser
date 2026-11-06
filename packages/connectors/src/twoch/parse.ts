@@ -142,6 +142,9 @@ export type BbsCgiResult =
   | { status: 'auth'; message: string; url?: string; code?: string }
   | { status: 'error'; message: string }
 
+/** 応答から理由を読み取れなかったときの言葉 */
+export const POST_FAILED = '書き込めませんでした'
+
 export function parseBbsCgiResponse(html: string): BbsCgiResult {
   const kind = /2ch_X:(\w+)/.exec(html)?.[1]
   const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').trim()
@@ -157,7 +160,7 @@ export function parseBbsCgiResponse(html: string): BbsCgiResult {
     const code = /認証コード'([^']+)'|再認証コード'([^']+)'/.exec(message)
     return { status: 'auth', message, url, code: code?.[1] ?? code?.[2] }
   }
-  return { status: 'error', message: message || title || '書き込めませんでした' }
+  return { status: 'error', message: message || title || POST_FAILED }
 }
 
 /** タグの属性を読む(クォートあり・なし、並び順はばらばら) */

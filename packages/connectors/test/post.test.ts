@@ -106,7 +106,7 @@ describe('createPost', () => {
   }
 
   /** 送られたものを記録し、用意した応答を順に返す偽サーバー */
-  function fake(responses: { html: string; headers?: Record<string, string> }[]) {
+  function fake(responses: { html: string; status?: number; headers?: Record<string, string> }[]) {
     const sent: { url: string; body: string; headers: Record<string, string> }[] = []
     const ctx: ConnectorContext = {
       decode: (b, e) => new TextDecoder(e).decode(b),
@@ -117,7 +117,7 @@ describe('createPost', () => {
         async post(url, body, opts): Promise<HttpResponse> {
           sent.push({ url, body: typeof body === 'string' ? body : new TextDecoder().decode(body), headers: opts?.headers ?? {} })
           const r = responses[sent.length - 1]
-          return { status: 200, headers: { 'content-type': 'text/html; charset=x-sjis', ...r.headers }, body: sjisBytes(r.html) }
+          return { status: r.status ?? 200, headers: { 'content-type': 'text/html; charset=x-sjis', ...r.headers }, body: sjisBytes(r.html) }
         },
       },
     }
@@ -182,6 +182,31 @@ describe('createPost', () => {
     const { ctx } = fake([{ html: eddistError('NGワードが含まれています', 'NgWordDetected') }])
     const r = await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)
     expect(r.status === 'error' && r.html).toContain('ＥＲＲＯＲ')
+  })
+
+  it('板の前に道があれば、その下の bbs.cgi へ板名だけを bbs にして送る', async () => {
+    const { ctx, sent } = fake([{ html: EDDIST_OK }])
+    await twoChConnector.createPost!({ ...thread, boardUrl: 'https://host.example/bbs/a/', key: '123' }, { name: '', mail: '', body: 'a' }, ctx)
+    expect(sent[0].url).toBe('https://host.example/bbs/test/bbs.cgi')
+    expect(sent[0].headers.Referer).toBe('https://host.example/bbs/test/read.cgi/a/123/')
+    expect(decodeForm(sent[0].body).bbs).toBe('a')
+  })
+
+  it('スレ立ても同じ送り先と bbs にする', async () => {
+    const { ctx, sent } = fake([{ html: EDDIST_OK }])
+    await twoChConnector.createThread!({ connectorId: '2ch-compat', url: 'https://host.example/bbs/a/', name: 'a' }, { title: 't', name: '', mail: '', body: 'a' }, ctx)
+    expect(sent[0].url).toBe('https://host.example/bbs/test/bbs.cgi')
+    expect(decodeForm(sent[0].body).bbs).toBe('a')
+  })
+
+  it('HTTP エラーで本文から理由を読めなければ、番号を伝える', async () => {
+    const { ctx } = fake([{ html: '', status: 500 }])
+    expect(await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)).toMatchObject({ status: 'error', message: 'HTTP 500' })
+  })
+
+  it('HTTP エラーでも本文に理由があれば、それを伝える', async () => {
+    const { ctx } = fake([{ html: '<html><body>規制中です</body></html>', status: 403 }])
+    expect(await twoChConnector.createPost!(thread, { name: '', mail: '', body: 'a' }, ctx)).toMatchObject({ status: 'error', message: '規制中です' })
   })
 })
 

@@ -1,6 +1,7 @@
 // アプリの版を変える: npm run version:set -- 0.2.0
 // 版は apps/desktop/package.json に持ち、Tauri(tauri.conf.json の version)はそこを読む。
 // Rust の Cargo.toml の版も同じにそろえる(インストーラーの版は tauri.conf.json、Rust 側の表示は Cargo.toml を使うため)
+// lock の版もそろえる(Cargo.lock が古いと cargo の --locked が止まる)
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const version = process.argv[2]
@@ -23,4 +24,17 @@ if (next === cargo && !cargo.includes(`version = "${version}"`)) {
   process.exit(1)
 }
 writeFileSync(cargoPath, next)
-console.log(`版を ${before} → ${version} にしました(apps/desktop/package.json・Cargo.toml)。CHANGELOG.md も書き足してください`)
+
+/** lock の中の 1 か所の版を書き換える。見つからなければ止める */
+function setLockVersion(rel, pattern) {
+  const path = new URL(rel, import.meta.url)
+  const text = readFileSync(path, 'utf8')
+  if (!pattern.test(text)) {
+    console.error(`${rel} の版が見つかりませんでした`)
+    process.exit(1)
+  }
+  writeFileSync(path, text.replace(pattern, `$1"${version}"`))
+}
+setLockVersion('../apps/desktop/src-tauri/Cargo.lock', /(name = "bbs-browser"\r?\nversion = )"[^"]*"/)
+setLockVersion('../package-lock.json', /("apps\/desktop": \{\r?\n\s*"name": "@bbs-browser\/desktop",\r?\n\s*"version": )"[^"]*"/)
+console.log(`版を ${before} → ${version} にしました(apps/desktop/package.json・Cargo.toml・Cargo.lock・package-lock.json)。CHANGELOG.md も書き足してください`)

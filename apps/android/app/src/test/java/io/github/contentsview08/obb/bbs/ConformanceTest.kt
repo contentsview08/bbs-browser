@@ -87,6 +87,12 @@ class ConformanceTest {
         }
     }
 
+    @Test fun post_target() = check("post-target.json") { c ->
+        val i = c.getJSONObject("input")
+        val path = boardPathOf(i.getString("boardUrl"))
+        mapOf("bbs" to path.bbs, "postUrl" to path.postUrl, "threadUrl" to path.threadUrl(i.getString("key")))
+    }
+
     private fun siteName(s: UrlRoute.Site) = when (s) {
         UrlRoute.Site.TWOCH -> "2ch"
         UrlRoute.Site.HONO -> "hono"

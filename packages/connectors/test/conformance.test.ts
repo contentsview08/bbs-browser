@@ -6,7 +6,7 @@ import { detectEncoding, encodeUtf8Form } from '../src/encoding'
 import { encodeEucJpForm } from '../src/eucjp'
 import { encodeShiftJisForm } from '../src/sjis'
 import type { Encoding } from '../src/types'
-import { createdAtOf, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
+import { boardPathOf, createdAtOf, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
 
 interface Case<I, E> {
   name: string
@@ -42,6 +42,13 @@ describe('url.json', () => {
     // 2ch 互換でないコネクタは、PC では形の解釈が通信といっしょになっているので、スレか板かまでを比べる
     const keys = actual.site !== undefined && actual.site !== '2ch' ? Object.keys(expected).filter((k) => k === 'kind' || k === 'site') : Object.keys(expected)
     expect(Object.fromEntries(keys.map((k) => [k, actual[k]]))).toEqual(Object.fromEntries(keys.map((k) => [k, expected[k]])))
+  })
+})
+
+describe('post-target.json', () => {
+  it.each(load<{ boardUrl: string; key: string }, Record<string, string>>('post-target.json'))('$name', (c) => {
+    const path = boardPathOf(c.input.boardUrl)
+    expect({ bbs: path.bbs, postUrl: path.postUrl, threadUrl: path.threadUrl(c.input.key) }).toEqual(expectedOf(c))
   })
 })
 

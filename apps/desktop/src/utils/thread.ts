@@ -1,7 +1,5 @@
 // スレ一覧の表示に使う計算。勢いの考え方は web 版(utils/momentum.ts)と同じ
 
-import { formatDistanceToNow } from 'date-fns'
-import { ja } from 'date-fns/locale'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 
 /** 勢い = レス数 / スレが立ってからの経過日数(1 日あたりのレス数。2ch の専ブラと、スマホのアプリ スマホ版 と同じ) */
@@ -28,8 +26,15 @@ export function formatMomentum(value: number): string {
   return value.toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 
-export function relativeTime(date: Date): string {
-  return formatDistanceToNow(date, { addSuffix: true, locale: ja })
+/** スマホ版の relativeTime(ui/Chrome.kt)と同じ言葉・同じ区切り */
+export function relativeTime(date: Date, now = Date.now()): string {
+  const s = Math.floor((now - date.getTime()) / 1000)
+  if (s < 60) return 'たった今'
+  if (s < 3600) return `${Math.floor(s / 60)}分前`
+  if (s < 86400) return `${Math.floor(s / 3600)}時間前`
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}日前`
+  if (s < 86400 * 365) return `約${Math.floor(s / (86400 * 30))}か月前`
+  return `約${Math.floor(s / (86400 * 365))}年前`
 }
 
 /** 日ごとの見出し(今日・昨日・10/18(土))。同じ日のものをまとめて区切る */

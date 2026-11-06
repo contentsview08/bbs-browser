@@ -2251,7 +2251,7 @@ export function BoardListTab(props: {
       <p className="text-xs text-c-text-muted mb-2">☆ でお気に入りに登録・解除、ダブルクリックでその板を開きます</p>
       {message && <p className="text-sm text-c-heat-very-hot mb-2">{message}</p>}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-c-border rounded-[var(--card-radius)]">
-        {!boards && busy && <p className="px-3 py-2 text-sm text-c-text-muted">読み込み中...</p>}
+        {!boards && busy && <p className="px-3 py-2 text-sm text-c-text-muted">読み込み中…</p>}
         {grouped.map(([cat, list]) => {
           const open = query.trim() !== '' || openCats.has(cat)
           return (

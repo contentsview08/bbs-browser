@@ -2078,7 +2078,7 @@ export default function ThreadView(props: Props) {
                   e.currentTarget.blur()
                 }
               }}
-              placeholder="レス検索..."
+              placeholder="レスを探す(本文・名前・ID)"
               className={`absolute inset-y-0 right-0 z-10 bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none focus:ring-0 transition-[left,opacity] duration-300 ease-out ${
                 searchActive ? 'left-0 opacity-100' : 'left-full opacity-0 pointer-events-none'
               }`}

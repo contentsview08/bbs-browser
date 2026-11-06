@@ -55,7 +55,7 @@ export default function LinkPreview({ url, onOpen, more }: { url: string; onOpen
             <p className="text-[10px] text-c-text-muted truncate">{host}</p>
           </>
         ) : !ogp ? (
-          <span className="text-[10px] text-c-text-muted">読み込み中...</span>
+          <span className="text-[10px] text-c-text-muted">読み込み中…</span>
         ) : (
           <>
             <p className="text-xs font-medium text-c-text-strong line-clamp-2 leading-snug break-all">{ogp.title || url}</p>

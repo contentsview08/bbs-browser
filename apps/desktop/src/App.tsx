@@ -91,6 +91,8 @@ import { findNextThreads, nextUnreadThread } from './utils/nextThread'
 import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
+import { reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from './utils/autoRefresh'
+import { favUnread, threadUnread, unreadCount } from './utils/unread'
 import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
@@ -147,8 +149,7 @@ const connectorOf = (id: string) => {
 
 /** レスの数の上限まで来たスレか(2ch・したらばは 1000。上限のない掲示板はいつも false) */
 const isFull = (t: ThreadSummary, posts: Post[]) => {
-  const max = findConnector(t.connectorId)?.maxPosts
-  return max !== undefined && posts.length >= max
+  return reachedMaxPosts(posts.length, findConnector(t.connectorId)?.maxPosts)
 }
 
 /** URL を扱えるコネクタで、板(とスレ)に読み替える */
@@ -599,7 +600,7 @@ export default function App() {
   useEffect(() => {
     if (!canCheckUpdate || isMobile) return
     const t = setTimeout(async () => {
-      if (Date.now() - settingsRef.current.lastUpdateCheckAt < 20 * 3600 * 1000) return
+      if (!updateCheckDue(settingsRef.current.lastUpdateCheckAt, Date.now())) return
       updateSetting('lastUpdateCheckAt', Date.now())
       try {
         const [release, current] = await Promise.all([fetchLatestRelease(), getVersion()])
@@ -856,6 +857,8 @@ export default function App() {
    * filter を渡すと、その絞り込みにして開く(undefined ならいまのまま)
    */
   const openHistory = (record = true, filter?: ListFilter | null) => {
+    // 履歴を出しているときに押し直しても、引き出しを閉じる
+    if (isMobile) setDrawerOpen(false)
     if (filter !== undefined) {
       setFilterRequest({ key: filter, seq: Date.now() })
       // 一覧がまだないときは onFilterChange が来ないので、ここでもそろえる(前の「書き込んだ」が残っていた)
@@ -1437,8 +1440,8 @@ export default function App() {
    */
   const autoRefresh = () => {
     const t = activeTab
-    if (!store || !t?.log || !isAppVisible()) return
-    if (t.log.status === 'archived' || isFull(t.thread, t.log.posts)) return
+    if (!store || !t?.log) return
+    if (!shouldAutoRefresh({ visible: isAppVisible(), status: t.log.status, postCount: t.log.posts.length, maxPosts: findConnector(t.thread.connectorId)?.maxPosts })) return
     readFlush.current?.()
     void fetchThread(store, t.thread).catch(() => undefined)
   }
@@ -1909,7 +1912,7 @@ export default function App() {
   // スマホ: 何かを開いたら(板・スレ・履歴・設定・URL)、サイドバーの引き出しを閉じる
   useEffect(() => {
     if (isMobile) setDrawerOpen(false)
-  }, [board?.url, history, activeId, settingsTab, urlPrompt !== undefined])
+  }, [board?.url, historyShown, activeId, settingsTab, urlPrompt !== undefined])
 
   /** 文字を打つ欄(検索欄・書き込み欄)にフォーカスがあれば、外してキーボードをしまう。外したら true */
   const blurTyping = (): boolean => {
@@ -2459,9 +2462,7 @@ export default function App() {
   )
   /** サイドバーに出す、お気に入りのスレの新着の合計 */
   const favNewTotal = favThreads.reduce((sum, f) => {
-    if (f.postCount === 0) return sum
-    const n = favCounts.get(threadId(f.thread)) ?? f.postCount
-    return sum + Math.max(0, n - f.readNo)
+    return sum + favUnread(f, favCounts.get(threadId(f.thread)))
   }, 0)
   // 毎回新しい関数にすると、スレ一覧が App の描き直しのたびに全部を並べ直す。使う Map が変わったときだけ作り直す
   const stateOf = useMemo(
@@ -2508,7 +2509,7 @@ export default function App() {
       unreadCount={
         historyThreads?.filter((t) => {
           const st = historyStates.get(threadId(t))
-          return !!st && t.postCount > st.readNo
+          return threadUnread(st, t.postCount) > 0
         }).length ?? 0
       }
       favCount={favNewTotal}
@@ -2521,7 +2522,7 @@ export default function App() {
     const st = stateOf(t)
     if (!st) return 0
     const tab = tabs.find((x) => x.id === threadId(t))
-    return Math.max(0, Math.max(t.postCount, tab?.log?.postCount ?? 0) - Math.max(st.readNo, tab?.readNo ?? 0))
+    return unreadCount(Math.max(st.readNo, tab?.readNo ?? 0), t.postCount, tab?.log?.postCount ?? 0)
   })
   nextUnreadRef.current = nextUnread
   const listPlacements = useMemo(
@@ -2767,7 +2768,7 @@ export default function App() {
             id: t.id,
             title: t.log?.title || t.thread.title,
             // ログのレス数に加えて、スレ一覧などの取り直しで分かった新着も数える(タブを開き直さなくても +n が出る)
-            unread: t.log ? Math.max(0, Math.max(t.log.postCount, knownCount(t.id)) - t.readNo) : 0,
+            unread: t.log ? unreadCount(t.readNo, t.log.postCount, knownCount(t.id)) : 0,
             loading: t.loading,
             ended:
               t.log?.status === 'archived' ? 'archived' : t.log && isFull(t.thread, t.log.posts) ? 'full' : undefined,

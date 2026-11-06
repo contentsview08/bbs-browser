@@ -625,14 +625,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun exportBackup(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
-                val o = org.json.JSONObject()
-                o.put("app", "bbs-native").put("version", 1)
-                o.put("settings", prefs.export())
-                o.put("favoriteBoards", org.json.JSONArray().apply { for (b in db.favorites()) put(org.json.JSONObject().put("url", b.url).put("name", b.name)) })
-                o.put("favoriteThreads", org.json.JSONArray().apply {
-                    for (h in db.favoriteThreads()) put(org.json.JSONObject().put("boardUrl", h.thread.boardUrl).put("key", h.thread.key).put("title", h.thread.title))
-                })
-                o.put("sites", org.json.JSONArray().apply { for ((u, n) in db.siteMenuUrls()) put(org.json.JSONObject().put("url", u).put("name", n)) })
+                val o = io.github.contentsview08.obb.data.backupJson(prefs.export(), db.favorites(), db.favoriteThreads().map { it.thread }, db.siteMenuUrls())
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(o.toString(2).toByteArray()) }
                 }
@@ -648,16 +641,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
-                val o = org.json.JSONObject(text)
-                o.optJSONObject("settings")?.let { prefs.import(it) }
-                o.optJSONArray("favoriteBoards")?.let { a -> for (i in 0 until a.length()) a.getJSONObject(i).let { db.setFavorite(Board(it.getString("url"), it.getString("name")), true) } }
-                o.optJSONArray("favoriteThreads")?.let { a ->
-                    for (i in 0 until a.length()) a.getJSONObject(i).let {
-                        val t = ThreadSummary(it.getString("boardUrl"), it.getString("key"), it.getString("title"), 0, 0, null)
-                        db.setFavoriteThread(t, t.title, true)
-                    }
-                }
-                o.optJSONArray("sites")?.let { a -> for (i in 0 until a.length()) a.getJSONObject(i).let { db.addSite(it.getString("url"), it.getString("name")) } }
+                // 先に全部読む(途中の行が壊れていても、半分だけ戻さない)
+                val b = io.github.contentsview08.obb.data.parseBackup(text)
+                b.settings?.let { prefs.import(it) }
+                for (x in b.boards) db.setFavorite(x, true)
+                for (t in b.threads) db.setFavoriteThread(t, t.title, true)
+                for ((u, n) in b.sites) db.addSite(u, n)
                 favorites = db.favorites()
                 sites = db.siteMenuUrls()
                 reloadSide()
@@ -1232,7 +1221,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val mail = r.mail.trim()
         val over = TwoCh.overLimits(page.summary.boardUrl, body, r.name, mail)
         if (over.isNotEmpty()) { r.notice = over.joinToString(" / "); return }
-        prefs.postName = r.name
         handlePost(page, body, r.name, mail) { TwoCh.createPost(page.summary, PostInput(r.name, mail, body)) }
     }
 
@@ -1261,7 +1249,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             // 遅れて保存する書きかけが、空にしたあとで古い本文を書き戻さないように止める
                             draftJob?.cancel()
                             db.saveDraft(page.summary, "")
-                            prefs.postMail = r.mail
+                            // 板ごとの既定値がある欄は、ふだんの値を書き換えない
+                            val meta = prefs.boardMeta[page.summary.boardUrl]
+                            if (meta?.defaultName == null) prefs.postName = name
+                            if (meta?.defaultMail == null) prefs.postMail = mail
                         }
                         toast = "書き込みました"
                         // 自動更新の最中だと取り直しが飛ばされ、自分のレスが見つからない。終わるのを待ってから取り直す

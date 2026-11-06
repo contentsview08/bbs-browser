@@ -103,8 +103,8 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
   /** 段 depth のレスの、アイコンの真ん中の横位置(行の左端から) */
   const x = (depth: number) => `calc(${depth * D_STEP}px + var(--post-padding-x) + ${D_HALF}px)`
   /** レスの枠の上端から、アイコンの真ん中・アイコンの下端までの高さ */
-  const midY = `calc(var(--post-padding-y) + ${D_HALF}px)`
-  const bottomY = `calc(var(--post-padding-y) + ${D_HALF * 2 + 2}px)`
+  const midY = `calc(var(--post-pad, var(--post-padding-y)) + ${D_HALF}px)`
+  const bottomY = `calc(var(--post-pad, var(--post-padding-y)) + ${D_HALF * 2 + 2}px)`
   return (
     <div className="flex flex-col">
       {props.rows.map((r, i) => {

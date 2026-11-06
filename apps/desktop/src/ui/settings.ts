@@ -766,6 +766,23 @@ function withoutOldGestures(g: AppSettings['swipeGestures']): AppSettings['swipe
 }
 
 /**
+ * やめた値を今の値に読み替える。s にある項目だけを返す(設定の読み込みと、書き出したファイルの読み込みで使う)
+ */
+export function migrateValues(s: Partial<AppSettings>): Partial<AppSettings> {
+  const out: Partial<AppSettings> = {}
+  // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
+  if (s.postStyle !== undefined) out.postStyle = (s.postStyle as string) === 'timeline' ? 'discord' : s.postStyle
+  if (s.uploadHost !== undefined) out.uploadHost = migrateUploadHost(s.uploadHost as string)
+  for (const k of ['scheme', 'lightScheme', 'darkScheme'] as const) {
+    const v = s[k]
+    if (v !== undefined) out[k] = withoutOldLight(v)
+  }
+  if (s.swipeGestures !== undefined) out.swipeGestures = withoutOldGestures(s.swipeGestures)
+  if (s.mouseGestures !== undefined) out.mouseGestures = migrateMouseGestures(s.mouseGestures)
+  return out
+}
+
+/**
  * テーマを選んだときに変える設定。OS に合わせているときは、暗い配色ならダーク用に、明るい配色ならライト用にする
  */
 export function pickScheme(s: AppSettings, key: ColorScheme): Partial<AppSettings> {
@@ -832,8 +849,9 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   if (s.postLineHeight) root.style.setProperty('--post-line-height', String(s.postLineHeight))
   else root.style.removeProperty('--post-line-height')
   // 余白(px)。決めていなければ、見た目・密度の既定のまま
-  if (s.postPadPx >= 0) root.style.setProperty('--post-padding-y', `${s.postPadPx}px`)
-  else root.style.removeProperty('--post-padding-y')
+  // --post-padding-y は既定のまま残す(スライダーの「元に戻す」が既定の値として読む)
+  if (s.postPadPx >= 0) root.style.setProperty('--post-pad', `${s.postPadPx}px`)
+  else root.style.removeProperty('--post-pad')
   if (s.listPadPx >= 0) {
     root.style.setProperty('--list-row-pad', `${s.listPadPx / 16}rem`)
     root.setAttribute('data-list-pad', '')
@@ -897,9 +915,7 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
           void store.setSetting('contentBasePx', known.fontPx)
         }
         const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }
-        // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
-        const postStyle: PostStyle = (next.postStyle as string) === 'timeline' ? 'discord' : next.postStyle
-        return { ...next, postStyle, uploadHost: migrateUploadHost(next.uploadHost as string), scheme: withoutOldLight(next.scheme), lightScheme: withoutOldLight(next.lightScheme), darkScheme: withoutOldLight(next.darkScheme), swipeGestures: withoutOldGestures(next.swipeGestures), mouseGestures: migrateMouseGestures(next.mouseGestures) }
+        return { ...next, ...migrateValues(next) }
       })
       setLoaded(true)
     })

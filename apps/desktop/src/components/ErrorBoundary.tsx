@@ -28,7 +28,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
             {error.stack}
           </pre>
           <div className="mt-4 flex justify-end">
-            <button type="button" className="h-9 px-4 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-c-accent-text" onClick={() => location.reload()}>
+            <button type="button" className="h-9 px-4 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)]" onClick={() => location.reload()}>
               読み込み直す
             </button>
           </div>

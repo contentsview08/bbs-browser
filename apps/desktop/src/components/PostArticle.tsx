@@ -432,9 +432,9 @@ function PostArticle(props: Props) {
   const frame = {
     paddingLeft: 'var(--post-padding-x)',
     paddingRight: 'var(--post-padding-x)',
-    paddingBottom: 'var(--post-padding-y)',
+    paddingBottom: 'var(--post-pad, var(--post-padding-y))',
     // Discord 風で続けて書いたレスは、前のレスに寄せる
-    paddingTop: props.continued ? '2px' : props.showTopDivider ? undefined : 'var(--post-padding-y)',
+    paddingTop: props.continued ? '2px' : props.showTopDivider ? undefined : 'var(--post-pad, var(--post-padding-y))',
     borderTopColor: props.showTopDivider ? 'var(--post-divider-color, var(--c-border))' : undefined,
   }
   const frameClass = `group w-full ${props.showTopDivider ? 'border-t pt-2' : ''} ${props.flash ? 'flash-new' : ''}`

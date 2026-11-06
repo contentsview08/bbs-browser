@@ -43,6 +43,7 @@ import io.github.contentsview08.obb.data.AiModel
 import io.github.contentsview08.obb.data.AiNgRule
 import io.github.contentsview08.obb.data.hypothesisOf
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** 設定 → NG の「AI NG」(PC 版・Web の components/AiNgSettings.tsx と同じ項目・同じ言葉) */
 @Composable
@@ -80,7 +81,7 @@ fun AiNgSettings(vm: AppViewModel) {
             Checkbox(r.enabled, { v -> p.setAiRules(p.aiNgRules.map { if (it.id == r.id) it.copy(enabled = v) else it }) }, colors = CheckboxDefaults.colors(checkedColor = Palette.accent))
             Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                 Text(
-                    "${r.name}  ${AI_NG_SHOWS.firstOrNull { it.first == r.show }?.second}・${(r.threshold * 100).toInt()}% から${if (marks > 0) "・手の印 $marks 件" else ""}",
+                    "${r.name}  ${AI_NG_SHOWS.firstOrNull { it.first == r.show }?.second}・${(r.threshold * 100).roundToInt()}% から${if (marks > 0) "・手の印 $marks 件" else ""}",
                     color = if (r.enabled) Palette.textStrong else Palette.textMuted, fontSize = 15.sp,
                 )
                 Text(hypothesisOf(r.prompt), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -108,8 +109,8 @@ private fun AiRuleEditor(vm: AppViewModel, initial: AiNgRule, onDismiss: () -> U
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(r.name, { r = r.copy(name = it) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("名前(短く)") }, placeholder = { Text("例: 煽り") })
                 OutlinedTextField(r.prompt, { r = r.copy(prompt = it) }, Modifier.fillMaxWidth(), label = { Text("条件(当てたい書き込みの様子)") }, placeholder = { Text("例: 他人を煽ったり、見下したりしている") })
-                Text("当てる当たり具合: ${(r.threshold * 100).toInt()}% から(当たるものは 60〜80% ほどに出ます)", color = Palette.textBody, fontSize = 13.sp)
-                Slider(r.threshold, { r = r.copy(threshold = (it * 100).toInt() / 100f) }, valueRange = 0.5f..0.98f, colors = SliderDefaults.colors(thumbColor = Palette.accent, activeTrackColor = Palette.accent))
+                Text("当てる当たり具合: ${(r.threshold * 100).roundToInt()}% から(当たるものは 60〜80% ほどに出ます)", color = Palette.textBody, fontSize = 13.sp)
+                Slider(r.threshold, { r = r.copy(threshold = (it * 100).roundToInt() / 100f) }, valueRange = 0.5f..0.98f, colors = SliderDefaults.colors(thumbColor = Palette.accent, activeTrackColor = Palette.accent))
                 Text("当たったレスの見せ方", color = Palette.textBody, fontSize = 13.sp)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for ((k, name) in AI_NG_SHOWS) {

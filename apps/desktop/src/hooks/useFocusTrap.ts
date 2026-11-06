@@ -24,6 +24,11 @@ function isTextField(el: HTMLElement): boolean {
   return type === 'text' || type === 'search' || type === 'url' || type === 'email' || type === 'password' || type === 'number'
 }
 
+/** box のあとに開いた画像のビューアーがあるか(portal は開いた順に body の後ろへ付く。ビューアー自身と、その上に開いたものは当たらない) */
+function lightboxAbove(box: HTMLElement): boolean {
+  return [...document.querySelectorAll('[data-lightbox]')].some((lb) => lb !== box && !(lb.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING))
+}
+
 /**
  * opts.escBlursInputs: 文字を打っている欄(中身あり)で Esc を押したら、閉じずに欄を抜けるだけにする(2 回目で閉じる)。
  * 入力をやめるつもりで押した Esc で、ダイアログごと消えて書きかけがなくなるのを防ぐ。直す画面(設定・NG・スレ立て)で使う
@@ -36,7 +41,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () =>
     const onKey = (e: KeyboardEvent) => {
       const box = ref.current
       // 上に画像のビューアーが開いていれば、キー(Esc・矢印)はビューアーのもの
-      if (!box || e.defaultPrevented || e.isComposing || document.querySelector('[data-lightbox]')) return
+      if (!box || e.defaultPrevented || e.isComposing || lightboxAbove(box)) return
       if (e.key === 'Escape') {
         // 画面が重なっているとき(ページの上に下からのメニューなど)は、いちばん上(あとから開いたもの)だけが閉じる
         const modals = document.querySelectorAll('[data-modal]')

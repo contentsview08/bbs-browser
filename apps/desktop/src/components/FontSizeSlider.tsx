@@ -290,7 +290,7 @@ export function PostFontSliders(props: { settings: AppSettings; update: UpdateSe
         min={0}
         max={24}
         icons={['density_small', 'density_large']}
-        preview={(px) => setCssVar('--post-padding-y', `${px}px`)}
+        preview={(px) => setCssVar('--post-pad', `${px}px`)}
         onCommit={(px) => update('postPadPx', px)}
         resettable
       />

@@ -7,6 +7,10 @@ import { getVersion } from '@tauri-apps/api/app'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import {
   FONT_PX_KEY,
+  LINE_HEIGHT_MAX,
+  LINE_HEIGHT_MIN,
+  PAD_PX_MAX,
+  SCREEN_PX_RANGE,
   MOBILE_POST_STYLES,
   COLOR_SCHEMES,
   ID_STYLES,
@@ -206,7 +210,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
       return (
         <>
           <Group title="文字の大きさ" note="動かすと、その場で変わります。「元に戻す」で、画面全体の大きさに合わせます">
-            <FontSizeSlider label="画面全体" value={base} base={base} preview={(px) => (document.documentElement.style.fontSize = `${px}px`)} onCommit={(px) => update(FONT_PX_KEY, px)} />
+            <FontSizeSlider label="画面全体" value={base} base={base} {...SCREEN_PX_RANGE} preview={(px) => (document.documentElement.style.fontSize = `${px}px`)} onCommit={(px) => update(FONT_PX_KEY, px)} />
             <FontSizeSlider label="スレ一覧" value={s.listFontPx} base={base} preview={(px) => setCssVar('--list-zoom', String(px / base))} onCommit={(px) => update('listFontPx', px)} resettable />
             <FontSizeSlider label="レスの本文" value={s.postBodyPx} base={base} preview={(px) => setCssVar('--post-body-size', `${px}px`)} onCommit={(px) => update('postBodyPx', px)} resettable />
             <FontSizeSlider label="レスの頭(名前・日付・ID)" value={s.postHeadPx} base={base} preview={(px) => setCssVar('--post-head-zoom', String(px / base))} onCommit={(px) => update('postHeadPx', px)} resettable />
@@ -214,8 +218,8 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               label="レスの本文の行間"
               value={s.postLineHeight}
               base={1.625}
-              min={1}
-              max={2.4}
+              min={LINE_HEIGHT_MIN}
+              max={LINE_HEIGHT_MAX}
               step={0.05}
               format={(v) => `${v.toFixed(2)} 倍`}
               icons={['format_line_spacing', 'format_line_spacing']}
@@ -231,7 +235,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               unset={-1}
               base={cssPx('--thread-card-padding-y', 8)}
               min={0}
-              max={24}
+              max={PAD_PX_MAX}
               icons={['density_small', 'density_large']}
               preview={(px) => {
                 setCssVar('--list-row-pad', `${px}px`)
@@ -246,7 +250,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               unset={-1}
               base={cssPx('--post-padding-y', 6)}
               min={0}
-              max={24}
+              max={PAD_PX_MAX}
               icons={['density_small', 'density_large']}
               preview={(px) => setCssVar('--post-pad', `${px}px`)}
               onCommit={(px) => update('postPadPx', px)}

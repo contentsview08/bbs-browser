@@ -6,6 +6,7 @@ use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod chosen_paths;
+mod fonts;
 mod post_http;
 mod update;
 mod web_upload;
@@ -622,6 +623,8 @@ pub fn run() {
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
+            app.manage(fonts::FontJobs::default());
+            fonts::prepare(app.handle());
             // ポータブルでは、前に置いた背景画像もアセットで読めるように許す
             if portable_dir().is_some() {
                 if let Ok(dir) = data_dir(app.handle()) {
@@ -640,6 +643,10 @@ pub fn run() {
             can_self_update,
             data_paths,
             list_system_fonts,
+            fonts::font_status,
+            fonts::font_css,
+            fonts::download_font,
+            fonts::cancel_font_download,
             save_image,
             set_background_image,
             current_background_image,

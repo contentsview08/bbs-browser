@@ -1,8 +1,9 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
-import { useDeferredValue, useEffect, useState } from 'react'
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useDialogRect } from '../hooks/useDialogRect'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import CustomSchemeEditor from './mobile/CustomSchemeEditor'
 import { Switch } from './SettingParts'
 import { ICON_BTN } from './DialogParts'
 import { AboutTab } from './settings/AboutTab'
@@ -46,7 +47,33 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
 ]
 
 export default function SettingsDialog(props: SettingsProps) {
-  const [tab, setTab] = useState<Tab>(props.initialTab ?? 'display')
+  const [tab, setTabState] = useState<Tab>(props.initialTab ?? 'display')
+  /** 自分の配色の画面を開いているか(「表示」のもう 1 段下) */
+  const [schemePage, setSchemePage] = useState(false)
+  /** その画面から戻ったところか(すべりの向きを変える) */
+  const [cameBack, setCameBack] = useState(false)
+  const setTab = (next: Tab) => {
+    setTabState(next)
+    setSchemePage(false)
+    setCameBack(false)
+  }
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const scrollBeforePage = useRef(0)
+  const openSchemePage = () => {
+    scrollBeforePage.current = bodyRef.current?.scrollTop ?? 0
+    setQuery('')
+    setTabState('display')
+    setCameBack(false)
+    setSchemePage(true)
+  }
+  const closeSchemePage = () => {
+    setCameBack(true)
+    setSchemePage(false)
+  }
+  // 入るときは一番上から、戻るときは元の位置へ
+  useLayoutEffect(() => {
+    bodyRef.current?.scrollTo({ top: schemePage ? 0 : scrollBeforePage.current })
+  }, [schemePage])
   useEffect(() => {
     if (props.requestedTab) setTab(props.requestedTab.tab)
     // seq が変わったときだけ
@@ -63,12 +90,12 @@ export default function SettingsDialog(props: SettingsProps) {
   // 置き場所(左上の角)と大きさ。動かした・大きさを変えたら覚えておき、次に開いたときも同じ所・大きさで出す
   const dialog = useDialogRect('bbs:settings-dialog-rect2', { w: 896, h: 720, minW: 560, minH: 360 })
   // Esc は、文字を打っている欄の中では 1 回目は欄を抜けるだけ(検索語・URL を打っている途中で設定ごと消えないように)
-  useFocusTrap(dialog.boxRef, () => props.onClose(), { escBlursInputs: true })
+  useFocusTrap(dialog.boxRef, () => (schemePage ? closeSchemePage() : props.onClose()), { escBlursInputs: true })
 
   const renderTab = (key: Tab) => {
     switch (key) {
       case 'display':
-        return <DisplayTab {...props} />
+        return <DisplayTab {...props} onOpenCustomScheme={openSchemePage} />
       case 'threads':
         return <ThreadsTab {...props} />
       case 'posts':
@@ -141,7 +168,11 @@ export default function SettingsDialog(props: SettingsProps) {
       <span className="material-symbols-outlined text-lg text-c-text-muted">search</span>
       <input
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setSchemePage(false)
+          setCameBack(false)
+        }}
         placeholder="設定を探す(例: 文字の大きさ・NG・スワイプ)"
         className="flex-1 min-w-0 bg-transparent border-0 p-0 text-sm text-c-text-body placeholder-c-text-muted focus:ring-0"
       />
@@ -198,16 +229,39 @@ export default function SettingsDialog(props: SettingsProps) {
         </nav>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className={`flex items-center justify-between px-6 py-3 border-b border-c-border select-none ${props.windowed ? '' : 'cursor-move'}`} onMouseDown={props.windowed ? undefined : dialog.startMove} title={props.windowed ? undefined : 'つかんで動かす'}>
-            <h3 className="text-base font-bold text-c-text-strong">{searching ? '設定の検索' : TABS.find((t) => t.key === tab)?.name}</h3>
+            <h3 className="flex items-center gap-1 text-base font-bold text-c-text-strong">
+              {schemePage && (
+                <button type="button" onClick={closeSchemePage} className={`${ICON_BTN} -ml-2`} title="表示へ戻る">
+                  <span className="material-symbols-outlined text-xl">arrow_back</span>
+                </button>
+              )}
+              {searching ? '設定の検索' : schemePage ? '自分の配色' : TABS.find((t) => t.key === tab)?.name}
+            </h3>
             <button type="button" onClick={props.onClose} className={ICON_BTN} title="閉じる">
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
           </div>
           <AdvancedContext.Provider value={showAdvanced}>
           <div
+            ref={bodyRef}
             className={`flex-1 min-h-0 px-6 py-5 ${tab === 'boardlist' && !searching ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}
           >
-            {searching ? searchResults : renderTab(tab)}
+            {searching ? (
+              searchResults
+            ) : schemePage ? (
+              // overflow-x-clip: すべっている間に横のスクロールバーを出さない(clip なので sticky は効いたまま)
+              <div className="overflow-x-clip">
+                <div className="page-in">
+                  <CustomSchemeEditor settings={props.settings} update={props.update} stickySample />
+                </div>
+              </div>
+            ) : cameBack ? (
+              <div className="overflow-x-clip">
+                <div className="page-back">{renderTab(tab)}</div>
+              </div>
+            ) : (
+              renderTab(tab)
+            )}
           </div>
           </AdvancedContext.Provider>
         </div>

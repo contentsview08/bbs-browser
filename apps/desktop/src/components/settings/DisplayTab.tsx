@@ -1,13 +1,14 @@
-import CustomSchemeEditor from '../mobile/CustomSchemeEditor'
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
 import { useEffect, useState } from 'react'
-import { ACCENTS, COLOR_SCHEMES, FONT_FAMILIES, POST_STYLES, effectivePostStyle, effectiveScheme, isDarkScheme, pickScheme, type AppSettings } from '../../ui/settings'
+import { ACCENTS, COLOR_SCHEMES, POST_STYLES, effectivePostStyle, effectiveScheme, isDarkScheme, pickScheme, type AppSettings } from '../../ui/settings'
 import { loadSystemFonts, type SystemFont } from '../../host/systemFonts'
 import { BaseFontSlider } from '../FontSizeSlider'
 import { ManagerDialog, NumberField, OpenRow, Toggle } from '../SettingParts'
 import { BTN_PRIMARY, INPUT } from '../DialogParts'
 import { backgroundImageUrl, importBackgroundImage } from '../../host/backgroundImage'
 import { pickOpenPath } from '../../host/dialog'
+import { FONT_NOTE } from '../../host/fonts'
+import { FontRows } from './FontRows'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
 
 /** OS に入っているフォントから選ぶ。各行をそのフォント自体で描くので、見た目を比べられる */
@@ -125,7 +126,7 @@ function BackgroundDialog({ settings: s, update, onClose }: Pick<SettingsProps, 
   )
 }
 
-export function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<SettingsProps, 'settings' | 'update'> & { onOpenCustomScheme: () => void }) {
   const [bgOpen, setBgOpen] = useState(false)
   return (
     <>
@@ -189,14 +190,10 @@ export function DisplayTab({ settings: s, update }: Pick<SettingsProps, 'setting
         </div>
       </Section>
       <Section advanced title="自分の配色" note="地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます(スマホのアプリと同じ JSON)">
-        <CustomSchemeEditor settings={s} update={update} />
+        <OpenRow label={parseCustom(s.customScheme) ? '自分の配色を直す' : '自分の配色を作る'} value={effectiveScheme(s) === 'custom' ? '使っています' : undefined} onOpen={onOpenCustomScheme} />
       </Section>
-      <Section advanced desktopOnly title="フォント">
-        <Choice
-          value={s.fontFamily}
-          options={[...FONT_FAMILIES, { key: 'custom' as const, name: s.customFont ? `OS のフォント(${s.customFont})` : 'OS のフォント' }]}
-          onChange={(v) => update('fontFamily', v)}
-        />
+      <Section advanced desktopOnly title="フォント" note={FONT_NOTE}>
+        <FontRows settings={s} osFont={true} onPick={(key) => update('fontFamily', key)} />
         {s.fontFamily === 'custom' && (
           <SystemFontPicker
             value={s.customFont}

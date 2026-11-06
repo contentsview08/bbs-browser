@@ -6,7 +6,7 @@ import { setHaptics } from '../utils/haptics'
 import { customLineBg, customVars, isCustomDark, onColor, parseCustom } from './customScheme'
 import type { DateStyle } from '../utils/displayDate'
 import { isMobile } from '../utils/platform'
-import { ensureFont } from '../host/fonts'
+import { ensureFont, onFontSwitch } from '../host/fonts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import type { ThreadSummary } from '@bbs-browser/connectors'
@@ -625,9 +625,28 @@ const DARK_SCHEMES = new Set<ColorScheme>(['indigo', 'amber-teal', 'soft-dark', 
 
 /** 文字の大きさ(px)の設定の名前(スマホは PC と別に持つ)。文字の大きさを変える所は、どこもこれを使う */
 export const FONT_PX_KEY = isMobile ? 'mobileFontPx' : 'fontPx'
-/** 選べる文字の大きさ(px) */
-export const FONT_PX_MIN = 9
-export const FONT_PX_MAX = 26
+/** px で決める文字の大きさ(スレ一覧・レスの本文・レスの頭)の幅。スマホ版と同じ */
+export const FONT_PX_MIN = 8
+export const FONT_PX_MAX = 32
+/** 文字の倍率(画面全体・帯の文字)の幅と 1 段。スマホ版と同じ */
+export const FONT_SCALE_MIN = 0.6
+export const FONT_SCALE_MAX = 1.6
+export const FONT_SCALE_STEP = 0.05
+/** 倍率の幅を、1 倍が base px のときの px に直す(px で持つ設定のスライダー用) */
+export function scaledPxRange(base: number): { min: number; max: number; step: number } {
+  const px = (scale: number) => Math.round(base * scale * 100) / 100
+  return { min: px(FONT_SCALE_MIN), max: px(FONT_SCALE_MAX), step: px(FONT_SCALE_STEP) }
+}
+/** 画面全体の文字の大きさの幅(px) */
+// PC の基本の文字は px で決めるので、ほかの文字と同じ幅にする(倍率だと下限が 9.6 までで、今より狭くなる)
+export const SCREEN_PX_RANGE = isMobile ? scaledPxRange(DEFAULT_SETTINGS[FONT_PX_KEY]) : { min: FONT_PX_MIN, max: FONT_PX_MAX, step: 1 }
+/** 行間(倍)・上下の余白(px)・帯の高さ(px)の幅。スマホ版と同じ */
+export const LINE_HEIGHT_MIN = 1
+export const LINE_HEIGHT_MAX = 3
+export const PAD_PX_MAX = 40
+export const BAR_PX_MIN = 32
+export const HEADER_PX_MAX = 120
+export const FOOTER_PX_MAX = 110
 /**
  * レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。PC は基本の文字から切り離す(基本の文字はメニュー・ボタン・ポップアップなどの部品だけ)。
  * スマホは基本の文字に合わせる
@@ -858,7 +877,7 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
     root.removeAttribute('data-list-pad')
   }
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
-  // Web フォントは、選んだときだけ取りに行く(host/fonts.ts)
+  // 用意した書体は host/fonts.ts が使えるようにする
   if (s.fontFamily !== 'custom') ensureFont(preset.key)
   // OS のフォントが見つからなかったときのために、既定のフォントを後ろに置く
   const css =
@@ -976,6 +995,14 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
     },
     [flush],
   )
+
+  // 選んだ書体の取得が終わったら切り替える。設定のウィンドウを閉じていても切り替わるよう、メインが受ける
+  useEffect(() => {
+    if (opts.font === false) return
+    const off = onFontSwitch((key) => update('fontFamily', key as FontFamily))
+    return () => void off.then((f) => f())
+    // opts は固定
+  }, [update])
 
   return [settings, update, loaded]
 }

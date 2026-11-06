@@ -1,38 +1,112 @@
-// Web フォント(Noto Sans JP・BIZ UDPゴシック など)を、設定で選んだときだけ jsDelivr の fontsource から読む(同梱するとインストーラーが大きくなる)。
-// 既定の「Windows 標準」は OS のフォントなので、何も取りに行かない。つながらなければ、CSS の後ろの OS のフォントで出る。
-// CSS が参照する字のファイルは CSS と同じ CDN から読む(tauri.conf.json の CSP で style-src・font-src に cdn.jsdelivr.net を許している)
-const CDN = 'https://cdn.jsdelivr.net/npm'
+// 書体。取得したファイルはアプリのデータフォルダに置き(src-tauri/src/fonts.rs)、次の起動からは取りに行かない。
+// 既定の「Windows 標準」は OS の書体なので、何も取りに行かない。取得が終わるまでは、CSS の後ろの OS の書体で出る
+import { useEffect, useSyncExternalStore } from 'react'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { fontNeedsDownload, fontStatesOf, localFontCss, reduceFontStates, type FontEvent, type FontState, type FontStates, type FontStatus } from '../utils/fontDownload'
 
-/** 設定のキー(ui/settings.ts の FONT_FAMILIES)→ 読む CSS */
-const CSS: Record<string, string[]> = {
-  noto: [`${CDN}/@fontsource-variable/noto-sans-jp@5/index.css`],
-  'biz-ud': [`${CDN}/@fontsource/biz-udpgothic@5/400.css`, `${CDN}/@fontsource/biz-udpgothic@5/700.css`],
-  'm-plus-1p': [`${CDN}/@fontsource/m-plus-1p@5/400.css`, `${CDN}/@fontsource/m-plus-1p@5/700.css`],
-  'm-plus-2': [`${CDN}/@fontsource-variable/m-plus-2@5/index.css`],
-  'zen-kaku': [`${CDN}/@fontsource/zen-kaku-gothic-new@5/400.css`, `${CDN}/@fontsource/zen-kaku-gothic-new@5/700.css`],
-  'ibm-plex': [`${CDN}/@fontsource/ibm-plex-sans-jp@5/400.css`, `${CDN}/@fontsource/ibm-plex-sans-jp@5/700.css`],
-  murecho: [`${CDN}/@fontsource-variable/murecho@5/index.css`],
-  sawarabi: [`${CDN}/@fontsource/sawarabi-gothic@5/400.css`],
-  'm-plus-rounded': [`${CDN}/@fontsource/m-plus-rounded-1c@5/400.css`, `${CDN}/@fontsource/m-plus-rounded-1c@5/700.css`],
-  'zen-maru': [`${CDN}/@fontsource/zen-maru-gothic@5/400.css`, `${CDN}/@fontsource/zen-maru-gothic@5/700.css`],
-  'kosugi-maru': [`${CDN}/@fontsource/kosugi-maru@5/400.css`],
-  'noto-serif': [`${CDN}/@fontsource-variable/noto-serif-jp@5/index.css`],
-  'biz-ud-mincho': [`${CDN}/@fontsource/biz-udpmincho@5/400.css`, `${CDN}/@fontsource/biz-udpmincho@5/700.css`],
-  'shippori-mincho': [`${CDN}/@fontsource/shippori-mincho@5/400.css`, `${CDN}/@fontsource/shippori-mincho@5/700.css`],
-  'zen-old-mincho': [`${CDN}/@fontsource/zen-old-mincho@5/400.css`, `${CDN}/@fontsource/zen-old-mincho@5/700.css`],
+/** 取得の仕組みがあるか(web 版は false) */
+export const FONT_DOWNLOADS = true
+export const FONT_NOTE = '選ぶと取得を始め、終わると切り替わります。取得したものは次からすぐ使えます'
+
+const EVENT = 'font-download'
+
+let states: FontStates = {}
+const subscribers = new Set<() => void>()
+function setStates(next: FontStates) {
+  states = next
+  subscribers.forEach((f) => f())
 }
 
-const loaded = new Set<string>()
+/** このウィンドウで使う書体(取得が終わったら CSS を入れる) */
+const wanted = new Set<string>()
+const injected = new Map<string, Promise<boolean>>()
+/** 自動の取得は起動ごとに 1 回(設定が変わるたびに取りに行かない) */
+const autoTried = new Set<string>()
 
-/** 選んだフォントの CSS を(まだなら)読み込む。OS のフォントなら何もしない */
+let started = false
+function start() {
+  if (started) return
+  started = true
+  void listen<FontEvent>(EVENT, (e) => {
+    setStates(reduceFontStates(states, e.payload))
+    if (e.payload.state === 'done' && wanted.has(e.payload.key)) void injectFont(e.payload.key)
+  })
+  void invoke<FontStatus>('font_status').then((status) => setStates({ ...fontStatesOf(status), ...states }))
+}
+
+/** 取得済みなら CSS を入れる。なければ false */
+function injectFont(key: string): Promise<boolean> {
+  const inFlight = injected.get(key)
+  if (inFlight) return inFlight
+  const p = invoke<{ css: string; dir: string } | null>('font_css', { key }).then((font) => {
+    if (!font) {
+      injected.delete(key)
+      return false
+    }
+    const style = document.createElement('style')
+    style.dataset.font = key
+    style.textContent = localFontCss(font.css, font.dir, convertFileSrc)
+    document.head.appendChild(style)
+    return true
+  })
+  injected.set(key, p)
+  p.catch(() => injected.delete(key))
+  return p
+}
+
+/** 選んである書体を使えるようにする。取得済みでなければ裏で取りに行く(切り替わるのではなく、選んである書体が出るようになる) */
 export function ensureFont(key: string): void {
-  const urls = CSS[key]
-  if (!urls || loaded.has(key) || typeof document === 'undefined') return
-  loaded.add(key)
-  for (const href of urls) {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = href
-    document.head.appendChild(link)
+  if (!fontNeedsDownload(key) || typeof document === 'undefined') return
+  start()
+  wanted.add(key)
+  void injectFont(key).then((ok) => {
+    if (ok || autoTried.has(key)) return
+    autoTried.add(key)
+    void invoke('download_font', { key, switchTo: false }).catch(() => undefined)
+  })
+}
+
+/** 書体の行の状態。取得済みの行は、その書体で描けるように CSS を入れる */
+export function useFontStates(): FontStates {
+  const value = useSyncExternalStore(
+    (f) => {
+      start()
+      subscribers.add(f)
+      return () => subscribers.delete(f)
+    },
+    () => states,
+  )
+  useEffect(() => {
+    for (const [key, st] of Object.entries(value)) if (st.kind === 'ready') void injectFont(key).catch(() => undefined)
+  }, [value])
+  return value
+}
+
+/**
+ * 行で書体を選んだとき。使えるならすぐ useNow を呼び、なければ取得を始める(終わるとメインのウィンドウが切り替える)。
+ * 前に選んで取得中のものは、選び直されたので止める
+ */
+export function chooseFont(key: string, useNow: () => void): void {
+  const st: FontState = states[key] ?? { kind: 'none' }
+  if (!fontNeedsDownload(key) || st.kind === 'ready') {
+    for (const [other, s] of Object.entries(states)) if (other !== key && s.kind === 'running' && s.switchTo) cancelFontDownload(other)
+    useNow()
+    return
   }
+  setStates({ ...states, [key]: { kind: 'running', done: 0, total: 0, switchTo: true } })
+  void invoke('download_font', { key, switchTo: true }).catch((e: unknown) =>
+    setStates({ ...states, [key]: { kind: 'failed', error: e instanceof Error ? e.message : String(e) } }),
+  )
+}
+
+export function cancelFontDownload(key: string): void {
+  void invoke('cancel_font_download', { key }).catch(() => undefined)
+}
+
+/** 選んだ書体の取得が終わったとき(メインのウィンドウだけが受けて、設定を変える) */
+export function onFontSwitch(cb: (key: string) => void): Promise<UnlistenFn> {
+  return listen<FontEvent>(EVENT, (e) => {
+    if (e.payload.state === 'done' && e.payload.switchTo) void injectFont(e.payload.key).then(() => cb(e.payload.key))
+  })
 }

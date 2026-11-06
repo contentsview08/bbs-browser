@@ -1068,6 +1068,24 @@ html[data-platform='mobile'] .card-thread {
 html[data-platform='mobile'] .bar-zoom {
   zoom: var(--bar-zoom, 1);
 }
+/* スマホ: 文字を小さくしても押せるように、帯のボタンの押せる所は 40px を下回らせない(見た目はそのまま) */
+html[data-platform='mobile'] .bar-zoom button:not(.absolute) {
+  position: relative;
+}
+html[data-platform='mobile'] .bar-zoom button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, calc(40px / var(--bar-zoom, 1)));
+  height: max(100%, calc(40px / var(--bar-zoom, 1)));
+  transform: translate(-50%, -50%);
+}
+/* スマホ: 帯に付いた丸いボタンは、文字を小さくしても 44px より小さくしない */
+html[data-platform='mobile'] .bar-fab {
+  min-width: calc(44px / var(--bar-zoom, 1));
+  min-height: calc(44px / var(--bar-zoom, 1));
+}
 
 
 /* 役目ごとに色を分ける(未読・自分・主・新着が同じ色に寄ると見分けにくい)。

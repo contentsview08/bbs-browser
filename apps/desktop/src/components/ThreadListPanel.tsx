@@ -1205,7 +1205,7 @@ export default function ThreadListPanel(props: Props) {
             <button
               type="button"
               onClick={props.onNewThread}
-              className="absolute right-4 bottom-full mb-3 w-14 h-14 rounded-full shadow-lg flex items-center justify-center"
+              className="bar-fab absolute right-4 bottom-full mb-3 w-14 h-14 rounded-full shadow-lg flex items-center justify-center"
               style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
               title="スレを立てる"
             >

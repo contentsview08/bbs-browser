@@ -2258,7 +2258,7 @@ export default function ThreadView(props: Props) {
         type="button"
         onClick={() => jumpToBottom()}
         title="いちばん下へ"
-        className={`absolute z-20 ${isMobile ? 'w-10 h-10 rounded-xl' : 'w-11 h-11 rounded-full'} flex items-center justify-center bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
+        className={`absolute z-20 ${isMobile ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-xl' : 'w-11 h-11 rounded-full'} flex items-center justify-center bg-c-surface border border-c-border shadow-lg text-c-text-body hover:text-c-accent hover:border-c-accent transition-all duration-200 ${
           showJump ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
         }`}
         // ミニマップを出しているときは、その左に置く。スマホでフッターが出ているときは、その上に置く

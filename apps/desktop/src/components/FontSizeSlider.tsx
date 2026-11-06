@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
-import { FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, ROOT_FONT_SIZE, applyCssVar, baseFontPx, contentFontPx, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { BAR_PX_MIN, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, FOOTER_PX_MAX, HEADER_PX_MAX, LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PAD_PX_MAX, ROOT_FONT_SIZE, SCREEN_PX_RANGE, applyCssVar, baseFontPx, contentFontPx, scaledPxRange, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
 import { broadcast, toolKindOfThisWindow } from '../host/crossWindow'
 
@@ -198,6 +198,7 @@ export function BaseFontSlider(props: { settings: AppSettings; update: UpdateSet
       label="基本の文字(メニュー・ボタン・ポップアップ)"
       value={baseFontPx(s)}
       base={baseFontPx(s)}
+      {...SCREEN_PX_RANGE}
       fixedSize={props.fixedSize}
       preview={(px) => {
         setCssVar(ROOT_FONT_SIZE, `${px}px`)
@@ -230,7 +231,7 @@ export function ListFontSliders(props: { settings: AppSettings; update: UpdateSe
         unset={-1}
         base={cssPx('--thread-card-padding-y', 8)}
         min={0}
-        max={24}
+        max={PAD_PX_MAX}
         icons={['density_small', 'density_large']}
         preview={(px) => {
           setCssVar('--list-row-pad', `${px / 16}rem`)
@@ -269,8 +270,8 @@ export function PostFontSliders(props: { settings: AppSettings; update: UpdateSe
         label="レスの本文の行間"
         value={s.postLineHeight}
         base={1.625}
-        min={1}
-        max={2.4}
+        min={LINE_HEIGHT_MIN}
+        max={LINE_HEIGHT_MAX}
         step={0.05}
         format={(v) => `${v.toFixed(2)} 倍`}
         icons={['format_line_spacing', 'format_line_spacing']}
@@ -284,7 +285,7 @@ export function PostFontSliders(props: { settings: AppSettings; update: UpdateSe
         unset={-1}
         base={cssPx('--post-padding-y', 6)}
         min={0}
-        max={24}
+        max={PAD_PX_MAX}
         icons={['density_small', 'density_large']}
         preview={(px) => setCssVar('--post-pad', `${px}px`)}
         onCommit={(px) => update('postPadPx', px)}
@@ -361,8 +362,8 @@ export function BarSliders(props: { settings: AppSettings; update: UpdateSetting
         label="ヘッダーの高さ"
         value={s.headerPx}
         base={72}
-        min={44}
-        max={120}
+        min={BAR_PX_MIN}
+        max={HEADER_PX_MAX}
         icons={['vertical_align_center', 'height']}
         preview={(px) => setCssVar('--header-height', `${px}px`)}
         onCommit={(px) => update('headerPx', px)}
@@ -372,8 +373,8 @@ export function BarSliders(props: { settings: AppSettings; update: UpdateSetting
         label="フッターの高さ"
         value={s.footerPx}
         base={64}
-        min={44}
-        max={110}
+        min={BAR_PX_MIN}
+        max={FOOTER_PX_MAX}
         icons={['vertical_align_center', 'height']}
         preview={(px) => setCssVar('--footer-bar-h', `${px}px`)}
         onCommit={(px) => update('footerPx', px)}
@@ -383,6 +384,8 @@ export function BarSliders(props: { settings: AppSettings; update: UpdateSetting
         label="ヘッダー・フッターの文字"
         value={s.barFontPx}
         base={base}
+        {...scaledPxRange(base)}
+        format={(px) => `${Math.round((px / base) * 100)}%`}
         preview={(px) => setCssVar('--bar-zoom', String(px / base))}
         onCommit={(px) => update('barFontPx', px)}
         resettable

@@ -66,7 +66,7 @@ import { canCheckUpdate, compareVersions, fetchLatestRelease, runAutoUpdate, typ
 import { MouseGesturePieOverlay } from './components/MouseGesturePie'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName, mouseActionName } from './utils/gestures'
-import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, COLOR_SCHEMES, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, POST_STYLES, ROOT_FONT_SIZE, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ListFilter, type ListTabKey, type ReplyLayout, type SavedTab, type StoredNotification, type UpdateSetting } from './ui/settings'
+import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, COLOR_SCHEMES, FONT_PX_KEY, SCREEN_PX_RANGE, POST_STYLES, ROOT_FONT_SIZE, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ListFilter, type ListTabKey, type ReplyLayout, type SavedTab, type StoredNotification, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -1527,7 +1527,7 @@ export default function App() {
         return true
       case 'zoomIn':
       case 'zoomOut':
-        updateSetting(FONT_PX_KEY, Math.min(FONT_PX_MAX, Math.max(FONT_PX_MIN, baseFontPx(settings) + (action === 'zoomIn' ? 1 : -1))))
+        updateSetting(FONT_PX_KEY, Math.min(SCREEN_PX_RANGE.max, Math.max(SCREEN_PX_RANGE.min, baseFontPx(settings) + (action === 'zoomIn' ? 1 : -1))))
         return true
       case 'help':
         setKeyHelpOpen(true)

@@ -7,7 +7,12 @@ import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCu
 /** 色選びで動かし終えてから、設定に書くまで待つ時間 */
 const COLOR_COMMIT_MS = 150
 
-export default function CustomSchemeEditor(props: { settings: AppSettings; update: UpdateSetting }) {
+export default function CustomSchemeEditor(props: {
+  settings: AppSettings
+  update: UpdateSetting
+  /** スクロールしても見本を上に残す(PC。色を変えながら見るため) */
+  stickySample?: boolean
+}) {
   const { settings: s, update } = props
   const now = effectiveScheme(s)
   // まだ作っていなければ、今の配色(自分の配色でなければ)から 6 色を写して始める
@@ -39,7 +44,7 @@ export default function CustomSchemeEditor(props: { settings: AppSettings; updat
   return (
     <div className="flex flex-col">
       {/* 見本: 上の帯・スレ一覧の行(読んだ・まだ開いていない)・レス・書き込み欄を、いま作っている色で小さく描く */}
-      <div className="m-4 rounded-lg overflow-hidden border border-c-border" style={{ ...(vars as React.CSSProperties), background: 'var(--c-base)' }}>
+      <div className={`m-4 rounded-lg overflow-hidden border border-c-border ${props.stickySample ? '[@media(min-height:640px)]:sticky [@media(min-height:640px)]:-top-5 z-10' : ''}`} style={{ ...(vars as React.CSSProperties), background: 'var(--c-base)' }}>
         <div className="flex items-center px-3 py-2.5" style={{ background: 'var(--c-header-footer)' }}>
           <span className="flex-1 font-bold text-[15px]" style={{ color: 'var(--c-text-strong)' }}>
             ニュー速

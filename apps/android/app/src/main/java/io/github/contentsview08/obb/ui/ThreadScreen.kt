@@ -184,9 +184,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
     fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
     var fontDialog by remember { mutableStateOf(false) }
-    var titleSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
-    var saveSheet by remember { mutableStateOf(false) }
     val safeName = remember(page.title) { page.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60) }
     val saveText = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")) { uri -> if (uri != null) vm.saveThread(page, uri, html = false) }
     val saveHtml = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/html")) { uri -> if (uri != null) vm.saveThread(page, uri, html = true) }
@@ -268,16 +266,26 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     LaunchedEffect(page, index.posts.isNotEmpty()) {
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
-        scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
-        // 書き込み履歴・画像の「貼ったレス」から開いたときは、そのレスへ飛んで光らせる
-        page.jumpNo?.let { no ->
+        // レスへ飛ぶときは、ふだんの開く位置を読んだことにしない
+        val jumping = page.jumpNo != null
+        ctl.keepJump = jumping
+        if (jumping) scroller.open(null, "top") else scroller.open(vm.position(page.summary.id), vm.prefs.openPosition)
+        if (!jumping) reportRead(ctl, scroller, vm, page)
+    }
+    // 飛ぶ先のレスは新着の取得で届くことがあるので、取り終えるまで待つ
+    val fetched = page.loaded && !page.loading
+    LaunchedEffect(page, page.jumpNo, ctl.positioned, index.posts.size, fetched) {
+        val no = page.jumpNo ?: return@LaunchedEffect
+        if (!ctl.positioned) return@LaunchedEffect
+        if (index.posts.any { it.no == no }) {
+            scroller.toUnreadNow(no)
+            ctl.jumpFlash = no to System.nanoTime()
             page.jumpNo = null
-            if (index.posts.any { it.no == no }) {
-                scroller.toUnreadNow(no)
-                ctl.jumpFlash = no to System.nanoTime()
-            }
+            reportRead(ctl, scroller, vm, page)
+        } else if (fetched) {
+            page.jumpNo = null
+            vm.toast = "$no 番のレスはありません"
         }
-        reportRead(ctl, scroller, vm, page)
     }
     // 一覧へ戻って「進む」で開き直したとき: 一番下まで読んでいたなら一番下へ(戻る前と同じ所から続けて読めるように)
     LaunchedEffect(page) {
@@ -288,6 +296,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
     }
     LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew) }
+    // grew のあとに外す(同じ組み立てで新着と取得の終わりが届いたときも、新着で位置を動かさないように)
+    LaunchedEffect(fetched) { if (fetched) ctl.keepJump = false }
     LaunchedEffect(listState) {
         snapshotFlow { Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, listState.layoutInfo.totalItemsCount) }
             .collectLatest {
@@ -510,13 +520,20 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     // キーボードが出たら、スレ表示ごと縮め、本文をキーボードの高さだけ送る。下のレスが隠れずに上がるように
     val imeInsets = androidx.compose.foundation.layout.WindowInsets.ime
-    var lastIme by remember { mutableIntStateOf(0) }
     // 高さはキーボードの動きの間ずっと変わるので、組み立ての外で見る
     LaunchedEffect(listState, density) {
+        // 開いたときに残っているキーボード(URL の入力など)は、ここで送った分ではないので、引っ込んでも本文を動かさない
+        var lastIme = imeInsets.getBottom(density)
+        var sent = 0f
         snapshotFlow { imeInsets.getBottom(density) }.collect { ime ->
             val d = ime - lastIme
             lastIme = ime
-            if (d != 0) runCatching { listState.scrollBy(d.toFloat()) }
+            if (d > 0) runCatching { sent += listState.scrollBy(d.toFloat()) }
+            else if (d < 0 && sent > 0f) {
+                val back = minOf(-d.toFloat(), sent)
+                sent -= back
+                runCatching { listState.scrollBy(-back) }
+            }
         }
     }
     Box(
@@ -533,9 +550,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         val e = awaitPointerEvent(PointerEventPass.Initial)
                         if (e.changes.count { it.pressed } >= 2) {
                             acc *= e.calculateZoom()
-                            val v = ((start * acc).coerceIn(0.8f, 1.4f) * 20).roundToInt() / 20f
+                            val px = fontSizeOf(start * acc, 15)
+                            val v = scaleOf(px, 15)
                             if (v != vm.prefs.bodyScale) { vm.prefs.bodyScale = v; Haptics.tick(view) }
-                            pinchLabel = "本文 ${(v * 100).roundToInt()}%"
+                            pinchLabel = "本文 $px"
                             e.changes.forEach { it.consume() }
                         }
                     } while (e.changes.any { it.pressed })
@@ -604,11 +622,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                     Text(next.second.title, color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 Spacer(Modifier.width(8.dp))
-                                Text(
-                                    if (next.third > 999) "+999+" else "+${next.third}",
-                                    Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 1.dp),
-                                    color = Palette.unreadText, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                )
+                                Badge(badgeCount(next.third), Palette.unread, Palette.unreadText)
                             }
                         }
                         if (ended && filter == null && query.isBlank()) item(key = "next") {
@@ -648,7 +662,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (searching) {
                     SearchBar(query, { query = it }, "レスを探す(本文・名前・ID)") { searching = false; query = "" }
                 } else {
-                    HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { titleSheet = true }) {
+                    HeaderBar(remember(page.title) { page.title.replace(TITLE_THREAD_NO, "") }, onNav = { vm.drawerOpen = true }, onTitle = { menu = true }) {
                         BarIcon(Icons.Filled.Search, "探す") { searching = true }
                         MoreButton { menu = true }
                     }
@@ -704,63 +718,52 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { postRow(it, null, false) }
     }
 
+    // ヘッダーのスレタイと ︙ は同じメニュー
     if (menu) {
         MenuSheet(
             listOf(
                 listOf(
                     favoriteItem(),
+                    MenuItem("更新", Icons.Filled.Refresh) { refresh() },
+                    MenuItem("レス検索", Icons.Filled.Search) { searching = true; bars.show() },
+                    MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person) { filter = if (filter == Filter.OWN) null else Filter.OWN },
                     MenuItem("画像一覧", Icons.Filled.PhotoLibrary) { gallery = true },
                     MenuItem("次スレを探す", Icons.Filled.SkipNext) { vm.findNext(page); nextSheet = true },
-                    MenuItem("レス検索", Icons.Filled.Search) { searching = true; bars.show() },
-                    MenuItem("板に戻る", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
                 ),
                 listOf(
+                    MenuItem("板に戻る", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                     MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
-                    MenuItem("表示スタイル", Icons.Filled.Palette) { styleSheet = true },
-                    MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { fontDialog = true },
                 ),
                 listOf(
-                    MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
+                    styleMenuItem(
+                        vm.prefs, onTheme = { styleSheet = true }, onSize = { fontDialog = true },
+                        extra = listOf(MenuItem("名前欄を目立たなくする", Icons.Filled.Person, checked = vm.prefs.nameSubtle) { vm.prefs.nameSubtle = !vm.prefs.nameSubtle }),
+                    ),
+                    MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
+                        MenuItem("スレタイをコピー", Icons.Filled.ContentCopy) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
+                        MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
+                        MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy) { copyText(context, "${page.title}\n${TwoCh.webUrl(page.summary)}"); vm.toast = "スレタイと URL をコピーしました" },
+                    )) {},
+                    MenuItem("スレを保存", Icons.Filled.Save, children = listOf(
+                        MenuItem("HTML で保存", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
+                        MenuItem("テキストで保存", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
+                    )) {},
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, TwoCh.webUrl(page.summary), false) },
-                    MenuItem("スレを保存(HTML・テキスト)", Icons.Filled.Save) { saveSheet = true },
-                    MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person) { filter = if (filter == Filter.OWN) null else Filter.OWN },
-                    MenuItem("更新", Icons.Filled.Refresh) { refresh() },
                 ),
-                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() }),
+                listOf(
+                    MenuItem("NG", Icons.Filled.Block, children = listOf(
+                        MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("title", page.title)) },
+                    )) {},
+                    MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() },
+                ),
             ),
+            header = {
+                val count = index.posts.size
+                val heat = page.summary.createdAt?.let { " ・ 勢い ${momentumText(momentumOf(count, it, System.currentTimeMillis()))}" }.orEmpty()
+                MenuInfo(page.title.ifEmpty { page.summary.key }, "${count}レス$heat")
+            },
         ) { menu = false }
-    }
-    if (saveSheet) {
-        MenuSheet(
-            listOf(listOf(
-                MenuItem("HTML で保存", Icons.Filled.Save) { saveHtml.launch("$safeName.html") },
-                MenuItem("テキストで保存", Icons.Filled.Save) { saveText.launch("$safeName.txt") },
-            )),
-            MenuAt.Center,
-        ) { saveSheet = false }
-    }
-    if (titleSheet) {
-        MenuSheet(
-            listOf(
-                listOf(
-                    MenuItem("板を開く", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
-                    favoriteItem(),
-                ),
-                listOf(
-                    MenuItem("スレタイをコピー", Icons.Filled.ContentCopy) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
-                    MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
-                    MenuItem("スレタイと URL をコピー", Icons.Filled.ContentCopy) { copyText(context, "${page.title}\n${TwoCh.webUrl(page.summary)}"); vm.toast = "スレタイと URL をコピーしました" },
-                    MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("title", page.title)) },
-                ),
-                listOf(
-                    MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
-                    MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, TwoCh.webUrl(page.summary), false) },
-                ),
-                listOf(MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() }),
-            ),
-            MenuAt.TopStart,
-        ) { titleSheet = false }
     }
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
     if (styleSheet) StyleSheet(vm.prefs) { styleSheet = false }
@@ -866,10 +869,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     if (fontDialog) SizeDialog({ fontDialog = false }) {
         val pr = vm.prefs
-        SizeSlider("レスの本文", pr.bodyScale, 0.8f..1.4f, 11, "${percent(pr.bodyScale)}%", 1f) { pr.bodyScale = snapTo(it, 20) }
-        SizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 0.8f..1.4f, 11, "${percent(pr.postHeadScale)}%", 1f) { pr.postHeadScale = snapTo(it, 20) }
-        SizeSlider("レスの本文の行間", pr.lineHeight, 1.2f..1.9f, 13, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = snapTo(it, 20) }
-        SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..24f, 23, "${pr.postPad}dp", 8f) { pr.postPad = snapInt(it) }
+        FontSizeSlider("レスの本文", pr.bodyScale, 15) { pr.bodyScale = it }
+        FontSizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 12) { pr.postHeadScale = it }
+        SizeSlider("レスの本文の行間", pr.lineHeight, 1.0f..3.0f, 39, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = if (it == 1.47f) it else snapTo(it, 20) }
+        SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..40f, 39, "${pr.postPad}dp", 8f) { pr.postPad = snapInt(it) }
         BarSliders(pr)
     }
 

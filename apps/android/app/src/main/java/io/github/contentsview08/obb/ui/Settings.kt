@@ -91,7 +91,7 @@ import io.github.contentsview08.obb.data.parseLicenses
 import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
-    "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
+    "theme" to "テーマと色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
     "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "サイトごとの設定", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア",
 )
@@ -115,7 +115,14 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
         viaSearch = viaSearch && sub != null
     }
     BackHandler(enabled = sub != null) { goBack() }
-    Column(Modifier.fillMaxSize().background(Palette.base)) {
+    // 大項目の画面でだけ、右へなぞるとメニュー。中の画面ではスライダーの操作とぶつかるので受けない
+    val swipe = rememberSwipeState()
+    val drawerGesture = mapOf("right" to SwipeAction("メニュー") { vm.drawerOpen = true })
+    Column(
+        Modifier.fillMaxSize().background(Palette.base).then(
+            if (sub == null && vm.prefs.gesturesEnabled) Modifier.swipeGestures(swipe, drawerGesture, sensitivity = vm.prefs.gestureSensitivity) else Modifier,
+        ),
+    ) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
         else HeaderBar(TITLES[sub] ?: "", onNav = { goBack() }, navIsBack = true)
         HorizontalDivider(color = Palette.border)
@@ -203,7 +210,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("見た目") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "テーマと色", value = if (p.followSystem) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
-        NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字と余白", value = "${percent(p.fontScale)}%") { open("text") }
+        NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字", value = io.github.contentsview08.obb.data.Fonts.CHOICES.firstOrNull { it.key == p.font }?.name ?: "端末の標準") { open("text") }
     }
     Group("画面") {
         NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード・ログ") { open("list") }
@@ -298,24 +305,14 @@ private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String)
 @Composable
 private fun TextPage(vm: AppViewModel) {
     val p = vm.prefs
-    Group("字", note = "端末の標準以外は、選んだときに Google Fonts から 1 回だけ取ります(Wi-Fi のときがおすすめ)") {
+    Group("字", note = "端末の標準以外は、選んだときに Google Fonts から 1 回だけ取り、取り終えてから切り替わります(Wi-Fi のときがおすすめ)") {
         val context = androidx.compose.ui.platform.LocalContext.current
         val f = io.github.contentsview08.obb.data.Fonts
         // ファイルがあるかの確かめは、スライダーを動かすたびに走らせない(字を取り終えた・消したときだけ調べ直す)
         var fontsDeleted by remember { androidx.compose.runtime.mutableIntStateOf(0) }
         val downloaded = remember(p.font, f.loading, fontsDeleted) { f.CHOICES.map { it.key }.filter { f.isDownloaded(context, it) }.toSet() }
-        ChoiceRow(
-            "字", p.font,
-            listOf("" to "端末の標準") + f.CHOICES.map { it.key to "${it.name}${if (it.key in downloaded) "" else "(${it.desc.substringAfter('(').trimEnd(')')})"}" },
-        ) { p.font = it }
-        f.loading?.let { InfoRow("字を取っています", f.CHOICES.firstOrNull { c -> c.key == it }?.name ?: "") }
-        f.error?.let { InfoRow("うまくいきませんでした", it) }
+        FontRow(p.font, downloaded) { key -> f.pick(context, key) { p.font = it } }
         if (f.CHOICES.any { it.key != p.font && it.key in downloaded }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.font); fontsDeleted++ }
-    }
-    Group("文字の大きさ") {
-        SliderRow("画面全体", p.fontScale, 0.85f..1.3f, steps = 8, label = "${percent(p.fontScale)}%") { p.fontScale = snapTo(it, 20) }
-        SliderRow("レスの本文", p.bodyScale, 0.8f..1.4f, steps = 11, label = "${percent(p.bodyScale)}%") { p.bodyScale = snapTo(it, 20) }
-        if (LocalAdvanced.current) SliderRow("レスの本文の行間", p.lineHeight, 1.2f..1.9f, steps = 13, label = "%.2f".format(p.lineHeight)) { p.lineHeight = snapTo(it, 20) }
     }
     Group("見本") { SamplePosts(vm) }
 }
@@ -374,7 +371,6 @@ private fun ThreadPage(vm: AppViewModel) {
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
         ChoiceRow("ID の位置", p.idPosition, listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")) { p.idPosition = it }
-        SwitchRow("名前欄を目立たなくする", p.nameSubtle, desc = "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます") { p.nameSubtle = it }
         SwitchRow("ワッチョイを短く出す", p.watchoiShort, desc = "「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)") { p.watchoiShort = it }
         SwitchRow("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi, desc = "Discord 風・LINE 風のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます") { p.iconFromWatchoi = it }
         ChoiceRow(
@@ -618,7 +614,7 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
             .background(if (on) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
         color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp, maxLines = 1,
     )
-    androidx.compose.ui.window.Popup(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+    FullWindow(onDismiss = onDismiss) {
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { onDismiss() },
             contentAlignment = Alignment.BottomCenter,
@@ -989,6 +985,74 @@ private fun SwitchRow(label: String, checked: Boolean, desc: String? = null, onC
 }
 
 /** 選ぶ行。押すと選べるものの一覧が出る */
+/** 取っている字の進み具合のバー。全体の大きさが分からない間は流れる形 */
+@Composable
+private fun FontProgress(modifier: Modifier = Modifier) {
+    val done = io.github.contentsview08.obb.data.Fonts.progress
+    if (done != null) androidx.compose.material3.LinearProgressIndicator({ done }, modifier.fillMaxWidth(), color = Palette.accent, trackColor = Palette.border)
+    else androidx.compose.material3.LinearProgressIndicator(modifier.fillMaxWidth(), color = Palette.accent, trackColor = Palette.border)
+}
+
+private fun fontProgressText() = io.github.contentsview08.obb.data.Fonts.progress?.let { "取得中 ${percent(it)}%" } ?: "取得中"
+
+/**
+ * 字を選ぶ行。取り終えるまで今の字のまま(取り終えると自動で切り替わる)。
+ * 取っている行を押すと取り消す。別の字を選ぶと、取っている分はやめて選び直した字にする。失敗したら理由を出し、今の字のまま
+ */
+@Composable
+private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> Unit) {
+    val f = io.github.contentsview08.obb.data.Fonts
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("字", Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
+            Text(f.CHOICES.firstOrNull { it.key == value }?.name ?: "端末の標準", color = Palette.textMuted, fontSize = 14.sp, maxLines = 1)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textMuted)
+        }
+        f.loading?.let { key ->
+            Text("${f.CHOICES.firstOrNull { it.key == key }?.name ?: key}を${fontProgressText()}(取り終えると切り替わります)", Modifier.padding(top = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
+            FontProgress(Modifier.padding(top = 4.dp))
+        }
+        f.error?.let { Text(it, Modifier.padding(top = 4.dp), color = Palette.markDanger, fontSize = 12.sp) }
+    }
+    if (open) AlertDialog(
+        onDismissRequest = { open = false },
+        title = { Text("字") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                for ((k, name) in listOf("" to "端末の標準") + f.CHOICES.map { it.key to it.name }) {
+                    val on = k == value
+                    val loading = f.loading == k
+                    val failed = f.errorKey == k
+                    val size = f.CHOICES.firstOrNull { it.key == k }?.takeIf { k !in downloaded }?.desc?.substringAfter('(')?.trimEnd(')')
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (on) Palette.accentWash else Color.Transparent)
+                            .clickable {
+                                onPick(k)
+                                // 取り始めたときは、進み具合が見えるように開いたままにする
+                                if (k in downloaded || k.isEmpty()) open = false
+                            }.heightIn(min = 46.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(name, Modifier.weight(1f), color = if (on) Palette.accent else if (loading) Palette.textMuted else Palette.textBody, fontSize = 15.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                            if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(18.dp))
+                            else if (loading) Icon(Icons.Filled.Close, "取り消す", tint = Palette.textMuted, modifier = Modifier.size(18.dp))
+                            else if (size != null) Text(size, color = Palette.textMuted, fontSize = 12.sp)
+                        }
+                        if (loading) {
+                            FontProgress(Modifier.padding(top = 6.dp))
+                            Text("${fontProgressText()}。取り終えるまで使えません(押すと取り消し)", Modifier.padding(top = 4.dp), color = Palette.textMuted, fontSize = 12.sp)
+                        }
+                        if (failed) Text("${f.error.orEmpty()}。押すともう一度取ります", Modifier.padding(top = 4.dp), color = Palette.markDanger, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { open = false }) { Text("閉じる") } },
+    )
+}
+
 @Composable
 private fun ChoiceRow(label: String, value: String, options: List<Pair<String, String>>, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }

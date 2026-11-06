@@ -18,6 +18,23 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** 動いている 1 つの仕事の取り消しを受ける。取り消しは画面のスレッドからも呼ばれるので、待たない処理だけを渡す */
+internal class DownloadRun {
+    private var action: (() -> Unit)? = null
+    @Volatile var canceled = false
+        private set
+
+    fun onCancel(f: () -> Unit) {
+        synchronized(this) { if (!canceled) { action = f; return } }
+        f()
+    }
+
+    fun cancel() {
+        val f = synchronized(this) { canceled = true; action }
+        f?.invoke()
+    }
+}
+
 /**
  * 1 つの鍵の仕事を 1 回だけ、サムネイルかビューアーの枠で動かす。サムネイルの枠で待っている間にビューアーから頼まれたら、
  * ビューアーの枠にも並べ、先に順番が来たほうが動かす(順番が来ても動かしたあとなら、すぐ枠を返す)
@@ -26,6 +43,7 @@ internal class DownloadLanes<T>(private val scope: CoroutineScope, thumbs: Int, 
     private class Entry<T>(var viewer: Boolean) {
         val result = CompletableDeferred<T>()
         val taken = AtomicBoolean(false)
+        val run = DownloadRun()
     }
 
     private val thumbSlots = Semaphore(thumbs)
@@ -34,7 +52,7 @@ internal class DownloadLanes<T>(private val scope: CoroutineScope, thumbs: Int, 
 
     fun isRunning(key: String) = synchronized(entries) { key in entries }
 
-    fun start(key: String, viewer: Boolean, work: suspend () -> T): CompletableDeferred<T> = synchronized(entries) {
+    fun start(key: String, viewer: Boolean, work: suspend (DownloadRun) -> T): CompletableDeferred<T> = synchronized(entries) {
         val running = entries[key]
         if (running == null) {
             Entry<T>(viewer).also { entries[key] = it; line(key, it, viewer, work) }.result
@@ -44,12 +62,22 @@ internal class DownloadLanes<T>(private val scope: CoroutineScope, thumbs: Int, 
         }
     }
 
-    private fun line(key: String, e: Entry<T>, viewer: Boolean, work: suspend () -> T) {
+    /** 待っている・動いている仕事をやめる。待っている人には value を返す。やめる仕事がなければ false */
+    fun cancel(key: String, value: T): Boolean {
+        val e = synchronized(entries) { entries.remove(key) } ?: return false
+        e.taken.set(true)
+        e.run.cancel()
+        e.result.complete(value)
+        return true
+    }
+
+    private fun line(key: String, e: Entry<T>, viewer: Boolean, work: suspend (DownloadRun) -> T) {
         scope.launch {
             (if (viewer) viewerSlots else thumbSlots).withPermit {
                 if (e.taken.compareAndSet(false, true)) {
-                    val r = work()
-                    synchronized(entries) { entries.remove(key) }
+                    val r = work(e.run)
+                    // 取り消したあとに頼み直された仕事を消さない
+                    synchronized(entries) { if (entries[key] === e) entries.remove(key) }
                     e.result.complete(r)
                 }
             }
@@ -71,6 +99,8 @@ object ImageStore {
         data class Loading(val read: Long, val total: Long) : State
         data class Done(val file: File) : State
         data class Failed(val message: String) : State
+        /** 長押しで取り消した。押すまで読み直さない */
+        data object Canceled : State
     }
 
     /** URL → 状態(書き換えは画面のスレッドで)。1 枚の進み具合でほかの画像の画面まで組み直さないよう、URL ごとに別の State に持つ */
@@ -120,11 +150,12 @@ object ImageStore {
 
     /**
      * 画像を頼む(画面に出たとき・押したとき)。手元にあればすぐ Done。viewer = true ならビューアーの枠で取る。
-     * 失敗していたら、もう一度取り直す
+     * 失敗していたら、もう一度取り直す。取り消したものは、ビューアーで開くか retry = true(押したとき)でだけ取り直す
      */
-    fun request(url: String, viewer: Boolean = false) {
+    fun request(url: String, viewer: Boolean = false, retry: Boolean = false) {
         cached(url)?.let { f -> if (stateOf(url) !is State.Done) cell(url).value = State.Done(f); return }
         val s = stateOf(url)
+        if (s is State.Canceled && !viewer && !retry) return
         if (s is State.Queued || s is State.Loading) {
             // サムネイルの順番待ちをビューアーの枠へ移す
             if (viewer) start(url, viewer = true)
@@ -134,6 +165,14 @@ object ImageStore {
         start(url, viewer)
     }
 
+    /** 待っている・取っている画像をやめる。画面のスレッドから呼ぶ */
+    fun cancel(url: String) {
+        val s = stateOf(url)
+        if (s !is State.Queued && s !is State.Loading) return
+        cell(url).value = State.Canceled
+        lanes.cancel(url, null)
+    }
+
     /** ファイルが取れるまで待つ(保存など)。取れなければ例外 */
     suspend fun get(url: String): File {
         cached(url)?.let { return it }
@@ -141,20 +180,23 @@ object ImageStore {
         return start(url, viewer = true).await() ?: error((stateOf(url) as? State.Failed)?.message ?: "取れませんでした")
     }
 
-    private fun start(url: String, viewer: Boolean): CompletableDeferred<File?> = lanes.start(url, viewer) { download(url) }
+    private fun start(url: String, viewer: Boolean): CompletableDeferred<File?> = lanes.start(url, viewer) { run -> download(url, run) }
 
-    private suspend fun setState(url: String, s: State) = withContext(Dispatchers.Main) { cell(url).value = s }
-
-    private suspend fun download(url: String): File? {
+    private suspend fun download(url: String, run: DownloadRun): File? {
+        // 取り消したあとの遅れた知らせで、頼み直した分の状態を上書きしない
+        suspend fun setState(s: State) = withContext(Dispatchers.Main) { if (!run.canceled) cell(url).value = s }
         val out = fileOf(url)
-        val part = File(dir, out.name + ".part")
+        // 取り消した分の後始末と、頼み直した分のファイルが重ならないように、回ごとに別の名前にする
+        val part = File(dir, "${out.name}.${System.nanoTime()}.part")
         return try {
             val req = Request.Builder().url(url).header("Accept", "image/*,*/*;q=0.8").build()
-            client.newCall(req).execute().use { res ->
+            val call = client.newCall(req)
+            run.onCancel { call.cancel() }
+            call.execute().use { res ->
                 if (!res.isSuccessful) error("HTTP ${res.code}")
                 val body = res.body ?: error("中身がありません")
                 val total = body.contentLength()
-                setState(url, State.Loading(0, total))
+                setState(State.Loading(0, total))
                 var read = 0L
                 var lastShown = 0L
                 body.byteStream().use { input ->
@@ -167,14 +209,15 @@ object ImageStore {
                             read += n
                             // 進み具合は 0.1 秒ごとに知らせる(細かすぎると画面が重くなる)
                             val now = System.currentTimeMillis()
-                            if (now - lastShown > 100) { lastShown = now; setState(url, State.Loading(read, total)) }
+                            if (now - lastShown > 100) { lastShown = now; setState(State.Loading(read, total)) }
                         }
                     }
                 }
                 if (read == 0L) error("中身がありません")
             }
+            if (run.canceled) { part.delete(); return null }
             if (!part.renameTo(out)) error("置けませんでした")
-            setState(url, State.Done(out))
+            setState(State.Done(out))
             out
         } catch (e: Exception) {
             part.delete()
@@ -184,7 +227,7 @@ object ImageStore {
                 is java.net.UnknownHostException -> "つながりませんでした"
                 else -> e.message ?: e.toString()
             }
-            setState(url, State.Failed(msg))
+            setState(State.Failed(msg))
             null
         }
     }

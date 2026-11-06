@@ -241,7 +241,7 @@ fun PostItem(
                     // track と onTextLayout は、ID・名前の長押しのメニューに要る
                     if (own || toOwn || idTopRight != null) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
-                    if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
+                    if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).coerceAtLeast(1f).em)
                     idLine()
                 }
                 media()
@@ -318,7 +318,7 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
  */
 @Composable
 fun AaZoom(r: RenderedPost, onDismiss: () -> Unit) {
-    androidx.compose.ui.window.Dialog(onDismiss, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+    FullWindow(onDismiss = onDismiss) {
         var scale by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
         var offset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
         Box(
@@ -363,11 +363,7 @@ private fun OwnChip(label: String, onSky: Boolean = false) {
     val isOwn = label == "自分"
     val color = if (isOwn) Palette.own else Palette.toOwn
     val wash = if (isOwn) Palette.ownWash else Palette.toOwnWash
-    Text(
-        label,
-        Modifier.border(1.dp, color, RoundedCornerShape(4.dp)).background(if (onSky) Color.White else wash, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
-        color = color, fontSize = 10.sp, lineHeight = 14.sp,
-    )
+    Badge(label, if (onSky) Color.White else wash, color, border = color)
 }
 
 /** BE のアイコン(カード・専ブラ風・まとめ風): 本文の上に、高さ 28dp にそろえて(元の絵は小さいので広げる)。取れなければ出さない */

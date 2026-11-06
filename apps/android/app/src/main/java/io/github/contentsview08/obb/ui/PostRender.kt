@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.PostIndex
@@ -192,7 +193,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         val isOp = o.highlightOp && opId != null && p.id == opId
         val header = if (isChatStyle(o.style)) compactHeader(p, name, replies, idCount, isOp, o, links) else buildAnnotatedString {
             // 番号(返信の数): 返信が多いほど暖色。返信があれば押すと返信を出す
-            val noStyle = SpanStyle(color = replyHeat ?: mutedC(o), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            val noStyle = SpanStyle(color = replyHeat ?: mutedC(o), fontWeight = FontWeight.Bold, fontSize = HEAD_NO)
             val noText = if (replies > 0) "${p.no} ($replies)" else "${p.no}"
             if (replies > 0) withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) { withStyle(noStyle) { append(noText) } }
             else withStyle(noStyle) { append(noText) }
@@ -288,7 +289,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         // ID を頭の外(右上・右下)に出すとき: 頭と同じ色・押せる形で別に作る
         if (p.id != null && o.idPosition != "header") rp.idText = buildAnnotatedString {
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                withStyle(SpanStyle(color = idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
+                withStyle(SpanStyle(color = idC(p.id, idCount, o), fontFamily = FontFamily.Monospace, fontSize = HEAD_SMALL, fontWeight = if (idCount >= 5) FontWeight.Bold else FontWeight.Normal)) {
                     append(displayId(p.id, o.idShort))
                     if (idCount >= 2) append("($idCount)")
                 }
@@ -313,14 +314,14 @@ fun shortUrl(url: String, max: Int = 36): String {
  */
 private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String, replies: Int, idCount: Int, isOp: Boolean, o: RenderOptions, links: PostLinks, showName: Boolean = true, showReplies: Boolean = true): AnnotatedString =
     buildAnnotatedString {
-        val small = SpanStyle(color = mutedC(o), fontSize = 11.sp)
+        val small = SpanStyle(color = mutedC(o), fontSize = HEAD_SMALL)
         // 返信の数は頭の一番左に。吹き出しも数と同じ色に。印と数の間では折り返さない
         if (replies > 0 && showReplies) {
             appendReplies(p, replies, o, links)
             append("  ")
         }
         if (showName) withLink(LinkAnnotation.Clickable("n:${p.no}", plain, links)) {
-            withStyle(SpanStyle(color = if (o.nameSubtle) mutedC(o) else nameC(o), fontWeight = FontWeight.Bold, fontSize = if (o.nameSubtle) 11.sp else 13.sp)) { append(name.ifEmpty { "名無し" }) }
+            withStyle(SpanStyle(color = if (o.nameSubtle) mutedC(o) else nameC(o), fontWeight = FontWeight.Bold, fontSize = if (o.nameSubtle) HEAD_SMALL else HEAD_NO)) { append(name.ifEmpty { "名無し" }) }
         }
         if (isOp) {
             append(" ")
@@ -336,7 +337,7 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
         if (p.id != null && o.idPosition == "header") {
             append("  ")
             withLink(LinkAnnotation.Clickable("i:${p.id}", plain, links)) {
-                withStyle(SpanStyle(color = idC(p.id, idCount, o), fontSize = 11.sp, fontFamily = FontFamily.Monospace)) {
+                withStyle(SpanStyle(color = idC(p.id, idCount, o), fontSize = HEAD_SMALL, fontFamily = FontFamily.Monospace)) {
                     append(displayId(p.id, o.idShort))
                     if (idCount >= 2) append("($idCount)")
                 }
@@ -344,6 +345,10 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
         }
         if (p.mail.isNotEmpty()) { append("  "); withStyle(small) { append("[${p.mail}]") } }
     }
+
+// 頭の中の字は頭の文字の大きさ(12 が基準)に合わせて変わるよう、比で書く
+private val HEAD_NO = (13f / 12f).em
+private val HEAD_SMALL = (11f / 12f).em
 
 /** 返信の数(吹き出しの印と数。多いほど暖色。押すと返信を出す) */
 private fun AnnotatedString.Builder.appendReplies(p: io.github.contentsview08.obb.bbs.Post, replies: Int, o: RenderOptions, links: PostLinks) {

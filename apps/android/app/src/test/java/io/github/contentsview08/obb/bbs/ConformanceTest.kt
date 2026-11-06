@@ -87,10 +87,11 @@ class ConformanceTest {
         // お知らせスレの判定に今の時刻を使うのは PC と同じ
         when (val r = UrlRoute.parse(c.getString("input"))) {
             null -> mapOf("kind" to "none")
-            is UrlRoute.Itest -> buildMap { put("kind", "itest"); put("domain", r.domain); put("board", r.board); r.key?.let { put("key", it) } }
+            // no の JSON の null は plain で "null" になる
+            is UrlRoute.Itest -> buildMap { put("kind", "itest"); put("domain", r.domain); put("board", r.board); r.key?.let { put("key", it) }; put("no", r.no ?: "null") }
             is UrlRoute.BoardPage -> mapOf("kind" to "board", "site" to siteName(r.site), "boardUrl" to r.boardUrl)
             is UrlRoute.Thread -> mapOf(
-                "kind" to "thread", "site" to siteName(r.site), "boardUrl" to r.thread.boardUrl, "key" to r.thread.key, "createdAtKnown" to (r.thread.createdAt != null),
+                "kind" to "thread", "site" to siteName(r.site), "boardUrl" to r.thread.boardUrl, "key" to r.thread.key, "createdAtKnown" to (r.thread.createdAt != null), "no" to (r.no ?: "null"),
             )
         }
     }
@@ -193,5 +194,8 @@ class ConformanceTest {
     @Test fun アプリの中で開けるスレの判定() {
         assertTrue(UrlRoute.isThreadUrl("https://itest.5ch.net/test/read.cgi/x/1700000000/"))
         assertEquals(false, UrlRoute.isThreadUrl("https://itest.5ch.net/subback/x"))
+        // サーバー名を探したあとも、レス番号を落とさない
+        val itest = UrlRoute.parse("https://itest.5ch.net/test/read.cgi/x/1700000000/5") as UrlRoute.Itest
+        assertEquals(5, (UrlRoute.parse(itest.realUrl("eagle.5ch.io")) as UrlRoute.Thread).no)
     }
 }

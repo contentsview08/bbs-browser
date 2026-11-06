@@ -68,8 +68,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.contentsview08.obb.bbs.Post
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -113,16 +111,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
         scope.launch { open.animateTo(0f, tween(180, easing = EASE)); onClose() }
     }
 
-    Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        // 暗さは自分で背景に描く。窓の暗さが残ると、閉じたあとに一瞬暗い画面が残る
-        val dialogView = androidx.compose.ui.platform.LocalView.current
-        androidx.compose.runtime.SideEffect {
-            (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
-                w.setDimAmount(0f)
-                w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                w.setWindowAnimations(0)
-            }
-        }
+    FullWindow(onDismiss = { close() }) {
         BackHandler(enabled = sheet) { sheet = false }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val h = constraints.maxHeight.toFloat()

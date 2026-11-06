@@ -22,6 +22,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -171,11 +177,11 @@ fun HeaderBar(
         // 長押しで、たどってきた画面の一覧(戻る先を選べる)
         val navLong = LocalNavLong.current
         Box(
-            Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            Modifier.size(barButtonSize(prefs.headerHeight).dp).clip(androidx.compose.foundation.shape.CircleShape)
                 .combinedClickable(onLongClick = navLong, onClick = onNav),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(if (navIsBack) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Menu, if (navIsBack) "戻る" else "メニュー", tint = Palette.textMuted, modifier = Modifier.size(28.dp))
+            Icon(if (navIsBack) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Menu, if (navIsBack) "戻る" else "メニュー", tint = Palette.textMuted, modifier = Modifier.size(minOf(28, prefs.headerHeight - 4).dp))
         }
         if (leading != null) {
             Spacer(Modifier.width(4.dp))
@@ -188,34 +194,87 @@ fun HeaderBar(
             title,
             Modifier.weight(1f).then(if (onTitle != null) Modifier.clickable(onClick = onTitle) else Modifier).padding(vertical = 4.dp),
             style = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontWeight = FontWeight.Bold, lineHeight = 1.25.em),
-            maxLines = 2, overflow = TextOverflow.Ellipsis,
+            // 帯を低くしたときは 1 行にして、帯からはみ出さないように
+            maxLines = if (prefs.headerHeight < 44) 1 else 2, overflow = TextOverflow.Ellipsis,
             autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = (size * 0.7f).sp, maxFontSize = size.sp, stepSize = 0.5.sp),
         )
         actions()
     }
 }
 
-/** 帯の右のボタン(︙ など)。押しやすいよう 48dp */
+/** 帯のボタンの大きさ。48dp まで帯に合わせる。低くしても、押せる範囲は Compose が 48dp まで広げる */
+fun barButtonSize(barHeight: Int): Int = minOf(48, barHeight)
+
+/** 帯の右のボタン(︙ など) */
 @Composable
 fun BarIcon(icon: ImageVector, label: String, tint: Color = Palette.textMuted, onClick: () -> Unit) {
-    IconButton(onClick = onClick) { Icon(icon, label, tint = tint, modifier = Modifier.size(26.dp)) }
+    val h = LocalPrefs.current.headerHeight
+    Box(
+        Modifier.size(barButtonSize(h).dp).clip(androidx.compose.foundation.shape.CircleShape).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, label, tint = tint, modifier = Modifier.size(minOf(26, h - 6).dp)) }
 }
 
 @Composable
 fun MoreButton(onClick: () -> Unit) = BarIcon(Icons.Filled.MoreVert, "その他", onClick = onClick)
 
 /** メニューの 1 行 */
-class MenuItem(val label: String, val icon: ImageVector, val danger: Boolean = false, /** あれば、押すと小項目の画面に切り替える */ val children: List<MenuItem>? = null, val onClick: () -> Unit)
+class MenuItem(val label: String, val icon: ImageVector, val danger: Boolean = false, /** あれば、押すと小項目の画面に切り替える */ val children: List<MenuItem>? = null, /** 今選んでいるものの印 */ val checked: Boolean = false, val onClick: () -> Unit)
+
+/**
+ * 画面全体を覆う窓(網掛けのあるメニュー・シート・全画面の画面はみなこれで開く)。
+ * Popup は開く瞬間の「キーボードを除いた高さ」で測られ、キーボードが引っ込むとその分だけ下が空く。
+ * Dialog の窓はキーボードの有無で大きさが変わらない。中に入力欄があるときのキーボードの分は、中身が imePadding で空ける
+ */
+@Composable
+fun FullWindow(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        // 暗さと出入りの動きは中身が描く
+        val view = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.SideEffect {
+            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+                w.setDimAmount(0f)
+                w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                w.setWindowAnimations(0)
+                w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            }
+        }
+        content()
+    }
+}
+
+/** ︙ の一番上の情報(スレタイ・板名は省略しない) */
+@Composable
+fun MenuInfo(title: String, detail: String) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(title, color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+        Text(detail, Modifier.padding(top = 2.dp), color = Palette.textMuted, fontSize = 12.sp)
+    }
+    HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
+}
+
+/** ︙ の「表示スタイル」とその小項目(スレ一覧・スレ表示で共通) */
+fun styleMenuItem(p: io.github.contentsview08.obb.data.Prefs, onTheme: () -> Unit, onSize: () -> Unit, extra: List<MenuItem> = emptyList()) =
+    MenuItem("表示スタイル", Icons.Filled.Palette, children = listOf(
+        MenuItem("テーマと差し色", Icons.Filled.ColorLens, onClick = onTheme),
+        MenuItem("レスの見た目", Icons.Filled.ViewAgenda, children = POST_STYLES.map { (k, name) ->
+            MenuItem(name, Icons.Filled.ViewAgenda, checked = p.postStyle == k) { p.postStyle = k }
+        }) {},
+        MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize, onClick = onSize),
+    ) + extra) {}
 
 /** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
 enum class MenuAt { TopEnd, TopStart, Center }
 
 /**
  * メニュー(︙ ・題・長押し)。押した所の近くにふわっと出る(右上の ︙ なら右上の角から広がる)。
- * groups の間に線を引く。危ない項目(削除)は赤く。外を押すか戻るで閉じる
+ * groups の間に線を引く。危ない項目(削除)は赤く。外を押すか戻るで閉じる。header は大項目の一番上に出す
  */
 @Composable
-fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismiss: () -> Unit) {
+fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, header: (@Composable () -> Unit)? = null, onDismiss: () -> Unit) {
     val show = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -228,13 +287,10 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
         MenuAt.TopStart -> androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
         MenuAt.Center -> androidx.compose.ui.graphics.TransformOrigin.Center
     }
-    /** 開いている小項目の親 */
-    var sub by remember { mutableStateOf<MenuItem?>(null) }
-    androidx.compose.ui.window.Popup(
-        // 戻るは、小項目を開いていれば元のメニューへ
-        onDismissRequest = { if (sub != null) sub = null else close() },
-        properties = androidx.compose.ui.window.PopupProperties(focusable = true),
-    ) {
+    /** 開いている小項目の親(大項目から順に) */
+    var path by remember { mutableStateOf<List<MenuItem>>(emptyList()) }
+    // 戻るは、小項目を開いていれば 1 つ上へ
+    FullWindow(onDismiss = { if (path.isNotEmpty()) path = path.dropLast(1) else close() }) {
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * show.value))
                 .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { close() },
@@ -243,7 +299,7 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
             Column(
                 Modifier
                     .align(when (at) { MenuAt.TopEnd -> Alignment.TopEnd; MenuAt.TopStart -> Alignment.TopStart; MenuAt.Center -> Alignment.Center })
-                    .statusBarsPadding()
+                    .statusBarsPadding().navigationBarsPadding()
                     .padding(top = if (at == MenuAt.Center) 0.dp else 52.dp, start = 10.dp, end = 10.dp)
                     .width(288.dp)
                     .graphicsLayer {
@@ -258,31 +314,34 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
             ) {
                 val itemRow = @Composable { it: MenuItem ->
                         Row(
-                            Modifier.fillMaxWidth().clickable { if (it.children != null) sub = it else { it.onClick(); onDismiss() } }.heightIn(min = 46.dp).padding(horizontal = 16.dp),
+                            Modifier.fillMaxWidth().clickable { if (it.children != null) path = path + it else { it.onClick(); onDismiss() } }.heightIn(min = 46.dp).padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             // アイコンは色を付けず控えめに(色が多いと、どれが大事か分からなくなる)。危ない項目だけ赤
                             Icon(it.icon, null, tint = if (it.danger) Palette.markDanger else Palette.textMuted, modifier = Modifier.size(21.dp))
-                            Text(it.label, color = if (it.danger) Palette.markDanger else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(it.label, Modifier.weight(1f), color = if (it.danger) Palette.markDanger else Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (it.children != null) Icon(Icons.Filled.ChevronRight, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
+                            if (it.checked) Icon(Icons.Filled.Check, "選んでいます", tint = Palette.accent, modifier = Modifier.size(18.dp))
                         }
                 }
                 // 小項目は右から入ってくる。戻るときは逆向き(PC 版と同じ)
                 androidx.compose.animation.AnimatedContent(
-                    sub,
+                    path,
                     transitionSpec = {
-                        val forward = targetState != null
+                        val forward = targetState.size > initialState.size
                         val tween = androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(180)
-                        androidx.compose.animation.slideInHorizontally(tween) { if (forward) it else -it } togetherWith
+                        if (Motion.reduced) (androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None).using(null)
+                        else androidx.compose.animation.slideInHorizontally(tween) { if (forward) it else -it } togetherWith
                             androidx.compose.animation.slideOutHorizontally(tween) { if (forward) -it else it }
                     },
                     label = "menu",
-                ) { parent ->
+                ) { opened ->
+                    val parent = opened.lastOrNull()
                     Column {
                         if (parent != null) {
                             Row(
-                                Modifier.fillMaxWidth().clickable { sub = null }.heightIn(min = 44.dp).padding(horizontal = 12.dp),
+                                Modifier.fillMaxWidth().clickable { path = path.dropLast(1) }.heightIn(min = 44.dp).padding(horizontal = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
@@ -291,9 +350,12 @@ fun MenuSheet(groups: List<List<MenuItem>>, at: MenuAt = MenuAt.TopEnd, onDismis
                             }
                             HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
                             for (it in parent.children.orEmpty()) itemRow(it)
-                        } else groups.filter { it.isNotEmpty() }.forEachIndexed { gi, items ->
-                            if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
-                            for (it in items) itemRow(it)
+                        } else {
+                            header?.invoke()
+                            groups.filter { it.isNotEmpty() }.forEachIndexed { gi, items ->
+                                if (gi > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
+                                for (it in items) itemRow(it)
+                            }
                         }
                     }
                 }
@@ -327,6 +389,31 @@ object Motion {
     fun read(context: android.content.Context) {
         system = runCatching { android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }.getOrDefault(false)
     }
+}
+
+/** 数の札の数字。+ は付けない。4 桁からは 999+ */
+fun badgeCount(n: Int): String = if (n > 999) "999+" else "$n"
+
+/** 札の地。高さ 20dp・左右 6dp・角丸は高さの半分。1 桁なら幅も 20dp で丸くなる */
+fun Modifier.badgeShape(bg: Color, border: Color? = null): Modifier =
+    heightIn(min = 20.dp).widthIn(min = 20.dp)
+        .then(if (border != null) border(1.dp, border, RoundedCornerShape(10.dp)) else Modifier)
+        .background(bg, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp)
+
+/** 札の字。12sp の太字。行の高さを字に合わせて、札の縦の真ん中に置く */
+@Composable
+fun BadgeText(text: String, color: Color) = Text(
+    text, color = color, maxLines = 1, softWrap = false, fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 14.sp,
+    style = androidx.compose.ui.text.TextStyle(
+        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None),
+    ),
+)
+
+/** 札(未読の数・自分のレス・返信で共通) */
+@Composable
+fun Badge(text: String, bg: Color, fg: Color, modifier: Modifier = Modifier, border: Color? = null) {
+    Box(modifier.badgeShape(bg, border), contentAlignment = Alignment.Center) { BadgeText(text, fg) }
 }
 
 /** 中身のない画面の案内 */
@@ -438,12 +525,29 @@ fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Floa
     }
 }
 
-/** ヘッダー・フッターの高さと文字 */
+/** 文字の大きさの範囲(3 つで同じ)。設定は基準の大きさに掛ける倍率で持つ */
+const val FONT_MIN = 8
+const val FONT_MAX = 32
+
+/** 倍率 → 文字の大きさ(1 ずつ) */
+fun fontSizeOf(scale: Float, base: Int): Int = (scale * base).roundToInt().coerceIn(FONT_MIN, FONT_MAX)
+
+/** 文字の大きさ → 倍率 */
+fun scaleOf(size: Int, base: Int): Float = size.toFloat() / base
+
+/** 文字の大きさのスライダー。base は倍率 1 のときの大きさ */
+@Composable
+fun FontSizeSlider(label: String, scale: Float, base: Int, onChange: (Float) -> Unit) {
+    SizeSlider(label, scale * base, FONT_MIN.toFloat()..FONT_MAX.toFloat(), FONT_MAX - FONT_MIN - 1, "${fontSizeOf(scale, base)}", base.toFloat()) { onChange(scaleOf(it.roundToInt(), base)) }
+}
+
+/** 画面全体の文字と、ヘッダー・フッターの高さと文字 */
 @Composable
 fun BarSliders(p: io.github.contentsview08.obb.data.Prefs) {
-    SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 44f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
-    SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 44f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
-    SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.8f..1.4f, 11, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
+    SizeSlider("画面全体の文字", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
+    SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 32f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
+    SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 32f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
+    SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.6f..1.6f, 19, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
 }
 
 /**
@@ -455,14 +559,7 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val drag = remember { SizeDrag() }
     val dragging = drag.active != null
     val bg by androidx.compose.animation.core.animateFloatAsState(if (dragging) 0f else 1f, androidx.compose.animation.core.tween(150), label = "bg")
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-        val view = androidx.compose.ui.platform.LocalView.current
-        androidx.compose.runtime.SideEffect {
-            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
-                w.setDimAmount(0f)
-                w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            }
-        }
+    FullWindow(onDismiss = onDismiss) {
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f * bg))
@@ -489,20 +586,13 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * 表示スタイル: テーマ・差し色・レスの見た目。真ん中に浮かぶ(画面全体の文字の大きさは「文字の大きさ・余白」と設定にあるので、ここには置かない)
+ * テーマと差し色。真ん中に浮かぶ(レスの見た目と文字の大きさは ︙ の「表示スタイル」の別の小項目)
  */
 @Composable
 fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onDismiss: () -> Unit) {
-    CenterPanel("表示スタイル", onDismiss) {
+    CenterPanel("テーマと差し色", onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             @Composable fun group(t: String) = Text(t, Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            @Composable fun row(label: String, on: Boolean, lead: (@Composable () -> Unit)? = null, onClick: () -> Unit) {
-                Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (lead != null) { lead(); Spacer(Modifier.width(14.dp)) }
-                    Text(label, Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
-                    if (on) Icon(Icons.Filled.Check, null, tint = Palette.accent, modifier = Modifier.size(18.dp))
-                }
-            }
             group("テーマ")
             val current = Palette.scheme.key
             // 2 列の見本(地・帯・面・差し色を小さく描く)。名前だけより、押す前に色が分かる
@@ -552,9 +642,6 @@ fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onDismiss: () -> Unit
                 dot(Palette.scheme.accent, "テーマ", p.accent.isEmpty()) { p.accent = "" }
                 for (a in ACCENTS) dot(if (Palette.dark) a.dark else a.light, a.name, p.accent == a.key) { p.accent = a.key }
             }
-            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
-            group("レスの見た目")
-            for ((k, name) in POST_STYLES) row(name, p.postStyle == k) { p.postStyle = k }
         }
     }
 }
@@ -603,7 +690,7 @@ fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composab
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) { if (Motion.reduced) show.snapTo(1f) else show.animateTo(1f, androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
     fun close() { scope.launch { if (!Motion.reduced) show.animateTo(0f, androidx.compose.animation.core.tween(120)); onDismiss() } }
-    androidx.compose.ui.window.Popup(onDismissRequest = { close() }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+    FullWindow(onDismiss = { close() }) {
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f * show.value))
                 .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { close() },

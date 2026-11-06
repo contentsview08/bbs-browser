@@ -1,5 +1,7 @@
 package io.github.contentsview08.obb.ui
 
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -111,9 +113,13 @@ private enum class ListTab(val key: String, val label: String, val icon: ImageVe
 /** 勢い(1 日あたりのレス数) */
 fun momentum(t: ThreadSummary, now: Long): Double {
     val c = t.createdAt ?: return 0.0
-    val days = maxOf(now - c, 60_000L) / 86_400_000.0
-    return t.postCount / days
+    return momentumOf(t.postCount, c, now)
 }
+
+fun momentumOf(count: Int, createdAt: Long, now: Long): Double = count / (maxOf(now - createdAt, 60_000L) / 86_400_000.0)
+
+/** 100 からは整数 */
+fun momentumText(m: Double): String = if (m >= 100) "%.0f".format(m) else "%.1f".format(m)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -175,7 +181,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
 
     var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
-    var titleSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
     var sizeDialog by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
@@ -306,7 +311,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 HeaderBar(
                     vm.prefs.boardMeta[page.board.url]?.alias ?: page.board.name, onNav = { vm.drawerOpen = true },
                     leading = { BoardIcon(page.board.url, 22.dp) { Icon(Icons.Filled.Forum, null, tint = Palette.textMuted, modifier = Modifier.size(24.dp)) } },
-                    onTitle = { titleSheet = true },
+                    onTitle = { menu = true },
                 ) {
                     BarIcon(Icons.Filled.Search, "探す") { searching = true }
                     MoreButton { menu = true }
@@ -355,11 +360,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                             Icon(t.icon, null, tint = c, modifier = Modifier.size(17.dp))
                             Text(t.label, color = c, fontSize = 14.sp)
                             if (t == ListTab.UNREAD && unreadTotal > 0) {
-                                Text(
-                                    if (unreadTotal > 999) "+999+" else "+$unreadTotal",
-                                    Modifier.background(Palette.unread, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
-                                    color = Palette.unreadText, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                                )
+                                Badge(badgeCount(unreadTotal), Palette.unread, Palette.unreadText)
                             }
                             if (!filterTab) Icon(
                                 if (active && page.reversed) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward, null,
@@ -371,7 +372,11 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     }
                 }
                 }
-                IconButton(onClick = { vm.refreshBoard(page) }, enabled = !page.loading) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted) }
+                val footerH = vm.prefs.footerHeight
+                Box(
+                    Modifier.size(barButtonSize(footerH).dp).clip(CircleShape).clickable(enabled = !page.loading) { vm.refreshBoard(page) },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(minOf(24, footerH - 6).dp)) }
             }
         }
 
@@ -391,51 +396,36 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ) { Icon(Icons.Filled.EditNote, "スレを立てる") }
     }
 
+    // ヘッダーの板名と ︙ は同じメニュー
     if (menu) {
-        val fav = vm.isFavorite(page.board)
-        MenuSheet(
-            listOf(
-                listOf(
-                    MenuItem("スレを立てる", Icons.Filled.EditNote) { vm.openNewThread(page) },
-                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
-                    MenuItem("スレッド検索", Icons.Filled.Search) { searching = true; bars.show() },
-                    MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
-                ),
-                listOf(
-                    MenuItem("表示スタイル", Icons.Filled.Palette) { styleSheet = true },
-                    MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize) { sizeDialog = true },
-                    MenuItem("スレッド一覧を更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
-                ),
-            ),
-        ) { menu = false }
-    }
-    if (titleSheet) {
         val fav = vm.isFavorite(page.board)
         val context = androidx.compose.ui.platform.LocalContext.current
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に足す", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
                     MenuItem("スレを立てる", Icons.Filled.EditNote) { vm.openNewThread(page) },
-                ),
-                listOf(
-                    MenuItem("板名をコピー", Icons.Filled.ContentCopy) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
-                    MenuItem("板の URL をコピー", Icons.Filled.Link) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
-                ),
-                listOf(
-                    MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
+                    MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
                     MenuItem("更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
+                    MenuItem("スレッド検索", Icons.Filled.Search) { searching = true; bars.show() },
+                    MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
+                ),
+                listOf(
+                    styleMenuItem(vm.prefs, onTheme = { styleSheet = true }, onSize = { sizeDialog = true }),
+                    MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
+                        MenuItem("板名をコピー", Icons.Filled.ContentCopy) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
+                        MenuItem("板の URL をコピー", Icons.Filled.Link) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
+                    )) {},
                     MenuItem("ブラウザで開く", Icons.AutoMirrored.Filled.OpenInNew) { openExternal(context, page.board.url, false) },
                 ),
             ),
-            MenuAt.TopStart,
-        ) { titleSheet = false }
+            header = { MenuInfo(page.board.name, "${page.threads.size}スレ") },
+        ) { menu = false }
     }
     if (styleSheet) StyleSheet(vm.prefs) { styleSheet = false }
     if (sizeDialog) SizeDialog({ sizeDialog = false }) {
         val p = vm.prefs
-        SizeSlider("スレ一覧の文字", p.listFontScale, 0.8f..1.4f, 11, "${percent(p.listFontScale)}%", 1f) { p.listFontScale = snapTo(it, 20) }
-        SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..24f, 23, "${p.listPad}dp", 9f) { p.listPad = snapInt(it) }
+        FontSizeSlider("スレ一覧の文字", p.listFontScale, 15) { p.listFontScale = it }
+        SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..40f, 39, "${p.listPad}dp", 9f) { p.listPad = snapInt(it) }
         BarSliders(p)
     }
     NewThreadSheet(vm, page)
@@ -490,11 +480,7 @@ private fun ThreadRow(
                     "${t.postCount}", Modifier.widthIn(min = 36.dp), fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                     color = heatC,
                 )
-                if (unread > 0) Text(
-                    if (unread > 999) "+999+" else "+$unread",
-                    Modifier.padding(start = 6.dp).widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
-                    color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
+                if (unread > 0) Badge(badgeCount(unread), Palette.unread, Palette.unreadText, Modifier.padding(start = 6.dp))
             }
             return@Box
         }
@@ -512,7 +498,7 @@ private fun ThreadRow(
             Text(
                 threadTitleText(t, isNew, isFavorite),
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
-                // 開いたスレは新着があっても既読の色にする。新着は右の +N の札で分かる
+                // 開いたスレは新着があっても既読の色にする。新着は右の数の札で分かる
                 color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
             )
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -526,7 +512,7 @@ private fun ThreadRow(
                 }
                 // 勢い・レス数は幅をそろえ、数字の桁を縦にそろえる
                 Text(
-                    if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
+                    momentumText(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                     color = heatC,
                 )
@@ -534,19 +520,16 @@ private fun ThreadRow(
                     buildAnnotatedString { append("${t.postCount}"); withStyle(SpanStyle(fontSize = (10 * k).sp)) { append("レス") } },
                     Modifier.widthIn(min = 60.dp), color = Palette.textMuted, fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                 )
-                if (unread > 0) Box(Modifier.padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                if (unread > 0) Box(Modifier.padding(start = 8.dp).badgeShape(Palette.unread), contentAlignment = Alignment.Center) {
                     androidx.compose.animation.AnimatedContent(
-                        unread, Modifier.widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+                        unread,
                         transitionSpec = {
                             if (Motion.reduced) androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
                             else (androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn()) togetherWith (androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut())
                         },
                         contentAlignment = Alignment.Center, label = "unread",
                     ) { n ->
-                        Text(
-                            if (n > 999) "+999+" else "+$n",
-                            color = Palette.unreadText, fontSize = (10 * k).sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
+                        BadgeText(badgeCount(n), Palette.unreadText)
                     }
                 }
             }
@@ -555,32 +538,58 @@ private fun ThreadRow(
     }
 }
 
-/** スレ一覧に出すサムネイルの URL。取れなかった画像は出さない(×の枠が並ばないように) */
+/** スレ一覧に出すサムネイルの URL。取れなかった画像・取り消した画像は出さない(×の枠が並ばないように) */
 @Composable
 private fun rememberListThumb(thumb: String?, allowed: Boolean): String? {
     if (thumb == null) return null
     // 読み込みの進み具合では行を組み直さない
-    val failed by remember(thumb) { androidx.compose.runtime.derivedStateOf { io.github.contentsview08.obb.data.ImageStore.stateOf(thumb) is io.github.contentsview08.obb.data.ImageStore.State.Failed } }
+    val failed by remember(thumb) { androidx.compose.runtime.derivedStateOf { io.github.contentsview08.obb.data.ImageStore.stateOf(thumb).let { it is io.github.contentsview08.obb.data.ImageStore.State.Failed || it is io.github.contentsview08.obb.data.ImageStore.State.Canceled } } }
     return thumb.takeIf { allowed && !failed }
 }
 
 
+/** 検索の帯。ヘッダーと同じ高さ・同じ戻るボタンで、書き込み欄と同じ「帯の上の面の丸い枠」を置く */
 @Composable
 fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, onClose: () -> Unit) {
     val focus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     LaunchedEffect(Unit) { focus.requestFocus() }
-    Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 64.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "閉じる", tint = Palette.textMuted) }
-        TextField(
-            value, onChange, Modifier.weight(1f).focusRequester(focus), singleLine = true,
-            placeholder = { Text(placeholder) },
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Palette.surface2, unfocusedContainerColor = Palette.surface2,
-                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-            ),
-            shape = RoundedCornerShape(6.dp),
-        )
-        if (value.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted) }
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = LocalPrefs.current.headerHeight.dp).padding(start = 4.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BarIcon(Icons.AutoMirrored.Filled.ArrowBack, "閉じる", onClick = onClose)
         Spacer(Modifier.width(4.dp))
+        androidx.compose.foundation.text.BasicTextField(
+            value, onChange,
+            Modifier.weight(1f).focusRequester(focus).onFocusChanged { focused = it.isFocused },
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 15.sp),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            decorationBox = { field ->
+                val shape = RoundedCornerShape(20.dp)
+                Row(
+                    Modifier.height(minOf(40, LocalPrefs.current.headerHeight - 4).coerceAtLeast(28).dp).background(Palette.surface, shape)
+                        .border(if (focused) 1.5.dp else 1.dp, if (focused) Palette.accent else Palette.border, shape)
+                        .padding(start = 12.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty()) Text(placeholder, color = Palette.textMuted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        field()
+                    }
+                    // 消しても入力は続ける
+                    if (value.isNotEmpty()) Box(
+                        Modifier.size(32.dp).clip(CircleShape).clickable { onChange("") },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Cancel, "消す", tint = Palette.textMuted, modifier = Modifier.size(18.dp)) }
+                }
+            },
+        )
     }
 }

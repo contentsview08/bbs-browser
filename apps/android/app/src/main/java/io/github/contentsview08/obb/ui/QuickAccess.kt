@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -101,7 +102,7 @@ fun QuickAccess(vm: AppViewModel) {
         }
     }
 
-    androidx.compose.ui.window.Popup(onDismissRequest = { close() }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+    FullWindow(onDismiss = { close() }) {
         BoxWithConstraints(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f * show.value))
                 .clickable(remember { MutableInteractionSource() }, null) { close() },
@@ -114,7 +115,8 @@ fun QuickAccess(vm: AppViewModel) {
                     .graphicsLayer { translationY = (1f - show.value) * size.height }
                     .shadow(16.dp, sheetShape).clip(sheetShape).background(Palette.surface)
                     .clickable(remember { MutableInteractionSource() }, null) {}
-                    .navigationBarsPadding(),
+                    // 絞り込みの欄を押したとき、一覧の下がキーボードに隠れないように
+                    .navigationBarsPadding().imePadding(),
             ) {
                 // つまみと題
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {

@@ -139,7 +139,12 @@ class MainActivity : ComponentActivity() {
                     val drawer = rememberDrawerState(DrawerValue.Closed)
                     // 引き出しの開け閉めは ViewModel の drawerOpen に合わせる(画面の ☰ から開く)
                     LaunchedEffect(vm.drawerOpen) { if (vm.drawerOpen) drawer.open() else drawer.close() }
-                    LaunchedEffect(drawer) { snapshotFlow { drawer.currentValue }.collect { vm.drawerOpen = it == DrawerValue.Open } }
+                    // 動きが止まった所で実際の状態に合わせる。開く途中で外を押されると currentValue は Closed のまま変わらず、drawerOpen が true に残って ☰ が効かなくなる
+                    LaunchedEffect(drawer) {
+                        snapshotFlow { drawer.isAnimationRunning to drawer.currentValue }.collect { (running, value) ->
+                            if (!running) vm.drawerOpen = value == DrawerValue.Open
+                        }
+                    }
                     BackHandler(enabled = vm.drawerOpen) { vm.drawerOpen = false }
                     // 戻る(なぞって戻る途中も): なぞっている間は今の画面が指についてきて、後ろに前の画面が見える。離せば戻り、引き返せばやめる
                     androidx.activity.compose.PredictiveBackHandler(enabled = !vm.drawerOpen && vm.stack.size > 1) { progress ->
@@ -173,9 +178,9 @@ class MainActivity : ComponentActivity() {
                             var tabsH by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
                             val density = LocalDensity.current
                             val pageContent: @androidx.compose.runtime.Composable (Page?) -> Unit = { page ->
-                            // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴・設定など)も、右へなぞるとメニューを開く
+                            // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴など)も、右へなぞるとメニューを開く。設定は SettingsScreen が大項目の画面でだけ受ける
                             val swipe = io.github.contentsview08.obb.ui.rememberSwipeState()
-                            val others = page !is Page.Threads && page !is Page.Thread
+                            val others = page !is Page.Threads && page !is Page.Thread && page !is Page.Settings
                             val drawerGesture = mapOf("right" to io.github.contentsview08.obb.ui.SwipeAction("メニュー") { vm.drawerOpen = true })
                             Box(
                                 Modifier.fillMaxSize().background(Palette.base).then(

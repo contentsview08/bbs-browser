@@ -168,7 +168,7 @@ sealed interface Page {
         /** いま書き込んだ本文(その取り直しで、自分宛ての知らせを出さないため) */
         var justPosted: String? = null
         var favorite by mutableStateOf(false)
-        /** 開いたらこのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」から)。飛んだら null */
+        /** 開いたらこのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」・URL のレス番号から)。飛んだら null */
         var jumpNo by mutableStateOf<Int?>(null)
         /** 次スレの候補(探したら入る。null はまだ探していない) */
         var nextCandidates by mutableStateOf<List<NextThreadCandidate>?>(null)
@@ -691,7 +691,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── スレ ──
 
-    /** no: 開いたらそのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」から) */
+    /** no: 開いたらそのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」・URL のレス番号から) */
     fun openThread(t: ThreadSummary, no: Int? = null) {
         drawerOpen = false
         val page = Page.Thread(t)
@@ -1018,10 +1018,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     openInOs(u)
                 }
             }
-            is UrlRoute.Thread -> if (r.site != UrlRoute.Site.TWOCH || knownBoard(r.thread.boardUrl) != null) openThread(r.thread) else viewModelScope.launch {
+            is UrlRoute.Thread -> if (r.site != UrlRoute.Site.TWOCH || knownBoard(r.thread.boardUrl) != null) openThread(r.thread, r.no) else viewModelScope.launch {
                 // 形だけではスレか分からない。ログがあるか、板があると確かめられたら開く(PC 版の ensureBoard と同じ)。だめなら OS の既定のアプリへ
                 val ok = db.loadThread(r.thread) != null || kotlinx.coroutines.withTimeoutOrNull(8000) { TwoCh.isBoard(r.thread.boardUrl) } == true
-                if (ok) openThread(r.thread) else openInOs(u)
+                if (ok) openThread(r.thread, r.no) else openInOs(u)
             }
             is UrlRoute.BoardPage -> openBoardPage(r, u)
         }

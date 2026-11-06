@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Refresh
 
 /** Wi-Fi(か有線)につながっているか。画像を「Wi-Fi のときだけ」自動で読むのに使う。分からないときは false(読まない側) */
 fun isWifi(context: Context): Boolean = runCatching {
@@ -76,7 +78,7 @@ fun Thumbnails(
 
 /**
  * 画像を 1 枚出す(サムネイル・画像一覧・クイックアクセスで共通)。ImageStore に頼み、取れたファイルを出す。
- * 取っている間は明滅する面と輪と「320 KB / 1.2 MB」、失敗したら壊れた画像の印と「取得できません」(押すと取り直す)
+ * 取っている間は明滅する面と輪と「320 KB / 1.2 MB」、失敗したら壊れた画像の印と「取得できません」、取り消したら「取り消しました」(どちらも押すと取り直す)
  */
 @Composable
 fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, blurred: Boolean = false, showProgress: Boolean = true) {
@@ -96,6 +98,14 @@ fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: Conten
                 Text("取得できません", color = Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
                 Text("押して再試行", color = Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
             }
+            is io.github.contentsview08.obb.data.ImageStore.State.Canceled -> Column(
+                Modifier.matchParentSize().clickable { io.github.contentsview08.obb.data.ImageStore.request(url, retry = true) },
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Refresh, null, Modifier.size(20.dp), tint = Palette.textMuted)
+                Text("取り消しました", color = Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
+                Text("押して読み込む", color = Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
+            }
             else -> {
                 val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "thumb")
                 val a by t.animateFloat(0.35f, 0.8f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween<Float>(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
@@ -113,6 +123,7 @@ fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: Conten
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
     // 家の中のアドレスは、押すまで読まない。手元にある画像(どの画面で取ったものでも)は、自動で読まない設定でもそのまま出す
@@ -125,7 +136,21 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
         Box(box.clickable { load = true }, contentAlignment = Alignment.Center) { Text("画像", color = Palette.textMuted, fontSize = 13.sp) }
         return
     }
-    Box(box.clickable { onOpen(url) }, contentAlignment = Alignment.Center) {
+    // 進み具合が変わるたびにサムネイルごと組み直さないよう、読み込み中かどうかだけを見る
+    val loading by remember(url) {
+        androidx.compose.runtime.derivedStateOf {
+            val st = io.github.contentsview08.obb.data.ImageStore.stateOf(url)
+            st is io.github.contentsview08.obb.data.ImageStore.State.Queued || st is io.github.contentsview08.obb.data.ImageStore.State.Loading
+        }
+    }
+    val view = androidx.compose.ui.platform.LocalView.current
+    Box(
+        box.combinedClickable(
+            onLongClick = if (loading) ({ Haptics.longPress(view); io.github.contentsview08.obb.data.ImageStore.cancel(url) }) else null,
+            onClick = { onOpen(url) },
+        ),
+        contentAlignment = Alignment.Center,
+    ) {
         StoredImage(url, Modifier.matchParentSize(), blurred = blurred)
         if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
         if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)

@@ -50,7 +50,9 @@ private const val NEW_TOAST_MS = 2500L
 /** スレ表示 1 つぶんの、スクロールの覚え(開き直すと作り直す) */
 @Stable
 class ThreadScrollCtl(val page: Page.Thread) {
-    var positioned = false
+    var positioned by mutableStateOf(false)
+    /** レスへ飛んで開いた。開いたときの取得が済むまで、新着で位置を動かさない */
+    var keepJump = false
     /** 開いてから、まだ利用者がスクロールしていない */
     var untouched = true
     /** 開いてから、まだ新着を受け取っていない(次に届くのは開いたときの取得の分) */
@@ -162,6 +164,7 @@ class ThreadScroller(
         val unreadFrom = page.unreadFrom
         val head = prevLastNo + 1
         when {
+            ctl.keepJump -> {}
             ctl.pendingUnread && posts.any { it.no == unreadFrom } -> toUnread(unreadFrom)
             opening -> if (ctl.sent >= prevLastNo) toUnread(head)
             autoScrollOnNew && ctl.atBottom -> toUnread(head, animate = true)

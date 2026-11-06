@@ -217,7 +217,7 @@ private fun PastRow(
                 maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
             if (own != null) Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.Top) {
-                if (ownNo != null) Text(">>$ownNo", Modifier.background(Palette.ownWash, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp), color = Palette.own, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                if (ownNo != null) Badge(">>$ownNo", Palette.ownWash, Palette.own)
                 Spacer(Modifier.width(6.dp))
                 Text(own, color = Palette.textBody, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
@@ -239,7 +239,7 @@ private fun boardName(vm: AppViewModel, url: String) = vm.favorites.firstOrNull 
 /** 未読の数の札 */
 @Composable
 internal fun UnreadBadge(unread: Int) {
-    Text(if (unread > 999) "+999+" else "+$unread", Modifier.background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp), color = Palette.unreadText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    Badge(badgeCount(unread), Palette.unread, Palette.unreadText)
 }
 
 /** 書いた本文の頭の行(アンカーだけの行は飛ばす) */

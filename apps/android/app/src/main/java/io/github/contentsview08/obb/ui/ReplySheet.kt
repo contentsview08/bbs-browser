@@ -164,7 +164,10 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 )
             }
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
+        // フッターを低くしたら、欄とボタンも合わせて小さくする(本文の 1 行が切れない 28dp まで)
+        val footerH = vm.prefs.footerHeight
+        val control = (footerH - 8).coerceIn(28, 40)
+        Row(Modifier.fillMaxWidth().heightIn(min = footerH.dp).padding(horizontal = 8.dp, vertical = ((footerH - control) / 2).coerceIn(2, 6).dp), verticalAlignment = Alignment.Bottom) {
             // 丸い本文の欄。左の端に ＋(画像・オプション)
             Box(Modifier.weight(1f)) {
                 Row(
@@ -172,10 +175,10 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     val rot by androidx.compose.animation.core.animateFloatAsState(if (plusMenu) 45f else 0f, label = "plus")
-                    IconButton(onClick = { plusMenu = !plusMenu }, Modifier.size(40.dp)) {
+                    IconButton(onClick = { plusMenu = !plusMenu }, Modifier.size(control.dp)) {
                         Icon(Icons.Filled.Add, "画像・オプション", tint = if (plusMenu || options || r.mail.isNotEmpty() || r.name.isNotEmpty()) Palette.accent else Palette.textMuted, modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = rot })
                     }
-                    Box(Modifier.weight(1f).heightIn(min = 40.dp, max = 160.dp).padding(end = 14.dp, top = 10.dp, bottom = 10.dp)) {
+                    Box(Modifier.weight(1f).heightIn(min = control.dp, max = 160.dp).padding(end = 14.dp, top = ((control - 20) / 2).dp, bottom = ((control - 20) / 2).dp)) {
                         BodyField(
                             field, { v -> field = v; r.body = v.text; vm.saveDraftLater(page) }, isAA(r), disabled ?: "書き込む", 15,
                             Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { r.open = it.isFocused; if (it.isFocused) plusMenu = false },
@@ -229,7 +232,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             }
             Spacer(Modifier.width(6.dp))
             Box(
-                Modifier.padding(bottom = 1.dp).size(40.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape)
+                Modifier.padding(bottom = 1.dp).size(control.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape)
                     .combinedClickable(
                         enabled = canSend,
                         onLongClick = { preview = true },
@@ -258,7 +261,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 val pressed by press.collectIsPressedAsState()
                 val sink by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.86f else 1f, label = "sink")
                 Box(
-                    Modifier.padding(start = 6.dp, end = 4.dp).size(44.dp).graphicsLayer { scaleX = sink; scaleY = sink }
+                    Modifier.padding(start = 6.dp, end = 4.dp).size((control + 4).dp).graphicsLayer { scaleX = sink; scaleY = sink }
                         .clickable(interactionSource = press, indication = null, onClick = onRefresh),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -447,17 +450,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
         onDispose { if (draftPending[0]) { draftPending[0] = false; saveDraftNow() } }
     }
     if (r.open) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { r.open = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-        ) {
-            val view = androidx.compose.ui.platform.LocalView.current
-            androidx.compose.runtime.SideEffect {
-                (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
-                    w.setDimAmount(0f)
-                    w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-                }
-            }
+        FullWindow(onDismiss = { r.open = false }) {
             // 下からすべり上がって出る
             val rise = remember { androidx.compose.animation.core.Animatable(1f) }
             LaunchedEffect(Unit) { rise.animateTo(0f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))) }

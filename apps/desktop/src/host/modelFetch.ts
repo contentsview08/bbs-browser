@@ -4,8 +4,9 @@ import { fetch } from '@tauri-apps/plugin-http'
 export async function fetchModelFile(
   url: string,
   onProgress?: (loaded: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; status: number; headers: [string, string][]; body: ArrayBuffer }> {
-  const res = await fetch(url, { method: 'GET' })
+  const res = await fetch(url, { method: 'GET', signal })
   // 少しずつ読み、取れた量を知らせる(モデルは 339MB あるので、取っている間の進み具合を出す)
   const total = Number(res.headers.get('content-length') ?? 0)
   const reader = res.body?.getReader()
@@ -15,6 +16,10 @@ export async function fetchModelFile(
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
+    if (signal?.aborted) {
+      void reader.cancel().catch(() => {})
+      throw new Error('取るのをやめました')
+    }
     chunks.push(value)
     loaded += value.byteLength
     onProgress?.(loaded, total)

@@ -335,7 +335,7 @@ function NgRunRow(props: {
   onToggle: () => void
 }) {
   const { run } = props
-  const count = run.auto + run.rule
+  const count = run.auto + run.ai + run.rule
   const parts = [run.auto > 0 && `自動 NG ${run.auto}`, run.ai > 0 && `AI NG ${run.ai}`, run.rule > 0 && `NG ${run.rule}`].filter(Boolean).join('・')
   return (
     <article data-no={run.nos[0]} style={{ paddingLeft: 'var(--post-padding-x)', paddingRight: 'var(--post-padding-x)', paddingTop: 6, paddingBottom: 6 }}>
@@ -1488,16 +1488,16 @@ export default function ThreadView(props: Props) {
         if (media.length > 0) setLightbox({ urls: media, index: 0, post: p })
         else if ((replies.get(p.no)?.length ?? 0) > 0) h.onReplies?.(p.no, el)
         else if (anchorTree(p.no, log.posts, resolveAnchor, quoteLinks).length > 1) h.onBody?.(p.no, el)
-        else showQuick(false, `>>${p.no} には画像も返信もアンカーもありません`)
+        else showQuick(false, `>>${refOf(p.no)} には画像も返信もアンカーもありません`)
         return true
       }
       case 'anchorTree':
         if (anchorTree(p.no, log.posts, resolveAnchor, quoteLinks).length > 1) h.onBody?.(p.no, el)
-        else showQuick(false, `>>${p.no} にはつながるレスがありません`)
+        else showQuick(false, `>>${refOf(p.no)} にはつながるレスがありません`)
         return true
       case 'copyPost':
         void navigator.clipboard.writeText(p.body).then(
-          () => showQuick(true, `>>${p.no} の本文をコピーしました`),
+          () => showQuick(true, `>>${refOf(p.no)} の本文をコピーしました`),
           () => showQuick(false, 'コピーできませんでした'),
         )
         return true

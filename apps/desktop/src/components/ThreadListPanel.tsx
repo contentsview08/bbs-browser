@@ -20,7 +20,7 @@ import { momentum, rankMomentum } from '../utils/thread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
-import { LIST_FILTERS, tabDefOf, type ListFilter, type ListTabKey, type ThreadSort } from '../ui/settings'
+import { LIST_FILTERS, isListTabActive, tabDefOf, type ListFilter, type ListTabKey, type ThreadSort } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -263,8 +263,10 @@ export default function ThreadListPanel(props: Props) {
     seenTab.current = r.seq
     if (r.key === 'next' || r.key === 'prev') {
       if (tabs.length === 0) return
-      const cur = tabs.findIndex((k) => k === filter || (sort && k === sort.mode && !LIST_FILTERS.has(k)))
-      pressTab(tabs[(cur + (r.key === 'next' ? 1 : -1) + tabs.length) % tabs.length])
+      const cur = tabs.findIndex((k) => isListTabActive(k, filter, sort))
+      // どれも選んでいないときは、次へは先頭、前へは末尾
+      const to = cur < 0 ? (r.key === 'next' ? 0 : tabs.length - 1) : (cur + (r.key === 'next' ? 1 : -1) + tabs.length) % tabs.length
+      pressTab(tabs[to])
     } else if (tabs.includes(r.key)) pressTab(r.key)
     // 頼みが来たときだけ
   }, [props.tabRequest])
@@ -357,11 +359,13 @@ export default function ThreadListPanel(props: Props) {
     else if (action === 'top') {
       animateScroll(el, () => 0, 0)
       setCursorHidden(false)
-      setCursorId(ordered[0] && threadId(ordered[0]))
+      // ページに分けているときは、見えているページの中で選ぶ
+      const first = (pageItems ?? ordered)[0]
+      setCursorId(first && threadId(first))
     } else if (action === 'bottom') {
       animateScroll(el, () => el.scrollHeight, 0)
       setCursorHidden(false)
-      const last = ordered[ordered.length - 1]
+      const last = (pageItems ?? ordered).at(-1)
       setCursorId(last && threadId(last))
     } else if (action === 'refresh' && props.onRefresh) void props.onRefresh()
     else if (action === 'reply' && props.onNewThread) props.onNewThread() // スレ一覧の「書き込む」はスレ立て
@@ -505,6 +509,15 @@ export default function ThreadListPanel(props: Props) {
   useEffect(() => {
     onShownChange.current?.(visible)
   }, [shownKey])
+  // 見えなくなったスレは選択から外す(件数・全選択の判定を、実際に消す対象とそろえる)
+  useEffect(() => {
+    setSelected((s) => {
+      if (s.size === 0) return s
+      const shown = new Set(visible.map(threadId))
+      const kept = [...s].filter((id) => shown.has(id))
+      return kept.length === s.size ? s : new Set(kept)
+    })
+  }, [shownKey])
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
@@ -540,7 +553,8 @@ export default function ThreadListPanel(props: Props) {
   const pageItems = paged ? ordered.slice(pageSafe * pageSize, (pageSafe + 1) * pageSize) : undefined
   useEffect(() => {
     setPage(0)
-  }, [visible])
+    // visible は裏の確認や既読の変化でも作り直されるので、きっかけにしない
+  }, [filter, sort?.mode, sort?.dir, reversed, query])
   const goPage = (n: number) => {
     setPage(Math.max(0, Math.min(pageCount - 1, n)))
     scrollRef.current?.scrollTo({ top: 0 })
@@ -848,8 +862,7 @@ export default function ThreadListPanel(props: Props) {
               {tabs.map((key, i) => {
                 const def = tabDefOf(key)
                 const isFilter = LIST_FILTERS.has(key)
-                // 見た順は、並べ替えていないあいだずっと選んでいる(閲覧履歴のいつもの並び)
-                const active = isFilter ? filter === key : key === 'viewed' ? !sort && !filtering : sort?.mode === key && !filtering
+                const active = isListTabActive(key, filter, sort)
                 return (
                   <button
                     key={key}

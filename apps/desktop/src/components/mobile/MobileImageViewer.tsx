@@ -123,6 +123,8 @@ export default function MobileImageViewer(props: Props) {
   )
 
   const onTouchStart = (e: React.TouchEvent) => {
+    // 操作シートは portal でも、タッチは React の木を通ってここへ届く。シートの上の操作を絵の操作にしない
+    if (sheet) return
     // 動画の操作バー・YouTube は、その部品の操作に任せる
     if ((e.target as HTMLElement).closest('video, iframe, [data-viewer-ui]')) return
     const s = g.current
@@ -359,7 +361,8 @@ export default function MobileImageViewer(props: Props) {
         </div>
       )
     return (
-      <div key={`${i}:${url}`} className="w-screen h-full flex-shrink-0 flex items-center justify-center overflow-hidden">
+      // 2 枚のときは前と次が同じ絵になるので、key を分ける(重なると古い要素が残る)
+      <div key={n === 2 && d === 1 ? `${i}:${url}:next` : `${i}:${url}`} className="w-screen h-full flex-shrink-0 flex items-center justify-center overflow-hidden">
         {content}
       </div>
     )

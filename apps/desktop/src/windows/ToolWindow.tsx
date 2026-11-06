@@ -7,6 +7,7 @@ import type { AccountRecord, LogStore } from '@bbs-browser/logstore'
 import { openLogStore } from '../host/logStore'
 import { useSettings } from '../ui/settings'
 import { broadcast, callMain, onBroadcast, onToolOpen, toolKindOfThisWindow } from '../host/crossWindow'
+import { mirrorAiModelStatus } from '../hooks/useAiNg'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { backupDatabase, restoreDatabase } from '../host/backup'
 import SettingsDialog, { type SettingsTab } from '../components/SettingsDialog'
@@ -56,6 +57,7 @@ function SettingsWindow({ store, settings, update }: { store: LogStore; settings
       onBroadcast('favorites-changed', () => void reloadFavorites()),
       onBroadcast('sites-changed', () => void reloadSites()),
       onBroadcast('accounts-changed', () => void reloadAccounts()),
+      mirrorAiModelStatus(),
       onToolOpen((p) => {
         if (p.tab) setRequestedTab({ tab: p.tab as SettingsTab, seq: Date.now() })
       }),

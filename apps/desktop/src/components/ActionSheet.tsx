@@ -69,7 +69,13 @@ export default function ActionSheet(props: {
     </button>
   )
   return createPortal(
-    <div className="fixed inset-0 bg-black/40 flex items-end drawer-fade" style={{ zIndex: props.zIndex ?? 9600 }} {...backdrop}>
+    <div className="fixed inset-0 bg-black/40 flex items-end drawer-fade" style={{ zIndex: props.zIndex ?? 9600 }} {...backdrop}
+      // portal でも React のイベントは親へ届くので、外を押したクリックを後ろの部品(カードなど)へ渡さない
+      onClick={(e) => {
+        e.stopPropagation()
+        backdrop.onClick(e)
+      }}
+    >
       <div
         ref={boxRef}
         className="w-full max-h-[80vh] flex flex-col bg-c-surface rounded-t-3xl shadow-xl sheet-rise"

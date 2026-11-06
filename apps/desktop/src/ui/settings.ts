@@ -83,6 +83,13 @@ export type ListTabKey = 'unread' | 'visited' | 'momentum' | 'newest' | 'count' 
 /** スレ一覧の絞り込み(タブのうち、並べ替えではないもの) */
 export type ListFilter = 'unread' | 'visited' | 'posted' | 'fav'
 export const LIST_FILTERS: ReadonlySet<ListTabKey> = new Set(['unread', 'visited', 'posted', 'fav'])
+/** そのタブを選んでいるか。絞り込み中の sort は既定の値のままなので、絞り込みがあれば並べ替えのタブは選んでいない */
+export function isListTabActive(key: ListTabKey, filter: ListFilter | null, sort: { mode: string } | null): boolean {
+  if (LIST_FILTERS.has(key)) return filter === key
+  if (filter !== null) return false
+  // 見た順は、並べ替えていないあいだずっと選んでいる(閲覧履歴のいつもの並び)
+  return key === 'viewed' ? !sort : sort?.mode === key
+}
 export const LIST_TABS: { key: ListTabKey; name: string; icon: string; note: string }[] = [
   { key: 'unread', name: '未読', icon: 'mark_email_unread', note: 'ログがあり、新着レスのあるスレだけを出す' },
   { key: 'visited', name: '閲覧済み', icon: 'history', note: '一度でも開いた(ログのある)スレだけを出す' },
@@ -712,7 +719,7 @@ function withoutOldLight(scheme: ColorScheme): ColorScheme {
  * 消したもの(起動時に開く板・ホイールで更新・タブを使う・AA の自動判定・一番下まで送る・知らせる 2 つ・アップロードを使う・EXIF を消す・
  * 書き込んだあとに待つ・畳んだサイドバーの板名・送る前に待つ・定型文のバー・タブの見せ方)は、いつもオンかサーバー任せ
  */
-function migrateOld(saved: Record<string, unknown>): Partial<AppSettings> {
+export function migrateOld(saved: Record<string, unknown>): Partial<AppSettings> {
   const out: Partial<AppSettings> = {}
   // 文字の大きさ: 5 段階(fontSize・mobileFontSize)は px に写す(px を決めていなければ)
   const steps: { from: string; to: 'fontPx' | 'mobileFontPx'; px: number[] }[] = [
@@ -724,7 +731,7 @@ function migrateOld(saved: Record<string, unknown>): Partial<AppSettings> {
     if (!saved[to] && typeof n === 'number' && px[n - 1]) out[to] = px[n - 1]
   }
   // サムネイルを出さない → 読み込まない
-  if (saved.showThumbnails === false) out.thumbLoad = 'never'
+  if (saved.thumbLoad === undefined && saved.showThumbnails === false) out.thumbLoad = 'never'
   // 空行の整え方 2 つ → 1 つ(どちらかがオンならオン)
   if (saved.tidyBlankLines === undefined && (saved.collapseBlankLines !== undefined || saved.trimTrailingBlank !== undefined)) {
     out.tidyBlankLines = !!(saved.collapseBlankLines || saved.trimTrailingBlank)

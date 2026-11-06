@@ -2,10 +2,12 @@
 // - スレ表示は useAiNgScores でレスを渡す。まだ当たり具合のないもの(本文と条件の組)だけを、見えている順にモデルへ頼む
 // - 当たり具合は、出るたびに少しずつ届き、届くと描き直す
 // - モデルは利用者が「使う」にしたときだけ取る(約 125MB)。取ったものは Cache Storage に残る
+// - モデルを動かすのはメインのウィンドウだけ。PC の設定ウィンドウには状態を写し、試す・消すはメインに頼む
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { Post } from '@bbs-browser/connectors'
 import { aiInputOf, aiTextOf, hypothesisOf, scoreKey } from '../utils/aiNg'
 import { bodyKey } from '../utils/autoNg'
+import { broadcast, callMain, onBroadcast, toolKindOfThisWindow } from '../host/crossWindow'
 import { fetchModelFile } from '../host/modelFetch'
 import type { AiWorkerRequest, AiWorkerResponse } from '../workers/aiNgWorker'
 
@@ -20,7 +22,12 @@ const BATCH = 8
 /** 覚えておく当たり具合の数(古いものから忘れる) */
 const SCORE_MAX = 50000
 
+const STATUS_EVENT = 'ai-model-status'
+const isToolWindow = () => toolKindOfThisWindow() !== undefined
+
 let worker: Worker | undefined
+/** 取っている途中のファイルを止めるもの(worker と同じ間だけ生きる) */
+let fetchAbort: AbortController | undefined
 let status: AiModelStatus = { kind: 'off' }
 const scores = new Map<string, number>()
 /** 頼んであって、まだ返っていない組 */
@@ -45,7 +52,7 @@ function showProgress() {
     loaded += p.loaded
     total += p.total
   }
-  if (status.kind === 'loading' || status.kind === 'off') setStatus({ kind: 'loading', loaded, total })
+  if (status.kind === 'loading') setStatus({ kind: 'loading', loaded, total })
 }
 
 /** 知らせは少し待ってまとめる(当たり具合は 8 件ずつ届く。届くたびに全タブのレスを判定し直して描き直すと重い) */
@@ -66,22 +73,46 @@ function emitNow() {
   emitTimer = undefined
   for (const l of listeners) l()
 }
-function setStatus(s: AiModelStatus) {
+function applyStatus(s: AiModelStatus) {
   status = s
   emitNow()
+}
+function setStatus(s: AiModelStatus) {
+  applyStatus(s)
+  if (!isToolWindow()) void broadcast(STATUS_EVENT, s)
+}
+
+/** 設定ウィンドウで、メインのモデルの状態を写す(開いた時点の状態ももらう) */
+export function mirrorAiModelStatus(): Promise<() => void> {
+  const off = onBroadcast<AiModelStatus>(STATUS_EVENT, applyStatus)
+  void off.then(() => callMain<AiModelStatus>('aiModelStatus')).then(applyStatus, () => {})
+  return off
+}
+
+/** いまのモデルの状態(設定ウィンドウからの問い合わせ用) */
+export function aiModelStatus(): AiModelStatus {
+  return status
 }
 
 function ensureWorker(): Worker {
   if (worker) return worker
   const w = new Worker(new URL('../workers/aiNgWorker.ts', import.meta.url), { type: 'module' })
+  const abort = new AbortController()
+  fetchAbort = abort
   w.onmessage = async (e: MessageEvent<AiWorkerResponse>) => {
+    if (worker !== w) return
     const m = e.data
     if (m.type === 'fetch') {
       try {
-        const r = await fetchModelFile(m.url, (loaded, total) => {
-          progress.set(m.url, { loaded, total })
-          showProgress()
-        })
+        const r = await fetchModelFile(
+          m.url,
+          (loaded, total) => {
+            if (worker !== w) return
+            progress.set(m.url, { loaded, total })
+            showProgress()
+          },
+          abort.signal,
+        )
         w.postMessage({ type: 'fetched', reqId: m.reqId, ...r } satisfies AiWorkerRequest, [r.body])
       } catch (err) {
         w.postMessage({ type: 'fetched', reqId: m.reqId, ok: false, status: 0, headers: [], error: err instanceof Error ? err.message : String(err) } satisfies AiWorkerRequest)
@@ -154,6 +185,8 @@ export function startAiModel() {
 
 /** モデルを止める(使わないにしたとき。覚えた当たり具合は残す) */
 export function stopAiModel() {
+  fetchAbort?.abort()
+  fetchAbort = undefined
   worker?.terminate()
   worker = undefined
   busy = false
@@ -166,6 +199,7 @@ export function stopAiModel() {
 
 /** 取ったモデルのファイルを消す(Cache Storage から) */
 export async function deleteAiModelFiles(): Promise<void> {
+  if (isToolWindow()) return callMain('aiDeleteModel')
   stopAiModel()
   await caches.delete('transformers-cache')
 }
@@ -177,7 +211,7 @@ export function requestScores(posts: Post[], prompts: string[], contexts: (strin
   for (const p of posts) {
     if (!aiTextOf(p.body)) continue
     // 文脈つきの条件は、文脈を添えた文で別に頼む(鍵も別)
-    for (const ctx of [...new Set(contexts.map((c) => c ?? ''))]) {
+    for (const ctx of [...new Set(prompts.map((_, i) => contexts[i] ?? ''))]) {
       const text = aiInputOf(p.body, ctx || undefined)
       const need = prompts.filter((pr, i) => {
         if ((contexts[i] ?? '') !== ctx) return false
@@ -206,9 +240,12 @@ export function requestScores(posts: Post[], prompts: string[], contexts: (strin
 
 /** 1 つの文を試す(設定の「試す」欄)。モデルが使えるときだけ */
 export function testScore(text: string, prompt: string): Promise<number> {
+  if (isToolWindow()) return callMain<number>('aiTestScore', { text, prompt })
   return new Promise((resolve, reject) => {
     if (status.kind !== 'ready') return reject(new Error('モデルがまだ使えません'))
     const body = text
+    // アンカーと URL だけの文は判定に回らない
+    if (!aiTextOf(body)) return reject(new Error('判定できる文がありません(アンカーと URL は除いて判定します)'))
     const k = scoreKey(body, prompt)
     if (scores.has(k)) return resolve(scores.get(k)!)
     const off = subscribe(() => {
@@ -218,6 +255,9 @@ export function testScore(text: string, prompt: string): Promise<number> {
       } else if (status.kind === 'error') {
         off()
         reject(new Error(status.message))
+      } else if (status.kind === 'off') {
+        off()
+        reject(new Error('モデルが止まりました'))
       }
     })
     pending.delete(k)

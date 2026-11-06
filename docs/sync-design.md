@@ -328,7 +328,8 @@ push は次のとおり。
 
 - トークンから `space_id` を計算して呼ぶ。未作成の領域は空のまま 404 を返す
 - 放置削除とレコードの片づけは、各 Durable Object の alarm で行う
-- 全体のレート制限は Cloudflare の Rate Limiting で行い、概算でよい。領域の数と作成元の数は台帳で正確に数える
+- 全体のレート制限は Cloudflare の Rate Limiting で行い、概算でよい。領域の数と作成元の数は台帳で正確に数える。IP ごとの回数は環境変数ではなく wrangler の設定(`RL_IP`・`RL_WIDE`・`RL_AUTH`・`RL_CREATE`・`RL_ADMIN`)で変える
+- ほかの上限と期間は環境変数。一覧は `apps/sync-server/src/config.ts`。非常スイッチは `CREATION_CLOSED`(新規作成の停止)と `READ_ONLY`(読み取りだけ。書き込みは 503)
 - IP は `space_id` と結び付けて長期に保存しない
 
 ### 不正利用対策
@@ -436,7 +437,8 @@ obb-sync-admin-v1
 <鍵 ID>
 ```
 
-- ヘッダー `X-OBB-Admin` に鍵 ID・時刻・nonce・署名を入れる
+- ヘッダー `X-OBB-Admin` に鍵 ID・時刻・nonce・署名を入れる。形は `kid=<鍵 ID>,ts=<秒>,nonce=<Base64URL>,sig=<Base64URL>`。`ADMIN_KEYS` は `{"<鍵 ID>":"<公開鍵 32 バイトの Base64URL>"}` の JSON
+- 並べた query は、生の `k=v` を文字列の順に並べて `&` でつなぐ(復号しない)
 - 時刻は前後 60 秒。nonce は 16 バイト以上で、台帳に 5 分残して再利用を拒否する
 - 失敗は普通の未定義のパスと同じ 404。レート制限を超えたときも 404。管理 API の存在を見せない
 - host を署名に入れるのは、検証用への要求を本番で使い回せないようにするため

@@ -1,0 +1,90 @@
+# 例のファイル。写して wrangler.toml にして使う(wrangler.toml はコミットしない)。アカウント ID と秘密は書かない
+# 秘密は wrangler secret で入れる: POW_SECRET、ADMIN_KEYS、(一般公開で)TURNSTILE_SECRET
+# 既定の値は省略できる。一覧は src/config.ts
+name = "obb-sync"
+main = "src/index.ts"
+compatibility_date = "2026-03-01"
+workers_dev = false
+
+[vars]
+SPACE_LIMIT = "100"
+
+[[durable_objects.bindings]]
+name = "SPACE"
+class_name = "SpaceDO"
+
+[[durable_objects.bindings]]
+name = "LEDGER"
+class_name = "LedgerDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SpaceDO", "LedgerDO"]
+
+# IP ごとの制限。周期は 10 秒か 60 秒だけ。namespace_id はアカウントの中で重ならない数字
+[[ratelimits]]
+name = "RL_IP"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "RL_WIDE"
+namespace_id = "1002"
+simple = { limit = 600, period = 60 }
+
+[[ratelimits]]
+name = "RL_AUTH"
+namespace_id = "1003"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "RL_CREATE"
+namespace_id = "1004"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "RL_ADMIN"
+namespace_id = "1005"
+simple = { limit = 60, period = 60 }
+
+# 検証用。workers.dev に出す。枠 2 の手動のテストは SPACE_LIMIT を 2 にして出す
+[env.verify]
+name = "obb-sync-verify"
+workers_dev = true
+
+[env.verify.vars]
+SPACE_LIMIT = "100"
+POW_BITS = "16"
+
+[[env.verify.durable_objects.bindings]]
+name = "SPACE"
+class_name = "SpaceDO"
+
+[[env.verify.durable_objects.bindings]]
+name = "LEDGER"
+class_name = "LedgerDO"
+
+[[env.verify.ratelimits]]
+name = "RL_IP"
+namespace_id = "2001"
+simple = { limit = 120, period = 60 }
+
+[[env.verify.ratelimits]]
+name = "RL_WIDE"
+namespace_id = "2002"
+simple = { limit = 600, period = 60 }
+
+[[env.verify.ratelimits]]
+name = "RL_AUTH"
+namespace_id = "2003"
+simple = { limit = 30, period = 60 }
+
+[[env.verify.ratelimits]]
+name = "RL_CREATE"
+namespace_id = "2004"
+simple = { limit = 10, period = 60 }
+
+[[env.verify.ratelimits]]
+name = "RL_ADMIN"
+namespace_id = "2005"
+simple = { limit = 60, period = 60 }

@@ -10,8 +10,8 @@
   "scripts": {
     "dev": "npm run tauri -w @bbs-browser/desktop -- dev",
     "build": "npm run tauri -w @bbs-browser/desktop -- build",
-    "test": "npm test -w @bbs-browser/connectors -w @bbs-browser/logstore -w @bbs-browser/sync -w @bbs-browser/desktop",
-    "typecheck": "npm run typecheck -w @bbs-browser/connectors -w @bbs-browser/logstore -w @bbs-browser/sync && npx -w @bbs-browser/desktop tsc --noEmit",
+    "test": "npm test -w @bbs-browser/connectors -w @bbs-browser/logstore -w @bbs-browser/sync -w @bbs-browser/sync-server -w @bbs-browser/desktop",
+    "typecheck": "npm run typecheck -w @bbs-browser/connectors -w @bbs-browser/logstore -w @bbs-browser/sync -w @bbs-browser/sync-server && npx -w @bbs-browser/desktop tsc --noEmit",
     "version:set": "node scripts/set-version.mjs",
     "licenses:gen": "node scripts/gen-licenses.mjs",
     "package:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-zip.ps1"

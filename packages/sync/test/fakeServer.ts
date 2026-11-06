@@ -30,7 +30,24 @@ export interface FakeResponse {
   body: string
 }
 
-interface ServerRecord {
+/** 共通シナリオが相手にするサーバー。偽サーバーと、Miniflare の本物(apps/sync-server/test/node)の両方がこの形 */
+export interface ScenarioSpace {
+  epoch: string
+  next: number
+  gc_floor: number
+  records: Map<string, ServerRecord>
+}
+
+export interface ScenarioServer {
+  handle(req: FakeRequest): FakeResponse | Promise<FakeResponse>
+  spaceCount(): number | Promise<number>
+  space(id: string): ScenarioSpace | undefined | Promise<ScenarioSpace | undefined>
+  deleteSpace(id: string): void | Promise<void>
+  bumpEpoch(id: string): void | Promise<void>
+  injectRecord(id: string, r: Omit<ServerRecord, 'version' | 'updated_at'>): void | Promise<void>
+}
+
+export interface ServerRecord {
   record_id: string
   version: number
   kind_tag: string
@@ -82,7 +99,7 @@ export function fakeSpaceIdOf(tokenHex: string): string {
   return toHex(sha256(fromHex(tokenHex)))
 }
 
-export class FakeSyncServer {
+export class FakeSyncServer implements ScenarioServer {
   readonly spaces = new Map<string, Space>()
   private epochs = 0
   readonly o: Required<FakeServerOptions>
@@ -103,6 +120,14 @@ export class FakeSyncServer {
   }
 
   // ── テストの操作。API にはない ──
+
+  spaceCount(): number {
+    return this.spaces.size
+  }
+
+  space(id: string): Space | undefined {
+    return this.spaces.get(id)
+  }
 
   deleteSpace(id: string): void {
     this.spaces.delete(id)

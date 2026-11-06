@@ -6,3 +6,10 @@ dist/
 apps/desktop/src-tauri/target/
 # 自動で作り直す
 apps/desktop/src-tauri/gen/schemas/
+
+# 同期サーバー。実際の設定はアカウントごとなのでコミットしない(例は wrangler.example.toml)
+apps/sync-server/wrangler.toml
+apps/sync-server/.wrangler/
+apps/sync-server/.dev.vars
+# 管理 API の秘密鍵
+*.pem

@@ -1,6 +1,7 @@
 // サーバーとの通信の口。実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
 import { HTTP_TIMEOUT_MS, MAX_RESPONSE_BYTES } from '../config'
 import { parseStrictJson } from '../json'
+import { checkPowChallenge, solvePow } from './pow'
 
 export interface SyncRequest {
   method: 'GET' | 'POST' | 'DELETE'
@@ -26,7 +27,7 @@ export interface SyncTransport {
 export type SyncFailureKind = 'bad_url' | 'network' | 'redirect' | 'too_large' | 'bad_response' | 'no_progress' | 'http'
 
 export class SyncApiError extends Error {
-  constructor(readonly kind: SyncFailureKind, readonly status = 0, readonly code = '') {
+  constructor(readonly kind: SyncFailureKind, readonly status = 0, readonly code = '', readonly detail: Record<string, unknown> | null = null) {
     super(code ? `${kind}:${code}` : kind)
     this.name = 'SyncApiError'
   }
@@ -102,13 +103,26 @@ export class SyncApi {
     } catch {
       parsed = null
     }
-    if (res.status < 200 || res.status >= 300) throw new SyncApiError('http', res.status, isObject(parsed) && typeof parsed.error === 'string' ? parsed.error.slice(0, 64) : '')
+    if (res.status < 200 || res.status >= 300) throw new SyncApiError('http', res.status, isObject(parsed) && typeof parsed.error === 'string' ? parsed.error.slice(0, 64) : '', isObject(parsed) ? parsed : null)
     if (!isObject(parsed)) throw bad()
     return parsed
   }
 
   async createSpace(): Promise<{ epoch: string }> {
-    const r = await this.call('POST', '/spaces', {})
+    let r: Record<string, unknown>
+    try {
+      r = await this.call('POST', '/spaces', {})
+    } catch (e) {
+      if (!(e instanceof SyncApiError && e.status === 403 && e.code === 'pow_required')) throw e
+      let pow
+      try {
+        pow = checkPowChallenge(e.detail?.pow)
+      } catch {
+        throw bad()
+      }
+      // 解いて 1 回だけ送り直す。断られたら、ほかの 403 と同じくエンジンが止まる
+      r = await this.call('POST', '/spaces', { pow: { challenge: pow.challenge, nonce: await solvePow(pow.challenge, pow.bits) } })
+    }
     return { epoch: checkEpoch(r.epoch) }
   }
 

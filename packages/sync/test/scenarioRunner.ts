@@ -6,7 +6,7 @@ import { expect } from 'vitest'
 import { LogStore, UserOps, type SqlDb } from '../../logstore/src/index'
 import type { ThreadSummary } from '../../connectors/src/index'
 import { canonicalJson, deriveKeys, FavoriteThreadAdapter, recordId, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
-import { FakeSyncServer, fakeSpaceIdOf } from './fakeServer'
+import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
 const SERVER = 'https://sync.test'
 const START = 1_800_000_000_000
@@ -95,15 +95,20 @@ interface LogEntry {
   request_id?: string
 }
 
+/** シナリオの server の項目と時計を受け取って、相手のサーバーを作る */
+export type MakeServer = (now: () => number, options: Record<string, unknown>) => ScenarioServer
+
+const makeFake: MakeServer = (now, options) => new FakeSyncServer({ now, rate_per_minute: null, full_pull_per_hour: null, ...options })
+
 class World {
   now = START
-  server: FakeSyncServer
+  server: ScenarioServer
   faults: Fault[] = []
   log: LogEntry[] = []
   mark = 0
   devices = new Map<string, Device>()
-  constructor(options: Record<string, unknown>) {
-    this.server = new FakeSyncServer({ now: () => this.now, rate_per_minute: null, full_pull_per_hour: null, ...options })
+  constructor(make: MakeServer, options: Record<string, unknown>) {
+    this.server = make(() => this.now, options)
   }
 }
 
@@ -147,19 +152,19 @@ class Device {
         if (f.kind === 'unreachable') throw new Error('unreachable')
         if (f.kind === 'redirect') return { status: 302, headers: { Location: f.location as string }, body: '' }
         if (f.kind === 'drop') {
-          w.server.handle({ method: req.method, path, headers: req.headers, body: req.body })
+          await w.server.handle({ method: req.method, path, headers: req.headers, body: req.body })
           throw new Error('dropped')
         }
         if (f.kind === 'swap') {
           // 本物の別レコードの暗号文を、送った先頭のレコードの 409 として返す
-          const sp = w.server.spaces.get(fakeSpaceIdOf((req.headers.Authorization as string).slice(7)))
+          const sp = await w.server.space(fakeSpaceIdOf((req.headers.Authorization as string).slice(7)))
           const first = (JSON.parse(req.body as string).records as { record_id: string }[])[0].record_id
           return { status: 200, body: JSON.stringify({ results: [{ record_id: first, status: 409, record: sp?.records.get(f.other as string) }], epoch: sp?.epoch, gc_floor: sp?.gc_floor }) }
         }
-        const epoch = w.server.spaces.get(fakeSpaceIdOf((req.headers.Authorization as string).slice(7)))?.epoch ?? ''
+        const epoch = (await w.server.space(fakeSpaceIdOf((req.headers.Authorization as string).slice(7))))?.epoch ?? ''
         return { status: f.status ?? 200, body: JSON.stringify(f.body).replaceAll('$epoch', epoch) }
       }
-      return w.server.handle({ method: req.method, path, headers: req.headers, body: req.body })
+      return await w.server.handle({ method: req.method, path, headers: req.headers, body: req.body })
     },
   }
   newEngine() {
@@ -282,17 +287,17 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       break
     }
     case 'server_delete_space':
-      w.server.deleteSpace(await spaceOf(d)())
+      await w.server.deleteSpace(await spaceOf(d)())
       break
     case 'server_bump_epoch':
-      w.server.bumpEpoch(await spaceOf(d)())
+      await w.server.bumpEpoch(await spaceOf(d)())
       break
     case 'server_inject': {
       const keys = deriveKeys((await d.keys.load() as SyncKeyMaterial).k)
       const id = recordId(keys.k_id, s.record[0], s.record[1], s.record[2], s.record[3])
       const sid = spaceId(keys.auth_token)
-      if (s.corrupt) w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: false, nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) })
-      else w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: s.payload.deleted === true, ...sealPayload(keys, { space_id: sid, record_id: id, kind_tag: 'h', schema_version: 1 }, s.payload) })
+      if (s.corrupt) await w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: false, nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) })
+      else await w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: s.payload.deleted === true, ...sealPayload(keys, { space_id: sid, record_id: id, kind_tag: 'h', schema_version: 1 }, s.payload) })
       break
     }
     case 'db_fail':
@@ -318,8 +323,7 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
 async function check(w: World, want: Record<string, any>, label: string): Promise<void> {
   for (const [name, e] of Object.entries(want)) {
     if (name === '$server') {
-      const spaces = w.server.spaces
-      if (e.spaces !== undefined) expect(spaces.size, `${label}: サーバーの領域の数`).toBe(e.spaces)
+      if (e.spaces !== undefined) expect(await w.server.spaceCount(), `${label}: サーバーの領域の数`).toBe(e.spaces)
       if (e.hosts !== undefined) expect([...new Set(w.log.map((l) => l.host))], `${label}: 通信先`).toEqual(e.hosts)
       if (e.request_id_repeated !== undefined) {
         const ids = w.log.flatMap((l) => (l.request_id ? [l.request_id] : []))
@@ -327,7 +331,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
       }
       for (const [dev, v] of Object.entries<any>(e.of ?? {})) {
         const m = await (w.devices.get(dev) as Device).keys.load()
-        const sp = m ? spaces.get(spaceId(deriveKeys(m.k).auth_token)) : undefined
+        const sp = m ? await w.server.space(spaceId(deriveKeys(m.k).auth_token)) : undefined
         if (v.exists !== undefined) expect(sp !== undefined, `${label}: ${dev} の領域`).toBe(v.exists)
         if (v.records !== undefined) expect(sp?.records.size, `${label}: ${dev} の領域のレコード数`).toBe(v.records)
         if (v.head !== undefined) expect(sp?.next, `${label}: ${dev} の領域の version`).toBe(v.head)
@@ -377,8 +381,8 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
   }
 }
 
-export async function runScenario(c: Scenario): Promise<Record<string, string>> {
-  const w = new World(c.server ?? {})
+export async function runScenario(c: Scenario, make: MakeServer = makeFake): Promise<Record<string, string>> {
+  const w = new World(make, c.server ?? {})
   for (const name of c.devices) w.devices.set(name, new Device(name, w, c.skew_ms?.[name] ?? 0))
   for (const [name, seed] of Object.entries(c.seed ?? {})) {
     const d = w.devices.get(name) as Device

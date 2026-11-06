@@ -945,6 +945,11 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `GET /space` | `{ used_bytes, record_count, quota_bytes, quota_records, epoch, gc_floor }` |
 | `DELETE /space` | `{ deleted: true }` |
 
+- 作成の問題: サーバーが `POW_BITS` を 1 以上にしていると、`POST /spaces` の `{}` は 403 と `{ error: "pow_required", pow: { challenge, bits } }` を返す。端末は `SHA-256("<challenge>:<nonce>")` の先頭 `bits` ビットが 0 になる `nonce`(`[A-Za-z0-9_-]` の 64 文字まで)を探し、本文 `{ pow: { challenge, nonce } }` で 1 回だけ送り直す。問題は 5 分有効で、その領域にしか使えない。`bits` が 28 を超える問題は解かない。例は `packages/conformance/sync-pow.json`。PC は `packages/sync/src/engine/pow.ts`
+- 作成元の制限と締め出しは、全体の停止と同じ `creation_closed`
+- 1 回の 409 に入るレコードは合計 1.5MB まで(読み取りの上限 2MB に収めるため)。入らない分は `results` に出ないので、送信待ちのまま次の回で送り直す
+- `POST` は `Content-Length` と `Content-Type: application/json` が要る。ないと 413・415。圧縮した本文は 415
+- `request_id` は領域ごとに新しい 64 件だけ覚える。忘れられた後の再送は 409 で自分の値が返り、マージしても変わらない
 - `request_id` は `[A-Za-z0-9_-]` の 22 文字(16 バイト)。`epoch` は 128 文字までの文字列で、端末は中身を解釈しない
 - 失敗は `{ error }`。端末は 4xx の `error` を `last_error` に写す
 - `since=0` の回数は、中身のある領域だけ数える。空の領域を数えると、まだ何も送っていない端末が止まる

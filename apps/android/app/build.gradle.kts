@@ -1,9 +1,36 @@
+import javax.inject.Inject
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// テーブルを作る SQL は PC 版と同じファイル。packages/logstore をそのまま足すと src や node_modules まで入るので、migrations だけを assets に入れる
+abstract class LogstoreMigrations @Inject constructor(private val fs: FileSystemOperations) : DefaultTask() {
+    @get:InputDirectory
+    abstract val source: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        fs.sync {
+            from(source)
+            into(output.dir("migrations"))
+        }
+    }
+}
+
+val logstoreMigrations = tasks.register<LogstoreMigrations>("logstoreMigrations") {
+    source.set(layout.projectDirectory.dir("../../../packages/logstore/migrations"))
+    output.set(layout.buildDirectory.dir("generated/logstoreAssets"))
+}
+
+androidComponents {
+    onVariants { variant -> variant.sources.assets?.addGeneratedSourceDirectory(logstoreMigrations, LogstoreMigrations::output) }
 }
 
 android {
@@ -35,6 +62,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // User-Agent の版
+        buildConfig = true
     }
     // 最初から入れておく掲示板・板(PC 版と同じ packages/presets/sites.json)を assets に同梱する
     sourceSets["main"].assets.srcDir("../../../packages/presets")
@@ -76,4 +105,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // android.jar の org.json は単体テストでは動かないので、本物を使う
     testImplementation("org.json:json:20250517")
+    // 本物のマイグレーションと履歴の SQL を単体テストで流す
+    testImplementation("org.xerial:sqlite-jdbc:3.49.1.0")
 }

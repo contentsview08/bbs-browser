@@ -28,7 +28,7 @@ class Ogp(val title: String?, val description: String?, val image: String?, val 
  */
 object OgpFetcher {
     // 掲示板向けの Monazilla ではなく、ふつうのブラウザに近い名乗りにする(OGP を返さないサイトがあるため)
-    private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) bbs-native/0.1.0"
+    private val USER_AGENT = AppUa.BROWSER_LIKE
     private const val HEAD_BYTES = 256 * 1024
     /** 取れなかったページを取り直すまでの時間(スクロールで通るたびに取りに行かないように) */
     private const val RETRY_MS = 10L * 60 * 1000

@@ -605,7 +605,7 @@ fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onDismiss: () -> Unit
                             Modifier.weight(1f).clip(shape).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, shape)
                                 .clickable {
                                     // スマホのダーク・ライトに合わせているときは、いまの明るさの方の配色を変える(PC 版の pickSchemeNow)
-                                    if (p.followSystem) { if (s.dark == Palette.dark) { if (s.dark) p.darkScheme = s.key else p.lightScheme = s.key } else { p.followSystem = false; p.scheme = s.key } }
+                                    if (p.followOsTheme) { if (s.dark == Palette.dark) { if (s.dark) p.darkScheme = s.key else p.lightScheme = s.key } else { p.followOsTheme = false; p.scheme = s.key } }
                                     else p.scheme = s.key
                                 }
                                 .padding(6.dp),

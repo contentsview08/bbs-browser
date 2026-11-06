@@ -29,11 +29,13 @@ import java.util.concurrent.TimeUnit
 object Fonts {
     class Choice(val key: String, val name: String, val desc: String, val regular: String, val bold: String)
 
+    /** 端末の標準の字 */
+    const val SYSTEM = "system"
     private const val BASE = "https://github.com/google/fonts/raw/main/ofl/"
     val CHOICES = listOf(
-        Choice("biz-udp", "BIZ UDPゴシック", "読みやすさを重視した UD 書体(約 9MB)", "bizudpgothic/BIZUDPGothic-Regular.ttf", "bizudpgothic/BIZUDPGothic-Bold.ttf"),
+        Choice("biz-ud", "BIZ UDPゴシック", "読みやすさを重視した UD 書体(約 9MB)", "bizudpgothic/BIZUDPGothic-Regular.ttf", "bizudpgothic/BIZUDPGothic-Bold.ttf"),
         Choice("zen-maru", "Zen 丸ゴシック", "角の丸いやわらかい字(約 8MB)", "zenmarugothic/ZenMaruGothic-Regular.ttf", "zenmarugothic/ZenMaruGothic-Bold.ttf"),
-        Choice("mplus-1p", "M PLUS 1p", "すっきりした細身の字(約 4MB)", "mplus1p/MPLUS1p-Regular.ttf", "mplus1p/MPLUS1p-Bold.ttf"),
+        Choice("m-plus-1p", "M PLUS 1p", "すっきりした細身の字(約 4MB)", "mplus1p/MPLUS1p-Regular.ttf", "mplus1p/MPLUS1p-Bold.ttf"),
     )
 
     /** いま使う字(null なら端末の標準) */
@@ -72,7 +74,7 @@ object Fonts {
         error = null
         errorKey = null
         if (again) return
-        if (key.isEmpty() || isDownloaded(context, key)) onReady(key) else download(context, key, onReady)
+        if (key == SYSTEM || isDownloaded(context, key)) onReady(key) else download(context, key, onReady)
     }
 
     /** 取っている字をやめる */

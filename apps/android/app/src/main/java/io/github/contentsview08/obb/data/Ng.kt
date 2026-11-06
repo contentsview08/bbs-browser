@@ -6,15 +6,15 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * NG(あぼーん)1 つ。PC 版・hono-bbs の web の utils/ng.ts の NgRule と同じ項目・同じ当て方。
- * target: body(本文)/ name(名前)/ id(ID)/ title(スレタイ)。expiresOn は この日まで(YYYY-MM-DD)、boardUrl はこの板だけ(なければすべての板)
+ * NG(あぼーん)1 つ。PC 版・hono-bbs の web の utils/ng.ts の NgRule と同じ項目・同じ JSON・同じ当て方。
+ * target: content(本文)/ posterName(名前)/ posterId(ID)/ threadTitle(スレタイ)。expiresOnDate は この日まで(YYYY-MM-DD)、boardUrl はこの板だけ(なければすべての板)
  */
 data class NgRule(
     val target: String,
     val pattern: String,
     val isRegex: Boolean = false,
     val enabled: Boolean = true,
-    val expiresOn: String? = null,
+    val expiresOnDate: String? = null,
     val boardUrl: String? = null,
     val boardName: String? = null,
     val note: String? = null,
@@ -25,26 +25,26 @@ data class NgRule(
     fun sameAs(o: NgRule) = target == o.target && pattern == o.pattern && isRegex == o.isRegex && boardUrl == o.boardUrl
 
     fun toJson(): JSONObject = JSONObject().put("target", target).put("pattern", pattern).put("isRegex", isRegex).put("enabled", enabled)
-        .put("expiresOn", expiresOn).put("boardUrl", boardUrl).put("boardName", boardName).put("note", note).put("id", id).put("createdAt", createdAt)
+        .put("expiresOnDate", expiresOnDate).put("boardUrl", boardUrl).put("boardName", boardName).put("note", note).put("id", id).put("createdAt", createdAt)
 
     companion object {
-        /** 前の形(種類と文字だけ)も読む */
+        /** PC の型で省ける項目は省けるものとして読む */
         fun fromJson(o: JSONObject) = NgRule(
             o.getString("target"), o.getString("pattern"), o.optBoolean("isRegex"), o.optBoolean("enabled", true),
-            o.optString("expiresOn").ifEmpty { null }, o.optString("boardUrl").ifEmpty { null }, o.optString("boardName").ifEmpty { null },
+            o.optString("expiresOnDate").ifEmpty { null }, o.optString("boardUrl").ifEmpty { null }, o.optString("boardName").ifEmpty { null },
             o.optString("note").ifEmpty { null }, o.optString("id").ifEmpty { java.util.UUID.randomUUID().toString() }, o.optLong("createdAt", 0L),
         )
     }
 }
 
-val NG_TARGETS = listOf("body" to "本文", "name" to "名前", "id" to "ID", "title" to "スレタイ")
+val NG_TARGETS = listOf("content" to "本文", "posterName" to "名前", "posterId" to "ID", "threadTitle" to "スレタイ")
 fun ngTargetName(t: String) = NG_TARGETS.firstOrNull { it.first == t }?.second ?: "言葉"
 
 fun today(): String = LocalDate.now().toString()
 fun daysLater(days: Long): String = LocalDate.now().plusDays(days).toString()
 
 /** いま効いているか(有効で、期限が切れていない) */
-fun NgRule.active(today: String = today()) = enabled && (expiresOn == null || expiresOn >= today)
+fun NgRule.active(today: String = today()) = enabled && (expiresOnDate == null || expiresOnDate >= today)
 
 private val NG_SCRIPT = setOf("Han", "Hiragana", "Katakana", "Latin", "Hangul", "Greek", "Cyrillic")
 private const val WORD = "A-Za-z0-9_"
@@ -137,7 +137,7 @@ fun ngPatternError(pattern: String, isRegex: Boolean): String? {
 /** text のうち、ルールに当たる所(始まり・終わり)。試し欄で色を付ける */
 fun ngMatchRanges(r: NgRule, text: String): List<IntRange> {
     if (r.pattern.isEmpty()) return emptyList()
-    if (r.target == "id" && !r.isRegex) return if (text == r.pattern) listOf(text.indices) else emptyList()
+    if (r.target == "posterId" && !r.isRegex) return if (text == r.pattern) listOf(text.indices) else emptyList()
     if (!r.isRegex) {
         val out = ArrayList<IntRange>()
         var i = text.indexOf(r.pattern, ignoreCase = true)
@@ -212,7 +212,7 @@ class NgMatcher(rules: List<NgRule>) {
         (m.r.boardUrl == null || m.r.boardUrl == boardUrl) && when {
             m.re != null -> m.re.containsMatchIn(text)
             // ID は部分一致だと別の ID まで巻き込むので、完全一致
-            target == "id" -> text == m.r.pattern
+            target == "posterId" -> text == m.r.pattern
             else -> text.contains(m.r.pattern, ignoreCase = true)
         }
 
@@ -226,13 +226,13 @@ class NgMatcher(rules: List<NgRule>) {
         return byTarget[target].orEmpty().filter { matches(it, target, text, boardUrl) }.map { it.r }
     }
 
-    fun post(p: Post, boardUrl: String?) = hit("body", p.body, boardUrl) || hit("name", p.name, boardUrl) || hit("id", p.id, boardUrl)
+    fun post(p: Post, boardUrl: String?) = hit("content", p.body, boardUrl) || hit("posterName", p.name, boardUrl) || hit("posterId", p.id, boardUrl)
 
     /** このレスに当たっている NG(種類ごと)。レスのメニューから外すために使う */
-    fun postHits(p: Post, boardUrl: String?) = NgHits(hits("id", p.id, boardUrl), hits("name", p.name, boardUrl), hits("body", p.body, boardUrl))
+    fun postHits(p: Post, boardUrl: String?) = NgHits(hits("posterId", p.id, boardUrl), hits("posterName", p.name, boardUrl), hits("content", p.body, boardUrl))
 
     /** スレ一覧: スレタイの NG と、立てた人の ID の NG */
-    fun thread(t: ThreadSummary) = hit("title", t.title, t.boardUrl) || hit("id", t.authorId, t.boardUrl)
+    fun thread(t: ThreadSummary) = hit("threadTitle", t.title, t.boardUrl) || hit("posterId", t.authorId, t.boardUrl)
 
     val isEmpty get() = byTarget.isEmpty()
 }

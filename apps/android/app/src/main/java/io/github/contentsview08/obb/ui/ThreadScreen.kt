@@ -212,11 +212,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     fun idNgItems(p: Post): List<MenuItem> = p.id?.let { id ->
         listOf(
-            MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule) { vm.addNg(NgRule("id", id, expiresOn = io.github.contentsview08.obb.data.today())) },
-            MenuItem("この ID を NG に", Icons.Filled.Block) { vm.addNg(NgRule("id", id)) },
+            MenuItem("この ID を NG に(今日だけ)", Icons.Filled.Schedule) { vm.addNg(NgRule("posterId", id, expiresOnDate = io.github.contentsview08.obb.data.today())) },
+            MenuItem("この ID を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterId", id)) },
         )
     }.orEmpty()
-    fun nameNgItem(p: Post) = MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("name", p.name)) }
+    fun nameNgItem(p: Post) = MenuItem("この名前を NG に", Icons.Filled.Block) { vm.addNg(NgRule("posterName", p.name)) }
     val own = page.ownNos
     val toOwn = remember(index, own) { own.flatMap { index.replies[it] ?: emptyList() }.toSet() - own }
     val autoLoad = remember(vm.prefs.thumbMode) {
@@ -236,14 +236,14 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         list
     }
     // 続けて並んだあぼーんのまとまり。絞り込み・検索の間はまとめない。薄く表示の NG は読めるのでまとめない
-    val ngStyleNow = vm.prefs.ngStyle
+    val ngStyleNow = vm.prefs.ngMode
     val ngGroups = remember(index, page.ngNos, page.aiNg, ngStyleNow, vm.prefs.groupNg, filter, query, page.unreadFrom) {
         if (!vm.prefs.groupNg || filter != null || query.isNotBlank()) io.github.contentsview08.obb.data.NgRuns.NONE
         else io.github.contentsview08.obb.data.ngRuns(index.posts.map { it.no }, page.unreadFrom) { no ->
             val ai = page.aiNg[no]
             when {
                 no in page.ngNos -> when (ngStyleNow) {
-                    "fold" -> io.github.contentsview08.obb.data.NgRunKind.RULE
+                    "aborn" -> io.github.contentsview08.obb.data.NgRunKind.RULE
                     "hide" -> io.github.contentsview08.obb.data.NgRunKind.SKIP
                     else -> null
                 }
@@ -440,7 +440,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     onDoubleClick = if (vm.prefs.doubleTapReply) ({ Haptics.tick(view); replyWith(">>${p.no}\n") }) else null,
                 ),
         ) {
-            val ngStyle = vm.prefs.ngStyle
+            val ngStyle = vm.prefs.ngMode
             val ai = page.aiNg[p.no]
             if (ai != null && ai.rule.show != "mark" && p.no !in page.ngNos && p.no !in revealed) {
                 if (ai.rule.show == "fold") Row(Modifier.fillMaxWidth().clickable { revealed = revealed + p.no }.padding(start = 14.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -448,7 +448,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     TextButton(onClick = { vm.markAi(p, ai.rule.id, if (ai.manual) null else false) }) { Text(if (ai.manual) "印を外す" else "当たらない", fontSize = 12.sp) }
                 }
             } else if (p.no in page.ngNos && p.no !in revealed && ngStyle != "dim") {
-                if (ngStyle == "fold") Text(
+                if (ngStyle == "aborn") Text(
                     // 外の行の長押しは、この押せる行に指を取られて届かないので、ここでも受ける
                     "${p.no}  あぼーん", Modifier.fillMaxWidth().combinedClickable(onLongClick = { Haptics.longPress(view); postMenu = p }) { revealed = revealed + p.no }.padding(horizontal = 14.dp, vertical = 10.dp),
                     color = Palette.textMuted, fontSize = 13.sp,
@@ -757,7 +757,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 ),
                 listOf(
                     MenuItem("NG", Icons.Filled.Block, children = listOf(
-                        MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("title", page.title)) },
+                        MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("threadTitle", page.title)) },
                     )) {},
                     MenuItem("ログを削除して閉じる", Icons.Filled.Delete, danger = true) { askDeleteLog() },
                 ),
@@ -862,7 +862,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             onDismissRequest = { ngWordFor = null },
             title = { Text("言葉を NG") },
             text = { OutlinedTextField(word, { word = it }, singleLine = true, label = { Text("この言葉を含むレスをあぼーんにする") }) },
-            confirmButton = { TextButton(onClick = { vm.addNg(NgRule("body", word.trim())); ngWordFor = null }) { Text("NG に足す") } },
+            confirmButton = { TextButton(onClick = { vm.addNg(NgRule("content", word.trim())); ngWordFor = null }) { Text("NG に足す") } },
             dismissButton = { TextButton(onClick = { ngWordFor = null }) { Text("やめる") } },
         )
     }

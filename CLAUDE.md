@@ -21,14 +21,14 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   Rust 側は公式プラグインの登録が中心。WebView でできないこと(OS のフォント一覧など)だけ、`src-tauri/src/lib.rs` に小さな命令として書く。
 - `apps/android` — スマホ版(Kotlin・Jetpack Compose)。コネクタは `packages/connectors` を `bbs/` の Kotlin に写したもの(2ch 互換・hono-bbs・したらば・まちBBS)。
   決まりは `packages/conformance` の JSON を PC 版と両方のテストで読んでそろえる。最初から入れる掲示板・板は `packages/presets/sites.json` を共有する。
-  `assets/migrations` は `packages/logstore/migrations` の写し(いまは 015 まで)。
+  移行 SQL は Gradle が `packages/logstore/migrations` から assets へ入れる。
 
 ## 設計の決まりごと
 
 - 差分取得の続き(`Cursor`)の中身はコネクタだけが解釈する。ホストは JSON として保存して渡し返すだけ。
 - UI はコネクタが持つ任意のメソッド(`createPost` など)の有無を見て機能を出し分ける。
 - 本文はコネクタの段階でプレーンテキストにする。UI で `innerHTML` / `dangerouslySetInnerHTML` を使わない。
-- 2ch 互換の User-Agent は `Monazilla/1.00 (bbs-browser/x.y.z)`。
+- 2ch 互換の User-Agent は PC が `Monazilla/1.00 (bbs-browser/x.y.z)`、スマホが `Monazilla/1.00 (OBB/x.y.z)`。
 - 書き込みは `POST /test/bbs.cgi`(Shift_JIS の URL エンコード。`packages/connectors/src/sjis.ts`)。
   eddist(eddibb)は初回に認証コードを返し、ブラウザで `/auth-code` を済ませると `edge-token` Cookie で通るようになる。
   書き込み(と BE などのログイン)の POST は、plugin-http ではなく自前の通信(`src-tauri/src/post_http.rs` の `http_post`)で送る。

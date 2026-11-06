@@ -212,6 +212,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var history by mutableStateOf<List<HistoryEntry>>(emptyList())
         private set
+    /** 上げた画像の履歴(新しい順) */
+    var uploads by mutableStateOf<List<io.github.contentsview08.obb.data.UploadRecord>>(emptyList())
+        private set
     var favThreads by mutableStateOf<List<HistoryEntry>>(emptyList())
         private set
     var postHistory by mutableStateOf<List<PostHistoryEntry>>(emptyList())
@@ -584,11 +587,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** バックアップを書き出す: 設定・お気に入り板・お気に入りのスレ・サイト・NG(設定に入っている) */
+    /** バックアップを書き出す: 設定・お気に入り板・お気に入りのスレ・サイト・NG(設定に入っている)・上げた画像の履歴 */
     fun exportBackup(uri: android.net.Uri) {
         viewModelScope.launch {
             try {
-                val o = io.github.contentsview08.obb.data.backupJson(prefs.export(), db.favorites(), db.favoriteThreads().map { it.thread }, db.siteMenuUrls())
+                val o = io.github.contentsview08.obb.data.backupJson(prefs.export(), db.favorites(), db.favoriteThreads().map { it.thread }, db.siteMenuUrls(), db.listUploads())
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(o.toString(2).toByteArray()) }
                 }
@@ -610,6 +613,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 for (x in b.boards) db.setFavorite(x, true)
                 for (t in b.threads) db.setFavoriteThread(t, t.title, true)
                 for ((u, n) in b.sites) db.addSite(u, n)
+                db.importUploads(b.uploads)
+                uploads = db.listUploads()
                 favorites = db.favorites()
                 sites = db.siteMenuUrls()
                 reloadSide()
@@ -1089,9 +1094,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private suspend fun addUpload(url: String, name: String, size: Long, hash: String?, deleteUrl: String? = null) {
+        db.addUpload(io.github.contentsview08.obb.data.UploadRecord(url, name, size, System.currentTimeMillis(), hash = hash, deleteUrl = deleteUrl))
+        uploads = db.listUploads()
+    }
+
     /** サイトの画面で上げたリンクを履歴に残し、本文の終わりに 1 行で入れる(ui/WebUpload.kt)。hash は渡した画像と結びつくときだけ */
     fun insertLink(r: ReplyState, url: String, hash: String? = null) {
-        prefs.addUpload(url, hash)
+        val file = r.webUpload?.files?.firstOrNull { it.hash == hash && hash != null }
+        val old = uploads.firstOrNull { it.url == url }
+        viewModelScope.launch { addUpload(url, file?.name ?: old?.name ?: url.substringAfterLast('/'), file?.bytes?.size?.toLong() ?: old?.size ?: 0L, hash) }
         if (r.body.contains(url)) return
         r.body = withLine(r.body, url + "\n")
         toast = "リンクを本文に入れました"
@@ -1122,11 +1134,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val (name, type, bytes) = up.prepareFor(getApplication(), item.uri, prefs.uploadMaxDimension, item.stamp)
                     // 同じ中身の画像を前に上げていれば、上げずにその URL を使う(履歴のハッシュで引く)
                     val hash = up.sha256(bytes)
-                    val sent = prefs.findUploadByHash(hash)?.let { it to null } ?: up.send(name, type, bytes, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey).let { it.url to it.deleteUrl }
+                    val sent = db.findUploadByHash(hash)?.let { it to null } ?: up.send(name, type, bytes, api, prefs.uploadHost, prefs.imgurClientId, prefs.imgbbApiKey).let { it.url to it.deleteUrl }
                     val (url, deleteUrl) = sent
                     // いつも最新の本文に足す(前の画像の URL を消さない)
                     r.body = withLine(r.body, url + "\n")
-                    prefs.addUpload(url, hash, deleteUrl ?: prefs.uploadDeleteUrl(url))
+                    addUpload(url, name, bytes.size.toLong(), hash, deleteUrl)
                     item.state = UploadItem.State.Done(url)
                 } catch (e: Exception) {
                     uploadFailed(r, item, e)
@@ -1174,10 +1186,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     val (name, type, bytes) = up.prepareFor(getApplication(), item.uri, prefs.uploadMaxDimension, item.stamp)
                     val hash = up.sha256(bytes)
-                    val known = prefs.findUploadByHash(hash)
+                    val known = db.findUploadByHash(hash)
                     if (known != null) {
                         if (!r.body.contains(known)) r.body = withLine(r.body, known + "\n")
-                        prefs.addUpload(known, hash)
+                        addUpload(known, name, bytes.size.toLong(), hash)
                         item.state = UploadItem.State.Done(known)
                         continue
                     }
@@ -1376,6 +1388,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         openBoard(Board(url, prefs.lastBoardName ?: "エッヂ"), root = true)
         // 最初から入れておく掲示板・板を足してから、左のメニューを読む
         viewModelScope.launch { runCatching { applyPresets() }; reloadSide() }
+        viewModelScope.launch { uploads = db.listUploads() }
         viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
         // 起動したら、しばらく開いていないスレのログを消す(設定)
         if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }

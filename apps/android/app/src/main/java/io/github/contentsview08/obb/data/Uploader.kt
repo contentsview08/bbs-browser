@@ -27,7 +27,7 @@ object Uploader {
     private const val CATBOX = "https://catbox.moe/user/api.php"
     private const val IMGUR = "https://api.imgur.com/3/image"
     private const val IMGBB = "https://api.imgbb.com/1/upload"
-    private const val USER_AGENT = "bbs-native/0.1.0 (+https://red-edge.net)"
+    private val USER_AGENT = AppUa.UPLOADER
     private const val MAX_BYTES = 50L * 1024 * 1024
     private const val MAX_GIF_BYTES = 20L * 1024 * 1024
 
@@ -105,8 +105,6 @@ object Uploader {
         HostDef("imgbox-web", "imgbox", "web", "消えない。ログインなしで上げられる"),
         HostDef("imgbb-web", "imgbb", "web", "消えない。ログインなしで上げられる"),
     )
-    /** 知らない上げ先(廃止した 自動・0x0.st・uguu.se など)は既定の上げ先に読み替える */
-    fun migrateHost(v: String?): String = if (HOSTS.any { it.key == v }) v!! else DEFAULT_HOST
     /** API で上げるのに登録が要るのに、まだなら理由 */
     fun hostProblem(host: String, imgurClientId: String, imgbbApiKey: String): String? = when {
         host == "imgur" && imgurClientId.isBlank() -> "imgur の Client-ID が登録されていません(設定 → 画像のアップロード)"

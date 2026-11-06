@@ -34,7 +34,7 @@ class LogFormatTest {
         assertEquals(listOf("CREATE TABLE a (\n  x TEXT\n)", "INSERT INTO a VALUES ('1')", "DROP TABLE b"), splitSql(sql))
     }
 
-    private val migrations = File("src/main/assets/migrations").listFiles()!!.filter { it.name.endsWith(".sql") }.sortedBy { it.name }
+    private val migrations = File("../../../packages/logstore/migrations").listFiles()!!.filter { it.name.endsWith(".sql") }.sortedBy { it.name }
 
     // execSQL は最初の 1 文しか流さないので、文がつながると後ろのテーブルが黙って作られない
     @Test fun 本物のマイグレーションが1文ずつに分かれる() {
@@ -50,11 +50,11 @@ class LogFormatTest {
         }
     }
 
-    @Test fun マイグレーションはPC版の写しで欠けがない() {
+    @Test fun マイグレーションはPC版のファイルをそのまま使い欠けがない() {
         assertEquals(migrations.indices.map { it + 1 }, migrations.map { it.name.take(3).toInt() })
-        for (f in migrations) {
-            val pc = File("../../../packages/logstore/migrations/${f.name}")
-            assertEquals(f.name, pc.readText().replace("\r\n", "\n"), f.readText().replace("\r\n", "\n"))
-        }
+        assertTrue(migrations.any { it.name == "017_upload_delete_url.sql" })
+        // 写しを置くと、ビルドで入るものと二重になる
+        assertFalse(File("src/main/assets/migrations").exists())
+        assertTrue(File("build.gradle.kts").readText().contains("packages/logstore/migrations"))
     }
 }

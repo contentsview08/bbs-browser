@@ -44,7 +44,7 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
                     MenuItem("NG", Icons.Filled.Block, children = listOfNotNull(
                     // authorId はエッヂ・hono-bbs の ID、BE 番号、スレタイの後ろの [名前]。ID の NG なので、立てたスレも書いたレスも隠れる
                     t.authorId?.let { a ->
-                        MenuItem("立てた人を NG に追加($a)", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("id", a)); vm.toast = "立てた人を NG にしました" }
+                        MenuItem("立てた人を NG に追加($a)", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("posterId", a)); vm.toast = "立てた人を NG にしました" }
                     },
                     MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
                     )) {},
@@ -59,7 +59,7 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
             onDismissRequest = onDismiss,
             title = { Text("スレタイを NG") },
             text = { OutlinedTextField(word, { word = it }, label = { Text("この言葉を含むスレを一覧に出さない") }) },
-            confirmButton = { TextButton(onClick = { if (word.isNotBlank()) vm.addNg(NgRule("title", word.trim())); onDismiss() }) { Text("NG に足す") } },
+            confirmButton = { TextButton(onClick = { if (word.isNotBlank()) vm.addNg(NgRule("threadTitle", word.trim())); onDismiss() }) { Text("NG に足す") } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
         )
     }

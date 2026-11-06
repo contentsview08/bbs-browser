@@ -204,8 +204,8 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         return
     }
     Group("見た目") {
-        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "テーマと色", value = if (p.followSystem) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
-        NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字", value = io.github.contentsview08.obb.data.Fonts.CHOICES.firstOrNull { it.key == p.font }?.name ?: "端末の標準") { open("text") }
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "テーマと色", value = if (p.followOsTheme) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
+        NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字", value = io.github.contentsview08.obb.data.Fonts.CHOICES.firstOrNull { it.key == p.fontFamily }?.name ?: "端末の標準") { open("text") }
     }
     Group("画面") {
         NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード・ログ") { open("list") }
@@ -244,7 +244,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     HorizontalDivider(color = Palette.border)
     val p = vm.prefs
     Group {
-        SwitchRow("スマホのダーク・ライトに合わせる", p.followSystem, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followSystem = it }
+        SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it }
         if (LocalAdvanced.current) SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
     }
     Group("レスの見た目") {
@@ -260,7 +260,7 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
         ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
     }
-    if (!p.followSystem) {
+    if (!p.followOsTheme) {
         Group("配色") { SchemeGrid(p.scheme) { p.scheme = it } }
     } else {
         Group("ダークのとき") { SchemeGrid(p.darkScheme, dark = true) { p.darkScheme = it } }
@@ -307,9 +307,9 @@ private fun TextPage(vm: AppViewModel) {
         val f = io.github.contentsview08.obb.data.Fonts
         // ファイルがあるかの確かめは、スライダーを動かすたびに走らせない(字を取り終えた・消したときだけ調べ直す)
         var fontsDeleted by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-        val downloaded = remember(p.font, f.loading, fontsDeleted) { f.CHOICES.map { it.key }.filter { f.isDownloaded(context, it) }.toSet() }
-        FontRow(p.font, downloaded) { key -> f.pick(context, key) { p.font = it } }
-        if (f.CHOICES.any { it.key != p.font && it.key in downloaded }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.font); fontsDeleted++ }
+        val downloaded = remember(p.fontFamily, f.loading, fontsDeleted) { f.CHOICES.map { it.key }.filter { f.isDownloaded(context, it) }.toSet() }
+        FontRow(p.fontFamily, downloaded) { key -> f.pick(context, key) { p.fontFamily = it } }
+        if (f.CHOICES.any { it.key != p.fontFamily && it.key in downloaded }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.fontFamily); fontsDeleted++ }
     }
     Group("見本") { SamplePosts(vm) }
 }
@@ -324,7 +324,7 @@ private fun ListPage(vm: AppViewModel) {
         ) { p.threadSort = it }
     }
     if (LocalAdvanced.current) Group("行の見た目") {
-        ChoiceRow("行の形", p.listDensity, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listDensity = it }
+        ChoiceRow("行の形", p.listShape, listOf("normal" to "ふつう", "compact" to "コンパクト(スレタイ 1 行と数だけ)")) { p.listShape = it }
     }
     if (LocalAdvanced.current) Group("タブ", note = "一覧の下に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)") {
         val all = listOf("unread" to "未読", "visited" to "閲覧済み", "momentum" to "勢い順", "newest" to "新しい順", "count" to "レス数順")
@@ -390,8 +390,8 @@ private fun MediaPage(vm: AppViewModel) {
     Group("サムネイル") {
         ChoiceRow("サムネイルを読み込む", p.thumbMode.name, ThumbMode.entries.map { it.name to it.label }) { p.thumbMode = ThumbMode.valueOf(it) }
         // 大きさは 8dp ずつ。動かすと下の枠がその大きさになる
-        SliderRow("大きさ", p.thumbSize.toFloat(), 56f..200f, steps = 17, label = "${p.thumbSize}dp") { p.thumbSize = snapInt(it, 8).coerceIn(56, 200) }
-        ThumbSample(p.thumbSize)
+        SliderRow("大きさ", p.postThumbSize.toFloat(), 56f..200f, steps = 17, label = "${p.postThumbSize}dp") { p.postThumbSize = snapInt(it, 8).coerceIn(56, 200) }
+        ThumbSample(p.postThumbSize)
     }
     if (LocalAdvanced.current) Group("グロ注意", note = "この言葉を含むレスと、そのアンカー先の画像を、押すまでぼかします") {
         SwitchRow("グロ注意の画像をぼかす", p.blurGross) { p.blurGross = it }
@@ -455,7 +455,7 @@ private fun BehaviorPage(vm: AppViewModel) {
         if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {
-        if (LocalAdvanced.current) SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshButton) { p.showRefreshButton = it }
+        if (LocalAdvanced.current) SwitchRow("書き込み欄の右に更新ボタン", p.showRefreshFab) { p.showRefreshFab = it }
         ChoiceRow(
             "開いているスレの自動更新", p.autoRefreshSec.toString(),
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },
@@ -516,7 +516,7 @@ private fun NgPage(vm: AppViewModel) {
     var adding by remember { mutableStateOf(false) }
     val today = io.github.contentsview08.obb.data.today()
     Group("見せ方") {
-        ChoiceRow("NG のレス", p.ngStyle, listOf("fold" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngStyle = it }
+        ChoiceRow("NG のレス", p.ngMode, listOf("aborn" to "あぼーん(1 行に畳む)", "hide" to "透明あぼーん(消す)", "dim" to "薄く表示(会話の流れを残す)")) { p.ngMode = it }
         SwitchRow("2 つ以上続いたあぼーんを 1 行にまとめる", p.groupNg, desc = "「あぼーん × 12(NG 12)」のように出します。押すと 1 つずつのあぼーんに広がり、そこから中身を見られます") { p.groupNg = it }
     }
     Group("AI NG(条件で見つける)", note = "「他人を煽っている」のように文で書いた条件に当たるレスを、この端末の中の判定モデルで見つけます。条件ごとに、隠す・畳む・印だけを選べます") {
@@ -554,10 +554,10 @@ private fun NgPage(vm: AppViewModel) {
             .asReversed().sortedByDescending { it.createdAt }
         if (shown.isEmpty()) Text(if (p.ngRules.isEmpty()) "NG はまだありません" else "当てはまる NG はありません", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = Palette.textMuted, fontSize = 14.sp)
         for (r in shown) {
-            val expired = r.expiresOn != null && r.expiresOn < today
+            val expired = r.expiresOnDate != null && r.expiresOnDate < today
             val marks = listOfNotNull(
                 if (r.isRegex) "正規表現" else null, r.boardUrl?.let { "${r.boardName ?: "この板"}だけ" },
-                r.expiresOn?.let { if (expired) "期限切れ" else "${it}まで" }, r.note,
+                r.expiresOnDate?.let { if (expired) "期限切れ" else "${it}まで" }, r.note,
             )
             HorizontalDivider(color = Palette.border)
             Row(
@@ -582,8 +582,8 @@ private fun NgPage(vm: AppViewModel) {
         }
         HorizontalDivider(color = Palette.border)
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
-        val expiredCount = p.ngRules.count { it.expiresOn != null && it.expiresOn < today }
-        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.setNg(p.ngRules.filter { it.expiresOn == null || it.expiresOn >= today }) }
+        val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
+        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.setNg(p.ngRules.filter { it.expiresOnDate == null || it.expiresOnDate >= today }) }
     }
     // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
     val board = when (val pg = vm.stack.lastOrNull { it is io.github.contentsview08.obb.Page.Thread || it is io.github.contentsview08.obb.Page.Threads }) {
@@ -591,7 +591,7 @@ private fun NgPage(vm: AppViewModel) {
         is io.github.contentsview08.obb.Page.Threads -> pg.board.url to pg.board.name
         else -> null
     }
-    if (adding) NgEditSheet(NgRule(if (filter == "all") "body" else filter, ""), board, isNew = true, onDismiss = { adding = false }) { vm.saveNg(it); adding = false }
+    if (adding) NgEditSheet(NgRule(if (filter == "all") "content" else filter, ""), board, isNew = true, onDismiss = { adding = false }) { vm.saveNg(it); adding = false }
     editing?.let { r -> NgEditSheet(r, board, isNew = false, onDismiss = { editing = null }, onDelete = { vm.removeNg(r); editing = null }) { vm.saveNg(it); editing = null } }
 }
 
@@ -655,11 +655,11 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
                         val t = io.github.contentsview08.obb.data.today()
                         val w = io.github.contentsview08.obb.data.daysLater(7)
                         val m = io.github.contentsview08.obb.data.daysLater(30)
-                        chip("ずっと", r.expiresOn == null) { r = r.copy(expiresOn = null) }
-                        chip("今日だけ", r.expiresOn == t) { r = r.copy(expiresOn = t) }
-                        chip("7 日", r.expiresOn == w) { r = r.copy(expiresOn = w) }
-                        chip("30 日", r.expiresOn == m) { r = r.copy(expiresOn = m) }
-                        if (r.expiresOn != null && r.expiresOn !in listOf(t, w, m)) chip("${r.expiresOn} まで", true) {}
+                        chip("ずっと", r.expiresOnDate == null) { r = r.copy(expiresOnDate = null) }
+                        chip("今日だけ", r.expiresOnDate == t) { r = r.copy(expiresOnDate = t) }
+                        chip("7 日", r.expiresOnDate == w) { r = r.copy(expiresOnDate = w) }
+                        chip("30 日", r.expiresOnDate == m) { r = r.copy(expiresOnDate = m) }
+                        if (r.expiresOnDate != null && r.expiresOnDate !in listOf(t, w, m)) chip("${r.expiresOnDate} まで", true) {}
                     }
                     OutlinedTextField(r.note ?: "", { r = r.copy(note = it.ifEmpty { null }) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("メモ(なぜ NG にしたか)") })
                     // 試し: 文を入れると、当たる所に色が付く
@@ -1017,7 +1017,7 @@ private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> 
         title = { Text("字") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                for ((k, name) in listOf("" to "端末の標準") + f.CHOICES.map { it.key to it.name }) {
+                for ((k, name) in listOf(f.SYSTEM to "端末の標準") + f.CHOICES.map { it.key to it.name }) {
                     val on = k == value
                     val loading = f.loading == k
                     val failed = f.errorKey == k
@@ -1027,7 +1027,7 @@ private fun FontRow(value: String, downloaded: Set<String>, onPick: (String) -> 
                             .clickable {
                                 onPick(k)
                                 // 取り始めたときは、進み具合が見えるように開いたままにする
-                                if (k in downloaded || k.isEmpty()) open = false
+                                if (k in downloaded || k == f.SYSTEM) open = false
                             }.heightIn(min = 46.dp).padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.Center,
                     ) {

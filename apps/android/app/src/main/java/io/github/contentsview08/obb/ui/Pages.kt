@@ -371,12 +371,12 @@ fun UploadsScreen(vm: AppViewModel) {
     val swipe = rememberSwipeState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val hv = androidx.compose.ui.platform.LocalView.current
-    val ups = remember { vm.prefs.uploads() }
+    val ups = vm.uploads
     // セルごとに書き込み履歴をなめないよう、先にまとめて引いておく
-    val postedOf = remember(ups, vm.postHistory) { ups.associate { it.first to vm.postedIn(it.first) } }
+    val postedOf = remember(ups, vm.postHistory) { ups.associate { it.url to vm.postedIn(it.url) } }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<String?>(null) }
-    viewerUrl?.let { u -> ImageViewer(ups.map { it.first }, u, onClose = { viewerUrl = null }) }
+    viewerUrl?.let { u -> ImageViewer(ups.map { it.url }, u, onClose = { viewerUrl = null }) }
     menuFor?.let { url ->
         val posted = vm.postedIn(url)
         MenuSheet(
@@ -386,7 +386,7 @@ fun UploadsScreen(vm: AppViewModel) {
                     MenuItem("URL をコピー", Icons.Filled.ContentCopy) { copyText(context, url); vm.toast = "URL をコピーしました" },
                     posted?.let { e -> MenuItem("貼ったレスへ(${e.thread.title.ifEmpty { "スレタイ不明" }}${e.no?.let { " >>$it" } ?: ""})", Icons.Filled.Reply) { vm.openThread(e.thread, e.no) } },
                     // imgbb(API キー)は上げたときに消すためのページが返る。API では消せないので、ブラウザで開いて消す
-                    vm.prefs.uploadDeleteUrl(url)?.let { d -> MenuItem("置き場の削除ページを開く", Icons.Filled.Delete) { openExternal(context, d, false) } },
+                    vm.uploads.firstOrNull { it.url == url }?.deleteUrl?.let { d -> MenuItem("置き場の削除ページを開く", Icons.Filled.Delete) { openExternal(context, d, false) } },
                 ),
             ),
             MenuAt.Center,
@@ -403,7 +403,7 @@ fun UploadsScreen(vm: AppViewModel) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 items(ups.size) { i ->
-                    val url = ups[i].first
+                    val url = ups[i].url
                     val posted = postedOf[url]
                     Column(Modifier.padding(3.dp)) {
                         @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -414,7 +414,7 @@ fun UploadsScreen(vm: AppViewModel) {
                         )
                         // 貼ったレスがあれば、その印(押すとそのレスへ)
                         Text(
-                            if (posted != null) "→ ${posted.thread.title.ifEmpty { "スレ" }}" else relativeTime(ups[i].second),
+                            if (posted != null) "→ ${posted.thread.title.ifEmpty { "スレ" }}" else relativeTime(ups[i].uploadedAt),
                             Modifier.fillMaxWidth().padding(top = 2.dp).then(if (posted != null) Modifier.clickable { vm.openThread(posted.thread, posted.no) } else Modifier),
                             color = if (posted != null) Palette.accent else Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )

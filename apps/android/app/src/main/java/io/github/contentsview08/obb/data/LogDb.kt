@@ -35,11 +35,40 @@ internal fun unreadEntries(entries: List<HistoryEntry>, counts: Map<String, Int>
     return entries.filter { total(it) > it.readNo }.sortedByDescending { total(it) - it.readNo }
 }
 
+/** 上げた画像 1 枚。PC 版の UploadRecord と同じ項目 */
+data class UploadRecord(
+    val url: String,
+    val name: String,
+    val size: Long,
+    val uploadedAt: Long,
+    val withAccount: Boolean = false,
+    val hash: String? = null,
+    val deleteUrl: String? = null,
+)
+
+/** 上げた画像の履歴の SQL。JVM のテストでも同じ文を流す */
+internal object UploadSql {
+    /** 同じ画像を使い直すときはハッシュや消すページが分からないので、渡さなければ前の値を残す */
+    const val ADD = "INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account, hash, delete_url) VALUES (?, ?, ?, ?, ?, " +
+        "COALESCE(?, (SELECT hash FROM uploads WHERE url = ?)), COALESCE(?, (SELECT delete_url FROM uploads WHERE url = ?)))"
+    /** バックアップから戻すときは、手元の行を古い行で置き換えない */
+    const val IMPORT = "INSERT OR IGNORE INTO uploads (url, name, size, uploaded_at, with_account, hash, delete_url) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    const val FIND_BY_HASH = "SELECT url FROM uploads WHERE hash = ? ORDER BY uploaded_at DESC LIMIT 1"
+    const val LIST = "SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY uploaded_at DESC"
+    const val REMOVE = "DELETE FROM uploads WHERE url = ?"
+
+    fun addArgs(u: UploadRecord, now: Long): Array<Any?> =
+        arrayOf(u.url, u.name, u.size, now, if (u.withAccount) 1 else 0, u.hash, u.url, u.deleteUrl, u.url)
+
+    fun importArgs(u: UploadRecord): Array<Any?> =
+        arrayOf(u.url, u.name, u.size, u.uploadedAt, if (u.withAccount) 1 else 0, u.hash, u.deleteUrl)
+}
+
 /**
- * ログの保存(PC 版の packages/logstore にあたる)。テーブルは assets/migrations の SQL(PC 版の packages/logstore/migrations の
- * 001〜015 の写し)で作る。版の番号 = 流したマイグレーションの数
+ * ログの保存(PC 版の packages/logstore にあたる)。テーブルは PC 版と同じ packages/logstore/migrations の SQL で作る
+ * (ビルドで assets の migrations/ に入る)。版の番号 = 流したマイグレーションの数
  */
-class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-native.db", null, migrationNames(context).size) {
+class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", null, migrationNames(context).size) {
 
     override fun onCreate(db: SQLiteDatabase) = migrate(db, 0)
 
@@ -50,6 +79,41 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
             val sql = context.assets.open("migrations/$name").bufferedReader().use { it.readText() }
             for (stmt in splitSql(sql)) db.execSQL(stmt)
         }
+    }
+
+    // ── 上げた画像の履歴 ──
+
+    suspend fun addUpload(u: UploadRecord, now: Long = System.currentTimeMillis()) = io {
+        writableDatabase.execSQL(UploadSql.ADD, UploadSql.addArgs(u, now))
+    }
+
+    suspend fun importUploads(list: List<UploadRecord>) = io {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (u in list) db.execSQL(UploadSql.IMPORT, UploadSql.importArgs(u))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 同じ中身(hash)の画像を前に上げていれば、その URL(いちばん新しいもの) */
+    suspend fun findUploadByHash(hash: String): String? = io {
+        readableDatabase.rawQuery(UploadSql.FIND_BY_HASH, arrayOf(hash)).use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }
+
+    suspend fun listUploads(): List<UploadRecord> = io {
+        readableDatabase.rawQuery(UploadSql.LIST, null).use { c ->
+            buildList {
+                while (c.moveToNext()) add(UploadRecord(c.getString(0), c.getString(1), c.getLong(2), c.getLong(3), c.getInt(4) == 1, c.getString(5), c.getString(6)))
+            }
+        }
+    }
+
+    /** 履歴から消す(置き場のファイルを消すのは呼ぶ側) */
+    suspend fun removeUpload(url: String) = io {
+        writableDatabase.execSQL(UploadSql.REMOVE, arrayOf(url))
     }
 
     // ── 板 ──

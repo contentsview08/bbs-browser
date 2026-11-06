@@ -145,14 +145,9 @@ class ConformanceTest {
         val pattern = i.getString("pattern")
         val isRegex = i.getBoolean("isRegex")
         val text = i.getString("text")
-        val target = when (i.getString("target")) {
-            "posterName" -> "name"
-            "posterId" -> "id"
-            "threadTitle" -> "title"
-            else -> "body"
-        }
+        val target = i.getString("target")
         val rule = NgRule(target, pattern, isRegex)
-        val p = Post(1, if (target == "name") text else "", "", "", if (target == "id") text else null, if (target == "body") text else "")
+        val p = Post(1, if (target == "posterName") text else "", "", "", if (target == "posterId") text else null, if (target == "content") text else "")
         mapOf(
             "valid" to (ngPatternError(pattern, isRegex) == null),
             "match" to NgMatcher(listOf(rule)).post(p, null),

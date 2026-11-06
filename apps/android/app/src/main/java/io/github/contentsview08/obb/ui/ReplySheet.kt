@@ -241,7 +241,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 else Icon(Icons.AutoMirrored.Filled.Send, "送る", tint = Palette.accentText, modifier = Modifier.size(20.dp))
             }
             // 更新(設定で消せる)。取っている間は回る
-            if (vm.prefs.showRefreshButton) {
+            if (vm.prefs.showRefreshFab) {
                 // 取り終えたら、新着があれば ✓、なければ「—」を少しだけ出して戻る(取れたか分かるように)
                 var startCount by remember { mutableStateOf(-1) }
                 var result by remember { mutableStateOf<Boolean?>(null) }

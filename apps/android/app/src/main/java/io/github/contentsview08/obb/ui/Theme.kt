@@ -133,7 +133,7 @@ fun accentOf(key: String) = ACCENTS.firstOrNull { it.key == key }
 
 fun schemeOf(key: String) =
     if (key == "custom") CustomSchemes.def?.let { buildScheme(it) } ?: SCHEMES[0]
-    else SCHEMES.firstOrNull { it.key == retiredScheme(key) } ?: SCHEMES[0]
+    else SCHEMES.firstOrNull { it.key == key } ?: SCHEMES[0]
 
 /** 選べる配色(自分の配色を作っていれば、最後に足す) */
 fun allSchemes(): List<Scheme> = CustomSchemes.def?.let { SCHEMES + buildScheme(it) } ?: SCHEMES
@@ -292,11 +292,4 @@ fun BbsTheme(content: @Composable () -> Unit) {
         labelLarge = base.labelLarge.tight(), labelMedium = base.labelMedium.tight(), labelSmall = base.labelSmall.tight(),
     )
     MaterialTheme(colorScheme = scheme, shapes = shapes, typography = typography, content = content)
-}
-
-/** なくなった配色の保存値を、いちばん近い配色へ読み替える(PC 版の withoutOldLight と同じ) */
-fun retiredScheme(key: String): String = when (key) {
-    "soft-light", "sepia", "discord-light", "light", "2ch-classic" -> "light-gray"
-    "night" -> "soft-dark"
-    else -> key
 }

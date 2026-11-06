@@ -101,10 +101,10 @@ class MainActivity : ComponentActivity() {
             io.github.contentsview08.obb.ui.Haptics.enabled = p.haptics
             io.github.contentsview08.obb.ui.Motion.pref = p.reduceMotion
             LaunchedEffect(Unit) { io.github.contentsview08.obb.ui.Motion.read(this@MainActivity) }
-            LaunchedEffect(p.font) { io.github.contentsview08.obb.data.Fonts.apply(this@MainActivity, p.font) }
+            LaunchedEffect(p.fontFamily) { io.github.contentsview08.obb.data.Fonts.apply(this@MainActivity, p.fontFamily) }
             // AI NG のモデルは、使う設定のときだけ動かす(取ってあれば通信しない)
             LaunchedEffect(p.aiNgEnabled) { if (p.aiNgEnabled) io.github.contentsview08.obb.data.AiModel.start(this@MainActivity) else io.github.contentsview08.obb.data.AiModel.stop() }
-            val key = if (p.followSystem) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
+            val key = if (p.followOsTheme) (if (systemDark) p.darkScheme else p.lightScheme) else p.scheme
             LaunchedEffect(key, p.customScheme) {
                 io.github.contentsview08.obb.ui.CustomSchemes.def = io.github.contentsview08.obb.ui.CustomDef.parse(p.customScheme)
                 Palette.scheme = io.github.contentsview08.obb.ui.schemeOf(key)

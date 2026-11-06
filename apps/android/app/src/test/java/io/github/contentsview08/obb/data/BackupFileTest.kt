@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupFileTest {
-    private val floats = setOf("fontScale", "lineHeight")
+    private val floats = setOf("mobileFontPx", "postLineHeight")
 
     /** ファイルに書いて読み戻した設定 */
     private fun roundTrip(settings: JSONObject): Map<String, Any> {
@@ -32,9 +32,9 @@ class BackupFileTest {
 
     // JSON は 2.0 を 2 と書くので、Int で保存すると getFloat が読めず既定の大きさに戻る
     @Test fun 小数の設定はきりのよい数でも小数のまま戻る() {
-        val s = roundTrip(JSONObject().put("fontScale", 2f).put("lineHeight", 1.47f))
-        assertEquals(2f, s["fontScale"])
-        assertEquals(1.47f, s["lineHeight"])
+        val s = roundTrip(JSONObject().put("mobileFontPx", 16f).put("postLineHeight", 1.47f))
+        assertEquals(16f, s["mobileFontPx"])
+        assertEquals(1.47f, s["postLineHeight"])
     }
 
     @Test fun ほかの型はそのまま戻る() {
@@ -63,9 +63,9 @@ class BackupFileTest {
     }
 
     @Test fun 無い項目は空() {
-        val b = parseBackup("""{"app":"bbs-native","version":1}""")
+        val b = parseBackup("""{"app":"OBB","version":1}""")
         assertNull(b.settings)
-        assertTrue(b.boards.isEmpty() && b.threads.isEmpty() && b.sites.isEmpty())
+        assertTrue(b.boards.isEmpty() && b.threads.isEmpty() && b.sites.isEmpty() && b.uploads.isEmpty())
     }
 
     private fun assertRefused(text: String) {
@@ -74,7 +74,7 @@ class BackupFileTest {
     }
 
     @Test fun 別のファイルは戻さない() {
-        assertRefused("""{"settings":{"fontScale":2}}""")
+        assertRefused("""{"settings":{"mobileFontPx":2}}""")
         assertRefused("""{"app":"other","settings":{}}""")
         assertRefused("[]")
         assertRefused("not json")
@@ -82,8 +82,47 @@ class BackupFileTest {
     }
 
     @Test fun 途中の行が壊れていれば全体を戻さない() {
-        assertRefused("""{"app":"bbs-native","settings":{"a":1},"favoriteBoards":[{"url":"https://x.test/a/","name":"A"},{"url":"https://x.test/b/"}]}""")
-        assertRefused("""{"app":"bbs-native","favoriteThreads":[{"boardUrl":"https://x.test/a/","title":"t"}]}""")
-        assertRefused("""{"app":"bbs-native","sites":[1]}""")
+        assertRefused("""{"app":"OBB","settings":{"a":1},"favoriteBoards":[{"url":"https://x.test/a/","name":"A"},{"url":"https://x.test/b/"}]}""")
+        assertRefused("""{"app":"OBB","favoriteThreads":[{"boardUrl":"https://x.test/a/","title":"t"}]}""")
+        assertRefused("""{"app":"OBB","sites":[1]}""")
+    }
+
+    @Test fun 新しい版のファイルは戻さない() {
+        assertRefused("""{"app":"OBB","version":2,"settings":{}}""")
+    }
+
+    @Test fun 読めないNGがあれば全体を戻さない() {
+        assertRefused("""{"app":"OBB","settings":{"ngRules":[{"target":"content"}]}}""")
+    }
+
+    @Test fun 印はOBBで上げた画像の履歴も戻る() {
+        val u = UploadRecord("https://i.test/a.png", "a.png", 12, 1700000000000, true, "ab", "https://i.test/del")
+        val u2 = UploadRecord("https://i.test/b.png", "b.png", 0, 1700000000001)
+        val o = backupJson(JSONObject(), emptyList(), emptyList(), emptyList(), listOf(u, u2))
+        assertEquals("OBB", o.getString("app"))
+        assertEquals(listOf(u, u2), parseBackup(o.toString(2)).uploads)
+    }
+
+    @Test fun JSONの項目はPCのファイルと同じくJSONのまま書いて文字列に戻す() {
+        val ng = """[{"id":"1","target":"posterId","pattern":"abc","isRegex":false,"enabled":true,"expiresOnDate":"2030-01-01"}]"""
+        val out = exportedSettings(mapOf("ngRules" to ng, "keywords" to "[\"a\"]", "swipeGestures" to "", "mobileFontPx" to 16f), setOf("ngRules", "keywords", "swipeGestures", "mobileFontPx"))
+        assertEquals("abc", out.getJSONArray("ngRules").getJSONObject(0).getString("pattern"))
+        assertEquals("a", out.getJSONArray("keywords").getString(0))
+        assertFalse(out.has("swipeGestures"))
+        val s = roundTrip(out)
+        assertEquals("abc", org.json.JSONArray(s["ngRules"] as String).getJSONObject(0).getString("pattern"))
+        assertEquals("[\"a\"]", s["keywords"])
+        assertEquals(16f, s["mobileFontPx"])
+    }
+
+    @Test fun 書き出しは今ある項目だけで秘密の値を入れない() {
+        val all = mapOf("honoPassword" to "p", "imgbbApiKey" to "k", "fontScale" to 1.2f, "postName" to "n")
+        val out = exportedSettings(all, setOf("honoPassword", "imgbbApiKey", "postName"))
+        assertEquals(setOf("postName"), out.keys().asSequence().toSet())
+    }
+
+    @Test fun 知らない項目の配列は戻さず知っている項目の配列は戻す() {
+        val s = restoredSettings(JSONObject("""{"other":[1],"listTabs":["unread"],"boardVisits":{"u":1}}"""), emptySet())
+        assertEquals(mapOf("listTabs" to """["unread"]""", "boardVisits" to """{"u":1}"""), s)
     }
 }

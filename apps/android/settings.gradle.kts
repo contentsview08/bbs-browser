@@ -13,5 +13,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "bbs-native"
+rootProject.name = "OBB"
 include(":app")

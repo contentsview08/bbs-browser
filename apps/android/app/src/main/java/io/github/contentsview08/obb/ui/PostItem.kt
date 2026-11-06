@@ -110,7 +110,7 @@ fun PostItem(
         if (aa) AaBody(r) else Text(shownBody, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
     }
     val media = @Composable {
-        if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.thumbSize)
+        if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.postThumbSize)
         if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
     }
     // 頭の行の字の並びと位置を覚えておく(長押しした所が ID・名前の上か、スレ表示が調べる)

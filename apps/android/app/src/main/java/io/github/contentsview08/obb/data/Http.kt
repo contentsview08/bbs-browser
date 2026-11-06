@@ -26,7 +26,7 @@ class HttpResponse(val status: Int, val headers: Map<String, String>, val body: 
  * 掲示板のフォームの書き込み(postForm)は、読む通信とは別の置き場を使う(エッヂの edge-token・5ch の書き込みの Cookie。PC 版の post_http.rs と同じ分け方)
  */
 object Http {
-    private const val USER_AGENT = "Monazilla/1.00 (bbs-native/0.1.0)"
+    private val USER_AGENT = AppUa.MONAZILLA
 
     /** 試験用: 通信の代わりに答える(メソッド・URL・ヘッダー・送る中身) */
     internal var fake: ((String, String, Map<String, String>, ByteArray?) -> HttpResponse)? = null
@@ -49,8 +49,7 @@ object Http {
     fun init(context: Context) {
         if (::jar.isInitialized) return
         jar = SavedCookieJar(context.applicationContext, "cookies")
-        // 読む通信の置き場の Cookie を初回に引き継ぐ(置き場を分ける前の版から更新しても、書き込みの認証が切れないように)
-        postJar = SavedCookieJar(context.applicationContext, "post-cookies", inheritFrom = "cookies")
+        postJar = SavedCookieJar(context.applicationContext, "post-cookies")
     }
 
     private val postFormClient by lazy { client.newBuilder().cookieJar(postJar).build() }
@@ -164,17 +163,10 @@ internal fun cookieFromJson(o: JSONObject): Cookie {
     return b.build()
 }
 
-/** Cookie を SharedPreferences に保存する置き場。期限の切れたものは読むときに捨てる。inheritFrom は、まだ空のときに中身を写してくる置き場 */
-private class SavedCookieJar(context: Context, name: String, inheritFrom: String? = null) : CookieJar {
+/** Cookie を SharedPreferences に保存する置き場。期限の切れたものは読むときに捨てる */
+private class SavedCookieJar(context: Context, name: String) : CookieJar {
     private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
-    private val cookies: MutableList<Cookie>
-
-    init {
-        if (inheritFrom != null && !prefs.contains("all")) {
-            context.getSharedPreferences(inheritFrom, Context.MODE_PRIVATE).getString("all", null)?.let { prefs.edit().putString("all", it).apply() }
-        }
-        cookies = load()
-    }
+    private val cookies: MutableList<Cookie> = load()
 
     @Synchronized
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {

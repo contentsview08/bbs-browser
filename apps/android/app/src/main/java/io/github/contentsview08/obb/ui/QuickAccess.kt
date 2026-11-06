@@ -80,7 +80,7 @@ fun QuickAccess(vm: AppViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     var viewerUrl by remember { mutableStateOf<String?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    viewerUrl?.let { u -> ImageViewer(vm.prefs.uploads().map { it.first }, u, onClose = { viewerUrl = null }) }
+    viewerUrl?.let { u -> ImageViewer(vm.uploads.map { it.url }, u, onClose = { viewerUrl = null }) }
 
     // 板の URL → 名前(お気に入り・最近見た板から。なければ URL の板の部分)
     val recentBoards = remember(vm.quickOpen) { vm.prefs.recentBoards() }
@@ -225,7 +225,7 @@ fun QuickAccess(vm: AppViewModel) {
                     }
                     "uploads" -> {
                         // 上げた画像: 押すと見る、長押しで URL をコピー(もう一度貼れるように)
-                        val ups = vm.prefs.uploads()
+                        val ups = vm.uploads
                         if (ups.isEmpty()) empty("まだありません(書き込み欄の ＋ の「画像」から上げた画像が並びます)")
                         else {
                             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -233,7 +233,7 @@ fun QuickAccess(vm: AppViewModel) {
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
                             ) {
                                 items(ups.size) { i ->
-                                    val url = ups[i].first
+                                    val url = ups[i].url
                                     @OptIn(ExperimentalFoundationApi::class)
                                     StoredImage(
                                         url,

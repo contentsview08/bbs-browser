@@ -190,11 +190,11 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
     }
 
     Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        val using = prefs.scheme == "custom" && !prefs.followSystem
+        val using = prefs.scheme == "custom" && !prefs.followOsTheme
         Text(
             if (using) "使っています" else "この配色を使う",
             Modifier.clip(RoundedCornerShape(6.dp)).background(if (using) Palette.surface2 else Palette.accent)
-                .clickable(enabled = !using) { save(def); prefs.followSystem = false; prefs.scheme = "custom" }.padding(horizontal = 16.dp, vertical = 10.dp),
+                .clickable(enabled = !using) { save(def); prefs.followOsTheme = false; prefs.scheme = "custom" }.padding(horizontal = 16.dp, vertical = 10.dp),
             color = if (using) Palette.textMuted else Palette.accentText, fontSize = 14.sp, fontWeight = FontWeight.Bold,
         )
         Text(

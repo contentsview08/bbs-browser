@@ -490,7 +490,7 @@ private fun ThreadRow(
     val pad = prefs.listPad.dp
     val visited = state != null
     val archived = state?.archived == true
-    val compact = prefs.listDensity == "compact"
+    val compact = prefs.listShape == "compact"
     val heatC = when {
         rank >= 0.9 -> Palette.heatVeryHot
         rank >= 0.6 -> Palette.heatHot

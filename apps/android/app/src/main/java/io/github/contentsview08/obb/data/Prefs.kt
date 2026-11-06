@@ -10,11 +10,13 @@ import org.json.JSONObject
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
-/** 基本の文字を外したあとも、見えていた大きさを保つ倍率 */
-internal fun splitContentScale(content: Float, base: Float): Float = content * base
-
 /** 画像のサムネイル: いつも読む / Wi-Fi のときだけ / 押したら読む / 出さない */
-enum class ThumbMode(val label: String) { ALWAYS("いつも"), WIFI("Wi-Fi のときだけ"), TAP("押したら"), NEVER("出さない") }
+enum class ThumbMode(val label: String) {
+    ALWAYS("いつも"), WIFI("Wi-Fi のときだけ"), TAP("押したら"), NEVER("出さない");
+
+    /** 保存する値(PC の thumbLoad と同じ) */
+    val key get() = name.lowercase()
+}
 
 /** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
 private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T) : ReadWriteProperty<Any?, T> {
@@ -45,46 +47,29 @@ private class Pref<T>(private val sp: SharedPreferences, private val key: String
     }
 }
 
+/** PC では string[] の項目。保存は同じ JSON の配列で、画面には sep でつないだ文字で渡す */
+private class WordsPref(private val inner: ReadWriteProperty<Any?, String>, private val sep: String, private val def: String) : ReadWriteProperty<Any?, String> {
+    override fun getValue(thisRef: Any?, property: KProperty<*>): String = joinedWords(inner.getValue(thisRef, property), sep, def)
+    override fun setValue(thisRef: Any?, property: KProperty<*>, value: String) = inner.setValue(thisRef, property, wordsJson(value, sep))
+}
+
 /**
  * 設定(端末の SharedPreferences)。画面から見る値は Compose の状態にして、変えたらすぐ画面に出る。
- * 項目と既定の値は apps/desktop/src/ui/settings.ts の DEFAULT_SETTINGS にそろえる
+ * 端末をまたいで意味のある項目は、保存の名前・単位・JSON を apps/desktop/src/ui/settings.ts の AppSettings と同じにする
  */
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     /** 小数の設定の名前。バックアップの 1.0 は JSON で 1 になるので、戻すときの型をこれで決める */
     private val floatKeys = HashSet<String>()
+    /** いまある設定の名前。バックアップにはこれだけを入れ、これだけを戻す */
+    private val knownKeys = hashSetOf("ngRules", "aiNgRules", "aiNgOverrides", "boardMeta")
     private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> {
         if (def is Float) floatKeys += key
+        knownKeys += key
         return Pref(sp, key, def)
     }
-
-    init {
-        splitBaseFont()
-        // 古い値を今の設定に読み替える。レスの見た目 timeline → いちばん近い discord
-        if (sp.getString("postStyle", null) == "timeline") sp.edit().putString("postStyle", "discord").apply()
-        // 廃止した配色 → いちばん近い配色(ui/Theme.kt の retiredScheme)
-        for (k in listOf("scheme", "darkScheme", "lightScheme")) {
-            val v = sp.getString(k, null) ?: continue
-            val to = io.github.contentsview08.obb.ui.retiredScheme(v)
-            if (to != v) sp.edit().putString(k, to).apply()
-        }
-        // 廃止した上げ先 → 既定の上げ先
-        sp.getString("uploadHost", null)?.let { v -> val to = Uploader.migrateHost(v); if (to != v) sp.edit().putString("uploadHost", to).apply() }
-        // showThumbnails + thumbMode → thumbMode(出さない = NEVER。古い NEVER は「押したら」なので TAP)
-        if (sp.contains("showThumbnails")) {
-            val mode = if (!sp.getBoolean("showThumbnails", true)) "NEVER" else if (sp.getString("thumbMode", null) == "NEVER") "TAP" else null
-            sp.edit().apply { if (mode != null) putString("thumbMode", mode); remove("showThumbnails") }.apply()
-        }
-        // idHeat + idColor → idStyle(none / color)
-        if (sp.contains("idHeat") || sp.contains("idColor")) {
-            val color = sp.getBoolean("idColor", false) || sp.getBoolean("idHeat", true)
-            sp.edit().putString("idStyle", if (color) "color" else "none").remove("idHeat").remove("idColor").apply()
-        }
-        // heatStyle の none → left
-        if (sp.getString("heatStyle", null) == "none") sp.edit().putString("heatStyle", "left").apply()
-        // もう使わない設定の値を消す
-        for (k in listOf("pullToRefreshList", "aaAutoDetect", "sendDelay", "phraseBar", "uploadEnabled", "imageUrlOmit", "imageUrlCollapse")) if (sp.contains(k)) sp.edit().remove(k).apply()
-    }
+    private fun wordsPref(key: String, def: List<String>, sep: String): ReadWriteProperty<Any?, String> =
+        WordsPref(pref(key, JSONArray(def).toString()), sep, def.joinToString(sep))
 
     var lastBoardUrl: String?
         get() = sp.getString("lastBoardUrl", null)
@@ -97,41 +82,71 @@ class Prefs(context: Context) {
     /** 配色(Palette の SCHEMES のキー) */
     var scheme by pref("scheme", "indigo")
     /** スマホのダーク・ライトに合わせる(合わせるときは darkScheme / lightScheme を使う) */
-    var followSystem by pref("followSystem", true)
+    var followOsTheme by pref("followOsTheme", true)
     var darkScheme by pref("darkScheme", "soft-dark")
     /** 差し色(ACCENTS のキー)。空ならテーマの色 */
     var accent by pref("accent", "")
     var lightScheme by pref("lightScheme", "light-gray")
     /** レスの見た目(ui/PostRender.kt の POST_STYLES のキー) */
     var postStyle by pref("postStyle", "card")
-    /** 基本の文字の倍率。メニュー・ボタン・ポップアップなどの部品の字 */
-    var fontScale by pref("fontScale", 1f)
-    /** レスの本文の文字の倍率 */
-    var bodyScale by pref("bodyScale", 1f)
-    /** レスの本文の行間(字の高さの倍) */
-    var lineHeight by pref("lineHeight", 1.47f)
-    /** レスの頭(名前・日付・ID)の文字の倍率 */
-    var postHeadScale by pref("postHeadScale", 1f)
-    /** レスの上下の余白(dp) */
-    var postPad by pref("postPad", 8)
-    /** スレ一覧の文字の倍率 */
-    var listFontScale by pref("listFontScale", 1f)
-    /** スレ一覧のスレの上下の余白(dp) */
-    var listPad by pref("listPad", 9)
-    /** ヘッダー・フッターの高さ(dp)と文字の倍率 */
-    var headerHeight by pref("headerHeight", 54)
-    var footerHeight by pref("footerHeight", 52)
-    var barFontScale by pref("barFontScale", 1f)
+    /** 基本の文字(px)。メニュー・ボタン・ポップアップなどの部品の字 */
+    var mobileFontPx by pref("mobileFontPx", MOBILE_FONT_PX)
+    var fontScale: Float
+        get() = baseScaleOfPx(mobileFontPx)
+        set(v) { mobileFontPx = basePxOfScale(v) }
+    /** レスの本文の文字(px。0 なら既定) */
+    var postBodyPx by pref("postBodyPx", 0)
+    var bodyScale: Float
+        get() = scaleOfPx(postBodyPx, POST_BODY_BASE_PX)
+        set(v) { postBodyPx = pxOfScale(v, POST_BODY_BASE_PX) }
+    /** レスの本文の行間(字の高さの倍。0 なら既定) */
+    var postLineHeight by pref("postLineHeight", 0f)
+    var lineHeight: Float
+        get() = if (postLineHeight > 0f) postLineHeight else POST_LINE_HEIGHT
+        set(v) { postLineHeight = if (v == POST_LINE_HEIGHT) 0f else v }
+    /** レスの頭(名前・日付・ID)の文字(px。0 なら既定) */
+    var postHeadPx by pref("postHeadPx", 0)
+    var postHeadScale: Float
+        get() = scaleOfPx(postHeadPx, POST_HEAD_BASE_PX)
+        set(v) { postHeadPx = pxOfScale(v, POST_HEAD_BASE_PX) }
+    /** レスの上下の余白(px。-1 なら既定) */
+    var postPadPx by pref("postPadPx", -1)
+    var postPad: Int
+        get() = orDefault(postPadPx, -1, POST_PAD_PX)
+        set(v) { postPadPx = orUnset(v, -1, POST_PAD_PX) }
+    /** スレ一覧の文字(px。0 なら既定) */
+    var listFontPx by pref("listFontPx", 0)
+    var listFontScale: Float
+        get() = scaleOfPx(listFontPx, LIST_FONT_BASE_PX)
+        set(v) { listFontPx = pxOfScale(v, LIST_FONT_BASE_PX) }
+    /** スレ一覧のスレの上下の余白(px。-1 なら既定) */
+    var listPadPx by pref("listPadPx", -1)
+    var listPad: Int
+        get() = orDefault(listPadPx, -1, LIST_PAD_PX)
+        set(v) { listPadPx = orUnset(v, -1, LIST_PAD_PX) }
+    /** ヘッダー・フッターの高さ(px。0 なら既定)と文字(px。0 なら基本の文字のまま) */
+    var headerPx by pref("headerPx", 0)
+    var headerHeight: Int
+        get() = orDefault(headerPx, 0, HEADER_PX)
+        set(v) { headerPx = orUnset(v, 0, HEADER_PX) }
+    var footerPx by pref("footerPx", 0)
+    var footerHeight: Int
+        get() = orDefault(footerPx, 0, FOOTER_PX)
+        set(v) { footerPx = orUnset(v, 0, FOOTER_PX) }
+    var barFontPx by pref("barFontPx", 0f)
+    var barFontScale: Float
+        get() = barScaleOfPx(barFontPx, mobileFontPx)
+        set(v) { barFontPx = barPxOfScale(v, mobileFontPx) }
 
     // ── スレ一覧 ──
     /** 板を開いたときの並び: subject(更新順)/ momentum / newest / count */
     var threadSort by pref("threadSort", "subject")
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
-    var keywords by pref("keywords", "")
+    var keywords by wordsPref("keywords", emptyList(), "\n")
     /** スレ一覧の勢いの示し方: number(数字の色)/ bar(行の下のバー)/ both */
     var momentumStyle by pref("momentumStyle", "number")
     /** スレ一覧の行の形: normal / compact(スレタイ 1 行と数だけ) */
-    var listDensity by pref("listDensity", "normal")
+    var listShape by pref("listShape", "normal")
     /** スレ一覧を見出し(キーワード・新しいスレ・新着のある読んだスレ・その他)で区切る */
     var listSections by pref("listSections", false)
     /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */
@@ -145,29 +160,6 @@ class Prefs(context: Context) {
         recentBoardsJson = JSONArray(list.take(30).map { JSONObject().put("url", it.first).put("name", it.second).put("t", it.third) }).toString()
     }
 
-    /** 上げた画像(新しい順、100 まで)。クイックアクセスから URL をもう一度使えるように */
-    private var uploadsJson by pref("uploads", "[]")
-    /** 上げた画像 1 件(url・時刻・中身のハッシュ・置き場から消すページ。ハッシュと消すページは昔の履歴にはない) */
-    data class Upload(val url: String, val t: Long, val hash: String?, val deleteUrl: String? = null)
-    private fun readUploads(): List<Upload> = runCatching {
-        val a = JSONArray(uploadsJson)
-        (0 until a.length()).map { a.getJSONObject(it).let { o -> Upload(o.getString("url"), o.getLong("t"), o.optString("h").ifEmpty { null }, o.optString("d").ifEmpty { null }) } }
-    }.getOrDefault(emptyList())
-    private fun writeUploads(list: List<Upload>) {
-        uploadsJson = JSONArray(list.take(100).map { JSONObject().put("url", it.url).put("t", it.t).put("h", it.hash ?: "").put("d", it.deleteUrl ?: "") }).toString()
-    }
-    fun uploads(): List<Pair<String, Long>> = readUploads().map { it.url to it.t }
-    /** 置き場から消すためのページ(imgbb の delete_url)。なければ null(置き場では消せない) */
-    fun uploadDeleteUrl(url: String): String? = readUploads().firstOrNull { it.url == url }?.deleteUrl
-    /** 履歴に残す。hash は中身の SHA-256(同じ画像をもう一度選んだら、上げずにこの URL を使う)。deleteUrl は置き場から消すページ(imgbb) */
-    fun addUpload(url: String, hash: String? = null, deleteUrl: String? = null) {
-        val all = readUploads()
-        val old = all.firstOrNull { it.url == url }
-        // 同じ URL をもう一度残すときに、前に分かったハッシュと消すページを失わない
-        writeUploads(listOf(Upload(url, System.currentTimeMillis(), hash ?: old?.hash, deleteUrl ?: old?.deleteUrl)) + all.filter { it.url != url })
-    }
-    /** 同じ中身(hash)の画像を前に上げていれば、その URL */
-    fun findUploadByHash(hash: String): String? = readUploads().firstOrNull { it.hash == hash }?.url
     /** 上げる前の確かめの「画像にスレタイと URL を入れる」(left / right。入れないなら空。最後に選んだものを覚える) */
     var uploadStamp by pref("uploadStamp", "")
 
@@ -193,7 +185,7 @@ class Prefs(context: Context) {
     fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }
     /** 一覧の下に出すタブと並び(カンマ区切り。unread / visited / momentum / newest / count) */
-    var listTabs by pref("listTabs", "unread,momentum,newest")
+    var listTabs by wordsPref("listTabs", listOf("unread", "momentum", "newest"), ",")
     /** 開いていないスレのログを消すまでの日数(0 なら消さない) */
     var logRetentionDays by pref("logRetentionDays", 90)
 
@@ -201,8 +193,8 @@ class Prefs(context: Context) {
     /** 開く位置: unread(最初の未読)/ top / bottom */
     var openPosition by pref("openPosition", "unread")
     var omitNoname by pref("omitNoname", true)
-    /** 空行を整える(3 行以上続く空行を 1 行に)。保存の鍵は collapseBlankLines のまま(既存の設定を引き継ぐ) */
-    var tidyBlankLines by pref("collapseBlankLines", true)
+    /** 空行を整える(3 行以上続く空行を 1 行に) */
+    var tidyBlankLines by pref("tidyBlankLines", true)
     var highlightOp by pref("highlightOp", true)
     /** ID の見せ方: none(文字だけ) / color(2 回以上書いた ID を ID ごとの色に)。PC・Web の idStyle と同じ(模様はスマホにない) */
     var idStyle by pref("idStyle", "none")
@@ -214,10 +206,19 @@ class Prefs(context: Context) {
     var idPosition by pref("idPosition", "topRight")
     /** OS の通知に出す */
     var osNotify by pref("osNotify", false)
-    /** 知らせる種類 */
-    var notifyReply by pref("notifyReply", true)
-    var notifyFav by pref("notifyFav", true)
-    var notifyKeyword by pref("notifyKeyword", true)
+    /** 知らせる種類(PC の notifyKinds と同じ。ないものはオン) */
+    private var notifyKindsJson by pref("notifyKinds", "{}")
+    private fun notifyKind(kind: String) = runCatching { JSONObject(notifyKindsJson).optBoolean(kind, true) }.getOrDefault(true)
+    private fun setNotifyKind(kind: String, on: Boolean) { notifyKindsJson = runCatching { JSONObject(notifyKindsJson) }.getOrDefault(JSONObject()).put(kind, on).toString() }
+    var notifyReply: Boolean
+        get() = notifyKind("reply")
+        set(v) = setNotifyKind("reply", v)
+    var notifyFav: Boolean
+        get() = notifyKind("fav")
+        set(v) = setNotifyKind("fav", v)
+    var notifyKeyword: Boolean
+        get() = notifyKind("keyword")
+        set(v) = setNotifyKind("keyword", v)
     /** 閲覧履歴(既読のスレ)の新着を、この分ごとに確かめる(0 ならしない。5 分より短くはしない) */
     var historyCheckMin by pref("historyCheckMin", 0)
     /** お気に入りのスレの新着の数を、アプリを開いている間この分ごとに確かめる(0 ならしない)。PC 版と同じ既定 */
@@ -232,8 +233,8 @@ class Prefs(context: Context) {
     var iconFromWatchoi by pref("iconFromWatchoi", true)
     /** 動きを減らす(画面の移り方・新着の光り方・数字の繰り上がりを省く)。端末の「アニメーションを削除」でも同じになる */
     var reduceMotion by pref("reduceMotion", false)
-    /** 字(Fonts.CHOICES のキー)。空なら端末の標準 */
-    var font by pref("font", "")
+    /** 字(Fonts.CHOICES のキー。PC の fontFamily と同じ名前)。Fonts.SYSTEM なら端末の標準 */
+    var fontFamily by pref("fontFamily", Fonts.SYSTEM)
     /** 自分で作った配色(CustomDef の JSON)。空なら作っていない */
     var customScheme by pref("customScheme", "")
     /** 設定で、詳しい項目も出す */
@@ -244,8 +245,8 @@ class Prefs(context: Context) {
     var pastTab by pref("pastTab", "history")
     /** 返信の連なりの起点のレスの下に「この会話 (N)」を出す */
     var showConversations by pref("showConversations", false)
-    /** NG のレスの見せ方: fold(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示) */
-    var ngStyle by pref("ngStyle", "fold")
+    /** NG のレスの見せ方: aborn(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示。スマホだけ) */
+    var ngMode by pref("ngMode", "aborn")
     /** 2 つ以上続いたあぼーんを 1 行にまとめる(PC 版と同じ既定) */
     var groupNg by pref("groupNg", true)
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */
@@ -259,22 +260,22 @@ class Prefs(context: Context) {
     var openLinksInApp by pref("openLinksInApp", true)
 
     // ── 画像と動画 ──
-    private var thumbModeName by pref("thumbMode", "WIFI")
+    private var thumbLoad by pref("thumbLoad", ThumbMode.WIFI.key)
     var thumbMode: ThumbMode
-        get() = runCatching { ThumbMode.valueOf(thumbModeName) }.getOrDefault(ThumbMode.WIFI)
-        set(v) { thumbModeName = v.name }
-    /** サムネイルの大きさ(dp) */
-    var thumbSize by pref("thumbSize", 96)
+        get() = ThumbMode.entries.firstOrNull { it.key == thumbLoad } ?: ThumbMode.WIFI
+        set(v) { thumbLoad = v.key }
+    /** サムネイルの大きさ(px) */
+    var postThumbSize by pref("postThumbSize", 96)
     var blurGross by pref("blurGross", true)
     /** グロ注意とみなす言葉(改行区切り) */
-    var grossWords by pref("grossWords", "グロ")
+    var grossWords by wordsPref("grossWords", listOf("グロ"), "\n")
 
     // ── 書き込み ──
     /** 書き込みの名前・メール(前回のもの) */
     var postName by pref("postName", "")
     var postMail by pref("postMail", "")
     /** 定型文(長押しの「すぐ書き込む」。改行区切り) */
-    var quickPhrases by pref("quickPhrases", "")
+    var quickPhrases by wordsPref("quickPhrases", emptyList(), "\n")
     /** 定型文を 1 行ずつ(空の行は除く) */
     val quickPhraseList: List<String> get() = quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
     /** hono-bbs のアカウント(ユーザー ID とパスワード。設定 → サイトごとの設定)。空なら使わない。パスワードはそのまま保存する(PC 版と同じ) */
@@ -287,8 +288,8 @@ class Prefs(context: Context) {
     var uploadHost by pref("uploadHost", Uploader.DEFAULT_HOST)
     /** imgbb の API キー(https://api.imgbb.com/)。空なら imgbb は使わない */
     var imgbbApiKey by pref("imgbbApiKey", "")
-    /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切り)。利用者が消したものを戻さないために覚える */
-    var presetsApplied by pref("presetsApplied", "")
+    /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切りで渡す)。利用者が消したものを戻さないために覚える */
+    var presetsApplied by wordsPref("presetsApplied", emptyList(), ",")
     /** imgur の Client-ID(https://api.imgur.com/oauth2/addclient で登録したもの)。空なら imgur は使わない */
     var imgurClientId by pref("imgurClientId", "")
 
@@ -298,31 +299,29 @@ class Prefs(context: Context) {
     var haptics by pref("haptics", true)
     /** なぞる操作の感度(1 鈍い〜5 敏感) */
     var gestureSensitivity by pref("gestureSensitivity", 3)
-    private var gesturesListJson by pref("gesturesList", "")
-    private var gesturesThreadJson by pref("gesturesThread", "")
+    /** なぞる操作の割り当て(PC の swipeGestures と同じ形。{list: {向き: 操作}, thread: {…}}) */
+    private var swipeGesturesJson by pref("swipeGestures", "")
     var hideBarsOnScroll by pref("hideBarsOnScroll", true)
     /** ログを削除する前に確かめる(確かめる画面の「次回から表示しない」で切れる) */
     var confirmDeleteLog by pref("confirmDeleteLog", true)
     var autoScrollOnNew by pref("autoScrollOnNew", true)
     /** 開いているスレの自動更新(秒。0 ならしない) */
     var autoRefreshSec by pref("autoRefreshSec", 0)
-    var showRefreshButton by pref("showRefreshButton", true)
+    var showRefreshFab by pref("showRefreshFab", true)
 
     /** なぞる操作の割り当て(向きの並び → 操作)。screen は list / thread */
     fun gestures(screen: String): Map<String, String> {
-        val json = if (screen == "list") gesturesListJson else gesturesThreadJson
         val defaults = DEFAULT_GESTURES.getValue(screen)
-        if (json.isEmpty()) return defaults
         // 保存した割り当てを既定に重ねる(あとから足した向きの並びも、既定の操作で使えるように)
-        return defaults + runCatching { JSONObject(json).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrDefault(emptyMap())
+        return defaults + runCatching { JSONObject(swipeGesturesJson).getJSONObject(screen).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrDefault(emptyMap())
     }
 
     fun setGesture(screen: String, seq: String, action: String) {
-        val json = JSONObject(gestures(screen).toMutableMap().apply { put(seq, action) } as Map<*, *>).toString()
-        if (screen == "list") gesturesListJson = json else gesturesThreadJson = json
+        val all = runCatching { JSONObject(swipeGesturesJson) }.getOrDefault(JSONObject())
+        swipeGesturesJson = all.put(screen, JSONObject(gestures(screen).toMutableMap().apply { put(seq, action) } as Map<*, *>)).toString()
     }
 
-    fun resetGestures() { gesturesListJson = ""; gesturesThreadJson = "" }
+    fun resetGestures() { swipeGesturesJson = "" }
 
     var ngRules by mutableStateOf(loadNg())
         private set
@@ -392,26 +391,14 @@ class Prefs(context: Context) {
         o.keys().asSequence().associateWith { BoardMeta.fromJson(o.getJSONObject(it)) }
     }.getOrDefault(emptyMap())
 
-    /** 基本の文字がレスとスレ一覧にも掛かっていた間の倍率を、それぞれの設定へ移す(見た目を変えないため。1 回だけ) */
-    private fun splitBaseFont() {
-        if (sp.contains(BASE_FONT_SPLIT)) return
-        val base = sp.getFloat("fontScale", 1f)
-        val e = sp.edit().putBoolean(BASE_FONT_SPLIT, true)
-        for (k in CONTENT_FONT_KEYS) if (base != 1f) e.putFloat(k, splitContentScale(sp.getFloat(k, 1f), base))
-        e.apply()
-    }
-
     /** バックアップ: 設定を JSON に(最後に開いた板と秘密の値は除く) */
-    fun export(): JSONObject {
-        val o = JSONObject()
-        for ((k, v) in sp.all) if (inBackup(k)) o.put(k, v)
-        return o
-    }
+    fun export(): JSONObject = exportedSettings(sp.all, knownKeys)
 
     /** バックアップから戻す(戻したあとはアプリを開き直すと全部に効く) */
     fun import(o: JSONObject) {
         val e = sp.edit()
         for ((k, v) in restoredSettings(o, floatKeys)) {
+            if (k !in knownKeys) continue
             when (v) {
                 is Boolean -> e.putBoolean(k, v)
                 is Int -> e.putInt(k, v)
@@ -419,19 +406,20 @@ class Prefs(context: Context) {
                 is String -> e.putString(k, v)
             }
         }
-        // 分ける前のファイルは、次の起動で分け直す
-        if (!o.has(BASE_FONT_SPLIT)) e.remove(BASE_FONT_SPLIT)
         e.commit()
     }
 
     companion object {
-        private const val BASE_FONT_SPLIT = "baseFontSplit"
-        private val CONTENT_FONT_KEYS = listOf("listFontScale", "bodyScale", "postHeadScale")
-
         /** バックアップに入れない項目: 最後に開いた板と、アカウント・API キー(ファイルは人に渡したりクラウドに置いたりするので) */
         private val NOT_IN_BACKUP = setOf("lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId")
 
         internal fun inBackup(key: String) = key !in NOT_IN_BACKUP
+
+        /** 文字列に JSON を入れて持つ項目。バックアップでは PC と同じく JSON のまま書く */
+        internal val JSON_KEYS = setOf(
+            "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "grossWords", "quickPhrases",
+            "listTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
+        )
 
         /** なぞる操作の既定 */
         val DEFAULT_GESTURES = mapOf(

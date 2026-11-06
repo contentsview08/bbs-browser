@@ -89,6 +89,7 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
     androidx.compose.runtime.LaunchedEffect(page.site) { page.site?.let { if (vm.siteUrl != it || vm.boards.isEmpty()) vm.selectSite(it) } }
     val up = { if (page.category != null) page.category = null else page.site = null }
     androidx.activity.compose.BackHandler(enabled = page.site != null && !searching) { up() }
+    androidx.activity.compose.BackHandler(enabled = searching) { searching = false; query = "" }
     val siteName = page.site?.let { u -> vm.sites.firstOrNull { it.first == u }?.let { siteLabel(it.first, it.second) } }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         if (searching) SearchBar(query, { query = it }, "板の名前・カテゴリ") { searching = false; query = "" }
@@ -362,7 +363,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
 /** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ(置き場から消せないので、履歴から消す操作はない) */
 @Composable
 fun UploadsScreen(vm: AppViewModel) {
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val swipe = rememberSwipeState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val hv = androidx.compose.ui.platform.LocalView.current
@@ -386,13 +387,14 @@ fun UploadsScreen(vm: AppViewModel) {
             MenuAt.Center,
         ) { menuFor = null }
     }
-    Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
+    val toBottom: suspend () -> Unit = { gridState.scrollToItem(maxOf(0, gridState.layoutInfo.totalItemsCount - 1)) }
+    Box(Modifier.fillMaxSize().then(pastGestures(vm, toBottom, { gridState.scrollToItem(0) }, null, swipe))) {
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         PastHeader(vm, "uploads", null)
         if (ups.isEmpty()) Hint("まだありません(書き込み欄の ＋ の「画像」から上げた画像が並びます)")
         else {
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                androidx.compose.foundation.lazy.grid.GridCells.Fixed(3), Modifier.fillMaxSize(),
+                androidx.compose.foundation.lazy.grid.GridCells.Fixed(3), Modifier.fillMaxSize(), state = gridState,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 items(ups.size) { i ->
@@ -423,7 +425,11 @@ fun UploadsScreen(vm: AppViewModel) {
 
 /** 過去のスレの一覧でも、スレ一覧と同じなぞる操作(一番上へ・一番下へ・更新・メニューなど)を使う */
 @Composable
-private fun pastGestures(vm: AppViewModel, listState: androidx.compose.foundation.lazy.LazyListState, refresh: (() -> Unit)?, swipe: SwipeState): Modifier {
+private fun pastGestures(vm: AppViewModel, listState: androidx.compose.foundation.lazy.LazyListState, refresh: (() -> Unit)?, swipe: SwipeState): Modifier =
+    pastGestures(vm, { listState.scrollToItem(maxOf(0, listState.layoutInfo.totalItemsCount - 1)) }, { listState.scrollToItem(0) }, refresh, swipe)
+
+@Composable
+private fun pastGestures(vm: AppViewModel, toBottom: suspend () -> Unit, toTop: suspend () -> Unit, refresh: (() -> Unit)?, swipe: SwipeState): Modifier {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val prefs = vm.prefs
     val g = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
@@ -431,8 +437,8 @@ private fun pastGestures(vm: AppViewModel, listState: androidx.compose.foundatio
         buildMap {
             put("drawer") { vm.drawerOpen = true }
             put("forward") { vm.forward() }
-            put("bottom") { scope.launch { listState.scrollToItem(maxOf(0, listState.layoutInfo.totalItemsCount - 1)) }; Unit }
-            put("top") { scope.launch { listState.scrollToItem(0) }; Unit }
+            put("bottom") { scope.launch { toBottom() }; Unit }
+            put("top") { scope.launch { toTop() }; Unit }
             if (refresh != null) put("refresh", refresh)
             put("quick") { vm.openQuick() }
         },

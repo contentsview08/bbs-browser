@@ -107,8 +107,15 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     var sub by rememberSaveable { mutableStateOf(start) }
     // 検索から開いたページは、探した項目が隠れないよう詳しい設定も出す
     var viaSearch by rememberSaveable { mutableStateOf(false) }
-    // 使っているソフトウェアは「このアプリについて」の下の画面なので、戻るとそこへ
-    val goBack = { sub = if (sub == "licenses") "about" else null; viaSearch = false }
+    // ページの下の画面(使っているソフトウェア・自分の配色)は、戻ると親のページへ。検索から開いたページの詳しい設定は、そのページを出るまで出しておく
+    val goBack = {
+        sub = when (sub) {
+            "licenses" -> "about"
+            "custom" -> "theme"
+            else -> null
+        }
+        viaSearch = viaSearch && sub != null
+    }
     BackHandler(enabled = sub != null) { goBack() }
     Column(Modifier.fillMaxSize().background(Palette.base)) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
@@ -192,7 +199,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group("見た目") {
         NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), "テーマと色", value = if (p.followSystem) "スマホに合わせる" else schemeOf(p.scheme).name) { open("theme") }
-        NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字と余白", value = "${(p.fontScale * 100).toInt()}%") { open("text") }
+        NavRow(Icons.Filled.FormatSize, Color(0xFF6366F1), "文字と余白", value = "${percent(p.fontScale)}%") { open("text") }
     }
     Group("画面") {
         NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード・ログ") { open("list") }
@@ -300,9 +307,9 @@ private fun TextPage(vm: AppViewModel) {
         if (f.CHOICES.any { it.key != p.font && f.isDownloaded(context, it.key) }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.font) }
     }
     Group("文字の大きさ") {
-        SliderRow("画面全体", p.fontScale, 0.85f..1.3f, steps = 8, label = "${(p.fontScale * 100).toInt()}%") { p.fontScale = (it * 20).toInt() / 20f }
-        SliderRow("レスの本文", p.bodyScale, 0.8f..1.4f, steps = 11, label = "${(p.bodyScale * 100).toInt()}%") { p.bodyScale = (it * 20).toInt() / 20f }
-        if (LocalAdvanced.current) SliderRow("レスの本文の行間", p.lineHeight, 1.2f..1.9f, steps = 13, label = "%.2f".format(p.lineHeight)) { p.lineHeight = (it * 20).toInt() / 20f }
+        SliderRow("画面全体", p.fontScale, 0.85f..1.3f, steps = 8, label = "${percent(p.fontScale)}%") { p.fontScale = snapTo(it, 20) }
+        SliderRow("レスの本文", p.bodyScale, 0.8f..1.4f, steps = 11, label = "${percent(p.bodyScale)}%") { p.bodyScale = snapTo(it, 20) }
+        if (LocalAdvanced.current) SliderRow("レスの本文の行間", p.lineHeight, 1.2f..1.9f, steps = 13, label = "%.2f".format(p.lineHeight)) { p.lineHeight = snapTo(it, 20) }
     }
     Group("見本") { SamplePosts(vm) }
 }
@@ -383,7 +390,7 @@ private fun MediaPage(vm: AppViewModel) {
     Group("サムネイル") {
         ChoiceRow("サムネイルを読み込む", p.thumbMode.name, ThumbMode.entries.map { it.name to it.label }) { p.thumbMode = ThumbMode.valueOf(it) }
         // 大きさは 8dp ずつ。動かすと下の枠がその大きさになる
-        SliderRow("大きさ", p.thumbSize.toFloat(), 56f..200f, steps = 17, label = "${p.thumbSize}dp") { p.thumbSize = ((it / 8).toInt() * 8).coerceIn(56, 200) }
+        SliderRow("大きさ", p.thumbSize.toFloat(), 56f..200f, steps = 17, label = "${p.thumbSize}dp") { p.thumbSize = snapInt(it, 8).coerceIn(56, 200) }
         ThumbSample(p.thumbSize)
     }
     if (LocalAdvanced.current) Group("グロ注意", note = "この言葉を含むレスと、そのアンカー先の画像を、押すまでぼかします") {
@@ -425,7 +432,7 @@ private fun GesturesPage(vm: AppViewModel) {
         SwitchRow("なぞって操作する", p.gesturesEnabled, desc = "左右になぞり、続けて上下になぞると、別の操作になります") { p.gesturesEnabled = it }
         SwitchRow("振動で知らせる", p.haptics, desc = "ジェスチャー・引っぱって更新が決まったとき、長押しのメニューで軽く振動します") { p.haptics = it }
         if (LocalAdvanced.current) SwitchRow("レスをダブルタップで返信", p.doubleTapReply, desc = ">>番号 を入れて書き込み欄を開きます。オンにすると、1 回のタップ(ツリーを開く)が少し遅れます") { p.doubleTapReply = it }
-        if (p.gesturesEnabled) SliderRow("感度", p.gestureSensitivity.toFloat(), 1f..5f, steps = 3, label = listOf("鈍い", "少し鈍い", "標準", "少し敏感", "敏感")[p.gestureSensitivity - 1]) { p.gestureSensitivity = it.toInt().coerceIn(1, 5) }
+        if (p.gesturesEnabled) SliderRow("感度", p.gestureSensitivity.toFloat(), 1f..5f, steps = 3, label = listOf("鈍い", "少し鈍い", "標準", "少し敏感", "敏感")[p.gestureSensitivity - 1]) { p.gestureSensitivity = snapInt(it).coerceIn(1, 5) }
     }
     if (p.gesturesEnabled) Group("ジェスチャーを試す", note = "枠の中でなぞると、何の操作になるかが出ます(実際には動かしません)。感度を変えながら試せます") {
         GesturePractice(p)
@@ -778,7 +785,7 @@ private fun AccountsPage(vm: AppViewModel) {
         ActionRow("新しく登録する(メールの確認コード)") { register = true }
         if (status != null) Text(status!!, Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = Palette.textMuted, fontSize = 13.sp)
     }
-    if (register) RegisterDialog(vm, origins, onAuth = { auth = it; register = false }, onDone = { msg -> status = msg; register = false })
+    if (register) RegisterDialog(vm, origins, onAuth = { auth = it; register = false }, onDone = { msg -> if (msg.isNotEmpty()) status = msg; register = false })
     // Turnstile の認証(書き込みと同じ案内)
     auth?.let { a ->
         AlertDialog(
@@ -902,7 +909,6 @@ private fun AboutPage(vm: AppViewModel, open: (String) -> Unit) {
     Group {
         InfoRow("名前", "OBB(Open BBS Browser)")
         InfoRow("版", version)
-        InfoRow("画像のアップロード", "catbox.moe")
         InfoRow("AA の字", "aahub_light")
     }
 }

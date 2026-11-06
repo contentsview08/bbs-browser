@@ -76,13 +76,13 @@ import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
 import { setUploadLookup } from './utils/uploadIndex'
 import { useViewState } from './hooks/useViewState'
-import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step } from './utils/viewState'
+import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step, updateNearest } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
 import { useWatchLists } from './hooks/useWatchLists'
 import { useKeywordWatch } from './hooks/useKeywordWatch'
-import { backgroundImageUrl } from './host/backgroundImage'
+import { backgroundImageUrl, currentBackgroundImage } from './host/backgroundImage'
 import { initFavicons } from './host/favicon'
 import { initOgp } from './host/ogp'
 import { KEY_ACTIONS, modalOpen, actionFor, keyEventsOf, keyString, resolveKeymap, type KeyAction } from './utils/keymap'
@@ -97,7 +97,7 @@ import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox } from './host/uploader'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
-import { startAiModel, stopAiModel } from './hooks/useAiNg'
+import { aiModelStatus, deleteAiModelFiles, startAiModel, stopAiModel, testScore } from './hooks/useAiNg'
 import { postMatcher, pruneExpired, threadMatcher, type NgRule, type NgTarget } from './utils/ng'
 
 /** 閉じたタブを覚えておく数(Shift+X で開き直す) */
@@ -383,7 +383,9 @@ export default function App() {
     }
     const cur = currentListTarget()
     const same =
-      cur?.kind === v.list.kind && (v.list.kind !== 'board' || (cur.kind === 'board' && cur.board.url === v.list.board.url))
+      cur?.kind === v.list.kind &&
+      (v.list.kind !== 'board' || (cur.kind === 'board' && cur.board.url === v.list.board.url)) &&
+      (v.list.kind !== 'history' || (cur.kind === 'history' && (cur.filter ?? null) === (v.list.filter ?? null)))
     if (same) updateView((s) => showList(s, undefined))
     else if (v.list.kind === 'board') void openBoard(v.list.board, false)
     else if (v.list.kind === 'history') void openHistory(false, v.list.filter ?? null)
@@ -644,6 +646,8 @@ export default function App() {
   const [listOrder, setListOrder] = useState<ListSort>()
   /** 頼んでいる並び(取り直しの途中なら、まだ listOrder と違う) */
   const listOrderRef = useRef<ListSort | undefined>(undefined)
+  /** 取り直した一覧を画面にも出すときに頼む並び。その板を開いていれば、いまの並び(違う並びの一覧を出すと順が崩れる) */
+  const listOrderOf = (boardUrl: string) => (boardRef.current?.url === boardUrl ? listOrderRef.current : undefined)
   /** スレ一覧の並びを、その掲示板のサーバーに頼める並びにする(頼めなければ undefined = 手元で並べ替える) */
   const serverSortFor = (b: Board, sort: { mode: SortMode; dir: 'desc' | 'asc' } | null): ListSort | undefined => {
     if (!sort) return undefined
@@ -666,9 +670,10 @@ export default function App() {
     // 届くまでは、今の一覧を手元で並べ替えて見せる(listOrder は届いた一覧と一緒に変える)
     listOrderRef.current = order
     void run('threads', async () => {
+      const startedAt = Date.now()
       const list = await connectorOf(b.connectorId).listThreads(b, ctx, { sort: order })
       if (boardRef.current?.url !== b.url || listOrderRef.current !== order) return
-      rememberList(b.url, list)
+      rememberList(b.url, list, startedAt)
       setThreads(list)
       setListOrder(order)
       mergeKnownCounts(list)
@@ -718,13 +723,14 @@ export default function App() {
       // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
+      const startedAt = Date.now()
       const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }), store.getThreadStates(b.url)]).catch((e: unknown) => {
         if (seq === boardSeq.current) throw e
         return [undefined, undefined] as const
       })
       // 待っているあいだに別の板を開いた・並びを変えた(そちらを使う)
       if (!list || !st || seq !== boardSeq.current || listOrderRef.current !== order) return
-      rememberList(b.url, list)
+      rememberList(b.url, list, startedAt)
       setThreads(list)
       setListOrder(order)
       setStates(st)
@@ -776,13 +782,20 @@ export default function App() {
       setHistoryVersion((v) => v + 1)
     })
   const crawlHistory = async (store: LogStore, resort: boolean) => {
-    {
+    try {
       // 利用者が更新したときだけ、見た順に並べ直す。定期の確認(resort が false)と、板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
       const list = await loadHistory(store)
       setHistory((prev) => (resort ? list : mergeHistory(prev, list)))
       const byBoard = new Map<string, HistoryEntry[]>()
       for (const h of list) byBoard.set(h.thread.boardUrl, [...(byBoard.get(h.thread.boardUrl) ?? []), h])
-      const counts = new Map(historyCounts)
+      const counts = new Map<string, number>()
+      // 巡回の間に板を開いて分かった数を消さないよう、分かった分だけを足す
+      const publishCounts = () =>
+        setHistoryCounts((m) => {
+          const next = new Map(m)
+          for (const [id, n] of counts) next.set(id, Math.max(next.get(id) ?? 0, n))
+          return next
+        })
       // まとめ取りができる掲示板(hono-bbs の POST /threads/status): 板ごとに一覧を取り直さず、コネクタごとに 1 回で確かめる
       const bulk = new Map<string, HistoryEntry[]>()
       for (const [boardUrl, entries] of byBoard) {
@@ -804,7 +817,7 @@ export default function App() {
             // 返らなかった = 消えた・見えない。開いて確かめる(dat 落ちの印が付く)
             else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
           }
-          setHistoryCounts(new Map(counts))
+          publishCounts()
           const fresh = await loadHistory(store)
           setHistory((prev) => mergeHistory(prev, fresh))
         } catch {
@@ -827,13 +840,14 @@ export default function App() {
           if (live) counts.set(threadId(h.thread), live.postCount)
           else if (h.status !== 'archived') await fetchThread(store, h.thread).catch(() => undefined)
         }
-        setHistoryCounts(new Map(counts))
+        publishCounts()
         const fresh = await loadHistory(store)
         setHistory((prev) => mergeHistory(prev, fresh))
       }
-      setHistoryProgress(undefined)
       setHistoryVersion((v) => v + 1)
       await reloadRecent(store)
+    } finally {
+      setHistoryProgress(undefined)
     }
   }
 
@@ -849,7 +863,7 @@ export default function App() {
     }
     setNotifView(false)
     return run('threads', async () => {
-      updateView((s) => showList(s, record ? listEntry({ kind: 'history' }) : undefined))
+      updateView((s) => showList(s, record ? listEntry({ kind: 'history', filter: filter !== undefined ? filter : pastFilter }) : undefined))
       if (record) setFocusPane('list')
       // DB から読み直す前に、控え(なければ空)をすぐ出す。ここで履歴を undefined のままにすると、読み終えるまで直前の板の一覧が映る
       if (!history) setHistory(historyCache.current ?? historyList ?? [])
@@ -875,6 +889,11 @@ export default function App() {
   /** いまスレ一覧に出しているもの(戻る・進むで覚える) */
   const currentListTarget = (): ListTarget | undefined =>
     notifView ? { kind: 'notifications' } : history ? { kind: 'history', filter: pastFilter } : board ? { kind: 'board', board } : undefined
+  /** 一覧のタブで絞り込みを変えた。戻る・進むで同じ絞り込みに戻せるよう、履歴の項目も変える */
+  const changePastFilter = (filter: ListFilter | null) => {
+    setPastFilter(filter)
+    updateView((s) => updateNearest(s, listEntry({ kind: 'history', filter })))
+  }
   /** 通知(溜めた知らせ)をスレ一覧の所に出す(PC)。スマホはポップアップ */
   const openNotifications = (record = true) => {
     if (isMobile) return setNotifOpen(true)
@@ -995,8 +1014,9 @@ export default function App() {
       try {
         // 裏で確かめるときは、少し前に取った一覧を使い回す(まとめて更新は取り直す)
         const b = { connectorId, url: boardUrl, name: '' }
-        const threads = fetchDats ? await connectorOf(connectorId).listThreads(b, ctx) : await listForWatch(b)
-        if (fetchDats) rememberList(boardUrl, threads)
+        const startedAt = Date.now()
+        const threads = fetchDats ? await connectorOf(connectorId).listThreads(b, ctx) : (await listForWatch(b)).list
+        if (fetchDats) rememberList(boardUrl, threads, startedAt)
         subject = new Map(threads.map((t) => [t.key, t]))
       } catch {
         continue // 板ごと取れなかったら、この板は今回は見送る
@@ -1042,11 +1062,13 @@ export default function App() {
    */
   const latest = useRef({
     openThread: (t: ThreadSummary) => void openThread(t),
+    openPost: (t: ThreadSummary, no: number) => void openPost(t, no),
     openFavThreads: () => void openFavThreads(),
     checkFavThreads,
   })
   latest.current = {
     openThread: (t: ThreadSummary) => void openThread(t),
+    openPost: (t: ThreadSummary, no: number) => void openPost(t, no),
     openFavThreads: () => void openFavThreads(),
     checkFavThreads,
   }
@@ -1190,19 +1212,21 @@ export default function App() {
     if (own.size === 0) return
     const resolve = makeAnchorResolver(log.posts, findConnector(t.connectorId)?.anchorTarget)
     const replies = log.posts.filter((p) => p.no > beforeCount && !own.has(p.no) && anchorTargets(p.body, resolve).some((n) => own.has(n)))
-    const id = threadId(t)
     replies.slice(0, 3).forEach((p, i) =>
       notify({
         icon: 'alternate_email',
         title: `あなた宛てのレス: ${log.title}`,
         body: `${p.no}: ${p.body}${i === 2 && replies.length > 3 ? `\n(ほか ${replies.length - 3} 件)` : ''}`,
-        onClick: () => {
-          selectTab(id)
-          setJump({ tabId: id, no: p.no, seq: Date.now() })
-        },
+        onClick: () => latest.current.openPost(t, p.no),
         keep: { thread: t, no: p.no },
       }),
     )
+  }
+
+  /** スレを(タブがなければ開いて)そのレスへ飛ぶ */
+  const openPost = async (t: ThreadSummary, no: number) => {
+    await openThread(t)
+    setJump({ tabId: threadId(t), no, seq: Date.now() })
   }
 
   /** タブにログを読み込み(手元のものをすぐ出す)、差分を取りに行く */
@@ -1368,15 +1392,37 @@ export default function App() {
     return refresh()
   }
 
+  /** スレ一覧を手で更新する(更新ボタン・R・F5 で同じもの)。通知を出しているときは取り直すものがない */
+  const refreshList = notifView
+    ? undefined
+    : history
+      ? // 閲覧履歴の更新は時間がかかるので、引っぱったときの丸い矢印は待たずに引っ込め、ヘッダーの下の帯だけで知らせる。
+        // お気に入りの絞り込みのときは、お気に入りのスレの新着を確かめる
+        manualListRefresh(() => {
+          void (pastFilter === 'fav' ? refreshFavThreads() : refreshHistory())
+        })
+      : board
+        ? manualListRefresh(() => openBoard(board, false))
+        : undefined
+
   const refreshAll = () =>
     run(null, async () => {
       if (!store) return
       setRefreshingAll(true)
       try {
+        let failed: unknown
         for (const t of tabsRef.current) {
-          if (t.log) await fetchThread(store, t.thread)
-          else await loadTab(store, t.thread)
+          // もう増えないスレは取りに行かない(自動更新と同じ)
+          if (t.log && (t.log.status === 'archived' || isFull(t.thread, t.log.posts))) continue
+          try {
+            if (t.log) await fetchThread(store, t.thread)
+            else await loadTab(store, t.thread)
+          } catch (e) {
+            // 残りのタブは続ける。失敗は最後にまとめて知らせる
+            failed ??= e
+          }
         }
+        if (failed !== undefined) throw failed
       } finally {
         setRefreshingAll(false)
       }
@@ -1427,8 +1473,7 @@ export default function App() {
   /** F5 で更新するもの。キー操作を受け取っている方(上に線が出ている方)。スレを開いていなければスレ一覧 */
   const reload = () => {
     if (activeTab?.log && !listFocused) return void refreshThread()
-    const list = history ? refreshHistory : board ? () => openBoard(board, false) : undefined
-    if (list) void manualListRefresh(list)()
+    void refreshList?.()
   }
   /** Ctrl+E(設定で変えられる): キー操作を受け取る方を、スレ一覧とスレ表示で入れ替える(1 画面なら見せる方を入れ替える) */
   const toggleFocus = () => {
@@ -1798,15 +1843,18 @@ export default function App() {
     if (!store || r.status !== 'ok') return r
     const connector = connectorOf(b.connectorId)
 
-    if (input.name !== settings.postName) updateSetting('postName', input.name)
-    if (input.mail !== settings.postMail) updateSetting('postMail', input.mail)
+    // 板ごとの既定値がある欄は、アプリ全体の「最後に使った値」を書き換えない
+    const meta = settings.boardMeta[b.url]
+    if (meta?.defaultName === undefined && input.name !== settings.postName) updateSetting('postName', input.name)
+    if (meta?.defaultMail === undefined && input.mail !== settings.postMail) updateSetting('postMail', input.mail)
     const normalize = (s: string) => s.replace(/\s+/g, '')
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((ok) => setTimeout(ok, 1500))
       // スレは立っている。一覧の取得の失敗をスレ立ての失敗として見せると、立て直して重複する
-      const list = await connector.listThreads(b, ctx).catch(() => undefined)
+      const order = listOrderOf(b.url)
+      const list = await connector.listThreads(b, ctx, { sort: order }).catch(() => undefined)
       if (!list) continue
-      if (boardRef.current?.url === b.url) setThreads(list)
+      if (boardRef.current?.url === b.url && listOrderRef.current === order) setThreads(list)
       const found = list
         .filter((t) => normalize(t.title) === normalize(input.title))
         .sort((x, y) => (y.createdAt?.getTime() ?? 0) - (x.createdAt?.getTime() ?? 0))[0]
@@ -2083,8 +2131,23 @@ export default function App() {
     if (!url) return
     const fav = favorites.find((b) => b.url === url)
     if (fav) void openBoard(fav)
-    else void openUrlInApp(url)
+    // 開けなければエラーを出すだけ(通信できないときなどに、何も押していないのに外のブラウザを立ち上げない)
+    else
+      void run(null, async () => {
+        await openBoard((await resolve(url)).board)
+      })
   }, [settingsLoaded, favorites, settings.lastBoardUrl, externalReady])
+
+  // 背景画像のパスは保存した時の置き場のものなので、置き場が変わっていたら読み替える
+  useEffect(() => {
+    if (!settingsLoaded || !settings.backgroundImage) return
+    const saved = settings.backgroundImage
+    void currentBackgroundImage(saved)
+      .then((path) => {
+        if (path !== saved) updateSetting('backgroundImage', path)
+      })
+      .catch(backgroundError('背景画像の読み直し'))
+  }, [settingsLoaded])
 
   // スマホはタブを使わないので、開いているスレ以外のタブを閉じる(戻したタブも 1 つにする)
   useEffect(() => {
@@ -2201,6 +2264,9 @@ export default function App() {
         login: (a: AccountRecord) => rpcRef.current.saveAndLogin(a),
         pruneLogs: () => rpcRef.current.pruneLogs(),
         loginStatus: () => [...rpcRef.current.loginStatus.entries()],
+        aiModelStatus: () => aiModelStatus(),
+        aiTestScore: ({ text, prompt }: { text: string; prompt: string }) => testScore(text, prompt),
+        aiDeleteModel: () => deleteAiModelFiles(),
       }),
       onBroadcast('favorites-changed', () => void reloadFavorites(store)),
       onBroadcast('sites-changed', () => void store.listSites().then(setSites)),
@@ -2286,9 +2352,10 @@ export default function App() {
       if (next) void openThread(next.thread)
     }),
     findNext: useEvent(async (t: ThreadSummary, title: string) => {
-      const list = await connectorOf(t.connectorId).listThreads({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx)
+      const order = listOrderOf(t.boardUrl)
+      const list = await connectorOf(t.connectorId).listThreads({ connectorId: t.connectorId, url: t.boardUrl, name: '' }, ctx, { sort: order })
       // その板を開いていれば、取り直したスレ一覧も見せる
-      if (boardRef.current?.url === t.boardUrl) setThreads(list)
+      if (boardRef.current?.url === t.boardUrl && listOrderRef.current === order) setThreads(list)
       return findNextThreads({ key: t.key, title, createdAt: t.createdAt }, list)
     }),
     openThread: useEvent((t: ThreadSummary) => void openThread(t, { newTab: true })),
@@ -2381,7 +2448,7 @@ export default function App() {
     [history, historyCounts],
   )
   // お気に入りのスレ。ログのないスレ(足しただけでまだ開いていない)には状態を付けない(既読の線を出さない)
-  const favStates = new Map(favThreads.filter((f) => f.postCount > 0).map((f) => [threadId(f.thread), f as ThreadState]))
+  const favStates = useMemo(() => new Map(favThreads.filter((f) => f.postCount > 0).map((f) => [threadId(f.thread), f as ThreadState])), [favThreads])
   const favListThreads = useMemo(
     () =>
       favThreads.map((f) => {
@@ -2617,17 +2684,7 @@ export default function App() {
           }
           onOpen={(t, newTab) => void openThread(t, newTab ? { newTab: true } : {})}
           newTabEnabled={settings.tabsEnabled}
-          onRefresh={
-            history
-              ? // 閲覧履歴の更新は時間がかかるので、引っぱったときの丸い矢印は待たずに引っ込め、ヘッダーの下の帯だけで知らせる。
-                // お気に入りの絞り込みのときは、お気に入りのスレの新着を確かめる
-                manualListRefresh(() => {
-                  void (pastFilter === 'fav' ? refreshFavThreads() : refreshHistory())
-                })
-              : board
-                ? manualListRefresh(() => openBoard(board, false))
-                : undefined
-          }
+          onRefresh={refreshList}
           refreshReadyAt={listReadyAt}
           // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
           width={settings.threadPanelWidth}
@@ -2664,7 +2721,7 @@ export default function App() {
           snapshotKey={history ? `${historyVersion}:${favVersion}` : undefined}
           filterRequest={history ? filterRequest : undefined}
           tabRequest={tabRequest}
-          onFilterChange={history ? setPastFilter : undefined}
+          onFilterChange={history ? changePastFilter : undefined}
           postedIds={history ? postedIds : undefined}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
           style={{

@@ -135,8 +135,9 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
         HorizontalDivider(color = Palette.border)
         if (r.uploading) {
-            val done = r.uploads.count { it.state is io.github.contentsview08.obb.UploadItem.State.Done || it.state is io.github.contentsview08.obb.UploadItem.State.Failed }
-            FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${r.uploads.size} 枚目", Palette.textMuted, null)
+            val batch = r.uploads.filter { it.inBatch }
+            val done = batch.count { it.state is io.github.contentsview08.obb.UploadItem.State.Done || it.state is io.github.contentsview08.obb.UploadItem.State.Failed }
+            FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${batch.size} 枚目", Palette.textMuted, null)
         }
         // 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す
         val result = r.notice ?: r.done
@@ -231,15 +232,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         ) {
                             PlusItem(Icons.Filled.Image, if (r.uploading) "画像(アップロード中)" else "画像") {
                                 plusMenu = false
-                                // 上げ先が「サイトの画面」なら、その画面を開く(hono-bbs の板はその掲示板の置き場なので、画像を選ぶ)
-                                val hono = HonoBbs.isBoardUrl(r.boardUrl)
-                                val site = if (!hono) webUploadSiteFor(vm.prefs.uploadHost) else null
-                                val problem = if (!hono && site == null) io.github.contentsview08.obb.data.Uploader.hostProblem(vm.prefs.uploadHost, vm.prefs.imgurClientId, vm.prefs.imgbbApiKey) else null
-                                when {
-                                    site != null -> webSite = site
-                                    problem != null -> r.notice = problem
-                                    else -> picker()
-                                }
+                                startImagePick(vm, r, { webSite = it }, picker)
                             }
                             PlusItem(Icons.Filled.Tune, if (options) "オプションを閉じる" else "オプション(名前・メール)") { plusMenu = false; options = !options }
                             // 定型文は、設定にあるときだけ(既定は空)
@@ -493,6 +486,8 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
             LaunchedEffect(Unit) { rise.animateTo(0f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f))) }
             val picker = rememberImagePicker(vm, r)
             PickConfirm(vm, r, r.title, page.board.url)
+            var webSite by remember { mutableStateOf<WebUploadSite?>(null) }
+            webSite?.let { site -> WebUploadScreen(site, onLink = { vm.insertLink(r, it) }, onDismiss = { webSite = null }) }
             var options by remember { mutableStateOf(false) }
             val titleFocus = remember { FocusRequester() }
             LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
@@ -553,7 +548,7 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                 // キーボードのすぐ上の道具: 画像・オプション(名前・メール)・バイト数
                 HorizontalDivider(color = Palette.border)
                 Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { picker() }, enabled = !r.uploading) {
+                    IconButton(onClick = { startImagePick(vm, r, { webSite = it }, picker) }, enabled = !r.uploading) {
                         if (r.uploading) CircularProgressIndicator(Modifier.size(20.dp), color = Palette.accent, strokeWidth = 2.dp)
                         else Icon(Icons.Filled.Image, "画像を付ける", tint = Palette.textMuted)
                     }
@@ -573,6 +568,18 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
 fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("bbs", text))
+}
+
+/** 画像を付ける: 上げ先が「サイトの画面」なら、その画面を開く(hono-bbs の板はその掲示板の置き場なので、画像を選ぶ) */
+private fun startImagePick(vm: AppViewModel, r: io.github.contentsview08.obb.ReplyState, openSite: (WebUploadSite) -> Unit, picker: () -> Unit) {
+    val hono = HonoBbs.isBoardUrl(r.boardUrl)
+    val site = if (!hono) webUploadSiteFor(vm.prefs.uploadHost) else null
+    val problem = if (!hono && site == null) io.github.contentsview08.obb.data.Uploader.hostProblem(vm.prefs.uploadHost, vm.prefs.imgurClientId, vm.prefs.imgbbApiKey) else null
+    when {
+        site != null -> openSite(site)
+        problem != null -> r.notice = problem
+        else -> picker()
+    }
 }
 
 /** 写真の選択画面(何枚でも選べる。一度に 10 枚まで)を開く関数。選んだ画像は順番に上げる */

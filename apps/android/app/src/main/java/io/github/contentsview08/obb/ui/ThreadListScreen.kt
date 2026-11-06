@@ -208,7 +208,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             "bottom" to { scope.launch { listState.scrollToItem(maxOf(0, shown.size - 1)) }; Unit },
             "top" to { scope.launch { listState.scrollToItem(0); bars.show() }; Unit },
             "refresh" to { vm.refreshBoard(page) },
-            "newThread" to { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+            "newThread" to { vm.openNewThread(page) },
             "search" to { searching = true; bars.show() },
             "quick" to { vm.openQuick() },
         ),
@@ -397,7 +397,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
 
         // スレを立てる(右下の丸いボタン)
         FloatingActionButton(
-            onClick = { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+            onClick = { vm.openNewThread(page) },
             containerColor = Palette.accent, contentColor = Palette.accentText, shape = CircleShape,
             // 下へスクロールしてフッターが隠れるときは、一緒に画面の下へ沈めて消す
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp).navigationBarsPadding()
@@ -416,7 +416,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         MenuSheet(
             listOf(
                 listOf(
-                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { vm.openNewThread(page) },
                     MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star, Palette.markFav) { vm.toggleFavorite(page.board) },
                     MenuItem("スレッド検索", Icons.Filled.Search, Palette.accent) { searching = true; bars.show() },
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
@@ -437,7 +437,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             listOf(
                 listOf(
                     MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に足す", if (fav) Icons.Filled.Star else Icons.Outlined.Star, Palette.markFav) { vm.toggleFavorite(page.board) },
-                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { page.newThread.name = vm.prefs.postName; page.newThread.open = true },
+                    MenuItem("スレを立てる", Icons.Filled.EditNote, Palette.markNew) { vm.openNewThread(page) },
                 ),
                 listOf(
                     MenuItem("板名をコピー", Icons.Filled.ContentCopy, Palette.markLink) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
@@ -455,10 +455,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     if (styleSheet) StyleSheet(vm.prefs, onFont = { fontOnly = true; sizeDialog = true }) { styleSheet = false }
     if (sizeDialog) SizeDialog({ sizeDialog = false; fontOnly = false }) {
         val p = vm.prefs
-        if (fontOnly) SizeSlider("画面全体の文字", p.fontScale, 0.85f..1.3f, 8, "${(p.fontScale * 100).toInt()}%", 1f) { p.fontScale = (it * 20).toInt() / 20f }
+        if (fontOnly) SizeSlider("画面全体の文字", p.fontScale, 0.85f..1.3f, 8, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
         else {
-            SizeSlider("スレ一覧の文字", p.listFontScale, 0.8f..1.4f, 11, "${(p.listFontScale * 100).toInt()}%", 1f) { p.listFontScale = (it * 20).toInt() / 20f }
-            SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..24f, 23, "${p.listPad}dp", 9f) { p.listPad = it.toInt() }
+            SizeSlider("スレ一覧の文字", p.listFontScale, 0.8f..1.4f, 11, "${percent(p.listFontScale)}%", 1f) { p.listFontScale = snapTo(it, 20) }
+            SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..24f, 23, "${p.listPad}dp", 9f) { p.listPad = snapInt(it) }
             BarSliders(p)
         }
     }

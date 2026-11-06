@@ -19,6 +19,17 @@ async function solve(challenge: string): Promise<string> {
   }
 }
 
+describe('head の ETag', () => {
+  it('Cloudflare が書き換えた弱い ETag でも 304 を返す', async () => {
+    await create('E')
+    const etag = (await call('GET', '/head', { token: 'E' })).headers.get('ETag') as string
+    for (const value of [etag, `W/${etag}`]) {
+      const r = await call('GET', '/head', { token: 'E', headers: { 'If-None-Match': value } })
+      expect(r.status).toBe(304)
+    }
+  })
+})
+
 describe('トークン', () => {
   beforeEach(() => setup())
   afterEach(teardown)

@@ -236,7 +236,8 @@ export class SpaceDO extends DurableObject<Env> {
     if ('status' in m) return m
     await this.report(m)
     const etag = `"${m.epoch}:${m.next}"`
-    if (ifNoneMatch === etag) return { status: 304, body: '', etag }
+    // Cloudflare は圧縮すると ETag を弱いものに書き換えるので、W/ を除いて比べる
+    if (ifNoneMatch?.replace(/^W\//, '') === etag) return { status: 304, body: '', etag }
     return result(200, { version: m.next, epoch: m.epoch, gc_floor: m.gc_floor }, etag)
   }
 

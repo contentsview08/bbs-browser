@@ -11,16 +11,11 @@ import PostArticle, { type PostHandlers } from './PostArticle'
 import { DragHandle, DragList } from './DragSort'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose, useGuardedClose } from '../hooks/useDialogClose'
-import { BTN_PRIMARY, BTN_SECONDARY, DialogHeader } from './DialogParts'
+import { BTN_PRIMARY, BTN_SECONDARY, DialogHeader, ICON_BTN, INPUT } from './DialogParts'
 import { effectivePostStyle, effectiveScheme, isDarkScheme, type AppSettings } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { isMobile } from '../utils/platform'
 
-const INPUT =
-  'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
-const BTN = BTN_PRIMARY
-const SUB_BTN = BTN_SECONDARY
-const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colors rounded'
 
 /** 見本のレス(どの掲示板にもありそうな形。画像は読みに行かない) */
 const SAMPLE: Post[] = [
@@ -215,7 +210,7 @@ export function ListEditor(props: {
         }}
       >
         <input type="text" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={props.placeholder} className={`${INPUT} flex-1 min-w-0`} />
-        <button type="submit" className={BTN} disabled={!draft.trim()}>
+        <button type="submit" className={BTN_PRIMARY} disabled={!draft.trim()}>
           追加
         </button>
       </form>
@@ -262,12 +257,12 @@ export function ListEditor(props: {
           <p className="text-xs text-c-text-muted mb-2">1 行に 1 つ。ほかのアプリから貼り付けたり、ここからコピーして写したりできます(空の行と、同じものは除きます)</p>
           <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={12} className={`${INPUT} w-full font-mono`} spellCheck={false} />
           <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className={SUB_BTN} onClick={() => setBulk(undefined)}>
+            <button type="button" className={BTN_SECONDARY} onClick={() => setBulk(undefined)}>
               やめる
             </button>
             <button
               type="button"
-              className={BTN}
+              className={BTN_PRIMARY}
               onClick={() => {
                 props.onChange([...new Set(bulk.split('\n').map((x) => x.trim()).filter(Boolean))])
                 setBulk(undefined)
@@ -351,41 +346,6 @@ export function OpenRow(props: { label: string; value?: string; note?: string; o
 }
 
 /** 多いデータの設定の行: 件数と、管理画面を開くボタン */
-/**
- * 0〜100% のスライダー。動かしている間は画面にだけ映し(onPreview)、離したときに設定に書く(onCommit)。
- * 動かすたびに設定を書くと、残してあるタブまで毎回描き直されて重い
- */
-export function PercentSlider(props: { value: number; onCommit: (v: number) => void; onPreview?: (v: number) => void; disabled?: boolean }) {
-  const [draft, setDraft] = useState<number>()
-  const v = draft ?? Math.round(props.value * 100)
-  const commit = () => {
-    if (draft === undefined) return
-    setDraft(undefined)
-    if (draft !== Math.round(props.value * 100)) props.onCommit(draft / 100)
-  }
-  return (
-    <>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={v}
-        disabled={props.disabled}
-        onChange={(e) => {
-          const n = Number(e.target.value)
-          setDraft(n)
-          props.onPreview?.(n / 100)
-        }}
-        onPointerUp={commit}
-        onKeyUp={commit}
-        onBlur={commit}
-        className="flex-1"
-      />
-      <span className="w-10 text-right tabular-nums text-c-text-muted">{v}%</span>
-    </>
-  )
-}
-
 export function ManagerRow(props: { label: string; count: number; unit?: string; note?: string; onOpen: () => void }) {
   return (
     <button
@@ -440,7 +400,7 @@ const TEXT_COMMIT_MS = 500
  * 文字の欄の設定(保存先・API キーなど)。1 文字打つたびに設定へ書くと、そのたびにアプリ全体の描き直し(別ウィンドウなら知らせ)が走るので、
  * 欄の中はここで持ち、打ち終えて少し経ったとき・欄を抜けたとき・Enter で書く
  */
-export function TextSetting(props: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; trim?: boolean; className?: string }) {
+export function TextSetting(props: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; trim?: boolean; className?: string; type?: 'text' | 'password'; autoComplete?: string }) {
   const [text, setText] = useState(props.value)
   const [last, setLast] = useState(props.value)
   if (last !== props.value) {
@@ -456,7 +416,8 @@ export function TextSetting(props: { value: string; onChange: (v: string) => voi
   }
   return (
     <input
-      type="text"
+      type={props.type ?? 'text'}
+      autoComplete={props.autoComplete}
       value={text}
       onChange={(e) => {
         const v = e.target.value

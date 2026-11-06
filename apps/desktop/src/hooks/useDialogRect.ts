@@ -1,6 +1,6 @@
 // PC のダイアログを「置いたまま使える窓」にする: 上の帯をつかんで動かし、右下の角をつかんで大きさを変える。
 // 置き場所と大きさはこの端末のブラウザの保存に覚えておき、次に開いたときも同じ所・大きさで出す(消えても既定に戻るだけ)。
-// 設定の窓(SettingsDialog)と同じ作り。ふつうのウィンドウと同じく、大きさを変えると左上の角は動かず、右と下へ広がる
+// ふつうのウィンドウと同じく、大きさを変えると左上の角は動かず、右と下へ広がる
 import { useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 
 export type DialogRect = { x: number; y: number; w: number; h: number }

@@ -6,11 +6,11 @@
 // どれも公開されている窓口だけを使い、負荷をかけないこと
 
 import { fetch } from '@tauri-apps/plugin-http'
+import { UPLOADER_UA as USER_AGENT } from './userAgent'
 
 const ENDPOINT = 'https://catbox.moe/user/api.php'
 const IMGUR = 'https://api.imgur.com/3/image'
 const IMGBB = 'https://api.imgbb.com/1/upload'
-const USER_AGENT = 'bbs-browser/0.1.0 (+https://red-edge.net)'
 /**
  * catbox の上限は 200MB だが、plugin-http は送る中身を数値の配列(JSON)にして Rust 側へ渡すので、
  * 大きすぎると固まる。アプリ側では 50MB までにする。GIF は catbox の決まりで 20MB まで
@@ -22,11 +22,21 @@ const MAX_GIF_BYTES = 20 * 1024 * 1024
 const REENCODE = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 /** 上げる前に確かめる。だめなら理由を返す */
-export function checkUpload(file: File): string | undefined {
+function checkUpload(file: File): string | undefined {
   if (!/^(image|video)\//.test(file.type)) return '画像か動画だけを上げられます'
   if (file.type === 'image/gif' && file.size > MAX_GIF_BYTES) return 'GIF は 20MB までです(大きいアニメは webm にしてください)'
   if (file.size > MAX_BYTES) return 'このアプリから上げられるのは 50MB までです'
   return undefined
+}
+
+/** 上げ終わった画像(アップロード履歴に残す)。deleteUrl は置き場の削除ページ(imgbb) */
+export interface UploadedFile {
+  url: string
+  name: string
+  size: number
+  withAccount: boolean
+  hash?: string
+  deleteUrl?: string
 }
 
 export interface UploadOptions {
@@ -71,7 +81,7 @@ export const DEFAULT_UPLOAD_HOST: UploadHost = 'imgur-web'
 /** 前の設定(自動・0x0.st・uguu.se)は imgur の画面に読み替える */
 export function migrateUploadHost(v: string | undefined): UploadHost {
   if (UPLOAD_HOSTS.some((h) => h.key === v)) return v as UploadHost
-  return v === 'catbox' ? 'catbox' : v === 'imgur' ? 'imgur' : DEFAULT_UPLOAD_HOST
+  return DEFAULT_UPLOAD_HOST
 }
 /** API で上げるときに、登録が要るのにまだ登録していなければ、その理由 */
 export function uploadHostProblem(host: UploadHost, o: { imgurClientId?: string; imgbbApiKey?: string }): string | undefined {
@@ -134,7 +144,7 @@ export interface UploadResult {
 }
 
 /** 置き場の返事を、人に分かる言葉にする(スマホ版の Uploader.explain と同じ) */
-export function explainUploadError(status: number, text: string): string {
+function explainUploadError(status: number, text: string): string {
   const t = text.slice(0, 200)
   if (/paused/i.test(t) && /storage/i.test(t)) return `今は受け付けを止めています(置き場の不具合。「${t}」)`
   if (status === 413 || /too large/i.test(t)) return 'ファイルが大きすぎます'
@@ -143,6 +153,16 @@ export function explainUploadError(status: number, text: string): string {
   if (!t) return `HTTP ${status}`
   if (t.startsWith('<')) return `受け付けませんでした(HTTP ${status})`
   return `${t}(HTTP ${status})`
+}
+
+/** multipart で送る。つながらなければ Error */
+async function send(endpoint: string, fields: [string, string][], fileField: string, body: Blob, file: File, headers?: Record<string, string>): Promise<Response> {
+  const { bytes, contentType } = await multipart(fields, { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
+  try {
+    return await fetch(endpoint, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType, ...headers } })
+  } catch (e) {
+    throw new Error(`つながりませんでした(${e instanceof Error ? e.message : String(e)})`)
+  }
 }
 
 /** JSON で返事をする置き場(imgur・imgbb)に上げる。pick で返事から URL を取り出す。だめなら、返事の文面から理由を作る */
@@ -157,13 +177,7 @@ async function postJsonTo(
   /** 返事から、消すためのページの URL を取り出す(imgbb の data.delete_url) */
   pickDelete?: (j: unknown) => string | undefined,
 ): Promise<{ url: string; deleteUrl?: string }> {
-  const { bytes, contentType } = await multipart([], { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
-  let res: Response
-  try {
-    res = await fetch(endpoint, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType, ...headers } })
-  } catch (e) {
-    throw new Error(`つながりませんでした(${e instanceof Error ? e.message : String(e)})`)
-  }
+  const res = await send(endpoint, [], fileField, body, file, headers)
   const text = await res.text()
   let j: unknown
   try {
@@ -182,13 +196,7 @@ async function postJsonTo(
 
 /** 1 つの置き場に上げる。成功すると、本文にファイルの URL だけが返る(urlPattern に合う)。それ以外はエラーの文面 */
 async function postTo(endpoint: string, fields: [string, string][], fileField: string, body: Blob, file: File, urlPattern: RegExp): Promise<string> {
-  const { bytes, contentType } = await multipart(fields, { name: fileField, fileName: file.name || 'image', type: body.type || file.type, data: body })
-  let res: Response
-  try {
-    res = await fetch(endpoint, { method: 'POST', body: bytes, headers: { 'User-Agent': USER_AGENT, 'Content-Type': contentType } })
-  } catch (e) {
-    throw new Error(`つながりませんでした(${e instanceof Error ? e.message : String(e)})`)
-  }
+  const res = await send(endpoint, fields, fileField, body, file)
   const text = (await res.text()).trim()
   if (res.ok && urlPattern.test(text)) return text
   throw new Error(explainUploadError(res.status, text))

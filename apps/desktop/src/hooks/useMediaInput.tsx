@@ -11,8 +11,8 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEve
 import { createPortal } from 'react-dom'
 import type { AttachmentRules, PostFile } from '@bbs-browser/connectors'
 import EmojiPicker from '../components/EmojiPicker'
-import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadOptions } from '../host/uploader'
-import { closeWebUpload, openWebUpload, showWebUpload } from '../host/webUpload'
+import { DEFAULT_UPLOAD_HOST, PRIMARY_HOST, UPLOAD_HOSTS, uploadHostProblem, uploadMedia, type UploadedFile, type UploadOptions } from '../host/uploader'
+import { closeWebUpload, openWebUpload } from '../host/webUpload'
 import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
 import { hashFile, lookupUploaded } from '../utils/uploadIndex'
 import { canStamp, stampImage, type StampCorner } from '../utils/stampImage'
@@ -59,8 +59,6 @@ function verifyImage(url: string, host: string, file: File): Promise<void> {
 /** サイトの画面を閉じるまで: 渡した画像のぶんのリンクがそろってから / 最後のリンクから */
 const WEB_CLOSE_SOON_MS = 1200
 const WEB_CLOSE_IDLE_MS = 4000
-/** 裏で上げていて、これだけ経ってもリンクが来なければ画面を見せる */
-const WEB_SHOW_AFTER_MS = 20000
 
 let nextItemId = 1
 
@@ -85,7 +83,7 @@ export function useMediaInput(o: {
   /** 本文のカーソルの位置に文字を入れる(ownLine: 行の途中なら改行してから入れる。画像の URL) */
   insert: (text: string, opts?: { ownLine?: boolean }) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string; deleteUrl?: string }) => void
+  onUploaded?: (u: UploadedFile) => void
   /** 書き込みにファイルを付けられる掲示板の決まり。あれば、アップロードの代わりに書き込みに付ける */
   attach?: AttachmentRules
   disabled?: boolean
@@ -140,7 +138,7 @@ export function useMediaInput(o: {
    * 貼り付け・ドロップで 2 枚以上来たときの確かめ(「この n 枚を上げていいですか」。上げないものはチェックを外す)。
    * 1 枚はそのまま上げる。ファイルを選ぶボタンから選んだときは、選んだ時点で決めているので確かめない
    */
-  const [pending, setPending] = useState<{ files: File[]; on: boolean[]; previews: string[]; go: (files: File[]) => void }>()
+  const [pending, setPending] = useState<{ files: File[]; on: boolean[]; previews: string[] }>()
   const closePending = () => {
     pending?.previews.forEach((u) => URL.revokeObjectURL(u))
     setPending(undefined)
@@ -292,17 +290,13 @@ export function useMediaInput(o: {
     for (const i of itemsRef.current) if (i.state === 'done') URL.revokeObjectURL(i.preview)
     setAll(itemsRef.current.filter((i) => i.state !== 'done'))
   }
-  /** サイトの画面で裏で上げている間の進み具合(渡した画像の数と、リンクが来た数) */
-  const [webProgress, setWebProgress] = useState<{ got: number; total: number }>()
-  const uploading = items.filter((i) => i.state === 'waiting' || i.state === 'uploading').length + (webProgress ? 1 : 0)
+  const uploading = items.filter((i) => i.state === 'waiting' || i.state === 'uploading').length
   // 何枚目か: 今回の並び(失敗したものを除く)のうち、済んだ数 + 1
   const batch = items.filter((i) => batchIds.current.has(i.id) && i.state !== 'failed')
   const progress =
     batch.length > 0 && uploading > 0
       ? { current: Math.min(batch.length, batch.filter((i) => i.state === 'done').length + 1), total: batch.length }
-      : webProgress
-        ? { current: Math.min(webProgress.total, webProgress.got + 1), total: webProgress.total }
-        : undefined
+      : undefined
   const localOf = (url: string) => items.find((i) => i.url === url)?.preview
 
   // 上げ先(設定)。サイトの画面で上げるもの(imgur・imgbox・imgbb の画面)なら、画像ボタンでその画面を開く
@@ -321,7 +315,7 @@ export function useMediaInput(o: {
   /** 貼り付け・ドロップで来たファイル。上げる前に確かめる(1 枚でも。要望) */
   const take = (files: File[]) => {
     if (files.length === 0) return
-    setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)), go: takeNow })
+    setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)) })
   }
   const confirmView: ReactNode = pending
     ? createPortal(
@@ -403,12 +397,11 @@ export function useMediaInput(o: {
                 disabled={!pending.on.some(Boolean)}
                 onClick={() => {
                   const chosen = pending.files.filter((_, i) => pending.on[i])
-                  const go = pending.go
                   const st = !o.attach && stampOn ? o.stamp?.() : undefined
                   closePending()
-                  if (!st) return go(chosen)
+                  if (!st) return takeNow(chosen)
                   // 描き込んでから上げる(描き込めない種類はそのまま)
-                  void Promise.all(chosen.map((f) => stampImage(f, [st.title ?? '', st.url ?? ''], stampCorner))).then(go)
+                  void Promise.all(chosen.map((f) => stampImage(f, [st.title ?? '', st.url ?? ''], stampCorner))).then(takeNow)
                 }}
                 className="px-4 py-1.5 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
               >
@@ -432,63 +425,64 @@ export function useMediaInput(o: {
     },
     [],
   )
-  const showTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const finishWebUpload = () => {
     clearTimeout(closeTimer.current)
-    clearTimeout(showTimer.current)
     stopWeb.current?.()
     stopWeb.current = undefined
     setWebSite(undefined)
-    setWebProgress(undefined)
     void closeWebUpload()
   }
-  /**
-   * サイトの画面で上げる。画像を渡すとき(貼り付け・ドラッグ)は画面を見せず裏で上げ、リンクが来たら本文に入れる
-   * (進み具合は書き込み欄の上に出す)。しばらく経ってもリンクが来なければ画面を見せる(ログイン・確認など、利用者の手が要る)。
-   * 画像ボタンから開くとき(画像なし)は、利用者がその画面で選ぶので見せる
-   */
+  /** サイトの画面を見せて上げる。画像を渡すと(貼り付け・ドラッグ)そのページに貼り付けたことにして上がり、リンクが来たら本文に入れる */
   const startWebUpload = async (site: WebUploadSite, files: File[] = []) => {
     stopWeb.current?.()
     clearTimeout(closeTimer.current)
-    clearTimeout(showTimer.current)
     let got = 0
-    // 画面は見せたまま上げる(裏で上げると、いま上げているのか分からなかった。要望)。画像を渡すと、そのページに貼り付けたことにして上がる
-    const background = false
     try {
       stopWeb.current = await openWebUpload(
         site,
         (url) => {
           // URL は 1 行に 1 つ(改行で区切る)
-          insertRef.current(`${url}\n`, { ownLine: true })
+          oRef.current.insert(`${url}\n`, { ownLine: true })
           got++
           const file = files[got - 1]
           // どの上げ方でも、上げた画像の履歴に残す(大きさは渡した画像のもの。画面で選んだものは 0)
           oRef.current.onUploaded?.({ url, name: file?.name || 'image', size: file?.size ?? 0, withAccount: false })
-          setNotice(background ? `${site.name}に上げました(${got}/${files.length})` : `${site.name}のリンクを本文に入れました(${got} 件)`)
-          if (background) setWebProgress({ got, total: files.length })
-          clearTimeout(showTimer.current)
+          setNotice(`${site.name}のリンクを本文に入れました(${got} 件)`)
           clearTimeout(closeTimer.current)
           closeTimer.current = setTimeout(finishWebUpload, files.length > 0 && got >= files.length ? WEB_CLOSE_SOON_MS : WEB_CLOSE_IDLE_MS)
         },
         files,
-        { background },
       )
       setWebSite(site)
-      if (background) {
-        setWebProgress({ got: 0, total: files.length })
-        setNotice(`${site.name}に上げています(${files.length} 枚)…`)
-        showTimer.current = setTimeout(() => {
-          setNotice(`${site.name}の画面で続けてください(裏では上がりませんでした)`)
-          void showWebUpload()
-        }, WEB_SHOW_AFTER_MS)
-      }
     } catch (e) {
-      setWebProgress(undefined)
       setNotice(`${site.name}の画面を開けませんでした: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  const insertRef = useRef(o.insert)
-  insertRef.current = (t: string, opts?: { ownLine?: boolean }) => o.insert(t, opts)
+  // 隠したファイルの選び口(buttons の中に置く。スマホの入力欄 chat は単独で置く)
+  const fileInput = o.attach ? (
+    <input
+      ref={fileRef}
+      type="file"
+      accept={o.attach.types.join(',')}
+      hidden
+      onChange={(e) => {
+        attach([...(e.target.files ?? [])])
+        e.target.value = ''
+      }}
+    />
+  ) : o.uploader ? (
+    <input
+      ref={fileRef}
+      type="file"
+      accept="image/*,video/*"
+      multiple
+      hidden
+      onChange={(e) => {
+        upload(mediaFiles(e.target.files))
+        e.target.value = ''
+      }}
+    />
+  ) : null
 
   const buttons = (
     <>
@@ -503,16 +497,7 @@ export function useMediaInput(o: {
           >
             <span className="material-symbols-outlined text-lg leading-none">attach_file</span>
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept={o.attach.types.join(',')}
-            hidden
-            onChange={(e) => {
-              attach([...(e.target.files ?? [])])
-              e.target.value = ''
-            }}
-          />
+          {fileInput}
         </>
       )}
       {!o.attach && o.uploader && (
@@ -539,17 +524,7 @@ export function useMediaInput(o: {
               {uploading > 0 ? 'progress_activity' : 'add_photo_alternate'}
             </span>
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*,video/*"
-            multiple
-            hidden
-            onChange={(e) => {
-              upload(mediaFiles(e.target.files))
-              e.target.value = ''
-            }}
-          />
+          {fileInput}
         </>
       )}
       <EmojiPicker onPick={o.insert} disabled={o.disabled} />
@@ -574,31 +549,6 @@ export function useMediaInput(o: {
     },
   }
 
-  // スマホの入力欄(chat)用の、隠したファイルの選び口(buttons の中のものと同じ働き)
-  const fileInput = o.attach ? (
-    <input
-      ref={fileRef}
-      type="file"
-      accept={o.attach.types.join(',')}
-      hidden
-      onChange={(e) => {
-        attach([...(e.target.files ?? [])])
-        e.target.value = ''
-      }}
-    />
-  ) : o.uploader ? (
-    <input
-      ref={fileRef}
-      type="file"
-      accept="image/*,video/*"
-      multiple
-      hidden
-      onChange={(e) => {
-        upload(mediaFiles(e.target.files))
-        e.target.value = ''
-      }}
-    />
-  ) : null
   // スマホの入力欄から: サイトの画面で上げる上げ先なら、その画面を開く
   const pick = o.attach || o.uploader ? () => (webSiteDef && !o.attach ? void startWebUpload(webSiteDef) : fileRef.current?.click()) : undefined
 

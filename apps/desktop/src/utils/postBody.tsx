@@ -1,7 +1,7 @@
 // レス本文の解析と描画。本文はコネクタの段階でプレーンテキストになっているので、
 // ここではアンカー(>>1)と URL だけを見つけて部品に分ける(HTML としては扱わない)。
 
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { shortWatchoi } from './watchoi'
 import { allConnectors, type Post } from '@bbs-browser/connectors'
 
@@ -133,9 +133,10 @@ export function quoteLinksOf(posts: Post[]): QuoteLinks {
         for (let j = i - 1; j >= 0; j--) {
           const hit = lines[j].some(
             (l) =>
-              (ownTextOnly ? quotedText(l) === undefined : true) &&
               // 画像のファイル名の引用(「>1792224836232.jpg」)は、その画像を貼ったレス
-              (l.includes(q) || (/^https?:\/\//.test(l) && l.endsWith(`/${q}`))),
+              (l.includes(q) || (/^https?:\/\//.test(l) && l.endsWith(`/${q}`))) &&
+              // ほとんどの行は上で外れるので、正規表現を使う引用の判定は後で
+              (ownTextOnly ? quotedText(l) === undefined : true),
           )
           if (hit) return posts[j].no
         }
@@ -226,13 +227,16 @@ export function toImageUrl(url: string): string | undefined {
   return undefined
 }
 
+/** 本文の URL を、開ける形に直して出てきた順に */
+function* urlTokens(text: string): Generator<string> {
+  for (const m of text.matchAll(TOKEN)) if (m[2]) yield normalizeUrl(m[2])
+}
+
 export const imageUrlsIn = memoByText(function imageUrlsIn(text: string): string[] {
   const urls: string[] = []
-  for (const m of text.matchAll(TOKEN)) {
-    if (m[2]) {
-      const img = toImageUrl(normalizeUrl(m[2]))
-      if (img) urls.push(img)
-    }
+  for (const url of urlTokens(text)) {
+    const img = toImageUrl(url)
+    if (img) urls.push(img)
   }
   return urls
 })
@@ -247,30 +251,20 @@ export function isVideoFileUrl(url: string): boolean {
 /** 本文の中の動画ファイルの URL(サムネイルを出し、押すとビューアーで再生する) */
 export const videoFileUrlsIn = memoByText(function videoFileUrlsIn(text: string): string[] {
   const urls: string[] = []
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[2]) continue
-    const url = normalizeUrl(m[2])
-    if (isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
-  }
+  for (const url of urlTokens(text)) if (isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
   return urls
 })
 
 /** 画像でも動画でもないリンク(埋め込みのカードを出す候補) */
 export const linkUrlsIn = memoByText(function linkUrlsIn(text: string): string[] {
   const urls: string[] = []
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[2]) continue
-    const url = normalizeUrl(m[2])
-    if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
-  }
+  for (const url of urlTokens(text)) if (!toImageUrl(url) && !YOUTUBE_URL.test(url) && !isVideoFileUrl(url) && !urls.includes(url)) urls.push(url)
   return urls
 })
 
 /** 本文の URL をすべて(開ける形に直して、出てきた順に) */
 export function urlsIn(text: string): string[] {
-  const urls: string[] = []
-  for (const m of text.matchAll(TOKEN)) if (m[2]) urls.push(normalizeUrl(m[2]))
-  return urls
+  return [...urlTokens(text)]
 }
 
 /** 本文の中の「ID:xxxx」の ID */
@@ -347,14 +341,14 @@ export function displayName(name: string, o: DisplayOptions): string {
 
 const YOUTUBE_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/)/i
 
+const youtubeIdOf = (url: string) => /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+
 /** 本文の YouTube の動画(ID と元の URL)。サムネイルに使う */
 export const youtubeLinksIn = memoByText(function youtubeLinksIn(text: string): { id: string; url: string }[] {
   const links: { id: string; url: string }[] = []
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[2]) continue
-    const url = normalizeUrl(m[2])
+  for (const url of urlTokens(text)) {
     if (!YOUTUBE_URL.test(url)) continue
-    const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+    const id = youtubeIdOf(url)
     if (id && !links.some((l) => l.id === id)) links.push({ id, url })
   }
   return links
@@ -370,9 +364,7 @@ export type MediaItem = { kind: 'image'; url: string } | { kind: 'video'; url: s
 export const mediaIn = memoByText(function mediaIn(text: string): MediaItem[] {
   const out: MediaItem[] = []
   const seen = new Set<string>()
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[2]) continue
-    const url = normalizeUrl(m[2])
+  for (const url of urlTokens(text)) {
     const img = toImageUrl(url)
     if (img) {
       out.push({ kind: 'image', url: img })
@@ -380,7 +372,7 @@ export const mediaIn = memoByText(function mediaIn(text: string): MediaItem[] {
       if (!seen.has(url)) out.push({ kind: 'video', url })
       seen.add(url)
     } else if (YOUTUBE_URL.test(url)) {
-      const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+      const id = youtubeIdOf(url)
       if (id && !seen.has(`yt:${id}`)) out.push({ kind: 'youtube', url, id })
       if (id) seen.add(`yt:${id}`)
     }
@@ -394,7 +386,7 @@ export const mediaIn = memoByText(function mediaIn(text: string): MediaItem[] {
  */
 export function youtubeEmbedUrl(url: string): string | undefined {
   if (!YOUTUBE_URL.test(url)) return undefined
-  const id = /(?:v=|youtu\.be\/|shorts\/|live\/)([\w-]{6,})/.exec(url)?.[1]
+  const id = youtubeIdOf(url)
   if (!id) return undefined
   const t = /[?&#](?:t|start)=([\dhms]+)/.exec(url)?.[1]
   let start = 0
@@ -411,10 +403,10 @@ export function youtubeIdsIn(text: string): string[] {
 }
 
 /** 本文に YouTube の URL があるか(ミニマップの動画の印に使う) */
-export function hasYoutube(text: string): boolean {
-  for (const m of text.matchAll(TOKEN)) if (m[2] && YOUTUBE_URL.test(normalizeUrl(m[2]))) return true
+const hasYoutube = memoByText(function hasYoutube(text: string): boolean {
+  for (const url of urlTokens(text)) if (YOUTUBE_URL.test(url)) return true
   return false
-}
+})
 
 /** 動画(YouTube か動画のファイル)を含むか。「動画」の絞り込みと縮図に使う */
 export function hasVideo(text: string): boolean {
@@ -490,20 +482,9 @@ export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<st
       ) : (
         <span
           key={`q${i}`}
-          role="button"
-          tabIndex={0}
           className="text-mark-new hover:underline cursor-pointer"
           title={`引用元のレスを出す`}
-          onClick={(e) => {
-            e.stopPropagation()
-            handlers.onAnchor([no], e.currentTarget, 'click')
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            e.stopPropagation()
-            handlers.onAnchor([no], e.currentTarget, 'click')
-          }}
+          {...pressProps((el) => handlers.onAnchor([no], el, 'click'))}
           onMouseEnter={(e) => handlers.onAnchor([no], e.currentTarget, 'hover')}
           onMouseLeave={handlers.onAnchorLeave}
         >
@@ -513,6 +494,24 @@ export function renderBody(text: string, handlers: BodyHandlers, quotes?: Map<st
     )
   })
   return parts
+}
+
+/** 本文の中の押せる文字の props。Tab で選んだものは Enter で開く(押したのと同じ) */
+function pressProps(press: (el: HTMLElement) => void) {
+  return {
+    role: 'button',
+    tabIndex: 0,
+    onClick: (e: MouseEvent<HTMLElement>) => {
+      e.stopPropagation()
+      press(e.currentTarget)
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      e.stopPropagation()
+      press(e.currentTarget)
+    },
+  }
 }
 
 function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): ReactNode[] {
@@ -573,20 +572,8 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
       parts.push(
         <span
           key={keyPrefix + start}
-          role="button"
-          tabIndex={0}
           className="text-c-link hover:underline cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation()
-            handlers.onAnchor(nos, e.currentTarget, 'click')
-          }}
-          onKeyDown={(e) => {
-            // Tab で選んだアンカーは、Enter で開く(押したのと同じ)
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            e.stopPropagation()
-            handlers.onAnchor(nos, e.currentTarget, 'click')
-          }}
+          {...pressProps((el) => handlers.onAnchor(nos, el, 'click'))}
           onMouseEnter={(e) => handlers.onAnchor(nos, e.currentTarget, 'hover')}
           onMouseLeave={handlers.onAnchorLeave}
         >
@@ -598,19 +585,8 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
       parts.push(
         <span
           key={keyPrefix + start}
-          role="button"
-          tabIndex={0}
           className="text-c-link hover:underline cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation()
-            handlers.onId?.(id, e.currentTarget)
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            e.stopPropagation()
-            handlers.onId?.(id, e.currentTarget)
-          }}
+          {...pressProps((el) => handlers.onId?.(id, el))}
         >
           {m[0]}
         </span>,

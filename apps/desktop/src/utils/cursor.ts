@@ -1,17 +1,26 @@
 // 選んでいるもの(スレ表示のレス・スレ一覧のスレ・ポップアップのレス)の決め方。
 // 画面の大きさや位置は呼ぶ側が測って渡し、ここでは「どれを選ぶか」「どれだけ送るか」だけを決める(テストできるように)
 
+/** J・K で選んだものへ送るときのスクロールの時間と、画面の上下に残す余白の割合 */
+export const CURSOR_SCROLL_MS = 160
+export const CURSOR_MARGIN = 0.25
+/** Esc の 2 回押しとみなす間隔 */
+export const DOUBLE_ESC_MS = 500
+
 /** 縦の位置(画面の座標) */
 export interface Span {
   top: number
   bottom: number
 }
 
-/** 見えている範囲。top はヘッダーの下 */
-export interface View {
-  top: number
-  bottom: number
+/** 要素の縦の位置(画面の座標) */
+export function spanOf(el: HTMLElement): Span {
+  const r = el.getBoundingClientRect()
+  return { top: r.top, bottom: r.bottom }
 }
+
+/** 見えている範囲。top はヘッダーの下 */
+export type View = Span
 
 /** 選んでいるものが、画面から大きく(1 画面分以上)離れていないか。押し続けて送るのが追いついていないだけなら近いとみなす */
 export function isNear(item: Span, view: View): boolean {

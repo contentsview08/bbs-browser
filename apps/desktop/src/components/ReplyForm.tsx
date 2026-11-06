@@ -7,7 +7,7 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, us
 import type { AttachmentRules, PostConfirm, PostInput, PostLimits, PostResult } from '@bbs-browser/connectors'
 import PostResultBox from './PostResultBox'
 import { looksLikeAA } from '../utils/postBody'
-import type { UploadOptions } from '../host/uploader'
+import type { UploadedFile, UploadOptions } from '../host/uploader'
 import { useMediaInput } from '../hooks/useMediaInput'
 import { measurePost } from '../utils/postLimit'
 import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
@@ -40,8 +40,6 @@ interface Props {
   leading?: ReactNode
   /** chat: 送るボタンの右に置くもの(更新ボタンなど) */
   trailing?: ReactNode
-  /** chat: 本文が空のあいだ、送るボタンの代わりに出す操作 */
-  idle?: { icon: string; title: string; onClick: () => void; disabled?: boolean }
   /** chat: 本文の欄に入った・出た(フッターを隠さないようにするため) */
   onFocusChange?: (focused: boolean) => void
   disabled?: string
@@ -51,15 +49,14 @@ interface Props {
   /** 書き込み確認で承諾した。元の書き込みの内容も渡す(自分の書き込みを見分けるため) */
   onConfirm: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
-  /** 画像のアップロード(catbox.moe)を使うとき。使わないなら undefined */
-  uploader?: UploadOptions
+  uploader: UploadOptions
   /** 書き込んだあとのクールダウンが明ける時刻と、その長さ。明けるまで書き込むボタンを押せなくし、残りを出す */
   /** 書き込み欄をしまう(しまうボタンを出す) */
   onCollapse?: () => void
   /** 下のサムネイルを押した(画像ビューアーで開く) */
   onImage?: (urls: string[], index: number) => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded?: (u: { url: string; name: string; size: number; withAccount: boolean }) => void
+  onUploaded?: (u: UploadedFile) => void
   /**
    * 書きかけの本文を覚えておく所(スレごと)。開いたときに読み、書くのが止まったら保存し、書き込めたら消す。
    * タブを閉じても・アプリを閉じても、書きかけが残るように
@@ -100,8 +97,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const [chatFocused, setChatFocused] = useState(false)
   /** chat: ＋ のメニュー(画像・オプション)を出しているか */
   const [plusMenu, setPlusMenu] = useState(false)
-  /** 画像のアップロードが無効のときに「画像」を押したら、設定のことを知らせる */
-  const [imageHint, setImageHint] = useState(false)
   /** 本文の欄を AA 用の字で出すか(ボタンで選んだもの。選んでいなければ本文から見分ける。空白が続く本文は AA とみなす) */
   const [aaOverride, setAaOverride] = useState<boolean>()
   const isAA = aaOverride ?? looksLikeAA(body)
@@ -196,13 +191,12 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       bodyRef.current = cur + text
       return changeBody(cur + text)
     }
-    const start = el.selectionStart
-    const next = cur.slice(0, start) + text + cur.slice(el.selectionEnd)
+    const next = cur.slice(0, at) + text + cur.slice(el.selectionEnd)
     bodyRef.current = next
     changeBody(next)
     requestAnimationFrame(() => {
       el.focus()
-      el.selectionStart = el.selectionEnd = start + text.length
+      el.selectionStart = el.selectionEnd = at + text.length
     })
   }
   useImperativeHandle(ref, () => ({ insert, focus: () => textRef.current?.focus() }))
@@ -252,19 +246,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     }
   }
 
-  /** 送るボタン・Ctrl+Enter(送る前に待つ設定は 2026-11 にやめた) */
-  const requestSend = () => void submit()
   /** 定型文のバー。押すとカーソルの所に入れる(選んでいた字は置き換える) */
-  const insertPhrase = (ph: string) => {
-    const el = textRef.current
-    const start = el?.selectionStart ?? body.length
-    const end = el?.selectionEnd ?? body.length
-    changeBody(body.slice(0, start) + ph + body.slice(end))
-    requestAnimationFrame(() => {
-      el?.focus()
-      el?.setSelectionRange(start + ph.length, start + ph.length)
-    })
-  }
   const phraseBar = !!props.phraseBar?.length && (
     <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
       {props.phraseBar.map((ph) => (
@@ -273,7 +255,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           type="button"
           // 押しても本文の欄からカーソルが外れないように(外れるとスマホのキーボードが閉じる)
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => insertPhrase(ph)}
+          onClick={() => insert(ph)}
           className="flex-shrink-0 px-3 py-1 rounded-full bg-c-surface2 border border-c-border text-[13px] text-c-text-strong whitespace-nowrap"
         >
           {ph}
@@ -294,7 +276,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   const sendButton = (
     <button
       type="button"
-      onClick={requestSend}
+      onClick={() => void submit()}
       disabled={!canSend}
       title="Ctrl+Enter でも書き込めます"
       className={`btn-thread-create relative overflow-hidden px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
@@ -320,15 +302,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       <div data-composer className="w-full flex flex-col" {...dropProps(media)}>
         {media.fileInput}
         {media.confirmView}
-        {imageHint && (
-          <p className="px-3 pt-2 flex items-start gap-1 text-xs text-c-text-muted">
-            <span className="material-symbols-outlined text-sm">info</span>
-            <span className="flex-1">画像を付けるには、設定の「画像のアップロードを使う」をオンにしてください(catbox に上げて URL を本文に入れます)</span>
-            <button type="button" onClick={() => setImageHint(false)} className="material-symbols-outlined text-sm" title="閉じる">
-              close
-            </button>
-          </p>
-        )}
         {/* 画像を上げている間は、何枚中の何枚目かを出す */}
         {media.uploading > 0 && (
           <p className="px-3 pt-2 flex items-center gap-1.5 text-xs text-c-text-muted">
@@ -391,8 +364,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
                   type="button"
                   onClick={() => {
                     setPlusMenu(false)
-                    if (media.pick) media.pick()
-                    else setImageHint(true)
+                    media.pick?.()
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[15px] text-c-text-body active:bg-c-surface2"
                 >
@@ -450,7 +422,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           </div>
           <button
             type="button"
-            onClick={requestSend}
+            onClick={() => void submit()}
             disabled={!canSend}
             className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-opacity disabled:opacity-40"
             style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)' }}
@@ -547,7 +519,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()
-              requestSend()
+              void submit()
             } else collapseOnEsc(e)
           }}
           placeholder={props.disabled ?? '本文(Ctrl+Enter で書き込む)'}

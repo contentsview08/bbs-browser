@@ -252,3 +252,9 @@ export function keyLabel(key: string): string {
 export function modalOpen(): boolean {
   return document.querySelector('[data-modal]') !== null
 }
+
+/** 文字を打つ欄の中か(キー操作を効かせない) */
+export function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+}

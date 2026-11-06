@@ -9,6 +9,7 @@ import { isMobile } from '../utils/platform'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Board, ThreadSummary } from '@bbs-browser/connectors'
 import BoardIcon from './BoardIcon'
+import { useDragReorder } from '../hooks/useDragReorder'
 import type { BoardMeta } from '../ui/settings'
 
 interface Props {
@@ -56,8 +57,6 @@ const COLLAPSED = 64
 /** 広げたときの幅の範囲 */
 const MIN_WIDTH = 200
 const MAX_WIDTH = 480
-/** これだけ動かしたらドラッグとみなす */
-const DRAG_PX = 4
 
 /**
  * 選んでいる行の印。サイドバーの右の境界線が、選んだ行のところでくにっと曲がって行の上・左・下を回り、また右の線へ戻る
@@ -161,7 +160,6 @@ export default function Sidebar(props: Props) {
   useEffect(() => {
     setWidth(props.width)
   }, [props.width])
-  const EXPANDED = width
   const onResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
     const startX = e.clientX
@@ -204,7 +202,8 @@ export default function Sidebar(props: Props) {
     for (const child of el.children) observer.observe(child)
     updateMore()
     return () => observer.disconnect()
-  })
+    // 中の行が入れ替わるときだけ見直す。高さの変化は observer が知らせる
+  }, [favoritesOpen, historyOpen, !!props.onOpenUrl, !!props.onOpenUploads])
   const [peek, setPeek] = useState(false)
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const collapsed = props.collapsed && !peek
@@ -216,58 +215,24 @@ export default function Sidebar(props: Props) {
   const ICON = 20
 
   // ── お気に入り板の並べ替え(つかんで上下に動かす) ──
-  const [drag, setDrag] = useState<{ url: string; from: number; dy: number; over: number }>()
-  const justDragged = useRef(false)
-  const onRowMouseDown = (e: React.MouseEvent, url: string, index: number) => {
-    // 行の外で離したドラッグは click が来ないので、印が残っている
-    justDragged.current = false
-    if (e.button !== 0) return
-    const startY = e.clientY
-    let moved = false
-    let latest = { url, from: index, dy: 0, over: index }
-    const onMove = (ev: MouseEvent) => {
-      const dy = ev.clientY - startY
-      if (!moved && Math.abs(dy) < DRAG_PX) return
-      moved = true
-      const over = Math.max(0, Math.min(props.favorites.length - 1, index + Math.round(dy / rowH)))
-      latest = { url, from: index, dy, over }
-      setDrag(latest)
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      setDrag(undefined)
-      if (!moved) return
-      justDragged.current = true
-      if (latest.over === latest.from) return
-      const urls = props.favorites.map((f) => f.url)
-      urls.splice(latest.from, 1)
-      urls.splice(latest.over, 0, url)
-      props.onReorderFavorites(urls)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
-  /** ドラッグ中に、ほかの行をどれだけずらすか(つかんだ行の行き先を空ける) */
-  const shiftOf = (i: number): number => {
-    if (!drag) return 0
-    if (drag.from < drag.over && i > drag.from && i <= drag.over) return -rowH
-    if (drag.from > drag.over && i >= drag.over && i < drag.from) return rowH
-    return 0
-  }
-
+  const { drag, justDragged, onDragMouseDown, shiftOf } = useDragReorder<string>('y', rowH, props.favorites.length, (url, from, over) => {
+    const urls = props.favorites.map((f) => f.url)
+    urls.splice(from, 1)
+    urls.splice(over, 0, url)
+    props.onReorderFavorites(urls)
+  })
   return (
     // 外枠は、しまっているあいだ帯の幅のまま。一時的に開いた中身は、その上に重ねて広げる。
     // 外枠の幅はアニメーションさせずに 1 回で切り替え、中身(aside)だけを本体の上に重ねて伸び縮みさせる
     // (外枠の幅を少しずつ変えると、右の本体の配置とスレ表示の測り直しが 1 コマごとに走ってカクつくため)
-    <div className="relative flex-shrink-0" style={{ width: props.collapsed ? COLLAPSED : EXPANDED }}>
+    <div className="relative flex-shrink-0" style={{ width: props.collapsed ? COLLAPSED : width }}>
     <aside
       data-neighbor={props.neighbor ?? 'list'}
       className={`absolute inset-y-0 left-0 overflow-hidden bg-panel-sidebar ${resizing ? '' : 'transition-[width] duration-200 ease-out'} ${
         peek ? 'z-40 shadow-xl' : 'z-30'
       }`}
       // --sb-w: いま見えている幅。選んでいる行の印(NavNotch)を、右の境界線の位置まで伸ばすのに使う
-      style={{ width: collapsed ? COLLAPSED : EXPANDED, ['--sb-w' as string]: `${collapsed ? COLLAPSED : EXPANDED}px` }}
+      style={{ width: collapsed ? COLLAPSED : width, ['--sb-w' as string]: `${collapsed ? COLLAPSED : width}px` }}
       onMouseEnter={() => {
         if (!props.collapsed) return
         clearTimeout(peekTimer.current)
@@ -287,7 +252,7 @@ export default function Sidebar(props: Props) {
           title="ドラッグで幅を変える"
         />
       )}
-      <div className="h-full flex flex-col" style={{ width: EXPANDED }}>
+      <div className="h-full flex flex-col" style={{ width }}>
         {/* 一番上の行。サイドバーをしまう・広げるボタンとアプリ名(アドレスバーの帯の下) */}
         {/* スマホ: スレ一覧・スレ表示のヘッダー(72px)と同じ高さにそろえる */}
         <div className={`${isMobile ? 'h-[72px]' : 'h-10'} flex-shrink-0 flex items-center select-none`}>
@@ -325,11 +290,11 @@ export default function Sidebar(props: Props) {
             <div className="menu-reveal pb-1">
               {props.favorites.map((b, i) => {
                 const active = b.url === props.activeBoardUrl && !props.historyActive && !props.favThreadsActive
-                const dragging = drag?.url === b.url
+                const dragging = drag?.key === b.url
                 return (
                   <div
                     key={b.url}
-                    onMouseDown={(e) => onRowMouseDown(e, b.url, i)}
+                    onMouseDown={(e) => onDragMouseDown(e, b.url, i)}
                     onClick={() => {
                       if (justDragged.current) {
                         justDragged.current = false
@@ -340,7 +305,7 @@ export default function Sidebar(props: Props) {
                     title={nameOf(b)}
                     style={{
                       height: rowH,
-                      transform: `translateY(${dragging ? drag.dy : shiftOf(i)}px)`,
+                      transform: `translateY(${dragging ? drag.delta : shiftOf(i)}px)`,
                       transition: dragging ? 'none' : 'transform 150ms ease-out',
                     }}
                     className={`group relative flex items-center cursor-pointer select-none transition-colors ${active ? '' : 'hover:bg-c-surface3'} ${

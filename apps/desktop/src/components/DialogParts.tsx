@@ -1,6 +1,11 @@
 // ダイアログの共通の部品(PC)。頭(題と ×)とボタンの形を 1 か所に決め、画面ごとのばらつきをなくす
 import type { ReactNode } from 'react'
 
+/** 設定の入力欄 */
+export const INPUT =
+  'bg-c-surface2 border-c-border rounded-[var(--btn-radius)] text-sm text-c-text-body placeholder-c-text-muted py-1.5 focus:ring-c-accent focus:border-c-accent'
+/** 設定の小さなアイコンのボタン */
+export const ICON_BTN = 'p-1 text-c-text-muted hover:text-c-text-strong transition-colors rounded'
 /** 主なボタン(差し色の塗り)・ふつうのボタン(線)・消すボタン(赤の塗り)。高さ 32px・角は --btn-radius */
 export const BTN_PRIMARY =
   'h-8 px-3 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50'

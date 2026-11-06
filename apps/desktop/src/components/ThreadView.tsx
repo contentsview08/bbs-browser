@@ -12,7 +12,7 @@ import { judgeAutoNg, type AutoNgReason, type TrollMarks } from '../utils/autoNg
 import { activeRules, judgeAiNg, setOverride, trainRules, threadContextOf } from '../utils/aiNg'
 import { scoreOf as aiScoreOf, useAiNgScores } from '../hooks/useAiNg'
 import type { Judgement } from '../utils/trollModel'
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react'
 import type { AttachmentRules, Post, PostActionDef, ReactionDef, PostConfirm, PostInput, PostLimits, PostResult, ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadLog } from '@bbs-browser/logstore'
 import PostArticle, { type PostHandlers, type PostVariant } from './PostArticle'
@@ -30,22 +30,22 @@ import { saveThread } from '../host/exportThread'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, type BarAction } from './ActionBar'
-import { inBar, type Placement } from '../utils/toolbar'
-import { mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
+import { inBar, mobileMenuActions, orderBy, resolvePlacements, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
 import StyleMenu, { StyleMenuItems } from './StyleMenu'
 import { BaseFontSlider, PostFontSliders, SliderDialog } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
+import type { UploadedFile } from '../host/uploader'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, closedPosition, framesIn, useThreadScroll } from '../hooks/useThreadScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
-import { firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, stepCursor, type Span } from '../utils/cursor'
+import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, spanOf, stepCursor } from '../utils/cursor'
 import type { ScrollPosition } from '../utils/threadScroll'
-import { createKeyReader, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
+import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
   anchorTree,
@@ -182,7 +182,7 @@ interface Props {
   isFavorite: boolean
   onToggleFavorite: () => void
   /** 上げ終わった画像(アップロード履歴に残す) */
-  onUploaded: (u: { url: string; name: string; size: number; withAccount: boolean; hash?: string }) => void
+  onUploaded: (u: UploadedFile) => void
   /** 通知などから、このレスへ飛ぶ(seq が変わるたびに飛ぶ) */
   jumpTo?: { no: number; seq: number }
   /** 板の既定の名前(名無しの省略に使う) */
@@ -200,7 +200,7 @@ const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colo
 type PostFilter = 'popular' | 'image' | 'video' | 'link' | 'own'
 // 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
 /** スマホのフッターの高さ */
-export const MOBILE_BAR_H = 60
+const MOBILE_BAR_H = 60
 /** スマホのフッターのボタン(大きく押しやすく) */
 const MOBILE_BTN = 'p-2.5 rounded-xl text-c-text-muted hover:text-c-text-strong active:bg-c-surface2 transition-colors disabled:opacity-40'
 const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[] = [
@@ -212,16 +212,13 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
 /** 自分の書き込み(書き込み履歴にあるレス)だけを出す。PC だけ(スマホは 5 つを等分に並べているため) */
 const OWN_FILTER = { key: 'own', label: '自分', icon: 'person', color: 'var(--c-own)' } as const
 /** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
-/** 選んだレスへ送るときのスクロールの時間 */
-const CURSOR_SCROLL_MS = 160
 /** 引用のない(文章で引用する掲示板の)レスに渡す、空のつながり(描き直しを起こさないよう、いつも同じもの) */
 const NO_QUOTES = new Map<string, number>()
 /**
- * スレを開いたときに、最初に中身まで作るレスの数(開く位置の前後)と、そのあと手の空いたときに 1 回で作り足す数。
+ * スレを開いたときに、最初に中身まで作るレスの数(開く位置の前後)。
  * 全部を一度に作ると、1000 レスのスレで開くまでに時間がかかるので、見える所から先に作る
  */
 const FIRST_RENDER = 80
-const RENDER_CHUNK = 150
 /**
  * スマホ: 中身を作るのは、見えているレスの上 WIN_BEFORE 件・下 WIN_AFTER 件まで(仮想スクロール)。
  * PC のように全部を作り足すと、1000 レスのスレでは部品が多すぎて、作り足すたび・スクロールのたびに重くなる。
@@ -229,16 +226,10 @@ const RENDER_CHUNK = 150
  */
 // 勢いよくはじいても空箱が見えないよう、先(下)は多めに作っておき、端まで 1/3 ほどに近づいたら早めに動かす
 // (はじめ 25・45・10 にしたら、はじいたときに中身を作る前に空箱が見え、「表示が遅れる」と言われた)
-/** PC で、手の空いたときに全部のレスを作り足すか(やめた。見えている所の前後だけ作る) */
-const PC_GROW_ALL = false
 // 上へ読むときに範囲を動かす間隔は WIN_BEFORE − WIN_MARGIN 件。少ないと数レスごとに全枠を見直すことになる
 const WIN_BEFORE = 80
 const WIN_AFTER = 100
 const WIN_MARGIN = 35
-/** Esc の 2 回押しとみなす間隔 */
-const DOUBLE_ESC_MS = 500
-/** J・K で選んだレスを、画面の上下からこの割合だけ離しておく */
-const CURSOR_MARGIN = 0.25
 /** 書き込み欄(下に置いたとき)を伸ばせる高さの上限。つかんで伸ばすときの上限と同じ */
 const REPLY_MAX_HEIGHT = 600
 const AUTO_COLLAPSE_WIDTH = 720
@@ -296,10 +287,31 @@ function selectedTextIn(el: HTMLElement): string | undefined {
   return text || undefined
 }
 
-/** 要素の縦の位置(画面の座標) */
-function spanOf(el: HTMLElement): Span {
-  const r = el.getBoundingClientRect()
-  return { top: r.top, bottom: r.bottom }
+/** レス検索の対象の文の控え(レスは作り直されるまで中身が変わらないので、1 文字打つごとに揃え直さない) */
+const searchTexts = new WeakMap<Post, string>()
+function searchTextOf(p: Post): string {
+  let v = searchTexts.get(p)
+  if (v === undefined) {
+    v = normalizeForSearch(`${p.no} ${p.name} ${p.id ?? ''} ${p.body}`)
+    searchTexts.set(p, v)
+  }
+  return v
+}
+
+/** 絞り込みの付け外し */
+function togglePostFilter(filters: Set<PostFilter>, key: PostFilter): Set<PostFilter> {
+  const next = new Set(filters)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  return next
+}
+
+/** Tab・Shift+Tab: レスの中のリンクなどを順に選ぶ(今の次へ。端からは反対の端へ) */
+function cycleTabItems(items: HTMLElement[], back: boolean): HTMLElement {
+  const i = items.indexOf(document.activeElement as HTMLElement)
+  const next = i < 0 ? (back ? items.length - 1 : 0) : (i + (back ? -1 : 1) + items.length) % items.length
+  items[next].focus()
+  return items[next]
 }
 
 function tabItems(post: HTMLElement): HTMLElement[] {
@@ -387,6 +399,32 @@ interface FrameShared {
   ownNos: Set<number>
   replyToOwn: Set<number>
   reactions?: { get(no: number): ArticleProps['reactions'] }
+}
+
+/** レスの枠とポップアップで共通の、そのレスの中身(枠の線・操作など置き場所で違うものは呼ぶ側で足す) */
+function postArticleProps(p: Post, s: FrameShared) {
+  return {
+    post: p,
+    reactions: s.reactions?.get(p.ref ?? p.no),
+    quotes: s.quotesOf(p.no),
+    blurMedia: s.grossNos?.has(p.no),
+    anchorCount: s.anchorCounts.get(p.no) ?? 0,
+    idCount: p.id ? (s.idCounts.get(p.id) ?? 1) : 0,
+    iconCount: s.iconCounts.get(iconKeyOf(p, s.iconFromWatchoi) ?? '') ?? 0,
+    variant: s.variant,
+    ng: s.isNg(p),
+    autoNg: s.autoNg.get(p.no),
+    aiMark: s.aiMarkOf(p.no),
+    showThumbnails: s.showThumbnails,
+    showIdenticon: s.showIdenticon,
+    showLinkPreview: s.showLinkPreview,
+    display: s.display,
+    toolbar: s.toolbar,
+    phrases: s.phrases,
+    isOp: s.opId !== undefined && p.id === s.opId,
+    isOwn: s.ownNos.has(p.no),
+    isReplyToOwn: s.replyToOwn.has(p.no),
+  }
 }
 
 /**
@@ -478,31 +516,12 @@ const PostFrame = memo(function PostFrame(props: {
       )}
       {props.showArticle && (
         <PostArticle
-          post={p}
-          reactions={s.reactions?.get(p.ref ?? p.no)}
-          quotes={s.quotesOf(p.no)}
-          blurMedia={s.grossNos?.has(p.no)}
-          anchorCount={s.anchorCounts.get(p.no) ?? 0}
-          idCount={p.id ? (s.idCounts.get(p.id) ?? 1) : 0}
-          iconCount={s.iconCounts.get(iconKeyOf(p, s.iconFromWatchoi) ?? '') ?? 0}
+          {...postArticleProps(p, s)}
           showTopDivider={i > 0 && !firstUnread && (s.variant === 'card' || s.variant === 'matome')}
-          variant={s.variant}
           continued={continuedHead(p, i, s.variant, s.anchorCounts, s.ownNos, s.replyPreviewOf, s.continuedFrom, firstUnread)}
           replyPreview={s.variant === 'discord' || s.variant === 'line' ? s.replyPreviewOf(p) : undefined}
-          ng={s.isNg(p)}
-          autoNg={s.autoNg.get(p.no)}
-          aiMark={s.aiMarkOf(p.no)}
           ngMode={s.ngMode}
-          showThumbnails={s.showThumbnails}
-          showIdenticon={s.showIdenticon}
-          showLinkPreview={s.showLinkPreview}
-          display={s.display}
-          toolbar={s.toolbar}
-          phrases={s.phrases}
-          isOp={s.opId !== undefined && p.id === s.opId}
           flash={enterDelay !== undefined}
-          isOwn={s.ownNos.has(p.no)}
-          isReplyToOwn={s.replyToOwn.has(p.no)}
           handlers={s.handlers}
         />
       )}
@@ -682,7 +701,7 @@ export default function ThreadView(props: Props) {
       if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
       if (e.key !== 'Escape' || e.defaultPrevented) return
       const t = e.target as HTMLElement | null
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (isTypingTarget(t)) return
       if (popups.length > 0) {
         e.preventDefault()
         // スマホ(戻る操作)は、重なったポップアップをまとめて閉じる。PC の Esc はいちばん上から 1 つずつ
@@ -729,16 +748,15 @@ export default function ThreadView(props: Props) {
   }
   const quickPost = async (body: string) => {
     if (!props.onSubmitPost) return
-    const show = showQuick
-    show(true, '書き込み中…')
+    showQuick(true, '書き込み中…')
     try {
       const r = await props.onSubmitPost({ name: props.postName, mail: props.postMail, body })
-      if (r.status === 'ok') show(true, `書き込みました: ${body.replace(/\n/g, ' ')}`)
-      else if (r.status === 'auth') show(false, '認証が必要です。書き込み欄から一度書き込んで、認証を済ませてください')
-      else if (r.status === 'confirm') show(false, '書き込み確認が出ました。書き込み欄から一度書き込んで、承諾してください')
-      else show(false, r.message)
+      if (r.status === 'ok') showQuick(true, `書き込みました: ${body.replace(/\n/g, ' ')}`)
+      else if (r.status === 'auth') showQuick(false, '認証が必要です。書き込み欄から一度書き込んで、認証を済ませてください')
+      else if (r.status === 'confirm') showQuick(false, '書き込み確認が出ました。書き込み欄から一度書き込んで、承諾してください')
+      else showQuick(false, r.message)
     } catch (e) {
-      show(false, e instanceof Error ? e.message : String(e))
+      showQuick(false, e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -826,7 +844,7 @@ export default function ThreadView(props: Props) {
   /** アンカーの番号をスレの中の番号に読み替えるもの(2ch はそのまま、4chan などは板の本当の番号から) */
   const resolveAnchor = useMemo(() => makeAnchorResolver(log.posts, props.anchorTarget), [log.posts, props.anchorTarget])
   /** 画面に出す番号と、返信で付けるアンカーの番号(板の本当の番号があればそれ) */
-  const refOf = (no: number) => byNo.get(no)?.ref ?? no
+  const refOf = (no: number) => dataRef.current.byNo.get(no)?.ref ?? no
   /**
    * 返信で書き込み欄に入れる文。ふつうは「>>番号」(選んだ文があれば、そのあとに「>選んだ文」)。
    * 文章で引用する掲示板(ふたば)は番号を付けず、「>選んだ文」、選んでいなければ「>そのレスの最初の行」
@@ -836,7 +854,7 @@ export default function ThreadView(props: Props) {
     const quoted = (text: string) => `${text.split('\n').map((l) => `>${l}`).join('\n')}\n`
     if (!props.textQuotes) return `>>${refOf(no)}\n${quote ? quoted(quote) : ''}`
     if (quote) return quoted(quote)
-    const lines = (byNo.get(no)?.body ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
+    const lines = (dataRef.current.byNo.get(no)?.body ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
     const text = lines.find((l) => !/^https?:\/\//.test(l) && quotedText(l) === undefined)
     const image = lines.find((l) => /^https?:\/\//.test(l))?.split('/').at(-1)
     return quoted(text ?? image ?? `No.${refOf(no)}`)
@@ -928,27 +946,7 @@ export default function ThreadView(props: Props) {
     setRenderWin(firstWindow())
     // レスが初めて届いたときだけ
   }, [log.posts.length])
-  // 見えている所の前後だけ中身を作り、スクロールに合わせて範囲を動かす(下の仮想スクロール)。PC もスマホも同じ。
-  // 以前の PC は手の空いたときに全部(1000 件)作り足していたので、DOM が大きくなり、設定を変える・タブを切り替えるたびに重かった
-  useEffect(() => {
-    if (!PC_GROW_ALL) return
-    const n = log.posts.length
-    // レスが届くまでは広げない(0 件のうちに「最後まで」になると、届いた瞬間に全部作ってしまう)
-    if (n === 0 || windowPending.current) return
-    if (renderWin.lo <= 0 && renderWin.hi === Infinity) return
-    const grow = () =>
-      setRenderWin((w) => {
-        const hi = w.hi === Infinity ? Infinity : w.hi + RENDER_CHUNK
-        return { lo: Math.max(0, w.lo - RENDER_CHUNK), hi: hi >= n ? Infinity : hi }
-      })
-    const idle = window.requestIdleCallback
-    if (idle) {
-      const id = idle(grow, { timeout: 300 })
-      return () => window.cancelIdleCallback(id)
-    }
-    const t = setTimeout(grow, 30)
-    return () => clearTimeout(t)
-  }, [renderWin, log.posts.length])
+  // 見えている所の前後だけ中身を作り、スクロールに合わせて範囲を動かす(下の仮想スクロール)。PC もスマホも同じ
   const isRendered = useCallback((i: number) => i >= renderWin.lo && i < renderWin.hi, [renderWin])
 
   /** レスの見た目のスタイル(設定) */
@@ -974,9 +972,11 @@ export default function ThreadView(props: Props) {
     c.own = log.posts.reduce((n, p) => (ownNos.has(p.no) ? n + 1 : n), 0)
     return c
   }, [log.posts, matchesFilter, ownNos])
+  // 全レスを見るので、打っている間は少し遅らせて入力の反応を止めない
+  const deferredQuery = useDeferredValue(query)
   const visibleNos = useMemo(() => {
     // 検索: 空白で区切った言葉はすべて含むもの(AND)。番号・名前・ID・本文から探す
-    const terms = normalizeForSearch(query.trim()).split(/\s+/).filter(Boolean)
+    const terms = normalizeForSearch(deferredQuery.trim()).split(/\s+/).filter(Boolean)
     if (filters.size === 0 && terms.length === 0) return undefined
     const set = new Set<number>()
     for (const p of log.posts) {
@@ -984,13 +984,13 @@ export default function ThreadView(props: Props) {
         if (![...filters].some((f) => matchesFilter(p, f))) continue
       }
       if (terms.length > 0) {
-        const hay = normalizeForSearch(`${p.no} ${p.name} ${p.id ?? ''} ${p.body}`)
+        const hay = searchTextOf(p)
         if (!terms.every((w) => hay.includes(w))) continue
       }
       set.add(p.no)
     }
     return set
-  }, [log.posts, filters, query, matchesFilter])
+  }, [log.posts, filters, deferredQuery, matchesFilter])
 
   const visiblePosts = useMemo(
     () => (visibleNos ? log.posts.filter((p) => visibleNos.has(p.no)) : log.posts),
@@ -1061,7 +1061,7 @@ export default function ThreadView(props: Props) {
       // id は引用の行のアイコンの種。レスのアイコンと同じ決め方(設定でワッチョイがあればワッチョイ、なければ ID)
       const no = /^\s*(?:>>|＞＞)\d/.test(p.body) ? anchorTargets(p.body, resolveAnchor)[0] : quoteLinks?.get(p.no)?.values().next().value
       if (no === undefined) continue
-      const src = no === undefined || no === p.no ? undefined : byNo.get(no)
+      const src = no === p.no ? undefined : byNo.get(no)
       if (!src) continue
       const ng = isNg(src)
       m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : (settings.iconFromWatchoi ? watchoiOf(src.name) : undefined) ?? src.id })
@@ -1121,7 +1121,6 @@ export default function ThreadView(props: Props) {
     scrollToUnread,
     jumpToBottom,
     jumpToTop,
-    stepPost,
     page,
     showJump,
     flashNos,
@@ -1589,7 +1588,7 @@ export default function ThreadView(props: Props) {
       // F5・Ctrl+R はアプリ全体で扱う(App.tsx)ので、ここでは見ない
       if (e.defaultPrevented || isReloadKey(e)) return
       const t = e.target as HTMLElement | null
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (isTypingTarget(t)) return
       // Tab・Shift+Tab: 選んでいるレスの中のリンク・アンカー・画像を順に選ぶ(Enter で開く)。レスを選んでいなければ普通の Tab
       if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && cursorFrameRef.current) {
         const frame = cursorFrameRef.current()
@@ -1597,10 +1596,7 @@ export default function ThreadView(props: Props) {
           const items = tabItems(frame)
           e.preventDefault()
           if (items.length === 0) return
-          const i = items.indexOf(document.activeElement as HTMLElement)
-          const next = i < 0 ? (e.shiftKey ? items.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + items.length) % items.length
-          items[next].focus()
-          items[next].scrollIntoView({ block: 'nearest' })
+          cycleTabItems(items, e.shiftKey).scrollIntoView({ block: 'nearest' })
           return
         }
       }
@@ -1614,12 +1610,7 @@ export default function ThreadView(props: Props) {
         e.preventDefault()
         if (n === 5) return setFilters(new Set())
         const key = n === 6 ? OWN_FILTER.key : FILTERS[n - 1].key
-        setFilters((f) => {
-          const next = new Set(f)
-          if (next.has(key)) next.delete(key)
-          else next.add(key)
-          return next
-        })
+        setFilters((f) => togglePostFilter(f, key))
         return
       }
       // スレ表示の操作だけをここで受ける(タブ・戻る などアプリ全体の操作は App.tsx が受ける)
@@ -1631,7 +1622,7 @@ export default function ThreadView(props: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [keysOn, props.onRefresh, lightbox, popups.length, keymap, unreadFrom, stepPost, page, jumpToTop, jumpToBottom, scrollToUnread])
+  }, [keysOn, lightbox, popups.length, keymap])
 
   // ── ポップアップの中のキー操作 ──
   // ポップアップ(返信・ID・アンカー・アンカーツリー)が出ている間は、一番上のポップアップの中で、本文と同じキーが使える:
@@ -1642,7 +1633,7 @@ export default function ThreadView(props: Props) {
     if (modalOpen()) return // ダイアログが開いている間は、後ろの画面を動かさない
     if (e.defaultPrevented || isReloadKey(e)) return
     const t = e.target as HTMLElement | null
-    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    if (isTypingTarget(t)) return
     const box = document.querySelector<HTMLElement>('[data-popup-top]')
     if (!box) return
     const posts = [...box.querySelectorAll<HTMLElement>('article[data-no]')]
@@ -1665,9 +1656,7 @@ export default function ThreadView(props: Props) {
       const items = tabItems(cur)
       e.preventDefault()
       if (items.length === 0) return
-      const i = items.indexOf(document.activeElement as HTMLElement)
-      const next = i < 0 ? (e.shiftKey ? items.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + items.length) % items.length
-      items[next].focus()
+      cycleTabItems(items, e.shiftKey)
       return
     }
     if (e.key === 'Enter' && t && (/^(BUTTON|A)$/.test(t.tagName) || t.getAttribute('role') === 'button')) return
@@ -1823,6 +1812,7 @@ export default function ThreadView(props: Props) {
   // 操作の関数が読むレスのデータ(新着のたびに関数を作り直すと、全レスが描き直される。ref で最新を読む)
   const dataRef = useRef({ byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts })
   dataRef.current = { byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts }
+  const thumbAuto = settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi())
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
       const d = () => dataRef.current
@@ -1915,7 +1905,7 @@ export default function ThreadView(props: Props) {
         idPosition: settings.idPosition,
         iconFromWatchoi: settings.iconFromWatchoi,
         nameSubtle: settings.nameSubtle,
-        thumbAuto: settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi()),
+        thumbAuto,
         onReact: props.onReact,
         reactionDefs: props.reactionDefs,
         onPostAction: props.onPostAction,
@@ -1928,10 +1918,10 @@ export default function ThreadView(props: Props) {
         onQuickReply: canReply ? (no, text) => void quickPostRef.current(`${replyText(no)}${text}`) : undefined,
       }
     },
-    // renderPosts は下で定義する関数で、handlersFor と同じ依存で作り直される
+    // ポップアップの中身は renderRef で最新の値で描くので、NG の判定や自分のレスなど描くための値はここに入れない
     // 設定は、ここで使うものだけを見る(設定全体を見ると、配色を変えただけで、すべてのレスを描き直して重い)
     // レスのデータ(byNo・replies・posts・anchorCounts など)は dataRef で読むので、ここには入れない
-    [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, settings.thumbLoad, settings.urlShorten, isNg, ownNos, replyToOwn, canReply, display, opId, props.onUrl, props.onAddNg, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn, grossNos],
+    [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, thumbAuto, settings.urlShorten, canReply, props.onUrl, props.onAddNg, props.onRemoveNg, props.onEditNg, props.onNgDraft, props.textQuotes, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn],
   )
 
   /** アンカーツリーを線でつないで描く(ポップアップの中身) */
@@ -1946,29 +1936,10 @@ export default function ThreadView(props: Props) {
           const p = byNo.get(no)!
           return (
             <PostArticle
-              post={p}
-              reactions={props.reactions?.get(p.ref ?? p.no)}
-              quotes={quotesOf(p.no)}
-              blurMedia={grossNos?.has(p.no)}
-              anchorCount={anchorCounts.get(p.no) ?? 0}
-              idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-              iconCount={iconCounts.get(iconKeyOf(p, settings.iconFromWatchoi) ?? '') ?? 0}
+              {...postArticleProps(p, frameShared)}
               showTopDivider={false}
-              variant={variant}
               alignLeft
-              ng={isNg(p)}
-              autoNg={autoNg.get(p.no)}
-              aiMark={aiMarkOf(p.no)}
               ngMode="aborn"
-              showThumbnails={settings.thumbLoad !== 'never'}
-              showIdenticon={settings.idStyle === 'icon'}
-              showLinkPreview={settings.showLinkPreview}
-              display={display}
-              toolbar={settings.postToolbar}
-              phrases={settings.quickPhrases}
-              isOp={opId !== undefined && p.id === opId}
-              isOwn={ownNos.has(p.no)}
-              isReplyToOwn={replyToOwn.has(p.no)}
               handlers={handlers}
             />
           )
@@ -1985,28 +1956,9 @@ export default function ThreadView(props: Props) {
         {posts.map((p, i) => (
           <PostArticle
             key={p.no}
-            post={p}
-            reactions={props.reactions?.get(p.ref ?? p.no)}
-            quotes={quotesOf(p.no)}
-            blurMedia={grossNos?.has(p.no)}
-            anchorCount={anchorCounts.get(p.no) ?? 0}
-            idCount={p.id ? (idCounts.get(p.id) ?? 1) : 0}
-            iconCount={iconCounts.get(iconKeyOf(p, settings.iconFromWatchoi) ?? '') ?? 0}
+            {...postArticleProps(p, frameShared)}
             showTopDivider={i > 0 && (variant === 'card' || variant === 'matome')}
-            variant={variant}
-            ng={isNg(p)}
-              autoNg={autoNg.get(p.no)}
-              aiMark={aiMarkOf(p.no)}
             ngMode="aborn"
-            showThumbnails={settings.thumbLoad !== 'never'}
-            showIdenticon={settings.idStyle === 'icon'}
-            showLinkPreview={settings.showLinkPreview}
-            display={display}
-            toolbar={settings.postToolbar}
-            phrases={settings.quickPhrases}
-            isOp={opId !== undefined && p.id === opId}
-            isOwn={ownNos.has(p.no)}
-            isReplyToOwn={replyToOwn.has(p.no)}
             // Discord・LINE 風は、ポップアップの中でも返信元を頭に出し、本文の頭のアンカーを省く
             replyPreview={variant === 'discord' || variant === 'line' ? replyPreviewOf(p) : undefined}
             handlers={handlers}
@@ -2148,14 +2100,7 @@ export default function ThreadView(props: Props) {
               <button
                 key={key}
                 type="button"
-                onClick={() =>
-                  setFilters((f) => {
-                    const next = new Set(f)
-                    if (next.has(key)) next.delete(key)
-                    else next.add(key)
-                    return next
-                  })
-                }
+                onClick={() => setFilters((f) => togglePostFilter(f, key))}
                 className={`relative shrink-0 flex items-center ${isMobile ? 'justify-center gap-1' : 'gap-1.5 px-2'} transition-colors whitespace-nowrap ${
                   // 選んでいる絞り込みは、強調色を薄く敷く
                   active ? 'text-c-accent bg-[var(--c-accent-wash)]' : 'text-c-text-muted hover:text-c-text-body'
@@ -2232,6 +2177,7 @@ export default function ThreadView(props: Props) {
     }),
     [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
   )
+  const galleryItems = useMemo(() => (galleryOpen ? collectMedia(log.posts.filter((p) => !isNg(p))) : []), [galleryOpen, log.posts, isNg])
   /**
    * レスの枠(1000 件ぶん)。読み込み中の印・既読・ポップアップの開閉で ThreadView が描き直されても作り直さない。
    * 変わるものだけを依存に並べる(見積もりの高さは intrinsicHeight の関数が変わる)。
@@ -2269,6 +2215,34 @@ export default function ThreadView(props: Props) {
     }),
     [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared],
   )
+
+  /** 書き込み欄の中身(スマホのフッターと PC の欄で共通)。書けない掲示板は undefined */
+  const replyFormProps = props.onSubmitPost && {
+    stamp: { title: log.title, url: props.threadUrl },
+    phraseBar: settings.quickPhrases,
+    attach: props.attachments,
+    disabled: log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined,
+    initialName: props.postName,
+    initialMail: props.postMail,
+    onSubmit: props.onSubmitPost,
+    onConfirm: props.onConfirmPost,
+    onUploaded: props.onUploaded,
+    accounts: props.postAccounts,
+    draft: props.draft,
+    limits: props.postLimits,
+    byteLength: props.postByteLength,
+    onToggleAccount: props.onTogglePostAccount,
+    onOpenAccountSettings: props.onOpenAccountSettings,
+    onImage: (urls: string[], index: number) => setLightbox({ urls, index }),
+    uploader: {
+      maxDimension: settings.uploadMaxDimension,
+      userhash: settings.catboxUserhash.trim() || undefined,
+      host: settings.uploadHost,
+      imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
+      imgurClientId: settings.imgurClientId.trim() || undefined,
+    },
+    onOpenUrl: props.onUrl,
+  }
 
   return (
     <main
@@ -2420,12 +2394,11 @@ export default function ThreadView(props: Props) {
           // キーボードが出ていれば、その上に持ち上げる(main.tsx が --kb-inset を測る)。高さは設定(--footer-bar-h)で変えられる
           style={{ bottom: 'var(--kb-inset, 0px)', minHeight: `calc(var(--footer-bar-h, ${MOBILE_BAR_H}px) / var(--bar-zoom, 1))` }}
         >
-          {props.onSubmitPost ? (
+          {replyFormProps ? (
             // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
             <ReplyForm
               ref={replyRef}
-              stamp={{ title: log.title, url: props.threadUrl }}
-              phraseBar={settings.quickPhrases}
+              {...replyFormProps}
               variant="chat"
               // フッターの右端(送るボタンの右)に更新ボタン(設定で消せる)
               trailing={
@@ -2444,29 +2417,6 @@ export default function ThreadView(props: Props) {
               onFocusChange={(f) => {
                 composing.current = f
               }}
-              attach={props.attachments}
-              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
-              initialName={props.postName}
-              initialMail={props.postMail}
-              onSubmit={props.onSubmitPost}
-              onConfirm={props.onConfirmPost}
-              onUploaded={props.onUploaded}
-              accounts={props.postAccounts}
-              draft={props.draft}
-              limits={props.postLimits}
-              byteLength={props.postByteLength}
-              onToggleAccount={props.onTogglePostAccount}
-              onOpenAccountSettings={props.onOpenAccountSettings}
-              onImage={(urls, index) => setLightbox({ urls, index })}
-              uploader={{
-                      maxDimension: settings.uploadMaxDimension,
-                      userhash: settings.catboxUserhash.trim() || undefined,
-                      host: settings.uploadHost,
-                      imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
-                      imgurClientId: settings.imgurClientId.trim() || undefined,
-              }}
-              onOpenUrl={props.onUrl}
-
             />
           ) : (
             <div className="px-2 flex items-center gap-2" style={{ height: MOBILE_BAR_H }}>
@@ -2493,7 +2443,7 @@ export default function ThreadView(props: Props) {
           {replyLayout === 'bottom' && '書き込む'}
         </button>
       )}
-      {props.onSubmitPost && !replyCollapsed && !isMobile && (
+      {replyFormProps && !replyCollapsed && !isMobile && (
         <>
           <Splitter
             layout={replyLayout}
@@ -2511,32 +2461,9 @@ export default function ThreadView(props: Props) {
           >
             <ReplyForm
               ref={replyRef}
-              stamp={{ title: log.title, url: props.threadUrl }}
-              phraseBar={settings.quickPhrases}
+              {...replyFormProps}
               layout={replyLayout}
               onTextOverflow={replyLayout === 'bottom' ? onTextOverflow : undefined}
-              attach={props.attachments}
-              disabled={log.status === 'archived' ? 'dat 落ちしたスレには書き込めません' : undefined}
-              initialName={props.postName}
-              initialMail={props.postMail}
-              onSubmit={props.onSubmitPost}
-              onConfirm={props.onConfirmPost}
-              onUploaded={props.onUploaded}
-              accounts={props.postAccounts}
-              draft={props.draft}
-              limits={props.postLimits}
-              byteLength={props.postByteLength}
-              onToggleAccount={props.onTogglePostAccount}
-              onOpenAccountSettings={props.onOpenAccountSettings}
-              onImage={(urls, index) => setLightbox({ urls, index })}
-              uploader={{
-                      maxDimension: settings.uploadMaxDimension,
-                      userhash: settings.catboxUserhash.trim() || undefined,
-                      host: settings.uploadHost,
-                      imgbbApiKey: settings.imgbbApiKey.trim() || undefined,
-                      imgurClientId: settings.imgurClientId.trim() || undefined,
-              }}
-              onOpenUrl={props.onUrl}
               onCollapse={closeReply}
             />
           </div>
@@ -2585,7 +2512,7 @@ export default function ThreadView(props: Props) {
       {galleryOpen && (
         <MediaGallery
           // NG のレスは除く(見えていないレスの画像は出さない)
-          items={collectMedia(log.posts.filter((p) => !isNg(p)))}
+          items={galleryItems}
           blurNos={grossNos}
           saveDir={settings.imageSaveDir}
           onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}

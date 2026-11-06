@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import BoardIcon from './BoardIcon'
+import { useDragReorder } from '../hooks/useDragReorder'
 
 export interface TabItem {
   id: string
@@ -40,8 +41,6 @@ interface Props {
   onReorder: (id: string, index: number) => void
 }
 
-/** これだけ動かしたらドラッグとみなす */
-const DRAG_PX = 4
 
 const MAX_WIDTH = 220
 const MIN_WIDTH = 72
@@ -57,10 +56,6 @@ export default function TabBar(props: Props) {
   const hasTabs = props.tabs.length > 0
   /** Shift+クリックの起点(最後に押したタブ) */
   const anchorRef = useRef<string>(undefined)
-  /** つかんで動かしているタブ。dx は動かした量、over は落とす位置 */
-  const [drag, setDrag] = useState<{ id: string; from: number; dx: number; over: number }>()
-  /** ドラッグを終えた直後のクリックは無視する */
-  const justDragged = useRef(false)
 
   useEffect(() => {
     const el = stripRef.current
@@ -73,6 +68,8 @@ export default function TabBar(props: Props) {
   const fitWidth =
     stripWidth > 0 ? Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.floor(stripWidth / props.tabs.length))) : MAX_WIDTH
   const tabWidth = frozenWidth ?? fitWidth
+  /** つかんで動かす。同じ幅のタブなので、何個ぶん動いたかは幅で割って決める */
+  const { drag, justDragged, onDragMouseDown, shiftOf } = useDragReorder<string>('x', tabWidth, props.tabs.length, (id, _from, over) => props.onReorder(id, over))
 
   /** マウスで閉じるときは、いまの幅のまま固定する */
   const closeByPointer = (id: string) => {
@@ -105,42 +102,6 @@ export default function TabBar(props: Props) {
     anchorRef.current = id
     props.onSelectionChange(new Set())
     props.onSelect(id)
-  }
-
-  /** つかんで動かす。同じ幅のタブなので、何個ぶん動いたかは幅で割って決める */
-  const onTabMouseDown = (e: React.MouseEvent, id: string, index: number) => {
-    // 帯の外で離したドラッグは click が来ないので、印が残っている
-    justDragged.current = false
-    if (e.button !== 0) return
-    const startX = e.clientX
-    let moved = false
-    let latest = { id, from: index, dx: 0, over: index }
-    const onMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX
-      if (!moved && Math.abs(dx) < DRAG_PX) return
-      moved = true
-      const over = Math.max(0, Math.min(props.tabs.length - 1, index + Math.round(dx / tabWidth)))
-      latest = { id, from: index, dx, over }
-      setDrag(latest)
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      setDrag(undefined)
-      if (!moved) return
-      justDragged.current = true
-      if (latest.over !== latest.from) props.onReorder(id, latest.over)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
-
-  /** ドラッグ中に、ほかのタブをどれだけずらすか(つかんだタブの行き先を空ける) */
-  const shiftOf = (i: number): number => {
-    if (!drag) return 0
-    if (drag.from < drag.over && i > drag.from && i <= drag.over) return -tabWidth
-    if (drag.from > drag.over && i >= drag.over && i < drag.from) return tabWidth
-    return 0
   }
 
   // 全部閉じると帯がなくなって onMouseLeave が来ないので、ここで固定を解く
@@ -199,13 +160,13 @@ export default function TabBar(props: Props) {
           const next = props.tabs[i + 1]
           const separator = !active && next !== undefined && next.id !== props.activeId
           const selected = !active && props.selectedIds.has(t.id)
-          const dragging = drag?.id === t.id
+          const dragging = drag?.key === t.id
           return (
             <div
               key={t.id}
               ref={active ? activeRef : undefined}
               onClick={(e) => onTabClick(e, t.id)}
-              onMouseDown={(e) => onTabMouseDown(e, t.id, i)}
+              onMouseDown={(e) => onDragMouseDown(e, t.id, i)}
               onAuxClick={(e) => {
                 if (e.button === 1) closeByPointer(t.id)
               }}
@@ -222,7 +183,7 @@ export default function TabBar(props: Props) {
                     ? 'color-mix(in srgb, var(--tab-active-fill) 70%, transparent)'
                     : undefined,
                 // つかんだタブはマウスについて動かし、ほかのタブはなめらかにずらして場所を空ける
-                transform: `translateX(${dragging ? drag.dx : shiftOf(i)}px)`,
+                transform: `translateX(${dragging ? drag.delta : shiftOf(i)}px)`,
                 transition: dragging ? 'none' : 'transform 150ms ease-out, background-color 150ms',
               }}
               className={`group relative flex-shrink-0 h-8 flex items-center gap-1.5 pl-3 pr-1.5 rounded-t-lg cursor-pointer select-none text-xs ${

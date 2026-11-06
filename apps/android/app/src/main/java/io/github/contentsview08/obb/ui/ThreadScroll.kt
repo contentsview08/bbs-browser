@@ -119,7 +119,6 @@ class ThreadScroller(
 
     fun toUnread(no: Int, animate: Boolean = false) { scope.launch { toUnreadNow(no, animate) } }
     fun toBottom(animate: Boolean = false) { scope.launch { toBottomNow(animate) } }
-    fun toTop() { scope.launch { state.scrollToItem(0) } }
 
     /**
      * 開いたとき(最初にレスが出たとき)。覚えた位置 → 設定(一番下・最初の未読)→ 先頭(PC 版の openTarget)。
@@ -285,8 +284,8 @@ class PullState(private val onCommit: () -> Unit = {}) {
  * (同じ指のまま、スクロールして端に着き、そのまま引っぱっても効くように)
  */
 class PullConnection(
-    private val top: PullState?,
-    private val bottom: PullState?,
+    private val top: PullState,
+    private val bottom: PullState,
     private val density: Float,
     private val scope: CoroutineScope,
     private val refresh: suspend () -> Unit,
@@ -294,12 +293,12 @@ class PullConnection(
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
         if (source != NestedScrollSource.UserInput) return Offset.Zero
         // 引いている途中で指を戻したら、まず引いた分を戻す
-        if (top != null && top.dist > 0f && available.y < 0f) {
+        if (top.dist > 0f && available.y < 0f) {
             val d = minOf(top.dist * density, -available.y)
             scope.launch { top.pull(top.dist - d / density) }
             return Offset(0f, -d)
         }
-        if (bottom != null && bottom.dist > 0f && available.y > 0f) {
+        if (bottom.dist > 0f && available.y > 0f) {
             val d = minOf(bottom.dist * density, available.y)
             scope.launch { bottom.pull(bottom.dist - d / density) }
             return Offset(0f, d)
@@ -309,14 +308,14 @@ class PullConnection(
 
     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
         if (source != NestedScrollSource.UserInput) return Offset.Zero
-        if (top != null && available.y > 0f) { scope.launch { top.pull(top.dist + available.y / density) }; return Offset(0f, available.y) }
-        if (bottom != null && available.y < 0f) { scope.launch { bottom.pull(bottom.dist - available.y / density) }; return Offset(0f, available.y) }
+        if (available.y > 0f) { scope.launch { top.pull(top.dist + available.y / density) }; return Offset(0f, available.y) }
+        if (available.y < 0f) { scope.launch { bottom.pull(bottom.dist - available.y / density) }; return Offset(0f, available.y) }
         return Offset.Zero
     }
 
     override suspend fun onPreFling(available: Velocity): Velocity {
-        top?.let { t -> if (t.dist > 0f) scope.launch { t.release(refresh) } }
-        bottom?.let { b -> if (b.dist > 0f) scope.launch { b.release(refresh) } }
+        if (top.dist > 0f) scope.launch { top.release(refresh) }
+        if (bottom.dist > 0f) scope.launch { bottom.release(refresh) }
         return Velocity.Zero
     }
 }
@@ -324,12 +323,19 @@ class PullConnection(
 /** 引っぱって更新の印(丸の中の更新の矢印。引いた分だけ回り、確定したらくるくる回る)。sign は上の端なら 1、下の端なら -1 */
 @Composable
 fun PullSpinner(state: PullState, sign: Int, modifier: Modifier = Modifier) {
-    val spin = rememberInfiniteTransition(label = "spin").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "r")
     Box(
         modifier.graphicsLayer { translationY = sign * state.y.value * density; alpha = state.alpha.value }
             .size(42.dp).background(Palette.surface, CircleShape).border(1.dp, Palette.border, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Refresh, null, tint = Palette.accent, modifier = Modifier.size(24.dp).rotate(if (state.spinning) spin.value else state.progress * 360f))
+        if (state.spinning) SpinningRefreshIcon(null, Palette.accent, 24.dp)
+        else Icon(Icons.Filled.Refresh, null, tint = Palette.accent, modifier = Modifier.size(24.dp).rotate(state.progress * 360f))
     }
+}
+
+/** 回っている更新の矢印。無限のアニメーションは置いてある間ずっと毎フレーム動くので、回す間だけ置く */
+@Composable
+fun SpinningRefreshIcon(contentDescription: String?, tint: androidx.compose.ui.graphics.Color, size: androidx.compose.ui.unit.Dp) {
+    val spin = rememberInfiniteTransition(label = "spin").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "r")
+    Icon(Icons.Filled.Refresh, contentDescription, tint = tint, modifier = Modifier.size(size).graphicsLayer { rotationZ = spin.value })
 }

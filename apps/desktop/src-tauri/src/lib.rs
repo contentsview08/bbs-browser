@@ -134,6 +134,17 @@ fn allow_background_asset(app: &tauri::AppHandle, path: &Path) {
     }
 }
 
+/// 置き場にある背景画像のファイル
+fn background_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    entries.flatten().filter(|e| e.file_name().to_string_lossy().starts_with("background-")).map(|e| e.path()).collect()
+}
+
+/// UNIX 時刻(ファイル名に入れる。取れなければ 0)
+fn since_epoch() -> std::time::Duration {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default()
+}
+
 /// OS に入っているフォント 1 ファミリーぶん
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -176,109 +187,34 @@ async fn list_system_fonts() -> Vec<SystemFont> {
 
 fn migrations() -> Vec<Migration> {
     // SQL は packages/logstore にあり、vitest のテストでも同じファイルを使う
+    macro_rules! m {
+        ($version:literal, $description:literal, $file:literal) => {
+            Migration {
+                version: $version,
+                description: $description,
+                sql: include_str!(concat!("../../../../packages/logstore/migrations/", $file)),
+                kind: MigrationKind::Up,
+            }
+        };
+    }
     vec![
-        Migration {
-            version: 1,
-            description: "init",
-            sql: include_str!("../../../../packages/logstore/migrations/001_init.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "settings",
-            sql: include_str!("../../../../packages/logstore/migrations/002_settings.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 3,
-            description: "favorite_boards",
-            sql: include_str!("../../../../packages/logstore/migrations/003_favorite_boards.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 4,
-            description: "own_posts",
-            sql: include_str!("../../../../packages/logstore/migrations/004_own_posts.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 5,
-            description: "favicons",
-            sql: include_str!("../../../../packages/logstore/migrations/005_favicons.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 6,
-            description: "uploads",
-            sql: include_str!("../../../../packages/logstore/migrations/006_uploads.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 7,
-            description: "upload_account",
-            sql: include_str!("../../../../packages/logstore/migrations/007_upload_account.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 8,
-            description: "ogp_cache",
-            sql: include_str!("../../../../packages/logstore/migrations/008_ogp.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 9,
-            description: "post_history",
-            sql: include_str!("../../../../packages/logstore/migrations/009_post_history.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 10,
-            description: "favorite_threads",
-            sql: include_str!("../../../../packages/logstore/migrations/010_favorite_threads.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 11,
-            description: "accounts",
-            sql: include_str!("../../../../packages/logstore/migrations/011_accounts.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 12,
-            description: "drafts",
-            sql: include_str!("../../../../packages/logstore/migrations/012_drafts.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 13,
-            description: "post_ref",
-            sql: include_str!("../../../../packages/logstore/migrations/013_post_ref.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 14,
-            description: "troll_marks",
-            sql: include_str!("../../../../packages/logstore/migrations/014_troll_marks.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 15,
-            description: "post_badges",
-            sql: include_str!("../../../../packages/logstore/migrations/015_post_badges.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 16,
-            description: "upload_hash",
-            sql: include_str!("../../../../packages/logstore/migrations/016_upload_hash.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 17,
-            description: "upload_delete_url",
-            sql: include_str!("../../../../packages/logstore/migrations/017_upload_delete_url.sql"),
-            kind: MigrationKind::Up,
-        },
+        m!(1, "init", "001_init.sql"),
+        m!(2, "settings", "002_settings.sql"),
+        m!(3, "favorite_boards", "003_favorite_boards.sql"),
+        m!(4, "own_posts", "004_own_posts.sql"),
+        m!(5, "favicons", "005_favicons.sql"),
+        m!(6, "uploads", "006_uploads.sql"),
+        m!(7, "upload_account", "007_upload_account.sql"),
+        m!(8, "ogp_cache", "008_ogp.sql"),
+        m!(9, "post_history", "009_post_history.sql"),
+        m!(10, "favorite_threads", "010_favorite_threads.sql"),
+        m!(11, "accounts", "011_accounts.sql"),
+        m!(12, "drafts", "012_drafts.sql"),
+        m!(13, "post_ref", "013_post_ref.sql"),
+        m!(14, "troll_marks", "014_troll_marks.sql"),
+        m!(15, "post_badges", "015_post_badges.sql"),
+        m!(16, "upload_hash", "016_upload_hash.sql"),
+        m!(17, "upload_delete_url", "017_upload_delete_url.sql"),
     ]
 }
 
@@ -433,21 +369,14 @@ fn set_background_image(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPa
     let source = chosen.take(&source)?;
     let dir = data_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            if entry.file_name().to_string_lossy().starts_with("background-") {
-                let _ = std::fs::remove_file(entry.path());
-            }
-        }
+    for path in background_files(&dir) {
+        let _ = std::fs::remove_file(path);
     }
     let ext = Path::new(&source)
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_else(|| "png".into());
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or_default();
+    let stamp = since_epoch().as_millis();
     let dest = dir.join(format!("background-{stamp}.{ext}"));
     std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
     allow_background_asset(&app, &dest);
@@ -568,10 +497,7 @@ fn apply_pending_restore(app: &tauri::AppHandle) {
     if !pending.exists() {
         return;
     }
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or_default();
+    let stamp = since_epoch().as_secs();
     for suffix in ["", "-wal", "-shm"] {
         let current = dir.join(format!("{DB_FILE}{suffix}"));
         if current.exists() {
@@ -602,10 +528,7 @@ fn backup_before_migrations(app: &tauri::AppHandle) {
         if std::fs::create_dir_all(&backups).is_err() {
             return;
         }
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or_default();
+        let stamp = since_epoch().as_secs();
         let name = format!("{SCHEMA_BACKUP_PREFIX}{current}-{stamp}.db");
         for suffix in ["", "-wal"] {
             let from = dir.join(format!("{DB_FILE}{suffix}"));
@@ -703,12 +626,10 @@ pub fn run() {
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());
             // ポータブルでは、前に置いた背景画像もアセットで読めるように許す
-            if let Ok(dir) = data_dir(app.handle()) {
-                if let Ok(entries) = std::fs::read_dir(&dir) {
-                    for entry in entries.flatten() {
-                        if entry.file_name().to_string_lossy().starts_with("background-") {
-                            allow_background_asset(app.handle(), &entry.path());
-                        }
+            if portable_dir().is_some() {
+                if let Ok(dir) = data_dir(app.handle()) {
+                    for path in background_files(&dir) {
+                        allow_background_asset(app.handle(), &path);
                     }
                 }
             }
@@ -734,7 +655,6 @@ pub fn run() {
             chosen_paths::pick_save_path,
             chosen_paths::pick_open_path,
             web_upload::open_web_upload,
-            web_upload::show_web_upload,
             web_upload::close_web_upload,
             update::download_update
         ])

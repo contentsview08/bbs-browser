@@ -32,6 +32,14 @@ impl ChosenPaths {
     }
 }
 
+/// 選ばれたパスを覚えて、画面に返す形にする
+fn remember_picked(state: &ChosenPaths, picked: Option<tauri_plugin_dialog::FilePath>) -> Result<Option<String>, String> {
+    let Some(path) = picked else { return Ok(None) };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    state.remember(path.clone());
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// 保存先を選ぶ画面を出す。選ばなければ None
 #[tauri::command]
 pub async fn pick_save_path(
@@ -43,10 +51,7 @@ pub async fn pick_save_path(
 ) -> Result<Option<String>, String> {
     let exts: Vec<&str> = extensions.iter().map(String::as_str).collect();
     let picked = app.dialog().file().set_file_name(default_name).add_filter(filter_name, &exts).blocking_save_file();
-    let Some(path) = picked else { return Ok(None) };
-    let path = path.into_path().map_err(|e| e.to_string())?;
-    state.remember(path.clone());
-    Ok(Some(path.to_string_lossy().into_owned()))
+    remember_picked(&state, picked)
 }
 
 /// 読み込むファイルを選ぶ画面を出す。選ばなければ None
@@ -59,8 +64,5 @@ pub async fn pick_open_path(
 ) -> Result<Option<String>, String> {
     let exts: Vec<&str> = extensions.iter().map(String::as_str).collect();
     let picked = app.dialog().file().add_filter(filter_name, &exts).blocking_pick_file();
-    let Some(path) = picked else { return Ok(None) };
-    let path = path.into_path().map_err(|e| e.to_string())?;
-    state.remember(path.clone());
-    Ok(Some(path.to_string_lossy().into_owned()))
+    remember_picked(&state, picked)
 }

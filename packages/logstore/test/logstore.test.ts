@@ -623,7 +623,7 @@ describe('マイグレーション', () => {
   it('migrations の全部が、番号どおりアプリに登録されている', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort()
     const rust = readFileSync(new URL('../../../apps/desktop/src-tauri/src/lib.rs', import.meta.url), 'utf-8')
-    const registered = [...rust.matchAll(/version: (\d+),[\s\S]*?migrations\/(\d+_[^"]+\.sql)"/g)].map((m) => [Number(m[1]), m[2]])
+    const registered = [...rust.matchAll(/m!\((\d+), "[^"]*", "(\d+_[^"]+\.sql)"\)/g)].map((m) => [Number(m[1]), m[2]])
     expect(registered).toEqual(files.map((f) => [Number(f.slice(0, 3)), f]))
   })
 })

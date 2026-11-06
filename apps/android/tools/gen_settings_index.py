@@ -16,14 +16,15 @@ src = (UI / "Settings.kt").read_text(encoding="utf-8")
 keys = dict((fn, k) for k, fn in re.findall(r'"(\w+)" -> (\w+Page)\(', src))
 # TITLES: 見出しのない Group の note は、ページの名前の説明として入れる
 titles = dict(re.findall(r'"(\w+)" to "([^"]+)"', src[src.index("val TITLES"):src.index("val TITLES") + 800]))
+# ページの本体の終わり(次の宣言)
+NEXT_DECL = re.compile(r"\n(?:private fun |@)")
 rows = []
 for m in re.finditer(r"private fun (\w+Page)\(", src):
     fn = m.group(1)
     if fn not in keys:
         continue
-    end = src.find("\nprivate fun ", m.end())
-    end = src.find("\n@", m.end()) if end < 0 else min(end, src.find("\n@", m.end()) if src.find("\n@", m.end()) > 0 else end)
-    body = src[m.end():end]
+    next_decl = NEXT_DECL.search(src, m.end())
+    body = src[m.end():next_decl.start() if next_decl else len(src)]
     for r in re.finditer(
         r'(?:SwitchRow|ChoiceRow|SliderRow|TextRow|ActionRow|NavRow|NumberRow)\(\s*(?:[^"()]*?,\s*)?"([^"$]+)"(?:[^\n]*?desc = "([^"$]+)")?'
         r'|\bGroup\(\s*(?:"([^"$]+)"\s*,?\s*)?(?:note = "([^"$]+)")?',
@@ -34,6 +35,10 @@ for m in re.finditer(r"private fun (\w+Page)\(", src):
         elif r.group(3) or r.group(4):
             rows.append((keys[fn], r.group(3) or titles[keys[fn]], r.group(4) or ""))
 
+def esc(s):
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 out = ['package io.github.contentsview08.obb.ui', '',
        '// tools/gen_settings_index.py で ui/Settings.kt から作ったもの。手で直さない', '',
        '/** 設定の検索の索引: ページのキー・項目の名前・説明 */',
@@ -43,7 +48,6 @@ seen = {}
 for k, label, desc in rows:
     if not seen.get((k, label)):
         seen[(k, label)] = desc
-esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
 for (k, label), desc in seen.items():
     out.append(f'    Triple("{k}", "{esc(label)}", "{esc(desc)}"),')
 out.append(')')

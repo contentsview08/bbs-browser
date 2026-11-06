@@ -63,7 +63,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -81,7 +80,6 @@ import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
@@ -163,11 +161,9 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     }
 }
 
+/** 設定の上の検索欄 */
 @Composable
-private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open: (String) -> Unit) {
-    val p = vm.prefs
-    // 設定の検索(項目の名前と説明から探し、押すとその項目のあるページを開く)
-    var q by rememberSaveable { mutableStateOf("") }
+private fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).background(Palette.surface2, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -175,15 +171,23 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f)) {
-            if (q.isEmpty()) Text("設定を探す", color = Palette.textMuted, fontSize = 15.sp)
+            if (value.isEmpty()) Text(placeholder, color = Palette.textMuted, fontSize = 15.sp)
             androidx.compose.foundation.text.BasicTextField(
-                q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
+                value, onChange, Modifier.fillMaxWidth(), singleLine = true,
                 textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 15.sp),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
             )
         }
-        if (q.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(20.dp).clickable { q = "" })
+        if (value.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(20.dp).clickable { onChange("") })
     }
+}
+
+@Composable
+private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open: (String) -> Unit) {
+    val p = vm.prefs
+    // 設定の検索(項目の名前と説明から探し、押すとその項目のあるページを開く)
+    var q by rememberSaveable { mutableStateOf("") }
+    SearchField(q, { q = it }, "設定を探す")
     val words = q.trim().split(Regex("[\\s　]+")).filter { it.isNotEmpty() }
     if (words.isNotEmpty()) {
         val hits = SETTINGS_INDEX.filter { (k, label, desc) -> words.all { w -> label.contains(w, true) || desc.contains(w, true) || (TITLES[k] ?: "").contains(w, true) } }
@@ -232,7 +236,6 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
 
 // ── 項目ごとの画面 ──
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
     val p = vm.prefs
@@ -298,13 +301,16 @@ private fun TextPage(vm: AppViewModel) {
     Group("字", note = "端末の標準以外は、選んだときに Google Fonts から 1 回だけ取ります(Wi-Fi のときがおすすめ)") {
         val context = androidx.compose.ui.platform.LocalContext.current
         val f = io.github.contentsview08.obb.data.Fonts
+        // ファイルがあるかの確かめは、スライダーを動かすたびに走らせない(字を取り終えた・消したときだけ調べ直す)
+        var fontsDeleted by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+        val downloaded = remember(p.font, f.loading, fontsDeleted) { f.CHOICES.map { it.key }.filter { f.isDownloaded(context, it) }.toSet() }
         ChoiceRow(
             "字", p.font,
-            listOf("" to "端末の標準") + f.CHOICES.map { it.key to "${it.name}${if (f.isDownloaded(context, it.key)) "" else "(${it.desc.substringAfter('(').trimEnd(')')})"}" },
+            listOf("" to "端末の標準") + f.CHOICES.map { it.key to "${it.name}${if (it.key in downloaded) "" else "(${it.desc.substringAfter('(').trimEnd(')')})"}" },
         ) { p.font = it }
         f.loading?.let { InfoRow("字を取っています", f.CHOICES.firstOrNull { c -> c.key == it }?.name ?: "") }
         f.error?.let { InfoRow("うまくいきませんでした", it) }
-        if (f.CHOICES.any { it.key != p.font && f.isDownloaded(context, it.key) }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.font) }
+        if (f.CHOICES.any { it.key != p.font && it.key in downloaded }) ActionRow("使っていない字を消す") { f.deleteUnused(context, p.font); fontsDeleted++ }
     }
     Group("文字の大きさ") {
         SliderRow("画面全体", p.fontScale, 0.85f..1.3f, steps = 8, label = "${percent(p.fontScale)}%") { p.fontScale = snapTo(it, 20) }
@@ -332,7 +338,7 @@ private fun ListPage(vm: AppViewModel) {
         @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(name, Modifier.weight(1f), color = if (shown) Palette.textStrong else Palette.textMuted, fontSize = 15.sp)
-                Switch(shown, { v -> p.listTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 4.dp), colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                Switch(shown, { v -> p.listTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 4.dp), colors = accentSwitchColors())
                 if (handle != null) DragHandleIcon(handle) else Spacer(Modifier.size(46.dp))
             }
         // 出しているものは掴んで並べ替える。出していないものは後ろに(並びはない)
@@ -409,19 +415,17 @@ private fun WritePage(vm: AppViewModel) {
         EditableWordList(p.quickPhrases, "定型文", "定型文を足す", "定型文はありません", sortable = true) { p.quickPhrases = it }
     }
     if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」の上げ先は、画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れます") {
-        run {
-            // 上げ先: サイトの画面(画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れる)か API(キーを登録して、そのまま上げる)
-            ChoiceRow(
-                "上げ先", p.uploadHost,
-                io.github.contentsview08.obb.data.Uploader.HOSTS.map { h -> h.key to "${h.name}(${if (h.kind == "web") "サイトの画面" else "API"})・${h.note}" },
-            ) { p.uploadHost = it }
-            if (p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID") { p.imgurClientId = it.trim() }
-            if (p.uploadHost == "imgbb") TextRow("imgbb の API キー", p.imgbbApiKey, "api.imgbb.com で発行した API キー") { p.imgbbApiKey = it.trim() }
-            ChoiceRow(
-                "大きい画像を縮める", p.uploadMaxDimension.toString(),
-                listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },
-            ) { p.uploadMaxDimension = it.toInt() }
-        }
+        // 上げ先: サイトの画面(画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れる)か API(キーを登録して、そのまま上げる)
+        ChoiceRow(
+            "上げ先", p.uploadHost,
+            io.github.contentsview08.obb.data.Uploader.HOSTS.map { h -> h.key to "${h.name}(${if (h.kind == "web") "サイトの画面" else "API"})・${h.note}" },
+        ) { p.uploadHost = it }
+        if (p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID") { p.imgurClientId = it.trim() }
+        if (p.uploadHost == "imgbb") TextRow("imgbb の API キー", p.imgbbApiKey, "api.imgbb.com で発行した API キー") { p.imgbbApiKey = it.trim() }
+        ChoiceRow(
+            "大きい画像を縮める", p.uploadMaxDimension.toString(),
+            listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },
+        ) { p.uploadMaxDimension = it.toInt() }
     }
 }
 
@@ -581,7 +585,7 @@ private fun NgPage(vm: AppViewModel) {
                     }
                     if (marks.isNotEmpty()) Text(marks.joinToString(" ・ "), Modifier.padding(top = 2.dp), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Switch(r.enabled, { vm.saveNg(r.copy(enabled = it)) }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                Switch(r.enabled, { vm.saveNg(r.copy(enabled = it)) }, colors = accentSwitchColors())
             }
         }
         HorizontalDivider(color = Palette.border)
@@ -643,11 +647,11 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("正規表現", Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
-                        Switch(r.isRegex, { r = r.copy(isRegex = it) }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                        Switch(r.isRegex, { r = r.copy(isRegex = it) }, colors = accentSwitchColors())
                         Spacer(Modifier.width(16.dp))
                         Text("有効", color = Palette.textBody, fontSize = 14.sp)
                         Spacer(Modifier.width(8.dp))
-                        Switch(r.enabled, { r = r.copy(enabled = it) }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+                        Switch(r.enabled, { r = r.copy(enabled = it) }, colors = accentSwitchColors())
                     }
                     Text("効く板", color = Palette.textMuted, fontSize = 12.sp)
                     Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -758,7 +762,6 @@ private fun SitesPage(vm: AppViewModel, menus: Boolean) {
 private fun AccountsPage(vm: AppViewModel) {
     val p = vm.prefs
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var auth by remember { mutableStateOf<io.github.contentsview08.obb.bbs.PostResult.Auth?>(null) }
@@ -788,25 +791,7 @@ private fun AccountsPage(vm: AppViewModel) {
     if (register) RegisterDialog(vm, origins, onAuth = { auth = it; register = false }, onDone = { msg -> if (msg.isNotEmpty()) status = msg; register = false })
     // Turnstile の認証(書き込みと同じ案内)
     auth?.let { a ->
-        AlertDialog(
-            onDismissRequest = { auth = null },
-            title = { Text("人の確認が要ります") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("ブラウザで認証のページを開き、下の認証コードを入れてから、もう一度登録してください。", fontSize = 14.sp)
-                    if (a.code != null) Text("認証コード: ${a.code}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Palette.textStrong)
-                    Text(a.message, fontSize = 12.sp, color = Palette.textMuted)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    a.code?.let { copyText(context, it) }
-                    a.url?.let { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(it))) } }
-                    auth = null
-                }) { Text(if (a.code != null) "コードをコピーして開く" else "ブラウザで開く") }
-            },
-            dismissButton = { TextButton(onClick = { auth = null }) { Text("閉じる") } },
-        )
+        AuthDialog(a, "人の確認が要ります", "ブラウザで認証のページを開き、下の認証コードを入れてから、もう一度登録してください。") { auth = null }
     }
 }
 
@@ -930,22 +915,7 @@ private fun LicensesPage() {
     val shown = remember(file, q) { filterLicenses(file.packages, q) }
     androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp)) {
         item {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).background(Palette.surface2, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Search, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.weight(1f)) {
-                    if (q.isEmpty()) Text("名前・版・ライセンスで探す", color = Palette.textMuted, fontSize = 15.sp)
-                    androidx.compose.foundation.text.BasicTextField(
-                        q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.textStrong, fontSize = 15.sp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.accent),
-                    )
-                }
-                if (q.isNotEmpty()) Icon(Icons.Filled.Close, "消す", tint = Palette.textMuted, modifier = Modifier.size(20.dp).clickable { q = "" })
-            }
+            SearchField(q, { q = it }, "名前・版・ライセンスで探す")
             Text("${shown.size} 件。押すとライセンスの全文を開きます", Modifier.padding(start = 20.dp, end = 20.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
         }
         items(shown.size, key = { shown[it].id }) { i ->
@@ -1015,7 +985,7 @@ private fun SwitchRow(label: String, checked: Boolean, desc: String? = null, onC
             if (desc != null) Text(desc, color = Palette.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
         }
         Spacer(Modifier.width(10.dp))
-        Switch(checked, onChange, colors = SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText))
+        Switch(checked, onChange, colors = accentSwitchColors())
     }
 }
 

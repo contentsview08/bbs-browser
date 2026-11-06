@@ -25,8 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,12 +45,12 @@ import org.json.JSONArray
  * 画像の置き場の、ふつうのアップロードの画面(API を使わない)。PC 版・Web の utils/webUpload.ts と同じ表。
  * pattern は、上げたあとに出るリンク(直接の画像の URL)の形
  */
-data class WebUploadSite(val key: String, val name: String, val url: String, val pattern: String, val note: String)
+data class WebUploadSite(val key: String, val name: String, val url: String, val pattern: String)
 
 val WEB_UPLOAD_SITES = listOf(
-    WebUploadSite("imgur", "imgur", "https://imgur.com/upload", """https://i\.imgur\.com/[A-Za-z0-9]{5,}\.(?:jpe?g|png|gif|webp|mp4)""", "消えない。ログインしなくても上げられます"),
-    WebUploadSite("imgbox", "imgbox", "https://imgbox.com/", """https://images[0-9]*\.imgbox\.com/[a-f0-9]{2}/[a-f0-9]{2}/[A-Za-z0-9]+_o\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
-    WebUploadSite("imgbb", "imgbb", "https://imgbb.com/", """https://i\.ibb\.co/[A-Za-z0-9]+/[^\s"'<>]+\.(?:jpe?g|png|gif|webp)""", "消えない。ログインしなくても上げられます"),
+    WebUploadSite("imgur", "imgur", "https://imgur.com/upload", """https://i\.imgur\.com/[A-Za-z0-9]{5,}\.(?:jpe?g|png|gif|webp|mp4)"""),
+    WebUploadSite("imgbox", "imgbox", "https://imgbox.com/", """https://images[0-9]*\.imgbox\.com/[a-f0-9]{2}/[a-f0-9]{2}/[A-Za-z0-9]+_o\.(?:jpe?g|png|gif|webp)"""),
+    WebUploadSite("imgbb", "imgbb", "https://imgbb.com/", """https://i\.ibb\.co/[A-Za-z0-9]+/[^\s"'<>]+\.(?:jpe?g|png|gif|webp)"""),
 )
 
 /** 設定の上げ先(imgur-web など)が「サイトの画面」なら、そのサイト */

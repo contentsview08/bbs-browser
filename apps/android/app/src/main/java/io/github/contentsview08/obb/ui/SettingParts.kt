@@ -57,6 +57,10 @@ private val SAMPLE = listOf(
 )
 
 /** 見本のレス。いまの設定で組み立てて描く(押しても何もしない) */
+/** 設定のスイッチの色(オンのときは差し色) */
+@Composable
+fun accentSwitchColors() = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText)
+
 @Composable
 fun SamplePosts(vm: AppViewModel) {
     val p = vm.prefs

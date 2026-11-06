@@ -70,12 +70,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil3.compose.AsyncImage
 import io.github.contentsview08.obb.bbs.Post
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -309,11 +307,10 @@ private fun ZoomPage(
                     var pinch: Triple<Float, Offset, Float>? = null // 始めた時の拡大・真ん中・指の間
                     var dy = 0f
                     val longJob = scope.launch { delay(LONG_PRESS_MS); if (!moved && mode == "") { longPressed = true; onLongPress() } }
-                    var up = false
                     while (true) {
                         val ev = awaitPointerEvent(PointerEventPass.Main)
                         val pressed = ev.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) { up = true; break }
+                        if (pressed.isEmpty()) break
                         if (pressed.size >= 2) {
                             // 2 本指: 拡大。指の真ん中が、絵の同じ所を指し続けるように
                             moved = true
@@ -364,7 +361,6 @@ private fun ZoomPage(
                         }
                     }
                     longJob.cancel()
-                    if (!up) return@awaitEachGesture
                     val v = tracker.calculateVelocity()
                     when (mode) {
                         "pinch" -> settle()
@@ -397,7 +393,7 @@ private fun ZoomPage(
     ) {
         // 画像は ImageStore で取る(サムネイルと同じファイルを使う。ビューアーの枠で、サムネイルの順番待ちに並ばない)
         val store = io.github.contentsview08.obb.data.ImageStore
-        val ds = store.states[url]
+        val ds = store.stateOf(url)
         LaunchedEffect(url, active) { if (active || ds !is io.github.contentsview08.obb.data.ImageStore.State.Done) store.request(url, viewer = active) }
         val file = (ds as? io.github.contentsview08.obb.data.ImageStore.State.Done)?.file
         if (file != null) {

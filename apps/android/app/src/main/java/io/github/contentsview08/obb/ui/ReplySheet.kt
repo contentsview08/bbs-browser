@@ -28,7 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,20 +35,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -65,15 +57,12 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
@@ -103,12 +92,18 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     val r = page.reply
     val focus = remember { FocusRequester() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val context = LocalContext.current
     var plusMenu by remember { mutableStateOf(false) }
     /** サイトの画面で上げる: 開いている置き場(上げ先が「サイトの画面」のとき、画像を押すと開く) */
     var webSite by remember { mutableStateOf<WebUploadSite?>(null) }
     var options by remember { mutableStateOf(false) }
     var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body)) }
+    // 定型文をカーソルの所に入れる
+    fun insertPhrase(ph: String) {
+        val sel = field.selection
+        val t = field.text.substring(0, sel.min) + ph + field.text.substring(sel.max)
+        field = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(sel.min + ph.length))
+        r.body = t; vm.saveDraftLater(page)
+    }
     // 本文が外(返信の >>12・書き込めて空になった・下書き)で変わったら、欄に写す(カーソルは最後に)
     LaunchedEffect(r.body) { if (field.text != r.body) field = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
     // 下書きを戻す
@@ -137,7 +132,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         if (r.uploading) {
             val batch = r.uploads.filter { it.inBatch }
             val done = batch.count { it.state is io.github.contentsview08.obb.UploadItem.State.Done || it.state is io.github.contentsview08.obb.UploadItem.State.Failed }
-            FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${batch.size} 枚目", Palette.textMuted, null)
+            FooterNote(Icons.Filled.Sync, "画像をアップロード中… ${done + 1} / ${batch.size} 枚目", Palette.textMuted)
         }
         // 返事は、後ろのレスが透けて読めなくならないよう、塗りつぶした面に出す
         val result = r.notice ?: r.done
@@ -160,18 +155,13 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             }
         }
         // 定型文のバー(書いている間)。押すとカーソルの所に入る
-        val phrases = vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val phrases = vm.prefs.quickPhraseList
         if (r.open && phrases.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (ph in phrases) Text(
                     ph,
                     Modifier.clip(RoundedCornerShape(50)).background(Palette.surface2).border(1.dp, Palette.border, RoundedCornerShape(50))
-                        .clickable {
-                            val sel = field.selection
-                            val t = field.text.substring(0, sel.min) + ph + field.text.substring(sel.max)
-                            field = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(sel.min + ph.length))
-                            r.body = t; vm.saveDraftLater(page)
-                        }.padding(horizontal = 12.dp, vertical = 5.dp),
+                        .clickable { insertPhrase(ph) }.padding(horizontal = 12.dp, vertical = 5.dp),
                     color = Palette.textStrong, fontSize = 13.sp,
                 )
             }
@@ -197,7 +187,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 }
                 // 定型文を選ぶ(＋ の「定型文」から)。押すとカーソルの所に入る
                 if (phraseMenu) {
-                    val phrases = vm.prefs.quickPhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { phraseMenu = false }) {
                         Column(
                             Modifier.widthIn(min = 200.dp, max = 320.dp).heightIn(max = 360.dp).shadow(10.dp, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
@@ -209,10 +198,7 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                                 ph,
                                 Modifier.fillMaxWidth().clickable {
                                     phraseMenu = false
-                                    val sel = field.selection
-                                    val t = field.text.substring(0, sel.min) + ph + field.text.substring(sel.max)
-                                    field = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(sel.min + ph.length))
-                                    r.body = t; vm.saveDraftLater(page)
+                                    insertPhrase(ph)
                                     r.focusSeq++
                                 }.padding(horizontal = 16.dp, vertical = 11.dp),
                                 color = Palette.textStrong, fontSize = 15.sp, maxLines = 2,
@@ -258,7 +244,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
             }
             // 更新(設定で消せる)。取っている間は回る
             if (vm.prefs.showRefreshButton) {
-                val spin = androidx.compose.animation.core.rememberInfiniteTransition(label = "r").animateFloat(0f, 360f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.LinearEasing)), label = "s")
                 // 取り終えたら、新着があれば ✓、なければ「—」を少しだけ出して戻る(取れたか分かるように)
                 var startCount by remember { mutableStateOf(-1) }
                 var result by remember { mutableStateOf<Boolean?>(null) }
@@ -284,7 +269,8 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         when (res) {
                             true -> Icon(Icons.Filled.Check, "新着あり", tint = Palette.own, modifier = Modifier.size(28.dp))
                             false -> Text("—", color = Palette.textMuted, fontSize = 22.sp)
-                            null -> Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = if (page.loading) spin.value else 0f })
+                            null -> if (page.loading) SpinningRefreshIcon("更新", Palette.textMuted, 28.dp)
+                            else Icon(Icons.Filled.Refresh, "更新", tint = Palette.textMuted, modifier = Modifier.size(28.dp))
                         }
                     }
                 }
@@ -344,7 +330,8 @@ private fun PostPreview(vm: AppViewModel, page: Page.Thread, onDismiss: () -> Un
 
 /** 本文を AA 用の字で出すか: 選んでいればそれ、なければ空白が 5 つ以上続く本文(設定の「AA を見分ける」がオンのとき) */
 /** AA 用の字で出すか: ボタンで選んだもの。選んでいなければ、空白が続く本文を AA とみなす */
-private fun isAA(r: ReplyState) = r.aaOverride ?: Regex("[ \t　]{5,}").containsMatchIn(r.body)
+private fun isAA(r: ReplyState) = r.aaOverride ?: AA_SPACES.containsMatchIn(r.body)
+private val AA_SPACES = Regex("[ \t　]{5,}")
 
 /**
  * 本文の欄。AA のときは AA 用の字で、折り返さず横にずらせる(レスの表示と同じ字なので、書いたとおりに見える。今のスマホ版の書き込み欄と同じ)
@@ -365,12 +352,11 @@ private fun BodyField(
 }
 
 @Composable
-private fun FooterNote(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color, onClose: (() -> Unit)?) {
+private fun FooterNote(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color) {
     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
         Icon(icon, null, tint = color, modifier = Modifier.size(14.dp).padding(top = 1.dp))
         Spacer(Modifier.width(4.dp))
         Text(text, Modifier.weight(1f), color = color, fontSize = 12.sp, lineHeight = 16.sp)
-        if (onClose != null) Icon(Icons.Filled.Close, "閉じる", tint = color, modifier = Modifier.size(16.dp).clickable(onClick = onClose))
     }
 }
 
@@ -392,54 +378,36 @@ private fun SmallField(value: String, onChange: (String) -> Unit, placeholder: S
     )
 }
 
-/**
- * 画像を付けるボタン(端末の写真の選択画面を開き、選んだ画像を catbox に上げて URL を本文に入れる)。
- * 設定で切っているときは、押すと案内を出す(PC 版と同じ)
- */
+/** ブラウザで済ませる認証の案内(書き込み・スレ立て・利用者の登録で共通) */
 @Composable
-fun AttachButton(vm: AppViewModel, r: ReplyState) {
-    val picker = rememberImagePicker(vm, r)
-    IconButton(
-        onClick = {
-            picker()
+fun AuthDialog(a: io.github.contentsview08.obb.bbs.PostResult.Auth, title: String, guide: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(guide, fontSize = 14.sp)
+                if (a.code != null) Text("認証コード: ${a.code}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Palette.textStrong)
+                Text(a.message, fontSize = 12.sp, color = Palette.textMuted)
+            }
         },
-        enabled = !r.uploading,
-    ) {
-        if (r.uploading) CircularProgressIndicator(Modifier.size(22.dp), color = Palette.accent, strokeWidth = 2.dp)
-        else Icon(Icons.Filled.AddPhotoAlternate, "画像を付ける", tint = Palette.markImage)
-    }
+        confirmButton = {
+            TextButton(onClick = {
+                a.code?.let { copyText(context, it) }
+                a.url?.let { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
+                onDismiss()
+            }) { Text(if (a.code != null) "コードをコピーして開く" else "ブラウザで開く") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+    )
 }
-
-@Composable
-private fun fieldColors() = TextFieldDefaults.colors(
-    focusedContainerColor = Palette.surface2, unfocusedContainerColor = Palette.surface2,
-    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-)
 
 /** エッヂの認証・5ch の書き込み確認の画面(書き込みとスレ立てで共通) */
 @Composable
 fun PostDialogs(r: ReplyState, onAccept: () -> Unit) {
-    val context = LocalContext.current
     r.auth?.let { a ->
-        AlertDialog(
-            onDismissRequest = { r.auth = null },
-            title = { Text("認証が要ります") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("ブラウザで認証のページを開き、下の認証コードを入れてから、もう一度書き込んでください。", fontSize = 14.sp)
-                    if (a.code != null) Text("認証コード: ${a.code}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Palette.textStrong)
-                    Text(a.message, fontSize = 12.sp, color = Palette.textMuted)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    a.code?.let { copyText(context, it) }
-                    a.url?.let { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
-                    r.auth = null
-                }) { Text(if (a.code != null) "コードをコピーして開く" else "ブラウザで開く") }
-            },
-            dismissButton = { TextButton(onClick = { r.auth = null }) { Text("閉じる") } },
-        )
+        AuthDialog(a, "認証が要ります", "ブラウザで認証のページを開き、下の認証コードを入れてから、もう一度書き込んでください。") { r.auth = null }
     }
     r.confirm?.let { c ->
         AlertDialog(
@@ -461,13 +429,26 @@ fun PostDialogs(r: ReplyState, onAccept: () -> Unit) {
 fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
     val r = page.newThread
     // 書きかけを戻す(開いたとき、まだ何も書いていなければ)・書くたびに覚える(閉じても消えないように)
+    fun saveDraftNow() = vm.prefs.setNewThreadDraft(page.board.url, r.title, r.name, r.mail, r.body)
+    // 覚えるのを待っている書きかけがあるか
+    val draftPending = remember(r) { booleanArrayOf(false) }
     androidx.compose.runtime.LaunchedEffect(r.open) {
+        if (draftPending[0]) { draftPending[0] = false; saveDraftNow() }
         if (r.open && r.title.isEmpty() && r.body.isEmpty()) vm.prefs.newThreadDraft(page.board.url)?.let { (t, n, m, b) ->
             r.title = t; if (n.isNotEmpty()) r.name = n; r.mail = m; r.body = b
         }
     }
+    // 全部の板の書きかけを読み直して書き戻すので、打っている間は待ち、止まってから覚える
     androidx.compose.runtime.LaunchedEffect(r.title, r.name, r.mail, r.body) {
-        if (r.open || r.title.isNotEmpty() || r.body.isNotEmpty()) vm.prefs.setNewThreadDraft(page.board.url, r.title, r.name, r.mail, r.body)
+        if (r.open || r.title.isNotEmpty() || r.body.isNotEmpty()) {
+            draftPending[0] = true
+            kotlinx.coroutines.delay(500)
+            draftPending[0] = false
+            saveDraftNow()
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(r) {
+        onDispose { if (draftPending[0]) { draftPending[0] = false; saveDraftNow() } }
     }
     if (r.open) {
         androidx.compose.ui.window.Dialog(

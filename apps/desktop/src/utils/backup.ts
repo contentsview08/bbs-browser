@@ -2,7 +2,7 @@
 // - 設定には、秘密の値(catbox のアカウント・書き込みの削除キー)と、その端末だけの状態(開いていたタブ・背景画像のパスなど)を入れない
 // - NG は、読み込むときに今のものへ足す(同じものは重ねない)
 
-import type { AppSettings } from '../ui/settings'
+import { migrateOld, migrateValues, type AppSettings } from '../ui/settings'
 import type { NgRule, NgTarget } from './ng'
 
 const APP = 'bbs-browser'
@@ -71,6 +71,27 @@ function isNgRule(v: unknown): v is NgRule {
   )
 }
 
+const isString = (v: unknown) => typeof v === 'string'
+
+/** 配列の設定の、要素の確かめ方。合わない要素は読み込まない(手で書き換えた値で描画が落ちないように) */
+const ARRAY_ITEM_CHECKS: Partial<Record<keyof AppSettings, (v: unknown) => boolean>> = {
+  ngRules: isNgRule,
+  aiNgRules: (v) => !!v && typeof v === 'object' && ['id', 'name', 'prompt'].every((k) => typeof (v as Record<string, unknown>)[k] === 'string'),
+  listTabs: isString,
+  keywords: isString,
+  grossWords: isString,
+  quickPhrases: isString,
+  postToolbar: isString,
+}
+
+/** 確かめる間隔の範囲(設定の画面と同じ)。外れた値だと、タイマーがすぐ回り続けて通信を送り続ける */
+const INTERVAL_LIMITS: Partial<Record<keyof AppSettings, number>> = {
+  autoRefreshSec: 3600,
+  favCheckMin: 1440,
+  historyCheckMin: 1440,
+  keywordWatchMin: 1440,
+}
+
 export function parseBackup(text: string): ParsedBackup {
   let data: unknown
   try {
@@ -102,12 +123,20 @@ export function parseBackup(text: string): ParsedBackup {
 export function importableSettings(file: SettingsFile, defaults: AppSettings): Partial<AppSettings> {
   const out: Partial<AppSettings> = {}
   for (const [k, v] of Object.entries(file.settings) as [keyof AppSettings, unknown][]) {
-    if (!(k in defaults) || NOT_EXPORTED.includes(k)) continue
+    // __proto__ などの受け継いだ名前も in には当たるので、自分の項目だけを見る
+    if (!Object.hasOwn(defaults, k) || NOT_EXPORTED.includes(k)) continue
     const d = defaults[k]
     const sameType = Array.isArray(d) ? Array.isArray(v) : typeof d === typeof v && (typeof d !== 'object' || (v !== null && !Array.isArray(v)))
-    if (sameType) (out as Record<string, unknown>)[k] = v
+    if (!sameType || (typeof v === 'number' && !Number.isFinite(v))) continue
+    const check = ARRAY_ITEM_CHECKS[k]
+    const limit = INTERVAL_LIMITS[k]
+    ;(out as Record<string, unknown>)[k] = check && Array.isArray(v) ? v.filter(check) : limit !== undefined ? Math.min(limit, Math.max(0, Math.round(v as number))) : v
   }
-  return out
+  // id がないと消すときに見分けられず、enabled がないと黙って切れてしまう
+  if (out.ngRules) out.ngRules = out.ngRules.map((r) => ({ ...r, id: r.id || crypto.randomUUID(), enabled: r.enabled !== false }))
+  // 古い版のファイルも、保存してある設定を読むときと同じく今の形に読み替える
+  const merged = { ...out, ...migrateOld(file.settings) }
+  return { ...merged, ...migrateValues(merged) }
 }
 
 /** NG を今のものに足す。同じもの(種類・言葉・正規表現か・効く板)は重ねない。足した数も返す */

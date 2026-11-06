@@ -11,6 +11,7 @@ import { FloatingMenu, MenuButton, menuPosAt, wantsNativeMenu, type MenuPos } fr
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
+import { threadUnread } from '../utils/unread'
 import Identicon from './Identicon'
 import { isAutoLoadable } from '../utils/safeUrl'
 import BoardIcon from './BoardIcon'
@@ -107,7 +108,7 @@ function ThreadCard({
   // 勢いの色は「とても多い」の 1 段だけ(3 段に塗り分けると、行の中の色が増えて読みにくい)
   const momentumColorClass = momentumRank >= 0.9 ? 'text-c-heat-very-hot' : 'text-c-text-muted'
 
-  const unreadCount = state ? Math.max(0, thread.postCount - state.readNo) : 0
+  const unreadCount = threadUnread(state, thread.postCount)
   // 一度でも開いたスレ(ログがある)は、左に線を引き、スレタイに色を付ける。太字は使わない(目が疲れるので)
   const visited = state !== undefined
   const archived = state?.status === 'archived'

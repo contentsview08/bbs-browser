@@ -17,6 +17,7 @@ import { SliderDialog } from './FontSizeSlider'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
+import { threadUnread } from '../utils/unread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
@@ -437,7 +438,7 @@ export default function ThreadListPanel(props: Props) {
     () =>
       threads.reduce((sum, t) => {
         const st = stateOf(t)
-        return st && !props.isNg(t) ? sum + Math.max(0, t.postCount - st.readNo) : sum
+        return props.isNg(t) ? sum : sum + threadUnread(st, t.postCount)
       }, 0),
     [threads, stateOf, props.isNg],
   )
@@ -454,10 +455,7 @@ export default function ThreadListPanel(props: Props) {
     setUnreadSnapshot(
       new Set(
         threads
-          .filter((t) => {
-            const s = of(t)
-            return s !== undefined && s.readNo < t.postCount
-          })
+          .filter((t) => threadUnread(of(t), t.postCount) > 0)
           .map(threadId),
       ),
     )
@@ -1014,7 +1012,7 @@ export default function ThreadListPanel(props: Props) {
                       e.currentTarget.blur()
                     }
                   }}
-                  placeholder="スレッド検索..."
+                  placeholder="スレタイを探す"
                   className={`absolute inset-y-0 right-0 h-9 my-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] px-3 text-sm text-c-text-body placeholder-c-text-muted focus:outline-none transition-[width,opacity] duration-300 ease-out ${
                     searchActive ? 'w-full opacity-100' : 'w-0 opacity-0 pointer-events-none'
                   }`}

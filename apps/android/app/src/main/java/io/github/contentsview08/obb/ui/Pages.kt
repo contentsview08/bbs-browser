@@ -202,7 +202,9 @@ private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit
 private fun PastRow(
     vm: AppViewModel, t: io.github.contentsview08.obb.bbs.ThreadSummary, meta: String, total: Int?, unread: Int,
     archived: Boolean = false, own: String? = null, ownNo: Int? = null, checked: Boolean? = null, onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null,
-) {
+) = WithoutBaseFont {
+    // スレ一覧と同じく、字の大きさはスレ一覧の文字で決める
+    val k = vm.prefs.listFontScale
     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     Row(
         Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick) { if (onClick != null) onClick() else vm.openThread(t) }.graphicsLayer { alpha = if (archived) 0.6f else 1f },
@@ -213,17 +215,17 @@ private fun PastRow(
         if (checked != null) androidx.compose.material3.Checkbox(checked, null, Modifier.align(Alignment.CenterVertically).padding(start = 10.dp), colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = Palette.accent))
         Column(Modifier.weight(1f).padding(start = 13.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)) {
             Text(
-                t.title.ifEmpty { t.key }, color = if (unread > 0) Palette.textStrong else Palette.threadReadTitle, fontSize = 15.sp, lineHeight = 20.sp,
+                t.title.ifEmpty { t.key }, color = if (unread > 0) Palette.textStrong else Palette.threadReadTitle, fontSize = (15 * k).sp, lineHeight = (20 * k).sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
             )
             if (own != null) Row(Modifier.padding(top = 5.dp), verticalAlignment = Alignment.Top) {
                 if (ownNo != null) Badge(">>$ownNo", Palette.ownWash, Palette.own)
                 Spacer(Modifier.width(6.dp))
-                Text(own, color = Palette.textBody, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(own, color = Palette.textBody, fontSize = (13 * k).sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(meta, Modifier.weight(1f), color = Palette.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (total != null) Text("${total}レス", color = Palette.textMuted, fontSize = 11.sp)
+                Text(meta, Modifier.weight(1f), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (total != null) Text("${total}レス", color = Palette.textMuted, fontSize = (11 * k).sp)
                 if (unread > 0) {
                     Spacer(Modifier.width(8.dp))
                     UnreadBadge(unread)

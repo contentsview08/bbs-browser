@@ -542,10 +542,11 @@ fun FontSizeSlider(label: String, scale: Float, base: Int, onChange: (Float) -> 
 /** 基本の文字と、ヘッダー・フッターの高さと文字 */
 @Composable
 fun BarSliders(p: io.github.contentsview08.obb.data.Prefs) {
-    SizeSlider("基本の文字(メニュー・ボタン・ポップアップ)", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
     SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 32f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
     SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 32f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
     SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.6f..1.6f, 19, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
+    // 動かすと帯やメニューの字が変わって確かめやすいよう、一番下に置く
+    SizeSlider("基本の文字(メニュー・ボタン・ポップアップ)", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
 }
 
 /**
@@ -557,7 +558,8 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val drag = remember { SizeDrag() }
     val dragging = drag.active != null
     val bg by androidx.compose.animation.core.animateFloatAsState(if (dragging) 0f else 1f, androidx.compose.animation.core.tween(150), label = "bg")
-    FullWindow(onDismiss = onDismiss) { WithoutBaseFont {
+    // Dialog は密度が変わると窓を作り直すので、外側から基本の文字を外す(内側だけだと、動かした瞬間につかみが離れる)
+    WithoutBaseFont { FullWindow(onDismiss = onDismiss) {
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f * bg))

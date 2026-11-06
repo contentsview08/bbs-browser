@@ -3,6 +3,7 @@
 // 宣言は間違っていることもあるので、バイト列そのものを最も強い手がかりにする。
 // スマホ版の bbs/Encoding.kt と同じ決まりで、正は packages/conformance/charset.json。
 
+import { formBody } from './formEncode'
 import type { Encoding } from './types'
 
 interface Utf8Stats {
@@ -104,6 +105,9 @@ const LABELS: Record<string, Encoding> = {
   'x-euc-jp': 'euc-jp',
 }
 
+/** UTF-8 の日本語と言ってよいか。Shift_JIS の文章がこの形になることはまずない。数バイトの壊れは許す */
+const isJapaneseUtf8 = (s: Utf8Stats) => s.long > 0 && s.invalid * 20 <= s.long
+
 /** 宣言された文字コードの名前(小文字)。ヘッダー、なければ HTML の <meta> */
 export function declaredCharset(body: Uint8Array, contentType?: string): string | undefined {
   const type = contentType ?? ''
@@ -117,11 +121,7 @@ export function declaredCharset(body: Uint8Array, contentType?: string): string 
   return /<meta[^>]+charset\s*=\s*["']?\s*([\w-]+)/i.exec(head)?.[1].toLowerCase()
 }
 
-/** UTF-8 の日本語と言ってよいか。Shift_JIS の文章がこの形になることはまずない。数バイトの壊れは許す */
-export function looksLikeUtf8(body: Uint8Array): boolean {
-  const s = utf8Stats(body)
-  return s.long > 0 && s.invalid * 20 <= s.long
-}
+export const looksLikeUtf8 = (body: Uint8Array) => isJapaneseUtf8(utf8Stats(body))
 
 /**
  * 文字コードを決める。順番は UTF-8 の BOM → UTF-8 の形 → 宣言(中身と矛盾しなければ) → 中身から推測。
@@ -133,7 +133,7 @@ export function detectEncoding(body: Uint8Array, contentType?: string, fallback:
   const declared = label ? LABELS[label] : undefined
   if (!body.some((c) => c >= 0x80)) return declared ?? fallback
   const utf8 = utf8Stats(body)
-  if (utf8.long > 0 && utf8.invalid * 20 <= utf8.long) return 'utf-8'
+  if (isJapaneseUtf8(utf8)) return 'utf-8'
   if (declared === 'utf-8' && utf8.invalid * 20 <= utf8.long + utf8.short) return 'utf-8'
   if (declared === 'shift_jis' && sjisInvalid(body) === 0) return 'shift_jis'
   if (declared === 'euc-jp' && eucStats(body).invalid === 0) return 'euc-jp'
@@ -143,17 +143,6 @@ export function detectEncoding(body: Uint8Array, contentType?: string, fallback:
 
 /** UTF-8 の掲示板へ送るフォームの本文。空白は +、改行は CR LF(Shift_JIS のときと同じ決まり) */
 export function encodeUtf8Form(fields: Record<string, string>): string {
-  const component = (value: string) => {
-    let out = ''
-    for (const b of new TextEncoder().encode(value)) {
-      const ch = String.fromCharCode(b)
-      if (b === 0x20) out += '+'
-      else if (b < 0x80 && /[A-Za-z0-9*\-._]/.test(ch)) out += ch
-      else out += `%${b.toString(16).toUpperCase().padStart(2, '0')}`
-    }
-    return out
-  }
-  return Object.entries(fields)
-    .map(([k, v]) => `${component(k)}=${component(v.replace(/\r?\n/g, '\r\n'))}`)
-    .join('&')
+  const utf8 = new TextEncoder()
+  return formBody(fields, (ch) => utf8.encode(ch))
 }

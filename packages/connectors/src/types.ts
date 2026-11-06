@@ -293,16 +293,9 @@ export interface ThreadStatusInfo {
   archived: boolean
 }
 
-export interface ConnectorCapabilities {
-  post: boolean
-  images: boolean
-  incremental: boolean
-}
-
 export interface Connector {
   id: string
   name: string
-  capabilities: ConnectorCapabilities
   /** 書き込みにファイルを付けられるときの決まり。あれば、書き込み欄の画像のボタンは外のアップローダーではなく、書き込みに付ける */
   attachments?: AttachmentRules
   /** 1 つのスレに書けるレスの数の上限(2ch は 1000)。ここまで来たら「満」。上限のない掲示板は付けない */
@@ -356,7 +349,7 @@ export interface Connector {
   /** サーバーに並べ替えを頼める順(なければ、いつも同じ一覧を取り、並べ替えは手元でする) */
   serverSorts?: ListSort[]
   fetchPosts(thread: ThreadSummary, cursor: Cursor | null, ctx: ConnectorContext): Promise<FetchPostsResult>
-  /** 書き込む。capabilities.post が true のコネクタだけが持つ */
+  /** 書き込む。書き込めないコネクタは持たない */
   createPost?(thread: ThreadSummary, input: PostInput, ctx: ConnectorContext): Promise<PostResult>
   /**
    * スレを立てる。成功しても新しいスレのキーは返らないことが多いので、

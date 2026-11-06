@@ -171,7 +171,7 @@ export function formatDate(iso: string): string {
   return `${j.getUTCFullYear()}/${p(j.getUTCMonth() + 1)}/${p(j.getUTCDate())}(${wd}) ${p(j.getUTCHours())}:${p(j.getUTCMinutes())}:${p(j.getUTCSeconds())}.${p(j.getUTCMilliseconds(), 3)}`
 }
 
-export function toPost(p: ApiPost): Post {
+function toPost(p: ApiPost): Post {
   return {
     no: p.postNumber,
     name: p.isDeleted ? 'あぼーん' : (p.posterName ?? ''),
@@ -231,7 +231,6 @@ async function readWrite(res: HttpResponse, api: string, ctx: ConnectorContext):
 export const honoBbsConnector: Connector = {
   id: ID,
   name: 'hono-bbs',
-  capabilities: { post: true, images: true, incremental: true },
 
   canHandle(url) {
     return THREAD_URL.test(url) || BOARD_URL.test(url)
@@ -301,7 +300,9 @@ export const honoBbsConnector: Connector = {
     const byOrigin = new Map<string, ThreadSummary[]>()
     for (const t of threads) {
       const { origin } = parts(t.boardUrl)
-      byOrigin.set(origin, [...(byOrigin.get(origin) ?? []), t])
+      const list = byOrigin.get(origin)
+      if (list) list.push(t)
+      else byOrigin.set(origin, [t])
     }
     const out: ThreadStatusInfo[] = []
     for (const [origin, list] of byOrigin) {

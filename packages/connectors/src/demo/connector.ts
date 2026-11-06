@@ -74,7 +74,6 @@ const find = (key: string) => {
 export const demoConnector: Connector = {
   id: ID,
   name: 'お試しの掲示板',
-  capabilities: { post: true, images: false, incremental: true },
   reactions: [
     { id: 'like', label: 'いいね', icon: 'thumb_up' },
     { id: 'kusa', label: '草', icon: 'grass' },

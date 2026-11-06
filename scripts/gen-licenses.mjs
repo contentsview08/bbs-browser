@@ -25,13 +25,16 @@ const LICENSE_DIR = /^licen[cs]es?$/i
 const NOT_TEXT = /\.(js|cjs|mjs|ts|rs|json|html?|toml|ya?ml|py|sh|png|svg)$/i
 const MAX_TEXT_BYTES = 256 * 1024
 
+/** ライセンスの文を読む(BOM と改行の違いをなくす。同じ文が dedupe で別物にならないように) */
+const readText = (path) => readFileSync(path, 'utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim()
+
 /** パッケージのフォルダから、ライセンスの文のファイルを集める */
 function licenseFiles(dir) {
   if (!existsSync(dir)) return []
   const found = []
   const add = (path, label) => {
     if (NOT_TEXT.test(path) || statSync(path).size > MAX_TEXT_BYTES) return
-    found.push({ file: label, text: readFileSync(path, 'utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim() })
+    found.push({ file: label, text: readText(path) })
   }
   for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
     if (e.isFile() && LICENSE_FILE.test(e.name)) add(join(dir, e.name), e.name)
@@ -165,7 +168,7 @@ function collectManual() {
   const manual = JSON.parse(readFileSync(join(root, 'scripts/licenses-manual.json'), 'utf8'))
   return manual.filter((p) => !p.apps || p.apps.includes('desktop')).map(({ textFile, apps: _apps, ...p }) => ({
     ...p,
-    files: textFile ? [{ file: textFile.split('/').pop(), text: readFileSync(join(root, textFile), 'utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim() }] : [],
+    files: textFile ? [{ file: textFile.split('/').pop(), text: readText(join(root, textFile)) }] : [],
   }))
 }
 

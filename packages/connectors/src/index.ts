@@ -7,9 +7,7 @@ import { demoConnector } from './demo/connector'
 import type { Connector } from './types'
 
 export * from './types'
-export { htmlToText, decodeEntities } from './html'
-export { encodeShiftJisForm } from './sjis'
-export { declaredCharset, detectEncoding, encodeUtf8Form, looksLikeUtf8 } from './encoding'
+export { declaredCharset, detectEncoding, looksLikeUtf8 } from './encoding'
 export { twoChConnector, shitarabaConnector, machiConnector, futabaConnector, honoBbsConnector, demoConnector }
 
 /** 組み込みコネクタ。外部コネクタを読み込めるようにしたら、ここに足していく */

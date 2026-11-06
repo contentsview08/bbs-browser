@@ -12,7 +12,8 @@
 import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, PostResult, ThreadSummary } from '../types'
 import { encodeEucJpForm, eucJpByteLength } from '../eucjp'
 import { detectEncoding } from '../encoding'
-import { parseRawmode, parseShitarabaSetting, parseShitarabaSubject, parseShitarabaWrite } from './parse'
+import { createdAtOfKey, isCgiSubject, parseCgiSubject, parseKeyValue } from '../common'
+import { parseRawmode, parseShitarabaWrite } from './parse'
 import { POST_FAILED } from '../twoch/parse'
 
 const ID = 'shitaraba'
@@ -38,10 +39,6 @@ function dirOf(boardUrl: string): { dir: string; bbs: string } {
 
 const boardUrlOf = (dir: string, bbs: string) => `${ORIGIN}/${dir}/${bbs}/`
 
-function createdAtOf(key: string): Date | undefined {
-  return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
-}
-
 const decode = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, detectEncoding(res.body, res.headers['content-type'], 'euc-jp'))
 
 /** 応答のヘッダーの ERROR(過去ログ倉庫・スレなし など) */
@@ -52,7 +49,7 @@ async function readSetting(boardUrl: string, ctx: ConnectorContext): Promise<Rec
     const { dir, bbs } = dirOf(boardUrl)
     const res = await ctx.http.get(`${ORIGIN}/bbs/api/setting.cgi/${dir}/${bbs}/`)
     if (res.status !== 200) return {}
-    return parseShitarabaSetting(decode(res, ctx))
+    return parseKeyValue(decode(res, ctx))
   } catch {
     return {}
   }
@@ -76,7 +73,6 @@ async function sendWrite(url: string, fields: Record<string, string>, referer: s
 export const shitarabaConnector: Connector = {
   id: ID,
   name: 'したらば',
-  capabilities: { post: true, images: false, incremental: true },
   // 1 つのスレは 1000 レスまで
   maxPosts: 1000,
 
@@ -104,13 +100,13 @@ export const shitarabaConnector: Connector = {
     }
     if (res.status === 404) throw new Error('したらばの板が見つかりません(HTTP 404)')
     if (res.status !== 200) throw new Error(`したらばの板を開けません(HTTP ${res.status})`)
-    const setting = parseShitarabaSetting(decode(res, ctx))
+    const setting = parseKeyValue(decode(res, ctx))
     if (!setting.BBS && !setting.TOP) throw new Error('したらばの板ではないようです(板の設定が読めません)')
     const board: Board = { connectorId: ID, url: boardUrl, name: setting.BBS_TITLE || `${dir}/${bbs}` }
     if (!t) return { board }
     return {
       board,
-      thread: { connectorId: ID, boardUrl, key: t[3], title: '', postCount: 0, order: 0, createdAt: createdAtOf(t[3]) },
+      thread: { connectorId: ID, boardUrl, key: t[3], title: '', postCount: 0, order: 0, createdAt: createdAtOfKey(t[3]) },
     }
   },
 
@@ -129,16 +125,15 @@ export const shitarabaConnector: Connector = {
     if (res.status === 404) throw new Error(`したらばの板が見つかりません(HTTP 404): ${board.url}`)
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${board.url}subject.txt`)
     const text = decode(res, ctx)
-    const first = text.split('\n').find((l) => l.trim() !== '')
-    if (first !== undefined && !/^\d+\.cgi,/.test(first)) throw new Error(`スレ一覧を読めませんでした: ${board.url}`)
-    return parseShitarabaSubject(text).map((e, i) => ({
+    if (!isCgiSubject(text)) throw new Error(`スレ一覧を読めませんでした: ${board.url}`)
+    return parseCgiSubject(text).map((e, i) => ({
       connectorId: ID,
       boardUrl: board.url,
       key: e.key,
       title: e.title,
       postCount: e.count,
       order: i,
-      createdAt: createdAtOf(e.key),
+      createdAt: createdAtOfKey(e.key),
     }))
   },
 

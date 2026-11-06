@@ -29,7 +29,7 @@ class Scheme(
 private fun c(hex: Long) = Color(hex or 0xFF000000)
 private fun wash(hex: Long, a: Float) = c(hex).copy(alpha = a)
 
-/** 選べる配色(PC 版・Web の PICKABLE_SCHEMES と同じ並び)。前のライト・紙・夜間・Discord ライトはやめた(2026-11)。ライトグレーをライトとする */
+/** 選べる配色(PC 版・Web の COLOR_SCHEMES と同じ並び)。前のライト・紙・夜間・Discord ライトはやめた(2026-11)。ライトグレーをライトとする */
 val SCHEMES = listOf(
     Scheme(
         "indigo", "インディゴ", true,

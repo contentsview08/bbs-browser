@@ -7,29 +7,32 @@ import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)))
 const sjis = (bytes: Uint8Array) => new TextDecoder('shift_jis').decode(bytes)
 
+/** get だけを持つ偽の ctx(書き込みはしない) */
+const fakeCtx = (get: ConnectorContext['http']['get']): ConnectorContext => ({
+  decode: (bytes, enc) => new TextDecoder(enc).decode(bytes),
+  http: {
+    get,
+    post: async () => {
+      throw new Error('この試験では書き込まない')
+    },
+  },
+})
+
 /** 1 つの dat を返す偽サーバー。Range と If-Modified-Since をそれらしく扱う */
 function fakeServer(initial: Uint8Array) {
   const state = { body: initial, lastModified: 'Thu, 01 Oct 2026 00:00:00 GMT' }
-  const ctx: ConnectorContext = {
-    decode: (bytes, enc) => new TextDecoder(enc).decode(bytes),
-    http: {
-      async get(_url, opts): Promise<HttpResponse> {
-        const h = opts?.headers ?? {}
-        const base = { 'content-type': 'text/plain', 'last-modified': state.lastModified }
-        if (h['If-Modified-Since'] === state.lastModified) return { status: 304, headers: base, body: new Uint8Array() }
-        const range = /^bytes=(\d+)-$/.exec(h.Range ?? '')
-        if (range) {
-          const from = Number(range[1])
-          if (from >= state.body.length) return { status: 416, headers: base, body: new Uint8Array() }
-          return { status: 206, headers: base, body: state.body.subarray(from) }
-        }
-        return { status: 200, headers: base, body: state.body }
-      },
-      post: async () => {
-        throw new Error('この試験では書き込まない')
-      },
-    },
-  }
+  const ctx = fakeCtx(async (_url, opts): Promise<HttpResponse> => {
+    const h = opts?.headers ?? {}
+    const base = { 'content-type': 'text/plain', 'last-modified': state.lastModified }
+    if (h['If-Modified-Since'] === state.lastModified) return { status: 304, headers: base, body: new Uint8Array() }
+    const range = /^bytes=(\d+)-$/.exec(h.Range ?? '')
+    if (range) {
+      const from = Number(range[1])
+      if (from >= state.body.length) return { status: 416, headers: base, body: new Uint8Array() }
+      return { status: 206, headers: base, body: state.body.subarray(from) }
+    }
+    return { status: 200, headers: base, body: state.body }
+  })
   const update = (body: Uint8Array, lastModified: string) => Object.assign(state, { body, lastModified })
   return { ctx, update }
 }
@@ -135,29 +138,21 @@ describe('fetchPosts の差分取得', () => {
 
 describe('resolveUrl', () => {
   // SETTING.TXT だけを返す偽サーバー
-  const ctx: ConnectorContext = {
-    decode: (bytes, enc) => new TextDecoder(enc).decode(bytes),
-    http: {
-      async get(url): Promise<HttpResponse> {
-        if (url === 'https://bbs.eddibb.cc/liveedge/subject.txt' || url === 'https://medaka.5ch.io/prog/subject.txt')
-          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1792065954.dat<>スレ (1)\n') }
-        if (url === 'https://mercury.bbspink.com/avideo/subject.txt' || url === 'https://example.com/bbs/news/subject.txt')
-          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1788606033.dat<>スレ (1)\n') }
-        if (url === 'https://itest.bbspink.com/subback/avideo')
-          return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<a href="https://itest.bbspink.com/subback/avideo">x</a><a href="https://mercury.bbspink.com/avideo/">PC版</a>') }
-        if (url === 'https://example.com/foo/subject.txt')
-          return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<!doctype html><html></html>') }
-        if (url === 'https://bbs.eddibb.cc/liveedge/SETTING.TXT') {
-          const body = new TextEncoder().encode('liveedge@liveedge\nBBS_TITLE=エッヂ\nBBS_NONAME_NAME=エッヂの名無し\nBBS_LINE_NUMBER=16\nBBS_MESSAGE_COUNT=9192\nBBS_SUBJECT_COUNT=192\n')
-          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body }
-        }
-        return { status: 404, headers: {}, body: new Uint8Array() }
-      },
-      post: async () => {
-        throw new Error('この試験では書き込まない')
-      },
-    },
-  }
+  const ctx = fakeCtx(async (url): Promise<HttpResponse> => {
+    if (url === 'https://bbs.eddibb.cc/liveedge/subject.txt' || url === 'https://medaka.5ch.io/prog/subject.txt')
+      return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1792065954.dat<>スレ (1)\n') }
+    if (url === 'https://mercury.bbspink.com/avideo/subject.txt' || url === 'https://example.com/bbs/news/subject.txt')
+      return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1788606033.dat<>スレ (1)\n') }
+    if (url === 'https://itest.bbspink.com/subback/avideo')
+      return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<a href="https://itest.bbspink.com/subback/avideo">x</a><a href="https://mercury.bbspink.com/avideo/">PC版</a>') }
+    if (url === 'https://example.com/foo/subject.txt')
+      return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<!doctype html><html></html>') }
+    if (url === 'https://bbs.eddibb.cc/liveedge/SETTING.TXT') {
+      const body = new TextEncoder().encode('liveedge@liveedge\nBBS_TITLE=エッヂ\nBBS_NONAME_NAME=エッヂの名無し\nBBS_LINE_NUMBER=16\nBBS_MESSAGE_COUNT=9192\nBBS_SUBJECT_COUNT=192\n')
+      return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body }
+    }
+    return { status: 404, headers: {}, body: new Uint8Array() }
+  })
 
   it('板の URL(末尾スラッシュなしでも)から板名つきで板を返す', async () => {
     for (const url of ['https://bbs.eddibb.cc/liveedge', 'https://bbs.eddibb.cc/liveedge/']) {
@@ -220,19 +215,11 @@ describe('resolveUrl', () => {
 describe('スレが立った日時', () => {
   it('5ch のお知らせスレのような未来の dat 番号は「不明」にする(勢いの計算が狂わないように)', async () => {
     const subject = '9240230830.dat<>★ UPLIFT プレミアム・サービスのお知らせ (2)\n1789358916.dat<>普通のスレ (10)\n'
-    const ctx: ConnectorContext = {
-      decode: (b, e) => new TextDecoder(e).decode(b),
-      http: {
-        get: async (): Promise<HttpResponse> => ({
-          status: 200,
-          headers: { 'content-type': 'text/plain; charset=utf-8' },
-          body: new TextEncoder().encode(subject),
-        }),
-        post: async () => {
-          throw new Error('この試験では書き込まない')
-        },
-      },
-    }
+    const ctx = fakeCtx(async (): Promise<HttpResponse> => ({
+      status: 200,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+      body: new TextEncoder().encode(subject),
+    }))
     const [notice, normal] = await twoChConnector.listThreads({ connectorId: '2ch-compat', url: 'https://mevius.5ch.io/x/', name: 'x' }, ctx)
     expect(notice.createdAt).toBeUndefined()
     expect(normal.createdAt?.getTime()).toBe(1789358916 * 1000)
@@ -262,19 +249,11 @@ describe('スレタイの後ろの角かっこ(立てた人)', () => {
 describe('エッジの立てた人の ID(subject-metadent.txt)', () => {
   const fake = (routes: Record<string, string>) => {
     const got: string[] = []
-    const ctx: ConnectorContext = {
-      decode: (b, e) => new TextDecoder(e).decode(b),
-      http: {
-        get: async (url): Promise<HttpResponse> => {
-          got.push(url)
-          if (!(url in routes)) return { status: 404, headers: {}, body: new Uint8Array() }
-          return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode(routes[url]) }
-        },
-        post: async () => {
-          throw new Error('この試験では書き込まない')
-        },
-      },
-    }
+    const ctx = fakeCtx(async (url): Promise<HttpResponse> => {
+      got.push(url)
+      if (!(url in routes)) return { status: 404, headers: {}, body: new Uint8Array() }
+      return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode(routes[url]) }
+    })
     return { ctx, got }
   }
   const board = { connectorId: '2ch-compat', url: 'https://bbs.eddibb.cc/liveedge/', name: 'liveedge' }

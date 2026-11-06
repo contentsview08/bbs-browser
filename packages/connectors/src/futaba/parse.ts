@@ -33,7 +33,7 @@ export function parseCatalog(html: string): CatalogEntry[] {
 }
 
 /** レスの本文の HTML を、表示用の文字にする。画像があれば本文の頭に画像の URL を置く(サムネイルとビューアーで出すため) */
-export function bodyOf(comHtml: string, image: string | undefined, origin: string): string {
+function bodyOf(comHtml: string, image: string | undefined, origin: string): string {
   const text = htmlToText(comHtml.replace(/\r?\n/g, '')).trim()
   return image ? `${new URL(image, origin).href}${text ? `\n${text}` : ''}` : text
 }
@@ -65,14 +65,9 @@ function parsePostHtml(html: string, no: number, origin: string): Post | undefin
 }
 
 /**
- * スレのページを読む。スレを立てた人のレスを 1 番、返信を 2 番から(何番目の返信か + 1)にする。
+ * スレのページを読む(レスと、そうだねの数)。スレを立てた人のレスを 1 番、返信を 2 番から(何番目の返信か + 1)にする。
  * スレがない(消えた)ページなら undefined
  */
-export function parseThreadHtml(html: string, origin: string): Post[] | undefined {
-  return parseThreadPage(html, origin)?.posts
-}
-
-/** スレのページを読む(レスと、そうだねの数)。スレがない(消えた)ページなら undefined */
 export function parseThreadPage(html: string, origin: string): { posts: Post[]; votes: Record<string, number> } | undefined {
   const start = html.indexOf('class="thre"')
   if (start < 0) return undefined
@@ -112,8 +107,8 @@ interface JsonRes {
 }
 
 /** スレの JSON の返信を、番号の順に読む(何番目の返信か + 1 を no にする) */
-export function parseThreadJson(text: string, origin: string): { posts: Post[]; old: boolean; votes: Record<string, number> } {
-  const d = JSON.parse(text) as { res?: Record<string, JsonRes>; old?: number; sd?: Record<string, string | number> }
+export function parseThreadJson(text: string, origin: string): { posts: Post[]; votes: Record<string, number> } {
+  const d = JSON.parse(text) as { res?: Record<string, JsonRes>; sd?: Record<string, string | number> }
   // そうだねの数(スレ全体の分。番号 → 数)
   const votes: Record<string, number> = {}
   for (const [ref, n] of Object.entries(d.sd ?? {})) if (Number(n) > 0) votes[ref] = Number(n)
@@ -132,7 +127,7 @@ export function parseThreadJson(text: string, origin: string): { posts: Post[]; 
     })
   }
   posts.sort((a, b) => a.no - b.no)
-  return { posts, old: d.old === 1, votes }
+  return { posts, votes }
 }
 
 /**

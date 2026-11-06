@@ -32,7 +32,7 @@ export interface BarActionDef {
 }
 
 /** スレ表示の操作(並べる順) */
-export const THREAD_ACTIONS: BarActionDef[] = [
+const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'back', name: '一覧に戻る', icon: 'arrow_back', placement: 'menu', mobile: 'footer', mobileOnly: true },
   { id: 'search', name: 'レス検索', icon: 'search', placement: 'header' },
   { id: 'favorite', name: 'お気に入りのスレ', icon: 'star', placement: 'header', mobile: 'menu' },
@@ -55,7 +55,7 @@ export const THREAD_ACTIONS: BarActionDef[] = [
 ]
 
 /** スレ一覧の操作(並べる順) */
-export const LIST_ACTIONS: BarActionDef[] = [
+const LIST_ACTIONS: BarActionDef[] = [
   { id: 'drawer', name: 'メニュー(引き出し)', icon: 'menu', placement: 'menu', mobileOnly: true },
   { id: 'search', name: 'スレッド検索', icon: 'search', placement: 'header' },
   // スマホでは、左下の丸いボタンでも立てられる
@@ -68,7 +68,7 @@ export const LIST_ACTIONS: BarActionDef[] = [
   { id: 'refresh', name: '更新', icon: 'refresh', placement: 'footer', mobile: 'footer' },
 ]
 
-export const BAR_ACTIONS: Record<BarArea, BarActionDef[]> = { thread: THREAD_ACTIONS, list: LIST_ACTIONS }
+const BAR_ACTIONS: Record<BarArea, BarActionDef[]> = { thread: THREAD_ACTIONS, list: LIST_ACTIONS }
 
 /**
  * スマホの ︙ に出す操作。帯(ヘッダー・フッター)に出ているものと、いつも別の所にあるもの

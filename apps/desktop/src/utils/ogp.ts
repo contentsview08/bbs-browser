@@ -15,7 +15,7 @@ function decodeEntities(s: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => fromCode(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d: string) => fromCode(Number(d)))
     .replace(/&quot;/g, '"')
-    .replace(/&apos;|&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ')

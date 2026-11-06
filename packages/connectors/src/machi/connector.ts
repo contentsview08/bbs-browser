@@ -14,7 +14,8 @@
 import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, ThreadSummary } from '../types'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 import { detectEncoding } from '../encoding'
-import { machiError, parseMachiSubject, parseMachiTop, parseMachiWrite, parseOfflaw } from './parse'
+import { createdAtOfKey, isCgiSubject, parseCgiSubject } from '../common'
+import { machiError, parseMachiTop, parseMachiWrite, parseOfflaw } from './parse'
 
 const ID = 'machi'
 const ORIGIN = 'https://machi.to'
@@ -60,10 +61,6 @@ function bbsOf(boardUrl: string): string {
 
 const boardUrlOf = (bbs: string) => `${ORIGIN}/${bbs}/`
 
-function createdAtOf(key: string): Date | undefined {
-  return /^\d{10}$/.test(key) ? new Date(Number(key) * 1000) : undefined
-}
-
 const decode = (res: HttpResponse, ctx: ConnectorContext) => ctx.decode(res.body, detectEncoding(res.body, res.headers['content-type'], 'shift_jis'))
 
 function threadWebUrl(thread: ThreadSummary): string {
@@ -88,7 +85,6 @@ async function boardNameOf(bbs: string, ctx: ConnectorContext): Promise<string> 
 export const machiConnector: Connector = {
   id: ID,
   name: 'まちBBS',
-  capabilities: { post: true, images: false, incremental: true },
   // 1 つのスレは 1000 レスまで
   maxPosts: 1000,
 
@@ -119,15 +115,12 @@ export const machiConnector: Connector = {
     }
     if (res.status === 404) throw new Error('まちBBS の板が見つかりません(HTTP 404)')
     if (res.status !== 200) throw new Error(`まちBBS の板を開けません(HTTP ${res.status})`)
-    const first = decode(res, ctx)
-      .split('\n')
-      .find((l) => l.trim() !== '')
-    if (first !== undefined && !/^\d+\.cgi,/.test(first)) throw new Error('まちBBS の板ではないようです(スレ一覧が読めません)')
+    if (!isCgiSubject(decode(res, ctx))) throw new Error('まちBBS の板ではないようです(スレ一覧が読めません)')
     const board: Board = { connectorId: ID, url: boardUrl, name: await boardNameOf(bbs, ctx) }
     if (!t) return { board }
     return {
       board,
-      thread: { connectorId: ID, boardUrl, key: t[2], title: '', postCount: 0, order: 0, createdAt: createdAtOf(t[2]) },
+      thread: { connectorId: ID, boardUrl, key: t[2], title: '', postCount: 0, order: 0, createdAt: createdAtOfKey(t[2]) },
     }
   },
 
@@ -154,16 +147,15 @@ export const machiConnector: Connector = {
     if (res.status === 404) throw new Error(`まちBBS の板が見つかりません(HTTP 404): ${board.url}`)
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${board.url}subject.txt`)
     const text = decode(res, ctx)
-    const first = text.split('\n').find((l) => l.trim() !== '')
-    if (first !== undefined && !/^\d+\.cgi,/.test(first)) throw new Error(`スレ一覧を読めませんでした: ${board.url}`)
-    return parseMachiSubject(text).map((e, i) => ({
+    if (!isCgiSubject(text)) throw new Error(`スレ一覧を読めませんでした: ${board.url}`)
+    return parseCgiSubject(text).map((e, i) => ({
       connectorId: ID,
       boardUrl: board.url,
       key: e.key,
       title: e.title,
       postCount: e.count,
       order: i,
-      createdAt: createdAtOf(e.key),
+      createdAt: createdAtOfKey(e.key),
     }))
   },
 

@@ -10,7 +10,7 @@ export interface MenuBoard {
 }
 
 /** 板の URL の形(https://host/dir/)をしているものだけを板とみなす */
-export function isBoardUrl(url: string): boolean {
+function isBoardUrl(url: string): boolean {
   return /^https?:\/\/[^/]+\/[^/?#]+\/$/.test(url)
 }
 
@@ -42,16 +42,6 @@ export function parseBbsMenuHtml(html: string): MenuBoard[] {
     if (category && isBoardUrl(url)) boards.push({ url, name: decodeEntities(m[3].trim()), category })
   }
   return boards
-}
-
-/** SETTING.TXT(`KEY=値` の行の並び) */
-export function parseSettingTxt(text: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const line of text.split(/\r?\n/)) {
-    const i = line.indexOf('=')
-    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim()
-  }
-  return out
 }
 
 export interface SubjectEntry {

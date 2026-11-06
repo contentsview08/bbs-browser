@@ -1,5 +1,4 @@
 // 2ch 互換コネクタ(標準コネクタ)。5ch、eddist、hono-bbs の互換窓口などを読む。
-// いまは読む専用。書き込み(bbs.cgi)は capabilities.post を立てて後から足す。
 
 import type {
   Board,
@@ -14,7 +13,8 @@ import type {
   PostResult,
   ThreadSummary,
 } from '../types'
-import { POST_FAILED, parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSettingTxt, parseSubjectTxt, splitAuthorId } from './parse'
+import { POST_FAILED, parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseSubjectTxt, splitAuthorId } from './parse'
+import { createdAtOfKey, parseKeyValue } from '../common'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 import { detectEncoding, encodeUtf8Form, looksLikeUtf8 } from '../encoding'
 
@@ -28,16 +28,6 @@ interface DatCursor {
   kako?: boolean
 }
 
-/**
- * dat 落ちしたスレの過去ログの dat。5ch(と bbspink)では、板/oyster/キーの頭 4 桁/キー.dat に置かれ、
- * 2026-10 時点ではログインなしで取れる。過去ログの置き場がない掲示板では undefined
- */
-function kakoDatUrl(thread: ThreadSummary): string | undefined {
-  const host = new URL(thread.boardUrl).hostname
-  if (!/(?:^|\.)(?:5ch\.io|5ch\.net|bbspink\.com)$/.test(host)) return undefined
-  return `${to5chIo(thread.boardUrl)}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
-}
-
 const ID = '2ch-compat'
 const LF = 0x0a
 
@@ -49,6 +39,16 @@ export function to5chIo(url: string): string {
   return url
     .replace(/^https?:\/\/((?:[a-z0-9]+\.)?)5ch\.net(?=[/?#]|$)/, (_, sub: string) => `https://${sub}5ch.io`)
     .replace(/^http:\/\/((?:[a-z0-9]+\.)?(?:5ch\.io|bbspink\.com))(?=[/?#]|$)/, 'https://$1')
+}
+
+/**
+ * dat 落ちしたスレの過去ログの dat。5ch(と bbspink)では、板/oyster/キーの頭 4 桁/キー.dat に置かれ、
+ * 2026-10 時点ではログインなしで取れる。過去ログの置き場がない掲示板では undefined
+ */
+function kakoDatUrl(thread: ThreadSummary): string | undefined {
+  const host = new URL(thread.boardUrl).hostname
+  if (!/(?:^|\.)(?:5ch\.io|5ch\.net|bbspink\.com)$/.test(host)) return undefined
+  return `${to5chIo(thread.boardUrl)}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
 }
 
 /** Content-Type の charset から文字コードを決める。書かれていなければ 2ch 互換の慣習どおり Shift_JIS */
@@ -116,14 +116,14 @@ async function sendBbsCgi(
   const html = ctx.decode(res.body, encodingOf(res))
   const r = parseBbsCgiResponse(html)
   if (r.status === 'confirm') {
-    const form = parseConfirmForm(html)
+    const confirmForm = parseConfirmForm(html)
     return {
       status: 'confirm',
       message: r.message,
       html,
       confirm: {
-        url: form.action ? new URL(form.action, url).href : url,
-        fields: { ...fields, ...form.hidden },
+        url: confirmForm.action ? new URL(confirmForm.action, url).href : url,
+        fields: { ...fields, ...confirmForm.hidden },
         referer,
         excludeCookies,
       },
@@ -168,7 +168,7 @@ async function readSettingTxt(boardUrl: string, ctx: ConnectorContext): Promise<
     const res = await ctx.http.get(`${to5chIo(boardUrl)}SETTING.TXT`)
     if (res.status < 200 || res.status >= 300) return {}
     rememberBoardEncoding(boardUrl, res.body)
-    const s = parseSettingTxt(ctx.decode(res.body, encodingOf(res)))
+    const s = parseKeyValue(ctx.decode(res.body, encodingOf(res)))
     const num = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : undefined)
     const lineNumber = num(s.BBS_LINE_NUMBER)
     return {
@@ -205,13 +205,10 @@ function threadWebUrl(thread: ThreadSummary): string {
 const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000
 
 /**
- * dat 番号はスレが立った時刻の UNIX 秒(10 桁のときだけ信用する)。
- * 5ch のお知らせスレ(9240230830 など)は番号がわざと未来になっていて、勢いの計算が狂うので、未来の日時は「不明」にする
+ * スレが立った日時。5ch のお知らせスレ(9240230830 など)は番号がわざと未来になっていて、勢いの計算が狂うので、未来の日時は「不明」にする
  */
 export function createdAtOf(key: string, now = Date.now()): Date | undefined {
-  if (!/^\d{10}$/.test(key)) return undefined
-  const date = new Date(Number(key) * 1000)
-  return date.getTime() > now + FUTURE_TOLERANCE_MS ? undefined : date
+  return isAnnouncementKey(key, now) ? undefined : createdAtOfKey(key)
 }
 
 /** 立てた人の ID が付いたスレ一覧(subject-metadent.txt)がある掲示板(エッジ) */
@@ -230,7 +227,8 @@ async function readSubject(url: string, ctx: ConnectorContext, boardUrl?: string
 
 /** お知らせスレの番号。10 桁で、日時にするとずっと先(番号がわざと未来になっている。9240230830 など) */
 export function isAnnouncementKey(key: string, now = Date.now()): boolean {
-  return /^\d{10}$/.test(key) && Number(key) * 1000 > now + FUTURE_TOLERANCE_MS
+  const date = createdAtOfKey(key)
+  return date !== undefined && date.getTime() > now + FUTURE_TOLERANCE_MS
 }
 
 /** スレの URL(…/test/read.cgi/板/番号/)と板の URL(…/板/)を見分ける */
@@ -325,21 +323,22 @@ export function splitBeIcon(body: string): { icon?: string; body: string } {
   return { icon: `https://${m[1]}`, body: body.slice(m[0].length) }
 }
 
+/** したらばは専用のコネクタで読む */
+const isShitaraba = (url: string) => /^https?:\/\/jbbs\.(?:shitaraba\.net|livedoor\.jp)\//.test(url)
+
 export const twoChConnector: Connector = {
   id: ID,
   name: '2ch 互換',
-  capabilities: { post: true, images: false, incremental: true },
   // 1 つのスレは 1000 レスまで
   maxPosts: 1000,
 
   canHandle(url) {
-    // したらばは専用のコネクタで読む
-    if (/^https?:\/\/jbbs\.(?:shitaraba\.net|livedoor\.jp)\//.test(url)) return false
+    if (isShitaraba(url)) return false
     return THREAD_URL.test(url) || BOARD_URL.test(url) || ITEST_BOARD.test(url) || /\/bbsmenu\.(html|json)$/.test(url)
   },
 
   isThreadUrl(url) {
-    return twoChConnector.canHandle(url) && THREAD_URL.test(url)
+    return !isShitaraba(url) && THREAD_URL.test(url)
   },
 
   canonicalBoardUrl: to5chIo,

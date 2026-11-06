@@ -3,6 +3,7 @@
 // ここを分けておくのは、開く・読む・タブを切り替える・新着が届く、の流れをテストで確かめるため。
 
 import type { Post } from '@bbs-browser/connectors'
+import type { OpenPosition } from '../ui/settings'
 import { cardUrlsIn, looksLikeAA, mediaIn } from './postBody'
 import { isAutoLoadable } from './safeUrl'
 
@@ -13,8 +14,6 @@ export interface ScrollPosition {
   /** 一番下まで見ていた。戻すときはレスの位置ではなく一番下へ戻す(レスの高さの見積もりでずれないように) */
   bottom?: boolean
 }
-
-export type OpenPosition = 'unread' | 'top' | 'bottom'
 
 /** 開いたときの行き先 */
 export type OpenTarget =

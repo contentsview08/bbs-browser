@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
-import { PICKABLE_SCHEMES, ACCENTS, isDarkScheme, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { COLOR_SCHEMES, ACCENTS, isDarkScheme, baseFontPx, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type UpdateSetting } from '../ui/settings'
 
 const MENU_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2 text-c-text-body hover:bg-c-surface2 transition-colors'
 const GROUP_LABEL = 'px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tracking-wide'
@@ -20,7 +20,7 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
   return (
     <>
       <p className={GROUP_LABEL}>テーマ</p>
-      {PICKABLE_SCHEMES.map((s) => (
+      {COLOR_SCHEMES.map((s) => (
         <button
           key={s.key}
           type="button"

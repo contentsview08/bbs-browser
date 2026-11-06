@@ -166,6 +166,19 @@ function valuesClause(rows: number, cols: number): string {
   return groups.join(', ')
 }
 
+/** スレの行から ThreadSummary を作る(スレタイとレス数は呼ぶ側が決める) */
+function threadOfRow(r: { connector_id: string; board_url: string; key: string; created_at: number | null }, title: string, postCount: number): ThreadSummary {
+  return {
+    connectorId: r.connector_id,
+    boardUrl: r.board_url,
+    key: r.key,
+    title,
+    postCount,
+    order: 0,
+    createdAt: r.created_at === null ? undefined : new Date(r.created_at),
+  }
+}
+
 export class LogStore {
   constructor(private db: SqlDb) {}
 
@@ -189,6 +202,26 @@ export class LogStore {
   async removeSite(menuUrl: string): Promise<void> {
     await this.db.execute('DELETE FROM boards WHERE site_menu_url = $1', [menuUrl])
     await this.db.execute('DELETE FROM sites WHERE menu_url = $1', [menuUrl])
+  }
+
+  async getBoards(menuUrl: string): Promise<Board[]> {
+    const rows = await this.db.select<{ url: string; connector_id: string; name: string; category: string | null }>(
+      'SELECT url, connector_id, name, category FROM boards WHERE site_menu_url = $1 ORDER BY sort',
+      [menuUrl],
+    )
+    return rows.map((r) => ({ url: r.url, connectorId: r.connector_id, name: r.name, category: r.category ?? undefined }))
+  }
+
+  /** 板一覧はただのキャッシュなので、途中で落ちても次の取得で作り直せばよい */
+  async replaceBoards(menuUrl: string, boards: Board[]): Promise<void> {
+    await this.db.execute('DELETE FROM boards WHERE site_menu_url = $1', [menuUrl])
+    for (let i = 0; i < boards.length; i += CHUNK) {
+      const chunk = boards.slice(i, i + CHUNK)
+      await this.db.execute(
+        `INSERT OR REPLACE INTO boards (site_menu_url, url, connector_id, name, category, sort) VALUES ${valuesClause(chunk.length, 6)}`,
+        chunk.flatMap((b, j) => [menuUrl, b.url, b.connectorId, b.name, nn(b.category), i + j]),
+      )
+    }
   }
 
   // ── お気に入り板 ──
@@ -218,6 +251,10 @@ export class LogStore {
     for (const [i, url] of urls.entries()) {
       await this.db.execute('UPDATE favorite_boards SET sort = $1 WHERE url = $2', [i, url])
     }
+  }
+
+  async removeFavorite(url: string): Promise<void> {
+    await this.db.execute('DELETE FROM favorite_boards WHERE url = $1', [url])
   }
 
   // ── 画像のアップロード履歴 ──
@@ -277,30 +314,6 @@ export class LogStore {
   /** 古いプレビューを捨てる(増え続けないように) */
   async pruneOgp(olderThan: number): Promise<void> {
     await this.db.execute('DELETE FROM ogp_cache WHERE fetched_at < $1', [olderThan])
-  }
-
-  async removeFavorite(url: string): Promise<void> {
-    await this.db.execute('DELETE FROM favorite_boards WHERE url = $1', [url])
-  }
-
-  async getBoards(menuUrl: string): Promise<Board[]> {
-    const rows = await this.db.select<{ url: string; connector_id: string; name: string; category: string | null }>(
-      'SELECT url, connector_id, name, category FROM boards WHERE site_menu_url = $1 ORDER BY sort',
-      [menuUrl],
-    )
-    return rows.map((r) => ({ url: r.url, connectorId: r.connector_id, name: r.name, category: r.category ?? undefined }))
-  }
-
-  /** 板一覧はただのキャッシュなので、途中で落ちても次の取得で作り直せばよい */
-  async replaceBoards(menuUrl: string, boards: Board[]): Promise<void> {
-    await this.db.execute('DELETE FROM boards WHERE site_menu_url = $1', [menuUrl])
-    for (let i = 0; i < boards.length; i += CHUNK) {
-      const chunk = boards.slice(i, i + CHUNK)
-      await this.db.execute(
-        `INSERT OR REPLACE INTO boards (site_menu_url, url, connector_id, name, category, sort) VALUES ${valuesClause(chunk.length, 6)}`,
-        chunk.flatMap((b, j) => [menuUrl, b.url, b.connectorId, b.name, nn(b.category), i + j]),
-      )
-    }
   }
 
   // ── 設定 ──
@@ -403,6 +416,73 @@ export class LogStore {
     )
   }
 
+  /** スレのログ(レス・既読位置・自分の書き込みの印)をまとめて消す */
+  async deleteThread(thread: ThreadSummary): Promise<void> {
+    const where = [thread.boardUrl, thread.key]
+    // 先に threads を消す。途中で落ちても「ログのないスレ」になるだけで、次に開けば取り直す。
+    // 残りの 2 つは互いに関係しないので、待ち合わせずに同時に流す
+    await this.db.execute('DELETE FROM threads WHERE board_url = $1 AND key = $2', where)
+    await Promise.all([
+      this.db.execute('DELETE FROM posts WHERE board_url = $1 AND key = $2', where),
+      this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2', where),
+    ])
+  }
+
+  /**
+   * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの)。
+   * お気に入りのスレ・自分が書き込んだスレと、keep のスレ(開いているタブ)は残す。消したスレの数を返す
+   */
+  async pruneLogs(before: number, keep: { boardUrl: string; key: string }[] = []): Promise<number> {
+    const rows = await this.db.select<{ board_url: string; key: string; connector_id: string }>(
+      `SELECT t.board_url, t.key, t.connector_id FROM threads t
+       WHERE COALESCE(t.read_at, t.fetched_at, 0) < $1
+         AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key)
+         AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)`,
+      [before],
+    )
+    const kept = new Set(keep.map((k) => `${k.boardUrl}\t${k.key}`))
+    const targets = rows.filter((r) => !kept.has(`${r.board_url}\t${r.key}`))
+    for (const r of targets)
+      await this.deleteThread({ connectorId: r.connector_id, boardUrl: r.board_url, key: r.key, title: '', postCount: 0, order: 0 })
+    return targets.length
+  }
+
+  /** 既読位置は戻さない(読み返しても未読が増えないように) */
+  async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
+    await this.db.execute(
+      'UPDATE threads SET read_no = MAX(read_no, $1), read_at = $2 WHERE board_url = $3 AND key = $4',
+      [no, now, thread.boardUrl, thread.key],
+    )
+  }
+
+  async history(limit = 100): Promise<HistoryEntry[]> {
+    const rows = await this.db.select<ThreadRow>(
+      'SELECT * FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC LIMIT $1',
+      [limit],
+    )
+    return rows.map((r) => ({
+      thread: threadOfRow(r, r.title, r.post_count),
+      postCount: r.post_count,
+      readNo: r.read_no,
+      status: r.status,
+      readAt: r.read_at!,
+    }))
+  }
+
+  /** 自動 NG の判断軸のためのログ。最近取ったスレのレスから limit 件(スレの名前は「板の URL タブ キー」) */
+  async corpusPosts(limit: number): Promise<{ thread: string; body: string }[]> {
+    const rows = await this.db.select<{ board_url: string; key: string; body: string }>(
+      // スレを先に新しい順に並べ、そのレスを limit 件読んだら止める(全レスの本文を読まない)。
+      // 中の LIMIT -1 は、副問い合わせを外へ展開させないため(展開されると全レスを並べ替える)
+      `SELECT p.board_url, p.key, p.body
+       FROM (SELECT board_url, key FROM threads ORDER BY fetched_at DESC LIMIT -1) t
+       CROSS JOIN posts p ON p.board_url = t.board_url AND p.key = t.key
+       LIMIT $1`,
+      [limit],
+    )
+    return rows.map((r) => ({ thread: `${r.board_url}\t${r.key}`, body: r.body }))
+  }
+
   // ── 自分の書き込み ──
 
   async addOwnPost(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
@@ -449,16 +529,8 @@ export class LogStore {
        ORDER BY f.sort`,
     )
     return rows.map((r) => ({
-      thread: {
-        connectorId: r.connector_id,
-        boardUrl: r.board_url,
-        key: r.key,
-        // ログのスレタイがあればそちら(URL から開いて足したスレは、足したときのスレタイが空のことがある)
-        title: r.log_title || r.title,
-        postCount: r.post_count ?? 0,
-        order: 0,
-        createdAt: r.created_at === null ? undefined : new Date(r.created_at),
-      },
+      // ログのスレタイがあればそちら(URL から開いて足したスレは、足したときのスレタイが空のことがある)
+      thread: threadOfRow(r, r.log_title || r.title, r.post_count ?? 0),
       postCount: r.post_count ?? 0,
       readNo: r.read_no ?? 0,
       status: r.status ?? 'active',
@@ -502,16 +574,6 @@ export class LogStore {
   }
 
   // ── 自動 NG の印(荒らし・荒らしじゃない) ──
-
-  /** 自動 NG の判断軸のためのログ。最近取ったスレのレスから limit 件(スレの名前は「板の URL タブ キー」) */
-  async corpusPosts(limit: number): Promise<{ thread: string; body: string }[]> {
-    const rows = await this.db.select<{ board_url: string; key: string; body: string }>(
-      `SELECT p.board_url, p.key, p.body FROM posts p JOIN threads t ON t.board_url = p.board_url AND t.key = p.key
-       ORDER BY t.fetched_at DESC LIMIT $1`,
-      [limit],
-    )
-    return rows.map((r) => ({ thread: `${r.board_url}\t${r.key}`, body: r.body }))
-  }
 
   async listTrollMarks(): Promise<TrollMarkRecord[]> {
     const rows = await this.db.select<{ body_key: string; label: number; body: string; board_url: string; reason: string | null; created_at: number }>(
@@ -621,66 +683,5 @@ export class LogStore {
 
   async deletePostHistory(id: number): Promise<void> {
     await this.db.execute('DELETE FROM post_history WHERE id = $1', [id])
-  }
-
-  /** スレのログ(レス・既読位置・自分の書き込みの印)をまとめて消す */
-  async deleteThread(thread: ThreadSummary): Promise<void> {
-    const where = [thread.boardUrl, thread.key]
-    // 先に threads を消す。途中で落ちても「ログのないスレ」になるだけで、次に開けば取り直す。
-    // 残りの 2 つは互いに関係しないので、待ち合わせずに同時に流す
-    await this.db.execute('DELETE FROM threads WHERE board_url = $1 AND key = $2', where)
-    await Promise.all([
-      this.db.execute('DELETE FROM posts WHERE board_url = $1 AND key = $2', where),
-      this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2', where),
-    ])
-  }
-
-  /**
-   * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの)。
-   * お気に入りのスレ・自分が書き込んだスレと、keep のスレ(開いているタブ)は残す。消したスレの数を返す
-   */
-  async pruneLogs(before: number, keep: { boardUrl: string; key: string }[] = []): Promise<number> {
-    const rows = await this.db.select<{ board_url: string; key: string; connector_id: string }>(
-      `SELECT t.board_url, t.key, t.connector_id FROM threads t
-       WHERE COALESCE(t.read_at, t.fetched_at, 0) < $1
-         AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key)
-         AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)`,
-      [before],
-    )
-    const kept = new Set(keep.map((k) => `${k.boardUrl}\t${k.key}`))
-    const targets = rows.filter((r) => !kept.has(`${r.board_url}\t${r.key}`))
-    for (const r of targets)
-      await this.deleteThread({ connectorId: r.connector_id, boardUrl: r.board_url, key: r.key, title: '', postCount: 0, order: 0 })
-    return targets.length
-  }
-
-  /** 既読位置は戻さない(読み返しても未読が増えないように) */
-  async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
-    await this.db.execute(
-      'UPDATE threads SET read_no = MAX(read_no, $1), read_at = $2 WHERE board_url = $3 AND key = $4',
-      [no, now, thread.boardUrl, thread.key],
-    )
-  }
-
-  async history(limit = 100): Promise<HistoryEntry[]> {
-    const rows = await this.db.select<ThreadRow>(
-      'SELECT * FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC LIMIT $1',
-      [limit],
-    )
-    return rows.map((r) => ({
-      thread: {
-        connectorId: r.connector_id,
-        boardUrl: r.board_url,
-        key: r.key,
-        title: r.title,
-        postCount: r.post_count,
-        order: 0,
-        createdAt: r.created_at === null ? undefined : new Date(r.created_at),
-      },
-      postCount: r.post_count,
-      readNo: r.read_no,
-      status: r.status,
-      readAt: r.read_at!,
-    }))
   }
 }

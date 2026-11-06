@@ -10,7 +10,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: '#3b82f6',
         'c-base': 'var(--c-base)',
         'c-surface': 'var(--c-surface)',
         'c-surface2': 'var(--c-surface2)',
@@ -27,8 +26,6 @@ export default {
         'c-accent-self-wash': 'var(--c-accent-self-wash)',
         'c-link': 'var(--c-link)',
         'c-link-image': 'var(--c-link-image)',
-        'c-link-twitter': 'var(--c-link-twitter)',
-        'c-link-youtube': 'var(--c-link-youtube)',
         'c-poster-name': 'var(--c-poster-name)',
         'c-heat-warm': 'var(--c-heat-warm)',
         'c-heat-hot': 'var(--c-heat-hot)',

@@ -1,7 +1,7 @@
 // 設定の「自分の配色」の画面。スマホのアプリ(ui/CustomScheme.kt の CustomSchemeEditor)と同じ:
 // 見本・6 色・読みやすさ(コントラスト比)の判定・「この配色を使う」・JSON をコピー・もとにする配色を選び直す
 import { useMemo, useRef, useState } from 'react'
-import { PICKABLE_SCHEMES, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
+import { COLOR_SCHEMES, effectiveScheme, isDarkScheme, type AppSettings, type UpdateSetting } from '../../ui/settings'
 import { CUSTOM_KEYS, CUSTOM_LABELS, customOf, customToJson, customVars, parseCustom, type CustomDef } from '../../ui/customScheme'
 
 /** 色選びで動かし終えてから、設定に書くまで待つ時間 */
@@ -145,7 +145,7 @@ export default function CustomSchemeEditor(props: { settings: AppSettings; updat
       {/* もとにする配色を選び直す(6 色をその配色の色に戻す) */}
       <p className="px-4 pt-4 pb-1.5 text-[12px] text-c-text-muted">もとにする配色を選ぶと、6 色をその配色の色に戻します</p>
       <div className="flex gap-2 px-4 overflow-x-auto no-scrollbar">
-        {PICKABLE_SCHEMES.map((c) => (
+        {COLOR_SCHEMES.map((c) => (
           <button key={c.key} type="button" onClick={() => save(customOf(c.key, isDarkScheme(c.key)))} className="flex-shrink-0 w-14 flex flex-col items-center">
             <span
               data-scheme={c.key}

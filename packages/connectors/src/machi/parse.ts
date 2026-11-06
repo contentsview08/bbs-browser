@@ -3,19 +3,6 @@
 import type { Post } from '../types'
 import { htmlToText } from '../html'
 
-/** subject.txt の 1 行は「キー.cgi,スレタイ(レス数)」 */
-export function parseMachiSubject(text: string): { key: string; title: string; count: number }[] {
-  const out: { key: string; title: string; count: number }[] = []
-  const seen = new Set<string>()
-  for (const line of text.split('\n')) {
-    const m = /^(\d+)\.cgi,(.*)\((\d+)\)\s*$/.exec(line)
-    if (!m || seen.has(m[1])) continue
-    seen.add(m[1])
-    out.push({ key: m[1], title: htmlToText(m[2]).trim(), count: Number(m[3]) })
-  }
-  return out
-}
-
 /** offlaw.cgi の応答が「スレがない」のしるし(<ERROR>スレッドを発見できません</ERROR>。HTTP は 200 のまま) */
 export function machiError(text: string): string | undefined {
   return /<ERROR>([\s\S]*?)<\/ERROR>/i.exec(text)?.[1].trim()

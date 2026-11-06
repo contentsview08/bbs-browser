@@ -51,6 +51,23 @@ describe('openTarget: 開いたときの行き先', () => {
       pendingUnread: false,
     })
   })
+
+  describe('タブを閉じたときの位置', () => {
+    const base = { savedFound: false, openPosition: 'unread' as const, unreadFrom: 1001, hasUnreadPost: false }
+    it('全部読み終えたスレは、閉じたときの位置へ戻し、新着が届いたら未読の頭へ移れるようにしておく', () => {
+      const closed = { no: 578, offset: -12 }
+      expect(openTarget({ ...base, closed })).toEqual({ kind: 'saved', position: closed, pendingUnread: true })
+    })
+    it('閉じたときに一番下にいたなら一番下', () => {
+      expect(openTarget({ ...base, closed: { no: 990, offset: 0, bottom: true } })).toEqual({ kind: 'bottom', pendingUnread: true })
+    })
+    it('未読があれば未読の頭を優先する', () => {
+      expect(openTarget({ ...base, unreadFrom: 701, hasUnreadPost: true, closed: { no: 578, offset: 0 } })).toEqual({ kind: 'unread', no: 701 })
+    })
+    it('開く位置を一番下にしている人は、閉じたときの位置を使わない', () => {
+      expect(openTarget({ ...base, openPosition: 'bottom', closed: { no: 578, offset: 0 } })).toEqual({ kind: 'bottom', pendingUnread: false })
+    })
+  })
 })
 
 describe('newPostsTarget: 新着が届いたときの行き先', () => {
@@ -139,32 +156,32 @@ describe('estimatePostHeight: 描く前のレスの高さの見積もり', () =>
   it('画像があればサムネイルの段を足す', () => {
     expect(estimatePostHeight(post('https://i.imgur.com/abc.jpg'), m)).toBeGreaterThan(64 + 80)
   })
-})
 
-describe('estimatePostHeight: 高さを決める条件', () => {
-  const m = { charsPerLine: 40, lineHeight: 24, chrome: 40, thumbRow: 88, linkPreview: 88, showThumbnails: true, showLinkPreview: true }
-  const post = (body: string) => ({ no: 1, name: '', mail: '', date: '', id: '', body }) as Post
-  const img = (n: number) => `https://i.imgur.com/a${n}.jpg`
+  describe('高さを決める条件', () => {
+    const m = { charsPerLine: 40, lineHeight: 24, chrome: 40, thumbRow: 88, linkPreview: 88, showThumbnails: true, showLinkPreview: true }
+    const post = (body: string) => ({ no: 1, name: '', mail: '', date: '', id: '', body }) as Post
+    const img = (n: number) => `https://i.imgur.com/a${n}.jpg`
 
-  it('サムネイルは 1 段に入る数で折り返す', () => {
-    const body = [1, 2, 3, 4, 5].map(img).join('\n')
-    const oneRow = estimatePostHeight(post(body), { ...m, thumbsPerRow: 5 })
-    const twoRows = estimatePostHeight(post(body), { ...m, thumbsPerRow: 3 })
-    expect(twoRows - oneRow).toBe(88)
-  })
-  it('リンクの札は 3 件までで、家の中のアドレスには出さない', () => {
-    const urls = (n: number) => Array.from({ length: n }, (_, i) => `https://example.com/p${i}`).join('\n')
-    expect(postShape(post(urls(5)), m).links).toBe(3)
-    expect(postShape(post('http://192.168.0.1/x'), m).links).toBe(0)
-    expect(postShape(post(urls(2)), { ...m, showLinkPreview: false }).links).toBe(0)
-  })
-  it('札の高さを足す', () => {
-    const plain = estimatePostHeight(post('a\nb'), m)
-    const carded = estimatePostHeight(post('a\nhttps://example.com/p'), m)
-    expect(carded - plain).toBe(88)
-  })
-  it('サムネイルを出さない設定なら足さない', () => {
-    expect(estimatePostHeight(post('a\n' + img(1)), { ...m, showThumbnails: false })).toBe(estimatePostHeight(post('a\nb'), { ...m, showThumbnails: false, showLinkPreview: false }))
+    it('サムネイルは 1 段に入る数で折り返す', () => {
+      const body = [1, 2, 3, 4, 5].map(img).join('\n')
+      const oneRow = estimatePostHeight(post(body), { ...m, thumbsPerRow: 5 })
+      const twoRows = estimatePostHeight(post(body), { ...m, thumbsPerRow: 3 })
+      expect(twoRows - oneRow).toBe(88)
+    })
+    it('リンクの札は 3 件までで、家の中のアドレスには出さない', () => {
+      const urls = (n: number) => Array.from({ length: n }, (_, i) => `https://example.com/p${i}`).join('\n')
+      expect(postShape(post(urls(5)), m).links).toBe(3)
+      expect(postShape(post('http://192.168.0.1/x'), m).links).toBe(0)
+      expect(postShape(post(urls(2)), { ...m, showLinkPreview: false }).links).toBe(0)
+    })
+    it('札の高さを足す', () => {
+      const plain = estimatePostHeight(post('a\nb'), m)
+      const carded = estimatePostHeight(post('a\nhttps://example.com/p'), m)
+      expect(carded - plain).toBe(88)
+    })
+    it('サムネイルを出さない設定なら足さない', () => {
+      expect(estimatePostHeight(post('a\n' + img(1)), { ...m, showThumbnails: false })).toBe(estimatePostHeight(post('a\nb'), { ...m, showThumbnails: false, showLinkPreview: false }))
+    })
   })
 })
 
@@ -251,23 +268,6 @@ describe('movedByOthers: ジャンプの途中で誰かが動かしたか', () =
   })
 })
 
-describe('openTarget: タブを閉じたときの位置', () => {
-  const base = { savedFound: false, openPosition: 'unread' as const, unreadFrom: 1001, hasUnreadPost: false }
-  it('全部読み終えたスレは、閉じたときの位置へ戻し、新着が届いたら未読の頭へ移れるようにしておく', () => {
-    const closed = { no: 578, offset: -12 }
-    expect(openTarget({ ...base, closed })).toEqual({ kind: 'saved', position: closed, pendingUnread: true })
-  })
-  it('閉じたときに一番下にいたなら一番下', () => {
-    expect(openTarget({ ...base, closed: { no: 990, offset: 0, bottom: true } })).toEqual({ kind: 'bottom', pendingUnread: true })
-  })
-  it('未読があれば未読の頭を優先する', () => {
-    expect(openTarget({ ...base, unreadFrom: 701, hasUnreadPost: true, closed: { no: 578, offset: 0 } })).toEqual({ kind: 'unread', no: 701 })
-  })
-  it('開く位置を一番下にしている人は、閉じたときの位置を使わない', () => {
-    expect(openTarget({ ...base, openPosition: 'bottom', closed: { no: 578, offset: 0 } })).toEqual({ kind: 'bottom', pendingUnread: false })
-  })
-})
-
 describe('PositionMemory', () => {
   it('スレごとに覚え、多すぎたら古いものから捨てる', () => {
     const m = new PositionMemory(2)
@@ -290,15 +290,5 @@ describe('HeightCache', () => {
     c.set('t', 800, 3, 140)
     expect(c.get('t', 800, 1)).toBeUndefined()
     expect(c.size).toBe(2)
-  })
-})
-
-describe('newPostsTarget: 一番下を見ているときの新着', () => {
-  const base = { pendingUnread: false, unreadFrom: 11, hasUnreadPost: true, prevLastNo: 10, readNo: 10, opening: false, autoScrollOnNew: true, atBottom: true }
-  it('新着の頭まで送る(一番下まで送る設定は 2026-11 にやめた)', () => {
-    expect(newPostsTarget(base)).toEqual({ no: 11, animate: true })
-  })
-  it('一番下を見ていなければ動かさない', () => {
-    expect(newPostsTarget({ ...base, atBottom: false })).toBeUndefined()
   })
 })

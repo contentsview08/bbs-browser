@@ -10,7 +10,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 import {
   FONT_PX_KEY,
   MOBILE_POST_STYLES,
-  PICKABLE_SCHEMES,
+  COLOR_SCHEMES,
   ID_STYLES,
   baseFontPx,
   effectivePostStyle,
@@ -23,19 +23,15 @@ import {
 import { ensureNotifyPermission } from '../../utils/osNotify'
 import FontSizeSlider, { BarSliders, cssPx, setCssVar } from '../FontSizeSlider'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from '../ActionBar'
-import {
-  AccountsTab,
-  BackupTab,
-  BoardListTab,
-  BoardsTab,
-  GestureSettings,
-  ListTabsEditor,
-  NgTab,
-  SettingsEmbed,
-  ToolbarsTab,
-  UserhashInput,
-  type SettingsProps,
-} from '../SettingsDialog'
+import { AccountsTab } from '../settings/AccountsTab'
+import { BackupTab } from '../settings/BackupTab'
+import { BoardListTab } from '../settings/BoardListTab'
+import { BoardsTab } from '../settings/BoardsTab'
+import { GestureSettings } from '../settings/GestureSettings'
+import { ListTabsEditor, SettingsEmbed, type SettingsProps } from '../settings/common'
+import { NgTab } from '../settings/NgTab'
+import { ToolbarsTab } from '../settings/ToolbarsTab'
+import { UserhashInput } from '../settings/UploadTab'
 import { ActionRow, ChoiceRow, Group, NavRow, SwitchRow, TextRow, WordList } from './ui'
 import LicensesDialog from '../LicensesDialog'
 
@@ -126,7 +122,7 @@ export default function MobileSettings(props: SettingsProps & { initialPage?: Pa
 
 /** 1 つの画面の中身 */
 function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: UpdateSetting, push: (p: PageId) => void): ReactNode {
-  const scheme = PICKABLE_SCHEMES.find((c) => c.key === effectiveScheme(s))
+  const scheme = COLOR_SCHEMES.find((c) => c.key === effectiveScheme(s))
   switch (page) {
     case 'home':
       return (
@@ -175,7 +171,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           </Group>
           <Group title="配色" note={s.followOsTheme ? '暗い配色と明るい配色を、それぞれ 1 つ選んでください' : undefined}>
             <div className="grid grid-cols-2 gap-2.5 p-3">
-              {PICKABLE_SCHEMES.map((c) => {
+              {COLOR_SCHEMES.map((c) => {
                 const chosen = s.followOsTheme ? c.key === s.darkScheme || c.key === s.lightScheme : s.scheme === c.key
                 return (
                   <button

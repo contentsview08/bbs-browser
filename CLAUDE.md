@@ -24,7 +24,7 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 ## 設計の決まりごと
 
 - 差分取得の続き(`Cursor`)の中身はコネクタだけが解釈する。ホストは JSON として保存して渡し返すだけ。
-- UI はコネクタの `capabilities` を見て機能を出し分ける。
+- UI はコネクタが持つ任意のメソッド(`createPost` など)の有無を見て機能を出し分ける。
 - 本文はコネクタの段階でプレーンテキストにする。UI で `innerHTML` / `dangerouslySetInnerHTML` を使わない。
 - 2ch 互換の User-Agent は `Monazilla/1.00 (bbs-browser/x.y.z)`。
 - 書き込みは `POST /test/bbs.cgi`(Shift_JIS の URL エンコード。`packages/connectors/src/sjis.ts`)。

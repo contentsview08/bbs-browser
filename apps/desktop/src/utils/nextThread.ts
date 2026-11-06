@@ -9,7 +9,7 @@ export function normalizeTitle(title: string): string {
   return title
     .normalize('NFKC')
     .toLowerCase()
-    .replace(/(part|ｐａｒｔ|その|第|vol\.?|no\.?)\s*\d+\s*(弾|章|話|回|スレ|目)?/g, '')
+    .replace(/(part|その|第|vol\.?|no\.?)\s*\d+\s*(弾|章|話|回|スレ|目)?/g, '')
     .replace(/[★☆◆◇■□●○#＃]+\s*\d+/g, '')
     .replace(/\d+/g, '')
     .replace(/[\s\p{P}\p{S}]+/gu, '')

@@ -9,7 +9,8 @@ import { shitarabaConnector } from '../src/shitaraba/connector'
 import { parseRawmode } from '../src/shitaraba/parse'
 import { encodeShiftJisForm } from '../src/sjis'
 import { twoChConnector } from '../src/twoch/connector'
-import { parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseDatLine, parseSettingTxt, parseSubjectTxt } from '../src/twoch/parse'
+import { parseBbsMenuHtml, parseBbsMenuJson, parseDat, parseDatLine, parseSubjectTxt } from '../src/twoch/parse'
+import { parseKeyValue } from '../src/common'
 import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types'
 
 const enc = (s: string) => new TextEncoder().encode(s)
@@ -100,7 +101,7 @@ describe('スレ一覧・板一覧・板の設定の壊れた入力', () => {
   })
 
   it('SETTING.TXT の値の = を残し、= のない行・キーのない行は飛ばす', () => {
-    expect(parseSettingTxt('板名だけの行\n=値だけ\nA=b=c\r\nB = 空白 \nC=\n')).toEqual({ A: 'b=c', B: '空白', C: '' })
+    expect(parseKeyValue('板名だけの行\n=値だけ\nA=b=c\r\nB = 空白 \nC=\n')).toEqual({ A: 'b=c', B: '空白', C: '' })
   })
 
   it('bbsmenu.json: 壊れていれば投げ、足りない所は空として読み、板の形でない URL は除く', () => {

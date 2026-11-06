@@ -4,19 +4,6 @@ import type { Post } from '../types'
 import { htmlToText } from '../html'
 import { POST_FAILED } from '../twoch/parse'
 
-/** subject.txt の 1 行は「キー.cgi,スレタイ(レス数)」。最後の行は最初の行の繰り返しなので、同じキーは 1 つにする */
-export function parseShitarabaSubject(text: string): { key: string; title: string; count: number }[] {
-  const out: { key: string; title: string; count: number }[] = []
-  const seen = new Set<string>()
-  for (const line of text.split('\n')) {
-    const m = /^(\d+)\.cgi,(.*)\((\d+)\)\s*$/.exec(line)
-    if (!m || seen.has(m[1])) continue
-    seen.add(m[1])
-    out.push({ key: m[1], title: htmlToText(m[2]).trim(), count: Number(m[3]) })
-  }
-  return out
-}
-
 /**
  * rawmode.cgi の 1 行は「番号<>名前<>メール<>日付<>本文<>スレタイ<>ID」。
  * スレタイは 1 番目のレスにだけ入っている。名前と本文は HTML(<b> や <br>)なので文字にする
@@ -41,16 +28,6 @@ export function parseRawmode(text: string): { posts: Post[]; title?: string } {
     })
   }
   return { posts, title }
-}
-
-/** setting.cgi は「キー=値」の行 */
-export function parseShitarabaSetting(text: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const line of text.split('\n')) {
-    const i = line.indexOf('=')
-    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim()
-  }
-  return out
 }
 
 /** write.cgi の応答。書けたら ok、ERROR やエラーの文言があれば error(理由を添える) */

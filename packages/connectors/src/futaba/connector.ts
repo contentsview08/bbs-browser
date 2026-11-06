@@ -175,10 +175,12 @@ const sodane = (votes: Record<string, number>): Record<string, Record<string, nu
 /** サーバーに頼む並び順と、カタログの sort の番号 */
 const CATALOG_SORT: Record<ListSort, number> = { newest: 1, oldest: 2, most: 3, fewest: 4, momentum: 6 }
 
+/** 板の URL の道の頭(https://may.2chan.net/b/ なら b) */
+const boardNameOf = (boardUrl: string) => new URL(boardUrl).pathname.split('/').filter(Boolean)[0]
+
 export const futabaConnector: Connector = {
   id: ID,
   name: 'ふたば☆ちゃんねる',
-  capabilities: { post: true, images: true, incremental: true },
   anchorTarget: 'ref',
   reactions: [{ id: SODANE, label: 'そうだね', icon: 'thumb_up' }],
   // 引用は番号ではなく「>前のレスの文章」で書く
@@ -297,7 +299,7 @@ export const futabaConnector: Connector = {
   // 自分の書き込みを消す: 板/futaba.php?guid=on へ mode=usrdel・番号=delete・pwd=削除キー(ふたばの JavaScript の usrdelsend と同じ)
   async deletePost(thread, post, deleteKey, ctx): Promise<PostResult> {
     const ref = post.ref ?? post.no
-    const board = new URL(thread.boardUrl).pathname.split('/').filter(Boolean)[0]
+    const board = boardNameOf(thread.boardUrl)
     const body = new URLSearchParams({ responsemode: 'ajax', pwd: deleteKey, [String(ref)]: 'delete', mode: 'usrdel' }).toString()
     const res = await ctx.http.post(`${originOf(thread.boardUrl)}/${board}/futaba.php?guid=on`, body, {
       headers: { ...BROWSER, 'Content-Type': 'application/x-www-form-urlencoded', Referer: threadWebUrl(thread), Origin: originOf(thread.boardUrl) },
@@ -312,7 +314,7 @@ export const futabaConnector: Connector = {
   // そうだね: /sd.php?板名.番号 を GET すると、新しい数が返る(ふたばの JavaScript の sd() と同じ)
   async react(thread, post, reactionId, ctx) {
     if (reactionId !== SODANE) throw new Error(`ふたばにない反応です: ${reactionId}`)
-    const board = new URL(thread.boardUrl).pathname.split('/').filter(Boolean)[0]
+    const board = boardNameOf(thread.boardUrl)
     const res = await ctx.http.get(`${originOf(thread.boardUrl)}/sd.php?${board}.${post.ref ?? post.no}`, { headers: { ...BROWSER, Referer: threadWebUrl(thread) } })
     if (res.status !== 200) throw new Error(`そうだねを送れませんでした(HTTP ${res.status})`)
     const n = parseInt(new TextDecoder().decode(res.body), 10)

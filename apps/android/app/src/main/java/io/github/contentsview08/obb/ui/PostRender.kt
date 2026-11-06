@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.PostIndex
 import io.github.contentsview08.obb.bbs.BodyToken
+import io.github.contentsview08.obb.bbs.isYoutubeUrl
 import io.github.contentsview08.obb.bbs.toImageUrl
 
 /**
@@ -175,6 +176,8 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
     val nonames = nonameCandidates(o.noname, o.extraNonames)
     // 色は組み立てるときの配色で決める(配色を変えたら組み立て直す)
     val linkStyle = TextLinkStyles(SpanStyle(color = Palette.link))
+    // YouTube のリンクは赤で見分ける(PC 版と同じ色)
+    val youtubeLinkStyle = TextLinkStyles(SpanStyle(color = Color(0xFFFF3344)))
     val imageChip = SpanStyle(color = Palette.markImage, background = Palette.surface2, fontSize = 13.sp)
     // スレ主: >>1 と同じ ID
     val opId = index.posts.firstOrNull()?.id
@@ -264,7 +267,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                         at = end
                     }
                     // URL は https:// を外し、長いものは後ろを省く。押したときに画面が決める(同じ掲示板のスレならアプリの中で開く)
-                    s is BodyToken.Url -> { withLink(LinkAnnotation.Clickable("u:${s.url}", linkStyle, links)) { append(if (o.urlShorten) shortUrl(s.url) else text) }; at = s.end }
+                    s is BodyToken.Url -> { withLink(LinkAnnotation.Clickable("u:${s.url}", if (isYoutubeUrl(s.url)) youtubeLinkStyle else linkStyle, links)) { append(if (o.urlShorten) shortUrl(s.url) else text) }; at = s.end }
                 }
                 i++
             }

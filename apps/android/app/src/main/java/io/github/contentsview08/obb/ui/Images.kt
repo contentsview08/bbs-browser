@@ -131,7 +131,8 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
         mutableStateOf(io.github.contentsview08.obb.data.ImageStore.cached(url) != null || (autoLoad && io.github.contentsview08.obb.data.isAutoLoadable(url)))
     }
     val shape = RoundedCornerShape(5.dp)
-    val box = Modifier.size(size.dp).clip(shape).border(1.dp, Palette.border, shape).background(Palette.surface2)
+    // YouTube は赤い枠で見分ける(PC 版と同じ色)
+    val box = Modifier.size(size.dp).clip(shape).then(if (play) Modifier.border(2.dp, Color(0xFFFF0000), shape) else Modifier.border(1.dp, Palette.border, shape)).background(Palette.surface2)
     if (!load) {
         Box(box.clickable { load = true }, contentAlignment = Alignment.Center) { Text("画像", color = Palette.textMuted, fontSize = 13.sp) }
         return

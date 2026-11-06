@@ -71,6 +71,8 @@ dependencies {
     implementation("androidx.browser:browser:1.8.0")
     // AI NG の判定モデル(mDeBERTa-v3 の ONNX)を動かす
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    // 同期の暗号(ChaCha20-Poly1305・HKDF・HMAC)。JVM の単体テストでも同じ実装が動き、使わないものは R8 が外す
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
     testImplementation("junit:junit:4.13.2")
     // android.jar の org.json は単体テストでは動かないので、本物を使う
     testImplementation("org.json:json:20250517")

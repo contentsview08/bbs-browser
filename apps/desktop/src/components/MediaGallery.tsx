@@ -87,8 +87,16 @@ export default function MediaGallery(props: {
   const stopSaving = useRef<() => void>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const anchor = useRef<string>(undefined)
-  /** 種類で隠したものは選択に数えない。YouTube は保存できないので選べない */
-  const selectable = useMemo(() => shown.filter((m) => m.kind !== 'youtube'), [shown])
+  /** 種類で隠したものは選択に数えない。動画は大きくサーバーの負担になるので、まとめて保存しない */
+  const selectable = useMemo(() => shown.filter((m) => m.kind === 'image'), [shown])
+  const [notice, setNotice] = useState<string>()
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(noticeTimer.current), [])
+  const warnVideo = () => {
+    setNotice('動画は選択できません')
+    clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => setNotice(undefined), 2500)
+  }
   const selectedFiles = useMemo(() => selectable.filter((m) => picked.has(m.url)), [selectable, picked])
 
   /** 画像と動画のファイルを保存する(家の中のアドレスは一度に読みに行かない)。キャッシュにあるものを先に写し、ないものだけ控えめに取る */
@@ -126,13 +134,14 @@ export default function MediaGallery(props: {
   }
 
   const clickTile = (m: MediaItem, index: number, e: React.MouseEvent) => {
-    const canSelect = m.kind !== 'youtube'
+    const canSelect = m.kind === 'image'
     if (e.shiftKey) {
       if (canSelect) setPicked((p) => selectRange(selectable.map((x) => x.url), anchor.current, m.url, p, e.ctrlKey || e.metaKey))
+      else warnVideo()
       return
     }
     if (e.ctrlKey || e.metaKey || (isMobile && picked.size > 0)) {
-      if (!canSelect) return
+      if (!canSelect) return warnVideo()
       anchor.current = m.url
       setPicked((p) => toggled(p, m.url))
       return
@@ -142,7 +151,7 @@ export default function MediaGallery(props: {
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const bandRef = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ start: Point; pointer: Point; moved: boolean; additive: boolean; base: ReadonlySet<string>; tiles: { key: string; rect: Rect }[]; frame: number }>(undefined)
+  const drag = useRef<{ start: Point; pointer: Point; moved: boolean; additive: boolean; base: ReadonlySet<string>; warned: boolean; videos: { key: string; rect: Rect }[]; tiles: { key: string; rect: Rect }[]; frame: number }>(undefined)
   useEffect(() => () => cancelAnimationFrame(drag.current?.frame ?? 0), [])
 
   const contentPoint = (el: HTMLElement, x: number, y: number): Point => {
@@ -161,6 +170,11 @@ export default function MediaGallery(props: {
     band.style.top = `${rect.top}px`
     band.style.width = `${rect.right - rect.left}px`
     band.style.height = `${rect.bottom - rect.top}px`
+    // 帯が動画に触れたら、1 回のドラッグで 1 度だけ知らせる
+    if (!d.warned && selectByRect(rect, d.videos, new Set(), false).size > 0) {
+      d.warned = true
+      warnVideo()
+    }
     const next = selectByRect(rect, d.tiles, d.base, d.additive)
     setPicked((p) => (p.size === next.size && [...next].every((k) => p.has(k)) ? p : next))
   }
@@ -171,13 +185,16 @@ export default function MediaGallery(props: {
     // スクロールバーをつかんだとき
     if (e.clientX >= box.left + el.clientWidth || e.clientY >= box.top + el.clientHeight) return
     const additive = e.ctrlKey || e.metaKey
-    const tiles = [...el.querySelectorAll<HTMLElement>('[data-tile][data-selectable]')].map((tile) => {
-      const r = tile.getBoundingClientRect()
-      const a = contentPoint(el, r.left, r.top)
-      return { key: tile.dataset.tile!, rect: { left: a.x, top: a.y, right: a.x + r.width, bottom: a.y + r.height } }
-    })
+    const tilesOf = (selector: string) =>
+      [...el.querySelectorAll<HTMLElement>(selector)].map((tile) => {
+        const r = tile.getBoundingClientRect()
+        const a = contentPoint(el, r.left, r.top)
+        return { key: tile.dataset.tile!, rect: { left: a.x, top: a.y, right: a.x + r.width, bottom: a.y + r.height } }
+      })
+    const tiles = tilesOf('[data-tile][data-selectable]')
+    const videos = tilesOf('[data-tile]:not([data-selectable])')
     el.setPointerCapture(e.pointerId)
-    const d = { start: contentPoint(el, e.clientX, e.clientY), pointer: { x: e.clientX, y: e.clientY }, moved: false, additive, base: picked, tiles, frame: 0 }
+    const d = { start: contentPoint(el, e.clientX, e.clientY), pointer: { x: e.clientX, y: e.clientY }, moved: false, additive, warned: false, videos, base: picked, tiles, frame: 0 }
     drag.current = d
     const tick = () => {
       const speed = d.moved ? edgeScrollSpeed(d.pointer.y, box.top, box.bottom) : 0
@@ -271,7 +288,7 @@ export default function MediaGallery(props: {
                 type="button"
                 onClick={() => void (selectedFiles.length > 0 ? saveFiles(selectedFiles, true) : saveFiles(selectable, false))}
                 className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
-                title={`${selectedFiles.length > 0 ? '選んだもの' : '見せている画像と動画'}を ${props.saveDir || 'ダウンロードフォルダ'} に保存します(YouTube と家の中のアドレスは除く)`}
+                title={`${selectedFiles.length > 0 ? '選んだもの' : '見せている画像'}を ${props.saveDir || 'ダウンロードフォルダ'} に保存します(YouTube と家の中のアドレスは除く)`}
               >
                 <span className="material-symbols-outlined text-base">download</span>
                 {selectedFiles.length > 0 ? `選んだものを保存(${selectedFiles.length})` : 'まとめて保存'}
@@ -300,10 +317,12 @@ export default function MediaGallery(props: {
                   item={m}
                   blur={!!props.blurNos?.has(m.post.no)}
                   picked={picked.has(m.url)}
+                  selecting={picked.size > 0}
                   onClick={(e) => clickTile(m, i, e)}
                   onLongPress={
-                    isMobile && m.kind !== 'youtube'
+                    isMobile
                       ? () => {
+                          if (m.kind !== 'image') return warnVideo()
                           anchor.current = m.url
                           setPicked((p) => toggled(p, m.url))
                         }
@@ -311,6 +330,11 @@ export default function MediaGallery(props: {
                   }
                 />
               ))}
+            </div>
+          )}
+          {notice && (
+            <div className="fixed left-1/2 -translate-x-1/2 bottom-8 z-10 px-4 py-2 rounded-full bg-black/80 text-white text-sm pointer-events-none" role="status">
+              {notice}
             </div>
           )}
           <div ref={bandRef} className="absolute hidden pointer-events-none border border-c-accent bg-[var(--c-accent-wash)] rounded-sm z-10" />
@@ -321,16 +345,23 @@ export default function MediaGallery(props: {
   )
 }
 
-function GalleryTile(props: { item: MediaItem; blur: boolean; picked: boolean; onClick: (e: React.MouseEvent) => void; onLongPress?: () => void }) {
+function GalleryTile(props: { item: MediaItem; blur: boolean; picked: boolean; selecting: boolean; onClick: (e: React.MouseEvent) => void; onLongPress?: () => void }) {
   const m = props.item
   const longPress = useLongPress(props.onLongPress)
   return (
     <button
       type="button"
       data-tile={m.url}
-      data-selectable={m.kind !== 'youtube' ? '' : undefined}
+      data-selectable={m.kind === 'image' ? '' : undefined}
       aria-pressed={props.picked}
       {...longPress}
+      // 選ぶ操作は、中の「押して再試行」より先に受ける
+      onClickCapture={(e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !(isMobile && props.selecting)) return
+        e.stopPropagation()
+        e.preventDefault()
+        props.onClick(e)
+      }}
       onClick={props.onClick}
       className={`relative aspect-square bg-c-surface2 border rounded overflow-hidden hover:border-c-accent transition-colors ${
         props.picked ? 'border-c-accent ring-2 ring-[var(--c-accent)]' : 'border-c-border'

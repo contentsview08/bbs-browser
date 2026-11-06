@@ -42,9 +42,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,12 +117,12 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
             BbsTheme {
-                // 文字の大きさの設定は、アプリ全体の文字の倍率にかける
+                // 基本の文字は、メニュー・ボタン・ポップアップなどの部品の字。レスとスレ一覧の行は WithoutBaseFont で外す
                 val d = LocalDensity.current
                 // 上の帯の左のボタンの長押し: たどってきた画面の一覧(押すとそこまで戻る)
                 var backMenu by remember { mutableStateOf(false) }
                 val navLong: (() -> Unit)? = if (vm.stack.size > 1) ({ backMenu = true }) else null
-                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * vm.prefs.fontScale), io.github.contentsview08.obb.ui.LocalPrefs provides vm.prefs, io.github.contentsview08.obb.ui.LocalNavLong provides navLong) {
+                CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * vm.prefs.fontScale), io.github.contentsview08.obb.ui.LocalDeviceFontScale provides d.fontScale, io.github.contentsview08.obb.ui.LocalPrefs provides vm.prefs, io.github.contentsview08.obb.ui.LocalNavLong provides navLong) {
                     if (backMenu) io.github.contentsview08.obb.ui.MenuSheet(
                         listOf(
                             vm.stack.toList().withIndex().reversed().drop(1).map { (i, pg) ->
@@ -172,11 +169,6 @@ class MainActivity : ComponentActivity() {
                     // 引き出しの指の操作は、開いているとき(閉じる)だけ。開くのはスワイプの操作(左の端から右へ)に任せる
                     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {
-                            // 下のタブ(2ch Mate 風・設定): スレ表示と設定のほかの画面で、画面の下に固定する。中身はその分だけ縮める
-                            val top = vm.stack.lastOrNull()
-                            val showTabs = vm.prefs.bottomTabs && top != null && top !is Page.Thread && top !is Page.Settings
-                            var tabsH by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
-                            val density = LocalDensity.current
                             val pageContent: @androidx.compose.runtime.Composable (Page?) -> Unit = { page ->
                             // スレ一覧・スレ表示のほかの画面(閲覧履歴・書き込み履歴など)も、右へなぞるとメニューを開く。設定は SettingsScreen が大項目の画面でだけ受ける
                             val swipe = io.github.contentsview08.obb.ui.rememberSwipeState()
@@ -211,8 +203,7 @@ class MainActivity : ComponentActivity() {
                             }
                             AnimatedContent(
                                 targetState = vm.stack.lastOrNull(),
-                                modifier = (if (showTabs) Modifier.padding(bottom = with(density) { tabsH.toDp() }).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars) else Modifier)
-                                    .graphicsLayer { translationX = vm.backDrag * size.width; shadowElevation = if (vm.backDrag > 0f) 24f else 0f },
+                                modifier = Modifier.graphicsLayer { translationX = vm.backDrag * size.width; shadowElevation = if (vm.backDrag > 0f) 24f else 0f },
                                 transitionSpec = {
                                     // 何が起きたか分かるように: 開くと新しい画面が右端からすべり込み、前の画面は少し左へ下がって暗くなる。
                                     // 戻ると今の画面が右へ抜け、前の画面が左から戻る(スマホのふつうの画面の移り方)
@@ -232,9 +223,6 @@ class MainActivity : ComponentActivity() {
                                 label = "page",
                             ) { page -> pageContent(page) }
                             io.github.contentsview08.obb.ui.QuickAccess(vm)
-                            if (showTabs) io.github.contentsview08.obb.ui.BottomTabs(
-                                vm, top, Modifier.align(Alignment.BottomCenter).onSizeChanged { tabsH = it.height },
-                            )
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->
                                 LaunchedEffect(msg) { delay(2200); if (vm.toast == msg) vm.toast = null }

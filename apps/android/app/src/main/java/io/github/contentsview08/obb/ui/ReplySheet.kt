@@ -317,7 +317,7 @@ private fun PostPreview(vm: AppViewModel, page: Page.Thread, onDismiss: () -> Un
     }
     CenterPanel("送る前の見た目", onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-            if (rendered != null) PostItem(rendered, aa = isAA(r))
+            if (rendered != null) WithoutBaseFont { PostItem(rendered, aa = isAA(r)) }
             Text(
                 "AA・改行・リンクの見え方を確かめてから送れます", Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 color = Palette.textMuted, fontSize = 12.sp,

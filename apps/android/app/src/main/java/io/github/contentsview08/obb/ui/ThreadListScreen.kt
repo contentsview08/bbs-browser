@@ -87,7 +87,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -262,7 +267,35 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             }
         }
     }
-    Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).nestedScroll(listPull).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)) {
+    // ピンチの間の字の大きさ。保存は指を離したときに 1 回だけ
+    var pinchScale by remember { mutableStateOf<Float?>(null) }
+    var pinchLabel by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pinchLabel) { if (pinchLabel != null) { kotlinx.coroutines.delay(900); pinchLabel = null } }
+    Box(
+        modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).nestedScroll(listPull).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)
+            // 1 本指の操作には触らない。2 本指になってからは指を全部離すまで受け、残った指でスクロールや行の押下にならないようにする
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var zoom = 1f
+                    val start = vm.prefs.listFontScale
+                    var pinching = false
+                    do {
+                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                        if (e.changes.count { it.pressed } >= 2) {
+                            pinching = true
+                            zoom *= e.calculateZoom()
+                            val v = pinchedScale(start, zoom, 15)
+                            if (v != (pinchScale ?: start)) { pinchScale = v; Haptics.tick(hapticView) }
+                            pinchLabel = "スレ一覧 ${fontSizeOf(v, 15)}"
+                        }
+                        if (pinching) e.changes.forEach { it.consume() }
+                    } while (e.changes.any { it.pressed })
+                    pinchScale?.let { if (it != start) vm.prefs.listFontScale = it }
+                    pinchScale = null
+                }
+            },
+    ) {
         if (pullPx.value > 1f) {
             Box(
                 Modifier.fillMaxWidth().barPadding(top = { bars.topHeight * (1f - bars.hidden) }).height(with(density) { pullPx.value.toDp() }),
@@ -294,7 +327,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                 ) {
                     items(shown, key = { it.key }, contentType = { 0 }) { t ->
                         ThreadRow(
-                            t, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
+                            t, pinchScale ?: prefs.listFontScale, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                             isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds, thumbAllowed = thumbAllowed,
                             onLongClick = { Haptics.longPress(hapticView); menuFor = t },
                         ) { vm.openThread(t) }
@@ -394,6 +427,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     alpha = 1f - f
                 },
         ) { Icon(Icons.Filled.EditNote, "スレを立てる") }
+        pinchLabel?.let {
+            Text(
+                it, Modifier.align(Alignment.Center).background(Palette.surface3.copy(alpha = 0.95f), RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+            )
+        }
     }
 
     // ヘッダーの板名と ︙ は同じメニュー
@@ -443,12 +482,11 @@ private fun threadTitleText(t: ThreadSummary, isNew: Boolean, isFavorite: Boolea
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ThreadRow(
-    t: ThreadSummary, state: ThreadState?, momentum: Double, rank: Double, now: Long,
+    t: ThreadSummary, k: Float, state: ThreadState?, momentum: Double, rank: Double, now: Long,
     isNew: Boolean, isFavorite: Boolean, thumbAllowed: Boolean, onLongClick: () -> Unit, onClick: () -> Unit,
-) {
+) = WithoutBaseFont {
     val unread = unreadOf(t, state)
     val prefs = LocalPrefs.current
-    val k = prefs.listFontScale
     val pad = prefs.listPad.dp
     val visited = state != null
     val archived = state?.archived == true

@@ -1025,8 +1025,13 @@ html[data-platform='mobile'] .frosted-glass {
 .list-zoom :is(img, svg, canvas) {
   zoom: var(--list-unzoom, 1);
 }
-[data-post-header] {
+[data-post-header],
+.post-head-zoomed {
   zoom: var(--post-head-zoom, 1);
+}
+/* 札とアイコンは頭の zoom を打ち消す(高さと字を基本の文字にもレスの頭の文字にも連動させない) */
+[data-post-header] .post-fixed {
+  zoom: calc(1 / var(--post-head-zoom, 1));
 }
 /* レスの本文は、字の大きさそのもの(サムネイル・リンクのカードは変えない) */
 [data-post-body] > p {

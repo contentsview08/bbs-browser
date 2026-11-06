@@ -1,5 +1,6 @@
 package io.github.contentsview08.obb.ui
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,5 +15,13 @@ class SettingsIndexTest {
 
     @Test fun まとまりの説明も索引に入る() {
         assertTrue(SETTINGS_INDEX.any { it.first == "backup" && it.third.contains("1 つのファイルに書き出します") })
+    }
+
+    @Test fun 廃止した下のタブは探しても出ない() {
+        assertFalse(SETTINGS_INDEX.any { it.second.contains("「履歴・未読・スレ・板」") })
+    }
+
+    @Test fun テーマと色のページも索引に入る() {
+        assertTrue(has("theme", "配色"))
     }
 }

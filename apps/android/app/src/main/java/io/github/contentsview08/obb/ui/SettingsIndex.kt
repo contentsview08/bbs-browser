@@ -64,7 +64,6 @@ val SETTINGS_INDEX = listOf(
     Triple("gestures", "ジェスチャーを試す", "枠の中でなぞると、何の操作になるかが出ます(実際には動かしません)。感度を変えながら試せます"),
     Triple("gestures", "割り当てを元に戻す", ""),
     Triple("behavior", "スクロール", ""),
-    Triple("behavior", "下に「履歴・未読・スレ・板」のタブ", "2ch Mate のように、左のメニューを開かずに一覧を行き来できます"),
     Triple("behavior", "下へスクロールしたら、ヘッダーとフッターを隠す", "上へスクロールすると、すぐ戻ります"),
     Triple("behavior", "いちばん下を見ているときは、新着まで送る", ""),
     Triple("behavior", "ログを削除する前に確かめる", ""),

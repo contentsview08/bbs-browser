@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Forum
@@ -40,8 +39,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -157,35 +154,5 @@ private fun DrawerRow(
                 Icon(trailing, null, tint = Palette.textMuted, modifier = Modifier.size(20.dp))
             }
         } else Spacer(Modifier.width(4.dp))
-    }
-}
-
-
-/**
- * 下のタブ(2ch Mate 風): 履歴・未読(全板)・スレ(最後に開いた板)・板(板を探す)。いま見ている画面のタブに色を付ける
- */
-@Composable
-fun BottomTabs(vm: io.github.contentsview08.obb.AppViewModel, current: Page?, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding()) {
-        androidx.compose.material3.HorizontalDivider(color = Palette.border)
-        Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
-            @Composable fun tab(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
-                Column(
-                    Modifier.weight(1f).fillMaxHeight().clickable(onClick = onClick),
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                ) {
-                    Icon(icon, null, tint = if (on) Palette.accent else Palette.textMuted, modifier = Modifier.size(22.dp))
-                    Text(label, color = if (on) Palette.accent else Palette.textMuted, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
-                }
-            }
-            tab(Icons.Filled.History, "履歴", current is Page.History || current is Page.FavThreads || current is Page.PostHistory || current is Page.Uploads) { vm.openPast(if (vm.prefs.pastTab == "unread") "history" else vm.prefs.pastTab) }
-            tab(Icons.Filled.MarkEmailUnread, "未読", current is Page.AllUnread) { vm.openPast("unread") }
-            tab(Icons.Filled.Forum, "スレ", current is Page.Threads) {
-                val url = vm.prefs.lastBoardUrl
-                if (!url.isNullOrEmpty()) vm.openBoard(vm.favorites.firstOrNull { it.url == url } ?: io.github.contentsview08.obb.bbs.Board(url, vm.prefs.lastBoardName ?: url))
-                else vm.openRoot(Page.Boards())
-            }
-            tab(Icons.Filled.Star, "板", current is Page.Boards) { vm.openRoot(Page.Boards()) }
-        }
     }
 }

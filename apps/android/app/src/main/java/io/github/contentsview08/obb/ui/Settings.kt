@@ -126,11 +126,6 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
         else HeaderBar(TITLES[sub] ?: "", onNav = { goBack() }, navIsBack = true)
         HorizontalDivider(color = Palette.border)
-        // テーマと色のページは、今の配色の見本を上に止めておく(下で選ぶと、その場で変わる)
-        if (sub == "theme") {
-            SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
-            HorizontalDivider(color = Palette.border)
-        }
         // 一覧は長いので、外のスクロールに入れず自分でスクロールする
         if (sub == "licenses") { LicensesPage(); return@Column }
         androidx.compose.runtime.CompositionLocalProvider(LocalAdvanced provides (vm.prefs.showAdvanced || viaSearch)) {
@@ -245,6 +240,8 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
 
 @Composable
 private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
+    SchemePreview(Palette.scheme, Palette.own, Palette.accent, Palette.accentText)
+    HorizontalDivider(color = Palette.border)
     val p = vm.prefs
     Group {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followSystem, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followSystem = it }
@@ -453,7 +450,6 @@ private fun GesturesPage(vm: AppViewModel) {
 private fun BehaviorPage(vm: AppViewModel) {
     val p = vm.prefs
     Group("スクロール") {
-        SwitchRow("下に「履歴・未読・スレ・板」のタブ", p.bottomTabs, desc = "2ch Mate のように、左のメニューを開かずに一覧を行き来できます") { p.bottomTabs = it }
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
         if (LocalAdvanced.current) SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
         if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }

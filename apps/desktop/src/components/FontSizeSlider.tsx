@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
-import { BAR_PX_MIN, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, FOOTER_PX_MAX, HEADER_PX_MAX, LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PAD_PX_MAX, ROOT_FONT_SIZE, SCREEN_PX_RANGE, applyCssVar, baseFontPx, contentFontPx, scaledPxRange, type AppSettings, type UpdateSetting } from '../ui/settings'
+import { BAR_PX_MIN, listUnzoom, FONT_PX_KEY, FONT_PX_MAX, FONT_PX_MIN, FOOTER_PX_MAX, HEADER_PX_MAX, LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PAD_PX_MAX, ROOT_FONT_SIZE, SCREEN_PX_RANGE, applyCssVar, baseFontPx, contentFontPx, scaledPxRange, type AppSettings, type UpdateSetting } from '../ui/settings'
 import { isMobile } from '../utils/platform'
 import { broadcast, toolKindOfThisWindow } from '../host/crossWindow'
 
@@ -74,13 +74,14 @@ export default function FontSizeSlider(props: {
     if (v !== shown) props.onCommit(v)
   }
   const label = props.format ? props.format(px) : `${px}px`
-  // スマホ: 指で扱いやすいよう、字・つまみ・線を大きくし、左右に − ・ ＋ を置く
+  // スマホ: 指で扱いやすいよう、字・つまみ・線を大きくし、左右に − ・ ＋ を置く。寸法は px(rem だと基本の文字で行の高さが変わり、スライダーが指から逃げる)
   if (isMobile)
     return (
-      <div ref={drag.rowRef} style={drag.rowStyle} className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-2">
+      <div ref={drag.rowRef} style={drag.rowStyle} className="px-[14px] py-[12px]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-[7px] mb-[7px] min-h-[23px]">
           <span className="flex-1 min-w-0 text-[16px] text-c-text-strong">{props.label}</span>
-          <span className="tabular-nums text-[18px] font-bold text-c-accent">{label}</span>
+          {/* 桁で名前の折り返しが変わると、行の高さが変わってスライダーが指から逃げる */}
+          <span className="tabular-nums text-[18px] font-bold text-c-accent min-w-[52px] text-right">{label}</span>
           {props.resettable && isSet && (
             <button
               type="button"
@@ -88,15 +89,15 @@ export default function FontSizeSlider(props: {
                 props.preview(props.base)
                 props.onCommit(unset)
               }}
-              className="ml-1 px-2.5 py-1 rounded-full border border-c-border text-[13px] text-c-text-muted active:bg-c-surface3"
+              className="ml-[4px] px-[9px] py-[4px] rounded-full border border-c-border text-[13px] leading-none text-c-text-muted active:bg-c-surface3"
             >
               元に戻す
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => nudge(-1)} className="w-11 h-11 flex-shrink-0 rounded-full bg-c-surface3 text-c-text-strong flex items-center justify-center active:brightness-110" title="小さく">
-            <span className="material-symbols-outlined text-2xl">remove</span>
+        <div className="flex items-center gap-[7px]">
+          <button type="button" onClick={() => nudge(-1)} className="w-[38.5px] h-[38.5px] flex-shrink-0 rounded-full bg-c-surface3 text-c-text-strong flex items-center justify-center active:brightness-110" title="小さく">
+            <span className="material-symbols-outlined text-[21px]">remove</span>
           </button>
           <input
             type="range"
@@ -117,8 +118,8 @@ export default function FontSizeSlider(props: {
             className="big-range flex-1 min-w-0"
             style={{ touchAction: 'pan-y' }}
           />
-          <button type="button" onClick={() => nudge(1)} className="w-11 h-11 flex-shrink-0 rounded-full bg-c-surface3 text-c-text-strong flex items-center justify-center active:brightness-110" title="大きく">
-            <span className="material-symbols-outlined text-2xl">add</span>
+          <button type="button" onClick={() => nudge(1)} className="w-[38.5px] h-[38.5px] flex-shrink-0 rounded-full bg-c-surface3 text-c-text-strong flex items-center justify-center active:brightness-110" title="大きく">
+            <span className="material-symbols-outlined text-[21px]">add</span>
           </button>
         </div>
       </div>
@@ -186,9 +187,17 @@ export const setCssVar = (name: string, value: string) => {
   else applyCssVar(name, value)
 }
 
+/** 動かしている間、切り離してある本文・頭・一覧がつられないよう、倍率も一緒に書き換える */
+function previewBaseFont(s: AppSettings, content: number, px: number) {
+  setCssVar(ROOT_FONT_SIZE, `${px}px`)
+  setCssVar('--list-zoom', String((s.listFontPx || content) / px))
+  setCssVar('--post-head-zoom', String((s.postHeadPx || content) / px))
+  setCssVar('--list-unzoom', listUnzoom(px, content))
+  if (!isMobile) setCssVar('--dialog-zoom', String(16 / px))
+}
+
 /**
- * PC: 基本の文字(メニュー・ボタン・タブ・ポップアップなどの部品の字とアイコン)。レスの本文・頭、スレ一覧の字は動かない。
- * 動かしている間は、切り離してある本文・頭・一覧がつられないよう、倍率も一緒に書き換える
+ * 基本の文字(メニュー・ボタン・タブ・ポップアップなどの部品の字とアイコン)。レスの本文・頭、スレ一覧の字は動かない
  */
 export function BaseFontSlider(props: { settings: AppSettings; update: UpdateSetting; fixedSize?: boolean }) {
   const { settings: s, update } = props
@@ -200,13 +209,7 @@ export function BaseFontSlider(props: { settings: AppSettings; update: UpdateSet
       base={baseFontPx(s)}
       {...SCREEN_PX_RANGE}
       fixedSize={props.fixedSize}
-      preview={(px) => {
-        setCssVar(ROOT_FONT_SIZE, `${px}px`)
-        setCssVar('--list-zoom', String((s.listFontPx || content) / px))
-        setCssVar('--post-head-zoom', String((s.postHeadPx || content) / px))
-        setCssVar('--list-unzoom', String(px / 16))
-        setCssVar('--dialog-zoom', String(16 / px))
-      }}
+      preview={(px) => previewBaseFont(s, content, px)}
       onCommit={(px) => update(FONT_PX_KEY, px)}
     />
   )
@@ -326,21 +329,21 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
         ref={boxRef}
         // つかんでいる間は、入れ物ごと見えなくし、つかんでいる行だけを visibility: visible で残す
         style={{
-          ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : { zoom: 'var(--dialog-zoom, 1)' }),
+          ...(isMobile ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)', lineHeight: '21px' } : { zoom: 'var(--dialog-zoom, 1)' }),
           ...(active ? { visibility: 'hidden' as const } : {}),
         }}
-        className={`w-full overflow-y-auto bg-c-surface shadow-xl ${isMobile ? 'max-h-[70vh] rounded-t-3xl sheet-rise pt-2' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
+        className={`w-full overflow-y-auto bg-c-surface shadow-xl ${isMobile ? 'max-h-[70vh] rounded-t-[21px] sheet-rise pt-[7px]' : 'max-w-sm max-h-[85vh] border border-c-border rounded-2xl rise-in py-2'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {isMobile && (
-          <div className="flex justify-center pt-0.5 pb-1">
-            <span className="w-10 h-1 rounded-full bg-c-border-strong" />
+          <div className="flex justify-center pt-[2px] pb-[4px]">
+            <span className="w-[35px] h-[3.5px] rounded-full bg-c-border-strong" />
           </div>
         )}
-        <div className="flex items-center justify-between pl-4 pr-2 pb-1">
+        <div className={`flex items-center justify-between ${isMobile ? 'pl-[14px] pr-[7px] pb-[4px]' : 'pl-4 pr-2 pb-1'}`}>
           <h2 className={`${isMobile ? 'text-[17px]' : 'text-sm'} font-bold text-c-text-strong`}>{props.title}</h2>
-          <button type="button" onClick={props.onClose} className="p-1.5 rounded-full text-c-text-muted hover:text-c-text-strong" title="閉じる">
-            <span className="material-symbols-outlined text-xl">close</span>
+          <button type="button" onClick={props.onClose} className={`${isMobile ? 'w-[32px] h-[32px] flex items-center justify-center' : 'p-1.5'} rounded-full text-c-text-muted hover:text-c-text-strong`} title="閉じる">
+            <span className={`material-symbols-outlined ${isMobile ? 'text-[17.5px]' : 'text-xl'}`}>close</span>
           </button>
         </div>
         {props.children}

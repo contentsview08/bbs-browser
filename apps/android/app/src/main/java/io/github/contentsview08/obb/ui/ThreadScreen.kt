@@ -452,7 +452,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 )
             } else Column {
                 if (ai != null && ai.rule.show == "mark") Text(ai.label, Modifier.padding(start = 14.dp, top = 4.dp), color = Palette.markPurple, fontSize = 11.sp)
-                androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { page.rendered[p.no]?.let {
+                androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { WithoutBaseFont { page.rendered[p.no]?.let {
                 val continued = ((index.replyCount[p.no] ?: 0) == 0 || (style == "line" && p.no in own)) && (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 if (p.no in page.ngNos && p.no !in revealed) Box(Modifier.graphicsLayer { alpha = 0.3f }) { PostItem(
                     it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,
@@ -464,7 +464,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     imagesExpanded = p.no in page.expandedImages,
                     onAvatar = iconKey(p)?.let { k -> { openPopup(index.posts.filter { iconKey(it) == k }, focus = p.no) } },
                     aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
-            } }
+            } } }
             }
         }
     }

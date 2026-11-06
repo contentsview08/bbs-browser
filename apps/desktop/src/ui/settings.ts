@@ -186,12 +186,13 @@ export interface AppSettings {
   postStyle: PostStyle
   /** 文字の大きさ(px)。1px ずつ変えられる。スマホは mobileFontPx(画面が狭いので既定は小さい) */
   fontPx: number
-  /** PC: レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字(fontPx)を変えても動かない */
+  /** レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字を変えても動かない */
   contentBasePx: number
+  mobileContentBasePx: number
   mobileFontPx: number
-  /** スレ一覧の文字の大きさ(px)。0 なら画面全体の大きさのまま */
+  /** スレ一覧の文字の大きさ(px)。0 なら contentFontPx のまま */
   listFontPx: number
-  /** スレ表示のレスの本文・頭(名前・日付など)の文字の大きさ(px)。0 なら画面全体の大きさのまま */
+  /** スレ表示のレスの本文・頭(名前・日付など)の文字の大きさ(px)。0 なら contentFontPx のまま */
   postBodyPx: number
   postHeadPx: number
   /** スレ一覧のスレの上下の余白・レスの上下の余白(px)。-1 なら見た目の既定のまま */
@@ -447,6 +448,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postStyle: 'card',
   fontPx: 16,
   contentBasePx: 16,
+  mobileContentBasePx: 14,
   mobileFontPx: 14,
   listFontPx: 0,
   postBodyPx: 0,
@@ -637,7 +639,7 @@ export function scaledPxRange(base: number): { min: number; max: number; step: n
   const px = (scale: number) => Math.round(base * scale * 100) / 100
   return { min: px(FONT_SCALE_MIN), max: px(FONT_SCALE_MAX), step: px(FONT_SCALE_STEP) }
 }
-/** 画面全体の文字の大きさの幅(px) */
+/** 基本の文字の大きさの幅(px) */
 // PC の基本の文字は px で決めるので、ほかの文字と同じ幅にする(倍率だと下限が 9.6 までで、今より狭くなる)
 export const SCREEN_PX_RANGE = isMobile ? scaledPxRange(DEFAULT_SETTINGS[FONT_PX_KEY]) : { min: FONT_PX_MIN, max: FONT_PX_MAX, step: 1 }
 /** 行間(倍)・上下の余白(px)・帯の高さ(px)の幅。スマホ版と同じ */
@@ -647,14 +649,15 @@ export const PAD_PX_MAX = 40
 export const BAR_PX_MIN = 32
 export const HEADER_PX_MAX = 120
 export const FOOTER_PX_MAX = 110
-/**
- * レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。PC は基本の文字から切り離す(基本の文字はメニュー・ボタン・ポップアップなどの部品だけ)。
- * スマホは基本の文字に合わせる
- */
+/** レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字(メニュー・ボタン・ポップアップなどの部品だけ)から切り離す */
 export function contentFontPx(s: AppSettings): number {
-  return isMobile ? baseFontPx(s) : s.contentBasePx || DEFAULT_SETTINGS.contentBasePx
+  return isMobile ? s.mobileContentBasePx || DEFAULT_SETTINGS.mobileContentBasePx : s.contentBasePx || DEFAULT_SETTINGS.contentBasePx
 }
-/** いまの画面全体の文字の大きさ(px) */
+/** スレ一覧の画像・アイコンの zoom。基本の文字の分を打ち消す */
+export function listUnzoom(base: number, content: number): string {
+  return String(base / (isMobile ? content : 16))
+}
+/** いまの基本の文字の大きさ(px) */
 export function baseFontPx(s: AppSettings): number {
   return s[FONT_PX_KEY] || DEFAULT_SETTINGS[FONT_PX_KEY]
 }
@@ -852,7 +855,7 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   const content = contentFontPx(s)
   root.style.setProperty('--list-zoom', String((s.listFontPx || content) / base))
   // スレ一覧の画像・アイコン(px で大きさを決めるもの)は、基本の文字の分を打ち消す
-  root.style.setProperty('--list-unzoom', isMobile ? '1' : String(base / 16))
+  root.style.setProperty('--list-unzoom', listUnzoom(base, content))
   root.style.setProperty('--post-head-zoom', String((s.postHeadPx || content) / base))
   root.style.setProperty('--post-body-size', `${s.postBodyPx || content}px`)
   // スライダーの窓は、基本の文字を変えても大きさを変えない(打ち消す)
@@ -893,7 +896,7 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   root.style.setProperty('--list-thumb-scale', String(s.listThumbScale))
 }
 
-/** 画面全体の文字の大きさを表す、applyCssVar の名前(変数ではなく <html> の font-size) */
+/** 基本の文字の大きさを表す、applyCssVar の名前(変数ではなく <html> の font-size) */
 export const ROOT_FONT_SIZE = 'font-size'
 
 /** この画面(ウィンドウ)の変数(CSS)を書き換える(スライダーを動かしている間の見た目。data-* は属性) */
@@ -925,10 +928,13 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
     void store.getSettings().then((saved) => {
       // いまある項目だけを写し、消した項目は migrateOld で写す
       const known = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([k]) => k in DEFAULT_SETTINGS)) as Partial<AppSettings>
-      // 基本の文字を本文から切り離す前に大きさを変えていた人は、見えていた大きさを本文の既定として引き継ぐ(1 回だけ。保存する)
-      if (!('contentBasePx' in saved) && typeof known.fontPx === 'number' && known.fontPx !== DEFAULT_SETTINGS.fontPx) {
-        known.contentBasePx = known.fontPx
-        void store.setSetting('contentBasePx', known.fontPx)
+      // 基本の文字を本文から切り離す前に大きさを変えていた人は、見えていた大きさを本文の既定として引き継ぐ。
+      // 既定のままの人も保存する(切り離したあとに変えた基本の文字を、次の起動で引き継がないように)
+      for (const [content, font] of [['contentBasePx', 'fontPx'], ['mobileContentBasePx', 'mobileFontPx']] as const) {
+        if (content in saved) continue
+        const px = typeof known[font] === 'number' ? known[font] : DEFAULT_SETTINGS[content]
+        known[content] = px
+        void store.setSetting(content, px)
       }
       setSettings((s) => {
         const next = { ...s, ...known, ...migrateOld(saved as Record<string, unknown>) }

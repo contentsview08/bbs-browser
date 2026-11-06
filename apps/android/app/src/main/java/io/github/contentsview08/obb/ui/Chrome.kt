@@ -400,15 +400,17 @@ fun Modifier.badgeShape(bg: Color, border: Color? = null): Modifier =
         .then(if (border != null) border(1.dp, border, RoundedCornerShape(10.dp)) else Modifier)
         .background(bg, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp)
 
-/** 札の字。12sp の太字。行の高さを字に合わせて、札の縦の真ん中に置く */
+/** 札の字。12sp の太字(基本の文字に連動しない)。行の高さを字に合わせて、札の縦の真ん中に置く */
 @Composable
-fun BadgeText(text: String, color: Color) = Text(
-    text, color = color, maxLines = 1, softWrap = false, fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 14.sp,
-    style = androidx.compose.ui.text.TextStyle(
-        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
-        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None),
-    ),
-)
+fun BadgeText(text: String, color: Color) = WithoutBaseFont {
+    Text(
+        text, color = color, maxLines = 1, softWrap = false, fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 14.sp,
+        style = androidx.compose.ui.text.TextStyle(
+            platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+            lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None),
+        ),
+    )
+}
 
 /** 札(未読の数・自分のレス・返信で共通) */
 @Composable
@@ -515,8 +517,14 @@ fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Floa
     Column(Modifier.fillMaxWidth().graphicsLayer { alpha = a }.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
-            Text(text, color = Palette.accent, fontSize = 13.sp)
-            if (value != default) Text("元に戻す", Modifier.padding(start = 10.dp).clickable { onChange(default) }, color = Palette.textMuted, fontSize = 12.sp)
+            // 値の桁や「元に戻す」で名前の折り返しが変わると、窓の高さが変わってスライダーが指から逃げる
+            Text(text, Modifier.widthIn(min = 44.dp), color = Palette.accent, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+            val canReset = value != default
+            Text(
+                "元に戻す",
+                Modifier.padding(start = 10.dp).graphicsLayer { alpha = if (canReset) 1f else 0f }.clickable(enabled = canReset) { onChange(default) },
+                color = Palette.textMuted, fontSize = 12.sp, maxLines = 1,
+            )
         }
         androidx.compose.material3.Slider(
             value, onChange, valueRange = range, steps = steps, interactionSource = source,
@@ -525,26 +533,16 @@ fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Floa
     }
 }
 
-/** 文字の大きさの範囲(3 つで同じ)。設定は基準の大きさに掛ける倍率で持つ */
-const val FONT_MIN = 8
-const val FONT_MAX = 32
-
-/** 倍率 → 文字の大きさ(1 ずつ) */
-fun fontSizeOf(scale: Float, base: Int): Int = (scale * base).roundToInt().coerceIn(FONT_MIN, FONT_MAX)
-
-/** 文字の大きさ → 倍率 */
-fun scaleOf(size: Int, base: Int): Float = size.toFloat() / base
-
 /** 文字の大きさのスライダー。base は倍率 1 のときの大きさ */
 @Composable
 fun FontSizeSlider(label: String, scale: Float, base: Int, onChange: (Float) -> Unit) {
     SizeSlider(label, scale * base, FONT_MIN.toFloat()..FONT_MAX.toFloat(), FONT_MAX - FONT_MIN - 1, "${fontSizeOf(scale, base)}", base.toFloat()) { onChange(scaleOf(it.roundToInt(), base)) }
 }
 
-/** 画面全体の文字と、ヘッダー・フッターの高さと文字 */
+/** 基本の文字と、ヘッダー・フッターの高さと文字 */
 @Composable
 fun BarSliders(p: io.github.contentsview08.obb.data.Prefs) {
-    SizeSlider("画面全体の文字", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
+    SizeSlider("基本の文字(メニュー・ボタン・ポップアップ)", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
     SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 32f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
     SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 32f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
     SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.6f..1.6f, 19, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
@@ -559,7 +557,7 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val drag = remember { SizeDrag() }
     val dragging = drag.active != null
     val bg by androidx.compose.animation.core.animateFloatAsState(if (dragging) 0f else 1f, androidx.compose.animation.core.tween(150), label = "bg")
-    FullWindow(onDismiss = onDismiss) {
+    FullWindow(onDismiss = onDismiss) { WithoutBaseFont {
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f * bg))
@@ -582,7 +580,7 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
                 }
             }
         }
-    }
+    } }
 }
 
 /**

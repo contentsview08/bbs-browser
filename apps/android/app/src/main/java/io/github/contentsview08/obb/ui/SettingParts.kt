@@ -75,7 +75,7 @@ fun SamplePosts(vm: AppViewModel) {
             val r = rendered[post.no] ?: continue
             val prev = SAMPLE.getOrNull(n - 1)
             val continued = (p.postStyle == "discord" || p.postStyle == "line") && prev != null && prev.id == post.id && r.replyTo == null
-            PostItem(r, style = p.postStyle, id = post.id, continued = continued, heat = Palette.heat(index.replyCount[post.no] ?: 0), autoLoad = false)
+            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, continued = continued, heat = Palette.heat(index.replyCount[post.no] ?: 0), autoLoad = false) }
         }
     }
 }

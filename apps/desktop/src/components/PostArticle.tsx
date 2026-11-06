@@ -155,8 +155,10 @@ export type PostVariant = 'card' | 'discord' | 'classic' | 'line' | 'matome'
 
 /** マウスを乗せたレスの操作バーの高さ(基本の文字が 16px のときの px) */
 const TOOLBAR_H = 34
-/** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
-const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
+/** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく。頭は zoom で大きさを決めるので rem で書く(px だと基本の文字と逆に動く) */
+const HEAD_TEXT = isMobile ? 'text-[0.786rem]' : 'text-xs'
+/** 本文の上の返信元の 1 行の字(基本の文字に連動させない) */
+const REPLY_TEXT = isMobile ? 'text-[10.5px]' : 'text-[12px]'
 /** ダブルタップで返信: 2 回目のタップを待つ時間(ms) */
 const DOUBLE_TAP_MS = 280
 
@@ -561,16 +563,16 @@ function PostArticle(props: Props) {
         e.stopPropagation()
         setRevealed(false)
       }}
-      className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-px rounded hover:opacity-80 transition-opacity"
+      className="post-fixed flex-shrink-0 inline-flex items-center gap-[2px] text-[10px] font-bold px-[6px] py-px rounded-[4px] hover:opacity-80 transition-opacity"
       style={{ color: 'var(--c-heat-very-hot)', border: '1px solid var(--c-heat-very-hot)' }}
       title="NG のレスです。押すとあぼーんに戻します"
     >
-      <span className="material-symbols-outlined text-xs leading-none">block</span>
+      <span className="material-symbols-outlined text-[12px] leading-none">block</span>
       NG
     </button>
   )
-  /** スレ主(>>1 と同じ ID)と自分の書き込みの印。行の高さを字に合わせて、名前の行より背を高くしない */
-  const CHIP = 'flex-shrink-0 self-center text-[10px] leading-none font-bold px-1 py-[2px] rounded'
+  /** スレ主(>>1 と同じ ID)と自分の書き込みの印。行の高さを字に合わせて、名前の行より背を高くしない。札の大きさは基本の文字にもレスの頭の文字にも連動させない */
+  const CHIP = 'post-fixed flex-shrink-0 self-center text-[10px] leading-none font-bold px-[4px] py-[2px] rounded-[4px]'
   const opChip = props.isOp && (
     <span className={CHIP} style={{ color: 'var(--c-op)', background: 'var(--c-op-wash)', border: '1px solid var(--c-op)' }} title="スレ主(>>1 と同じ ID)">
       主
@@ -607,7 +609,7 @@ function PostArticle(props: Props) {
   const repliesBtn = anchorCount > 0 && (variant === 'discord' || variant === 'line') && (
     <button
       type="button"
-      className={`flex-shrink-0 whitespace-nowrap ${isMobile ? 'text-[11px]' : 'text-xs'} font-bold hover:opacity-80 ${numHeat || 'text-c-text-muted'}`}
+      className={`flex-shrink-0 whitespace-nowrap ${HEAD_TEXT} font-bold hover:opacity-80 ${numHeat || 'text-c-text-muted'}`}
       onClick={(e) => {
         e.stopPropagation()
         handlers.onReplies(post.no, e.currentTarget)
@@ -616,7 +618,7 @@ function PostArticle(props: Props) {
     >
       {/* 吹き出しの印と数だけ(スマホのアプリ・hono-bbs の web と同じ) */}
       <span className="inline-flex items-center gap-0.5">
-        <span className="material-symbols-outlined text-[14px] leading-none">chat_bubble</span>
+        <span className={`material-symbols-outlined ${isMobile ? 'text-[1.273em]' : 'text-[1.167em]'} leading-none`}>chat_bubble</span>
         {anchorCount}
       </span>
     </button>
@@ -633,7 +635,7 @@ function PostArticle(props: Props) {
     const text = single ? (n > 0 ? `${def.label}×${n}` : '+') : n > 0 ? String(n) : ''
     const inner = (
       <>
-        {!single && <span className="material-symbols-outlined text-sm leading-none">{def.icon}</span>}
+        {!single && <span className="material-symbols-outlined text-[14px] leading-none">{def.icon}</span>}
         {text}
       </>
     )
@@ -646,7 +648,7 @@ function PostArticle(props: Props) {
             e.stopPropagation()
             handlers.onReact?.(post, def.id)
           }}
-          className={`flex-shrink-0 flex items-center gap-0.5 text-[11px] font-bold tabular-nums hover:underline ${color}`}
+          className={`post-fixed flex-shrink-0 flex items-center gap-[2px] text-[11px] font-bold tabular-nums hover:underline ${color}`}
           title={`${def.label}を押す${n > 0 ? `(いま ${n})` : ''}`}
         >
           {inner}
@@ -654,7 +656,7 @@ function PostArticle(props: Props) {
       )
     if (n === 0) return null
     return (
-      <span key={def.id} className={`flex-shrink-0 flex items-center gap-0.5 text-[11px] font-bold tabular-nums ${color}`} title={`${def.label} ${n}`}>
+      <span key={def.id} className={`post-fixed flex-shrink-0 flex items-center gap-[2px] text-[11px] font-bold tabular-nums ${color}`} title={`${def.label} ${n}`}>
         {inner}
       </span>
     )
@@ -662,7 +664,7 @@ function PostArticle(props: Props) {
   const voteChip = reactionDefs.length > 0 && <>{reactionDefs.map(reactionChip)}</>
   // AI NG の「印だけ」: 頭に条件の名前と当たり具合を出す
   const aiChip = props.aiMark && (
-    <span className={`${CHIP} flex items-center gap-0.5`} style={{ color: 'var(--c-mark-purple)', border: '1px solid var(--c-mark-purple)' }} title={aiHitLabel(props.aiMark)}>
+    <span className={`${CHIP} flex items-center gap-[2px]`} style={{ color: 'var(--c-mark-purple)', border: '1px solid var(--c-mark-purple)' }} title={aiHitLabel(props.aiMark)}>
       <span className="material-symbols-outlined text-[11px] leading-none">psychology</span>
       {props.aiMark.rule.name || 'AI'}
     </span>
@@ -671,7 +673,7 @@ function PostArticle(props: Props) {
   const badgeChips = post.badges?.length || aiChip ? <>{post.badges?.map((b, i) => <BadgeChip key={i} badge={b} />)}{aiChip}</> : null
   const toOwnChip = props.isReplyToOwn && (
     <span
-      className="text-[10px] font-medium px-2 py-0.5 flex-shrink-0"
+      className="post-fixed text-[10px] leading-[13px] font-medium px-[8px] py-[2px] flex-shrink-0"
       style={{ color: 'var(--c-to-own)', background: 'var(--c-to-own-wash)', border: '1px solid var(--c-to-own)', borderRadius: 'var(--chip-radius)' }}
     >
       返信
@@ -685,7 +687,7 @@ function PostArticle(props: Props) {
     iconSeed && (
       <button
         type="button"
-        className={`relative flex-shrink-0 hover:opacity-80 ${round ? '' : 'mr-1'}`}
+        className={`post-fixed relative flex-shrink-0 hover:opacity-80 ${round ? '' : 'mr-[4px]'}`}
         onClick={(e) => (iconSeed === post.id ? handlers.onId(iconSeed, e.currentTarget) : handlers.onWatchoi?.(iconSeed, e.currentTarget))}
         title={iconSeed === post.id ? `ID:${post.id} (${iconCount})` : `ワッチョイ ${iconSeed} (${iconCount})`}
       >
@@ -695,7 +697,7 @@ function PostArticle(props: Props) {
         {iconCount >= 2 && (
           <span
             // 右下の数は、アイコンの外(名前や「主」の印の側)にはみ出さないよう、右へは少しだけ
-            className={`absolute -bottom-1 ${round ? '-right-0.5' : '-right-1'} min-w-[15px] h-[15px] px-0.5 rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(iconCount) || 'text-c-text-muted'}`}
+            className={`absolute -bottom-[4px] ${round ? '-right-[2px]' : '-right-[4px]'} min-w-[15px] h-[15px] px-[2px] rounded-full bg-c-surface border border-c-border text-[9px] font-bold leading-none flex items-center justify-center ${heatClass(iconCount) || 'text-c-text-muted'}`}
           >
             {iconCount}
           </span>
@@ -729,7 +731,7 @@ function PostArticle(props: Props) {
     setBarTop((id ? id.bottom - rect.top : 24) + 2)
   }
   const idAtTopRight = idPosition === 'topRight' && idBtn ? <span ref={idRef} className="ml-auto pl-2 flex-shrink-0">{idBtn}</span> : null
-  const idAtBottomRight = idPosition === 'bottomRight' && idBtn ? <div className="flex justify-end mt-0.5 text-xs">{idBtn}</div> : null
+  const idAtBottomRight = idPosition === 'bottomRight' && idBtn ? <div className="post-head-zoomed flex justify-end mt-0.5 text-xs">{idBtn}</div> : null
   const headerBlock =
     variant === 'classic' ? (
       // 専ブラ風: 「12 ：名前 [sage]：日付 ID:xxx」を 1 行に。色の面も枠もなし
@@ -755,22 +757,22 @@ function PostArticle(props: Props) {
         <div data-post-header className={`flex items-baseline flex-nowrap overflow-hidden ${isMobile ? 'mb-1 gap-x-1.5' : 'mb-0.5 gap-2'}`}>
           {/* 返信の数は頭の一番左に */}
           {repliesBtn}
-          {nameBtn(nameSubtle ? (isMobile ? 'text-[11px]' : HEAD_TEXT) : isMobile ? 'text-[13px]' : 'text-sm') || (
-            <span className={`font-bold ${nameSubtle ? `${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted` : 'text-sm text-c-poster-name'}`}>名無し</span>
+          {nameBtn(nameSubtle ? HEAD_TEXT : isMobile ? 'text-[0.929rem]' : 'text-sm') || (
+            <span className={`font-bold ${nameSubtle ? `${HEAD_TEXT} text-c-text-muted` : 'text-sm text-c-poster-name'}`}>名無し</span>
           )}
           {opChip}
           {ownChip}
             {badgeChips}
           {ngChip}
           {/* 番号は名前のすぐ後ろに(右端はマウスを乗せたときの操作バーと重なるため) */}
-          <span className="flex-shrink-0 text-xs">{numBtn('#', isMobile ? 'text-[11px]' : 'text-sm')}</span>
+          <span className="flex-shrink-0 text-xs">{numBtn('#', isMobile ? HEAD_TEXT : 'text-sm')}</span>
           {/* スマホは日付を短く(「10/19 12:34」)して、頭を 1〜2 行に収める */}
-          <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>
+          <span className={`${HEAD_TEXT} text-c-text-muted whitespace-nowrap`} title={post.date}>
             {isMobile ? shortDate(post.date) : shownDate}
           </span>
           {idInHeader}
           {voteChip}
-          {post.mail && <span className={`${isMobile ? 'text-[11px]' : HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
+          {post.mail && <span className={`${HEAD_TEXT} text-c-text-muted`}>[{post.mail}]</span>}
           {toOwnChip}
           {idAtTopRight}
         </div>
@@ -810,7 +812,7 @@ function PostArticle(props: Props) {
       />
       <button
         type="button"
-        className="flex items-center gap-1.5 min-w-0 max-w-full text-xs text-c-text-muted hover:text-c-text-body"
+        className={`flex items-center gap-[6px] min-w-0 max-w-full ${REPLY_TEXT} text-c-text-muted hover:text-c-text-body`}
         onClick={(e) => {
           e.stopPropagation()
           handlers.onAnchor([props.replyPreview!.no], e.currentTarget, 'click')
@@ -822,7 +824,7 @@ function PostArticle(props: Props) {
             <Identicon seed={props.replyPreview.id} size={16} />
           </span>
         ) : (
-          <span className="flex-shrink-0 flex w-4 h-4 rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" title="ID のないレス">
+          <span className="flex-shrink-0 flex w-[16px] h-[16px] rounded-full bg-c-surface3 items-center justify-center text-c-text-muted" title="ID のないレス">
             <span className="material-symbols-outlined fill text-[12px] leading-none">person</span>
           </span>
         )}
@@ -1073,7 +1075,7 @@ function PostArticle(props: Props) {
   const lineSide = (
     <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${right ? 'items-end' : 'items-start'}`}>
       {/* 右の吹き出しの返信の数は、番号の上に置く */}
-      {right && repliesBtn}
+      {right && repliesBtn && <span className="post-head-zoomed">{repliesBtn}</span>}
       {/* スマホは横幅が貴重なので、番号も小さくする */}
       <span className="text-[11px]">{numBtn('#', isMobile ? 'text-[10px]' : 'text-[11px]')}</span>
       <span title={post.date}>{time}</span>
@@ -1082,7 +1084,7 @@ function PostArticle(props: Props) {
   const lineQuote = props.replyPreview && (
     <button
       type="button"
-      className="flex items-center gap-1.5 min-w-0 max-w-full mb-1.5 pl-2 border-l-2 text-xs text-c-text-muted hover:text-c-text-body text-left"
+      className={`flex items-center gap-[6px] min-w-0 max-w-full mb-[6px] pl-[8px] border-l-2 ${REPLY_TEXT} text-c-text-muted hover:text-c-text-body text-left`}
       style={{ borderColor: 'currentColor' }}
       onClick={(e) => {
         e.stopPropagation()

@@ -14,7 +14,7 @@ export default function BadgeChip({ badge }: { badge: Badge }) {
   const color = TONE[badge.tone ?? 'muted']
   return (
     <span
-      className="flex-shrink-0 inline-flex items-center text-[10px] font-bold leading-none px-1.5 py-0.5 whitespace-nowrap"
+      className="post-fixed flex-shrink-0 inline-flex items-center text-[10px] font-bold leading-none px-[6px] py-[2px] whitespace-nowrap"
       style={{
         color,
         background: `color-mix(in srgb, ${color} 12%, transparent)`,

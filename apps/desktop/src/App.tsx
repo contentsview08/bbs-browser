@@ -47,7 +47,7 @@ import PastTabs, { type PastTab } from './components/PastTabs'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
 import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
-import FontSizeSlider, { BaseFontSlider, ListFontSliders, SliderDialog, setCssVar } from './components/FontSizeSlider'
+import { BaseFontSlider, ListFontSliders, SliderDialog } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -66,7 +66,7 @@ import { canCheckUpdate, compareVersions, fetchLatestRelease, runAutoUpdate, typ
 import { MouseGesturePieOverlay } from './components/MouseGesturePie'
 import UrlPrompt from './components/UrlPrompt'
 import { gestureActionName, mouseActionName } from './utils/gestures'
-import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, COLOR_SCHEMES, FONT_PX_KEY, SCREEN_PX_RANGE, POST_STYLES, ROOT_FONT_SIZE, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ListFilter, type ListTabKey, type ReplyLayout, type SavedTab, type StoredNotification, type UpdateSetting } from './ui/settings'
+import { HISTORY_LIST_TABS, NOTIFICATION_LOG_MAX, NOTIFY_KIND_BY_ICON, COLOR_SCHEMES, FONT_PX_KEY, SCREEN_PX_RANGE, POST_STYLES, effectivePostStyle, baseVariant, baseFontPx, pickSchemeNow, useSettings, type AppSettings, type ListFilter, type ListTabKey, type ReplyLayout, type SavedTab, type StoredNotification, type UpdateSetting } from './ui/settings'
 import type { PaletteItem } from './components/CommandPalette'
 import { useNarrow } from './hooks/useNarrow'
 import { useEvent } from './hooks/useEvent'
@@ -374,7 +374,7 @@ export default function App() {
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number; flash?: boolean }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
-  /** 表示スタイルのメニューから開く、画面全体の文字サイズの画面 */
+  /** 表示スタイルのメニューから開く、基本の文字の画面 */
   const [baseFontDialog, setBaseFontDialog] = useState(false)
   useEffect(() => {
     const open = () => setBaseFontDialog(true)
@@ -2951,13 +2951,7 @@ export default function App() {
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
       {baseFontDialog && (
         <SliderDialog title="文字サイズ" onClose={() => setBaseFontDialog(false)}>
-          <FontSizeSlider
-            label="画面全体"
-            value={baseFontPx(settings)}
-            base={baseFontPx(settings)}
-            preview={(px) => setCssVar(ROOT_FONT_SIZE, `${px}px`)}
-            onCommit={(px) => updateSetting(FONT_PX_KEY, px)}
-          />
+          <BaseFontSlider settings={settings} update={updateSetting} />
         </SliderDialog>
       )}
       {ngDraft && (

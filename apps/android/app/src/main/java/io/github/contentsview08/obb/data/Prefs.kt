@@ -10,6 +10,9 @@ import org.json.JSONObject
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
+/** 基本の文字を外したあとも、見えていた大きさを保つ倍率 */
+internal fun splitContentScale(content: Float, base: Float): Float = content * base
+
 /** 画像のサムネイル: いつも読む / Wi-Fi のときだけ / 押したら読む / 出さない */
 enum class ThumbMode(val label: String) { ALWAYS("いつも"), WIFI("Wi-Fi のときだけ"), TAP("押したら"), NEVER("出さない") }
 
@@ -56,6 +59,7 @@ class Prefs(context: Context) {
     }
 
     init {
+        splitBaseFont()
         // 古い値を今の設定に読み替える。レスの見た目 timeline → いちばん近い discord
         if (sp.getString("postStyle", null) == "timeline") sp.edit().putString("postStyle", "discord").apply()
         // 廃止した配色 → いちばん近い配色(ui/Theme.kt の retiredScheme)
@@ -100,9 +104,9 @@ class Prefs(context: Context) {
     var lightScheme by pref("lightScheme", "light-gray")
     /** レスの見た目(ui/PostRender.kt の POST_STYLES のキー) */
     var postStyle by pref("postStyle", "card")
-    /** 画面全体の文字の倍率(0.85〜1.3) */
+    /** 基本の文字の倍率。メニュー・ボタン・ポップアップなどの部品の字 */
     var fontScale by pref("fontScale", 1f)
-    /** レスの本文の文字の倍率(画面全体に掛ける) */
+    /** レスの本文の文字の倍率 */
     var bodyScale by pref("bodyScale", 1f)
     /** レスの本文の行間(字の高さの倍) */
     var lineHeight by pref("lineHeight", 1.47f)
@@ -236,8 +240,6 @@ class Prefs(context: Context) {
     var showAdvanced by pref("showAdvanced", false)
     /** 本文のアンカーを押したら、ポップアップではなくその下に差し込む */
     var anchorInline by pref("anchorInline", false)
-    /** 画面の下に「履歴・未読・スレ・板」のタブ(2ch Mate 風) */
-    var bottomTabs by pref("bottomTabs", false)
     /** 過去のスレの画面で最後に見たタブ(unread / history / fav / posts) */
     var pastTab by pref("pastTab", "history")
     /** 返信の連なりの起点のレスの下に「この会話 (N)」を出す */
@@ -390,6 +392,15 @@ class Prefs(context: Context) {
         o.keys().asSequence().associateWith { BoardMeta.fromJson(o.getJSONObject(it)) }
     }.getOrDefault(emptyMap())
 
+    /** 基本の文字がレスとスレ一覧にも掛かっていた間の倍率を、それぞれの設定へ移す(見た目を変えないため。1 回だけ) */
+    private fun splitBaseFont() {
+        if (sp.contains(BASE_FONT_SPLIT)) return
+        val base = sp.getFloat("fontScale", 1f)
+        val e = sp.edit().putBoolean(BASE_FONT_SPLIT, true)
+        for (k in CONTENT_FONT_KEYS) if (base != 1f) e.putFloat(k, splitContentScale(sp.getFloat(k, 1f), base))
+        e.apply()
+    }
+
     /** バックアップ: 設定を JSON に(最後に開いた板と秘密の値は除く) */
     fun export(): JSONObject {
         val o = JSONObject()
@@ -408,10 +419,15 @@ class Prefs(context: Context) {
                 is String -> e.putString(k, v)
             }
         }
+        // 分ける前のファイルは、次の起動で分け直す
+        if (!o.has(BASE_FONT_SPLIT)) e.remove(BASE_FONT_SPLIT)
         e.commit()
     }
 
     companion object {
+        private const val BASE_FONT_SPLIT = "baseFontSplit"
+        private val CONTENT_FONT_KEYS = listOf("listFontScale", "bodyScale", "postHeadScale")
+
         /** バックアップに入れない項目: 最後に開いた板と、アカウント・API キー(ファイルは人に渡したりクラウドに置いたりするので) */
         private val NOT_IN_BACKUP = setOf("lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId")
 

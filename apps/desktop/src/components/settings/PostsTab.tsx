@@ -67,7 +67,7 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           />
         </div>
       </Section>
-      <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。画面全体の文字の大きさは「表示」にあります">
+      <Section title="文字の大きさ・余白" note="スレ表示の ︙ の「文字の大きさ・余白」でも、見ながら変えられます。基本の文字の大きさは「表示」にあります">
         <PostFontSliders settings={s} update={update} />
       </Section>
       <Section title="本文">

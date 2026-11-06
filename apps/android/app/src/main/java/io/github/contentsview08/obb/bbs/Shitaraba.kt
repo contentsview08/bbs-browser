@@ -168,7 +168,9 @@ object Shitaraba {
         val title = Regex("<title>([^<]*)</title>", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)?.trim() ?: ""
         val text = htmlToText(html.replace(Regex("<head>[\\s\\S]*?</head>", RegexOption.IGNORE_CASE), "")).replace(Regex("\\s+"), " ").trim()
         val written = Regex("書き?こみました")
-        if (written.containsMatchIn(title) || written.containsMatchIn(text)) return PostResult.Ok("書きこみました", null)
+        // ERROR の題のページは、書き込んだ文字が本文に戻ってきていることがあるので、本文の文言では成功にしない
+        val errorTitle = Regex("^\\s*(?:ERROR|ＥＲＲＯＲ)(?:[\\s:：!！]|$)", RegexOption.IGNORE_CASE).containsMatchIn(title)
+        if (written.containsMatchIn(title) || (!errorTitle && written.containsMatchIn(text))) return PostResult.Ok("書きこみました", null)
         val err = Regex("ERROR[:：]?\\s*([^\\n]{0,200})", RegexOption.IGNORE_CASE).find(text)
         val message = err?.value?.trim() ?: title.ifEmpty { text.take(200) }
         return PostResult.Error(message.ifEmpty { if (res.status >= 400) "HTTP ${res.status}" else POST_FAILED })

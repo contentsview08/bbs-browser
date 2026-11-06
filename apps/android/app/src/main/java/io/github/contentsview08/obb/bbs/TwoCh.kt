@@ -11,7 +11,7 @@ import org.json.JSONObject
 private fun textOf(res: HttpResponse, body: ByteArray = res.body): String = decodeText(body, res.headers["content-type"])
 
 private val NAMED = mapOf("amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ", "hearts" to "♥")
-private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);")
+private val ENTITY = Regex("&(#[xX][0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);")
 
 fun decodeEntities(s: String): String {
     if (!s.contains('&')) return s
@@ -141,6 +141,9 @@ private fun parseDat(text: String, startNo: Int): Pair<List<Post>, String?> {
     }
     return posts to title
 }
+
+/** dat の形か(最初の行に区切りの <> がある)。200 で返るエラーのページをレスとして読まない */
+internal fun looksLikeDat(text: String): Boolean = text.lineSequence().firstOrNull { it.isNotBlank() }?.contains("<>") == true
 
 /** 最後の改行までだけ使う(書きかけの行を読まない) */
 private fun completeLines(b: ByteArray): ByteArray {
@@ -305,7 +308,8 @@ object TwoCh {
                 val res = Http.get(kako)
                 if (res.status == 200 && res.body.isNotEmpty()) {
                     val body = completeLines(res.body)
-                    val (posts, title) = parseDat(textOf(res, body), 1)
+                    val text = textOf(res, body)
+                    val (posts, title) = if (looksLikeDat(text)) parseDat(text, 1) else emptyList<Post>() to null
                     if (posts.isNotEmpty()) {
                         return FetchResult(
                             if (cursor != null) FetchStatus.RESET else FetchStatus.UPDATED,
@@ -322,8 +326,14 @@ object TwoCh {
             if (res.status == 404 || res.status == 302) return archived()
             ensureOk(res, url)
             val body = completeLines(res.body)
+            val text = textOf(res, body)
+            // 200 で返るエラーのページで置き換えると、手元のログが全部消える。板の文字コードとしても覚えない
+            if (text.isNotBlank() && !looksLikeDat(text)) {
+                if (cursor != null) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor)
+                throw IllegalStateException("スレを読めませんでした: $url")
+            }
             rememberBoardEncoding(thread.boardUrl, body)
-            val (posts, title) = parseDat(textOf(res, body), 1)
+            val (posts, title) = parseDat(text, 1)
             // 空か改行なしの本文で置き換えると、手元のログが全部消える
             if (cursor != null && posts.isEmpty()) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor)
             return FetchResult(

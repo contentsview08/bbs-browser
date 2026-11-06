@@ -57,7 +57,9 @@ export function parseShitarabaSetting(text: string): Record<string, string> {
 export function parseShitarabaWrite(html: string): { status: 'ok' | 'error'; message: string } {
   const title = /<title>([^<]*)<\/title>/i.exec(html)?.[1].trim() ?? ''
   const text = htmlToText(html.replace(/<head>[\s\S]*?<\/head>/i, '')).replace(/\s+/g, ' ').trim()
-  if (/書き?こみました/.test(title) || /書き?こみました/.test(text)) return { status: 'ok', message: '書きこみました' }
+  // ERROR の題のページは、書き込んだ文字が本文に戻ってきていることがあるので、本文の文言では成功にしない
+  const errorTitle = /^\s*(?:ERROR|ＥＲＲＯＲ)(?:[\s:：!！]|$)/i.test(title)
+  if (/書き?こみました/.test(title) || (!errorTitle && /書き?こみました/.test(text))) return { status: 'ok', message: '書きこみました' }
   const err = /ERROR[:：]?\s*([^\n]{0,200})/i.exec(text)
   return { status: 'error', message: err ? err[0].trim() : title || text.slice(0, 200) || POST_FAILED }
 }

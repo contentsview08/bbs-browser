@@ -188,7 +188,7 @@ object Machi {
     }
 
     /**
-     * write.cgi の応答。題や本文に ERROR・エラー があれば失敗。「書きこみました」か、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功。
+     * write.cgi の応答。題が ERROR で始まれば失敗。題に ERROR・エラー があっても、書き込みフォームがあればスレタイの一部とみなす(失敗にすると送り直して二重になる)。「書きこみました」か、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功。
      * それ以外は失敗(本文の頭を理由に)
      */
     private fun parseWrite(html: String): PostResult {
@@ -196,9 +196,12 @@ object Machi {
         val bodyHtml = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1) ?: html
         val text = htmlToText(bodyHtml.replace(Regex("<script[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "").replace(Regex("\\r?\\n"), "")).replace(Regex("\\s+"), " ").trim()
         val written = Regex("書き?こみました")
-        if (written.containsMatchIn(title) || written.containsMatchIn(text)) return PostResult.Ok("書きこみました", null)
-        if (Regex("ERROR|ＥＲＲＯＲ|エラー", RegexOption.IGNORE_CASE).containsMatchIn(title)) return PostResult.Error(text.take(300).ifEmpty { title })
-        if (Regex("<form[^>]*name=[\"']?posting[\"']?", RegexOption.IGNORE_CASE).containsMatchIn(html) || html.contains("/bbs/read.cgi/")) return PostResult.Ok("書きこみました", null)
+        val posting = Regex("<form[^>]*name=[\"']?posting[\"']?", RegexOption.IGNORE_CASE).containsMatchIn(html)
+        if (written.containsMatchIn(title)) return PostResult.Ok("書きこみました", null)
+        if (Regex("^\\s*(?:ERROR|ＥＲＲＯＲ)(?:[\\s:：!！]|$)", RegexOption.IGNORE_CASE).containsMatchIn(title) ||
+            (Regex("ERROR|ＥＲＲＯＲ|エラー", RegexOption.IGNORE_CASE).containsMatchIn(title) && !posting)
+        ) return PostResult.Error(text.take(300).ifEmpty { title })
+        if (written.containsMatchIn(text) || posting || html.contains("/bbs/read.cgi/")) return PostResult.Ok("書きこみました", null)
         val err = Regex("(?:ERROR|ＥＲＲＯＲ)[:：!！]?\\s*([^。]{0,200})", RegexOption.IGNORE_CASE).find(text)
         return PostResult.Error(err?.value?.trim() ?: title.ifEmpty { text.take(300).ifEmpty { "書き込めませんでした" } })
     }

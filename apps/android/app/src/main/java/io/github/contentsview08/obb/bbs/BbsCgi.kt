@@ -97,11 +97,14 @@ private val ATTR = Regex("([a-zA-Z_:][-A-Za-z0-9_:.]*)\\s*=\\s*(?:\"([^\"]*)\"|'
 private fun attrsOf(tag: String): Map<String, String> =
     ATTR.findAll(tag).associate { m -> m.groupValues[1].lowercase() to decodeEntities(m.groupValues[2].ifEmpty { m.groupValues[3].ifEmpty { m.groupValues[4] } }) }
 
+/** タグの名前から閉じ > までに当たる形を作る。クォートの中の > では切らない(確認画面の本文の「>>1」が消えないように) */
+private fun tagPattern(name: String) = Regex("<$name\\b(?:[^>\"']|\"[^\"]*\"|'[^']*')*>", RegexOption.IGNORE_CASE)
+
 /** 5ch の書き込み確認のフォームから、送り直すときに含める隠し項目と送り先を読む */
 private fun parseConfirmForm(html: String): Pair<String?, Map<String, String>> {
-    val action = Regex("<form\\b[^>]*>", RegexOption.IGNORE_CASE).find(html)?.value?.let { attrsOf(it)["action"] }?.ifEmpty { null }
+    val action = tagPattern("form").find(html)?.value?.let { attrsOf(it)["action"] }?.ifEmpty { null }
     val hidden = HashMap<String, String>()
-    for (m in Regex("<input\\b[^>]*>", RegexOption.IGNORE_CASE).findAll(html)) {
+    for (m in tagPattern("input").findAll(html)) {
         val a = attrsOf(m.value)
         val type = (a["type"] ?: "").lowercase()
         val name = a["name"]

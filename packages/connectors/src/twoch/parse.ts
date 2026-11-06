@@ -172,15 +172,18 @@ function attrsOf(tag: string): Record<string, string> {
   return attrs
 }
 
+/** タグの名前から閉じ > までに当たる形を作る。クォートの中の > では切らない(確認画面の本文の「>>1」が消えないように) */
+const tagPattern = (name: string) => new RegExp(`<${name}\\b(?:[^>"']|"[^"]*"|'[^']*')*>`, 'gi')
+
 /**
  * 5ch の「書き込み確認」のフォームから、送り直すときに含める隠し項目(hidden・名前つきの送信ボタン)と送り先を読む。
  * 隠し項目を付けずに同じ内容を送り直すと、確認画面が繰り返されることがある
  */
 export function parseConfirmForm(html: string): { action?: string; hidden: Record<string, string> } {
-  const form = /<form\b[^>]*>/i.exec(html)
+  const form = tagPattern('form').exec(html)
   const action = form ? attrsOf(form[0]).action : undefined
   const hidden: Record<string, string> = {}
-  for (const m of html.matchAll(/<input\b[^>]*>/gi)) {
+  for (const m of html.matchAll(tagPattern('input'))) {
     const a = attrsOf(m[0])
     const type = (a.type ?? '').toLowerCase()
     // 隠し項目に加えて、名前つきの送信ボタン(「上記全てを承諾して書き込む」)の値も、ブラウザで押したときと同じく送る

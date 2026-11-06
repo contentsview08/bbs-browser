@@ -51,7 +51,7 @@ export function parseOfflaw(text: string): { posts: Post[]; title?: string } {
 
 /**
  * write.cgi の応答。まちBBS は書けると「書きこみました」ではなく、スレのページ(書き込み欄のあるページ)をそのまま返す(2026-11-04 に利用者が確かめた)。
- * - 題や本文に ERROR・エラー があれば失敗(理由は本文の頭から)
+ * - 題が ERROR で始まれば失敗。題に ERROR・エラー があっても、書き込みフォームがあればスレタイの一部とみなす(失敗にすると送り直して二重になる)
  * - 「書きこみました」か、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功
  * - それ以外は失敗(本文の頭を理由に)
  */
@@ -59,9 +59,11 @@ export function parseMachiWrite(html: string): { status: 'ok' | 'error'; message
   const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').trim()
   const bodyHtml = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
   const text = htmlToText(bodyHtml.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\r?\n/g, '')).replace(/\s+/g, ' ').trim()
-  if (/書き?こみました/.test(title) || /書き?こみました/.test(text)) return { status: 'ok', message: '書きこみました' }
-  if (/ERROR|ＥＲＲＯＲ|エラー/i.test(title)) return { status: 'error', message: text.slice(0, 300) || title }
-  if (/<form[^>]*name=["']?posting["']?/i.test(html) || /\/bbs\/read\.cgi\//.test(html)) return { status: 'ok', message: '書きこみました' }
+  const posting = /<form[^>]*name=["']?posting["']?/i.test(html)
+  if (/書き?こみました/.test(title)) return { status: 'ok', message: '書きこみました' }
+  if (/^\s*(?:ERROR|ＥＲＲＯＲ)(?:[\s:：!！]|$)/i.test(title) || (/ERROR|ＥＲＲＯＲ|エラー/i.test(title) && !posting))
+    return { status: 'error', message: text.slice(0, 300) || title }
+  if (/書き?こみました/.test(text) || posting || /\/bbs\/read\.cgi\//.test(html)) return { status: 'ok', message: '書きこみました' }
   const err = /(?:ERROR|ＥＲＲＯＲ)[:：!！]?\s*([^。]{0,200})/i.exec(text)
   return { status: 'error', message: err ? err[0].trim() : title || text.slice(0, 300) || '書き込めませんでした' }
 }

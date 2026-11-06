@@ -58,7 +58,8 @@ export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, resu
     return result.archived && base.status !== 'archived' ? { ...base, status: 'archived' } : base
   if (result.status === 'archived') return base.status === 'archived' ? base : { ...base, status: 'archived' }
   let posts: Post[]
-  if (result.status === 'reset') posts = [...result.posts].sort((a, b) => a.no - b.no)
+  // 同じ番号は後のものを残す(INSERT OR REPLACE と同じ)
+  if (result.status === 'reset') posts = [...new Map(result.posts.map((p) => [p.no, p])).values()].sort((a, b) => a.no - b.no)
   else {
     // 同じ番号は新しいほうで置き換える(INSERT OR REPLACE と同じ)。ふつうは後ろに足すだけで済む
     const lastNo = base.posts.at(-1)?.no ?? 0

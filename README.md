@@ -102,8 +102,6 @@ gradlew.bat assembleRelease   # JAVA_HOME は Android Studio の jbr
 gradlew.bat testDebugUnitTest
 ```
 
-PC 版と同じソース(Tauri)から作るスマホ版の手順は [docs/mobile.md](docs/mobile.md)。
-
 ## 配布
 
 ```powershell

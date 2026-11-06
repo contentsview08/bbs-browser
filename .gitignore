@@ -4,5 +4,5 @@ dist/
 
 # Tauri
 apps/desktop/src-tauri/target/
-# gen/ のうち、Android・iOS の工程(tauri android init で作る)は残し、自動で作り直す schemas だけ外す
+# 自動で作り直す
 apps/desktop/src-tauri/gen/schemas/

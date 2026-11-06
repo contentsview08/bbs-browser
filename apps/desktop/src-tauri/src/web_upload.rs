@@ -36,7 +36,15 @@ const WATCH: &str = r#"
     }
   }
   save()
+  // 画像を渡す直前を見本との境目にする。3 秒を待つと、すぐ上がったリンクを見本として捨ててしまう
+  window.addEventListener('bbs-before-paste', () => {
+    if (ready) return
+    scan()
+    ready = true
+    save()
+  })
   setTimeout(() => {
+    if (ready) return
     if (moved) {
       // 関連画像の並ぶページを、上げた画像と取り違えない(数が多ければ見本とみなす)
       ready = true
@@ -95,6 +103,7 @@ const PASTE: &str = r#"
   }
   const fire = () => {
     window.name = FIRED
+    window.dispatchEvent(new Event('bbs-before-paste'))
     banner()
     const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body
     // 貼り付けを受け付けたサイトへドロップまで送ると、同じ画像が 2 回上がる

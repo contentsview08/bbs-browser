@@ -1,4 +1,4 @@
-// リンクの埋め込みのカード。web 版の LinkPreviewCard.tsx の見た目を移植。
+// リンクの埋め込みのカード。
 // 画面に見えたときに初めてページを取りに行く(スレを開いただけで全部のリンクを取りに行かないように)
 
 import { useEffect, useRef, useState } from 'react'

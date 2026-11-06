@@ -56,11 +56,11 @@ private val SAMPLE = listOf(
     Post(3, "名無しさん", "", "2026/11/02(月) 19:03:05.87", "Ab3dE9fG0", ">>2\nありがとう\nhttps://example.com/"),
 )
 
-/** 見本のレス。いまの設定で組み立てて描く(押しても何もしない) */
 /** 設定のスイッチの色(オンのときは差し色) */
 @Composable
 fun accentSwitchColors() = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Palette.accent, checkedThumbColor = Palette.accentText)
 
+/** 見本のレス。いまの設定で組み立てて描く(押しても何もしない) */
 @Composable
 fun SamplePosts(vm: AppViewModel) {
     val p = vm.prefs

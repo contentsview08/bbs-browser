@@ -76,7 +76,7 @@ fun Thumbnails(
 
 /**
  * 画像を 1 枚出す(サムネイル・画像一覧・クイックアクセスで共通)。ImageStore に頼み、取れたファイルを出す。
- * 取っている間は明滅する面と輪と「320 KB / 1.2 MB」、失敗したら「×」と理由(押すと取り直す)
+ * 取っている間は明滅する面と輪と「320 KB / 1.2 MB」、失敗したら壊れた画像の印と「取得できません」(押すと取り直す)
  */
 @Composable
 fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, blurred: Boolean = false, showProgress: Boolean = true) {

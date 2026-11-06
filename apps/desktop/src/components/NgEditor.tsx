@@ -1,5 +1,5 @@
-// NG 1 つの中身を決める欄(種類・文字・正規表現・効く板・期限・メモ・試し)。足す画面(NgRuleDialog)・PC の管理表(NgManager)・
-// スマホの NG の画面(mobile/NgPage)で共通に使う。スマホのアプリの NG の編集(ui/Settings.kt の NgEditSheet)と同じ項目・同じ言葉
+// NG 1 つの中身を決める欄(種類・文字・正規表現・効く板・期限・メモ・試し)。NgRuleDialog の中身。
+// スマホのアプリの NG の編集(ui/Settings.kt の NgEditSheet)と同じ項目・同じ言葉
 import { useMemo, type ReactNode } from 'react'
 import { NG_TARGETS, daysLaterDateString, matchRanges, patternError, todayDateString, type NgRule } from '../utils/ng'
 

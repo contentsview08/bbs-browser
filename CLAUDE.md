@@ -12,14 +12,16 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 掲示板の形式ごとの違いは「コネクタ」で吸収する。2ch 互換コネクタは標準コネクタの一つにすぎない。
 
 - `packages/connectors` — コネクタ。純 TS で、Tauri・DOM・グローバルの `fetch` に依存させない。
-  通信と文字コード変換はホストが渡す `ConnectorContext` 経由で行う(テストで偽サーバーを差し込めるように、
-  また将来の外部コネクタをサンドボックスに入れられるように)。
+  通信と文字コード変換はホストが渡す `ConnectorContext` 経由で行う(テストで偽サーバーを差し込めるように)。
 - `packages/logstore` — ログの保存。SQL は `SqlDb` 越しに実行し、アプリでは tauri-plugin-sql、テストでは sql.js を使う。
   tauri-plugin-sql は接続プールなのでトランザクションに頼らない。途中で落ちても次の取得で直る順番で書く
   (reset は cursor を先に NULL に、updated はレスを書いてから cursor を進める)。
   スキーマを変えるときは `migrations/` に新しい番号のファイルを足し、`src-tauri/src/lib.rs` にも登録する。
 - `apps/desktop` — Tauri アプリ。`src/host/tauriContext.ts` が `ConnectorContext` の実装。
   Rust 側は公式プラグインの登録が中心。WebView でできないこと(OS のフォント一覧など)だけ、`src-tauri/src/lib.rs` に小さな命令として書く。
+- `apps/android` — スマホ版(Kotlin・Jetpack Compose)。コネクタは `packages/connectors` を `bbs/` の Kotlin に写したもの(2ch 互換・hono-bbs・したらば・まちBBS)。
+  決まりは `packages/conformance` の JSON を PC 版と両方のテストで読んでそろえる。最初から入れる掲示板・板は `packages/presets/sites.json` を共有する。
+  `assets/migrations` は `packages/logstore/migrations` の写し(いまは 015 まで)。
 
 ## 設計の決まりごと
 
@@ -50,7 +52,7 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
 - 選んでいるタブ・1 画面でスレ一覧を出しているか・戻る/進むの履歴は、`src/utils/viewState.ts` の関数でいっしょに変える(別々に書き換えるとずれる)。
 - J・K などで選ぶレス・スレの決め方は `src/utils/cursor.ts`(スレ表示・スレ一覧・ポップアップで共通、テストあり)。
 - キー操作は `src/utils/keymap.ts` の操作の表(`KeyAction`)に割り当てる。ジェスチャーなどを足すときも、この表に割り当てる。
-- 外付けのコネクタ(MOD)は 2026-11 にやめた(組み込みのコネクタだけで掲示板に対応する方針)。前の作り(QuickJS の囲い・manifest の hosts の許可)は git の履歴(コミット `d7465cb` の前まで)にある。レスへの反応・操作・印は `Connector.reactions/postActions`・`Badge` で一般化してある(ふたばのそうだねもこの形)。
+- 外付けのコネクタ(MOD)は作らない(組み込みのコネクタだけで掲示板に対応する方針。前の作りは git の履歴、コミット `d7465cb` の前まで)。レスへの反応・操作・印は `Connector.reactions/postActions`・`Badge` で一般化してある(ふたばのそうだねもこの形)。
 - 自動 NG(荒らしの判定)は `src/utils/autoNg.ts`(決まりの境目は手でラベルを付けた 340 件で合わせた。テストあり)。ユーザーの印は DB の `troll_marks`(migration 014)に本文ごと貯め、印から育つ判定は `src/utils/trollModel.ts`(判断軸 = でたらめ度・スレをまたいだ重複(長文はコピペ、短文はスラング)・繰り返し・URL・長さ + 文字の 1〜3 文字の並び → ロジスティック回帰。コーパスは DB のログ、荒らしの印 3 件から使う)。Laya の特徴を足すのは次の段。
 - レスを描く数が多いと重い。1 レスの要素を増やさない(操作バーはマウスを乗せたときだけ作る、ID アイコンは背景の絵 1 つ)。
   スレ表示とスレ一覧は、見える所から先に作り、残りは手の空いたときに作り足す。
@@ -61,6 +63,8 @@ PC 向けの掲示板専用ブラウザ(Tauri v2 + React)。Windows が最優先
   (サムネイル・動画・リンクのプレビュー・画像一覧・ビューアー)。押したときだけ開く。
 - ファイルの読み書きは、Rust 側で出したダイアログで本人が選んだパスだけ(`src-tauri/src/chosen_paths.rs`)。
   画面から好きなパスを渡して読み書き・削除できる命令を作らない。CSP は `tauri.conf.json`(開発用は `devCsp`)。
+- アカウント: BE はコネクタの accounts / login(書き込み欄の sage の右の ︙ で、書き込みごとに使うか選べる)。
+  パスワードは accounts 表にそのまま置く(Linux に資格情報ストアがあるとは限らないため)。
 - App.tsx に何でも足さない。まとまりのある処理は `hooks/` に分ける(通知・アカウント・キーワードの見張りなど)。
 
 ## 開発環境
@@ -75,11 +79,7 @@ npm test           # コネクタ・logstore・desktop のテスト(vitest)
 npm run typecheck
 ```
 
-## 今後
+## 未確認・保留
 
-1. アカウント: BE は作った(コネクタの accounts / login。書き込み欄の sage の右の ︙ で、書き込みごとに使うか選べる)。
-   パスワードは accounts 表にそのまま置く(Linux に資格情報ストアがあるとは限らないため)。UPLIFT・どんぐりは保留
-2. 実機で BE のログインを確かめる(成功の見分けは「ログイン画面がまた出たか」だけで、本物のアカウントでは試していない)
-3. 自動 NG(連投・コピペ)は保留。判断用の軽量 LLM を内蔵する案と合わせて考える
-4. 2 つ目のコネクタ(hono-bbs ネイティブ API、したらばなど)
-5. 配布(インストーラー・自動更新)
+- 実機で BE のログインを確かめる(成功の見分けは「ログイン画面がまた出たか」だけで、本物のアカウントでは試していない)
+- UPLIFT・どんぐりのアカウントは保留

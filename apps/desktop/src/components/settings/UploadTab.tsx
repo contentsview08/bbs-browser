@@ -1,5 +1,3 @@
-// 設定の「画像のアップロード」。
-
 import { UPLOAD_HOSTS, type UploadHost } from '../../host/uploader'
 import { useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'

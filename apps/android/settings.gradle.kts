@@ -1,5 +1,5 @@
-// bbs-browser の Android ネイティブ版(Kotlin + Jetpack Compose)。Tauri のスマホ版(apps/desktop の Android)と並べて比べるための作り直し。
-// AGP は Tauri の Android 版(apps/desktop/src-tauri/gen/android)とそろえている。Kotlin は画像の Coil 3.6 に合わせて 2.4
+// OBB のスマホ版(Kotlin + Compose)
+// AGP は Tauri の Android 版(apps/desktop/src-tauri/gen/android)とそろえる。Kotlin は画像の Coil 3.6 に合わせて 2.4
 pluginManagement {
     repositories {
         google()

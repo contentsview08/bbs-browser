@@ -23,7 +23,6 @@ export default function MobilePage(props: {
     setQuery(q)
     props.onQuery?.(q)
   }
-  // 戻る: 検索中なら検索を閉じる(言葉も消す)。そうでなければページを閉じる
   useFocusTrap(boxRef, () => {
     if (searching) {
       setSearching(false)

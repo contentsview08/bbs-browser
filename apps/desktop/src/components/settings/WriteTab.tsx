@@ -1,5 +1,3 @@
-// 設定の「書き込み」。
-
 import { ListEditor } from '../SettingParts'
 import { type SettingsProps, Section, OrderEditor } from './common'
 
@@ -12,7 +10,6 @@ const TOOLBAR_ITEMS: { key: string; name: string; icon: string }[] = [
 ]
 
 export function WriteTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
-  // 並べられるもの全部(いま並べているものを先に、並びのとおりに)
   const all = [
     ...TOOLBAR_ITEMS,
     ...s.quickPhrases.map((p) => ({ key: `phrase:${p}`, name: `定型文「${p}」`, icon: 'bolt' })),

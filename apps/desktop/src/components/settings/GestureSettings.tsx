@@ -1,5 +1,3 @@
-// スマホの設定のスワイプの割り当て。
-
 import { useState } from 'react'
 import GestureRecorder, { gestureArrows } from '../GestureRecorder'
 import ActionSheet from '../ActionSheet'

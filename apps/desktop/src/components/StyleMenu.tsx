@@ -1,5 +1,4 @@
-// 表示スタイルのパレットメニュー。web 版の ThreadListStyleMenu.tsx を移植
-// (設定の読み書きを settingsStore から props に置き換え、'panel' 表示を外した)
+// 表示スタイル(配色・差し色・レスの見た目)のパレットメニュー
 
 import { useEffect, useRef, useState } from 'react'
 import { isMobile } from '../utils/platform'
@@ -8,13 +7,13 @@ import { COLOR_SCHEMES, ACCENTS, isDarkScheme, baseFontPx, MOBILE_POST_STYLES, P
 const MENU_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2 text-c-text-body hover:bg-c-surface2 transition-colors'
 const GROUP_LABEL = 'px-3 pt-1.5 pb-1 text-[10px] font-bold text-c-text-muted tracking-wide'
 
-/** メニューの中身(︙ の中でも使う) */
 /**
  * 画面全体の文字サイズの画面を開く知らせ(App が受けて開く)。
  * メニューの中で開くと、画面を押した瞬間にメニューが閉じて一緒に消えるので、メニューの外(App)に置く
  */
 export const OPEN_FONT_DIALOG = 'bbs:open-font-dialog'
 
+/** メニューの中身(︙ の中でも使う) */
 export function StyleMenuItems({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
   const check = <span className="material-symbols-outlined text-base text-c-accent">check</span>
   return (
@@ -34,7 +33,7 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
             style={{ background: s.accent, boxShadow: `inset 0 0 0 1px ${s.border}` }}
           />
           <span className="flex-1 text-left truncate">{s.name}</span>
-          {/* 印は、いま見えている配色だけに付ける(OS に合わせているとき、ダーク用とライト用の 2 つに付いていた) */}
+          {/* 印は、いま見えている配色だけに付ける(OS に合わせていても、ダーク用とライト用の両方には付けない) */}
           {effectiveScheme(settings) === s.key && check}
         </button>
       ))}
@@ -69,7 +68,7 @@ export function StyleMenuItems({ settings, update }: { settings: AppSettings; up
       {isMobile && <div className="my-1 border-t border-c-border" />}
 
       {/* 文字サイズのスライダーは、メニューの中ではなく真ん中の小さな画面で(動かすとメニューごと大きさが変わってずれるので) */}
-      {/* PC は ︙ の「文字の大きさ・余白」へ移した */}
+      {/* PC は ︙ の「文字の大きさ・余白」から */}
       {isMobile && (
       <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_FONT_DIALOG))} className={MENU_ITEM}>
         <span className="material-symbols-outlined text-base flex-shrink-0">format_size</span>

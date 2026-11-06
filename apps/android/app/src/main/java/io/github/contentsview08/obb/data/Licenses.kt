@@ -2,7 +2,7 @@ package io.github.contentsview08.obb.data
 
 import org.json.JSONObject
 
-// 使っている OSS の一覧(assets/licenses.json。app/licenses.gradle.kts が作る)。形と探し方は PC 版の utils/licenses.ts と同じ
+// 使っている OSS の一覧(assets/licenses.json。apps/android/gradle/licenses.gradle.kts が作る)。形と探し方は PC 版の utils/licenses.ts と同じ
 
 class LicensePackage(
     val name: String,

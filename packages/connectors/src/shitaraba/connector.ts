@@ -73,7 +73,6 @@ async function sendWrite(url: string, fields: Record<string, string>, referer: s
 export const shitarabaConnector: Connector = {
   id: ID,
   name: 'したらば',
-  // 1 つのスレは 1000 レスまで
   maxPosts: 1000,
 
   canHandle(url) {

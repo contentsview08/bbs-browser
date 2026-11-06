@@ -31,13 +31,11 @@ fn portable_dir() -> Option<PathBuf> {
     }
 }
 
-/// 前の identifier(この名前のフォルダが前の置き場)
+/// 旧 identifier(この名前のフォルダが旧版の置き場)
 const OLD_IDENTIFIER: &str = "io.github.yumekui8.bbs-browser";
 
-/// 2026-11-05 に identifier を io.github.yumekui8.bbs-browser から io.github.contentsview08.obb に変えた(名前を OBB に)。
-/// 前の置き場に DB があり、新しい置き場にまだなければ、フォルダごと写す(DB・設定・Cookie・背景画像・バックアップ)。ポータブルは関係ない。
-/// 移す(rename)のではなく写す: 前の版(bbs-browser)を残して使い続けても困らないように(移すと前の版が空になり、
-/// そこで取ったバックアップを新しい方へ戻そうとして DB の形が合わない、という行き違いが起きた 2026-11-05)
+/// 旧 identifier の置き場に DB があり新しい置き場になければ、フォルダごと写す。
+/// 旧版を使い続けられるよう移動はしない
 fn migrate_old_data_dir(app: &tauri::AppHandle) {
     if portable_dir().is_some() {
         return;
@@ -388,8 +386,8 @@ fn background_file_name(saved: &str) -> Option<&str> {
     saved.rsplit(['/', '\\']).next().filter(|name| name.starts_with("background-"))
 }
 
-/// 設定に残っているパスを、いまの置き場のものに読み替える(identifier の変更やポータブル版のフォルダの移動で、前のパスは読めなくなる)。
-/// 見るのはファイル名だけなので、置き場の外のファイルは読めない。Linux の前の置き場は DB と別の場所で migrate_old_data_dir が写さないので、ここで写す
+/// 設定に残っているパスを、いまの置き場のものに読み替える(identifier の変更やポータブル版のフォルダの移動で読めなくなるため)。
+/// 見るのはファイル名だけなので、置き場の外のファイルは読めない。Linux の旧置き場は DB と別の場所で migrate_old_data_dir が写さないので、ここで写す
 #[tauri::command]
 fn current_background_image(app: tauri::AppHandle, saved: String) -> Result<String, String> {
     let Some(name) = background_file_name(&saved) else { return Ok(saved) };
@@ -614,7 +612,6 @@ pub fn run() {
         )
         // DB を開くのは画面(JS)が動き出してからなので、ここで入れ替えれば間に合う
         .setup(|app| {
-            // 自動更新(パソコンの版だけ)
             #[cfg(desktop)]
             {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;

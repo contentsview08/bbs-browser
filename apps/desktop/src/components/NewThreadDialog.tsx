@@ -1,6 +1,5 @@
-// スレ立ての画面。web 版の NewThreadPage の入力項目(スレタイ・名前・メール・本文)に合わせている。
+// スレ立ての画面。
 // 成功したら親がスレ一覧を取り直し、新しいスレをタブで開く。
-// 書き込み欄と同じく、画像のアップロード(ボタン・貼り付け・画面のどこかへドラッグ)と絵文字が使え、上げた画像はサムネイルで出て押すと大きく見られる。
 // PC は「置いたまま使える窓」: 上の帯をつかんで動かし、右下の角で大きさを変えられる(覚えておく)
 
 import { useEffect, useRef, useState } from 'react'
@@ -28,7 +27,6 @@ interface Props {
   onConfirm: (confirm: PostConfirm, input: NewThreadInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
   onClose: () => void
-  /** 書き込んだあとのクールダウンが明ける時刻と、その長さ */
   uploader: UploadOptions
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: UploadedFile) => void
@@ -121,8 +119,6 @@ export default function NewThreadDialog(props: Props) {
       setSending(false)
     }
   }
-
-  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
 
   // PC: 置き場所と大きさ(つかんで動かす・角で広げる)。スマホは全画面
   const win = useDialogRect('bbs:new-thread-rect', { w: 720, h: 560, minW: 480, minH: 360 })

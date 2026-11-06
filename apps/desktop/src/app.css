@@ -72,7 +72,7 @@ body,
   --c-thread-read-title: #a9c4e8;
 }
 
-/* ライト(設定の名前。キーは soft-light のまま): 真っ白をやめて生成り色にし、文字も真っ黒にしない */
+/* ライト(設定の名前。キーは soft-light のまま): 真っ白ではなく生成り色にし、文字も真っ黒にしない */
 [data-scheme='soft-light'] {
   --c-base: #f0ede8;
   /* 読む所(スレ一覧・スレ表示)は生成り、枠(URL バー・サイドバー・タブの帯)は強調色に寄せた青灰色にして、
@@ -239,11 +239,10 @@ html:root[data-scheme='oled'] {
   --c-poster-name: #4a9583;
 }
 
-/* ---------- 面の色の役目をスマホのアプリ(スマホ版)にそろえる ----------
+/* ---------- 面の色の役目をスマホのアプリにそろえる ----------
    スマホのアプリは、スレ一覧・スレ表示 = 地の色(--c-base)、スレ一覧の行は面を敷かずに線で区切る、書き込み欄 = 帯の色。
-   web 版から受け継いだ決まり(スレ一覧の地は --c-surface2、カードの行は --c-surface2 に黒を 15% 混ぜた面)のままだと、
-   明るい配色ではスレ一覧が灰色にくすみ、黒い字が読みにくかった(Discord ライトでは #c8c9cb ほどの面に黒い字)。
-   2ch クラシックはスマホのアプリにない PC だけの配色なので、元の見た目のまま。
+   web 版の決まり(スレ一覧の地は --c-surface2、カードの行はそれに黒を 15% 混ぜた面)のままだと、明るい配色でスレ一覧がくすみ、黒い字が読みにくい。
+   2ch クラシックはスマホのアプリにない PC だけの配色なので対象外。
    配色ごとの指定([data-pattern][data-scheme='line-light'] など)より強くするため、html:root まで付ける */
 html:root[data-scheme]:not([data-scheme='2ch-classic']) {
   --c-panel-bg: var(--c-base);
@@ -292,9 +291,9 @@ html:root[data-scheme]:not([data-scheme='2ch-classic']) .bg-panel-reply {
 }
 
 /* 新着のレスの光り方。しばらく色を保ってから消す。
-   長さは ThreadView.tsx の FLASH_MS と揃える */
+   長さは hooks/useThreadScroll.ts の FLASH_MS と揃える */
 /* 光る色はスマホのアプリ(ThreadScreen の flashColor)と同じく、色みのない黒(明るい配色)・白(暗い配色)。
-   強調色だと配色によって見分けにくかった。アプリは黒を 0.5 倍・白を 0.8 倍の濃さで重ねるので、その濃さを色の不透明度で持たせる
+   強調色だと配色によって見分けにくい。アプリは黒を 0.5 倍・白を 0.8 倍の濃さで重ねるので、その濃さを色の不透明度で持たせる
    (下の color-mix で 24%・16% を掛けると、アプリと同じ濃さになる) */
 html:root[data-scheme] {
   --c-flash-new: rgba(0, 0, 0, 0.5);
@@ -391,7 +390,7 @@ html:root[data-scheme='line-light'][data-post-style='line'] {
 .card-thread {
   background: color-mix(in srgb, var(--card-bg) calc(var(--alpha-thread-list, 1) * 100%), transparent);
 }
-/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
+/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので)。以下の @media (hover: hover) も同じ */
 @media (hover: hover) {
   .card-thread:hover {
     background: color-mix(in srgb, var(--c-surface2) calc(var(--alpha-thread-list, 1) * 100%), transparent);
@@ -434,7 +433,6 @@ article.post-discord {
   border-radius: 6px;
   transition: background-color 0.1s;
 }
-/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
 @media (hover: hover) {
   article.post-discord:hover {
     background-color: color-mix(in srgb, var(--c-text-body) 5%, transparent);
@@ -453,8 +451,7 @@ article.post-discord {
   --line-own-text: #eef7e8;
   --line-own-link: #d3ebff;
 }
-/* 2ch クラシック × LINE 風: 2ch クラシックの茶色(--c-base)に青灰を混ぜるとくすんだ色になるので、ほぼ白の淡い茶色にする。
-   (レンガの模様を SVG で敷くのも試したが、合わなかったのでやめた) */
+/* 2ch クラシック × LINE 風: 2ch クラシックの茶色(--c-base)に青灰を混ぜるとくすんだ色になるので、ほぼ白の淡い茶色にする */
 :root[data-scheme='2ch-classic'][data-post-style='line'] {
   --c-thread-view-bg: #f6f1ea;
   --c-cursor-tint: color-mix(in srgb, #c5ad99 22%, transparent);
@@ -506,7 +503,6 @@ article.post-discord {
   --thread-card-radius: 0px;
   border-radius: 0;
 }
-/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
 @media (hover: hover) {
   .card-thread[data-variant='discord']:hover,
   .card-thread[data-variant='line']:hover {
@@ -518,8 +514,8 @@ article.post-discord {
 .card-thread[data-variant='classic'].card-selected {
   background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
 }
-/* Discord 風の行: 本家のチャンネル一覧に合わせ、スレタイを本文(1rem)より少し大きく・# を大きく・行にゆとりを持たせ、スレタイを折り返して全部見せる。
-   大きさは rem で決め、設定の文字の大きさに合わせて伸び縮みさせる。高密度では詰めて 1 行に切る */
+/* Discord 風の行: 本家のチャンネル一覧に合わせ、スレタイを本文(1rem)より少し大きく・# を大きく・行にゆとりを持たせる。
+   大きさは rem で決め、設定の文字の大きさに合わせて伸び縮みさせる。高密度では詰める */
 .card-thread[data-variant='discord'] {
   padding: 10px 12px;
 }
@@ -560,9 +556,8 @@ article.post-discord {
 [data-density='dense'] .card-thread[data-variant='discord'] .thread-row > :not(.thread-row-title) {
   margin-top: 0;
 }
-/* スレタイは省かず、折り返して全部出す(どの見た目・密度でも) */
 
-/* 専ブラ風の表: 一覧表示ではスレタイを折り返して全部見せ、高密度では 1 行に切る */
+/* スレタイは省かず、折り返して全部出す(どの見た目・密度でも) */
 .card-thread[data-variant='classic'] .thread-row-title {
   overflow-wrap: anywhere;
 }
@@ -570,19 +565,17 @@ article.post-discord {
   padding-top: 5px !important;
   padding-bottom: 5px !important;
 }
-/* スレタイは省かず、折り返して全部出す(どの見た目・密度でも) */
 
 /* 専ブラ風の表: 角を丸めない。1 行おきの色は付けない(スマホのアプリと同じく、地の色のまま線で区切る) */
 .card-thread[data-variant='classic'] {
   border-radius: 0;
 }
-/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
 @media (hover: hover) {
   .card-thread[data-variant='classic']:hover {
     background: color-mix(in srgb, var(--c-accent) 8%, transparent);
   }
 }
-/* 開いているスレは、1 行おきの色やマウスを乗せた色より強く */
+/* 開いているスレは、マウスを乗せた色より強く */
 .card-thread[data-variant='classic'].card-selected {
   background: color-mix(in srgb, var(--c-text-body) 10%, transparent);
 }
@@ -593,8 +586,7 @@ article.post-discord {
   padding-bottom: 6px;
 }
 
-/* 選んでいるレス(J・K・クリック)に重ねる色。ふつうは強調色をごく薄く。
-   ライト系の配色だけ。ダーク系は下で、色のない明るさにする(下の線は強調色のまま) */
+/* 選んでいるレス(J・K・クリック)に重ねる色。ライト系は強調色をごく薄く(ダーク系は下で上書き) */
 :root {
   --c-cursor-tint: color-mix(in srgb, var(--c-accent) 7%, transparent);
 }
@@ -649,7 +641,7 @@ html[data-platform='mobile'] .post-popup {
 .tree-post > article [data-post-body] {
   margin-left: 18px;
 }
-/* スマホは段の幅を詰めてある(AnchorTree.tsx の STEP) */
+/* スマホのツリーは StepTree(.tree-post-step)なので、いまは当たらない */
 html[data-platform='mobile'] .tree-post > article [data-post-body] {
   margin-left: 12px;
 }
@@ -721,9 +713,8 @@ article.popup-cursor::after {
   contain-intrinsic-size: auto 90px;
 }
 /* 操作バーを出しているレスは、次のレスより手前に出す(バーの影が次のレスにかかる)。
-   content-visibility は切り替えない: マウスを乗せる・外すたびに auto と visible を行き来すると、そのレスの囲い(containment)が
-   付いたり外れたりして、スレ全体が組み直されてヘッダーや本文が数 px 動いていた。
-   枠の外は切り取られるので、操作バーを上のレスとの線にまたがらせる分だけ、切り取りの範囲を広げる(囲いは変わらない) */
+   content-visibility は切り替えない(auto と visible を行き来すると囲いが付け外しされ、スレ全体が組み直されて数 px 動く)。
+   枠の外は切り取られるので、操作バーが上のレスとの線にまたがる分だけ、切り取りの範囲を広げる */
 .post-cv:has([data-post-toolbar]) {
   z-index: 5;
   overflow-clip-margin: 4rem;
@@ -768,7 +759,6 @@ article.popup-cursor::after {
 }
 
 /* 乗せたときに意味の色にする(style で --tint を渡す)。ふだんは落ち着いた色のまま */
-/* マウスを乗せたときの色は、マウスのある端末だけ(スマホはたたくと色が残るので) */
 @media (hover: hover) {
   .tint-hover:hover:not(:disabled) {
     color: var(--tint) !important;
@@ -1018,8 +1008,8 @@ html[data-platform='mobile'] .frosted-glass {
   backdrop-filter: none;
 }
 
-/* アイコンのフォント(Material Symbols。約 4MB)は、読み込み終わるまで見えない文字(arrow_back など)のまま、
-   その文字の幅だけ場所を取るので、開いた直前にボタンが横に広がって画面が一瞬崩れていた。
+/* アイコンのフォント(Material Symbols。約 4MB)は、読み込み終わるまで見えない文字(arrow_back など)のまま
+   その文字の幅だけ場所を取り、ボタンが横に広がって画面が一瞬崩れる。
    アイコンはいつも 1 文字分の正方形なので、最初からその大きさに決めておく */
 .material-symbols-outlined {
   width: 1em;
@@ -1043,8 +1033,8 @@ html[data-platform='mobile'] .frosted-glass {
   font-size: var(--post-body-size, 1rem);
 }
 
-/* スレ一覧のスレの上下の余白(⋮ の「文字の大きさ・余白」で決めたとき)。どの見た目でも同じ値にする */
-/* (Discord 風のスマホ用の余白より強くするため、属性を重ねて指定を強める) */
+/* スレ一覧のスレの上下の余白(⋮ の「文字の大きさ・余白」で決めたとき)。どの見た目でも同じ値にする
+   (Discord 風のスマホ用の余白より強くするため、属性を重ねて指定を強める) */
 html[data-list-pad][data-platform] .card-thread[data-variant] {
   padding-top: var(--list-row-pad) !important;
   padding-bottom: var(--list-row-pad) !important;
@@ -1080,8 +1070,8 @@ html[data-platform='mobile'] .bar-zoom {
 }
 
 
-/* 役目ごとの色を増やす(どの配色でも、未読・自分・主・新着が同じ色に寄って、のっぺりしていたので)。
-   未読・新着の札は今までどおり(ダークはピンク・赤、ライトは青)。ほかは別の色にする */
+/* 役目ごとに色を分ける(未読・自分・主・新着が同じ色に寄ると見分けにくい)。
+   未読・新着の札はダークはピンク・赤、ライトは青。ほかは別の色にする */
 /* 主(スレ主の印): 黄色・橙 */
 html:root[data-scheme] {
   --c-op: #926019;
@@ -1210,7 +1200,7 @@ html[data-post-style='matome'] article[data-variant='matome'] {
 :root.dark[data-post-style='line'] .line-bubble:not(.line-bubble-own) {
   background: color-mix(in srgb, var(--c-surface2) 92%, #ffffff);
 }
-/* スマホのアプリ(スマホ版)の Theme.kt の lineBg・lineBubble と同じ値(Compose の lerp は Oklab で混ぜるので、計算した色をそのまま書く)。
+/* スマホのアプリの Theme.kt の lineBg・lineBubble と同じ値(Compose の lerp は Oklab で混ぜるので、計算した色をそのまま書く)。
    scripts で作った値。配色を変えたら作り直す */
 :root[data-scheme='indigo'][data-post-style='line'] { --c-thread-view-bg: #05070a; --c-line-bg: #05070a; --c-line-bubble: #282c35; }
 :root[data-scheme='indigo'][data-post-style='line'] .line-bubble:not(.line-bubble-own) { background: #282c35; }
@@ -1264,7 +1254,7 @@ html[data-post-style='matome'] article[data-variant='matome'] {
   color: rgba(255, 255, 255, 0.85);
 }
 
-/* 本文の「▣ 画像」の札は緑(アプリの markImage = markNew と同じ。灰色だと札に見えにくかった)。PC もスマホも同じ */
+/* 本文の「▣ 画像」の札は緑(アプリの markImage = markNew と同じ。灰色だと札に見えにくい)。PC もスマホも同じ */
 html:root {
   --c-link-image: var(--c-mark-new);
 }

@@ -1,5 +1,3 @@
-// 設定の「NG」。
-
 import NgManager from '../NgManager'
 import AiNgSettings from '../AiNgSettings'
 import { isMobile } from '../../utils/platform'
@@ -7,7 +5,7 @@ import { ManagerRow, Toggle } from '../SettingParts'
 import { canOpenToolWindow, openToolWindow } from '../../host/crossWindow'
 import { type SettingsProps, Section, Choice } from './common'
 
-/** NG の管理。種類(本文・名前・ID・スレタイ)ごとのタブに分け、それぞれに追加欄と一覧を置く */
+/** NG の設定: 出し方・自動 NG・AI NG・NG の一覧 */
 export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const rules = s.ngRules
 

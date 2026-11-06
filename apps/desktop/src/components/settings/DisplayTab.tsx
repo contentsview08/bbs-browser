@@ -1,5 +1,3 @@
-// 設定の「表示」。
-
 import CustomSchemeEditor from '../mobile/CustomSchemeEditor'
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
 import { useEffect, useState } from 'react'

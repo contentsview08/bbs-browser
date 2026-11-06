@@ -1,8 +1,6 @@
-// スマホの設定画面(PC の SettingsDialog とは別に作ったもの)。Android の設定画面と同じ形:
-// トップにまとまりごとの分類を並べ、押すとその分類の画面が右からすべり込む。戻る(← ・戻るボタン・ジェスチャー)で 1 枚ずつ戻る。
-// 1 つの画面には、その分類の設定を、まとまり(Group)ごとに全部並べる(1 項目だけの画面を挟んで、段を深くしない)。
-// 説明は、スマホで触る人に向けて書く(キー・マウス・ウィンドウの話はしない)。
-// NG・板の一覧・アカウント・バックアップなど、作りの大きな部品は、PC の設定画面のものを埋め込んで使う
+// スマホの設定画面(PC の SettingsDialog とは別)。Android の設定と同じく、分類を押すと画面が右からすべり込み、戻るで 1 枚ずつ戻る。
+// 1 画面に分類の設定を Group ごとに全部並べ、段を深くしない。説明にキー・マウス・ウィンドウの話は書かない。
+// NG・板の一覧・アカウント・バックアップなど大きな部品は、PC の設定画面のものを埋め込む
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { getVersion } from '@tauri-apps/api/app'
@@ -120,7 +118,6 @@ export default function MobileSettings(props: SettingsProps & { initialPage?: Pa
   )
 }
 
-/** 1 つの画面の中身 */
 function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: UpdateSetting, push: (p: PageId) => void): ReactNode {
   const scheme = COLOR_SCHEMES.find((c) => c.key === effectiveScheme(s))
   switch (page) {
@@ -514,7 +511,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
 /** PC の設定画面の部品を、スマホの画面の余白で包んで出す */
 function Embed(props: { children: ReactNode; fill?: boolean }) {
   return (
-    // 前の設定画面の部品は字が小さいので、中身ごと少し拡大する
+    // PC 向けの部品は字が小さいので拡大する
     <div className={`px-5 ${props.fill ? 'h-full flex flex-col' : ''}`} style={{ zoom: 1.12 }}>
       <SettingsEmbed>{props.children}</SettingsEmbed>
     </div>

@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 本文の画像は ImageStore が取る(待ち行列・進み具合・タイムアウト)。Coil はファイルを絵にするのと、リンクのカードの絵だけに使う
         // AsyncImage の画像も https を先に試す
         coil3.SingletonImageLoader.setSafe { context ->
             coil3.ImageLoader.Builder(context).components {
@@ -96,7 +97,6 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         openFromNotification(intent)
-        // 本文の画像は ImageStore が取る(待ち行列・進み具合・タイムアウト)。Coil はファイルを絵にするのと、リンクのカードの絵だけに使う
         setContent {
             // 配色: 設定の配色か、スマホのダーク・ライトに合わせた配色
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -167,7 +167,6 @@ class MainActivity : ComponentActivity() {
                     // 引き出しの指の操作は、開いているとき(閉じる)だけ。開くのはスワイプの操作(左の端から右へ)に任せる
                     ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = vm.drawerOpen, drawerContent = { DrawerContent(vm) }) {
                         Box(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding()) {
-                            // 画面の移り方: 開くと右から出てきて、戻ると右へ抜ける(今のスマホ版と同じ)。左のメニューから開いたときは入れ替え
                             // 下のタブ(2ch Mate 風・設定): スレ表示と設定のほかの画面で、画面の下に固定する。中身はその分だけ縮める
                             val top = vm.stack.lastOrNull()
                             val showTabs = vm.prefs.bottomTabs && top != null && top !is Page.Thread && top !is Page.Settings
@@ -209,16 +208,14 @@ class MainActivity : ComponentActivity() {
                                 targetState = vm.stack.lastOrNull(),
                                 modifier = (if (showTabs) Modifier.padding(bottom = with(density) { tabsH.toDp() }).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars) else Modifier)
                                     .graphicsLayer { translationX = vm.backDrag * size.width; shadowElevation = if (vm.backDrag > 0f) 24f else 0f },
-                                // 今のスマホ版の page-in / page-back と同じ: 出てくる画面だけが、28%(戻るときは左へ 20%)ずれた所から
-                                // 薄い(0.4)状態ですべり込む。260ms・cubic-bezier(0.2, 0.8, 0.2, 1)。前の画面はそのまま消える
                                 transitionSpec = {
                                     // 何が起きたか分かるように: 開くと新しい画面が右端からすべり込み、前の画面は少し左へ下がって暗くなる。
                                     // 戻ると今の画面が右へ抜け、前の画面が左から戻る(スマホのふつうの画面の移り方)
                                     val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
                                     val move = tween<IntOffset>(320, easing = ease)
                                     val fade = tween<Float>(320, easing = ease)
-                                    // 動きを減らすときは、すっと切り替えるだけ
                                     if (vm.navDir == 2) androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+                                    // 動きを減らすときは、すっと切り替えるだけ
                                     else if (io.github.contentsview08.obb.ui.Motion.reduced) fadeIn(tween(90)) togetherWith fadeOut(tween(90))
                                     else when (vm.navDir) {
                                         1 -> slideInHorizontally(move) { it } togetherWith (slideOutHorizontally(move) { -it / 4 } + fadeOut(fade, targetAlpha = 0.5f))
@@ -236,7 +233,7 @@ class MainActivity : ComponentActivity() {
                             // 一瞬出す知らせ
                             vm.toast?.let { msg ->
                                 LaunchedEffect(msg) { delay(2200); if (vm.toast == msg) vm.toast = null }
-                                // 右からすべり込む(今のスマホ版の toast-in。260ms)
+                                // 右からすべり込む
                                 val slide = androidx.compose.runtime.remember(msg) { androidx.compose.animation.core.Animatable(0f) }
                                 LaunchedEffect(msg) { slide.animateTo(1f, tween(260, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))) }
                                 Text(

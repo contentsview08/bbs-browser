@@ -1,7 +1,7 @@
 // 更新の確かめと取り込み(PC)。手動の確認は、GitHub の最新のリリースを見て版を比べ、インストーラーを落として開く。
 // 起動時の自動更新(runAutoUpdate)は、リリースの latest.json を見て、署名を確かめてから入れ替える。
-// リポジトリは公開(2026-11-04 から)なので、トークンなしで GitHub の API を読む。
-// 落とすのは Rust 側(update.rs。一時フォルダに置いて開く)。web 版は host/update.ts が何もしない
+// 公開リポジトリなので、トークンなしで GitHub の API を読む。
+// 落とすのは Rust 側(update.rs。一時フォルダに置いて開く)
 import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
@@ -25,7 +25,7 @@ export interface ReleaseInfo {
 
 const HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'bbs-browser' }
 
-/** 最新のリリースを取る。見つからない・権限がないときは Error */
+/** 最新のリリースを取る。見つからない・取れないときは Error */
 export async function fetchLatestRelease(): Promise<ReleaseInfo> {
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: HEADERS })
   if (res.status === 404) throw new Error('リリースが見つかりません(まだ 1 つも公開していません)')

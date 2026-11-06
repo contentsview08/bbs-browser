@@ -1,13 +1,11 @@
 import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import ErrorBoundary from './components/ErrorBoundary'
-// フォントは通信なしでも同じ見た目になるよう npm パッケージから同梱する(web 版は Google Fonts)
-// 同梱のフォント(設定 → フォント)。どれも文字の範囲ごとに分かれたファイルで、選んだフォントの使う範囲だけを読む(選ばなければ読まない)
 import 'material-symbols/outlined.css'
 import App from './App'
 import { toolKindOfThisWindow } from './host/crossWindow'
 import { isMobile } from './utils/platform'
-// Web フォントは同梱しない(2026-11-05)。選んだときだけ host/fonts.ts が CDN から読む
+// Web フォントは同梱しない。選んだときだけ host/fonts.ts が CDN から読む
 import './index.css'
 import './app.css'
 

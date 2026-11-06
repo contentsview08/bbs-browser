@@ -142,7 +142,6 @@ export default function CustomSchemeEditor(props: { settings: AppSettings; updat
         </button>
       </div>
 
-      {/* もとにする配色を選び直す(6 色をその配色の色に戻す) */}
       <p className="px-4 pt-4 pb-1.5 text-[12px] text-c-text-muted">もとにする配色を選ぶと、6 色をその配色の色に戻します</p>
       <div className="flex gap-2 px-4 overflow-x-auto no-scrollbar">
         {COLOR_SCHEMES.map((c) => (

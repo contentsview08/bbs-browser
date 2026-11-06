@@ -1,4 +1,4 @@
-// アンカー・返信・ID のポップアップ。web 版の PostPopup.tsx の見た目と位置決めを移植。
+// アンカー・返信・ID のポップアップ。
 // ポップアップの中のアンカーを辿ると、上に積み重なっていく。
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -162,7 +162,6 @@ export default function PostPopup(props: Props) {
       style={{ zIndex: 9000 }}
       // 一番上の外を押したら閉じる。ただし、中で押し始めて外で離した・文字を選んでいるときは閉じない。
       // 下の段のポップアップの上を押したときは、その段より上をまとめて閉じる(その段が一番上になる)。
-      // 以前は「どれかのポップアップの上」なら何もしなかったので、小さいポップアップの外(大きい下の段の上)を押しても閉じなかった
       onMouseDown={(e) => (down.current = e.target === e.currentTarget)}
       onClick={(e) => {
         const wasDown = down.current

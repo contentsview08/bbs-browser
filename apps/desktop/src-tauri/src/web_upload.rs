@@ -1,6 +1,6 @@
-//! 画像の置き場(imgur・catbox など)の、ふつうのアップロードの画面を別のウィンドウで開き、
+//! 画像の置き場(imgur など)の、ふつうのアップロードの画面を別のウィンドウで開き、
 //! 利用者が手で上げたあとに画面に出た共有リンクを拾って、書き込み欄へ渡す(API を使わずに上げるため)。
-//! 開いたページはアプリの命令を呼べない(capabilities の対象は main だけ)。リンクは、ページに差し込んだ見張りの
+//! 開いたページはアプリの命令を呼べない(capabilities の対象は main・settings・ng で web-upload を含まない)。リンクは、ページに差し込んだ見張りの
 //! スクリプトが「https://bbs-upload.invalid/found?u=…」へ移ろうとするのを on_navigation で止めて受け取る。
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 

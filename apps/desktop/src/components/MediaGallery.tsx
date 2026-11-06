@@ -85,8 +85,6 @@ export default function MediaGallery(props: {
     setSaving({ done: targets.length, total: targets.length, failed, skipped, finished: true })
   }
 
-  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
-
   const boxRef = useRef<HTMLDivElement>(null)
 
   useFocusTrap(boxRef, props.onClose)

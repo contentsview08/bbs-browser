@@ -41,10 +41,7 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 
-/**
- * 画像の置き場の、ふつうのアップロードの画面(API を使わない)。PC 版・Web の utils/webUpload.ts と同じ表。
- * pattern は、上げたあとに出るリンク(直接の画像の URL)の形
- */
+/** 画像の置き場の、API を使わないアップロード画面。PC 版・Web の utils/webUpload.ts と同じ表。pattern は上げたあとに出る直リンクの形 */
 data class WebUploadSite(val key: String, val name: String, val url: String, val pattern: String)
 
 val WEB_UPLOAD_SITES = listOf(
@@ -53,7 +50,6 @@ val WEB_UPLOAD_SITES = listOf(
     WebUploadSite("imgbb", "imgbb", "https://imgbb.com/", """https://i\.ibb\.co/[A-Za-z0-9]+/[^\s"'<>]+\.(?:jpe?g|png|gif|webp)"""),
 )
 
-/** 設定の上げ先(imgur-web など)が「サイトの画面」なら、そのサイト */
 fun webUploadSiteFor(host: String): WebUploadSite? = when (host) {
     "imgur-web" -> "imgur"
     "imgbox-web" -> "imgbox"
@@ -90,7 +86,7 @@ private fun watchScript(pattern: String) = """
 })()
 """
 
-/** 置き場の画面を画面いっぱいに開き、利用者が手で上げたあとに出たリンクを onLink に渡す */
+/** 利用者が手で上げたあとに出たリンクを onLink に渡す */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebUploadScreen(site: WebUploadSite, onLink: (String) -> Unit, onDismiss: () -> Unit) {
@@ -101,7 +97,7 @@ fun WebUploadScreen(site: WebUploadSite, onLink: (String) -> Unit, onDismiss: ()
         fileCallback?.onReceiveValue(uris.toTypedArray())
         fileCallback = null
     }
-    // 1 秒ごとに、見つかったリンクを取り出す。上げ終わったら(最後のリンクから 4 秒、新しいリンクが来なければ)画面を閉じる
+    // 最後のリンクから 4 秒、新しいリンクが来なければ上げ終わったとみて閉じる
     var lastFoundAt by remember { mutableStateOf(0L) }
     LaunchedEffect(web) {
         val w = web ?: return@LaunchedEffect

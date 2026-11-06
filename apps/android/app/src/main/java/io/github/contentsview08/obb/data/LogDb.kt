@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/** どの掲示板の形か(専ブラの DB と同じ connector_id) */
+/** PC 版の DB の connector_id。したらば・まちBBS も 2ch-compat で入れる */
 private fun connectorOf(boardUrl: String) = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(boardUrl)) "honobbs" else "2ch-compat"
 
 /** 開いたことのあるスレの状態(スレ一覧の未読の数・既読の位置に使う) */
@@ -36,8 +36,8 @@ internal fun unreadEntries(entries: List<HistoryEntry>, counts: Map<String, Int>
 }
 
 /**
- * ログの保存(専ブラの packages/logstore にあたる)。テーブルは専ブラと同じ SQL(assets/migrations、専ブラの
- * packages/logstore/migrations の写し)で作るので、形は PC 版と同じ。版の番号 = 流したマイグレーションの数
+ * ログの保存(PC 版の packages/logstore にあたる)。テーブルは assets/migrations の SQL(PC 版の packages/logstore/migrations の
+ * 001〜015 の写し)で作る。版の番号 = 流したマイグレーションの数
  */
 class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-native.db", null, migrationNames(context).size) {
 
@@ -94,7 +94,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
         writableDatabase.execSQL("DELETE FROM sites WHERE menu_url = ?", arrayOf(menuUrl))
     }
 
-    /** 板一覧の取得元(bbsmenu)。はじめは 5ch だけ(DB を作るときに入る) */
+    /** 板一覧の取得元(bbsmenu) */
     suspend fun siteMenuUrls(): List<Pair<String, String>> = io {
         readableDatabase.rawQuery("SELECT menu_url, name FROM sites ORDER BY sort", null).use { c ->
             buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) }

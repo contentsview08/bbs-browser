@@ -1,4 +1,4 @@
-// 書き込み欄。スレ表示の下か右に置く(web 版の ReplyForm.tsx と同じ 2 通り)。
+// 書き込み欄。スレ表示の下か右に置く。
 // 大きさは親が決め、本文の欄が残りいっぱいに広がる。
 // 認証を求められたら(eddist の初回書き込みなど)、コードと認証ページへのボタンを出す。
 
@@ -50,7 +50,6 @@ interface Props {
   onConfirm: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>
   onOpenUrl: (url: string) => void
   uploader: UploadOptions
-  /** 書き込んだあとのクールダウンが明ける時刻と、その長さ。明けるまで書き込むボタンを押せなくし、残りを出す */
   /** 書き込み欄をしまう(しまうボタンを出す) */
   onCollapse?: () => void
   /** 下のサムネイルを押した(画像ビューアーで開く) */
@@ -58,10 +57,9 @@ interface Props {
   /** 上げ終わった画像(アップロード履歴に残す) */
   onUploaded?: (u: UploadedFile) => void
   /**
-   * 書きかけの本文を覚えておく所(スレごと)。開いたときに読み、書くのが止まったら保存し、書き込めたら消す。
-   * タブを閉じても・アプリを閉じても、書きかけが残るように
+   * 書きかけの本文を覚えておく所(スレごと)。タブやアプリを閉じても残るように、書くのが止まったら保存する。
+   * key があれば、打つたびにその場でも覚える(utils/draftStash。ページを離れても消えないように)
    */
-  /** key があれば、書きかけを打つたびにその場でも覚える(utils/draftStash。ページを離れても消えないように) */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void; key?: string }
   /** 板の書き込みの上限と、その掲示板での数え方。本文の欄の右下に長さを出し、超えていたら書き込まない */
   limits?: PostLimits
@@ -265,7 +263,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   )
 
   const right = props.layout === 'right'
-  // 本文に入れた画像・動画のリンクと上げている途中の画像は、サムネイルの帯に(MediaPreviewStrip。スレ立てと同じ部品)
+  // 本文に入れた画像・動画のリンクと上げている途中の画像は、サムネイルの帯に
   const hasPreview = hasMediaPreview(body, media)
   /** 本文から画像の URL を外す(サムネイルの ×)。その URL だけの行は行ごと消す */
   const removeUrl = (url: string) => {
@@ -287,8 +285,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       <span className="relative tabular-nums">書き込む</span>
     </button>
   )
-
-  /** 画像と絵文字のボタン(右端が絵文字)。本文の欄の上(名前とメールの行の右端＝本文の欄の右端)に置く */
 
   /** 入力欄で Esc を押したら、書き込み欄をしまう(書きかけは下書きに残る)。日本語の変換中の Esc は変換の取り消しなので見ない */
   const collapseOnEsc = (e: React.KeyboardEvent) => {

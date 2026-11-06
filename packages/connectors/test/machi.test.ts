@@ -24,7 +24,6 @@ function fake(routes: Record<string, { status?: number; body?: Uint8Array }>) {
       },
       async post(url, body, opts): Promise<HttpResponse> {
         posted.push({ url, body: body as string, headers: opts?.headers })
-        // 書きこみました(2ch 互換と同じ形のはず。本物の応答は確かめていない)
         return { status: 200, headers: {}, body: fixture('machi-written.html') }
       },
     },

@@ -1,7 +1,4 @@
-// hono-bbs-merge packages/web/src/components/ui/Identicon.tsx から複製し、描き方を変えた。
-// 元は 5x5 のマスを 1 つずつ div で塗っていた(1 つのアイコンで 26 個の要素)。Discord 風・LINE 風では全部のレスに
-// アイコンを出すので、1000 レスのスレだと要素が 2 万を超えて、スレを開くのが目に見えて遅くなった。
-// いまは模様を SVG の絵(data URL)にして、要素 1 つの背景に敷く。絵は seed ごとに 1 回だけ作って使い回す
+// 模様を SVG の data URL にして要素 1 つの背景に敷く(全レスに出すので要素を増やさない)。絵は seed ごとに控える
 import { useMemo } from 'react'
 import { generateIdenticon } from '../utils/identicon'
 

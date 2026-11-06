@@ -40,7 +40,6 @@ private val TRAILING_SPACE = Regex("[$WS]+$")
 /** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
 fun displayBody(body: String): String = body.replace(BLANK_LINES, "\n\n").replace(TRAILING_SPACE, "")
 
-/** アンカーツリーの 1 行 */
 /**
  * アンカーツリーの 1 行。rails: 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか)。
  * last: 同じ親の最後の子か(最後なら └、まだ兄弟がいれば ├)。PC 版の TreeRow と同じ

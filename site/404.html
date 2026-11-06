@@ -5,10 +5,7 @@
     <!-- 専ブラ(アプリ)が web の URL から API の場所を見つけるための印(bbs-browser の hono-bbs コネクタが読む) -->
     <meta name="bbs-api" content="https://contentsview08.github.io/bbs-browser/demo/api/v1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- interactive-widget=resizes-content: Android等でソフトキーボード表示時にレイアウト
-         ビューポート自体を縮めさせる。無指定だとキーボード表示中はビジュアルビューポートだけが
-         縮み、100%/100vh基準の高さがキーボード分ズレたまま残ってしまい、キーボードを閉じた後も
-         下に不要な空白ができてスクロールできてしまう不具合の原因になっていた。 -->
+    <!-- キーボード表示時にレイアウトも縮める。無指定だと 100vh がずれ、閉じた後の下に空白が残る -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <title>AnonBoard</title>
     <script type="module" crossorigin src="/bbs-browser/demo/assets/index-DvwqzpJJ.js"></script>

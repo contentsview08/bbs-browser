@@ -1,4 +1,4 @@
-# push のたびに、型チェックとテストを走らせる(数分。Windows のビルドはしない)
+# main への push と PR で、型チェックとテストを走らせる(Windows のビルドはしない)
 name: ci
 on:
   push:

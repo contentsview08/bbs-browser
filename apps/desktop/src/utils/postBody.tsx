@@ -175,12 +175,12 @@ export function countIds(posts: Post[]): Map<string, number> {
   return counts
 }
 
-/** 半角スペース・タブ・全角スペースが 5 つ以上続いていれば AA とみなす(web 版と同じ判定) */
+/** 半角スペース・タブ・全角スペースが 5 つ以上続いていれば AA とみなす */
 export function looksLikeAA(text: string): boolean {
   return /[ \t　]{5,}/.test(text)
 }
 
-/** 書き込み数・被アンカー数の色(web 版の heatClass と同じ段階) */
+/** 書き込み数・被アンカー数の色 */
 export function heatClass(count: number): string {
   if (count >= 7) return 'text-c-heat-very-hot font-bold'
   if (count >= 5) return 'text-c-heat-hot font-bold'
@@ -303,7 +303,6 @@ export function displayBody(body: string, o: DisplayOptions): string {
   return body.replace(/\n[ \t\u3000]*(?:\n[ \t\u3000]*){3,}/g, '\n\n').replace(/[\s\u3000]+$/, '')
 }
 
-/** 名前の見せ方: 板の既定の名前で始まるなら、その部分を省く(後ろのトリップなどは残す) */
 /** 名前の、トリップ・キャップ(◆・★・◇ から後ろ)を除いた頭の部分 */
 export function nameHead(name: string): string {
   return name.split(/[◆★◇]/)[0].trim()
@@ -330,6 +329,7 @@ export function mostCommonName(posts: { name: string }[]): string | undefined {
   return best && n >= posts.length * COMMON_NAME_RATIO ? best : undefined
 }
 
+/** 名前の見せ方: 板の既定の名前で始まるなら、その部分を省く(後ろのトリップなどは残す) */
 export function displayName(name: string, o: DisplayOptions): string {
   if (!o.omitNoname) return o.watchoiShort ? shortWatchoi(name) : name
   // 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)
@@ -619,7 +619,7 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
 
 /**
  * アンカーツリー: start からアンカーを前後(付けた先・付けられた元)にたどって、つながるレスの番号を全部集める。
- * web 版の buildAnchorTree と同じ。start だけなら長さ 1 になる
+ * start だけなら長さ 1 になる
  */
 export function anchorTree(start: number, posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): number[] {
   const exists = new Set(posts.map((p) => p.no))

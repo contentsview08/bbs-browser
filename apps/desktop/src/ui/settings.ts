@@ -1,11 +1,10 @@
 // アプリの設定。SQLite の settings 表に 1 項目 1 行(JSON)で保存する。
+// 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
+// 実際の色や余白は theme/theme.css・theme/patterns.css が CSS 変数で切り替える。
 import { AI_NG_SAMPLES, type AiNgOverride, type AiNgRule } from '../utils/aiNg'
 import { setHaptics } from '../utils/haptics'
 import { customLineBg, customVars, isCustomDark, onColor, parseCustom } from './customScheme'
 import type { DateStyle } from '../utils/displayDate'
-// 見た目の設定は <html> の data-scheme / data-pattern / data-density 属性と .dark クラスに反映し、
-// 実際の色や余白は theme/theme.css・theme/patterns.css(web 版の複製)が CSS 変数で切り替える。
-
 import { isMobile } from '../utils/platform'
 import { ensureFont } from '../host/fonts'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -19,12 +18,12 @@ import { DEFAULT_UPLOAD_HOST, migrateUploadHost, type UploadHost } from '../host
 import { broadcast, onBroadcast } from '../host/crossWindow'
 
 export type ColorScheme = 'indigo' | 'amber-teal' | 'light' | '2ch-classic' | 'soft-dark' | 'soft-light' | 'discord-dark' | 'line-light' | 'oled'
-  // スマホのアプリ(ネイティブ版)で足した配色。色は theme/native-schemes.css
+  // スマホ版で足した配色。色は theme/native-schemes.css
   | 'gray' | 'light-gray' | 'sepia' | 'nord' | 'contrast' | 'night' | 'line-dark' | 'discord-light' | 'x-dim' | 'mono'
   // 自分の配色(設定 customScheme の 6 色から作る。ui/customScheme.ts)
   | 'custom'
 export type DesignPattern = 'tonal' | 'bordered'
-/** レスの見た目のスタイル(PostArticle の variant)。カード / Discord 風 / 専ブラ風 */
+/** レスの見た目のスタイル(PostArticle の variant) */
 export type PostStyle = 'card' | 'discord' | 'classic' | 'line' | 'matome'
 export const POST_STYLES: { key: PostStyle; name: string; note: string }[] = [
   { key: 'card', name: 'カード', note: 'レスを区切り線で並べる、いままでの見た目' },
@@ -47,17 +46,15 @@ export function baseVariant(v: PostStyle): 'card' | 'discord' | 'classic' | 'lin
   return v === 'matome' ? 'card' : v
 }
 /**
- * 実際に使う密度。PC もスマホも、レスの見た目で決める(2026-11 に「一覧表示・高密度」の設定はやめた)。
+ * 実際に使う密度。PC もスマホも、レスの見た目で決める。
  * 吹き出し・アイコンで並べる Discord 風・LINE 風は一覧表示、カード・専ブラ風・まとめ風は高密度
  */
 export function effectiveDensity(s: Pick<AppSettings, 'postStyle'>): ListDensity {
   const st = effectivePostStyle(s)
   return st === 'discord' || st === 'line' ? 'list' : 'dense'
 }
-/** web 版の 'panel'(カード表示)はサムネイル前提なので、専ブラでは一覧と高密度だけにする */
 export type ListDensity = 'list' | 'dense'
-/** custom は OS に入っているフォントから選んだもの(customFont に名前を持つ) */
-/** フォント。同梱のもの(FONT_FAMILIES)・OS のもの(custom) */
+/** フォント。用意したもの(FONT_FAMILIES)か、OS のもの(custom。customFont に名前を持つ) */
 export type FontFamily = (typeof FONT_FAMILY_KEYS)[number] | 'custom'
 export const FONT_FAMILY_KEYS = [
   'noto',
@@ -108,7 +105,7 @@ export const HISTORY_LIST_TABS: ListTabKey[] = ['viewed', 'unread', 'posted', 'f
 /** タブの定義(板のタブと履歴のタブのどちらからも引ける) */
 export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key) ?? HISTORY_TABS.find((t) => t.key === key)!
 export type OpenPosition = 'unread' | 'top' | 'bottom'
-/** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色(スマホのアプリの heatStyle と同じ。「示さない」は 2026-11 にやめた) */
+/** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色(スマホ版の heatStyle と同じ) */
 export type HeatStyle = 'left' | 'right' | 'text'
 /** ID の見せ方: なし / 色(2 回以上書いた ID を ID ごとの色に) / 模様(ID から作るアイコンを番号の左と、スレ一覧の立てた人に) */
 export type IdStyle = 'none' | 'color' | 'icon'
@@ -117,7 +114,7 @@ export const ID_STYLES: { key: IdStyle; name: string; note: string }[] = [
   { key: 'color', name: '色', note: '2 回以上書いた ID を ID ごとの色で。同じ人の書き込みを目で追えます' },
   { key: 'icon', name: '模様', note: 'ID から作る GitHub 風の模様を、レス番号の左と、スレ一覧の立てた人(ID の付く掲示板)に出します' },
 ]
-/** スレ一覧の行の形: ふつう・コンパクト(スレタイ 1 行と数だけ。スマホのアプリの listDensity と同じ) */
+/** スレ一覧の行の形: ふつう・コンパクト(スレタイ 1 行と数だけ。スマホ版の listDensity と同じ) */
 export type ListShape = 'normal' | 'compact'
 export type AnchorPopup = 'hover' | 'click'
 /** PC: レスのダブルクリックの操作 */
@@ -187,7 +184,7 @@ export interface AppSettings {
   darkScheme: ColorScheme
   lightScheme: ColorScheme
   postStyle: PostStyle
-  /** 文字の大きさ(px)。1px ずつ変えられる。スマホは mobileFontPx(画面が狭いので既定は小さい)。前の 5 段階(fontSize)は px に写した */
+  /** 文字の大きさ(px)。1px ずつ変えられる。スマホは mobileFontPx(画面が狭いので既定は小さい) */
   fontPx: number
   /** PC: レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字(fontPx)を変えても動かない */
   contentBasePx: number
@@ -360,7 +357,7 @@ export interface AppSettings {
   uploadMaxDimension: number
   /** catbox のアカウント(userhash)。あればアカウントで上げ、アップロード履歴からサーバー上のファイルも消せる */
   catboxUserhash: string
-  /** 画像の上げ先(host/uploader.ts の UploadHost)。auto は catbox → 0x0.st → imgur → uguu.se の順に試す */
+  /** 画像の上げ先(host/uploader.ts の UploadHost) */
   uploadHost: UploadHost
   /** imgbb の API キー(上げ先が imgbb のとき) */
   imgbbApiKey: string
@@ -392,7 +389,7 @@ export interface AppSettings {
   showAdvanced: boolean
   /** 差し色(ACCENTS のキー)。空ならテーマの色 */
   accent: string
-  // ここからスマホのアプリ(スマホ版)と同じ設定(名前と意味はアプリの data/Prefs.kt と同じ)
+  // ここからスマホ版と同じ設定(名前と意味は data/Prefs.kt と同じ)
   /** 動きを減らす(画面の移り方・新着の光り方などを省く) */
   reduceMotion: boolean
   /** 人気のレスの示し方 */
@@ -401,7 +398,7 @@ export interface AppSettings {
   listShape: ListShape
   /** レスをダブルタップで返信(スマホ) */
   doubleTapReply: boolean
-  /** PC: レスをダブルクリックしたときの操作(none なら何もしない。1 回の押しは今までどおりアンカーツリー) */
+  /** PC: レスをダブルクリックしたときの操作(none なら何もしない。1 回の押しはアンカーツリー) */
   postDoubleClick: PostDoubleClick
   /** 振動で知らせる(ジェスチャー・引っぱって更新が決まったとき、長押しのメニュー。スマホ) */
   haptics: boolean
@@ -444,7 +441,6 @@ export const MOUSE_GESTURE_TRIGGERS: { key: MouseGestureTrigger; name: string }[
 
 export const DEFAULT_SETTINGS: AppSettings = {
   scheme: 'indigo',
-  // 既定は OS のダーク・ライトに合わせる(2026-11-04 に要望)
   followOsTheme: true,
   darkScheme: 'soft-dark',
   lightScheme: 'light-gray',
@@ -520,9 +516,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiNgEnabled: false,
   aiNgRules: AI_NG_SAMPLES.map((r, i) => ({ ...r, id: `sample-${i}` })),
   aiNgOverrides: {},
-  // 元の Web アプリ(hono-bbs)のスマホ版に合わせた割り当て
+  // Web(hono-bbs)のスマホ表示に合わせた割り当て
   swipeGestures: {
-    // →↑ は一番下へ・→↓ は先頭へ(引っぱる向きに動く。元の Web アプリと同じ)
+    // →↑ は一番下へ・→↓ は先頭へ(引っぱる向きに動く)
     list: { right: 'drawer', left: 'forward', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'reply' },
     // スマホはタブを使わない(→ の「戻る」が閉じるのと同じ)ので、←↑ はログを削除して閉じる
     thread: { right: 'back', left: 'reply', 'right,up': 'bottom', 'right,down': 'top', 'left,down': 'refresh', 'left,up': 'deleteLog' },
@@ -551,7 +547,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   presetsApplied: [],
   replyCollapsed: false,
   postAccounts: {},
-  // 定型文は最初は空(2026-11-04 に要望)
   quickPhrases: [],
   postToolbar: ['reply', 'copy', 'ng'],
   keymap: {},
@@ -568,7 +563,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   postDoubleClick: 'none',
   haptics: true,
   customScheme: '',
-  // スマホは頭を短く(アプリと同じ。年と秒の下の桁を省く・ID は 6 文字)、PC は今までどおり
+  // スマホは頭を短く(スマホ版と同じ。年と秒の下の桁を省く・ID は 6 文字)
   dateStyle: isMobile ? 'md_w_hms' : 'full',
   idShort: isMobile,
   postName: '',
@@ -584,9 +579,9 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
   { key: 'discord-dark', name: 'Discord ダーク', accent: '#5865f2', border: '#29292d' },
   { key: 'line-light', name: 'LINE ライト', accent: '#06c755', border: '#dfe2e7' },
   { key: 'oled', name: '真っ黒', accent: '#7aa2ff', border: '#222222' },
-  // スマホのアプリ(ネイティブ版)で足した配色
+  // スマホ版で足した配色
   { key: 'gray', name: 'グレー', accent: '#dcdcdc', border: '#232323' },
-  // 前のライト(soft-light)・紙・Discord ライト・2ch クラシック・夜間はやめた(2026-11)。ライトグレーをライトとする
+  // ライトはライトグレー。ほかの明るい配色と夜間は withoutOldLight で読み替える
   { key: 'light-gray', name: 'ライト', accent: '#4e5a68', border: '#d2d2d4' },
   { key: 'nord', name: 'Nord', accent: '#88c0d0', border: '#3b4252' },
   { key: 'contrast', name: 'ハイコントラスト', accent: '#ffd400', border: '#5c5c5c' },
@@ -601,7 +596,7 @@ export const COLOR_SCHEMES: { key: ColorScheme; name: string; accent: string; bo
  */
 const KAOMOJI_FALLBACK = "'BBS Kaomoji Fallback'"
 
-/** 同梱のフォント(main.tsx で読み込む)。ゴシック → 丸ゴシック → 明朝 の順。名前は見本に使う(設定のドロップダウンはそのフォントで描く) */
+/** 用意したフォント(Web フォントは host/fonts.ts が読む)。ゴシック → 丸ゴシック → 明朝 の順。名前は見本に使う(設定のドロップダウンはそのフォントで描く) */
 export const FONT_FAMILIES: { key: Exclude<FontFamily, 'custom'>; name: string; css: string }[] = [
   { key: 'noto', name: 'Noto Sans JP', css: `'Noto Sans JP Variable', 'Noto Sans JP', ${KAOMOJI_FALLBACK}, sans-serif` },
   { key: 'biz-ud', name: 'BIZ UDPゴシック', css: `'BIZ UDPGothic', ${KAOMOJI_FALLBACK}, sans-serif` },
@@ -635,7 +630,7 @@ export const FONT_PX_MIN = 9
 export const FONT_PX_MAX = 26
 /**
  * レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。PC は基本の文字から切り離す(基本の文字はメニュー・ボタン・ポップアップなどの部品だけ)。
- * スマホは今までどおり基本の文字に合わせる
+ * スマホは基本の文字に合わせる
  */
 export function contentFontPx(s: AppSettings): number {
   return isMobile ? baseFontPx(s) : s.contentBasePx || DEFAULT_SETTINGS.contentBasePx
@@ -702,8 +697,8 @@ export function effectiveScheme(s: AppSettings): ColorScheme {
 }
 
 /**
- * やめた配色を選んでいた人(設定の読み込みや、古い設定ファイル)は、いちばん近い配色にする。
- * 明るいもの(web 版のライト・前のライト・紙・Discord ライト・2ch クラシック)はライト(ライトグレー)、夜間(暖色)はダーク
+ * 今は選べない配色の保存値(設定の読み込みや、古い設定ファイル)を、いちばん近い配色にする。
+ * 明るいものはライトグレー、夜間(暖色)はダーク
  */
 function withoutOldLight(scheme: ColorScheme): ColorScheme {
   if (scheme === 'light' || scheme === 'soft-light' || scheme === 'sepia' || scheme === 'discord-light' || scheme === '2ch-classic') return 'light-gray'
@@ -712,9 +707,7 @@ function withoutOldLight(scheme: ColorScheme): ColorScheme {
 }
 
 /**
- * 2026-11-04 に消した・まとめた設定を、いまの設定に写す(保存してある古い値は、読んだあと使わない。DB の行は残っても害がない)。
- * 消したもの(起動時に開く板・ホイールで更新・タブを使う・AA の自動判定・一番下まで送る・知らせる 2 つ・アップロードを使う・EXIF を消す・
- * 書き込んだあとに待つ・畳んだサイドバーの板名・送る前に待つ・定型文のバー・タブの見せ方)は、いつもオンかサーバー任せ
+ * 消した・まとめた設定の保存値を、いまの設定に写す(古い値は読んだあと使わない。DB の行は残っても害がない)
  */
 export function migrateOld(saved: Record<string, unknown>): Partial<AppSettings> {
   const out: Partial<AppSettings> = {}
@@ -738,13 +731,13 @@ export function migrateOld(saved: Record<string, unknown>): Partial<AppSettings>
     if (saved.showIdenticon || saved.threadAuthorIcon) out.idStyle = 'icon'
     else if (saved.idColor || saved.idHeat) out.idStyle = 'color'
   }
-  // 人気のレス「示さない」はやめた
+  // 人気のレス「示さない」は左の帯に読み替える
   if (saved.heatStyle === 'none') out.heatStyle = 'left'
   return out
 }
 
 /**
- * マウスジェスチャーは、向きの並び(left・right,up など)から 8 方向の円盤(n・e・…)に変えた(2026-11-05)。
+ * 古い形(向きの並び。left・right,up など)のマウスジェスチャーを、8 方向の円盤(n・e・…)に読み替える。
  * 1 つの向きだけの割り当ては同じ方向に移し、折れ曲がる並びは捨てる。円盤の形の割り当てはそのまま
  */
 function migrateMouseGestures(g: Record<string, string> | undefined): Record<string, string> {
@@ -757,17 +750,17 @@ function migrateMouseGestures(g: Record<string, string> | undefined): Record<str
   return Object.keys(out).length > 0 ? out : DEFAULT_SETTINGS.mouseGestures
 }
 
-/** 前の既定だったスレ表示の ←↑「タブを閉じる」(スマホにはタブがない)は、いまの既定の「ログを削除して閉じる」にする */
+/** スレ表示の ←↑「タブを閉じる」の保存値(スマホにはタブがない)は、既定の「ログを削除して閉じる」に読み替える */
 function withoutOldGestures(g: AppSettings['swipeGestures']): AppSettings['swipeGestures'] {
   return g.thread?.['left,up'] === 'closeTab' ? { ...g, thread: { ...g.thread, 'left,up': 'deleteLog' } } : g
 }
 
 /**
- * やめた値を今の値に読み替える。s にある項目だけを返す(設定の読み込みと、書き出したファイルの読み込みで使う)
+ * 今はない値を今の値に読み替える。s にある項目だけを返す(設定の読み込みと、書き出したファイルの読み込みで使う)
  */
 export function migrateValues(s: Partial<AppSettings>): Partial<AppSettings> {
   const out: Partial<AppSettings> = {}
-  // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
+  // 今はない「タイムライン(X 風)」は、いちばん近い Discord 風に
   if (s.postStyle !== undefined) out.postStyle = (s.postStyle as string) === 'timeline' ? 'discord' : s.postStyle
   if (s.uploadHost !== undefined) out.uploadHost = migrateUploadHost(s.uploadHost as string)
   for (const k of ['scheme', 'lightScheme', 'darkScheme'] as const) {
@@ -865,9 +858,9 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
     root.removeAttribute('data-list-pad')
   }
   const preset = FONT_FAMILIES.find((f) => f.key === s.fontFamily) ?? FONT_FAMILIES[0]
-  // 同梱をやめた Web フォントは、選んだときだけ取りに行く(host/fonts.ts)
+  // Web フォントは、選んだときだけ取りに行く(host/fonts.ts)
   if (s.fontFamily !== 'custom') ensureFont(preset.key)
-  // OS のフォントが見つからなかったときのために、同梱の Noto Sans JP を後ろに置く
+  // OS のフォントが見つからなかったときのために、既定のフォントを後ろに置く
   const css =
     s.fontFamily === 'custom' && s.customFont
       ? `'${s.customFont.replace(/'/g, "\\'")}', ${FONT_FAMILIES[0].css}`
@@ -899,8 +892,8 @@ export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSett
 /** 設定を変えてから DB に書くまで待つ時間 */
 const SAVE_DELAY_MS = 400
 
-/** 設定を読み込み、変更を即座に画面へ反映して保存する。loaded は保存済みの値を読み終えたか */
 /**
+ * 設定を読み込み、変更を即座に画面へ反映して保存する。loaded は保存済みの値を読み終えたか。
  * opts.font: false なら、字の大きさは画面に当てない(道具のウィンドウ)。
  * 設定の変更は settings-changed でほかのウィンドウへ知らせ、ほかのウィンドウからの変更は受けて写す(DB に書くのは変えたウィンドウだけ)
  */

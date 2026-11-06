@@ -1,5 +1,3 @@
-// 設定の「ボタンの配置」。
-
 import { isMobile } from '../../utils/platform'
 import { DragZones } from '../DragSort'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement, PLACEMENTS } from '../../utils/toolbar'

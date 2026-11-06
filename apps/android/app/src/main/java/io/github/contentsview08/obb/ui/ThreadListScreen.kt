@@ -99,7 +99,7 @@ import io.github.contentsview08.obb.bbs.ThreadSummary
 import io.github.contentsview08.obb.data.ThreadState
 import kotlinx.coroutines.launch
 
-/** 一覧のタブ(今のスマホ版の LIST_TABS と同じ)。どれも選ばなければ設定の並び */
+/** 一覧のタブ(PC 版の LIST_TABS と同じ)。どれも選ばなければ設定の並び */
 private enum class ListTab(val key: String, val label: String, val icon: ImageVector) {
     UNREAD("unread", "未読", Icons.Filled.MarkEmailUnread),
     VISITED("visited", "閲覧済み", Icons.Filled.History),
@@ -118,9 +118,9 @@ fun momentum(t: ThreadSummary, now: Long): Double {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = Modifier) {
-    // タブ・検索・スクロールの位置はページに持つ(スレを開いて戻っても残す)
+    // タブ・検索・スクロールの位置は、スレを開いて戻っても残すためページに持つ
     val tab = ListTab.entries.firstOrNull { it.key == page.tab }
-    // サムネイルを読むか(設定)。行ごとに通信の状態を調べないよう、画面で 1 回だけ決める
+    // 行ごとに通信の状態を調べないよう、画面で 1 回だけ決める
     val thumbContext = androidx.compose.ui.platform.LocalContext.current
     val thumbAllowed = remember(vm.prefs.thumbMode) {
         when (vm.prefs.thumbMode) { ThumbMode.ALWAYS -> true; ThumbMode.WIFI -> isWifi(thumbContext); ThumbMode.TAP, ThumbMode.NEVER -> false }
@@ -135,13 +135,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val density = LocalDensity.current
     val hapticView = androidx.compose.ui.platform.LocalView.current
 
-    // 勢いの色は、板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなるように。今の専ブラと同じ)
+    // 勢いの色は板の中での順位で決める。過疎板でも一番勢いのあるスレを赤くするため(PC 版と同じ)
     val rank = remember(page.threads) {
-        // 順位は、立って 10 分たっていないスレを 10 分として数える(立った直後の 1 レスのスレが一番勢いがあることにならないように)
+        // 立って 10 分未満のスレは 10 分として数える。立った直後の 1 レスのスレが一番になるのを防ぐ
         val sorted = page.threads.map { it.key to momentum(it, maxOf(now, (it.createdAt ?: now) + 600_000L)) }.sortedByDescending { it.second }
         sorted.mapIndexed { i, (k, _) -> k to (1.0 - i.toDouble() / maxOf(1, sorted.size)) }.toMap()
     }
-    // スレタイの NG と、ID の NG に当たる人が立てたスレは出さない(長押しの「立てた人を NG に追加」。data/Ng.kt)
     val ngRules = vm.prefs.ngRules
     val ngMatcher = remember(ngRules) { io.github.contentsview08.obb.data.NgMatcher(ngRules) }
     val sort = vm.prefs.threadSort
@@ -149,13 +148,11 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val shown = remember(page.threads, page.states, tab, query, ngMatcher, sort, keywords, page.reversed, page.only) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
-        // 全角半角・カナを同一視し、空白で区切った言葉はすべて含むもの。立てた人の ID も探す(PC 版と同じ)
+        // 立てた人の ID も探す(PC 版と同じ)
         val terms = io.github.contentsview08.obb.data.searchTerms(query)
         if (terms.isNotEmpty()) list = list.filter { io.github.contentsview08.obb.data.matchesTerms("${it.title} ${it.authorId ?: ""}", terms) }
-        // 差分の行から「新しいスレ」だけに絞った
         if (page.only == "new") list = list.filter { t -> page.newSince?.let { (t.createdAt ?: 0) > it } == true }
         list = when (tab) {
-            // タブを選んでいないときは、設定の並び(板を開いたときの並び)
             null -> when (sort) {
                 "momentum" -> list.sortedByDescending { momentum(it, now) }
                 "newest" -> list.sortedByDescending { it.createdAt ?: 0 }
@@ -169,7 +166,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }.let { if (page.reversed) it.reversed() else it }
             ListTab.NEWEST -> list.sortedByDescending { it.createdAt ?: 0 }.let { if (page.reversed) it.reversed() else it }
         }
-        // キーワードの入ったスレは一番上にまとめる(設定)。運営のお知らせは一番下に
         if (keywords.isNotEmpty()) {
             val (hit, rest) = list.partition { t -> keywords.any { t.title.contains(it, ignoreCase = true) } }
             list = hit + rest
@@ -183,17 +179,15 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var styleSheet by remember { mutableStateOf(false) }
     var sizeDialog by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
-    // 戻る操作で、まず検索を外す
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.only != null) {
         if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false; page.only = null }
     }
-    // 取り直したら一番上へ戻す(上にあったスレの位置を保つと、その上に新しいスレが足されて分かりにくい)
-    // (戻ってきたときにもう一度動かさないよう、戻した回を覚えておく。更新しない限り、一覧の位置はそのまま)
+    // 取り直したら一番上へ戻す。位置を保つと、その上に新しいスレが足されて分かりにくい
+    // 戻ってきたときにもう一度動かさないよう、戻した回を覚えておく
     LaunchedEffect(page.refreshed) {
         if (page.refreshed > page.scrolledFor) { page.scrolledFor = page.refreshed; listState.scrollToItem(0); bars.show() }
     }
     val swipe = rememberSwipeState()
-    // なぞる操作(今のスマホ版の既定と同じ割り当て)
     val prefs = vm.prefs
     val gestures = if (!prefs.gesturesEnabled) emptyMap() else buildGestures(
         prefs.gestures("list"), "list",
@@ -215,8 +209,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     bars.enabled = prefs.hideBarsOnScroll
     bars.atTop = { !listState.canScrollBackward }
     bars.atBottom = { !listState.canScrollForward }
-    // 引っぱって更新(2ch Mate のように): 一番上で下へ引くと一覧が伸びて「引っぱって更新」→「離して更新」、
-    // 離すと「更新中…」を出したまま取り直し、終わったら戻る(取り直しが速くても、更新したと分かるように)
+    // 離したあとは「更新中…」を出したまま取り直す。取り直しが速くても更新したと分かるように
     val pullPx = remember { Animatable(0f) }
     var pullRaw by remember { mutableFloatStateOf(0f) }
     var pulling by remember { mutableStateOf(false) }
@@ -265,7 +258,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         }
     }
     Box(modifier.fillMaxSize().background(Palette.base).clipToBounds().nestedScroll(bars.connection).nestedScroll(listPull).swipeGestures(swipe, gestures, sensitivity = prefs.gestureSensitivity)) {
-        // 引っぱっている所(伸びたすき間)の案内
         if (pullPx.value > 1f) {
             Box(
                 Modifier.fillMaxWidth().barPadding(top = { bars.topHeight * (1f - bars.hidden) }).height(with(density) { pullPx.value.toDp() }),
@@ -307,7 +299,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             }
         }
 
-        // 上の帯(スクロールで隠れる)
         Column(Modifier.fillMaxWidth().onSizeChanged { bars.topHeight = it.height.toFloat() }.graphicsLayer { translationY = -bars.hidden * bars.topHeight }) {
             if (searching) {
                 SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" }
@@ -324,7 +315,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             HorizontalDivider(color = Palette.border)
         }
 
-        // 取り直しの途中は、一覧を残したまま、上の帯の下に細い帯を流す(今のスマホ版の list-progress。0.9 秒で左から右へ)
+        // 取り直しの途中は、一覧を残したまま細い帯を流す(PC 版の list-progress)
         if (page.loading && page.threads.isNotEmpty()) {
             val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "progress").animateFloat(
                 -0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing)), label = "x",
@@ -334,19 +325,14 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             }
         }
 
-        // 下の帯(並び順と更新)
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { bars.bottomHeight = it.height.toFloat() }
                 .graphicsLayer { translationY = bars.footerHidden * bars.bottomHeight },
         ) {
             HorizontalDivider(color = Palette.border)
             Row(Modifier.fillMaxWidth().background(Palette.bar).navigationBarsPadding().heightIn(min = vm.prefs.footerHeight.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                // 出すタブと並びは設定(スレ一覧 › タブ)
                 val tabs = vm.prefs.listTabs.split(',').mapNotNull { k -> ListTab.entries.firstOrNull { it.key == k } }
-                // タブが多くて入りきらないときは、横にずらせる
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                // 今のスマホ版のタブ: 選んでいるタブは強調色の文字と薄い色、上に線。未読のタブには未読の合計。
-                // 並べ替えのタブは、押すたびに 逆順 → 元の並び(矢印で向き)。絞り込みのタブは押すたびに入り切り
                 // NG で出していないスレは数えない
                 val unreadTotal = remember(page.threads, page.states, ngMatcher) { page.threads.sumOf { t -> if (ngMatcher.thread(t)) 0 else unreadOf(t, page.states[t.key]) } }
                 for (t in tabs) {
@@ -380,7 +366,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                                 tint = if (active) c else Color.Transparent, modifier = Modifier.size(14.dp),
                             )
                         }
-                        // 選んでいる印の線(フッターなので本文の側=上に)
+                        // フッターなので、選んでいる印の線は本文の側(上)に引く
                         if (active) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp).background(Palette.accent, RoundedCornerShape(1.dp)))
                     }
                 }
@@ -391,7 +377,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
 
         SwipeLabel(swipe)
 
-        // スレを立てる(右下の丸いボタン)
         FloatingActionButton(
             onClick = { vm.openNewThread(page) },
             containerColor = Palette.accent, contentColor = Palette.accentText, shape = CircleShape,
@@ -406,7 +391,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         ) { Icon(Icons.Filled.EditNote, "スレを立てる") }
     }
 
-    // ︙ のメニュー(今のスマホ版の並び: スレを立てる・お気に入り板・スレッド検索・先頭へ・表示スタイル・文字の大きさ・余白・更新)
     if (menu) {
         val fav = vm.isFavorite(page.board)
         MenuSheet(
@@ -425,7 +409,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             ),
         ) { menu = false }
     }
-    // 板名を押したときのメニュー
     if (titleSheet) {
         val fav = vm.isFavorite(page.board)
         val context = androidx.compose.ui.platform.LocalContext.current
@@ -460,18 +443,13 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
 
 private fun unreadOf(t: ThreadSummary, state: ThreadState?): Int = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
 
-/** スレタイの字(頭に「新」・お気に入りの星) */
 private fun threadTitleText(t: ThreadSummary, isNew: Boolean, isFavorite: Boolean) = buildAnnotatedString {
     if (isNew) { appendInlineContent("new", "[新]"); append(" ") }
     if (isFavorite) withStyle(SpanStyle(color = Palette.markFav)) { append("★ ") }
     append(t.title)
 }
 
-/**
- * スレ 1 行(今のスマホ版の ThreadCard のスマホの形): 1 段目にスレタイ(3 行まで。頭に「新」・お気に入りの星)、
- * 2 段目の左に立った時間・立てた人の ID・dat落ち、右に勢い・レス数・未読の数。開いたことのあるスレは左に線
- * (新着があれば未読の色)。スレタイの色: 新着があれば強く(太字)、開いて新着がなければ既読の色、開いていなければふつう
- */
+/** スレ 1 行(PC 版の ThreadCard のスマホの形) */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ThreadRow(
@@ -492,14 +470,13 @@ private fun ThreadRow(
         else -> Palette.textMuted
     }
     Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min).graphicsLayer { alpha = if (archived) 0.6f else 1f }) {
-        // 左の帯: 未読が多いほど濃く(+3 は薄く、+300 は濃く。札を見なくても溜まり具合が分かる)
+        // 未読が多いほど左の帯を濃くする。札を見なくても溜まり具合が分かるように
         if (visited) Box(
             Modifier.width(3.dp).fillMaxHeight().background(
                 if (unread > 0) Palette.unread.copy(alpha = (0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f))) else Palette.threadReadTitle,
             ),
         )
         if (compact) {
-            // コンパクト: スレタイ 1 行と、右端にレス数と未読だけ
             Row(
                 Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad / 2 + 2.dp, bottom = pad / 2 + 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -521,14 +498,12 @@ private fun ThreadRow(
             }
             return@Box
         }
-        // スレの画像(1 レス目の最初の画像。hono-bbs)を左に、行の縦いっぱいに(web 版と同じ)
         val thumb = rememberListThumb(t.thumb, thumbAllowed)
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick, onClick = onClick)
                 .padding(start = 14.dp, end = 12.dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
         ) {
         if (thumb != null) {
-            // 1:1 に切り取り、行の縦いっぱいに(幅は高さと同じ)
             StoredImage(thumb, Modifier.fillMaxHeight().heightIn(min = 64.dp).aspectRatio(1f, matchHeightConstraintsFirst = true).clip(RoundedCornerShape(6.dp)).background(Palette.surface2), showProgress = false)
             Spacer(Modifier.width(10.dp))
         }
@@ -537,11 +512,10 @@ private fun ThreadRow(
             Text(
                 threadTitleText(t, isNew, isFavorite),
                 maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = (15 * k).sp, lineHeight = (20 * k).sp, inlineContent = chipInlineContent(),
-                // まだ開いていないスレだけ太字。開いたスレは新着があっても細く既読の色に(新着は右の +N の札で分かる)
+                // 開いたスレは新着があっても既読の色にする。新着は右の +N の札で分かる
                 color = titleColor, fontWeight = if (!visited) FontWeight.SemiBold else FontWeight.Normal,
             )
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                // 左(時間・ID・dat落ち)は残りの幅に収め、右の 3 つは右端にそろえる
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(relativeTime(t.createdAt, now), color = Palette.textMuted, fontSize = (11 * k).sp, maxLines = 1)
                 if (t.authorId != null) {
@@ -550,7 +524,7 @@ private fun ThreadRow(
                 }
                 if (archived) { Spacer(Modifier.width(8.dp)); Text("dat落ち", color = Palette.textMuted, fontSize = (11 * k).sp) }
                 }
-                // 右の 3 つ(勢い・レス数・未読)は右端に寄せる(勢い・レス数は幅をそろえて、数字の桁が縦にそろうように)
+                // 勢い・レス数は幅をそろえ、数字の桁を縦にそろえる
                 Text(
                     if (momentum >= 100) "%.0f".format(momentum) else "%.1f".format(momentum), Modifier.widthIn(min = 44.dp), fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
@@ -561,7 +535,6 @@ private fun ThreadRow(
                     Modifier.widthIn(min = 60.dp), color = Palette.textMuted, fontSize = (11 * k).sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, maxLines = 1,
                 )
                 if (unread > 0) Box(Modifier.padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                    // 数が増えたら、数字が下から繰り上がる(カウンターの回転)
                     androidx.compose.animation.AnimatedContent(
                         unread, Modifier.widthIn(min = 30.dp).background(Palette.unread, RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
                         transitionSpec = {
@@ -582,7 +555,7 @@ private fun ThreadRow(
     }
 }
 
-/** スレ一覧に出すサムネイルの URL。「サムネイルを読み込む」の設定に従い、取れなかった画像は出さない(×の枠が並ばないように) */
+/** スレ一覧に出すサムネイルの URL。取れなかった画像は出さない(×の枠が並ばないように) */
 @Composable
 private fun rememberListThumb(thumb: String?, allowed: Boolean): String? {
     if (thumb == null) return null
@@ -592,7 +565,6 @@ private fun rememberListThumb(thumb: String?, allowed: Boolean): String? {
 }
 
 
-/** 上の帯の検索欄(題の代わりに出す) */
 @Composable
 fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, onClose: () -> Unit) {
     val focus = remember { FocusRequester() }

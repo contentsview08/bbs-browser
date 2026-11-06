@@ -33,7 +33,6 @@ class ConformanceTest {
         return plain(if (diff != null && diff.has("android")) diff.get("android") else c.get("expected"))
     }
 
-    /** JSON の値を、比べられる形(List・Map)にする */
     private fun plain(v: Any?): Any = when (v) {
         is JSONArray -> List(v.length()) { plain(v.get(it)) }
         is JSONObject -> v.keys().asSequence().associateWith { plain(v.get(it)) }
@@ -42,7 +41,6 @@ class ConformanceTest {
         else -> v.toString()
     }
 
-    /** 落ちたケースをまとめて出す */
     private fun check(file: String, actual: (JSONObject) -> Any) {
         val fails = ArrayList<String>()
         val all = cases(file)

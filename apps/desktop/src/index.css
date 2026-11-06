@@ -1,14 +1,11 @@
-/* hono-bbs-merge packages/web/src/index.css から複製(2026-10-15、コミット cc33290 + 作業中の変更)。
-   Google Fonts の読み込みだけ外し、フォントは main.tsx で npm パッケージから同梱している */
+/* Web(hono-bbs)の写しと共通の土台。Web フォントは host/fonts.ts が選ばれたときだけ読む */
 
 
 @import './theme/theme.css';
 @import './theme/native-schemes.css';
 @import './theme/patterns.css';
 
-/* AA(アスキーアート)用フォント。'MS Pゴシック'とほぼ同じ文字送り幅になるよう
-   IPA Pゴシック+monapoから作られた自己ホスト済みフォント。OSにインストールされて
-   いなくても全端末で同じ見た目になる (public/fonts/ に配置、CDN非依存)。 */
+/* AA 用フォント。MS Pゴシックとほぼ同じ文字送りで、OS に関係なく同じ見た目になる(public/fonts/) */
 @font-face {
   font-family: 'aahub_light';
   src: url('/fonts/aahub_light.woff2') format('woff2'),
@@ -48,7 +45,6 @@ input[type="range"] {
   }
 }
 
-/* グローバルスクロールバー（全要素に適用） */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--c-scrollbar-thumb) var(--c-scrollbar-track);
@@ -75,8 +71,7 @@ input[type="range"] {
 }
 
 @layer components {
-  /* custom-scrollbar はグローバルと同じ設定を継承。
-     スクロールバーの幅はいつも確保する(行が増えてバーが出た・消えたときに、中身が横にずれないように) */
+  /* バーの幅はいつも確保する(バーが出た・消えたときに、中身が横にずれないように) */
   .custom-scrollbar {
     scrollbar-gutter: stable;
   }
@@ -116,32 +111,22 @@ input[type="range"] {
     border-left: 4px solid var(--c-accent);
   }
 
-  /* 絵文字を明示的に絵文字フォントで描画するクラス */
   .emoji {
     font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', 'Twemoji Mozilla', sans-serif;
   }
 }
 
-/* AAアスキーアート用フォント
- * 'aahub_light' はIPA Pゴシック+monapoから作られた自己ホスト済みフォントで、
- * 'MS Pゴシック'とほぼ同じ文字送り幅を持つ(上のindex.css冒頭の@font-face参照)。
- * OS依存の'MS Pゴシック'/Mona系より先に置くことで、Windowsの有無に関わらず
- * 全端末が同じフォント・同じ文字送り幅でAAを見られるようにする。 */
+/* aahub_light を OS 依存のフォントより先に置き、どの端末でも同じ文字送りにする */
 .aa-font {
   font-family: aahub_light,'ＭＳ Ｐゴシック','MS PGothic',RobotoJAA,Monapo,'IPA モナー Pゴシック',IPAMonaPGothic,Mona,'梅Pゴシック',Textar,sans-serif !important;
   line-height: 1.15 !important;
   letter-spacing: 0 !important;
-  /* Android Chrome実機はビューポート幅から「読みやすいように」行の一部だけを自動拡大する
-   * ことがあり(PCのdevtoolsモバイルエミュレーションでは再現されない)、等幅グリッドが
-   * 崩れてAAが乱れる原因になる。AAだけはこの自動拡大を無効化して等幅を保証する。 */
+  /* Android Chrome は行の一部だけを自動で拡大することがあり、AA が崩れるので止める */
   -webkit-text-size-adjust: 100% !important;
   text-size-adjust: 100% !important;
 }
 
-/* 新着を光らせる動きは app.css の .flash-new(こちらは重複していたので消した) */
-
-/* メニューバーのラベル/アコーディオン中身が現れるときの演出。グラデーションのマスクが
- * 上から下へ抜けていくことで文字が上から降りてくるように見える、ごく短い(一瞬の)アニメーション */
+/* メニューの文字が上から降りてくるように見せる、ごく短い動き */
 @keyframes menu-reveal {
   0% {
     opacity: 0;
@@ -160,9 +145,7 @@ input[type="range"] {
   animation: menu-reveal 180ms ease-out;
 }
 
-/* 画像ビューワの←→切り替え時の演出。進む方向から軽くスライドインしつつ
- * フェードインする(全画面幅を使ったスワイプ追従ではなく、切り替わったことが
- * わかる程度の控えめな動きにとどめる) */
+/* 画像ビューアーの←→切り替え。進む方向から軽くスライドする */
 @keyframes lightbox-slide-in-right {
   from { opacity: 0; transform: translateX(24px); }
   to   { opacity: 1; transform: translateX(0); }
@@ -178,9 +161,7 @@ input[type="range"] {
   animation: lightbox-slide-in-left 200ms ease-out;
 }
 
-/* 画像ビューワを開いた瞬間だけの演出。←→切り替えの横スライドとは別物で、
- * 画面の奥から浮き上がってくるように、少し小さく・少し下にずらした状態から
- * 等倍・定位置までスケール+フェードインする */
+/* 画像ビューアーを開いた瞬間。画面の奥から浮き上がる */
 @keyframes lightbox-open-rise {
   from { opacity: 0; transform: scale(0.85) translateY(28px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
@@ -189,8 +170,7 @@ input[type="range"] {
   animation: lightbox-open-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* lightbox-open-riseと同じ「画面の奥から浮き上がってくる」演出の、ポップアップ等
- * 小さめのUI向けの控えめ版(拡大縮小・移動量を抑えている)。レス抽出ポップアップ等で使う */
+/* lightbox-open-rise の、ポップアップなど小さい UI 向けの控えめ版 */
 @keyframes rise-in {
   from { opacity: 0; transform: scale(0.98); }
   to   { opacity: 1; transform: scale(1); }
@@ -217,28 +197,15 @@ input[type="range"] {
   animation: badge-in 200ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
 }
 
-/* ヘッダー/フッターのすりガラス演出(ホーム画面・スレッド一覧・スレッド表示画面)。
- * --c-base 等はテーマトークンが16進数文字列で定義されているため、Tailwindの
- * bg-c-base/40 のような不透明度修飾子は効かない(rgb()関数の想定形式と合わずrgba(0,0,0,0)に
- * なる)。color-mix() で明示的に半透明化する。
- * --c-base ではなく --c-header-footer を使う: ダーク系スキームでは--c-surfaceと同じ
- * (1段明るい)値になっており、スクロールしてきたコンテンツ(--c-base)とヘッダー/フッターの
- * 境界がほんの少し明るい色差で分かるようにしている(ライト系は元々--c-baseのまま=変更なし)。 */
+/* ヘッダー・フッターのすりガラス。テーマの色は 16 進の文字列なので、Tailwind の bg-c-base/40 は効かない。
+ * color-mix で半透明にする。--c-header-footer はダーク系で中身より 1 段明るく、境界が分かる */
 .frosted-glass {
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
   background: color-mix(in srgb, var(--c-header-footer) 40%, transparent);
 }
 
-/* トップページ(WelcomePage、「/」)専用の「00年代手打ち個人サイト風」装飾。
- * local-output/design/toppage.html を参考にしたWin95風の立体ベベル枠を、
- * 固定色ではなくテーマトークンから作る。--c-surface3/--c-border-strongのような
- * 既存トークンをそのまま左上/右下に振り分ける方式は使わない: ダーク系スキームでは
- * 「一段明るい面」を表すトークンほど明るく、ライト系スキームでは逆に暗くなる
- * (elevationの方向がスキームで反転する)ため、決め打ちで振り分けると片方の
- * スキーム群でしかベベルの明暗が正しい向きにならない。代わりにcolor-mix()で
- * 背景色を直接white/blackに混ぜ、「必ず背景より明るい面」「必ず背景より暗い面」を
- * その場で作ることで、どのスキームでも向きが崩れないようにする。 */
+/* Win95 風の立体の枠。明暗の向きがスキームで逆になるトークンは使わず、背景色に white・black を混ぜて作る */
 .retro-box {
   background: var(--c-surface2);
   border-style: solid;
@@ -248,13 +215,7 @@ input[type="range"] {
   border-right-color: color-mix(in srgb, var(--c-surface2) 65%, black 35%);
   border-bottom-color: color-mix(in srgb, var(--c-surface2) 65%, black 35%);
 }
-/* .retro-boxの「文章パネル」版(スレッド一覧・板一覧・ホーム画面のコンテンツ・
- * Welcomeページのお約束欄など、文字を載せる面用)。既定では.retro-boxと全く同じ
- * (--c-surface2)だが、2chクラシックだけ--c-panel-bgを上書きする(theme.css参照)。
- * 2chクラシックの--c-baseは板一覧ページ背景用のレンガ/木目タイルの下地色(茶色)
- * なので、文字を載せる面に.retro-box-inset(--c-base直接使用)をそのまま使うと
- * 茶色い面に文字が乗ってしまい読みにくい、という指摘があったため専用の変数を
- * 用意した。他スキームでは--c-surface2のエイリアスなので見た目は変わらない */
+/* .retro-box の、文字を載せる面用。2ch クラシックの --c-base は茶色で読みにくいので、--c-panel-bg を使う */
 .retro-panel {
   background: var(--c-panel-bg, var(--c-surface2));
   border-style: solid;
@@ -264,8 +225,7 @@ input[type="range"] {
   border-right-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 65%, black 35%);
   border-bottom-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 65%, black 35%);
 }
-/* .retro-panelの凹み版(Welcomeページのお約束欄等、文字を載せる面だが「奥まった」
- * 見た目にしたい箇所用)。ベベルの明暗を.retro-box-insetと同じ向きに反転させる */
+/* .retro-panel の凹み版 */
 .retro-panel-inset {
   background: var(--c-panel-bg, var(--c-surface2));
   border-style: solid;
@@ -275,8 +235,7 @@ input[type="range"] {
   border-right-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 60%, white 40%);
   border-bottom-color: color-mix(in srgb, var(--c-panel-bg, var(--c-surface2)) 60%, white 40%);
 }
-/* .retro-boxの凹み版(入力欄等、「奥まった」見た目にしたい箇所用)。
- * ベベルの明暗を反転させ、背景も一段暗い/奥まった印象の--c-baseにする */
+/* .retro-box の凹み版。背景は --c-base */
 .retro-box-inset {
   background: var(--c-base);
   border-style: solid;
@@ -286,12 +245,7 @@ input[type="range"] {
   border-right-color: color-mix(in srgb, var(--c-base) 60%, white 40%);
   border-bottom-color: color-mix(in srgb, var(--c-base) 60%, white 40%);
 }
-/* 看板画像などの枠の外側四隅に置く四角いドット飾り(.retro-box-inset等と組み合わせて
- * 使う想定。位置(top/left/right/bottom)は呼び出し側がinline styleで枠から少し
- * 離して指定し、このクラス自体はposition:absoluteと見た目だけを持つ)。
- * リアルなねじ穴風(グラデーション+溝)にしたら気持ち悪いとのことだったので、
- * 平面的な正方形ドットだけにする。.retro-box系と同じ理由で固定色は使わず、
- * --c-borderからのcolor-mix()でどのスキームでも馴染むようにする */
+/* 枠の四隅に置く四角い飾り。位置は呼ぶ側が inline style で決める */
 .retro-screw {
   position: absolute;
   width: 5px;
@@ -305,36 +259,21 @@ input[type="range"] {
 .retro-blink {
   animation: retro-blink 1s steps(2, start) infinite;
 }
-/* ドット絵風フォント。font-familyは継承するので、これを付けた要素の配下は
- * 明示的に別フォントを指定していない限り全部この見た目になる(アイコンフォント
- * (.material-symbols-outlined)は自分自身に直接font-familyを指定した既存ルールが
- * 効くため、継承では上書きされず影響を受けない) */
+/* ドット絵風フォント。配下に継承する(アイコンフォントは自分で font-family を指定しているので変わらない) */
 .retro-font {
   font-family: 'DotGothic16', 'MS Pゴシック', 'MS PGothic', sans-serif;
 }
 
-/* 「ブラウザを150%ぐらいに拡大したときがちょうど良い」というフィードバックのための
- * 一括拡大。text-*クラス1つ1つを手で大きくする代わりに、ページ全体をzoomする
- * (transform: scale()と違い、zoomはレイアウトサイズ自体が変わるため、拡大後も
- * クリック領域や折り返し計算・スクロール量が実際の見た目どおりに機能する)。
- * zoomは「その要素が親から見て1.5倍のサイズを要求する」ようになる(transformと違い
- * レイアウトの外寸そのものが変わる)ため、無条件に効かせると実ビューポート幅は
- * そのままのスマホでは「中身だけ1.5倍」になって収まらず、横あふれで表示が崩れる。
- * Tailwindのsmブレークポイント(640px)以上、PC/タブレット幅でだけ効かせる */
+/* 全体を 1.5 倍にする。zoom はレイアウトの大きさごと変わるので、押せる範囲や折り返しも見た目どおりになる。
+ * スマホの幅では中身があふれるので、640px 以上だけ */
 @media (min-width: 640px) {
   .retro-scale {
     zoom: 1.5;
   }
 }
 
-/* お知らせサイネージ(電車の車内表示風)。コンテンツを2つ並べて複製し、
- * ちょうど半分(-50%)だけ動かして止めることで、1周目と2周目の継ぎ目が
- * 見えない無限ループにする(2つ目の複製に入れ替わった瞬間には元の位置に
- * 戻っているため、ループの境目がわからない)。
- * animation-timing-function/durationはここではデフォルト値だけ置き、
- * 実際にはWelcomePage.tsx側がお知らせ文の文字数に応じてinline styleで
- * 上書きする(steps(N)にして、電光掲示板のようになめらかではなく
- * 文字ぶんずつカクカク動くようにする)。 */
+/* 電光掲示板風の無限ループ。中身を 2 つ並べ、ちょうど半分動かして継ぎ目を隠す。
+ * 速さと steps は呼ぶ側が inline style で上書きする */
 @keyframes retro-marquee {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }

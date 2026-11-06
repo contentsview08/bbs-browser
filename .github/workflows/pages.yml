@@ -1,4 +1,4 @@
-# 公式サイト(site/)を GitHub Pages に出す。main に push したとき(site/ が変わったとき)と、Actions の画面から手で
+# 公式サイト(site/)を GitHub Pages に出す。main で site/ が変わったときと、Actions の画面から手で動かしたとき
 name: pages
 on:
   push:

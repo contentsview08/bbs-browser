@@ -1,4 +1,4 @@
-// スレ表示。web 版の MainBoardPage.tsx(ThreadView 部分)の見た目を移植。
+// スレ表示。
 // - 開いたときの位置・既読・新着の追いかけなど、スクロールまわりは hooks/useThreadScroll.ts にまとめてある
 // - アンカー・返信・ID はポップアップで出す(ホバーかクリックかは設定で選ぶ)
 // - 新着は若い番号から順に出して光らせる
@@ -158,7 +158,6 @@ interface Props {
   onOpenNextUnread?: () => void
   /** 手で更新したあとのクールダウンが明ける時刻(更新ボタンに残りを出す) */
   refreshReadyAt?: number
-  /** 書き込んだあとのクールダウンが明ける時刻と、その長さ(書き込むボタンに残りを出す) */
   /** 本文からアイコン(BE アイコンなど)を取り出す。掲示板ごとの書き方なのでコネクタのもの */
   splitPostIcon?: (body: string) => { icon?: string; body: string }
   /** 板の書き込みの上限と、その掲示板での数え方(書き込み欄に長さを出す) */
@@ -196,13 +195,13 @@ interface Props {
 
 const ICON_BTN = 'p-2 text-c-text-muted hover:text-c-text-strong transition-colors rounded-lg'
 
-/** レスの絞り込み(web 版と同じ 4 種と、PC だけの「自分」。選んだもののどれかに当たれば出す) */
+/** レスの絞り込み(4 種と、PC だけの「自分」。選んだもののどれかに当たれば出す) */
 type PostFilter = 'popular' | 'image' | 'video' | 'link' | 'own'
-// 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
 /** スマホのフッターの高さ */
 const MOBILE_BAR_H = 60
 /** スマホのフッターのボタン(大きく押しやすく) */
 const MOBILE_BTN = 'p-2.5 rounded-xl text-c-text-muted hover:text-c-text-strong active:bg-c-surface2 transition-colors disabled:opacity-40'
+// 絞り込みのアイコンには、意味の色を付ける(人気は橙、画像は緑、動画は赤、リンクは青)
 const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[] = [
   { key: 'popular', label: '人気', icon: 'local_fire_department', color: 'var(--c-mark-hot)' },
   { key: 'image', label: '画像', icon: 'image', color: 'var(--c-mark-image)' },
@@ -211,7 +210,6 @@ const FILTERS: { key: PostFilter; label: string; icon: string; color: string }[]
 ]
 /** 自分の書き込み(書き込み履歴にあるレス)だけを出す。PC だけ(スマホは 5 つを等分に並べているため) */
 const OWN_FILTER = { key: 'own', label: '自分', icon: 'person', color: 'var(--c-own)' } as const
-/** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 /** 引用のない(文章で引用する掲示板の)レスに渡す、空のつながり(描き直しを起こさないよう、いつも同じもの) */
 const NO_QUOTES = new Map<string, number>()
 /**
@@ -220,18 +218,16 @@ const NO_QUOTES = new Map<string, number>()
  */
 const FIRST_RENDER = 80
 /**
- * スマホ: 中身を作るのは、見えているレスの上 WIN_BEFORE 件・下 WIN_AFTER 件まで(仮想スクロール)。
- * PC のように全部を作り足すと、1000 レスのスレでは部品が多すぎて、作り足すたび・スクロールのたびに重くなる。
- * 作っている範囲の端から WIN_MARGIN 件以内まで見えてきたら、範囲を動かす(遠くなったレスは中身を外して仮の高さの箱に戻す)
+ * 見えているレスの前後に、何件まで中身を作っておくか(全部作ると 1000 レスのスレで重い)。
+ * 範囲の端から WIN_MARGIN 件以内まで見えてきたら範囲を動かす。はじいても空箱が見えないよう、下は多めに作り、早めに動かす
  */
-// 勢いよくはじいても空箱が見えないよう、先(下)は多めに作っておき、端まで 1/3 ほどに近づいたら早めに動かす
-// (はじめ 25・45・10 にしたら、はじいたときに中身を作る前に空箱が見え、「表示が遅れる」と言われた)
 // 上へ読むときに範囲を動かす間隔は WIN_BEFORE − WIN_MARGIN 件。少ないと数レスごとに全枠を見直すことになる
 const WIN_BEFORE = 80
 const WIN_AFTER = 100
 const WIN_MARGIN = 35
 /** 書き込み欄(下に置いたとき)を伸ばせる高さの上限。つかんで伸ばすときの上限と同じ */
 const REPLY_MAX_HEIGHT = 600
+/** スレ表示がこれより狭い(書き込み欄が右)・低い(書き込み欄が下)ときは、書き込み欄を自動でしまう */
 const AUTO_COLLAPSE_WIDTH = 720
 const AUTO_COLLAPSE_HEIGHT = 420
 /** 新着の札を出しておく時間 */
@@ -274,10 +270,6 @@ function Splitter(props: { layout: ReplyLayout; size: number; onChange: (size: n
   )
 }
 
-/**
- * レスの中で Tab で回るもの。本文(リンク・アンカー・画像・カード)を先に、レスの頭(番号・名前・ID)を後に並べる。
- * マウスを乗せたときに出る操作バーは入れない
- */
 /** el の中で選んでいる文字(前後の空白を除く)。el の外にまたがって選んでいたり、何も選んでいなければ undefined */
 function selectedTextIn(el: HTMLElement): string | undefined {
   const sel = window.getSelection()
@@ -314,6 +306,10 @@ function cycleTabItems(items: HTMLElement[], back: boolean): HTMLElement {
   return items[next]
 }
 
+/**
+ * レスの中で Tab で回るもの。本文(リンク・アンカー・画像・カード)を先に、レスの頭(番号・名前・ID)を後に並べる。
+ * マウスを乗せたときに出る操作バーは入れない
+ */
 function tabItems(post: HTMLElement): HTMLElement[] {
   const all = [...post.querySelectorAll<HTMLElement>('a[href], button, [role="button"]')].filter(
     (el) => !el.closest('[data-post-toolbar]') && el.getClientRects().length > 0,
@@ -427,10 +423,6 @@ function postArticleProps(p: Post, s: FrameShared) {
   }
 }
 
-/**
- * レス 1 件ぶんの枠。選んでいるレスなどは枠ごとの真偽値で受け取り、値の変わった枠だけを描き直す
- * (J・K や押したときに動くのは 2〜3 枠で、1000 枠を作り直すと押し続けで詰まる)
- */
 /** 頭(名前の行)を省くレスか。返信のレスは、続けて書いたものでも頭とアイコンを出す(返信元からの線をつなぐため) */
 function continuedHead(
   p: Post,
@@ -445,6 +437,10 @@ function continuedHead(
   return ((anchorCounts.get(p.no) ?? 0) === 0 || (variant === 'line' && !!ownNos?.has(p.no))) && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
 }
 
+/**
+ * レス 1 件ぶんの枠。選んでいるレスなどは枠ごとの真偽値で受け取り、値の変わった枠だけを描き直す
+ * (J・K や押したときに動くのは 2〜3 枠で、1000 枠を作り直すと押し続けで詰まる)
+ */
 const PostFrame = memo(function PostFrame(props: {
   post: Post
   index: number
@@ -489,8 +485,6 @@ const PostFrame = memo(function PostFrame(props: {
       data-placeholder={rendered ? undefined : ''}
       hidden={props.frameHidden}>
       {props.unreadLine && <Divider label="ここから未読" self />}
-      {/* 前のレスから 1 時間以上空いた所・日付が変わった所に、細い区切り(スマホのアプリ・hono-bbs の web と同じ) */}
-      {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
       {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
       {props.sameIdTint && (
         <span
@@ -498,6 +492,7 @@ const PostFrame = memo(function PostFrame(props: {
           style={{ background: 'var(--c-cursor-tint)' }}
         />
       )}
+      {/* 選んでいるレスの印。うっすらした色と、下辺のまっすぐな線(角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
       {props.cursorMark && (
         <>
           {/* うっすら色を敷いて、どのレスか目に入るようにする。中身(本文・吹き出し)の後ろに敷く(上に重ねると、吹き出しの文字まで色がかぶる) */}
@@ -531,11 +526,11 @@ const PostFrame = memo(function PostFrame(props: {
 
 export default function ThreadView(props: Props) {
   const { log, unreadFrom, settings, onRead } = props
-  /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
   // 見えているタブだけ、判定が届くたびに計算し直す(隠れたタブは、見せるときに計算し直す)
   const trollJudgeRef = useRef(props.trollJudge)
   if (props.active) trollJudgeRef.current = props.trollJudge
   const trollJudge = trollJudgeRef.current
+  /** 自動 NG(荒らしの判定)で畳むレスと、その理由 */
   const autoNgBase = useMemo(
     () => (settings.autoNg ? judgeAutoNg(log.posts, props.trollMarks, trollJudge) : new Map<number, AutoNgReason>()),
     [settings.autoNg, log.posts, props.trollMarks, trollJudge],
@@ -575,7 +570,6 @@ export default function ThreadView(props: Props) {
     (p: Post, ruleId: string, mark: 'hit' | 'miss' | null) => props.onUpdateSetting?.('aiNgOverrides', setOverride(settings.aiNgOverrides, ruleId, p.body, mark)),
     [props.onUpdateSetting, settings.aiNgOverrides],
   )
-  // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
   const isNgRule = props.isNg
   // レスのメニューが読む NG の一覧(変わるたびに全部のレスを描き直さないよう、控えを読む)
   const ngContext = useRef({ rules: settings.ngRules, boardUrl: props.boardUrl })
@@ -586,6 +580,7 @@ export default function ThreadView(props: Props) {
     for (const p of log.posts) if (isNgRule(p)) out.add(p.no)
     return out
   }, [log.posts, isNgRule])
+  // NG は、ユーザーの NG と自動 NG のどちらかに当たったもの
   const isNg = useCallback((p: Post) => ngRuleNos.has(p.no) || autoNg.has(p.no), [ngRuleNos, autoNg])
   const ref = useRef<HTMLDivElement>(null)
   /** レス一覧とミニマップの領域。ポップアップの幅をこれに合わせる */
@@ -616,7 +611,7 @@ export default function ThreadView(props: Props) {
     y: 0,
   })
 
-  // 端でさらにホイールを回すと更新する(web 版と同じ)。上端と下端で別々に持つ
+  // 端でさらにホイールを回すと更新する。上端と下端で別々に持つ
   // 手で更新したあとのクールダウン中(App が決める)は、引っぱっても数えない
   const refreshReadyRef = useRef(props.refreshReadyAt)
   refreshReadyRef.current = props.refreshReadyAt
@@ -658,8 +653,7 @@ export default function ThreadView(props: Props) {
       el.style.fontSize = ''
       const over = () => el.scrollHeight > el.clientHeight + 1
       if (!over()) return
-      // 2 行(line-clamp)に収まる一番大きい字を、0.5px きざみで半分ずつ探す(測るたびにレイアウトをやり直すので、
-      // 0.5px ずつ小さくすると最大 10 回以上測っていた。半分ずつなら 5 回ほど)
+      // 2 行(line-clamp)に収まる一番大きい字を、0.5px きざみで半分ずつ探す(測るたびにレイアウトをやり直すので、回数を減らす)
       let lo = 22 // 11px(0.5px きざみの数)
       let hi = Math.floor(parseFloat(getComputedStyle(el).fontSize) * 2) - 1
       while (lo < hi) {
@@ -734,13 +728,13 @@ export default function ThreadView(props: Props) {
   const [quickMessage, setQuickMessage] = useState<{ ok: boolean; text: string }>()
   const quickTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(quickTimer.current), [])
-  /** スレ表示の下に、少しのあいだ結果を出す */
   /** 文字をコピーして、短く知らせる */
   const copyText = (text: string, done: string) =>
     void navigator.clipboard.writeText(text).then(
       () => showQuick(true, done),
       () => showQuick(false, 'コピーできませんでした'),
     )
+  /** スレ表示の下に、少しのあいだ結果を出す */
   const showQuick = (ok: boolean, text: string) => {
     setQuickMessage({ ok, text })
     clearTimeout(quickTimer.current)
@@ -909,7 +903,6 @@ export default function ThreadView(props: Props) {
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
   // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
-  /** 中身を作るレスの範囲 [lo, hi)(log.posts の位置)。hi が Infinity なら末尾まで(新着もすぐ作る) */
   /** 開く位置の前後 FIRST_RENDER 件の範囲。レスがまだない(読み込み中)なら、まだ何も作らない(hi 0) */
   const firstWindow = () => {
     const posts = log.posts
@@ -936,9 +929,9 @@ export default function ThreadView(props: Props) {
     const hi = Math.min(n, a + FIRST_RENDER / 2)
     return { lo, hi: hi >= n ? Infinity : hi }
   }
+  /** 中身を作るレスの範囲 [lo, hi)(log.posts の位置)。hi が Infinity なら末尾まで(新着もすぐ作る) */
   const [renderWin, setRenderWin] = useState(firstWindow)
-  // 読み込み中(レス 0 件)に開いたスレは、レスが届いたところで開く位置の前後に決め直す。
-  // 以前は 0 件のときに「最後まで全部」と決まり、届いた瞬間に全部のレス(1000 件)の中身を一度に作っていた
+  // 読み込み中(レス 0 件)に開いたスレは、レスが届いたところで開く位置の前後に決め直す
   const windowPending = useRef(log.posts.length === 0)
   useLayoutEffect(() => {
     if (!windowPending.current || log.posts.length === 0) return
@@ -997,7 +990,7 @@ export default function ThreadView(props: Props) {
     [log.posts, visibleNos],
   )
   const byNo = useMemo(() => new Map(log.posts.map((p) => [p.no, p])), [log.posts])
-  /** Discord 風: 直前に見えているレスと同じ ID(続けて書いた)か */
+  /** 直前に見えているレスと同じ ID(続けて書いた)か */
   const continuedFrom = useCallback(
     (i: number) => {
       const p = log.posts[i]
@@ -1050,8 +1043,8 @@ export default function ThreadView(props: Props) {
       return next
     }), [])
   /**
-   * Discord 風: 本文がアンカーで始まるレスの、引用元の番号・本文の頭・ID。
-   * レスごとに 1 回だけ作って使い回す(描くたびに作り直すと、memo したレスが全部描き直しになって、J・K が重くなる)
+   * Discord・LINE 風: 本文がアンカーで始まるレスの、引用元の番号・本文の頭・ID。
+   * レスごとに 1 回だけ作って使い回す(描くたびに作ると memo したレスが全部描き直しになり、J・K が重くなる)
    */
   const replyPreviews = useMemo(() => {
     const m = new Map<number, { no: number; text: string; id?: string }>()
@@ -1176,7 +1169,7 @@ export default function ThreadView(props: Props) {
         if (filteringRef.current) return
         first = n - 1
       }
-      // 隠れた枠は高さ 0 で top も 0 なので、飛ばして測る(止まらずに全件まで広がっていた)
+      // 隠れた枠は高さ 0 で top も 0 なので、飛ばして測る(飛ばさないと範囲が全件まで広がる)
       let last = first
       for (let i = first + 1; i < n; i++) {
         if (frames[i].hidden) continue
@@ -1283,7 +1276,6 @@ export default function ThreadView(props: Props) {
             id: 'fontSize',
             label: '文字の大きさ・余白',
             icon: 'format_size',
-            // レスの本文と、頭(名前・日付・ID など)を別々に。動かすとその場で変わる
             // 動かすと後ろの画面の大きさが変わるので、メニューの中ではなく、真ん中に出す小さな画面で変える
             onClick: () => setFontDialog(true),
           },
@@ -1323,17 +1315,17 @@ export default function ThreadView(props: Props) {
       ),
     },
   ]
-  // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   /** ボタンの並び(設定で並べ替えたとき) */
   const barOrder = (isMobile ? settings.mobileBarOrder : settings.barOrder).thread
+  // その画面(PC かスマホか)で使わない操作は、︙ の中にも出さない
   const barActions = orderBy(allBarActions.filter((a) => placements[a.id] !== undefined), barOrder)
-  // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
   const refreshFab = isMobile && settings.showRefreshFab
+  // スマホで書き込める掲示板は、フッターに入力欄を置くので、いつもフッターがある
   const hasFooter = barActions.some((a) => inBar(placements[a.id], 'footer')) || (isMobile && !!props.onSubmitPost)
-  // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
   const footerRef = useRef<HTMLDivElement>(null)
   // 一番下へ・新着の札は、フッターが出ている間はその上に上げる(重ならないように)。--footer-offset で動かす
   const footerShown = useRef(true)
+  // スマホ: 下へスクロールするとヘッダーとフッターを隠し、上へスクロールすると戻す
   const hideBars = useHideOnScroll(
     headerRef,
     footerRef,
@@ -1373,9 +1365,8 @@ export default function ThreadView(props: Props) {
   const keyRepeat = useRef(false)
   /** 選んでいるレス。J・K で送ったレスと、押したレス。枠を強調色にし、Shift+E で返信する */
   const [cursorNo, setCursorNo] = useState<number>()
-  // 新着が届いた・開き直した(「ここから未読」が変わった)ら、読んだところより前で選んでいたレスは忘れる
-  // (次の J は新着の頭から始まる)。読んだところの最後のレスを選んでいた(一番下まで読んでいた)なら、そのまま残す。
-  // 残しておけば、新着がなくても選んでいる所は動かず、新着があれば J でそのまま新着の頭へ進む
+  // 新着が届いた・開き直した(「ここから未読」が変わった)ら、読んだところより前で選んでいたレスは忘れる(次の J は新着の頭から)。
+  // 読んだところの最後のレスを選んでいたなら残す(新着があれば、J でそのまま新着の頭へ進む)
   useEffect(() => {
     setCursorNo((c) => keepCursorOnNew(c, unreadFrom))
   }, [unreadFrom])
@@ -1385,10 +1376,6 @@ export default function ThreadView(props: Props) {
   const cursorFrame = () => (cursorNo === undefined ? null : ref.current?.querySelector<HTMLElement>(`[data-post="${cursorNo}"]`))
   const cursorFrameRef = useRef(cursorFrame)
   cursorFrameRef.current = cursorFrame
-  /**
-   * 選んでいるレスを 1 つ動かす。画面は、選んだレスが外に出るときだけ最小限動かす(スレ一覧の J・K と同じ)。
-   * まだ選んでいなければ、画面に見えている一番上のレスから始める
-   */
   /**
    * レスの中のリンク・画像のボタンに残ったフォーカスを外す。残っていると、Enter がそのボタンを押してしまい、
    * 前に選んでいたレスの画像が開く(ビューアーを閉じたあとや、レスを押したあとに残る)
@@ -1440,6 +1427,10 @@ export default function ThreadView(props: Props) {
     const i = pickAfterPageAt(frames.length, (k) => spanOf(frames[k]), y, moved, dir)
     if (i !== undefined) setCursorNo(Number(frames[i].dataset.post))
   }
+  /**
+   * 選んでいるレスを 1 つ動かす。画面は、選んだレスが外に出るときだけ最小限動かす(スレ一覧の J・K と同じ)。
+   * まだ選んでいなければ、画面に見えている一番上のレスから始める
+   */
   const moveCursor = (d: 1 | -1) => {
     releaseFocus()
     const { root, frames, seen, seenFrom, viewTop, box } = visibleFrames()
@@ -1970,11 +1961,11 @@ export default function ThreadView(props: Props) {
 
   const mainHandlers = useMemo(() => handlersFor(0), [handlersFor])
 
-  // スレタイ・絞り込みの帯。書き込み欄が下のときはスクロール領域の中に置いて(すりガラス越しにレスが透ける)、
-  // 右のときはスクロール領域の外に出して横いっぱいに置く(書き込み欄はその下に並ぶ)
   /** 選んでいるレスの ID(印を出しているときだけ。同じ ID のレスに薄く色を付ける) */
   const cursorId = keysOn && !cursorHidden && cursorNo !== undefined ? byNo.get(cursorNo)?.id : undefined
 
+  // スレタイ・絞り込みの帯。書き込み欄が下のときはスクロール領域の中に置いて(すりガラス越しにレスが透ける)、
+  // 右のときはスクロール領域の外に出して横いっぱいに置く(書き込み欄はその下に並ぶ)
   const headerBlock = (
     <div
       ref={headerRef}
@@ -2063,7 +2054,7 @@ export default function ThreadView(props: Props) {
               title={isMobile ? 'スレの操作' : 'クリックで先頭へスクロール'}
             >
               {isMobile ? (
-                // スマホ: 2 行まで。入りきらなければ字を小さくして収める(fitTitle)。レス数はスレタイの続きに
+                // スマホ: 2 行まで。入りきらなければ字を小さくして収める(titleFitRef)。レス数はスレタイの続きに
                 <span ref={titleFitRef} className="text-[15px] leading-snug break-words line-clamp-2">
                   {log.title}
                   <span className="ml-1.5 text-xs font-normal text-c-text-muted tabular-nums">({log.posts.length})</span>
@@ -2395,7 +2386,7 @@ export default function ThreadView(props: Props) {
           style={{ bottom: 'var(--kb-inset, 0px)', minHeight: `calc(var(--footer-bar-h, ${MOBILE_BAR_H}px) / var(--bar-zoom, 1))` }}
         >
           {replyFormProps ? (
-            // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻る・更新はジェスチャー・引っぱって更新で)
+            // 書き込める掲示板: Discord・LINE のような 1 行の入力欄(戻るはジェスチャーで)
             <ReplyForm
               ref={replyRef}
               {...replyFormProps}

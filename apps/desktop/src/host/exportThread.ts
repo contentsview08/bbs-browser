@@ -6,7 +6,6 @@ import { exportFileName, threadToHtml, threadToText, type ExportSource } from '.
 
 /** 保存先を選んで書き出す。拡張子が .txt ならテキスト、ほかは HTML。選ばなかったら undefined、書いたらそのパス */
 export async function saveThread(src: ExportSource): Promise<string | undefined> {
-  // 拡張子を .txt に書き換えればテキストで保存する
   const path = await pickSavePath(exportFileName(src.title, 'html'), 'HTML・テキスト', ['html', 'txt'])
   if (!path) return undefined
   const contents = /\.txt$/i.test(path) ? threadToText(src) : threadToHtml(src)

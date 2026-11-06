@@ -1,4 +1,4 @@
-// 2ch 互換コネクタ(標準コネクタ)。5ch、eddist、hono-bbs の互換窓口などを読む。
+// 2ch 互換コネクタ(標準コネクタ)。5ch・eddist などを読む。
 
 import type {
   Board,
@@ -51,7 +51,6 @@ function kakoDatUrl(thread: ThreadSummary): string | undefined {
   return `${to5chIo(thread.boardUrl)}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
 }
 
-/** Content-Type の charset から文字コードを決める。書かれていなければ 2ch 互換の慣習どおり Shift_JIS */
 /** 読み取ったバイト列の文字コード。切り詰めた本文は body で渡す */
 function encodingOf(res: HttpResponse, body: Uint8Array = res.body): Encoding {
   return detectEncoding(body, res.headers['content-type'])
@@ -211,7 +210,7 @@ export function createdAtOf(key: string, now = Date.now()): Date | undefined {
   return isAnnouncementKey(key, now) ? undefined : createdAtOfKey(key)
 }
 
-/** 立てた人の ID が付いたスレ一覧(subject-metadent.txt)がある掲示板(エッジ) */
+/** 立てた人の ID が付いたスレ一覧(subject-metadent.txt)がある掲示板(エッヂ) */
 const hasAuthorSubject = (boardUrl: string) => /^https?:\/\/[^/]*eddibb\.cc\//.test(boardUrl)
 
 /** スレ一覧のファイルを読む。boardUrl を渡すと、ないときに「板が見つかりません」と分かる言葉で断る */
@@ -231,7 +230,6 @@ export function isAnnouncementKey(key: string, now = Date.now()): boolean {
   return date !== undefined && date.getTime() > now + FUTURE_TOLERANCE_MS
 }
 
-/** スレの URL(…/test/read.cgi/板/番号/)と板の URL(…/板/)を見分ける */
 // スレの URL。/test/read.cgi/ の前に道(ディレクトリ)があってもよい(https://host/bbs/test/read.cgi/板/キー なら、板は https://host/bbs/板/)
 const THREAD_URL = /^(https?:\/\/[^/?#]+(?:\/[^?#]*?)?)\/test\/read\.cgi\/([^/?#]+)\/(\d+)/
 /**
@@ -329,7 +327,6 @@ const isShitaraba = (url: string) => /^https?:\/\/jbbs\.(?:shitaraba\.net|livedo
 export const twoChConnector: Connector = {
   id: ID,
   name: '2ch 互換',
-  // 1 つのスレは 1000 レスまで
   maxPosts: 1000,
 
   canHandle(url) {
@@ -382,12 +379,12 @@ export const twoChConnector: Connector = {
   },
 
   async listThreads(board, ctx) {
-    // エッジは、スレタイの後ろに立てた人の ID が付いたスレ一覧(subject-metadent.txt)も出している。読めればそちらを使う
+    // エッヂは、スレタイの後ろに立てた人の ID が付いたスレ一覧(subject-metadent.txt)も出している。読めればそちらを使う
     const base = to5chIo(board.url)
     const meta = hasAuthorSubject(board.url) ? await readSubject(`${base}subject-metadent.txt`, ctx).catch(() => undefined) : undefined
     const text = meta ?? (await readSubject(`${base}subject.txt`, ctx, board.url))
     return parseSubjectTxt(text).map((e, order): ThreadSummary => {
-      // スレタイの後ろの角かっこは、立てた人(エッジの ID・BE 番号・ほかの板の名前や ID)
+      // スレタイの後ろの角かっこは、立てた人(エッヂの ID・BE 番号・ほかの板の名前や ID)
       const { title, authorId } = splitAuthorId(e.title)
       return {
         connectorId: ID,

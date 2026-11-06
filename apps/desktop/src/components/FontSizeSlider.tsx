@@ -59,8 +59,7 @@ export default function FontSizeSlider(props: {
     setPx(shown)
   }, [shown])
   const drag = useSliderDrag()
-  // 値を保存する(つかんでいる印は、離した(pointerup)ときに SliderDialog 側が外す。blur で外すと、つかんだ直後に焦点が動いたときに
-  // 幕が透けないことがあった)
+  // 保存するだけ。印は SliderDialog が外す
   const commit = () => {
     if (px !== shown) props.onCommit(px)
   }
@@ -305,7 +304,7 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   const backdrop = useBackdropClose(props.onClose)
-  // つかんでいるスライダーの行。あるときは、その行のほか(題・ほかの行・暗い背景)を見えなくする
+  // つかんでいるスライダーの行。あるときは、その行のほか(題・ほかの行)を見えなくする
   const [active, setActive] = useState<HTMLElement | null>(null)
   // 指(マウス)を画面の外で離したときも戻す
   useEffect(() => {

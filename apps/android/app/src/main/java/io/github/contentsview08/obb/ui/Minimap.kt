@@ -38,7 +38,7 @@ import io.github.contentsview08.obb.bbs.PostIndex
 import kotlinx.coroutines.launch
 
 /**
- * ミニマップ(今のスマホ版の Minimap と同じ)。スレ全体を縦に縮めて、人気レス(真ん中の横棒)・
+ * ミニマップ。スレ全体を縦に縮めて、人気レス(真ん中の横棒)・
  * 自分のレス(左の塗ったひし形)・自分への返信(左の枠だけのひし形)・画像(右の四角)・動画(右の三角)と、
  * 「ここから未読」から下を示す。印の位置はレスの番目で決める(高さを測らない)。
  * たたくとその割合の位置へ飛び、なぞるとそのまま送れる。いま見ている範囲はつまみで出す
@@ -54,7 +54,6 @@ fun Minimap(
 ) {
     val scope = rememberCoroutineScope()
     val n = posts.size
-    // 印は posts が変わったときだけ作り直す
     val marks = remember(posts, index, own, toOwn) {
         posts.mapIndexedNotNull { i, p ->
             val heat = index.replyCount[p.no] ?: 0

@@ -37,7 +37,7 @@ export default function AnchorTree(props: {
   /** 押したレス(色を付ける) */
   focus: number
   renderPost: (no: number) => ReactNode
-  /** Discord 風: 線をアイコン同士をつなぐ形にする */
+  /** discord・line は、線でアイコン同士をつなぐ */
   variant?: 'card' | 'discord' | 'classic' | 'line'
 }) {
   // スマホは画面の幅が狭く、罫線でつなぐと本文が窮屈になるので、レスの左に縦線を引いて段をずらすだけにする
@@ -74,7 +74,7 @@ export default function AnchorTree(props: {
               />
             </div>
           )}
-          {/* 押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくいのでやめた) */}
+          {/* 押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくい) */}
           <div
             className={`tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus ? 'tree-focus' : ''}`}
           >
@@ -91,7 +91,7 @@ export default function AnchorTree(props: {
 
 /**
  * Discord 風・LINE 風のアンカーツリー。親のアイコンの下から縦線を下ろし、子のアイコンの真ん中の高さで右へ曲げて、子のアイコンにつなぐ。
- * 段の幅をアイコン 1 つ分にして、子のアイコンが親の本文の始まりにそろうようにする
+ * 段の幅をアイコンと隙間の分にして、子のアイコンが親の本文の始まりにそろうようにする
  */
 function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode; step: number }) {
   const D_STEP = props.step

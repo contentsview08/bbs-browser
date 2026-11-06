@@ -1,4 +1,4 @@
-// hono-bbs-merge packages/web/tailwind.config.js から複製。フォント名だけ同梱版(Variable)を先頭に足している
+// hono-bbs の packages/web/tailwind.config.js の複製。フォント名だけ同梱版(Variable)を先頭に足している
 import forms from '@tailwindcss/forms'
 
 /** @type {import('tailwindcss').Config} */

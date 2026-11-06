@@ -78,7 +78,7 @@ export const UPLOAD_HOSTS: UploadHostDef[] = [
   { key: 'imgbb-web', name: 'imgbb', kind: 'web', site: 'imgbb', note: '消えない。ログインなしで上げられる' },
 ]
 export const DEFAULT_UPLOAD_HOST: UploadHost = 'imgur-web'
-/** 前の設定(自動・0x0.st・uguu.se)は imgur の画面に読み替える */
+/** 今はない上げ先(自動・0x0.st・uguu.se)の保存値は、既定に読み替える */
 export function migrateUploadHost(v: string | undefined): UploadHost {
   if (UPLOAD_HOSTS.some((h) => h.key === v)) return v as UploadHost
   return DEFAULT_UPLOAD_HOST
@@ -111,7 +111,7 @@ async function prepare(file: File, o: UploadOptions): Promise<Blob> {
 
 /**
  * multipart/form-data の中身を自分で組み立てる。Android の plugin-http に FormData をそのまま渡すと、
- * 区切り(boundary)の付いた Content-Type が届かず、catbox が中身を読めずに空の返事(HTTP 200)を返していた
+ * 区切り(boundary)の付いた Content-Type が届かず、catbox が中身を読めずに空の返事(HTTP 200)を返す
  */
 async function multipart(fields: [string, string][], file: { name: string; fileName: string; type: string; data: Blob }) {
   const boundary = `----bbs-browser-${crypto.randomUUID()}`
@@ -268,7 +268,7 @@ export async function uploadMedia(file: File, options: UploadOptions): Promise<U
   }
 }
 
-/** はじめに試す上げ先(ここ以外に上げたときは、書き込み欄で知らせる) */
+/** userhash が効く上げ先。ここへアカウントで上げたものだけ、履歴からサーバー上でも消せる */
 export const PRIMARY_HOST = 'catbox'
 
 /**
@@ -278,7 +278,7 @@ export const PRIMARY_HOST = 'catbox'
 export async function deleteFromCatbox(url: string, userhash: string): Promise<void> {
   const name = /^https:\/\/files\.catbox\.moe\/([^/?#]+)$/.exec(url)?.[1]
   if (!name) throw new Error('catbox のファイルではありません')
-  // FormData は Android の plugin-http で区切りが落ちるので、ふつうのフォームの形で送る(uploadToCatbox の multipart を参照)
+  // FormData は Android の plugin-http で区切りが落ちるので、ふつうのフォームの形で送る(multipart の説明を参照)
   const form = new URLSearchParams({ reqtype: 'deletefiles', userhash, files: name })
   const res = await fetch(ENDPOINT, {
     method: 'POST',

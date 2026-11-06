@@ -121,7 +121,6 @@ private fun AiRuleEditor(vm: AppViewModel, initial: AiNgRule, onDismiss: () -> U
                         )
                     }
                 }
-                // スレの話題を踏まえて判定する・同じ ID の続きも当てる(PC 版と同じ)
                 Row(Modifier.fillMaxWidth().clickable { r = r.copy(withContext = !r.withContext) }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("スレの話題を踏まえて判定する", color = Palette.textStrong, fontSize = 14.sp)

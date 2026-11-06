@@ -137,7 +137,6 @@ describe('ふたばのコネクタ', () => {
     const r = await futabaConnector.createPost!(thread, { name: '', mail: 'sage', body: 'abc' }, ctx)
     expect(r.status).toBe('ok')
     expect(posted[0].url).toBe('https://may.2chan.net/b/futaba.php?guid=on')
-    // multipart/form-data の欄を読む
     const boundary = /boundary=(\S+)/.exec(posted[0].headers?.['Content-Type'] ?? '')?.[1]
     expect(boundary).toBeTruthy()
     const field = (name: string) => new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)\\r\\n`).exec(posted[0].body)?.[1]
@@ -216,7 +215,7 @@ describe('ふたばのコネクタ', () => {
     const { ctx } = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<html><head><title>本文がありません</title></head><body>…</body></html>')
     const r = await futabaConnector.createPost!(thread, { name: '', mail: '', body: '' }, ctx)
     expect(r).toMatchObject({ status: 'error', message: '本文がありません' })
-    // 前の読み方(refresh があれば書けた)だと、エラーのページも「書けた」にしてしまっていた
+    // エラーのページにも refresh が付くので、refresh だけでは書けたとみなさない
     const html = fake({ [`${BOARD}res/1000.htm`]: { body: FORM_PAGE } }, '<html><head><META HTTP-EQUIV="refresh" content="1"></head><body>書き込みが多すぎます</body></html>')
     expect((await futabaConnector.createPost!(thread, { name: '', mail: '', body: 'x' }, html.ctx)).status).toBe('error')
   })

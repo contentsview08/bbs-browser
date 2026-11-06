@@ -90,7 +90,6 @@ import io.github.contentsview08.obb.data.filterLicenses
 import io.github.contentsview08.obb.data.parseLicenses
 import io.github.contentsview08.obb.data.spdxLinks
 
-/** 設定の画面(今のスマホ版の MobileSettings と同じ組み立て: 入口の一覧から、項目ごとの画面へ進む) */
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字と余白", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
@@ -100,6 +99,7 @@ private val TITLES = mapOf(
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
 private val LocalAdvanced = androidx.compose.runtime.compositionLocalOf { false }
 
+/** 設定の画面: 入口の一覧から、項目ごとの画面へ進む */
 @Composable
 fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     var sub by rememberSaveable { mutableStateOf(start) }
@@ -161,7 +161,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     }
 }
 
-/** 設定の上の検索欄 */
+/** 検索欄(設定の上・使っているソフトウェアの一覧) */
 @Composable
 private fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String) {
     Row(
@@ -275,7 +275,7 @@ private fun SchemeGrid(selected: String, dark: Boolean? = null, onPick: (String)
                 Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(6.dp))
                     .clickable { onPick(s.key) },
             ) {
-                // 見本: 背景・面・強調色・未読の色
+                // 見本: 地・面・字・強調色・未読・人気の色
                 Box(Modifier.fillMaxWidth().height(56.dp).background(s.base).padding(8.dp)) {
                     Column(Modifier.fillMaxWidth().background(s.surface2, RoundedCornerShape(4.dp)).padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.width(48.dp).height(5.dp).background(s.textStrong, RoundedCornerShape(3.dp)))
@@ -415,7 +415,6 @@ private fun WritePage(vm: AppViewModel) {
         EditableWordList(p.quickPhrases, "定型文", "定型文を足す", "定型文はありません", sortable = true) { p.quickPhrases = it }
     }
     if (LocalAdvanced.current) Group("画像のアップロード", note = "画像を置き場に上げて、本文に URL を入れます。上げた画像は誰でも見られ、あとから消せません。撮影場所などの情報(EXIF)は描き直して取り除きます。hono-bbs の板では、いつもその掲示板の置き場に上げます。「サイトの画面」の上げ先は、画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れます") {
-        // 上げ先: サイトの画面(画像を押すとそのサイトの画面が開き、上げたリンクを本文に入れる)か API(キーを登録して、そのまま上げる)
         ChoiceRow(
             "上げ先", p.uploadHost,
             io.github.contentsview08.obb.data.Uploader.HOSTS.map { h -> h.key to "${h.name}(${if (h.kind == "web") "サイトの画面" else "API"})・${h.note}" },
@@ -950,7 +949,7 @@ private fun LicensesPage() {
     }
 }
 
-// ── 部品(今のスマホ版の components/mobile/ui.tsx にあたる) ──
+// ── 部品 ──
 
 /** 項目のまとまり。見出しと、下に小さな説明 */
 @Composable

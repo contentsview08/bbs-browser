@@ -70,7 +70,7 @@ fun siteLabel(url: String, name: String): String = if (url.contains("menu.5ch.")
 /**
  * 板を探す: サイト(5ちゃんねる・red-edge など) → カテゴリ → 板 の順に入っていく(スマホのファイルの選び方と同じ)。
  * 戻る(左上・端末の戻る)で 1 段上へ。☆ でお気に入り板に足す。押すとその板を開く。
- * 探す(虫めがね)は、いま見ているサイトの板の名前・カテゴリから(サイトを選ぶ前は、最初のサイトから)
+ * 探す(虫めがね)は、いま見ているサイトの板の名前・カテゴリから
  */
 @Composable
 fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Boards) {
@@ -253,7 +253,7 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     var menuFor by remember { mutableStateOf<io.github.contentsview08.obb.bbs.ThreadSummary?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
-    // お気に入りのスレは、開いたときに新着を確かめる(今のスマホ版と同じ)
+    // お気に入りのスレは、開いたときに新着を確かめる
     androidx.compose.runtime.LaunchedEffect(tab) { if (tab == "fav") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
@@ -362,7 +362,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
     }
 }
 
-/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ(置き場から消せないので、履歴から消す操作はない) */
+/** 履歴の「画像」のタブ: 上げた画像を 3 列で(新しい順)。押すと見る、長押しで URL のコピー・貼ったレスへ・置き場の削除ページ(imgbb)。履歴から消す操作はない */
 @Composable
 fun UploadsScreen(vm: AppViewModel) {
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()

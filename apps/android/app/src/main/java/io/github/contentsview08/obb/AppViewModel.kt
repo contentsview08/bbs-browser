@@ -45,13 +45,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 読んでいた位置(今のスマホ版の ScrollPosition) */
+/** 読んでいた位置(offset はレスの中のずれ、bottom は一番下にいたか) */
 data class ScrollPos(val no: Int, val offset: Int, val bottom: Boolean)
 
-/** 書き込み欄の状態(スレごと、スレ立てでも使う) */
-/**
- * 読み込めなかった理由を、人に分かる言葉にする(通信の失敗は英語の決まり文句なので言い換える)
- */
+/** 読み込めなかった理由を、人に分かる言葉にする(通信の失敗は英語の決まり文句なので言い換える) */
 fun loadErrorText(e: Throwable): String = when (e) {
     is java.net.UnknownHostException -> "ネットにつながっていないか、掲示板のサーバーが見つかりません(${e.message?.substringAfter('"')?.substringBefore('"') ?: ""})"
     is java.net.ConnectException -> "掲示板のサーバーにつながりませんでした"
@@ -60,12 +57,12 @@ fun loadErrorText(e: Throwable): String = when (e) {
     else -> e.message ?: e.toString()
 }
 
-/** boardUrl: 書き込む板(画像の上げ先を板で選ぶ。hono-bbs の板は、その掲示板の画像の置き場) */
+/** 書き込み欄の状態(スレごと、スレ立てでも使う)。boardUrl: 書き込む板(画像の上げ先を板で選ぶ。hono-bbs の板は、その掲示板の画像の置き場) */
 class ReplyState(val boardUrl: String = "") {
     /** 本文の欄に入っている(書いている)。書いている間はフッターを隠さない */
     var open by mutableStateOf(false)
     var name by mutableStateOf("")
-    /** メール(sage など)。今のスマホ版と同じく、オプションの欄で書く */
+    /** メール(sage など)。オプションの欄で書く */
     var mail by mutableStateOf("")
     var sage: Boolean
         get() = mail.trim().equals("sage", true)
@@ -135,7 +132,6 @@ sealed interface Page {
         var newSince by mutableStateOf<Long?>(null)
         /** 差分の行から絞り込んだ: "new"(新しく立ったスレ)/ null */
         var only by mutableStateOf<String?>(null)
-        /** スレを立てる欄 */
         val newThread = ReplyState(board.url)
     }
 
@@ -162,7 +158,6 @@ sealed interface Page {
         var unreadFrom by mutableStateOf(0)
         /** 画像の札を押して、URL を本文に広げたレス */
         val expandedImages = androidx.compose.runtime.mutableStateListOf<Int>()
-        /** 開いたときに移る位置(レス番号)。一度移ったら null */
         var loaded by mutableStateOf(false)
         var loading by mutableStateOf(false)
         var archived by mutableStateOf(false)
@@ -187,7 +182,7 @@ sealed interface Page {
     }
     class History : Page
     class FavThreads : Page
-    /** お気に入り板すべての、新着のある読んだスレ */
+    /** 閲覧履歴のうち、新着のあるスレ */
     class AllUnread : Page
     class PostHistory : Page
     /** 上げた画像(履歴の「画像」) */
@@ -223,7 +218,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 閲覧履歴の全部(検索用。ふだんの一覧は新しい方から 300 件だけ) */
     suspend fun allHistory(): List<HistoryEntry> = db.history(Int.MAX_VALUE)
 
-    /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
     /** クイックアクセス(最近見たスレ・書き込んだスレへさっと移る小さな画面)を出しているか */
     var quickOpen by mutableStateOf(false)
 
@@ -232,6 +226,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { history = db.history(); postHistory = db.postHistory(); favThreads = db.favoriteThreads() }
     }
 
+    /** 左のメニューに出すもの(お気に入り板・閲覧履歴・お気に入りのスレ)を読み直す */
     fun reloadSide() {
         viewModelScope.launch {
             favorites = db.favorites()
@@ -305,10 +300,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var checking by mutableStateOf(false)
         private set
 
-    /** 全板の未読(お気に入り板すべての、新着のある読んだスレ)。板ごとに subject.txt を 1 回ずつ取るだけ(スレの本文は取らない) */
+    /** 未読のスレ(閲覧履歴のうち、新着のあるもの) */
     var allUnread by mutableStateOf<List<HistoryEntry>>(emptyList())
     /**
-     * 未読: 閲覧履歴のうち、新着のあるスレ(PC 版・Web と同じ意味。2026-11-03 に「お気に入り板の読んだスレ」からそろえた)。
+     * 未読: 閲覧履歴のうち、新着のあるスレ(PC 版・Web と同じ意味)。
      * 板ごとにスレ一覧を 1 回だけ取り、載っていればそのレス数を新しい数にする(dat を 1 つずつ取りに行かない)
      */
     fun loadAllUnread() {
@@ -363,7 +358,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
     fun postedIn(url: String): PostHistoryEntry? = postHistory.firstOrNull { it.body.contains(url) }
 
-    /** 全板の未読を、手元の既読で数え直す(読んだスレは外す。通信はしない) */
+    /** 未読のスレを、手元の既読で数え直す(読んだスレは外す。通信はしない) */
     private fun recountAllUnread() {
         viewModelScope.launch {
             val byBoard = allUnread.groupBy { it.thread.boardUrl }
@@ -409,10 +404,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var appVisible by mutableStateOf(true)
     val canForward get() = forwardPage != null
 
-    /** 画面の移り方(1: 右から出てくる / -1: 右へ戻る / 0: 入れ替え)。積み重ねを変える直前に決める */
     /** なぞって戻っている途中の量(0〜1)。画面が指についてきて、後ろに前の画面が見える */
     var backDrag by mutableStateOf(0f)
-    /** 画面の移り方の向き(1 開く・-1 戻る・0 入れ替え・2 なぞって戻り終えた: 動きなし) */
+    /** 画面の移り方の向き(1 開く・-1 戻る・0 入れ替え・2 なぞって戻り終えた: 動きなし)。積み重ねを変える直前に決める */
     var navDir = 0
 
     fun back(): Boolean {
@@ -570,7 +564,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** お気に入り板を from 番目から to 番目へ(掴んで並べ替え) */
+    /** お気に入り板を i 番目から j 番目へ(掴んで並べ替え) */
     fun moveFavorite(i: Int, j: Int) {
         val list = favorites.toMutableList()
         if (i !in list.indices || j !in list.indices) return
@@ -680,7 +674,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val list = TwoCh.listThreads(page.board)
                 page.states = db.threadStates(page.board.url)
-                // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える(今のスマホ版と同じ)
+                // 前回この板の一覧を取った時刻より後に立ったスレに「新」の印を付ける。今回の時刻を次のために覚える
                 page.newSince = prefs.boardVisit(page.board.url)
                 prefs.setBoardVisit(page.board.url, System.currentTimeMillis())
                 page.threads = list
@@ -718,7 +712,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 page.title = log.title
                 page.readNo = log.readNo
                 page.archived = log.archived
-                // 「ここから未読」は、開いた時点の既読の次(まだ手元にないときは、届いた新着の頭に線が出る)。今のスマホ版と同じ。
+                // 「ここから未読」は、開いた時点の既読の次(まだ手元にないときは、届いた新着の頭に線が出る)。
                 // 開く位置は画面が決める(レスが出たときに、覚えた位置・設定・未読から)ので、レスより先に入れておく
                 page.unreadFrom = log.readNo + 1
                 setPosts(page, log.posts)
@@ -729,8 +723,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 新着を取る。取り直しの最中なら何もしない(null)。終わりを待つときは返した Job を join する */
-    /** quiet: 自動更新(「新着はありません」を出さない) */
+    /** 新着を取る。取り直しの最中なら何もしない(null)。終わりを待つときは返した Job を join する。quiet: 自動更新から呼ぶとき(今は動きを変えない) */
     fun refreshThread(page: Page.Thread, firstOpen: Boolean = false, quiet: Boolean = false): Job? {
         if (page.loading) return null
         return viewModelScope.launch {
@@ -749,14 +742,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 page.title = title
                 if (r.status == FetchStatus.ARCHIVED || r.archived) page.archived = true
-                // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)。今のスマホ版と同じ
+                // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)
                 if (!firstOpen) page.unreadFrom = page.readNo + 1
                 if (r.posts.isNotEmpty() || r.status == FetchStatus.RESET) {
                     val old = if (r.status == FetchStatus.RESET) emptyList() else renderSeq[page]?.second ?: page.index.posts
                     // 同じ番号が 2 回入らないように(差分の取得で重なって返る掲示板があると、スレ表示の LazyColumn のキーが重なって落ちる)
                     val all: List<Post> = (old + r.posts).distinctBy { it.no }
-                    // 手で更新したときは、届いた新着の頭に「ここから未読」を引き直す
-
                     setPosts(page, all)
                 }
             } catch (e: Exception) {
@@ -910,7 +901,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun markRead(page: Page.Thread, no: Int) {
         if (no <= page.readNo) return
         page.readNo = no
-        // 開いている一覧(板のスレ一覧・全板の未読)の既読も合わせる。古いままだと「次の未読スレへ」が読み終えたスレへ戻ってループした
+        // 開いている一覧(板のスレ一覧・未読のスレ)の既読も合わせる。古いままだと「次の未読スレへ」が読み終えたスレへ戻ってループする
         val t = page.summary
         for (p in stack) if (p is Page.Threads && p.board.url == t.boardUrl) {
             val st = p.states[t.key]
@@ -1011,7 +1002,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** このスレの板のスレ一覧を開く */
     fun openBoardOf(page: Page.Thread) {
         val url = page.summary.boardUrl
         openBoard(favorites.firstOrNull { it.url == url } ?: boards.firstOrNull { it.url == url } ?: Board(url, url.removePrefix("https://").trimEnd('/')), root = true)
@@ -1097,11 +1087,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * 選んだ画像(何枚でも、一度に 10 枚まで)を 1 枚ずつ順番に上げ、上げ終わるたびに本文の最後に URL を足す
-     * (書き込みとスレ立てで共通)。上げている途中に選び足したら、列の後ろに並べる。
-     * 上げ先は板で決める(hono-bbs の板はその掲示板の置き場、ほかは設定の上げ先。data/Uploader.kt)
-     */
     /** サイトの画面で上げたリンクを、本文の終わりに 1 行で入れる(ui/WebUpload.kt) */
     fun insertLink(r: ReplyState, url: String) {
         if (r.body.contains(url)) return
@@ -1109,6 +1094,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast = "リンクを本文に入れました"
     }
 
+    /**
+     * 選んだ画像(一度に 10 枚まで)を 1 枚ずつ順番に上げ、上げ終わるたびに本文の最後に URL を足す(書き込みとスレ立てで共通)。
+     * 上げている途中に選び足したら、列の後ろに並べる。上げ先は板で決める(hono-bbs の板はその掲示板の置き場、ほかは設定の上げ先。data/Uploader.kt)
+     */
     fun attach(r: ReplyState, uris: List<android.net.Uri>, stamp: io.github.contentsview08.obb.data.Uploader.Stamp? = null) {
         if (uris.isEmpty()) return
         r.notice = null
@@ -1148,7 +1137,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 上げられなかった画像を、もう一度上げる */
     fun retryUpload(r: ReplyState, item: UploadItem) {
         r.uploads.remove(item)
         attach(r, listOf(item.uri), item.stamp)
@@ -1179,7 +1167,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { db.saveDraft(page.summary, page.reply.body) }
     }
 
-    /** 長押しの「「草」とすぐ書き込む」: >>番号 と定型文を、書き込み欄を開かずに送る(今のスマホ版と同じ) */
+    /** 長押しの「「草」とすぐ書き込む」: >>番号 と定型文を、書き込み欄を開かずに送る */
     fun quickPost(page: Page.Thread, no: Int, phrase: String) {
         val r = page.reply
         if (r.sending) return
@@ -1259,7 +1247,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** スレを立てる。立てたら一覧を取り直し、同じスレタイのスレを開く */
     /** スレを立てる欄を開く。書きかけがなければ、板ごとの既定値かふだんの名前・メールを入れる */
     fun openNewThread(page: Page.Threads) {
         val r = page.newThread
@@ -1271,6 +1258,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         r.open = true
     }
 
+    /** スレを立てる。立てたら一覧を取り直し、同じスレタイのスレを開く */
     fun createThread(page: Page.Threads) {
         val r = page.newThread
         if (r.sending || r.title.isBlank() || r.body.isBlank()) return

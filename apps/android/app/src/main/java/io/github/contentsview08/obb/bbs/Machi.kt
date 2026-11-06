@@ -3,7 +3,7 @@ package io.github.contentsview08.obb.bbs
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
 
-// まちBBS(machi.to)。専ブラの packages/connectors/src/machi(connector.ts・parse.ts)を Kotlin に写したもの。2026-11-04 に実際の板で確かめた作り:
+// まちBBS(machi.to)。PC 版の packages/connectors/src/machi(connector.ts・parse.ts)を Kotlin に写したもの。2026-11-04 に実際の板で確かめた作り:
 // - 板の URL は https://machi.to/板/(kanto・tokyo など。地域ごとに 15 ほど)、スレは /bbs/read.cgi/板/キー/
 // - スレ一覧は 板/subject.txt(Shift_JIS)。「キー.cgi,スレタイ(レス数)」(2ch と違い dat はない)
 // - スレの中身は /bbs/offlaw.cgi/板/キー/(Shift_JIS)。「番号<>名前<>メール<>日付 ID:xxx<>本文<>ホスト」、1 番目のレスだけ本文の後ろにスレタイが入る。
@@ -172,8 +172,8 @@ object Machi {
     }
 
     /**
-     * write.cgi の応答。題が ERROR で始まれば失敗。題に ERROR・エラー があっても、書き込みフォームがあればスレタイの一部とみなす(失敗にすると送り直して二重になる)。「書きこみました」か、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功。
-     * それ以外は失敗(本文の頭を理由に)
+     * write.cgi の応答。題が ERROR で始まれば失敗。題に ERROR・エラー があっても、書き込みフォームがあればスレタイの一部とみなす(失敗にすると送り直して二重になる)。
+     * 「書きこみました」か、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功。それ以外は失敗(本文の頭を理由に)
      */
     private fun parseWrite(html: String): PostResult {
         val title = htmlToText(Regex("<title>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1) ?: "").trim()

@@ -79,15 +79,15 @@ class ReplyPreview(val no: Int, val id: String?, val text: String)
 /**
  * レス 1 件。組み立て済み(renderPosts)の頭の行と本文を置くだけ。
  * 頭の行の番号を押すとそのレスへの返信、ID を押すと同じ ID のレス、本文のアンカー・URL も押せる(PostLinks)。
- * 自分の書き込みは左に緑の線と「自分」の札、自分への返信は「→あなた宛」の札(今のスマホ版と同じ)。
- * style が discord / line のときは、今のスマホ版の Discord 風・LINE 風の並び
+ * 自分の書き込みは帯と「自分」の札、自分への返信は帯と「返信」の札。帯の側は下の leftBar・rightBar で決める。
+ * style(POST_STYLES のキー)で並びが変わる
  */
 @Composable
 fun PostItem(
     r: RenderedPost, aa: Boolean = r.aa, own: Boolean = false, toOwn: Boolean = false,
     info: PostInfo? = null, autoLoad: Boolean = true, onImage: (String) -> Unit = {}, onUrl: (String) -> Unit = {}, gross: Boolean = false,
     style: String = "card", id: String? = null, /** アイコンの右下の数字(2 以上で出す) */ iconCount: Int = 0, continued: Boolean = false, reply: ReplyPreview? = null, onReply: (Int) -> Unit = {},
-    /** 人気のレス(返信 3 件から)の色。左に線、淡い地 */
+    /** 人気のレス(返信 3 件から)の色。帯と淡い地 */
     heat: Color? = null,
     /** アイコンを押したとき(その ID のレスを出す)。null なら押せない */
     onAvatar: (() -> Unit)? = null,
@@ -131,7 +131,7 @@ fun PostItem(
     }
     val header = @Composable {
         if (headChip != null || idTopRight != null) {
-            // 右上の ID の幅だけを除いて、残りを全部頭に使う(頭と余白の両方に weight を付けると幅を半分ずつ分け合い、まだ入るのに折り返していた)
+            // 右上の ID の幅だけを除いて、残りを全部頭に使う(頭と余白の両方に weight を付けると幅を半分ずつ分け合い、入るのに折り返す)
             Row(if (idTopRight != null) Modifier.fillMaxWidth() else Modifier, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
                     Text(r.header, Modifier.weight(1f, fill = false).then(track), fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
@@ -144,8 +144,7 @@ fun PostItem(
             }
         } else Text(r.header, track, fontSize = headSize, lineHeight = 1.4.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
     }
-    // 左右の帯: 自分の書き込みは左に緑。人気のレスは設定の側(左・右)に暖色(左のときに自分の書き込みと重なれば右へ)と淡い地。
-    // 見た目(カード・Discord 風・LINE 風)に関わらず同じ
+    // 左右の帯: 人気のレスは設定の側(左・右)に暖色と淡い地。レスの見た目に関わらず同じ
     val heatSide = prefs.heatStyle
     val showHeat = heat != null && (heatSide == "left" || heatSide == "right")
     // 自分の書き込みの帯は、人気の帯と反対の側にいつも出す(人気が左の帯なら自分は右。人気を帯で示さないときは左)
@@ -183,7 +182,6 @@ fun PostItem(
         }
         "line" -> {
             // 吹き出しで会話のように。自分の書き込みは右に緑の吹き出し、ほかは左にアイコンと吹き出し
-            // 地と区別できる吹き出し(今のスマホ版の line-bubble・line-bubble-own)
             val bubble = if (own) Palette.lineOwnBg else Palette.lineBubble
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
@@ -238,10 +236,9 @@ fun PostItem(
         }
         "classic" -> {
             // 専ブラ風: 余白を詰め、頭の行を小さく。1 画面にたくさん並ぶ
-            // 頭と本文・画像は 1 つの縦の並びにまとめる(並べたままだと、人気の帯を描く Box の中で画像が頭と本文の上に重なった)
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = pad / 2 + 1.dp)) {
-                    // 頭の行の位置と字の並びを覚える(ID・名前の長押しのメニュー。付けていなかったので、専ブラ風では長押しが効かなかった)
+                    // track と onTextLayout は、ID・名前の長押しのメニューに要る
                     if (own || toOwn || idTopRight != null) header() else Text(r.header, track, fontSize = headSize * 0.92f, lineHeight = 1.3.em, inlineContent = chips, onTextLayout = { hit?.layout = it })
                     BeIcon(r.beIcon)
                     if (aa) AaBody(r) else Text(shownBody, Modifier.padding(top = 1.dp), color = Palette.textBody, fontSize = bodySize * 0.95f, lineHeight = (prefs.lineHeight - 0.1f).em)
@@ -282,7 +279,7 @@ fun PostItem(
     if (edge != null) androidx.compose.runtime.SideEffect { edge.color = leftBar }
     val ownLeft = if (edge != null) null else leftBar
     if (ownLeft == null && rightBar == null) return inner()
-    // 帯は描くだけにする(中身の高さを先に見積もる形だと、サムネイルやリンクのカードの分が足りず、本文と重なって出ることがあった)
+    // 帯は描くだけにする(中身の高さを先に見積もると、サムネイルやリンクのカードの分が足りず、本文と重なる)
     Box(
         Modifier.fillMaxWidth().then(
             when {
@@ -309,7 +306,6 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
         Identicon(reply.id, 16.dp)
         Spacer(Modifier.width(5.dp))
         Text(
-            // 本文だけ
             reply.text, color = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted, fontSize = 12.sp,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
@@ -350,8 +346,7 @@ fun AaZoom(r: RenderedPost, onDismiss: () -> Unit) {
 val AaFont = FontFamily(Font(R.font.aahub_light))
 
 /**
- * AA の本文。AA 用の字で折り返さず、横幅に収まるまで字を小さくする
- * (今のスマホ版の fitAA と同じ。横にずらして読むと、スクロールの操作とぶつかるため)
+ * AA の本文。AA 用の字で折り返さず、横幅に収まるまで字を小さくする(横にずらして読むと、スクロールの操作とぶつかる)
  */
 @Composable
 private fun AaBody(r: RenderedPost) {
@@ -387,7 +382,6 @@ private fun BeIcon(url: String?) {
     )
 }
 
-/** アイコンの列(Discord 風・LINE 風): BE のアイコンがあれば ID の模様の代わりに出す(枠に収まるよう縮める・縦横の比は保つ) */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.IconCount(n: Int) {
     if (n < 2) return
@@ -400,6 +394,7 @@ private fun androidx.compose.foundation.layout.BoxScope.IconCount(n: Int) {
     ) { Text("$n", color = Palette.heat(n) ?: Palette.textMuted, fontSize = 9.sp, lineHeight = 9.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1) }
 }
 
+/** アイコンの列(Discord 風・LINE 風): BE のアイコンがあれば ID の模様の代わりに出す(枠に収まるよう縮める・縦横の比は保つ) */
 @Composable
 private fun Avatar(id: String?, beIcon: String?, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
     if (beIcon == null) return Identicon(id, size, modifier)

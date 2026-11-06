@@ -10,11 +10,10 @@ export * from './types'
 export { declaredCharset, detectEncoding, looksLikeUtf8 } from './encoding'
 export { twoChConnector, shitarabaConnector, machiConnector, futabaConnector, honoBbsConnector, demoConnector }
 
-/** 組み込みコネクタ。外部コネクタを読み込めるようにしたら、ここに足していく */
-// URL から選ぶときは先に並べたものから見る。したらば・まちBBS・ふたばの URL を 2ch 互換が拾わないよう、先に置く
+/** 組み込みコネクタ。URL から選ぶときは先に並べたものから見るので、したらば・まちBBS・ふたばの URL を 2ch 互換が拾わないよう先に置く */
 export const builtinConnectors: Connector[] = [shitarabaConnector, machiConnector, futabaConnector, honoBbsConnector, twoChConnector]
 
-/** 組み込みに加えて使うコネクタ(お試しの掲示板・外付けのコネクタ)。アプリが起動時に足す */
+/** 開発中にお試しの掲示板を足すためのもの。アプリが起動時に足す */
 const extraConnectors: Connector[] = []
 
 /** コネクタを足す・置き換える(同じ id があれば置き換える)。URL から選ぶときは組み込みより後に見る */

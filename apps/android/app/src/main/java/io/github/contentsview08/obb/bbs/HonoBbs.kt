@@ -8,7 +8,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.Base64
 
-// hono-bbs(自作の掲示板)の読み書き。専ブラの packages/connectors/src/honobbs/connector.ts を Kotlin に写したもの。
+// hono-bbs(自作の掲示板)の読み書き。PC 版の packages/connectors/src/honobbs/connector.ts を Kotlin に写したもの。
 // 2ch 互換の窓口(subject.txt・dat)ではなく、掲示板の JSON の API を読む。スレ一覧の時点で 1 レス目(本文・ID・画像)が付いてくる
 // - 板の URL は web の URL(https://<web>/boards/<板ID>/)。スレは https://<web>/boards/<板ID>/<スレID(UUID)>
 // - API の場所は web のページの <meta name="bbs-api" content="…/api/v1"> から見つける(なければ https://api.<web のホスト>/api/v1)
@@ -161,7 +161,7 @@ object HonoBbs {
 
     /**
      * 持っているスレ(閲覧履歴・お気に入り)のいまのレス数と dat 落ちを、板をまたいでまとめて取る(POST /threads/status。200 件ずつ)。
-     * 返す Map の鍵はスレの key(id)。返らなかったスレは「消えた・見えない」(dat 落ち扱い)。docs/endpoints/threads-status.md
+     * 返す Map の鍵はスレの key(id)。返らなかったスレは「消えた・見えない」(dat 落ち扱い)。hono-bbs の docs/endpoints/threads-status.md
      */
     suspend fun threadStatus(threads: List<ThreadSummary>): Map<String, Pair<Int, Boolean>> {
         val out = HashMap<String, Pair<Int, Boolean>>()

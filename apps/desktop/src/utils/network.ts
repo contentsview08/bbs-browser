@@ -1,8 +1,7 @@
 // つながっている回線の種類。画像のサムネイルを「Wi-Fi のときだけ」読むかを決めるのに使う。
 // Android のアプリでは、MainActivity の口(window.BbsAndroid.isWifi。ConnectivityManager を見る)に聞く。
-// WebView の Network Information API(navigator.connection.type)は Android では取れないことが多く、
-// 取れないときに Wi-Fi 扱いにしていたので、モバイル通信でも画像を読んでしまっていた。
-// PC など、どちらも分からないときは Wi-Fi と同じに扱う
+// WebView の Network Information API(navigator.connection.type)は Android では取れないことが多い。
+// PC で分からないときは Wi-Fi と同じに扱う
 
 import { isMobile } from './platform'
 

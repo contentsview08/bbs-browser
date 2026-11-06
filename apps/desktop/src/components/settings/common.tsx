@@ -107,7 +107,6 @@ export function Section({
   if (advanced && !showAdvanced) return null
   if (desktopOnly && isMobile) return null
   return (
-    // スマホは、まとまりの間・題と中身の間をゆったり取る
     <section ref={ref} className={isMobile ? 'mb-10' : 'mb-8'}>
       <h3 className={`${isMobile ? 'text-base mb-1.5' : 'text-sm mb-1'} font-bold text-c-text-strong flex items-center gap-2`}>
         {title}
@@ -146,8 +145,8 @@ export function StickySample({ settings }: { settings: AppSettings }) {
 let sampleHidden = false
 
 /**
- * 1 つを選ぶ。少なくて短い(3 つまで・どれも 6 文字まで・説明なし)ものは横に並べたボタン、それより多い・長い・説明つきはドロップダウン
- * (ボタンが何行にも折り返すと、どれを選んでいるか見にくいため。画面の分け方・日時の出し方・人気の示し方などはドロップダウン)
+ * 1 つを選ぶ。少なくて短い(3 つまで・どれも 6 文字まで・説明なし)ものは横に並べたボタン、それ以外はドロップダウン
+ * (ボタンが何行にも折り返すと、どれを選んでいるか見にくいため)
  */
 export function Choice<T extends string | number>(props: {
   value: T

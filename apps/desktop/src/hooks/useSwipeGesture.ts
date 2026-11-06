@@ -1,5 +1,4 @@
-// スワイプ(指でなぞる)の操作。hono-bbs(packages/web/src/hooks/useSwipeGesture.ts)から持ってきて、
-// 感度を引数で受けるようにした。なぞった向きの並び(「right」「right,up」など)を、登録した操作に結びつける。
+// スワイプ(指でなぞる)の操作。なぞった向きの並び(「right」「right,up」など)を、登録した操作に結びつける。
 // - 最初に少し動いた時点で向きを決め、以後は一定以上ほかの向きへ動いたときだけ次の向きを足す(指のぶれで増えないように)
 // - 指が 1 秒止まったらやめる。登録していない並びなら、離しても何もしない
 // - 1 つの向きだけのときは、距離か速さが足りたときだけ確定する(スクロールのつもりの動きで発動しないように)
@@ -82,9 +81,8 @@ export function useSwipeGesture(map: SwipeMap, sensitivity = 3) {
       const dist = Math.hypot(dx, dy)
       const segs = segments.current
       if (segs.length === 0) {
-        // 向きを決める前でも、横向きに動き始めたらスクロールを始めさせない(始まってしまうと、あとから止められない)
         if (dist < LOCK_THRESHOLD * mult) {
-          // (はっきり横のときだけ。斜めに始まったふつうのスクロールまで止めないように)
+          // 向きを決める前でも、はっきり横に動き始めたらスクロールを始めさせない(始まると止められない。斜めに始まるふつうのスクロールは止めない)
           if (dist >= 3 && Math.abs(dx) > Math.abs(dy) * 1.5 && ev.cancelable && Object.keys(map).some((k) => k.startsWith('left') || k.startsWith('right')))
             ev.preventDefault()
           return

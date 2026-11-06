@@ -1,6 +1,6 @@
 package io.github.contentsview08.obb.bbs
 
-// 掲示板の形(専ブラの packages/connectors/src/types.ts にあたる)。2ch 互換と hono-bbs(HonoBbs.kt)
+// 掲示板の形(PC 版の packages/connectors/src/types.ts にあたる)。2ch 互換・hono-bbs・したらば・まちBBS で共通
 
 /** 板。url が板を一意に表すキー(例: https://bbs.eddibb.cc/liveedge/) */
 data class Board(val url: String, val name: String, val category: String? = null)
@@ -8,15 +8,15 @@ data class Board(val url: String, val name: String, val category: String? = null
 /** スレ一覧の 1 行 */
 data class ThreadSummary(
     val boardUrl: String,
-    /** 板の中でスレを表すキー(dat 番号) */
+    /** 板の中でスレを表すキー(2ch 互換は dat 番号、hono-bbs はスレ ID) */
     val key: String,
     val title: String,
     val postCount: Int,
-    /** subject.txt の並び順 */
+    /** スレ一覧の並び順 */
     val order: Int,
-    /** スレが立った時刻(ミリ秒)。dat 番号から分かるときだけ */
+    /** スレが立った時刻(ミリ秒)。分かるときだけ */
     val createdAt: Long?,
-    /** 立てた人の ID(エッジの subject-metadent.txt) */
+    /** 立てた人の ID(エッヂの subject-metadent.txt、hono-bbs の 1 レス目) */
     val authorId: String? = null,
     /** 運営のお知らせ(番号がわざと未来になっているスレ)。一覧の一番下に回す */
     val announcement: Boolean = false,
@@ -39,7 +39,7 @@ data class Post(
 )
 
 /**
- * dat の差分取得の続き。専ブラ(TypeScript)の DatCursor と同じ形の JSON で DB に入れる
+ * dat の差分取得の続き。PC 版の DatCursor と同じ形の JSON で DB に入れる
  * (bytes: 読み終えたバイト数(最後の改行まで)、postCount、lastModified、kako: 過去ログから取った)
  */
 data class DatCursor(val bytes: Long, val postCount: Int, val lastModified: String?, val kako: Boolean = false)

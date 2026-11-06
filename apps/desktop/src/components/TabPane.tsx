@@ -47,7 +47,7 @@ export interface TabEvents {
   ngDraft: (target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => void
   /** 自動 NG の印を付ける(true: 荒らし、false: 荒らしじゃない、null: 外す) */
   markTroll: (t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => void
-  /** 書き込めない掲示板なら undefined を返す */
+  /** 書き込める掲示板か */
   canPost: (t: ThreadSummary) => boolean
   submitPost: (input: PostInput) => Promise<PostResult>
   confirmPost: (confirm: PostConfirm, input: PostInput) => Promise<PostResult>

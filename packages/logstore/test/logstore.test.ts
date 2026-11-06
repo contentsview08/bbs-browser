@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { FetchPostsResult, Post, ThreadSummary } from '@bbs-browser/connectors'
 import { LogStore, applyFetch, type SqlDb, type ThreadLog } from '../src/index'
 
-// アプリと同じ順番で全マイグレーションを流す
 // migrations のフォルダの全部を番号順に流す(一覧を手で書くと、足し忘れてアプリと形がずれる)
 const migrations = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort().map((f) =>
   readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8'),
@@ -148,7 +147,7 @@ describe('applyFetch: 取得結果を手元のログに当てはめる', () => {
       { status: 'archived', posts: [], cursor: { bytes: 120 } },
       // 過去ログから取れた(レスは保存し、dat 落ちのまま)
       { status: 'reset', posts: [post(1), post(2), post(3), post(4)], cursor: { bytes: 300 }, archived: true },
-      // 一度 active に戻っても(古い版で取ったときなど)、過去ログの「変わらない」で dat 落ちに直る
+      // 一度 active に戻っても、過去ログの「変わらない」で dat 落ちに直る
       { status: 'reset', posts: [post(1), post(2), post(3), post(4)], cursor: { bytes: 300 } },
       { status: 'notModified', posts: [], cursor: { bytes: 300 }, archived: true },
     ]

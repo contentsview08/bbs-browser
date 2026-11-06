@@ -1,9 +1,4 @@
 // スマホの設定などで使う、スマホ向けの部品(Android の設定画面と同じ考え方)。
-// - Group: まとまりごとの、角の丸い面。中の行は線で区切る。上に題、下に補足
-// - SwitchRow: 左に名前と説明、右にスイッチ。行のどこを押しても切り替わる
-// - NavRow: 押すと次の画面へ(右に今の値と ›)
-// - ChoiceRow: 押すと、下から選択肢のシートが出る(1 つ選ぶ)
-// - TextRow: 名前・メールなどの入力欄
 import { useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../../hooks/useFocusTrap'

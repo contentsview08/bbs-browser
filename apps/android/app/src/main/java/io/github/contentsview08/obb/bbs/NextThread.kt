@@ -2,7 +2,7 @@ package io.github.contentsview08.obb.bbs
 
 import java.text.Normalizer
 
-// 次スレ探し・次の未読スレ。専ブラの apps/desktop/src/utils/nextThread.ts を Kotlin に写したもの
+// 次スレ探し・次の未読スレ。PC 版の apps/desktop/src/utils/nextThread.ts を Kotlin に写したもの
 
 private val COUNTER_WORD = Regex("(part|ｐａｒｔ|その|第|vol\\.?|no\\.?)\\s*[0-9]+\\s*(弾|章|話|回|スレ|目)?")
 private val MARK_NUMBER = Regex("[★☆◆◇■□●○#＃]+\\s*[0-9]+")

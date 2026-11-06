@@ -1,5 +1,3 @@
-// 設定の「バックアップ」。
-
 import { useState } from 'react'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../ui/settings'
 import { BTN_PRIMARY } from '../DialogParts'

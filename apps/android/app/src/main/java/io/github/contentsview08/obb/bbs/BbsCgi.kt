@@ -6,7 +6,7 @@ import java.nio.CharBuffer
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 
-// 2ch 互換の書き込み(POST /test/bbs.cgi)。専ブラの packages/connectors/src/sjis.ts と twoch/parse.ts の
+// 2ch 互換の書き込み(POST /test/bbs.cgi)。PC 版の packages/connectors/src/sjis.ts と twoch/parse.ts の
 // parseBbsCgiResponse・parseConfirmForm を Kotlin に写したもの
 
 /** 書き込む内容 */
@@ -65,6 +65,9 @@ private val TITLE = Regex("<title>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE
 private val BODY = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE)
 private val KIND = Regex("2ch_X:([A-Za-z0-9_]+)")
 
+/** 応答から理由を読み取れなかったときの言葉 */
+internal const val POST_FAILED = "書き込めませんでした"
+
 /**
  * bbs.cgi の応答を読み分ける。
  * - 2ch_X:true や「書きこみました」は成功
@@ -72,9 +75,6 @@ private val KIND = Regex("2ch_X:([A-Za-z0-9_]+)")
  * - 本文に認証ページの URL があれば認証待ち(eddist: 「認証コード'xxx'を用いて…/auth-code」)
  * - それ以外はエラー(本文のテキストを理由に)
  */
-/** 応答から理由を読み取れなかったときの言葉 */
-internal const val POST_FAILED = "書き込めませんでした"
-
 fun parseBbsCgi(html: String, url: String, fields: Map<String, String>, referer: String, resNumber: Int?): PostResult {
     val kind = KIND.find(html)?.groupValues?.get(1)
     val title = htmlToText(TITLE.find(html)?.groupValues?.get(1) ?: "").trim()

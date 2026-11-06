@@ -216,7 +216,7 @@ export function DragZones<Z extends string>(props: {
   onMove: (id: string, zone: Z, index: number) => void
   /**
    * 横に並べる箱の組(ヘッダーの左と右など)。組ごとに 1 本の帯として描き、箱の中の行も横に並べる。
-   * 実際の画面と同じ向きに置けるように。組に入っていない箱は、これまでどおり縦に並ぶ
+   * 実際の画面と同じ向きに置けるように。組に入っていない箱は縦に並ぶ
    */
   bars?: { title: string; zones: Z[]; between?: string }[]
 }) {

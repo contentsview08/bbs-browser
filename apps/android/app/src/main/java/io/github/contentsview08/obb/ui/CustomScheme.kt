@@ -158,10 +158,8 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
     val s = buildScheme(def)
     var editing by remember { mutableStateOf<String?>(null) }
 
-    // 見本(いま作っている色で、スレ一覧の行とレスを描く。変えるとその場で変わる)
     SchemePreview(s, def.own)
 
-    // 6 色
     Column(Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(8.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(8.dp))) {
         for ((k, c) in def.colors()) {
             Row(Modifier.fillMaxWidth().clickable { editing = k }.heightIn(min = 50.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -206,7 +204,6 @@ fun CustomSchemeEditor(prefs: io.github.contentsview08.obb.data.Prefs) {
             color = Palette.textStrong, fontSize = 14.sp,
         )
     }
-    // もとにする配色を選び直す(6 色をその配色の色に戻す)
     Text("もとにする配色を選ぶと、6 色をその配色の色に戻します", Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 12.sp)
     Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (sc in SCHEMES) Column(Modifier.clickable { save(CustomDef.of(sc)) }, horizontalAlignment = Alignment.CenterHorizontally) {

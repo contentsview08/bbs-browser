@@ -1,4 +1,3 @@
-// hono-bbs-merge packages/web/src/components/ui/PullSpinner.tsx から複製
 interface PullSpinnerProps {
   iconRef: React.RefObject<HTMLSpanElement | null>
 }

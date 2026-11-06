@@ -38,13 +38,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/*
- * スレ表示のスクロールまわり。今のスマホ版の hooks/useThreadScroll.ts と utils/threadScroll.ts をそのまま写したもの:
- * - 開いたら、覚えた位置(戻って開き直したとき)→ 設定の位置(最初の未読・先頭・一番下)へ置く。未読の頭は、見えている範囲の上から 3 割の所に
- * - スクロールが止まって 300ms たったら、どこまで読んだかを知らせ、読んでいた位置を覚える
- * - 新着が届いたら光らせ(35ms ずつずらして出す・合わせて 450ms まで・1 秒光る)、必要なら新着の頭まで送る
- * - 新着の頭が画面の外なら、下から「新着 +N」の札を 2.5 秒出す
- */
+// スレ表示のスクロールまわり。apps/desktop の hooks/useThreadScroll.ts と utils/threadScroll.ts の写し
 
 /** 未読の頭を置く位置(見えている範囲の上からの割合) */
 private const val UNREAD_AT = 0.3f
@@ -78,15 +72,13 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var jumpFlash by mutableStateOf<Pair<Int, Long>?>(null)
 }
 
-/** 新着を若い番号から順に出すときの、1 件ごとの遅れ(PC 版の staggerDelays) */
+/** PC 版の staggerDelays の写し */
 fun staggerDelays(nos: List<Int>): Map<Int, Int> {
     val d = minOf(STAGGER_MS, STAGGER_TOTAL_MS / maxOf(1, nos.size - 1))
     return nos.mapIndexed { i, n -> n to Math.round(i * d) }.toMap()
 }
 
-/**
- * スクロールの操作をまとめたもの。shown は今並んでいるレス(絞り込み後)、header・footer は重なっている帯の高さ(px)
- */
+/** shown は今並んでいるレス(絞り込み後)、footer は重なっている下の帯の高さ(px) */
 class ThreadScroller(
     private val ctl: ThreadScrollCtl,
     private val state: LazyListState,
@@ -121,7 +113,7 @@ class ThreadScroller(
     fun toBottom(animate: Boolean = false) { scope.launch { toBottomNow(animate) } }
 
     /**
-     * 開いたとき(最初にレスが出たとき)。覚えた位置 → 設定(一番下・最初の未読)→ 先頭(PC 版の openTarget)。
+     * 開いたときの位置。覚えた位置 → 設定(一番下・最初の未読)→ 先頭(PC 版の openTarget)。
      * 最初の未読がまだ手元にない(前回最後まで読んでいた)ときは、一番下に置いて新着を待つ
      */
     suspend fun open(saved: ScrollPos?, openPosition: String) {
@@ -187,7 +179,7 @@ class ThreadScroller(
         }
     }
 
-    /** そのレスが見えているか(上の端が、画面の下端より上にある) */
+    /** 上の端が画面の下端より上にあれば見えているとする */
     fun isVisible(no: Int): Boolean {
         val info = state.layoutInfo
         val item = info.visibleItemsInfo.firstOrNull { it.key == no } ?: return false
@@ -218,7 +210,7 @@ class ThreadScroller(
     }
 }
 
-// ── 引っぱって更新(今のスマホ版の useTouchPull・useWheelPullRefresh・PullSpinner) ──
+// ── 引っぱって更新(PC 版の useTouchPull・useWheelPullRefresh・PullSpinner の写し) ──
 
 /** 隠れている位置・確定して回る位置・引っぱれる見た目の上限(dp)。指でこれだけ引いて離したら更新する */
 private const val PULL_HIDDEN_Y = -70f
@@ -233,10 +225,9 @@ private fun dampedPullY(dy: Float, threshold: Float): Float {
     return PULL_HIDDEN_Y + (PULL_MAX_Y - PULL_HIDDEN_Y) * t
 }
 
-/** 上か下の端の、引っぱって更新の印の状態 */
 @Stable
 class PullState(private val onCommit: () -> Unit = {}) {
-    /** 引いた量(dp) */
+    /** dp */
     var dist by mutableFloatStateOf(0f)
     val y = Animatable(PULL_HIDDEN_Y)
     val alpha = Animatable(0f)
@@ -279,10 +270,7 @@ class PullState(private val onCommit: () -> Unit = {}) {
     }
 }
 
-/**
- * 本文の上の端で下へ、下の端で上へ引っぱると更新する(今どきのチャットと同じ)。端に着いたかは指を動かすたびに見る
- * (同じ指のまま、スクロールして端に着き、そのまま引っぱっても効くように)
- */
+/** 本文の端で引っぱると更新する。端に着いたかは指を動かすたびに見る(同じ指のまま端まで送って引いても効くように) */
 class PullConnection(
     private val top: PullState,
     private val bottom: PullState,

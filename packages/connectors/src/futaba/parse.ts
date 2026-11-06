@@ -17,7 +17,6 @@ export interface CatalogEntry {
   thumb?: string
 }
 
-/** カタログの表を読む */
 export function parseCatalog(html: string): CatalogEntry[] {
   const out: CatalogEntry[] = []
   const table = html.slice(html.indexOf("id='cattable'"))

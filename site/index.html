@@ -75,7 +75,7 @@
   .card h3 { margin: 0 0 6px; font-size: 16px; color: var(--strong); }
   .card p { margin: 0; font-size: 14px; color: var(--muted); }
 
-  /* 画面写真。ファイルがなければ「準備中」の枠 */
+  /* 画面写真 */
   .shots { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
   @media (max-width: 640px) { .shots { grid-template-columns: 1fr; } }
   .shots figure { cursor: zoom-in; transition: transform .15s; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -240,7 +240,7 @@
     document.addEventListener('keydown', (e) => { if (!lb.classList.contains('show')) return; if (e.key === 'Escape') hide(); else if (e.key === 'ArrowLeft') show(i - 1); else if (e.key === 'ArrowRight') show(i + 1) })
   })()
 
-  // 最新のリリースを GitHub から読み、版と落とす先(インストーラー・ZIP・APK)をボタンに入れる。読めなければ Releases のページのまま
+  // 最新のリリースを GitHub から読み、版と落とす先(インストーラー・ZIP)をボタンに入れる。読めなければ Releases のページのまま
   (async () => {
     try {
       const r = await fetch('https://api.github.com/repos/contentsview08/bbs-browser/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });

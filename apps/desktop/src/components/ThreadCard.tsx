@@ -1,6 +1,5 @@
-// スレ一覧の 1 行。web 版の ThreadCard.tsx(compact 表示)を移植。
-// サムネイルと作成者 ID は 2ch 互換の subject.txt からは取れないので外し、
-// 既読情報は localStorage の履歴ではなく LogStore の ThreadState から受け取る。
+// スレ一覧の 1 行。形はレスの見た目の設定(variant)に合わせる。
+// サムネイルと立てた人の ID は、取れる掲示板だけ出す(2ch の subject.txt からは取れない)。既読は LogStore の ThreadState から受け取る。
 
 import BadgeChip from './BadgeChip'
 import ActionSheet from './ActionSheet'
@@ -25,15 +24,13 @@ interface Props {
   momentum: number
   /** 板の中での勢いの相対順位(0〜1)。rankMomentum 参照 */
   momentumRank: number
-  /** どのカードにも同じ関数を渡し、押されたスレを引数で受け取る(カードを memo で描き直さずに済むように) */
-  /** 開く。newTab: Ctrl を押しながら押した(設定によらず新しいタブで開く) */
+  /** 開く。newTab: Ctrl を押しながら押した(設定によらず新しいタブで開く)。memo が効くよう、どのカードにも同じ関数を渡す */
   onOpen: (t: ThreadSummary, newTab?: boolean) => void
   /** タブを使っているか(右クリックの「新しいタブで開く」を出す) */
   newTabEnabled?: boolean
   /** マウスを乗せたときに、パネルの上辺に出す操作バーのボタン */
   onNg?: (t: ThreadSummary) => void
-  /** 立てた人を NG に追加(立てた人が分かるスレだけ出す。スマホのアプリと同じ) */
-  /** 立てた人を NG に。today なら今日だけ */
+  /** 立てた人を NG に。today なら今日だけ(立てた人が分かるスレだけ出す) */
   onNgAuthor?: (t: ThreadSummary, today?: boolean) => void
   onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
@@ -53,12 +50,12 @@ interface Props {
   onSelectStart?: (t: ThreadSummary) => void
   /** キー操作(J・K)で選んでいるカード。枠を強調色にする */
   isCursor?: boolean
-  /** 見た目のスタイル(レスの見た目の設定に合わせる)。card: いまのカード / discord: チャンネル一覧のような行 /
+  /** 見た目のスタイル(レスの見た目の設定に合わせる)。card: カード / discord: チャンネル一覧のような行 /
    *  classic: 専ブラのスレ一覧のような表 / line: トーク一覧のような行 */
   variant?: 'card' | 'discord' | 'classic' | 'line'
   /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
   authorIcon?: boolean
-  /** 行の形がコンパクト: スレタイ 1 行と、右端にレス数(勢いの色)と未読だけ(スマホのアプリの listDensity = compact と同じ)。専ブラ風の表は元から 1 行なので変えない */
+  /** 行の形がコンパクト: スレタイ 1 行と、右端にレス数と未読だけ(スマホのアプリの listDensity = compact と同じ)。専ブラ風の表は元から 1 行なので変えない */
   compact?: boolean
   /** 閲覧履歴の行(板の名前・いつ見たか)。渡すと、見た目によらず履歴用の形で描く(スマホのアプリの過去のスレの行と同じ並び) */
   historyMeta?: { boardName: string; readAt?: number; icon?: string }
@@ -104,12 +101,12 @@ function ThreadCard({
   const [ctxMenu, setCtxMenu] = useState<MenuPos>()
   const closeCtxMenu = useCallback(() => setCtxMenu(undefined), [])
   const longPress = useLongPress(isMobile ? (onSelectStart ? () => onSelectStart(thread) : () => setSheet(true)) : undefined)
-  // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)
-  // 勢いの色は「とても多い」の 1 段だけ(3 段に塗り分けると、行の中の色が増えて読みにくい)
+  // 勢いの色は板の中での順位で決める(過疎板でも一番勢いのあるスレは赤くなる)。
+  // 色は「とても多い」の 1 段だけ(塗り分けると、行の中の色が増えて読みにくい)
   const momentumColorClass = momentumRank >= 0.9 ? 'text-c-heat-very-hot' : 'text-c-text-muted'
 
   const unreadCount = threadUnread(state, thread.postCount)
-  // 一度でも開いたスレ(ログがある)は、左に線を引き、スレタイに色を付ける。太字は使わない(目が疲れるので)
+  // 一度でも開いたスレ(ログがある)
   const visited = state !== undefined
   const archived = state?.status === 'archived'
 
@@ -120,7 +117,7 @@ function ThreadCard({
       <input type="checkbox" checked={selected ?? false} onChange={(e) => onSelect(thread, e.target.checked)} className="rounded" />
     </label>
   )
-  // 「新」は塗りの札ではなく、小さな点(札が並びすぎて読みにくかった)
+  // 「新」は小さな点(塗りの札だと、並びすぎて読みにくい)
   const newBadge = isNew && (
     <span className="inline-block w-1.5 h-1.5 mr-1.5 rounded-full align-[0.1875rem]" style={{ background: 'var(--c-mark-new)' }} title="前回この板を見たあとに立ったスレ" />
   )
@@ -173,7 +170,7 @@ function ThreadCard({
   const beNo = variant === 'line' ? /[[［](\d{6,12})[\]］]\s*$/.exec(thread.title)?.[1] : undefined
 
   /**
-   * スマホ: カード・Discord 風・LINE 風を同じ形にそろえる(見た目ごとに並びがばらばらで読みにくかったので)。
+   * スマホ: カード・Discord 風・LINE 風を同じ形にそろえる。
    * 左に見た目ごとのアイコン、1 段目にスレタイ(3 行まで)、2 段目の左に 立った時間・立てた人の ID・dat落ち、右に 勢い・レス数・未読
    */
   const unified = () => {
@@ -343,8 +340,7 @@ function ThreadCard({
           {favStar}
           {threadBadges}
           {thread.title}
-          {/* dat落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる
-              (右に列で置くと、その分スレタイが手前で折り返して、長いスレタイが 3 行にもなっていた) */}
+          {/* dat落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる(右に列で置くと、長いスレタイが 3 行にもなる) */}
           <span className="inline-flex items-center gap-1.5 ml-1.5 align-[0.0625rem] whitespace-nowrap font-normal">
             {archived && <span className="text-[0.625rem] text-c-text-muted">dat落ち</span>}
             {thread.authorId && !authorIcon && (
@@ -379,8 +375,8 @@ function ThreadCard({
       </div>
     ) : variant === 'line' ? (
       // LINE 風: トーク一覧のような行。スレタイと「レス数・勢い」、右に時間と新着の数。
-      // スレ一覧(subject.txt)からは誰が立てたか分からないので、ふつうはアイコンを出さない。
-      // スレタイの後ろに立てた人の BE 番号が付く板(嫌儲など。「… [123456789]」)だけ、その番号の模様を出す
+      // subject.txt からは誰が立てたか分からないので、アイコンは立てた人の ID か、
+      // スレタイの後ろの BE 番号(嫌儲など。「… [123456789]」)が分かるスレだけ
       <div className="flex items-center gap-3 min-w-0">
         {checkbox}
         {thumbImg(40, 'rounded-xl') ||
@@ -445,7 +441,6 @@ function ThreadCard({
               </div>
             </div>
   
-            {/* タイトル行 */}
             <div className="flex items-center gap-2.5 min-w-0" style={{ marginTop: 'var(--thread-card-title-gap)' }}>
               <h3
                 className="flex-1 min-w-0 text-base leading-tight break-words font-normal"
@@ -457,7 +452,6 @@ function ThreadCard({
                 }}
               >
                 {threadBadges}
-                {/* 前回この板を見たあとに立ったスレは、スレタイの頭に「新」を付ける */}
                 {isNew && (
                   <span
                     className="inline-block px-1 mr-1 rounded text-[0.625rem] font-bold leading-[0.9375rem] align-[0.125rem]"
@@ -514,8 +508,6 @@ function ThreadCard({
               : undefined // Discord 風の余白は表示の密度で変える(app.css)
       }
     >
-      {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
-          (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
       {/* スマホ: 選んでいるスレは、強調色を薄く敷いて右にチェック */}
       {isMobile && selected && (
         <>
@@ -523,6 +515,8 @@ function ThreadCard({
           <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none material-symbols-outlined fill text-xl text-c-accent">check_circle</span>
         </>
       )}
+      {/* キー操作(J・K)で選んでいるスレの印。スレ表示の選んでいるレスと同じく、うっすらした色と、下辺のまっすぐな線
+          (角の丸みにかからないよう、両端を角の丸みの分だけ空ける) */}
       {isCursor && (
         <>
           <span className="absolute inset-0 pointer-events-none rounded-[inherit]" style={{ background: 'var(--c-cursor-tint)' }} />

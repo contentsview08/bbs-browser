@@ -1,13 +1,8 @@
-// hono-bbs(自作の掲示板)のコネクタ。2ch 互換の窓口(subject.txt・dat)ではなく、掲示板の JSON の API を読む。
-// JSON の API はスレ一覧の時点で 1 レス目(本文・書いた人の ID・画像)が付いてくるので、のぞき・サムネイル・立てた人の ID を出せる。
-// - 板の URL は web の URL(https://<web>/boards/<板ID>/)。スレは https://<web>/boards/<板ID>/<スレID>
-// - API の場所は、web のページの <meta name="bbs-api" content="https://api.<…>/api/v1"> から見つける(なければ https://api.<web のホスト>/api/v1)
-// - 板の一覧 GET /boards、スレ一覧 GET /boards/:板/threads(firstPost 付き)、レス GET /boards/:板/threads/:スレ/posts?cursor=…
-// - 書き込み POST /boards/:板/threads/:スレ/posts(JSON)、スレ立て POST /boards/:板/threads。
-//   Turnstile が要るとき(TURNSTILE_REQUIRED・TURNSTILE_INVALID)は、エッヂの認証と同じ流れにする:
+// hono-bbs のコネクタ。スレ一覧の時点で 1 レス目(本文・ID・画像)が分かるので、2ch 互換の窓口ではなく JSON の API を読む。
+// - 板の URL は https://<web>/boards/<板ID>/、スレは https://<web>/boards/<板ID>/<スレID>
+// - Turnstile が要るとき(TURNSTILE_REQUIRED・TURNSTILE_INVALID)は、エッヂの認証と同じ流れにする:
 //   POST /auth/turnstile/pair でコードをもらい(Cookie turnstile_pair が付く)、認証ページの URL とコードを出す。
 //   人がブラウザで認証してから送り直すと、その Cookie でセッションが使われる
-// 本番の板への試し書き込みはしない
 
 import type { Board, Connector, ConnectorContext, FetchPostsResult, HttpResponse, Post, PostResult, ThreadSummary, ThreadStatusInfo, LoginResult, PostInput } from '../types'
 
@@ -392,7 +387,7 @@ export const honoBbsConnector: Connector = {
     return { status: 'updated', posts, cursor: nextCursor, ...(title ? { title } : {}), archived: archived || undefined }
   },
 
-  // ── アカウント(ユーザー ID とパスワード。docs/endpoints/auth-login.md) ──
+  // ── アカウント(ユーザー ID とパスワード) ──
   // 5ch の BE と違って Cookie ではなく、ログインでもらったセッション ID を Authorization: Bearer で書き込みに付ける。
   // サイト(origin)はいくつもあり得るので、ログインは「サイトごと」に、書き込みのときに要るぶんだけ行う
   accounts: [{ id: ACCOUNT_ID, name: 'アカウント', site: 'red-edge.net', hosts: [ACCOUNT_HOST], userLabel: 'ユーザー ID' }],

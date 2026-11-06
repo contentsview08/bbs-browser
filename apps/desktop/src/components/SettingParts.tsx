@@ -389,10 +389,6 @@ export function ManagerDialog(props: { title: string; onClose: () => void; child
   )
 }
 
-/**
- * 数を入れる欄(日数・件数など)。よく使う値はボタンでも選べる。zeroLabel があれば 0 はその意味(「消さない」など)。
- * 入れている途中は保存せず、欄から離れたとき・Enter で保存する(範囲の外は端に寄せる)
- */
 /** 文字の欄の設定を、打ち終えてから書くまで待つ時間 */
 const TEXT_COMMIT_MS = 500
 
@@ -436,6 +432,10 @@ export function TextSetting(props: { value: string; onChange: (v: string) => voi
   )
 }
 
+/**
+ * 数を入れる欄(日数・件数など)。よく使う値はボタンでも選べる。zeroLabel があれば 0 はその意味(「消さない」など)。
+ * 入れている途中は保存せず、欄から離れたとき・Enter で保存する(範囲の外は端に寄せる)
+ */
 export function NumberField(props: {
   value: number
   onChange: (v: number) => void

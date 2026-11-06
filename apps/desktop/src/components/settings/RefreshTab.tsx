@@ -1,5 +1,3 @@
-// 設定の「自動更新」。
-
 import { NumberField, Toggle } from '../SettingParts'
 import { type SettingsProps, Section } from './common'
 

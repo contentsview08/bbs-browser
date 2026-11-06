@@ -1,5 +1,3 @@
-// 設定の「スレ一覧」。
-
 import { useState } from 'react'
 import { ListFontSliders } from '../FontSizeSlider'
 import { ListEditor, NumberField, Toggle } from '../SettingParts'

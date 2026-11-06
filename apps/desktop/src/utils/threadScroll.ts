@@ -77,7 +77,6 @@ export function newPostsTarget(input: {
   const head = input.prevLastNo + 1
   if (input.opening) return input.readNo >= input.prevLastNo ? { no: head, animate: false } : undefined
   if (!input.autoScrollOnNew || !input.atBottom) return undefined
-  // 新着の頭に固定する(一番下まで送る設定は 2026-11 にやめた)
   return { no: head, animate: true }
 }
 

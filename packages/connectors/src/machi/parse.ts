@@ -37,10 +37,11 @@ export function parseOfflaw(text: string): { posts: Post[]; title?: string } {
 }
 
 /**
- * write.cgi の応答。まちBBS は書けると「書きこみました」ではなく、スレのページ(書き込み欄のあるページ)をそのまま返す(2026-11-04 に利用者が確かめた)。
- * - 題が ERROR で始まれば失敗。題に ERROR・エラー があっても、書き込みフォームがあればスレタイの一部とみなす(失敗にすると送り直して二重になる)
- * - 「書きこみました」か、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功
- * - それ以外は失敗(本文の頭を理由に)
+ * write.cgi の応答。まちBBS は書けると「書きこみました」ではなく、スレのページ(書き込み欄のあるページ)をそのまま返す(2026-11-04 に確かめた)。
+ * 1. 題に「書きこみました」があれば成功
+ * 2. 題が ERROR で始まれば失敗。題に ERROR・エラー があるだけなら、書き込みフォームがなければ失敗、あればスレタイの一部とみなす(失敗にすると送り直して二重になる)
+ * 3. 本文に「書きこみました」があるか、スレのページ(name="posting" の書き込みフォーム・read.cgi のリンク)なら成功
+ * 4. それ以外は失敗
  */
 export function parseMachiWrite(html: string): { status: 'ok' | 'error'; message: string } {
   const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').trim()

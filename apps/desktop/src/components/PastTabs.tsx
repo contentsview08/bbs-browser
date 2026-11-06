@@ -15,7 +15,7 @@ export default function PastTabs(props: { current: PastTab; unreadCount: number;
     { key: 'posts' },
     { key: 'uploads' },
   ]
-  // PC: 平らなタブ(文字と下線)。丸いボタンを並べるのは生成 AI の UI の癖で、PC らしくない
+  // PC: 文字と下線のタブ
   if (!isMobile)
     return (
       <div className="flex items-stretch px-4 border-b border-c-border text-sm font-medium">

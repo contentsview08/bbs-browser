@@ -17,7 +17,7 @@ import java.io.ByteArrayOutputStream
  * - hono-bbs の板: その掲示板の画像の置き場(web の書き込み欄と同じ。受け付け → 置き場へ送る → 確定。Turnstile は書き込みと同じつなぎの Cookie)
  * - ほかの板: 設定の上げ先(uploadHost)のうち API のもの(catbox / imgur / imgbb)。サイトの画面で上げるもの(imgur-web / imgbox-web / imgbb-web)は
  *   ui/WebUpload.kt がその画面を開くので、ここには来ない
- * どこに上げても、返ってきた URL を開いて画像が返るかを確かめる(URL だけ返して中身がない、ということがあった)。
+ * どこに上げても、返ってきた URL を開いて画像が返るかを確かめる(verify)。
  * JPEG・PNG・WebP は描き直して EXIF(撮影場所など)を取り除き、長い辺が決めた大きさを超えれば縮める。GIF・動画はそのまま。
  * 利用規約: catbox(https://catbox.moe/legal.php)は商用でなければ使える。imgur(https://api.imgur.com)は利用者が登録した Client-ID、
  * imgbb(https://api.imgbb.com)は利用者が登録した API キーで使う。
@@ -31,8 +31,7 @@ object Uploader {
     private const val MAX_BYTES = 50L * 1024 * 1024
     private const val MAX_GIF_BYTES = 20L * 1024 * 1024
 
-    /** 上げた結果。host は上げ先の名前(知らせに出す) */
-    /** deleteUrl: 置き場から消すためのページ(imgbb の delete_url。API では消せないので、ブラウザで開いて消す)。返さない置き場は null */
+    /** 上げた結果。host は上げ先の名前(知らせに出す)。deleteUrl は置き場から消すページ(imgbb の delete_url。API では消せないのでブラウザで開く)。返さない置き場は null */
     data class Result(val url: String, val host: String, val deleteUrl: String? = null)
 
     /** 上げられなかった。message は人に見せる理由 */
@@ -106,7 +105,7 @@ object Uploader {
         HostDef("imgbox-web", "imgbox", "web", "消えない。ログインなしで上げられる"),
         HostDef("imgbb-web", "imgbb", "web", "消えない。ログインなしで上げられる"),
     )
-    /** 前の設定(自動・0x0.st・uguu.se)は imgur の画面に読み替える */
+    /** 知らない上げ先(廃止した 自動・0x0.st・uguu.se など)は既定の上げ先に読み替える */
     fun migrateHost(v: String?): String = if (HOSTS.any { it.key == v }) v!! else DEFAULT_HOST
     /** API で上げるのに登録が要るのに、まだなら理由 */
     fun hostProblem(host: String, imgurClientId: String, imgbbApiKey: String): String? = when {
@@ -190,7 +189,7 @@ object Uploader {
 
     /**
      * 上げた URL が本当に開けるかを確かめる。画像・動画の種類で返ってこなければ、上げられなかったとみなす
-     * (置き場の不具合で、URL だけ返して中身がないことがあった)。確かめの通信そのものが通らないときは、上げられたとみなす
+     * (置き場の不具合で、URL だけ返して中身がないことがある)。確かめの通信そのものが通らないときは、上げられたとみなす
      */
     private suspend fun verify(url: String, host: String) {
         val res = try { Http.head(url, USER_AGENT) } catch (e: java.io.IOException) { return }
@@ -240,7 +239,7 @@ object Uploader {
             else -> return Triple("file.${type.substringAfter('/')}", type, raw)
         }
         // 大きな写真をそのままの大きさで読むと、1 枚で数十 MB を使い、何枚も続けて上げるとメモリが足りなくなる。
-        // 先に大きさだけ読み、縮める先の 2 倍を下回らない所まで間引いて読む(最後に正確な大きさへ縮める)
+        // 先に大きさだけ読み、縮める先を下回らない所まで間引いて読む(最後に正確な大きさへ縮める)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
         val longSide = maxOf(bounds.outWidth, bounds.outHeight)

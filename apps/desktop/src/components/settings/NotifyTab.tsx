@@ -1,5 +1,3 @@
-// 設定の「通知」。
-
 import { NOTIFY_KINDS } from '../../ui/settings'
 import { ensureNotifyPermission } from '../../utils/osNotify'
 import { NumberField, Toggle } from '../SettingParts'

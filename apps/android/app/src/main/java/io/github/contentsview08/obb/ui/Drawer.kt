@@ -53,7 +53,7 @@ import io.github.contentsview08.obb.Page
 
 private const val BAD_URL_NOTICE = "開けない URL です(2ch 互換・したらば・まちBBS・hono-bbs のスレ・板の URL を入れてください)"
 
-/** 左から出るメニュー(今のスマホ版のサイドバーの引き出しと同じ並び) */
+/** 左から出るメニュー */
 @Composable
 fun DrawerContent(vm: AppViewModel) {
     var favOpen by rememberSaveable { mutableStateOf(true) }
@@ -72,7 +72,7 @@ fun DrawerContent(vm: AppViewModel) {
                 }
                 DrawerRow(Icons.Filled.Add, "板を追加", Palette.textMuted, sub = true, muted = true) { vm.openRoot(Page.Boards()) }
             }
-            // 過去に見たスレの一覧(未読・閲覧履歴・お気に入りのスレ・書き込み履歴)は 1 つの画面にまとめ、上のタブで切り替える
+            // 過去に見たスレの一覧(未読・閲覧履歴・お気に入りのスレ・書き込み履歴・上げた画像)は 1 つの画面にまとめ、上のタブで切り替える
             val past = current is Page.History || current is Page.AllUnread || current is Page.FavThreads || current is Page.PostHistory || current is Page.Uploads
             // 行を押すと小項目(最近見たスレ)を広げる。画面へは一番下の「すべて見る」から
             DrawerRow(Icons.Filled.History, "履歴", Palette.textMuted, active = past, trailing = if (histOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, onTrailing = { histOpen = !histOpen }) {
@@ -109,7 +109,6 @@ fun OpenUrlDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             text = {
                 OutlinedTextField(
                     url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") },
-                    // キーボードの決定でも開く
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) onDismiss() else vm.toast = BAD_URL_NOTICE }),
                 )

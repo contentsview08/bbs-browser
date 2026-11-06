@@ -80,7 +80,7 @@ import kotlin.math.max
 import kotlin.math.min
 import androidx.compose.material.icons.filled.BrokenImage
 
-// 動き方。今のスマホ版の MobileImageViewer と同じ曲線・時間・しきい値
+// 動き方は PC 版の MobileImageViewer と同じ
 private val EASE = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 private val OPEN_EASE = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 private const val MOVE_MS = 260
@@ -93,16 +93,7 @@ private const val RUBBER = 0.35f
 
 private fun rubber(v: Float, lo: Float, hi: Float) = if (v > hi) hi + (v - hi) * RUBBER else if (v < lo) lo - (lo - v) * RUBBER else v
 
-/**
- * 画像のビューアー(今のスマホ版の MobileImageViewer と同じ操作。スマホの写真ビューアーと同じ):
- * - 左右になぞると前後の絵へ(隣の絵は前もって読んでおき、指に付いてすべってくる)
- * - 2 本指で拡大、拡大中は 1 本指で動かす(離すと勢いで流れ、端からはみ出したら戻る)。2 回たたくと、たたいた所を拡大・等倍
- * - 上か下へなぞると閉じる(なぞった分だけ背景が透ける)。左上の ×・戻るでも閉じる。背景をたたいても閉じない
- * - 1 回たたくと、上下の帯(閉じる・何枚目か・画像の載っていたレス)を出し入れする
- * - 長押しで、保存・URL のコピー・ブラウザで開く
- * - 開くときは、画面の奥から浮き上がってくる
- * posts は urls と同じ並びの、その画像が載っていたレス
- */
+/** 画像のビューアー(操作は PC 版の MobileImageViewer と同じ)。posts は urls と同じ並びの、その画像が載っていたレス */
 @Composable
 fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: List<Post?> = emptyList()) {
     val context = LocalContext.current
@@ -113,11 +104,9 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     var chrome by remember { mutableStateOf(true) }
     var sheet by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
-    /** 拡大しているページ(拡大中は左右のページ送りを止める) */
+    /** 拡大中は左右のページ送りを止める */
     var zoomed by remember { mutableStateOf(false) }
-    /** 上下になぞって閉じるときのずれ */
     val dismiss = remember { Animatable(0f) }
-    /** 開くとき・閉じるときの動き(0 → 1) */
     val open = remember { Animatable(0f) }
     LaunchedEffect(Unit) { open.animateTo(1f, tween(MOVE_MS, easing = OPEN_EASE)) }
     fun close() {
@@ -125,7 +114,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     }
 
     Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        // 窓の後ろを暗くしない(暗さは自分で背景に描く。窓の暗さが残ると、閉じたあとに一瞬暗い画面が残っていた)
+        // 暗さは自分で背景に描く。窓の暗さが残ると、閉じたあとに一瞬暗い画面が残る
         val dialogView = androidx.compose.ui.platform.LocalView.current
         androidx.compose.runtime.SideEffect {
             (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
@@ -137,12 +126,10 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
         BackHandler(enabled = sheet) { sheet = false }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val h = constraints.maxHeight.toFloat()
-            // 背景: なぞった分だけ透ける
             val bgAlpha = (1f - min(1f, abs(dismiss.value) / (h * 0.6f))) * open.value
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)))
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
-                    // 開くとき: 少し小さく・少し下から、浮き上がってくる(lightbox-open-rise)
                     val p = open.value
                     alpha = p
                     val s = 0.85f + 0.15f * p
@@ -159,7 +146,6 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                         onDismissDrag = { dy -> scope.launch { dismiss.snapTo(dy) } },
                         onDismissEnd = { dy, v ->
                             scope.launch {
-                                // 画面の 15% を超えたか、速くはじいたら閉じる(なぞった向きへ抜ける)
                                 if (abs(dy) > h * 0.15f || abs(v) > with(density) { 500.dp.toPx() }) {
                                     dismiss.animateTo(if (dy > 0) h else -h, tween(MOVE_MS, easing = EASE))
                                     onClose()
@@ -170,7 +156,6 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 }
             }
 
-            // 上の帯: 閉じる・何枚目か・操作
             AnimatedVisibility(chrome && open.value > 0.5f, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)), modifier = Modifier.align(Alignment.TopCenter)) {
                 Row(
                     Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent))).statusBarsPadding().heightIn(min = 56.dp).padding(horizontal = 4.dp),
@@ -182,7 +167,6 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 }
             }
 
-            // 下の帯: 画像の載っていたレス
             val post = posts.getOrNull(pager.currentPage)
             if (post != null) {
                 AnimatedVisibility(chrome && open.value > 0.5f, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)), modifier = Modifier.align(Alignment.BottomCenter)) {
@@ -190,7 +174,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                         Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f), Color.Black.copy(alpha = 0.8f))))
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp).navigationBarsPadding(),
                     ) {
-                        // 名前が長くても ID が縦に潰れないよう、名前の方を 1 行で省く(番号と ID は折り返さない)
+                        // 名前が長くても ID が縦に潰れないよう、名前の方を省く
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("${post.no}", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                             Text(post.name, Modifier.weight(1f, fill = false), color = Color(0xFFA9BBFF), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -209,7 +193,6 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 )
             }
 
-            // 長押し・︙ の操作(下からせり上がる)
             if (sheet) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(remember { MutableInteractionSource() }, null) { sheet = false })
             AnimatedVisibility(
                 sheet, enter = slideInVertically(tween(200)) { it }, exit = slideOutVertically(tween(200)) { it },
@@ -224,7 +207,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                     }
                     SheetRow(Icons.Filled.Link, "URL をコピー") { sheet = false; copyText(context, url); notice = "URL をコピーしました" }
                     SheetRow(Icons.AutoMirrored.Filled.OpenInNew, "ブラウザで開く") { sheet = false; openExternal(context, url, prefs.openLinksInApp) }
-                    // 画像で検索(Google レンズ。画像の URL を渡すだけで、画像そのものは送らない)
+                    // 画像の URL を渡すだけで、画像そのものは送らない
                     SheetRow(Icons.Filled.ImageSearch, "画像で検索(Google レンズ)") {
                         sheet = false
                         openExternal(context, "https://lens.google.com/uploadbyurl?url=" + java.net.URLEncoder.encode(url, "UTF-8"), false)
@@ -243,10 +226,7 @@ private fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
-/**
- * 1 枚の絵。拡大・動かす・2 回たたく・長押し・上下になぞって閉じるを受ける。
- * 拡大していないときの左右のなぞりは受けずに、ページ送り(HorizontalPager)に任せる
- */
+/** 拡大していないときの左右のなぞりは受けずに、ページ送り(HorizontalPager)に任せる */
 @Composable
 private fun ZoomPage(
     url: String, active: Boolean,
@@ -261,7 +241,6 @@ private fun ZoomPage(
     var natural by remember { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
     var loading by remember { mutableStateOf(true) }
     var anim by remember { mutableStateOf<Job?>(null) }
-    // 別のページへ移ったら、拡大を戻す
     LaunchedEffect(active) { if (!active) { scale = 1f; ox = 0f; oy = 0f } }
 
     /** 拡大した絵を動かせる幅(真ん中から片側) */
@@ -272,7 +251,6 @@ private fun ZoomPage(
         val fit = min(w / n.width, h / n.height)
         return max(0f, (n.width * fit * s - w) / 2f) to max(0f, (n.height * fit * s - h) / 2f)
     }
-    /** 拡大・位置を、なめらかに目標へ */
     fun animateTo(s: Float, x: Float, y: Float) {
         anim?.cancel()
         anim = scope.launch {
@@ -284,7 +262,6 @@ private fun ZoomPage(
             onZoomed(s > 1.01f)
         }
     }
-    /** はみ出していれば戻す */
     fun settle() {
         val s = scale.coerceIn(1f, MAX_SCALE)
         val (mx, my) = bounds(s)
@@ -312,7 +289,7 @@ private fun ZoomPage(
                         val pressed = ev.changes.filter { it.pressed }
                         if (pressed.isEmpty()) break
                         if (pressed.size >= 2) {
-                            // 2 本指: 拡大。指の真ん中が、絵の同じ所を指し続けるように
+                            // 指の真ん中が、絵の同じ所を指し続けるように
                             moved = true
                             val a = pressed[0].position; val b = pressed[1].position
                             val mid = Offset((a.x + b.x) / 2, (a.y + b.y) / 2)
@@ -320,7 +297,6 @@ private fun ZoomPage(
                             val p = pinch ?: Triple(scale, mid, d).also { pinch = it; mode = "pinch" }
                             val newScale = rubber(p.first * (d / p.third), 1f, MAX_SCALE)
                             val cx = size.width / 2f; val cy = size.height / 2f
-                            // 絵の中の点(真ん中からの位置)を、拡大の比で動かす
                             val k = newScale / scale
                             ox = (mid.x - cx) - k * ((mid.x - cx) - ox)
                             oy = (mid.y - cy) - k * ((mid.y - cy) - oy)
@@ -348,7 +324,7 @@ private fun ZoomPage(
                                 c.consume()
                             }
                             "pinch" -> {
-                                // 2 本から 1 本になったら、そのまま動かす
+                                // 2 本から 1 本になった
                                 val delta = c.position - c.previousPosition
                                 ox += delta.x; oy += delta.y
                                 c.consume()
@@ -365,16 +341,13 @@ private fun ZoomPage(
                     when (mode) {
                         "pinch" -> settle()
                         "pan" -> {
-                            // 離したときの速さで少し流してから、はみ出しを戻す
                             val (mx, my) = bounds(scale)
                             animateTo(scale, (ox + v.x * 0.25f).coerceIn(-mx, mx), (oy + v.y * 0.25f).coerceIn(-my, my))
                         }
                         "dismiss" -> onDismissEnd(dy, v.y)
                         "" -> if (!longPressed) {
-                            // たたいた: 2 回なら拡大・等倍、1 回なら(2 回目を少し待ってから)帯の出し入れ
                             val second = withTimeoutOrNull(DOUBLE_TAP_MS) { awaitFirstDown(requireUnconsumed = false) }
                             if (second != null) {
-                                // 2 回目の指が離れるまで待つ
                                 do { val e = awaitPointerEvent() } while (e.changes.any { it.pressed })
                                 if (scale > 1.01f) animateTo(1f, 0f, 0f)
                                 else {
@@ -391,7 +364,7 @@ private fun ZoomPage(
             },
         contentAlignment = Alignment.Center,
     ) {
-        // 画像は ImageStore で取る(サムネイルと同じファイルを使う。ビューアーの枠で、サムネイルの順番待ちに並ばない)
+        // サムネイルと同じファイルを使う。ビューアーの枠で取るので、サムネイルの順番待ちに並ばない
         val store = io.github.contentsview08.obb.data.ImageStore
         val ds = store.stateOf(url)
         LaunchedEffect(url, active) { if (active || ds !is io.github.contentsview08.obb.data.ImageStore.State.Done) store.request(url, viewer = active) }
@@ -412,7 +385,6 @@ private fun ZoomPage(
             )
             if (st is coil3.compose.AsyncImagePainter.State.Error) Text("画像を取得できませんでした", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
         }
-        // 取っている間は進み具合、失敗したら理由と取り直すボタン
         when (ds) {
             is io.github.contentsview08.obb.data.ImageStore.State.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(androidx.compose.material.icons.Icons.Filled.BrokenImage, null, Modifier.size(48.dp), tint = Color.White.copy(alpha = 0.8f))

@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 class HttpResponse(val status: Int, val headers: Map<String, String>, val body: ByteArray)
 
 /**
- * 通信(専ブラの host/tauriContext.ts にあたる)。2ch 互換の板は専ブラに Monazilla の User-Agent を求める慣習がある。
+ * 通信(PC 版の host/tauriContext.ts にあたる)。2ch 互換の板は専ブラに Monazilla の User-Agent を求める慣習がある。
  * Range を付けた取得(dat の差分)では、OkHttp は gzip を頼まない(バイトの位置がずれないように)。
  * Cookie は端末に保存する(期限のないものも。アプリを閉じても残す)。
  * 掲示板のフォームの書き込み(postForm)は、読む通信とは別の置き場を使う(エッヂの edge-token・5ch の書き込みの Cookie。PC 版の post_http.rs と同じ分け方)
@@ -49,7 +49,7 @@ object Http {
     fun init(context: Context) {
         if (::jar.isInitialized) return
         jar = SavedCookieJar(context.applicationContext, "cookies")
-        // 置き場が 1 つだったころの Cookie を引き継ぐ(書き込みの認証が切れないように)
+        // 読む通信の置き場の Cookie を初回に引き継ぐ(置き場を分ける前の版から更新しても、書き込みの認証が切れないように)
         postJar = SavedCookieJar(context.applicationContext, "post-cookies", inheritFrom = "cookies")
     }
 

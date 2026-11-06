@@ -1,18 +1,7 @@
-// hono-bbs-merge packages/web/src/utils/identicon.ts から複製
-// GitHub風のIdenticon(ハッシュから機械的に生成する、シンボリックなアイコン)を
-// ブラウザ側だけで生成するためのユーティリティ。サーバーには一切問い合わせない
-// (同じ文字列を渡せば常に同じ見た目になる、という決定性だけが必要)。
-//
-// アルゴリズムの大枠は「MD5ハッシュの先頭15桁を3列×5行のパターンにし、左右対称に
-// 5列へミラーする。ハッシュの別の部分から色相/彩度/輝度を作る」という、よくある
-// Identicon生成方式(GitHubのIdenticonも同じ考え方)を踏襲している。ただし暗号学的な
-// 強度や既存実装とのビット互換性は不要なため、MD5の代わりに軽量な非暗号学的ハッシュ
-// (cyrb53)+ 決定的な擬似乱数生成器(mulberry32)を使い、依存ライブラリ無し・
-// 常に同期的に計算できるようにしている。
+// 文字列から決まる、左右対称の 5×5 の模様と色を作る(GitHub 風)。
+// 暗号の強さは要らないので、依存なしで同期的に計算できる cyrb53 + mulberry32 を使う
 
-// 文字列から53bit相当の決定的なハッシュ値を作る(cyrb53)。同じ文字列からは常に
-// 同じ値、違う文字列ならなるべく違う値になる分布の良さが目的で、暗号学的な
-// 安全性(衝突困難性等)は要求しない。
+// cyrb53: 53 ビットのハッシュ
 export function cyrb53(str: string): number {
   let h1 = 0xdeadbeef
   let h2 = 0x41c6ce57
@@ -26,8 +15,7 @@ export function cyrb53(str: string): number {
   return 4294967296 * (2097151 & h2) + (h1 >>> 0)
 }
 
-// mulberry32 PRNG。cyrb53で作った種から、必要な桁数だけ16進1桁(0-15)の
-// 決定的な擬似乱数列を取り出す(同じ種なら常に同じ列になる)。
+// mulberry32: 種から 16 進 1 桁(0-15)の乱数列を取り出す
 function hexDigitsFromSeed(seed: number, count: number): number[] {
   let a = seed >>> 0
   const digits: number[] = []
@@ -49,7 +37,6 @@ function hexDigitsFromSeed(seed: number, count: number): number[] {
 export interface Identicon {
   /** 5行5列。trueのマスだけcolorで塗る(falseは背景色のまま透明に抜く) */
   pattern: boolean[][]
-  /** CSSのcolor値(hsl(...)形式) */
   color: string
 }
 
@@ -58,18 +45,13 @@ const HUE_DIGITS = 3
 const SAT_DIGITS = 2
 const LUM_DIGITS = 2
 
-/**
- * 任意の文字列(投稿者ID等)から決定的にIdenticonを生成する。同じseedからは
- * 常に同じpattern/colorが得られる。
- */
 export function generateIdenticon(seed: string): Identicon {
   const digits = hexDigitsFromSeed(
     cyrb53(seed),
     PATTERN_HALF_DIGITS + HUE_DIGITS + SAT_DIGITS + LUM_DIGITS,
   )
 
-  // 先頭15桁を3列x5行に並べ、参考にした生成方式と同じく左右対称にミラーして
-  // 5列にする(半分の情報量だけで左右対称な図形にできるのがIdenticonらしい見た目の肝)
+  // 先頭 15 桁を 3 列 × 5 行に並べ、左右対称に広げて 5 列にする
   const half: boolean[][] = []
   for (let row = 0; row < 5; row++) {
     half.push([
@@ -80,8 +62,7 @@ export function generateIdenticon(seed: string): Identicon {
   }
   const pattern = half.map((row) => [row[2], row[1], row[0], row[1], row[2]])
 
-  // 残りの桁から色相(0-360)/彩度/輝度を作る。彩度・輝度は極端な値(真っ黒/真っ白や
-  // 彩度ゼロのグレー)を避け、常にはっきり色が乗った見た目になる範囲に収める。
+  // 残りの桁から色を作る。彩度・輝度は、真っ黒・真っ白・灰色にならない範囲に収める
   let i = PATTERN_HALF_DIGITS
   const hueDigits = digits.slice(i, i + HUE_DIGITS); i += HUE_DIGITS
   const satDigits = digits.slice(i, i + SAT_DIGITS); i += SAT_DIGITS

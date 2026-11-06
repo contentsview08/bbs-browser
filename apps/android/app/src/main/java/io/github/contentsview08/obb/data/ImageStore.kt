@@ -87,7 +87,7 @@ object ImageStore {
     private const val HEX = "0123456789abcdef"
 
     private val client by lazy {
-        // タイムアウト: つながるまで 10 秒・データが 15 秒届かなければ切る(止まったまま回り続けないように)・全体で 3 分まで
+        // 止まったまま回り続けないように、データが届かないときと全体の時間で切る
         OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(3, TimeUnit.MINUTES)
             .followRedirects(true).followSslRedirects(true).addInterceptor(HttpsFirst).build()
     }
@@ -95,7 +95,6 @@ object ImageStore {
     fun init(context: Context) {
         if (::dir.isInitialized) return
         dir = File(context.cacheDir, "images").apply { mkdirs() }
-        // 大きくなりすぎていたら、古い順に消す
         scope.launch { trim() }
     }
 

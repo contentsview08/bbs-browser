@@ -67,7 +67,6 @@ async function hasGpu(): Promise<boolean> {
 }
 /** GPU で開けなかった・動かなかったので、この先は CPU で動かす */
 let gpuBroken = false
-/** いまのモデルを GPU で開いたか */
 let onGpu = false
 async function openBest() {
   if (!gpuBroken && (await hasGpu())) {

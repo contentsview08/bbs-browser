@@ -62,7 +62,6 @@ export default function SettingsDialog(props: SettingsProps) {
 
   // 置き場所(左上の角)と大きさ。動かした・大きさを変えたら覚えておき、次に開いたときも同じ所・大きさで出す
   const dialog = useDialogRect('bbs:settings-dialog-rect2', { w: 896, h: 720, minW: 560, minH: 360 })
-  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   // Esc は、文字を打っている欄の中では 1 回目は欄を抜けるだけ(検索語・URL を打っている途中で設定ごと消えないように)
   useFocusTrap(dialog.boxRef, () => props.onClose(), { escBlursInputs: true })
 
@@ -160,7 +159,6 @@ export default function SettingsDialog(props: SettingsProps) {
     <div className={props.windowed ? 'fixed inset-0 z-[9500]' : 'fixed inset-0 z-[9500] pointer-events-none'}>
       <div
         ref={dialog.boxRef}
-        // 上の帯をつかんで動かせ、右下の角をつかんで大きさを変えられる(どちらも覚えておき、次に開いたときも同じ所・大きさで出す)。
         // 自分のウィンドウ(windowed)なら枠いっぱいに描き、動かす・大きさを変えるのは OS のウィンドウに任せる
         className={props.windowed ? 'absolute inset-0 flex bg-c-surface overflow-hidden' : 'absolute flex pointer-events-auto bg-c-surface border border-c-border rounded-[var(--card-radius)] shadow-xl overflow-hidden rise-in'}
         style={props.windowed ? undefined : dialog.style}
@@ -170,7 +168,7 @@ export default function SettingsDialog(props: SettingsProps) {
         <nav className="w-52 flex-shrink-0 flex flex-col bg-c-surface2 border-r border-c-border py-3">
           <h2 className="px-5 pb-3 text-lg font-bold text-c-text-strong">設定</h2>
           <div className="px-3 pb-2">{searchBox}</div>
-          {/* 分類が多くて入りきらないときは、この並びだけスクロールする(下の「高度な設定」は動かさない) */}
+          {/* 分類が多くて入りきらないときは、この並びだけスクロールする(下の「詳しい設定」は動かさない) */}
           <div className="flex-1 min-h-0 overflow-y-auto hover-scrollbar">
           {TABS.map((t) => (
             <button

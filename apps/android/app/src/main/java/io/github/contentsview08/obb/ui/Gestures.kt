@@ -42,7 +42,7 @@ class SwipeState {
 fun rememberSwipeState() = remember { SwipeState() }
 
 /**
- * スワイプ(指でなぞる)の操作。今のスマホ版の useSwipeGesture と同じ決まり。
+ * スワイプ(指でなぞる)の操作。PC 版の useSwipeGesture と同じ決まり。
  * - なぞった向きの並び(「right」「right,up」)を、map の操作に結びつける
  * - 最初の向きが縦なら、ふつうのスクロールに任せる。横なら以後の指の動きを受け取り、スクロールさせない
  * - 向きが変わったら(一定以上ほかの向きへ動いたら)次の向きを足す。指のぶれでは増えない
@@ -55,10 +55,10 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
     val current by rememberUpdatedState(map)
     val edgeAction by rememberUpdatedState(onEdgeRight)
     val view = androidx.compose.ui.platform.LocalView.current
-    // 感度(1 鈍い〜5 敏感)を、しきい値に掛ける倍率にする。3 が標準(今のスマホ版と同じ)
+    // 感度(1 鈍い〜5 敏感)を、しきい値に掛ける倍率にする。3 が標準
     val k = when (sensitivity) { 1 -> 1.6f; 2 -> 1.3f; 4 -> 0.7f; 5 -> 0.45f; else -> 1f }
     return this.pointerInput(k) {
-            // しきい値は今のスマホ版と同じ(向きを決める 8・次の向き 16・確定は画面の 40% か、60 を超えて平均 0.5/ms より速い)
+            // しきい値: 向きを決める 8・次の向き 16・確定は画面の 40% か、60 を超えて平均 0.5/ms より速い
             val lock = 8.dp.toPx() * k
             val segment = 16.dp.toPx() * k
             val minDistance = 60.dp.toPx() * k

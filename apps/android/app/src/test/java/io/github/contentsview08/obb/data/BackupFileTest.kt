@@ -30,7 +30,7 @@ class BackupFileTest {
         assertEquals(sites, b.sites)
     }
 
-    // JSON は 2.0 を 2 と書くので、Int で保存すると getFloat が読めず既定の大きさに戻っていた
+    // JSON は 2.0 を 2 と書くので、Int で保存すると getFloat が読めず既定の大きさに戻る
     @Test fun 小数の設定はきりのよい数でも小数のまま戻る() {
         val s = roundTrip(JSONObject().put("fontScale", 2f).put("lineHeight", 1.47f))
         assertEquals(2f, s["fontScale"])

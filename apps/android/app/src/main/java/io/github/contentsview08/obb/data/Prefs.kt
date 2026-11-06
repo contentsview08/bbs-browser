@@ -10,10 +10,7 @@ import org.json.JSONObject
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
-/** NG のルール。target: id / name / body(本文の言葉) / title(スレタイ) */
-
-/** 画像のサムネイルを自動で読むか */
-/** 画像のサムネイル: いつも読む / Wi-Fi のときだけ / 押したら読む / 出さない(前の「サムネイルで出す」のオフ) */
+/** 画像のサムネイル: いつも読む / Wi-Fi のときだけ / 押したら読む / 出さない */
 enum class ThumbMode(val label: String) { ALWAYS("いつも"), WIFI("Wi-Fi のときだけ"), TAP("押したら"), NEVER("出さない") }
 
 /** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
@@ -47,7 +44,7 @@ private class Pref<T>(private val sp: SharedPreferences, private val key: String
 
 /**
  * 設定(端末の SharedPreferences)。画面から見る値は Compose の状態にして、変えたらすぐ画面に出る。
- * 項目と既定の値は、今のスマホ版(apps/desktop/src/ui/settings.ts の DEFAULT_SETTINGS)にそろえる
+ * 項目と既定の値は apps/desktop/src/ui/settings.ts の DEFAULT_SETTINGS にそろえる
  */
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -59,30 +56,29 @@ class Prefs(context: Context) {
     }
 
     init {
-        // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
+        // 古い値を今の設定に読み替える。レスの見た目 timeline → いちばん近い discord
         if (sp.getString("postStyle", null) == "timeline") sp.edit().putString("postStyle", "discord").apply()
-        // やめた配色(2026-11)を選んでいたら、いちばん近い配色に書き換える(ui/Theme.kt の retiredScheme)
+        // 廃止した配色 → いちばん近い配色(ui/Theme.kt の retiredScheme)
         for (k in listOf("scheme", "darkScheme", "lightScheme")) {
             val v = sp.getString(k, null) ?: continue
             val to = io.github.contentsview08.obb.ui.retiredScheme(v)
             if (to != v) sp.edit().putString(k, to).apply()
         }
-        // 上げ先の 自動・0x0.st・uguu.se はやめた(2026-11)。imgur のサイトの画面に読み替える
+        // 廃止した上げ先 → 既定の上げ先
         sp.getString("uploadHost", null)?.let { v -> val to = Uploader.migrateHost(v); if (to != v) sp.edit().putString("uploadHost", to).apply() }
-        // 設定の棚卸し(2026-11-04。PC・Web と同じ)。消した・まとめた設定の古い値を、いまの設定に 1 回だけ写して消す
-        // サムネイル: 「出す・出さない」+「読み込む」→ 読み込む 1 つ(出さない = NEVER。前の NEVER(押したら)は TAP)
+        // showThumbnails + thumbMode → thumbMode(出さない = NEVER。古い NEVER は「押したら」なので TAP)
         if (sp.contains("showThumbnails")) {
             val mode = if (!sp.getBoolean("showThumbnails", true)) "NEVER" else if (sp.getString("thumbMode", null) == "NEVER") "TAP" else null
             sp.edit().apply { if (mode != null) putString("thumbMode", mode); remove("showThumbnails") }.apply()
         }
-        // ID の見せ方: 「赤く」+「ID ごとの色」→ idStyle(none / color)
+        // idHeat + idColor → idStyle(none / color)
         if (sp.contains("idHeat") || sp.contains("idColor")) {
             val color = sp.getBoolean("idColor", false) || sp.getBoolean("idHeat", true)
             sp.edit().putString("idStyle", if (color) "color" else "none").remove("idHeat").remove("idColor").apply()
         }
-        // 人気のレス「示さない」はやめた
+        // heatStyle の none → left
         if (sp.getString("heatStyle", null) == "none") sp.edit().putString("heatStyle", "left").apply()
-        // いつもオンにした(消した)もの
+        // もう使わない設定の値を消す
         for (k in listOf("pullToRefreshList", "aaAutoDetect", "sendDelay", "phraseBar", "uploadEnabled", "imageUrlOmit", "imageUrlCollapse")) if (sp.contains(k)) sp.edit().remove(k).apply()
     }
 
@@ -102,7 +98,7 @@ class Prefs(context: Context) {
     /** 差し色(ACCENTS のキー)。空ならテーマの色 */
     var accent by pref("accent", "")
     var lightScheme by pref("lightScheme", "light-gray")
-    /** レスの見た目: card(カード)/ discord(Discord 風)/ line(LINE 風) */
+    /** レスの見た目(ui/PostRender.kt の POST_STYLES のキー) */
     var postStyle by pref("postStyle", "card")
     /** 画面全体の文字の倍率(0.85〜1.3) */
     var fontScale by pref("fontScale", 1f)
@@ -134,7 +130,6 @@ class Prefs(context: Context) {
     var listDensity by pref("listDensity", "normal")
     /** スレ一覧を見出し(キーワード・新しいスレ・新着のある読んだスレ・その他)で区切る */
     var listSections by pref("listSections", false)
-    /** 板ごとに、前回スレ一覧を取った時刻(「新」の印の境目)。JSON */
     /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */
     private var recentBoardsJson by pref("recentBoards", "[]")
     fun recentBoards(): List<Triple<String, String, Long>> = runCatching {
@@ -186,6 +181,7 @@ class Prefs(context: Context) {
         newThreadDraftsJson = all.toString()
     }
 
+    /** 板ごとに、前回スレ一覧を取った時刻(「新」の印の境目)。JSON */
     private var boardVisitsJson by pref("boardVisits", "{}")
     fun boardVisit(url: String): Long? = runCatching { JSONObject(boardVisitsJson).optLong(url, 0L).takeIf { it > 0 } }.getOrNull()
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }
@@ -198,7 +194,7 @@ class Prefs(context: Context) {
     /** 開く位置: unread(最初の未読)/ top / bottom */
     var openPosition by pref("openPosition", "unread")
     var omitNoname by pref("omitNoname", true)
-    /** 空行を整える(3 行以上続く空行を 1 行に)。保存の鍵は前の名前のまま */
+    /** 空行を整える(3 行以上続く空行を 1 行に)。保存の鍵は collapseBlankLines のまま(既存の設定を引き継ぐ) */
     var tidyBlankLines by pref("collapseBlankLines", true)
     var highlightOp by pref("highlightOp", true)
     /** ID の見せ方: none(文字だけ) / color(2 回以上書いた ID を ID ごとの色に)。PC・Web の idStyle と同じ(模様はスマホにない) */
@@ -250,7 +246,7 @@ class Prefs(context: Context) {
     /** レスをダブルタップで返信(>>番号 を入れて書き込み欄を開く) */
     var doubleTapReply by pref("doubleTapReply", false)
     var showMinimap by pref("showMinimap", true)
-    /** 人気のレスの示し方: left(左の帯)/ right(右の帯)/ text(本文の色)/ none */
+    /** 人気のレスの示し方: left(左の帯)/ right(右の帯)/ text(本文の色) */
     var heatStyle by pref("heatStyle", "left")
     /** URL を短く見せる(https:// を外し、長いものは省く。画像の URL は「画像」の札にし、続いたものはまとめる) */
     var urlShorten by pref("urlShorten", true)
@@ -418,7 +414,7 @@ class Prefs(context: Context) {
 
         internal fun inBackup(key: String) = key !in NOT_IN_BACKUP
 
-        /** なぞる操作の既定(今のスマホ版と同じ) */
+        /** なぞる操作の既定 */
         val DEFAULT_GESTURES = mapOf(
             "list" to mapOf("right" to "drawer", "left" to "forward", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "newThread", "left,right" to "quick", "right,left" to "quick"),
             "thread" to mapOf("right" to "back", "left" to "reply", "right,up" to "bottom", "right,down" to "top", "left,down" to "refresh", "left,up" to "deleteLog", "left,right" to "quick", "right,left" to "quick"),

@@ -10,8 +10,7 @@ android {
     namespace = "io.github.contentsview08.obb"
     compileSdk = 37
     defaultConfig {
-        // Tauri のスマホ版(io.github.contentsview08.bbs_browser)と別のアプリとして入れ、並べて比べられるようにする
-        // 2026-11-05 に OBB へ(インストールの場所も変わる。前の スマホ版 とは別のアプリになるので、設定は入れ直し)
+        // Tauri のスマホ版(io.github.contentsview08.bbs_browser)とは別のアプリ。並べて入れられる
         applicationId = "io.github.contentsview08.obb"
         minSdk = 26
         targetSdk = 37
@@ -55,7 +54,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
-    // 今の専ブラと同じアイコン(Material Symbols の炎・画像・動画など)。使わないものは R8 が外す
+    // Material Symbols のアイコン(炎・画像・動画など)。使わないものは R8 が外す
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
@@ -64,11 +63,11 @@ dependencies {
     // 閲覧履歴の定期確認と OS の通知(アプリを閉じている間)
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // 画像(サムネイル・ビューアー)
+    // ファイルを絵にするのと、リンクのカードの絵。本文の画像の取得は ImageStore
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    // リンクをアプリの中で開く(Custom Tabs。今のスマホ版の「リンクをアプリの中で開く」)
+    // リンクをアプリの中で開く(Custom Tabs)
     implementation("androidx.browser:browser:1.8.0")
     // AI NG の判定モデル(mDeBERTa-v3 の ONNX)を動かす
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")

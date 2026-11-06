@@ -1,5 +1,3 @@
-// 設定の「板一覧」。
-
 import { useRef, useEffect, useMemo, useState } from 'react'
 import type { Board, SiteConfig } from '@bbs-browser/connectors'
 import { ICON_BTN, INPUT } from '../DialogParts'

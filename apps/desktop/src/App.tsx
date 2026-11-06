@@ -205,7 +205,6 @@ const isFull = (t: ThreadSummary, posts: Post[]) => {
   return reachedMaxPosts(posts.length, findConnector(t.connectorId)?.maxPosts)
 }
 
-/** URL を扱えるコネクタで、板(とスレ)に読み替える */
 /**
  * URL から板(とスレ)を割り出す。開けないときは、理由を付けて投げる(右下にエラーとして出る)。
  * - どのコネクタも扱わない URL: 対応していない URL
@@ -258,7 +257,7 @@ function fromSaved(s: SavedTab): ThreadSummary {
 
 /**
  * 設定(JSON)に保存してあったスレ(通知センターの行き先など)を、使える形に戻す。
- * Date は JSON にすると文字列になるので、createdAt を Date に戻す(そのまま開くと、タブの保存で getTime がなくて落ちた)
+ * Date は JSON にすると文字列になるので、createdAt を Date に戻す(戻さないとタブの保存の getTime で落ちる)
  */
 function reviveThread(t: ThreadSummary): ThreadSummary {
   const raw = t.createdAt as unknown
@@ -293,7 +292,6 @@ export default function App() {
   const [refreshingAll, setRefreshingAll] = useState(false)
   /** 閲覧履歴を取り直した回数(「未読」で絞り込んだ顔ぶれを控え直すきっかけ) */
   const [historyVersion, setHistoryVersion] = useState(0)
-  /** サイドバーの「未読のスレ」を押した回数(閲覧履歴を未読で絞り込むきっかけ) */
   /** 「履歴」の一覧の絞り込みの頼み(サイドバーの「お気に入りのスレ」・「次の未読スレ」などから開くとき)。seq が変わると一覧が従う */
   const [filterRequest, setFilterRequest] = useState<{ key: ListFilter | null; seq: number }>()
   /** マウスジェスチャーからの、スレ一覧の上のタブの頼み(どのタブか、または隣へ) */
@@ -342,7 +340,7 @@ export default function App() {
   /** アプリ内の通知(右下)。裏の処理の失敗もここに出る */
   const { notifications, notify: notifyInApp, dismiss } = useNotifications()
   /**
-   * 知らせる。いつもアプリの中(右下)に出し、スマホでアプリを裏に回しているときは OS の通知でも出す
+   * 知らせる。いつもアプリの中(右下)に出し、設定でオンなら OS の通知でも出す
    * (失敗の知らせは、アプリを見ているときに分かればよいので OS には出さない)
    */
   const notify = useCallback(
@@ -352,7 +350,6 @@ export default function App() {
       const kind = NOTIFY_KIND_BY_ICON[n.icon]
       if (kind && settingsRef.current.notifyKinds[kind] === false) return
       notifyInApp(rest)
-      // OS の通知にも出す(設定。PC でもスマホでも。エラーは出さない)
       if (settingsRef.current.osNotify && n.icon !== 'error') void sendOsNotification(n.title, n.body).catch(() => undefined)
       // あとで見たい知らせ(あなた宛てのレス・お気に入りの新着)は通知センターにも残す
       if (keep) {
@@ -402,7 +399,7 @@ export default function App() {
   }
   /** Shift+Delete で消そうとしているタブ(確かめるダイアログを出している間) */
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; extra: ThreadSummary[]; stayOnList?: boolean; after?: () => void }>()
-  // 縦長のときは、スレ一覧をしまってスレ表示だけにする。スレ一覧は左から引き出す
+  // 縦長のときは 1 画面にする(設定が auto のとき)
   const narrow = useNarrow()
   /** 1 画面(スレ一覧とスレ表示のどちらか一方だけを出す)か。設定と、ウィンドウの形で決まる */
   const single = isMobile || settings.paneMode === 'single' || (settings.paneMode === 'auto' && narrow)
@@ -421,8 +418,8 @@ export default function App() {
 
   // 見たもの(スレ一覧・スレ)を見た順に覚え、上の帯の ← →・マウスの戻る/進むボタン・Alt+← → で行き来する
   const goNav = (d: -1 | 1) => {
-    // スレ表示から離れる前に、見えている所までの既読をすぐ知らせる(既読はスクロールが止まって少ししてから知らせるので、
-    // 開いてすぐ戻ると、見えた新着が既読にならず、スレ一覧に新着の印が残っていた)
+    // スレ表示から離れる前に、見えている所までの既読をすぐ知らせる
+    // (既読はスクロールが止まって少し後に知らせるので、開いてすぐ戻ると一覧に新着の印が残る)
     readFlush.current?.()
     const r = step(view.current, d)
     if (!r) return
@@ -788,7 +785,7 @@ export default function App() {
     if (isMobile) setDrawerOpen(false)
     if (filter !== undefined) {
       setFilterRequest({ key: filter, seq: Date.now() })
-      // 一覧がまだないときは onFilterChange が来ないので、ここでもそろえる(前の「書き込んだ」が残っていた)
+      // 一覧がまだないときは onFilterChange が来ないので、ここでもそろえる
       setPastFilter(filter)
     }
     setNotifView(false)
@@ -1048,14 +1045,14 @@ export default function App() {
     setTabs((ts) => mapKeep(ts, (t) => (t.id === id && keys.some((k) => t[k] !== patch[k]) ? { ...t, ...patch } : t)))
   }
 
+  const inflight = useRef(new Map<string, Promise<ThreadLog>>())
+  /** ログを削除したスレ。削除の前に始まった取得・既読の記録が、あとから一覧の印を書き戻さないように覚えておく(開き直したら外す) */
+  const deletedIds = useRef(new Set<string>())
   /**
    * スレを取りに行って保存し、そのタブの表示を差し替える。
    * 同じスレを取りに行っている最中なら、それを待つ。force なら、待ったあとでもう一度取りに行く
    * (書き込んだ直後は、自分のレスが入った状態を必ず取りたいので)
    */
-  const inflight = useRef(new Map<string, Promise<ThreadLog>>())
-  /** ログを削除したスレ。削除の前に始まった取得・既読の記録が、あとから一覧の印を書き戻さないように覚えておく(開き直したら外す) */
-  const deletedIds = useRef(new Set<string>())
   const fetchThread = async (
     s: LogStore,
     t: ThreadSummary,
@@ -1081,11 +1078,10 @@ export default function App() {
         await s.saveFetch(t, r)
         const saved = applyFetch(before, t, r)
         const changed = saved !== before
-        // 「ここから未読」は、更新したときにその時点の既読位置の次へ引き直す
-        // (開いた時点の位置のままにすると、読み終えて更新しても線が残り続ける)。
-        // 開いたときの取得では動かさない(開いた直後に画面に見えたレスが既読になり、線が下へずれてしまうため)。
-        // 変わらなかったときはログを差し替えない(スレ表示を描き直さない)
-        // レスへの反応(ふたばのそうだねなど)は、新しいレスがなくても増えるので、届いたら写す
+        // 「ここから未読」は、更新のときその時点の既読位置の次へ引き直す(開いた時点のままだと、読み終えても線が残る)。
+        // 開いたときの取得では動かさない(開いた直後に見えたレスが既読になり、線が下へずれる)。
+        // 変わらなければログを差し替えない(描き直さない)。
+        // レスへの反応(ふたばのそうだねなど)は新着がなくても増えるので、届いたら写す
         const reactions = r.reactions && new Map(Object.entries(r.reactions).map(([k, v]) => [Number(k), v] as const))
         setTabs((ts) =>
           mapKeep(ts, (x) => {
@@ -1288,12 +1284,12 @@ export default function App() {
     })
   }
 
+  /** 開いているタブの「いま見えているところまでの既読をすぐ知らせる」関数(スレ表示が預ける) */
+  const readFlush = useRef<(() => void) | undefined>(undefined)
   /**
    * 開いているスレを手で更新する(更新ボタン・R キー・引っぱって更新)。
    * 続けて押してもサーバーに何度も取りに行かないよう、同じスレは REFRESH_COOLDOWN_MS あける(自動更新は別)
    */
-  /** 開いているタブの「いま見えているところまでの既読をすぐ知らせる」関数(スレ表示が預ける) */
-  const readFlush = useRef<(() => void) | undefined>(undefined)
   const refreshThread = () =>
     run('posts', async () => {
       if (!store || !activeTab) return
@@ -1312,7 +1308,7 @@ export default function App() {
       await fetchThread(store, activeTab.thread)
     })
 
-  // ── スレ一覧のクールダウン(書き込みの連投は掲示板のサーバーが抑える。2026-11 にアプリ側の待ち時間はやめた) ──
+  // ── スレ一覧のクールダウン(書き込みの連投は掲示板のサーバーが抑える) ──
   /** スレ一覧を手で更新したあとのクールダウンが明ける時刻 */
   const [listReadyAt, setListReadyAt] = useState<number>()
   /** スレ一覧を手で更新する(更新ボタン・引っぱって更新)。クールダウン中は取りに行かない */
@@ -1381,8 +1377,6 @@ export default function App() {
     return () => clearInterval(id)
   }, [activeId, settings.autoRefreshSec])
 
-  // キー操作: Ctrl+W で閉じる、Ctrl+Tab / Ctrl+PageDown で次、Ctrl+Shift+Tab / Ctrl+PageUp で前
-  // Delete で開いているスレのログを消してタブを閉じる(文字を入力しているときは除く)
   /** キー操作の対象: 選んでいるタブがあれば、それと開いているタブ。なければ開いているタブだけ */
   const targetTabs = () => {
     const ids = tabsRef.current.map((t) => t.id).filter((id) => selectedTabs.has(id) || id === activeId)
@@ -1550,8 +1544,7 @@ export default function App() {
         return false
     }
   }
-  /** Shift+Delete: 確かめてから(設定で確かめないことにしていれば、すぐ)ログを消して閉じる */
-  /** ログは dat 落ちすると取り直せないので、どの入口からでも消す前に確かめる */
+  /** 確かめてから(設定で確かめないことにしていれば、すぐ)ログを消して閉じる。ログは dat 落ちすると取り直せないので、どの入口からもここを通す */
   const confirmDeleteLogs = (ids: string[], extra: ThreadSummary[] = [], opts?: { stayOnList?: boolean; after?: () => void }) => {
     if (!settings.confirmDeleteLog) {
       setSelectedTabs(new Set())
@@ -1678,10 +1671,6 @@ export default function App() {
     if (restored.current) updateSetting('activeTab', activeId ?? '')
   }, [activeId])
 
-  /**
-   * 書き込み。成功したら差分を取り直し、書き込んだレスを「自分の書き込み」として覚える。
-   * レス番号はサーバーが教えてくれればそれを、なければ新着の中から本文が同じものを探す
-   */
   /** 書き込みの削除キー(ふたば)。まだなければ、英数字 8 文字を作って覚える */
   const deleteKey = () => {
     if (settings.postDeleteKey) return settings.postDeleteKey
@@ -1746,10 +1735,6 @@ export default function App() {
     patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
   }
 
-  /**
-   * スレ立て。成功したらスレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く。
-   * サーバーの一覧に載るまで少しかかることがあるので、見つからなければ間を置いて探し直す
-   */
   const createThread = async (input: NewThreadInput): Promise<PostResult> => {
     if (!store || !board) return { status: 'error', message: '板を開いていません' }
     const b = board
@@ -1767,7 +1752,10 @@ export default function App() {
     return afterThread(board, input, await connector.submitConfirm(confirm, ctx))
   }
 
-  /** スレが立ったら、スレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く */
+  /**
+   * スレが立ったら、スレ一覧を取り直して同じスレタイのスレを探し、新しいタブで開く。
+   * サーバーの一覧に載るまで少しかかることがあるので、見つからなければ間を置いて探し直す
+   */
   const afterThread = async (b: Board, input: NewThreadInput, r: PostResult): Promise<PostResult> => {
     if (!store || r.status !== 'ok') return r
     const connector = connectorOf(b.connectorId)
@@ -1874,7 +1862,6 @@ export default function App() {
   // ── スマホ: スワイプの操作 ──
   /** 操作を実行する。アプリ全体の操作はそのまま、スレ表示・スレ一覧の操作は、割り当てたキーを押したことにして渡す */
   const runAction = (action: string) => {
-    // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す(元の Web アプリと同じ)
     // 文字を打っている欄から抜けるのが先(検索欄で戻ると、まず欄から抜ける)
     if (action === 'back' && blurTyping()) return
     if (action === 'back' && clearSearchText()) return
@@ -1884,6 +1871,7 @@ export default function App() {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
       return
     }
+    // 戻る・引き出しは、絞り込み・検索をしていればまずそれを外す
     if ((action === 'back' || action === 'drawer') && clearFiltering()) return
     if (action === 'drawer') return setDrawerOpen(true)
     // マウスジェスチャー(円盤)だけの操作: 画面を開く・スレ一覧のタブ・お気に入り板
@@ -2052,12 +2040,11 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [settingsLoaded, store])
 
-  // 起動時に開く板(設定)。設定とお気に入りを読み終えてから一度だけ
+  // 起動時に前回の板を開く。設定とお気に入りを読み終えてから一度だけ
   const startupDone = useRef(false)
   useEffect(() => {
     if (startupDone.current || !settingsLoaded || !favorites) return
     startupDone.current = true
-    // いつも前回の板を開く(開きたくなければ閉じればよい。「起動時に開く板」の設定は 2026-11 にやめた)
     const url = settings.lastBoardUrl
     if (!url) return
     const fav = favorites.find((b) => b.url === url)
@@ -2102,7 +2089,7 @@ export default function App() {
         .then((info) => {
           setBoardInfos((m) => new Map(m).set(b.url, info))
           // 掲示板側で板名が変わっていたら、手元(お気に入り板・開いている板)の名前も直す。
-          // お気に入りの名前は足したときのものを DB に持っているので、取り直さないと古いままだった
+          // お気に入りの名前は足したときのものを DB に持っているので、直さないと古いまま
           if (!info.title) return
           const title = info.title
           setFavorites((list) => (list?.some((f) => f.url === b.url && f.name !== title) ? list.map((f) => (f.url === b.url ? { ...f, name: title } : f)) : list))
@@ -2137,7 +2124,7 @@ export default function App() {
         return new Map(m).set(t.key, { ...cur, readNo: no })
       })
     patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
-    // 閲覧履歴の一覧を出しているときは、その行の既読も進める(開いた時点のまま残り、未読の印が消えなかった)
+    // 閲覧履歴の一覧を出しているときは、その行の既読も進める(しないと未読の印が消えない)
     setHistory((list) => (list?.some((h) => threadId(h.thread) === id && no > h.readNo) ? list.map((h) => (threadId(h.thread) === id && no > h.readNo ? { ...h, readNo: no } : h)) : list))
     void store.markRead(t, no).catch(backgroundError('既読の保存'))
   })
@@ -2297,7 +2284,6 @@ export default function App() {
     togglePostAccount: useEvent((id: string, on: boolean) => updateSetting('postAccounts', { ...settings.postAccounts, [id]: on })),
     openAccountSettings: useEvent(() => openSettings('accounts')),
     threadUrl: useEvent((t: ThreadSummary) => connectorOf(t.connectorId).threadWebUrl(t)),
-    // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
     setThreadHeaderHeight: useEvent((h: number) => updateSetting('threadHeaderHeight', h)),
     // 自分の書き込みを消す(確かめてから)
     deletePost: useEvent((t: ThreadSummary, p: Post) => setPostDeleteConfirm({ t, p })),
@@ -2325,6 +2311,7 @@ export default function App() {
       if (def.confirm) setPostActionConfirm({ t, p, def })
       else runPostAction(t, p, def)
     }),
+    // ︙ の「板に戻る」: そのスレの板のスレ一覧を開く(お気に入りの板ならその設定のまま、なければ URL から調べて)
     openBoardOf: useEvent((t: ThreadSummary) => {
       const fav = favorites?.find((b) => b.url === t.boardUrl)
       if (fav) void openBoard(fav)
@@ -2346,8 +2333,6 @@ export default function App() {
   }, [store])
 
   const historyStates = useMemo(() => new Map(history?.map((h) => [threadId(h.thread), h as ThreadState])), [history])
-  // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
-  // スレ一覧から分かったレス数があれば、それを使う(手元のレス数より多いぶんが未読として出る)
   /** 板の URL → 画面に出す名前(別名 → お気に入り板の名前 → URL の最後) */
   const boardNameOf = (url: string): string => {
     const alias = settings.boardMeta[url]?.alias
@@ -2361,9 +2346,9 @@ export default function App() {
     }
   }
   const historyReadAt = useMemo(() => new Map(history?.map((h) => [threadId(h.thread), h.readAt])), [history])
-  /** 閲覧履歴の行に出すもの(板の名前・いつ見たか) */
   // 行ごとに同じ中身なら同じオブジェクトを返す(毎回新しいと、全部の行が描き直される)
   const historyMetaCache = useRef(new Map<string, { boardName: string; readAt?: number; icon?: string }>())
+  /** 閲覧履歴の行に出すもの(板の名前・いつ見たか) */
   const historyMetaOf = (t: ThreadSummary) => {
     const next = { boardName: boardNameOf(t.boardUrl), readAt: historyReadAt.get(threadId(t)), icon: settings.boardMeta[t.boardUrl]?.icon }
     const key = threadId(t)
@@ -2372,6 +2357,8 @@ export default function App() {
     historyMetaCache.current.set(key, next)
     return next
   }
+  // 履歴のスレの並びは、履歴が変わったときだけ作る(描き直しのたびに作ると、スレ一覧が勢いを計算し直してしまう)
+  // スレ一覧から分かったレス数があれば、それを使う(手元のレス数より多いぶんが未読として出る)
   const historyThreads = useMemo(
     () =>
       history?.map((h) => {
@@ -2592,7 +2579,7 @@ export default function App() {
         <div
           className={
             single
-              ? // スマホ: スレを開くとスレ一覧は少し左へ逃げ、閉じると左から戻ってくる(元の Web アプリと同じ)
+              ? // スマホ: スレを開くとスレ一覧は少し左へ逃げ、閉じると左から戻ってくる
                 // will-change: 動かす層を最初から分けておき、開く・戻るときのすべりを軽くする
                 `flex-1 min-w-0 flex justify-center bg-panel-view ${isMobile ? `will-change-transform transition-transform duration-[250ms] ease-out ${threadShown ? '-translate-x-1/4' : ''}` : ''}`
               : 'relative flex flex-shrink-0'
@@ -2615,7 +2602,7 @@ export default function App() {
           onShownChange={onShownChange}
           threads={notifView ? [] : (pastThreads ?? threads)}
           subHeader={pastHeader || undefined}
-          // 「書き込んだ」は、本文とどのスレに書いたかが見える前の一覧(スレの行ではなく)。通知は溜めた知らせの一覧
+          // 「書き込んだ」は、本文とどのスレに書いたかが見える一覧(スレの行ではなく)。通知は溜めた知らせの一覧
           body={
             notifView ? (
               <NotificationList items={settings.notificationLog} onOpen={openNotification} onClear={() => updateSetting('notificationLog', [])} />
@@ -2648,7 +2635,6 @@ export default function App() {
           newTabEnabled={settings.tabsEnabled}
           onRefresh={refreshList}
           refreshReadyAt={listReadyAt}
-          // 縦長のときは、引き出してもスレ表示が少し見えるように、ウィンドウの 85% までにする
           width={settings.threadPanelWidth}
           // 狭くて自動で 1 画面になったときは幅いっぱいに。設定で 1 画面にしたときは読みやすい幅で真ん中に
           fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
@@ -2706,7 +2692,7 @@ export default function App() {
         className={
           single
             ? isMobile
-              ? // スマホ: 開くときは右からすべり込み、閉じるときは右へすべって出ていく(元の Web アプリと同じ)。
+              ? // スマホ: 開くときは右からすべり込み、閉じるときは右へすべって出ていく。
                 // 出し切ったら transform を外す(付いたままだと、画面の座標で置くポップアップの位置がずれるため)
                 `absolute inset-0 z-30 flex flex-col bg-panel-view shadow-2xl will-change-transform transition-[transform,visibility] duration-[250ms] ease-out ${
                   threadShown ? '' : 'translate-x-full invisible pointer-events-none'

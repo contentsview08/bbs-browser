@@ -137,7 +137,7 @@ describe('fetchPosts の差分取得', () => {
 })
 
 describe('resolveUrl', () => {
-  // SETTING.TXT だけを返す偽サーバー
+  // resolveUrl が読む URL だけに答える偽サーバー
   const ctx = fakeCtx(async (url): Promise<HttpResponse> => {
     if (url === 'https://bbs.eddibb.cc/liveedge/subject.txt' || url === 'https://medaka.5ch.io/prog/subject.txt')
       return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1792065954.dat<>スレ (1)\n') }

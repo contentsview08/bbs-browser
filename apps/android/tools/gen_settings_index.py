@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
 設定の検索に使う索引(ui/SettingsIndex.kt)を、ui/Settings.kt の項目から作る。
-各ページ(XxxPage)の中の SwitchRow・ChoiceRow・SliderRow・TextRow・ActionRow・NavRow・NumberRow の名前と説明、
-Group の見出しと note を拾い、
-TITLES の対応(ページのキー)と組にする。設定の項目を足したら流し直す。
+設定の項目を足したら流し直す。
 使い方: python3 apps/android/tools/gen_settings_index.py
 """
 import pathlib

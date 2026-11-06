@@ -86,7 +86,6 @@ export interface FavoriteThreadEntry extends ThreadState {
   thread: ThreadSummary
 }
 
-/** サイトのアカウント(5ch の BE など) */
 /** 自動 NG にユーザーが付けた印(荒らし・荒らしじゃない)。本文の鍵ごとに 1 つ */
 export interface TrollMarkRecord {
   bodyKey: string
@@ -99,6 +98,7 @@ export interface TrollMarkRecord {
   createdAt: number
 }
 
+/** サイトのアカウント(5ch の BE など) */
 export interface AccountRecord {
   connectorId: string
   accountId: string

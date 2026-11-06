@@ -70,10 +70,10 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 /**
- * スクロールで上下の帯を隠す(今のスマホ版の useHideOnScroll を写したもの):
- * - 向きが変わった所からの合計で 8 を超えて下へ送ると隠し、上へ戻すと(どこにいても)すぐ出す。出し入れは 0.2 秒ですべらせる
- * - 一番上では両方出す。一番下まで来たら、フッターだけは出す(書き込み・更新を押したいはずなので)
- * - 指で触ってからだけ隠す(開いた直後の、未読への飛び・位置の戻しでは隠さない)
+ * スクロールで上下の帯を隠す(PC 版の useHideOnScroll を写したもの):
+ * - 向きが変わった所からの合計が 8dp を超えたら、下へ送るときは隠し、上へ戻すときは出す。出し入れは 0.2 秒ですべらせる
+ * - 一番上・一番下では両方出す
+ * - 指で動かしたスクロールでだけ隠す(開いた直後の、未読への飛び・位置の戻しでは隠さない)
  * 帯の高さは onSizeChanged で測って入れる。動いている値は graphicsLayer と barPadding で描く・置くときにだけ読み、画面を組み直さない
  */
 @Stable
@@ -113,11 +113,10 @@ class HideOnScroll(private val threshold: Float) {
     val connection = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
             if (!enabled) { show(); return Offset.Zero }
-            // 指で触ったスクロールだけ(プログラムで動かしたときは隠さない)
+            // 指で動かしたスクロールと、その慣性だけ
             if (source != NestedScrollSource.UserInput && source != NestedScrollSource.SideEffect) return Offset.Zero
             if (atTop()) { show(); direction = 0; moved = 0f; return Offset.Zero }
             val bottom = atBottom()
-            // 一番下まで来たら、ヘッダーもフッターも出す
             if (bottom) { show(); direction = 0; moved = 0f; return Offset.Zero }
             val delta = -consumed.y
             if (delta == 0f) return Offset.Zero
@@ -150,12 +149,10 @@ fun Modifier.barPadding(top: androidx.compose.ui.unit.Density.() -> Float = { 0f
     layout(c.constrainWidth(p.width), c.constrainHeight(p.height + t + b)) { p.place(0, t) }
 }
 
-/**
- * 上の帯。左に ☰(メニュー)か ←(戻る)、真ん中に題(2 行まで)、右にボタン。今のスマホ版の形
- */
 /** 上の帯の左のボタンを長押ししたとき(戻る先の一覧を出す)。MainActivity が入れる */
 val LocalNavLong = androidx.compose.runtime.compositionLocalOf<(() -> Unit)?> { null }
 
+/** 上の帯。左に ☰(メニュー)か ←(戻る)、真ん中に題、右にボタン */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun HeaderBar(
@@ -185,7 +182,7 @@ fun HeaderBar(
             leading()
         }
         Spacer(Modifier.width(8.dp))
-        // 題は 2 行まで。入りきらなければ字を小さくして収める(今のスマホ版の fitTitle)。押すとメニュー(スレ・板の操作)
+        // 題は 2 行まで。入りきらなければ字を小さくして収める。押すとメニュー(スレ・板の操作)
         val size = 15f * prefs.barFontScale
         androidx.compose.foundation.text.BasicText(
             title,
@@ -207,7 +204,7 @@ fun BarIcon(icon: ImageVector, label: String, tint: Color = Palette.textMuted, o
 @Composable
 fun MoreButton(onClick: () -> Unit) = BarIcon(Icons.Filled.MoreVert, "その他", onClick = onClick)
 
-/** 下から出るメニューの 1 行 */
+/** メニューの 1 行 */
 class MenuItem(val label: String, val icon: ImageVector, val danger: Boolean = false, /** あれば、押すと小項目の画面に切り替える */ val children: List<MenuItem>? = null, val onClick: () -> Unit)
 
 /** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
@@ -339,8 +336,8 @@ fun Hint(text: String) {
 }
 
 /**
- * 読み込めなかったときの画面: 理由と「もう一度読み込む」ボタン。スクロールできる部品の上に置くので、引っぱって更新でも取り直せる
- * (ただの文字だと、引っぱっても指の動きが届かず、取り直せなかった)
+ * 読み込めなかったときの画面: 理由と「もう一度読み込む」ボタン。
+ * 引っぱって更新の指の動きが届くよう、スクロールできる部品の上に置く(ただの文字だと届かない)
  */
 @Composable
 fun LoadError(message: String?, loading: Boolean, topPadding: androidx.compose.ui.unit.Dp, onBack: (() -> Unit)? = null, externalUrl: String? = null, onRetry: () -> Unit) {
@@ -441,7 +438,7 @@ fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Floa
     }
 }
 
-/** ヘッダー・フッターの高さと文字(今のスマホ版の BarSliders) */
+/** ヘッダー・フッターの高さと文字 */
 @Composable
 fun BarSliders(p: io.github.contentsview08.obb.data.Prefs) {
     SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 44f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
@@ -492,7 +489,7 @@ fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * 表示スタイル(今のスマホ版の StyleMenuItems): テーマ・レスの見た目。真ん中に浮かぶ(画面全体の文字の大きさは「文字の大きさ・余白」と設定にあるので、ここには置かない)
+ * 表示スタイル: テーマ・差し色・レスの見た目。真ん中に浮かぶ(画面全体の文字の大きさは「文字の大きさ・余白」と設定にあるので、ここには置かない)
  */
 @Composable
 fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onDismiss: () -> Unit) {
@@ -597,7 +594,7 @@ fun BoardIcon(boardUrl: String, size: androidx.compose.ui.unit.Dp, fallback: @Co
 }
 
 /**
- * 真ん中に浮かぶ小さな画面(表示スタイル・画像一覧・次スレの候補など)。下から出るシートの代わりに使う。
+ * 真ん中に浮かぶ小さな画面(表示スタイル・画像一覧・次スレの候補など)。
  * 少し小さく・少し下から浮き上がって出て、外を押すか戻るで閉じる
  */
 @Composable
@@ -627,7 +624,7 @@ fun CenterPanel(title: String? = null, onDismiss: () -> Unit, content: @Composab
     }
 }
 
-/** 字の中に置く札(主・新など)。地の色をはっきり塗り、字は地とはっきり差のある色にする(薄い地に同じ系統の字だと読みにくかった) */
+/** 字の中に置く札(主・新など)。地の色をはっきり塗り、字は地とはっきり差のある色にする(薄い地に同じ系統の字は読みにくい) */
 @Composable
 fun BadgeChip(text: String, bg: Color, fg: Color) {
     // 字は、字そのものの形の上下(グリフの外枠)で真ん中に置く。字の高さの余白(フォントごとに上下で違う)に左右されないように

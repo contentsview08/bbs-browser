@@ -1,9 +1,6 @@
-// ミニマップ。web 版の Minimap.tsx を移植(PC だけなのでタッチ操作は外した)。
-// スレ全体を縦に縮めて、人気レス(横棒)・自分のレス(ひし形)・自分への返信(枠だけのひし形)・
-// 画像(四角)・動画(三角)の位置と、「ここから未読」の位置を示す。つまみをドラッグしてスクロールでき、
-// 印を押すとそのレスへ、何もないところを押すとその割合の位置へ飛ぶ。
-// 印は重ならないよう 3 つの列に分ける(左: 自分のレスと返信、真ん中: 人気レスの帯、右: 画像と動画)。
-// いま見ている位置のつまみは強調色で目立たせ、未読の範囲はうっすら色を付け、乗せた高さのレス番号を出す。
+// ミニマップ。スレ全体を縦に縮めて、人気レス・自分のレス・自分への返信・画像・動画と「ここから未読」の位置を示す。
+// つまみをドラッグしてスクロールでき、印を押すとそのレスへ、何もないところを押すとその割合の位置へ飛ぶ。
+// 印は重ならないよう 3 つの列に分ける(左: 自分のレスと返信、真ん中: 人気レスの帯、右: 画像と動画)
 
 import { isMobile } from '../utils/platform'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
@@ -38,7 +35,7 @@ interface Props {
   onJump: (no: number) => void
 }
 
-// PostArticle の heatClass と同じ暖色の段階
+// utils/postBody の heatClass と同じ暖色の段階
 function heatColor(count: number): string {
   if (count >= 7) return 'var(--c-heat-very-hot)'
   if (count >= 5) return 'var(--c-heat-hot)'

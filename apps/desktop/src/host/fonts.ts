@@ -1,5 +1,4 @@
-// 同梱をやめた Web フォント(Noto Sans JP・BIZ UDPゴシック など)を、設定で選んだときだけ jsDelivr の fontsource から読む。
-// 2026-11-05 まで @fontsource を同梱していて、インストーラーが大きくなっていた(dist の assets が 150MB。ほぼフォント)。
+// Web フォント(Noto Sans JP・BIZ UDPゴシック など)を、設定で選んだときだけ jsDelivr の fontsource から読む(同梱するとインストーラーが大きくなる)。
 // 既定の「Windows 標準」は OS のフォントなので、何も取りに行かない。つながらなければ、CSS の後ろの OS のフォントで出る。
 // CSS が参照する字のファイルは CSS と同じ CDN から読む(tauri.conf.json の CSP で style-src・font-src に cdn.jsdelivr.net を許している)
 const CDN = 'https://cdn.jsdelivr.net/npm'
@@ -25,7 +24,7 @@ const CSS: Record<string, string[]> = {
 
 const loaded = new Set<string>()
 
-/** 選んだフォントの CSS を(まだなら)読み込む。同梱・OS のフォント(system)なら何もしない */
+/** 選んだフォントの CSS を(まだなら)読み込む。OS のフォントなら何もしない */
 export function ensureFont(key: string): void {
   const urls = CSS[key]
   if (!urls || loaded.has(key) || typeof document === 'undefined') return

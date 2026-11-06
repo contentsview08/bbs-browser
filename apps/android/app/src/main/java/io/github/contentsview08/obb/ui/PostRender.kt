@@ -18,9 +18,11 @@ import io.github.contentsview08.obb.bbs.PostIndex
 import io.github.contentsview08.obb.bbs.BodyToken
 import io.github.contentsview08.obb.bbs.toImageUrl
 
-/** 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする */
-/** aa: アスキーアートらしい本文(スペースが 5 つ以上続く。今のスマホ版と同じ判定)。AA 用の字で、折り返さず画面の幅に収める */
-/** replyTo: Discord 風・LINE 風で、本文の頭のアンカーを「返信」として頭の上に出すときの返信先(その分は本文から省いてある) */
+/**
+ * 組み立て済みのレス(頭の行と本文)。スクロール中は、これを Text に渡すだけにする。
+ * aa: アスキーアートらしい本文(スペースが 5 つ以上続く)。AA 用の字で、折り返さず画面の幅に収める。
+ * replyTo: Discord 風・LINE 風で、本文の頭のアンカーを「返信」として頭の上に出すときの返信先(その分は本文から省いてある)
+ */
 class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val aa: Boolean = false, val replyTo: Int? = null, val beIcon: String? = null) {
     /** ID の位置が「日時の後ろ」でないとき、頭から外した ID(押せる)。PostItem が右上か右下に置く */
     var idText: AnnotatedString? = null
@@ -49,7 +51,6 @@ fun shortWatchoi(name: String): String = WATCHOI.replace(name) { "(${it.groupVal
 private val LEADING_ANCHOR = Regex("^(?:[ \t　]*\n)*[ \t　]*(?:>>|＞＞)([0-9０-９]+)(?![0-9０-９,，\\-－ー〜~、])[ \t　]*")
 private val BLANK_AFTER = Regex("^\n(?:[ \t　]*\n)*")
 
-/** 「2026/10/26(月) 07:37:30.214」→「10/26 07:37」(Discord 風・LINE 風の頭を短く) */
 // 日付の読み取り(何度も呼ぶので、作っておいて使い回す)
 private val DATE_TIME = Regex("([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})[^0-9]*([0-9]{1,2}):([0-9]{2})")
 private val minutesCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -76,6 +77,7 @@ fun displayDate(date: String, style: String): String {
 /** 頭に出す ID(設定「ID を短く出す」がオンなら先頭の 6 文字だけで、「ID:」も省く。数えるのと色は ID 全体で決める) */
 fun displayId(id: String, short: Boolean): String = if (short) id.take(6) else "ID:$id"
 
+/** 「2026/10/26(月) 07:37:30.214」→「10/26 07:37」(Discord 風・LINE 風の頭を短く) */
 fun shortDate(date: String): String =
     DATE_TIME.find(date)?.let { m -> "${m.groupValues[2]}/${m.groupValues[3]} ${m.groupValues[4]}:${m.groupValues[5]}" } ?: date
 
@@ -96,7 +98,7 @@ private val AA = Regex("[ \t　]{5,}")
 
 /**
  * レスの中の押せるところ(番号・ID・アンカー)を押したときに呼ぶ先。組み立てた文字列は使い回すので、
- * 押したときの動きは、ここに入れた関数を差し替えて変える。tag は「a:から-まで」「r:番号」「i:ID」「u:URL」
+ * 押したときの動きは、ここに入れた関数を差し替えて変える。tag は「a:番号,番号」「r:番号」「n:番号」「i:ID」「u:URL」「x:番号」
  */
 class PostLinks : LinkInteractionListener {
     var onTag: (String) -> Unit = {}
@@ -134,7 +136,7 @@ data class RenderOptions(
     val heatText: Boolean = false,
     /** 頭の字(名前・日付・ID)を白っぽくする(空色の地の上で読めるように) */
     val onSky: Boolean = false,
-    /** レスの見た目: card / discord / line */
+    /** レスの見た目(POST_STYLES のキー) */
     val style: String = "card",
     /** 日時の出し方(displayDate) */
     val dateStyle: String = "md_w_hms",
@@ -216,8 +218,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                 }
             }
         }
-        // 人気のレス(返信 3 件から)は、本文を暖色に(5 件から太字)
-        // 人気のレスは本文の色を変えず、レスの左の線と淡い地で示す(PostItem の heat)。本文は読みやすい色のまま
+        // 人気のレスの示し方が「本文の色」のときだけ、本文を暖色に(5 件から太字)。ほかは本文の色を変えず、帯と淡い地で示す(PostItem の heat)
         val bodyStyle: SpanStyle? = if (o.heatText) replyHeat?.let { SpanStyle(color = it, fontWeight = if (replies >= 5) FontWeight.Bold else FontWeight.Normal) } else null
         val info = index.info[p.no]
         val full = info?.display ?: p.body
@@ -344,7 +345,6 @@ private fun compactHeader(p: io.github.contentsview08.obb.bbs.Post, name: String
         if (p.mail.isNotEmpty()) { append("  "); withStyle(small) { append("[${p.mail}]") } }
     }
 
-/** 頭の字の色(空色の地の上では白っぽく) */
 /** 返信の数(吹き出しの印と数。多いほど暖色。押すと返信を出す) */
 private fun AnnotatedString.Builder.appendReplies(p: io.github.contentsview08.obb.bbs.Post, replies: Int, o: RenderOptions, links: PostLinks) {
     withLink(LinkAnnotation.Clickable("r:${p.no}", plain, links)) {
@@ -355,13 +355,10 @@ private fun AnnotatedString.Builder.appendReplies(p: io.github.contentsview08.ob
 }
 
 private val LINE_TIME = Regex("([0-9]{1,2}:[0-9]{2})(?::[0-9]{2})?")
+/** 頭の字の色(空色の地の上では白っぽく) */
 private fun mutedC(o: RenderOptions) = if (o.onSky) Palette.skyMuted else Palette.textMuted
 private fun nameC(o: RenderOptions) = if (o.onSky) Palette.skyText else Palette.posterName
 
-/**
- * 名前の見せ方: 板の既定の名前(と、名無しとみなす名前)で始まるなら、その部分を省く(後ろのトリップなどは残す)。
- * 長い名前から当てる(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)。PC 版の utils/postBody.tsx の displayName と同じ
- */
 /** 名前の、トリップ・キャップ(◆・★・◇ から後ろ)を除いた頭の部分 */
 fun nameHead(name: String): String = name.split('◆', '★', '◇')[0].trim()
 
@@ -385,6 +382,10 @@ fun mostCommonName(posts: List<Post>): String? {
 private fun nonameCandidates(noname: String?, extra: List<String>): List<String> =
     (listOfNotNull(noname) + extra).filter { it.isNotEmpty() }.sortedByDescending { it.length }
 
+/**
+ * 名前の見せ方: 板の既定の名前(と、名無しとみなす名前)で始まるなら、その部分を省く(後ろのトリップなどは残す)。
+ * nonames は長い順(「名無しさん」と「名無しさん@実況」のように、片方がもう片方の頭のとき)。PC 版の utils/postBody.tsx の displayName と同じ
+ */
 private fun displayName(name: String, nonames: List<String>): String {
     val hit = nonames.firstOrNull { name.startsWith(it) }
     return if (hit != null) name.substring(hit.length).trim() else name

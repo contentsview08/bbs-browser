@@ -1,9 +1,6 @@
-// 左端のサイドバー: お気に入り板(開閉・並べ替えできる)、その下に閲覧履歴(開閉できる)、一番下に設定。
-// しまっているときは、0.5 秒マウスを乗せると一時的に開き、離れると閉じる。
-// 見た目は web 版の MenuBar.tsx に合わせている。
-// しまったときも開いたときも、アイコン(板のファビコンも)は左の列(しまったときの幅と同じ 64px)の真ん中に置き、名前はその右に足すだけにする。
-// 列を 64px より狭くすると、しまったときに名前の左端が 1px だけ見えてしまう
-// 外枠の幅だけを動かして開閉するので、アイコンはそのままで、名前が右から現れるように見える。
+// 左端のサイドバー。お気に入り板・閲覧履歴・設定。しまっているときは、0.5 秒マウスを乗せると一時的に開く。
+// アイコンはいつも左の 64px の列の真ん中に置き、外枠の幅だけで開閉する(アイコンは動かず、名前が右から現れる)。
+// 列を 64px より狭くすると、しまったときに名前の左端が 1px 見える。
 
 import { isMobile } from '../utils/platform'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -183,7 +180,6 @@ export default function Sidebar(props: Props) {
   }
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(false)
-  // しまっているときに、マウスを乗せて一時的に開いているか。開いている間は画面の上に重ねる(ほかを押しのけない)
   // 並びの上・下に、まだ続きがあるか(端をぼかして見せる)
   const navRef = useRef<HTMLElement>(null)
   const [more, setMore] = useState({ up: false, down: false })
@@ -204,12 +200,12 @@ export default function Sidebar(props: Props) {
     return () => observer.disconnect()
     // 中の行が入れ替わるときだけ見直す。高さの変化は observer が知らせる
   }, [favoritesOpen, historyOpen, !!props.onOpenUrl, !!props.onOpenUploads])
+  // しまっているときに、マウスを乗せて一時的に開いているか。開いている間は画面の上に重ねる(ほかを押しのけない)
   const [peek, setPeek] = useState(false)
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const collapsed = props.collapsed && !peek
   const nameOf = (b: Board) => props.boardMeta[b.url]?.alias || b.name
-  // しまったときは、アイコンの下に板名を小さく出す(2026-11-04 に要望でいつも出す。設定にはしない)。
-  // 名前が入るぶん行を高くし、開いたときも高さを変えない(変えるとファビコンの縦の位置がずれる)。小さな板名は、開いたら薄く消すだけ
+  // しまったときは、アイコンの下に板名を小さく出す。その分行を高くし、開いたときも高さを変えない(変えるとファビコンの縦の位置がずれる)
   const rowH = 52
   /** ファビコンの大きさ。開閉で変えない */
   const ICON = 20
@@ -222,9 +218,8 @@ export default function Sidebar(props: Props) {
     props.onReorderFavorites(urls)
   })
   return (
-    // 外枠は、しまっているあいだ帯の幅のまま。一時的に開いた中身は、その上に重ねて広げる。
-    // 外枠の幅はアニメーションさせずに 1 回で切り替え、中身(aside)だけを本体の上に重ねて伸び縮みさせる
-    // (外枠の幅を少しずつ変えると、右の本体の配置とスレ表示の測り直しが 1 コマごとに走ってカクつくため)
+    // 外枠の幅は 1 回で切り替え、中身(aside)だけを本体の上に重ねて伸び縮みさせる
+    // (外枠の幅を少しずつ変えると、右の本体の配置とスレ表示の測り直しが 1 コマごとに走ってカクつく)
     <div className="relative flex-shrink-0" style={{ width: props.collapsed ? COLLAPSED : width }}>
     <aside
       data-neighbor={props.neighbor ?? 'list'}
@@ -316,14 +311,11 @@ export default function Sidebar(props: Props) {
                     {!dragging && <NavNotch on={active} />}
                     {/* ファビコンは、しまったときのアイコンと同じ列に置く */}
                     <span className="relative w-[64px] self-stretch flex-shrink-0 flex items-center justify-center overflow-hidden">
-                      {/* ファビコンは板名の字と同じ高さ(行の真ん中)。しまったときの小さな板名は、場所を取らずにその下に重ねる
-                          (縦に並べると、開いたときも板名の分だけファビコンが上にずれていた) */}
+                      {/* しまったときの小さな板名は、場所を取らずにファビコンの下に重ねる(縦に並べると、開いたときにファビコンが上にずれる) */}
                       <span className={`flex items-center justify-center transition-transform duration-200 ${collapsed ? '-translate-y-2' : ''}`}>
                         <BoardIcon boardUrl={b.url} override={props.boardMeta[b.url]?.icon} size={ICON} />
                       </span>
-                      {/* 板名は列の真ん中に置き、入りきらなければ末尾を「…」で略す。
-                          幅いっぱいの箱で中央寄せにすると、長い名前は左右両側へはみ出して切れるので、
-                          文字の幅に縮む箱を列の幅までに抑えて真ん中に置く */}
+                      {/* 文字の幅に縮む箱を列の幅までに抑えて真ん中に置く(幅いっぱいの箱で中央寄せにすると、長い名前は左右両側が切れる) */}
                       <span className={`absolute inset-x-0 bottom-1 px-1 flex justify-center transition-opacity duration-200 ${collapsed ? 'opacity-100' : 'opacity-0'}`}>
                         {/* 小さい字でも読めるよう、太字で、薄い色にしない(選んでいる板はいちばん濃く) */}
                         <span className={`max-w-full truncate text-[10px] font-bold leading-tight ${active ? 'text-c-text-strong' : 'text-c-text-body'}`}>
@@ -405,7 +397,6 @@ export default function Sidebar(props: Props) {
             </div>
           )}
           {props.onOpenUrl && <Row icon="link" label="URL を開く" onClick={props.onOpenUrl} />}
-          {/* 未読のスレ・書き込んだスレは「履歴」の一覧のタブで絞り込む(行は置かない)。画像の履歴は独立したポップアップ */}
           {props.onOpenUploads && <Row icon="photo_library" label="上げた画像" onClick={props.onOpenUploads} />}
         </nav>
         </div>

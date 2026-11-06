@@ -63,7 +63,6 @@ export function LazyVideoThumb(props: { src: string; className: string }) {
   return <video src={props.src} preload="metadata" muted playsInline className={props.className} />
 }
 
-/** ビューアーの中で、画像を取得できなかったとき */
 export function ViewerImageFailed(props: { onRetry: () => void; onOpenExternal: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 text-white/80 text-sm" onClick={(e) => e.stopPropagation()}>

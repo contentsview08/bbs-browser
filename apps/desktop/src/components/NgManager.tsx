@@ -1,5 +1,5 @@
 // PC の NG の管理表(設定の NG のタブ)。検索・種類の絞り込み・並べ替え・まとめて有効 / 無効 / 削除・期限切れの片づけ・
-// 試し(文を入れると、当たる NG を並べる)。1 つずつの追加と直しは NgRuleDialog(中身の欄は NgEditor。スマホと共通)
+// 試し(文を入れると、当たる NG を並べる)。1 つずつの追加と直しは NgRuleDialog
 import { useMemo, useState } from 'react'
 import { NG_TARGETS, isActive, matchRanges, pruneExpired, todayDateString, type NgRule, type NgTarget } from '../utils/ng'
 import NgRuleDialog, { type NgDraft } from './NgRuleDialog'
@@ -35,7 +35,7 @@ export default function NgManager(props: { rules: NgRule[]; onChange: (rules: Ng
     )
     if (sort === 'pattern') return [...list].sort((a, b) => a.pattern.localeCompare(b.pattern, 'ja'))
     if (sort === 'target') return [...list].sort((a, b) => NG_TARGETS.findIndex((t) => t.key === a.target) - NG_TARGETS.findIndex((t) => t.key === b.target))
-    // 新しい順(足した時刻がない前からの NG は、並びのまま後ろに)
+    // 新しい順(createdAt のない NG は、並びのまま後ろに)
     return [...list].reverse().sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
   }, [rules, filter, query, sort])
   const expiredCount = rules.length - pruneExpired(rules).length

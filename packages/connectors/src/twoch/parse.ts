@@ -63,7 +63,7 @@ export function parseSubjectTxt(text: string): SubjectEntry[] {
 
 /**
  * スレタイの後ろの角かっこ(「… [xxx]」「… ［xxx］」)を、立てた人として取り出す(subject.txt の板。スマホ版の TwoCh.kt と同じ決まり):
- * - エッジの subject-metadent.txt の ID(「[YN3MdpLR★]」)は ★ を外して ID
+ * - エッヂの subject-metadent.txt の ID(「[YN3MdpLR★]」)は ★ を外して ID
  * - 5ch の BE の板(嫌儲など)の BE 番号(6〜12 桁の数字)は「BE:番号」
  * - それ以外の角かっこ(ほかの板の、立てた人の名前や ID)は中身をそのまま
  * 「[転載禁止]」のような決まり文句と、「©」で始まるものはスレタイの一部のまま。付いていなければ、スレタイはそのまま
@@ -119,13 +119,6 @@ export function parseDat(text: string, startNo = 1): { posts: Post[]; title?: st
   return { posts, title }
 }
 
-/**
- * bbs.cgi の応答を読み分ける。
- * - `<!-- 2ch_X:true -->` や「書きこみました」は成功
- * - `2ch_X:cookie`(や「書き込み確認」「承諾して書き込む」の文面)は 5ch の書き込み確認
- * - 本文に認証ページの URL があれば認証待ち(eddist: 「認証コード'xxx'を用いて…/auth-code」)
- * - それ以外はエラー。本文のテキストをそのまま理由として返す
- */
 export type BbsCgiResult =
   | { status: 'ok'; message: string }
   | { status: 'confirm'; message: string }
@@ -135,6 +128,13 @@ export type BbsCgiResult =
 /** 応答から理由を読み取れなかったときの言葉 */
 export const POST_FAILED = '書き込めませんでした'
 
+/**
+ * bbs.cgi の応答を読み分ける。
+ * - `<!-- 2ch_X:true -->` や「書きこみました」は成功
+ * - `2ch_X:cookie`(や「書き込み確認」「承諾して書き込む」の文面)は 5ch の書き込み確認
+ * - 本文に認証ページの URL があれば認証待ち(eddist: 「認証コード'xxx'を用いて…/auth-code」)
+ * - それ以外はエラー。本文のテキストをそのまま理由として返す
+ */
 export function parseBbsCgiResponse(html: string): BbsCgiResult {
   const kind = /2ch_X:(\w+)/.exec(html)?.[1]
   const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').trim()

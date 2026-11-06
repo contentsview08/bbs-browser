@@ -1,5 +1,4 @@
 // NG を足す・直す画面。元の文字(スレタイや本文)を入れた状態で開くので、要らない部分を削ってそのまま登録できる。
-// 中身の欄は NgEditor(PC の管理表・スマホの NG の画面と共通)
 
 import { useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -34,7 +33,6 @@ export default function NgRuleDialog(props: { draft: NgDraft; board?: { url: str
     props.onClose()
   }
 
-  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
   // 条件を変えていたら、閉じる前に確かめる(外を押しても閉じない。× と Esc だけ)
   const initial = useRef(JSON.stringify(rule)).current

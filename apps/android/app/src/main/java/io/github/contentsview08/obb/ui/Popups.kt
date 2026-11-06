@@ -47,7 +47,7 @@ class PopupEntry(val id: Int, val posts: List<Post>, val tree: List<TreeRow>? = 
 }
 
 /**
- * レスのポップアップ(今のスマホ版の PostPopup と同じ)。スレ表示の領域いっぱいの幅で、押した所の真上に収まるなら真上に、
+ * レスのポップアップ(PC 版の PostPopup と同じ決まり)。スレ表示の領域いっぱいの幅で、押した所の真上に収まるなら真上に、
  * 収まらなければ上の帯のすぐ下から出す。高さは領域の 8 割まで(外を押して閉じられるように)。
  * ポップアップの中のアンカーを押すと上に積み重なる。外を押すと一番上を閉じる。下のポップアップは押せない(押すと一番上が閉じる)
  */
@@ -81,7 +81,6 @@ private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endI
     val density = LocalDensity.current
     val gap = with(density) { 4.dp.toPx() }
     val shape = RoundedCornerShape(6.dp)
-    // 出てくるとき: 少し小さく・少し下から浮き上がる(今のスマホ版の rise-in。200ms)
     val rise = remember(e.id) { androidx.compose.animation.core.Animatable(0f) }
     // 広がり始める点(押した字の位置)。置く位置が決まってから、ポップアップの中の割合にする
     val origin = remember(e.id) { floatArrayOf(0.5f, 1f) }
@@ -105,7 +104,6 @@ private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endI
         val limit = (areaH - minTop) * 0.8f
         val spaceAbove = e.triggerY - minTop - gap
         val p = measurables.first().measure(Constraints(maxWidth = constraints.maxWidth, maxHeight = limit.toInt().coerceAtLeast(0)))
-        // 押した所の真上に収まるなら真上、収まらなければ上の帯のすぐ下
         val y = if (p.height <= spaceAbove) e.triggerY - p.height - gap else minTop
         if (p.height > 0) origin[1] = ((e.triggerY - y) / p.height).coerceIn(0f, 1f)
         if (e.triggerX >= 0 && p.width > 0) origin[0] = (e.triggerX / p.width).coerceIn(0f, 1f)
@@ -125,7 +123,7 @@ private fun PopupContent(e: PopupEntry, post: @Composable (Post) -> Unit) {
     if (tree == null) {
         // 一番下のレスが枠の線に付かないように
         LazyColumn(state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)) {
-            // 同じレスが 2 回並ぶことがある(抽出・ツリーで別の枝に同じレス)ので、番号だけをキーにすると落ちる(Key "1" was already used)。並びの位置も付ける
+            // 同じレスが 2 回並ぶことがある(抽出・ツリーの別の枝)。番号だけのキーは重複して落ちるので、並びの位置も付ける
             itemsIndexed(e.posts, key = { i, p -> "$i:${p.no}" }) { i, p ->
                 if (i > 0) HorizontalDivider(color = Palette.border)
                 Box(if (p.no == e.focusNo) Modifier.background(Palette.selectionWash(LocalPrefs.current.postStyle)) else Modifier) { post(p) }
@@ -158,7 +156,7 @@ val LocalInTree = androidx.compose.runtime.compositionLocalOf { false }
 class EdgeBar { val state = androidx.compose.runtime.mutableStateOf<Color?>(null); var color: Color? get() = state.value; set(v) { state.value = v } }
 val LocalEdgeBar = androidx.compose.runtime.compositionLocalOf<EdgeBar?> { null }
 
-/** スマホのツリーの 1 行(今のスマホ版の StepTree): 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線 */
+/** ツリーの 1 行: 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線。Discord 風・LINE 風は罫線でつなぐ */
 @Composable
 private fun TreeStep(
     r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild: Boolean = false,
@@ -169,11 +167,9 @@ private fun TreeStep(
     val edge = LocalEdgeBar.current
     // レスの左の帯(人気・自分)は、段の線より左、枠の左端に描く(ポップアップの枠線 2dp に隠れる分、少し太く)
     val edgeMod = Modifier.drawWithContent { drawContent(); edge?.color?.let { drawRect(it, size = androidx.compose.ui.geometry.Size(5.dp.toPx(), size.height)) } }
-    // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。親の頭の高さから縦線を下ろし、
-    // 子の頭の高さで角を丸めて横へ曲げる。まだ兄弟が残っている段は縦線を下まで続ける
+    // Discord 風・LINE 風: 罫線(├ └ │)でつなぐ(PC 版の AnchorTree と同じ形)。まだ兄弟が残っている段は縦線を下まで続ける
     if (isChatStyle(LocalPrefs.current.postStyle)) {
-        // 線はアイコンに合わせて引く: 縦線はアイコンの左寄り(左端から 8dp)を通り、子のアイコンの真ん中の高さで曲がって、子のアイコンの左端へ届く。
-        // 子への線は、自分のアイコンの下から下ろす。アイコンの上端は見た目ごとに違う(LINE 風は名前の行の下、ほかは頭と同じ高さ)
+        // 縦線はアイコンの左端から 8dp を通り、子のアイコンの真ん中の高さで曲がって、子のアイコンの左端へ届く。子への線は自分のアイコンの下から下ろす
         val prefs = LocalPrefs.current
         val step = 20.dp
         val line = Palette.textMuted.copy(alpha = 0.8f)

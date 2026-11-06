@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
 /**
- * 配色 1 つ分。値は今の専ブラ(apps/desktop/src/theme/theme.css と app.css の [data-scheme])と同じ。
+ * 配色 1 つ分。値は apps/desktop/src/theme/theme.css と app.css の [data-scheme] と同じ。
  * unread は --c-accent-self(未読・「ここから未読」)
  */
 class Scheme(
@@ -29,7 +29,7 @@ class Scheme(
 private fun c(hex: Long) = Color(hex or 0xFF000000)
 private fun wash(hex: Long, a: Float) = c(hex).copy(alpha = a)
 
-/** 選べる配色(PC 版・Web の COLOR_SCHEMES と同じ並び)。前のライト・紙・夜間・Discord ライトはやめた(2026-11)。ライトグレーをライトとする */
+/** 選べる配色(PC 版・Web の COLOR_SCHEMES と同じ並び) */
 val SCHEMES = listOf(
     Scheme(
         "indigo", "インディゴ", true,
@@ -75,40 +75,32 @@ val SCHEMES = listOf(
         c(0x222222), c(0x3E3E40), c(0x7E7F83), c(0x4E5A68), c(0xFFFFFF), wash(0x4E5A68, 0.10f),
         c(0xC4473F), c(0xFFFFFF), c(0x2F64A8), c(0x4F7F6D), c(0x3B5576), c(0xCC5F00), c(0xD6440F), c(0xCF2A2A),
     ),
-    // ── 提案書(2026-10-31)から足した配色。どれも 字と地のコントラスト比 4.5 以上 ──
-    // 紙(セピア): 読書アプリのような生成りの地にこげ茶の字
-    // Nord: 青みの灰色の地に淡い水色の強調。彩度が低く色がうるさくない
+    // 地を原典の Nord より一段暗く、字を一段明るくする。原典のままだと全体が薄く見える
     Scheme(
-        // 地を一段暗く、字を一段明るくして、全体が薄く見えないように(Nord の色味は保つ)
         "nord", "Nord", true,
         c(0x242933), c(0x2E3440), c(0x2E3440), c(0x3B4252), c(0x434C5E), c(0x3B4252), c(0x4C566A),
         c(0xF5F7FA), c(0xE5E9F0), c(0x9BA6BC), c(0x88C0D0), c(0x1E222A), wash(0x88C0D0, 0.16f),
         c(0xD06C76), c(0xFFFFFF), c(0x8FBCDB), c(0xA3BE8C), c(0xBFD0E3), c(0xEBCB8B), c(0xE0956E), c(0xE06C75),
     ),
-    // ハイコントラスト: 真っ黒の地に真っ白の字、意味の色は彩度最大
     Scheme(
         "contrast", "ハイコントラスト", true,
         c(0x000000), c(0x000000), c(0x0B0B0B), c(0x161616), c(0x222222), c(0x5C5C5C), c(0x8A8A8A),
         c(0xFFFFFF), c(0xFFFFFF), c(0xD0D0D0), c(0xFFD400), c(0x000000), wash(0xFFD400, 0.18f),
         c(0xFF4D6D), c(0x000000), c(0x7CC4FF), c(0x7DFFB3), c(0xE6F0FF), c(0xFFD400), c(0xFF9F1C), c(0xFF4D6D),
     ),
-    // 夜間(暖色): 青い色を使わない、オレンジがかった暗い配色。寝る前用
-    // LINE ダーク: LINE のダークモードに近い。地は濃い紺、自分の吹き出しは深い緑
     Scheme(
         "line-dark", "LINE ダーク", true,
         c(0x1B2129), c(0x20262F), c(0x222831), c(0x2A313B), c(0x343C47), c(0x323A45), c(0x434C59),
         c(0xE9EDF2), c(0xD7DDE5), c(0x8A96A6), c(0x06C755), c(0x04210E), wash(0x06C755, 0.14f),
         c(0xFF5B5B), c(0x2A0707), c(0x6FB1FF), c(0x7FD0A0), c(0xAFC0D6), c(0xFFB020), c(0xFF8A3D), c(0xFF5B5B),
     ),
-    // Discord ライト: 白い地に青紫の強調
-    // X(Twitter)ディム: 濃紺の地に青の強調。X の「ディム」と同じ色合い(未読は X のピンク)
     Scheme(
         "x-dim", "X(Twitter)ディム", true,
         c(0x15202B), c(0x15202B), c(0x192734), c(0x1E2732), c(0x273340), c(0x38444D), c(0x4A5864),
         c(0xF7F9F9), c(0xE1E6EA), c(0x8B98A5), c(0x1D9BF0), c(0xFFFFFF), wash(0x1D9BF0, 0.16f),
         c(0xF91880), c(0xFFFFFF), c(0x4FB2F5), c(0x00BA7C), c(0xA9C5DE), c(0xFFAD1F), c(0xF7853E), c(0xF4212E),
     ),
-    // モノクロ: 灰色だけで作り、未読・自分の印だけに色を残す(色の役割の原則をいちばん素直に当てたもの)
+    // 灰色だけで作り、未読だけに色を残す
     Scheme(
         "mono", "モノクロ", true,
         c(0x181818), c(0x202020), c(0x1E1E1E), c(0x262626), c(0x303030), c(0x2E2E2E), c(0x3E3E3E),
@@ -155,7 +147,6 @@ object Palette {
     val dark get() = scheme.dark
 
     val base get() = scheme.base
-    /** 上下の帯(ヘッダー・フッター) */
     val bar get() = scheme.bar
     val surface get() = scheme.surface
     val surface2 get() = scheme.surface2
@@ -165,23 +156,20 @@ object Palette {
     val textStrong get() = scheme.textStrong
     val textBody get() = scheme.textBody
     val textMuted get() = scheme.textMuted
-    /** 設定で選んだ差し色(null ならテーマの色) */
+    /** null ならテーマの色 */
     var accentPick by mutableStateOf<Accent?>(null)
     val accent get() = accentPick?.let { if (scheme.dark) it.dark else it.light } ?: scheme.accent
     val accentText get() = accentPick?.let { if (contrast(Color(0xFF111111), accent) >= contrast(Color.White, accent)) Color(0xFF111111) else Color.White } ?: scheme.accentText
     val accentWash get() = accentPick?.let { accent.copy(alpha = if (scheme.dark) 0.18f else 0.12f) } ?: scheme.accentWash
-    /** 未読(「ここから未読」・未読の数) */
     val unread get() = scheme.unread
     val unreadText get() = scheme.unreadText
     /** 「ここから未読」の字。未読の色は札の地に使う明るい色なので、明るい配色では濃くして読めるようにする */
     val unreadInk get() = if (scheme.dark) unread else androidx.compose.ui.graphics.Color(unread.red * 0.45f, unread.green * 0.45f, unread.blue * 0.45f)
-    /** 自分の書き込み */
-    // 自分の書き込みは紫、自分へのレスは橙(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
+    // 自分の書き込みは紫、自分へのレスは水色(名前欄の緑・未読の色と分ける。PC・Web の --c-own・--c-to-own と同じ)
     val own get() = if (scheme.key == "custom") CustomSchemes.def?.own ?: Color(0xFF5A3CC0) else if (scheme.dark) Color(0xFFA28BFF) else Color(0xFF5A3CC0)
     val ownWash get() = own.copy(alpha = 0.16f)
     val toOwn get() = if (scheme.dark) Color(0xFF4DD0E1) else Color(0xFF0B7A8C)
     val toOwnWash get() = toOwn.copy(alpha = 0.16f)
-    /** スレ主 */
     val op get() = if (scheme.dark) Color(0xFFF0B44C) else Color(0xFF926019)
     val opWash get() = op.copy(alpha = 0.16f)
     val link get() = scheme.link
@@ -201,10 +189,6 @@ object Palette {
     val markPurple get() = if (scheme.dark) Color(0xFFB48CF0) else Color(0xFF8051C7)
 
     /**
-     * LINE 風の地と吹き出し(今のスマホ版の [data-post-style='line']): 地は配色の背景に青灰を少し混ぜ(明 13%・暗 10%)、
-     * 吹き出しは面の色、自分の吹き出しは明るい緑(暗い配色では深い緑)
-     */
-    /**
      * スレ表示の地。LINE 風のときだけ配色ごとに変える: LINE ライトは LINE のトーク画面のような空色(ライトとの見分け)、
      * グレーは濃い群青(灰色の吹き出しと白い字がはっきり見える)、ほかは配色の背景に青灰を少し混ぜる
      */
@@ -218,7 +202,6 @@ object Palette {
     fun onSky(style: String) = style == "line" && scheme.key == "line-light"
     /** 選んだレスの地。空色の地はほんの少し白くする(名前・ID が白い字なので、これ以上白くすると読めなくなる)。PC 版の --c-cursor-tint と同じ */
     fun selectionWash(style: String): Color = if (onSky(style)) Color.White.copy(alpha = 0.12f) else accentWash
-    /** 空色の地の上で読める字の色 */
     val skyText get() = Color(0xFFF4F8FC)
     val skyMuted get() = Color(0xE6FFFFFF)
     // 地と吹き出しが見分けられるように: 暗い配色は地を沈めて吹き出しを少し浮かせ、明るい配色は地に青灰をはっきり混ぜる
@@ -226,7 +209,6 @@ object Palette {
     val lineBg get() = if (scheme.dark) androidx.compose.ui.graphics.lerp(androidx.compose.ui.graphics.lerp(base, Color(0xFF6F8FB8), 0.06f), Color.Black, 0.35f)
         else androidx.compose.ui.graphics.lerp(base, Color(0xFF7F9CC0), 0.22f)
     val lineBubble get() = if (scheme.key == "gray") surface2 else if (scheme.dark) androidx.compose.ui.graphics.lerp(surface2, Color.White, 0.08f) else Color.White
-    /** 吹き出しの外の字(名前・日付)は、空色の地の上でも読める色に */
     val lineOwnBg get() = if (scheme.dark) Color(0xFF3F7D2C) else Color(0xFF8DE055)
     val lineOwnText get() = if (scheme.dark) Color(0xFFEEF7E8) else Color(0xFF10200A)
 
@@ -258,7 +240,7 @@ object Palette {
         return c
     }
 
-    /** 書き込み数・被アンカー数の色(今の専ブラの heatClass と同じ段階)。null なら色を付けない */
+    /** 書き込み数・被アンカー数の色(PC 版の heatClass と同じ段階)。null なら色を付けない */
     fun heat(count: Int): Color? = when {
         count >= 7 -> heatVeryHot
         count >= 5 -> heatHot
@@ -285,7 +267,6 @@ fun BbsTheme(content: @Composable () -> Unit) {
             outline = p.border, outlineVariant = p.border, secondaryContainer = p.accentWash, onSecondaryContainer = p.textStrong,
         )
     }
-    // 角の丸みは控えめに(ダイアログ・メニュー・下から出る画面も)
     val shapes = androidx.compose.material3.Shapes(
         extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(3.dp),
         small = androidx.compose.foundation.shape.RoundedCornerShape(5.dp),
@@ -293,7 +274,7 @@ fun BbsTheme(content: @Composable () -> Unit) {
         large = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
         extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
     )
-    // 字の上下に Android が足す余白(includeFontPadding)を外す。字の上側の余白が大きく見えていた
+    // 字の上下に Android が足す余白(includeFontPadding)を外す。字の上側の余白が大きく見える
     val base = androidx.compose.material3.Typography()
     val font = io.github.contentsview08.obb.data.Fonts.family
     fun androidx.compose.ui.text.TextStyle.tight() = copy(
@@ -313,7 +294,7 @@ fun BbsTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, shapes = shapes, typography = typography, content = content)
 }
 
-/** やめた配色を選んでいた人は、いちばん近い配色にする(明るいものはライト、夜間はダーク。PC 版の withoutOldLight と同じ) */
+/** なくなった配色の保存値を、いちばん近い配色へ読み替える(PC 版の withoutOldLight と同じ) */
 fun retiredScheme(key: String): String = when (key) {
     "soft-light", "sepia", "discord-light", "light", "2ch-classic" -> "light-gray"
     "night" -> "soft-dark"

@@ -67,7 +67,7 @@ function threadWebUrl(thread: ThreadSummary): string {
   return `${ORIGIN}/bbs/read.cgi/${bbsOf(thread.boardUrl)}/${thread.key}/`
 }
 
-/** 板の名前。トップページの一覧にあればそれ、なければ板のページの <title>(「まちBBS関東掲示板」)、それもなければ URL の名前 */
+/** 板の名前。KNOWN_BOARDS にあればそれ、なければ板のページの <title>(「まちBBS関東掲示板」)、それもなければ URL の名前 */
 async function boardNameOf(bbs: string, ctx: ConnectorContext): Promise<string> {
   if (KNOWN_BOARDS[bbs]) return KNOWN_BOARDS[bbs]
   try {
@@ -85,7 +85,6 @@ async function boardNameOf(bbs: string, ctx: ConnectorContext): Promise<string> 
 export const machiConnector: Connector = {
   id: ID,
   name: 'まちBBS',
-  // 1 つのスレは 1000 レスまで
   maxPosts: 1000,
 
   canHandle(url) {

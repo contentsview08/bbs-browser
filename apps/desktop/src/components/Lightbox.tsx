@@ -1,11 +1,6 @@
-// 画像ビューワー。web 版の ImageLightbox.tsx の簡易版。
-// - 小さい画像も画面いっぱいの枠に収まるまで引き伸ばして見せ、ワンクリックで保存できる
-// - そのレスの中の画像を、ホイール・←→・左右のボタンで切り替える(最後まで行ったら最初に戻る)
-// - 画像の下側に本文のパネルを重ねる(web 版のスマホ表示と同じ)。画像を押すとパネルを隠す。絵の外を押したら閉じる
-// - Ctrl+ホイールでマウスの位置を中心に拡大・縮小し、拡大中はつかんで動かせる。ダブルクリックで等倍と 2.5 倍を切り替える
-// - 動画のファイル(mp4 など)は、その場で再生する(拡大はしない)。再生できない形式なら、ブラウザで開くボタンを出す
-// - YouTube は埋め込みのプレーヤーで再生する
-// - 2 枚以上なら、下に小さい絵を並べる(何枚あって今どれか。押すとその絵へ飛ぶ)
+// PC の画像ビューアー(スマホは mobile/MobileImageViewer)。小さい画像も枠いっぱいまで引き伸ばす。
+// ホイール・←→ で切り替え、Ctrl+ホイールとダブルクリックで拡大する。画像の下側に本文のパネルを重ね、絵の外を押したら閉じる。
+// 動画のファイルと YouTube はその場で再生する(拡大はしない)
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -130,7 +125,6 @@ function zoomAt(z: Zoom, next: number, cx: number, cy: number): Zoom {
   return { scale, x: px - (px - z.x) * k, y: py - (py - z.y) * k }
 }
 
-/** スマホは、スマホ用に別に作ったビューアー(components/mobile/MobileImageViewer)を使う */
 export default function Lightbox(props: Props) {
   if (isMobile) return <MobileImageViewer {...props} />
   return <DesktopLightbox {...props} />

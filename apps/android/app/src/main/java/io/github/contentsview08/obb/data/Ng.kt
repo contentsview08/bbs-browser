@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * NG(あぼーん)1 つ。PC 版・hono-bbs の web の utils/ng.ts の NgRule と同じ項目・同じ当て方(2026-11 にそろえた)。
+ * NG(あぼーん)1 つ。PC 版・hono-bbs の web の utils/ng.ts の NgRule と同じ項目・同じ当て方。
  * target: body(本文)/ name(名前)/ id(ID)/ title(スレタイ)。expiresOn は この日まで(YYYY-MM-DD)、boardUrl はこの板だけ(なければすべての板)
  */
 data class NgRule(

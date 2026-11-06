@@ -6,8 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-// 2ch 互換(bbsmenu / subject.txt / dat)。専ブラの packages/connectors/src/twoch(connector.ts・parse.ts)を Kotlin に写したもの
-
+// 2ch 互換(bbsmenu / subject.txt / dat)。PC 版の packages/connectors/src/twoch(connector.ts・parse.ts)を Kotlin に写したもの
 
 /** 読み取ったバイト列を文字にする。文字コードは bbs/Encoding.kt で見分ける */
 private fun textOf(res: HttpResponse, body: ByteArray = res.body): String = decodeText(body, res.headers["content-type"])
@@ -106,7 +105,7 @@ internal fun createdAtOf(key: String, now: Long): Long? {
 
 private fun isAnnouncementKey(key: String, now: Long) = key.length == 10 && key.all { it.isDigit() } && key.toLong() * 1000 > now + FUTURE_TOLERANCE_MS
 
-/** subject.txt・エッジの subject-metadent.txt(どちらも同じ読み方。スレタイの後ろの角かっこは立てた人) */
+/** subject.txt・エッヂの subject-metadent.txt(どちらも同じ読み方。スレタイの後ろの角かっこは立てた人) */
 fun parseSubjectTxt(text: String, boardUrl: String): List<ThreadSummary> {
     val now = System.currentTimeMillis()
     val out = ArrayList<ThreadSummary>()
@@ -128,7 +127,7 @@ private val BE_DIGITS = Regex("^[0-9]{6,12}$")
 
 /**
  * スレタイの後ろの角かっこ(「… [xxx]」「… ［xxx］」)を、立てた人として取り出す(PC 版の twoch/parse.ts の splitAuthorId と同じ決まり):
- * エッジの「[ID★]」は ★ を外して ID、5ch の BE の板の 6〜12 桁の数字は「BE:番号」、それ以外(ほかの板の名前や ID)は中身をそのまま。
+ * エッヂの「[ID★]」は ★ を外して ID、5ch の BE の板の 6〜12 桁の数字は「BE:番号」、それ以外(ほかの板の名前や ID)は中身をそのまま。
  * 「[転載禁止]」のような決まり文句・「©」で始まるもの・スレタイが角かっこだけのときは、スレタイのまま
  */
 fun splitAuthorId(title: String): Pair<String, String?> {
@@ -311,7 +310,7 @@ object TwoCh {
         res.status in 200..299 && looksLikeSubject(textOf(res))
     }.getOrDefault(false)
 
-    /** スレ一覧。エッジは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
+    /** スレ一覧。エッヂは、立てた人の ID が付いたスレ一覧(subject-metadent.txt)が読めればそちらを使う */
     suspend fun listThreads(board: Board): List<ThreadSummary> = withContext(Dispatchers.Default) { readThreads(board) }
 
     private suspend fun readThreads(board: Board): List<ThreadSummary> {

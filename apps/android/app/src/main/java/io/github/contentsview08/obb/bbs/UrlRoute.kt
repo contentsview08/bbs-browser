@@ -56,7 +56,7 @@ sealed class UrlRoute {
             return BoardPage(Site.TWOCH, "https://${b.groupValues[1]}/$dir/")
         }
 
-        // Android は暗号化しない通信を断るので、2ch 互換の板はいつも https で開く
+        // 2ch 互換の板は https で開く(取れないときの扱いは HttpsFirst)
         private fun thread(hostAndPath: String, key: String, now: Long) =
             Thread(Site.TWOCH, ThreadSummary("https://$hostAndPath", key, "", 0, 0, createdAtOf(key, now)))
 

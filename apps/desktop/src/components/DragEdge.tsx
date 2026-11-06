@@ -3,7 +3,7 @@
 import { isMobile } from '../utils/platform'
 
 export default function DragEdge(props: { edge: 'top' | 'bottom'; onMouseDown: (e: React.MouseEvent) => void; onReset: () => void }) {
-  // スマホにはマウスでつまむ操作がない(長押しすると、つかみ所の線が光るだけだった)ので出さない
+  // スマホにはマウスの操作がないので出さない
   if (isMobile) return null
   return (
     <div

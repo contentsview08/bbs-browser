@@ -1,5 +1,4 @@
-// NG(あぼーん)。対象と書式は web 版(settingsStore の NgRule)に合わせている。
-// スマホのアプリ(data/Prefs.kt の NgRule)も同じ形・同じ当て方(2026-11 にそろえた):
+// NG(あぼーん)。スマホ版(data/Prefs.kt の NgRule)と同じ形・同じ当て方:
 // 種類・文字・正規表現か・有効か・期限(この日まで)・効く板(なければすべての板)・メモ
 
 import type { Post, ThreadSummary } from '@bbs-browser/connectors'

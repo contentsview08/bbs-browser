@@ -17,7 +17,6 @@ import { WEB_UPLOAD_SITES, type WebUploadSite } from '../utils/webUpload'
 import { hashFile, lookupUploaded } from '../utils/uploadIndex'
 import { canStamp, stampImage, type StampCorner } from '../utils/stampImage'
 
-/** 一度に上げられる数 */
 const MAX_FILES = 10
 
 /** 書き込み欄で選んだ画像 1 枚 */
@@ -92,7 +91,7 @@ export function useMediaInput(o: {
 }): {
   /** 書き込みに付けたファイルの並び(小さい見本と ×)。付けていなければ null */
   attachedView: ReactNode
-  /** 貼り付け・ドロップで 2 枚以上来たときの確かめ(出すものがなければ null)。書き込み欄・スレ立ての中に置く */
+  /** 貼り付け・ドロップで来たときの確かめ(出すものがなければ null)。書き込み欄・スレ立ての中に置く */
   confirmView: ReactNode
   /** 付けたファイルの中身(書き込むときに PostInput.files に渡す) */
   takeFiles: () => Promise<PostFile[]>
@@ -135,8 +134,8 @@ export function useMediaInput(o: {
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
   /**
-   * 貼り付け・ドロップで 2 枚以上来たときの確かめ(「この n 枚を上げていいですか」。上げないものはチェックを外す)。
-   * 1 枚はそのまま上げる。ファイルを選ぶボタンから選んだときは、選んだ時点で決めているので確かめない
+   * 貼り付け・ドロップで来たときの確かめ(上げないものはチェックを外す)。1 枚でも確かめる。
+   * ファイルを選ぶボタンから選んだときは、選んだ時点で決めているので確かめない
    */
   const [pending, setPending] = useState<{ files: File[]; on: boolean[]; previews: string[] }>()
   const closePending = () => {
@@ -312,7 +311,7 @@ export function useMediaInput(o: {
     }
     upload(files)
   }
-  /** 貼り付け・ドロップで来たファイル。上げる前に確かめる(1 枚でも。要望) */
+  /** 貼り付け・ドロップで来たファイル。1 枚でも、上げる前に確かめる */
   const take = (files: File[]) => {
     if (files.length === 0) return
     setPending({ files, on: files.map(() => true), previews: files.map((f) => URL.createObjectURL(f)) })
@@ -441,7 +440,6 @@ export function useMediaInput(o: {
       stopWeb.current = await openWebUpload(
         site,
         (url) => {
-          // URL は 1 行に 1 つ(改行で区切る)
           oRef.current.insert(`${url}\n`, { ownLine: true })
           got++
           const file = files[got - 1]

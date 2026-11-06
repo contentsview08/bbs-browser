@@ -1,5 +1,3 @@
-// 設定の「掲示板ごとの設定」。
-
 import { useState } from 'react'
 import { normalizeForSearch } from '../../utils/postBody'
 import { allConnectors, type AccountKind, type Board, type LoginResult } from '@bbs-browser/connectors'
@@ -63,7 +61,7 @@ function AccountForm(props: {
         checked={autoLogin}
         onChange={(v) => {
           setAutoLogin(v)
-          // 保存してあるアカウントなら、トグルだけ変えたときもすぐ保存する(「保存してログイン」を押さないと消えていた)
+          // 保存済みのアカウントは、トグルだけ変えてもすぐ保存する
           if (props.saved) props.onSave({ ...props.saved, autoLogin: v })
         }}
         label="起動したときに自動でログインする"
@@ -162,7 +160,6 @@ export function AccountsTab(
       <p className="mb-5 text-xs text-c-text-muted leading-relaxed">
         ほかの分類の設定はすべての掲示板に効きます。ここでは、サイトごと・板ごとに変えたいものだけを決めます。決めていないものは全体の設定のままです。
       </p>
-      {/* サイトごとの設定: サイト(5ch など)ごとに、そのサイトのアカウント(5ch なら BE)を並べる */}
       {sites.length > 0 && (
         <Section
           title="サイトごとの設定"

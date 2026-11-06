@@ -1,6 +1,7 @@
-# スマホ版(Android・iOS)
+# Tauri のスマホ版(Android・iOS)
 
-PC 版と同じソース(Tauri v2)から作る。画面と操作だけを、スマホのときに変える(`src/utils/platform.ts` の `isMobile`)。
+いまのスマホ版は `apps/android`(Kotlin・Jetpack Compose)で、この手順では作らない。
+これは PC 版と同じソース(Tauri v2)からスマホ向けに作るときの手順。画面と操作だけを、スマホのときに変える(`apps/desktop/src/utils/platform.ts` の `isMobile`)。
 
 ## スマホのときに変わるところ
 

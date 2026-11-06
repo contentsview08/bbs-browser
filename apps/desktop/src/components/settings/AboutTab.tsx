@@ -1,5 +1,3 @@
-// 設定の「このアプリについて」。
-
 import { useEffect, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { OpenRow, Toggle } from '../SettingParts'

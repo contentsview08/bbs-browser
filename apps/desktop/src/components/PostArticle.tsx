@@ -1,5 +1,4 @@
-// レス 1 件。web 版の PostArticle.tsx の見た目を移植。
-// 返信・削除・通報など、web 版の API に依存する機能は外している。
+// レス 1 件。
 
 import { memo, useCallback, useRef, useState } from 'react'
 import type { Post, PostActionDef, ReactionDef } from '@bbs-browser/connectors'
@@ -135,7 +134,7 @@ interface Props {
   /** 自分の書き込みへのアンカーを含む */
   isReplyToOwn?: boolean
   handlers: PostHandlers
-  /** 見た目のスタイル。card: いまの区切り線の並び / discord: 丸いアイコンと平らな並び / classic: 専ブラ風の 1 行の頭 */
+  /** 見た目のスタイル。card: 区切り線の並び / discord: 丸いアイコンと平らな並び / classic: 専ブラ風の 1 行の頭 / line: 吹き出し / matome: 返信の多いレスを目立たせる */
   variant?: PostVariant
   /** Discord 風・LINE 風: 直前のレスと同じ ID(続けて書いた)。アイコンと頭を省く */
   continued?: boolean
@@ -144,7 +143,6 @@ interface Props {
   /** アンカーツリーの中のレス。LINE 風は自分の書き込みも左にそろえ、どのスタイルでも左端の縦の印(自分・自分宛て)を出さない
    *  (ツリーの線と重なって見にくいため。つながりはツリーの線で分かる) */
   alignLeft?: boolean
-  /** ほかの人からの評価の数と呼び名(ふたばの「そうだね」)。0 や なしなら出さない */
   /** レスへの反応の数(反応の id → 数) */
   reactions?: Record<string, number>
   /** 「グロ」などの返信が付いたレス。サムネイルをぼかし、「グロ注意」と出す */
@@ -155,16 +153,16 @@ interface Props {
 
 export type PostVariant = 'card' | 'discord' | 'classic' | 'line' | 'matome'
 
-/** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
 /** マウスを乗せたレスの操作バーの高さ(基本の文字が 16px のときの px) */
 const TOOLBAR_H = 34
+/** レスの頭の小さい字(ID など)。スマホは横幅が貴重なので、さらに小さく */
 const HEAD_TEXT = isMobile ? 'text-[11px]' : 'text-xs'
 /** ダブルタップで返信: 2 回目のタップを待つ時間(ms) */
 const DOUBLE_TAP_MS = 280
 
 /** Discord 風・LINE 風のアイコンの大きさ。スマホは画面が狭いので小さくする(アンカーツリーの段の幅も合わせる。AnchorTree.tsx) */
 export const AVATAR = isMobile ? 28 : 36
-/** アイコンと本文の隙間(px)。Discord 風の行の gap-2・gap-3 と同じ */
+/** アイコンと本文の隙間(px) */
 const AVATAR_GAP = isMobile ? 8 : 12
 /**
  * アイコンの列・アイコンの大きさ。アイコン(Identicon)は px で描くので、列も px で決める
@@ -374,7 +372,7 @@ function PostArticle(props: Props) {
   const mediaItems = props.showThumbnails ? mediaIn(post.body) : []
   const media = mediaItems.map((m) => m.url)
   const thumbReady = (i: number) => handlers.thumbAuto !== false || !!loadedThumbs?.has(i)
-  // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す。web 版と同じ)
+  // 埋め込みのカードは 3 件まで(それ以上はカードの右下に件数だけ出す)
   const links = props.showLinkPreview ? cardUrlsIn(post.body) : []
 
   const copy = (text: string) => void navigator.clipboard.writeText(text)
@@ -506,8 +504,7 @@ function PostArticle(props: Props) {
   ]
 
   // ── レスの頭の部品(スタイルごとに並べ方を変える) ──
-  /** レス番号(返信があれば数も。押すと返信を出す) */
-  /** size: 番号の字の大きさ(LINE 風の吹き出しの横などは小さく) */
+  /** レス番号(返信があれば数も。押すと返信を出す)。size は番号の字の大きさ(LINE 風の吹き出しの横などは小さく) */
   const numBtn = (prefix = '', size = 'text-sm') => (
     <button
       type="button"
@@ -567,9 +564,9 @@ function PostArticle(props: Props) {
       自分
     </span>
   )
-  // 2 回以上書いた ID は、ID ごとの色(設定 idStyle が「色」のとき)
   /** 頭の日時(設定の出し方で。元の形は title で見られる) */
   const shownDate = displayDate(post.date, handlers.dateStyle ?? 'full')
+  // 2 回以上書いた ID は、ID ごとの色(設定 idStyle が「色」のとき)
   const idTint = handlers.idColor && post.id && idCount >= 2 ? idColorOf(post.id, handlers.idColor.dark, handlers.idColor.sky) : null
   const idBtn =
     post.id &&
@@ -646,7 +643,6 @@ function PostArticle(props: Props) {
     )
   }
   const voteChip = reactionDefs.length > 0 && <>{reactionDefs.map(reactionChip)}</>
-  /** 掲示板がレスに付けた印(「管理人」「認証済み」など) */
   // AI NG の「印だけ」: 頭に条件の名前と当たり具合を出す
   const aiChip = props.aiMark && (
     <span className={`${CHIP} flex items-center gap-0.5`} style={{ color: 'var(--c-mark-purple)', border: '1px solid var(--c-mark-purple)' }} title={aiHitLabel(props.aiMark)}>
@@ -654,6 +650,7 @@ function PostArticle(props: Props) {
       {props.aiMark.rule.name || 'AI'}
     </span>
   )
+  /** 掲示板がレスに付けた印(「管理人」「認証済み」など) */
   const badgeChips = post.badges?.length || aiChip ? <>{post.badges?.map((b, i) => <BadgeChip key={i} badge={b} />)}{aiChip}</> : null
   const toOwnChip = props.isReplyToOwn && (
     <span
@@ -663,10 +660,10 @@ function PostArticle(props: Props) {
       返信
     </span>
   )
-  /** ID のアイコン。round なら丸く大きく(Discord 風)。書き込み数を右下に重ねる */
   // アイコンの種: 設定でワッチョイから作ることにしていて、名前にワッチョイがあればそれ(週ごとに変わる)。なければ ID(日ごと)
   const iconSeed = (handlers.iconFromWatchoi ? watchoiOf(post.name) : undefined) ?? post.id
   const iconCount = props.iconCount ?? idCount
+  /** ID のアイコン。round なら丸く大きく(Discord 風)。書き込み数を右下に重ねる */
   const identiconBtn = (size: number, round = false) =>
     iconSeed && (
       <button
@@ -700,7 +697,6 @@ function PostArticle(props: Props) {
   // ID の位置(設定): 日時の後ろ(頭の中)・レスの右上(頭の右端)・レスの右下(本文の下の右端)
   const idPosition = handlers.idPosition ?? 'header'
   const idInHeader = idPosition === 'header' ? idBtn : null
-  // 右上の ID の幅を覚えておき、マウスを乗せたときの操作バーをその左に置く(重ならないように。枠の外には出せない)
   /**
    * 操作バーの上端(レスの枠からの px)。ID と重ならないように、ID の上端を測って、バーの下端をその上に置く(上のレスとの線にまたがる)。
    * 上に余裕がない(すぐ上にレスが見えない)行は ID の下
@@ -764,7 +760,7 @@ function PostArticle(props: Props) {
       )
     ) : (
       <div data-post-header className="flex items-center mb-2 flex-nowrap overflow-hidden gap-3">
-        {/* ID のアイコン(web 版と同じく、右下にその ID の書き込み数を重ねる) */}
+        {/* ID のアイコン(右下にその ID の書き込み数を重ねる) */}
         {props.showIdenticon && identiconBtn(22)}
         {numBtn()}
         {nameBtn(HEAD_TEXT)}
@@ -966,7 +962,7 @@ function PostArticle(props: Props) {
                       </span>
                     </button>
                   )
-                // YouTube は赤い枠と ▶ で見分ける(web 版と同じ)。押すとビューアーの中で再生する
+                // YouTube は赤い枠と ▶ で見分ける。押すとビューアーの中で再生する
                 return (
                   <button
                     key={m.id}
@@ -1000,7 +996,6 @@ function PostArticle(props: Props) {
   /**
    * マウスを乗せたレスに出す操作バー(返信・定型文・コピー・NG・︙)。at は置き場所の class。
    * ふつうはレスの右上、LINE 風は吹き出しと同じ側の上(相手の吹き出しは左寄せなので、右上だと吹き出しから遠い)。
-   * どれもレスの枠の中に置く(枠は content-visibility で外を切り取るので、はみ出すと見えない)
    */
   const toolbarAt = (at: string, style?: { top: number }) => (
       <div
@@ -1092,7 +1087,7 @@ function PostArticle(props: Props) {
       {!right && (
         <div className="flex-shrink-0" style={AVATAR_COL}>
           {props.continued ? null : beIcon ? (
-            // BE のアイコンがあれば、ID の模様の代わりに出す。大きさは絵ごとに違うので、36px の枠に収まるよう縮め・広げる(縦横の比は保つ)
+            // BE のアイコンがあれば、ID の模様の代わりに出す。大きさは絵ごとに違うので、アイコンの枠に収まるよう縮め・広げる(縦横の比は保つ)
             <button
               type="button"
               className="block rounded-xl overflow-hidden bg-c-surface hover:opacity-80"
@@ -1170,9 +1165,6 @@ function PostArticle(props: Props) {
       }}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* 自分の書き込み(濃い線)と、自分へのアンカーを含むレス(薄い線)の目印。
-          高密度表示では web 版の設定で本文の縦線が 0 になるので、表示の密度に関係なく見えるよう別に引く */}
-      {/* LINE 風の自分の書き込みは、右に寄せた緑の吹き出しで分かるので、縦の印は出さない(自分宛てのレスには出す) */}
       {/* 人気のレスの帯(設定で左・右)。淡い地は article の style で敷く */}
       {heatBar && (
         <span
@@ -1181,6 +1173,8 @@ function PostArticle(props: Props) {
           title={`返信 ${anchorCount} 件`}
         />
       )}
+      {/* 自分の書き込みと、自分へのアンカーを含むレスの目印。本文の縦線とは別に引く(見た目によって縦線は出ない)。
+          LINE 風の自分の書き込みは、右に寄せた緑の吹き出しで分かるので出さない */}
       {((props.isOwn && variant !== 'line') || props.isReplyToOwn) && !props.alignLeft && (
         <span
           className={`absolute ${ownRight ? 'right-0' : 'left-0'} top-1 bottom-1 w-[3px] rounded-full pointer-events-none`}

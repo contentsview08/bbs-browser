@@ -165,7 +165,6 @@ describe('createPost', () => {
     expect(r.confirm.url).toBe('https://bbs.eddibb.cc/test/bbs.cgi?guid=ON')
     expect(r.confirm.fields).toMatchObject({ yuki: 'akari', MESSAGE: 'a', key: '1792065954', submit: '上記全てを承諾して書き込む' })
 
-    // 承諾したら、その内容で送る
     const done = await twoChConnector.submitConfirm!(r.confirm, ctx)
     expect(done.status).toBe('ok')
     expect(sent[1].url).toBe('https://bbs.eddibb.cc/test/bbs.cgi?guid=ON')

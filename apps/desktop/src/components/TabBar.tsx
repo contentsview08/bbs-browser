@@ -34,7 +34,7 @@ interface Props {
   onRefreshAll: () => void
   refreshingAll: boolean
   onDeleteLogs: (ids: string[]) => void
-  /** Ctrl/Shift+クリックで選んだタブ(開いているタブは含めない) */
+  /** Ctrl/Shift+クリックで選んだタブ(開いているタブも入ることがある) */
   selectedIds: Set<string>
   onSelectionChange: (ids: Set<string>) => void
   /** つかんで動かしたタブを、index の位置へ移す */
@@ -191,7 +191,7 @@ export default function TabBar(props: Props) {
               } ${active ? 'z-10' : ''} ${dragging ? 'z-30 shadow-lg' : ''}`}
             >
               {/* 開いているタブは、上の端に強調色の線を引く(暗い配色では、開いているタブと、ほかのタブの面の色の差が小さいため)。
-                  終わったスレ(dat 落ち・満)は、ファビコンの場所の「落」「満」の印と薄い字だけで示す(下の線は、開いているタブの印と見間違えるのでやめた) */}
+                  終わったスレ(dat 落ち・満)は、ファビコンの場所の「落」「満」の印と薄い字だけで示す(線を引くと、開いているタブの印と見間違える) */}
               {active && (
                 <>
                   <span className="absolute left-2 right-2 top-0 h-[2px] rounded-b-full bg-c-accent pointer-events-none" />

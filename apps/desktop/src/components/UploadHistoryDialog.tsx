@@ -1,7 +1,6 @@
-// 画像のアップロード履歴。サムネイル・URL のコピー・開く・削除。
-// 削除できるのは、catbox のアカウント(userhash)で上げたものだけ(サーバー上のファイルを消してから履歴からも外す)。
-// 匿名で上げたものはサーバー上では消せないので、削除ボタンを出さない。
-// imgbb(API キー)は API では消せないが、上げたときに消すためのページ(delete_url)が返るので、それをブラウザで開くボタンを出す
+// 画像のアップロード履歴。
+// 削除できるのは catbox のアカウント(userhash)で上げたものだけ。匿名で上げたものはサーバー上で消せないので、削除ボタンを出さない。
+// imgbb は API で消せないが、上げたときに消すためのページ(delete_url)が返るので、それをブラウザで開くボタンを出す
 
 import { useMemo, useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -64,7 +63,6 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
           <p className="text-[10px] text-c-text-muted">
             {new Date(u.uploadedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })} ・ {formatSize(u.size)}
           </p>
-          {/* 貼ったレス(書き込み履歴にあれば)。押すとそのレスへ */}
           {posted ? (
             <button type="button" onClick={posted.open} className="mt-1 w-full text-left text-[11px] text-c-accent truncate hover:underline" title="貼ったレスへ">
               <span className="material-symbols-outlined text-[13px] align-[-2px] mr-0.5">reply</span>
@@ -149,7 +147,6 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
 }
 
 function DesktopUploadHistory(props: Props) {
-  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   const backdrop = useBackdropClose(props.onClose)

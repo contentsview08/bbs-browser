@@ -1,5 +1,3 @@
-// hono-bbs-merge packages/web/src/hooks/useWheelPullRefresh.ts から複製。
-// 専ブラでは、端に着いた勢いで更新してしまい、取得が増えすぎたので、armDelayMs と cooldownMs を足した
 import { buzz } from '../utils/haptics'
 import { useRef } from 'react'
 import {
@@ -11,7 +9,7 @@ import {
   dampedPullY,
 } from '../utils/pullRefresh'
 
-/** 指でこれだけ引いて離したら更新する(px。元の Web アプリは 70。もう少し軽くした) */
+/** 指でこれだけ引いて離したら更新する(px) */
 export const TOUCH_COMMIT_PX = 56
 
 interface UseWheelPullRefreshOptions {
@@ -35,10 +33,8 @@ interface UseWheelPullRefreshOptions {
 }
 
 /**
- * PC版のホイールオーバースクロールによるプルリフレッシュ。
- * スマホのタッチ版(useSwipeGesture内のプル処理)と同じ見た目・タイミングになるよう
- * PULL_* 定数を共有する。1回のホイールイベントで即座に発火せず、revealThresholdに
- * 達するまではインジケーターも出さず、commitThresholdに達するまで累積させる。
+ * 引っぱって更新。ホイールは pull、指は useTouchPull から touchPull・touchRelease で受ける。見た目とタイミングは PULL_* でそろえる。
+ * ホイールは 1 回のイベントでは発火しない。revealThreshold までは印も出さず、commitThreshold まで積み増す。
  */
 export function useWheelPullRefresh({
   onRefresh,
@@ -164,8 +160,8 @@ export function useWheelPullRefresh({
   }
 
   // ── 指(スマホ) ──
-  // 指は利用者がわざと引っぱっているので、ホイールのような「着いたばかりの勢い」の待ちや、出し始めのしきい値は置かない
-  // (元の Web アプリのスマホ版と同じ)。引いた分だけすぐに印を出し、TOUCH_COMMIT_PX 以上引いて離したら更新する。
+  // 指はわざと引っぱっているので、ホイールのような「着いたばかりの勢い」の待ちや、出し始めのしきい値は置かない。
+  // 引いた分だけすぐに印を出し、TOUCH_COMMIT_PX 以上引いて離したら更新する。
   // 同じスレを続けて更新しすぎないかは、更新する側(App)が見る
   const touchDistRef = useRef(0)
 

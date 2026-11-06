@@ -1,7 +1,7 @@
 // お試しの掲示板(通信しない)。アプリの共通の部品(反応・操作・印・添付のない書き込みなど)を、
 // 本物の掲示板なしで確かめるためのもの。開発中のアプリだけに出す(apps/desktop が import.meta.env.DEV のときに足す)。
 // URL は https://demo.bbs-browser.invalid/ の下(.invalid は使われることのないドメイン)。
-// 外付けのコネクタ(フォルダに置くもの)を書くときの見本にもなるよう、コネクタの決まりの使い方を一通り入れてある
+// コネクタの決まりの使い方を一通り入れてある
 
 import type { Board, Connector, FetchPostsResult, Post, PostResult, ThreadSummary } from '../types'
 

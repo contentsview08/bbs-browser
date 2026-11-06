@@ -121,7 +121,6 @@ export function PostHistoryList(props: Omit<Props, 'onClose'>) {
 }
 
 function DesktopPostHistory(props: Props) {
-  // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   const backdrop = useBackdropClose(props.onClose)
@@ -154,7 +153,6 @@ function MobilePostHistory(props: Props) {
           const day = dayLabel(e.postedAt)
           return (
             <div key={e.id}>
-              {/* 日が変わる所に見出し */}
               {(i === 0 || dayLabel(shown[i - 1].postedAt) !== day) && (
                 <p className="sticky top-0 z-[1] px-4 py-2 text-[14px] font-bold text-c-accent bg-c-surface2 border-b border-c-border">{day}</p>
               )}
@@ -184,14 +182,12 @@ function HistoryRow(props: { entry: PostHistoryEntry; onOpen: () => void; onMenu
   const longPress = useLongPress(props.onMenu)
   return (
     <button type="button" {...longPress} onClick={props.onOpen} className="w-full text-left px-4 py-4 border-b border-c-border active:bg-c-surface2">
-      {/* 板・レス番号の札と、書いた時間 */}
       <div className="flex items-center gap-2 text-[13px] text-c-text-muted">
         <span className="px-2 py-0.5 rounded-full bg-c-surface2 border border-c-border text-c-text-body">{boardLabel(e.thread.boardUrl)}</span>
         {e.no !== undefined && <span className="px-2 py-0.5 rounded-full bg-[var(--c-accent-wash)] font-bold text-c-accent tabular-nums">&gt;&gt;{e.no}</span>}
         <span className="ml-auto flex-shrink-0 tabular-nums">{relativeTime(new Date(e.postedAt))}</span>
       </div>
       <p className="mt-2 text-[16px] font-bold leading-snug text-c-text-strong break-words line-clamp-2">{e.thread.title || '(スレタイ不明)'}</p>
-      {/* 書いた本文は、引用の形で */}
       <p className="mt-2 pl-3 border-l-[3px] text-[15px] leading-relaxed text-c-text-body whitespace-pre-wrap break-words line-clamp-3" style={{ borderColor: 'var(--c-own)' }}>
         {e.body || '(本文なし)'}
       </p>

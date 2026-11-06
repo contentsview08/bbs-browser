@@ -3,7 +3,7 @@ package io.github.contentsview08.obb.bbs
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
 
-// したらば(jbbs.shitaraba.net)。専ブラの packages/connectors/src/shitaraba(connector.ts・parse.ts)を Kotlin に写したもの。
+// したらば(jbbs.shitaraba.net)。PC 版の packages/connectors/src/shitaraba(connector.ts・parse.ts)を Kotlin に写したもの。
 // - 板の URL は https://jbbs.shitaraba.net/カテゴリ/番号/、スレは /bbs/read.cgi/カテゴリ/番号/キー/
 // - スレ一覧は 板/subject.txt(EUC-JP)。「キー.cgi,スレタイ(レス数)」、最後の行は最初の行の繰り返し
 // - スレの中身は /bbs/rawmode.cgi/カテゴリ/番号/キー/(EUC-JP)。「番号<>名前<>メール<>日付<>本文<>スレタイ<>ID」。

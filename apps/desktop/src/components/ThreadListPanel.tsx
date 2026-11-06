@@ -1,5 +1,4 @@
-// スレ一覧パネル。web 版の ThreadListPanel.tsx(PC 版)の見た目を移植。
-// 板のスレ一覧と閲覧履歴の両方をこのパネルで出す。
+// スレ一覧パネル。板のスレ一覧と閲覧履歴の両方をこのパネルで出す。
 
 import { useLayoutEffect, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
@@ -141,7 +140,6 @@ interface Props {
   postedIds?: Set<string>
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
   keywords?: string[]
-  /** スレタイを NG に追加する画面を開く */
   /** スレを NG にする画面を出す(スレタイと、分かれば立てた人の ID を入れて) */
   onNgThread?: (t: ThreadSummary) => void
   /** 立てた人を NG に追加 */
@@ -225,9 +223,9 @@ export default function ThreadListPanel(props: Props) {
   const filtering = filter !== null
   /** 上に出すタブ(設定の並び) */
   const tabs = props.tabs ?? ['unread', 'momentum', 'newest']
-  /** タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び */
   /** 閲覧履歴の「見た順」を逆にしている(最近見たものが下) */
   const [reversed, setReversed] = useState(false)
+  // タブを押した(数字キーも同じ): 絞り込みは付け外し、並べ替えは 多い順 → 逆順 → 元の並び。
   // タブはどれか 1 つだけを選ぶ(未読を選んでいて勢い順を押したら、未読の絞り込みは外れる)
   const pressTab = (key: ListTabKey) => {
     if (LIST_FILTERS.has(key)) {
@@ -277,9 +275,6 @@ export default function ThreadListPanel(props: Props) {
     // 頼みが来たときだけ
   }, [props.tabRequest])
 
-  // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
-  // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
-  // スレ表示の受け取りと順番が決まらないので、ほかの受け取りが済んでから(マイクロタスクで)見る
   /** 外すものがあれば外して true。なければ何もしないで false */
   const resetView = useEvent((): boolean => {
     // スマホ: 選んでいる途中なら、まず選ぶのをやめる(戻るで)
@@ -305,6 +300,9 @@ export default function ThreadListPanel(props: Props) {
       lastEsc.current = 0
     } else lastEsc.current = now
   })
+  // Esc：未読だけ・並べ替え・検索を外して、いつもの並びに戻す。
+  // 入力欄の中の Esc と、スレ表示が先に使った Esc(ポップアップを閉じた・絞り込みを解いた)には手を出さない。
+  // スレ表示の受け取りと順番が決まらないので、ほかの受け取りが済んでから(マイクロタスクで)見る
   useEffect(() => {
     if (props.active === false) return
     const onKey = (e: KeyboardEvent) => {
@@ -320,9 +318,7 @@ export default function ThreadListPanel(props: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [props.active, resetView, escNothing])
 
-  // キー操作。キーを受け取っているとき(2 画面なら上に線が出ているとき)だけ。割り当てはスレ表示と同じで、
-  // 次/前のレス(J・K)→ 次/前のスレを選ぶ、Enter で開く、1 画面分(Space・PageDown)、先頭・末尾(Home・G・End・Shift+G)、
-  // 半画面(D・U)、更新(R)、検索(/)、スレ立て(書き込み欄へ の W・E)、選んでいるスレの ☆(S)と URL のコピー(Y)。
+  // キー操作。割り当てはスレ表示と同じで、次/前のレス(J・K)は次/前のスレ、書き込み欄へ(W・E)はスレ立てに読み替える。
   // スレ表示だけの操作(未読へ・画像一覧 など)と、アプリ全体の操作(App.tsx が受ける)はここでは受けない
   /** キーを読むもの(「G G」を見分ける) */
   const readKey = useRef(createKeyReader())
@@ -407,7 +403,7 @@ export default function ThreadListPanel(props: Props) {
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
-  // 一番上でさらにホイールを回すと一覧を更新する(web 版と同じ)
+  // 一番上でさらにホイールを回すと一覧を更新する。
   // スレ一覧の更新は板全体を取り直すので、スレ表示より引っぱる量を多くする。
   // 続けて更新しないよう、手で更新したあとのクールダウン中(App が決める)は数えない
   const refreshReadyRef = useRef(props.refreshReadyAt)
@@ -420,7 +416,7 @@ export default function ThreadListPanel(props: Props) {
     commitThreshold: 340,
     canRefresh: () => Date.now() >= (refreshReadyRef.current ?? 0),
   })
-  // スマホ: 指で引っぱって更新する(上の端で下へ。しきい値がスレ表示の 1.7 倍なので、指の量も多めに掛ける)
+  // スマホ: 指で引っぱって更新する(上の端で下へ)
   // 選んでいる間(閲覧履歴を長押しで選んで、なぞっているときなど)は、引っぱって更新しない
   const touchPull = useTouchPull(scrollRef, props.onRefresh && selected.size === 0 ? pull : undefined, undefined)
 
@@ -804,8 +800,8 @@ export default function ThreadListPanel(props: Props) {
   // ── カードは上から少しずつ作る(数百スレある板でも、開いてすぐ出るように) ──
   // 最初は FIRST_CARDS 枚、そのあと手の空いたときに CARD_CHUNK 枚ずつ作り足す。板が変わると作り直す(この部品ごと作り直される)
   const [renderLimit, setRenderLimit] = useState(FIRST_CARDS)
-  // 並べ替え・絞り込み・検索を変えたら、描く数を最初の分まで戻して先頭へ(1000 枚のカードの DOM を一度に並べ直すと重い。
-  // 少しずつ描く仕組みが、並べ替えでは効いていなかった)。一覧の取り直し(threads が変わる)では戻さない(並びを保つ)
+  // 並べ替え・絞り込み・検索を変えたら、描く数を最初の分まで戻して先頭へ(1000 枚のカードの DOM を一度に並べ直すと重い)。
+  // 一覧の取り直し(threads が変わる)では戻さない(並びを保つ)
   const orderBasis = `${shownSort?.mode ?? ''}:${shownSort?.dir ?? ''}:${filter ?? ''}:${reversed}:${query}`
   const firstBasis = useRef(orderBasis)
   useLayoutEffect(() => {
@@ -1098,7 +1094,7 @@ export default function ThreadListPanel(props: Props) {
               ) : (
                 tabGrid
               )}
-              {/* 右端: 裏で取っている印(帯を差し込むと一覧がずれるので、同じ行に)。未読の一覧は、読み終えても並びから消さない(次に一覧を取り直すまで) */}
+              {/* 右端: 裏で取っている印(帯を差し込むと一覧がずれるので、同じ行に) */}
               {props.busyText && (
                 <span className="flex-shrink-0 flex items-center gap-1 pl-3 text-xs text-c-text-muted" title={props.busyText}>
                   <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
@@ -1111,8 +1107,7 @@ export default function ThreadListPanel(props: Props) {
 
         {/* スマホ: フッターを一覧の上に重ねるので、最後のスレがその下に隠れないよう、下に余白を足す */}
         <div className="relative flex-1 flex flex-col" style={isMobile ? { paddingBottom: 'calc(var(--footer-bar-h, 68px) + 8px)' } : undefined}>
-          {/* 取り直し・並べ直しの途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
-          {/* 帯は、取り直し(通信)のときだけ。手元の並べ替え(2ch の勢い順など)は通信しないので出さない */}
+          {/* 取り直し(通信)の途中は、一覧を残したまま上に細い帯を流す(一覧を消して待たせない) */}
           {props.loading && visible.length > 0 && <div className="list-progress" aria-label="読み込み中" />}
           {props.body ? (
             props.body
@@ -1176,13 +1171,13 @@ export default function ThreadListPanel(props: Props) {
           )}
         </div>
       </div>
-      {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
       {peek && <PeekPopup thread={peek} onOpen={() => onOpenCard(peek)} onClose={() => setPeek(undefined)} />}
       {note && (
         <div className="absolute left-1/2 bottom-4 -translate-x-1/2 z-30 max-w-[90%] px-3 py-2 text-xs rounded-lg bg-c-surface border border-c-border shadow-lg text-c-text-body rise-in">
           {note}
         </div>
       )}
+      {/* フッター。ボタンの配置で「フッター」にした操作だけ並べる(なければ出さない) */}
       {(hasFooter || isMobile) && (
         <div
           ref={footerRef}

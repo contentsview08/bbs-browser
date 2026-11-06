@@ -69,7 +69,7 @@ export const closedPosition = (threadKey: string) => closedPositions.get(threadK
 const moving = new WeakMap<HTMLElement, () => void>()
 /** スクロール領域ごとの、動きが終わったら基準のレスを見張りへ引き継ぐ関数 */
 const handOff = new WeakMap<HTMLElement, (el?: HTMLElement) => void>()
-/** スクロール領域ごとの、利用者が動かした回数(キー操作の分)。絞り込みの一番下まで読んだかの判断に使う */
+/** スクロール領域ごとの、利用者が動かした回数。絞り込みの一番下まで読んだかの判断に使う */
 const userMoves = new WeakMap<HTMLElement, number>()
 
 /**
@@ -336,7 +336,7 @@ export function useThreadScroll(o: Options) {
   /** 本文から見積もった高さ(測った高さでの補正の前) */
   const rawEstimate = (p: Post): number => (latest.current.isCollapsed?.(p) ? 36 : estimateOf(p).h)
   const kindOf = (p: Post): string => (latest.current.isCollapsed?.(p) ? 'ng' : estimateOf(p).kind)
-  /** 本文の寸法を測る。レスごとに幅だけ見て、字の大きさと行の高さは最初の 1 回だけ読む */
+  /** 本文の幅を測り、一番広いものを覚える。字の大きさと行の高さは recalibrate で読む */
   const probeBody = (frame: HTMLElement) => {
     const c = calibNow()
     const body = frame.querySelector<HTMLElement>('[data-post-body]')
@@ -387,7 +387,7 @@ export function useThreadScroll(o: Options) {
       e.final ??= Math.max(16, Math.round(e.h + (byKind.get(e.kind) ?? all)))
       return e.final
     },
-    // 幅・設定が変わったら、補正を見直したら見積もり直す
+    // 幅・設定が変わったとき、補正を見直したときに見積もり直す
     [width, calibVersion, o.layoutKey, o.showLinkPreview, o.showThumbnails],
   )
 
@@ -712,7 +712,7 @@ export function useThreadScroll(o: Options) {
   // ── 新着 ──
 
   // 新着として光らせ、順に出すレス。届いたときに番号と遅れ(ms)を控え、出し終わったら消す
-  // (描画のたびに「前回より後ろ」を計算し直すと、既読の保存などで描き直された時点で光が途中で切れていた)
+  // (描画のたびに計算し直すと、既読の保存などの描き直しで光が途中で切れる)
   const [flashNos, setFlashNos] = useState<Map<number, number>>(new Map())
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(flashTimer.current), [])
@@ -724,9 +724,8 @@ export function useThreadScroll(o: Options) {
     const prevLastNo = lastMax.current
     lastMax.current = log.posts.at(-1)?.no ?? 0
     if (!root || !grew || !positioned.current) return
-    // 空のログで開いて、手元のログが届いたとき(最初の中身)は新着ではない。位置は上の「開いたとき」が合わせている。
-    // ここを新着として扱うと pendingUnread(未読の頭はまだ手元にない)を消してしまい、あとで本当の新着が届いても未読の頭へ移らず、
-    // 一番下に飛んだままになっていた(「次の未読スレへ」で開いたとき)
+    // 空のログで開いて手元のログが届いたとき(最初の中身)は新着ではない。位置は上の「開いたとき」が合わせている。
+    // 新着として扱うと pendingUnread を消してしまい、あとで本当の新着が届いても未読の頭へ移らない
     if (prevLastNo === 0) return
     const fresh = log.posts.filter((p) => p.no > prevLastNo).map((p) => p.no)
     setFlashNos(staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS))

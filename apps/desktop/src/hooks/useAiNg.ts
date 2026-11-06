@@ -1,7 +1,7 @@
 // AI NG の判定モデルを動かす所(workers/aiNgWorker.ts)と、出た当たり具合を覚えておく所。アプリ全体で 1 つ。
 // - スレ表示は useAiNgScores でレスを渡す。まだ当たり具合のないもの(本文と条件の組)だけを、見えている順にモデルへ頼む
 // - 当たり具合は、出るたびに少しずつ届き、届くと描き直す
-// - モデルは利用者が「使う」にしたときだけ取る(約 125MB)。取ったものは Cache Storage に残る
+// - モデルは利用者が「使う」にしたときだけ取る(約 355MB)。取ったものは Cache Storage に残る
 // - モデルを動かすのはメインのウィンドウだけ。PC の設定ウィンドウには状態を写し、試す・消すはメインに頼む
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { Post } from '@bbs-browser/connectors'
@@ -42,7 +42,7 @@ let version = 0
 const listeners = new Set<() => void>()
 const progress = new Map<string, { loaded: number; total: number }>()
 
-/** 取っている途中の量を、ファイルをまとめて出す(取り終えたあとは止めない: 読み込みの途中でも出す) */
+/** 取っている量を、全ファイルの合計で出す(200ms に 1 回まで) */
 let lastShown = 0
 function showProgress() {
   const now = Date.now()

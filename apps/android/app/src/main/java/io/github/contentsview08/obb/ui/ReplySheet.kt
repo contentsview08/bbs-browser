@@ -83,7 +83,7 @@ import io.github.contentsview08.obb.bbs.HonoBbs
 import io.github.contentsview08.obb.bbs.shiftJisByteLength
 
 /**
- * スレ表示のフッター(今のスマホ版の ReplyForm の chat と同じ): Discord・LINE のような 1 行の入力欄。
+ * スレ表示のフッター: Discord・LINE のような 1 行の入力欄。
  * 丸い本文の欄(書くと 6 行ほどまで伸びる)の左の端に ＋(画像・オプションで名前とメール)、右に丸い送るボタンと更新ボタン。
  * 返事(エラー・書き込みました)は欄の上の面に出す。書き込めたらキーボードをしまう。キーボードが出たら、その上に持ち上がる
  */
@@ -106,9 +106,8 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
     }
     // 本文が外(返信の >>12・書き込めて空になった・下書き)で変わったら、欄に写す(カーソルは最後に)
     LaunchedEffect(r.body) { if (field.text != r.body) field = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
-    // 下書きを戻す
     LaunchedEffect(page) { vm.loadDraft(page) }
-    // 欄に入る: メニューの窓が閉じきってから入り、キーボードもはっきり出す(すぐに入ろうとすると、窓に取られてキーボードが出なかった)
+    // 欄に入る: メニューの窓が閉じきってから入り、キーボードもはっきり出す(すぐに入ると、窓に取られてキーボードが出ない)
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     LaunchedEffect(r.focusSeq) {
         if (r.focusSeq == 0) return@LaunchedEffect
@@ -147,7 +146,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
         }
         // 本文に入れた画像のリンクのサムネイル(欄の上)
         UploadStrip(vm, r, 56.dp, PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp))
-        // オプション: 名前・メール
         if (options) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SmallField(r.name, { r.name = it }, "名前", Modifier.weight(1f))
@@ -206,8 +204,8 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                         }
                     }
                 }
-                // ＋ のメニュー(欄の上にふわっと出る)
                 webSite?.let { site -> WebUploadScreen(site, onLink = { vm.insertLink(r, it) }, onDismiss = { webSite = null }) }
+                // ＋ のメニュー(欄の上にふわっと出る)
                 if (plusMenu) {
                     androidx.compose.ui.window.Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -with(androidx.compose.ui.platform.LocalDensity.current) { 52.dp.roundToPx() }), onDismissRequest = { plusMenu = false }) {
                         val rise = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -230,7 +228,6 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 }
             }
             Spacer(Modifier.width(6.dp))
-            // 送る(丸いボタン)
             Box(
                 Modifier.padding(bottom = 1.dp).size(40.dp).graphicsLayer { alpha = if (canSend) 1f else 0.4f }.background(Palette.accent, CircleShape)
                     .combinedClickable(
@@ -328,13 +325,12 @@ private fun PostPreview(vm: AppViewModel, page: Page.Thread, onDismiss: () -> Un
     }
 }
 
-/** 本文を AA 用の字で出すか: 選んでいればそれ、なければ空白が 5 つ以上続く本文(設定の「AA を見分ける」がオンのとき) */
 /** AA 用の字で出すか: ボタンで選んだもの。選んでいなければ、空白が続く本文を AA とみなす */
 private fun isAA(r: ReplyState) = r.aaOverride ?: AA_SPACES.containsMatchIn(r.body)
 private val AA_SPACES = Regex("[ \t　]{5,}")
 
 /**
- * 本文の欄。AA のときは AA 用の字で、折り返さず横にずらせる(レスの表示と同じ字なので、書いたとおりに見える。今のスマホ版の書き込み欄と同じ)
+ * 本文の欄。AA のときは AA 用の字で、折り返さず横にずらせる(レスの表示と同じ字なので、書いたとおりに見える)
  */
 @Composable
 private fun BodyField(
@@ -421,7 +417,7 @@ fun PostDialogs(r: ReplyState, onAccept: () -> Unit) {
 }
 
 /**
- * スレを立てる画面(全画面)。下から出る欄だと、入れる欄を切り替えるたびにキーボードが出入りして画面ごと上下に動いていたので、
+ * スレを立てる画面(全画面)。入れる欄を切り替えても画面が上下に動かないよう、
  * 画面いっぱいに置き、キーボードの分だけ下を縮める。上に ✕・板名・「立てる」、中にスレタイ・(オプションで名前とメール)・本文、
  * 本文に入れた画像のサムネイル、下にキーボードのすぐ上の道具(画像・バイト数)
  */
@@ -477,7 +473,6 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                 Modifier.fillMaxSize().graphicsLayer { translationY = rise.value * size.height * 0.15f; alpha = 1f - rise.value }
                     .background(Palette.base).statusBarsPadding().imePadding().navigationBarsPadding(),
             ) {
-                // 上の帯
                 Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = vm.prefs.headerHeight.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { r.open = false }) { Icon(Icons.Filled.Close, "閉じる", tint = Palette.textMuted) }
                     Column(Modifier.weight(1f)) {
@@ -493,13 +488,11 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                     }
                 }
                 HorizontalDivider(color = Palette.border)
-                // 返事(エラー)
                 r.notice?.let { n ->
                     Text(n, Modifier.fillMaxWidth().background(Palette.surface).padding(horizontal = 16.dp, vertical = 8.dp), color = Palette.heatVeryHot, fontSize = 13.sp)
                     HorizontalDivider(color = Palette.border)
                 }
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                    // スレタイ(大きく太く)
                     androidx.compose.foundation.text.BasicTextField(
                         r.title, { r.title = it },
                         Modifier.fillMaxWidth().focusRequester(titleFocus).padding(horizontal = 16.dp, vertical = 14.dp),
@@ -516,14 +509,12 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                         }
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Palette.border)
                     }
-                    // 本文
                     var bodyField by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(r.body)) }
                     // 画像の URL など、外から本文が変わったら欄にも映す(映さないと、書き足したときに URL が消える)
                     LaunchedEffect(r.body) { if (bodyField.text != r.body) bodyField = androidx.compose.ui.text.input.TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)) }
                     Box(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(horizontal = 16.dp, vertical = 14.dp)) {
                         BodyField(bodyField, { bodyField = it; r.body = it.text }, isAA(r), "本文", 16, Modifier.fillMaxWidth())
                     }
-                    // 本文に入れた画像のサムネイル
                     UploadStrip(vm, r, 72.dp, PaddingValues(horizontal = 16.dp, vertical = 8.dp))
                 }
                 // キーボードのすぐ上の道具: 画像・オプション(名前・メール)・バイト数
@@ -534,7 +525,6 @@ fun NewThreadSheet(vm: AppViewModel, page: Page.Threads) {
                         else Icon(Icons.Filled.Image, "画像を付ける", tint = Palette.textMuted)
                     }
                     IconButton(onClick = { options = !options }) { Icon(Icons.Filled.Tune, "名前・メール", tint = if (options || r.name.isNotEmpty() || r.mail.isNotEmpty()) Palette.accent else Palette.textMuted) }
-                    // AA として表示・文字列として表示
                     val aaNow = isAA(r)
                     IconButton(onClick = { r.aaOverride = !aaNow }) { Icon(Icons.Filled.GridOn, if (aaNow) "文字列として表示" else "AAとして表示", tint = if (aaNow) Palette.accent else Palette.textMuted) }
                     Spacer(Modifier.weight(1f))

@@ -103,4 +103,23 @@ class SyncCryptoTest {
         assertEquals("{\"a\":2}", canonicalJson(parseStrictJson("{\"a\":1,\"a\":2}")))
         assertEquals("\"\\u0001\\n\\ud800\"", canonicalJson(parseStrictJson("\"\\u0001\\n\\ud800\"")))
     }
+
+    @Test fun device_id_is_22_chars_and_random() {
+        val a = generateDeviceId()
+        assertTrue(Regex("[A-Za-z0-9_-]{22}").matches(a))
+        assertFalse(a == generateDeviceId())
+    }
+
+    private fun post(body: String): SyncPayload = mapOf(
+        "kind" to "post", "hlc" to "000000000001.0000.d0", "device_id" to "d0",
+        "body" to mapOf("post_id" to "a".repeat(32), "board_url" to "https://a.example/b/", "thread" to "1700000000", "title" to "あ".repeat(100), "no" to 1L, "body" to body, "posted_at" to 1L),
+    )
+
+    @Test fun post_of_max_japanese_fits() {
+        sealPayload(keys, ctx("h"), post("あ".repeat(4096)))
+    }
+
+    @Test fun post_of_escaped_chars_can_exceed_limit() {
+        assertThrows(SyncError::class.java) { sealPayload(keys, ctx("h"), post("\u0001".repeat(4096))) }
+    }
 }

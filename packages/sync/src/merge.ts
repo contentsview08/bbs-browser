@@ -58,17 +58,26 @@ export function mergePayloads(a: SyncPayload, b: SyncPayload): SyncPayload {
   return a.kind === 'last_view' || b.kind === 'last_view' ? mergeWithMax(a, b, LAST_VIEWED_FIELD) : mergeLww(a, b)
 }
 
+/** 消した項目を書き直すときは、tombstone の印を残さない */
+export function withoutTombstone(p: SyncPayload | null): Partial<SyncPayload> {
+  const { deleted: _, trim: __, ...rest } = p ?? ({} as Partial<SyncPayload>)
+  return rest
+}
+
 /** レコードの更新。知らないフィールドを残す。stamp は hlcStamp に existing.hlc を floor として渡して作る */
 export function updateRecord(existing: SyncPayload | null, kind: string, changes: Record<string, unknown>, stamp: string, deviceId: string): SyncPayload {
-  const { deleted: _, ...base } = existing ?? ({} as Partial<SyncPayload>)
+  const base = withoutTombstone(existing)
   return { ...base, kind, hlc: stamp, device_id: deviceId, body: { ...existing?.body, ...changes } }
 }
 
-/** 外した項目の中身を残さない。keep は max で持ち続けるフィールド(残さないと tombstone をまたいで max が崩れる) */
-export function makeTombstone(existing: SyncPayload, stamp: string, deviceId: string, keep: readonly string[] = []): SyncPayload {
-  const { body, ...base } = existing
+/**
+ * 外した項目の中身を残さない。keep は max で持ち続けるフィールド(残さないと tombstone をまたいで max が崩れる)。
+ * trim はサーバーから外すだけの印で、受け取った端末は手元のデータを消さない
+ */
+export function makeTombstone(existing: SyncPayload, stamp: string, deviceId: string, keep: readonly string[] = [], trim = false): SyncPayload {
+  const { body, trim: _, ...base } = existing
   const kept = Object.fromEntries(keep.flatMap((k) => (body && Object.hasOwn(body, k) ? [[k, body[k]]] : [])))
-  return { ...base, hlc: stamp, device_id: deviceId, deleted: true, ...(Object.keys(kept).length > 0 && { body: kept }) }
+  return { ...base, hlc: stamp, device_id: deviceId, deleted: true, ...(trim && { trim: true }), ...(Object.keys(kept).length > 0 && { body: kept }) }
 }
 
 const ORDER_KEY_RE = /^[0-9]*[1-9]$/

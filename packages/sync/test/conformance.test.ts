@@ -6,7 +6,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { describe, expect, it } from 'vitest'
 import { to5chIo } from '../../connectors/src/twoch/connector'
 import * as S from '../src/index'
-import { simulate } from './sim'
+import { recreateScript, simulate, simulateRecreate } from './sim'
 
 interface Case {
   name: string
@@ -17,6 +17,7 @@ interface Case {
 
 const load = (file: string): Case[] => JSON.parse(readFileSync(new URL(`../../conformance/${file}`, import.meta.url), 'utf-8'))
 const hex = (s: string) => S.fromHex(s)
+const REF = { board_url: 'https://a.example/b/', thread: '1' }
 const errorCode = (f: () => unknown): unknown => {
   try {
     return f()
@@ -116,13 +117,13 @@ function readScript(events: Record<string, any>[]): Record<string, number> {
       const old = d.store.get(id) ?? null
       const s = S.hlcStamp(d.clock, e.t, e.dev, old?.hlc)
       d.clock = s.clock
-      d.store.set(id, S.recordRead(old, d.store.get('reset') ?? null, e.read, s.stamp, e.dev))
+      d.store.set(id, S.recordRead(old, d.store.get('reset') ?? null, REF, e.read, s.stamp, e.dev))
     } else if (e.reset !== undefined) {
       const d = dev(e.dev)
       const old = d.store.get('reset') ?? null
       const s = S.hlcStamp(d.clock, e.t, e.dev, S.resetFloor(old, devsOf(e.dev)))
       d.clock = s.clock
-      d.store.set('reset', S.makeReset(old, e.id, e.reset, s.stamp, e.dev))
+      d.store.set('reset', S.makeReset(old, REF, e.id, e.reset, s.stamp, e.dev))
     } else if (e.sync !== undefined) {
       deliver(e.sync[0], e.sync[1], e.t)
     } else if (e.sync_all !== undefined) {
@@ -151,7 +152,7 @@ function merge(i: Record<string, any>): unknown {
     case 'update':
       return S.updateRecord(i.existing, i.kind, i.changes, i.stamp, i.device)
     case 'tombstone':
-      return S.makeTombstone(i.existing, i.stamp, i.device, i.keep ?? [])
+      return S.makeTombstone(i.existing, i.stamp, i.device, i.keep ?? [], i.trim === true)
     case 'order_between':
       return S.orderKeyBetween(i.a, i.b)
     case 'order_sort':
@@ -171,13 +172,25 @@ function merge(i: Record<string, any>): unknown {
     case 'read_position':
       return S.readPosition(i.reset, i.devs)
     case 'record_read':
-      return S.recordRead(i.dev, i.reset, i.pos, i.stamp, i.device)
+      return S.recordRead(i.dev, i.reset, i.ref, i.pos, i.stamp, i.device)
+    case 'make_reset':
+      return S.makeReset(i.existing, i.ref, i.id, i.target, i.stamp, i.device)
     case 'reset_floor':
       return S.resetFloor(i.reset, i.devs)
     case 'read_script':
       return readScript(i.events)
     case 'rebase':
-      return S.planRebase({ local: i.local, pending: i.pending, full: i.full, nowMs: i.now })
+      return S.planRebase({ local: i.local, pending: i.pending, full: i.full, complete: i.complete, nowMs: i.now })
+    case 'recreate':
+      return S.planRecreate({ local: i.local, full: i.full, nowMs: i.now })
+    case 'recreate_script':
+      return recreateScript(i.events, (who, actual, want) => expect(actual, `途中の ${who}`).toEqual(want))
+    case 'tomb_expired':
+      return S.isTombExpired(i.tomb_at ?? undefined, i.now)
+    case 'check_device_id':
+      return S.checkDeviceId(i.stored, i.db)
+    case 'sim_recreate':
+      return simulateRecreate({ seed: i.seed, devices: i.devices, ops: i.ops, skews: i.skews }).sha256
     case 'sim':
       return simulate({ seed: i.seed, devices: i.devices, ops: i.ops, skews: i.skews, max_reads: i.max_reads, decreasing_reads: i.decreasing_reads }).sha256
     default:

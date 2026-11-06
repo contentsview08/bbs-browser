@@ -48,4 +48,17 @@ class SyncPropertyTest {
         // 溢れの場面を本当に通っているかを確かめる
         assertTrue(under > 0)
     }
+
+    @Test fun recreate_converges_without_revival() {
+        var survived = 0
+        for (seed in 1..200) {
+            val r = simulateRecreate(RecreateOptions(seed, 2 + seed % 3, 150, skews))
+            assertTrue("seed $seed", r.converged)
+            assertTrue("seed $seed", r.matchesLog)
+            assertEquals("seed $seed", 0, r.revived)
+            survived += r.survivedTombstones
+        }
+        // 領域をまたいで残る tombstone の場面を本当に通っているかを確かめる
+        assertTrue(survived > 0)
+    }
 }

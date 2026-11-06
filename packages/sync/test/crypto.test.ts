@@ -1,6 +1,6 @@
 // 乱数を使う処理と、固定のベクトルでは確かめられない性質
 import { describe, expect, it } from 'vitest'
-import { SyncError, deriveKeys, fromBase64Url, generateMasterKey, openRecords, sealPayload, spaceId, type KindTag } from '../src/index'
+import { SyncError, deriveKeys, fromBase64Url, generateDeviceId, generateMasterKey, openRecords, sealPayload, spaceId, type KindTag } from '../src/index'
 import type { SyncPayload } from '../src/index'
 
 const keys = deriveKeys(generateMasterKey())
@@ -58,5 +58,23 @@ describe('暗号化', () => {
   it('平文の deleted は結果に使わない', () => {
     const r = openRecords(keys, space, [{ ...raw('h'), deleted: true }])
     expect(r.records[0].payload.deleted).toBeUndefined()
+  })
+})
+
+describe('端末 ID', () => {
+  it('22 文字で、毎回違う', () => {
+    const a = generateDeviceId()
+    expect(a).toMatch(/^[A-Za-z0-9_-]{22}$/)
+    expect(generateDeviceId()).not.toBe(a)
+  })
+})
+
+describe('書き込みの大きさ', () => {
+  const post = (body: string) => ({ kind: 'post', hlc: '000000000001.0000.d0', device_id: 'd0', body: { post_id: 'a'.repeat(32), board_url: 'https://a.example/b/', thread: '1700000000', title: 'あ'.repeat(100), no: 1, body, posted_at: 1 } })
+  it('本文が上限の日本語でも暗号文の上限に収まる', () => {
+    expect(() => sealPayload(keys, ctx('h'), post('あ'.repeat(4096)))).not.toThrow()
+  })
+  it('上限の文字数でも、エスケープで膨らむ文字だけなら上限を超えて止まる', () => {
+    expect(() => sealPayload(keys, ctx('h'), post('\u0001'.repeat(4096)))).toThrow(SyncError)
   })
 })

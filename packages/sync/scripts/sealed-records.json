@@ -1,0 +1,26 @@
+[
+  {
+    "name": "PC 版の本番の処理で閉じた暗号文を開く",
+    "record": {
+      "record_id": "3444d041cab391c38add381e4076999cc6aee0180f8a3f1df9e96fb234d66ab5",
+      "version": 1,
+      "kind_tag": "h",
+      "schema_version": 1,
+      "deleted": false,
+      "nonce": "AkUBQhJl6mDkK1H6rRJ871CgfYy6LJ6I",
+      "ciphertext": "7hsFTcDhHp20D_K-Vfp0g9Sc9U11g_hj8PnD6Qiv0U5peaqLpnUWiPfKjGariHp657a2GNU70hAZ6Ur759adhIFYHAjY0ejLEpm2Cxl6jCsMD8Lv8fIQCzwirHtktOdvz1PTC4qYlZQuxK5D_TL6vgaW8r5o9wjUmTl8xEtrUEfxEO4_rWQEL6D0qDpHhKa-7mffUu3kriVqUEg2_iTMwTO2fuEJ4ECx4QjAtYJizQu2mXXlP9WRMsYMpD5B_Bu-R5iCcW9M8jb5nma0T7Wfq36NxoOKnpnEZ67VItWbco2eCex0uH6Syd-8GzXsdWq8SrNh4Pl1EMB4fdFTVQYrUA5Wu-sY-2uRWpYpWG0ZqOY"
+    }
+  },
+  {
+    "name": "スマホ版の本番の処理で閉じた暗号文を開く",
+    "record": {
+      "ciphertext": "Gl7GrakqJTTHlgnGPGbeFxg4tVQD_BJx_DVhXHhFNbGS-7x8a9ostXfs6oe7SxTQU7mBMqrooP9AkIy71mqJ9oALaQaQX9sUMuLGG6R_ecRx2px7SuAF33FpsT4mRphfwFk7H_SdE7ULjYv78GDvdngBbnOBeuxUlNqgtL5xtOuwyf5oleYbKPj7A-VnUhS2WsIfDdK7BqKK6o-yL2UT-u9vc-qjGU0ppd1hj22A5Vl26ZTpImbtwMLRJPJUr2akdAZ7u9yJPtKACWe-CC-TBrVHPjKckf4afxK8CISlC4QPTWHF2Bj-yTREK_LSGIAKcIAB1Qih5cS3zW083rkbG4lGhUEsoMaTadcTcJhI_og",
+      "deleted": false,
+      "kind_tag": "h",
+      "nonce": "v-8eXCQuFefYyxRQdNjW7Cb7Lm6a3QeO",
+      "record_id": "3444d041cab391c38add381e4076999cc6aee0180f8a3f1df9e96fb234d66ab5",
+      "schema_version": 1,
+      "version": 1
+    }
+  }
+]

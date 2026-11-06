@@ -15,6 +15,22 @@ class SyncKeys(val authToken: ByteArray, val kData: ByteArray, val kSecret: Byte
 
 fun generateMasterKey(): ByteArray = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
 
+private const val DEVICE_ID_BYTES = 16
+
+fun generateDeviceId(): String = toBase64Url(ByteArray(DEVICE_ID_BYTES).also { SecureRandom().nextBytes(it) })
+
+enum class DeviceCheck { NONE, OK, CLEAR, REJOIN }
+
+/**
+ * 起動時に鍵保管と DB の device_id を比べる。DB を別の端末から入れると同じ device_id の端末が 2 台でき、read_dev がぶつかる。
+ * CLEAR は同期の表を消して使っていない状態へ、REJOIN は同期の表を消し、新しい device_id で合流し直す
+ */
+fun checkDeviceId(stored: String?, inDb: String?): DeviceCheck = when {
+    stored == null -> if (inDb == null) DeviceCheck.NONE else DeviceCheck.CLEAR
+    stored == inDb -> DeviceCheck.OK
+    else -> DeviceCheck.REJOIN
+}
+
 fun sha256(data: ByteArray): ByteArray {
     val d = SHA256Digest()
     d.update(data, 0, data.size)

@@ -6,6 +6,11 @@ const val MAX_STEPS = 8
 const val RESET_KIND = "read_reset"
 const val DEV_KIND = "read_dev"
 
+/** record_id は片道なので、どのスレの記録かを本文に書く */
+class ThreadRef(val boardUrl: String, val thread: String) {
+    fun toBody(): Map<String, Any?> = mapOf("board_url" to boardUrl, "thread" to thread)
+}
+
 private fun resetId(r: SyncPayload?): String? = r?.body?.get("id") as? String
 private fun resetAt(r: SyncPayload?): String = r?.hlc ?: Hlc.ZERO
 private fun resetTarget(r: SyncPayload?): Long = r?.body?.get("target_res") as? Long ?: 0
@@ -24,16 +29,16 @@ fun pushStep(steps: List<Map<String, Any?>>, at: String, pos: Long): List<Map<St
  * 新しいリセットを知った時点でも、そのリセットより後に読んだ分は引き継ぐ(既読位置が読み直しで下がらないように)。
  * 今の読みも必ず steps に足す(まだ知らない次のリセットより後の読みかもしれない)
  */
-fun recordRead(dev: SyncPayload?, latest: SyncPayload?, pos: Long, stamp: String, deviceId: String): SyncPayload {
+fun recordRead(dev: SyncPayload?, latest: SyncPayload?, ref: ThreadRef, pos: Long, stamp: String, deviceId: String): SyncPayload {
     val id = resetId(latest)
     val after = resetAt(latest)
     val live = stepsOf(dev).filter { Hlc.compare(stepAt(it), after) > 0 }
     val prior = if (dev != null && dev.body?.get("base_reset_id") as? String == id) dev.body?.get("pos") as? Long ?: 0 else live.maxOfOrNull(::stepPos) ?: 0
-    return dev.orEmpty() + mapOf(
+    return withoutTombstone(dev) + mapOf(
         "kind" to DEV_KIND,
         "hlc" to stamp,
         "device_id" to deviceId,
-        "body" to (dev?.body.orEmpty() + mapOf("base_reset_id" to id, "pos" to maxOf(prior, pos), "steps" to pushStep(live, stamp, pos))),
+        "body" to (dev?.body.orEmpty() + ref.toBody() + mapOf("base_reset_id" to id, "pos" to maxOf(prior, pos), "steps" to pushStep(live, stamp, pos))),
     )
 }
 
@@ -48,12 +53,12 @@ fun resetFloor(latest: SyncPayload?, devs: Iterable<SyncPayload>): String {
 }
 
 /** 未読に戻す。stamp は Hlc.stamp に resetFloor の値を floor として渡して作る。id はランダムな値 */
-fun makeReset(existing: SyncPayload?, id: String, targetRes: Long, stamp: String, deviceId: String): SyncPayload =
-    existing.orEmpty() + mapOf(
+fun makeReset(existing: SyncPayload?, ref: ThreadRef, id: String, targetRes: Long, stamp: String, deviceId: String): SyncPayload =
+    withoutTombstone(existing) + mapOf(
         "kind" to RESET_KIND,
         "hlc" to stamp,
         "device_id" to deviceId,
-        "body" to (existing?.body.orEmpty() + mapOf("id" to id, "target_res" to targetRes)),
+        "body" to (existing?.body.orEmpty() + ref.toBody() + mapOf("id" to id, "target_res" to targetRes)),
     )
 
 fun readPosition(latest: SyncPayload?, devs: Iterable<SyncPayload>): Long {

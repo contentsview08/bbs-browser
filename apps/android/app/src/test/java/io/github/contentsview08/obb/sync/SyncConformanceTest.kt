@@ -11,6 +11,11 @@ class SyncConformanceTest {
         parseStrictJson(javaClass.classLoader!!.getResourceAsStream(file)!!.readBytes().toString(Charsets.UTF_8)) as List<Map<String, Any?>>
 
     @Suppress("UNCHECKED_CAST")
+    private val ref = ThreadRef("https://a.example/b/", "1")
+
+    private fun Map<String, Any?>.ref(k: String): ThreadRef = (this[k] as Map<*, *>).let { ThreadRef(it["board_url"] as String, it["thread"] as String) }
+
+    @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any?>.input() = this["input"] as Map<String, Any?>
 
     private fun Map<String, Any?>.s(k: String) = this[k] as String
@@ -122,7 +127,7 @@ class SyncConformanceTest {
                     val old = d.store["dev:$n"]
                     val s = Hlc.stamp(d.clock, e["t"] as Long, n, old?.hlc)
                     d.clock = s.clock
-                    d.store["dev:$n"] = recordRead(old, d.store["reset"], e["read"] as Long, s.stamp, n)
+                    d.store["dev:$n"] = recordRead(old, d.store["reset"], ref, e["read"] as Long, s.stamp, n)
                 }
                 e.containsKey("reset") -> {
                     val n = e.s("dev")
@@ -130,7 +135,7 @@ class SyncConformanceTest {
                     val old = d.store["reset"]
                     val s = Hlc.stamp(d.clock, e["t"] as Long, n, resetFloor(old, devsOf(n)))
                     d.clock = s.clock
-                    d.store["reset"] = makeReset(old, e.s("id"), e["reset"] as Long, s.stamp, n)
+                    d.store["reset"] = makeReset(old, ref, e.s("id"), e["reset"] as Long, s.stamp, n)
                 }
                 e.containsKey("sync") -> {
                     val pair = e["sync"] as List<*>
@@ -147,9 +152,12 @@ class SyncConformanceTest {
 
     @Suppress("UNCHECKED_CAST")
     private fun records(v: Any?): Map<String, LocalRecord> =
-        (v as Map<String, Map<String, Any?>>).mapValues { LocalRecord(it.value["payload"] as SyncPayload, it.value["version"] as Long) }
+        (v as Map<String, Map<String, Any?>>).mapValues { LocalRecord(it.value["payload"] as SyncPayload, it.value["version"] as Long, it.value["tomb_at"] as Long?) }
 
-    private fun recordJson(r: LocalRecord) = mapOf("payload" to r.payload, "version" to r.version)
+    private fun recordJson(r: LocalRecord): Map<String, Any?> =
+        mapOf("payload" to r.payload, "version" to r.version) + (if (r.tombAt != null) mapOf("tomb_at" to r.tombAt) else emptyMap())
+
+    private fun pendingJson(m: Map<String, PendingRecord>) = m.mapValues { mapOf("payload" to it.value.payload, "base_version" to it.value.baseVersion) }
 
     @Suppress("UNCHECKED_CAST")
     @Test fun merge() = run("sync-merge.json") { i ->
@@ -157,7 +165,7 @@ class SyncConformanceTest {
             "lww" -> mergeLww(i.p("a"), i.p("b")).also { assertEquals(canonicalJson(it), canonicalJson(mergeLww(i.p("b"), i.p("a")))) }
             "max" -> mergePayloads(i.p("a"), i.p("b")).also { assertEquals(canonicalJson(it), canonicalJson(mergePayloads(i.p("b"), i.p("a")))) }
             "update" -> updateRecord(i.pn("existing"), i.s("kind"), i.p("changes"), i.s("stamp"), i.s("device"))
-            "tombstone" -> makeTombstone(i.p("existing"), i.s("stamp"), i.s("device"), (i["keep"] as List<String>?) ?: emptyList())
+            "tombstone" -> makeTombstone(i.p("existing"), i.s("stamp"), i.s("device"), (i["keep"] as List<String>?) ?: emptyList(), i["trim"] == true)
             "order_between" -> orderKeyBetween(i.sn("a"), i.sn("b"))
             "order_sort" -> i.ps("items").map { Ordered(it.s("key"), it.s("id")) }.sortedWith(ORDERED_COMPARATOR).map { it.id }
             "hlc_format" -> Hlc.format(i["wall"] as Long, (i["counter"] as Long).toInt(), i.s("device"))
@@ -167,18 +175,26 @@ class SyncConformanceTest {
             "hlc_stamp" -> Hlc.stamp(i.s("clock"), i["now"] as Long, i.s("device"), i.sn("floor")).let { mapOf("stamp" to it.stamp, "clock" to it.clock) }
             "push_step" -> pushStep(i["steps"] as List<Map<String, Any?>>, i.s("at"), i["pos"] as Long)
             "read_position" -> readPosition(i.pn("reset"), i.ps("devs"))
-            "record_read" -> recordRead(i.pn("dev"), i.pn("reset"), i["pos"] as Long, i.s("stamp"), i.s("device"))
+            "record_read" -> recordRead(i.pn("dev"), i.pn("reset"), i.ref("ref"), i["pos"] as Long, i.s("stamp"), i.s("device"))
+            "make_reset" -> makeReset(i.pn("existing"), i.ref("ref"), i.s("id"), i["target"] as Long, i.s("stamp"), i.s("device"))
             "reset_floor" -> resetFloor(i.pn("reset"), i.ps("devs"))
             "read_script" -> readScript(i["events"] as List<Map<String, Any?>>)
-            "rebase" -> planRebase(records(i["local"]), i["pending"] as Map<String, SyncPayload>, records(i["full"]), i["now"] as Long).let { r ->
+            "rebase" -> planRebase(records(i["local"]), i["pending"] as Map<String, SyncPayload>, records(i["full"]), i["complete"] as Boolean, i["now"] as Long).let { r ->
                 mapOf(
                     "records" to r.records.mapValues { recordJson(it.value) },
-                    "pending" to r.pending.mapValues { mapOf("payload" to it.value.payload, "base_version" to it.value.baseVersion) },
+                    "pending" to pendingJson(r.pending),
                     "removed" to r.removed,
                     "dropped_pending" to r.droppedPending,
                     "needs_confirmation" to r.needsConfirmation,
                 )
             }
+            "recreate" -> planRecreate(records(i["local"]), records(i["full"]), i["now"] as Long).let { r ->
+                mapOf("records" to r.records.mapValues { recordJson(it.value) }, "pending" to pendingJson(r.pending), "expired" to r.expired)
+            }
+            "recreate_script" -> recreateScript(i["events"] as List<Map<String, Any?>>) { who, actual, want -> assertEquals("途中の $who", canonicalJson(want), canonicalJson(actual)) }
+            "tomb_expired" -> isTombExpired(i["tomb_at"] as Long?, i["now"] as Long)
+            "check_device_id" -> checkDeviceId(i.sn("stored"), i.sn("db")).name.lowercase()
+            "sim_recreate" -> simulateRecreate(RecreateOptions((i["seed"] as Long).toInt(), (i["devices"] as Long).toInt(), (i["ops"] as Long).toInt(), i["skews"] as List<Long>)).sha256
             "sim" -> simulate(
                 SimOptions(
                     (i["seed"] as Long).toInt(), (i["devices"] as Long).toInt(), (i["ops"] as Long).toInt(), i["skews"] as List<Long>,

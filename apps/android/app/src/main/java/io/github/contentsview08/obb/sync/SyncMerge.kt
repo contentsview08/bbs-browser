@@ -48,20 +48,27 @@ fun mergeWithMax(a: SyncPayload, b: SyncPayload, field: String): SyncPayload {
 fun mergePayloads(a: SyncPayload, b: SyncPayload): SyncPayload =
     if (a.kind == "last_view" || b.kind == "last_view") mergeWithMax(a, b, LAST_VIEWED_FIELD) else mergeLww(a, b)
 
+/** 消した項目を書き直すときは、tombstone の印を残さない */
+fun withoutTombstone(p: SyncPayload?): SyncPayload = p.orEmpty() - "deleted" - "trim"
+
 /** レコードの更新。知らないフィールドを残す。stamp は Hlc.stamp に existing の hlc を floor として渡して作る */
 fun updateRecord(existing: SyncPayload?, kind: String, changes: Map<String, Any?>, stamp: String, deviceId: String): SyncPayload =
-    (existing.orEmpty() - "deleted") + mapOf(
+    withoutTombstone(existing) + mapOf(
         "kind" to kind,
         "hlc" to stamp,
         "device_id" to deviceId,
         "body" to (existing?.body.orEmpty() + changes),
     )
 
-/** 外した項目の中身を残さない。keep は max で持ち続けるフィールド(残さないと tombstone をまたいで max が崩れる) */
-fun makeTombstone(existing: SyncPayload, stamp: String, deviceId: String, keep: List<String> = emptyList()): SyncPayload {
+/**
+ * 外した項目の中身を残さない。keep は max で持ち続けるフィールド(残さないと tombstone をまたいで max が崩れる)。
+ * trim はサーバーから外すだけの印で、受け取った端末は手元のデータを消さない
+ */
+fun makeTombstone(existing: SyncPayload, stamp: String, deviceId: String, keep: List<String> = emptyList(), trim: Boolean = false): SyncPayload {
     val kept = existing.body.orEmpty().filterKeys { it in keep }
-    val base = (existing - "body") + mapOf("hlc" to stamp, "device_id" to deviceId, "deleted" to true)
-    return if (kept.isNotEmpty()) base + ("body" to kept) else base
+    val base = (existing - "body" - "trim") + mapOf("hlc" to stamp, "device_id" to deviceId, "deleted" to true)
+    val marked = if (trim) base + ("trim" to true) else base
+    return if (kept.isNotEmpty()) marked + ("body" to kept) else marked
 }
 
 private val ORDER_KEY = Regex("[0-9]*[1-9]")

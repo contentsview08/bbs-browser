@@ -3,7 +3,7 @@ import { hkdf } from '@noble/hashes/hkdf.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { randomBytes } from '@noble/ciphers/utils.js'
-import { toHex, utf8 } from './bytes'
+import { toBase64Url, toHex, utf8 } from './bytes'
 import { SyncError } from './errors'
 
 export const KEY_BYTES = 32
@@ -16,6 +16,20 @@ export interface SyncKeys {
 }
 
 export const generateMasterKey = (): Uint8Array => randomBytes(KEY_BYTES)
+
+const DEVICE_ID_BYTES = 16
+export const generateDeviceId = (): string => toBase64Url(randomBytes(DEVICE_ID_BYTES))
+
+export type DeviceCheck = 'none' | 'ok' | 'clear' | 'rejoin'
+
+/**
+ * 起動時に鍵保管と DB の device_id を比べる。DB を別の端末から入れると同じ device_id の端末が 2 台でき、read_dev がぶつかる。
+ * clear は同期の表を消して使っていない状態へ、rejoin は同期の表を消し、新しい device_id で合流し直す
+ */
+export function checkDeviceId(stored: string | null, inDb: string | null): DeviceCheck {
+  if (stored === null) return inDb === null ? 'none' : 'clear'
+  return stored === inDb ? 'ok' : 'rejoin'
+}
 
 export function deriveKeys(k: Uint8Array): SyncKeys {
   if (k.length !== KEY_BYTES) throw new SyncError('bad_key')

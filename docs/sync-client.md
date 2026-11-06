@@ -49,8 +49,8 @@
 
 言語は TypeScript(PC)と Kotlin(スマホ)で、共通テストで揃える。Rust の共有は採用しない。後から核だけを差し替えられるよう、次を守る。
 
-- エンジンとアダプターが呼ぶ核の関数は、下の表の 19 個だけ
-- 核は IO を持たない。DB・通信・時計・乱数の鍵保管に触らない(ノンスの乱数だけは核の中)
+- エンジンとアダプターが呼ぶ核の関数は、下の表の 23 個だけ
+- 核は IO を持たない。DB・通信・時計・鍵保管に触らない(乱数はノンスと `generateDeviceId` だけが核の中)
 - 値は `SyncPayload`(JSON にできる形)とバイト列だけで渡す。言語の特別な型を境界に出さない
 - 共通テストは核の入口の単位で書く。差し替えても同じテストで確かめられる
 
@@ -62,7 +62,9 @@
 | 順序 | `orderKeyBetween`・`compareOrdered` |
 | 既読 | `recordRead`・`makeReset`・`resetFloor`・`readPosition` |
 | 時計 | `hlcStamp`・`hlcObserve` |
-| 全件の取り直し | `planRebase`・`planRecreate`(足す。8 章) |
+| 全件の取り直し | `planRebase`・`planRecreate`(8 章) |
+| tombstone の保持 | `settleRecord`・`isTombExpired` |
+| 端末の ID | `generateDeviceId`・`checkDeviceId` |
 
 `checkPayload` は `openRecords` の中で通るので、外から呼ばない。
 
@@ -143,10 +145,10 @@ CREATE INDEX threads_key ON threads (key);
 
 | 場所 | 同期 | 同期しない | 内部 |
 | --- | --- | --- | --- |
-| PC の `LogStore` | 11 | 12 | 6 |
-| スマホの `LogDb` | 10 | 8 | 3 |
+| PC の `LogStore` | 13 | 10 | 6 |
+| スマホの `LogDb` | 12 | 6 | 3 |
 | スマホの `Prefs` | 6 | 7 | 2 |
-| 合計 | 27 | 27 | 11 |
+| 合計 | 31 | 23 | 11 |
 
 残りの 1 つは DB の入れ替えで、8 章で扱う。
 
@@ -156,8 +158,8 @@ CREATE INDEX threads_key ON threads (key);
 
 | 関数 | 呼び出し元 | 分類 |
 | --- | --- | --- |
-| `addSite` | **`App.addSite`(2182)は操作。`presets.ts:25` は自動** | 同期しない(U3) |
-| `removeSite` | `App.removeSite`(2189)・`ToolWindow`(92) | 同期しない(U3) |
+| `addSite` | **`App.addSite`(2182)は操作。`presets.ts:25` は自動** | 操作だけ同期 |
+| `removeSite` | `App.removeSite`(2189)・`ToolWindow`(92) | 同期 |
 | `replaceBoards` | `App`(588) | 内部 |
 | `addFavorite` | **`toggleFavorite`(2166)・`addFavoriteUrl`(2172)は操作。`presets.ts:34` は自動** | 操作だけ同期 |
 | `renameFavorite` | `App`(2121)。板の情報を取ったとき自動 | 内部 |
@@ -193,7 +195,7 @@ CREATE INDEX threads_key ON threads (key);
 | --- | --- | --- |
 | `setFavorite` | **`toggleFavorite`(646)と `importBackup`(610)は操作。`applyPresets`(531)は自動** | 操作だけ同期 |
 | `reorderFavorites` | `moveFavorite`(575) | 同期 |
-| `addSite`・`removeSite` | **`addSite`(551)・`removeSite`(563)・`importBackup`(612)は操作。`applyPresets`(521)は自動** | 同期しない(U3) |
+| `addSite`・`removeSite` | **`addSite`(551)・`removeSite`(563)・`importBackup`(612)は操作。`applyPresets`(521)は自動** | 操作だけ同期 |
 | `replaceBoards` | 551 の次(552)・`loadBoards`(632) | 内部 |
 | `saveFetch` | `refreshThread`(739) | 内部 |
 | `markRead` | `markRead`(916)。`ThreadScreen:904` から | 同期(`read` と `last_view`) |
@@ -302,6 +304,7 @@ class UserOps {
 | 履歴から外す | `view_remove` | 板 + キー |
 | お気に入りのスレ・板を足す・外す | `favorite_thread_add` など | 板 + キー |
 | お気に入り板を並べ替える | `favorite_board_order` | 固定 |
+| サイトを足す・外す | `site_add`・`site_remove` | メニューの URL |
 | 書き込みをした・履歴から消す | `post_add`・`post_remove` | seq |
 | 画像を上げた・履歴から消す | `upload_add`・`upload_remove` | URL |
 | NG を変えた | `ng_diff` | seq |
@@ -380,6 +383,7 @@ class UserOps {
 | 既読のリセット | `read_reset` | `read_reset:<board>:<key>` | h |
 | 既読の記録 | `read_dev` | `read_dev:<board>:<key>:<device_id>` | h |
 | 書き込み履歴 | `post` | `post:<board>:<key>:<post_id>` | h |
+| サイト | `site` | `site:::<normalizeBoardUrl(menu_url)>` | h |
 | 上げた画像 | `image` | `image:::<url>` | h |
 | NG | `ng` | `ng:::<rule.id>` | h |
 | 設定 | `setting` | `setting:::<name>` | h |
@@ -388,19 +392,28 @@ class UserOps {
 - `post_id` は `SHA-256(board|key|posted_at|body)` の先頭 32 桁。種まきをやり直しても同じ ID になる
 - 種類のオン・オフの単位は、設計書の表の行(閲覧履歴と既読は 1 つ)
 
-### 核のスキーマを直す所(`schema.ts`・`SyncSchema.kt`・`sync-schema.json`)
+### 本文の項目と上限(`schema.ts`・`SyncSchema.kt`・`sync-schema.json`)
 
-`record_id` は片道の HMAC なので、受け取った端末は本文に書いてあるものしか分からない。**今のスキーマでは次の種類が何のレコードか分からない。**
+`record_id` は片道の HMAC なので、受け取った端末は本文に書いてあるものしか分からない。どの種類も、ID の入力に使った値を本文に持つ。**太字**は必須(tombstone では要らない)。長さは UTF-16 の単位の文字数。
 
-| 種類 | 足りないもの | 直し方 |
-| --- | --- | --- |
-| `read_reset`・`read_dev` | どのスレか | `board_url`(必須)・`thread`(必須) |
-| `order` | 何の順序か | `board_url`(必須)・`thread`(板のときは空) |
-| `post` | スレタイ・本文 | `title`・`body`(本文は 4096 文字まで) |
-| `ng` | `type`・`value` だけで、ルールの項目が入らない | 下の NG の表 |
-| `image` | 大きさ | `size` |
-| `favorite`・`last_view` | スレが立った時刻 | `created_at` |
-| tombstone | 手元を消さない外し方 | `trim: true`(種類の共通フィールド) |
+| 種類 | 項目 |
+| --- | --- |
+| `read_reset` | **`board_url`**・**`thread`**(1〜256)・**`id`**(64)・**`target_res`** |
+| `read_dev` | **`board_url`**・**`thread`**(1〜256)・`base_reset_id`(64・null 可)・**`pos`**・**`steps`**(64 件) |
+| `last_view` | **`board_url`**・**`thread`**(1〜256)・`title`(1024)・`board_name`(256)・`created_at`・**`last_viewed_at`** |
+| `favorite` | **`board_url`**・`thread`(256。板はなし)・`title`(1024)・`board_name`(256)・`created_at` |
+| `order` | **`board_url`**・`thread`(256。板はなしか空)・**`key`**(1024) |
+| `post` | **`post_id`**(1〜64)・**`board_url`**・**`thread`**(1〜256)・`title`(1024)・`no`・**`body`**(4096)・**`posted_at`** |
+| `image` | **`url`**・`file_name`(1024)・`size`・`uploaded_at` |
+| `ng` | **`id`**(1〜128)・**`type`**(64)・**`value`**(4096)・`is_regex`・`enabled`・`expires_on`(10)・`board_url`・`board_name`(256)・`note`(1024)・`created_at` |
+| `setting` | **`key`**(2176。板ごとの設定は板 URL を含む)・**`value`**(真偽・整数・4096 文字まで) |
+| `site` | **`menu_url`**・`name`(256) |
+| `secret` | **`url`**・**`value`**(4096) |
+
+- URL は http と https だけ、2048 文字まで。`board_url` は手元の生の URL で、正規化した値ではない(開くときにそのまま使う)
+- `trim: true` は tombstone の共通フィールド(本文の外)。手元を消さない外し方で、`deleted: true` のときだけ通す。書き直すと消える
+- `recordRead`・`makeReset` は `ThreadRef`(`board_url`・`thread`)を引数に取り、本文に書く。ログを消した後でもリセットを書けるよう、手元の行に頼らない
+- **暗号文の上限(16KB)は文字数の上限と別に効く。** 書き込みは日本語の本文 4096 文字とスレタイ 100 文字なら収まる。エスケープで膨らむ文字(制御文字は 6 バイト)や長い URL・スレタイが重なると `too_large` になるので、アダプターは本文を切って作り直す
 
 ### 既読
 
@@ -408,7 +421,7 @@ class UserOps {
 | --- | --- | --- |
 | `threads.read_no` | `read_dev.body.pos`・`steps`、`read_reset` | `read_no` は `readPosition` の結果。下げることもある |
 | `markRead` の `no` | `recordRead` の `pos` | 手元 → レコード |
-| なし | `read_reset.body.id`・`target_res` | 未読に戻す操作を足すまでは受信だけ |
+| ログの削除 | `read_reset.body.id`(ランダム)・`target_res`(0) | 手元 → レコード。`pruneLogs` は書かない |
 | `threads.board_url`・`key` | `board_url`・`thread` | 手元の値をそのまま書く |
 
 ### 閲覧履歴
@@ -442,6 +455,19 @@ class UserOps {
 - 順序のレコードがない項目は、ある項目の後ろに今の順で並べる
 - キーが 256 桁を超えたら、そのリストを一度振り直す(利用者の操作として送る)
 - `favorite_threads` を並べ替える操作は今ない。足した順のキーだけ作る
+
+### サイト
+
+| 今のデータ | `site.body` | 埋め方 |
+| --- | --- | --- |
+| `sites.menu_url` | `menu_url` | ID は `normalizeBoardUrl` を通した値で作り、本文は生の値を書く |
+| `sites.name` | `name` | 空は手元を残す |
+| `sites.connector_id` | 送らない | スマホは `HonoBbs.isSiteUrl`、PC は `canHandle` で決める |
+| `sites.sort` | 送らない | 並べ替える操作がない。受信は末尾に足す |
+
+- プリセットの自動の追加(`presets.ts`・`applyPresets`)は送らない。種まきでは手元の全部のサイトをレコードにする
+- 受信で足したサイトの板一覧は、次に開いたときの既存の取得に任せる。適用では掲示板へ通信しない
+- tombstone は `sites` の行と `boards` の行を消す。お気に入りの板は消さない
 
 ### `connector_id` は同期しない
 
@@ -488,7 +514,7 @@ class UserOps {
 
 | `NgRule`(PC・スマホ共通) | `ng.body` |
 | --- | --- |
-| `id` | ID の入力に使う |
+| `id` | `id`。ID の入力にも使う(受け取った端末が同じルールを編集できるように) |
 | `target` | `type` |
 | `pattern` | `value` |
 | `isRegex`・`enabled` | `is_regex`・`enabled` |
@@ -562,10 +588,12 @@ class UserOps {
 
 | 種類 | 適用 |
 | --- | --- |
+| `read_*` の `trim` の tombstone | 計算し直さない。外した記録を除いて計算すると、手元の既読が下がるため |
 | `read_*` | 同じスレの `read_reset` と全 `read_dev`(`sync_records_thread` で引く)から `readPosition` を計算し、`threads.read_no` に書く。行がなければ何もしない |
 | `last_view` | 行があれば `read_at`・`title` を更新。なければ下の表 |
 | `last_view` tombstone | `read_at = NULL`。ログは消さない。`trim` なら何もしない |
 | `favorite` | 足す・消す・名前の更新。並びは最後にまとめて振り直す |
+| `site` | 足す・消す・名前の更新。`trim` なら何もしない |
 | `order` | リストごとに `sort` を振り直す |
 | `post` | `ref_local` がなければ INSERT し、`own_posts` に足す。tombstone は行を消す。`trim` なら何もしない |
 | `image` | 上の `ON CONFLICT`。tombstone は行を消す |
@@ -667,11 +695,12 @@ interface SyncApplied {
 | --- | --- | --- | --- | --- |
 | 1 | お気に入り板・並び | `favorite_boards` | 1(時刻がない) | 1 |
 | 2 | お気に入りのスレ・並び | `favorite_threads` | `added_at` | 1 |
-| 3 | NG | 設定 | `createdAt`。0 なら 1 | 2 |
-| 4 | 設定 | 許可リストで既定と違うもの | 1 | 2 |
-| 5 | 書き込み履歴 | `post_history`(新しい順) | `posted_at` | 3 |
-| 6 | 上げた画像 | `uploads`(新しい順) | `uploaded_at` | 4 |
-| 7 | 閲覧履歴・既読 | `threads WHERE read_at IS NOT NULL`(新しい順) | `read_at` | 5 |
+| 3 | サイト | `sites` | 1(時刻がない) | 1 |
+| 4 | NG | 設定 | `createdAt`。0 なら 1 | 2 |
+| 5 | 設定 | 許可リストで既定と違うもの | 1 | 2 |
+| 6 | 書き込み履歴 | `post_history`(新しい順) | `posted_at` | 3 |
+| 7 | 上げた画像 | `uploads`(新しい順) | `uploaded_at` | 4 |
+| 8 | 閲覧履歴・既読 | `threads WHERE read_at IS NOT NULL`(新しい順) | `read_at` | 5 |
 
 ### HLC の決め方
 
@@ -707,6 +736,7 @@ interface SyncApplied {
 | データ | 合流の結果 |
 | --- | --- |
 | お気に入り | 和集合。領域の tombstone が手元の古い項目に勝つ |
+| サイト | 和集合。領域の tombstone が手元の古い項目に勝つ |
 | 並び順 | 領域の順が正。手元だけの項目は末尾に足す(新しいキー)。**種まきのキーで領域の順を崩さない** |
 | 既読 | 2 台の max。`read_dev` が別なので自然に合う |
 | 閲覧履歴 | `last_viewed_at` の max |
@@ -732,7 +762,7 @@ interface SyncApplied {
 
 | 優先 | 種類 | 超えたとき |
 | --- | --- | --- |
-| 1 | お気に入り・並び・NG・設定 | 外さない |
+| 1 | お気に入り・並び・サイト・NG・設定 | 外さない |
 | 2 | 書き込み履歴 | 古い順に外す |
 | 3 | 上げた画像 | 古い順に外す |
 | 4 | 閲覧履歴と既読 | 最初に外す。古いスレから `trim` |
@@ -880,13 +910,13 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `epoch` が変わった | 下の「領域が消えたとき」。何も消さない |
 
 1. 全件を読む(`since=0` は 1 時間に 3 回まで。超えたら `backoff`)
-2. `planRebase` を呼ぶ
+2. `planRebase` を呼ぶ。最後のページまで読めなかったときは `complete: false` で渡す。届いていないものは消さず、未送信も捨てず、計画に残す。読めた分のマージだけを行い、次の周で続きから読む
 3. `needs_confirmation` なら、計画を `pending_confirm` に保存して `confirm` へ
 4. 消す前に、消える項目の一覧を `sync_state` の `rebase_backup` に保存する
 5. `records`・`pending`・`removed` を 200 件ずつ書く
 
 - `removed` のうち、手元のペイロードがすでに tombstone のものは今のデータに触らない。行を消すだけ
-- **核の直し:** `planRebase` は tombstone の掃除も `lost` に数える。90 日後の片づけで確認が誤って出るので、`deleted` のものを `lost` から除く
+- tombstone の片づけは大量削除の確認に数えない(分子にも、同期済みの分母にも)
 - 連続のリベースは 1 日 3 回まで。超えたら `blocked` にして知らせる
 
 ### 領域が消えたとき
@@ -903,7 +933,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 4 | `planRecreate` で手元と合わせる | 同じ |
 | 5 | `pending` を全部送る。tombstone を先に(`priority = 0`) | 同じ |
 
-`planRecreate({ local, full, nowMs })` の決まり。`planRebase` はこの場面に使えない(途中までしか届いていない全件を正として手元を消し、90 日より古い種まきの値を未送信として捨てるため)。
+`planRecreate({ local, full, nowMs })` の決まり。戻り値は `records`・`pending`・`expired`(同期の表から消すもの)。`planRebase` はこの場面に使えない(途中までしか届いていない全件を正として手元を消し、90 日より古い種まきの値を未送信として捨てるため)。
 
 | 手元 | サーバー | 結果 |
 | --- | --- | --- |
@@ -924,7 +954,9 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | --- | --- |
 | 同期の表の tombstone は、この端末で tombstone になってから 90 日残す(`tomb_at`)。サーバーの領域が消えても残す | 作り直しのとき、削除済みが他の端末の古い値から復活しないため |
 | 90 日を過ぎたら 1 日 1 回の片づけで消す | 増え続けないため |
-| 普通のリベースの `removed` でも、期限の前の tombstone は消さない | 同じ |
+| 普通のリベースの `removed` でも、期限の前の tombstone は消さない。`version = 0` で残し、送らない | 同じ |
+| `tomb_at` は最初に tombstone になった時刻のまま。新しい tombstone で延ばさない。マージの後は `settleRecord` で決める | 期限を保つ |
+| 期限の判定は `isTombExpired`。ちょうど 90 日はまだ残す | 端末で揃える |
 
 ### 鍵
 
@@ -957,9 +989,17 @@ interface SyncKeyStore {
 対策は次のとおり。
 
 - 鍵保管に `deviceId` も置く(`SyncKeyStore`)
-- 起動時に `sync_state.device_id` と比べる。違うか、鍵保管が空なら、DB が入れ替わったと判断する
-- 鍵保管が空: `sync_*` を消して `off` に戻す。領域の再参加はペアリングから
-- 鍵保管があり違う: `sync_records`・`sync_ops` を空にし、新しい `device_id` で `joining` から
+- 起動時に `checkDeviceId(鍵保管の deviceId, sync_state.device_id)` で比べる
+
+| 結果 | 場面 | 動き |
+| --- | --- | --- |
+| `none` | どちらもない | 同期を使っていない |
+| `ok` | 同じ | そのまま |
+| `clear` | 鍵保管が空で DB にある | `sync_*` を消して `off` に戻す。領域の再参加はペアリングから |
+| `rejoin` | 違う。または DB にない | `sync_records`・`sync_ops` を空にし、`since`・`clock`・`epoch`・`phase`・`push_inflight` も消す。`generateDeviceId` の新しい値を鍵保管と DB に書き、`joining` から |
+
+- `device_id` が変わると古い `read_dev` は領域に残るので、既読位置は下がらない
+- 同じ端末の古い DB に戻したときは `ok` になる。`device_id` は重複しない。`since` と `clock` が戻るだけで、次の pull で全部をマージし直して追いつく
 - スマホのバックアップは JSON で、`importBackup` は操作として積む。`allowBackup` は false
 
 ### 同期領域の削除と端末の離脱
@@ -998,7 +1038,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 項目 | 内容 |
 | --- | --- |
 | 同期を使う | スイッチ。オンで最初の説明 |
-| 同期するもの | 閲覧履歴と既読・お気に入り・書き込み履歴・上げた画像・NG・設定。各スイッチ |
+| 同期するもの | 閲覧履歴と既読・お気に入り・サイト・書き込み履歴・上げた画像・NG・設定。各スイッチ |
 | 今すぐ同期 | ボタン。最後の同期の時刻 |
 | 端末を追加 | QR とコピー用コード |
 | この種類をサーバーから外す | 詳しい設定。確認あり |
@@ -1183,7 +1223,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 
 | 段階 | 端末の作業 | 完了の目安 |
 | --- | --- | --- |
-| 0 | 核 | 済み。スキーマの直しを足す |
+| 0 | 核 | 済み |
 | 1 | `018_sync.sql`、`sql_batch`、`UserOps` の `favorite_thread_*`、アダプター 1 種類、エンジン(手動)、偽サーバー、テストの枠 | 偽サーバーで PC と スマホがお気に入りのスレを往復する。シナリオ 1・2・3・13・31 が両方で通る |
 | 2 | HTTP の実装、鍵、ペアリング、手動の同期ボタン | 検証用の Worker で 2 台が実機で同期する |
 | 3 | きっかけ、まとめ送り、再送、状態の表示、裏に回る瞬間の 1 回の送信、領域の作り直し | 機内モードの復帰で追いつく。シナリオ 30〜38・43〜53 |
@@ -1194,22 +1234,24 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 
 ## 12. 難しい点と未解決
 
+決定: `read_reset` は容量超過で外さない。外すと、消したログの既読が戻ることがあるため。`schema_version` は公開まで 1 のままとする。
+
+
 ### 危ない所(順に)
 
-1. **種類を見分ける情報が足りない。** `read_*`・`order` はどのスレのものか本文に書いていない。今の核のままでは適用できない。段階 1 の前に直す(4 章)
-2. **更新の入口が多く、画面から直接呼んでいる。** 取りこぼすと端末間でずれ、余計に拾うと消えるべきでないものが消える。名前付きの操作と静的な検査、起動時の照合で守る。App.tsx は 2,900 行を超え、写しの Web もある
-3. **PC でトランザクションが使えない。** `sql_batch` が前提。ここが崩れると「更新できたのに送らない」が起きる
-4. **既読の見え方。** `read_no` が同期で下がるのは初めての動き。`markRead` の `MAX`・`useThreadScroll` の `sent`・未読の線の 3 か所の前提に触れる。読んでいる画面で事故が起きると一番目立つ
-5. **「ログの削除」の意味が変わる。** 履歴から消す操作がログの削除しかない。消しても同期の表から位置が戻る。利用者の予想と違う
-6. **容量。** 2 台 10MB で約 6,500 スレ。閲覧履歴の量が多い人はすぐ超える。`trim` は 90 日まで容量を空けない。
+1. **更新の入口が多く、画面から直接呼んでいる。** 取りこぼすと端末間でずれ、余計に拾うと消えるべきでないものが消える。名前付きの操作と静的な検査、起動時の照合で守る。App.tsx は 2,900 行を超え、写しの Web もある
+2. **PC でトランザクションが使えない。** `sql_batch` が前提。ここが崩れると「更新できたのに送らない」が起きる
+3. **既読の見え方。** `read_no` が同期で下がるのは初めての動き。`markRead` の `MAX`・`useThreadScroll` の `sent`・未読の線の 3 か所の前提に触れる。読んでいる画面で事故が起きると一番目立つ
+4. **「ログの削除」の意味が変わる。** 履歴から消す操作がログの削除しかない。ログの削除は全端末を未読に戻すので、まとめて消すとスレの数だけリセットが増え、容量と送信を使う
+5. **容量。** 2 台 10MB で約 6,500 スレ。閲覧履歴の量が多い人はすぐ超える。`trim` は 90 日まで容量を空けない。
    押し出しのたびに全件を送り直すので、大きな領域ほど作り直しが重い
-7. **DB の入れ替えと端末の複製。** `device_id` の重複は `read_dev` を静かに壊す
-8. **時計。** 種まきの壁時計 1 と、未来の HLC は仕様のとおりだが、実機で見ないと分からない動きがある
-9. **板の移転。** `eagle.5ch.io/x/` から別のサーバーへ移ると別のレコードになる。5ch の板の移転はある。お気に入りが 2 つになることがある
-10. **Web の写し。** `App.tsx`・`ui/settings.ts` を Web に写すとき、`useSync`・`UserOps` を `WEB` で無効にする
-11. **PC の鍵が WebView に入る。** 核が TypeScript なので避けられない
-12. **90 日以上オフラインの端末。** 領域の作り直しのあとに戻ると、他の端末で期限切れになった tombstone を知らないので、削除済みの項目を生きた値として送ることがある(U14)
-13. **通信の増加の間接の影響。** 同期で増えた履歴の行は `historyCheckMin` の確認の対象になり、掲示板へのスレ一覧の取得が増える。板ごとに 1 回なので上限はあるが、多い人では目に見える
+6. **DB の入れ替えと端末の複製。** `device_id` の重複は `read_dev` を静かに壊す
+7. **時計。** 種まきの壁時計 1 と、未来の HLC は仕様のとおりだが、実機で見ないと分からない動きがある
+8. **板の移転。** `eagle.5ch.io/x/` から別のサーバーへ移ると別のレコードになる。5ch の板の移転はある。お気に入りが 2 つになることがある
+9. **Web の写し。** `App.tsx`・`ui/settings.ts` を Web に写すとき、`useSync`・`UserOps` を `WEB` で無効にする
+10. **PC の鍵が WebView に入る。** 核が TypeScript なので避けられない
+11. **90 日以上オフラインの端末。** 領域の作り直しのあとに戻ると、他の端末で期限切れになった tombstone を知らないので、削除済みの項目を生きた値として送ることがある(U14)
+12. **通信の増加の間接の影響。** 同期で増えた履歴の行は `historyCheckMin` の確認の対象になり、掲示板へのスレ一覧の取得が増える。板ごとに 1 回なので上限はあるが、多い人では目に見える
 
 ### 規模の見積もり
 

@@ -45,6 +45,7 @@ export default function MobileImageViewer(props: Props) {
   const { urls, index } = props
   const n = urls.length
   const at = (d: number) => (index + d + n) % n
+  const isEdge = (d: number) => index + d < 0 || index + d >= n
   const boxRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const zoomRef = useRef<HTMLDivElement>(null)
@@ -193,7 +194,7 @@ export default function MobileImageViewer(props: Props) {
       return
     }
     if (s.mode === 'undecided') s.mode = Math.abs(dx) > Math.abs(dy) ? 'swipe' : 'dismiss'
-    if (s.mode === 'swipe') setTrack(n > 1 ? dx : dx * RUBBER, 0)
+    if (s.mode === 'swipe') setTrack(dx, 0)
     else if (s.mode === 'dismiss') setTrack(0, dy)
   }
 
@@ -269,9 +270,10 @@ export default function MobileImageViewer(props: Props) {
     }
     const W = window.innerWidth
     if (mode === 'swipe') {
-      const go = n > 1 && (Math.abs(dx) > W * 0.2 || Math.abs(dx) / ms > 0.4) ? (dx < 0 ? 1 : -1) : 0
+      const go = Math.abs(dx) > W * 0.2 || Math.abs(dx) / ms > 0.4 ? (dx < 0 ? 1 : -1) : 0
       setTrack(go ? -go * W : 0, 0, true)
-      if (go) setTimeout(() => props.onIndex(at(go)), MOVE_MS)
+      // 端の外へなぞったら閉じる
+      if (go) setTimeout(() => (isEdge(go) ? props.onClose() : props.onIndex(at(go))), MOVE_MS)
       return
     }
     if (mode === 'dismiss') {
@@ -301,6 +303,7 @@ export default function MobileImageViewer(props: Props) {
 
   const post = props.posts?.[index] ?? props.post
   const slot = (d: number) => {
+    if (isEdge(d)) return <div key={`edge:${d}`} className="w-screen h-full flex-shrink-0" />
     const i = at(d)
     const url = urls[i]
     const current = d === 0

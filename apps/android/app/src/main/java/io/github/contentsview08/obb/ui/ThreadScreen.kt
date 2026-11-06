@@ -181,6 +181,8 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     /** 中身を見せている NG のレス */
     var revealed by remember { mutableStateOf(emptySet<Int>()) }
     var viewer by remember { mutableStateOf<String?>(null) }
+    /** サムネイルから開いたときの、そのレスの画像とレス。null ならスレ全体 */
+    var viewerPost by remember { mutableStateOf<Post?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
     fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
@@ -464,7 +466,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     heat = Palette.heat(index.replyCount[p.no] ?: 0),
                     imagesExpanded = p.no in page.expandedImages,
                     onAvatar = iconKey(p)?.let { k -> { openPopup(index.posts.filter { iconKey(it) == k }, focus = p.no) } },
-                    aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
+                    aa = aaOverride[p.no] ?: it.aa, own = p.no in own, toOwn = p.no in toOwn, info = index.info[p.no], autoLoad = autoLoad, onImage = { url -> viewerPost = p; viewer = url }, onUrl = { url -> page.links.onTag("u:$url") }, gross = p.no in index.gross)
             } } }
             }
         }
@@ -865,7 +867,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         )
     }
 
-    if (gallery) GalleryPanel(index.allImages, onOpen = { viewer = it }, save = vm::saveImages) { gallery = false }
+    if (gallery) GalleryPanel(index.allImages, onOpen = { viewerPost = null; viewer = it }, save = vm::saveImages) { gallery = false }
 
     if (nextSheet) {
         CenterPanel(onDismiss = { nextSheet = false }) {
@@ -887,7 +889,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     if (confirmDelete) ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLog(page) }) { confirmDelete = false }
 
     viewer?.let { url ->
-        if (url in index.allImages) ImageViewer(index.allImages, url, onClose = { viewer = null }, posts = index.allImagePosts)
+        val own = viewerPost?.let { post -> index.info[post.no]?.images?.takeIf { url in it }?.let { post to it } }
+        if (own != null) ImageViewer(own.second, url, onClose = { viewer = null }, posts = own.second.map { own.first })
+        else if (url in index.allImages) ImageViewer(index.allImages, url, onClose = { viewer = null }, posts = index.allImagePosts)
         else ImageViewer(listOf(url), url, onClose = { viewer = null })
     }
 }

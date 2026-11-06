@@ -98,7 +98,9 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     val prefs = LocalPrefs.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    val pager = rememberPagerState(initialPage = urls.indexOf(start).coerceAtLeast(0)) { urls.size }
+    // 両端の外に空のページを置き、そこまでなぞったら閉じる
+    val pager = rememberPagerState(initialPage = urls.indexOf(start).coerceAtLeast(0) + 1) { urls.size + 2 }
+    val current = (pager.currentPage - 1).coerceIn(0, urls.lastIndex.coerceAtLeast(0))
     var chrome by remember { mutableStateOf(true) }
     var sheet by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -107,6 +109,9 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     val dismiss = remember { Animatable(0f) }
     val open = remember { Animatable(0f) }
     LaunchedEffect(Unit) { open.animateTo(1f, tween(MOVE_MS, easing = OPEN_EASE)) }
+    LaunchedEffect(pager, urls.size) {
+        androidx.compose.runtime.snapshotFlow { pager.settledPage }.collect { if (it == 0 || it == urls.size + 1) onClose() }
+    }
     fun close() {
         scope.launch { open.animateTo(0f, tween(180, easing = EASE)); onClose() }
     }
@@ -115,7 +120,10 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
         BackHandler(enabled = sheet) { sheet = false }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val h = constraints.maxHeight.toFloat()
-            val bgAlpha = (1f - min(1f, abs(dismiss.value) / (h * 0.6f))) * open.value
+            // 端の外へなぞるほど、後ろの画面を見せる
+            val position = pager.currentPage + pager.currentPageOffsetFraction
+            val edge = maxOf(0f, 1f - position, position - urls.size).coerceAtMost(1f)
+            val bgAlpha = (1f - min(1f, abs(dismiss.value) / (h * 0.6f))) * open.value * (1f - edge)
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)))
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
@@ -127,8 +135,9 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 },
             ) {
                 HorizontalPager(pager, Modifier.fillMaxSize(), key = { it }, beyondViewportPageCount = 1, userScrollEnabled = !zoomed) { page ->
+                    val url = urls.getOrNull(page - 1) ?: return@HorizontalPager
                     ZoomPage(
-                        urls[page], active = page == pager.currentPage,
+                        url, active = page == pager.currentPage,
                         onZoomed = { if (page == pager.currentPage) zoomed = it },
                         onTap = { chrome = !chrome },
                         onLongPress = { sheet = true },
@@ -151,12 +160,12 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = { close() }) { Icon(Icons.Filled.Close, "閉じる", tint = Color.White, modifier = Modifier.size(26.dp)) }
-                    Text(if (urls.size > 1) "${pager.currentPage + 1} / ${urls.size}" else "", Modifier.weight(1f), color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(if (urls.size > 1) "${current + 1} / ${urls.size}" else "", Modifier.weight(1f), color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     IconButton(onClick = { sheet = true }) { Icon(Icons.Filled.MoreVert, "操作", tint = Color.White, modifier = Modifier.size(26.dp)) }
                 }
             }
 
-            val post = posts.getOrNull(pager.currentPage)
+            val post = posts.getOrNull(current)
             if (post != null) {
                 AnimatedVisibility(chrome && open.value > 0.5f, enter = fadeIn(tween(200)), exit = fadeOut(tween(200)), modifier = Modifier.align(Alignment.BottomCenter)) {
                     Column(
@@ -187,7 +196,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 sheet, enter = slideInVertically(tween(200)) { it }, exit = slideOutVertically(tween(200)) { it },
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                val url = urls.getOrNull(pager.currentPage) ?: ""
+                val url = urls.getOrNull(current) ?: ""
                 Column(Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)).navigationBarsPadding().padding(vertical = 8.dp)) {
                     SheetRow(Icons.Filled.Download, "保存") {
                         sheet = false

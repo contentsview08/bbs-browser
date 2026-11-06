@@ -638,7 +638,7 @@ fun NgEditSheet(initial: NgRule, board: Pair<String, String>?, isNew: Boolean, o
                         placeholder = { Text(if (r.isRegex) "正規表現(例: ^ｷﾀ━+|ｗ{5,})" else "NG にする言葉") },
                         textStyle = androidx.compose.ui.text.TextStyle(fontFamily = if (r.isRegex) androidx.compose.ui.text.font.FontFamily.Monospace else null),
                         supportingText = {
-                            Text(err ?: if (r.isRegex) "正規表現で当てます(大文字と小文字は区別します)" else if (r.target == "id") "ID が同じときだけ当てます(完全一致)" else "この言葉を含めば当てます(部分一致。大文字と小文字は区別しません)")
+                            Text(err ?: if (r.isRegex) "正規表現で当てます(大文字と小文字は区別します。先頭に (?i) と書くと区別しません)" else if (r.target == "id") "ID が同じときだけ当てます(完全一致)" else "この言葉を含めば当てます(部分一致。大文字と小文字は区別しません)")
                         },
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {

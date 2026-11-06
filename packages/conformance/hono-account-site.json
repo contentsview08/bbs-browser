@@ -1,0 +1,14 @@
+[
+  {"name": "本番", "input": "https://red-edge.net/", "expected": true},
+  {"name": "サブドメイン", "input": "https://api.red-edge.net/api/v1", "expected": true},
+  {"name": "大文字のホスト", "input": "https://RED-EDGE.NET/", "expected": true},
+  {"name": "大文字のスキーム", "input": "HTTPS://red-edge.net/", "expected": true},
+  {"name": "_ のあるサブドメイン", "input": "https://a_b.red-edge.net/", "expected": true},
+  {"name": "http は送らない", "input": "http://red-edge.net/", "expected": false},
+  {"name": "後ろに続くホスト", "input": "https://red-edge.net.evil.example/", "expected": false},
+  {"name": "似た名前", "input": "https://evilred-edge.net/", "expected": false},
+  {"name": "ユーザー名に見せかけ", "input": "https://red-edge.net@evil.example/", "expected": false},
+  {"name": "道に入っているだけ", "input": "https://evil.example/red-edge.net", "expected": false},
+  {"name": "バックスラッシュ", "input": "https://evil.example\\.red-edge.net/", "expected": false},
+  {"name": "URL でない", "input": "not a url", "expected": false}
+]

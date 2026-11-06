@@ -44,6 +44,37 @@ impl PostCookies {
     }
 }
 
+/// リダイレクトの次の一歩。決まりは packages/conformance/post-redirect.json(スマホ版の data/Http.kt の nextRequest と同じ)
+#[derive(Debug)]
+struct NextRequest {
+    url: Url,
+    /// 同じ方法と本文で送り直す(307・308)。false なら本文なしの GET
+    keep_method: bool,
+    /// false なら User-Agent のほかは渡さない(別のサイトへ行くとき)
+    keep_headers: bool,
+}
+
+/// たどらないなら None(受けた応答をそのまま返す)
+fn next_request(status: u16, from: &Url, location: Option<&str>) -> Option<NextRequest> {
+    if !matches!(status, 301 | 302 | 303 | 307 | 308) {
+        return None;
+    }
+    let next = from.join(location.filter(|l| !l.is_empty())?).ok()?;
+    let (from_https, next_https) = (from.scheme() == "https", next.scheme() == "https");
+    // https から http へは落とさない
+    if !matches!(next.scheme(), "http" | "https") || (from_https && !next_https) {
+        return None;
+    }
+    let upgrade = !from_https && next_https && from.port().is_none() && next.port().is_none();
+    let same_site = from.host_str() == next.host_str() && (from.port_or_known_default() == next.port_or_known_default() || upgrade);
+    let resend = matches!(status, 307 | 308);
+    // 本文を別のサイトへ渡さない
+    if resend && !same_site {
+        return None;
+    }
+    Some(NextRequest { url: next, keep_method: resend, keep_headers: same_site })
+}
+
 #[derive(serde::Serialize)]
 pub struct PostResponse {
     status: u16,
@@ -79,6 +110,7 @@ pub async fn http_post(
     }
     let mut method = reqwest::Method::POST;
     let mut body = Some(body);
+    let mut keep_headers = true;
 
     for _ in 0..=MAX_REDIRECTS {
         let cookie = {
@@ -92,7 +124,10 @@ pub async fn http_post(
         };
         let mut req = client.request(method.clone(), url.clone());
         for (k, v) in &headers {
-            req = req.header(k, v);
+            let content_type_without_body = body.is_none() && k.eq_ignore_ascii_case("content-type");
+            if (keep_headers || k.eq_ignore_ascii_case("user-agent")) && !content_type_without_body {
+                req = req.header(k, v);
+            }
         }
         if !cookie.is_empty() {
             req = req.header(reqwest::header::COOKIE, cookie);
@@ -122,16 +157,16 @@ pub async fn http_post(
         }
 
         let status = res.status();
-        if status.is_redirection() {
-            if let Some(next) = res.headers().get(reqwest::header::LOCATION).and_then(|l| l.to_str().ok()) {
-                url = url.join(next).map_err(|e| e.to_string())?;
-                // 303 と(慣習で)302・301 は GET で取り直す。307・308 は同じまま送り直す
-                if !matches!(status.as_u16(), 307 | 308) {
-                    method = reqwest::Method::GET;
-                    body = None;
-                }
-                continue;
+        let location = res.headers().get(reqwest::header::LOCATION).and_then(|l| l.to_str().ok());
+        if let Some(next) = next_request(status.as_u16(), &url, location) {
+            url = next.url;
+            keep_headers = next.keep_headers;
+            // 303 と(慣習で)302・301 は GET で取り直す。307・308 は同じまま送り直す
+            if !next.keep_method {
+                method = reqwest::Method::GET;
+                body = None;
             }
+            continue;
         }
 
         let mut out_headers = HashMap::new();
@@ -144,4 +179,52 @@ pub async fn http_post(
         return Ok(PostResponse { status: status.as_u16(), headers: out_headers, body: bytes.to_vec() });
     }
     Err("リダイレクトが多すぎます".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    /// knownDiff.pc があれば、それと比べる(差がなくなれば落ちて分かる)
+    fn expected_of(c: &Value) -> &Value {
+        c.get("knownDiff").and_then(|d| d.get("pc")).unwrap_or(&c["expected"])
+    }
+
+    fn cases(text: &str) -> Vec<Value> {
+        serde_json::from_str(text).unwrap()
+    }
+
+    #[test]
+    fn post_redirect() {
+        for c in cases(include_str!("../../../../packages/conformance/post-redirect.json")) {
+            let i = &c["input"];
+            let from = Url::parse(i["url"].as_str().unwrap()).unwrap();
+            let got = match next_request(i["status"].as_u64().unwrap() as u16, &from, i["location"].as_str()) {
+                None => json!({ "follow": false }),
+                Some(n) => json!({
+                    "follow": true,
+                    "url": n.url.as_str(),
+                    "method": if n.keep_method { "POST" } else { "GET" },
+                    "keepHeaders": n.keep_headers,
+                }),
+            };
+            assert_eq!(&got, expected_of(&c), "{}", c["name"]);
+        }
+    }
+
+    /// 保存して読み直した置き場(次に起動したとき)で、その URL に付くか
+    #[test]
+    fn cookie() {
+        for c in cases(include_str!("../../../../packages/conformance/cookie.json")) {
+            let i = &c["input"];
+            let mut store = CookieStore::default();
+            let _ = store.parse(i["setCookie"].as_str().unwrap(), &Url::parse(i["url"].as_str().unwrap()).unwrap());
+            let mut saved = Vec::new();
+            cookie_store::serde::json::save_incl_expired_and_nonpersistent(&store, &mut saved).unwrap();
+            let restored = cookie_store::serde::json::load_all(BufReader::new(&saved[..])).unwrap();
+            let sent = restored.get_request_values(&Url::parse(i["requestUrl"].as_str().unwrap()).unwrap()).next().is_some();
+            assert_eq!(&json!(sent), expected_of(&c), "{}", c["name"]);
+        }
+    }
 }

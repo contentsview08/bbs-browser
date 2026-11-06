@@ -2,6 +2,7 @@ package io.github.contentsview08.obb.bbs
 
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.HttpResponse
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -280,10 +281,13 @@ object HonoBbs {
      * パスワードを送ってよいサイトか。板は URL の形だけで判定するので、確かめないと、形を合わせただけの別サイトへパスワードが渡る。
      * API の場所(<meta name="bbs-api">)も相手のページが決めるので、こちらも確かめる。PC 版の isAccountSite と同じ
      */
-    fun isAccountSite(url: String): Boolean = runCatching {
-        val u = java.net.URI(url)
-        u.scheme == "https" && (u.host == "red-edge.net" || u.host.endsWith(".red-edge.net"))
-    }.getOrDefault(false)
+    fun isAccountSite(url: String): Boolean {
+        val u = url.toHttpUrlOrNull() ?: return false
+        return u.isHttps && (u.host == "red-edge.net" || u.host.endsWith(".red-edge.net"))
+    }
+
+    /** ログインし直して送り直すか。アカウントを付けて送ったのに、セッションが向こうで切れていたとき(packages/conformance/hono-relogin.json) */
+    internal fun shouldRelogin(status: Int, sentAuth: Boolean) = status == 401 && sentAuth
 
     /** そのサイト(web の origin)にログインしてセッションをもらう(POST /auth/login)。返すのは表示名。失敗は例外(理由は message) */
     suspend fun login(origin: String, account: Account): String {
@@ -312,12 +316,11 @@ object HonoBbs {
 
     /** アカウントを付けて送る。セッションが向こうで切れていたら(401)、一度だけログインし直して送り直す */
     private suspend fun postWithAuth(origin: String, url: String, body: String): HttpResponse {
-        var res = Http.postJson(url, body, authHeaders(origin))
-        if (res.status == 401 && account != null) {
-            synchronized(sessions) { sessions.remove(origin) }
-            res = Http.postJson(url, body, authHeaders(origin))
-        }
-        return res
+        val auth = authHeaders(origin)
+        val res = Http.postJson(url, body, auth)
+        if (!shouldRelogin(res.status, auth.isNotEmpty())) return res
+        synchronized(sessions) { sessions.remove(origin) }
+        return Http.postJson(url, body, authHeaders(origin))
     }
 
     /** 利用者の登録(1 段目): メールに確認コードを送る(POST /auth/register/request)。Turnstile が要れば Auth(認証ページとコード)を返す */

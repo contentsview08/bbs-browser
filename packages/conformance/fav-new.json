@@ -1,0 +1,10 @@
+[
+  {"name": "前回の確認からの増えを知らせる(未読の数ではない)", "input": {"now": 115, "localCount": 100, "readNo": 100, "before": 110}, "expected": 5},
+  {"name": "前回と同じなら知らせない", "input": {"now": 110, "localCount": 100, "readNo": 100, "before": 110}, "expected": 0},
+  {"name": "初めての確認は手元のレス数と比べる", "input": {"now": 115, "localCount": 100, "readNo": 100}, "expected": 15},
+  {"name": "手元が前回より新しければ手元と比べる", "input": {"now": 115, "localCount": 112, "readNo": 112, "before": 110}, "expected": 3},
+  {"name": "もう読んだ所までなら知らせない", "input": {"now": 115, "localCount": 100, "readNo": 120, "before": 110}, "expected": 0},
+  {"name": "一度も取っていないスレは知らせない", "input": {"now": 115, "localCount": 0, "readNo": 0}, "expected": 0},
+  {"name": "消えたスレは知らせない", "input": {"now": -1, "localCount": 100, "readNo": 100, "before": 110}, "expected": 0},
+  {"name": "減ったときは知らせない", "input": {"now": 105, "localCount": 100, "readNo": 100, "before": 110}, "expected": 0}
+]

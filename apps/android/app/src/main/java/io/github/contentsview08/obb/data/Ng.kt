@@ -46,11 +46,92 @@ fun daysLater(days: Long): String = LocalDate.now().plusDays(days).toString()
 /** いま効いているか(有効で、期限が切れていない) */
 fun NgRule.active(today: String = today()) = enabled && (expiresOn == null || expiresOn >= today)
 
+private val NG_SCRIPT = setOf("Han", "Hiragana", "Katakana", "Latin", "Hangul", "Greek", "Cyrillic")
+private const val WORD = "A-Za-z0-9_"
+private const val SPACE = " \\t\\n\\x0B\\f\\r\\u00A0\\uFEFF\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000"
+
+/**
+ * NG の正規表現を読む。PC 版・Web(utils/ng.ts の ngRegExp。JavaScript の正規表現)と同じ書き方が同じ意味になるようにそろえる(packages/conformance/ng.json)。
+ * Android の \d \w \b は Unicode 扱いで JVM とも違うので、JavaScript の意味(\d \w は ASCII)の形に書き直して、端末によらず同じ結果にする。
+ * 先頭の (?i) で大文字・小文字を区別しない。途中の (?i) は読めない。読めないときは例外
+ */
+internal fun ngRegex(pattern: String): Regex {
+    val ignoreCase = pattern.startsWith("(?i)")
+    val src = toJsMeaning(if (ignoreCase) pattern.substring(4) else pattern)
+    return if (ignoreCase) Regex(src, RegexOption.IGNORE_CASE) else Regex(src)
+}
+
+private val QUANTIFIER = Regex("\\{[0-9]+(,[0-9]*)?\\}")
+
+private fun toJsMeaning(p: String): String {
+    val out = StringBuilder()
+    var inClass = false
+    var i = 0
+    while (i < p.length) {
+        val c = p[i]
+        if (c == '\\' && i + 1 < p.length) {
+            val e = p[i + 1]
+            i += 2
+            fun set(body: String, negate: Boolean) { out.append(if (negate) "[^$body]" else if (inClass) body else "[$body]") }
+            when (e) {
+                'd', 'D' -> set("0-9", e == 'D')
+                'w', 'W' -> set(WORD, e == 'W')
+                's', 'S' -> set(SPACE, e == 'S')
+                'b', 'B' -> when {
+                    inClass -> out.append("\\x08")
+                    e == 'b' -> out.append("(?:(?<=[$WORD])(?![$WORD])|(?<![$WORD])(?=[$WORD]))")
+                    else -> out.append("(?:(?<=[$WORD])(?=[$WORD])|(?<![$WORD])(?![$WORD]))")
+                }
+                'p', 'P' -> {
+                    val end = if (i < p.length && p[i] == '{') p.indexOf('}', i) else -1
+                    if (end < 0) throw IllegalArgumentException("\\$e の書き方が違います")
+                    val name = p.substring(i + 1, end)
+                    out.append('\\').append(e).append('{').append(if (name in NG_SCRIPT) "script=$name" else name).append('}')
+                    i = end + 1
+                }
+                else -> out.append('\\').append(e)
+            }
+            continue
+        }
+        if (inClass) {
+            when {
+                c == ']' -> { inClass = false; out.append(c) }
+                // Java の [ ] の中の [ と && は特別な意味になる。JavaScript ではただの文字
+                c == '[' -> out.append("\\[")
+                c == '&' -> out.append("\\&")
+                else -> out.append(c)
+            }
+            i++
+            continue
+        }
+        when {
+            c == '[' -> {
+                inClass = true
+                out.append(c)
+                // 先頭の ^ を一緒に写す(上の分岐で文字として扱わないように)
+                if (i + 1 < p.length && p[i + 1] == '^') { out.append('^'); i++ }
+            }
+            // Java の $ は最後の改行の前にも当たる
+            c == '$' -> out.append("\\z")
+            c == '{' -> {
+                val q = QUANTIFIER.matchAt(p, i)
+                if (q != null) { out.append(q.value); i += q.value.length - 1 } else out.append("\\{")
+            }
+            // Android の正規表現は、対のない } ] を文字として読まないことがある
+            c == '}' || c == ']' -> out.append('\\').append(c)
+            c == '(' && i + 2 < p.length && p[i + 1] == '?' && (p[i + 2].isLetter() || p[i + 2] == '-') -> throw IllegalArgumentException("(?i) は先頭にだけ書けます")
+            else -> out.append(c)
+        }
+        i++
+    }
+    return out.toString()
+}
+
 /** 正規表現として読めないときの理由。読めれば null */
 fun ngPatternError(pattern: String, isRegex: Boolean): String? {
     if (pattern.isEmpty()) return "文字を入れてください"
     if (!isRegex) return null
-    return runCatching { Regex(pattern); null }.getOrElse { "正規表現として読めません(${it.message?.lineSequence()?.firstOrNull() ?: it})" }
+    return runCatching { ngRegex(pattern); null }.getOrElse { "正規表現として読めません(${it.message?.lineSequence()?.firstOrNull() ?: it})" }
 }
 
 /** text のうち、ルールに当たる所(始まり・終わり)。試し欄で色を付ける */
@@ -63,7 +144,7 @@ fun ngMatchRanges(r: NgRule, text: String): List<IntRange> {
         while (i >= 0 && out.size < 200) { out += i until i + r.pattern.length; i = text.indexOf(r.pattern, i + maxOf(1, r.pattern.length), ignoreCase = true) }
         return out
     }
-    val re = runCatching { Regex(r.pattern) }.getOrNull() ?: return emptyList()
+    val re = runCatching { ngRegex(r.pattern) }.getOrNull() ?: return emptyList()
     return re.findAll(text).take(200).map { it.range }.filter { !it.isEmpty() }.toList()
 }
 
@@ -122,7 +203,7 @@ class NgMatcher(rules: List<NgRule>) {
     init {
         val t = today()
         byTarget = rules.filter { it.active(t) }.mapNotNull { r ->
-            if (r.isRegex) runCatching { M(r, Regex(r.pattern)) }.getOrNull() else M(r, null)
+            if (r.isRegex) runCatching { M(r, ngRegex(r.pattern)) }.getOrNull() else M(r, null)
         }.groupBy { it.r.target }
     }
 

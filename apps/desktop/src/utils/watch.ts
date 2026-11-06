@@ -12,9 +12,16 @@ export interface FavIncrease {
 }
 
 /**
- * お気に入りのスレで、前に知っていた数より増えて、まだ読んでいないレスがあるもの。
- * 前に知っていた数は、前回スレ一覧で見た数(なければ手元のレス数)
+ * 知らせる新着の数(前回の確認からの増え)。知らせないなら 0。スマホ版の Crawler.kt の favIncrease と同じ(packages/conformance/fav-new.json)。
+ * 前に知っていた数は、前回スレ一覧で見た数(なければ手元のレス数)。一度も取っていないスレ(手元のレス数が 0)は知らせない
  */
+export function favIncrease(now: number, before: number | undefined, localCount: number, readNo: number): number {
+  if (now <= 0 || localCount <= 0) return 0
+  const known = Math.max(before ?? localCount, localCount)
+  return now > known && now > readNo ? now - known : 0
+}
+
+/** お気に入りのスレで、前に知っていた数より増えて、まだ読んでいないレスがあるもの */
 export function favIncreases(
   entries: { id: string; title: string; readNo: number; localCount: number }[],
   before: Map<string, number>,
@@ -24,8 +31,8 @@ export function favIncreases(
   for (const e of entries) {
     const now = after.get(e.id)
     if (now === undefined) continue
-    const known = Math.max(before.get(e.id) ?? e.localCount, e.localCount)
-    if (now > known && now > e.readNo) out.push({ id: e.id, title: e.title, added: now - known })
+    const added = favIncrease(now, before.get(e.id), e.localCount, e.readNo)
+    if (added > 0) out.push({ id: e.id, title: e.title, added })
   }
   return out
 }

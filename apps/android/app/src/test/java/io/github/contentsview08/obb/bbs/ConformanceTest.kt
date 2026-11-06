@@ -1,6 +1,16 @@
 package io.github.contentsview08.obb.bbs
 
+import io.github.contentsview08.obb.data.NgMatcher
+import io.github.contentsview08.obb.data.NgRule
+import io.github.contentsview08.obb.data.cookieFromJson
+import io.github.contentsview08.obb.data.cookieToJson
+import io.github.contentsview08.obb.data.favIncrease
+import io.github.contentsview08.obb.data.ngMatchRanges
+import io.github.contentsview08.obb.data.ngPatternError
+import io.github.contentsview08.obb.data.nextRequest
 import io.github.contentsview08.obb.data.normalizeForSearch
+import okhttp3.Cookie
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -130,6 +140,52 @@ class ConformanceTest {
     }
 
     @Test fun search() = check("search.json") { c -> normalizeForSearch(c.getString("input")) }
+
+    @Test fun ng() = check("ng.json") { c ->
+        val i = c.getJSONObject("input")
+        val pattern = i.getString("pattern")
+        val isRegex = i.getBoolean("isRegex")
+        val text = i.getString("text")
+        val target = when (i.getString("target")) {
+            "posterName" -> "name"
+            "posterId" -> "id"
+            "threadTitle" -> "title"
+            else -> "body"
+        }
+        val rule = NgRule(target, pattern, isRegex)
+        val p = Post(1, if (target == "name") text else "", "", "", if (target == "id") text else null, if (target == "body") text else "")
+        mapOf(
+            "valid" to (ngPatternError(pattern, isRegex) == null),
+            "match" to NgMatcher(listOf(rule)).post(p, null),
+            "ranges" to ngMatchRanges(rule, text).map { listOf(it.first, it.last + 1) },
+        )
+    }
+
+    @Test fun fav_new() = check("fav-new.json") { c ->
+        val i = c.getJSONObject("input")
+        favIncrease(i.getInt("now"), if (i.has("before")) i.getInt("before") else null, i.getInt("localCount"), i.getInt("readNo"))
+    }
+
+    @Test fun post_redirect() = check("post-redirect.json") { c ->
+        val i = c.getJSONObject("input")
+        val n = nextRequest(i.getInt("status"), i.getString("url").toHttpUrl(), if (i.has("location")) i.getString("location") else null)
+        if (n == null) mapOf("follow" to false)
+        else mapOf("follow" to true, "url" to n.url.toString(), "method" to if (n.keepMethod) "POST" else "GET", "keepHeaders" to n.keepHeaders)
+    }
+
+    /** 保存して読み直した Cookie(次に起動したとき)が、その URL に付くか */
+    @Test fun cookie() = check("cookie.json") { c ->
+        val i = c.getJSONObject("input")
+        val parsed = Cookie.parse(i.getString("url").toHttpUrl(), i.getString("setCookie"))?.takeIf { it.expiresAt > System.currentTimeMillis() }
+        parsed != null && cookieFromJson(cookieToJson(parsed)).matches(i.getString("requestUrl").toHttpUrl())
+    }
+
+    @Test fun hono_account_site() = check("hono-account-site.json") { c -> HonoBbs.isAccountSite(c.getString("input")) }
+
+    @Test fun hono_relogin() = check("hono-relogin.json") { c ->
+        val i = c.getJSONObject("input")
+        HonoBbs.shouldRelogin(i.getInt("status"), i.getBoolean("sentAuth"))
+    }
 
     @Test fun グロの言葉は検索と同じ揃え方で比べる() {
         val index = PostIndex.build(listOf(post(1, "写真"), post(2, ">>1 ぐろ注意")), grossWords = listOf("グロ"))

@@ -116,7 +116,14 @@ async function loginTo(origin: string, credential: { user: string; password: str
   })
   const body = json<{ data?: { sessionId: string; expiresAt: string; displayName: string }; error?: string; message?: string }>(res, ctx)
   if (res.status !== 200 || !body.data) {
-    const why = body.error === 'INVALID_CREDENTIALS' ? 'ユーザー ID かパスワードが違います' : body.error === 'PASSKEY_REQUIRED' ? 'このアカウントはパスキーでしか入れません' : (body.message ?? `HTTP ${res.status}`)
+    const why =
+      body.error === 'INVALID_CREDENTIALS'
+        ? 'ユーザー ID かパスワードが違います'
+        : body.error === 'PASSKEY_REQUIRED'
+          ? 'このアカウントはパスキーでしか入れません'
+          : body.error === 'TOO_MANY_ATTEMPTS'
+            ? 'ログインの失敗が続いたので、しばらく待ってください'
+            : (body.message ?? `HTTP ${res.status}`)
     return { ok: false, message: why }
   }
   sessions.set(origin, { sessionId: body.data.sessionId, expiresAt: new Date(body.data.expiresAt).getTime() })
@@ -132,6 +139,22 @@ async function authHeader(origin: string, input: PostInput, ctx: ConnectorContex
     if (!r.ok) throw new Error(`アカウントでログインできませんでした: ${r.message}`)
   }
   return { Authorization: `Bearer ${sessions.get(origin)!.sessionId}` }
+}
+
+/** ログインし直して送り直すか。アカウントを付けて送ったのに、セッションが向こうで切れていたとき(packages/conformance/hono-relogin.json) */
+export function shouldRelogin(status: number, sentAuth: boolean): boolean {
+  return status === 401 && sentAuth
+}
+
+/** アカウントを付けて送る。セッションが切れていたら、一度だけログインし直して送り直す */
+async function postWithAuth(origin: string, url: string, body: string, input: PostInput, ctx: ConnectorContext): Promise<HttpResponse> {
+  // Turnstile のつなぎの Cookie(読む通信で受け取ったもの)を付けて送る。アカウントを使うならセッションも
+  const send = async (auth: Record<string, string>) => ctx.http.post(url, body, { headers: { 'Content-Type': 'application/json', ...auth }, sameCookiesAsGet: true })
+  const auth = await authHeader(origin, input, ctx)
+  const res = await send(auth)
+  if (!shouldRelogin(res.status, 'Authorization' in auth)) return res
+  sessions.delete(origin)
+  return send(await authHeader(origin, input, ctx))
 }
 
 function json<T>(res: HttpResponse, ctx: ConnectorContext): T {
@@ -176,7 +199,8 @@ async function readWrite(res: HttpResponse, api: string, ctx: ConnectorContext):
   const text = ctx.decode(res.body, 'utf-8')
   let body: { data?: { postNumber?: number }; error?: string; message?: string } = {}
   try {
-    body = JSON.parse(text)
+    // 本文が null のときも空として読む
+    body = JSON.parse(text) ?? {}
   } catch {
     // JSON でない応答(WAF のページなど)は、そのまま見られるように html に入れる
   }
@@ -387,11 +411,12 @@ export const honoBbsConnector: Connector = {
   async createPost(thread, input, ctx) {
     const { origin, boardId } = parts(thread.boardUrl)
     const api = await apiBaseOf(origin, ctx)
-    const res = await ctx.http.post(
+    const res = await postWithAuth(
+      origin,
       `${api}/boards/${encodeURIComponent(boardId)}/threads/${encodeURIComponent(thread.key)}/posts`,
       JSON.stringify({ content: input.body, ...(input.name ? { posterName: input.name } : {}), ...(input.mail ? { posterOptionInfo: input.mail } : {}) }),
-      // Turnstile のつなぎの Cookie(読む通信で受け取ったもの)を付けて送る。アカウントを使うならセッションも
-      { headers: { 'Content-Type': 'application/json', ...(await authHeader(origin, input, ctx)) }, sameCookiesAsGet: true },
+      input,
+      ctx,
     )
     return readWrite(res, api, ctx)
   },
@@ -399,10 +424,12 @@ export const honoBbsConnector: Connector = {
   async createThread(board, input, ctx) {
     const { origin, boardId } = parts(board.url)
     const api = await apiBaseOf(origin, ctx)
-    const res = await ctx.http.post(
+    const res = await postWithAuth(
+      origin,
       `${api}/boards/${encodeURIComponent(boardId)}/threads`,
       JSON.stringify({ title: input.title, content: input.body, ...(input.name ? { posterName: input.name } : {}), ...(input.mail ? { posterOptionInfo: input.mail } : {}) }),
-      { headers: { 'Content-Type': 'application/json', ...(await authHeader(origin, input, ctx)) }, sameCookiesAsGet: true },
+      input,
+      ctx,
     )
     return readWrite(res, api, ctx)
   },

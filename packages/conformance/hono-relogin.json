@@ -1,0 +1,6 @@
+[
+  {"name": "付けて送って 401 ならログインし直す", "input": {"status": 401, "sentAuth": true}, "expected": true},
+  {"name": "付けずに送った 401 は送り直さない", "input": {"status": 401, "sentAuth": false}, "expected": false},
+  {"name": "成功", "input": {"status": 201, "sentAuth": true}, "expected": false},
+  {"name": "401 のほかは送り直さない", "input": {"status": 403, "sentAuth": true}, "expected": false}
+]

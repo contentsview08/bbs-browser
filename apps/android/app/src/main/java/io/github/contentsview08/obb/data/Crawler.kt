@@ -42,12 +42,22 @@ class CrawlClock {
 }
 
 /**
+ * 知らせる新着の数(前回の確認からの増え)。知らせないなら 0。PC 版の utils/watch.ts の favIncrease と同じ(packages/conformance/fav-new.json)。
+ * 前に知っていた数は、前回の確認で見た数(なければ手元のレス数)。一度も取っていないスレ(手元のレス数が 0)は知らせない
+ */
+internal fun favIncrease(now: Int, before: Int?, localCount: Int, readNo: Int): Int {
+    if (now <= 0 || localCount <= 0) return 0
+    val known = maxOf(before ?: localCount, localCount)
+    return if (now > known && now > readNo) now - known else 0
+}
+
+/**
  * 新着の定期確認(閲覧履歴・お気に入りのスレ)。板ごとにスレ一覧を 1 回だけ読み、いまのレス数を返す(dat は取らない)。
  * OS の通知がオンなら、ついでに知らせる:
  * - お気に入りのスレの新着
  * - あなた宛てのレス(自分が書いたスレに新着があるときだけ、その差分を読む。1 回に MAX_REPLY_FETCH スレまで。保存はしない: 開いたときに取り直す)
  * - キーワードに合うスレ(お気に入り板。そのためにスレ一覧を読む)
- * 初めて見るスレ・板は覚えるだけで知らせない(入れた直後に昔の未読をまとめて知らせないように)
+ * あなた宛てのレス・キーワードは、初めて見るスレ・板なら覚えるだけで知らせない(入れた直後に昔の未読をまとめて知らせないように)
  */
 object Crawler {
     private const val MAX_REPLY_FETCH = 5
@@ -82,8 +92,8 @@ object Crawler {
                 val c = counts[f.thread.id] ?: continue
                 if (c <= 0) continue
                 val key = "f:${f.thread.id}"
-                val last = seen.getInt(key, -1)
-                if (last >= 0 && c > maxOf(last, f.readNo)) hits += f.thread to c - f.readNo
+                val n = favIncrease(c, seen.getInt(key, -1).takeIf { it >= 0 }, f.thread.postCount, f.readNo)
+                if (n > 0) hits += f.thread to n
                 edit.putInt(key, c)
             }
             for ((t, n) in hits.take(MAX_NOTIFY)) Notifier.show(context, "お気に入りのスレに新着 +$n", t.title, TwoCh.webUrl(t))

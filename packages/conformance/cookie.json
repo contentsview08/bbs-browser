@@ -1,0 +1,14 @@
+[
+  {"name": "期限のない Cookie も次の起動で付く", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1", "requestUrl": "https://bbs.example/test/bbs.cgi"}, "expected": true},
+  {"name": "期限のある Cookie", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Max-Age=3600", "requestUrl": "https://bbs.example/test/bbs.cgi"}, "expected": true},
+  {"name": "Max-Age=0 は残らない", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Max-Age=0", "requestUrl": "https://bbs.example/test/bbs.cgi"}, "expected": false},
+  {"name": "期限が過ぎている", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Expires=Thu, 01 Jan 2015 00:00:00 GMT", "requestUrl": "https://bbs.example/test/bbs.cgi"}, "expected": false},
+  {"name": "Domain なしは同じホストだけ", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1", "requestUrl": "https://sub.bbs.example/test/bbs.cgi"}, "expected": false},
+  {"name": "Domain ありはサブドメインにも付く", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Domain=bbs.example", "requestUrl": "https://sub.bbs.example/test/bbs.cgi"}, "expected": true},
+  {"name": "別のサイトには付かない", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Domain=bbs.example", "requestUrl": "https://other.example/"}, "expected": false},
+  {"name": "Secure は http に付かない", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Secure", "requestUrl": "http://bbs.example/test/bbs.cgi"}, "expected": false},
+  {"name": "Secure は https に付く", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Secure", "requestUrl": "https://bbs.example/test/bbs.cgi"}, "expected": true},
+  {"name": "Path の下には付く", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Path=/test", "requestUrl": "https://bbs.example/test/bbs.cgi"}, "expected": true},
+  {"name": "Path の外には付かない", "input": {"url": "https://bbs.example/test/bbs.cgi", "setCookie": "a=1; Path=/test", "requestUrl": "https://bbs.example/other"}, "expected": false},
+  {"name": "公開サフィックスの Domain は受けない", "input": {"url": "https://evil.io/", "setCookie": "a=1; Domain=io", "requestUrl": "https://5ch.io/"}, "expected": false, "knownDiff": {"pc": true, "reason": "PC の cookie_store は既定で公開サフィックスの表を持たない。OkHttp は表で断る。docs/review-2026-11-05/reports/05 の 8"}}
+]

@@ -1,0 +1,21 @@
+[
+  {"name": "302 は GET で取り直す(空の本文で書き込み成功を返す掲示板)", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302, "location": "/test/read.cgi/a/1/"}, "expected": {"follow": true, "url": "https://bbs.example/test/read.cgi/a/1/", "method": "GET", "keepHeaders": true}},
+  {"name": "301 も GET", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 301, "location": "/x"}, "expected": {"follow": true, "url": "https://bbs.example/x", "method": "GET", "keepHeaders": true}},
+  {"name": "303 も GET", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 303, "location": "/x"}, "expected": {"follow": true, "url": "https://bbs.example/x", "method": "GET", "keepHeaders": true}},
+  {"name": "行き先は今の URL から読む", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302, "location": "done.html"}, "expected": {"follow": true, "url": "https://bbs.example/test/done.html", "method": "GET", "keepHeaders": true}},
+  {"name": "307 は同じ本文で送り直す", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 307, "location": "/test/bbs2.cgi"}, "expected": {"follow": true, "url": "https://bbs.example/test/bbs2.cgi", "method": "POST", "keepHeaders": true}},
+  {"name": "308 も送り直す", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 308, "location": "/test/bbs2.cgi"}, "expected": {"follow": true, "url": "https://bbs.example/test/bbs2.cgi", "method": "POST", "keepHeaders": true}},
+  {"name": "別のサイトへの 302 は GET でヘッダーを渡さない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302, "location": "https://other.example/x"}, "expected": {"follow": true, "url": "https://other.example/x", "method": "GET", "keepHeaders": false}},
+  {"name": "別のサイトへの 307 は本文を渡さない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 307, "location": "https://other.example/x"}, "expected": {"follow": false}},
+  {"name": "ポートが違えば別のサイト", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 307, "location": "https://bbs.example:8443/x"}, "expected": {"follow": false}},
+  {"name": "サブドメインも別のサイト", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 307, "location": "https://sub.bbs.example/x"}, "expected": {"follow": false}},
+  {"name": "https から http へは 302 でも落とさない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302, "location": "http://bbs.example/x"}, "expected": {"follow": false}},
+  {"name": "https から http へは 307 でも落とさない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 307, "location": "http://bbs.example/x"}, "expected": {"follow": false}},
+  {"name": "http から https へは同じサイトとして送り直す", "input": {"url": "http://bbs.example/test/bbs.cgi", "status": 307, "location": "https://bbs.example/test/bbs.cgi"}, "expected": {"follow": true, "url": "https://bbs.example/test/bbs.cgi", "method": "POST", "keepHeaders": true}},
+  {"name": "http のままの行き先", "input": {"url": "http://bbs.example/test/bbs.cgi", "status": 302, "location": "/x"}, "expected": {"follow": true, "url": "http://bbs.example/x", "method": "GET", "keepHeaders": true}},
+  {"name": "Location がない 302 はそのまま返す", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302}, "expected": {"follow": false}},
+  {"name": "空の Location もそのまま返す", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302, "location": ""}, "expected": {"follow": false}},
+  {"name": "http でも https でもない行き先へは行かない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 302, "location": "ftp://bbs.example/x"}, "expected": {"follow": false}},
+  {"name": "200 の Location は見ない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 200, "location": "/x"}, "expected": {"follow": false}},
+  {"name": "304 はたどらない", "input": {"url": "https://bbs.example/test/bbs.cgi", "status": 304, "location": "/x"}, "expected": {"follow": false}}
+]

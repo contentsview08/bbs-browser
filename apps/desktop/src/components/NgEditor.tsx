@@ -95,7 +95,7 @@ export default function NgEditor(props: {
         <p className={`mt-1 text-xs ${err ? 'text-c-heat-very-hot' : 'text-c-text-muted'}`}>
           {err ??
             (r.isRegex
-              ? '正規表現で当てます(大文字と小文字は区別します)'
+              ? '正規表現で当てます(大文字と小文字は区別します。先頭に (?i) と書くと区別しません)'
               : r.target === 'posterId'
                 ? 'ID が同じときだけ当てます(完全一致)'
                 : 'この言葉を含めば当てます(部分一致。大文字と小文字は区別しません)')}

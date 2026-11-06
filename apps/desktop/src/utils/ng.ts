@@ -43,6 +43,27 @@ export function daysLaterDateString(days: number, d = new Date()): string {
   return todayDateString(x)
 }
 
+/**
+ * NG の正規表現を読む。スマホ版(data/Ng.kt の ngRegex)と同じ書き方が同じ意味になるようにそろえる(packages/conformance/ng.json)。
+ * 先頭の (?i) で大文字・小文字を区別しない。途中の (?i) は読めない。\p{Han} など文字の種類の名前も使える。
+ * throw するのは読めないとき
+ */
+export function ngRegExp(pattern: string, global = false): RegExp {
+  const ignoreCase = pattern.startsWith('(?i)')
+  const src = (ignoreCase ? pattern.slice(4) : pattern).replace(/\\(?:([pP])\{(Han|Hiragana|Katakana|Latin|Hangul|Greek|Cyrillic)\}|[\s\S])/g, (all, p, name) =>
+    p ? `\\${p}{Script=${name}}` : all,
+  )
+  if (/\(\?[a-zA-Z-]/.test(src.replace(/\\[\s\S]|\[(?:\\[\s\S]|[^\]\\])*\]/g, ''))) throw new SyntaxError('(?i) は先頭にだけ書けます')
+  const flags = (ignoreCase ? 'i' : '') + (global ? 'g' : '')
+  try {
+    return new RegExp(src, `${flags}u`)
+  } catch (e) {
+    // u を付けると読めない書き方(\- や { だけなど)でも、前から作ってある NG が効かなくならないよう u なしで読む。\p は u なしだと別の意味になるので読めないまま
+    if (/\\[pP]\{/.test(src)) throw e
+    return new RegExp(src, flags)
+  }
+}
+
 export function isValidPattern(pattern: string, isRegex: boolean): boolean {
   return patternError(pattern, isRegex) === undefined
 }
@@ -52,7 +73,7 @@ export function patternError(pattern: string, isRegex: boolean): string | undefi
   if (!pattern) return '文字を入れてください'
   if (!isRegex) return undefined
   try {
-    new RegExp(pattern)
+    ngRegExp(pattern)
     return undefined
   } catch (e) {
     return `正規表現として読めません(${e instanceof Error ? e.message : String(e)})`
@@ -68,12 +89,13 @@ type Matcher = (text: string, boardUrl?: string) => boolean
 
 /**
  * ルールを判定関数にしておく(レスの数だけ正規表現を作り直さないため)。
- * 正規表現でない文字は、大文字・小文字を区別せずに含むか(スマホのアプリと同じ)。正規表現は書いたまま(i などは (?i) ではなく書かない)
+ * 正規表現でない文字は、大文字・小文字を区別せずに含むか(スマホのアプリと同じ)
  */
 function compile(rules: NgRule[], target: NgTarget): Matcher[] {
   const today = todayDateString()
   return rules
-    .filter((r) => r.target === target && isActive(r, today))
+    // 空の文字はどの文字列にも当たる。すべてのレスを消さないように外す
+    .filter((r) => r.target === target && r.pattern !== '' && isActive(r, today))
     .flatMap((r): Matcher[] => {
       const inBoard = (b?: string) => !r.boardUrl || r.boardUrl === b
       if (!r.isRegex) {
@@ -81,7 +103,7 @@ function compile(rules: NgRule[], target: NgTarget): Matcher[] {
         return [(t, b) => inBoard(b) && t.toLowerCase().includes(p)]
       }
       try {
-        const re = new RegExp(r.pattern)
+        const re = ngRegExp(r.pattern)
         return [(t, b) => inBoard(b) && re.test(t)]
       } catch {
         return []
@@ -92,7 +114,7 @@ function compile(rules: NgRule[], target: NgTarget): Matcher[] {
 /** ID の NG: 正規表現でなければ完全一致(部分一致だと別の ID まで巻き込む) */
 function idMatcher(rules: NgRule[]): (id: string | undefined, boardUrl?: string) => boolean {
   const today = todayDateString()
-  const exact = rules.filter((r) => r.target === 'posterId' && !r.isRegex && isActive(r, today))
+  const exact = rules.filter((r) => r.target === 'posterId' && !r.isRegex && r.pattern !== '' && isActive(r, today))
   const regex = compile(rules.filter((r) => r.isRegex), 'posterId')
   return (id, b) => id !== undefined && (exact.some((r) => r.pattern === id && (!r.boardUrl || r.boardUrl === b)) || regex.some((m) => m(id, b)))
 }
@@ -125,13 +147,13 @@ export function matchRanges(rule: Pick<NgRule, 'pattern' | 'isRegex' | 'target'>
   }
   let re: RegExp
   try {
-    re = new RegExp(rule.pattern, 'g')
+    re = ngRegExp(rule.pattern, true)
   } catch {
     return []
   }
   for (let m = re.exec(text); m && out.length < 200; m = re.exec(text)) {
-    out.push([m.index, m.index + m[0].length])
     if (m[0].length === 0) re.lastIndex++
+    else out.push([m.index, m.index + m[0].length])
   }
   return out
 }

@@ -7,6 +7,7 @@ import { encodeEucJpForm } from '../src/eucjp'
 import { encodeShiftJisForm } from '../src/sjis'
 import type { Encoding } from '../src/types'
 import { boardPathOf, createdAtOf, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
+import { isAccountSite, shouldRelogin } from '../src/honobbs/connector'
 
 interface Case<I, E> {
   name: string
@@ -76,4 +77,16 @@ it('残した差にはどれも理由がある', () => {
   for (const file of ['url.json', 'subject-shape.json', 'encode.json']) {
     for (const c of load<unknown, unknown>(file)) if (c.knownDiff) expect(c.knownDiff.reason, c.name).toBeTruthy()
   }
+})
+
+describe('hono-account-site.json', () => {
+  it.each(load<string, boolean>('hono-account-site.json'))('$name', (c) => {
+    expect(isAccountSite(c.input)).toBe(expectedOf(c))
+  })
+})
+
+describe('hono-relogin.json', () => {
+  it.each(load<{ status: number; sentAuth: boolean }, boolean>('hono-relogin.json'))('$name', (c) => {
+    expect(shouldRelogin(c.input.status, c.input.sentAuth)).toBe(expectedOf(c))
+  })
 })

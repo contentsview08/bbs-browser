@@ -127,3 +127,47 @@ describe('hono-bbs のコネクタ', () => {
     expect(r).toMatchObject({ status: 'ok', resNumber: 33 })
   })
 })
+
+describe('hono-bbs のアカウントの書き込み', () => {
+  const site = 'https://web.red-edge.net'
+  const api = 'https://api.red-edge.net/api/v1'
+  const thread: ThreadSummary = { connectorId: 'honobbs', boardUrl: `${site}/boards/a/`, key: '1', title: '', postCount: 0, order: 0 }
+  const input = { name: '', mail: '', body: 'x', accounts: ['user'] }
+
+  /** 書き込みの返事を順に返す偽の通信 */
+  function server(statuses: number[]) {
+    const auth: (string | undefined)[] = []
+    let logins = 0
+    const ctx: ConnectorContext = {
+      decode: (b) => new TextDecoder().decode(b),
+      http: {
+        get: async () => ({ status: 200, headers: {}, body: enc(`<meta name="bbs-api" content="${api}" />`) }),
+        async post(url, _body, opts) {
+          if (url.endsWith('/auth/login')) {
+            logins++
+            return { status: 200, headers: {}, body: enc({ data: { sessionId: `s${logins}`, expiresAt: new Date(Date.now() + 3600_000).toISOString(), displayName: 'x' } }) }
+          }
+          auth.push(opts?.headers?.Authorization)
+          return { status: statuses.shift() ?? 500, headers: {}, body: enc({ data: { postNumber: 2 } }) }
+        },
+      },
+    }
+    return { ctx, auth, logins: () => logins }
+  }
+
+  it('セッションが切れていたら、一度だけログインし直して送り直す', async () => {
+    const s = server([401, 201])
+    await honoBbsConnector.login!('user', { user: 'u', password: 'p' }, s.ctx)
+    const r = await honoBbsConnector.createPost!(thread, input, s.ctx)
+    expect(r.status).toBe('ok')
+    expect(s.auth).toEqual(['Bearer s1', 'Bearer s2'])
+    expect(s.logins()).toBe(2)
+  })
+
+  it('アカウントを使わない書き込みには付けず、401 でも送り直さない', async () => {
+    const s = server([401])
+    await honoBbsConnector.login!('user', { user: 'u', password: 'p' }, s.ctx)
+    await honoBbsConnector.createPost!(thread, { ...input, accounts: [] }, s.ctx)
+    expect(s.auth).toEqual([undefined])
+  })
+})

@@ -15,6 +15,8 @@ import {
   urlsIn,
   youtubeLinksIn,
 } from '../src/utils/postBody'
+import { favIncrease } from '../src/utils/watch'
+import { matchRanges, newRule, patternError, postMatcher, type NgTarget } from '../src/utils/ng'
 
 interface Case<I, E> {
   name: string
@@ -65,5 +67,22 @@ describe('thread.json', () => {
 describe('search.json', () => {
   it.each(load<string, string>('search.json'))('$name', (c) => {
     expect(normalizeForSearch(c.input)).toBe(expectedOf(c))
+  })
+})
+
+describe('ng.json', () => {
+  it.each(load<{ pattern: string; isRegex: boolean; target: NgTarget; text: string }, { valid: boolean; match: boolean; ranges?: [number, number][] }>('ng.json'))('$name', (c) => {
+    const { pattern, isRegex, target, text } = c.input
+    const expected = expectedOf(c)
+    expect(patternError(pattern, isRegex) === undefined).toBe(expected.valid)
+    const post: Post = { no: 1, name: target === 'posterName' ? text : '', mail: '', date: '', id: target === 'posterId' ? text : undefined, body: target === 'content' ? text : '' }
+    expect(postMatcher([newRule(target, pattern, { isRegex })])(post)).toBe(expected.match)
+    if (expected.ranges) expect(matchRanges({ pattern, isRegex, target }, text)).toEqual(expected.ranges)
+  })
+})
+
+describe('fav-new.json', () => {
+  it.each(load<{ now: number; before?: number; localCount: number; readNo: number }, number>('fav-new.json'))('$name', (c) => {
+    expect(favIncrease(c.input.now, c.input.before, c.input.localCount, c.input.readNo)).toBe(expectedOf(c))
   })
 })

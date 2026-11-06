@@ -83,6 +83,9 @@ async function isUtf8Board(postUrl: string, bbs: string | undefined, ctx: Connec
   return utf8Boards.get(key) === true
 }
 
+/** dat の形か。最初の行に区切りの <> がある */
+const looksLikeDat = (text: string) => text.split('\n').find((l) => l.trim() !== '')?.includes('<>') === true
+
 function ensureOk(res: HttpResponse, url: string): void {
   if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}: ${url}`)
 }
@@ -415,7 +418,8 @@ export const twoChConnector: Connector = {
         const res = await ctx.http.get(kako)
         if (res.status === 200 && res.body.length > 0) {
           const body = completeLines(res.body)
-          const { posts, title } = parseDat(ctx.decode(body, encodingOf(res, body)))
+          const text = ctx.decode(body, encodingOf(res, body))
+          const { posts, title } = looksLikeDat(text) ? parseDat(text) : { posts: [], title: undefined }
           if (posts.length > 0)
             return {
               status: cursor ? 'reset' : 'updated',
@@ -434,8 +438,14 @@ export const twoChConnector: Connector = {
       if (res.status === 404 || res.status === 302) return archived()
       ensureOk(res, url)
       const body = completeLines(res.body)
+      const text = ctx.decode(body, encodingOf(res, body))
+      // 200 で返るエラーのページをレスとして読むと、手元のログを置き換えてしまう
+      if (text.trim() !== '' && !looksLikeDat(text)) {
+        if (cursor) return { status: 'notModified', posts: [], cursor }
+        throw new Error(`スレを読めませんでした: ${url}`)
+      }
       rememberBoardEncoding(thread.boardUrl, body)
-      const { posts, title } = parseDat(ctx.decode(body, encodingOf(res, body)))
+      const { posts, title } = parseDat(text)
       // 空か改行なしの本文で置き換えると、手元のログが全部消える
       if (cursor && posts.length === 0) return { status: 'notModified', posts: [], cursor }
       return {

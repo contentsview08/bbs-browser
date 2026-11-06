@@ -202,7 +202,8 @@ class NgMatcher(rules: List<NgRule>) {
 
     init {
         val t = today()
-        byTarget = rules.filter { it.active(t) }.mapNotNull { r ->
+        // 空の文字はどの文字列にも当たる。すべてのレスを消さないように外す
+        byTarget = rules.filter { it.active(t) && it.pattern.isNotEmpty() }.mapNotNull { r ->
             if (r.isRegex) runCatching { M(r, ngRegex(r.pattern)) }.getOrNull() else M(r, null)
         }.groupBy { it.r.target }
     }

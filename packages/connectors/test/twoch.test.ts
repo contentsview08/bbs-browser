@@ -345,4 +345,13 @@ describe('文字コードの違うサイト', () => {
     expect(sent[0]).toContain('MESSAGE=%E3%81%82')
     expect(sent[1]).toContain('MESSAGE=%82%A0')
   })
+
+  it('200 で返るエラーのページでは、手元のログを置き換えない', async () => {
+    const html = new TextEncoder().encode('<html>\n<body>Service Unavailable</body>\n</html>\n')
+    const res = { status: 200, headers: { 'content-type': 'text/html' }, body: html }
+    const thread = { connectorId: '2ch', boardUrl: 'https://example.net/b/', key: '1000000000', title: '', postCount: 0, order: 0 }
+    const cursor = { bytes: 100, postCount: 3 }
+    await expect(twoChConnector.fetchPosts(thread, cursor, ctxOf(res))).resolves.toMatchObject({ status: 'notModified', cursor })
+    await expect(twoChConnector.fetchPosts(thread, null, ctxOf(res))).rejects.toThrow('スレを読めませんでした')
+  })
 })

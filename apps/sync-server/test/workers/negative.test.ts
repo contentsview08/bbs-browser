@@ -20,6 +20,8 @@ async function solve(challenge: string): Promise<string> {
 }
 
 describe('head の ETag', () => {
+  beforeEach(() => setup())
+  afterEach(teardown)
   it('Cloudflare が書き換えた弱い ETag でも 304 を返す', async () => {
     await create('E')
     const etag = (await call('GET', '/head', { token: 'E' })).headers.get('ETag') as string

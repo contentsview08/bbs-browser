@@ -51,7 +51,12 @@ private class Pref<T>(private val sp: SharedPreferences, private val key: String
  */
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-    private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> = Pref(sp, key, def)
+    /** 小数の設定の名前。バックアップの 1.0 は JSON で 1 になるので、戻すときの型をこれで決める */
+    private val floatKeys = HashSet<String>()
+    private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> {
+        if (def is Float) floatKeys += key
+        return Pref(sp, key, def)
+    }
 
     init {
         // レスの見た目「タイムライン(X 風)」はやめた(2026-11)。選んでいた人は、いちばん近い Discord 風に
@@ -403,12 +408,10 @@ class Prefs(context: Context) {
     /** バックアップから戻す(戻したあとはアプリを開き直すと全部に効く) */
     fun import(o: JSONObject) {
         val e = sp.edit()
-        for (k in o.keys()) {
-            if (!inBackup(k)) continue
-            when (val v = o.get(k)) {
+        for ((k, v) in restoredSettings(o, floatKeys)) {
+            when (v) {
                 is Boolean -> e.putBoolean(k, v)
                 is Int -> e.putInt(k, v)
-                is Double -> e.putFloat(k, v.toFloat())
                 is Float -> e.putFloat(k, v)
                 is String -> e.putString(k, v)
             }

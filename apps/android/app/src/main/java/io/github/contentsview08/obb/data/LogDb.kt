@@ -383,7 +383,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "bbs-nativ
 private fun migrationNames(context: Context): List<String> = (context.assets.list("migrations") ?: emptyArray()).filter { it.endsWith(".sql") }.sorted()
 
 /** SQL のファイルを文ごとに分ける(行頭の -- のコメントを外し、行末の ; で区切る) */
-private fun splitSql(sql: String): List<String> {
+internal fun splitSql(sql: String): List<String> {
     val out = ArrayList<String>()
     val cur = StringBuilder()
     for (line in sql.lines()) {
@@ -399,14 +399,14 @@ private fun splitSql(sql: String): List<String> {
     return out
 }
 
-private fun cursorToJson(c: DatCursor): String = JSONObject().apply {
+internal fun cursorToJson(c: DatCursor): String = JSONObject().apply {
     put("bytes", c.bytes)
     put("postCount", c.postCount)
     c.lastModified?.let { put("lastModified", it) }
     if (c.kako) put("kako", true)
 }.toString()
 
-private fun cursorFromJson(s: String): DatCursor? = runCatching {
+internal fun cursorFromJson(s: String): DatCursor? = runCatching {
     val o = JSONObject(s)
     DatCursor(o.getLong("bytes"), o.getInt("postCount"), o.optString("lastModified").ifEmpty { null }, o.optBoolean("kako"))
 }.getOrNull()

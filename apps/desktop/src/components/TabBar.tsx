@@ -109,6 +109,8 @@ export default function TabBar(props: Props) {
 
   /** つかんで動かす。同じ幅のタブなので、何個ぶん動いたかは幅で割って決める */
   const onTabMouseDown = (e: React.MouseEvent, id: string, index: number) => {
+    // 帯の外で離したドラッグは click が来ないので、印が残っている
+    justDragged.current = false
     if (e.button !== 0) return
     const startX = e.clientX
     let moved = false
@@ -140,6 +142,11 @@ export default function TabBar(props: Props) {
     if (drag.from > drag.over && i >= drag.over && i < drag.from) return tabWidth
     return 0
   }
+
+  // 全部閉じると帯がなくなって onMouseLeave が来ないので、ここで固定を解く
+  useEffect(() => {
+    if (props.tabs.length === 0) setFrozenWidth(undefined)
+  }, [props.tabs.length])
 
   // 選んだタブが見えるように横にスクロールする
   useEffect(() => {

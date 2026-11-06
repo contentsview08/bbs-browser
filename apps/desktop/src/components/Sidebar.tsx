@@ -219,6 +219,8 @@ export default function Sidebar(props: Props) {
   const [drag, setDrag] = useState<{ url: string; from: number; dy: number; over: number }>()
   const justDragged = useRef(false)
   const onRowMouseDown = (e: React.MouseEvent, url: string, index: number) => {
+    // 行の外で離したドラッグは click が来ないので、印が残っている
+    justDragged.current = false
     if (e.button !== 0) return
     const startY = e.clientY
     let moved = false

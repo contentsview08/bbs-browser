@@ -18,7 +18,12 @@ export default function NgManager(props: { rules: NgRule[]; onChange: (rules: Ng
   const [filter, setFilter] = useState<NgTarget | 'all'>('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('new')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [picked, setSelected] = useState<Set<string>>(new Set())
+  // 行のごみ箱や期限切れの片づけで消えた NG は、選択に数えない
+  const selected = useMemo(() => {
+    const ids = new Set(rules.map((r) => r.id))
+    return new Set([...picked].filter((id) => ids.has(id)))
+  }, [picked, rules])
   const [draft, setDraft] = useState<NgDraft>()
   const [sample, setSample] = useState('')
   const today = todayDateString()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_KEYMAP, actionFor, keyEventsOf, createKeyReader, keyString, reservedKeyName, resolveKeymap } from '../src/utils/keymap'
+import { DEFAULT_KEYMAP, actionFor, keyEventsOf, createKeyReader, keyString, reservedKeyName, resolveKeymap, setActionKeys } from '../src/utils/keymap'
 
 const k = (key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}) => ({
   key,
@@ -7,6 +7,22 @@ const k = (key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean }
   shiftKey: !!mods.shift,
   altKey: !!mods.alt,
   metaKey: false,
+})
+
+describe('setActionKeys', () => {
+  it('既定に戻すキーがほかの操作に付いていれば、そちらから外す', () => {
+    const moved = setActionKeys(DEFAULT_KEYMAP, 'favorite', ['S', 'R'])
+    expect(moved.refresh).toEqual([])
+    const back = setActionKeys(moved, 'refresh', DEFAULT_KEYMAP.refresh)
+    expect(back.refresh).toEqual(['R'])
+    expect(back.favorite).toEqual(['S'])
+  })
+
+  it('元の表は変えない', () => {
+    setActionKeys(DEFAULT_KEYMAP, 'favorite', ['R'])
+    expect(DEFAULT_KEYMAP.refresh).toEqual(['R'])
+    expect(DEFAULT_KEYMAP.favorite).toEqual(['S'])
+  })
 })
 
 describe('keyString', () => {

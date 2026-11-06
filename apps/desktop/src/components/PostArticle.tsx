@@ -293,12 +293,16 @@ export function FloatingMenu(props: { pos: MenuPos; items: MenuItem[]; onClose: 
         setSub(undefined)
       } else onClose()
     }
+    // メニューの上のホイールは、はみ出したメニューのスクロールなので閉じない
+    const closeOnWheel = (e: WheelEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) onClose()
+    }
     document.addEventListener('pointerdown', close)
-    window.addEventListener('wheel', onClose, { passive: true })
+    window.addEventListener('wheel', closeOnWheel, { passive: true })
     window.addEventListener('keydown', closeOnKey, true)
     return () => {
       document.removeEventListener('pointerdown', close)
-      window.removeEventListener('wheel', onClose)
+      window.removeEventListener('wheel', closeOnWheel)
       window.removeEventListener('keydown', closeOnKey, true)
     }
   }, [onClose, ignore])
@@ -486,7 +490,8 @@ function PostArticle(props: Props) {
   }
 
   // BE のアイコン(本文の 1 行目の sssp://)は絵にして、本文からは除く
-  const { icon: beIcon, body: rawBody } = props.display?.splitIcon?.(post.body) ?? { body: post.body }
+  const { icon: postIcon, body: rawBody } = props.display?.splitIcon?.(post.body) ?? { body: post.body }
+  const beIcon = postIcon && isAutoLoadable(postIcon) ? postIcon : undefined
   const shownBody = props.display ? displayBody(rawBody, props.display) : rawBody
   // Discord・LINE 風は、返信元を頭の上に出しているので、本文の頭のアンカーは省く
   const body = props.replyPreview ? dropLeadingAnchor(shownBody) : shownBody

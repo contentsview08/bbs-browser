@@ -109,4 +109,17 @@ describe('splitBeIcon: BE のアイコン', () => {
     expect(splitBeIcon('本文\nsssp://img.5ch.io/ico/nida.gif')).toEqual({ body: '本文\nsssp://img.5ch.io/ico/nida.gif' })
     expect(splitBeIcon('sssp://img.5ch.io/ico/nida.gif ほかの文字')).toEqual({ body: 'sssp://img.5ch.io/ico/nida.gif ほかの文字' })
   })
+
+  it('5ch のほかのホストは、読みに行かず本文のまま', () => {
+    for (const line of [
+      'sssp://example.com/x.gif',
+      'sssp://192.168.1.1/x.gif',
+      'sssp://evil5ch.io/x.gif',
+      'sssp://img.5ch.io.example.com/x.gif',
+      'sssp://img.5ch.io@example.com/x.gif',
+      'sssp://img.5ch.io:8080/x.gif',
+    ]) {
+      expect(splitBeIcon(`${line}\n本文`)).toEqual({ body: `${line}\n本文` })
+    }
+  })
 })

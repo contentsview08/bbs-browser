@@ -479,6 +479,8 @@ export function NumberField(props: {
   value: number
   onChange: (v: number) => void
   min: number
+  /** 0(しない)のほかに選べる最小の値 */
+  minNonZero?: number
   max: number
   unit: string
   presets?: number[]
@@ -495,7 +497,8 @@ export function NumberField(props: {
   const commit = () => {
     const n = Math.round(Number(text))
     if (!Number.isFinite(n)) return setText(String(props.value))
-    const v = Math.min(props.max, Math.max(props.min, n))
+    const clamped = Math.min(props.max, Math.max(props.min, n))
+    const v = clamped !== 0 && props.minNonZero !== undefined ? Math.max(props.minNonZero, clamped) : clamped
     setText(String(v))
     if (v !== props.value) props.onChange(v)
   }

@@ -60,7 +60,7 @@ import { openJson, saveJson } from '../host/backup'
 import { pickOpenPath } from '../host/dialog'
 import { canCheckUpdate, compareVersions, fetchLatestRelease, installUpdate, type ReleaseInfo, canSelfUpdate } from '../host/update'
 import { barActionsFor, orderBy, resolvePlacements, type BarArea, type Placement, PLACEMENTS } from '../utils/toolbar'
-import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, type KeyAction, type Keymap } from '../utils/keymap'
+import { DEFAULT_KEYMAP, FIXED_KEYS, KEY_ACTIONS, keyLabel, keyString, reservedKeyName, resolveKeymap, setActionKeys, type KeyAction, type Keymap } from '../utils/keymap'
 import { VideoPlaybackHelp } from './MediaFailed'
 import { canPlayVideo } from '../utils/videoSupport'
 
@@ -1109,7 +1109,7 @@ function UploadTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'up
                     {h.name}
                     <span className="ml-1.5 text-[10px] font-normal px-1 py-px rounded bg-c-surface2 text-c-text-muted">{h.kind === 'web' ? 'サイトの画面' : 'API'}</span>
                     {h.setting && (
-                      <span className={`ml-1.5 text-[10px] font-normal ${registered(h) ? 'text-c-mark-new' : 'text-c-text-muted'}`}>
+                      <span className={`ml-1.5 text-[10px] font-normal ${registered(h) ? 'text-mark-new' : 'text-c-text-muted'}`}>
                         {registered(h) ? `${h.settingName} 登録済み` : h.key === 'catbox' ? `${h.settingName} なし` : `${h.settingName} が要ります`}
                       </span>
                     )}
@@ -1195,11 +1195,12 @@ function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'u
         <NumberField
           value={s.historyCheckMin}
           min={0}
+          minNonZero={5}
           max={1440}
           unit="分ごと"
           zeroLabel="しない"
           presets={[0, 5, 10, 30, 60]}
-          onChange={(v) => update('historyCheckMin', v > 0 ? Math.max(5, v) : 0)}
+          onChange={(v) => update('historyCheckMin', v)}
         />
       </Section>
       <Section title="新着">
@@ -1431,7 +1432,7 @@ function MouseGestureSettings({ settings: s, update, favorites }: Pick<SettingsP
           {PIE_DIRS.map((d) => (
             <label
               key={d}
-              className={`flex items-center gap-3 py-1.5 px-2 -mx-2 rounded text-sm cursor-pointer ${picked === d ? 'bg-c-accent-wash' : ''}`}
+              className={`flex items-center gap-3 py-1.5 px-2 -mx-2 rounded text-sm cursor-pointer ${picked === d ? 'bg-[var(--c-accent-wash)]' : ''}`}
               onClick={() => setPicked(d)}
             >
               <span className={`w-10 flex-shrink-0 ${picked === d ? 'text-c-accent font-bold' : 'text-c-text-strong'}`}>{PIE_DIR_NAMES[d]}</span>
@@ -1504,10 +1505,7 @@ function KeysTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settin
         setWaiting(undefined)
         return
       }
-      const next = { ...keymap }
-      const from = KEY_ACTIONS.filter(({ key }) => key !== waiting && next[key].includes(k))
-      for (const { key } of KEY_ACTIONS) next[key] = next[key].filter((x) => x !== k)
-      next[waiting] = [...next[waiting].filter((x) => x !== k), k]
+      const from = KEY_ACTIONS.filter(({ key }) => key !== waiting && keymap[key].includes(k))
       setNotice({
         text:
           from.length > 0
@@ -1515,7 +1513,7 @@ function KeysTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settin
             : `${keyLabel(k)} を「${KEY_ACTIONS.find((a) => a.key === waiting)!.name}」に割り当てました`,
         before: s.keymap,
       })
-      save(next)
+      save(setActionKeys(keymap, waiting, [...keymap[waiting].filter((x) => x !== k), k]))
       setWaiting(undefined)
     }
     // 開いているスレのキー操作より先に受け取る
@@ -1644,8 +1642,12 @@ function KeysTab({ settings: s, update, favorites }: Pick<SettingsProps, 'settin
                         className={ICON_BTN}
                         title={`既定(${DEFAULT_KEYMAP[key].map(keyLabel).join('・') || 'なし'})に戻す`}
                         onClick={() => {
-                          setNotice({ text: `「${name}」を既定に戻しました`, before: s.keymap })
-                          save({ ...keymap, [key]: DEFAULT_KEYMAP[key] })
+                          const from = KEY_ACTIONS.filter((a) => a.key !== key && keymap[a.key].some((x) => DEFAULT_KEYMAP[key].includes(x)))
+                          setNotice({
+                            text: `「${name}」を既定に戻しました${from.length > 0 ? `(同じキーは「${from.map((a) => a.name).join('」「')}」から外しました)` : ''}`,
+                            before: s.keymap,
+                          })
+                          save(setActionKeys(keymap, key, DEFAULT_KEYMAP[key]))
                         }}
                       >
                         <span className="material-symbols-outlined text-base">restart_alt</span>
@@ -2182,16 +2184,20 @@ export function BoardListTab(props: {
   const [message, setMessage] = useState<string>()
   const favoriteUrls = useMemo(() => new Set(props.favorites.map((b) => b.url)), [props.favorites])
 
+  // 切り替えたあとに遅れて返った、前の BBS メニューの応答を捨てるための番号
+  const loadSeq = useRef(0)
   const load = async (refresh: boolean) => {
     if (!site) return
+    const seq = ++loadSeq.current
     setBusy(true)
     setMessage(undefined)
     try {
-      setBoards(await props.loadBoards(site, refresh))
+      const list = await props.loadBoards(site, refresh)
+      if (seq === loadSeq.current) setBoards(list)
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e))
+      if (seq === loadSeq.current) setMessage(e instanceof Error ? e.message : String(e))
     } finally {
-      setBusy(false)
+      if (seq === loadSeq.current) setBusy(false)
     }
   }
   // BBS メニューを切り替えたら、保存してある板一覧を出す(なければ取りに行く)

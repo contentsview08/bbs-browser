@@ -64,23 +64,25 @@ export default function MediaGallery(props: {
     for (const m of props.items) c[m.kind]++
     return c
   }, [props.items])
-  const [saving, setSaving] = useState<{ done: number; total: number; failed: number; finished?: boolean }>()
+  const [saving, setSaving] = useState<{ done: number; total: number; failed: number; skipped?: number; finished?: boolean }>()
 
-  /** 見せている画像と動画のファイルを、1 つずつ順に保存する(YouTube は保存できないので外す) */
+  /** 見せている画像と動画のファイルを、1 つずつ順に保存する(YouTube は保存できないので外す。家の中のアドレスは一度に読みに行かない) */
   const saveAll = async () => {
-    const targets = shown.filter((m) => m.kind !== 'youtube')
-    if (targets.length === 0) return
+    const files = shown.filter((m) => m.kind !== 'youtube')
+    if (files.length === 0) return
+    const targets = files.filter((m) => isAutoLoadable(m.url))
+    const skipped = files.length - targets.length
     let failed = 0
-    setSaving({ done: 0, total: targets.length, failed })
+    setSaving({ done: 0, total: targets.length, failed, skipped, finished: targets.length === 0 })
     for (let i = 0; i < targets.length; i++) {
       try {
         await saveImage(targets[i].url, props.saveDir)
       } catch {
         failed++
       }
-      setSaving({ done: i + 1, total: targets.length, failed })
+      setSaving({ done: i + 1, total: targets.length, failed, skipped })
     }
-    setSaving({ done: targets.length, total: targets.length, failed, finished: true })
+    setSaving({ done: targets.length, total: targets.length, failed, skipped, finished: true })
   }
 
   // Tab・矢印はダイアログの中だけで回し、Esc で閉じる。開いている間は後ろの画面のキー操作を止める
@@ -130,6 +132,7 @@ export default function MediaGallery(props: {
               <span className={`text-xs tabular-nums ${saving.failed > 0 ? 'text-c-heat-very-hot' : 'text-c-text-muted'}`}>
                 {saving.finished ? '保存しました' : '保存中'} {saving.done} / {saving.total}
                 {saving.failed > 0 && `(${saving.failed} 件失敗)`}
+                {!!saving.skipped && `(家の中のアドレス ${saving.skipped} 件は除外)`}
               </span>
             )}
             <button
@@ -137,7 +140,7 @@ export default function MediaGallery(props: {
               onClick={() => void saveAll()}
               disabled={!!saving && !saving.finished}
               className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
-              title={`見せている画像と動画を ${props.saveDir || 'ダウンロードフォルダ'} に保存します(YouTube は除く)`}
+              title={`見せている画像と動画を ${props.saveDir || 'ダウンロードフォルダ'} に保存します(YouTube と家の中のアドレスは除く)`}
             >
               <span className="material-symbols-outlined text-base">download</span>
               まとめて保存

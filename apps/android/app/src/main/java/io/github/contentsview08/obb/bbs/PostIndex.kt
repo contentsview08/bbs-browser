@@ -28,11 +28,16 @@ class PostInfo(
     val beIcon: String? = null,
 )
 
-private val BE_ICON = Regex("^[$WS]*sssp://([^$WS/]+/[^$WS]+\\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)", RegexOption.IGNORE_CASE)
+private val BE_ICON = Regex("^[$WS]*sssp://(([^$WS/]+)/[^$WS]+\\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)", RegexOption.IGNORE_CASE)
+
+/** BE のアイコンを置いているドメイン。名前だけを許す(ポートや user@ の付いたものは当たらない) */
+private val BE_ICON_HOST = Regex("^(?:[a-z0-9-]+\\.)*(?:5ch\\.io|5ch\\.net|2ch\\.net|bbspink\\.com)$", RegexOption.IGNORE_CASE)
 
 /** 本文の 1 行目の BE のアイコン(sssp は https の読み替え)と、その行を除いた本文 */
 fun splitBeIcon(body: String): Pair<String?, String> {
     val m = BE_ICON.find(body) ?: return null to body
+    // アイコンはレスを出しただけで読みに行くので、本文に書けるだけのほかのホストへは送らない
+    if (!BE_ICON_HOST.containsMatchIn(m.groupValues[2])) return null to body
     return "https://${m.groupValues[1]}" to body.substring(m.range.last + 1)
 }
 

@@ -229,9 +229,10 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
 
   // 書き込みの長さ。板の上限を超えていたら、送る前に止める
   const measure = props.byteLength ? measurePost({ body, name, mail }, props.limits, props.byteLength) : undefined
+  // ファイルを付けていれば、本文が空でも書き込める(画像だけのレス)
+  const canSend = !sending && !props.disabled && (!!body.trim() || !!media.attachedView)
   const submit = async () => {
-    // ファイルを付けていれば、本文が空でも書き込める(画像だけのレス)
-    if ((!body.trim() && !media.attachedView) || sending || props.disabled) return
+    if (!canSend) return
     if (measure && measure.over.length > 0) return setResult({ status: 'error', message: measure.over.join(' / ') })
     setSending(true)
     setResult(undefined)
@@ -242,6 +243,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
       if (r.status === 'ok') {
         clearBody()
         media.clearAttached()
+        media.clearUploaded()
       }
     } catch (e) {
       setResult({ status: 'error', message: e instanceof Error ? e.message : String(e) })
@@ -293,7 +295,7 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
     <button
       type="button"
       onClick={requestSend}
-      disabled={sending || !body.trim() || !!props.disabled}
+      disabled={!canSend}
       title="Ctrl+Enter でも書き込めます"
       className={`btn-thread-create relative overflow-hidden px-4 py-2 text-sm font-bold rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${right ? 'w-full' : 'self-end'}`}
     >
@@ -314,7 +316,6 @@ const ReplyForm = forwardRef<ReplyFormHandle, Props>(function ReplyForm(props, r
   }
 
   if (props.variant === 'chat') {
-    const canSend = !sending && !!body.trim() && !props.disabled
     return (
       <div data-composer className="w-full flex flex-col" {...dropProps(media)}>
         {media.fileInput}

@@ -230,6 +230,14 @@ export function actionFor(keymap: Keymap, key: string | undefined): KeyAction | 
   return (Object.keys(keymap) as KeyAction[]).find((a) => keymap[a].includes(key))
 }
 
+/** 操作のキーを決める。同じキーが 2 つの操作に付かないよう、ほかの操作からは外す */
+export function setActionKeys(keymap: Keymap, action: KeyAction, keys: string[]): Keymap {
+  const next = { ...keymap }
+  for (const a of Object.keys(next) as KeyAction[]) next[a] = next[a].filter((k) => !keys.includes(k))
+  next[action] = keys
+  return next
+}
+
 /** WebView がページごと読み直してしまうキー(F5・Ctrl+R)。アプリでは止める */
 export function isReloadKey(e: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
   return e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r')

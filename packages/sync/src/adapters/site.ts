@@ -94,6 +94,11 @@ export class SiteAdapter implements SyncAdapter {
     }
   }
 
+  async localLines(): Promise<string[]> {
+    const rows = await this.db.select<{ menu_url: string }>('SELECT menu_url FROM sites')
+    return rows.map((r) => String(normalizeBoardUrl(r.menu_url)))
+  }
+
   async apply(r: StoredRecord): Promise<ApplyPlan> {
     if (r.payload.deleted === true) return r.payload.trim === true ? { statements: [], changed: false } : this.remove(r)
     const body = r.payload.body ?? {}

@@ -1,7 +1,9 @@
 package io.github.contentsview08.obb.sync.engine
 
+import io.github.contentsview08.obb.sync.DEV_KIND
 import io.github.contentsview08.obb.sync.DeviceCheck
 import io.github.contentsview08.obb.sync.Hlc
+import io.github.contentsview08.obb.sync.LAST_VIEWED_FIELD
 import io.github.contentsview08.obb.sync.LocalRecord
 import io.github.contentsview08.obb.sync.RecordContext
 import io.github.contentsview08.obb.sync.SyncConfig
@@ -12,6 +14,9 @@ import io.github.contentsview08.obb.sync.adapters.AdapterContext
 import io.github.contentsview08.obb.sync.adapters.AREA_FAVORITE_THREADS
 import io.github.contentsview08.obb.sync.adapters.OpTarget
 import io.github.contentsview08.obb.sync.adapters.ApplyPlan
+import io.github.contentsview08.obb.sync.adapters.IMAGE_KIND
+import io.github.contentsview08.obb.sync.adapters.LAST_VIEW_KIND
+import io.github.contentsview08.obb.sync.adapters.POST_KIND
 import io.github.contentsview08.obb.sync.adapters.SyncAdapter
 import io.github.contentsview08.obb.sync.body
 import io.github.contentsview08.obb.sync.canonicalJson
@@ -21,6 +26,7 @@ import io.github.contentsview08.obb.sync.deriveKeys
 import io.github.contentsview08.obb.sync.generateDeviceId
 import io.github.contentsview08.obb.sync.hlc
 import io.github.contentsview08.obb.sync.kind
+import io.github.contentsview08.obb.sync.makeTombstone
 import io.github.contentsview08.obb.sync.mergePayloads
 import io.github.contentsview08.obb.sync.normalizeBoardUrl
 import io.github.contentsview08.obb.sync.openRecords
@@ -90,6 +96,9 @@ private fun refsFromBody(p: SyncPayload, detail: String?): RecordRefs {
     return RecordRefs(board?.let(::normalizeBoardUrl), p.body?.get("thread") as? String, detail)
 }
 
+/** 容量を超えたとき外す順。お気に入り・NG・設定・リセットは外さない */
+private val TRIM_ORDER = listOf(listOf(LAST_VIEW_KIND, DEV_KIND), listOf(IMAGE_KIND), listOf(POST_KIND))
+
 private fun same(a: SyncPayload, b: SyncPayload) = canonicalJson(a) == canonicalJson(b)
 
 @Suppress("UNCHECKED_CAST")
@@ -116,6 +125,14 @@ class SyncEngine(
     @Volatile var state = "off"
         private set
 
+    /** サーバーの指示。覚えておくので、304 の間も効く */
+    @Volatile var pace: SyncPace? = null
+        private set
+
+    /** 別の領域へ移る途中。走っている周を次の区切りで止め、古い領域の受信を新しい表に混ぜない */
+    @Volatile private var halting = false
+    private var headEtag: String? = null
+
     @Volatile private var again = false
     @Volatile private var againManual = false
     private var last = CycleResult()
@@ -135,6 +152,63 @@ class SyncEngine(
     private fun enter(s: String) {
         state = s
         onState(s)
+    }
+
+    /** 送るものがあるか。通信しない */
+    suspend fun hasChanges(): Boolean = withContext(io) {
+        ((db.query("SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1) AS n").firstOrNull()?.get("n") as Long?) ?: 0L) > 0
+    }
+
+    /** 走っている周を止めて、終わるまで待つ。その後で block を動かす間は次の周も入れない(裏のスレッドで周と表の削除が重ならないように) */
+    private suspend fun <T> halted(block: suspend () -> T): T {
+        halting = true
+        again = false
+        againManual = false
+        try {
+            return mutex.withLock { block() }
+        } finally {
+            halting = false
+        }
+    }
+
+    /** 表を消す・別の領域へ移るときはこれを先に通す */
+    suspend fun halt() = withContext(io) { halted { } }
+
+    /** GET /head。変化があれば true(次に周を回す)。変化なし・通信の失敗は false。周が走っていれば確かめない */
+    suspend fun checkHead(): Boolean = withContext(io) {
+        if (!mutex.tryLock()) return@withContext false
+        try {
+            if (t.state("enabled") != "1" || t.state("phase") != "idle" || now() < retryAt) return@withContext false
+            val material = keyStore.load() ?: return@withContext false
+            val head = SyncApi(serverUrl, deriveKeys(material.k).authToken.toHex(), transport, allowLocalhost)
+            try {
+                val r = head.head(headEtag)
+                head.pace?.let { pace = it }
+                val version = r.version ?: return@withContext false
+                headEtag = "\"${r.epoch}:$version\""
+                val since = t.state("since")?.toLong() ?: 0L
+                version > since || (r.gcFloor ?: 0L) > since || r.epoch != t.state("epoch")
+            } catch (e: SyncApiError) {
+                // 404・401 は周の流れ(作り直し・止める)で扱う
+                if (e.kind == "http" && (e.status == 404 || e.status == 401)) return@withContext true
+                if (e.kind == "http" && e.status == 429) waitFor(e) else retryAt = now() + SyncConfig.backoffDelayMs(attempts++, jitter())
+                false
+            }
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    /** 429 の応答の指示より早く試さない */
+    private fun waitFor(e: SyncApiError) {
+        val sec = (e.detail?.get("retry_after_sec") as? Number)?.toDouble()
+        val told = if (sec != null && sec.isFinite() && sec > 0) ceil(sec * 1000).toLong() else 0L
+        retryAt = now() + maxOf(told, SyncConfig.backoffDelayMs(attempts++, jitter()))
+    }
+
+    /** 長い周の途中で止められていたら、区切りで抜ける */
+    private fun keepRunning() {
+        if (halting) throw CycleStop("idle")
     }
 
     /** 走っている間のきっかけは「もう 1 周」の印にする */
@@ -177,20 +251,28 @@ class SyncEngine(
     /** 使い始め。鍵と端末 ID を保管してから enabled を立てる。ここから利用者の操作が積まれ始める */
     suspend fun pair(k: ByteArray, ticket: String?) = withContext(io) {
         if (ticket != null) checkTicketFor(k, ticket)
-        val id = newDeviceId()
-        keyStore.save(SyncKeyMaterial(k, id, ticket))
-        db.batch(joinStatements(id))
-        deviceChecked = true
-        reconciled = false
+        halted {
+            headEtag = null
+            pace = null
+            val id = newDeviceId()
+            keyStore.save(SyncKeyMaterial(k, id, ticket))
+            db.batch(joinStatements(id))
+            deviceChecked = true
+            reconciled = false
+        }
     }
 
     private fun joinStatements(id: String) = listOf(setState("device_id", id), setState("clock", Hlc.ZERO), setState("since", "0"), setState("phase", "joining"), setState("enabled", "1"))
 
     /** この端末で同期をやめる。手元のデータは消さない */
     suspend fun leave() = withContext(io) {
-        clearTables()
-        keyStore.clear()
-        enter("off")
+        halted {
+            headEtag = null
+            pace = null
+            clearTables()
+            keyStore.clear()
+            enter("off")
+        }
     }
 
     /** サーバーの URL の上書きは同期の中身ではないので残す */
@@ -219,6 +301,10 @@ class SyncEngine(
     private suspend fun cycle(manual: Boolean): CycleResult {
         val r = CycleResult()
         result = r
+        if (halting) {
+            r.skipped = "halting"
+            return r
+        }
         fun finish(s: String): CycleResult {
             enter(s)
             r.state = s
@@ -254,6 +340,7 @@ class SyncEngine(
             enter("draining")
             drain()
             flow(manual)
+            api.pace?.let { pace = it }
             attempts = 0
             retryAt = 0
             db.exec("DELETE FROM sync_state WHERE key = ?", listOf("last_error"))
@@ -281,7 +368,7 @@ class SyncEngine(
             }
         }
         noteError(code)
-        retryAt = now() + SyncConfig.backoffDelayMs(attempts++, jitter())
+        if (e is SyncApiError && e.kind == "http" && e.status == 429) waitFor(e) else retryAt = now() + SyncConfig.backoffDelayMs(attempts++, jitter())
         return next
     }
 
@@ -341,9 +428,10 @@ class SyncEngine(
             var clock = t.state("clock") ?: Hlc.ZERO
             val stmts = ArrayList<SqlStatement>()
             val touched = LinkedHashMap<String, StoredRecord>()
-            fun put(target: OpTarget, atMs: Long, make: (SyncPayload?, String) -> SyncPayload?) {
+            fun put(target: OpTarget, atMs: Long, floor: String?, make: (SyncPayload?, String) -> SyncPayload?) {
                 val existing = touched[target.recordId] ?: t.record(target.recordId)
-                val stamped = Hlc.stamp(clock, atMs, deviceId, existing?.payload?.hlc)
+                val before = existing?.payload?.hlc
+                val stamped = Hlc.stamp(clock, atMs, deviceId, if (floor != null && (before == null || Hlc.compare(floor, before) > 0)) floor else before)
                 val payload = make(existing?.payload, stamped.stamp) ?: return
                 if (checkPayload(payload) == null) {
                     countBad("local")
@@ -365,7 +453,7 @@ class SyncEngine(
                     stmts += delOp(op.seq)
                     val effects = adapter.expand(op, c)
                     if (effects == null) countBad("local")
-                    for (e in effects.orEmpty()) put(e.target, op.atMs, e.make)
+                    for (e in effects.orEmpty()) put(e.target, op.atMs, e.floor, e.make)
                     break
                 }
                 stmts += delOp(op.seq)
@@ -374,7 +462,7 @@ class SyncEngine(
                     countBad("local")
                     continue
                 }
-                put(target, op.atMs) { existing, stamp -> adapter.fromOp(op, existing, stamp, c) }
+                put(target, op.atMs, null) { existing, stamp -> adapter.fromOp(op, existing, stamp, c) }
             }
             for (r in touched.values) stmts += writeRecord(r)
             stmts += setState("clock", clock)
@@ -438,6 +526,7 @@ class SyncEngine(
         var since = t.state("since")?.toLong() ?: 0
         while (true) {
             enter("pulling")
+            keepRunning()
             val page = call { api.changes(since) }
             checkEpoch(page.epoch)
             if (!joining && since > 0 && page.gcFloor > since) throw NeedsRebase()
@@ -445,6 +534,7 @@ class SyncEngine(
             val next = if (page.more) lastVersion else maxOf(lastVersion, page.head)
             if (page.more && next <= since) throw SyncApiError("no_progress")
             enter("merging")
+            keepRunning()
             mergePage(page.records, next, page.gcFloor)
             since = next
             if (!page.more) return
@@ -503,35 +593,40 @@ class SyncEngine(
     /** 種まきと合流の残り。古い HLC なので新しい削除に勝たない。ID が決まっているのでやり直しても重ならない */
     private fun seedAndPlan() {
         val c = ctx()
-        val stmts = ArrayList<SqlStatement>()
         for (adapter in adapters) {
-            val rows = adapter.seed(c)
-            val local = t.records(rows.map { it.recordId })
-            for (r in rows) {
-                val l = local[r.recordId]
-                val payload = if (l != null) mergePayloads(l.payload, r.payload) else r.payload
-                val changed = l == null || !same(l.payload, payload)
-                val settled = settleRecord(payload, l?.version ?: 0, l?.asLocal(), c.now)
-                val refs = r.refs.over(l?.refs)
-                stmts += writeRecord(
-                    StoredRecord(
-                        r.recordId, payload.kind, l?.kindTag ?: "h", l?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
-                        pending = changed || (l?.pending ?: false), priority = l?.priority ?: r.priority, needsApply = l?.needsApply ?: false,
-                        refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
-                    ),
-                )
+            // 件数の多い人でも 1 回の呼び出しを小さく保つ。ID が決まっているので途中で切れてもやり直せる
+            for (chunk in adapter.seed(c).chunked(SyncConfig.WRITE_BATCH)) {
+                val local = t.records(chunk.map { it.recordId })
+                val stmts = ArrayList<SqlStatement>()
+                for (r in chunk) {
+                    val l = local[r.recordId]
+                    val payload = if (l != null) mergePayloads(l.payload, r.payload) else r.payload
+                    val changed = l == null || !same(l.payload, payload)
+                    val settled = settleRecord(payload, l?.version ?: 0, l?.asLocal(), c.now)
+                    val refs = r.refs.over(l?.refs)
+                    stmts += writeRecord(
+                        StoredRecord(
+                            r.recordId, payload.kind, l?.kindTag ?: "h", l?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
+                            pending = changed || (l?.pending ?: false), priority = l?.priority ?: r.priority, needsApply = l?.needsApply ?: false,
+                            refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
+                        ),
+                    )
+                }
+                if (stmts.isNotEmpty()) db.batch(stmts)
             }
         }
-        if (stmts.isNotEmpty()) db.batch(stmts)
-        var lost = 0L
-        var total = 0L
-        for (adapter in adapters) {
-            for (r in t.recordsOfKind(adapter.kind)) {
-                if (!adapter.owns(r) || !adapter.exists(r)) continue
-                total++
-                if (r.needsApply && isDeleted(r.payload) && r.payload["trim"] != true) lost++
+        // 消えるものがなければ全件を見ない(種類ごとの exists は 1 件ごとに DB を読むので)
+        fun count(where: (StoredRecord) -> Boolean): Long {
+            var n = 0L
+            for (adapter in adapters) {
+                for (r in t.recordsOfKind(adapter.kind)) {
+                    if (where(r) && adapter.owns(r) && adapter.exists(r)) n++
+                }
             }
+            return n
         }
+        val lost = count { it.needsApply && isDeleted(it.payload) && it.payload["trim"] != true }
+        val total = if (lost > 0) count { true } else 0L
         if (lost > 0 && (lost >= SyncConfig.JOIN_CONFIRM_MIN || lost * 2 >= total)) {
             db.batch(listOf(setState("phase", "confirm"), setState("pending_confirm", canonicalJson(mapOf("type" to "join", "lost" to lost, "total" to total)))))
             throw CycleStop("confirm")
@@ -570,6 +665,7 @@ class SyncEngine(
 
     private fun applyAll() {
         enter("applying")
+        keepRunning()
         val c = ctx()
         // まだ処理していない操作のあるレコードは、次の周に回す(操作の結果を古いレコードで上書きしない)
         val waiting = t.ops(opNames, 1000).mapNotNull { op -> adapters.firstOrNull { op.op in it.ops }?.target(op, c)?.recordId }.toSet()
@@ -584,7 +680,7 @@ class SyncEngine(
                 val adapter = adapters.firstOrNull { it.kind == r.kind && it.owns(r) }
                 if (adapter == null) {
                     // 本文も ref もない tombstone は手元のどれか分からない。後で種まきが同じ ID を作れば ref が埋まって写せる
-                    if (r.refBoard == null && r.refDetail == null && r.payload["body"] == null) items += ApplyItem(r.recordId, "", ApplyPlan(emptyList(), false))
+                    if (r.refBoard == null && r.refDetail == null && isDeleted(r.payload)) items += ApplyItem(r.recordId, "", ApplyPlan(emptyList(), false))
                     continue
                 }
                 items += ApplyItem(r.recordId, adapter.area, adapter.apply(r, c))
@@ -629,7 +725,9 @@ class SyncEngine(
 
     private suspend fun pushAll() {
         enter("pushing")
+        var trims = 0
         for (round in 0 until SyncConfig.PUSH_MAX_ROUNDS) {
+            keepRunning()
             val prepared = prepareBatch() ?: return
             val body = ArrayList<Map<String, Any?>>()
             for (r in prepared.rows) {
@@ -646,10 +744,48 @@ class SyncEngine(
                 db.exec("DELETE FROM sync_state WHERE key = ?", listOf("push_inflight"))
                 continue
             }
-            val res = call { api.pushRecords(prepared.requestId, body) }
+            val res = try {
+                call { api.pushRecords(prepared.requestId, body) }
+            } catch (e: SyncApiError) {
+                if (e.status == 413 && e.code == "quota_exceeded" && trims < SyncConfig.TRIM_ROUNDS && trimForQuota()) {
+                    trims++
+                    continue
+                }
+                throw e
+            }
+            keepRunning()
             checkEpoch(res.epoch)
             settlePush(res.results, prepared.sent)
         }
+    }
+
+    /** 容量を超えた。古いものから trim の tombstone にしてサーバーから外す。手元は消さない。外せるものがなければ false */
+    private fun trimForQuota(): Boolean {
+        for (trimKinds in TRIM_ORDER) {
+            val marks = trimKinds.joinToString(", ") { "?" }
+            val rows = t.selectRecords("deleted = 0 AND kind IN ($marks) AND (version > 0 OR pending = 1) ORDER BY hlc, record_id LIMIT ?", trimKinds + SyncConfig.TRIM_BATCH.toLong())
+            if (rows.isEmpty()) continue
+            val at = now()
+            var clock = t.state("clock") ?: Hlc.ZERO
+            val stmts = ArrayList<SqlStatement>()
+            for (r in rows) {
+                // まだ送っていないものは送らないだけでよい
+                if (r.version == 0L) {
+                    stmts += SqlStatement("UPDATE sync_records SET pending = 0 WHERE record_id = ?", listOf(r.recordId))
+                    continue
+                }
+                val stamped = Hlc.stamp(clock, at, deviceId, r.payload.hlc)
+                clock = stamped.clock
+                val payload = makeTombstone(r.payload, stamped.stamp, deviceId, if (r.kind == LAST_VIEW_KIND) listOf(LAST_VIEWED_FIELD) else emptyList(), true)
+                val settled = settleRecord(payload, r.version, r.asLocal(), at)
+                stmts += writeRecord(r.copy(payload = payload, version = settled.version, pending = true, priority = 0, needsApply = false, tombAt = settled.tombAt))
+            }
+            stmts += listOf(setState("clock", clock), delState("push_inflight"))
+            db.batch(stmts)
+            countBad("quota_trim")
+            return true
+        }
+        return false
     }
 
     /** 送信中の一覧を先に保存する。応答が来ないまま落ちたら、同じ request_id で送り直す(サーバーが二重に採番しない) */

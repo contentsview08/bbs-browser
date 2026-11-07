@@ -2,6 +2,7 @@ package io.github.contentsview08.obb.sync.engine
 
 import io.github.contentsview08.obb.sync.PairingCode
 import io.github.contentsview08.obb.sync.SyncText
+import io.github.contentsview08.obb.sync.adapters.AdapterContext
 import io.github.contentsview08.obb.sync.adapters.SyncAdapter
 import io.github.contentsview08.obb.sync.deriveKeys
 import io.github.contentsview08.obb.sync.encodePairingCode
@@ -58,10 +59,12 @@ class SyncController(
     private fun serverUrl(): String = overrideUrl() ?: defaultServerUrl
     private fun isEnabled() = t.state("enabled") == "1"
 
-    private fun engine(): SyncEngine {
+    private suspend fun engine(): SyncEngine {
         val url = serverUrl()
         val cur = engineValue
         if (cur != null && engineUrl == url) return cur
+        // 古い先へ走っている周を残さない
+        cur?.halt()
         engineUrl = url
         return SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = url, adapters = adapters, now = now, allowLocalhost = allowLocalhost).also { engineValue = it }
     }
@@ -142,6 +145,7 @@ class SyncController(
         if (isEnabled()) throw SyncHostError("already_on")
         val c = parsePairingCode(code, allowLocalhost)
         loadKeys()
+        engineValue?.halt()
         writeServerUrl(c.serverUrl)
         pair(c.k, c.ticket)
         spaceHead = spaceOf(c.k).take(12)
@@ -161,6 +165,32 @@ class SyncController(
         spaceHead = null
     }
 
+    /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す */
+    suspend fun autoCycle() {
+        run(false)
+    }
+
+    suspend fun autoCheck(): Boolean = engine().checkHead()
+
+    suspend fun hasChanges(): Boolean = engine().hasChanges()
+
+    fun autoEnabled(): Boolean = isEnabled() || keyHint()
+
+    fun pace(): SyncPace? = engineValue?.pace
+
+    private suspend fun adapterContext(): AdapterContext? {
+        // 使っていない間は鍵保管を開かない
+        if (!isEnabled()) return null
+        val m = try { keyStore.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { null } ?: return null
+        return AdapterContext(deriveKeys(m.k), m.deviceId, now())
+    }
+
+    /** 種類ごとの件数とハッシュ。本文や URL は出さない */
+    suspend fun summary(): SyncSummary? = adapterContext()?.let { syncSummary(db, adapters, it) }
+
+    /** 手元と同期の表の違いを数える。件数によって時間がかかるので押したときだけ */
+    suspend fun mismatches(): MismatchSummary? = adapterContext()?.let { syncMismatches(db, adapters, it) }
+
     suspend fun resolveConfirm(choice: String): CycleResult {
         engine().resolveConfirm(choice)
         return run(true)
@@ -174,9 +204,10 @@ class SyncController(
      * 空で既定値に戻す。使っている間に変えたら、新しい先に領域がないかもしれないので全件を合わせ直す。
      * 手元のレコードを消さず、version は計画が決め直す
      */
-    fun setServerUrl(url: String) {
+    suspend fun setServerUrl(url: String) {
         val next = if (url.isBlank()) defaultServerUrl else checkServerUrl(url.trim(), allowLocalhost)
         if (next == serverUrl()) return
+        engineValue?.halt()
         val stmts = arrayListOf(if (next == defaultServerUrl) delState("server_url") else setState("server_url", next))
         if (isEnabled()) stmts += listOf(setState("since", "0"), setState("recreate_pending", "1"), delState("epoch"), delState("gc_floor"), delState("push_inflight"), delState("last_error"))
         db.batch(stmts)

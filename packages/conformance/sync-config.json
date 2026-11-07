@@ -15,7 +15,16 @@
     "REBASE_LIMIT": 3,
     "REBASE_WINDOW_MS": 86400000,
     "RECREATE_RETRY_MS": 3600000,
-    "JOIN_CONFIRM_MIN": 10
+    "JOIN_CONFIRM_MIN": 10,
+    "RESET_BATCH_MAX": 2000,
+    "RESET_TOTAL_MAX": 5000,
+    "TRIM_BATCH": 100,
+    "TRIM_ROUNDS": 5,
+    "HEAD_INTERVAL_MS": 30000,
+    "PUSH_INTERVAL_MS": 30000,
+    "NET_SETTLE_MS": 5000,
+    "NET_MIN_GAP_MS": 30000,
+    "IDLE_STOP_MS": 600000
   },
   "backoff": [
     {"attempt": 0, "jitter": 0, "ms": 500},

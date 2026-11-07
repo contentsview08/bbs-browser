@@ -6,7 +6,7 @@ import { runScenario, type Scenario } from '../../../../packages/sync/test/scena
 import { MiniflareSyncServer, scenarioOverrides, startServer } from './server'
 
 const url = (f: string) => new URL(`../../../../packages/conformance/${f}`, import.meta.url)
-const scenarios: Scenario[] = JSON.parse(readFileSync(url('sync-client.json'), 'utf-8'))
+const scenarios: Scenario[] = [...JSON.parse(readFileSync(url('sync-client.json'), 'utf-8')), ...JSON.parse(readFileSync(url('sync-client-random.json'), 'utf-8'))]
 const digests: Record<string, Record<string, string>> = JSON.parse(readFileSync(url('sync-client-digests.json'), 'utf-8'))
 
 describe('sync-client.json を本物のサーバーへ', () => {

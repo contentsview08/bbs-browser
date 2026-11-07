@@ -2,13 +2,19 @@ package io.github.contentsview08.obb.data
 
 import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.sync.SyncConfig
 import io.github.contentsview08.obb.sync.canonicalJson
 import io.github.contentsview08.obb.sync.engine.SqlStatement
+import io.github.contentsview08.obb.sync.adapters.SettingOp
 import io.github.contentsview08.obb.sync.engine.SyncSql
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 // 利用者の操作の入口。データの更新と送信待ちを同じトランザクションで書く。プリセットや同期の適用はここを通らない
+
+/** 1 回の削除で書くリセットの数。SyncConfig.RESET_BATCH_MAX と同じ値 */
+const val LOG_RESET_MAX = SyncConfig.RESET_BATCH_MAX
+private const val LOG_DELETE_CHUNK = 200
 
 /** 使っていないときは sync_state が空。読めないときも使っていない扱いにして、利用者の操作を止めない */
 internal fun isSyncEnabled(sql: SyncSql): Boolean = try {
@@ -81,6 +87,68 @@ class UserOps(private val sql: SyncSql, private val isOn: () -> Boolean = { isSy
 
     internal fun removeUploadNow(url: String, now: Long) =
         write(listOf(SqlStatement(UploadSql.REMOVE, listOf(url)))) { listOf(plainOp("upload_remove", url, mapOf("url" to url), now)) }
+
+    /** スクロールで何度も呼ばれるので、同じスレの読みは sync_ops の 1 行にまとめる。minSdk 26 の SQLite は 3.18 なので、更新と追加の 2 文に分ける */
+    internal fun markReadNow(t: ThreadSummary, no: Long, now: Long) {
+        val target = "${t.boardUrl}\t${t.key}"
+        write(listOf(SqlStatement(ThreadLogSql.MARK_READ, listOf(no, now, t.boardUrl, t.key)))) {
+            listOf(
+                SqlStatement("UPDATE sync_ops SET num = MAX(num, ?), at_ms = ? WHERE op = 'read' AND target = ?", listOf(no, now, target)),
+                SqlStatement("INSERT OR IGNORE INTO sync_ops (op, target, num, args, at_ms) VALUES ('read', ?, ?, ?, ?)", listOf(target, no, canonicalJson(mapOf("board_url" to t.boardUrl, "key" to t.key)), now)),
+            )
+        }
+    }
+
+    suspend fun markRead(t: ThreadSummary, no: Int, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { markReadNow(t, no.toLong(), now) }
+
+    /** スレを開いたときの最終閲覧時刻 */
+    internal fun threadViewNow(t: ThreadSummary, now: Long) =
+        write(listOf(SqlStatement(ThreadLogSql.VIEW, listOf(now, t.boardUrl, t.key)))) { listOf(opStatement("view", t, now)) }
+
+    suspend fun threadView(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { threadViewNow(t, now) }
+
+    /** 履歴から外す。ログと既読は残す。全端末の履歴から外れる */
+    internal fun historyRemoveNow(t: ThreadSummary, now: Long) =
+        write(listOf(SqlStatement(ThreadLogSql.REMOVE_HISTORY, listOf(t.boardUrl, t.key)))) { listOf(opStatement("view_remove", t, now)) }
+
+    suspend fun historyRemove(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { historyRemoveNow(t, now) }
+
+    /** ログの削除は全端末で未読に戻す操作を兼ねる。自動整理は LogDb.pruneLogs を使い、ここを通らない */
+    internal fun deleteLogsNow(threads: List<ThreadSummary>, now: Long) {
+        val on = isOn()
+        threads.chunked(LOG_DELETE_CHUNK).forEachIndexed { c, chunk ->
+            val stmts = ArrayList<SqlStatement>()
+            chunk.forEachIndexed { j, t ->
+                for (del in ThreadLogSql.DELETE_LOG) stmts += SqlStatement(del, listOf(t.boardUrl, t.key))
+                if (on && c * LOG_DELETE_CHUNK + j < LOG_RESET_MAX) stmts += opStatement("log_delete", t, now)
+            }
+            sql.batch(stmts)
+        }
+    }
+
+    suspend fun deleteLogs(threads: List<ThreadSummary>, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { deleteLogsNow(threads, now) }
+
+    internal fun postAddNow(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String, now: Long) =
+        write(listOf(SqlStatement(PostHistorySql.ADD, PostHistorySql.addArgs(t, title, no, name, mail, body, now)))) {
+            listOf(plainOp("post_add", "${t.boardUrl}\t${t.key}\t$now", mapOf("board_url" to t.boardUrl, "key" to t.key, "posted_at" to now, "body" to body), now))
+        }
+
+    suspend fun postAdd(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String, now: Long = System.currentTimeMillis()) =
+        withContext(Dispatchers.IO) { postAddNow(t, title, no, name, mail, body, now) }
+
+    /** 消した後は行がないので、ID を作るのに要る値を操作に書く */
+    internal fun postRemoveNow(e: PostHistoryEntry, now: Long) = write(listOf(SqlStatement(PostHistorySql.REMOVE, listOf(e.id)))) {
+        listOf(plainOp("post_remove", "${e.thread.boardUrl}\t${e.thread.key}\t${e.postedAt}", mapOf("board_url" to e.thread.boardUrl, "key" to e.thread.key, "posted_at" to e.postedAt, "body" to e.body), now))
+    }
+
+    suspend fun postRemove(e: PostHistoryEntry, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { postRemoveNow(e, now) }
+
+    /** 設定の変更を積む。スマホの今の値は Prefs にあるので、changes は共通テストが settings 表へ書く文 */
+    internal fun settingsWriteNow(ops: List<SettingOp>, now: Long, changes: List<SqlStatement> = emptyList()) {
+        val on = ops.isNotEmpty() && isOn()
+        val stmts = changes + if (on) ops.map { plainOp("setting", it.name, mapOf("name" to it.name, "value" to it.value), now) } else emptyList()
+        if (stmts.isNotEmpty()) sql.batch(stmts)
+    }
 
     /** NG の差分を積む。積むのは upsert と remove だけで、drop は tombstone にならない。今の値は Prefs にあるので、書くのは呼ぶ側 */
     internal fun ngChangeNow(diff: NgDiff, now: Long) {

@@ -1,6 +1,7 @@
 package io.github.contentsview08.obb.sync
 
 import java.nio.ByteBuffer
+import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.util.Base64
@@ -28,7 +29,18 @@ fun fromBase64Url(s: String): ByteArray {
     return out
 }
 
-fun utf8(s: String): ByteArray = s.toByteArray(Charsets.UTF_8)
+private val REPLACEMENT_UTF8 = byteArrayOf(0xEF.toByte(), 0xBF.toByte(), 0xBD.toByte())
+
+/** 半端なサロゲートは TextEncoder と同じく U+FFFD にする。toByteArray は '?' にするので、PC とハッシュが変わる */
+fun utf8(s: String): ByteArray {
+    if (s.none { it.isSurrogate() }) return s.toByteArray(Charsets.UTF_8)
+    val out = Charsets.UTF_8.newEncoder()
+        .onMalformedInput(CodingErrorAction.REPLACE)
+        .onUnmappableCharacter(CodingErrorAction.REPLACE)
+        .replaceWith(REPLACEMENT_UTF8)
+        .encode(CharBuffer.wrap(s))
+    return ByteArray(out.remaining()).also { out.get(it) }
+}
 
 fun fromUtf8(b: ByteArray): String = try {
     Charsets.UTF_8.newDecoder()

@@ -453,6 +453,44 @@ describe('入口', () => {
   })
 })
 
+describe('端末への指示', () => {
+  afterEach(teardown)
+  it('回数を超えた応答に待つ秒を書く', async () => {
+    setup({ RATE_PER_MINUTE: '1', RATE_PER_DAY: '0', FULL_PULL_PER_HOUR: '0' })
+    await create('A')
+    await call('GET', '/head', { token: 'A', ip: freshIp() })
+    const over = await call('GET', '/head', { token: 'A', ip: freshIp() })
+    expect(over.status).toBe(429)
+    const body = (await over.json()) as { error: string; retry_after_sec: number }
+    expect(body.error).toBe('rate_limited')
+    expect(body.retry_after_sec).toBeGreaterThan(0)
+    expect(body.retry_after_sec).toBeLessThanOrEqual(60)
+  })
+  it('PACE の環境変数があるときだけ応答に載せる。ないときは今までの形', async () => {
+    setup({ PACE_HEAD_SEC: '120', PACE_PUSH_SEC: '90' })
+    await create('A')
+    const paced = (await (await call('GET', '/head', { token: 'A', ip: freshIp() })).json()) as Record<string, unknown>
+    expect(paced.pace).toEqual({ head_sec: 120, push_sec: 90 })
+    const changes = (await (await call('GET', '/changes?since=0', { token: 'A', ip: freshIp() })).json()) as Record<string, unknown>
+    expect(changes.pace).toEqual({ head_sec: 120, push_sec: 90 })
+    await teardown()
+    setup()
+    await create('A')
+    const plain = (await (await call('GET', '/head', { token: 'A', ip: freshIp() })).json()) as Record<string, unknown>
+    expect(plain.pace).toBeUndefined()
+  })
+  it('ETag が同じ head は 304 で本文がなく、日の回数にも数える', async () => {
+    setup({ RATE_PER_MINUTE: '0', RATE_PER_DAY: '2', FULL_PULL_PER_HOUR: '0' })
+    await create('A')
+    const first = await call('GET', '/head', { token: 'A', ip: freshIp() })
+    const etag = first.headers.get('ETag') as string
+    await first.text()
+    const again = await call('GET', '/head', { token: 'A', ip: freshIp(), headers: { 'If-None-Match': etag } })
+    expect(again.status).toBe(304)
+    expect((await call('GET', '/head', { token: 'A', ip: freshIp(), headers: { 'If-None-Match': etag } })).status).toBe(429)
+  })
+})
+
 describe('作成済み', () => {
   beforeEach(() => setup())
   afterEach(teardown)

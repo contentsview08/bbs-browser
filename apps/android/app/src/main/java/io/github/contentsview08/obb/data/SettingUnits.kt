@@ -43,5 +43,8 @@ internal fun joinedWords(json: String, sep: String, def: String): String = runCa
     List(a.length()) { a.getString(it) }.joinToString(sep)
 }.getOrDefault(def)
 
+/** JSON の配列 → 文字のリスト。読めなければ例外 */
+internal fun wordsOfJson(json: String): List<String> = JSONArray(json).let { a -> List(a.length()) { a.getString(it) } }
+
 /** sep でつないだ文字 → JSON の配列(空の要素は入れない) */
 internal fun wordsJson(joined: String, sep: String): String = JSONArray().apply { for (w in joined.split(sep)) if (w.isNotBlank()) put(w) }.toString()

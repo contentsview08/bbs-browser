@@ -61,8 +61,24 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
-    override fun onStart() { super.onStart(); vm.appVisible = true; vm.syncForeground() }
-    override fun onStop() { super.onStop(); vm.appVisible = false }
+    /** ネットワークの復帰を、前面の間だけ見る */
+    private val network = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: android.net.Network) = runOnUiThread { vm.syncNetworkBack() }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        vm.appVisible = true
+        vm.syncForeground()
+        runCatching { getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(network) }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        vm.appVisible = false
+        runCatching { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(network) }
+        vm.syncBackground()
+    }
 
     /** 通知を押して開いたとき: そのスレ・板をアプリの中で開く */
     private fun openFromNotification(intent: android.content.Intent?) {

@@ -373,7 +373,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 書き込み履歴から 1 件消す(掲示板の書き込みは消えない) */
     fun deletePostHistory(e: PostHistoryEntry) {
         postHistory = postHistory.filter { it !== e }
-        viewModelScope.launch { db.deletePostHistory(e); postHistory = db.postHistory() }
+        viewModelScope.launch { db.userOps.postRemove(e); postHistory = db.postHistory() }
     }
 
     /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
@@ -422,6 +422,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ── 同期 ──
 
     private val syncKeys = io.github.contentsview08.obb.data.androidSyncKeyStore(app)
+    private val settingAllow by lazy { io.github.contentsview08.obb.sync.adapters.SettingAllowlist(app.assets.open("settings-allowlist.json").bufferedReader().use { it.readText() }) }
     /** 同期を始める窓の URL。出している間だけ値がある */
     var syncStartUrl by mutableStateOf<String?>(null)
         private set
@@ -439,6 +440,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 io.github.contentsview08.obb.sync.adapters.SiteAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncSite(it) },
                 io.github.contentsview08.obb.sync.adapters.ImageAdapter(db.syncSql),
                 io.github.contentsview08.obb.sync.adapters.NgAdapter(io.github.contentsview08.obb.data.SyncNgHost({ prefs.ngRules }, { prefs.applyRemoteNg(it) })),
+                io.github.contentsview08.obb.sync.adapters.PostAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) },
+                io.github.contentsview08.obb.sync.adapters.SettingAdapter(settingAllow, io.github.contentsview08.obb.data.PrefsSettingsHost(prefs, settingAllow), db.syncSql),
+            ) + io.github.contentsview08.obb.sync.adapters.historyAdapters(
+                db.syncSql,
+                io.github.contentsview08.obb.sync.adapters.HistoryHost({ io.github.contentsview08.obb.data.resolveSyncBoard(it) }, { prefs.logRetentionDays }, { io.github.contentsview08.obb.sync.generateDeviceId() }),
             ),
             now = System::currentTimeMillis,
             allowLocalhost = BuildConfig.SYNC_ALLOW_LOCALHOST,
@@ -457,6 +463,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_UPLOADS in r.applied) viewModelScope.launch { uploads = db.listUploads() }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_NG in r.applied) viewModelScope.launch { reapplyNg() }
+                if (io.github.contentsview08.obb.sync.adapters.AREA_POSTS in r.applied) viewModelScope.launch { postHistory = db.postHistory() }
+                if (io.github.contentsview08.obb.sync.adapters.AREA_HISTORY in r.applied || io.github.contentsview08.obb.sync.adapters.AREA_READS in r.applied) viewModelScope.launch { reflectSyncedReads() }
             },
         )
     }
@@ -479,9 +487,76 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         io.github.contentsview08.obb.sync.SyncText.message(e.code.ifEmpty { e.kind })
     }
 
-    /** 前面に戻ったとき。自動の送信はまだ持たない */
+    /** 同期の要約。使っていなければ null */
+    suspend fun syncSummary() = withContext(Dispatchers.IO) { syncCtl.summary() }
+
+    suspend fun syncMismatches() = withContext(Dispatchers.IO) { syncCtl.mismatches() }
+
+    /** 自動の同期。前面の間だけ動く。バックグラウンドの処理は足さない */
+    private val syncScheduler = io.github.contentsview08.obb.sync.engine.SyncScheduler(object : io.github.contentsview08.obb.sync.engine.SchedulerHost {
+        override fun now() = System.currentTimeMillis()
+        override fun setTimer(f: () -> Unit, ms: Long): Any = viewModelScope.launch {
+            kotlinx.coroutines.delay(ms)
+            f()
+        }
+        override fun clearTimer(t: Any) = (t as Job).cancel()
+        override fun launch(f: suspend () -> Unit) {
+            viewModelScope.launch { f() }
+        }
+        override suspend fun enabled() = withContext(Dispatchers.IO) { syncCtl.autoEnabled() }
+        override suspend fun cycle(reason: String) = withContext(Dispatchers.IO) { syncCtl.autoCycle() }
+        override suspend fun check() = withContext(Dispatchers.IO) { syncCtl.autoCheck() }
+        override suspend fun hasChanges() = withContext(Dispatchers.IO) { syncCtl.hasChanges() }
+        override fun pace() = syncCtl.pace()
+        override val idleStops = false
+    })
+
     fun syncForeground() {
-        viewModelScope.launch(Dispatchers.IO) { runCatching { syncCtl.foreground() } }
+        viewModelScope.launch { runCatching { syncScheduler.foreground() } }
+    }
+
+    /** 裏に回る瞬間。待っている設定の変更も一緒に送る */
+    fun syncBackground() {
+        viewModelScope.launch {
+            settingOpsJob?.cancel()
+            flushSettingOps()
+            runCatching { syncScheduler.background() }
+        }
+    }
+
+    fun syncNetworkBack() = syncScheduler.networkBack()
+
+    override fun onCleared() {
+        syncScheduler.dispose()
+        super.onCleared()
+    }
+
+    /** スライダーで続けて呼ばれるので、間を空けて裏で積む */
+    private val settingOps by lazy { io.github.contentsview08.obb.data.SettingOpQueue(settingAllow, io.github.contentsview08.obb.data.PrefsSettingsHost(prefs, settingAllow)) }
+    private var settingOpsJob: Job? = null
+
+    private fun noteSettingChange(key: String, before: Any?) {
+        if (!settingOps.note(key, before)) return
+        settingOpsJob?.cancel()
+        settingOpsJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(io.github.contentsview08.obb.data.SETTING_OPS_DELAY_MS)
+            // 取り消されないよう、積むのは別の仕事にする
+            viewModelScope.launch { flushSettingOps() }
+        }
+    }
+
+    private suspend fun flushSettingOps() = withContext(ngOps) {
+        runCatching { db.userOps.settingsWriteNow(settingOps.drain(), System.currentTimeMillis()) }
+    }
+
+    /** 適用で変わった既読と履歴を画面へ。開いているスレは上がったときだけ上げ、「ここから未読」の線とスクロール位置は動かさない */
+    private suspend fun reflectSyncedReads() {
+        val hist = db.history()
+        history = hist
+        favThreads = db.favoriteThreads()
+        allUnread = unreadEntries(hist, remoteCounts)
+        for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
+        for (p in threadPages()) p.readNo = io.github.contentsview08.obb.data.openReadNoAfterSync(p.readNo, db.readNo(p.summary))
     }
 
     /** スレ一覧に戻る前に見ていたスレ(「進む」で開き直す) */
@@ -801,6 +876,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         page.reply.name = meta?.defaultName ?: prefs.postName
         page.reply.mail = meta?.defaultMail ?: prefs.postMail
         viewModelScope.launch {
+            // ログのないスレは同期の表から既読を戻してから読む(自動整理のあとに開き直すと既読が戻る)
+            db.restoreThreadRead(t)
             // 手元のログを先に出し、そのあと新着を取りに行く
             val log = db.loadThread(t)
             page.ownNos = db.ownPosts(t)
@@ -813,9 +890,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 開く位置は画面が決める(レスが出たときに、覚えた位置・設定・未読から)ので、レスより先に入れておく
                 page.unreadFrom = log.readNo + 1
                 setPosts(page, log.posts)
-                db.touch(t)
+                db.userOps.threadView(t)
             }
-            page.loaded = log != null
+            // 同期で作った空の行は、取り終えるまで「レスなし」と見せない
+            page.loaded = log != null && log.posts.isNotEmpty()
             refreshThread(page, firstOpen = true)
         }
     }
@@ -832,7 +910,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val r = TwoCh.fetchPosts(t, log?.cursor)
                 val title = r.title ?: log?.title ?: t.title
                 db.saveFetch(t, r, title)
-                if (log == null) db.touch(t)
+                if (log == null) db.userOps.threadView(t)
                 // 手元にログのあるスレに届いた新着なら、あなた宛てを知らせる(全部取り直したときと、初めて開くスレは知らせない)
                 if (log != null && r.status != FetchStatus.RESET && r.posts.isNotEmpty()) {
                     runCatching { io.github.contentsview08.obb.data.Crawler.notifyReplies(getApplication(), prefs, t, title, r.posts, page.ownNos, page.justPosted) }
@@ -1019,7 +1097,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 変わるものがないときは書き換えない(読み手全員を作り直さない)
         if (history.any { it.thread.id == t.id && it.readNo < no }) history = history.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
         if (favThreads.any { it.thread.id == t.id && it.readNo < no }) favThreads = favThreads.map { if (it.thread.id == t.id && it.readNo < no) HistoryEntry(it.thread, no, it.readAt) else it }
-        viewModelScope.launch { db.markRead(page.summary, no) }
+        viewModelScope.launch { db.userOps.markRead(page.summary, no) }
     }
 
     /**
@@ -1063,7 +1141,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** スレ一覧の長押しから: ログを削除(開いていないスレ) */
     fun deleteLogOf(t: ThreadSummary) {
         viewModelScope.launch {
-            db.deleteThread(t)
+            db.userOps.deleteLogs(listOf(t))
             if (forwardPage?.summary?.id == t.id) forwardPage = null
             (stack.lastOrNull() as? Page.Threads)?.let { it.states = db.threadStates(it.board.url) }
             reloadSide()
@@ -1071,10 +1149,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 履歴から外す。ログと既読は残す */
+    fun removeFromHistory(t: ThreadSummary) {
+        viewModelScope.launch {
+            db.userOps.historyRemove(t)
+            allUnread = allUnread.filter { it.thread.id != t.id }
+            reloadSide()
+            toast = "履歴から外しました"
+        }
+    }
+
     /** 履歴で選んだスレのログをまとめて削除 */
     fun deleteLogsOf(list: List<ThreadSummary>) {
         viewModelScope.launch {
-            db.deleteThreads(list)
+            db.userOps.deleteLogs(list)
             if (list.any { it.id == forwardPage?.summary?.id }) forwardPage = null
             // スタックの下のスレ一覧も、既読の印を読み直す
             for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
@@ -1168,7 +1256,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteLog(page: Page.Thread) {
         viewModelScope.launch {
-            db.deleteThread(page.summary)
+            db.userOps.deleteLogs(listOf(page.summary))
             back()
             // 消したスレを「進む」で開き直さない
             forwardPage = null
@@ -1408,7 +1496,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             db.addOwnPost(page.summary, no)
                             page.ownNos = page.ownNos + no
                         }
-                        db.addPostHistory(page.summary, page.title, no, name, mail, body)
+                        db.userOps.postAdd(page.summary, page.title, no, name, mail, body)
                     }
                     is PostResult.Auth -> r.auth = res
                     is PostResult.Confirm -> {
@@ -1479,6 +1567,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // 中で画面のスレッドの処理を始めるので、すべてのプロパティを初期化したあとに置く
     init {
+        prefs.onSettingChange = ::noteSettingChange
         Http.init(app)
         // hono-bbs のアカウント(保存してあれば、書き込みのときにログインして使う)
         if (prefs.honoUser.isNotEmpty()) HonoBbs.account = HonoBbs.Account(prefs.honoUser, prefs.honoPassword)

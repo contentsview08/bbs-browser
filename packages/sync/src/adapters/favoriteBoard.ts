@@ -239,6 +239,12 @@ export class FavoriteBoardAdapter implements SyncAdapter {
     }
   }
 
+  /** 並びまで比べる */
+  async localLines(): Promise<string[]> {
+    const rows = await this.db.select<{ url: string; sort: number }>('SELECT url, sort FROM favorite_boards')
+    return rows.map((r) => `${r.sort}\t${normalizeBoardUrl(r.url)}`)
+  }
+
   /** 順序のレコードで並べる。ない項目はある項目の後ろで、どの端末でも同じ順になるよう板 URL で決める */
   async afterApply(): Promise<ApplyPlan> {
     if (!this.dirty) return { statements: [], changed: false }

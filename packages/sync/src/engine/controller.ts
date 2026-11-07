@@ -1,9 +1,11 @@
 // 画面から使う同期の入口。鍵・窓・HTTP は親が渡す。使っていない間は鍵保管にも通信にも触らない
-import type { SyncAdapter } from '../adapters/types'
+import type { AdapterContext, SyncAdapter } from '../adapters/types'
 import { deriveKeys, generateMasterKey, spaceId } from '../keys'
 import { syncMessage } from '../messages'
 import { encodePairingCode, parsePairingCode } from '../pairing'
 import { type CycleResult, type ConfirmChoice, SyncEngine, type SyncKeyStore } from './engine'
+import type { SyncPace } from './scheduler'
+import { syncMismatches, syncSummary, type MismatchSummary, type SyncSummary } from './summary'
 import { delState, setState, SyncTables, type SqlStatement, type SyncSqlDb } from './tables'
 import { checkServerUrl, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
@@ -71,6 +73,8 @@ export class SyncController {
   private async engine(): Promise<SyncEngine> {
     const url = await this.serverUrl()
     if (this.engineValue === null || this.engineUrl !== url) {
+      // 古い先へ走っている周を残さない
+      await this.engineValue?.halt()
       this.engineUrl = url
       this.engineValue = new SyncEngine({
         db: this.deps.db,
@@ -171,6 +175,7 @@ export class SyncController {
     if (await this.isEnabled()) throw new SyncHostError('already_on')
     const c = parsePairingCode(code, this.deps.allowLocalhost)
     await this.loadKeys()
+    await this.engineValue?.halt()
     await this.writeServerUrl(c.serverUrl)
     await this.pair(c.k, c.ticket)
     this.spaceHead = spaceId(deriveKeys(c.k).auth_token).slice(0, 12)
@@ -192,6 +197,45 @@ export class SyncController {
     this.spaceHead = null
   }
 
+  /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す */
+  async autoCycle(): Promise<void> {
+    await this.run(false)
+  }
+
+  async autoCheck(): Promise<boolean> {
+    return (await this.engine()).checkHead()
+  }
+
+  async hasChanges(): Promise<boolean> {
+    return (await this.engine()).hasChanges()
+  }
+
+  async autoEnabled(): Promise<boolean> {
+    return (await this.isEnabled()) || this.deps.keyHint()
+  }
+
+  pace(): SyncPace | null {
+    return this.engineValue?.pace ?? null
+  }
+
+  private async adapterContext(): Promise<AdapterContext | null> {
+    if (!(await this.isEnabled())) return null
+    const m = await this.deps.keyStore.load().catch(() => null)
+    return m && { keys: deriveKeys(m.k), deviceId: m.deviceId, now: this.deps.now() }
+  }
+
+  /** 種類ごとの件数とハッシュ。本文や URL は出さない */
+  async summary(): Promise<SyncSummary | null> {
+    const ctx = await this.adapterContext()
+    return ctx && syncSummary(this.deps.db, this.deps.adapters, ctx)
+  }
+
+  /** 手元と同期の表の違いを数える。件数によって時間がかかるので押したときだけ */
+  async mismatches(): Promise<MismatchSummary | null> {
+    const ctx = await this.adapterContext()
+    return ctx && syncMismatches(this.deps.db, this.deps.adapters, ctx)
+  }
+
   async resolveConfirm(choice: ConfirmChoice): Promise<CycleResult> {
     await (await this.engine()).resolveConfirm(choice)
     return this.run(true)
@@ -210,6 +254,7 @@ export class SyncController {
     const next = url.trim() === '' ? this.deps.defaultServerUrl : checkServerUrl(url.trim(), this.deps.allowLocalhost)
     const current = await this.serverUrl()
     if (next === current) return
+    await this.engineValue?.halt()
     const stmts: SqlStatement[] = [next === this.deps.defaultServerUrl ? delState('server_url') : setState('server_url', next)]
     if (await this.isEnabled()) stmts.push(setState('since', '0'), setState('recreate_pending', '1'), delState('epoch'), delState('gc_floor'), delState('push_inflight'), delState('last_error'))
     await this.deps.db.batch(stmts)

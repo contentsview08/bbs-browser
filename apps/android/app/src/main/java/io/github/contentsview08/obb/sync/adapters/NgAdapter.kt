@@ -146,6 +146,19 @@ class NgAdapter(private val host: NgHost) : SyncAdapter {
         return ApplyPlan(emptyList(), false)
     }
 
+    /** apply は周の最後にまとめて書くので、溜まった変更を見て捨てる */
+    override fun differs(r: StoredRecord, ctx: AdapterContext): Boolean {
+        if (r.payload["deleted"] == true) return load().containsKey(r.refDetail)
+        apply(r, ctx)
+        val pending = changes.isNotEmpty()
+        changes.clear()
+        snapshot = null
+        snapshotFor = null
+        return pending
+    }
+
+    override fun localLines(ctx: AdapterContext): List<String> = load().values.map(::known)
+
     /** 周の中の変更を 1 回で書く。needs_apply は先に消えるが、落ちても起動時の照合で値の違いから写し直す */
     override fun afterApply(ctx: AdapterContext): ApplyPlan? {
         snapshot = null

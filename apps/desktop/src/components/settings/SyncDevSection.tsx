@@ -1,7 +1,7 @@
 // 開発用の同期の画面。隠してあり、版を押して開く。鍵は main の窓にあるので、ここは頼むだけ
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { encode } from 'uqr'
-import { PAIRING_SHOW_MS, SYNC_LABELS as L, syncMessage, type SyncStatus } from '@bbs-browser/sync'
+import { PAIRING_SHOW_MS, SYNC_LABELS as L, syncMessage, type MismatchSummary, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
 import { callMain } from '../../host/crossWindow'
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT } from '../DialogParts'
 import ConfirmDialog from '../ConfirmDialog'
@@ -19,9 +19,13 @@ export function SyncDevSection() {
   const [pairing, setPairing] = useState<string>()
   const [ask, setAsk] = useState<'leave' | 'server'>()
 
+  const [summary, setSummary] = useState<SyncSummary | null>()
+  const [mismatch, setMismatch] = useState<MismatchSummary | null>()
+  const refreshSummary = () => void callMain<SyncSummary | null>('syncSummary').then(setSummary, () => undefined)
   const refresh = () => void callMain<SyncStatus>('syncStatus').then(setSt, () => undefined)
   useEffect(() => {
     refresh()
+    refreshSummary()
     const id = window.setInterval(refresh, 1000)
     return () => window.clearInterval(id)
   }, [])
@@ -49,7 +53,7 @@ export function SyncDevSection() {
   if (!st) return null
   const needTicket = st.lastError?.startsWith('ticket_')
   return (
-    <Section title={L.section} note="お気に入りのスレと板、サイト、上げた画像の履歴、NG を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です">
+    <Section title={L.section} note="お気に入りのスレと板、サイト、上げた画像の履歴、NG、書き込み履歴、閲覧履歴と既読、設定を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です">
       <dl className="text-sm text-c-text-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mb-3">
         <dt className="text-c-text-muted">状態</dt>
         <dd>{st.state}</dd>
@@ -84,7 +88,7 @@ export function SyncDevSection() {
           </button>
         )}
         {st.enabled && (
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncNow'))}>
+          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncNow')).then(refreshSummary)}>
             {L.sync_now}
           </button>
         )}
@@ -117,6 +121,7 @@ export function SyncDevSection() {
           </button>
         </div>
       )}
+      {st.enabled && summary && <SyncSummaryView summary={summary} mismatch={mismatch} busy={busy} onCheck={() => void act(async () => setMismatch(await callMain<MismatchSummary | null>('syncMismatches')))} />}
       {pairing && <PairingCode code={pairing} onEnd={() => setPairing(undefined)} />}
       <label className="block text-sm text-c-text-muted mb-1">{L.server_url}</label>
       <div className="flex gap-2 mb-2">
@@ -153,6 +158,50 @@ export function SyncDevSection() {
         />
       )}
     </Section>
+  )
+}
+
+/** 端末どうしで見比べる値。本文や URL は出さない */
+function SyncSummaryView({ summary, mismatch, busy, onCheck }: { summary: SyncSummary; mismatch: MismatchSummary | null | undefined; busy: boolean; onCheck: () => void }) {
+  const counts = (m: Record<string, number>) => Object.entries(m).map(([k, n]) => `${k} ${n}`).join('、') || 'なし'
+  return (
+    <div className="mb-3 text-sm text-c-text-body">
+      <p className="font-bold mb-1">同期の要約</p>
+      <p className="text-c-text-muted mb-1">同期の表(生きている+削除:ハッシュ)</p>
+      <ul className="font-mono text-xs mb-2">
+        {summary.kinds.map((k) => (
+          <li key={k.kind}>{`${k.kind} ${k.live}+${k.tombstones}:${k.hash}`}{k.pending > 0 ? ` 送信待ち ${k.pending}` : ''}{k.needs_apply > 0 ? ` 適用待ち ${k.needs_apply}` : ''}</li>
+        ))}
+      </ul>
+      <p className="text-c-text-muted mb-1">手元(件数:ハッシュ)</p>
+      <ul className="font-mono text-xs mb-2">
+        {summary.local.map((l) => (
+          <li key={l.area}>{`${l.area} ${l.count}:${l.hash}`}</li>
+        ))}
+      </ul>
+      <div className="flex gap-2 mb-2">
+        <button type="button" className={BTN_SECONDARY} onClick={() => void navigator.clipboard.writeText(summary.text)}>
+          要約をコピー
+        </button>
+        <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={onCheck}>
+          不一致の検査
+        </button>
+      </div>
+      {mismatch && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          <dt className="text-c-text-muted">違い</dt>
+          <dd>{counts(mismatch.differs)}</dd>
+          <dt className="text-c-text-muted">表にない手元の行</dt>
+          <dd>{counts(mismatch.missing)}</dd>
+          {mismatch.samples.length > 0 && (
+            <>
+              <dt className="text-c-text-muted">レコード</dt>
+              <dd className="font-mono text-xs break-all">{mismatch.samples.join(' ')}</dd>
+            </>
+          )}
+        </dl>
+      )}
+    </div>
   )
 }
 

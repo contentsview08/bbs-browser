@@ -142,6 +142,22 @@ export class NgAdapter implements SyncAdapter {
     return { statements: [], changed: false }
   }
 
+  /** apply は周の最後にまとめて書くので、溜まった変更を見て捨てる */
+  async differs(r: StoredRecord, ctx: AdapterContext): Promise<boolean> {
+    if (r.payload.deleted === true) return (await this.load()).has(r.ref_detail as string)
+    await this.apply(r, ctx)
+    const pending = this.changes.size > 0
+    this.changes.clear()
+    this.snapshot = null
+    this.snapshotFor = null
+    return pending
+  }
+
+  async localLines(ctx: AdapterContext): Promise<string[]> {
+    void ctx
+    return [...(await this.load()).values()].map(known)
+  }
+
   /** 周の中の変更を 1 回で書く。needs_apply は先に消えるが、落ちても起動時の照合で値の違いから写し直す */
   async afterApply(): Promise<ApplyPlan> {
     this.snapshot = null

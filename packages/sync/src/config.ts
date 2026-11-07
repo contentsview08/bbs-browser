@@ -16,6 +16,21 @@ export const REBASE_WINDOW_MS = 24 * 60 * 60 * 1000
 export const RECREATE_RETRY_MS = 60 * 60 * 1000
 export const JOIN_CONFIRM_MIN = 10
 export const LEASE_MS = 90_000
+/** 1 回のログの削除で書くリセットの数。これを超えた分は手元からだけ消える。1 件 528 バイトなので 2,000 件で約 1MB */
+export const RESET_BATCH_MAX = 2000
+/** 領域のリセットの総数。read_reset は容量超過でも外さないので、ここで容量の 4 分の 1 に抑える(5,000 件で約 2.6MB) */
+export const RESET_TOTAL_MAX = 5000
+
+/** 容量超過のとき、1 回に外す数と、1 周で試す回数 */
+export const TRIM_BATCH = 100
+export const TRIM_ROUNDS = 5
+
+/** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/scheduler.ts) */
+export const HEAD_INTERVAL_MS = 30_000
+export const PUSH_INTERVAL_MS = 30_000
+export const NET_SETTLE_MS = 5_000
+export const NET_MIN_GAP_MS = 30_000
+export const IDLE_STOP_MS = 10 * 60 * 1000
 
 /** 打ち切った回数から次の待ち時間を決める。jitter は 0 以上 1 未満 */
 export function backoffDelayMs(attempt: number, jitter: number): number {

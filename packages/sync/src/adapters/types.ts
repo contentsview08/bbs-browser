@@ -37,6 +37,8 @@ export interface ApplyPlan {
 export interface OpEffect {
   target: OpTarget
   make: (existing: SyncPayload | null, stamp: string) => SyncPayload | null
+  /** レコードの HLC に加えて、これより必ず後にする(リセットは知っている全端末の読みより後) */
+  floor?: string
 }
 
 export interface SyncAdapter {
@@ -65,4 +67,12 @@ export interface SyncAdapter {
   remove(r: StoredRecord): Promise<ApplyPlan>
   /** 周の適用の最後に 1 回。並べ直しのように 1 件ずつでは決まらないもの */
   afterApply?(ctx: AdapterContext): Promise<ApplyPlan>
+  /** 手元の今のデータの要約の単位。なければ area。同じ表を見るものをまとめる */
+  readonly localArea?: string
+  /** 手元の今のデータを 1 行ずつ。端末で揃うかを見比べるための値で、画面には件数とハッシュだけを出す */
+  localLines?(ctx: AdapterContext): Promise<string[]>
+  /** false は「手元にあるのにレコードがない」を数えない(手元の値が他の端末の記録から来ている種類) */
+  readonly seedsAll?: boolean
+  /** 手元が同期の表と違うか。なければ apply の changed で見る(apply に副作用のある種類だけ書く) */
+  differs?(r: StoredRecord, ctx: AdapterContext): Promise<boolean>
 }

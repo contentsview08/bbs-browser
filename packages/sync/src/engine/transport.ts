@@ -2,6 +2,7 @@
 import { HTTP_TIMEOUT_MS, MAX_RESPONSE_BYTES } from '../config'
 import { parseStrictJson } from '../json'
 import { checkPowChallenge, solvePow } from './pow'
+import type { SyncPace } from './scheduler'
 
 export interface SyncRequest {
   method: 'GET' | 'POST' | 'DELETE'
@@ -82,16 +83,26 @@ function checkEpoch(v: unknown): string {
   return v
 }
 
+export interface HeadResult {
+  /** 304 なら null */
+  version: number | null
+  epoch?: string
+  gc_floor?: number
+}
+
 export class SyncApi {
   private readonly base: string
+  /** 応答に書いてあった「最低これだけ空ける」。古いサーバーは書かない */
+  pace: SyncPace | null = null
 
   constructor(serverUrl: string, private readonly tokenHex: string, private readonly transport: SyncTransport, allowLocalhost = false) {
     this.base = checkServerUrl(serverUrl, allowLocalhost)
   }
 
-  private async call(method: SyncRequest['method'], path: string, body?: unknown): Promise<Record<string, unknown>> {
+  private async call(method: SyncRequest['method'], path: string, body?: unknown, etag?: string): Promise<Record<string, unknown>> {
     const headers: Record<string, string> = { Authorization: `Bearer ${this.tokenHex}` }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
+    if (etag !== undefined) headers['If-None-Match'] = etag
     let res: SyncResponse
     try {
       res = await this.transport.send({
@@ -115,7 +126,20 @@ export class SyncApi {
     }
     if (res.status < 200 || res.status >= 300) throw new SyncApiError('http', res.status, isObject(parsed) && typeof parsed.error === 'string' ? parsed.error.slice(0, 64) : '', isObject(parsed) ? parsed : null)
     if (!isObject(parsed)) throw bad()
+    if (isObject(parsed.pace)) this.pace = parsed.pace as SyncPace
     return parsed
+  }
+
+  /** 同じ ETag なら 304。Cookie も本文もないので一番軽い確認になる */
+  async head(etag: string | null): Promise<HeadResult> {
+    try {
+      const r = await this.call('GET', '/head', undefined, etag ?? undefined)
+      if (!isCount(r.version) || !isCount(r.gc_floor)) throw bad()
+      return { version: r.version, epoch: checkEpoch(r.epoch), gc_floor: r.gc_floor }
+    } catch (e) {
+      if (e instanceof SyncApiError && e.kind === 'redirect' && e.status === 304) return { version: null }
+      throw e
+    }
   }
 
   async createSpace(ticket: string): Promise<{ epoch: string }> {

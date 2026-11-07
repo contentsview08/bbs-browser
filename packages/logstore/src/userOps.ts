@@ -2,6 +2,11 @@
 import type { Board, SiteConfig, ThreadSummary } from '@bbs-browser/connectors'
 import {
   addFavoriteBoardStatement,
+  addPostHistoryStatement,
+  deletePostHistoryStatement,
+  deleteThreadStatements,
+  markReadStatement,
+  removeHistoryStatement,
   addFavoriteThreadStatement,
   addSiteStatement,
   addUploadStatement,
@@ -12,11 +17,16 @@ import {
   reorderFavoriteStatements,
   setSettingStatement,
   type LogStore,
+  type PostHistoryEntry,
   type SqlDb,
   type SqlStatement,
   type UploadRecord,
 } from './index'
 import { applyNgDiff, isEmptyNgDiff, ngRuleFromBody, ngRuleToBody, type NgDiff, type NgRuleData } from './ngRules'
+
+/** 1 回の削除で書くリセットの数。packages/sync の RESET_BATCH_MAX と同じ値 */
+export const LOG_RESET_MAX = 2000
+const LOG_DELETE_CHUNK = 200
 
 /** 使っていないときは sync_state が空。読めないときも使っていない扱いにして、利用者の操作を止めない */
 export async function isSyncEnabled(db: SqlDb): Promise<boolean> {
@@ -116,6 +126,61 @@ export class UserOps {
   async uploadRemove(url: string, now = Date.now()): Promise<void> {
     if (await this.isOn()) await this.db.batch([removeUploadStatement(url), plainOp('upload_remove', url, { url }, now)])
     else await this.store.removeUpload(url)
+  }
+
+  /** 設定の保存と、許可リストの項目の送信待ちを同じトランザクションで書く */
+  async settingsWrite(writes: { key: string; value: unknown; ops: { name: string; value: unknown }[] }[], now = Date.now()): Promise<void> {
+    const changes = writes.map((w) => setSettingStatement(w.key, w.value))
+    const on = writes.some((w) => w.ops.length > 0) && (await this.isOn())
+    await this.db.batch([...changes, ...(on ? writes.flatMap((w) => w.ops.map((o) => plainOp('setting', o.name, { name: o.name, value: o.value }, now))) : [])])
+  }
+
+  /** スクロールで何度も呼ばれるので、同じスレの読みは sync_ops の 1 行にまとめる。古い SQLite で通るよう UPDATE と INSERT OR IGNORE の 2 文にする */
+  async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
+    if (!(await this.isOn())) return this.store.markRead(thread, no, now)
+    const target = `${thread.boardUrl}\t${thread.key}`
+    await this.db.batch([
+      markReadStatement(thread, no, now),
+      { sql: "UPDATE sync_ops SET num = MAX(num, $1), at_ms = $2 WHERE op = 'read' AND target = $3", params: [no, now, target] },
+      { sql: "INSERT OR IGNORE INTO sync_ops (op, target, num, args, at_ms) VALUES ('read', $1, $2, $3, $4)", params: [target, no, JSON.stringify({ board_url: thread.boardUrl, key: thread.key }), now] },
+    ])
+  }
+
+  /** スレを開いたときの最終閲覧時刻。PC は読んだときだけ進むので、スマホの touch と共通テストが使う */
+  async threadView(thread: ThreadSummary, now = Date.now()): Promise<void> {
+    const change = { sql: 'UPDATE threads SET read_at = $1 WHERE board_url = $2 AND key = $3', params: [now, thread.boardUrl, thread.key] }
+    if (await this.isOn()) await this.db.batch([change, opStatement('view', thread, now)])
+    else await this.db.execute(change.sql, change.params)
+  }
+
+  /** 履歴から外す。ログと既読は残す。全端末の履歴から外れる */
+  async historyRemove(thread: ThreadSummary, now = Date.now()): Promise<void> {
+    const change = removeHistoryStatement(thread)
+    if (await this.isOn()) await this.db.batch([change, opStatement('view_remove', thread, now)])
+    else await this.db.execute(change.sql, change.params)
+  }
+
+  /** ログの削除は全端末で未読に戻す操作を兼ねる。自動整理は store.pruneLogs を使い、ここを通らない */
+  async deleteLogs(threads: ThreadSummary[], now = Date.now()): Promise<void> {
+    if (!(await this.isOn())) {
+      for (const t of threads) await this.store.deleteThread(t)
+      return
+    }
+    for (let i = 0; i < threads.length; i += LOG_DELETE_CHUNK) {
+      const chunk = threads.slice(i, i + LOG_DELETE_CHUNK)
+      await this.db.batch(chunk.flatMap((t, j) => [...deleteThreadStatements(t), ...(i + j < LOG_RESET_MAX ? [opStatement('log_delete', t, now)] : [])]))
+    }
+  }
+
+  async postAdd(thread: ThreadSummary, post: { no?: number; name: string; mail: string; body: string }, now = Date.now()): Promise<void> {
+    if (!(await this.isOn())) return this.store.addPostHistory(thread, post, now)
+    await this.db.batch([addPostHistoryStatement(thread, post, now), plainOp('post_add', `${thread.boardUrl}\t${thread.key}\t${now}`, { board_url: thread.boardUrl, key: thread.key, posted_at: now, body: post.body }, now)])
+  }
+
+  /** 消した後は行がないので、ID を作るのに要る値を操作に書く */
+  async postRemove(e: PostHistoryEntry, now = Date.now()): Promise<void> {
+    if (!(await this.isOn())) return this.store.deletePostHistory(e.id)
+    await this.db.batch([deletePostHistoryStatement(e.id), plainOp('post_remove', `${e.thread.boardUrl}\t${e.thread.key}\t${e.postedAt}`, { board_url: e.thread.boardUrl, key: e.thread.key, posted_at: e.postedAt, body: e.body }, now)])
   }
 
   /** 差分を今の DB の値に重ねて書く。積むのは upsert と remove だけで、drop は tombstone にならない。書いた結果を返す */

@@ -14,16 +14,19 @@ import {
   PUSH_MAX_ROUNDS,
   REBASE_LIMIT,
   REBASE_WINDOW_MS,
+  TRIM_BATCH,
+  TRIM_ROUNDS,
   RECREATE_RETRY_MS,
   SCHEMA_VERSION,
   WRITE_BATCH,
 } from '../config'
 import { openRecords, sealPayload, type KindTag } from '../crypto'
 import { SyncError } from '../errors'
-import { HLC_ZERO, hlcObserve, hlcStamp } from '../hlc'
+import { compareHlc, HLC_ZERO, hlcObserve, hlcStamp } from '../hlc'
 import { canonicalJson, parseStrictJson } from '../json'
+import type { SyncPace } from './scheduler'
 import { checkDeviceId, deriveKeys, generateDeviceId, normalizeBoardUrl, spaceId, type SyncKeys } from '../keys'
-import { mergePayloads, type SyncPayload } from '../merge'
+import { LAST_VIEWED_FIELD, makeTombstone, mergePayloads, type SyncPayload } from '../merge'
 import { planRebase, planRecreate, settleRecord, type LocalRecord } from '../rebase'
 import { checkPayload } from '../schema'
 import {
@@ -105,7 +108,7 @@ export interface CycleResult {
   /** 画面が読み直すもの。キーはアダプターの area。適用で手元が変わったときだけ立つ */
   applied: Record<string, boolean>
   /** 周を始めなかった理由 */
-  skipped?: 'backoff' | 'lease' | 'waiting'
+  skipped?: 'backoff' | 'lease' | 'waiting' | 'halting'
 }
 
 /** 領域がない・作り直された。newEpoch は応答で分かった新しい値 */
@@ -143,6 +146,10 @@ interface InflightEntry {
   record_id: string
   hlc: string
 }
+
+const LAST_VIEW = 'last_view'
+/** 外す順。書き込みと画像は閲覧履歴の後。docs/sync-client.md の「容量を超えるとき」 */
+const TRIM_ORDER: readonly (readonly string[])[] = [[LAST_VIEW, 'read_dev'], ['image'], ['post']]
 
 const emptyRefs: RecordRefs = { ref_board: null, ref_thread: null, ref_detail: null, ref_local: null }
 
@@ -184,6 +191,10 @@ export class SyncEngine {
   private attempts = 0
   private retryAt = 0
   private applyFailures = 0
+  /** 別の領域へ移る途中。走っている周を次の区切りで止め、古い領域の受信を新しい表に混ぜない */
+  private halting = false
+  private headEtag: string | null = null
+  private paceValue: SyncPace | null = null
 
   // 周の間だけ持つ
   private keys!: SyncKeys
@@ -205,6 +216,61 @@ export class SyncEngine {
 
   get state(): SyncEngineState {
     return this.current
+  }
+
+  /** サーバーの指示。覚えておくので、304 の間も効く */
+  get pace(): SyncPace | null {
+    return this.paceValue
+  }
+
+  /** 送るものがあるか。通信しない */
+  async hasChanges(): Promise<boolean> {
+    const [row] = await this.db.select<{ n: number }>('SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1) AS n')
+    return Number(row?.n ?? 0) > 0
+  }
+
+  /** 走っている周を止めて、終わるまで待つ。表を消す・別の領域へ移るときはこれを先に通す */
+  async halt(): Promise<void> {
+    this.halting = true
+    this.again = false
+    this.againManual = false
+    try {
+      await this.running?.catch(() => undefined)
+    } finally {
+      this.halting = false
+    }
+  }
+
+  /** GET /head。変化があれば true(次に周を回す)。変化なし・通信の失敗は false。周の中では呼ばない */
+  async checkHead(): Promise<boolean> {
+    if (this.running || (await this.t.state('enabled')) !== '1') return false
+    if ((await this.t.state('phase')) !== 'idle' || this.deps.now() < this.retryAt) return false
+    const material = await this.deps.keyStore.load()
+    if (!material) return false
+    if (!(await this.takeLease())) return false
+    const keys = deriveKeys(material.k)
+    const api = new SyncApi(this.deps.serverUrl, toHex(keys.auth_token), this.deps.transport, this.deps.allowLocalhost)
+    try {
+      const head = await api.head(this.headEtag)
+      if (api.pace) this.paceValue = api.pace
+      if (head.version === null) return false
+      this.headEtag = `"${head.epoch}:${head.version}"`
+      const since = Number((await this.t.state('since')) ?? 0)
+      return head.version > since || (head.gc_floor as number) > since || head.epoch !== (await this.t.state('epoch'))
+    } catch (e) {
+      // 404・401 は周の流れ(作り直し・止める)で扱う
+      if (e instanceof SyncApiError && e.kind === 'http' && (e.status === 404 || e.status === 401)) return true
+      if (e instanceof SyncApiError && e.kind === 'http' && e.status === 429) this.waitFor(e)
+      else this.retryAt = this.deps.now() + backoffDelayMs(this.attempts++, this.jitter())
+      return false
+    }
+  }
+
+  /** 429 の応答の指示より早く試さない */
+  private waitFor(e: SyncApiError): void {
+    const sec = e.detail?.retry_after_sec
+    const told = typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.ceil(sec * 1000) : 0
+    this.retryAt = this.deps.now() + Math.max(told, backoffDelayMs(this.attempts++, this.jitter()))
   }
 
   private enter(s: SyncEngineState): void {
@@ -239,6 +305,9 @@ export class SyncEngine {
   /** 使い始め。鍵と端末 ID を保管してから enabled を立てる。ここから利用者の操作が積まれ始める */
   async pair(k: Uint8Array, ticket: string | null): Promise<void> {
     if (ticket !== null) checkTicketFor(k, ticket)
+    await this.halt()
+    this.headEtag = null
+    this.paceValue = null
     const deviceId = this.newDeviceId()
     await this.deps.keyStore.save({ k, deviceId, ticket })
     await this.db.batch([setState('device_id', deviceId), setState('clock', HLC_ZERO), setState('since', '0'), setState('phase', 'joining'), setState('enabled', '1')])
@@ -256,6 +325,9 @@ export class SyncEngine {
 
   /** この端末で同期をやめる。手元のデータは消さない */
   async leave(): Promise<void> {
+    await this.halt()
+    this.headEtag = null
+    this.paceValue = null
     await this.clearTables()
     await this.deps.keyStore.clear()
     this.enter('off')
@@ -287,6 +359,10 @@ export class SyncEngine {
   private async cycle(manual: boolean): Promise<CycleResult> {
     const result: CycleResult = { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {} }
     this.result = result
+    if (this.halting) {
+      result.skipped = 'halting'
+      return result
+    }
     const finish = (s: SyncEngineState) => {
       this.enter(s)
       result.state = s
@@ -327,6 +403,7 @@ export class SyncEngine {
       this.enter('draining')
       await this.drain()
       await this.flow(manual)
+      if (this.api.pace) this.paceValue = this.api.pace
       this.attempts = 0
       this.retryAt = 0
       await this.db.execute('DELETE FROM sync_state WHERE key = $1', ['last_error'])
@@ -352,7 +429,8 @@ export class SyncEngine {
       }
     }
     await this.noteError(code)
-    this.retryAt = this.deps.now() + backoffDelayMs(this.attempts++, this.jitter())
+    if (e instanceof SyncApiError && e.kind === 'http' && e.status === 429) this.waitFor(e)
+    else this.retryAt = this.deps.now() + backoffDelayMs(this.attempts++, this.jitter())
     return next
   }
 
@@ -415,6 +493,7 @@ export class SyncEngine {
 
   /** 長い周の途中で別の起動に渡っていたら、そこで止める */
   private async keepLease(): Promise<void> {
+    if (this.halting) throw new CycleStop('idle')
     if (!(await this.takeLease())) throw new CycleStop('idle')
   }
 
@@ -436,9 +515,10 @@ export class SyncEngine {
       let clock = (await this.t.state('clock')) ?? HLC_ZERO
       const stmts: SqlStatement[] = []
       const touched = new Map<string, StoredRecord>()
-      const put = async (target: OpTarget, make: OpEffect['make'], atMs: number): Promise<void> => {
+      const put = async (target: OpTarget, make: OpEffect['make'], atMs: number, floor?: string): Promise<void> => {
         const existing = touched.get(target.record_id) ?? (await this.t.record(target.record_id)) ?? undefined
-        const stamped = hlcStamp(clock, atMs, this.deviceId, existing?.payload.hlc)
+        const before = existing?.payload.hlc
+        const stamped = hlcStamp(clock, atMs, this.deviceId, floor !== undefined && (before === undefined || compareHlc(floor, before) > 0) ? floor : before)
         const payload = make(existing?.payload ?? null, stamped.stamp)
         if (payload === null) return
         if (checkPayload(payload) === null) {
@@ -470,7 +550,7 @@ export class SyncEngine {
           stmts.push(delOp(op.seq))
           const effects = await adapter.expand(op, ctx)
           if (effects === null) await this.countBad('local')
-          for (const e of effects ?? []) await put(e.target, e.make, op.at_ms)
+          for (const e of effects ?? []) await put(e.target, e.make, op.at_ms, e.floor)
           break
         }
         stmts.push(delOp(op.seq))
@@ -556,6 +636,7 @@ export class SyncEngine {
       const next = page.more ? last : Math.max(last, page.head)
       if (page.more && next <= since) throw new SyncApiError('no_progress')
       this.enter('merging')
+      if (this.halting) throw new CycleStop('idle')
       await this.mergePage(page.records, next, page.gc_floor)
       since = next
       if (!page.more) return
@@ -624,43 +705,50 @@ export class SyncEngine {
   /** 種まきと合流の残り。古い HLC なので新しい削除に勝たない。ID が決まっているのでやり直しても重ならない */
   private async seedAndPlan(): Promise<void> {
     const ctx = this.ctx()
-    const stmts: SqlStatement[] = []
     for (const adapter of this.deps.adapters) {
       const rows = await adapter.seed(ctx)
-      const local = await this.t.records(rows.map((r) => r.record_id))
-      for (const r of rows) {
-        const l = local.get(r.record_id)
-        const payload = l ? mergePayloads(l.payload, r.payload) : r.payload
-        const changed = !l || !same(l.payload, payload)
-        const settled = settleRecord(payload, l?.version ?? 0, l && asLocal(l), ctx.now)
-        stmts.push(
-          writeRecord({
-            record_id: r.record_id,
-            kind: payload.kind,
-            kind_tag: l?.kind_tag ?? 'h',
-            schema_version: l?.schema_version ?? SCHEMA_VERSION,
-            payload,
-            hlc: payload.hlc,
-            version: settled.version,
-            pending: changed || (l?.pending ?? false),
-            priority: l?.priority ?? r.priority,
-            needs_apply: l?.needs_apply ?? false,
-            ...keepRefs(refsOf(l), r.refs),
-            tomb_at: settled.tomb_at ?? null,
-          }),
-        )
+      // 件数の多い人でも 1 回の呼び出しを小さく保つ。ID が決まっているので途中で切れてもやり直せる
+      for (let i = 0; i < rows.length; i += WRITE_BATCH) {
+        const chunk = rows.slice(i, i + WRITE_BATCH)
+        const local = await this.t.records(chunk.map((r) => r.record_id))
+        const stmts: SqlStatement[] = []
+        for (const r of chunk) {
+          const l = local.get(r.record_id)
+          const payload = l ? mergePayloads(l.payload, r.payload) : r.payload
+          const changed = !l || !same(l.payload, payload)
+          const settled = settleRecord(payload, l?.version ?? 0, l && asLocal(l), ctx.now)
+          stmts.push(
+            writeRecord({
+              record_id: r.record_id,
+              kind: payload.kind,
+              kind_tag: l?.kind_tag ?? 'h',
+              schema_version: l?.schema_version ?? SCHEMA_VERSION,
+              payload,
+              hlc: payload.hlc,
+              version: settled.version,
+              pending: changed || (l?.pending ?? false),
+              priority: l?.priority ?? r.priority,
+              needs_apply: l?.needs_apply ?? false,
+              ...keepRefs(refsOf(l), r.refs),
+              tomb_at: settled.tomb_at ?? null,
+            }),
+          )
+        }
+        if (stmts.length > 0) await this.db.batch(stmts)
       }
     }
-    if (stmts.length > 0) await this.db.batch(stmts)
-    let lost = 0
-    let total = 0
-    for (const adapter of this.deps.adapters) {
-      for (const r of await this.t.recordsOfKind(adapter.kind)) {
-        if (!adapter.owns(r) || !(await adapter.exists(r))) continue
-        total++
-        if (r.needs_apply && isDeleted(r.payload) && r.payload.trim !== true) lost++
+    // 消えるものがなければ全件を見ない(種類ごとの exists は 1 件ごとに DB を読むので)
+    const count = async (where: (r: StoredRecord) => boolean): Promise<number> => {
+      let n = 0
+      for (const adapter of this.deps.adapters) {
+        for (const r of await this.t.recordsOfKind(adapter.kind)) {
+          if (where(r) && adapter.owns(r) && (await adapter.exists(r))) n++
+        }
       }
+      return n
     }
+    const lost = await count((r) => r.needs_apply && isDeleted(r.payload) && r.payload.trim !== true)
+    const total = lost > 0 ? await count(() => true) : 0
     if (lost > 0 && (lost >= JOIN_CONFIRM_MIN || lost * 2 >= total)) {
       await this.db.batch([setState('phase', 'confirm'), setState('pending_confirm', canonicalJson({ type: 'join', lost, total }))])
       throw new CycleStop('confirm')
@@ -713,7 +801,7 @@ export class SyncEngine {
         const adapter = this.deps.adapters.find((a) => a.kind === r.kind && a.owns(r))
         if (!adapter) {
           // 本文も ref もない tombstone は手元のどれか分からない。後で種まきが同じ ID を作れば ref が埋まって写せる
-          if (r.ref_board === null && r.ref_detail === null && r.payload.body === undefined) items.push({ id: r.record_id, area: '', plan: { statements: [], changed: false } })
+          if (r.ref_board === null && r.ref_detail === null && isDeleted(r.payload)) items.push({ id: r.record_id, area: '', plan: { statements: [], changed: false } })
           continue
         }
         items.push({ id: r.record_id, area: adapter.area, plan: await adapter.apply(r, ctx) })
@@ -755,8 +843,41 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * 容量超過。優先の低い古いものからサーバーで外す。手元は消さない(trim の tombstone は適用で何もしない)。
+   * read_reset は外さない(外すと、消したログの既読が戻る)。お気に入り・NG・設定も外さない。外せるものがなければ false
+   */
+  private async trimForQuota(): Promise<boolean> {
+    for (const kinds of TRIM_ORDER) {
+      const marks = kinds.map((_, i) => `$${i + 2}`).join(', ')
+      const rows = await this.t.selectRecords(`deleted = 0 AND kind IN (${marks}) AND (version > 0 OR pending = 1) ORDER BY hlc, record_id LIMIT $1`, [TRIM_BATCH, ...kinds])
+      if (rows.length === 0) continue
+      const now = this.deps.now()
+      let clock = (await this.t.state('clock')) ?? HLC_ZERO
+      const stmts: SqlStatement[] = []
+      for (const r of rows) {
+        // まだ送っていないものは送らないだけでよい
+        if (r.version === 0) {
+          stmts.push({ sql: 'UPDATE sync_records SET pending = 0 WHERE record_id = $1', params: [r.record_id] })
+          continue
+        }
+        const stamped = hlcStamp(clock, now, this.deviceId, r.payload.hlc)
+        clock = stamped.clock
+        const payload = makeTombstone(r.payload, stamped.stamp, this.deviceId, r.kind === LAST_VIEW ? [LAST_VIEWED_FIELD] : [], true)
+        const settled = settleRecord(payload, r.version, asLocal(r), now)
+        stmts.push(writeRecord({ ...r, payload, hlc: payload.hlc, version: settled.version, pending: true, priority: 0, needs_apply: false, tomb_at: settled.tomb_at ?? null }))
+      }
+      stmts.push(setState('clock', clock), delState('push_inflight'))
+      await this.db.batch(stmts)
+      await this.countBad('quota_trim')
+      return true
+    }
+    return false
+  }
+
   private async pushAll(): Promise<void> {
     this.enter('pushing')
+    let trims = 0
     for (let round = 0; round < PUSH_MAX_ROUNDS; round++) {
       await this.keepLease()
       const prepared = await this.prepareBatch()
@@ -778,7 +899,17 @@ export class SyncEngine {
         await this.db.execute('DELETE FROM sync_state WHERE key = $1', ['push_inflight'])
         continue
       }
-      const res = await this.call(() => this.api.pushRecords(requestId, body))
+      let res
+      try {
+        res = await this.call(() => this.api.pushRecords(requestId, body))
+      } catch (e) {
+        if (e instanceof SyncApiError && e.status === 413 && e.code === 'quota_exceeded' && trims < TRIM_ROUNDS && (await this.trimForQuota())) {
+          trims++
+          continue
+        }
+        throw e
+      }
+      if (this.halting) throw new CycleStop('idle')
       await this.checkEpoch(res.epoch)
       await this.settlePush(res.results, sent)
     }

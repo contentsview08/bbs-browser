@@ -41,6 +41,9 @@ class PushResult(val recordId: String, val status: Long, val version: Long?, val
 
 class PushResponse(val results: List<PushResult>, val epoch: String, val gcFloor: Long)
 
+/** version が null は 304 */
+class HeadResult(val version: Long?, val epoch: String? = null, val gcFloor: Long? = null)
+
 private const val MAX_SAFE = 9007199254740991L
 private fun isCount(v: Any?) = v is Long && v in 0..MAX_SAFE
 private fun bad() = SyncApiError("bad_response")
@@ -54,10 +57,15 @@ private fun checkEpoch(v: Any?): String {
 class SyncApi(serverUrl: String, private val tokenHex: String, private val transport: SyncTransport, allowLocalhost: Boolean = false) {
     private val base = checkServerUrl(serverUrl, allowLocalhost)
 
-    private suspend fun call(method: String, path: String, body: Any? = null): Map<String, Any?> {
+    /** 応答に書いてあった「最低これだけ空ける」。古いサーバーは書かない */
+    var pace: SyncPace? = null
+        private set
+
+    private suspend fun call(method: String, path: String, body: Any? = null, etag: String? = null): Map<String, Any?> {
         val headers = LinkedHashMap<String, String>()
         headers["Authorization"] = "Bearer $tokenHex"
         if (body != null) headers["Content-Type"] = "application/json"
+        if (etag != null) headers["If-None-Match"] = etag
         val res = try {
             transport.send(SyncRequest(method, base + path, headers, body?.let { canonicalJson(it) }, SyncConfig.MAX_RESPONSE_BYTES, SyncConfig.HTTP_TIMEOUT_MS))
         } catch (e: CancellationException) {
@@ -76,7 +84,21 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
         }
         val detail = parsed as? Map<String, Any?>
         if (res.status !in 200..299) throw SyncApiError("http", res.status, (detail?.get("error") as? String)?.take(64).orEmpty(), detail)
-        return parsed as? Map<String, Any?> ?: throw bad()
+        val ok = parsed as? Map<String, Any?> ?: throw bad()
+        (ok["pace"] as? Map<String, Any?>)?.let { pace = SyncPace((it["head_sec"] as? Number)?.toDouble(), (it["push_sec"] as? Number)?.toDouble()) }
+        return ok
+    }
+
+    /** 同じ ETag なら 304。Cookie も本文もないので一番軽い確認になる */
+    suspend fun head(etag: String?): HeadResult {
+        try {
+            val r = call("GET", "/head", null, etag)
+            if (!isCount(r["version"]) || !isCount(r["gc_floor"])) throw bad()
+            return HeadResult(r["version"] as Long, checkEpoch(r["epoch"]), r["gc_floor"] as Long)
+        } catch (e: SyncApiError) {
+            if (e.kind == "redirect" && e.status == 304) return HeadResult(null)
+            throw e
+        }
     }
 
     suspend fun createSpace(ticket: String): String {

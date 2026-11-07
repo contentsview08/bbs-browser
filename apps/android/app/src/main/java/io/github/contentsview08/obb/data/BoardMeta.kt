@@ -22,6 +22,20 @@ data class BoardMeta(
 ) {
     val isEmpty get() = icon == null && alias == null && defaultName == null && defaultMail == null && omitNoname == null && nonames.isEmpty()
 
+    /** 同期する項目。名前欄・メール欄の既定値とファビコンは手元に残す */
+    fun syncFields(): Map<String, Any?> = buildMap {
+        alias?.let { put("alias", it) }
+        omitNoname?.let { put("omitNoname", it) }
+        if (nonames.isNotEmpty()) put("nonames", nonames)
+    }
+
+    /** 許可された項目だけを差し替える。手元だけの項目は残す */
+    fun withSyncFields(remote: Map<String, Any?>) = copy(
+        alias = (remote["alias"] as? String)?.ifEmpty { null },
+        omitNoname = remote["omitNoname"] as? Boolean,
+        nonames = (remote["nonames"] as? List<*>).orEmpty().filterIsInstance<String>(),
+    )
+
     fun toJson(): JSONObject = JSONObject().apply {
         alias?.let { put("alias", it) }
         icon?.let { put("icon", it) }

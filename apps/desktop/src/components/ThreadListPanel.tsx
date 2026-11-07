@@ -148,6 +148,8 @@ interface Props {
   onNgAuthor?: (t: ThreadSummary, today?: boolean) => void
   /** スレのログ(閲覧履歴)を消す */
   onDeleteThreadLog?: (t: ThreadSummary) => void
+  /** 閲覧履歴の一覧だけ。ログは残す */
+  onRemoveFromHistory?: (t: ThreadSummary) => void
   /** スレのブラウザ用の URL(コピーに使う) */
   threadUrl?: (t: ThreadSummary) => string
   /** 渡されたときだけ、チェックボックスで選んでまとめてログを消せる(閲覧履歴) */
@@ -692,6 +694,7 @@ export default function ThreadListPanel(props: Props) {
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
   )
   const onDeleteCard = useEvent((t: ThreadSummary) => props.onDeleteThreadLog?.(t))
+  const onRemoveCard = useEvent((t: ThreadSummary) => props.onRemoveFromHistory?.(t))
   const onFavoriteCard = useEvent((t: ThreadSummary) => props.onToggleFavoriteThread?.(t))
 
   // ヘッダー・フッター・︙ に並べる操作。どこに置くかは設定(ボタンの配置)で決まる
@@ -858,6 +861,7 @@ export default function ThreadListPanel(props: Props) {
         onNgAuthor={props.onNgAuthor ? onNgAuthorCard : undefined}
         onCopy={onCopyCard}
         onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
+        onRemoveFromHistory={props.onRemoveFromHistory ? onRemoveCard : undefined}
         isFavorite={props.favoriteIds?.has(id) ?? false}
         isNew={props.newSince !== undefined && (t.createdAt?.getTime() ?? 0) > props.newSince}
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}

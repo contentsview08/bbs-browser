@@ -1,360 +1,634 @@
 {
  "同期を始めない限り、操作は積まれず通信もしない": {
-  "pc": "c22164aed9f598f767ffef5f4d3e4f56208caafc6a651590d69f5a6ae741b58e"
+  "pc": "4bb075985bb75bdb63f27863c1fe27c9b45aedb85fb5574ceb9a054664dd9a03"
  },
  "お気に入りのスレの追加が別の端末へ届く": {
-  "pc": "d8308a4d79954dfeae57eff40213bc0e291fff3db8c979f32dbb10e04a270135",
-  "phone": "55bc63ed44d2ccf09079845493f9bce28134c5555ce5c5dc97c9bc27a2940972"
+  "pc": "a5d2e7e77e5dad847a5df86c0d6e8069aa7ded181590c7d979b2fc1bbe0a759e",
+  "phone": "87f79ebc27c7f1cfa9a688d7572a9722d446ad8d536296f20d949b5097c7fdef"
  },
  "削除が届き、もう一度同期しても復活しない": {
-  "pc": "234644df647f3d805d9dc62439c7446f7534706cccab1b1100c6c409324aa723",
-  "phone": "4edb85b0f404571ee7c86873f057994b59880b03e17e82a4d61d24cbda5c407f"
+  "pc": "3ca268cbc8b31513c33a2f88230bfabf131ebe9eb70ef580c24b8975d1027ab2",
+  "phone": "e800befd97ed9a9c765c449b2fa12b80bab78c5e1f2942596b2dd9621215b79a"
  },
  "足した直後に外すと tombstone だけが伝わる": {
-  "pc": "ad1be8aff28b91053ebc3827b82ff9dba5d7af934ff32c592bdf98017520e8bf",
-  "phone": "f624adb63a146595ac4c340a7e3a19792da5c45c412330600ce3a9b4996268ae"
+  "pc": "fd2fdc09decc8d17724b5a30e7f447b659e40dc302231ccb2c56bfbb5cd6395e",
+  "phone": "cd6e5ec105b7446ce55276ccd718f53b7ec1d268e54fbe02e5c4afdbfb79795f"
  },
  "同時の追加と削除: 削除の方が新しければ消える": {
-  "pc": "fc51f548f8d9be64ad7b5a277c62772826677a30363506ecc0525ce1cc44a79b",
-  "phone": "fc51f548f8d9be64ad7b5a277c62772826677a30363506ecc0525ce1cc44a79b"
+  "pc": "8259a361bf4a38459f97c3bad41f69120bbc827bc8a2ed497a9109dcc3020341",
+  "phone": "8259a361bf4a38459f97c3bad41f69120bbc827bc8a2ed497a9109dcc3020341"
  },
  "同時の追加と削除: 追加の方が新しければ残る": {
-  "pc": "84b7fcf7f45e4b162749988be64f0e8f9a95d360ca5b020d22e1676648681c45",
-  "phone": "d47d2733ff2c78f1eeda3fded124b98210697d1aebdb546f82b4240b12402a97"
+  "pc": "a6b1e9b0807b851a7c9f731a3bdfc21233165a72bcfd8189450ddd10e20a2777",
+  "phone": "f37dfebee437160a3806ae15f152c442249c59b7a3d2538385b589bf69fda3db"
  },
  "オフラインから戻ると両方の変更が揃う": {
-  "pc": "dd49ff578e53755b407b2285772562b80c4414f083a91dcc8337b4aedfa42676",
-  "phone": "27256b6d91b9c4dd2c0b710a5df7f25cac9e64eaf9de4dd6fbd0fbed3d040848"
+  "pc": "26fd1f99eddeb56d7bd28db9aff6b32f7f63c4bbd07df88bce0ba01ab24f4a9e",
+  "phone": "130a5831e9e65529dbf92b7ff781b8c456bb54e2b0f48e8123651652c1ec026f"
  },
  "適用したものを送り返さない": {
-  "pc": "8d0a73303a3568294df4484812eb590e1ec37c0fce31cc61b4cb03d33dc5cb3d",
-  "phone": "10b4ac394af8a84849880b5b4580a943573fe371af5f4b72ccd6bfff592210cf"
+  "pc": "0169fb4d95d6cbc93fef94c827d7967e25972c28bf002e358c4521238f40ce51",
+  "phone": "37ad62d331b51d2b85917a75999dbcc107d13b929192e89abcfd576ad5da5373"
  },
  "プリセットと自動の追加は積まれない": {
-  "pc": "b85aae220cd9e998c32b0293a76491d15a458b33ae90064119b849f9628e409f"
+  "pc": "977cd83e22488393f0587d8491b6c2fca44201e24c30ed2963b0b787ccb3a922"
  },
  "起動時の照合: 取りこぼした追加は低い HLC でレコードになり、新しい削除に負ける": {
-  "pc": "c8a01e6340b38fce8ba07f51c8d850618f104507a165afafe9f5bab50537813a",
-  "phone": "5a5aa6662f9d320f9bdfa0d694a12ba0be846b7394743be968a980aed90372c9"
+  "pc": "2bb4451de76d1ae47f9cc9e9b35d8103531b183d7d8121a56e0faa6c745b84b4",
+  "phone": "250580959034472abe3bfc7bf3b26827ff0ce15a33dddb2b18c551bdb68cc0d8"
  },
  "起動時の照合: レコードがあり手元にない行は同期の表から戻す": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "354dee19a2ad6076d2e090d2033cdb2c70ec56817a29e2530214874f1448abec"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "f8c3802696c59805b4c4fa5c8223ca4836a28151935e35a5c388fee0e838d32e"
  },
  "409: 同じレコードを 2 台が足すと、マージして揃う": {
-  "pc": "8e0fa78dc2086a04384d0111bbe3de6ba84ddb39c52fb0e7cc5f6fb72c9efef2",
-  "phone": "6b07d5ef6a941d8b6ff9cc88823afab25f2dbb7304dc227a566442420b19ca1c"
+  "pc": "ef8635015fe6c076598e9106d94032b6126dd239c175564356ff566e0fe9fd32",
+  "phone": "c6e319c69e7dd3d36dd4498fb3aa1e08a19ac3a66656f5109205936236ec439d"
  },
  "409: 手元の方が古ければ送り直さず、サーバーの値へ揃う": {
-  "pc": "e5d2f4e8aedc081d496d966d369b364be3d4141a755f7a38edb33b0d47222bc9",
-  "phone": "fa1c0ebea2d8c7681685df0912684fb75aad23cb6bcdcb00c7a5d2555286e3dd"
+  "pc": "b1251d8f922dfcb777cfb2dfe5b02a089e95513ecd07dd1b0be122f10681e141",
+  "phone": "d0e259e71397629d397494241aa9d752c4debcfa022bcc9b59ca2eedc295afd8"
  },
  "404 からの作り直し: 確認なしで手元から戻り、削除が復活しない": {
-  "pc": "3f850b37dee2a01670c1edbc26a84c90ee95b4d788b4564add69a6fe7daf7dec",
-  "phone": "96f22b3da43f21625e11cf334afe0ab6cc86c3dde7754d59230ce18e472c4a72"
+  "pc": "81cf84ea036c4f346e5513bc089a4e4493ce3dde5ce399db14cfe62457cf3220",
+  "phone": "248ebd45cc8949ff3699d9b945ae9e6f504eb9ca9bd5194dab3049f671857aa8"
  },
  "404: 送信待ちは失われず、作り直しで届く": {
-  "pc": "1ae1dfa7ee77db325d1841039d8cd6c019cff75b9428e8caf6bb94932b09a1f7",
-  "phone": "4cc6c31db5819a9241fce272878ee2cd62ad85be375d07305e5ddf989df900e2"
+  "pc": "0cc2d59991a6b58c5d7ffa05936929563e6865fb71c21359c3660afe7dc11b68",
+  "phone": "91255c0a0df554a01622c3dc4020aa3c73f575513d9211a6a78b1121d4c1ca9e"
  },
  "2 台が同時に作り直しても領域は 1 つで揃う": {
-  "pc": "c85e772c975da930fe6616cc30850ce8b2f5297daf53c21e831327d28bb16d41",
-  "phone": "b855042725f6cc5fffccef14d226ac4b1a1cb22167a0fafa3d3a4a756fa695b6"
+  "pc": "eb169f5c42b4de6e3e2bd0707b4bac675b7b598de23549a4b5a7e5a3a764c030",
+  "phone": "901f13ab6913c59fee871bbefcf73d74aedc5edae9fc8c8ac85bd6fb183af607"
  },
  "作り直しの途中で切れても次の周で続く": {
-  "pc": "dfe638b686e6f061ef74be12e052014855074515649f79115811c7e12cbb2c4a",
-  "phone": "94f315c29413a67c2a7ece1bca8caa129bd8891e5598e3095672b5bfc53ef792"
+  "pc": "a41199642d325724372c3e44e9f20c85af5d92258502ba470f1a8b14f2ac91c2",
+  "phone": "17a0439241aa5b5588185d4e8b395be71a6df2b4ab8fa62de176ee5646ca487a"
  },
  "epoch の変更: 何も消さず全部を合わせ直して送る": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "354dee19a2ad6076d2e090d2033cdb2c70ec56817a29e2530214874f1448abec"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "f8c3802696c59805b4c4fa5c8223ca4836a28151935e35a5c388fee0e838d32e"
  },
  "epoch の繰り返しの変更: 回数を超えると止まり、手元は残る": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "枠 2 で 3 領域: 使っていない領域だけが押し出され、戻ると作り直して揃う": {
-  "a1": "51d03106f88a6b14b24d718c8a916e3c50593a18728ab4e2844492b100619767",
-  "a2": "71074fec6423470483b1996580da24480205ce2066561874012366c677301812",
-  "b1": "0ff19eb6e5c3dfbd3a764941b3c776b5637056c2cf17ac73bca4c9caf8b97063",
-  "b2": "7de62cac2b828b0c95112b080083b650ff79262a807fe21b788e8d528c4ee173",
-  "c1": "ef242ae81b1ff15c2913b5cb3aeba12f21f7acafc7a24b10cf7d2f7763a62aa2",
-  "c2": "83cb2b8610daa886e9db66b061e3216eafde8be0d6027c3747238fe0094d326e"
+  "a1": "5287d1159c0843df7a79cfe641b58552a19d77d69b63d67eebe1ecfb3303db02",
+  "a2": "832b3166476b1a88f41cdff617016d40e699542c37321934b5d82760366f96e5",
+  "b1": "54bd6222a06ecb9f29a11287c4a75372cc4d545ab1b69ba55b31c0fee4991c1d",
+  "b2": "d0a469a3f4282fa1c7e0f955f047b9c9a31107694e492a8a51044b97147b65ca",
+  "c1": "e73ca86d1b17ce2f85591f7b3fb57b9ad1a7513718b187b4782d56dac89e38e6",
+  "c2": "a543080a5e65b522a1d41675a3d176011e040ef97a3290c7665b1c16d8e230e6"
  },
  "中断してやり直しても重ならない: 応答が消えたら同じ request_id で採番し直さない": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "354dee19a2ad6076d2e090d2033cdb2c70ec56817a29e2530214874f1448abec"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "f8c3802696c59805b4c4fa5c8223ca4836a28151935e35a5c388fee0e838d32e"
  },
  "中断してやり直しても重ならない: 届かなかった送信は同じ request_id で届く": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "中断してやり直しても重ならない: 種まきの途中で落ちてやり直す": {
-  "pc": "a9052b84b3c912df4008c1b7bc33fea637dad404fe3c0042288e2b110f4983e0",
-  "phone": "a72ef661922650368ba29a654bc93f40535ee48ab5e056b30fdf2e7f6a930711"
+  "pc": "7b8128507ce41c3e65622abc9587a3db8fa0ffb55a3c878f40628b49dce7f997",
+  "phone": "dae58736adf4d3b6b7ce5d963e63454d9636dc2288440accb37e03a312c657a7"
  },
  "中断してやり直しても重ならない: 適用の途中で失敗すると巻き戻り、次の周で続く": {
-  "pc": "dfe638b686e6f061ef74be12e052014855074515649f79115811c7e12cbb2c4a",
-  "phone": "0d4e0b9fe67e0dd8efe2190cc4b29cbce0b83a758049ece37144d1c590a331ce"
+  "pc": "a41199642d325724372c3e44e9f20c85af5d92258502ba470f1a8b14f2ac91c2",
+  "phone": "47eaae5751180aacca4907d5117558593285616f12144609ab18fd0f7941051e"
  },
  "適用が 3 回続けて失敗すると、原因のレコードだけを除ける": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "43b8b1e81d7ea758fb8bacc7f251fbab3aa2446e7e93410ad199c4a6ecfc9e0c"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "112d4d120efe0f2f54b21ded7717c262186ca2c7708d5268df866d95c83b5cf4"
  },
  "種まき: 既存のお気に入りがレコードになり、もう 1 台へ届く": {
-  "pc": "8eef4ddff015269274d6b3c5c2852eed099b6d1675a783fee5af2a1e79b8f4b6",
-  "phone": "9c90e5eacbc352c77b1f5dc4ade063ed5e766fc3fdc1f1ef7a453d8c41d16cf6"
+  "pc": "f5504e11faf09b12247e1435d2a6781f65d2bbeff10a46d8b6743eb050dbeecb",
+  "phone": "155d5b9f848956a778c7022df6b7aa126307b1864c8a4a713c278afbfa48c589"
  },
  "種まき: 合流は和集合で、どちらの手元も消えない": {
-  "pc": "c827f3422b83dc181862472945bc7dc6f7baca28940b2af721dc2af7ebabe1bf",
-  "phone": "e7e122bfe0a35001c07790c3748b85574309775693c2b327780765ac33722331"
+  "pc": "51f055696d0a894bb999fb4d5d0edd1620b3240344804f6dbdcefbbb5aca4c09",
+  "phone": "e94d1b4d30e4fe01d6755a787676537edad1d27236f051e74ec98552acf7538c"
  },
  "種まき: 古いお気に入りは新しい削除に勝たず、確認の後で消える": {
-  "pc": "ad105c651e8c2306fbb2b8d4bad7a73e32a0cdd2b8240d276401c28b091afae6",
-  "phone": "67e3d8e82ebf61901cb927402e46461f085c4fffde0889c8385bd5a0e120c27d"
+  "pc": "385d45a6765fd5e8332cf5d9e4e3fcb5e2a74ab91b5be5150cf40287f4c82415",
+  "phone": "c9503868b47060a129c546f888383550b98769300092d7222f8bd08da28fb16a"
  },
  "種まき: 削除より後に足したものは残る": {
-  "pc": "9efb2904ecd1342ac5c5bbb6f903217ea839e0e39a6a87602c1f6ff8c59e7ef0",
-  "phone": "3d3e2d98f8c8a285196179f71d2c316fbebb2d2bc484ab0d852c6cd3cbdcc982"
+  "pc": "154e471383e5095c534c0cf7f8a213b5aa7ad977751db8bb1ff13b6870a8c6a0",
+  "phone": "a6d0fcaf03c4691ba621a707d51b2cdad1c58d9944e865a14d217222d09ae952"
  },
  "合流で 10 件以上消えるときは止まり、やめても手元は残る": {
-  "pc": "266ed5c328c58b588c07a09e66b95669e8107f14707c040f39d311758da0a8c8",
-  "phone": "2353b61762b73fb25855cb51782bcf096561595f456e2a69e0d0de8361334691"
+  "pc": "aa4746d2a724f5b3ec23db59c2132a8da7d6644e3f1948943728fbf99b4007d9",
+  "phone": "c4b736dd73513219ac60d72a1cbb6156d8a704379f94226a7ccdcad48c9f3354"
  },
  "gc_floor の変更: リベースで消えたものが手元から消え、復活しない": {
-  "pc": "0bf047062b89affa4ece610ad1c8941d50d077986b33650b24129d5be15b9f4d",
-  "phone": "36a670d26c4c3a0d5f22802461cd01f07b2dd43318351f13a329eb3e6f2fa08b"
+  "pc": "506a7a9939bbd1a59ec992a037b3a0463367112785cc913b7010d57649267045",
+  "phone": "ac8021bb5ed67fbc2d801cb211c73705c62da3aa4fd0dd4e3acc07fb8d0c05fa"
  },
  "gc_floor: サーバーが全件を空に見せると確認で止まり、手元を消さない": {
-  "pc": "dfe638b686e6f061ef74be12e052014855074515649f79115811c7e12cbb2c4a",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "a41199642d325724372c3e44e9f20c85af5d92258502ba470f1a8b14f2ac91c2",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "gc_floor の繰り返しの変更: 回数を超えると止まる": {
-  "pc": "5869bb35feae58bb092f30288316a6263ecf6caf1cda8e38719c158ff84ab4b2"
+  "pc": "db66c3217267a1c1d75de01c137cdf0a54d3f35cf783f018672c48e79f6ad8d9"
  },
  "再送: 500 は偽の時計で待ってから試す。待つ間は通信しない": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "再送: 続けて失敗すると待ちが延びる": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "429 は待って試す": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "送信中に同じレコードを変えると pending が残り、次で送る": {
-  "pc": "437d7d9559e1b1545cf1bd60b624a18edd4ce6ab21588a5bcfa2678d32ab12ce",
-  "phone": "46a2ce6e75769c7d334504f44cff6fc4e2366c28724d149c940d796fa9234a13"
+  "pc": "20c78a873a80c6d0c83c4bf201cd69f8228b4c6ada3ef56f315d390cbe8499e4",
+  "phone": "791821d608eeff56529afa057b511063fc73d90ba7c07fbec6ebd6de4ad98942"
  },
  "リダイレクトをたどらず、トークンを別の先へ渡さない": {
-  "pc": "a6370696a7ae869195167eaaed53487b894b69a9cd2d7ae4e3d21bc184f6bf8c",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "6cb120f62043d9df7e266765e996e223fb342b62d7ec9f740d99d2d7401a7e5c",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "version が進まない応答はページングを止める": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "401 は止まり、自動で再開しない": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "creation_closed は止まり、手元が残る": {
-  "pc": "588da68b94bf0b5651ba7f6b5b4f724f174e28286f1c490a9d25ed3bfbd902d1"
+  "pc": "473bdfb3f7599214f8858beabb3256973a666a1c573c9987fb0385982c3ef23c"
  },
  "413 は通知だけで送信待ちを残す": {
-  "pc": "e8a8aec415c94309fe689cf120dd679b1106fb565766a09d8d75238dd2361a97",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "5e688d7ae271abf6c775371654e2158c221d4c10514e54c2f85bc322ee8e9fa3",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "HTTP と 5ch.net の揺れは同じレコードで、手元の行を二重に作らない": {
-  "pc": "741c99ae3f5aca505b43a34612f4fdcb66a523e730b253e2b92b437cc84a04b4",
-  "phone": "741c99ae3f5aca505b43a34612f4fdcb66a523e730b253e2b92b437cc84a04b4"
+  "pc": "47a39f044b9553fe08a47f4a2134158f6918e4fa3f14bf358b053185165f9cee",
+  "phone": "47a39f044b9553fe08a47f4a2134158f6918e4fa3f14bf358b053185165f9cee"
  },
  "スマホにないふたばのレコードは手元に入れず、持ち続ける": {
-  "pc": "bb45836ad9ab9427ea4f25f936ff9d05ba6944ca2abd74127dcd63e27af2be30",
-  "phone": "93cc5f3fff61fa39b3ff804eafadfbd83b8743a01d7657bf051d09bf3339d087"
+  "pc": "59864d33c0eaf92901d8f0123dc6a3bec2604cde29711e4912d5f9bd4a71cf8e",
+  "phone": "4bb16ac5aba91eff069f118ca98bd3ffe5e4a434e56c9eed3bc23a507cee4bf7"
  },
  "知らない種類とフィールドは保持して作り直しで送り直す": {
-  "pc": "e786da25a95ffe8e8258b0b8310ea38a206eedf712cc6dc820141a707fbb4e0a",
-  "phone": "e786da25a95ffe8e8258b0b8310ea38a206eedf712cc6dc820141a707fbb4e0a"
+  "pc": "137d14878ede47b5abd796dc1fb000e0c71b394679dcb187633baf58877c5abc",
+  "phone": "137d14878ede47b5abd796dc1fb000e0c71b394679dcb187633baf58877c5abc"
  },
  "読めないレコードはそれだけ捨てて数え、止まらない": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "354dee19a2ad6076d2e090d2033cdb2c70ec56817a29e2530214874f1448abec"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "f8c3802696c59805b4c4fa5c8223ca4836a28151935e35a5c388fee0e838d32e"
  },
  "種類の検査に落ちる値は捨てて数える": {
-  "pc": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "外す印の tombstone では手元を消さない": {
-  "pc": "9fe39f81e2651bf8384279ed92918659d8cbe5857d92a11cbafd3ef26abfd376",
-  "phone": "d2434734b4e2616e57cdc9c76749378a797a834f61dc43e6dc99e8ce7b7ea254"
+  "pc": "4e8d44d56a00319863a3c4c42c8c6774ea40c726b7201faab86ca88f9d12c3da",
+  "phone": "3e34c228471f5289cff074c73509e52aa6e9ed105bda59de0f1b8e2b2bef98ab"
  },
  "やめると手元が残り、同期の表と鍵が消える": {
-  "pc": "785bd3efae19574d22b42f6805623d76a1735982f81a98d83bc31822fbe5bfa6",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "54f4e333051007e9eb6ed89fe07da3225e4d203701af22939473b6c65afb9aaa",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "DB を別の端末から入れると、新しい device_id で合流し直す": {
-  "pc": "06605c51dfcbfd77600039d3b501c6704aae110a23017364877065d4dd460bce",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "9b0e20ecf765842e11b6478860f2ae5927aa5dbe4158331ae8f3b972fc7276fb",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "鍵がなくなっていたら同期の表を消して使わない状態に戻す": {
-  "pc": "785bd3efae19574d22b42f6805623d76a1735982f81a98d83bc31822fbe5bfa6",
-  "phone": "431cfb698e27fc1a54db7cde3a34b47d36be9daf2e05163c50a525065356dac9"
+  "pc": "54f4e333051007e9eb6ed89fe07da3225e4d203701af22939473b6c65afb9aaa",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
  },
  "tombstone は 90 日を過ぎると作り直しで送らず消す": {
-  "pc": "3b0556ff5104d387921bd1df858836c2a704c4b5d5a4b74cf63bc42e3be3569e",
-  "phone": "94f315c29413a67c2a7ece1bca8caa129bd8891e5598e3095672b5bfc53ef792"
+  "pc": "f2c52c3cc74b023df8b1c4f4a29c44f90ef684f9e5203d3229d32b056c2e7fb4",
+  "phone": "17a0439241aa5b5588185d4e8b395be71a6df2b4ab8fa62de176ee5646ca487a"
  },
  "時計が 3 日先の端末の追加も、遅れた端末の削除で消せる": {
-  "pc": "da2089245a87f8a127438390a6e8eca860edeeecc4a94689f1c5ba9bd6aa0ba9",
-  "phone": "8bd9763455a8579b3532f0cd22b1f33f13c78d296fa17b348e5bb7827214d407"
+  "pc": "33da4c02459d1cacff2413f221739ef5b0580830c927626a7d81788582b4234c",
+  "phone": "192b3246499a0425694bd3c4646336b41fc01af1825ef07dd605bb13c3f4b8a5"
  },
  "受け取る側の検査に落ちる長いキーは送らず、列を止めない": {
-  "pc": "9c440394e7411459a6fd136e5beefb61b740b0122db095062b9122897fc2f854",
-  "phone": "e2cd26d36c96aabcb130999fc28e3d8ab89dc65b5ccef385acb0753ed476b8ad"
+  "pc": "12fbd514786b01da83306d1faf8f695ef6b203d1744fa557df4176362790d8b8",
+  "phone": "90e70865a9e6d8643b9bee6a83c447874289f527c01d4adfc1a8b84f00739485"
  },
  "別のレコードの暗号文をすり替えた 409 は混ぜない": {
-  "pc": "e918bb9a70e2bfa715559c759e60098ade8e198e6d68a9b9029291cca5f72738"
+  "pc": "4cfd3f74dea652d6dce01f2e1c797ea8e6532802571d5862db890317f3c8b8a5"
  },
  "許可証がなければ作成を送らず止まり、手元が残る。通すと続く": {
-  "pc": "8523fdc58752a5531a8db69432f6817eb0208b9c3cafa5293f91cdea24d9b6e7"
+  "pc": "74194a7f8e1587ba9e35dbf2939d1519a4c9b12cb4a0154bc8a0e11453f22d9f"
  },
  "領域が消えても、同じ許可証で人の操作なしに作り直す": {
-  "pc": "3fe1c976fac76be6cd87bf3838f96abd0e21fb0307659e722175f5411d5c0f81"
+  "pc": "1212377b1641cf13d2d3bf278c002d899429afd12d7713633b463ef1b0c45dbe"
  },
  "2 台目は許可証を受け取り、Turnstile を通さず作り直せる": {
-  "pc": "3fe1c976fac76be6cd87bf3838f96abd0e21fb0307659e722175f5411d5c0f81",
-  "phone": "cd8742c2742676daa391850354df85e1d9ceb0581d9b09eb9e1805e7efc5ae42"
+  "pc": "1212377b1641cf13d2d3bf278c002d899429afd12d7713633b463ef1b0c45dbe",
+  "phone": "f843f5b5abaa03802ac8c26e0c906abdab570aaf3d26bfd0bda3d1dd9a59bd68"
  },
  "許可証の期限が切れると止まり、手元が残る。通し直すと作り直す": {
-  "pc": "3fe1c976fac76be6cd87bf3838f96abd0e21fb0307659e722175f5411d5c0f81"
+  "pc": "1212377b1641cf13d2d3bf278c002d899429afd12d7713633b463ef1b0c45dbe"
  },
  "サーバーが許可証を断ると、作り直しの待ちにせず止まる": {
-  "pc": "3fe1c976fac76be6cd87bf3838f96abd0e21fb0307659e722175f5411d5c0f81"
+  "pc": "1212377b1641cf13d2d3bf278c002d899429afd12d7713633b463ef1b0c45dbe"
  },
  "計算の問題を解いて作る。許可証を付けて送り直す": {
-  "pc": "3fe1c976fac76be6cd87bf3838f96abd0e21fb0307659e722175f5411d5c0f81",
-  "phone": "cd8742c2742676daa391850354df85e1d9ceb0581d9b09eb9e1805e7efc5ae42"
+  "pc": "1212377b1641cf13d2d3bf278c002d899429afd12d7713633b463ef1b0c45dbe",
+  "phone": "f843f5b5abaa03802ac8c26e0c906abdab570aaf3d26bfd0bda3d1dd9a59bd68"
  },
  "同期を始めない限り、4 種類とも積まれず通信もしない": {
-  "pc": "5e31a744e9dcc9945e7ee54898e6ea4a6a2ddc544c4b6c15fe6295ad6f6e9cc6"
+  "pc": "8dfc87ea421b8da46ace1d397efe0e48fa3a4e52ac20c7fc4bebc57f9ab018d5"
  },
  "お気に入り板の追加が別の端末へ届き、消すと届く。送り返さない": {
-  "pc": "9cdc6db80abefcaba858adf742df11ddab3e6d0c77c38fcf23db8e66e9aec5af",
-  "phone": "ca62fd5f4ab0da0e6e457b23e9258cab2b3dc8027fffa77962e91895650acd84"
+  "pc": "c34fa5856b3bef367aa18d52e0003d0cbb91170f700f7e08ce4975c834d61d8b",
+  "phone": "ab0f5e393ad16c1511a88cd137d4a999efd40186caf05109f3a05d150a1a3a9a"
  },
  "お気に入り板の並べ替え: 動いた項目のレコードだけ変わり、sort が揃う": {
-  "pc": "b561ee1b57d324617439ab64685a7f6c14f5be07602c32895d588d9a21950853",
-  "phone": "8e54d5f9e79522791c72e692c11032bc8151cc5f1911023fe5d7419c22f83c83"
+  "pc": "f78b807a5c0adec4ea59c97ed68a1ea05d4d21e23b9eed8e1d85a5cb7d065544",
+  "phone": "3abc408dbcfbefc38c83b931449ffc804456ad4859ebbdfc7dbad4b9318da5f7"
  },
  "お気に入り板の並べ替え: 2 台が別の項目を同時に動かすと、両方の動きが残り収束する": {
-  "pc": "bb5063374436ce51ba99ed4756c7ccd29c8fdc77e4b3db2ed8bddb12ada9b871",
-  "phone": "0631a797a21a835e072fad7e72b9f9d360dd29e64c07d8f1fff02aa38a257b3a"
+  "pc": "f965e604f33bf9544ff3986c80f9b637aa9cc7377ebd36fc483e05be840895b3",
+  "phone": "7bc973cb9d9b53fbe81308c3a2dede8bfd8e5948719d6310b03bf300f743c64e"
  },
  "お気に入り板の並べ替え: 2 台が同じ項目を別の位置へ動かすと、新しい方が勝つ": {
-  "pc": "ce081009d91b1c042f9ad2da68207348a984226b067702e8fa42f6f663288b78",
-  "phone": "95810d38fb4b6c93bfcc095fbdfae2d18012815ddc63e4c354deddee7b6e4507"
+  "pc": "95df42d407cd13250417c15e0829bb4a2f645adb27deb9c20134415e7700cb47",
+  "phone": "63bc66a5309e522c235ac3ef7871b5eb9e2d9d39ceaaa99913fa5c5aef4aeb20"
  },
  "お気に入り板の種まき: 合流で領域の順が崩れず、手元だけの項目は末尾に足す": {
-  "pc": "609ae22fa03db496298f9605acf7144083a8e118abd48599e961e12a30fe0295",
-  "phone": "e1081d801c4c7d6f2fbd29e6a653b2488efceef202a5cb629ffc323d83106bcd"
+  "pc": "a68e3d13ec00a686ae77256521131a768450b3e38b6375bc239675b79a9bafba",
+  "phone": "5178a930e6e3e812f2ff69a6acb1b7f4d308047cb7c676532cb04d947c435c0a"
  },
  "お気に入り板の順序キーが長くなりすぎたら、リストを振り直しても順が同じ": {
-  "pc": "0af8300c698770c0f15e91c9d1c2ca855c528c762f8b8e33a768b254fbb74a60",
-  "phone": "1f1561139c50478f80c97b6ec148adb4327de79beb91c87bbfc888c61194e38f"
+  "pc": "2087a53e8f5dd77d1014cd979ea82e9c7ceacda6741775ff39faacb435d531fb",
+  "phone": "aeb22d818a7372e569fc9a4d6dce48bff56480b7d3078375da71e6fddaac6cbd"
  },
  "お気に入り板: プリセットの追加は積まれず、消す操作は他の板とお気に入りのスレに触らない": {
-  "pc": "0f1a507655c6f5096571944a23aad8fae1f7eae82091eae4ee333d80a54e449c",
-  "phone": "ba0a425eb2f24a858339a8059f1db96995acd134eeff70ea39d94121ddd08881"
+  "pc": "cd6f41d7fc1c1b7b8ec4a10d4bda9603d6c4a139d2e37fc32247bbda6bd8e99f",
+  "phone": "c5f14423c6649798967d6b84259aa2018dd058e31374ffbd5c7828ded7638edb"
  },
  "お気に入り板: スマホにないふたばは手元に入れず持ち続け、並べ替えでも消えない": {
-  "pc": "1db042e6ec7147018e77c5c72b07a2156f3cc2c88043d75155246554239cf80a",
-  "phone": "9732399f551fb659b47f6e1afa6064a1571a12d42ba632f92e5af7857022fd30"
+  "pc": "498541fa0d876effa5ed6fd7f7a3bcda913bb9f154b669b34955ca90b0ade64e",
+  "phone": "1f5595326ec16d64b68f4bcbfc3bb4d19366332e45aafa302c861a70723a6f3b"
  },
  "お気に入り板: HTTP と 5ch.net の揺れは同じレコードで、行を二重に作らない": {
-  "pc": "d3c08ff8b25a11ecea5bf479e87bdda5ee22c7cfe41739b22abcf7f47009dcb0",
-  "phone": "683711c3a2d24a497d8828093bd00d99d2244ad198ab57c5c3544f89c7b756db"
+  "pc": "5a5bff56900ff62b4ebc1a237d4a1596f6bd782361ba46fd3e8e51d712bae567",
+  "phone": "ab122b10a0b0cf82d1ec9200e3f4a65b9835f3cabe9feb4aa801227b0a3216b4"
  },
  "サイトの追加と削除が別の端末へ届く。名前が届き、板一覧は消えるがお気に入り板は残る": {
-  "pc": "20b5ad3660fd63e6aa9fe06006faa5858659c72dd8e00742b0e38b24a9472bc0",
-  "phone": "2b61b65d04744afaf2df919fa52a581fd1ec37c86a7342dcd0747139c63b1274"
+  "pc": "5b5508ac6db73ad6c7995549db566ac875b039f62d66321b48353a9d05279633",
+  "phone": "71f0ff880f7fa28cae7b165eff6d2b3161354c6af9949ac1dcb6500ee7a6da84"
  },
  "サイト: プリセットは積まれない。種まきでは手元の全部が送られ、領域で消したものは合流で消える": {
-  "pc": "c3ef2373f771010028988f50ca0a054370d0597abeb86e9c09646046c653216a",
-  "phone": "f615ca9ae7d685c1e18c99d01de0d7477d9187f3efa8c870dab61dfbacbdbadf"
+  "pc": "15e3e633f8e7c004952fa8471e986c9f9ed45dfbfe7b21b5b40995bbea8fff32",
+  "phone": "eef6b889ce2a3a44fdc74daebef70f7f798d47bad1faf8e1905082ab28a22b5a"
  },
  "サイト: URL の揺れは同じレコード。ふたばのサイトはスマホの手元に入らない": {
-  "pc": "de26403b04233ea344fd49f2ffbb41d0d072a5cb7c343152d340dae3761aad09",
-  "phone": "1bdc2b23058416f95e3a97b261f159e6f558cb79a76ce7b87ae3492759c0aa3b"
+  "pc": "9d4cfd2137c6a0d94a7a29710442343a0eedc5108d198519695c6f6a091ad2e2",
+  "phone": "0ae10679d7dfaff7be81c52f9e743a2d1363c3cb157ebee606625d86b85738e3"
  },
  "上げた画像: 追加と削除が届き、削除キーとハッシュは送らない": {
-  "pc": "3637f1a672664c46089eeb5fafb907c007b8160f418163f70664fcba4db84ba8",
-  "phone": "3637f1a672664c46089eeb5fafb907c007b8160f418163f70664fcba4db84ba8"
+  "pc": "0b75e83d2bf32c0e89ee27958cd2efefcc8c4c648668449903cd89094520acc3",
+  "phone": "0b75e83d2bf32c0e89ee27958cd2efefcc8c4c648668449903cd89094520acc3"
  },
  "上げた画像: 受信で手元のハッシュと削除キーを消さない": {
-  "pc": "26bf8237c2b23d55d98e0510850abbee8850a728043873062a29b4901c57f45a",
-  "phone": "9f5c92a8825778afd444e83e24564dab3460c01389011ea7a68f688c4ec6e6db"
+  "pc": "9db4f8a002ab74b23ff5c570706c461bb8d62e298a2820de4256c5b3ca4e03db",
+  "phone": "5cda0d3509cf37b50aa97f4522a9868f1362e0f066cb45eab6fee68a59db5df7"
  },
  "上げた画像の種まき: 古い行は新しい削除に負ける。合流は和集合": {
-  "pc": "b844c9002aeb08494d06323f52a3c0ae7033f0efa21d9c3feb365aae7688c0f7",
-  "phone": "2ecb2cc09fc8f937a21bec1fb76b92a2a5d93f3d23940e6c7288bd3f1d6f151b"
+  "pc": "a11bb9bd2632b3390654d071ff284d266217bf42a8540bb1470459967ffb40de",
+  "phone": "1e1b003db0c4da962afa8133e331034d8cc78facad205943ee106c06f1901870"
  },
  "NG の追加・編集・削除が 1 要素ずつ届く。編集で消した項目は残らない": {
-  "pc": "d7f4ac326b1b50e9f1eec4ca1e3794fce0f22a4ec41339dda475bc3da0f077d1",
-  "phone": "eb0dec04e2d3a74a1b4fc295d5e0938a968ca782885bb22d05535e03a4b89dcb"
+  "pc": "62cb5134a95619f94e1711a89131f2e1612728ea9cc3a405ad0a50e921697cf6",
+  "phone": "9a7c4226165de58c0ffeb3bb99a13a1a7ff60d8125b8f4ca2245b88bfb7ec508"
  },
  "NG: 同時の編集と削除は HLC の新しい方": {
-  "pc": "19d58f04081ddb443fbe715ae7b32fc75b3bbb0f8cec5ca4226a3e866ed8aa2c",
-  "phone": "19d58f04081ddb443fbe715ae7b32fc75b3bbb0f8cec5ca4226a3e866ed8aa2c"
+  "pc": "d9a455aaad2b2edd547ab2663e597c5a68c4ba35832b90252bc08fcb2c42d062",
+  "phone": "d9a455aaad2b2edd547ab2663e597c5a68c4ba35832b90252bc08fcb2c42d062"
  },
  "NG: 期限切れの自動の片づけは tombstone にならず、手元からだけ消える": {
-  "pc": "af53f0ac08edc46ab442624430b5d1dc47dd45ef919d41c5e645435591dccb76",
-  "phone": "981833d8bc6713f282354803028399e2e49851cc9c8233b6d827b4c70c24b5d6"
+  "pc": "4e808ce38862596992172a9d437bc33a044ac3548216ed286d17ad5ca60176f5",
+  "phone": "d6b1eddfb8908cc60a661b4fe8e3e860f1fba93afa2846a8d318ed5de0e5f03a"
  },
  "NG: 手で片づけても、期限の切れたものは送らない。消す操作で消えた有効な NG だけが届く": {
-  "pc": "69fe730d8d274be5989efcb5c5ced9b01f672f2f1d01f7afce23241a42e27a44",
-  "phone": "7a63362cb57da323144858c5a38d258c928a15997e33c4eaac7a59b6e37a5d9f"
+  "pc": "b7f63f1bdbe2e8490313f8eeb625e6bca0ed772c04064cb5c56087a453f435c9",
+  "phone": "f44e7a5c110aba1336767add71a5cc0a4dca80c68235ab71e50dbb2da295f887"
  },
  "NG: 古い窓の保存は別の窓の追加を tombstone にせず、手元からも消さない": {
-  "pc": "db041f0c3f7033856bbc00fc2a31eaf9ecd94e842d0d46a9090014ec6aeb78dc",
-  "phone": "216e17d249efd90c6d88109cbb6ee48712858969137785dc94760100e9ed4d14"
+  "pc": "c3cb55d0e528426a7eb0287d8ac7cc19a7fdf2bed83b19549b54953bdcb322f9",
+  "phone": "297a252b51ce843dc3b2a0c145da17d095887bb99b2e6d66130eb864ad287e9d"
  },
  "NG: 古い窓が消した要素だけが tombstone になり、知らない要素は残る": {
-  "pc": "d559b18b2db655b1450e0b7971276c833674c1068242c0aa67491f908aa3467c",
-  "phone": "5e180bb28096ac89cabef275f27a1e9ef4f4a1a32096d3e73a25835588a207ce"
+  "pc": "1241fab577eeceeabe636e4bb5c8cb744b83d289fceab0b68fece68407b7ce31",
+  "phone": "5dca5682ab2e044329dc08ab2a566bd1983b160af8a6766267c53861e7dea536"
  },
  "NG: 読めない式と固まる式は手元に入れず、同期の表に残し、止まらない": {
-  "pc": "181b4785cb5223f972519e77da5da891cd3cb0b50196160b91e076c989c31917",
-  "phone": "66db75e23f196298c50ff599b989c83cbcefd5bf3c74eac476a06b85ee73d9d2"
+  "pc": "5ceefffe9442730c3e05446a881a6b4f6b9980b3f1e8e97657a47a20af93ef2d",
+  "phone": "ee29d9a9644f27f922113087a59d7a965889bb0452a3502b109cfd986e32065f"
  },
  "NG: 期限の切れたものは受信でも手元に入らず、種まきでも送らない": {
-  "pc": "fb52406beef61690b8a991e1ee9132d620e2ac858b7386e10c201ac2397f1cbe",
-  "phone": "8691ea76a9aeebc3d3e1bbf94842561b84c21bbe28ca285a74981309421b51a3"
+  "pc": "27cb329bfae74c5fb7663fee73f45eb77ec862c8ccd0aba8cce9b072fb588eb7",
+  "phone": "f06a8d7f6b0cbe67276bf86bfad422911512270c73068421d4ae4bad3d226543"
  },
  "NG の種まき: 合流は和集合で、同じ内容で id が違うものは両方残る": {
-  "pc": "d807078d8e21c84d7834338e6a596495030891ab6402d2be219594783ba4635f",
-  "phone": "dc03892e212e83ad8f0747654f49c83a66b0cc843f2755cb126ef7bffe92dd65"
+  "pc": "3e6b4e0e4ce0f20b8553a12ca4823821bab7a4a225e587a473ca304d83e85497",
+  "phone": "6dd4fa44dacf4400330c73e347eafcb73fdd2ae05822869dd1bc939392e36039"
  },
  "NG の起動時の照合: 取りこぼしは低い HLC でレコードになり、値の違いは表の値へ戻す": {
-  "pc": "7be3529ed11ad087481a3354751871aa83aa7fde754f87d923c169ddb645b49e",
-  "phone": "34c33272d41d4530042b62315674656aa61bc0854f0750540f7916d5e2a89ebe"
+  "pc": "b004bb8c8d84170a750cc6aac24954d67043faec6973935159ecd8809d4701b7",
+  "phone": "410aedf0b1e78a6c18d2362f856ff8a7c0e39282d66e7c7690bb9e4010394980"
  },
  "NG の読み込み: 足した分だけ送り、なくなった分は全端末から消さない": {
-  "pc": "14389dfd63c54b1723a966fb860b0b5de36a070f483b7ab4b82da17bac899b4e",
-  "phone": "41df924925487ec1f4ff733445b1d7d2168bbdc51940fae0ba826276e51c0648"
+  "pc": "63dfde854debae9a9f011004915f780481dc97dc0e31e1881f765a428b79ce49",
+  "phone": "aa926b9f9d8e5415774706c5f63a648c5400c0fe9313baab0e035f16daac2d2d"
  },
  "リベース: お気に入り板・サイト・画像・NG の片づいた削除を手元から消す": {
-  "pc": "12cb42a13478805bdbf2acd6e3bde77f4e3f5999d24fb98baa48fd38906d5e27",
-  "phone": "f7ac976fa3506fb9e0e5e4d5e36f8781f28a9edf3318171a3530f0b824c0e63a"
+  "pc": "c8256f7b7c0133b4c95bfb90b584c1a49e6a08ea08d19ac2edcb25d4eff509b6",
+  "phone": "ed25ea0b434aff182d85ce370cb94584d5e019b6a440e5ff4c4187d85f1cdd95"
  },
  "領域が消えても、4 種類とも手元から作り直して揃う": {
-  "pc": "b69af127a74ad12bc7ea58ae55612e75e5aeb67a8667a7da9e6ccc26ef970819",
-  "phone": "ca2b7d8e6b520bc2864e2477d9524f24edb217b9cac8ec57fc34adb062b3e17a"
+  "pc": "eae33336bca0e536dc0b0070e84706712db505b9e45c08f44f386df1895a7dff",
+  "phone": "52ed533157ce432f3b3e06ee0746dd290959c2b901b83e2f2cd8a3e8bc57141c"
  },
  "適用待ちの NG に操作が重なると、操作を先に処理して手元が操作の結果になる": {
-  "pc": "dd739e71c4cf1c2b1f8606b5547420747406007c6ee281eae321ef6d99063259",
-  "phone": "dd739e71c4cf1c2b1f8606b5547420747406007c6ee281eae321ef6d99063259"
+  "pc": "f0726f0c497d7ce3ede69aac6781ce1f2d78cde1ccadf1565dc6e801a748d54b",
+  "phone": "f0726f0c497d7ce3ede69aac6781ce1f2d78cde1ccadf1565dc6e801a748d54b"
+ },
+ "履歴: 2 台が別々に書いて読むと、今のデータまで全部揃う": {
+  "pc": "ee4ba70a21a197756454e4dd2bd7fb160f44653b1e563f29b29253b757a9e504",
+  "phone": "b110afdf36bfdd38724dc3082fef69b11285018b60c3241b687baff9aabd088d"
+ },
+ "履歴: 合流: 別々に使っていた 2 台の履歴は和集合で、重複せず、古い値が新しい値に勝たない": {
+  "pc": "6de87ce44ae9c7a48a419b3bb44f4d4ccf5353af3b0d93a109d62f69b2ebec4c",
+  "phone": "6fdc5be4622606a48566a124a5c7147842f46ebeefa81410161af9b1adf278f1"
+ },
+ "履歴: 合流: 領域で外された履歴は、合流した端末の古い行からも外れる": {
+  "pc": "fb9e190959b5424bc975ad8cc410305beb52332ba2e1cc35219c91d80d125490",
+  "phone": "6a81a11f03596af9046331a103293c54b87efcd940285ba33489a6c9d682c8da"
+ },
+ "履歴: 履歴の削除: 全端末に届き、オフラインの端末が戻っても復活しない": {
+  "pc": "828ea4e63f11061c9c51d12fa4f02ee8aaaebbe25eb5d7e9ea62c5e00da2d968",
+  "phone": "7674e892cd97f4b89abe62fc3de30d158835a678543dbe1fccd29f8dc5e82940",
+  "tablet": "d0fb395951a1fc0b381e554c5ae8ce07d3188b93481137bd75849925a0960bca"
+ },
+ "履歴: 履歴の削除: オフラインの端末が削除より前に読んでいたら、戻っても削除が勝つ": {
+  "pc": "ea958111ea83f650801dafa661b486cd1e69d35bd0689219216ca8d9e8dae80b",
+  "phone": "a2af476cec0c03698f45ec9c4f995042854b5f8aedef1cc641fe8aefa17b61d0"
+ },
+ "履歴: 履歴の削除: 削除より後に別の端末で読むと、履歴に戻る": {
+  "pc": "cc2aa86f6f0cb3ef49ecfecb9e8c6c47dad6a533da2a9133007cebe2d7fc547a",
+  "phone": "0295c1b62d4e2c7f7b0ce03650f3b4edd6da2f1e60b2f1eae72996c4862c2705"
+ },
+ "履歴: 履歴の削除: 外した端末でもう一度読むと履歴に戻り、全端末に届く": {
+  "pc": "f117b22061f1d154683db24d5ad1e3066f7e7099d7fc61457839977302cc32e7",
+  "phone": "7678a588115361a59b07646645e9311221ed9454823ad75845ed28c27ab7c846"
+ },
+ "履歴: 閲覧: 開いただけの最終閲覧時刻が届き、古い時刻に戻らない": {
+  "pc": "e2dec54eb79f6de4c9121442b0a9bf9e2d91a2bb22794b76dd23bb186732f7b4",
+  "phone": "e2dec54eb79f6de4c9121442b0a9bf9e2d91a2bb22794b76dd23bb186732f7b4"
+ },
+ "履歴: 書き込み履歴: 同じスレに別の端末で書くと別々に残り、やり直しても重複しない": {
+  "pc": "c704d5ee61ca440d795bf2f35d0cb3efb7ec683aebe95f6228a569d1121f6936",
+  "phone": "3aba741d36ad34673d3999f61f31892197f69e5f07f0709ce75137adccecfa38"
+ },
+ "履歴: 書き込み履歴: 削除は全端末に届き、自分のレスの印は残り、オフラインの古い端末でも復活しない": {
+  "pc": "e305a30631258820470402e29bb3b4b841bac2d5e04931ba8a9b09ee9845a97c",
+  "phone": "5c7219a336ca61eed04875e76b21ddf61bd62455141fc9bcc9f6af7e72437538",
+  "tablet": "0d7285429af96a954bc15c1d16fda90c8cb3f128ff5de09017cce914265bb713"
+ },
+ "履歴: 書き込み履歴: 長い本文は切って同期し、切った本文の ID は送った端末と受けた端末で同じ": {
+  "pc": "55aee7108eea76ab234bd3827ec3d1827f00bddeacdda63ae47ba5b521559505",
+  "phone": "fed3c2e82c382a0fdf8c10d1a61f35932c7a77054689b8388e258398d90a6c42"
+ },
+ "履歴: 書き込み履歴: 応答が切れても同じ書き込みを二重に送らない": {
+  "pc": "563ae888615401b324b63a70e51e534e1f97775d4141cac7ccbc7941b36f3f98",
+  "phone": "2a2b24b593a916f3504d2b2ec14dd183b809c573a3a3239da49b3b9440bb2c3c"
+ },
+ "履歴: 書き込み履歴: レス番号が後から分かっても 1 行のまま": {
+  "pc": "eb9611f09008c45129f306a2569bfef2d2ffb0f7fc2ae65dcc51cded91725666",
+  "phone": "8221d65d0c4c9e3088cda47ab85e18949d4d052d84de195cdcc5c2009a5726d8"
+ },
+ "履歴: 既読 1: PC で 500、スマホで 300 まで読んだら 500": {
+  "pc": "e467c7890a54d85695fd6fd7cddba8d211021ed04fdaa962a0659adfb293f050",
+  "phone": "adf00b4ffd833bc51bfb7d37c351872a3b0289c0739877745720f71073a556a7"
+ },
+ "履歴: 既読 2: PC で 500 まで読んだ後、スマホでログを消すと全端末で未読": {
+  "pc": "d993acafae46a4fad092d3e699b954c45fca03506dd99af9a891b7e2ef4ffb17",
+  "phone": "d3d5d36f1e89edc3b9e5d456c7dfaa514c14e29c62f25c104350181d8c293bcd"
+ },
+ "履歴: 既読 3: 未読に戻した後、それを知らないオフラインの PC で 350 まで読み、次に 100 まで読むと 350": {
+  "pc": "b6d567284b33c2d3faf94a583807f0858d68e5de5ec320570305e0a4beb4640f",
+  "phone": "1d523ea06cf117087ba2a7b7a205b23844509be0d4066a022f5d99d3fc96a102"
+ },
+ "履歴: 既読 4: PC で 500 まで読み、スマホで未読に戻した後で PC が同期すると 0": {
+  "pc": "d993acafae46a4fad092d3e699b954c45fca03506dd99af9a891b7e2ef4ffb17",
+  "phone": "d3d5d36f1e89edc3b9e5d456c7dfaa514c14e29c62f25c104350181d8c293bcd"
+ },
+ "履歴: 既読 5: 2 台で同時に未読に戻すと HLC の新しい方が残り、どちらも 0": {
+  "pc": "da255765ba07152081b4c7c081ab742e9c9603e3eaa5d468930ccdc9350c8767",
+  "phone": "b8c03bb6ee2962972d279b734473c36dc89d55d87c75c36ba3ac29506b8c5a46"
+ },
+ "履歴: 既読 6: 未読に戻した後、PC が 350 まで読み、同期してから 100 まで読むと 350": {
+  "pc": "be964a8f2b48491722c4048a0b75488dd0f766363206ac5d12c85b4c31d82f83",
+  "phone": "9d0144199fbf3a50041e8ef4af38cf85c63d1a31cbea4d6a852f27c6864eb555"
+ },
+ "履歴: 既読 7: 時計が 3 日先の PC が 500 まで読み、それを見たスマホで未読に戻すと 0": {
+  "pc": "6510ae60be24854dcad7b0391e1baf1bc12e89e448ba5ef00b01b8b59b3dd0c6",
+  "phone": "dbd9ec328c0c80a9988e4fda48fdbbcaccc765a26d324a48b874f6499f5fdd2b"
+ },
+ "履歴: 既読: 未読に戻した後で別の端末が読むと、消した端末で開き直したときその位置になる": {
+  "pc": "0236888a5ff6eb52f7cb52315f22b951ba2676f568609703c84dd1bb2d6d9d0a",
+  "phone": "f674657a09b84d11bfc3392a475dccaa60c728094f14c63fbcdb04d742ccf090"
+ },
+ "履歴: ログの削除: 他の端末のログ・履歴・書き込み履歴を消さず、消した端末で開き直すと未読": {
+  "pc": "2fec30d9919be560dd408eb3cf30035ea610f6c02a0a9f2f0359efaff71b78cf",
+  "phone": "7bf13f42f01b161c4a07e238dab19a10bc3d64ab14dc76ff2f9d88e778f3fc0e"
+ },
+ "履歴: ログの削除: 消した端末に、消す前の別の端末の読みが遅れて届いても履歴の行を作らない": {
+  "pc": "18624159c0f5fbfa488d8786950d767442356c3d0717084200373fc6219b6f19",
+  "phone": "347493be5464393900a8411f5c3b9ba77aae18cac394219fdfb491eff9a210b8"
+ },
+ "履歴: ログの削除: まとめて消すとスレの数だけリセットを書く": {
+  "pc": "8d13e683e673f113e567d4a7b8ef107a49e47f90649dad8342e707afc1ee171c",
+  "phone": "40e6af40ebc7b3cac6db09cc978b375df5a0da9253bdec46b768b96415b88cbf"
+ },
+ "履歴: 自動整理: 何も送らず、他の端末は変わらず、開き直すと既読が戻る": {
+  "pc": "8b402088a2bbefa06355fcf4ef1cdd7862af1ced2eaac60eae8da134ad132319",
+  "phone": "11670d966e965dfca0ac7f971e088eca9bf21915b3e64c041bd70a49b635dd19"
+ },
+ "履歴: 読んでいる最中: DB の既読は下がり、読み進めると上がる": {
+  "pc": "6fca055bff68d9a169b3a4fdf879e9959bba2f99eef42878e5c43a9e9d7557b7",
+  "phone": "e821a6e5e8116520d979aef6264d65ee7ce690dd5906b3903d8e377f70242503"
+ },
+ "履歴: 読みの途中に届いたリセットで、まだ処理していない読みを消さない": {
+  "pc": "8c19120b15f851e797f831ccb193b7586038ab245fa36a79f87253a77684e7da",
+  "phone": "e255d9fdc7b2281e59e1d5603476974cdc550c44ea7b7c7365661f6f78a07e83"
+ },
+ "履歴: スクロール: 100 回読んでも操作は 1 行で、記録の steps は 1 件": {
+  "pc": "f73dfac14a408f26df0db83a62d5842c35d9c5d015ecb7ca17984a624923c63d",
+  "phone": "1ebf9c0e121c913bcb9b3dc2cbb233215d07393608612df3c141f79e58703b70"
+ },
+ "履歴: ログのないスレ: 新しい閲覧は空の行、古い閲覧と扱えない板は同期の表にだけ持つ": {
+  "pc": "1fdeb40637a203f386195fccd399e4ac7f96478643c48078a4ecaaa1bc2d6867",
+  "phone": "f1870191960b24d3b70924b32b64699c81dbc95a72a52082c0731143bfa10ef6"
+ },
+ "履歴: ログのないスレ: 10 桁のキーからスレの時刻を作る": {
+  "pc": "25e23abc65845789b97d52e3757a6468099c2ac97d46e7c55d39a97b70cb9edf",
+  "phone": "bfdb85e81bddd36850e5aa5adc56cfb6989d9c6fd553198949f0646edaa05070"
+ },
+ "履歴: URL の揺れ: 同じ板の http と 5ch.net は同じレコードで、手元の行を二重に作らない": {
+  "pc": "0481880ad631af87d1e6cb98a4e231d60cfa6da4fefc9068b0ed323df7403115",
+  "phone": "08e8e6f94d23db292a5ccb7d4749dfb0daa505acb632412f6412cf998ea50adf"
+ },
+ "履歴: リセットのある領域に合流: 古い読みは未読に戻す操作に勝たない": {
+  "pc": "4c1e6117bb6e0b1607fd9c246754f3598e023986c2698c0635bc289ef5bc0b7d",
+  "phone": "5caf451699f862f0c90802f604d17ad66c06f110cfbd9bb78540a95527a2464f"
+ },
+ "履歴: 領域が消える: 閲覧履歴・既読・書き込み履歴を手元から作り直して揃い、削除が復活しない": {
+  "pc": "3545b2b899d02536212d2aa843f786caa6034b13a234e28cb50daa821eb23839",
+  "phone": "d41e2dbf3144a397737d89651a7c37162b78867809aac68d7a60e8c6c6f582f9"
+ },
+ "履歴: 知らない種類: 閲覧履歴の知らない項目を持ち続けて再送する": {
+  "pc": "a1e46be8b942e660f7be626ffd05be2dfa470804e26b4728bd618eb2a50813d5",
+  "phone": "629f8e6d414b24224be438b53831012efbf91bfa4ee52278f87eef4c32964d73"
+ },
+ "設定: 許可リストの項目は全端末に届き、種類ごとに最新が勝つ": {
+  "pc": "5977bc94f5a52a08032c8f62a4646cf600b7b012c367154f714214ad9ddefa30",
+  "phone": "96c2eb0c0ddfe8936b1e8438cd33c0eca7cce1246181e80752ed7845bc06ed81"
+ },
+ "設定: 秘密の項目と配色と字の大きさは積まず、受けても書かない": {
+  "pc": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271",
+  "phone": "d4896c7f128c1ecced53b7f49c4bde944bef6971e8a24452a295e27f7280da82"
+ },
+ "設定: 範囲の外の値は手元に入れず、同期の表には残し、止まらない": {
+  "pc": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271",
+  "phone": "af6b192df6dc80e16a162a5043a169a088a0e4c5ebbf5a4993ce7c34bc6253fc"
+ },
+ "設定: 1 台目の種まきは既定と違うものだけで、2 台目は領域の値を使う": {
+  "pc": "fff0b2741af4a7f9b7518bf00dbe244703009c90efd857ac1523e0674fc1890a",
+  "phone": "f6b3dad3413d30ce3030488b34e2a74763fc894805e5fbe23ab9201096802957"
+ },
+ "設定: 板ごとの設定は別名と名無しだけを送り、名前欄の既定値はどの端末でも手元に残す": {
+  "pc": "f81d788ffb740779eac6824c90a2ac3c62abdd2247ad9dd22b6be5ef19e5d580",
+  "phone": "6807bb1e23c43d94e7bb2d0512dd48c1e7a8fcb79917162b524a49cec41451fa"
+ },
+ "設定: 起動時の照合: 取りこぼした手元の値は表の値へ戻す": {
+  "pc": "acc54b4a23d46cdc78026ef66da819d45668d7f654a08e5e95de5a8c9c5816c4",
+  "phone": "7f66d4b6fb9f0eab595eba12318877fd3269486960e711cc80580361388834e1"
+ },
+ "設定: 領域が消えても設定を手元から作り直す": {
+  "pc": "acc54b4a23d46cdc78026ef66da819d45668d7f654a08e5e95de5a8c9c5816c4",
+  "phone": "7f66d4b6fb9f0eab595eba12318877fd3269486960e711cc80580361388834e1"
+ },
+ "容量: 超えたら古い閲覧履歴から送らない。お気に入りとリセットは残り、手元は消えない": {
+  "pc": "eaae85191fdf20221ca64738af815fe2d6c74c3187bf3eb430fa8b48e658711a",
+  "phone": "8f4a0fadb3c4051a9808f0f44a3d3be56fa4c95047929a9f2dded79043d94861"
+ },
+ "容量: 送ったものは trim の tombstone で外し、ほかの端末の手元を消さない": {
+  "pc": "1ecdc425c5caacb2bec49c65c67be804c4779a39e55007b428b95da7e473cca8",
+  "phone": "6bcc141265691392dbb4892e2a1ce566d3f83a2d39f6d83b7092052482e6779f"
+ },
+ "乱数 全部 1": {
+  "pc": "904517771d0315c3c9796430a8913f63d1f2ca0f96b9298f35a461c62910333a",
+  "phone": "8305ccb84eba785da51bd71a0191fdc49b119ac39dc1ca83ed52a15e20c70405",
+  "tablet": "934134f7083c220bbfed185deec74f6bdb3b65d6403768e319142a8a18073ae5"
+ },
+ "乱数 削除あり 2": {
+  "pc": "559c40f982ef89d6a7d0c8d61dd704166409c311686e95d85a7eedaff35a311d",
+  "phone": "169f38899bd6e32e099a8ef783771bfc265dc5f6ccb72df5c5bd69ce14ee6a29",
+  "tablet": "c0d5b23139dd4d2a22ec34489cd36e3af45602fe6beb5ebb2c0795cbd45a401e"
+ },
+ "乱数 全部 3": {
+  "pc": "b1921b13caf7079a66f81868d63efeca74892660871c425e813d91c07a856411",
+  "phone": "d6fe10b429d3dd0e2ecc702cb738ba4638ab8335dabeef9432d98dd6ca50fc51",
+  "tablet": "f3fb9c49cd8ac2abe681b733876320555d96cd92df73715b17cddd3e73a21e40"
+ },
+ "乱数 削除あり 4": {
+  "pc": "0dbc89636fe3e3f94b7a45c108d9ea9d8184edc5089e87d3e3d0d49b15dff7da",
+  "phone": "f0c3d30f35c6fcc9e7c19e2c5b7b7ad939af475b8a48f9df7705822b7765ae1b",
+  "tablet": "7868d240adc9f472158be74c2b59347b82cc4297e1e9fec674d829b74ef72ffd"
+ },
+ "乱数 全部 5": {
+  "pc": "de7ffac1be7d5eadf6dc3a44ec911171130edcb841270deb2b319eec54250a24",
+  "phone": "ab8417d6a8b3207245330386ed83b50142f20ea34f344301ef8036bd6cc12ed4",
+  "tablet": "c1eb340b6f28b74321783edd15ca9277d32cf2dcba4e9809eb444d822d8051c1"
+ },
+ "乱数 削除あり 6": {
+  "pc": "a715fb3cf3850b5bf612a96be98af57aad875f2045a519c52f5f935d16d95bad",
+  "phone": "0256c6a0186e243d2a115474089dd2401403a8ea20a64f3166b93fc638bb6fc9",
+  "tablet": "8af7bd58f9c147dadb6b13d822d58fee6e2c18cb96f94b8e9ae09d7941031697"
+ },
+ "乱数 全部 7": {
+  "pc": "3e201fd0dbddca95650807861fc5fe0024116923c0db97504651c6febdd59309",
+  "phone": "49af5505c0d4bc1bef09fc1fcadc93129812c186a10fd8b31460949eb27b7ae8",
+  "tablet": "37dfb22eb52ad4070907f58ef58cc4fd1d75795c641d926ef6206446cde8fef5"
+ },
+ "乱数 削除あり 8": {
+  "pc": "02789a045355e2e4bff56ef98cb9d701f04a3795c0580a72d5fe05fc0b11b068",
+  "phone": "48d7b22506ffef7afde84c42748d7e54f4e35b0b04ea1c252c9ea9787f09709e",
+  "tablet": "dd3ea0c636e3118ab6cab12737b4d0369b6f8414feb7bee397087d2b7315cfcb"
+ },
+ "乱数 全部 9": {
+  "pc": "d59f72914c6f805bd3d8b9be10be694c201968ae6372113d7d01b781540fa8cf",
+  "phone": "6d213e167cb0ef5666ef6167f42a0396b7f7e6bf0c4c8f7ef275acc196ad8c95",
+  "tablet": "d16c1515dce31f74a88db4e3d963fccf5958b6eee4395c6f7c2e21c9c2d19556"
+ },
+ "乱数 削除あり 10": {
+  "pc": "ada792851eef31f9a3195137328fba219942f86d5bb5a268060be8e0de34247e",
+  "phone": "7f1599ed15e4fe2735b2ff268a3727360d5e71ea3ad68dbde101d57cb98dedc8",
+  "tablet": "4c6aa406657c2bb33a67377a40b2ebcf0a3fa8d25e5dc989ca7243390392735f"
+ },
+ "乱数 全部 11": {
+  "pc": "6223933b567e1f6df79ecdca678b76c5d54b88ebb8da5aea3391ae7db025acb6",
+  "phone": "7f291e154b82a13360ac8cd4e4bdb797c2f307aedadb05fbc39a3d287d3335e8",
+  "tablet": "968c1ba02b6779da3b57191f56c8ce1fe235bc0a9cbf4dd010f03199fa956eb0"
+ },
+ "乱数 削除あり 12": {
+  "pc": "5280e52425f5ed41baa50b9857d0b3b19047518198176d99ecbe8b4260750751",
+  "phone": "5f7deffa61d6ebbc87653c75ae15f492fccff7891a74190fc1171fed99004889",
+  "tablet": "8a9ec390d313bec037c0a6ed0c8a84508c47f568d0fa1ffaacd26acbe4749d2b"
+ },
+ "乱数 全部 13": {
+  "pc": "1dfa5462cf9da00d3c8ef4c4ab7568df8849c79272139946714f16332e4836ea",
+  "phone": "7adf8fb0cdf4cd1dff71ea4b7199959d7a5bb1331e03bd42b72c645e6c1f03b3",
+  "tablet": "0376848fe4ef2a5d639830c4be0072fa71df4db8d6cd7f9e443814d0cf03af02"
+ },
+ "乱数 削除あり 14": {
+  "pc": "7e5f6b96997d8d22b8591c20d165ccfa1220cd4b63797c21dfc6a430b96ee2fa",
+  "phone": "6f5e1a4f264bdbcaa1776a9f5dd6be0bd53f0252946652a3a0298c025bc90bd6",
+  "tablet": "2ce054570c823d52bd986dc5ba493ed2f3ebb114431726b78926adc901bc0cf4"
+ },
+ "乱数 全部 15": {
+  "pc": "e40306adacb39ba540fd95d6b377d0d1c48be953096de0b3c0b048adc4bdf031",
+  "phone": "f655629689e6adc3e09e1d83c342ecfb04d3c6b8a20a0e814b307160bbb1c703",
+  "tablet": "6c3829cad3d1898bace45433389642c704843873f93a038450100ba8fde4af85"
+ },
+ "乱数 削除あり 16": {
+  "pc": "35dca9afd9c534f192701bfee67387f788a09c14182558b4f60ba1997d6d5397",
+  "phone": "d3984e4feef677f47b078399d62e18c38f85a54e4cc45c915eb71ffb53cf5de4",
+  "tablet": "4c82b4cc711edfb6d426d3158db69d0ca0b66e5261d3c67f3adf8f319b7d97bc"
+ },
+ "乱数 全部 17": {
+  "pc": "7c065fe18a132cf243e2bcb8aad5a2449078c8ad42c626e8daf633a058494445",
+  "phone": "1a9310e164b846615f6564d3223fe4a8bc25e6bb75b9d4c09f319188d162f51c",
+  "tablet": "bacc26214b02522a3c9f3da0854a14002fa763df20f1ec7ea33a6e58e037944d"
+ },
+ "乱数 削除あり 18": {
+  "pc": "623aa527b54c957da1fc326fdb64dcfa7cc5351dc9e3504e2b5e703b906bb60f",
+  "phone": "42cbfd492b7db5bad30ab59c6f78d09ff4cbb7faf871a2b52513e07563880790",
+  "tablet": "c28bb119c80af3628fe389a4f2320680e4f77ef68d3af94169f011eb8b87d2f1"
+ },
+ "乱数 全部 19": {
+  "pc": "edf51c6c06595f1229031cdb16680f930de8ffd1ee05b1477243eaecbac285e1",
+  "phone": "5e3bf7c550a270be61ff7dac6048f36f452374405cdc85be5524f87380db288b",
+  "tablet": "933b5db3db558ea628ee8dac88bfc555055d48278fc0807822fb022f55594ba9"
+ },
+ "乱数 削除あり 20": {
+  "pc": "e31b90833f823c420ddc79081fa81da8b71b0354d695c1d78db40b33d18224a3",
+  "phone": "aabd868c0719d0b4a4733ace46c8aab6d3c85ef48144fd9e835f118f0e59f4a7",
+  "tablet": "1c5d18fa27e110bcf55e72e03925ab67b39cc139322dc3d7c26d9cfa210b1464"
  }
 }

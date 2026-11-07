@@ -23,7 +23,12 @@ class ApplyPlan(
 )
 
 /** 1 つの操作で変わるレコードの 1 つ。make の stamp は Hlc.stamp の値 */
-class OpEffect(val target: OpTarget, val make: (existing: SyncPayload?, stamp: String) -> SyncPayload?)
+class OpEffect(
+    val target: OpTarget,
+    /** レコードの HLC に加えて、これより必ず後にする(リセットは知っている全端末の読みより後) */
+    val floor: String? = null,
+    val make: (existing: SyncPayload?, stamp: String) -> SyncPayload?,
+)
 
 interface SyncAdapter {
     val kind: String
@@ -66,4 +71,16 @@ interface SyncAdapter {
 
     /** 周の適用の最後に 1 回。並べ直しのように 1 件ずつでは決まらないもの */
     fun afterApply(ctx: AdapterContext): ApplyPlan? = null
+
+    /** 手元の今のデータの要約の単位。なければ area。同じ表を見るものをまとめる */
+    val localArea: String? get() = null
+
+    /** 手元の今のデータを 1 行ずつ。端末で揃うかを見比べるための値で、画面には件数とハッシュだけを出す。null は要約に入れない */
+    fun localLines(ctx: AdapterContext): List<String>? = null
+
+    /** false は「手元にあるのにレコードがない」を数えない(手元の値が他の端末の記録から来ている種類) */
+    val seedsAll: Boolean get() = true
+
+    /** 手元が同期の表と違うか。apply に副作用のある種類だけ書き換える */
+    fun differs(r: StoredRecord, ctx: AdapterContext): Boolean = apply(r, ctx).changed
 }

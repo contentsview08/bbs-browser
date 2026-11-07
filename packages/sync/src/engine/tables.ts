@@ -107,6 +107,10 @@ export class SyncTables {
     return (await this.db.select<RecordRow>(`SELECT ${COLUMNS} FROM sync_records WHERE kind = $1 ORDER BY record_id`, [kind])).map(fromRow)
   }
 
+  async selectRecords(where: string, params: unknown[]): Promise<StoredRecord[]> {
+    return (await this.db.select<RecordRow>(`SELECT ${COLUMNS} FROM sync_records WHERE ${where}`, params)).map(fromRow)
+  }
+
   async pendingRecords(limit: number): Promise<StoredRecord[]> {
     return (await this.db.select<RecordRow>(`SELECT ${COLUMNS} FROM sync_records WHERE pending = 1 ORDER BY priority, hlc, record_id LIMIT $1`, [limit])).map(fromRow)
   }

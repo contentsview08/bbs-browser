@@ -12,6 +12,8 @@ import io.github.contentsview08.obb.sync.adapters.ResolvedBoard
 private val FUTABA = Regex("^https?://([^/]+\\.)?2chan\\.net(/|$)", RegexOption.IGNORE_CASE)
 
 fun resolveSyncBoard(url: String): ResolvedBoard? = when {
+    // 他の端末から来た URL。家の中のアドレスなどは手元に入れず、同期の表にだけ持つ
+    !isAutoLoadable(url) -> null
     FUTABA.containsMatchIn(url) -> null
     HonoBbs.isBoardUrl(url) -> ResolvedBoard(url, "honobbs")
     Shitaraba.isBoardUrl(url) || Machi.isBoardUrl(url) -> ResolvedBoard(url, "2ch-compat")
@@ -21,6 +23,7 @@ fun resolveSyncBoard(url: String): ResolvedBoard? = when {
 
 /** サイトの入口を受け持つコネクタ。LogDb の addSite と同じ。ふたばのサイトは手元に入れない */
 fun resolveSyncSite(url: String): String? = when {
+    !isAutoLoadable(url) -> null
     FUTABA.containsMatchIn(url) -> null
     HonoBbs.isSiteUrl(url) -> "honobbs"
     else -> "2ch-compat"

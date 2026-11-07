@@ -21,6 +21,9 @@ export interface FakeServerOptions {
   creation_closed?: boolean
   /** null は数えない */
   rate_per_minute?: number | null
+  /** 端末へ指示する「最低これだけ空ける」秒 */
+  pace_head_sec?: number
+  pace_push_sec?: number
   full_pull_per_hour?: number | null
   ticket_ttl_days?: number
   /** 0 は問題を出さない */
@@ -151,6 +154,8 @@ export class FakeSyncServer implements ScenarioServer {
       quota_records: 50_000,
       creation_closed: false,
       rate_per_minute: 20,
+      pace_head_sec: 0,
+      pace_push_sec: 0,
       full_pull_per_hour: 3,
       ticket_ttl_days: 365,
       pow_bits: 0,
@@ -180,6 +185,12 @@ export class FakeSyncServer implements ScenarioServer {
   injectRecord(id: string, r: Omit<ServerRecord, 'version' | 'updated_at'>): void {
     const s = this.spaces.get(id) as Space
     s.records.set(r.record_id, { ...r, version: ++s.next, updated_at: this.o.now() })
+  }
+
+  private pace(): Record<string, unknown> {
+    const head = this.o.pace_head_sec ?? 0
+    const push = this.o.pace_push_sec ?? 0
+    return head > 0 || push > 0 ? { pace: { head_sec: head, push_sec: push } } : {}
   }
 
   private newEpoch(): string {
@@ -226,7 +237,7 @@ export class FakeSyncServer implements ScenarioServer {
         space.minute = minute
         space.minute_count = 0
       }
-      if (++space.minute_count > this.o.rate_per_minute) return fail(429, 'rate_limited')
+      if (++space.minute_count > this.o.rate_per_minute) return json(429, { error: 'rate_limited', retry_after_sec: Math.ceil((60_000 - (this.o.now() % 60_000)) / 1000) })
     }
     space.last_used = now
     if (path === '/changes') return this.changes(space, query)
@@ -234,7 +245,7 @@ export class FakeSyncServer implements ScenarioServer {
     if (path === '/head') {
       const etag = `"${space.epoch}:${space.next}"`
       if (req.headers?.['If-None-Match'] === etag) return { status: 304, headers: { ETag: etag }, body: '' }
-      return json(200, { version: space.next, epoch: space.epoch, gc_floor: space.gc_floor }, { ETag: etag })
+      return json(200, { version: space.next, epoch: space.epoch, gc_floor: space.gc_floor, ...this.pace() }, { ETag: etag })
     }
     if (req.method === 'DELETE') {
       this.spaces.delete(id)
@@ -310,7 +321,7 @@ export class FakeSyncServer implements ScenarioServer {
     // 空の領域の全件は重くない。使い始めの端末を止めないよう数えない
     if (since === 0 && this.o.full_pull_per_hour !== null && s.records.size > 0) {
       s.full_pulls = s.full_pulls.filter((at) => now - at < HOUR)
-      if (s.full_pulls.length >= this.o.full_pull_per_hour) return fail(429, 'rate_limited')
+      if (s.full_pulls.length >= this.o.full_pull_per_hour) return json(429, { error: 'rate_limited', retry_after_sec: 3600 })
       s.full_pulls.push(now)
     }
     const all = [...s.records.values()].filter((r) => r.version > since).sort((a, b) => a.version - b.version)
@@ -321,7 +332,7 @@ export class FakeSyncServer implements ScenarioServer {
       if (page.length > 0 && (page.length >= PAGE_RECORDS || bytes > PAGE_BYTES)) break
       page.push(r)
     }
-    return json(200, { records: page, head: s.next, more: page.length < all.length, epoch: s.epoch, gc_floor: s.gc_floor })
+    return json(200, { records: page, head: s.next, more: page.length < all.length, epoch: s.epoch, gc_floor: s.gc_floor, ...this.pace() })
   }
 
   private records(s: Space, text: string): FakeResponse {
@@ -357,7 +368,7 @@ export class FakeSyncServer implements ScenarioServer {
       s.records.set(id, { record_id: id, version, kind_tag: r.kind_tag as string, schema_version: r.schema_version as number, deleted: r.deleted as boolean, nonce: r.nonce as string, ciphertext: r.ciphertext as string, updated_at: now })
       return { record_id: id, status: 200, version }
     })
-    const out = JSON.stringify({ results, epoch: s.epoch, gc_floor: s.gc_floor })
+    const out = JSON.stringify({ results, epoch: s.epoch, gc_floor: s.gc_floor, ...this.pace() })
     s.requests.set(body.request_id, out)
     return { status: 200, headers: {}, body: out }
   }

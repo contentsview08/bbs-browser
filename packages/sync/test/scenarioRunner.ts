@@ -6,7 +6,7 @@ import { expect } from 'vitest'
 import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
 import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, favoriteBoardAdapters, FavoriteThreadAdapter, ImageAdapter, NgAdapter, recordId, SiteAdapter, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
 const SERVER = 'https://sync.test'
@@ -19,7 +19,9 @@ export interface Scenario {
   name: string
   devices: string[]
   server?: Record<string, unknown>
-  seed?: Record<string, { favorite_threads?: Step[]; favorite_boards?: Step[]; sites?: Step[]; uploads?: Step[]; ng?: NgRuleData[] }>
+  seed?: Record<string, { favorite_threads?: Step[]; favorite_boards?: Step[]; sites?: Step[]; uploads?: Step[]; ng?: NgRuleData[]; threads?: Step[]; posts?: Step[]; settings?: Record<string, unknown> }>
+  /** logRetentionDays。0 は消さない */
+  retention_days?: number
   /** 移行の SQL が入れる 5ch とエッヂを残す。ふだんは空から始めて、各シナリオの件数を読みやすくする */
   keep_defaults?: boolean
   skew_ms?: Record<string, number>
@@ -112,6 +114,7 @@ class World {
   devices = new Map<string, Device>()
   /** 同期を始めるページを通した回数。人の操作の代わり */
   tickets = 0
+  retentionDays = 0
   constructor(make: MakeServer, options: Record<string, unknown>) {
     this.server = make(() => this.now, options)
   }
@@ -175,19 +178,25 @@ class Device {
       return await w.server.handle({ method: req.method, path, headers: req.headers, body: req.body })
     },
   }
+  resetCount = 0
+  adapters: SyncAdapter[] = []
   newEngine() {
-    this.engine = new SyncEngine({
-      db: this.sql.db,
-      keyStore: this.keys,
-      transport: this.transport,
-      serverUrl: SERVER,
-      adapters: [
+    this.adapters = [
         new FavoriteThreadAdapter(this.sql.db, resolver(this.name)),
         ...favoriteBoardAdapters(this.sql.db, resolver(this.name)),
         new SiteAdapter(this.sql.db, (url) => (this.name === 'phone' && url.includes('2chan.net') ? null : '2ch-compat')),
         new ImageAdapter(this.sql.db),
         new NgAdapter({ ...settingsNgStore(this.sql.db), apply: async (c) => void (await settingsNgStore(this.sql.db).apply(c)), patternOk: ngPatternSyncable, today: dateOf }),
-      ],
+        new PostAdapter(this.sql.db, resolver(this.name)),
+        new SettingAdapter(settingsTableHost(this.sql.db, this.name === 'phone' ? 'phone' : 'pc'), this.sql.db),
+        ...historyAdapters(this.sql.db, { resolve: resolver(this.name), retentionDays: () => this.world.retentionDays, newResetId: () => `reset_${this.name}_${++this.resetCount}` }),
+    ]
+    this.engine = new SyncEngine({
+      db: this.sql.db,
+      keyStore: this.keys,
+      transport: this.transport,
+      serverUrl: SERVER,
+      adapters: this.adapters,
       now: this.now,
       newDeviceId: () => (this.idCount++ === 0 ? this.name : `${this.name}_${this.idCount}`),
       newRequestId: () => {
@@ -222,8 +231,15 @@ class Device {
     const sites = await this.sql.db.select('SELECT menu_url, connector_id, name, sort FROM sites ORDER BY menu_url')
     const uploads = await this.sql.db.select('SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url')
     const ng = await settingsNgStore(this.sql.db).read()
+    const threads = await this.sql.db.select('SELECT board_url, key, connector_id, title, post_count, read_no, status, created_at, read_at FROM threads ORDER BY board_url, key')
+    const posts = await this.sql.db.select('SELECT connector_id, board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, board_url, key, body')
+    const own = await this.sql.db.select('SELECT board_url, key, no, posted_at FROM own_posts ORDER BY board_url, key, no')
     const records = await this.sql.db.select('SELECT record_id, kind, kind_tag, schema_version, payload, hlc, deleted, version, pending, priority, needs_apply, ref_board, ref_thread, ref_detail, tomb_at FROM sync_records ORDER BY record_id')
-    return toHex(sha256(utf8(canonicalJson({ favorites, boards, sites, uploads, ng, records }))))
+    const settings = [...(await settingsTableHost(this.sql.db, 'pc').read())].map(([k, v]) => [k, canonicalJson(v)]).sort(([a], [b]) => (a < b ? -1 : 1))
+    // 端末の要約の文字列も比べる。画面に出す値が PC とスマホで同じ作りになるように
+    const m = await this.keys.load()
+    const summary = m ? (await syncSummary(this.sql.db, this.adapters, { keys: deriveKeys(m.k), deviceId: m.deviceId, now: this.now() })).text : ''
+    return toHex(sha256(utf8(canonicalJson({ favorites, boards, sites, uploads, ng, threads, posts, own, settings, records, summary }))))
   }
 }
 
@@ -243,6 +259,41 @@ async function windowChange(d: Device, view: NgRuleData[], s: Step): Promise<NgR
   return after
 }
 
+/** 端末どうしで揃うはずの値。キーごとに持つので、違ったレコードと項目をそのまま読める */
+async function snapshot(d: Device, full: boolean): Promise<Record<string, string>> {
+  const out: Record<string, string> = {}
+  const recs = await d.sql.db.select<{ record_id: string; kind: string; payload: string; ref_board: string | null; ref_thread: string | null; ref_detail: string | null }>('SELECT record_id, kind, payload, ref_board, ref_thread, ref_detail FROM sync_records')
+  for (const r of recs) {
+    const k = `record ${r.kind} ${r.record_id.slice(0, 12)}`
+    out[k] = r.payload
+    // 削除だけを受けた端末は ref を知らない。比べずに、違いの見出しにだけ使う
+    if (r.ref_board || r.ref_thread || r.ref_detail) out[`#${k}`] = `${r.ref_board ?? ''} ${r.ref_thread ?? ''} ${r.ref_detail ?? ''}`
+  }
+  const posts = await d.sql.db.select<{ board_url: string; key: string; thread_title: string; no: number | null; body: string; posted_at: number }>('SELECT board_url, key, thread_title, no, body, posted_at FROM post_history')
+  for (const p of posts) {
+    const board = normalizeBoardUrl(p.board_url) as string
+    out[`書き込み履歴 ${board} ${p.key} ${postIdOf(board, p.key, p.posted_at, p.body)}`] = canonicalJson({ title: p.thread_title, no: p.no, posted_at: p.posted_at })
+  }
+  const threads = await d.sql.db.select<{ board_url: string; key: string; title: string; read_no: number; read_at: number | null }>('SELECT board_url, key, title, read_no, read_at FROM threads')
+  for (const t of threads) {
+    if (full || t.read_at !== null) out[`閲覧履歴 ${normalizeBoardUrl(t.board_url)} ${t.key}`] = canonicalJson({ read_at: t.read_at, title: t.title })
+    if (full || t.read_no > 0) out[`既読 ${normalizeBoardUrl(t.board_url)} ${t.key}`] = String(t.read_no)
+  }
+  return out
+}
+
+/** 全部の端末を比べ、違いを 1 行ずつ出す。ログを消した端末は行がないので、full でなければ両方にあるものだけを手元の値として比べる */
+export function diffSnapshots(an: string, a: Record<string, string>, bn: string, b: Record<string, string>, full: boolean, ignoreTombstones = false): string[] {
+  const lines: string[] = []
+  for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
+    if (a[k] === b[k] || k.startsWith('#')) continue
+    if (ignoreTombstones && k.startsWith('record ') && [a[k], b[k]].every((v) => v === undefined || v.includes('"deleted":true'))) continue
+    if (!full && !k.startsWith('record ') && !k.startsWith('書き込み履歴 ') && (a[k] === undefined || b[k] === undefined)) continue
+    lines.push(`${k} ${a[`#${k}`] ?? b[`#${k}`] ?? ''}\n  ${an}: ${a[k] ?? '(ない)'}\n  ${bn}: ${b[k] ?? '(ない)'}`)
+  }
+  return lines
+}
+
 const thread = (s: Step): ThreadSummary => ({
   connectorId: '2ch-compat',
   boardUrl: s.board,
@@ -252,6 +303,9 @@ const thread = (s: Step): ThreadSummary => ({
   order: 0,
   createdAt: s.created_at === undefined ? undefined : new Date(s.created_at),
 })
+
+/** 共通シナリオと同じ移行 SQL を流した DB */
+export const testDb = (): SqlDb => sqlDb([]).db
 
 export const keyOf = (device: string) => sha256(utf8(`key:${device}`))
 
@@ -304,6 +358,91 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     case 'upload_remove':
       await d.ops.uploadRemove(s.url, d.now())
       break
+    case 'open': {
+      const t = thread(s)
+      await restoreThreadRead(d.sql.db, { boardUrl: t.boardUrl, key: t.key, connectorId: t.connectorId, title: t.title, createdAt: s.created_at ?? null })
+      await d.sql.db.execute('INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at) VALUES ($1, $2, $3, $4, $5)', [t.boardUrl, t.key, t.connectorId, t.title, s.created_at ?? null])
+      if (s.post_count !== undefined) await d.sql.db.execute('UPDATE threads SET post_count = $1 WHERE board_url = $2 AND key = $3', [s.post_count, t.boardUrl, t.key])
+      break
+    }
+    case 'read':
+      await d.ops.markRead(thread(s), s.no, d.now())
+      break
+    case 'view':
+      await d.ops.threadView(thread(s), d.now())
+      break
+    case 'view_remove':
+      await d.ops.historyRemove(thread(s), d.now())
+      break
+    case 'log_delete':
+      await d.ops.deleteLogs((s.threads ?? [s]).map(thread), d.now())
+      break
+    case 'prune':
+      await d.store.pruneLogs(d.now() - s.older_than_ms, (s.keep ?? []).map((k: Step) => ({ boardUrl: k.board, key: k.key })))
+      break
+    case 'post_add':
+      await d.ops.postAdd(thread(s), { no: s.no, name: s.name ?? '', mail: s.mail ?? '', body: s.body }, d.now())
+      break
+    case 'post_remove': {
+      const entry = (await d.store.listPostHistory()).find((e) => e.thread.key === s.key && e.body === s.body)
+      if (entry) await d.ops.postRemove(entry, d.now())
+      break
+    }
+    case 'clear_faults':
+      w.faults = []
+      for (const x of w.devices.values()) x.dbFail.length = 0
+      break
+    case 'sync_together':
+      await Promise.all((s.devices as string[]).map((n) => (w.devices.get(n) as Device).sync()))
+      break
+    case 'settle': {
+      // 新しい変更が出なくなるまで全端末を回す。止まらなければ下の確かめで落ちる
+      const targets = s.devices ? (s.devices as string[]).map((n) => w.devices.get(n) as Device) : [...w.devices.values()]
+      for (let round = 0; round < 400; round++) {
+        let moved = false
+        for (const x of targets) {
+          const r = await x.sync()
+          if (r.pulled > 0 || r.pushed > 0 || r.conflicts > 0) moved = true
+        }
+        w.now += 1000
+        if (!moved) break
+      }
+      break
+    }
+    case 'converged': {
+      const names: string[] = s.devices ?? [...w.devices.keys()]
+      const snaps = await Promise.all(names.map((n) => snapshot(w.devices.get(n) as Device, s.full !== false)))
+      for (let i = 1; i < names.length; i++) {
+        const lines = diffSnapshots(names[0], snaps[0], names[i], snaps[i], s.full !== false, s.ignore_tombstones === true)
+        expect(lines, `${c.name}: ${names[0]} と ${names[i]} の違い\n${lines.join('\n')}`).toEqual([])
+      }
+      break
+    }
+    case 'summary_same': {
+      const names: string[] = s.devices ?? [...w.devices.keys()]
+      const results = await Promise.all(names.map(async (n) => {
+        const x = w.devices.get(n) as Device
+        const m = (await x.keys.load()) as SyncKeyMaterial
+        const ctx = { keys: deriveKeys(m.k), deviceId: m.deviceId, now: x.now() }
+        return { sum: await syncSummary(x.sql.db, x.adapters, ctx), mis: await syncMismatches(x.sql.db, x.adapters, ctx) }
+      }))
+      for (let i = 0; i < names.length; i++) {
+        expect(results[i].mis.differs, `${c.name}: ${names[i]} の手元と表の違い`).toEqual({})
+        expect(results[i].mis.missing, `${c.name}: ${names[i]} の表にない手元の行`).toEqual({})
+        expect(results[i].sum.kinds.map((k) => [k.kind, k.live, k.tombstones, k.hash]), `${c.name}: ${names[i]} の表の要約`).toEqual(results[0].sum.kinds.map((k) => [k.kind, k.live, k.tombstones, k.hash]))
+        if (s.local !== false) expect(results[i].sum.local, `${c.name}: ${names[i]} の手元の要約`).toEqual(results[0].sum.local)
+      }
+      break
+    }
+    case 'setting_change': {
+      const before = (await settingsTableHost(d.sql.db, 'pc').read()).get(s.name)
+      const current = s.name === 'boardMeta' ? Object.fromEntries([...(await settingsTableHost(d.sql.db, 'pc').read())].filter(([k]) => k.startsWith('boardMeta/')).map(([k, v]) => [k.slice('boardMeta/'.length), v])) : before
+      await d.ops.settingsWrite([{ key: s.name, value: s.value, ops: settingOpsOf(s.name, s.value, current) }], d.now())
+      break
+    }
+    case 'setting_write_raw':
+      await d.sql.db.batch([setSettingStatement(s.name, s.value)])
+      break
     case 'ng_change':
       await windowChange(d, await readNgRules(d.sql.db), s)
       break
@@ -328,7 +467,7 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     }
     case 'pair_first':
       await d.engine.pair(keyOf(s.device), s.no_ticket ? null : await d.startPage(keyOf(s.device)))
-      await d.sync()
+      if (!s.no_sync) await d.sync()
       break
     case 'pair_join': {
       // QR とコピー用のコードの中身は K と許可証
@@ -421,6 +560,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
   for (const [name, e] of Object.entries(want)) {
     if (name === '$server') {
       if (e.spaces !== undefined) expect(await w.server.spaceCount(), `${label}: サーバーの領域の数`).toBe(e.spaces)
+      if (e.spaces_at_most !== undefined) expect(await w.server.spaceCount(), `${label}: サーバーの領域の数の上限`).toBeLessThanOrEqual(e.spaces_at_most)
       if (e.tickets !== undefined) expect(w.tickets, `${label}: 同期を始めるページを通した回数`).toBe(e.tickets)
       if (e.hosts !== undefined) expect([...new Set(w.log.map((l) => l.host))], `${label}: 通信先`).toEqual(e.hosts)
       if (e.request_id_repeated !== undefined) {
@@ -467,6 +607,22 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.uploads !== undefined) expect(await d.sql.db.select('SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url'), `${at} の画像`).toEqual(e.uploads)
     if (e.ng_ids !== undefined) expect((await readNgRules(d.sql.db)).map((r) => r.id), `${at} の NG`).toEqual(e.ng_ids)
     if (e.ng_rules !== undefined) expect(await settingsNgStore(d.sql.db).read(), `${at} の NG の中身`).toEqual(e.ng_rules)
+    if (e.read_no !== undefined) {
+      const rows = await d.sql.db.select<{ key: string; read_no: number }>('SELECT key, read_no FROM threads ORDER BY key')
+      expect(Object.fromEntries(rows.map((r) => [r.key, r.read_no])), `${at} の既読`).toEqual(e.read_no)
+    }
+    if (e.history !== undefined) {
+      const rows = await d.sql.db.select<{ key: string }>('SELECT key FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC, key')
+      expect(rows.map((r) => r.key), `${at} の閲覧履歴`).toEqual(e.history)
+    }
+    if (e.thread_rows !== undefined) expect(await d.sql.db.select('SELECT board_url, key, connector_id, title, post_count, read_no, created_at, read_at FROM threads ORDER BY board_url, key'), `${at} のスレの行`).toEqual(e.thread_rows)
+    if (e.post_rows !== undefined) expect(await d.sql.db.select('SELECT board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, body'), `${at} の書き込み履歴`).toEqual(e.post_rows)
+    if (e.post_bodies !== undefined) {
+      const rows = await d.sql.db.select<{ body: string }>('SELECT body FROM post_history ORDER BY posted_at, body')
+      expect(rows.map((r) => r.body), `${at} の書き込み履歴の本文`).toEqual(e.post_bodies)
+    }
+    if (e.own_posts !== undefined) expect(await d.sql.db.select('SELECT key, no FROM own_posts ORDER BY key, no'), `${at} の自分のレス`).toEqual(e.own_posts)
+    if (e.settings !== undefined) expect(Object.fromEntries([...(await settingsTableHost(d.sql.db, 'pc').read())].sort(([a], [b]) => (a < b ? -1 : 1))), `${at} の設定`).toEqual(e.settings)
     if (e.kinds !== undefined) {
       const rows = await d.sql.db.select<{ kind: string; n: number }>('SELECT kind, COUNT(*) AS n FROM sync_records GROUP BY kind')
       expect(Object.fromEntries(rows.map((r) => [r.kind, r.n])), `${at} の種類ごとのレコード数`).toEqual(e.kinds)
@@ -512,6 +668,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
 
 export async function runScenario(c: Scenario, make: MakeServer = makeFake): Promise<Record<string, string>> {
   const w = new World(make, c.server ?? {})
+  w.retentionDays = c.retention_days ?? 0
   for (const name of c.devices) w.devices.set(name, new Device(name, w, c.skew_ms?.[name] ?? 0, c.keep_defaults === true))
   for (const [name, seed] of Object.entries(c.seed ?? {})) {
     const d = w.devices.get(name) as Device
@@ -520,6 +677,19 @@ export async function runScenario(c: Scenario, make: MakeServer = makeFake): Pro
     for (const x of seed.sites ?? []) await d.store.addSite(site(x))
     for (const u of seed.uploads ?? []) await d.store.addUpload(upload(u), START - (u.ago_ms ?? 0))
     if (seed.ng) await d.store.setSetting('ngRules', seed.ng)
+    for (const [k, v] of Object.entries(seed.settings ?? {})) await d.store.setSetting(k, v)
+    for (const t of seed.threads ?? []) {
+      await d.sql.db.execute(
+        'INSERT INTO threads (board_url, key, connector_id, title, post_count, read_no, created_at, read_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [t.board, t.key, '2ch-compat', t.title ?? '', t.post_count ?? 0, t.read_no ?? 0, t.created_at ?? null, t.read_ago_ms === undefined ? null : START - t.read_ago_ms],
+      )
+    }
+    for (const p of seed.posts ?? []) {
+      await d.sql.db.execute(
+        'INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        ['2ch-compat', p.board, p.key, p.title ?? '', p.no ?? null, p.name ?? '', p.mail ?? '', p.body, START - (p.ago_ms ?? 0)],
+      )
+    }
   }
   for (const s of c.steps) await runStep(w, s, c)
   if (c.expected) await check(w, c.expected, c.name)

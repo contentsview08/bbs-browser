@@ -29,8 +29,33 @@ val logstoreMigrations = tasks.register<LogstoreMigrations>("logstoreMigrations"
     output.set(layout.buildDirectory.dir("generated/logstoreAssets"))
 }
 
+// 同期する設定の一覧は PC と同じファイル。packages/sync の中はほかのものも多いので、このファイルだけを assets に入れる
+abstract class SyncAllowlistAsset @Inject constructor(private val fs: FileSystemOperations) : DefaultTask() {
+    @get:InputFile
+    abstract val source: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        fs.sync {
+            from(source)
+            into(output)
+        }
+    }
+}
+
+val syncAllowlistAsset = tasks.register<SyncAllowlistAsset>("syncAllowlistAsset") {
+    source.set(layout.projectDirectory.file("../../../packages/sync/settings-allowlist.json"))
+    output.set(layout.buildDirectory.dir("generated/syncAllowlistAssets"))
+}
+
 androidComponents {
-    onVariants { variant -> variant.sources.assets?.addGeneratedSourceDirectory(logstoreMigrations, LogstoreMigrations::output) }
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(logstoreMigrations, LogstoreMigrations::output)
+        variant.sources.assets?.addGeneratedSourceDirectory(syncAllowlistAsset, SyncAllowlistAsset::output)
+    }
 }
 
 android {

@@ -41,6 +41,9 @@ export interface Config {
   /** 0 は数えない */
   ratePerMinute: number
   ratePerDay: number
+  /** 端末へ「最低これだけ空ける」と指示する秒。0 は指示しない(端末の既定に任せる) */
+  paceHeadSec: number
+  pacePushSec: number
   fullPullPerHour: number
   sourceLimit: number
   sourceWindowDays: number
@@ -92,7 +95,10 @@ export function loadConfig(env: Env): Config {
     pageBytes: int(e.PAGE_BYTES, 1024 * 1024),
     conflictBytes: int(e.CONFLICT_BYTES, 1536 * 1024),
     ratePerMinute: int(e.RATE_PER_MINUTE, 20),
-    ratePerDay: int(e.RATE_PER_DAY, 2000),
+    // 前面で 30 秒ごとの確認と送信。2 台を 11 時間使って最大 2,640 回なので余裕を持たせる
+    ratePerDay: int(e.RATE_PER_DAY, 6000),
+    paceHeadSec: int(e.PACE_HEAD_SEC, 0),
+    pacePushSec: int(e.PACE_PUSH_SEC, 0),
     fullPullPerHour: int(e.FULL_PULL_PER_HOUR, 3),
     sourceLimit: int(e.SOURCE_LIMIT, 5),
     sourceWindowDays: int(e.SOURCE_WINDOW_DAYS, 7),

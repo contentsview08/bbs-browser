@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /** PC 版の DB の connector_id。したらば・まちBBS も 2ch-compat で入れる */
-private fun connectorOf(boardUrl: String) = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(boardUrl)) "honobbs" else "2ch-compat"
+internal fun connectorOf(boardUrl: String) = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(boardUrl)) "honobbs" else "2ch-compat"
 
 /** 開いたことのあるスレの状態(スレ一覧の未読の数・既読の位置に使う) */
 data class ThreadState(val readNo: Int, val postCount: Int, val archived: Boolean = false)
@@ -25,7 +25,7 @@ data class ThreadState(val readNo: Int, val postCount: Int, val archived: Boolea
 class ThreadLog(val title: String, val posts: List<Post>, val readNo: Int, val cursor: DatCursor?, val archived: Boolean)
 
 /** 書き込み履歴の 1 行 */
-data class PostHistoryEntry(val thread: ThreadSummary, val no: Int?, val body: String, val postedAt: Long)
+data class PostHistoryEntry(val id: Long, val thread: ThreadSummary, val no: Int?, val body: String, val postedAt: Long)
 
 /** 閲覧履歴の 1 行 */
 data class HistoryEntry(val thread: ThreadSummary, val readNo: Int, val readAt: Long)
@@ -80,6 +80,30 @@ internal object SiteSql {
     const val REMOVE = "DELETE FROM sites WHERE menu_url = ?"
 
     fun addArgs(menuUrl: String, name: String): List<Any?> = listOf(menuUrl, if (io.github.contentsview08.obb.bbs.HonoBbs.isSiteUrl(menuUrl)) "honobbs" else "2ch-compat", name)
+}
+
+/** スレのログと履歴の SQL。JVM のテストでも同じ文を流す */
+internal object ThreadLogSql {
+    const val MARK_READ = "UPDATE threads SET read_no = MAX(read_no, ?), read_at = ? WHERE board_url = ? AND key = ?"
+    const val VIEW = "UPDATE threads SET read_at = ? WHERE board_url = ? AND key = ?"
+    const val REMOVE_HISTORY = "UPDATE threads SET read_at = NULL WHERE board_url = ? AND key = ?"
+    val DELETE_LOG = listOf("threads", "posts").map { "DELETE FROM $it WHERE board_url = ? AND key = ?" }
+
+    /** rawQuery の引数は文字列で渡るので、CAST して数で比べる(文字列のままだと、どの数も文字列より小さいので全部消える) */
+    const val PRUNE_TARGETS = "SELECT t.board_url, t.key FROM threads t " +
+        "WHERE COALESCE(t.read_at, t.fetched_at, 0) < CAST(? AS INTEGER) " +
+        "AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key) " +
+        "AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)"
+}
+
+/** 書き込み履歴の SQL。JVM のテストでも同じ文を流す */
+internal object PostHistorySql {
+    const val ADD = "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    const val REMOVE = "DELETE FROM post_history WHERE id = ?"
+    const val LIST = "SELECT id, board_url, key, thread_title, no, body, posted_at FROM post_history ORDER BY posted_at DESC, id DESC LIMIT ?"
+
+    fun addArgs(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String, now: Long): List<Any?> =
+        listOf(connectorOf(t.boardUrl), t.boardUrl, t.key, title, no?.toLong(), name, mail, body, now)
 }
 
 /** お気に入りのスレの SQL。JVM のテストでも同じ文を流す */
@@ -276,19 +300,6 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         }
     }
 
-    /** どこまで読んだか(戻らない。read_at は閲覧履歴の並びに使う) */
-    suspend fun markRead(t: ThreadSummary, no: Int) = io {
-        writableDatabase.execSQL(
-            "UPDATE threads SET read_no = MAX(read_no, ?), read_at = ? WHERE board_url = ? AND key = ?",
-            arrayOf<Any>(no, System.currentTimeMillis(), t.boardUrl, t.key),
-        )
-    }
-
-    /** 開いた(閲覧履歴の一番上に) */
-    suspend fun touch(t: ThreadSummary) = io {
-        writableDatabase.execSQL("UPDATE threads SET read_at = ? WHERE board_url = ? AND key = ?", arrayOf<Any>(System.currentTimeMillis(), t.boardUrl, t.key))
-    }
-
     suspend fun history(limit: Int = 300): List<HistoryEntry> = io {
         readableDatabase.rawQuery(
             "SELECT board_url, key, title, post_count, read_no, read_at, created_at FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC LIMIT ?",
@@ -381,68 +392,39 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
 
     // ── 書き込み履歴 ──
 
-    suspend fun addPostHistory(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String) = io {
-        writableDatabase.execSQL(
-            "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            arrayOf<Any?>(connectorOf(t.boardUrl), t.boardUrl, t.key, title, no, name, mail, body, System.currentTimeMillis()),
-        )
-    }
-
     suspend fun postHistory(limit: Int = 300): List<PostHistoryEntry> = io {
-        readableDatabase.rawQuery(
-            "SELECT board_url, key, thread_title, no, body, posted_at FROM post_history ORDER BY posted_at DESC LIMIT ?", arrayOf(limit.toString()),
-        ).use { c ->
+        readableDatabase.rawQuery(PostHistorySql.LIST, arrayOf(limit.toString())).use { c ->
             buildList {
                 while (c.moveToNext()) {
-                    val key = c.getString(1)
+                    val key = c.getString(2)
                     val created = if (key.length == 10 && key.all { it.isDigit() }) key.toLong() * 1000 else null
-                    add(PostHistoryEntry(ThreadSummary(c.getString(0), key, c.getString(2), 0, 0, created), if (c.isNull(3)) null else c.getInt(3), c.getString(4), c.getLong(5)))
+                    add(PostHistoryEntry(c.getLong(0), ThreadSummary(c.getString(1), key, c.getString(3), 0, 0, created), if (c.isNull(4)) null else c.getInt(4), c.getString(5), c.getLong(6)))
                 }
             }
         }
     }
 
-    /** 書き込み履歴から 1 件消す(同じスレに同じ時刻で書いたものは 1 つしかない) */
-    suspend fun deletePostHistory(e: PostHistoryEntry) = io {
-        writableDatabase.delete("post_history", "board_url = ? AND key = ? AND posted_at = ?", arrayOf(e.thread.boardUrl, e.thread.key, e.postedAt.toString()))
+    /** 同期の表から既読と履歴を戻す。自動整理のあとに開き直すと既読が戻る */
+    suspend fun restoreThreadRead(t: ThreadSummary) = io {
+        runCatching { io.github.contentsview08.obb.sync.adapters.restoreThreadRead(syncSql, t.boardUrl, t.key, connectorOf(t.boardUrl), t.title, t.createdAt) }
     }
 
-    suspend fun deleteThread(t: ThreadSummary) = deleteThreads(listOf(t))
-
-    private fun deleteLog(db: SQLiteDatabase, boardUrl: String, key: String) {
-        db.delete("posts", "board_url = ? AND key = ?", arrayOf(boardUrl, key))
-        db.delete("threads", "board_url = ? AND key = ?", arrayOf(boardUrl, key))
-    }
-
-    /** 選んだスレのログをまとめて消す(途中で落ちて半分だけ消えないように 1 つのトランザクションで) */
-    suspend fun deleteThreads(list: List<ThreadSummary>) = io {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            for (t in list) deleteLog(db, t.boardUrl, t.key)
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
+    /** 開いているスレのために、DB の既読だけを読む */
+    suspend fun readNo(t: ThreadSummary): Int? = io {
+        readableDatabase.rawQuery("SELECT read_no FROM threads WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { c -> if (c.moveToFirst()) c.getInt(0) else null }
     }
 
     /**
      * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの。PC 版の pruneLogs と同じ)。
      * お気に入りのスレ・自分が書き込んだスレは残す。消したスレの数を返す。
-     * rawQuery の引数は文字列で渡るので、CAST して数で比べる(文字列のままだと、どの数も文字列より小さいので全部消える)
      */
     suspend fun pruneLogs(before: Long): Int = io {
         val db = writableDatabase
-        val rows = db.rawQuery(
-            """SELECT t.board_url, t.key FROM threads t
-               WHERE COALESCE(t.read_at, t.fetched_at, 0) < CAST(? AS INTEGER)
-                 AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key)
-                 AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)""",
-            arrayOf(before.toString()),
+        val rows = db.rawQuery(ThreadLogSql.PRUNE_TARGETS, arrayOf(before.toString())
         ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) } }
         db.beginTransaction()
         try {
-            for ((b, k) in rows) deleteLog(db, b, k)
+            for ((b, k) in rows) for (sql in ThreadLogSql.DELETE_LOG) db.execSQL(sql, arrayOf(b, k))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

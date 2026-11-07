@@ -108,6 +108,11 @@ export class FavoriteThreadAdapter implements SyncAdapter {
     }
   }
 
+  async localLines(): Promise<string[]> {
+    const rows = await this.db.select<{ board_url: string; key: string }>('SELECT board_url, key FROM favorite_threads')
+    return rows.map((r) => `${normalizeBoardUrl(r.board_url)}\t${r.key}`)
+  }
+
   async apply(r: StoredRecord, ctx: AdapterContext): Promise<ApplyPlan> {
     // trim はサーバーから外すだけの印で、手元を消さない
     if (r.payload.deleted === true) return r.payload.trim === true ? { statements: [], changed: false } : this.remove(r)

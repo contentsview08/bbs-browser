@@ -35,6 +35,7 @@ interface Props {
   onCopy?: (t: ThreadSummary) => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
+  onRemoveFromHistory?: (t: ThreadSummary) => void
   /** 前回この板の一覧を見たあとに立ったスレ(「新」の印を出す) */
   isNew?: boolean
   /** お気に入りのスレか(スレタイの頭に ★ を出す) */
@@ -78,6 +79,7 @@ function ThreadCard({
   onNgAuthor,
   onCopy,
   onDeleteLog,
+  onRemoveFromHistory,
   isFavorite,
   onToggleFavorite,
   isNew,
@@ -551,6 +553,7 @@ function ThreadCard({
               : onNg
                 ? [{ label: 'スレタイを NG に追加', icon: 'block', onClick: () => onNg(thread) }]
                 : []),
+            ...(onRemoveFromHistory ? [{ label: '履歴から外す', icon: 'history_toggle_off', onClick: () => onRemoveFromHistory(thread) }] : []),
             ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread) }] : []),
           ]}
         />
@@ -576,6 +579,7 @@ function ThreadCard({
                   },
                 ]
               : []),
+            ...(onRemoveFromHistory ? [{ label: '履歴から外す', icon: 'history_toggle_off', onClick: () => onRemoveFromHistory(thread) }] : []),
             ...(onDeleteLog && state ? [{ label: 'ログを削除', icon: 'delete', onClick: () => onDeleteLog(thread), danger: true }] : []),
           ]}
         />

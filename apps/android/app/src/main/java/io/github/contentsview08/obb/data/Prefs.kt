@@ -2,6 +2,8 @@ package io.github.contentsview08.obb.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.contentsview08.obb.sync.adapters.AllowedSetting
+import io.github.contentsview08.obb.sync.adapters.BOARD_META_KEY
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,7 +30,7 @@ fun shownPastTabs(saved: String): List<String> {
 }
 
 /** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
-private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T) : ReadWriteProperty<Any?, T> {
+private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T, private val changed: (String, Any?) -> Unit) : ReadWriteProperty<Any?, T> {
     @Suppress("UNCHECKED_CAST")
     private var state = mutableStateOf(
         runCatching {
@@ -44,6 +46,16 @@ private class Pref<T>(private val sp: SharedPreferences, private val key: String
 
     override fun getValue(thisRef: Any?, property: KProperty<*>): T = state.value
     override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+        val before = state.value
+        write(value)
+        if (before != value) changed(key, before)
+    }
+
+    /** 同期の適用。利用者の操作ではないので知らせない(知らせると送り返してしまう) */
+    @Suppress("UNCHECKED_CAST")
+    fun setRemote(value: Any?) = write(value as T)
+
+    private fun write(value: T) {
         state.value = value
         sp.edit().apply {
             when (value) {
@@ -72,10 +84,15 @@ class Prefs(context: Context) {
     private val floatKeys = HashSet<String>()
     /** いまある設定の名前。バックアップにはこれだけを入れ、これだけを戻す */
     private val knownKeys = hashSetOf("ngRules", "aiNgRules", "aiNgOverrides", "boardMeta")
+    private val prefByKey = HashMap<String, Pref<*>>()
+
+    /** 利用者が設定を変えた(名前と前の値)。同期の適用とバックアップの読み込みからは呼ばない */
+    var onSettingChange: ((String, Any?) -> Unit)? = null
+
     private fun <T> pref(key: String, def: T): ReadWriteProperty<Any?, T> {
         if (def is Float) floatKeys += key
         knownKeys += key
-        return Pref(sp, key, def)
+        return Pref(sp, key, def) { k, before -> onSettingChange?.invoke(k, before) }.also { prefByKey[key] = it }
     }
     private fun wordsPref(key: String, def: List<String>, sep: String): ReadWriteProperty<Any?, String> =
         WordsPref(pref(key, JSONArray(def).toString()), sep, def.joinToString(sep))
@@ -413,12 +430,54 @@ class Prefs(context: Context) {
         private set
 
     /** 板の設定を入れる。全部空なら消す */
+    @Synchronized
     fun setBoardMeta(url: String, m: BoardMeta) {
-        val next = if (m.isEmpty) boardMeta - url else boardMeta + (url to m)
+        val before = boardMetaFields()
+        saveBoardMeta(if (m.isEmpty) boardMeta - url else boardMeta + (url to m))
+        onSettingChange?.invoke(BOARD_META_KEY, before)
+    }
+
+    private fun saveBoardMeta(next: Map<String, BoardMeta>) {
         boardMeta = next
         val o = JSONObject()
         for ((u, v) in next) o.put(u, v.toJson())
         sp.edit().putString("boardMeta", o.toString()).apply()
+    }
+
+    /** 板ごとの同期する項目。名前欄・メール欄の既定値は出さない */
+    fun boardMetaFields(): Map<String, Map<String, Any?>> = boardMeta.mapValues { it.value.syncFields() }
+
+    /** 同期の適用。許可された項目だけを今の値に重ね、操作として積まない。何もなくなれば消す */
+    @Synchronized
+    fun applyRemoteBoardMeta(changes: Map<String, Map<String, Any?>>) {
+        val next = LinkedHashMap(boardMeta)
+        for ((url, remote) in changes) {
+            val merged = (next[url] ?: BoardMeta()).withSyncFields(remote)
+            if (merged.isEmpty) next.remove(url) else next[url] = merged
+        }
+        saveBoardMeta(next)
+    }
+
+    /** 保存したことのない項目は null。settings 表に行がないのと同じ扱いにする */
+    fun syncedValue(item: AllowedSetting): Any? {
+        if (!sp.contains(item.name)) return null
+        return runCatching {
+            when (item.type) {
+                "bool" -> sp.getBoolean(item.name, false)
+                "enum" -> sp.getString(item.name, null)
+                "words" -> wordsOfJson(sp.getString(item.name, null).orEmpty())
+                else -> null
+            }
+        }.getOrNull()
+    }
+
+    /** 同期の適用。Compose の状態を変えるが、操作として積まない */
+    fun applyRemote(item: AllowedSetting, value: Any?) {
+        // 薄く表示はスマホだけの値で送れない。別の端末の値で上書きしない
+        if (item.name == "ngMode" && ngMode == "dim") return
+        @Suppress("UNCHECKED_CAST")
+        val stored: Any? = if (item.type == "words") JSONArray(value as List<String>).toString() else value
+        prefByKey[item.name]?.setRemote(stored)
     }
 
     private fun loadBoardMeta(): Map<String, BoardMeta> = runCatching {

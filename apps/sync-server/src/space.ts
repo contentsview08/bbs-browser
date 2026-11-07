@@ -48,6 +48,12 @@ CREATE TABLE requests (
 );
 `
 
+/** 端末はこの秒より早く試さない。超えた要求を繰り返させないため */
+const limited = (waitMs: number) => result(429, { error: 'rate_limited', retry_after_sec: Math.ceil(waitMs / 1000) })
+
+/** 指示があるときだけ応答に載せる。ない応答では端末の既定が効く */
+const paceOf = (cfg: Config) => (cfg.paceHeadSec > 0 || cfg.pacePushSec > 0 ? { pace: { head_sec: cfg.paceHeadSec, push_sec: cfg.pacePushSec } } : {})
+
 interface Meta {
   space_id: string
   epoch: string
@@ -165,8 +171,8 @@ export class SpaceDO extends DurableObject<Env> {
     const minuteCount = m.minute === minute ? m.minute_count : 0
     const dayCount = m.day === day ? m.day_count : 0
     // 超えた要求は書かない。連打で書き込みの費用を増やさないため
-    if (cfg.ratePerMinute > 0 && minuteCount >= cfg.ratePerMinute) return failure(429, 'rate_limited')
-    if (cfg.ratePerDay > 0 && dayCount >= cfg.ratePerDay) return failure(429, 'rate_limited')
+    if (cfg.ratePerMinute > 0 && minuteCount >= cfg.ratePerMinute) return limited((minute + 1) * MINUTE - now)
+    if (cfg.ratePerDay > 0 && dayCount >= cfg.ratePerDay) return limited((day + 1) * DAY - now)
     m.minute = minute
     m.minute_count = minuteCount + 1
     m.day = day
@@ -238,7 +244,7 @@ export class SpaceDO extends DurableObject<Env> {
     const etag = `"${m.epoch}:${m.next}"`
     // Cloudflare は圧縮すると ETag を弱いものに書き換えるので、W/ を除いて比べる
     if (ifNoneMatch?.replace(/^W\//, '') === etag) return { status: 304, body: '', etag }
-    return result(200, { version: m.next, epoch: m.epoch, gc_floor: m.gc_floor }, etag)
+    return result(200, { version: m.next, epoch: m.epoch, gc_floor: m.gc_floor, ...paceOf(this.config) }, etag)
   }
 
   async usage(): Promise<ApiResult> {
@@ -257,7 +263,7 @@ export class SpaceDO extends DurableObject<Env> {
     // 空の領域の全件は重くない。使い始めの端末を止めないよう数えない
     if (since === 0 && cfg.fullPullPerHour > 0 && m.record_count > 0) {
       const pulls = (JSON.parse(m.full_pulls) as number[]).filter((at) => now - at < HOUR)
-      if (pulls.length >= cfg.fullPullPerHour) return failure(429, 'rate_limited')
+      if (pulls.length >= cfg.fullPullPerHour) return limited(HOUR)
       pulls.push(now)
       this.sql.exec('UPDATE meta SET full_pulls = ? WHERE id = 1', JSON.stringify(pulls))
     }
@@ -273,7 +279,7 @@ export class SpaceDO extends DurableObject<Env> {
       page.push(toWire(r))
     }
     await this.report(m)
-    return result(200, { records: page, head: m.next, more, epoch: m.epoch, gc_floor: m.gc_floor })
+    return result(200, { records: page, head: m.next, more, epoch: m.epoch, gc_floor: m.gc_floor, ...paceOf(cfg) })
   }
 
   async records(input: PushInput): Promise<ApiResult> {
@@ -294,7 +300,7 @@ export class SpaceDO extends DurableObject<Env> {
     }
     const after = this.meta() as Meta
     await this.report(after)
-    return result(200, { results: out, epoch: after.epoch, gc_floor: after.gc_floor })
+    return result(200, { results: out, epoch: after.epoch, gc_floor: after.gc_floor, ...paceOf(this.config) })
   }
 
   /** 同じ request_id は採番し直さない。409 のレコードは今の値を入れる(端末はマージするだけ) */

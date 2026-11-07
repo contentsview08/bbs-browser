@@ -9,6 +9,7 @@ import { isMobile } from '../utils/platform'
 import { ensureFont, onFontSwitch } from '../host/fonts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { applyNgDiff, isEmptyNgDiff, ngDiff, UserOps, type LogStore, type NgDiff } from '@bbs-browser/logstore'
+import { settingOpsOf } from '@bbs-browser/sync'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import { todayDateString, type NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
@@ -1016,7 +1017,13 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
     if (!store) return
     const writes = [...pendingWrites.current.entries()]
     pendingWrites.current.clear()
-    for (const [key, value] of writes) void store.setSetting(key, value as AppSettings[typeof key]).catch(backgroundError('設定の保存'))
+    if (writes.length > 0) {
+      // 許可リストの項目だけ送信待ちに積む。自動で書く項目(整理の時刻など)はここで弾かれる
+      void (async () => {
+        const prior = writes.some(([key]) => key === 'boardMeta') ? (await store.getSettings()).boardMeta : undefined
+        await new UserOps(store).settingsWrite(writes.map(([key, value]) => ({ key, value, ops: settingOpsOf(key, value, prior) })))
+      })().catch(backgroundError('設定の保存'))
+    }
     if (pendingNg.current.length === 0) return
     const ng = pendingNg.current.splice(0)
     void (async () => {

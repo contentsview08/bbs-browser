@@ -97,6 +97,9 @@ fun delRecord(id: String) = SqlStatement("DELETE FROM sync_records WHERE record_
 fun delOp(seq: Long) = SqlStatement("DELETE FROM sync_ops WHERE seq = ?", listOf(seq))
 fun clearNeedsApply(id: String) = SqlStatement("UPDATE sync_records SET needs_apply = 0 WHERE record_id = ?", listOf(id))
 
+/** minSdk 26 の SQLite は 1 つの文のプレースホルダーが 999 個まで */
+private const val SQL_VARS_MAX = 900
+
 class SyncTables(val db: SyncSql) {
     private fun marks(n: Int) = List(n) { "?" }.joinToString(", ")
 
@@ -125,14 +128,17 @@ class SyncTables(val db: SyncSql) {
     fun records(ids: Collection<String>): MutableMap<String, StoredRecord> {
         val out = LinkedHashMap<String, StoredRecord>()
         val unique = ids.distinct()
-        if (unique.isEmpty()) return out
-        for (r in db.query("SELECT $COLUMNS FROM sync_records WHERE record_id IN (${marks(unique.size)})", unique)) fromRow(r).let { out[it.recordId] = it }
+        for (chunk in unique.chunked(SQL_VARS_MAX)) {
+            for (r in db.query("SELECT $COLUMNS FROM sync_records WHERE record_id IN (${marks(chunk.size)})", chunk)) fromRow(r).let { out[it.recordId] = it }
+        }
         return out
     }
 
     fun allRecords(): List<StoredRecord> = db.query("SELECT $COLUMNS FROM sync_records ORDER BY record_id").map(::fromRow)
 
     fun recordsOfKind(kind: String): List<StoredRecord> = db.query("SELECT $COLUMNS FROM sync_records WHERE kind = ? ORDER BY record_id", listOf(kind)).map(::fromRow)
+
+    fun selectRecords(where: String, args: List<Any?>): List<StoredRecord> = db.query("SELECT $COLUMNS FROM sync_records WHERE $where", args).map(::fromRow)
 
     fun pendingRecords(limit: Int): List<StoredRecord> =
         db.query("SELECT $COLUMNS FROM sync_records WHERE pending = 1 ORDER BY priority, hlc, record_id LIMIT ?", listOf(limit.toLong())).map(::fromRow)

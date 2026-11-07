@@ -3,6 +3,7 @@ package io.github.contentsview08.obb.sync.adapters
 import io.github.contentsview08.obb.sync.Hlc
 import io.github.contentsview08.obb.sync.SyncPayload
 import io.github.contentsview08.obb.sync.body
+import io.github.contentsview08.obb.sync.canonicalJson
 import io.github.contentsview08.obb.sync.checkPayload
 import io.github.contentsview08.obb.sync.engine.RecordRefs
 import io.github.contentsview08.obb.sync.engine.SqlStatement
@@ -70,6 +71,9 @@ class ImageAdapter(private val db: SyncSql) : SyncAdapter {
         val had = exists(r)
         return ApplyPlan(if (had) listOf(SqlStatement("DELETE FROM uploads WHERE url = ?", listOf(r.refDetail))) else emptyList(), had)
     }
+
+    override fun localLines(ctx: AdapterContext): List<String> =
+        db.query("SELECT $COLUMNS FROM uploads").map { canonicalJson(listOf(it["url"], it["name"], it["size"], it["uploaded_at"])) }
 
     /** with_account は 0 で足す(その端末のアカウントで消せるとは限らない)。INSERT OR REPLACE は hash と削除キーを消すので使わない */
     override fun apply(r: StoredRecord, ctx: AdapterContext): ApplyPlan {

@@ -232,6 +232,27 @@ export function addUploadStatement(u: Omit<UploadRecord, 'uploadedAt'>, now: num
 
 export const removeUploadStatement = (url: string): SqlStatement => ({ sql: 'DELETE FROM uploads WHERE url = $1', params: [url] })
 
+/** 既読位置は戻さない(読み返しても未読が増えないように) */
+export function markReadStatement(thread: ThreadSummary, no: number, now: number): SqlStatement {
+  return { sql: 'UPDATE threads SET read_no = MAX(read_no, $1), read_at = $2 WHERE board_url = $3 AND key = $4', params: [no, now, thread.boardUrl, thread.key] }
+}
+
+export const removeHistoryStatement = (thread: ThreadSummary): SqlStatement => ({ sql: 'UPDATE threads SET read_at = NULL WHERE board_url = $1 AND key = $2', params: [thread.boardUrl, thread.key] })
+
+/** 同期を使っている間のログの削除。書き込み履歴が残るので、自分のレスの印も残す */
+export const deleteThreadStatements = (thread: ThreadSummary): SqlStatement[] =>
+  ['threads', 'posts'].map((table) => ({ sql: `DELETE FROM ${table} WHERE board_url = $1 AND key = $2`, params: [thread.boardUrl, thread.key] }))
+
+export function addPostHistoryStatement(thread: ThreadSummary, post: { no?: number; name: string; mail: string; body: string }, now: number): SqlStatement {
+  return {
+    sql: `INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    params: [thread.connectorId, thread.boardUrl, thread.key, thread.title, nn(post.no), post.name, post.mail, post.body, now],
+  }
+}
+
+export const deletePostHistoryStatement = (id: number): SqlStatement => ({ sql: 'DELETE FROM post_history WHERE id = $1', params: [id] })
+
 export const setSettingStatement = (key: string, value: unknown): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', params: [key, JSON.stringify(value)] })
 
 export class LogStore {
@@ -494,12 +515,9 @@ export class LogStore {
     return targets.length
   }
 
-  /** 既読位置は戻さない(読み返しても未読が増えないように) */
   async markRead(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
-    await this.db.execute(
-      'UPDATE threads SET read_no = MAX(read_no, $1), read_at = $2 WHERE board_url = $3 AND key = $4',
-      [no, now, thread.boardUrl, thread.key],
-    )
+    const { sql, params } = markReadStatement(thread, no, now)
+    await this.db.execute(sql, params)
   }
 
   async history(limit = 100): Promise<HistoryEntry[]> {
@@ -694,11 +712,8 @@ export class LogStore {
     post: { no?: number; name: string; mail: string; body: string },
     now = Date.now(),
   ): Promise<void> {
-    await this.db.execute(
-      `INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [thread.connectorId, thread.boardUrl, thread.key, thread.title, nn(post.no), post.name, post.mail, post.body, now],
-    )
+    const { sql, params } = addPostHistoryStatement(thread, post, now)
+    await this.db.execute(sql, params)
   }
 
   /** 新しい順 */
@@ -727,7 +742,8 @@ export class LogStore {
   }
 
   async deletePostHistory(id: number): Promise<void> {
-    await this.db.execute('DELETE FROM post_history WHERE id = $1', [id])
+    const { sql, params } = deletePostHistoryStatement(id)
+    await this.db.execute(sql, params)
   }
 }
 

@@ -222,6 +222,10 @@ class FavoriteBoardAdapter(private val db: SyncSql, private val resolve: (String
     }
 
     /** 順序のレコードで並べる。ない項目はある項目の後ろで、どの端末でも同じ順になるよう板 URL で決める */
+    /** 並びまで比べる */
+    override fun localLines(ctx: AdapterContext): List<String> =
+        db.query("SELECT url, sort FROM favorite_boards").map { "${it["sort"]}\t${normalizeBoardUrl(it["url"] as String)}" }
+
     override fun afterApply(ctx: AdapterContext): ApplyPlan? {
         if (!dirty) return null
         dirty = false

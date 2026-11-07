@@ -76,6 +76,8 @@ import { useViewState } from './hooks/useViewState'
 import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step, updateNearest } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
 import { useSync } from './hooks/useSync'
+import { mergeSyncedHistory, syncedTabReadNo } from './utils/syncRead'
+import { restoreThreadRead } from '@bbs-browser/sync'
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -849,7 +851,8 @@ export default function App() {
     })
   const deletePostEntry = async (id: number) => {
     if (!store) return
-    await store.deletePostHistory(id)
+    const entry = (await store.listPostHistory()).find((p) => p.id === id)
+    if (entry) await new UserOps(store).postRemove(entry)
     setPostHistory(await store.listPostHistory())
   }
   /** その画像を貼ったレス(書き込み履歴の本文に URL があるもの) */
@@ -918,7 +921,40 @@ export default function App() {
     favoriteBoards: (s) => void reloadFavorites(s),
     sites: (s) => void s.listSites().then(setSites),
     uploads: (s) => void s.listUploads().then((list) => setUploads((cur) => (cur ? list : cur))),
+    posts: (s) => void s.listPostHistory().then((list) => setPostHistory((cur) => (cur ? list : cur))),
+    reads: (s) => void syncedReads(s),
+    retentionDays: () => settingsRef.current.logRetentionDays,
   })
+
+  /** 別の端末の履歴と既読を写す。DB は適用が書いてある。開いているタブの位置は上がるときだけ追い、下がっても読んでいる画面を動かさない */
+  const syncedReads = async (s: LogStore) => {
+    await reloadRecent(s)
+    await reloadFavThreads(s)
+    const list = await loadHistory(s)
+    setHistory((cur) => (cur ? mergeSyncedHistory(cur, list) : cur))
+    historyCache.current = list
+    const b = boardRef.current
+    if (b) {
+      const st = await s.getThreadStates(b.url)
+      setStates(st)
+    }
+    const boards = [...new Set(tabsRef.current.map((x) => x.thread.boardUrl))]
+    const known = new Map<string, number>()
+    for (const url of boards) for (const [key, state] of await s.getThreadStates(url)) known.set(`${url}\t${key}`, state.readNo)
+    setTabs((ts) => mapKeep(ts, (x) => {
+      const next = syncedTabReadNo(x.readNo, known.get(`${x.thread.boardUrl}\t${x.thread.key}`))
+      return next === x.readNo ? x : { ...x, readNo: next }
+    }))
+  }
+
+  /** 履歴から外す。ログと既読は残す。全端末の履歴から外れる */
+  const removeFromHistory = (t: ThreadSummary) => {
+    if (!store) return
+    const id = threadId(t)
+    setRecentHistory((list) => list.filter((x) => threadId(x) !== id))
+    setHistory((list) => list?.filter((h) => threadId(h.thread) !== id))
+    void run(null, () => new UserOps(store).historyRemove(t))
+  }
 
   const toggleFavoriteThread = (t: ThreadSummary) => {
     if (!store) return
@@ -1170,7 +1206,9 @@ export default function App() {
   const loadTab = async (s: LogStore, t: ThreadSummary) => {
     const id = threadId(t)
     const started = performance.now()
-    const [local, own] = await Promise.all([s.loadThread(t), s.getOwnPosts(t)])
+    const [first, own] = await Promise.all([s.loadThread(t), s.getOwnPosts(t)])
+    // 整理で消えたログは、同期の表から既読と履歴を戻す。ログの削除はリセットがあるので戻らない
+    const local = first ?? ((await restoreThreadRead(s.db, { boardUrl: t.boardUrl, key: t.key, connectorId: t.connectorId, title: t.title, createdAt: t.createdAt?.getTime() ?? null }).catch(() => false)) ? await s.loadThread(t) : null)
     // スマホ: スレ表示が右からすべり込んでいる間(SLIDE_MS)はレスを並べない。並べるのは重く、すべりがカクつくので、
     // すべり込み終わってから並べる(その間はヘッダーと書き込み欄だけの軽い画面)
     if (isMobile) {
@@ -1286,12 +1324,8 @@ export default function App() {
     })
     // DB は裏で消す。取りに行っている最中のスレは、終わるのを待ってから(消したあとに書き戻されないように)
     void run(null, async () => {
-      await Promise.all(
-        [...targets].map(async ([id, thread]) => {
-          await inflight.current.get(id)?.catch(() => undefined)
-          await store.deleteThread(thread)
-        }),
-      )
+      await Promise.all([...targets.keys()].map((id) => inflight.current.get(id)?.catch(() => undefined)))
+      await new UserOps(store).deleteLogs([...targets.values()])
     })
   }
 
@@ -1735,7 +1769,7 @@ export default function App() {
       patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
     }
     // 書き込み履歴には、番号が分からなくても書いた内容を残す。URL から開いたスレはスレタイが空なので、ログのものを使う
-    await store.addPostHistory({ ...t, title: after?.title || t.title }, { no, name: input.name, mail: input.mail, body: input.body })
+    await new UserOps(store).postAdd({ ...t, title: after?.title || t.title }, { no, name: input.name, mail: input.mail, body: input.body })
     return r
   }
 
@@ -1790,7 +1824,7 @@ export default function App() {
         .sort((x, y) => (y.createdAt?.getTime() ?? 0) - (x.createdAt?.getTime() ?? 0))[0]
       if (found) {
         await store.addOwnPost(found, 1)
-        await store.addPostHistory(found, { no: 1, name: input.name, mail: input.mail, body: input.body })
+        await new UserOps(store).postAdd(found, { no: 1, name: input.name, mail: input.mail, body: input.body })
         setNewThreadOpen(false)
         await openThread(found, { newTab: true })
         return r
@@ -2160,7 +2194,7 @@ export default function App() {
     patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
     // 閲覧履歴の一覧を出しているときは、その行の既読も進める(しないと未読の印が消えない)
     setHistory((list) => (list?.some((h) => threadId(h.thread) === id && no > h.readNo) ? list.map((h) => (threadId(h.thread) === id && no > h.readNo ? { ...h, readNo: no } : h)) : list))
-    void store.markRead(t, no).catch(backgroundError('既読の保存'))
+    void new UserOps(store).markRead(t, no).catch(backgroundError('既読の保存'))
   })
 
   // ── お気に入り・サイト ──
@@ -2708,6 +2742,7 @@ export default function App() {
           // 立てた人を NG: ID の NG(その人が立てたスレも、書いたレスも隠れる)。選んだらそのまま入れる
           onNgAuthor={(t, today) => t.authorId && addNg(newRule('posterId', t.authorId, today ? { expiresOnDate: todayDateString() } : {}))}
           onDeleteThreadLog={(t) => confirmDeleteLogs([], [t])}
+          onRemoveFromHistory={history ? removeFromHistory : undefined}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={history ? undefined : settings.keywords}
           snapshotKey={history ? `${historyVersion}:${favVersion}` : undefined}

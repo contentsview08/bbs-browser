@@ -409,7 +409,7 @@ class UserOps {
 | 設定 | `setting` | `setting:::<name>` | h |
 | 画像の削除ページ | `secret` | `secret:::<url>` | s |
 
-- `post_id` は `SHA-256(board|key|posted_at|body)` の先頭 32 桁。種まきをやり直しても同じ ID になる
+- `post_id` は `SHA-256(board|key|posted_at|body)` の先頭 32 桁。`board` は `normalizeBoardUrl` の値、`body` は**切った後の本文**(`fitPostBody`)。受け取った端末は切った本文しか持たないので、切る前で作ると、その端末が種まきをやり直したときに別の ID になる。種まきをやり直しても同じ ID になる
 - 種類のオン・オフの単位は、設計書の表の行(閲覧履歴と既読は 1 つ)
 
 ### 本文の項目と上限(`schema.ts`・`SyncSchema.kt`・`sync-schema.json`)
@@ -442,7 +442,17 @@ class UserOps {
 | `threads.read_no` | `read_dev.body.pos`・`steps`、`read_reset` | `read_no` は `readPosition` の結果。下げることもある |
 | `markRead` の `no` | `recordRead` の `pos` | 手元 → レコード |
 | ログの削除 | `read_reset.body.id`(ランダム)・`target_res`(0) | 手元 → レコード。`pruneLogs` は書かない |
+
+ログの削除の量の決まり。リセットは容量超過でも外さないので、書く数を先に抑える。
+
+| 項目 | 値 | 理由 |
+| --- | --- | --- |
+| 1 スレ | `read_reset` 1 件。レコードは増えない(2 回目からは同じ ID) | 1 件 528 バイト |
+| 1 回の操作の上限 | 2,000 スレ(`RESET_BATCH_MAX`・`LOG_RESET_MAX`)。超えた分は手元からだけ消え、他の端末は既読のまま | 約 1MB。送るのに 20 回の要求 |
+| 領域の総数の上限 | 5,000 件(`RESET_TOTAL_MAX`)。超えた新しいスレは書かず `bad_counts.local` に数える。すでにリセットのあるスレは更新できる | 約 2.6MB。容量 10MB の 4 分の 1 |
 | `threads.board_url`・`key` | `board_url`・`thread` | 手元の値をそのまま書く |
+
+適用で未処理の読み(`sync_ops` の `read`)があれば、その位置より下げない。次の周で操作が処理されて計算し直される。
 
 ### 閲覧履歴
 
@@ -453,6 +463,10 @@ class UserOps {
 | なし | `board_name` | 送るとき `favorite_boards.name`、なければ `boards.name`、なければ省く |
 | `threads.created_at` | `created_at` | 無ければ省く。受信で無ければ、10 桁の数字のキーから作る(`LogDb.postHistory` と同じ) |
 | `threads.connector_id` | 送らない | 下記 |
+
+- 消した後に届いた、それより前の閲覧では行を作らない(`read_reset` の HLC の壁時計 ≧ `last_viewed_at`)。消した端末の履歴が勝手に戻らないように
+- 操作の処理のときに手元の行がなければ、`last_view` は変えない(読んだ直後にログを消した)。`read_dev` は記録する
+- 種まきの `read_dev` は `read_no > 0` の行。`read_at` がなければ `fetched_at`、それもなければ壁時計 1
 | `post_count`・`cursor`・`status`・`fetched_at` | 送らない | 取得で決まる |
 
 ### お気に入りのスレ・板と並び順
@@ -504,17 +518,21 @@ class UserOps {
 
 | 今のデータ | `post.body` | 埋め方 |
 | --- | --- | --- |
-| `id` | 送らない | `ref_local` で対応を持つ |
+| `id` | 送らない | 手元の行は `posted_at` で引いて `post_id` で比べる(本文の揺れと URL の揺れを同じ規則で吸収する) |
 | なし | `post_id` | 上の式 |
 | `board_url`・`key` | `board_url`・`thread` | |
 | `thread_title` | `title` | |
 | `no` | `no` | NULL は省く |
-| `body` | `body` | 4096 文字を超えたら切る |
+| `body` | `body` | `fitPostBody` で切る。4096 文字か、JSON にして 12,288 バイト(制御文字は 6 バイト)の早い方。文字の途中で切らない。送った端末の行は切らずに残す |
 | `name`・`mail` | 送らない | 受信は `''`。トリップを送らないため |
 | `posted_at` | `posted_at` | |
 | `connector_id` | 送らない | 上と同じ |
 
 - `no` があれば、適用で `own_posts` に足す(あなた宛ての知らせが効くように)。tombstone でも `own_posts` は消さない
+- tombstone の本文は `post_id` と `posted_at` だけ。手元の行を探すのに要る。本文とスレタイは残さない
+- 消す操作の `args` には ID を作る値を書く(消した後は行がない)。次の周で消える
+- 同じ `post_id` の行が手元に 2 つあれば、適用で 1 つにする
+- 全部で平文 15,000 バイトを超えるときはスレタイを落とす
 - スマホの `deletePostHistory` は `board_url`・`key`・`posted_at` で消す。`PostHistoryEntry` に `id` がないので足す
 
 ### 上げた画像
@@ -557,7 +575,7 @@ class UserOps {
 
 ### 設定の許可リスト
 
-許可リストは `packages/sync/settings-allowlist.json` に置き、PC とスマホのテストで読む。値はどちらの端末でも同じ意味のものだけを入れる。
+許可リストは `packages/sync/settings-allowlist.json` に置き、PC とスマホが読む(スマホは Gradle が assets へ写す)。値はどちらの端末でも同じ意味のものだけを入れる。`never` は入れてはいけない項目で、テストで確かめる。既定値が端末で違う項目(`idShort`・`dateStyle`)は `default` を端末ごとに書く。
 
 | 群 | 項目(PC の名前) | 値の形 |
 | --- | --- | --- |
@@ -578,6 +596,9 @@ class UserOps {
 - `checkPayload` の `scalar` は真偽・整数・4096 文字までの文字列だけ。小数は通らない(行間などは同期しない)
 - 受信の値は範囲を検査して丸める。知らない値は適用せず、同期の表には残す
 - 既定と同じ値は種まきで送らない
+- 領域に設定のレコードが 1 つでもあれば種まきしない(合流は領域の値を使う)。レコードのない項目は手元の値のまま
+- 板ごとの設定の ID は `setting:::boardMeta/<正規化した板 URL>`、本文の `key` は生の URL
+- 適用は周の最後に 1 回書く。手元の値が表と違えば起動時の照合で表の値へ戻す
 
 ### 手元の URL との対応
 
@@ -782,7 +803,7 @@ class UserOps {
 
 2 台で読むスレ 1 本は `last_view` 1 + `read_dev` 2 で約 1.6KB。**10MB は約 6,500 スレで埋まる。** 1 日 70 スレ読む人は、保持 90 日で届く。
 
-優先順は次のとおり。`GET /space` の使用量を見て、種まきは 8MB で止める。止めた分は手元だけに残る。
+優先順は次のとおり。種まきも普通の送信と同じ流れで、超えたら下の順に外す。
 
 | 優先 | 種類 | 超えたとき |
 | --- | --- | --- |
@@ -791,7 +812,7 @@ class UserOps {
 | 3 | 上げた画像 | 古い順に外す |
 | 4 | 閲覧履歴と既読 | 最初に外す。古いスレから `trim` |
 
-413 を受けたら、優先の低い古いものから 100 件 `trim` の tombstone を作って再送する(tombstone も容量を使うので、外す効果はサーバーの 90 日後の片づけまで遅れる)。それでも足りなければ画面で知らせる。
+413 を受けたら、優先の低い古いものから 100 件を外して再送する(1 周に 5 回まで)。まだ送っていないものは送らないだけ。送ったものは `trim` の tombstone にする(tombstone も容量を使うので、外す効果はサーバーの 90 日後の片づけまで遅れる)。`read_reset`・お気に入り・NG・設定は外さない。外せるものがなければ送信待ちのまま画面で知らせる。外した回数は `bad_counts.quota_trim`。
 
 ## 7. コネクタとの関係
 
@@ -874,8 +895,8 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 前面に戻る | `focus`・`visibilitychange`(`useSync`) | `MainActivity.onStart`(`vm.appVisible`) |
 | 放置後の操作 | `pointerdown`・`keydown` で最後の時刻を見る | 同じ考えを `Activity.onUserInteraction` で |
 | ネットワークの復帰 | `online` | `ConnectivityManager.NetworkCallback`(前面の間だけ登録) |
-| 保険の 5 分 | 前面のときだけ `GET /head` | 同じ。`snapshotFlow { appVisible }` |
-| まとめ送り | 2 分・10 秒のデバウンス | 同じ |
+| 確認の 30 秒 | 前面のときだけ `GET /head`。`SyncScheduler` | 同じ |
+| 送信の 30 秒 | 変更があるときだけ | 同じ |
 | 手動 | 同期ボタン | 同じ |
 
 - 既読は `readFlush` の呼び出し(タブの切り替え・閉じる)でも周を起こす
@@ -883,11 +904,10 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 | 定数 | 値 |
 | --- | --- |
-| `PUSH_INTERVAL_MS` | 2 分(変更があるときだけ) |
-| `IMPORTANT_DEBOUNCE_MS` | 10 秒 |
+| `PUSH_INTERVAL_MS` | 30 秒(変更があるときだけ) |
 | `PULL_MIN_GAP_MS` | 10 秒 |
-| `IDLE_PULL_MS` | 10 分 |
-| `HEAD_INTERVAL_MS` | 5 分 |
+| `IDLE_STOP_MS` | 10 分 |
+| `HEAD_INTERVAL_MS` | 30 秒 |
 | `NET_SETTLE_MS` | 5 秒 |
 | `NET_MIN_GAP_MS` | 30 秒 |
 - pull の間隔の 10 秒はエンジンが守る。手動だけ例外
@@ -916,6 +936,10 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 - 周の途中で止められても壊れない。`sync_ops`・`pending`・`needs_apply`・`push_inflight` が DB にあるので、次の前面で続きから動く
 - 限界: スマホで読んですぐ閉じ、送れなかった分は、次にスマホを開くまで他の端末に届かない。9 章の説明に書く
 
+### leave と周回の排他
+
+`leave`・`pair`・サーバーの URL の変更は、先に `halt` で走っている周を止める。周は次の区切り(通信の応答の後・ページ・送信の回)で止まり、古い領域の受信を書かない。表を消すのはその後。
+
 ### 再送
 
 設計書の「エラー」のとおり。端末の中の決まりは次を足す。
@@ -927,7 +951,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 409 | 応答のレコードを `mergePayloads` して、新しい `version` を `base_version` に再送。応答の `record_id` が送ったものと違えば混ぜず、`bad_counts.swapped` に数える(別のレコードの暗号文のすり替え) |
 | 待ち時間 | `backoffDelayMs(回数, jitter)`。1 秒から最大 60 秒を倍々にし、半分をジッターにする。表は `sync-config.json` |
 | 1 周の送信 | 100 件・1MB ずつ、最大 20 回。残りは次の周 |
-| 413 | 段階 1 は `last_error` に書くだけで `pending` を残す。外す処理は段階 5 |
+| 413 | 上の「容量を超えるとき」のとおり外して送り直す。外せるものがなければ `last_error` に書いて `pending` を残す |
 | 読み取りの上限 | 1 応答 2MB。超えたら捨てて `backoff` |
 | version が進まない | ページングを止める |
 | リダイレクト | 3xx は失敗。たどらない |
@@ -1240,6 +1264,10 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 - 偽のサーバーの決まりは `packages/conformance/sync-server-rules.json` で、後で実物のサーバーでも流す
 - 比べるのは今のデータと `sync_records` の `payload`。リセットの `id` と `device_id` はテストの固定値を差し込む。ノンスの乱数はペイロードに出ないので比較に影響しない
 
+### 件数
+
+`sync-client.json` は 134 件。`sync-client-random.json` は順序・重複・中断を乱数で作った 20 件で、生成した手順を PC とスマホと Miniflare で流して digest を比べる。生成は `packages/sync/test/randomScenario.ts`。ほかに PC で 300 シードずつ回す。枠 2 のシミュレーターは `packages/sync/test/slotScenarios.ts`(偽サーバーと Miniflare)。比較に失敗すると、どのレコードのどの値が違うかを 1 行ずつ出す(`diffSnapshots`)。検証用の Worker へは `OBB_SYNC_VERIFY` に URL を入れて `packages/sync/test/verifyServer.test.ts` を回す。
+
 ### 一覧
 
 | 番号 | シナリオ | 確かめること |
@@ -1296,7 +1324,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 50 | 裏に回る瞬間の送信が途中で切れる | 送信待ちが残り、次の前面復帰で同じ `request_id` で届く |
 | 51 | ネットワークの復帰(偽の時計) | 5 秒待つ。前回から 30 秒未満なら同期しない。30 秒以上なら同期する |
 | 52 | 裏にいる間 | 周が始まらず、通信しない |
-| 53 | 変更がない間の 2 分 | 送らない |
+| 53 | 変更がない間の 30 秒 | 送らない |
 | 54 | 許可証がない | 作成を送らず `blocked`。手元が残る。通すと続く |
 | 55 | 領域が消える | 同じ許可証で作り直す。ページを通した回数が増えない |
 | 56 | 2 台目 | 許可証を受け取り、Turnstile を通さず作り直せる |
@@ -1323,7 +1351,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 2 | なし(サーバーの段階) | 済み |
 | 3 | 許可証を送る形(`SyncApi.createSpace`・`pair`・`setTicket`)、スマホの PoW、偽サーバーの同じ規則 | シナリオ 54〜59 が PC とスマホで同じ結果 |
 | 4 | HTTP の実装、鍵の保管、許可証の窓、手動の同期ボタン、開発用の設定に隠したペアリング。お気に入りのスレだけ。画面の入口は `SyncController`(`packages/sync/src/engine/controller.ts`・`SyncController.kt`)。言葉と QR は `sync-ui.json`・`sync-qr.json` で揃える | 検証用の Worker で 2 台が実機で同期する。PC とエミュレーターでは通した。実機は未確認 |
-| 5 | 板と順序・サイト・上げた画像・NG は済み(手動の同期まで)。残りは閲覧履歴・既読 → 書き込み → 設定の順に足す。初回の同期。きっかけ、まとめ送り、再送、状態の表示、裏に回る瞬間の 1 回の送信 | 全シナリオ。1 万スレの偽データで初回の同期が固まらない。機内モードの復帰で追いつく |
+| 5 | 全部の種類、初回の同期、自動の同期(`SyncScheduler`)、状態と要約の表示、容量超過で外す処理は済み | 全シナリオ。件数の多い合流。実機の確認は残り |
 | 6 | 試験の説明と同意、満員の表示、実際のウィジェット。枠 2 のシミュレーターにエンジンをつなぐ。検証環境で枠 2 にして PC とスマホのエミュレーターで通す | 限定の試験の前の条件を満たす |
 | 7 | 公開の案内 | 公開の前の条件 |
 | 8 | 権限系、ローテーション、リカバリーコード | `sync-design.md` の検証の全部 |

@@ -98,6 +98,9 @@ class FavoriteThreadAdapter(
         return ApplyPlan(rows.map { SqlStatement("DELETE FROM favorite_threads WHERE board_url = ? AND key = ?", listOf(it["board_url"], r.refThread)) }, rows.isNotEmpty())
     }
 
+    override fun localLines(ctx: AdapterContext): List<String> =
+        db.query("SELECT board_url, key FROM favorite_threads").map { "${normalizeBoardUrl(it["board_url"] as String)}\t${it["key"]}" }
+
     override fun apply(r: StoredRecord, ctx: AdapterContext): ApplyPlan {
         // trim はサーバーから外すだけの印で、手元を消さない
         if (r.payload["deleted"] == true) return if (r.payload["trim"] == true) ApplyPlan(emptyList(), false) else remove(r)

@@ -83,6 +83,137 @@ class SyncEngineTest {
         db.close()
     }
 
+    @Test fun leaveは走っている周の終わりを待ち周はあとで表を書かない() = runBlocking {
+        val now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        val gate = CompletableDeferred<Unit>()
+        val entered = CompletableDeferred<Unit>()
+        var pulls = 0
+        val e = engine(db, { now }) { r ->
+            if (r.url.contains("/changes")) {
+                pulls++
+                entered.complete(Unit)
+                gate.await()
+            }
+            call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        val cycle = async(Dispatchers.Default) { e.runCycle(true) }
+        entered.await()
+        val leaving = async(Dispatchers.Default) { e.leave() }
+        // leave が周を待っている間に来たきっかけも、表を消す前には走らない
+        Thread.sleep(100)
+        assertEquals(false, leaving.isCompleted)
+        val during = async(Dispatchers.Default) { e.runCycle(true) }
+        Thread.sleep(100)
+        gate.complete(Unit)
+        leaving.await()
+        cycle.await()
+        assertEquals("off", during.await().state)
+        assertEquals(0L, db.query("SELECT COUNT(*) AS n FROM sync_records")[0]["n"])
+        assertEquals(0L, db.query("SELECT COUNT(*) AS n FROM sync_state")[0]["n"])
+        assertEquals(1, pulls)
+        assertEquals("off", e.state)
+        db.close()
+    }
+
+    @Test fun 止めると周は次の区切りで抜け先の通信をしない() = runBlocking {
+        val now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        val gate = CompletableDeferred<Unit>()
+        val entered = CompletableDeferred<Unit>()
+        val paths = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val e = engine(db, { now }) { r ->
+            paths += r.url
+            entered.complete(Unit)
+            gate.await()
+            call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        val cycle = async(Dispatchers.Default) { e.runCycle(true) }
+        entered.await()
+        val halting = async(Dispatchers.Default) { e.halt() }
+        Thread.sleep(100)
+        gate.complete(Unit)
+        halting.await()
+        assertEquals("idle", cycle.await().state)
+        // 領域の作成の後の読み直しと送信へ進まない
+        assertEquals(1, paths.count { it.contains("/changes") })
+        assertEquals(0, paths.count { it.contains("/records") })
+        db.close()
+    }
+
+    @Test fun headは304で周を回さず変化があれば回す_paceを覚える() = runBlocking {
+        val now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        val etags = ArrayList<String?>()
+        var head: () -> SyncResponse = { SyncResponse(500, "{}") }
+        val e = engine(db, { now }) { r ->
+            if (r.url.endsWith("/head")) {
+                etags += r.headers["If-None-Match"]
+                head()
+            } else call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        e.runCycle(true)
+        val since = db.query("SELECT value FROM sync_state WHERE key = 'since'")[0]["value"].toString().toLong()
+        val epoch = db.query("SELECT value FROM sync_state WHERE key = 'epoch'")[0]["value"]
+        head = { SyncResponse(200, canonicalJson(mapOf("version" to since, "epoch" to epoch, "gc_floor" to 0L, "pace" to mapOf("head_sec" to 120L)))) }
+        assertEquals(false, e.checkHead())
+        assertEquals(120.0, e.pace?.headSec)
+        head = { SyncResponse(304, "") }
+        assertEquals(false, e.checkHead())
+        assertEquals(listOf(null, "\"$epoch:$since\""), etags)
+        // 304 の間も指示は残る
+        assertEquals(120.0, e.pace?.headSec)
+        head = { SyncResponse(200, canonicalJson(mapOf("version" to since + 1, "epoch" to epoch, "gc_floor" to 0L))) }
+        assertEquals(true, e.checkHead())
+        head = { SyncResponse(404, "{}") }
+        assertEquals(true, e.checkHead())
+        db.close()
+    }
+
+    @Test fun 混んでいるという応答の指示より早く試さない() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        var busy = false
+        var heads = 0
+        val e = engine(db, { now }) { r ->
+            if (r.url.endsWith("/head")) heads++
+            if (busy) SyncResponse(429, canonicalJson(mapOf("error" to "rate", "retry_after_sec" to 600L))) else call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        e.runCycle(true)
+        busy = true
+        now += SyncConfig.PULL_MIN_GAP_MS
+        e.runCycle(false)
+        assertEquals("backoff", e.state)
+        now += 599_000
+        assertEquals("backoff", e.runCycle(false).state)
+        assertEquals(false, e.checkHead())
+        assertEquals(0, heads)
+        db.close()
+    }
+
+    @Test fun recordsは999個を超えるプレースホルダーを作らない() {
+        val db = JdbcSyncSql.open()
+        var most = 0
+        val counting = object : io.github.contentsview08.obb.sync.engine.SyncSql by db {
+            override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> {
+                most = maxOf(most, args.size)
+                return db.query(sql, args)
+            }
+        }
+        val got = io.github.contentsview08.obb.sync.engine.SyncTables(counting).records(List(2500) { "id$it" })
+        assertEquals(0, got.size)
+        assertEquals(true, most in 1..999)
+        db.close()
+    }
+
     @Test fun pullは自動のきっかけなら10秒あける() = runBlocking {
         var now = 1_800_000_000_000L
         val s = server { now }

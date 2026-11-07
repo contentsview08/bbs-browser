@@ -1,7 +1,7 @@
 // 上げた画像の履歴。ID は image:::<URL>。テキストだけで、削除キーと手元のハッシュは送らない
 import type { StoredRecord, SyncOpRow, SyncSqlDb } from '../engine/tables'
 import { formatHlc } from '../hlc'
-import { parseStrictJson } from '../json'
+import { canonicalJson, parseStrictJson } from '../json'
 import { recordId } from '../keys'
 import { makeTombstone, updateRecord, type SyncPayload } from '../merge'
 import { checkPayload } from '../schema'
@@ -85,6 +85,11 @@ export class ImageAdapter implements SyncAdapter {
   async remove(r: StoredRecord): Promise<ApplyPlan> {
     const had = await this.exists(r)
     return { changed: had, statements: had ? [{ sql: 'DELETE FROM uploads WHERE url = $1', params: [r.ref_detail] }] : [] }
+  }
+
+  async localLines(): Promise<string[]> {
+    const rows = await this.db.select<LocalRow>('SELECT url, name, size, uploaded_at FROM uploads')
+    return rows.map((r) => canonicalJson([r.url, r.name, r.size, r.uploaded_at]))
   }
 
   /** with_account は 0 で足す(その端末のアカウントで消せるとは限らない)。INSERT OR REPLACE は hash と削除キーを消すので使わない */

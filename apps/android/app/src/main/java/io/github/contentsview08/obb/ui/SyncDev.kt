@@ -98,7 +98,9 @@ import io.github.contentsview08.obb.data.syncStartNav
 import io.github.contentsview08.obb.data.SyncStartNav
 import io.github.contentsview08.obb.sync.SyncText
 import io.github.contentsview08.obb.sync.engine.PAIRING_SHOW_MS
+import io.github.contentsview08.obb.sync.engine.MismatchSummary
 import io.github.contentsview08.obb.sync.engine.SyncStatus
+import io.github.contentsview08.obb.sync.engine.SyncSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -134,6 +136,10 @@ fun SyncDevPage(vm: AppViewModel) {
     var pairing by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    var summary by remember { mutableStateOf<SyncSummary?>(null) }
+    var mismatch by remember { mutableStateOf<MismatchSummary?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { summary = runCatching { vm.syncSummary() }.getOrNull() }
     LaunchedEffect(Unit) {
         while (true) {
             st = vm.syncStatus()
@@ -147,6 +153,7 @@ fun SyncDevPage(vm: AppViewModel) {
             val failed = vm.syncAttempt(f)
             val now = vm.syncStatus()
             st = now
+            summary = runCatching { vm.syncSummary() }.getOrNull()
             // 窓を通っても領域を作れないことがある。その理由は状態の最後のエラーに出る
             message = failed ?: done?.takeIf { now.lastError == null }
             busy = false
@@ -156,11 +163,12 @@ fun SyncDevPage(vm: AppViewModel) {
     val s = st ?: return
     val needTicket = s.lastError?.startsWith("ticket_") == true
     Column(Modifier.padding(horizontal = 12.dp, vertical = 16.dp)) {
-        Text("お気に入りのスレと板、サイト、上げた画像の履歴、NG を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です", Modifier.padding(horizontal = 8.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
+        Text("お気に入りのスレと板、サイト、上げた画像の履歴、NG、書き込み履歴、閲覧履歴と既読、設定を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です", Modifier.padding(horizontal = 8.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
         Column(Modifier.fillMaxWidth().background(Palette.surface)) {
             StatusRow("状態", s.state)
             StatusRow(label("status_space"), s.space ?: "―")
             StatusRow(label("status_pending"), "${s.pending} 件")
+            StatusRow("最後の同期", clock(listOfNotNull(s.lastPullAt, s.lastPushAt).maxOrNull()))
             StatusRow("最後の受信", clock(s.lastPullAt))
             StatusRow("最後の送信", clock(s.lastPushAt))
             StatusRow(label("status_error"), s.lastErrorText ?: "―", if (s.lastError != null) Palette.markDanger else Palette.textMuted)
@@ -178,6 +186,9 @@ fun SyncDevPage(vm: AppViewModel) {
                 SyncButton(label("add_device"), !busy) { act { pairing = vm.syncCtl.pairingCode() } }
                 SyncButton(label("leave"), !busy, danger = true) { ask = "leave" }
             }
+        }
+        if (s.enabled) summary?.let { sum ->
+            SyncSummaryView(sum, mismatch, !busy, onCopy = { copyText(context, sum.text); vm.toast = "コピーしました" }, onCheck = { act { mismatch = vm.syncMismatches() } })
         }
         Text(label("server_url"), Modifier.padding(start = 8.dp, top = 16.dp), color = Palette.textMuted, fontSize = 13.sp)
         OutlinedTextField(url ?: s.serverOverride.orEmpty(), { url = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(s.serverUrl, fontSize = 12.sp) })
@@ -225,6 +236,30 @@ fun SyncDevPage(vm: AppViewModel) {
             },
             dismissButton = { TextButton({ ask = null }) { Text("閉じる") } },
         )
+    }
+}
+
+/** 端末どうしで見比べる値。本文や URL は出さない */
+@Composable
+private fun SyncSummaryView(summary: SyncSummary, mismatch: MismatchSummary?, enabled: Boolean, onCopy: () -> Unit, onCheck: () -> Unit) {
+    fun counts(m: Map<String, Int>) = m.entries.joinToString("、") { "${it.key} ${it.value}" }.ifEmpty { "なし" }
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp).background(Palette.surface)) {
+        Text("同期の要約", Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp), color = Palette.textStrong, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        @Composable fun Heading(text: String) = Text(text, Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp), color = Palette.textMuted, fontSize = 13.sp)
+        @Composable fun Mono(text: String) = Text(text, Modifier.padding(horizontal = 16.dp), color = Palette.textStrong, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        Heading("同期の表(生きている+削除:ハッシュ)")
+        for (k in summary.kinds) {
+            Mono("${k.kind} ${k.live}+${k.tombstones}:${k.hash}" + (if (k.pending > 0) " 送信待ち ${k.pending}" else "") + (if (k.needsApply > 0) " 適用待ち ${k.needsApply}" else ""))
+        }
+        Heading("手元(件数:ハッシュ)")
+        for (l in summary.local) Mono("${l.area} ${l.count}:${l.hash}")
+        SyncButton("要約をコピー", onClick = onCopy)
+        SyncButton("不一致の検査", enabled, onClick = onCheck)
+        mismatch?.let { m ->
+            StatusRow("違い", counts(m.differs))
+            StatusRow("表にない手元の行", counts(m.missing))
+            if (m.samples.isNotEmpty()) StatusRow("レコード", m.samples.joinToString(" "))
+        }
     }
 }
 

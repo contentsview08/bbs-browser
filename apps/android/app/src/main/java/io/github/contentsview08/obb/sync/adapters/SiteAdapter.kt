@@ -88,6 +88,9 @@ class SiteAdapter(
         )
     }
 
+    override fun localLines(ctx: AdapterContext): List<String> =
+        db.query("SELECT menu_url FROM sites").map { normalizeBoardUrl(it["menu_url"] as String).toString() }
+
     override fun apply(r: StoredRecord, ctx: AdapterContext): ApplyPlan {
         if (r.payload["deleted"] == true) return if (r.payload["trim"] == true) ApplyPlan(emptyList(), false) else remove(r)
         val body = r.payload.body.orEmpty()

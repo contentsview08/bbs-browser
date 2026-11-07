@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +49,7 @@ fun ThreadMenu(vm: AppViewModel, t: ThreadSummary, hasLog: Boolean, onDismiss: (
                     },
                     MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
                     )) {},
+                    if (hasLog) MenuItem("履歴から外す", Icons.Filled.History) { vm.removeFromHistory(t) } else null,
                     if (hasLog) MenuItem("ログを削除", Icons.Filled.Delete, danger = true) { if (vm.prefs.confirmDeleteLog) confirmDel = true else vm.deleteLogOf(t) } else null,
                 ),
             ),

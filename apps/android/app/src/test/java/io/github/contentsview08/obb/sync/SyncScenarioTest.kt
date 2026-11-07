@@ -5,6 +5,8 @@ import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.data.FavoriteBoardSql
 import io.github.contentsview08.obb.data.FavoriteThreadSql
 import io.github.contentsview08.obb.data.NgRule
+import io.github.contentsview08.obb.data.PostHistoryEntry
+import io.github.contentsview08.obb.data.ThreadLogSql
 import io.github.contentsview08.obb.data.SiteSql
 import io.github.contentsview08.obb.data.SyncNgHost
 import io.github.contentsview08.obb.data.UploadRecord
@@ -14,6 +16,18 @@ import io.github.contentsview08.obb.data.applyNgDiff
 import io.github.contentsview08.obb.data.ngDiff
 import io.github.contentsview08.obb.data.ngRuleToBody
 import io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter
+import io.github.contentsview08.obb.sync.adapters.HistoryHost
+import io.github.contentsview08.obb.sync.adapters.PostAdapter
+import io.github.contentsview08.obb.sync.adapters.SettingAdapter
+import io.github.contentsview08.obb.sync.adapters.SettingAllowlist
+import io.github.contentsview08.obb.sync.adapters.SettingsHost
+import io.github.contentsview08.obb.sync.adapters.SyncAdapter
+import io.github.contentsview08.obb.sync.adapters.AdapterContext
+import io.github.contentsview08.obb.sync.adapters.historyAdapters
+import io.github.contentsview08.obb.sync.adapters.restoreThreadRead
+import io.github.contentsview08.obb.sync.engine.SqlStatement
+import io.github.contentsview08.obb.sync.engine.syncMismatches
+import io.github.contentsview08.obb.sync.engine.syncSummary
 import io.github.contentsview08.obb.sync.adapters.ImageAdapter
 import io.github.contentsview08.obb.sync.adapters.NgAdapter
 import io.github.contentsview08.obb.sync.adapters.SiteAdapter
@@ -47,7 +61,7 @@ private class MemoryKeyStore : SyncKeyStore {
     }
 }
 
-private class Fault(val kind: String, var times: Int, val path: String?, val status: Int? = null, val body: Any? = null, val location: String? = null, val other: String? = null)
+private class Fault(val kind: String, var times: Int, val path: String?, val status: Int? = null, val body: Any? = null, val location: String? = null, val other: String? = null, var skip: Int = 0)
 
 private class LogEntry(val device: String, val method: String, val path: String, val host: String, val requestId: String?)
 
@@ -72,7 +86,54 @@ private class World(o: Map<String, Any?>) {
     val log = ArrayList<LogEntry>()
     var mark = 0
     val devices = LinkedHashMap<String, Device>()
+    var retentionDays = 0
 }
+
+private val ALLOW = SettingAllowlist(java.io.File("../../../packages/sync/settings-allowlist.json").readText())
+
+/** settings 表の置き場。TS の settingsTableHost と同じ。スマホの実物は Prefs の裏 */
+@Suppress("UNCHECKED_CAST")
+private class TableSettingsHost(val sql: JdbcSyncSql, override val device: String) : SettingsHost {
+    private fun rows(): MutableMap<String, Any?> {
+        val names = ALLOW.items.map { it.name } + "boardMeta"
+        val out = LinkedHashMap<String, Any?>()
+        for (r in sql.query("SELECT key, value FROM settings WHERE key IN (${names.joinToString(", ") { "?" }})", names)) {
+            try {
+                out[r["key"] as String] = parseStrictJson(r["value"] as String)
+            } catch (_: Exception) {
+                // 読めない値は無いものとして扱う
+            }
+        }
+        return out
+    }
+
+    override fun read(): Map<String, Any?> {
+        val all = rows()
+        val meta = all.remove("boardMeta") as Map<String, Any?>? ?: emptyMap()
+        for ((url, m) in meta) all[ALLOW.boardMetaPrefix + url] = m
+        return all
+    }
+
+    override fun apply(changes: Map<String, Any?>) {
+        val meta = LinkedHashMap((rows()["boardMeta"] as Map<String, Any?>?) ?: emptyMap())
+        var metaChanged = false
+        val stmts = ArrayList<SqlStatement>()
+        for ((name, value) in changes) {
+            if (name.startsWith(ALLOW.boardMetaPrefix)) {
+                val url = name.substring(ALLOW.boardMetaPrefix.length)
+                // 許可された項目だけを差し替える。手元だけの項目(名前欄の既定値など)は残す
+                val kept = (meta[url] as Map<String, Any?>?).orEmpty().filterKeys { it !in ALLOW.boardMetaFields }
+                val next = kept + (value as Map<String, Any?>)
+                if (next.isEmpty()) meta.remove(url) else meta[url] = next
+                metaChanged = true
+            } else stmts += setSetting(name, value)
+        }
+        if (metaChanged) stmts += setSetting("boardMeta", meta)
+        sql.batch(stmts)
+    }
+}
+
+private fun setSetting(name: String, value: Any?) = SqlStatement("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", listOf(name, canonicalJson(value)))
 
 private fun resolver(device: String): (String) -> ResolvedBoard? = { url ->
     if (device == "phone" && url.contains("2chan.net")) null
@@ -96,6 +157,8 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
     val trace = ArrayList<String>()
     var idCount = 0
     var requestCount = 0
+    var resetCount = 0
+    var adapters: List<SyncAdapter> = emptyList()
 
     init {
         newEngine()
@@ -113,7 +176,8 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         if (!online) throw IllegalStateException("offline")
         val f = w.faults.firstOrNull { it.times > 0 && (it.path == null || it.path == pathOnly) }
         val real = FakeRequest(req.method, path, req.headers, req.body)
-        if (f != null) {
+        if (f != null && f.skip > 0) f.skip--
+        else if (f != null) {
             f.times--
             when (f.kind) {
                 "status" -> return SyncResponse(f.status!!, "{}")
@@ -147,16 +211,19 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
     }
 
     fun newEngine() {
+        adapters = listOf(FavoriteThreadAdapter(sql, resolver(name))) + favoriteBoardAdapters(sql, resolver(name)) + listOf(
+            SiteAdapter(sql) { url -> if (name == "phone" && url.contains("2chan.net")) null else "2ch-compat" },
+            ImageAdapter(sql),
+            NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
+            PostAdapter(sql, resolver(name)),
+            SettingAdapter(ALLOW, TableSettingsHost(sql, if (name == "phone") "phone" else "pc"), sql),
+        ) + historyAdapters(sql, HistoryHost(resolver(name), { world.retentionDays }, { "reset_${name}_${++resetCount}" }))
         engine = SyncEngine(
             db = sql,
             keyStore = keys,
             transport = { send(it) },
             serverUrl = "https://sync.test",
-            adapters = listOf(FavoriteThreadAdapter(sql, resolver(name))) + favoriteBoardAdapters(sql, resolver(name)) + listOf(
-                SiteAdapter(sql) { url -> if (name == "phone" && url.contains("2chan.net")) null else "2ch-compat" },
-                ImageAdapter(sql),
-                NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
-            ),
+            adapters = adapters,
             now = { now() },
             newDeviceId = { if (idCount++ == 0) name else "${name}_$idCount" },
             newRequestId = {
@@ -184,9 +251,26 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         val boards = sql.query("SELECT url, connector_id, name, sort FROM favorite_boards ORDER BY url")
         val sites = sql.query("SELECT menu_url, connector_id, name, sort FROM sites ORDER BY menu_url")
         val uploads = sql.query("SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url")
+        val threads = sql.query("SELECT board_url, key, connector_id, title, post_count, read_no, status, created_at, read_at FROM threads ORDER BY board_url, key")
+        val posts = sql.query("SELECT connector_id, board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, board_url, key, body")
+        val own = sql.query("SELECT board_url, key, no, posted_at FROM own_posts ORDER BY board_url, key, no")
         val records = sql.query("SELECT record_id, kind, kind_tag, schema_version, payload, hlc, deleted, version, pending, priority, needs_apply, ref_board, ref_thread, ref_detail, tomb_at FROM sync_records ORDER BY record_id")
-        return sha256(utf8(canonicalJson(mapOf("favorites" to favorites, "boards" to boards, "sites" to sites, "uploads" to uploads, "ng" to ng.map(::ngRuleToBody), "records" to records)))).toHex()
+        val settings = TableSettingsHost(sql, "pc").read().entries.sortedBy { it.key }.map { listOf(it.key, canonicalJson(it.value)) }
+        // 端末の要約の文字列も比べる。画面に出す値が PC とスマホで同じ作りになるように
+        val summary = keys.value?.let { syncSummary(sql, adapters, context(it)).text } ?: ""
+        return sha256(
+            utf8(
+                canonicalJson(
+                    mapOf(
+                        "favorites" to favorites, "boards" to boards, "sites" to sites, "uploads" to uploads, "ng" to ng.map(::ngRuleToBody), "threads" to threads,
+                        "posts" to posts, "own" to own, "settings" to settings, "records" to records, "summary" to summary,
+                    ),
+                ),
+            ),
+        ).toHex()
     }
+
+    fun context(m: SyncKeyMaterial) = AdapterContext(deriveKeys(m.k), m.deviceId, now())
 }
 
 /** 端末の日付の代わり。時差で結果が変わらないよう UTC で決める */
@@ -213,11 +297,45 @@ private fun windowChange(d: Device, view: List<NgRule>, s: Map<String, Any?>): L
 
 private fun thread(s: Map<String, Any?>) = ThreadSummary(s["board"] as String, s["key"] as String, s["title"] as String? ?: "", 0, 0, s["created_at"] as Long?)
 
+/** 端末どうしで揃うはずの値。キーごとに持つので、違ったレコードと項目をそのまま読める */
+private fun snapshot(d: Device, full: Boolean): Map<String, String> {
+    val out = HashMap<String, String>()
+    for (r in d.sql.query("SELECT record_id, kind, payload, ref_board, ref_thread, ref_detail FROM sync_records")) {
+        val k = "record ${r["kind"]} ${(r["record_id"] as String).take(12)}"
+        out[k] = r["payload"] as String
+        // 削除だけを受けた端末は ref を知らない。比べずに、違いの見出しにだけ使う
+        if (r["ref_board"] != null || r["ref_thread"] != null || r["ref_detail"] != null) out["#$k"] = "${r["ref_board"] ?: ""} ${r["ref_thread"] ?: ""} ${r["ref_detail"] ?: ""}"
+    }
+    for (p in d.sql.query("SELECT board_url, key, thread_title, no, body, posted_at FROM post_history")) {
+        val board = normalizeBoardUrl(p["board_url"] as String)!!
+        out["書き込み履歴 $board ${p["key"]} ${postIdOf(board, p["key"] as String, p["posted_at"] as Long, p["body"] as String)}"] = canonicalJson(mapOf("title" to p["thread_title"], "no" to p["no"], "posted_at" to p["posted_at"]))
+    }
+    for (t in d.sql.query("SELECT board_url, key, title, read_no, read_at FROM threads")) {
+        val at = "${normalizeBoardUrl(t["board_url"] as String)} ${t["key"]}"
+        if (full || t["read_at"] != null) out["閲覧履歴 $at"] = canonicalJson(mapOf("read_at" to t["read_at"], "title" to t["title"]))
+        if (full || (t["read_no"] as Long) > 0) out["既読 $at"] = t["read_no"].toString()
+    }
+    return out
+}
+
+/** 全部の端末を比べ、違いを 1 行ずつ出す。ログを消した端末は行がないので、full でなければ両方にあるものだけを手元の値として比べる */
+internal fun diffSnapshots(an: String, a: Map<String, String>, bn: String, b: Map<String, String>, full: Boolean): List<String> {
+    val lines = ArrayList<String>()
+    for (k in (a.keys + b.keys).sorted()) {
+        if (a[k] == b[k] || k.startsWith("#")) continue
+        if (!full && !k.startsWith("record ") && !k.startsWith("書き込み履歴 ") && (a[k] == null || b[k] == null)) continue
+        lines += "$k ${a["#$k"] ?: b["#$k"] ?: ""}\n  $an: ${a[k] ?: "(ない)"}\n  $bn: ${b[k] ?: "(ない)"}"
+    }
+    return lines
+}
+
+private fun threadSql(s: Map<String, Any?>) = listOf(s["board"], s["key"], "2ch-compat", s["title"] as String? ?: "")
+
 private fun keyOf(device: String) = sha256(utf8("key:$device"))
 
 private fun checkEq(label: String, want: Any?, got: Any?) = assertEquals(label, canonicalJson(want), canonicalJson(got))
 
-private fun Fault(s: Map<String, Any?>, kind: String) = Fault(kind, (s["times"] as Long?)?.toInt() ?: 1, s["path"] as String?, (s["status"] as Long?)?.toInt(), s["body"], s["location"] as String?)
+private fun Fault(s: Map<String, Any?>, kind: String) = Fault(kind, (s["times"] as Long?)?.toInt() ?: 1, s["path"] as String?, (s["status"] as Long?)?.toInt(), s["body"], s["location"] as String?, skip = (s["skip"] as Long?)?.toInt() ?: 0)
 
 @Suppress("UNCHECKED_CAST")
 private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
@@ -243,6 +361,76 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "boards_cache" -> d!!.sql.exec("INSERT INTO boards (site_menu_url, url, connector_id, name, sort) VALUES (?, ?, '2ch-compat', 'x', 0)", listOf(s["site"], s["url"]))
         "upload_add" -> d!!.ops.addUploadNow(uploadOf(s, d.now()), d.now())
         "upload_remove" -> d!!.ops.removeUploadNow(s["url"] as String, d.now())
+        "open" -> {
+            val t = thread(s)
+            restoreThreadRead(d!!.sql, t.boardUrl, t.key, "2ch-compat", t.title, t.createdAt)
+            d.sql.exec("INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at) VALUES (?, ?, ?, ?, ?)", threadSql(s) + listOf(s["created_at"]))
+            s["post_count"]?.let { d.sql.exec("UPDATE threads SET post_count = ? WHERE board_url = ? AND key = ?", listOf(it, t.boardUrl, t.key)) }
+        }
+        "read" -> d!!.ops.markReadNow(thread(s), s["no"] as Long, d.now())
+        "view" -> d!!.ops.threadViewNow(thread(s), d.now())
+        "view_remove" -> d!!.ops.historyRemoveNow(thread(s), d.now())
+        "log_delete" -> d!!.ops.deleteLogsNow(((s["threads"] as List<Map<String, Any?>>?) ?: listOf(s)).map(::thread), d.now())
+        "prune" -> {
+            val kept = (s["keep"] as List<Map<String, Any?>>?).orEmpty().map { "${it["board"]}\t${it["key"]}" }.toSet()
+            val rows = d!!.sql.query(ThreadLogSql.PRUNE_TARGETS, listOf(d.now() - s["older_than_ms"] as Long))
+            for (r in rows) if ("${r["board_url"]}\t${r["key"]}" !in kept) for (del in ThreadLogSql.DELETE_LOG) d.sql.exec(del, listOf(r["board_url"], r["key"]))
+        }
+        "post_add" -> thread(s).let { d!!.ops.postAddNow(it, it.title, (s["no"] as Long?)?.toInt(), s["name"] as String? ?: "", s["mail"] as String? ?: "", s["body"] as String, d.now()) }
+        "post_remove" -> {
+            val row = d!!.sql.query("SELECT id, board_url, key, thread_title, no, body, posted_at FROM post_history ORDER BY posted_at DESC, id DESC LIMIT 1000").firstOrNull { it["key"] == s["key"] && it["body"] == s["body"] }
+            if (row != null) d.ops.postRemoveNow(PostHistoryEntry(row["id"] as Long, ThreadSummary(row["board_url"] as String, row["key"] as String, row["thread_title"] as String, 0, 0, null), (row["no"] as Long?)?.toInt(), row["body"] as String, row["posted_at"] as Long), d.now())
+        }
+        "clear_faults" -> {
+            w.faults.clear()
+            for (x in w.devices.values) x.sql.failing.clear()
+        }
+        "settle" -> {
+            // 新しい変更が出なくなるまで全端末を回す。止まらなければ下の確かめで落ちる
+            for (round in 0 until 400) {
+                var moved = false
+                for (x in w.devices.values) {
+                    val r = x.sync()
+                    if (r.pulled > 0 || r.pushed > 0 || r.conflicts > 0) moved = true
+                }
+                w.now += 1000
+                if (!moved) break
+            }
+        }
+        "converged" -> {
+            val names = s["devices"] as List<String>? ?: w.devices.keys.toList()
+            val full = s["full"] != false
+            val snaps = names.map { snapshot(w.devices.getValue(it), full) }
+            for (i in 1 until names.size) {
+                val lines = diffSnapshots(names[0], snaps[0], names[i], snaps[i], full)
+                if (lines.isNotEmpty()) fail("$label: ${names[0]} と ${names[i]} の違い(${lines.size} 件)\n${lines.take(40).joinToString("\n")}")
+            }
+        }
+        "summary_same" -> {
+            val names = s["devices"] as List<String>? ?: w.devices.keys.toList()
+            class R(val sum: io.github.contentsview08.obb.sync.engine.SyncSummary, val mis: io.github.contentsview08.obb.sync.engine.MismatchSummary)
+            val results = names.map { n ->
+                val x = w.devices.getValue(n)
+                val ctx = x.context(x.keys.value!!)
+                R(syncSummary(x.sql, x.adapters, ctx), syncMismatches(x.sql, x.adapters, ctx))
+            }
+            fun kinds(r: R) = r.sum.kinds.map { listOf(it.kind, it.live, it.tombstones, it.hash) }
+            fun local(r: R) = r.sum.local.map { listOf(it.area, it.count, it.hash) }
+            for (i in names.indices) {
+                checkEq("$label: ${names[i]} の手元と表の違い", emptyMap<String, Int>(), results[i].mis.differs)
+                checkEq("$label: ${names[i]} の表にない手元の行", emptyMap<String, Int>(), results[i].mis.missing)
+                checkEq("$label: ${names[i]} の表の要約", kinds(results[0]), kinds(results[i]))
+                if (s["local"] != false) checkEq("$label: ${names[i]} の手元の要約", local(results[0]), local(results[i]))
+            }
+        }
+        "setting_change" -> {
+            val name = s["name"] as String
+            val host = TableSettingsHost(d!!.sql, "pc")
+            val all = host.read()
+            val current = if (name == "boardMeta") all.filterKeys { it.startsWith(ALLOW.boardMetaPrefix) }.mapKeys { it.key.substring(ALLOW.boardMetaPrefix.length) } else all[name]
+            d.ops.settingsWriteNow(ALLOW.opsOf(name, s["value"], current), d.now(), listOf(setSetting(name, s["value"])))
+        }
+        "setting_write_raw" -> d!!.sql.batch(listOf(setSetting(s["name"] as String, s["value"])))
         "ng_change" -> windowChange(d!!, d.ng, s)
         "ng_prune" -> {
             val today = dateOf(d!!.now())
@@ -347,6 +535,13 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         e["uploads"]?.let { checkEq("$at の画像", it, d.sql.query("SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url")) }
         e["ng_ids"]?.let { checkEq("$at の NG", it, d.ng.map { r -> r.id }) }
         e["ng_rules"]?.let { checkEq("$at の NG の中身", it, d.ng.map(::ngRuleToBody)) }
+        e["read_no"]?.let { checkEq("$at の既読", it, d.sql.query("SELECT key, read_no FROM threads ORDER BY key").associate { r -> r["key"] as String to r["read_no"] }) }
+        e["history"]?.let { checkEq("$at の閲覧履歴", it, d.sql.query("SELECT key FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC, key").map { r -> r["key"] }) }
+        e["thread_rows"]?.let { checkEq("$at のスレの行", it, d.sql.query("SELECT board_url, key, connector_id, title, post_count, read_no, created_at, read_at FROM threads ORDER BY board_url, key")) }
+        e["post_rows"]?.let { checkEq("$at の書き込み履歴", it, d.sql.query("SELECT board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, body")) }
+        e["post_bodies"]?.let { checkEq("$at の書き込み履歴の本文", it, d.sql.query("SELECT body FROM post_history ORDER BY posted_at, body").map { r -> r["body"] }) }
+        e["own_posts"]?.let { checkEq("$at の自分のレス", it, d.sql.query("SELECT key, no FROM own_posts ORDER BY key, no")) }
+        e["settings"]?.let { checkEq("$at の設定", it, TableSettingsHost(d.sql, "pc").read()) }
         e["kinds"]?.let { checkEq("$at の種類ごとのレコード数", it, d.sql.query("SELECT kind, COUNT(*) AS n FROM sync_records GROUP BY kind").associate { r -> r["kind"] as String to r["n"] }) }
         e["max_order_key"]?.let {
             val longest = d.sql.query("SELECT payload FROM sync_records WHERE kind = 'order' AND deleted = 0").maxOfOrNull { r -> ((parseStrictJson(r["payload"] as String) as Map<String, Any?>)["body"] as Map<String, Any?>)["key"].toString().length } ?: 0
@@ -389,6 +584,7 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
 @Suppress("UNCHECKED_CAST")
 private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> {
     val w = World(c["server"] as Map<String, Any?>? ?: emptyMap())
+    w.retentionDays = (c["retention_days"] as Long?)?.toInt() ?: 0
     val skews = c["skew_ms"] as Map<String, Long>? ?: emptyMap()
     for (name in c["devices"] as List<String>) w.devices[name] = Device(name, w, skews[name] ?: 0, c["keep_defaults"] == true)
     for ((name, seed) in (c["seed"] as Map<String, Map<String, Any?>>?).orEmpty()) {
@@ -404,6 +600,19 @@ private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> {
             d.sql.exec(UploadSql.ADD, UploadSql.addArgs(uploadOf(u, at), at).toList())
         }
         (seed["ng"] as List<Map<String, Any?>>?)?.let { d.ng = it.map(::ruleOf) }
+        for ((k, v) in (seed["settings"] as Map<String, Any?>?).orEmpty()) d.sql.batch(listOf(setSetting(k, v)))
+        for (t in (seed["threads"] as List<Map<String, Any?>>?).orEmpty()) {
+            d.sql.exec(
+                "INSERT INTO threads (board_url, key, connector_id, title, post_count, read_no, created_at, read_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                threadSql(t) + listOf(t["post_count"] as Long? ?: 0L, t["read_no"] as Long? ?: 0L, t["created_at"], (t["read_ago_ms"] as Long?)?.let { START - it }),
+            )
+        }
+        for (p in (seed["posts"] as List<Map<String, Any?>>?).orEmpty()) {
+            d.sql.exec(
+                "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                listOf("2ch-compat", p["board"], p["key"], p["title"] as String? ?: "", p["no"], p["name"] as String? ?: "", p["mail"] as String? ?: "", p["body"], START - (p["ago_ms"] as Long? ?: 0L)),
+            )
+        }
     }
     val label = c["name"] as String
     for (s in c["steps"] as List<Map<String, Any?>>) runStep(w, s, label)
@@ -437,6 +646,61 @@ class SyncScenarioTest {
         if (fails.isNotEmpty()) fail("${scenarios.size} 件のうち ${fails.size} 件が違う\n" + fails.joinToString("\n"))
     }
 
+    /** 順序・重複・中断を乱数で作った手順。digest まで PC と同じになる */
+    @Test fun 乱数のシナリオがPCと同じ結果になる() = runBlocking {
+        val scenarios = load("sync-client-random.json") as List<Map<String, Any?>>
+        val digests = load("sync-client-digests.json") as Map<String, Map<String, String>>
+        val fails = ArrayList<String>()
+        for (c in scenarios) {
+            val name = c["name"] as String
+            try {
+                val got = runScenario(c)
+                if (canonicalJson(got) != canonicalJson(digests[name])) fails += "$name: digest が PC と違う"
+            } catch (e: Throwable) {
+                fails += "$name: ${e.message ?: e}"
+            }
+        }
+        assertEquals(20, scenarios.size)
+        if (fails.isNotEmpty()) fail("${scenarios.size} 件のうち ${fails.size} 件が違う\n" + fails.joinToString("\n"))
+    }
+
+    @Test fun 五千スレと五千件の書き込みを持つ二台が合流する() = runBlocking {
+        val board = "https://a.5ch.io/x/"
+        fun threads(from: Int, to: Int, ago: Long) = (from until to).map { i -> mapOf("board" to board, "key" to "$i", "title" to "スレ $i", "read_no" to 1L + ((i - from) % 500), "read_ago_ms" to ago + (i - from), "post_count" to 600L) }
+        fun posts(from: Int, to: Int, ago: Long) = (from until to).map { i -> mapOf("board" to board, "key" to "$i", "title" to "スレ $i", "no" to 1L, "body" to "本文 $i", "ago_ms" to ago + i) }
+        val c = mapOf(
+            "name" to "5,000 件の合流",
+            "devices" to listOf("pc", "phone"),
+            "seed" to mapOf(
+                "pc" to mapOf("threads" to threads(0, 5000, 1000), "posts" to posts(0, 5000, 1000)),
+                "phone" to mapOf("threads" to threads(2500, 7500, 2000), "posts" to posts(2500, 7500, 1000)),
+            ),
+            "steps" to listOf(
+                mapOf("device" to "pc", "op" to "pair_first"),
+                mapOf("device" to "phone", "op" to "pair_join", "from" to "pc"),
+                mapOf("op" to "settle"),
+                mapOf("op" to "converged"),
+                mapOf("op" to "summary_same"),
+                mapOf("op" to "expect", "expect" to mapOf("pc" to mapOf("pending" to 0L, "ops" to 0L, "needs_apply" to 0L, "kinds" to mapOf("last_view" to 7500L, "read_dev" to 10000L, "post" to 7500L)))),
+            ),
+        )
+        val at = System.currentTimeMillis()
+        runScenario(c)
+        println("合流 2 台(閲覧 7,500・書き込み 7,500・レコード 25,000): ${System.currentTimeMillis() - at} ms")
+    }
+
+    @Test fun 書き込みのIDと切り方とハッシュが表と同じ() {
+        val t = load("sync-post.json") as Map<String, Any?>
+        for (p in t["posts"] as List<Map<String, Any?>>) {
+            val body = p["body"] as String
+            assertEquals("${p["name"]} の長さ", (p["cut_length"] as Long).toInt(), fitPostBody(body).length)
+            assertEquals("${p["name"]} の ID", p["post_id"], postIdOf(p["board"] as String, p["key"] as String, p["posted_at"] as Long, body))
+        }
+        for (h in t["hash_lines"] as List<Map<String, Any?>>) {
+            assertEquals(h["hash"], io.github.contentsview08.obb.sync.engine.hashLines(h["lines"] as List<String>))
+        }
+    }
+
     @Test fun 定数と待ち時間とサーバーのURLが表と同じ() {
         val cfg = load("sync-config.json") as Map<String, Any?>
         val c = cfg["constants"] as Map<String, Long>
@@ -446,7 +710,10 @@ class SyncScenarioTest {
             "PUSH_BATCH_RECORDS" to SyncConfig.PUSH_BATCH_RECORDS.toLong(), "PUSH_BATCH_BYTES" to SyncConfig.PUSH_BATCH_BYTES.toLong(), "PUSH_MAX_ROUNDS" to SyncConfig.PUSH_MAX_ROUNDS.toLong(),
             "APPLY_BATCH" to SyncConfig.APPLY_BATCH.toLong(), "WRITE_BATCH" to SyncConfig.WRITE_BATCH.toLong(), "APPLY_SPLIT_AFTER" to SyncConfig.APPLY_SPLIT_AFTER.toLong(),
             "REBASE_LIMIT" to SyncConfig.REBASE_LIMIT.toLong(), "REBASE_WINDOW_MS" to SyncConfig.REBASE_WINDOW_MS, "RECREATE_RETRY_MS" to SyncConfig.RECREATE_RETRY_MS,
-            "JOIN_CONFIRM_MIN" to SyncConfig.JOIN_CONFIRM_MIN.toLong(),
+            "JOIN_CONFIRM_MIN" to SyncConfig.JOIN_CONFIRM_MIN.toLong(), "RESET_BATCH_MAX" to SyncConfig.RESET_BATCH_MAX.toLong(), "RESET_TOTAL_MAX" to SyncConfig.RESET_TOTAL_MAX.toLong(),
+            "TRIM_BATCH" to SyncConfig.TRIM_BATCH.toLong(), "TRIM_ROUNDS" to SyncConfig.TRIM_ROUNDS.toLong(),
+            "HEAD_INTERVAL_MS" to SyncConfig.HEAD_INTERVAL_MS, "PUSH_INTERVAL_MS" to SyncConfig.PUSH_INTERVAL_MS, "NET_SETTLE_MS" to SyncConfig.NET_SETTLE_MS,
+            "NET_MIN_GAP_MS" to SyncConfig.NET_MIN_GAP_MS, "IDLE_STOP_MS" to SyncConfig.IDLE_STOP_MS,
         )
         assertEquals(c.toSortedMap(), actual.toSortedMap())
         for (b in cfg["backoff"] as List<Map<String, Any?>>) {

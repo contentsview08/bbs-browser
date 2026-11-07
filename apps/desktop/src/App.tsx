@@ -2199,8 +2199,9 @@ export default function App() {
   // 道具のウィンドウ(設定・NG)からの頼みごとを受け、向こうで変えたものを読み直す
   const loadSiteUrls = async (): Promise<string[]> => {
     if (!store) return []
-    const [boards, favs, seen] = await Promise.all([Promise.all(sites.map((s) => store.getBoards(s.menuUrl))), store.listFavoriteThreads(), store.history(300)])
-    return [...boards.flat().map((b) => b.url), ...favs.map((f) => f.thread.boardUrl), ...seen.map((h) => h.thread.boardUrl)]
+    // 自分で登録したものだけ。一度開いただけのサイトは出さない
+    const [boards, favBoards, favThreads] = await Promise.all([Promise.all(sites.map((s) => store.getBoards(s.menuUrl))), store.listFavorites(), store.listFavoriteThreads()])
+    return [...boards.flat().map((b) => b.url), ...favBoards.map((b) => b.url), ...favThreads.map((f) => f.thread.boardUrl)]
   }
   const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus })
   rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus }

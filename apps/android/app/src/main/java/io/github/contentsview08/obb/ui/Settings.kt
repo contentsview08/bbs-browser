@@ -828,7 +828,7 @@ private fun AccountsPage(vm: AppViewModel, open: (String) -> Unit) {
     androidx.compose.runtime.LaunchedEffect(Unit) { vm.reloadSites(); menuBoards = vm.menuBoardUrls() }
     val sites = uniqueSiteDomains(
         vm.sites.map { it.first } + menuBoards + vm.favorites.map { it.url } + vm.favThreads.map { it.thread.boardUrl } +
-            vm.history.map { it.thread.boardUrl } + p.boardMeta.keys,
+            p.boardMeta.keys,
     )
     Text(
         "ほかの分類の設定はすべての掲示板に効きます。ここでは、サイトごと・板ごとに変えたいものだけを決めます。決めていないものは全体の設定のままです",

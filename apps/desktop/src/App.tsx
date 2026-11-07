@@ -180,6 +180,8 @@ const withMaxCounts = (m: Map<string, number>, counts: Iterable<readonly [string
   return next
 }
 /** map と同じ。1 つも変わらなければ元の配列を返す(描き直さない) */
+const sameNos = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => a.size === b.size && [...a].every((n) => b.has(n))
+
 const mapKeep = <T,>(list: T[], f: (x: T) => T): T[] => {
   const next = list.map(f)
   return next.every((x, i) => x === list[i]) ? list : next
@@ -932,6 +934,7 @@ export default function App() {
     sites: (s) => void s.listSites().then(setSites),
     uploads: (s) => void s.listUploads().then((list) => setUploads((cur) => (cur ? list : cur))),
     posts: (s) => void s.listPostHistory().then((list) => setPostHistory((cur) => (cur ? list : cur))),
+    ownPosts: (s) => void syncedOwnPosts(s),
     reads: (s) => void syncedReads(s),
     retentionDays: () => settingsRef.current.logRetentionDays,
   })
@@ -962,6 +965,14 @@ export default function App() {
       const next = syncedTabReadNo(x.readNo, known.get(`${x.thread.boardUrl}\t${x.thread.key}`))
       return next === x.readNo ? x : { ...x, readNo: next }
     }))
+  }
+
+  /** 別の端末の自分のレスの印を、開いているタブへ写す(ミニマップの点と強調が変わる) */
+  const syncedOwnPosts = async (s: LogStore) => {
+    for (const x of tabsRef.current) {
+      const own = new Set(await s.getOwnPosts(x.thread))
+      setTabs((ts) => mapKeep(ts, (y) => (y.id !== x.id || sameNos(y.ownNos, own) ? y : { ...y, ownNos: own })))
+    }
   }
 
   /** 履歴から外す。ログと既読は残す。全端末の履歴から外れる */
@@ -1160,6 +1171,9 @@ export default function App() {
             }
           }),
         )
+        // 別の端末で付けた自分のレスの印は、取り直すたびに写す(同期の適用と更新が前後しても揃う)
+        const own = new Set(await s.getOwnPosts(t))
+        setTabs((ts) => mapKeep(ts, (x) => (x.id !== id || sameNos(x.ownNos, own) ? x : { ...x, ownNos: own })))
         // 自分宛てのレスが新しく届いたら知らせる(初めて開いたスレの、もとからあるレスでは知らせない)
         if (changed && before) await notifyReplies(s, t, saved, before.postCount)
         if (changed) {
@@ -1793,7 +1807,7 @@ export default function App() {
         .reverse()
         .find((p) => squeezeSpaces(p.body) === squeezeSpaces(input.body))?.no
     if (no) {
-      await store.addOwnPost(t, no)
+      await new UserOps(store).ownAdd(t, no)
       patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
     }
     // 書き込み履歴には、番号が分からなくても書いた内容を残す。URL から開いたスレはスレタイが空なので、ログのものを使う
@@ -1804,7 +1818,8 @@ export default function App() {
   /** 自分のレスの印を手で付ける・外す(ほかの専ブラ・ブラウザから書いたレスにも印を付けられるように) */
   const markOwn = async (t: ThreadSummary, nos: number[], own: boolean) => {
     if (!store) return
-    for (const no of nos) await (own ? store.addOwnPost(t, no) : store.removeOwnPost(t, no))
+    const ops = new UserOps(store)
+    for (const no of nos) await (own ? ops.ownAdd(t, no) : ops.ownRemove(t, no))
     patchTab(threadId(t), { ownNos: new Set(await store.getOwnPosts(t)) })
   }
 
@@ -1851,8 +1866,9 @@ export default function App() {
         .filter((t) => squeezeSpaces(t.title) === squeezeSpaces(input.title))
         .sort((x, y) => (y.createdAt?.getTime() ?? 0) - (x.createdAt?.getTime() ?? 0))[0]
       if (found) {
-        await store.addOwnPost(found, 1)
-        await new UserOps(store).postAdd(found, { no: 1, name: input.name, mail: input.mail, body: input.body })
+        const ops = new UserOps(store)
+        await ops.ownAdd(found, 1)
+        await ops.postAdd(found, { no: 1, name: input.name, mail: input.mail, body: input.body })
         setNewThreadOpen(false)
         await openThread(found, { newTab: true })
         return r

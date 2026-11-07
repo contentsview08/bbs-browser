@@ -22,10 +22,10 @@ describe('同期の入口', () => {
     expect(found).toEqual(['presets.ts:addFavorite', 'presets.ts:addSite'])
   })
 
-  it('既読・閲覧履歴・書き込み履歴・ログの削除は UserOps を通す。自動整理だけが LogStore の中で消す', () => {
-    const direct = /\bstore\??\.(markRead|deleteThread|addPostHistory|deletePostHistory)\(/g
+  it('既読・閲覧履歴・書き込み履歴・自分のレスの印・ログの削除は UserOps を通す。自動整理だけが LogStore の中で消す', () => {
+    const direct = /\bstore\??\.(markRead|deleteThread|addPostHistory|deletePostHistory|addOwnPost|removeOwnPost)\(/g
     expect(files.flatMap((f) => [...f.text.matchAll(direct)].map((m) => `${f.name}:${m[1]}`))).toEqual([])
-    expect(files.flatMap((f) => [...f.text.matchAll(/\bs\.(markRead|deleteThread|addPostHistory|deletePostHistory)\(/g)].map((m) => `${f.name}:${m[1]}`))).toEqual([])
+    expect(files.flatMap((f) => [...f.text.matchAll(/\bs\.(markRead|deleteThread|addPostHistory|deletePostHistory|addOwnPost|removeOwnPost)\(/g)].map((m) => `${f.name}:${m[1]}`))).toEqual([])
   })
 
   it('NG の配列の保存は、もとにした配列を渡す(設定の読み込みの一括の保存を除く)', () => {

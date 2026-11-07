@@ -96,10 +96,11 @@
     },
     {
       "id": "posts",
-      "label": "書き込み履歴",
+      "label": "書き込み履歴と自分のレスの印",
       "default": true,
       "kinds": [
-        "post"
+        "post",
+        "own_post"
       ]
     },
     {

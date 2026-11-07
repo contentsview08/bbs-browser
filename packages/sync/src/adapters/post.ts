@@ -141,7 +141,7 @@ export class PostAdapter implements SyncAdapter {
     return { changed: rows.length > 0, statements: rows.map((x) => ({ sql: 'DELETE FROM post_history WHERE id = $1', params: [x.id] })) }
   }
 
-  /** 自分のレスの印は足すだけ。履歴から消しても消さない */
+  /** 自分のレスの印は own_post のレコードで別に届く。履歴から消しても印は消えない */
   async apply(r: StoredRecord): Promise<ApplyPlan> {
     if (r.payload.deleted === true) return r.payload.trim === true ? { statements: [], changed: false } : this.remove(r)
     const body = r.payload.body ?? {}
@@ -160,7 +160,6 @@ export class PostAdapter implements SyncAdapter {
             sql: `INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES ($1, $2, $3, $4, $5, '', '', $6, $7)`,
             params: [resolved.connectorId, resolved.boardUrl, r.ref_thread, title, no, body.body, postedAt],
           },
-          ...(no === null ? [] : [ownPost(resolved.boardUrl, r.ref_thread as string, no, postedAt)]),
         ],
       }
     }
@@ -174,7 +173,6 @@ export class PostAdapter implements SyncAdapter {
       statements: [
         ...extra.map((x) => ({ sql: 'DELETE FROM post_history WHERE id = $1', params: [x.id] })),
         { sql: 'UPDATE post_history SET thread_title = $1, no = $2 WHERE id = $3', params: [newTitle, newNo, first.id] },
-        ...(newNo === null ? [] : [ownPost(first.board_url, first.key, newNo, postedAt)]),
       ],
     }
   }
@@ -189,8 +187,3 @@ export class PostAdapter implements SyncAdapter {
     return [...lines]
   }
 }
-
-const ownPost = (boardUrl: string, key: string, no: number, postedAt: number) => ({
-  sql: 'INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES ($1, $2, $3, $4)',
-  params: [boardUrl, key, no, postedAt],
-})

@@ -12,7 +12,7 @@ val SYNC_GROUPS = listOf(
     SyncGroup("history", "閲覧履歴と既読", true, listOf("last_view", "read_dev", "read_reset")),
     SyncGroup("favorites", "お気に入り(スレ・板)", true, listOf("favorite", "order")),
     SyncGroup("sites", "サイト", true, listOf("site")),
-    SyncGroup("posts", "書き込み履歴", true, listOf("post")),
+    SyncGroup("posts", "書き込み履歴と自分のレスの印", true, listOf("post", "own_post")),
     SyncGroup("images", "上げた画像の履歴", true, listOf("image")),
     SyncGroup("ng", "NG", true, listOf("ng")),
     SyncGroup("settings", "設定", true, listOf("setting")),

@@ -2,6 +2,7 @@
 import type { Board, SiteConfig, ThreadSummary } from '@bbs-browser/connectors'
 import {
   addFavoriteBoardStatement,
+  addOwnPostStatement,
   addPostHistoryStatement,
   deletePostHistoryStatement,
   deleteThreadStatements,
@@ -12,6 +13,7 @@ import {
   addUploadStatement,
   removeFavoriteBoardStatement,
   removeFavoriteThreadStatement,
+  removeOwnPostStatement,
   removeSiteStatements,
   removeUploadStatement,
   reorderFavoriteStatements,
@@ -199,6 +201,17 @@ export class UserOps {
   async postRemove(e: PostHistoryEntry, now = Date.now()): Promise<void> {
     if (!(await this.isOn('posts'))) return this.store.deletePostHistory(e.id)
     await this.db.batch([deletePostHistoryStatement(e.id), plainOp('post_remove', `${e.thread.boardUrl}\t${e.thread.key}\t${e.postedAt}`, { board_url: e.thread.boardUrl, key: e.thread.key, posted_at: e.postedAt, body: e.body }, now)])
+  }
+
+  /** 自分のレスの印。書き込みで付いた印も手で付けた印も同じ経路。外すと全端末から外れる */
+  async ownAdd(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
+    if (!(await this.isOn('posts'))) return this.store.addOwnPost(thread, no, now)
+    await this.db.batch([addOwnPostStatement(thread, no, now), plainOp('own_add', `${thread.boardUrl}\t${thread.key}\t${no}`, { board_url: thread.boardUrl, key: thread.key, no }, now)])
+  }
+
+  async ownRemove(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
+    if (!(await this.isOn('posts'))) return this.store.removeOwnPost(thread, no)
+    await this.db.batch([removeOwnPostStatement(thread, no), plainOp('own_remove', `${thread.boardUrl}\t${thread.key}\t${no}`, { board_url: thread.boardUrl, key: thread.key, no }, now)])
   }
 
   /** 差分を今の DB の値に重ねて書く。積むのは upsert と remove だけで、drop は tombstone にならない。書いた結果を返す */

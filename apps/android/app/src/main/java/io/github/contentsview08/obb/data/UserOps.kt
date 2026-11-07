@@ -158,6 +158,25 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
 
     suspend fun postRemove(e: PostHistoryEntry, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { postRemoveNow(e, now) }
 
+    /** 自分のレスの印。書き込みで付いた印も手で付けた印も同じ経路。外すと全端末から外れる。まとめて付け外すときは 1 つのトランザクション */
+    internal fun setOwnPostsNow(t: ThreadSummary, nos: Collection<Int>, own: Boolean, now: Long) {
+        if (nos.isEmpty()) return
+        val changes = nos.map { no ->
+            if (own) SqlStatement(OwnPostSql.ADD, listOf(t.boardUrl, t.key, no.toLong(), now)) else SqlStatement(OwnPostSql.REMOVE, listOf(t.boardUrl, t.key, no.toLong()))
+        }
+        write("posts", changes) {
+            nos.map { no -> plainOp(if (own) "own_add" else "own_remove", "${t.boardUrl}\t${t.key}\t$no", mapOf("board_url" to t.boardUrl, "key" to t.key, "no" to no.toLong()), now) }
+        }
+    }
+
+    suspend fun setOwnPosts(t: ThreadSummary, nos: Collection<Int>, own: Boolean, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { setOwnPostsNow(t, nos, own, now) }
+
+    internal fun ownAddNow(t: ThreadSummary, no: Int, now: Long) = setOwnPostsNow(t, listOf(no), true, now)
+
+    internal fun ownRemoveNow(t: ThreadSummary, no: Int, now: Long) = setOwnPostsNow(t, listOf(no), false, now)
+
+    suspend fun ownAdd(t: ThreadSummary, no: Int, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { ownAddNow(t, no, now) }
+
     /** 設定の変更を積む。スマホの今の値は Prefs にあるので、changes は共通テストが settings 表へ書く文 */
     internal fun settingsWriteNow(ops: List<SettingOp>, now: Long, changes: List<SqlStatement> = emptyList()) {
         val on = ops.isNotEmpty() && isOn("settings")

@@ -9188,6 +9188,10 @@
       ],
       "own_posts": [
        {
+        "key": "1",
+        "no": 11
+       },
+       {
         "key": "2",
         "no": 6
        }
@@ -10224,7 +10228,8 @@
        "同じ本文"
       ],
       "kinds": {
-       "post": 2
+       "post": 2,
+       "own_post": 2
       }
      }
     }
@@ -10267,7 +10272,8 @@
        "同じ本文"
       ],
       "kinds": {
-       "post": 2
+       "post": 2,
+       "own_post": 2
       }
      },
      "pc": {
@@ -10588,7 +10594,8 @@
      "pc": {
       "pending": 0,
       "kinds": {
-       "post": 1
+       "post": 1,
+       "own_post": 1
       },
       "inflight": false
      },
@@ -10600,8 +10607,8 @@
      "$server": {
       "of": {
        "pc": {
-        "records": 1,
-        "head": 1
+        "records": 2,
+        "head": 2
        }
       }
      }
@@ -10662,6 +10669,391 @@
        }
       ],
       "own_posts": []
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "自分の印: 手で付けた印が別の端末に届き、外すと消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "own_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "no": 5
+   },
+   {
+    "op": "own_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "no": 7
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 5
+       },
+       {
+        "key": "1",
+        "no": 7
+       }
+      ],
+      "kinds": {
+       "own_post": 2
+      },
+      "pending": 0,
+      "ops": 0
+     },
+     "phone": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 5
+       },
+       {
+        "key": "1",
+        "no": 7
+       }
+      ],
+      "thread_rows": [],
+      "applied_areas": [
+       "ownPosts"
+      ]
+     }
+    }
+   },
+   {
+    "op": "own_remove",
+    "device": "phone",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "no": 5
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "converged",
+    "full": true
+   },
+   {
+    "op": "summary_same",
+    "local": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 7
+       }
+      ],
+      "tombstones": 1,
+      "pending": 0,
+      "ops": 0,
+      "applied_areas": [
+       "ownPosts"
+      ]
+     },
+     "phone": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 7
+       }
+      ],
+      "pending": 0,
+      "ops": 0
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "自分の印: 書き込みで付いた印が別の端末に届く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "post_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "no": 11,
+    "body": "書いた"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 11
+       }
+      ],
+      "kinds": {
+       "post": 1,
+       "own_post": 1
+      },
+      "pending": 0,
+      "ops": 0
+     },
+     "phone": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 11
+       }
+      ],
+      "post_bodies": [
+       "書いた"
+      ]
+     }
+    }
+   },
+   {
+    "op": "own_remove",
+    "device": "phone",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "no": 11
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "converged",
+    "full": true
+   },
+   {
+    "op": "summary_same",
+    "local": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "own_posts": [],
+      "post_bodies": [
+       "書いた"
+      ],
+      "pending": 0,
+      "ops": 0
+     },
+     "phone": {
+      "own_posts": [],
+      "post_bodies": [
+       "書いた"
+      ],
+      "pending": 0,
+      "ops": 0
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "自分の印: 種まきで手元の印が全部送られ、合流は和集合",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "own_posts": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "no": 2,
+      "ago_ms": 5000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "2",
+      "no": 3,
+      "ago_ms": 4000
+     }
+    ]
+   },
+   "phone": {
+    "own_posts": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "no": 2,
+      "ago_ms": 3000
+     },
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "3",
+      "no": 4,
+      "ago_ms": 2000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "kinds": {
+       "own_post": 2
+      },
+      "pending": 0
+     }
+    }
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "converged",
+    "full": true
+   },
+   {
+    "op": "summary_same",
+    "local": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 2
+       },
+       {
+        "key": "2",
+        "no": 3
+       },
+       {
+        "key": "3",
+        "no": 4
+       }
+      ],
+      "kinds": {
+       "own_post": 3
+      },
+      "pending": 0,
+      "ops": 0
+     },
+     "phone": {
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 2
+       },
+       {
+        "key": "2",
+        "no": 3
+       },
+       {
+        "key": "3",
+        "no": 4
+       }
+      ],
+      "kinds": {
+       "own_post": 3
+      },
+      "pending": 0,
+      "ops": 0
      }
     }
    }
@@ -11633,7 +12025,12 @@
       "post_bodies": [
        "書いた"
       ],
-      "own_posts": []
+      "own_posts": [
+       {
+        "key": "1",
+        "no": 501
+       }
+      ]
      },
      "phone": {
       "read_no": {}
@@ -14285,6 +14682,131 @@
        "ngMode": "hide"
       },
       "pending": 0
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "設定と NG: 種類を足す前に合流した端末の設定と NG が fill で送られる",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "op": "setting_write_raw",
+    "device": "pc",
+    "name": "keywords",
+    "value": [
+     "見張る"
+    ]
+   },
+   {
+    "op": "ng_write_raw",
+    "device": "pc",
+    "rules": [
+     {
+      "id": "old",
+      "target": "content",
+      "pattern": "m",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 7
+     }
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0,
+      "kinds_lack": [
+       "setting",
+       "ng"
+      ]
+     }
+    }
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "kinds": {
+       "setting": 1,
+       "ng": 1
+      },
+      "pending": 0
+     }
+    }
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "converged",
+    "full": true
+   },
+   {
+    "op": "summary_same",
+    "local": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "settings": {
+       "keywords": [
+        "見張る"
+       ]
+      },
+      "ng_rules": [
+       {
+        "id": "old",
+        "type": "content",
+        "value": "m",
+        "is_regex": false,
+        "enabled": true,
+        "created_at": 7
+       }
+      ],
+      "pending": 0,
+      "ops": 0
+     },
+     "pc": {
+      "settings": {
+       "keywords": [
+        "見張る"
+       ]
+      },
+      "pending": 0,
+      "ops": 0
      }
     }
    }

@@ -457,6 +457,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 io.github.contentsview08.obb.sync.adapters.SecretAdapter(db.syncSql),
                 io.github.contentsview08.obb.sync.adapters.NgAdapter(io.github.contentsview08.obb.data.SyncNgHost({ prefs.ngRules }, { prefs.applyRemoteNg(it) })),
                 io.github.contentsview08.obb.sync.adapters.PostAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) },
+                io.github.contentsview08.obb.sync.adapters.OwnPostAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) },
                 io.github.contentsview08.obb.sync.adapters.SettingAdapter(settingAllow, io.github.contentsview08.obb.data.PrefsSettingsHost(prefs, settingAllow), db.syncSql),
             ) + io.github.contentsview08.obb.sync.adapters.historyAdapters(
                 db.syncSql,
@@ -481,6 +482,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (io.github.contentsview08.obb.sync.adapters.AREA_UPLOADS in r.applied) viewModelScope.launch { uploads = db.listUploads() }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_NG in r.applied) viewModelScope.launch { reapplyNg() }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_POSTS in r.applied) viewModelScope.launch { postHistory = db.postHistory() }
+                if (io.github.contentsview08.obb.sync.adapters.AREA_OWN_POSTS in r.applied) viewModelScope.launch { reflectSyncedOwnPosts() }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_HISTORY in r.applied || io.github.contentsview08.obb.sync.adapters.AREA_READS in r.applied) viewModelScope.launch { reflectSyncedReads() }
             },
         )
@@ -588,6 +590,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (readNo == null && p.loaded) dropThreadPage(p)
             else p.readNo = io.github.contentsview08.obb.data.openReadNoAfterSync(p.readNo, readNo)
         }
+    }
+
+    /** 別の端末の自分のレスの印を、開いているスレの画面へ写す(ミニマップの点と強調が変わる) */
+    private suspend fun reflectSyncedOwnPosts() {
+        for (p in threadPages()) p.ownNos = db.ownPosts(p.summary)
     }
 
     /** ログが消えたスレの画面を外す。いま見ている画面なら戻ると同じ動きで前の画面へ。「進む」にも残さない。知らせは出さない */
@@ -973,6 +980,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val r = TwoCh.fetchPosts(t, log?.cursor)
                 val title = r.title ?: log?.title ?: t.title
                 db.saveFetch(t, r, title)
+                // 別の端末で付けた自分のレスの印は、取り直すたびに写す(同期の適用と更新が前後しても揃う)
+                page.ownNos = db.ownPosts(t)
                 if (log == null) {
                     db.userOps.threadView(t)
                     history = db.history()
@@ -1081,7 +1090,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun markOwn(page: Page.Thread, p: Post, own: Boolean, sameId: Boolean) {
         val nos = if (sameId && p.id != null) page.index.posts.filter { it.id == p.id }.map { it.no } else listOf(p.no)
         viewModelScope.launch {
-            db.setOwnPosts(page.summary, nos, own)
+            db.userOps.setOwnPosts(page.summary, nos, own)
             page.ownNos = if (own) page.ownNos + nos else page.ownNos - nos.toSet()
             toast = if (own) "自分のレスの印を付けました" else "自分のレスの印を外しました"
         }
@@ -1565,7 +1574,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // 自分の書き込みを覚える。番号が返らない掲示板では、新着から同じ本文の一番新しいレスを探す
                         val no = res.resNumber ?: page.index.posts.lastOrNull { it.body.trim() == body.trim() }?.no
                         if (no != null) {
-                            db.addOwnPost(page.summary, no)
+                            db.userOps.ownAdd(page.summary, no)
                             page.ownNos = page.ownNos + no
                         }
                         db.userOps.postAdd(page.summary, page.title, no, name, mail, body)

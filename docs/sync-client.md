@@ -186,8 +186,7 @@ CREATE INDEX threads_key ON threads (key);
 | `deleteThread` | **`confirmDeleteLogs`(1282)は操作で、既読のリセットを送る。`pruneLogs` の中からも呼ばれ、そちらは自動で送らない** | 操作のみ同期 |
 | `pruneLogs` | `App.pruneLogs`(2051)。起動後の自動と、設定の「今すぐ」(RPC) | 同期しない |
 | `markRead` | `App.markRead`(2153)。`useThreadScroll`(598)から | 同期(`read` と `last_view`) |
-| `addOwnPost` | **書き込みの後(1724・1782)と、手の印(1735)** | 同期しない。`post` の適用で付く |
-| `removeOwnPost` | 手の印(1735) | 同期しない(U4) |
+| `addOwnPost`・`removeOwnPost` | `UserOps.ownAdd`・`ownRemove` から。書き込みの後(`afterPost`・`afterThread`)と、手の印(`markOwn`) | 同期(`own_post`) |
 | `addFavoriteThread`・`removeFavoriteThread` | `toggleFavoriteThread`(918) | 同期 |
 | `setDraft` | `App.saveDraft`(2349) | 同期しない |
 | `setTrollMark`・`removeTrollMark` | `markTroll`(891) | 同期しない |
@@ -211,8 +210,7 @@ CREATE INDEX threads_key ON threads (key);
 | `saveFetch` | `refreshThread`(739) | 内部 |
 | `markRead` | `markRead`(916)。`ThreadScreen:904` から | 同期(`read` と `last_view`) |
 | `touch` | **開いたとき(721)と、初めて取った後(740)** | 同期(`last_view`) |
-| `addOwnPost` | 書き込みの後(1295) | 同期しない。`post` の適用で付く |
-| `setOwnPosts` | `markOwn`(845) | 同期しない(U4) |
+| `OwnPostSql`(`UserOps.ownAdd`・`setOwnPosts`) | 書き込みの後(`send`)と、手の印(`markOwn`) | 同期(`own_post`) |
 | `saveDraft` | 1228・1232・1280 | 同期しない |
 | `setFavoriteThread` | `toggleFavoriteThread`(951・985)・`importBackup`(611) | 同期 |
 | `addPostHistory` | `send`(1298) | 同期 |
@@ -268,7 +266,7 @@ CREATE INDEX threads_key ON threads (key);
 | `setSetting('ngRules')` | NG の追加・削除 | 期限切れの片づけ(`App.tsx:2131`) | 差分の計算で期限切れを除く(下記) |
 | `markRead` | 読んだ | タブの復元で画面に出たレスも進む | 位置が増えたときだけ呼ばれる(598)。読んだとして扱う |
 | `touch` | 開いた | 取得の後の 740 | 開いた流れなのでどちらも操作 |
-| `addOwnPost` | 書き込みの結果 | なし。手の印と同じ関数 | 送らない。`post` から作る |
+| `ownAdd` | 書き込みの結果と手の印 | なし | どちらも同じ操作として積む(`own_add`) |
 
 ### 設計書とコードの違い
 
@@ -317,6 +315,7 @@ class UserOps {
 | お気に入り板を並べ替える | `favorite_board_order`(`args.urls` に新しい並び) | 固定 |
 | サイトを足す・外す | `site_add`・`site_remove` | メニューの URL |
 | 書き込みをした・履歴から消す | `post_add`・`post_remove` | seq |
+| 自分のレスの印を付けた・外した | `own_add`・`own_remove` | 板 + キー + 番号 |
 | 画像を上げた・履歴から消す | `upload_add`・`upload_remove` | URL |
 | NG を変えた | `ng_diff`(要素ごと。`args` に `id` と本文。消すときの本文は null) | `rule.id` |
 | 設定を変えた | `setting` | 設定の名前 |
@@ -399,6 +398,8 @@ class UserOps {
 | --- | --- |
 | `last_view` | `read_at` のある行のうち、レコードのないもの |
 | `post` | 手元の行のうち、レコードのないもの |
+| `own_post` | `own_posts` の全行のうち、レコードのないもの |
+| `ng`・`setting` | `seed` と同じ(種類を足す前に合流した端末の既存の NG と設定を送る) |
 | `read_dev` | 手元の `read_no` が表の `readPosition` より大きいスレで、外した記録のないもの |
 
 - HLC は種まきと同じ元の時刻。新しい削除に勝たない
@@ -420,6 +421,7 @@ class UserOps {
 | 既読のリセット | `read_reset` | `read_reset:<board>:<key>` | h |
 | 既読の記録 | `read_dev` | `read_dev:<board>:<key>:<device_id>` | h |
 | 書き込み履歴 | `post` | `post:<board>:<key>:<post_id>` | h |
+| 自分のレスの印 | `own_post` | `own_post:<board>:<key>:<no>` | h |
 | サイト | `site` | `site:::<normalizeBoardUrl(menu_url)>` | h |
 | 上げた画像 | `image` | `image:::<url>` | h |
 | NG | `ng` | `ng:::<rule.id>` | h |
@@ -441,6 +443,7 @@ class UserOps {
 | `favorite` | **`board_url`**・`thread`(256。板はなし)・`title`(1024)・`board_name`(256)・`created_at` |
 | `order` | **`board_url`**・`thread`(256。板はなしか空)・**`key`**(1024) |
 | `post` | **`post_id`**(1〜64)・**`board_url`**・**`thread`**(1〜256)・`title`(1024)・`no`・**`body`**(4096)・**`posted_at`** |
+| `own_post` | **`board_url`**・**`thread`**(1〜256)・**`no`**・`posted_at` |
 | `image` | **`url`**・`file_name`(1024)・`size`・`uploaded_at` |
 | `ng` | **`id`**(1〜128)・**`type`**(64)・**`value`**(4096)・`is_regex`・`enabled`・`expires_on`(10)・`board_url`・`board_name`(256)・`note`(1024)・`created_at` |
 | `setting` | **`key`**(2176。板ごとの設定は板 URL を含む)・**`value`**(真偽・整数・4096 文字まで) |
@@ -545,12 +548,25 @@ class UserOps {
 | `posted_at` | `posted_at` | |
 | `connector_id` | 送らない | 上と同じ |
 
-- `no` があれば、適用で `own_posts` に足す(あなた宛ての知らせが効くように)。tombstone でも `own_posts` は消さない
+- 自分のレスの印は `post` からは作らない(`own_post` で別に届く)。tombstone でも `own_posts` は消さない
 - tombstone の本文は `post_id` と `posted_at` だけ。手元の行を探すのに要る。本文とスレタイは残さない
 - 消す操作の `args` には ID を作る値を書く(消した後は行がない)。次の周で消える
 - 同じ `post_id` の行が手元に 2 つあれば、適用で 1 つにする
 - 全部で平文 15,000 バイトを超えるときはスレタイを落とす
 - スマホの `deletePostHistory` は `board_url`・`key`・`posted_at` で消す。`PostHistoryEntry` に `id` がないので足す
+
+### 自分のレスの印
+
+| 今のデータ | `own_post.body` | 埋め方 |
+| --- | --- | --- |
+| `own_posts.board_url`・`key` | `board_url`・`thread` | |
+| `no` | `no` | ID にも使う(`ref_detail`) |
+| `posted_at` | `posted_at` | 受信で無ければ適用の時刻 |
+
+- 書き込みで付いた印も手で付けた印も同じレコード。外す操作は tombstone で、全端末から外れる(書き込み履歴の行は残る)
+- 適用は `INSERT OR IGNORE`。`threads` の行がなくても入れる(印はログと独立。ログを消しても残る)
+- 種まきと `fill` は `own_posts` の全行。HLC は `posted_at`
+- 種類のスイッチは書き込み履歴と同じ(`posts`)
 
 ### 上げた画像
 
@@ -701,7 +717,8 @@ class UserOps {
 | `favorite` | 足す・消す・名前の更新。並びは最後にまとめて振り直す |
 | `site` | 足す・消す・名前の更新。`trim` なら何もしない |
 | `order` | リストごとに `sort` を振り直す |
-| `post` | `ref_local` がなければ INSERT し、`own_posts` に足す。tombstone は行を消す。`trim` なら何もしない |
+| `post` | `ref_local` がなければ INSERT。tombstone は行を消す。`trim` なら何もしない |
+| `own_post` | `INSERT OR IGNORE`(スレの行がなくても)。tombstone は行を消す。`trim` なら何もしない |
 | `image` | 上の `UPDATE` と `INSERT OR IGNORE`。tombstone は行を消す |
 | `ng`・`setting` | 検査してから手元に書く |
 | `secret` | `uploads.delete_url` |
@@ -734,7 +751,7 @@ class UserOps {
 - 消した端末はリセットを書き、ログと履歴の行を消す。開き直すと先頭から始まる
 - 他の端末は、消す前の閲覧しかなければログと履歴の行を消す(「規則」の `read_*`)。開いているタブ・画面も閉じる(下の「読んでいる最中」)。消した後に読んでいれば、既読を下げるだけで行は残る
 - 覚えたスクロール位置(PC は閉じたときの位置 `closedPositions`、スマホは `positions`)も消す。手元の削除も、他の端末の削除が写ったときも同じ。開き直す位置は既読から決まり、既読が 0 なら先頭
-- 書き込み履歴と自分のレスの印は消さない
+- 書き込み履歴と自分のレスの印は消さない(印は `own_post` のレコードで別に持つ)
 - 自動整理(`pruneLogs`)はリセットを書かない。開き直すと同期の表から既読が戻る
 
 ### 読んでいる最中
@@ -758,7 +775,9 @@ class UserOps {
 
 適用の結果を要約にして、画面へ 1 回だけ渡す。
 
-`CycleResult.applied` は変わった種類の集まり(キーはアダプターの `area`: `favoriteThreads`・`favoriteBoards`・`sites`・`uploads`・`ng`)。閲覧履歴と既読を足すときに行ごとの要約を足す。
+`CycleResult.applied` は変わった種類の集まり(キーはアダプターの `area`: `favoriteThreads`・`favoriteBoards`・`sites`・`uploads`・`ng`・`posts`・`ownPosts`)。閲覧履歴と既読を足すときに行ごとの要約を足す。
+
+`ownPosts` が立ったら、開いているタブ・画面の `ownNos` を `own_posts` から読み直す(PC は `syncedOwnPosts`、スマホは `reflectSyncedOwnPosts`)。スレの更新(`fetchThread`・`refreshThread`)の後も読み直すので、適用と更新が前後しても揃う。
 
 
 | 端末 | 反映の口 |
@@ -834,6 +853,7 @@ class UserOps {
 | 4 | NG | 設定 | `createdAt`。0 なら 1 | 2 |
 | 5 | 設定 | 許可リストで既定と違うもの | 1 | 2 |
 | 6 | 書き込み履歴 | `post_history`(新しい順) | `posted_at` | 3 |
+| 6 | 自分のレスの印 | `own_posts`(新しい順) | `posted_at` | 3 |
 | 7 | 上げた画像 | `uploads`(新しい順) | `uploaded_at` | 4 |
 | 8 | 閲覧履歴・既読 | `threads WHERE read_at IS NOT NULL`(新しい順) | `read_at` | 5 |
 
@@ -877,7 +897,7 @@ class UserOps {
 | 並び順 | 領域の順が正。手元だけの項目は末尾に足す(新しいキー)。**種まきのキーで領域の順を崩さない** |
 | 既読 | 2 台の max。`read_dev` が別なので自然に合う |
 | 閲覧履歴 | `last_viewed_at` の max |
-| 書き込み・画像 | 和集合 |
+| 書き込み・画像・自分のレスの印 | 和集合 |
 | NG | 和集合。同じ内容で `id` が違うものは両方残る |
 | 設定 | 領域の値を使う。手元の値はレコードにしない。確認の画面で「この端末の設定を使う」を選べる(選ぶと新しい HLC で送る) |
 | プリセットのお気に入り板 | 普通の項目と同じ。領域で消していれば消える |
@@ -1380,7 +1400,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 
 ### 件数
 
-`sync-client.json` は 165 件(後半の 25 件はスイッチの組み合わせ。名前が `スイッチ:` で始まる)。`sync-client-random.json` は順序・重複・中断を乱数で作った 20 件で、生成した手順を PC とスマホと Miniflare で流して digest を比べる。生成は `packages/sync/test/randomScenario.ts`。ほかに PC で 300 シードずつ回す。枠 2 のシミュレーターは `packages/sync/test/slotScenarios.ts`(偽サーバーと Miniflare)。比較に失敗すると、どのレコードのどの値が違うかを 1 行ずつ出す(`diffSnapshots`)。検証用の Worker へは `OBB_SYNC_VERIFY` に URL を入れて `packages/sync/test/verifyServer.test.ts` を回す。
+`sync-client.json` は 171 件(後半の 25 件はスイッチの組み合わせ。名前が `スイッチ:` で始まる)。`sync-client-random.json` は順序・重複・中断を乱数で作った 20 件で、生成した手順を PC とスマホと Miniflare で流して digest を比べる。生成は `packages/sync/test/randomScenario.ts`。ほかに PC で 300 シードずつ回す。枠 2 のシミュレーターは `packages/sync/test/slotScenarios.ts`(偽サーバーと Miniflare)。比較に失敗すると、どのレコードのどの値が違うかを 1 行ずつ出す(`diffSnapshots`)。検証用の Worker へは `OBB_SYNC_VERIFY` に URL を入れて `packages/sync/test/verifyServer.test.ts` を回す。
 
 ### 一覧
 
@@ -1448,6 +1468,10 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 60 | 参加: 手元にデータがある | 確認が出る(`pair_join` の `asks`)。やめると鍵も書かず何も送らない。参加すると和集合 |
 | 61 | 参加: まっさらな端末(最初から入っている掲示板・板だけ) | 確認なしで参加する |
 | 62 | 読んでいる最中に他の端末の削除が届く | 開いていても行が消える(画面が閉じる)。開き直して読み進めると上がる |
+| 63 | 自分のレスの印: 手で付ける・外す | 別の端末に届く。外すと tombstone で消える。スレの行がなくても入る |
+| 64 | 自分のレスの印: 書き込みで付く | `post_add` と一緒に届く。外しても書き込み履歴は残る |
+| 65 | 自分のレスの印の種まき | 手元の全行が送られ、合流は和集合 |
+| 66 | 種類を足す前に合流した端末の設定と NG | `fill` で送られる(起動の照合を待たない) |
 
 端末ごとのテスト(共通にしない)。
 
@@ -1515,7 +1539,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | U1 | ログを消したスレを開き直すと既読が戻るか | **決定: 戻らない。** ログの削除は全端末で削除。自動整理のあとは戻す |
 | U2 | 限定の試験の既定の URL を `workers.dev` のままにするか | `docs/sync-design.md` の未決事項 | 段階 6 |
 | U3 | サイトを同期するか | **決定: する。** お気に入りの板とスレも同期する |
-| U4 | 手の「自分のレス」の印 | 同期しない。要るなら `own_mark` を足す | 段階 5 |
+| U4 | 手の「自分のレス」の印 | **決定: 同期する。** `own_post`(書き込みで付いた印と同じレコード) |
 | U5 | スマホのスレ立てが書き込み履歴に入らない | PC に合わせて入れる(別の担当と相談) | 段階 5 |
 | U6 | AI NG の条件と手の印 | 同期しない | 段階 8 の後 |
 | U7 | 「未読に戻す」を画面に足すか | **決定: 足さない。** ログの削除が兼ねる |

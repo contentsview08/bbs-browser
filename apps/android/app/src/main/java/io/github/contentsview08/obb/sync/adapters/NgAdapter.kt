@@ -82,6 +82,9 @@ class NgAdapter(private val host: NgHost) : SyncAdapter {
 
     private fun load(): Map<String, Map<String, Any?>> = LinkedHashMap<String, Map<String, Any?>>().apply { for (x in host.read()) put(x["id"] as String, x) }
 
+    /** 種類を足す前に合流した端末の NG も、レコードがなければ送る */
+    override fun fill(ctx: AdapterContext): List<SeedRow> = seed(ctx)
+
     /** 期限の切れたものは送らない。受け取る端末でも手元に入らない */
     override fun seed(ctx: AdapterContext): List<SeedRow> {
         today = host.today(ctx.now)

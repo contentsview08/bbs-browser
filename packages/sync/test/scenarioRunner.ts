@@ -6,7 +6,7 @@ import { expect } from 'vitest'
 import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
 import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, hasLocalData, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, hasLocalData, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, OwnPostAdapter, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
 import presets from '../../presets/sites.json'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
@@ -22,7 +22,7 @@ export interface Scenario {
   name: string
   devices: string[]
   server?: Record<string, unknown>
-  seed?: Record<string, { favorite_threads?: Step[]; favorite_boards?: Step[]; sites?: Step[]; uploads?: Step[]; ng?: NgRuleData[]; threads?: Step[]; posts?: Step[]; settings?: Record<string, unknown> }>
+  seed?: Record<string, { favorite_threads?: Step[]; favorite_boards?: Step[]; sites?: Step[]; uploads?: Step[]; ng?: NgRuleData[]; threads?: Step[]; posts?: Step[]; own_posts?: Step[]; settings?: Record<string, unknown> }>
   /** logRetentionDays。0 は消さない */
   retention_days?: number
   /** 移行の SQL が入れる 5ch とエッヂを残す。ふだんは空から始めて、各シナリオの件数を読みやすくする */
@@ -199,6 +199,7 @@ class Device {
         new SecretAdapter(this.sql.db),
         new NgAdapter({ ...settingsNgStore(this.sql.db), apply: async (c) => void (await settingsNgStore(this.sql.db).apply(c)), patternOk: ngPatternSyncable, today: dateOf }),
         new PostAdapter(this.sql.db, resolver(this.name)),
+        new OwnPostAdapter(this.sql.db, resolver(this.name)),
         new SettingAdapter(settingsTableHost(this.sql.db, this.name === 'phone' ? 'phone' : 'pc'), this.sql.db),
         ...historyAdapters(this.sql.db, { resolve: resolver(this.name), retentionDays: () => this.world.retentionDays, newResetId: () => `reset_${this.name}_${++this.resetCount}` }),
     ]
@@ -412,7 +413,15 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       await d.store.pruneLogs(d.now() - s.older_than_ms, (s.keep ?? []).map((k: Step) => ({ boardUrl: k.board, key: k.key })))
       break
     case 'post_add':
+      // 画面と同じ順: 番号が分かれば自分のレスの印を付けてから、書き込み履歴に残す
+      if (s.no !== undefined) await d.ops.ownAdd(thread(s), s.no, d.now())
       await d.ops.postAdd(thread(s), { no: s.no, name: s.name ?? '', mail: s.mail ?? '', body: s.body }, d.now())
+      break
+    case 'own_add':
+      await d.ops.ownAdd(thread(s), s.no, d.now())
+      break
+    case 'own_remove':
+      await d.ops.ownRemove(thread(s), s.no, d.now())
       break
     case 'post_remove': {
       const entry = (await d.store.listPostHistory()).find((e) => e.thread.key === s.key && e.body === s.body)
@@ -788,6 +797,7 @@ export async function runScenario(c: Scenario, make: MakeServer = makeFake): Pro
         ['2ch-compat', p.board, p.key, p.title ?? '', p.no ?? null, p.name ?? '', p.mail ?? '', p.body, START - (p.ago_ms ?? 0)],
       )
     }
+    for (const o of seed.own_posts ?? []) await d.store.addOwnPost(thread(o), o.no, START - (o.ago_ms ?? 0))
   }
   for (const s of c.steps) {
     await runStep(w, s, c)

@@ -39,6 +39,7 @@ private val SCHEMAS: Map<String, Map<String, Rule>> = mapOf(
     "favorite" to mapOf("board_url" to BOARD, "thread" to Rule.Str(THREAD_MAX), "title" to Rule.Str(TITLE_MAX), "board_name" to Rule.Str(NAME_MAX), "created_at" to INT),
     "order" to mapOf("board_url" to BOARD, "thread" to Rule.Str(THREAD_MAX), "key" to Rule.Order(true)),
     "post" to mapOf("post_id" to Rule.Str(ID_MAX, true, min = 1), "board_url" to BOARD, "thread" to THREAD, "title" to Rule.Str(TITLE_MAX), "no" to INT, "body" to Rule.Str(POST_BODY_MAX, true), "posted_at" to Rule.Int_(true)),
+    "own_post" to mapOf("board_url" to BOARD, "thread" to THREAD, "no" to Rule.Int_(true), "posted_at" to INT),
     "image" to mapOf("url" to Rule.Url(true), "file_name" to Rule.Str(TITLE_MAX), "size" to INT, "uploaded_at" to INT),
     "ng" to mapOf(
         "id" to Rule.Str(NG_ID_MAX, true, min = 1),

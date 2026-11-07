@@ -72,9 +72,6 @@ private fun argsOf(op: SyncOpRow): PostArgs? = try {
     null
 }
 
-private fun ownPost(boardUrl: String, key: String, no: Long, postedAt: Long) =
-    SqlStatement("INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES (?, ?, ?, ?)", listOf(boardUrl, key, no, postedAt))
-
 private val NOTHING = ApplyPlan(emptyList(), false)
 
 class PostAdapter(private val db: SyncSql, private val resolve: (String) -> ResolvedBoard?) : SyncAdapter {
@@ -131,7 +128,7 @@ class PostAdapter(private val db: SyncSql, private val resolve: (String) -> Reso
         return ApplyPlan(rows.map { SqlStatement("DELETE FROM post_history WHERE id = ?", listOf(it.id)) }, rows.isNotEmpty())
     }
 
-    /** 自分のレスの印は足すだけ。履歴から消しても消さない */
+    /** 自分のレスの印は own_post のレコードで別に届く。履歴から消しても印は消えない */
     override fun apply(r: StoredRecord, ctx: AdapterContext): ApplyPlan {
         if (r.payload["deleted"] == true) return if (r.payload["trim"] == true) NOTHING else remove(r)
         val body = r.payload.body.orEmpty()
@@ -143,12 +140,11 @@ class PostAdapter(private val db: SyncSql, private val resolve: (String) -> Reso
         if (rows.isEmpty()) {
             val resolved = resolve(body["board_url"] as String) ?: return NOTHING
             return ApplyPlan(
-                listOfNotNull(
+                listOf(
                     SqlStatement(
                         "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, '', '', ?, ?)",
                         listOf(resolved.connectorId, resolved.boardUrl, r.refThread, title, no, body["body"], postedAt),
                     ),
-                    no?.let { ownPost(resolved.boardUrl, r.refThread!!, it, postedAt) },
                 ),
                 true,
             )
@@ -160,8 +156,7 @@ class PostAdapter(private val db: SyncSql, private val resolve: (String) -> Reso
         if (extra.isEmpty() && newTitle == first.threadTitle && newNo == first.no) return NOTHING
         return ApplyPlan(
             extra.map { SqlStatement("DELETE FROM post_history WHERE id = ?", listOf(it.id)) } +
-                SqlStatement("UPDATE post_history SET thread_title = ?, no = ? WHERE id = ?", listOf(newTitle, newNo, first.id)) +
-                listOfNotNull(newNo?.let { ownPost(first.boardUrl, first.key, it, postedAt) }),
+                SqlStatement("UPDATE post_history SET thread_title = ?, no = ? WHERE id = ?", listOf(newTitle, newNo, first.id)),
             true,
         )
     }

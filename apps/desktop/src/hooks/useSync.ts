@@ -1,7 +1,7 @@
 // 同期のきっかけと、設定の窓からの頼みごと。自動の同期は前面にいる間だけ(きっかけの決まりは SyncScheduler)
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
-import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type SyncGroup } from '@bbs-browser/sync'
+import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type SyncGroup } from '@bbs-browser/sync'
 import { broadcast } from '../host/crossWindow'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
 import { PRESET_URLS } from '../presets'
@@ -14,6 +14,8 @@ export interface SyncReloaders {
   sites: (s: LogStore) => void
   uploads: (s: LogStore) => void
   posts: (s: LogStore) => void
+  /** 自分のレスの印(開いているタブの印を読み直す) */
+  ownPosts: (s: LogStore) => void
   /** 閲覧履歴と既読(行が消えたスレのタブを閉じるのもここ) */
   reads: (s: LogStore) => void
   retentionDays: () => number
@@ -37,6 +39,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
         new SecretAdapter(store.db),
         new NgAdapter(syncNgHost(store.db)),
         new PostAdapter(store.db, resolveSyncBoard),
+        new OwnPostAdapter(store.db, resolveSyncBoard),
         new SettingAdapter(syncSettingsHost(store.db), store.db),
         ...historyAdapters(store.db, { resolve: resolveSyncBoard, retentionDays: () => applied.current.retentionDays(), newResetId: () => crypto.randomUUID().replaceAll('-', '') }),
       ],
@@ -58,6 +61,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
         }
         if (r.applied.uploads) applied.current.uploads(store)
         if (r.applied.posts) applied.current.posts(store)
+        if (r.applied.ownPosts) applied.current.ownPosts(store)
         if (r.applied.history || r.applied.reads) applied.current.reads(store)
       },
     })

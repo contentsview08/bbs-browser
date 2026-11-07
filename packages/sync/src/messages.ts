@@ -83,7 +83,7 @@ export const SYNC_GROUP_LABELS = {
   history: '閲覧履歴と既読',
   favorites: 'お気に入り(スレ・板)',
   sites: 'サイト',
-  posts: '書き込み履歴',
+  posts: '書き込み履歴と自分のレスの印',
   images: '上げた画像の履歴',
   ng: 'NG',
   settings: '設定',

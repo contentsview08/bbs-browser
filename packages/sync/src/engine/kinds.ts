@@ -3,7 +3,7 @@ export const SYNC_GROUPS = [
   { id: 'history', default: true, kinds: ['last_view', 'read_dev', 'read_reset'] },
   { id: 'favorites', default: true, kinds: ['favorite', 'order'] },
   { id: 'sites', default: true, kinds: ['site'] },
-  { id: 'posts', default: true, kinds: ['post'] },
+  { id: 'posts', default: true, kinds: ['post', 'own_post'] },
   { id: 'images', default: true, kinds: ['image'] },
   { id: 'ng', default: true, kinds: ['ng'] },
   { id: 'settings', default: true, kinds: ['setting'] },

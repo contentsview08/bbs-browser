@@ -5,6 +5,7 @@ import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.data.FavoriteBoardSql
 import io.github.contentsview08.obb.data.FavoriteThreadSql
 import io.github.contentsview08.obb.data.NgRule
+import io.github.contentsview08.obb.data.OwnPostSql
 import io.github.contentsview08.obb.data.PostHistoryEntry
 import io.github.contentsview08.obb.data.ThreadLogSql
 import io.github.contentsview08.obb.data.SiteSql
@@ -17,6 +18,7 @@ import io.github.contentsview08.obb.data.ngDiff
 import io.github.contentsview08.obb.data.ngRuleToBody
 import io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter
 import io.github.contentsview08.obb.sync.adapters.HistoryHost
+import io.github.contentsview08.obb.sync.adapters.OwnPostAdapter
 import io.github.contentsview08.obb.sync.adapters.PostAdapter
 import io.github.contentsview08.obb.sync.adapters.SettingAdapter
 import io.github.contentsview08.obb.sync.adapters.SettingAllowlist
@@ -238,6 +240,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
             SecretAdapter(sql),
             NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
             PostAdapter(sql, resolver(name)),
+            OwnPostAdapter(sql, resolver(name)),
             SettingAdapter(ALLOW, TableSettingsHost(sql, if (name == "phone") "phone" else "pc"), sql),
         ) + historyAdapters(sql, HistoryHost(resolver(name), { world.retentionDays }, { "reset_${name}_${++resetCount}" }))
         engine = SyncEngine(
@@ -417,7 +420,14 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
             val rows = d!!.sql.query(ThreadLogSql.PRUNE_TARGETS, listOf(d.now() - s["older_than_ms"] as Long))
             for (r in rows) if ("${r["board_url"]}\t${r["key"]}" !in kept) for (del in ThreadLogSql.DELETE_LOG) d.sql.exec(del, listOf(r["board_url"], r["key"]))
         }
-        "post_add" -> thread(s).let { d!!.ops.postAddNow(it, it.title, (s["no"] as Long?)?.toInt(), s["name"] as String? ?: "", s["mail"] as String? ?: "", s["body"] as String, d.now()) }
+        "post_add" -> thread(s).let {
+            // 画面と同じ順: 番号が分かれば自分のレスの印を付けてから、書き込み履歴に残す
+            val no = (s["no"] as Long?)?.toInt()
+            if (no != null) d!!.ops.ownAddNow(it, no, d.now())
+            d!!.ops.postAddNow(it, it.title, no, s["name"] as String? ?: "", s["mail"] as String? ?: "", s["body"] as String, d.now())
+        }
+        "own_add" -> d!!.ops.ownAddNow(thread(s), (s["no"] as Long).toInt(), d.now())
+        "own_remove" -> d!!.ops.ownRemoveNow(thread(s), (s["no"] as Long).toInt(), d.now())
         "post_remove" -> {
             val row = d!!.sql.query("SELECT id, board_url, key, thread_title, no, body, posted_at FROM post_history ORDER BY posted_at DESC, id DESC LIMIT 1000").firstOrNull { it["key"] == s["key"] && it["body"] == s["body"] }
             if (row != null) d.ops.postRemoveNow(PostHistoryEntry(row["id"] as Long, ThreadSummary(row["board_url"] as String, row["key"] as String, row["thread_title"] as String, 0, 0, null), (row["no"] as Long?)?.toInt(), row["body"] as String, row["posted_at"] as Long), d.now())
@@ -704,6 +714,7 @@ private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> {
                 listOf("2ch-compat", p["board"], p["key"], p["title"] as String? ?: "", p["no"], p["name"] as String? ?: "", p["mail"] as String? ?: "", p["body"], START - (p["ago_ms"] as Long? ?: 0L)),
             )
         }
+        for (o in (seed["own_posts"] as List<Map<String, Any?>>?).orEmpty()) d.sql.exec(OwnPostSql.ADD, listOf(o["board"], o["key"], o["no"], START - (o["ago_ms"] as Long? ?: 0L)))
     }
     val label = c["name"] as String
     for (s in c["steps"] as List<Map<String, Any?>>) runStep(w, s, label)

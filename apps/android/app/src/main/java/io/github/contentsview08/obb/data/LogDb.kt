@@ -110,6 +110,12 @@ internal object ThreadLogSql {
         "AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)"
 }
 
+/** 自分のレスの印の SQL。JVM のテストでも同じ文を流す */
+internal object OwnPostSql {
+    const val ADD = "INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES (?, ?, ?, ?)"
+    const val REMOVE = "DELETE FROM own_posts WHERE board_url = ? AND key = ? AND no = ?"
+}
+
 /** 書き込み履歴の SQL。JVM のテストでも同じ文を流す */
 internal object PostHistorySql {
     const val ADD = "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -339,30 +345,10 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
 
     // ── 書き込み ──
 
-    /** 自分の書き込みとして覚える(「自分」の絞り込み・自分への返信の印に使う) */
-    suspend fun addOwnPost(t: ThreadSummary, no: Int) = io {
-        writableDatabase.execSQL("INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES (?, ?, ?, ?)", arrayOf<Any>(t.boardUrl, t.key, no, System.currentTimeMillis()))
-    }
-
+    /** 自分のレスの印(「自分」の絞り込み・自分への返信の印に使う)。付ける・外すは UserOps(同期に乗せる) */
     suspend fun ownPosts(t: ThreadSummary): Set<Int> = io {
         readableDatabase.rawQuery("SELECT no FROM own_posts WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { c ->
             buildSet { while (c.moveToNext()) add(c.getInt(0)) }
-        }
-    }
-
-    /** 自分のレスの印を手で付ける・外す(同じ ID のレスすべてのように、まとめて) */
-    suspend fun setOwnPosts(t: ThreadSummary, nos: Collection<Int>, own: Boolean) = io {
-        val db = writableDatabase
-        val now = System.currentTimeMillis()
-        db.beginTransaction()
-        try {
-            for (no in nos) {
-                if (own) db.execSQL("INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES (?, ?, ?, ?)", arrayOf<Any>(t.boardUrl, t.key, no, now))
-                else db.delete("own_posts", "board_url = ? AND key = ? AND no = ?", arrayOf(t.boardUrl, t.key, no.toString()))
-            }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
     }
 

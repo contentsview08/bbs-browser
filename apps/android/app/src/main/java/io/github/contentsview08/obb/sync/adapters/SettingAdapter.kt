@@ -148,6 +148,9 @@ class SettingAdapter(private val allow: SettingAllowlist, private val host: Sett
     override fun fromOp(op: SyncOpRow, existing: SyncPayload?, stamp: String, ctx: AdapterContext): SyncPayload? =
         argsOf(op)?.let { (name, value) -> updateRecord(existing, SETTING_KIND, mapOf("key" to name, "value" to value), stamp, ctx.deviceId) }
 
+    /** 種類を足す前に合流した端末の設定も、レコードがなければ送る */
+    override fun fill(ctx: AdapterContext): List<SeedRow> = seed(ctx)
+
     /** 領域に設定があれば手元の値をレコードにしない(合流は領域の値を使う)。1 台目は既定と違うものだけ */
     override fun seed(ctx: AdapterContext): List<SeedRow> {
         val n = db.query("SELECT COUNT(*) AS n FROM sync_records WHERE kind = ?", listOf(SETTING_KIND)).firstOrNull()?.get("n") as Long? ?: 0L

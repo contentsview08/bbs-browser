@@ -253,6 +253,16 @@ export function addPostHistoryStatement(thread: ThreadSummary, post: { no?: numb
 
 export const deletePostHistoryStatement = (id: number): SqlStatement => ({ sql: 'DELETE FROM post_history WHERE id = $1', params: [id] })
 
+export const addOwnPostStatement = (thread: ThreadSummary, no: number, now: number): SqlStatement => ({
+  sql: 'INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES ($1, $2, $3, $4)',
+  params: [thread.boardUrl, thread.key, no, now],
+})
+
+export const removeOwnPostStatement = (thread: ThreadSummary, no: number): SqlStatement => ({
+  sql: 'DELETE FROM own_posts WHERE board_url = $1 AND key = $2 AND no = $3',
+  params: [thread.boardUrl, thread.key, no],
+})
+
 export const setSettingStatement = (key: string, value: unknown): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', params: [key, JSON.stringify(value)] })
 
 /** 同じ板の URL の書き方。行は書いた端末の URL のまま残るので、板の未読はどの書き方の行も読む */
@@ -567,17 +577,14 @@ export class LogStore {
   // ── 自分の書き込み ──
 
   async addOwnPost(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
-    await this.db.execute('INSERT OR IGNORE INTO own_posts (board_url, key, no, posted_at) VALUES ($1, $2, $3, $4)', [
-      thread.boardUrl,
-      thread.key,
-      no,
-      now,
-    ])
+    const { sql, params } = addOwnPostStatement(thread, no, now)
+    await this.db.execute(sql, params)
   }
 
   /** 自分の書き込みの印を外す(手で付けた印・書き込みで付いた印のどちらも) */
   async removeOwnPost(thread: ThreadSummary, no: number): Promise<void> {
-    await this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2 AND no = $3', [thread.boardUrl, thread.key, no])
+    const { sql, params } = removeOwnPostStatement(thread, no)
+    await this.db.execute(sql, params)
   }
 
   async getOwnPosts(thread: ThreadSummary): Promise<number[]> {

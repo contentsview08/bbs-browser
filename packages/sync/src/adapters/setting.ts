@@ -212,6 +212,11 @@ export class SettingAdapter implements SyncAdapter {
     return a && updateRecord(existing, SETTING_KIND, { key: a.name, value: a.value }, stamp, ctx.deviceId)
   }
 
+  /** 種類を足す前に合流した端末の設定も、レコードがなければ送る */
+  fill(ctx: AdapterContext): Promise<SeedRow[]> {
+    return this.seed(ctx)
+  }
+
   /** 領域に設定があれば手元の値をレコードにしない(合流は領域の値を使う)。1 台目は既定と違うものだけ */
   async seed(ctx: AdapterContext): Promise<SeedRow[]> {
     const [row] = await this.db.select<{ n: number }>('SELECT COUNT(*) AS n FROM sync_records WHERE kind = $1', [SETTING_KIND])

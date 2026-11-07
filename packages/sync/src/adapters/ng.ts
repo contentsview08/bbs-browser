@@ -79,6 +79,11 @@ export class NgAdapter implements SyncAdapter {
     return new Map((await this.host.read()).map((x) => [x.id as string, x]))
   }
 
+  /** 種類を足す前に合流した端末の NG も、レコードがなければ送る */
+  fill(ctx: AdapterContext): Promise<SeedRow[]> {
+    return this.seed(ctx)
+  }
+
   /** 期限の切れたものは送らない。受け取る端末でも手元に入らない */
   async seed(ctx: AdapterContext): Promise<SeedRow[]> {
     this.today = this.host.today(ctx.now)

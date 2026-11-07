@@ -38,6 +38,7 @@ const SCHEMAS: Record<string, Record<string, Rule>> = {
   favorite: { board_url: BOARD, thread: STR(THREAD_MAX), title: STR(TITLE_MAX), board_name: STR(NAME_MAX), created_at: INT },
   order: { board_url: BOARD, thread: STR(THREAD_MAX), key: { t: 'order', req: true } },
   post: { post_id: { t: 'str', max: ID_MAX, min: 1, req: true }, board_url: BOARD, thread: THREAD, title: STR(TITLE_MAX), no: INT, body: STR(POST_BODY_MAX, true), posted_at: { t: 'int', req: true } },
+  own_post: { board_url: BOARD, thread: THREAD, no: { t: 'int', req: true }, posted_at: INT },
   image: { url: { t: 'url', req: true }, file_name: STR(TITLE_MAX), size: INT, uploaded_at: INT },
   ng: {
     id: { t: 'str', max: NG_ID_MAX, min: 1, req: true },

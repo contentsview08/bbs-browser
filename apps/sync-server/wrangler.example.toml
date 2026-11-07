@@ -63,6 +63,8 @@ workers_dev = true
 
 [env.verify.vars]
 SPACE_LIMIT = "100"
+# 開発で何度も作り直すので、同じ作成元の上限を緩める
+SOURCE_LIMIT = "1000"
 POW_BITS = "16"
 TICKET_KID = "k1"
 # Cloudflare の公式のテスト用のキー(文書: turnstile/troubleshooting/testing)。誰でも通るので検証用の環境だけで使う

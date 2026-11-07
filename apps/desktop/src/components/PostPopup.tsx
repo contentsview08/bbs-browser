@@ -110,10 +110,10 @@ function PopupWindow(props: {
       ref={ref}
       data-popup-top={props.isTop || undefined}
       data-index={props.stackIndex}
-      // 一番上(操作が届く)だけ差し色の 2px の枠。背景が本文と同じ色なので、枠がないとどこまでがポップアップか分からない
-      // (スマホ版 Popups.kt の border(2.dp, Palette.accent) と同じ)。下に重なっているものは細い枠のまま
-      className={`post-popup ${props.isTop ? 'border-2' : 'border'} rounded-lg shadow-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
-      style={{ ...style, borderColor: props.isTop ? 'var(--c-accent)' : 'var(--c-border-strong)' }}
+      // 一番上(操作が届く)だけ差し色の太い枠。背景が本文と同じ色なので、枠がないとどこまでがポップアップか分からない
+      // (スマホ版 Popups.kt の差し色の枠と同じ考え)。下に重なっているものは細い枠のまま。影は本文の上で浮いて見えるよう濃くする
+      className={`post-popup ${props.isTop ? 'border-[3px]' : 'border'} rounded-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
+      style={{ ...style, borderColor: props.isTop ? 'var(--c-accent)' : 'var(--c-border-strong)', boxShadow: '0 8px 28px rgba(0, 0, 0, 0.45)' }}
       onClick={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
       onMouseEnter={props.onEnter}

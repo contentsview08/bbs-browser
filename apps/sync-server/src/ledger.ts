@@ -207,7 +207,8 @@ export class LedgerDO extends DurableObject<Env> {
       }
       const step = this.ctx.storage.transactionSync((): ReserveResult | { verify: string } => {
         if (outcome.gone) {
-          this.sql.exec('DELETE FROM spaces WHERE space_id = ?', candidate)
+          // 候補の所有者が同時に作り直していれば行は pending に入れ直されている。それを消すと枠が 1 つ増える
+          this.sql.exec("DELETE FROM spaces WHERE space_id = ? AND state = 'deleting'", candidate)
           return { ok: true }
         }
         if (outcome.last_used !== undefined) {

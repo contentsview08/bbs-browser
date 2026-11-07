@@ -14,13 +14,15 @@ function sources(dir: string): string[] {
 
 const src = sources(join(root, 'src')).map((p) => ({ p, text: readFileSync(p, 'utf-8') }))
 
-/** exec( の最初の引数(閉じるまでの文字列)を取り出す */
+/** exec( と書き込みの包み write( の最初の引数(閉じるまでの文字列)を取り出す */
 function sqlArgs(text: string): string[] {
   const out: string[] = []
-  for (const m of text.matchAll(/\bsql\.exec(?:<[^(]*>)?\(\s*/g)) {
+  for (const m of text.matchAll(/\b(?:sql\.exec|this\.write)(?:<[^(]*>)?\(\s*/g)) {
     const start = (m.index as number) + m[0].length
     const q = text[start]
     if (q !== "'" && q !== '"' && q !== '`') {
+      // 包みの中の exec(sql, ...args) は引数をそのまま渡すだけ。文は包みの呼び出し側で見る
+      if (text.startsWith('sql, ...args)', start)) continue
       out.push(text.slice(start, start + 40))
       continue
     }

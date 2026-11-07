@@ -90,6 +90,8 @@ async function createSpace(body: string, spaceId: string, ip: string, env: Env, 
   if (input.ticket === undefined) return result(403, { error: 'ticket_required' })
   const check = await checkTicket(keys, spaceId, runtime.now(), input.ticket)
   if (check !== 'ok') return result(403, { error: check === 'expired' ? 'ticket_expired' : 'ticket_invalid' })
+  // 環境変数で止めているときは、PoW を出さず領域も台帳も起こさない(台帳の印で止めているときは台帳が断る)
+  if (cfg.creationClosed) return result(403, { error: 'creation_closed' })
   if (cfg.powBits > 0) {
     if (!env.POW_SECRET) return { status: 503, body: JSON.stringify({ error: 'unavailable' }) }
     if (!input.pow) {

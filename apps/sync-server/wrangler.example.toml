@@ -10,6 +10,12 @@ workers_dev = false
 [vars]
 SPACE_LIMIT = "100"
 TICKET_KID = "k1"
+# 端末へ「最低これだけ空ける」と指示する秒(確認・送信)。0 は指示しない(端末の既定: 確認 60 秒、変化なしで 2 倍ずつ最大 5 分、送信 120 秒)
+# Workers Free(Durable Objects 100,000 要求/日)で出すときの目安は PACE_HEAD_SEC = "300"、PACE_PUSH_SEC = "120"
+PACE_HEAD_SEC = "0"
+PACE_PUSH_SEC = "0"
+# 領域ごとの 1 日の回数。既定 6000 は Paid 向け。Free で 100 人なら 1 人 1,000 要求に収めるため "1200" 程度に下げる(docs/sync-design.md の費用)
+# RATE_PER_DAY = "1200"
 # 実際のウィジェットのサイトキーを入れて使う
 TURNSTILE_SITEKEY = ""
 
@@ -26,10 +32,12 @@ tag = "v1"
 new_sqlite_classes = ["SpaceDO", "LedgerDO"]
 
 # IP ごとの制限。周期は 10 秒か 60 秒だけ。namespace_id はアカウントの中で重ならない数字
+# RL_IP の根拠: 端末は確認 60 秒・送信 120 秒なので 1 台で 1 分に多くて 3 回(head・changes・records)、前面復帰の直後に数回まとまる。
+# 家の PC + スマホは同じ IP から来るので 2 台分 + 復帰のまとまりで 30。CGNAT で多くの利用者が同じ IPv4 を共有する回線が多ければ上げる
 [[ratelimits]]
 name = "RL_IP"
 namespace_id = "1001"
-simple = { limit = 120, period = 60 }
+simple = { limit = 30, period = 60 }
 
 [[ratelimits]]
 name = "RL_WIDE"
@@ -90,7 +98,7 @@ class_name = "LedgerDO"
 [[env.verify.ratelimits]]
 name = "RL_IP"
 namespace_id = "2001"
-simple = { limit = 120, period = 60 }
+simple = { limit = 30, period = 60 }
 
 [[env.verify.ratelimits]]
 name = "RL_WIDE"

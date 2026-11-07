@@ -201,6 +201,50 @@ describe('放置削除', () => {
     expect(await activeCount()).toBe(0)
     expect((await create('B')).status).toBe(201)
   })
+  it('台帳へ知らせられなくても、次の alarm で送り直して枠を空ける', async () => {
+    setup({ SPACE_LIMIT: '1', EVICT_IDLE_DAYS: '1000' })
+    const id = await spaceIdOf('A')
+    await create('A')
+    const stub = asDo(spaceStub(id))
+    // 台帳が落ちている間に端末が消す
+    await runInDurableObject(stub, (inst) => {
+      ;(inst as unknown as { tell: () => Promise<void> }).tell = () => Promise.reject(new Error('down'))
+    })
+    expect((await call('DELETE', '/space', { token: 'A' })).status).toBe(200)
+    expect(await activeCount()).toBe(1)
+    expect((await create('B')).status).toBe(403)
+    await runInDurableObject(stub, async (inst, state) => {
+      delete (inst as unknown as { tell?: unknown }).tell
+      expect(await state.storage.getAlarm()).not.toBeNull()
+    })
+    await advance(5 * 60 * 1000, [id])
+    expect(await activeCount()).toBe(0)
+    expect((await create('B')).status).toBe(201)
+    await runInDurableObject(stub, async (_o, state) => {
+      expect(await state.storage.get('untold')).toBeUndefined()
+    })
+  })
+  it('作り直しは知らせの代わりになり、未通知の印を消す', async () => {
+    setup({ SPACE_LIMIT: '2', EVICT_IDLE_DAYS: '1000' })
+    const id = await spaceIdOf('A')
+    await create('A')
+    const stub = asDo(spaceStub(id))
+    await runInDurableObject(stub, (inst) => {
+      ;(inst as unknown as { tell: () => Promise<void> }).tell = () => Promise.reject(new Error('down'))
+    })
+    await call('DELETE', '/space', { token: 'A' })
+    await runInDurableObject(stub, (inst) => {
+      delete (inst as unknown as { tell?: unknown }).tell
+    })
+    expect((await create('A')).status).toBe(201)
+    await runInDurableObject(stub, async (_o, state) => {
+      expect(await state.storage.get('untold')).toBeUndefined()
+    })
+    // 古い知らせの印が消えているので、alarm が作り直した領域の行を消さない
+    await advance(5 * 60 * 1000, [id])
+    expect(await activeCount()).toBe(1)
+    expect(await status('A')).toBe(200)
+  })
   it('端末の削除で枠が空く。古い知らせは作り直した領域を消さない', async () => {
     setup({ SPACE_LIMIT: '1' })
     await create('A')

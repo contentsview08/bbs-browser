@@ -6,8 +6,28 @@ import { randomToken } from './encoding'
 import { runtime } from './runtime'
 import type { InputRecord, PushInput } from './validate'
 
+/** 覚えておく応答の写しの上限。片づけは TRIM_EVERY 件の採番ごとなので、その間に増える分を引いた数まで残す */
 const REQUESTS_KEPT = 64
+const TRIM_EVERY = 16
 const REQUESTS_TTL_MS = 7 * DAY
+/** 回数と最終使用をメモリで数え、DB へはこの間隔でまとめて写す */
+const FLUSH_MS = 10 * MINUTE
+/** 台帳へ知らせられなかったときの送り直しの間隔 */
+const RETELL_MS = 5 * MINUTE
+/** 作り方が変わったら上げる。既存の領域は最初に触ったときに migrate() で追いつく */
+const DB_VERSION = 2
+/** 台帳へ未通知の削除の印(KV)。meta ごと消えた後も残す必要があるので SQL の外に置く */
+const UNTOLD_KEY = 'untold'
+
+/** 通し番号を持たない(AUTOINCREMENT は 1 回の INSERT で sqlite_sequence にも 1 行書く)。並びは要求の後の version(head)で足りる */
+const SCHEMA_REQUESTS = `
+CREATE TABLE requests (
+  request_id TEXT PRIMARY KEY,
+  results TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  head INTEGER NOT NULL
+) WITHOUT ROWID;
+`
 
 const SCHEMA = `
 CREATE TABLE meta (
@@ -27,7 +47,8 @@ CREATE TABLE meta (
   day_count INTEGER NOT NULL,
   full_pulls TEXT NOT NULL,
   reported_at INTEGER NOT NULL,
-  reported_day INTEGER NOT NULL
+  reported_day INTEGER NOT NULL,
+  db_version INTEGER NOT NULL
 );
 CREATE TABLE records (
   record_id TEXT PRIMARY KEY,
@@ -40,13 +61,7 @@ CREATE TABLE records (
   updated_at INTEGER NOT NULL
 ) WITHOUT ROWID;
 CREATE INDEX records_tomb ON records (updated_at) WHERE deleted = 1;
-CREATE TABLE requests (
-  seq INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT NOT NULL UNIQUE,
-  results TEXT NOT NULL,
-  at INTEGER NOT NULL
-);
-`
+${SCHEMA_REQUESTS}`
 
 /** 端末はこの秒より早く試さない。超えた要求を繰り返させないため */
 const limited = (waitMs: number) => result(429, { error: 'rate_limited', retry_after_sec: Math.ceil(waitMs / 1000) })
@@ -71,6 +86,20 @@ interface Meta {
   full_pulls: string
   reported_at: number
   reported_day: number
+  db_version: number
+}
+
+/** 要求ごとに変わる値。DB の行ではなくここで数え、間引いて DB に写す。実体が落ちたら DB の値から数え直す(回数が少し甘くなるだけ) */
+interface Live {
+  minute: number
+  minute_count: number
+  day: number
+  day_count: number
+  last_used: number
+  /** 最後に DB へ写した時刻 */
+  flushed_at: number
+  /** 写していない分の境目をまたいだ */
+  minute_crossed: boolean
 }
 
 interface RecordRow {
@@ -89,6 +118,11 @@ interface StoredResult {
   record_id: string
   status: number
   version?: number
+}
+
+interface Untold {
+  space_id: string
+  epoch: string
 }
 
 export interface SpaceInfo {
@@ -119,6 +153,9 @@ export class SpaceDO extends DurableObject<Env> {
   protected sql: SqlStorage
   /** 無ければ書かない。ランダムなトークンで空の領域を保存させないため */
   private hasSchema: boolean | null = null
+  private live: Live | null = null
+  /** この実体が書いた行の数(索引の更新を含む)。費用の見積もりとテストで使う */
+  protected writtenRows = 0
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -129,11 +166,42 @@ export class SpaceDO extends DurableObject<Env> {
     return loadConfig(this.env)
   }
 
+  /** 書き込みの SQL はすべてここを通す。行数を数えるため */
+  private write(sql: string, ...args: SqlStorageValue[]): number {
+    const n = this.sql.exec(sql, ...args).rowsWritten
+    this.writtenRows += n
+    return n
+  }
+
   protected meta(): Meta | null {
-    if (this.hasSchema === null) this.hasSchema = this.sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").toArray().length > 0
+    if (this.hasSchema === null) {
+      const table = this.sql.exec<{ sql: string }>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'meta'").toArray()[0]
+      this.hasSchema = table !== undefined
+      if (table) this.migrate(table.sql)
+    }
     if (!this.hasSchema) return null
     const rows = this.sql.exec('SELECT * FROM meta WHERE id = 1').toArray()
-    return rows.length === 0 ? null : (rows[0] as unknown as Meta)
+    if (rows.length === 0) return null
+    const m = rows[0] as unknown as Meta
+    // DB より新しい値はメモリにある
+    if (this.live) Object.assign(m, { minute: this.live.minute, minute_count: this.live.minute_count, day: this.live.day, day_count: this.live.day_count, last_used: this.live.last_used })
+    return m
+  }
+
+  /** 古い作りの領域を今の作りに直す。1 回だけ流れ、途中で落ちても次に触ったときにやり直す */
+  private migrate(metaSql: string): void {
+    // 版 1 には db_version の列がない
+    const v = metaSql.includes('db_version') ? (this.sql.exec<{ v: number }>('SELECT db_version AS v FROM meta').toArray()[0]?.v ?? DB_VERSION) : 1
+    if (v >= DB_VERSION) return
+    this.ctx.storage.transactionSync(() => {
+      if (v < 2) {
+        // requests の通し番号をやめる。残っていた応答の写しは捨てる(その再送は 409 で今の値が返り、端末がマージしても変わらない)
+        this.write('ALTER TABLE meta ADD COLUMN db_version INTEGER NOT NULL DEFAULT 1')
+        this.write('DROP TABLE requests')
+        this.write(SCHEMA_REQUESTS)
+      }
+      this.write('UPDATE meta SET db_version = ? WHERE id = 1', DB_VERSION)
+    })
   }
 
   private expired(m: Meta, now: number, cfg: Config): boolean {
@@ -143,19 +211,47 @@ export class SpaceDO extends DurableObject<Env> {
 
   private async wipe(): Promise<void> {
     this.hasSchema = false
+    this.live = null
     await this.ctx.storage.deleteAlarm()
     await this.ctx.storage.deleteAll()
   }
 
+  /** テストで差し替えて失敗を起こす */
+  protected async tell(spaceId: string, epoch: string): Promise<void> {
+    await this.env.LEDGER.getByName('ledger').spaceGone(spaceId, epoch)
+  }
+
+  /** 届かなければ印を残して alarm で送り直す。届かないままだと台帳の枠が放置削除の期限まで塞がる */
   private async tellGone(spaceId: string, epoch: string): Promise<void> {
     try {
-      await this.env.LEDGER.getByName('ledger').spaceGone(spaceId, epoch)
+      await this.tell(spaceId, epoch)
     } catch {
-      // 台帳の alarm が照合して直す
+      const untold: Untold = { space_id: spaceId, epoch }
+      await this.ctx.storage.put(UNTOLD_KEY, untold)
+      await this.ctx.storage.setAlarm(runtime.now() + RETELL_MS)
     }
   }
 
-  /** 認証を通った要求の入口。消えていれば 404、回数を超えれば 429、通れば最終使用を進める */
+  /** 未通知の削除を台帳へ送り直す。alarm から呼ぶ */
+  private async retell(): Promise<void> {
+    const untold = await this.ctx.storage.get<Untold>(UNTOLD_KEY)
+    if (!untold) return
+    try {
+      await this.tell(untold.space_id, untold.epoch)
+      await this.ctx.storage.delete(UNTOLD_KEY)
+    } catch {
+      await this.ctx.storage.setAlarm(runtime.now() + RETELL_MS)
+    }
+  }
+
+  /** 最終使用を今にする(メモリだけ)。回数は数えない */
+  private touch(m: Meta, now: number): void {
+    if (!this.live) this.live = { minute: m.minute, minute_count: m.minute_count, day: m.day, day_count: m.day_count, last_used: m.last_used, flushed_at: m.last_used, minute_crossed: false }
+    this.live.last_used = now
+    m.last_used = now
+  }
+
+  /** 認証を通った要求の入口。消えていれば 404、回数を超えれば 429、通れば回数と最終使用を進める(メモリだけ。DB へは flushIfDue か書き込みの相乗りで) */
   private async enter(): Promise<Meta | ApiResult> {
     const cfg = this.config
     const now = runtime.now()
@@ -166,23 +262,44 @@ export class SpaceDO extends DurableObject<Env> {
       await this.tellGone(m.space_id, m.epoch)
       return NOT_FOUND
     }
+    this.touch(m, now)
+    const live = this.live as Live
     const minute = Math.floor(now / MINUTE)
     const day = Math.floor(now / DAY)
-    const minuteCount = m.minute === minute ? m.minute_count : 0
-    const dayCount = m.day === day ? m.day_count : 0
-    // 超えた要求は書かない。連打で書き込みの費用を増やさないため
+    const minuteCount = live.minute === minute ? live.minute_count : 0
+    const dayCount = live.day === day ? live.day_count : 0
+    // 超えた要求は数えない。連打で書き込みの費用を増やさないため
     if (cfg.ratePerMinute > 0 && minuteCount >= cfg.ratePerMinute) return limited((minute + 1) * MINUTE - now)
     if (cfg.ratePerDay > 0 && dayCount >= cfg.ratePerDay) return limited((day + 1) * DAY - now)
-    m.minute = minute
-    m.minute_count = minuteCount + 1
-    m.day = day
-    m.day_count = dayCount + 1
-    m.last_used = now
-    this.sql.exec('UPDATE meta SET minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', minute, m.minute_count, day, m.day_count, now)
+    if (live.minute !== minute) live.minute_crossed = true
+    live.minute = minute
+    live.minute_count = minuteCount + 1
+    live.day = day
+    live.day_count = dayCount + 1
+    Object.assign(m, { minute, minute_count: live.minute_count, day, day_count: live.day_count })
     return m
   }
 
-  /** 日の変わり目と 1 時間ごとに台帳へ報告する。失敗しても同期を止めない */
+  /** 回数と最終使用を DB に写す */
+  private flush(m: Meta): void {
+    this.write('UPDATE meta SET minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', m.minute, m.minute_count, m.day, m.day_count, m.last_used)
+    this.flushed(m.last_used)
+  }
+
+  private flushed(now: number): void {
+    if (!this.live) return
+    this.live.flushed_at = now
+    this.live.minute_crossed = false
+  }
+
+  /** 分の境目をまたいだか、前回から FLUSH_MS たっていれば写す。確認のたびに行を書かないため */
+  private flushIfDue(m: Meta): void {
+    const live = this.live
+    if (!live) return
+    if (live.minute_crossed || m.last_used - live.flushed_at >= FLUSH_MS) this.flush(m)
+  }
+
+  /** 日の変わり目と 1 時間ごとに台帳へ報告する。失敗しても同期を止めない。報告の時刻を書くときに回数と最終使用も一緒に写す */
   private async report(m: Meta): Promise<void> {
     const now = m.last_used
     const day = Math.floor(now / DAY)
@@ -196,7 +313,11 @@ export class SpaceDO extends DurableObject<Env> {
         record_count: m.record_count,
         req_recent: m.day_count,
       })
-      this.sql.exec('UPDATE meta SET reported_at = ?, reported_day = ? WHERE id = 1', now, day)
+      m.reported_at = now
+      m.reported_day = day
+      // 回数と最終使用もこの 1 行に乗せる
+      this.write('UPDATE meta SET reported_at = ?, reported_day = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', now, day, m.minute, m.minute_count, m.day, m.day_count, now)
+      this.flushed(now)
     } catch {
       // 次の要求でまた試す
     }
@@ -212,8 +333,8 @@ export class SpaceDO extends DurableObject<Env> {
       await this.tellGone(m.space_id, m.epoch)
       return null
     }
-    this.sql.exec('UPDATE meta SET last_used = ? WHERE id = 1', now)
-    m.last_used = now
+    this.touch(m, now)
+    this.flushIfDue(m)
     await this.report(m)
     return { epoch: m.epoch }
   }
@@ -225,14 +346,17 @@ export class SpaceDO extends DurableObject<Env> {
     const epoch = randomToken(16)
     const day = Math.floor(now / DAY)
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(SCHEMA)
-      this.sql.exec(
-        `INSERT INTO meta (id, space_id, epoch, next, gc_floor, created_at, last_used, used_bytes, record_count, ever_written, minute, minute_count, day, day_count, full_pulls, reported_at, reported_day)
-         VALUES (1, ?, ?, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, 0, '[]', ?, ?)`,
-        spaceId, epoch, now, now, now, day,
+      this.write(SCHEMA)
+      this.write(
+        `INSERT INTO meta (id, space_id, epoch, next, gc_floor, created_at, last_used, used_bytes, record_count, ever_written, minute, minute_count, day, day_count, full_pulls, reported_at, reported_day, db_version)
+         VALUES (1, ?, ?, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, 0, '[]', ?, ?, ?)`,
+        spaceId, epoch, now, now, now, day, DB_VERSION,
       )
     })
     this.hasSchema = true
+    this.live = null
+    // 作り直しは台帳の行を入れ直すので、前の領域の未通知の印は要らない
+    await this.ctx.storage.delete(UNTOLD_KEY)
     await this.arm()
     return { epoch, created: true }
   }
@@ -243,7 +367,9 @@ export class SpaceDO extends DurableObject<Env> {
     await this.report(m)
     const etag = `"${m.epoch}:${m.next}"`
     // Cloudflare は圧縮すると ETag を弱いものに書き換えるので、W/ を除いて比べる
+    // 変化なしの確認は一番多い要求なので、行を書かない(回数と最終使用はメモリに残る)
     if (ifNoneMatch?.replace(/^W\//, '') === etag) return { status: 304, body: '', etag }
+    this.flushIfDue(m)
     return result(200, { version: m.next, epoch: m.epoch, gc_floor: m.gc_floor, ...paceOf(this.config) }, etag)
   }
 
@@ -251,6 +377,7 @@ export class SpaceDO extends DurableObject<Env> {
     const m = await this.enter()
     if ('status' in m) return m
     await this.report(m)
+    this.flushIfDue(m)
     const cfg = this.config
     return result(200, { used_bytes: m.used_bytes, record_count: m.record_count, quota_bytes: cfg.quotaBytes, quota_records: cfg.quotaRecords, epoch: m.epoch, gc_floor: m.gc_floor })
   }
@@ -265,7 +392,9 @@ export class SpaceDO extends DurableObject<Env> {
       const pulls = (JSON.parse(m.full_pulls) as number[]).filter((at) => now - at < HOUR)
       if (pulls.length >= cfg.fullPullPerHour) return limited(HOUR)
       pulls.push(now)
-      this.sql.exec('UPDATE meta SET full_pulls = ? WHERE id = 1', JSON.stringify(pulls))
+      m.full_pulls = JSON.stringify(pulls)
+      this.write('UPDATE meta SET full_pulls = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', m.full_pulls, m.minute, m.minute_count, m.day, m.day_count, now)
+      this.flushed(now)
     }
     const page: ReturnType<typeof toWire>[] = []
     let bytes = 0
@@ -279,15 +408,22 @@ export class SpaceDO extends DurableObject<Env> {
       page.push(toWire(r))
     }
     await this.report(m)
+    this.flushIfDue(m)
     return result(200, { records: page, head: m.next, more, epoch: m.epoch, gc_floor: m.gc_floor, ...paceOf(cfg) })
   }
 
   async records(input: PushInput): Promise<ApiResult> {
     const m = await this.enter()
     if ('status' in m) return m
+    // 見たことのない version を土台にした要求は端末の不具合。採番を進めずに断る
+    if ((input.records as InputRecord[]).some((r) => r.base_version > m.next)) {
+      this.flushIfDue(m)
+      return failure(400, 'bad_request')
+    }
     const replay = this.replay(input.request_id, m)
     if (replay) {
       await this.report(m)
+      this.flushIfDue(m)
       return replay
     }
     const cfg = this.config
@@ -295,12 +431,16 @@ export class SpaceDO extends DurableObject<Env> {
     try {
       out = this.ctx.storage.transactionSync(() => this.applyPush(input, m, cfg))
     } catch (e) {
-      if (e instanceof QuotaExceeded) return failure(413, 'quota_exceeded')
+      if (e instanceof QuotaExceeded) {
+        this.flushIfDue(m)
+        return failure(413, 'quota_exceeded')
+      }
       throw e
     }
-    const after = this.meta() as Meta
-    await this.report(after)
-    return result(200, { results: out, epoch: after.epoch, gc_floor: after.gc_floor, ...paceOf(this.config) })
+    Object.assign(m, { next: out.next, used_bytes: out.bytes, record_count: out.count, ever_written: out.written })
+    this.flushed(m.last_used)
+    await this.report(m)
+    return result(200, { results: out.results, epoch: m.epoch, gc_floor: m.gc_floor, ...paceOf(cfg) })
   }
 
   /** 同じ request_id は採番し直さない。409 のレコードは今の値を入れる(端末はマージするだけ) */
@@ -322,7 +462,8 @@ export class SpaceDO extends DurableObject<Env> {
     return result(200, { results, epoch: m.epoch, gc_floor: m.gc_floor })
   }
 
-  private applyPush(input: PushInput, m: Meta, cfg: Config): unknown[] {
+  /** トランザクションの中で呼ぶ。m は書き換えず、新しい値を返す(途中で失敗しても m が崩れないように) */
+  private applyPush(input: PushInput, m: Meta, cfg: Config): { results: unknown[]; next: number; bytes: number; count: number; written: number } {
     const now = m.last_used
     let next = m.next
     let bytes = m.used_bytes
@@ -343,8 +484,10 @@ export class SpaceDO extends DurableObject<Env> {
       next++
       bytes += r.ciphertext.length - (cur?.ciphertext.length ?? 0)
       if (!cur) count++
-      this.sql.exec(
-        `INSERT OR REPLACE INTO records (record_id, version, kind_tag, schema_version, deleted, nonce, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      // 置き換えは行の更新で(INSERT OR REPLACE は削除と挿入で索引も 2 度書く)
+      this.write(
+        `INSERT INTO records (record_id, version, kind_tag, schema_version, deleted, nonce, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (record_id) DO UPDATE SET version = excluded.version, kind_tag = excluded.kind_tag, schema_version = excluded.schema_version, deleted = excluded.deleted, nonce = excluded.nonce, ciphertext = excluded.ciphertext, updated_at = excluded.updated_at`,
         r.record_id, next, r.kind_tag, r.schema_version, r.deleted ? 1 : 0, r.nonce, r.ciphertext, now,
       )
       const ok = { record_id: r.record_id, status: 200, version: next }
@@ -354,11 +497,17 @@ export class SpaceDO extends DurableObject<Env> {
     // tombstone も数える。外す効果は片づけまで遅れる
     if (bytes > cfg.quotaBytes || count > cfg.quotaRecords) throw new QuotaExceeded()
     const written = next !== m.next ? 1 : m.ever_written
-    this.sql.exec('UPDATE meta SET next = ?, used_bytes = ?, record_count = ?, ever_written = ? WHERE id = 1', next, bytes, count, written)
-    this.sql.exec('INSERT INTO requests (request_id, results, at) VALUES (?, ?, ?)', input.request_id, JSON.stringify(stored), now)
-    // 保存の枠の外で溜まらないよう、件数で切る
-    this.sql.exec('DELETE FROM requests WHERE seq <= (SELECT MAX(seq) FROM requests) - ?', REQUESTS_KEPT)
-    return results
+    // 回数と最終使用もこの 1 行に乗せる
+    this.write(
+      'UPDATE meta SET next = ?, used_bytes = ?, record_count = ?, ever_written = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1',
+      next, bytes, count, written, m.minute, m.minute_count, m.day, m.day_count, now,
+    )
+    this.write('INSERT INTO requests (request_id, results, at, head) VALUES (?, ?, ?, ?)', input.request_id, JSON.stringify(stored), now, next)
+    // 保存の枠の外で溜まらないよう件数で切る。毎回ではなく、通番が TRIM_EVERY の区切りを越えたときだけ(実体が落ちても区切りは変わらない)
+    if (Math.floor(next / TRIM_EVERY) !== Math.floor(m.next / TRIM_EVERY)) {
+      this.write('DELETE FROM requests WHERE head < (SELECT head FROM requests ORDER BY head DESC LIMIT 1 OFFSET ?)', REQUESTS_KEPT - TRIM_EVERY - 1)
+    }
+    return { results, next, bytes, count, written }
   }
 
   /** 端末からの領域の削除 */
@@ -408,10 +557,10 @@ export class SpaceDO extends DurableObject<Env> {
       const cutoff = now - cfg.tombGcDays * DAY
       const old = this.sql.exec<{ n: number; top: number | null; size: number | null }>('SELECT COUNT(*) AS n, MAX(version) AS top, SUM(LENGTH(ciphertext)) AS size FROM records WHERE deleted = 1 AND updated_at <= ?', cutoff).one()
       if (old.n > 0) {
-        this.sql.exec('DELETE FROM records WHERE deleted = 1 AND updated_at <= ?', cutoff)
-        this.sql.exec('UPDATE meta SET gc_floor = MAX(gc_floor, ?), used_bytes = used_bytes - ?, record_count = record_count - ? WHERE id = 1', old.top, old.size, old.n)
+        this.write('DELETE FROM records WHERE deleted = 1 AND updated_at <= ?', cutoff)
+        this.write('UPDATE meta SET gc_floor = MAX(gc_floor, ?), used_bytes = used_bytes - ?, record_count = record_count - ? WHERE id = 1', old.top, old.size, old.n)
       }
-      this.sql.exec('DELETE FROM requests WHERE at <= ?', now - REQUESTS_TTL_MS)
+      this.write('DELETE FROM requests WHERE at <= ?', now - REQUESTS_TTL_MS)
     })
   }
 
@@ -428,6 +577,7 @@ export class SpaceDO extends DurableObject<Env> {
   }
 
   override async alarm(): Promise<void> {
+    await this.retell()
     try {
       await this.housekeep()
     } finally {

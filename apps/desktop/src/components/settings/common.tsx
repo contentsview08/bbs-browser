@@ -22,6 +22,8 @@ export interface SettingsProps {
   onRemoveSite: (menuUrl: string) => void
   /** BBS メニューの板一覧。refresh なら取り直す(なければ保存してあるものを返す) */
   loadBoards: (site: SiteConfig, refresh: boolean) => Promise<Board[]>
+  /** サイトごとの設定の一覧を作る URL(取ってある板一覧・お気に入りのスレ・閲覧履歴の板) */
+  loadSiteUrls?: () => Promise<string[]>
   onToggleFavorite: (board: Board) => void
   /** 板一覧でダブルクリックした板を開く(設定は閉じる) */
   onOpenBoard: (board: Board) => void
@@ -201,6 +203,8 @@ export function OrderEditor<K extends string>(props: {
   onChange: (v: K[]) => void
   /** 出していないものの見出し */
   restTitle?: string
+  /** これより少なくは外せない */
+  minShown?: number
 }) {
   const shown = props.value.filter((k) => props.all.some((t) => t.key === k))
   const rest = props.all.map((t) => t.key).filter((k) => !shown.includes(k))
@@ -214,7 +218,7 @@ export function OrderEditor<K extends string>(props: {
         onChange={props.onChange}
         render={(k, handle, dragging) => (
           <div className={`flex items-center gap-3 ${pad} border border-c-border ${dragging ? 'bg-c-surface2' : 'bg-c-surface'}`}>
-            <button type="button" onClick={() => props.onChange(shown.filter((x) => x !== k))} className="text-c-heat-very-hot" title="外す">
+            <button type="button" disabled={shown.length <= (props.minShown ?? 0)} onClick={() => props.onChange(shown.filter((x) => x !== k))} className="text-c-heat-very-hot disabled:opacity-30" title="外す">
               <span className="material-symbols-outlined fill text-xl">do_not_disturb_on</span>
             </button>
             <span className="material-symbols-outlined text-xl text-c-text-muted">{def(k).icon}</span>

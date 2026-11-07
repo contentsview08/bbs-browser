@@ -17,11 +17,14 @@ data class BoardMeta(
     val omitNoname: Boolean? = null,
     /** 板の既定の名前のほかに、名無しとみなす名前 */
     val nonames: List<String> = emptyList(),
+    /** ファビコンの上書き(画像の URL) */
+    val icon: String? = null,
 ) {
-    val isEmpty get() = alias == null && defaultName == null && defaultMail == null && omitNoname == null && nonames.isEmpty()
+    val isEmpty get() = icon == null && alias == null && defaultName == null && defaultMail == null && omitNoname == null && nonames.isEmpty()
 
     fun toJson(): JSONObject = JSONObject().apply {
         alias?.let { put("alias", it) }
+        icon?.let { put("icon", it) }
         defaultName?.let { put("defaultName", it) }
         defaultMail?.let { put("defaultMail", it) }
         omitNoname?.let { put("omitNoname", it) }
@@ -35,6 +38,7 @@ data class BoardMeta(
             o.optString("defaultMail").ifEmpty { null },
             if (o.has("omitNoname")) o.optBoolean("omitNoname") else null,
             o.optJSONArray("nonames")?.let { a -> List(a.length()) { a.optString(it) }.filter { it.isNotEmpty() } } ?: emptyList(),
+            o.optString("icon").ifEmpty { null },
         )
     }
 }

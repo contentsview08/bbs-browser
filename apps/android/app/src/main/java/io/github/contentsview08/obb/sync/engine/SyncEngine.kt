@@ -45,7 +45,7 @@ import kotlin.random.Random
 /** ticket は領域の作成の許可証。k と一緒に動くので一緒に置く。これだけでは領域を作れない(トークンが要る) */
 class SyncKeyMaterial(val k: ByteArray, val deviceId: String, val ticket: String?)
 
-/** 本番は Android Keystore で包んで専用の Prefs に置く(段階 4)。k を同期の表にも settings の Prefs にも置かない */
+/** Android Keystore で包んで専用の Prefs に置く(data/SyncKeyVault.kt)。k を同期の表にも settings の Prefs にも置かない */
 interface SyncKeyStore {
     suspend fun load(): SyncKeyMaterial?
     suspend fun save(v: SyncKeyMaterial)
@@ -190,7 +190,8 @@ class SyncEngine(
         enter("off")
     }
 
-    private fun clearTables() = db.batch(listOf(SqlStatement("DELETE FROM sync_records"), SqlStatement("DELETE FROM sync_ops"), SqlStatement("DELETE FROM sync_state")))
+    /** サーバーの URL の上書きは同期の中身ではないので残す */
+    private fun clearTables() = db.batch(listOf(SqlStatement("DELETE FROM sync_records"), SqlStatement("DELETE FROM sync_ops"), SqlStatement("DELETE FROM sync_state WHERE key <> 'server_url'")))
 
     /**
      * 確認の答え。合流で keep_local は「進まない」なのでやめる。

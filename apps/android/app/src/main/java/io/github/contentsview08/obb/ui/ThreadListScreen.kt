@@ -401,7 +401,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                             )
                         }
                         // フッターなので、選んでいる印の線は本文の側(上)に引く
-                        if (active) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp).background(Palette.accent, RoundedCornerShape(1.dp)))
+                        // 横に動かせる並びの中では幅が決まらないので、タブの大きさに合わせてから引く
+                        if (active) Box(Modifier.matchParentSize()) {
+                            Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp).background(Palette.accent, RoundedCornerShape(1.dp)))
+                        }
                     }
                 }
                 }

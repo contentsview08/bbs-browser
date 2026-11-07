@@ -201,6 +201,7 @@ fun BoardMetaSheet(vm: AppViewModel, url: String, name: String, onDismiss: () ->
                 Text("ここで決めたものだけ、この板で全体の設定の代わりに使います", color = Palette.textMuted, fontSize = 13.sp)
                 Head("見せ方")
                 Field("別名(板名の代わりに出す名前)", m.alias, name) { set(m.copy(alias = it)) }
+                Field("ファビコン(画像の URL)", m.icon, "自動(板のページから探す)") { set(m.copy(icon = it)) }
                 Head("書き込み")
                 Field("名前欄の既定値", m.defaultName, "ふだんの名前のまま") { set(m.copy(defaultName = it)) }
                 Field("メール欄の既定値", m.defaultMail, "ふだんのメールのまま(sage など)") { set(m.copy(defaultMail = it)) }

@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
@@ -86,14 +87,22 @@ import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.data.NgRule
 import io.github.contentsview08.obb.data.LicensesFile
 import io.github.contentsview08.obb.data.ThumbMode
+import io.github.contentsview08.obb.data.PAST_TABS
+import io.github.contentsview08.obb.data.shownPastTabs
+import io.github.contentsview08.obb.data.normalizeForSearch
+import io.github.contentsview08.obb.data.BoardMeta
+import io.github.contentsview08.obb.bbs.siteDomain
+import io.github.contentsview08.obb.bbs.uniqueSiteDomains
 import io.github.contentsview08.obb.data.filterLicenses
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import io.github.contentsview08.obb.data.parseLicenses
 import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "サイトごとの設定", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア",
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "syncdev" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -108,9 +117,9 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     // ページの下の画面(使っているソフトウェア・自分の配色)は、戻ると親のページへ。検索から開いたページの詳しい設定は、そのページを出るまで出しておく
     val goBack = {
         sub = when (sub) {
-            "licenses" -> "about"
+            "licenses", "syncdev" -> "about"
             "custom" -> "theme"
-            else -> null
+            else -> if (sub?.startsWith(SITE_PAGE) == true) "accounts" else null
         }
         viaSearch = viaSearch && sub != null
     }
@@ -124,7 +133,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
         ),
     ) {
         if (sub == null) HeaderBar("設定", onNav = { vm.drawerOpen = true })
-        else HeaderBar(TITLES[sub] ?: "", onNav = { goBack() }, navIsBack = true)
+        else HeaderBar(TITLES[sub] ?: sub.orEmpty().removePrefix(SITE_PAGE), onNav = { goBack() }, navIsBack = true)
         HorizontalDivider(color = Palette.border)
         // 一覧は長いので、外のスクロールに入れず自分でスクロールする
         if (sub == "licenses") { LicensesPage(); return@Column }
@@ -135,6 +144,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "theme" -> ThemePage(vm) { sub = it }
                 "text" -> TextPage(vm)
                 "list" -> ListPage(vm)
+                "history" -> HistoryPage(vm)
                 "thread" -> ThreadPage(vm)
                 "media" -> MediaPage(vm)
                 "write" -> WritePage(vm)
@@ -144,13 +154,15 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "ng" -> NgPage(vm)
                 "sites" -> SitesPage(vm, menus = false)
                 "menus" -> SitesPage(vm, menus = true)
-                "accounts" -> AccountsPage(vm)
+                "accounts" -> AccountsPage(vm) { sub = it }
                 "backup" -> BackupPage(vm)
                 "about" -> AboutPage(vm) { sub = it }
                 "custom" -> CustomSchemeEditor(vm.prefs)
+                "syncdev" -> SyncDevPage(vm)
+                else -> if (sub?.startsWith(SITE_PAGE) == true) SiteSettings(vm, sub.orEmpty().removePrefix(SITE_PAGE))
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
-            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus", "accounts") && !(vm.prefs.showAdvanced || viaSearch)) {
+            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus", "accounts", "syncdev", "history") && sub?.startsWith(SITE_PAGE) != true && !(vm.prefs.showAdvanced || viaSearch)) {
                 Text(
                     "詳しい設定も出す",
                     Modifier.padding(16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
@@ -210,6 +222,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     Group("画面") {
         NavRow(Icons.AutoMirrored.Filled.ViewList, Color(0xFF0EA5E9), "スレ一覧", desc = "並び順・キーワード・ログ") { open("list") }
         NavRow(Icons.Filled.Forum, Color(0xFF3B82F6), "スレ表示", desc = "開いたときの位置・本文・リンク") { open("thread") }
+        NavRow(Icons.Filled.History, Color(0xFF0D9488), "履歴", desc = "タブの並び・置き場") { open("history") }
         NavRow(Icons.Filled.Image, Color(0xFF06B6D4), "画像と動画", desc = "サムネイル・読み込み・グロ注意") { open("media") }
     }
     Group("書き込み") {
@@ -227,7 +240,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
         NavRow(Icons.Filled.Star, Color(0xFF14B8A6), "お気に入り板", value = "${vm.favorites.size} 板") { open("sites") }
         NavRow(Icons.Filled.Dns, Color(0xFF0E7490), "BBS メニュー", desc = "板一覧を取る掲示板") { vm.reloadSites(); open("menus") }
         NavRow(Icons.Filled.TravelExplore, Color(0xFF0891B2), "板を探す", desc = "BBS メニューから板を選ぶ") { vm.openRoot(Page.Boards()) }
-        NavRow(Icons.Filled.AccountCircle, Color(0xFF7C3AED), "サイトごとの設定", desc = "アカウント(hono-bbs のユーザー ID とパスワード)", value = if (p.honoUser.isNotEmpty()) "登録済み" else null) { open("accounts") }
+        NavRow(Icons.Filled.Tune, Color(0xFF7C3AED), "掲示板ごとの設定", desc = "サイトごと・板ごとに変えたいもの") { open("accounts") }
     }
     Group {
         SwitchRow("詳しい設定を出す", p.showAdvanced, desc = "オフのときは、よく使う項目だけを出します(検索ではいつも全部から探せます)") { p.showAdvanced = it }
@@ -347,6 +360,27 @@ private fun ListPage(vm: AppViewModel) {
     if (LocalAdvanced.current) Group("閲覧履歴(ログ)", note = "この日数より長く開いていないスレのログ(閲覧履歴とレス)を消します。0 なら消しません。お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
         NumberRow("残す日数", p.logRetentionDays, unit = "日", range = 0..3650, zeroLabel = "消さない", presets = listOf(7, 30, 90, 365, 0)) { p.logRetentionDays = it }
         ActionRow("今すぐ消す") { vm.pruneLogsNow() }
+    }
+}
+
+@Composable
+private fun HistoryPage(vm: AppViewModel) {
+    val p = vm.prefs
+    Group("タブ", note = "履歴の画面に出すタブ。≡ を掴んで並べ替え、スイッチで出す・出さないを決めます(上が左)。すべては隠せません") {
+        val on = shownPastTabs(p.pastTabs)
+        @Composable fun TabRow(k: String, name: String, shown: Boolean, handle: Modifier?) =
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, Modifier.weight(1f), color = if (shown) Palette.textStrong else Palette.textMuted, fontSize = 15.sp)
+                Switch(shown, { v -> p.pastTabs = (if (v) on + k else on - k).joinToString(",") }, Modifier.padding(end = 4.dp), enabled = !shown || on.size > 1, colors = accentSwitchColors())
+                if (handle != null) DragHandleIcon(handle) else Spacer(Modifier.size(46.dp))
+            }
+        ReorderableColumn(on, { it }, { from, to -> p.pastTabs = shownPastTabs(p.pastTabs).toMutableList().apply { add(to, removeAt(from)) }.joinToString(",") }) { k, handle, _ ->
+            TabRow(k, PAST_TABS.first { it.first == k }.second, true, handle)
+        }
+        for ((k, name) in PAST_TABS.filter { it.first !in on }) TabRow(k, name, false, null)
+    }
+    Group {
+        ChoiceRow("タブの置き場", p.pastTabsPosition, listOf("header" to "ヘッダー(上)", "footer" to "フッター(下)")) { p.pastTabsPosition = it }
     }
 }
 
@@ -744,14 +778,139 @@ private fun SitesPage(vm: AppViewModel, menus: Boolean) {
     }
 }
 
+/** hono-bbs のログインの欄を出すか。保存したアカウントは、この値にかかわらず書き込みに使う */
+private const val SHOW_HONO_LOGIN = false
+
+/** サイト 1 つぶんの画面のキーの頭(続けて主ドメイン) */
+private const val SITE_PAGE = "site:"
+
+/** 設定の板の一覧に出す、URL だけの板の名前 */
+private fun boardLabel(url: String) = url.removePrefix("https://").removePrefix("http://").trimEnd('/')
+
+/** 板の設定の中身を短く(PC 版の 板ごとの設定 と同じ言葉) */
+private fun boardMetaSummary(m: BoardMeta?): String = listOfNotNull(
+    m?.alias?.let { "別名「$it」" },
+    m?.defaultName?.let { "名前「$it」" },
+    m?.defaultMail?.let { "メール「$it」" },
+    m?.omitNoname?.let { if (it) "名無しを省く" else "名無しを省かない" },
+    m?.nonames?.takeIf { it.isNotEmpty() }?.let { "名無し扱い ${it.size} 件" },
+).joinToString("・")
+
+/** 板の 1 行: 名前と設定の中身。押すと板の設定を開く */
+@Composable
+private fun BoardMetaRow(vm: AppViewModel, url: String, name: String, onOpen: () -> Unit) {
+    val m = vm.prefs.boardMeta[url]
+    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(m?.alias ?: name, color = Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(boardMetaSummary(m).ifEmpty { "全体の設定のまま" }, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textMuted)
+    }
+}
+
+/** 板の URL を設定の鍵の形に(開いたときの板の URL と同じにしないと効かない)。板として読めなければ null */
+private fun boardKeyOf(url: String): String? = when (val r = io.github.contentsview08.obb.bbs.UrlRoute.parse(url)) {
+    is io.github.contentsview08.obb.bbs.UrlRoute.BoardPage -> r.boardUrl
+    is io.github.contentsview08.obb.bbs.UrlRoute.Thread -> r.thread.boardUrl
+    else -> null
+}
+
 /**
- * サイトごとの設定(PC 版の 掲示板ごとの設定 → サイトごと と同じ)。いまは hono-bbs のアカウントだけ。
+ * 掲示板ごとの設定(PC 版と同じ分け方)。全体の設定の上に、サイトごと・板ごとに変えたいものを重ねる。
+ * サイトは BBS メニュー・板一覧・お気に入り・閲覧履歴・板ごとの設定の URL の主ドメイン(bbs/SiteDomain.kt)
+ */
+@Composable
+private fun AccountsPage(vm: AppViewModel, open: (String) -> Unit) {
+    val p = vm.prefs
+    var menuBoards by remember { mutableStateOf(emptyList<String>()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.reloadSites(); menuBoards = vm.menuBoardUrls() }
+    val sites = uniqueSiteDomains(
+        vm.sites.map { it.first } + menuBoards + vm.favorites.map { it.url } + vm.favThreads.map { it.thread.boardUrl } +
+            vm.history.map { it.thread.boardUrl } + p.boardMeta.keys,
+    )
+    Text(
+        "ほかの分類の設定はすべての掲示板に効きます。ここでは、サイトごと・板ごとに変えたいものだけを決めます。決めていないものは全体の設定のままです",
+        Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp,
+    )
+    Group("サイトごとの設定", note = "BBS メニュー・板・お気に入り・開いたスレの URL から、サイトを自動で並べます(サブドメインはまとめます)") {
+        if (sites.isEmpty()) Text("まだありません(BBS メニューや板を足すと出ます)", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
+        for (d in sites) SiteRow(d, vm.sites.firstOrNull { siteDomain(it.first) == d }?.let { siteLabel(it.first, it.second) }?.takeIf { it != d }) { open(SITE_PAGE + d) }
+    }
+    // 名前の分かっている板(お気に入り)と、設定のある板。URL で足した板は、設定を入れるまで覚えておくだけ
+    var added by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var editing by remember { mutableStateOf<String?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val boards = vm.favorites.map { it.url to it.name } + (p.boardMeta.keys + added).distinct().filter { u -> vm.favorites.none { it.url == u } }.map { it to boardLabel(it) }
+    val q = normalizeForSearch(query.trim())
+    val shown = if (q.isEmpty()) boards else boards.filter { (u, n) -> normalizeForSearch("${p.boardMeta[u]?.alias.orEmpty()} $n $u").contains(q) }
+    Group("板ごとの設定", note = "別名・ファビコン・名前欄とメール欄の既定値・名無しの扱いを、板ごとに決めます。お気に入りの板と、設定のある板が並びます") {
+        if (boards.size > 8) SearchField(query, { query = it }, "${boards.size} 板から絞り込む")
+        for ((u, n) in shown) BoardMetaRow(vm, u, n) { editing = u }
+        if (shown.isEmpty()) Text(if (boards.isEmpty()) "お気に入りの板がまだありません" else "見つかりません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
+        ActionRow("お気に入りでない板を設定する", Icons.Filled.Add) { adding = true }
+    }
+    editing?.let { u -> BoardMetaSheet(vm, u, boards.firstOrNull { it.first == u }?.second ?: boardLabel(u)) { editing = null } }
+    if (adding) {
+        var url by remember { mutableStateOf("") }
+        var error by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("板の URL") },
+            text = {
+                OutlinedTextField(
+                    url, { url = it; error = false }, singleLine = true, placeholder = { Text("https://eagle.5ch.io/livejupiter/") }, isError = error,
+                    supportingText = if (error) ({ Text("板の URL として読めません") }) else null,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val key = boardKeyOf(url)
+                    if (key == null) error = true
+                    else { if (key !in added) added = added + key; editing = key; adding = false }
+                }) { Text("設定する") }
+            },
+            dismissButton = { TextButton(onClick = { adding = false }) { Text("やめる") } },
+        )
+    }
+}
+
+/** サイトの行: 主ドメインと、分かっていればサイトの名前 */
+@Composable
+private fun SiteRow(title: String, sub: String?, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Palette.textStrong, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) Text(sub, color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Palette.textMuted)
+    }
+}
+
+/** サイト 1 つぶんの設定。いまサイトだけで決めるものはなく、そのサイトの板の設定へ入る入口 */
+@Composable
+private fun SiteSettings(vm: AppViewModel, domain: String) {
+    val p = vm.prefs
+    if (SHOW_HONO_LOGIN && io.github.contentsview08.obb.bbs.HonoBbs.isAccountSite("https://$domain/")) HonoAccountSection(vm)
+    var editing by remember { mutableStateOf<String?>(null) }
+    val boards = (vm.favorites.map { it.url to it.name } + (vm.favThreads + vm.history).map { it.thread.boardUrl to boardLabel(it.thread.boardUrl) } + p.boardMeta.keys.map { it to boardLabel(it) })
+        .distinctBy { it.first }.filter { siteDomain(it.first) == domain }
+    Group("このサイトの板", note = "押すとその板の設定を開きます。お気に入りの板・お気に入りのスレや開いたスレの板・設定のある板が並びます") {
+        if (boards.isEmpty()) Text("まだありません", Modifier.padding(16.dp), color = Palette.textMuted, fontSize = 14.sp)
+        for ((u, n) in boards) BoardMetaRow(vm, u, n) { editing = u }
+    }
+    editing?.let { u -> BoardMetaSheet(vm, u, boards.firstOrNull { it.first == u }?.second ?: boardLabel(u)) { editing = null } }
+}
+
+/**
+ * hono-bbs のアカウント(SHOW_HONO_LOGIN で出す)。
  * ユーザー ID とパスワードを保存し、書き込むときにそのサイトにログインして使う(bbs/HonoBbs.kt)。
  * 「ログインして確かめる」は、知っているサイト(BBS メニューに登録した hono-bbs・お気に入り板)に今ログインしてみる。
  * 登録は、メールに確認コード → コード・ID・パスワードで作る(Turnstile が要れば、書き込みと同じく認証ページとコードを出す)
  */
 @Composable
-private fun AccountsPage(vm: AppViewModel) {
+private fun HonoAccountSection(vm: AppViewModel) {
     val p = vm.prefs
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
@@ -883,9 +1042,24 @@ private fun AboutPage(vm: AppViewModel, open: (String) -> Unit) {
     Group("ライセンス", note = "このアプリに入っているオープンソースのソフトウェアと、そのライセンスを見られます") {
         ActionRow("使っているソフトウェア") { open("licenses") }
     }
+    var syncDev by remember { mutableStateOf(io.github.contentsview08.obb.data.syncDevOpen(context)) }
+    if (syncDev) Group { ActionRow(io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section")) { open("syncdev") } }
+    var taps by remember { mutableStateOf(0) }
+    var lastTap by remember { mutableStateOf(0L) }
     Group {
         InfoRow("名前", "OBB(Open BBS Browser)")
-        InfoRow("版", version)
+        // 続けて押すと開発用の同期の画面を出す。間が 2 秒空くと数え直す
+        Box(Modifier.pointerInput(Unit) {
+            detectTapGestures {
+                val t = System.currentTimeMillis()
+                taps = if (t - lastTap > 2000) 1 else taps + 1
+                lastTap = t
+                if (taps >= io.github.contentsview08.obb.sync.SyncText.REVEAL_TAPS) {
+                    io.github.contentsview08.obb.data.openSyncDev(context)
+                    syncDev = true
+                }
+            }
+        }) { InfoRow("版", version) }
         InfoRow("AA の字", "aahub_light")
     }
 }

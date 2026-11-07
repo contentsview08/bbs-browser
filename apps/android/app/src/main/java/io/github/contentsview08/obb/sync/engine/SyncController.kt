@@ -1,0 +1,184 @@
+package io.github.contentsview08.obb.sync.engine
+
+import io.github.contentsview08.obb.sync.PairingCode
+import io.github.contentsview08.obb.sync.SyncText
+import io.github.contentsview08.obb.sync.adapters.SyncAdapter
+import io.github.contentsview08.obb.sync.deriveKeys
+import io.github.contentsview08.obb.sync.encodePairingCode
+import io.github.contentsview08.obb.sync.generateMasterKey
+import io.github.contentsview08.obb.sync.parsePairingCode
+import io.github.contentsview08.obb.sync.parseStrictJson
+import io.github.contentsview08.obb.sync.spaceId
+import kotlinx.coroutines.CancellationException
+
+// 画面から使う同期の入口。PC 版の packages/sync/src/engine/controller.ts と同じ順番。使っていない間は鍵保管にも通信にも触らない
+
+const val PAIRING_SHOW_MS = 60_000L
+
+/** 利用者の操作を続けられない理由。文は SyncText.message */
+class SyncHostError(val code: String) : Exception(code)
+
+class SyncStatus(
+    val enabled: Boolean,
+    val state: String,
+    /** 領域の先頭。鍵は出さない */
+    val space: String?,
+    /** 送信待ちの件数(まだレコードにしていない操作を含む) */
+    val pending: Long,
+    val lastError: String?,
+    val lastErrorText: String?,
+    val lastPullAt: Long?,
+    val lastPushAt: Long?,
+    val serverUrl: String,
+    /** 開発用の上書き。なければ既定値 */
+    val serverOverride: String?,
+    val confirmLost: Long?,
+)
+
+class SyncController(
+    private val db: SyncSql,
+    private val keyStore: SyncKeyStore,
+    private val transport: SyncTransport,
+    private val defaultServerUrl: String,
+    private val adapters: List<SyncAdapter>,
+    private val now: () -> Long,
+    private val allowLocalhost: Boolean = false,
+    /** 鍵保管に値があるかもしれない。使ったことのない人の鍵保管を開かないための控え */
+    private val keyHint: () -> Boolean,
+    /** /start の窓を開く。許可証か、閉じたら null */
+    private val openStartWindow: suspend (String) -> String?,
+    private val onCycle: (CycleResult) -> Unit = {},
+) {
+    private val t = SyncTables(db)
+    private var engineValue: SyncEngine? = null
+    private var engineUrl = ""
+    private var spaceHead: String? = null
+
+    private fun overrideUrl(): String? = t.state("server_url")
+    private fun serverUrl(): String = overrideUrl() ?: defaultServerUrl
+    private fun isEnabled() = t.state("enabled") == "1"
+
+    private fun engine(): SyncEngine {
+        val url = serverUrl()
+        val cur = engineValue
+        if (cur != null && engineUrl == url) return cur
+        engineUrl = url
+        return SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = url, adapters = adapters, now = now, allowLocalhost = allowLocalhost).also { engineValue = it }
+    }
+
+    private suspend fun run(manual: Boolean): CycleResult = engine().runCycle(manual).also(onCycle)
+
+    private suspend fun loadKeys(): SyncKeyMaterial? = try {
+        keyStore.load()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        throw SyncHostError("key_store_unavailable")
+    }
+
+    private suspend fun pair(k: ByteArray, ticket: String) {
+        try {
+            engine().pair(k, ticket)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SyncApiError) {
+            throw e
+        } catch (_: Exception) {
+            throw SyncHostError("key_store_unavailable")
+        }
+    }
+
+    private fun spaceOf(k: ByteArray) = spaceId(deriveKeys(k).authToken)
+
+    suspend fun status(): SyncStatus {
+        val enabled = isEnabled()
+        val pending = db.query("SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1) + (SELECT COUNT(*) FROM sync_ops) AS n").firstOrNull()?.get("n") as? Long ?: 0L
+        val lastError = t.state("last_error")
+        if (enabled && spaceHead == null) {
+            val m = try { keyStore.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+            if (m != null) spaceHead = spaceOf(m.k).take(12)
+        }
+        val running = engineValue?.state
+        @Suppress("UNCHECKED_CAST")
+        val confirm = t.state("pending_confirm")?.let { (parseStrictJson(it) as Map<String, Any?>)["lost"] as? Long ?: 0L }
+        return SyncStatus(
+            enabled = enabled,
+            state = if (!enabled) "off" else if (running == null || running == "off") t.state("phase") ?: "idle" else running,
+            space = if (enabled) spaceHead else null,
+            pending = pending,
+            lastError = lastError,
+            lastErrorText = lastError?.let(SyncText::message),
+            lastPullAt = t.state("last_pull_at")?.toLongOrNull(),
+            lastPushAt = t.state("last_push_at")?.toLongOrNull(),
+            serverUrl = serverUrl(),
+            serverOverride = overrideUrl(),
+            confirmLost = confirm,
+        )
+    }
+
+    /** 同期を始める。1 台目は K を作り、窓を閉じたら捨てる。止まっている領域は同じ K で確認を通し直す */
+    suspend fun start(): CycleResult {
+        val url = checkServerUrl(serverUrl(), allowLocalhost)
+        val material = loadKeys()
+        val resuming = material != null && isEnabled()
+        val k = if (resuming) material!!.k else generateMasterKey()
+        val id = spaceOf(k)
+        val ticket = openStartWindow("$url/start?space_id=$id&return=app") ?: throw SyncHostError("cancelled")
+        if (ticketSpaceId(ticket) != id) throw SyncHostError("bad_ticket")
+        if (resuming) engine().setTicket(ticket) else pair(k, ticket)
+        spaceHead = id.take(12)
+        return run(true)
+    }
+
+    /** QR とコピー用のコードの中身。表示は 60 秒で消す */
+    suspend fun pairingCode(): String {
+        if (!isEnabled()) throw SyncHostError("already_on")
+        val m = loadKeys() ?: throw SyncHostError("key_store_unavailable")
+        val ticket = m.ticket ?: throw SyncHostError("ticket_required")
+        return encodePairingCode(PairingCode(m.k, serverUrl(), ticket))
+    }
+
+    suspend fun join(code: String): CycleResult {
+        if (isEnabled()) throw SyncHostError("already_on")
+        val c = parsePairingCode(code, allowLocalhost)
+        loadKeys()
+        writeServerUrl(c.serverUrl)
+        pair(c.k, c.ticket)
+        spaceHead = spaceOf(c.k).take(12)
+        return run(true)
+    }
+
+    suspend fun syncNow(): CycleResult = run(true)
+
+    /** 前面に戻ったとき。pull の間隔はエンジンが守る。使っていないなら何もしない */
+    suspend fun foreground(): CycleResult? {
+        if (!isEnabled() && !keyHint()) return null
+        return run(false)
+    }
+
+    suspend fun leave() {
+        engine().leave()
+        spaceHead = null
+    }
+
+    suspend fun resolveConfirm(choice: String): CycleResult {
+        engine().resolveConfirm(choice)
+        return run(true)
+    }
+
+    private fun writeServerUrl(url: String) {
+        db.batch(listOf(if (url == defaultServerUrl) delState("server_url") else setState("server_url", url)))
+    }
+
+    /**
+     * 空で既定値に戻す。使っている間に変えたら、新しい先に領域がないかもしれないので全件を合わせ直す。
+     * 手元のレコードを消さず、version は計画が決め直す
+     */
+    fun setServerUrl(url: String) {
+        val next = if (url.isBlank()) defaultServerUrl else checkServerUrl(url.trim(), allowLocalhost)
+        if (next == serverUrl()) return
+        val stmts = arrayListOf(if (next == defaultServerUrl) delState("server_url") else setState("server_url", next))
+        if (isEnabled()) stmts += listOf(setState("since", "0"), setState("recreate_pending", "1"), delState("epoch"), delState("gc_floor"), delState("push_inflight"), delState("last_error"))
+        db.batch(stmts)
+    }
+}

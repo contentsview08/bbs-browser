@@ -95,14 +95,14 @@ HKDF の salt は空、長さは 32 バイト。`auth_token` は Bearer では�
 
 ### 保管
 
-- `K` は OS の鍵保管(Windows の資格情報・Linux の Secret Service・Android Keystore で包む)に置く
+- `K` は OS の鍵保管(Windows の資格情報・Linux の Secret Service・Android Keystore で包む)に置く。使ったことのない人の鍵保管は開かない
 - Linux で Secret Service が使えないときは同期を始めず、理由を出す
 - `K` と派生鍵は設定の書き出しとバックアップに入れない。どちらも許可リストにないことをテストで確かめる
 - 全端末で失うと戻せない。任意でリカバリーコードを書き出せる
 
 ### 端末の追加
 
-1. 既存の端末で「端末を追加」を押すと、`K` と許可証を含む QR と、同じ内容のコピー用コードを出す。中身は `obb1.<K の Base64URL>.<許可証>`。新しい端末は Turnstile を通さない
+1. 既存の端末で「端末を追加」を押すと、`K` と許可証とサーバーの URL を含む QR と、同じ内容のコピー用コードを出す。中身は `obb1.<K の Base64URL>.<URL の Base64URL>.<許可証>`(`packages/conformance/sync-pairing.json`)。新しい端末は Turnstile を通さない
 2. スマホは QR を読む。PC にはカメラがないので、コピー用コードを入れる
 3. 60 秒で消す。表示中は警告を出し、スマホでは画面の撮影を止める
 4. 任意の 6 桁 PIN で、中身を Argon2id の鍵で暗号化できる。写真を撮られたあとの総当たりには強くないので、補助として扱う

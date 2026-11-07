@@ -49,7 +49,7 @@ export interface SyncKeyMaterial {
   ticket: string | null
 }
 
-/** 本番は OS の鍵保管に置く(段階 4)。k を同期の表にも settings にも置かない */
+/** OS の鍵保管に置く。k を同期の表にも settings にも置かない */
 export interface SyncKeyStore {
   load(): Promise<SyncKeyMaterial | null>
   save(v: SyncKeyMaterial): Promise<void>
@@ -261,8 +261,9 @@ export class SyncEngine {
     this.enter('off')
   }
 
+  /** サーバーの URL の上書きは同期の中身ではないので残す */
   private clearTables(): Promise<void> {
-    return this.db.batch([{ sql: 'DELETE FROM sync_records' }, { sql: 'DELETE FROM sync_ops' }, { sql: 'DELETE FROM sync_state' }])
+    return this.db.batch([{ sql: 'DELETE FROM sync_records' }, { sql: 'DELETE FROM sync_ops' }, { sql: "DELETE FROM sync_state WHERE key <> 'server_url'" }])
   }
 
   /**

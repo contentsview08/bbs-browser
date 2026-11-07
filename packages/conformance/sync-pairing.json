@@ -1,0 +1,60 @@
+[
+  {
+    "name": "形どおりのコードを作って読める",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdA.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "k_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "server_url": "https://sync.example.test",
+    "ticket": "v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "encode": true
+  },
+  {
+    "name": "前後の空白は無視する",
+    "code": "  obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdA.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk\n",
+    "k_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "server_url": "https://sync.example.test",
+    "ticket": "v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
+  {
+    "name": "http のサーバーは断る",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cDovL3N5bmMuZXhhbXBsZS50ZXN0.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "error": "bad_url"
+  },
+  {
+    "name": "localhost は開発の版だけ",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cDovL2xvY2FsaG9zdDo4Nzg3.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "error": "bad_url"
+  },
+  {
+    "name": "localhost は開発の版で読める",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cDovL2xvY2FsaG9zdDo4Nzg3.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "allow_localhost": true,
+    "k_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "server_url": "http://localhost:8787",
+    "ticket": "v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+  },
+  {
+    "name": "ほかの領域の許可証は断る",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdA.v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "error": "bad_code"
+  },
+  {
+    "name": "鍵の長さが違えば断る",
+    "code": "obb1.AAAAAAAAAAAAAAAAAAAAAA.aHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdA.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "error": "bad_code"
+  },
+  {
+    "name": "頭が違えば断る",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdA.v1.65c9f14dc93888fa8adc4d62e9244bbea8b0f2fd71e478fd18824981c737d7ae.4000000000.k1.CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+    "error": "bad_code"
+  },
+  {
+    "name": "途中で切れていれば断る",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "error": "bad_code"
+  },
+  {
+    "name": "許可証の形が違えば断る",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.aHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdA.v1.abc",
+    "error": "bad_code"
+  }
+]

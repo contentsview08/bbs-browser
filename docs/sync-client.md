@@ -1031,9 +1031,9 @@ interface SyncKeyStore {
 
 | 端末 | 置き場 | 注意 |
 | --- | --- | --- |
-| Windows | 資格情報マネージャー(`keyring` クレートを足す。今は依存にない) | Rust の命令。呼べるのは `main` の窓だけ(`window.label()` を確かめる。権限は全窓で共通なので) |
-| Linux | Secret Service | 使えなければ同期を始めず、理由を出す |
-| スマホ | Android Keystore の AES-GCM の鍵で包み、**専用の Prefs `sync_key`** に置く | `settings` の Prefs に置かない。`Prefs.export` は `sp.all` から除く方式なので、新しい項目が書き出しに入る |
+| Windows | 資格情報マネージャー(`keyring-core` と `windows-native-keyring-store`。`src-tauri/src/sync_key.rs`) | Rust の命令。呼べるのは `main` の窓だけ(`window.label()` を確かめる。権限は全窓で共通なので)。設定の窓は `callMain` で頼む |
+| Linux | Secret Service(`zbus-secret-service-keyring-store`。libdbus が要らない) | 使えなければ同期を始めず、理由を出す |
+| スマホ | Android Keystore の AES-GCM の鍵で包み、**専用の Prefs `sync_key`** に置く(`data/SyncKeyVault.kt`) | `settings` の Prefs に置かない。`allowBackup=false` に加えて `data_extraction_rules.xml` で端末の移行からも外す。包む鍵がなくて開けない値は鍵なしと同じ |
 
 - 許可証は鍵ではないが、`K` と一緒に動くので同じ所に置く。DB の入れ替えで消えない
 - PC の鍵は TypeScript の核で使うため、`main` の WebView のメモリに入る。`innerHTML` を使わない決まりが守りの前提
@@ -1049,6 +1049,7 @@ interface SyncKeyStore {
 対策は次のとおり。
 
 - 鍵保管に `deviceId` も置く(`SyncKeyStore`)
+- `sync_state.enabled` も鍵の控え(PC は `localStorage`、スマホは Prefs の値の有無)もなければ、鍵保管を開かない。使っていない人は Secret Service の解錠を求められない
 - 起動時に `checkDeviceId(鍵保管の deviceId, sync_state.device_id)` で比べる
 
 | 結果 | 場面 | 動き |
@@ -1077,12 +1078,13 @@ interface SyncKeyStore {
 
 | 項目 | 決まり |
 | --- | --- |
-| 既定値 | コードの定数(PC: `packages/sync/src/config.ts`、スマホ: `SyncConfig.kt`) |
+| 既定値 | `packages/sync/server-url.json` の 1 か所。PC は `VITE_OBB_SYNC_SERVER_URL`、スマホは `OBB_SYNC_SERVER_URL` でビルドのときに差し替えられる |
 | 設定 | 上書きの欄だけを保存する。空なら既定値。**上書きしていない人は、アプリの更新で既定値が変われば新しい先へ行く** |
-| 保存先 | `sync_state.server_url`。`settings` に入れない |
+| 保存先 | `sync_state.server_url`。`settings` に入れない。離脱しても残す(同期の中身ではないので)。DB を入れ替えると既定値に戻る |
 | 検査 | `https:` だけ。利用者名・パスワード・クエリ・フラグメントを拒否。開発の版だけ `http://localhost` を許す |
-| リダイレクト | PC は `@tauri-apps/plugin-http` の `maxRedirections: 0`。スマホは同期専用の `OkHttpClient`(`followRedirects(false)`・`followSslRedirects(false)`・Cookie なし・`HttpsFirst` なし。`Http.client` を使わない) |
-| 変更 | 確認を出す(新しい先に `auth_token` が渡る)。変えたら `since = 0` で `joining` から |
+| リダイレクト | PC は Rust の命令 `sync_http`(`src-tauri/src/sync_http.rs`)。`plugin-http` は掲示板の Cookie の置き場を共有し、全体の打ち切りと読み取りの上限を持たず、通信先も権限の表(http を含む)任せになるので使わない。WebView の `fetch` はサーバーが CORS を出さないので使えない。スマホは同期専用の `OkHttpClient`(`followRedirects(false)`・`followSslRedirects(false)`・Cookie なし・`HttpsFirst` なし。`Http.client` を使わない) |
+| 変更 | 確認を出す(新しい先に `auth_token` が渡る)。使っている間に変えたら、`since = 0`・`recreate_pending` で全件を合わせ直す。新しい先に領域がなければ作り、手元を全部送る |
+| 開発の版 | `http://localhost` を許すのは PC の開発の版とスマホの debug だけ。スマホの release は `-PobbSyncAllowLocalhost` を付けたときだけ(R8 を通した版で試すため) |
 | 別の領域 | サーバーを変えても `space_id` は同じ。新しい先に領域がなければ作成の流れへ |
 
 試験の間は `workers.dev` の検証用の URL が既定値になる。本番のドメインを決めたら定数を変えて更新する。古い版のために、古い入口はしばらく残す。
@@ -1090,6 +1092,10 @@ interface SyncKeyStore {
 ## 9. 画面
 
 PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に足す。
+
+### 開発中の入口(段階 4)
+
+一般の利用者に見せない。設定 → このアプリについて の版を 2 秒以内の間隔で 7 回押すと「同期(開発中)」が出る(PC は localStorage、スマホは Prefs `sync_dev` に覚える。書き出しに入らない)。既定で無効で、押すまで鍵保管にも通信にも触らない。
 
 ### 設定の項目
 
@@ -1316,7 +1322,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 1 | `018_sync.sql`、`sql_batch`、`UserOps` の `favorite_thread_*`、アダプター 1 種類、エンジン(手動)、偽サーバー、テストの枠 | 済み。偽サーバーで PC と スマホがお気に入りのスレを往復する。本番の鍵保管・HTTP・板の判定(`BoardResolver`)はまだつないでいない |
 | 2 | なし(サーバーの段階) | 済み |
 | 3 | 許可証を送る形(`SyncApi.createSpace`・`pair`・`setTicket`)、スマホの PoW、偽サーバーの同じ規則 | シナリオ 54〜59 が PC とスマホで同じ結果 |
-| 4 | HTTP の実装、鍵の保管、許可証の窓、手動の同期ボタン、開発用の設定に隠したペアリング。お気に入りのスレだけ | 検証用の Worker で 2 台が実機で同期する |
+| 4 | HTTP の実装、鍵の保管、許可証の窓、手動の同期ボタン、開発用の設定に隠したペアリング。お気に入りのスレだけ。画面の入口は `SyncController`(`packages/sync/src/engine/controller.ts`・`SyncController.kt`)。言葉と QR は `sync-ui.json`・`sync-qr.json` で揃える | 検証用の Worker で 2 台が実機で同期する。PC とエミュレーターでは通した。実機は未確認 |
 | 5 | 閲覧履歴・既読・板と順序 → 書き込み・画像 → NG → 設定の順に足す。初回の同期。きっかけ、まとめ送り、再送、状態の表示、裏に回る瞬間の 1 回の送信 | 全シナリオ。1 万スレの偽データで初回の同期が固まらない。機内モードの復帰で追いつく |
 | 6 | 試験の説明と同意、満員の表示、実際のウィジェット。枠 2 のシミュレーターにエンジンをつなぐ。検証環境で枠 2 にして PC とスマホのエミュレーターで通す | 限定の試験の前の条件を満たす |
 | 7 | 公開の案内 | 公開の前の条件 |

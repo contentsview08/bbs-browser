@@ -176,6 +176,8 @@ class ConformanceTest {
 
     @Test fun hono_account_site() = check("hono-account-site.json") { c -> HonoBbs.isAccountSite(c.getString("input")) }
 
+    @Test fun site_domain() = check("site-domain.json") { c -> siteDomain(c.getString("input")) }
+
     @Test fun hono_relogin() = check("hono-relogin.json") { c ->
         val i = c.getJSONObject("input")
         HonoBbs.shouldRelogin(i.getInt("status"), i.getBoolean("sentAuth"))

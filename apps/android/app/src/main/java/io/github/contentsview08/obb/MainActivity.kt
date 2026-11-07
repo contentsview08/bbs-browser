@@ -61,7 +61,7 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
-    override fun onStart() { super.onStart(); vm.appVisible = true }
+    override fun onStart() { super.onStart(); vm.appVisible = true; vm.syncForeground() }
     override fun onStop() { super.onStop(); vm.appVisible = false }
 
     /** 通知を押して開いたとき: そのスレ・板をアプリの中で開く */

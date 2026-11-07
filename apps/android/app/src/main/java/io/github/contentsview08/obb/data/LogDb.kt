@@ -181,6 +181,12 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         }
     }
 
+    suspend fun cachedBoardUrls(): List<String> = io {
+        readableDatabase.rawQuery("SELECT DISTINCT url FROM boards", null).use { c ->
+            buildList { while (c.moveToNext()) add(c.getString(0)) }
+        }
+    }
+
     suspend fun replaceBoards(menuUrl: String, boards: List<Board>) = io {
         val db = writableDatabase
         db.beginTransaction()
@@ -359,7 +365,8 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
     }
 
     /** お気に入りのスレを足す・外す利用者の操作はここだけを通す */
-    val userOps by lazy { UserOps(AndroidSyncSql { writableDatabase }) }
+    val syncSql by lazy { AndroidSyncSql { writableDatabase } }
+    val userOps by lazy { UserOps(syncSql) }
 
     // ── 書き込み履歴 ──
 

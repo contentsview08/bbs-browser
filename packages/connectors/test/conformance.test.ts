@@ -8,6 +8,7 @@ import { encodeShiftJisForm } from '../src/sjis'
 import type { Encoding } from '../src/types'
 import { boardPathOf, createdAtOf, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
 import { isAccountSite, shouldRelogin } from '../src/honobbs/connector'
+import { siteDomain } from '../src/siteDomain'
 
 interface Case<I, E> {
   name: string
@@ -82,6 +83,12 @@ it('残した差にはどれも理由がある', () => {
 describe('hono-account-site.json', () => {
   it.each(load<string, boolean>('hono-account-site.json'))('$name', (c) => {
     expect(isAccountSite(c.input)).toBe(expectedOf(c))
+  })
+})
+
+describe('site-domain.json', () => {
+  it.each(load<string, string>('site-domain.json'))('$name', (c) => {
+    expect(siteDomain(c.input)).toBe(expectedOf(c))
   })
 })
 

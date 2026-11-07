@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -63,6 +67,8 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.data.HistoryEntry
+import io.github.contentsview08.obb.data.PAST_TABS
+import io.github.contentsview08.obb.data.shownPastTabs
 
 /** サイトの見せる名前(5ch の bbsmenu は「5ちゃんねる」と出す) */
 fun siteLabel(url: String, name: String): String = if (url.contains("menu.5ch.")) "5ちゃんねる" else name
@@ -111,7 +117,7 @@ fun BoardsScreen(vm: AppViewModel, page: io.github.contentsview08.obb.Page.Board
                     FolderRow(siteLabel(url, name), url.removePrefix("https://").substringBefore('/'), Icons.Filled.Public) { page.site = url; page.category = null }
                 }
                 item { SectionLabel("ほかの掲示板") }
-                item { FolderRow("サイトを足す", "bbsmenu・hono-bbs のサイトの URL から", Icons.Filled.Add, chevron = false) { vm.openRoot(io.github.contentsview08.obb.Page.Settings("sites")) } }
+                item { FolderRow("サイトを足す", "bbsmenu・hono-bbs のサイトの URL から", Icons.Filled.Add, chevron = false) { vm.openRoot(io.github.contentsview08.obb.Page.Settings("menus")) } }
                 item { FolderRow("URL で板・スレを開く", "板の一覧がない掲示板は、板・スレの URL から", Icons.Filled.Link, chevron = false) { urlDialog = true } }
                 item { Spacer(Modifier.navigationBarsPadding()) }
             }
@@ -170,32 +176,91 @@ private fun BoardRow(b: Board, favorite: Boolean, onStar: () -> Unit, onClick: (
 }
 
 /**
- * 履歴の画面の上: 題「履歴」と、未読(全板)・閲覧履歴・お気に入り・書き込み・画像の切り替え。
- * どれも「前に見た・書いた・上げたもの」の一覧なので、1 つの画面のタブとしてまとめる(PC 版・Web と同じ並び)
+ * 履歴の画面の枠: 題「履歴」と、未読(全板)・閲覧履歴・お気に入り・書き込み・画像の切り替えのタブ、その間に一覧。
+ * タブの並びと置き場(ヘッダーの下・フッター)は設定の pastTabs・pastTabsPosition。
+ * headerOverlay はヘッダーとタブの全体に重ねる帯(選んでいる間)
  */
 @Composable
-private fun PastHeader(vm: AppViewModel, current: String, onRefresh: (() -> Unit)?, actions: @Composable () -> Unit = {}) {
-    HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
-        actions()
-        if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
+private fun PastFrame(
+    vm: AppViewModel, current: String, onRefresh: (() -> Unit)?,
+    actions: @Composable () -> Unit = {},
+    headerOverlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+    belowHeader: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    val footer = vm.prefs.pastTabsPosition == "footer"
+    Column(Modifier.fillMaxSize().background(Palette.base)) {
+        Box {
+            Column {
+                HeaderBar("履歴", onNav = { vm.drawerOpen = true }) {
+                    actions()
+                    if (onRefresh != null) BarIcon(Icons.Filled.Refresh, "新着を確かめる") { onRefresh() }
+                }
+                if (!footer) PastTabBar(vm, current, footer = false)
+                HorizontalDivider(color = Palette.border)
+            }
+            headerOverlay()
+        }
+        belowHeader()
+        // タブが画面の下の余白を受け持つので、一覧の側で重ねて空けない
+        val insets = if (footer) Modifier.consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars) else Modifier
+        Box(Modifier.weight(1f).fillMaxWidth().then(insets)) { content() }
+        if (footer) {
+            HorizontalDivider(color = Palette.border)
+            PastTabBar(vm, current, footer = true)
+        }
     }
-    Row(Modifier.fillMaxWidth().background(Palette.bar).padding(horizontal = 10.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((k, label) in listOf("unread" to "未読", "history" to "閲覧", "fav" to "お気に入り", "posts" to "書き込み", "uploads" to "画像")) {
-            val on = k == current
-            val count = when (k) { "unread" -> vm.allUnread.size; "fav" -> vm.favThreads.size; else -> 0 }
-            Row(
-                Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Palette.accentWash else Palette.surface2)
-                    .border(1.dp, if (on) Palette.accent else Color.Transparent, RoundedCornerShape(50))
-                    .clickable(enabled = !on) { vm.openPast(k) }.padding(vertical = 7.dp),
-                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(label, color = if (on) Palette.accent else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
-                if (count > 0) Text(" $count", color = if (k == "unread") Palette.unread else Palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+}
+
+/** 履歴のタブ。スレ一覧のタブと同じ見た目。余った幅は等分して足し、入りきらなければ横に動かせる */
+@Composable
+private fun PastTabBar(vm: AppViewModel, current: String, footer: Boolean) {
+    val tabs = shownPastTabs(vm.prefs.pastTabs)
+    val height = if (footer) vm.prefs.footerHeight else PAST_TAB_HEIGHT
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().background(Palette.bar).then(if (footer) Modifier.navigationBarsPadding() else Modifier)) {
+        val available = constraints.maxWidth
+        androidx.compose.ui.layout.Layout(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            content = {
+            for (k in tabs) {
+                val on = k == current
+                val count = when (k) { "unread" -> vm.allUnread.size; "fav" -> vm.favThreads.size; else -> 0 }
+                Box(
+                    Modifier.clickable(enabled = !on) { vm.openPast(k) }
+                        .background(if (on) Palette.accentWash else Color.Transparent).heightIn(min = height.dp).padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(PAST_TABS.first { it.first == k }.second, color = if (on) Palette.accent else Palette.textMuted, fontSize = 14.sp, maxLines = 1, softWrap = false)
+                        if (count > 0) {
+                            if (k == "unread") UnreadBadge(count)
+                            else Text(badgeCount(count), color = Palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                        }
+                    }
+                    // 選んでいる印の線は本文の側に引く
+                    if (on) Box(Modifier.matchParentSize()) {
+                        Box(Modifier.align(if (footer) Alignment.TopCenter else Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(Palette.accent, RoundedCornerShape(1.dp)))
+                    }
+                }
+            }
+            },
+        ) { measurables, _ ->
+            val natural = measurables.map { it.maxIntrinsicWidth(Int.MAX_VALUE) }
+            val spare = maxOf(0, available - natural.sum())
+            val extra = spare / measurables.size
+            val placeables = measurables.mapIndexed { i, m ->
+                // 割り切れない分は前のタブから 1 画素ずつ足し、右端に隙間を残さない
+                m.measure(androidx.compose.ui.unit.Constraints.fixedWidth(natural[i] + extra + if (i < spare % measurables.size) 1 else 0))
+            }
+            layout(placeables.sumOf { it.width }, placeables.maxOf { it.height }) {
+                var x = 0
+                for (pl in placeables) { pl.placeRelative(x, 0); x += pl.width }
             }
         }
     }
-    HorizontalDivider(color = Palette.border)
 }
+
+private const val PAST_TAB_HEIGHT = 44
 
 /** 過去のスレの 1 行(どのタブでも同じ形): スレタイ、下に板と時間、右に レス数と未読。書き込みのタブは、書いた本文を下に */
 @Composable
@@ -278,15 +343,16 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     androidx.activity.compose.BackHandler(enabled = selecting) { stopSelecting() }
     if (confirmDel) ConfirmDeleteDialog(vm.prefs, count = picked.size, onDelete = { vm.deleteLogsOf(picked); stopSelecting() }) { confirmDel = false }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, refresh, swipe))) {
-    Column(Modifier.fillMaxSize().background(Palette.base)) {
-        // 選んでいる間の帯はヘッダーに重ねる(差し込むと、一覧が下にずれて押す所が動く)
-        Box {
-            PastHeader(vm, tab, refresh) {
-                if (tab == "history") {
-                    BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
-                    if (entries.isNotEmpty()) BarIcon(Icons.Filled.Checklist, "選んでログを削除") { selecting = true }
-                }
+    PastFrame(
+        vm, tab, refresh,
+        actions = {
+            if (tab == "history") {
+                BarIcon(Icons.Filled.Search, "スレタイを探す") { searching = true }
+                if (entries.isNotEmpty()) BarIcon(Icons.Filled.Checklist, "選んでログを削除") { selecting = true }
             }
+        },
+        // 選んでいる間の帯はヘッダーに重ねる(差し込むと、一覧が下にずれて押す所が動く)
+        headerOverlay = {
             if (selecting) Row(Modifier.matchParentSize().background(Palette.bar).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 BarIcon(Icons.Filled.Close, "選ぶのをやめる") { stopSelecting() }
                 Text("${picked.size} 件", Modifier.weight(1f), color = Palette.textStrong, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -297,8 +363,9 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
                     Text("ログを削除", color = if (picked.isNotEmpty()) Palette.markDanger else Palette.textMuted, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-        if (searching) SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" }
+        },
+        belowHeader = { if (searching) SearchBar(query, { query = it }, "スレタイを探す") { searching = false; query = "" } },
+    ) {
         if (searching && shown.isEmpty() && pool != null) Hint("見つかりませんでした")
         else if (entries.isEmpty() && !(tab == "unread" && vm.checking)) Hint(empty)
         else androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = vm.checking, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) { LazyColumn(Modifier.fillMaxSize(), state = listState) {
@@ -345,8 +412,7 @@ fun PostHistoryScreen(vm: AppViewModel) {
         ) { menuFor = null }
     }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, listState, null, swipe))) {
-    Column(Modifier.fillMaxSize().background(Palette.base)) {
-        PastHeader(vm, "posts", null)
+    PastFrame(vm, "posts", null) {
         if (vm.postHistory.isEmpty()) Hint("まだ書き込んでいません")
         else LazyColumn(Modifier.fillMaxSize(), state = listState) {
             items(vm.postHistory) { e ->
@@ -394,8 +460,7 @@ fun UploadsScreen(vm: AppViewModel) {
     }
     val toBottom: suspend () -> Unit = { gridState.scrollToItem(maxOf(0, gridState.layoutInfo.totalItemsCount - 1)) }
     Box(Modifier.fillMaxSize().then(pastGestures(vm, toBottom, { gridState.scrollToItem(0) }, null, swipe))) {
-    Column(Modifier.fillMaxSize().background(Palette.base)) {
-        PastHeader(vm, "uploads", null)
+    PastFrame(vm, "uploads", null) {
         if (ups.isEmpty()) Hint("まだありません(書き込み欄の ＋ の「画像」から上げた画像が並びます)")
         else {
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(

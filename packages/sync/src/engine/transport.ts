@@ -19,12 +19,15 @@ export interface SyncResponse {
   body: string
 }
 
+/** 応答が上限を超えた。通信の失敗と分ける(オフラインに見せない) */
+export class SyncResponseTooLarge extends Error {}
+
 /** 実装はリダイレクトをたどらず Cookie を持たない。通信できないときは例外を投げる */
 export interface SyncTransport {
   send(req: SyncRequest): Promise<SyncResponse>
 }
 
-export type SyncFailureKind = 'bad_url' | 'bad_ticket' | 'network' | 'redirect' | 'too_large' | 'bad_response' | 'no_progress' | 'http'
+export type SyncFailureKind = 'bad_url' | 'bad_ticket' | 'bad_code' | 'network' | 'redirect' | 'too_large' | 'bad_response' | 'no_progress' | 'http'
 
 export class SyncApiError extends Error {
   constructor(readonly kind: SyncFailureKind, readonly status = 0, readonly code = '', readonly detail: Record<string, unknown> | null = null) {
@@ -99,8 +102,8 @@ export class SyncApi {
         maxBytes: MAX_RESPONSE_BYTES,
         timeoutMs: HTTP_TIMEOUT_MS,
       })
-    } catch {
-      throw new SyncApiError('network')
+    } catch (e) {
+      throw new SyncApiError(e instanceof SyncResponseTooLarge ? 'too_large' : 'network')
     }
     if (res.status >= 300 && res.status < 400) throw new SyncApiError('redirect', res.status)
     if (res.body.length > MAX_RESPONSE_BYTES) throw new SyncApiError('too_large')

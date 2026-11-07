@@ -11,6 +11,9 @@ mod fonts;
 mod media_cache;
 mod post_http;
 mod sql_batch;
+mod sync_http;
+mod sync_key;
+mod sync_start;
 mod update;
 mod web_upload;
 #[cfg(desktop)]
@@ -694,6 +697,12 @@ pub fn run() {
             schedule_db_restore,
             post_http::http_post,
             sql_batch::sql_batch,
+            sync_http::sync_http,
+            sync_key::sync_key_load,
+            sync_key::sync_key_save,
+            sync_key::sync_key_clear,
+            sync_start::open_sync_start,
+            sync_start::close_sync_start,
             chosen_paths::pick_save_path,
             chosen_paths::pick_open_path,
             web_upload::open_web_upload,

@@ -31,8 +31,10 @@ serde_json = "1"
 # 書き込みの Cookie を自分で持つ(post_http.rs)。plugin-http が使っているものと同じ版。
 # どの OS でも使うので、Windows だけの依存(下)には入れない(入れると Android・Linux でビルドできない)
 cookie_store = "0.22"
-# 更新のインストーラーを落とす(update.rs)。plugin-http が使っているものと同じ
+# 更新のインストーラーを落とす(update.rs)と同期の通信(sync_http.rs)。plugin-http が使っているものと同じ
 reqwest = "0.12"
+# 同期の鍵を OS の鍵保管に置く(sync_key.rs)。使う OS の分だけ、下の target に足す
+keyring-core = "1"
 # 画像のキャッシュのファイル名(URL のハッシュ)。tauri が使っているものと同じ版
 sha2 = "0.10"
 # 画像のキャッシュの同時数・取り消し。tauri が使っているものと同じ版
@@ -46,8 +48,11 @@ tauri-plugin-process = "2"
 # 描画のプロセスが落ちたことを受け取る。版は tauri(wry)が使っているものに合わせる
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0.2"
+# Secret Service。libdbus が要らない方(Rust だけで動く)
+zbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] }
 
 # WebView2 の設定を直接変える(F5 などのブラウザのショートカットを切る)。版は tauri(wry)が使っているものに合わせる
 [target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = "1"
 webview2-com = "0.39"
 windows-core = "0.62"

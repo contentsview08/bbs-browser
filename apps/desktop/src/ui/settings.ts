@@ -242,6 +242,10 @@ export interface AppSettings {
   threadSort: ThreadSort
   /** スレ一覧の上に出すタブと、その並び(左から) */
   listTabs: ListTabKey[]
+  /** スマホの履歴の画面のタブと並び(スマホ版の pastTabs と同じ。PC の履歴は 1 つの一覧なので使わない) */
+  pastTabs: string[]
+  /** スマホの履歴の画面のタブの置き場: header / footer */
+  pastTabsPosition: 'header' | 'footer'
   /** 履歴(閲覧履歴・未読・お気に入りのスレ)の 1 ページの件数(0 なら全部)。板のスレ一覧は分けない */
   listPageSize: number
   /** 板ごとの情報(板の URL → 別名・ファビコン・名前とメールの既定値) */
@@ -481,6 +485,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
   listTabs: ['unread', 'momentum', 'newest'],
+  pastTabs: ['unread', 'history', 'fav', 'posts', 'uploads'],
+  pastTabsPosition: 'header',
   listPageSize: 100,
   boardMeta: {},
   keywords: [],

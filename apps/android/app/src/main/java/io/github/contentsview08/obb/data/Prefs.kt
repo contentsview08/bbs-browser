@@ -18,6 +18,15 @@ enum class ThumbMode(val label: String) {
     val key get() = name.lowercase()
 }
 
+/** 履歴の画面のタブ(キーと名前)。PC・Web の PastTab と同じ */
+val PAST_TABS = listOf("unread" to "未読", "history" to "閲覧", "fav" to "お気に入り", "posts" to "書き込み", "uploads" to "画像")
+
+/** 保存した並びのうち、いま出せるタブ。バックアップなどで 1 つも残らなければ全部を出す(履歴の画面からタブが消えないように) */
+fun shownPastTabs(saved: String): List<String> {
+    val known = PAST_TABS.map { it.first }
+    return saved.split(',').filter { it in known }.distinct().ifEmpty { known }
+}
+
 /** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
 private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T) : ReadWriteProperty<Any?, T> {
     @Suppress("UNCHECKED_CAST")
@@ -186,6 +195,10 @@ class Prefs(context: Context) {
     fun setBoardVisit(url: String, t: Long) { boardVisitsJson = runCatching { JSONObject(boardVisitsJson) }.getOrDefault(JSONObject()).put(url, t).toString() }
     /** 一覧の下に出すタブと並び(カンマ区切り。unread / visited / momentum / newest / count) */
     var listTabs by wordsPref("listTabs", listOf("unread", "momentum", "newest"), ",")
+    /** 履歴の画面に出すタブと並び(カンマ区切り。PAST_TABS のキー) */
+    var pastTabs by wordsPref("pastTabs", PAST_TABS.map { it.first }, ",")
+    /** 履歴の画面のタブの置き場: header / footer */
+    var pastTabsPosition by pref("pastTabsPosition", "header")
     /** 開いていないスレのログを消すまでの日数(0 なら消さない) */
     var logRetentionDays by pref("logRetentionDays", 90)
 
@@ -418,7 +431,7 @@ class Prefs(context: Context) {
         /** 文字列に JSON を入れて持つ項目。バックアップでは PC と同じく JSON のまま書く */
         internal val JSON_KEYS = setOf(
             "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "grossWords", "quickPhrases",
-            "listTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
+            "listTabs", "pastTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
         )
 
         /** なぞる操作の既定 */

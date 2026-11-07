@@ -75,6 +75,7 @@ import { setUploadLookup } from './utils/uploadIndex'
 import { useViewState } from './hooks/useViewState'
 import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step, updateNearest } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
+import { useSync } from './hooks/useSync'
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -911,6 +912,8 @@ export default function App() {
     const id = threadId(t)
     setFavThreads((list) => (list.some((f) => threadId(f.thread) === id) ? list.map((f) => (threadId(f.thread) === id ? patch(f) : f)) : list))
   }
+
+  const syncRpc = useSync(store, (s) => void reloadFavThreads(s))
 
   const toggleFavoriteThread = (t: ThreadSummary) => {
     if (!store) return
@@ -2194,13 +2197,19 @@ export default function App() {
     })
 
   // 道具のウィンドウ(設定・NG)からの頼みごとを受け、向こうで変えたものを読み直す
-  const rpcRef = useRef({ loadBoards, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus })
-  rpcRef.current = { loadBoards, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus }
+  const loadSiteUrls = async (): Promise<string[]> => {
+    if (!store) return []
+    const [boards, favs, seen] = await Promise.all([Promise.all(sites.map((s) => store.getBoards(s.menuUrl))), store.listFavoriteThreads(), store.history(300)])
+    return [...boards.flat().map((b) => b.url), ...favs.map((f) => f.thread.boardUrl), ...seen.map((h) => h.thread.boardUrl)]
+  }
+  const rpcRef = useRef({ loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus })
+  rpcRef.current = { loadBoards, loadSiteUrls, toggleFavorite, openBoard, addFavoriteUrl, addSite, saveAndLogin, pruneLogs, loginStatus }
   useEffect(() => {
     if (!store || !canOpenToolWindow) return
     const offs = [
       serveMain({
         loadBoards: ({ site, refresh }: { site: SiteConfig; refresh: boolean }) => rpcRef.current.loadBoards(site, refresh),
+        loadSiteUrls: () => rpcRef.current.loadSiteUrls(),
         toggleFavorite: (b: Board) => rpcRef.current.toggleFavorite(b),
         openBoard: (b: Board) => void rpcRef.current.openBoard(b),
         addFavoriteUrl: (url: string) => rpcRef.current.addFavoriteUrl(url),
@@ -2211,6 +2220,7 @@ export default function App() {
         aiModelStatus: () => aiModelStatus(),
         aiTestScore: ({ text, prompt }: { text: string; prompt: string }) => testScore(text, prompt),
         aiDeleteModel: () => deleteAiModelFiles(),
+        ...syncRpc,
       }),
       onBroadcast('favorites-changed', () => void reloadFavorites(store)),
       onBroadcast('sites-changed', () => void store.listSites().then(setSites)),
@@ -2449,6 +2459,7 @@ export default function App() {
   /** スマホの設定画面と PC の設定ダイアログに共通で渡すもの */
   const settingsProps = () => ({
     loadBoards,
+    loadSiteUrls,
     onToggleFavorite: (b: Board) => void toggleFavorite(b),
     onOpenBoard: (b: Board) => {
       setSettingsTab(undefined)

@@ -11,6 +11,9 @@ class SyncRequest(val method: String, val url: String, val headers: Map<String, 
 
 class SyncResponse(val status: Int, val body: String, val headers: Map<String, String> = emptyMap())
 
+/** 応答が上限を超えた。通信の失敗と分ける(オフラインに見せない) */
+class SyncResponseTooLarge : Exception("too_large")
+
 /** 実装はリダイレクトをたどらず Cookie を持たない(同期専用の OkHttpClient)。通信できないときは例外を投げる */
 fun interface SyncTransport {
     suspend fun send(req: SyncRequest): SyncResponse
@@ -59,6 +62,8 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
             transport.send(SyncRequest(method, base + path, headers, body?.let { canonicalJson(it) }, SyncConfig.MAX_RESPONSE_BYTES, SyncConfig.HTTP_TIMEOUT_MS))
         } catch (e: CancellationException) {
             throw e
+        } catch (_: SyncResponseTooLarge) {
+            throw SyncApiError("too_large")
         } catch (_: Exception) {
             throw SyncApiError("network")
         }

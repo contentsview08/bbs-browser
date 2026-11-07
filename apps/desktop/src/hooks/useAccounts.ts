@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react'
 import { findConnector, type LoginResult } from '@bbs-browser/connectors'
 import type { AccountRecord, LogStore } from '@bbs-browser/logstore'
 import type { PostAccountOption } from '../components/PostAccountMenu'
+
+/** ログインの欄を隠しているコネクタ。保存したアカウントは隠していても書き込みに使う */
+export const LOGIN_HIDDEN_CONNECTORS: ReadonlySet<string> = new Set(['honobbs'])
 import { tauriContext as ctx } from '../host/tauriContext'
 
 export function useAccounts(store: LogStore | undefined, postAccounts: Record<string, boolean>) {
@@ -80,6 +83,8 @@ export function useAccounts(store: LogStore | undefined, postAccounts: Record<st
             registered: accounts.some((a) => a.connectorId === connectorId && a.accountId === k.id),
             on: postAccounts[k.id] !== false,
           }))
+          // 登録の欄を隠しているサイトに「未登録です」の案内を出さない
+          .filter((o) => o.registered || !LOGIN_HIDDEN_CONNECTORS.has(connectorId))
         cache.set(key, list)
       }
       return list

@@ -673,6 +673,13 @@ fun ConfirmDeleteDialog(prefs: io.github.contentsview08.obb.data.Prefs, count: I
 /** 板のファビコン。取れるまで(取れなければ)は fallback を出す */
 @Composable
 fun BoardIcon(boardUrl: String, size: androidx.compose.ui.unit.Dp, fallback: @Composable () -> Unit) {
+    // 板ごとの設定のファビコンがあれば、そちらを出す
+    val override = LocalPrefs.current.boardMeta[boardUrl]?.icon
+    var overrideFailed by remember(override) { mutableStateOf(false) }
+    if (override != null && !overrideFailed) {
+        coil3.compose.AsyncImage(override, null, Modifier.size(size).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)), onError = { overrideFailed = true })
+        return
+    }
     var bytes by remember(boardUrl) { mutableStateOf<ByteArray?>(null) }
     androidx.compose.runtime.LaunchedEffect(boardUrl) { bytes = io.github.contentsview08.obb.data.Favicons.of(boardUrl) }
     val b = bytes

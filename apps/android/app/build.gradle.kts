@@ -45,9 +45,16 @@ android {
         versionName = "0.1.3"
         // ONNX Runtime(AI NG)はネイティブのライブラリを持つので、スマホ(arm64)とエミュレーター(x86_64)の分だけ入れる
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        // 同期サーバーの既定値。元は packages/sync/server-url.json。ビルドのときに環境変数 OBB_SYNC_SERVER_URL で差し替えられる
+        val syncDefault = (groovy.json.JsonSlurper().parse(file("../../../packages/sync/server-url.json")) as Map<*, *>)["default"] as String
+        val syncServer = providers.environmentVariable("OBB_SYNC_SERVER_URL").orNull ?: syncDefault
+        buildConfigField("String", "SYNC_SERVER_URL", "\"$syncServer\"")
     }
     buildTypes {
+        // http://localhost の同期サーバーは開発の版だけ。-PobbSyncAllowLocalhost で R8 を通した版でも試せる
+        getByName("debug") { buildConfigField("boolean", "SYNC_ALLOW_LOCALHOST", "true") }
         getByName("release") {
+            buildConfigField("boolean", "SYNC_ALLOW_LOCALHOST", if (providers.gradleProperty("obbSyncAllowLocalhost").isPresent) "true" else "false")
             // R8 で縮めて最適化する(Compose はデバッグ用のビルドだと何倍も遅い。速さは配布用のビルドで比べる)
             isMinifyEnabled = true
             isShrinkResources = true
@@ -102,6 +109,8 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     // 同期の暗号(ChaCha20-Poly1305・HKDF・HMAC)。JVM の単体テストでも同じ実装が動き、使わないものは R8 が外す
     implementation("org.bouncycastle:bcprov-jdk18on:1.86")
+    // 端末を足すコードの QR の読み書き。カメラは Camera2 を直に使い、CameraX を足さない
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     // android.jar の org.json は単体テストでは動かないので、本物を使う
     testImplementation("org.json:json:20250517")

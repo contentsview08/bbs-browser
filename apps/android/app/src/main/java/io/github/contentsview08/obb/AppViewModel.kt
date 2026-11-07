@@ -27,6 +27,7 @@ import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.LogDb
 import io.github.contentsview08.obb.data.NgRule
 import io.github.contentsview08.obb.data.PostHistoryEntry
+import io.github.contentsview08.obb.data.shownPastTabs
 import io.github.contentsview08.obb.data.Prefs
 import io.github.contentsview08.obb.data.ThreadState
 import io.github.contentsview08.obb.data.unreadEntries
@@ -344,8 +345,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 過去のスレの画面を、そのタブで開く(左のメニュー・下のタブ・画面の上のタブから) */
     fun openPast(tab: String) {
-        prefs.pastTab = tab
-        when (tab) {
+        val shown = shownPastTabs(prefs.pastTabs)
+        // 設定で隠したタブは開かず、出しているタブの先頭へ
+        val open = if (tab in shown) tab else shown.first()
+        prefs.pastTab = open
+        when (open) {
             "unread" -> { openRoot(Page.AllUnread()); loadAllUnread() }
             "fav" -> openRoot(Page.FavThreads())
             "posts" -> openRoot(Page.PostHistory())
@@ -401,6 +405,57 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 checking = false
             }
         }
+    }
+
+    // ── 同期 ──
+
+    private val syncKeys = io.github.contentsview08.obb.data.androidSyncKeyStore(app)
+    /** 同期を始める窓の URL。出している間だけ値がある */
+    var syncStartUrl by mutableStateOf<String?>(null)
+        private set
+    private var syncStartResult: kotlinx.coroutines.CompletableDeferred<String?>? = null
+
+    val syncCtl by lazy {
+        io.github.contentsview08.obb.sync.engine.SyncController(
+            db = db.syncSql,
+            keyStore = syncKeys.first,
+            transport = io.github.contentsview08.obb.sync.engine.OkHttpSyncTransport(),
+            defaultServerUrl = BuildConfig.SYNC_SERVER_URL,
+            adapters = listOf(io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) }),
+            now = System::currentTimeMillis,
+            allowLocalhost = BuildConfig.SYNC_ALLOW_LOCALHOST,
+            keyHint = syncKeys.second,
+            openStartWindow = { url ->
+                val d = kotlinx.coroutines.CompletableDeferred<String?>()
+                syncStartResult = d
+                withContext(Dispatchers.Main) { syncStartUrl = url }
+                d.await()
+            },
+            onCycle = { r -> if (r.favoriteThreads) reloadSide() },
+        )
+    }
+
+    fun finishSyncStart(ticket: String?) {
+        syncStartUrl = null
+        syncStartResult?.complete(ticket)
+        syncStartResult = null
+    }
+
+    suspend fun syncStatus() = withContext(Dispatchers.IO) { syncCtl.status() }
+
+    /** 画面の操作を行い、失敗なら出す文を返す */
+    suspend fun syncAttempt(f: suspend () -> Unit): String? = try {
+        withContext(Dispatchers.IO) { f() }
+        null
+    } catch (e: io.github.contentsview08.obb.sync.engine.SyncHostError) {
+        io.github.contentsview08.obb.sync.SyncText.message(e.code)
+    } catch (e: io.github.contentsview08.obb.sync.engine.SyncApiError) {
+        io.github.contentsview08.obb.sync.SyncText.message(e.code.ifEmpty { e.kind })
+    }
+
+    /** 前面に戻ったとき。自動の送信はまだ持たない */
+    fun syncForeground() {
+        viewModelScope.launch(Dispatchers.IO) { runCatching { syncCtl.foreground() } }
     }
 
     /** スレ一覧に戻る前に見ていたスレ(「進む」で開き直す) */
@@ -499,6 +554,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun honoOrigins(): List<String> =
         (HonoBbs.knownOrigins() + listOfNotNull(prefs.lastBoardUrl?.let { HonoBbs.originOfBoard(it) }) +
             favorites.mapNotNull { HonoBbs.originOfBoard(it.url) } + sites.map { it.first }.mapNotNull { HonoBbs.originOfSite(it) }).distinct()
+
+    /** 取ってある板一覧の板の URL(サイトごとの設定の一覧を作る材料) */
+    suspend fun menuBoardUrls(): List<String> = db.cachedBoardUrls()
 
     fun selectSite(url: String) {
         siteUrl = url

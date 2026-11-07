@@ -188,7 +188,7 @@ describe('一覧と詳細', () => {
     const text = await res.text()
     const d = JSON.parse(text) as Record<string, unknown>
     expect(Object.keys(d).sort()).toEqual(['created_at', 'last_access_at', 'last_access_day', 'live', 'record_count', 'req_recent', 'source_mac', 'space_id', 'state', 'used_bytes'])
-    expect(d.live).toMatchObject({ exists: true, record_count: 1 })
+    expect(d.live).toMatchObject({ exists: true, record_count: 1, records_today: 1 })
     expect(text).not.toContain('ciphertext')
     expect(text).not.toContain('nonce')
     expect((await signed('GET', `/admin/v1/spaces/${'0'.repeat(64)}`)).status).toBe(404)

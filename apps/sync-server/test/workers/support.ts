@@ -13,7 +13,7 @@ export const BASE = 'https://sync.test'
 export const clock = { now: START }
 
 /** 既定の検査の外にあるものを切っておく。テストごとに必要なものだけ戻す */
-export const QUIET: Record<string, string> = { POW_BITS: '0', SOURCE_LIMIT: '0', EMPTY_SPACE_DAYS: '0', RATE_PER_MINUTE: '0', RATE_PER_DAY: '0', FULL_PULL_PER_HOUR: '0' }
+export const QUIET: Record<string, string> = { POW_BITS: '0', SOURCE_LIMIT: '0', EMPTY_SPACE_DAYS: '0', RATE_PER_MINUTE: '0', RATE_PER_DAY: '0', RECORDS_PER_DAY: '0', FULL_PULL_PER_HOUR: '0' }
 
 export function setup(overrides: Record<string, string> = {}): void {
   clock.now = START

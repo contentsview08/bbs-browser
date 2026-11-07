@@ -41,6 +41,8 @@ export interface Config {
   /** 0 は数えない */
   ratePerMinute: number
   ratePerDay: number
+  /** 1 日に受け付けるレコードの数(領域ごと)。0 は数えない */
+  recordsPerDay: number
   /** 端末へ「最低これだけ空ける」と指示する秒。0 は指示しない(端末の既定に任せる) */
   paceHeadSec: number
   pacePushSec: number
@@ -97,6 +99,8 @@ export function loadConfig(env: Env): Config {
     ratePerMinute: int(e.RATE_PER_MINUTE, 20),
     // 前面で 30 秒ごとの確認と送信。2 台を 11 時間使って最大 2,640 回なので余裕を持たせる
     ratePerDay: int(e.RATE_PER_DAY, 6000),
+    // 正規のアプリは 1 日に数百件(送信は 5 分ごと、1 回に既読と閲覧履歴)。1 件が 2 行なので、要求の上限いっぱいに 100 件ずつ送られると 1 領域で Free の 100,000 行を使い切れてしまう
+    recordsPerDay: int(e.RECORDS_PER_DAY, 3000),
     paceHeadSec: int(e.PACE_HEAD_SEC, 0),
     pacePushSec: int(e.PACE_PUSH_SEC, 0),
     fullPullPerHour: int(e.FULL_PULL_PER_HOUR, 3),

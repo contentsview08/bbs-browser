@@ -358,7 +358,7 @@ export class LedgerDO extends DurableObject<Env> {
     const row = this.sql.exec<SpaceRow>('SELECT * FROM spaces WHERE space_id = ?', id).toArray()[0]
     if (!row) return failure(404, 'not_found')
     const live: SpaceInfo = await this.space(id).info()
-    return result(200, { ...publicRow(row), live: { exists: live.exists, last_used: live.last_used ?? null, used_bytes: live.used_bytes ?? null, record_count: live.record_count ?? null } })
+    return result(200, { ...publicRow(row), live: { exists: live.exists, last_used: live.last_used ?? null, used_bytes: live.used_bytes ?? null, record_count: live.record_count ?? null, records_today: live.records_today ?? null } })
   }
 
   private startJob(kind: string, rows: { space_id: string; epoch: string | null }[], now: number): string {

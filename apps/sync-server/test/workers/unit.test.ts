@@ -78,7 +78,7 @@ describe('PoW', () => {
 describe('loadConfig', () => {
   it('既定は設計の値', () => {
     const c = loadConfig({} as Env)
-    expect([c.spaceLimit, c.evictIdleDays, c.idleDeleteDays, c.emptySpaceDays, c.tombGcDays, c.quotaBytes, c.quotaRecords, c.maxPushRecords, c.maxBodyBytes, c.maxCiphertextBytes, c.ratePerMinute, c.ratePerDay, c.fullPullPerHour, c.sourceLimit]).toEqual([100, 14, 90, 7, 90, 10485760, 50000, 100, 1048576, 16384, 20, 6000, 3, 5])
+    expect([c.spaceLimit, c.evictIdleDays, c.idleDeleteDays, c.emptySpaceDays, c.tombGcDays, c.quotaBytes, c.quotaRecords, c.maxPushRecords, c.maxBodyBytes, c.maxCiphertextBytes, c.ratePerMinute, c.ratePerDay, c.recordsPerDay, c.fullPullPerHour, c.sourceLimit]).toEqual([100, 14, 90, 7, 90, 10485760, 50000, 100, 1048576, 16384, 20, 6000, 3000, 3, 5])
   })
   it('読めない値は既定に戻す。制限が外れない', () => {
     const c = loadConfig({ SPACE_LIMIT: 'abc', RATE_PER_MINUTE: '-1', QUOTA_BYTES: '1e9' } as unknown as Env)

@@ -1,7 +1,7 @@
-// 費用: 1 要求あたりの書き行、作りの移行、端末の不具合の検知、停止のときに起こさないこと
+// 費用: 1 要求あたりの書き行、1 日の件数、作りの移行、端末の不具合の検知、停止のときに起こさないこと
 import { runInDurableObject } from 'cloudflare:test'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MINUTE } from '../../src/config'
+import { DAY, MINUTE } from '../../src/config'
 import { call, clock, ledger, push, record, setup, spaceIdOf, spaceStub, teardown } from './support'
 
 const asDo = (s: unknown) => s as DurableObjectStub
@@ -92,6 +92,42 @@ describe('書き行', () => {
   })
 })
 
+describe('1 日の件数', () => {
+  afterEach(teardown)
+  const dayRecords = async (token: string): Promise<number> => runInDurableObject(asDo(spaceStub(await spaceIdOf(token))), (_o, state) => state.storage.sql.exec<{ n: number }>('SELECT day_records AS n FROM meta').one().n)
+  it('上限を超える送信は 429 で 1 行も書かず、ちょうどまでは通る。409 は数えない', async () => {
+    setup({ RECORDS_PER_DAY: '5' })
+    await create('A')
+    expect((await push('A', [await record('1'), await record('2'), await record('3')])).status).toBe(200)
+    const before = await written('A')
+    // 3 + 3 > 5。途中まで書かない
+    const over = await push('A', [await record('4'), await record('5'), await record('6')])
+    expect(over.status).toBe(429)
+    const body = (await over.json()) as { error: string; retry_after_sec: number }
+    expect(body.error).toBe('rate_limited')
+    expect(body.retry_after_sec).toBeGreaterThan(0)
+    expect(body.retry_after_sec).toBeLessThanOrEqual(24 * 60 * 60)
+    expect((await written('A')) - before).toBe(0)
+    // 古い base_version で送り直したものは 409 で書かないので数えない
+    const conflict = (await (await push('A', [await record('1')])).json()) as { results: { status: number }[] }
+    expect(conflict.results[0].status).toBe(409)
+    // ちょうど 5 件までは通り、DB にも写る
+    expect((await push('A', [await record('4'), await record('5')])).status).toBe(200)
+    expect(await dayRecords('A')).toBe(5)
+    expect((await push('A', [await record('6')])).status).toBe(429)
+  })
+  it('日が変わると数え直す', async () => {
+    setup({ RECORDS_PER_DAY: '2' })
+    await create('A')
+    expect((await push('A', [await record('1'), await record('2')])).status).toBe(200)
+    expect((await push('A', [await record('3')])).status).toBe(429)
+    clock.now += DAY
+    expect((await push('A', [await record('3')])).status).toBe(200)
+    expect((await push('A', [await record('4')])).status).toBe(200)
+    expect((await push('A', [await record('5')])).status).toBe(429)
+  })
+})
+
 describe('作りの移行', () => {
   afterEach(teardown)
   it('版 1 の領域は最初に触ったときに 1 回だけ requests を作り直す', async () => {
@@ -102,6 +138,7 @@ describe('作りの移行', () => {
     // 版 1 の作りに戻す
     await runInDurableObject(stub, (inst, state) => {
       state.storage.sql.exec('ALTER TABLE meta DROP COLUMN db_version')
+      state.storage.sql.exec('ALTER TABLE meta DROP COLUMN day_records')
       state.storage.sql.exec('DROP TABLE requests')
       state.storage.sql.exec('CREATE TABLE requests (seq INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE, results TEXT NOT NULL, at INTEGER NOT NULL)')
       state.storage.sql.exec("INSERT INTO requests (request_id, results, at) VALUES ('r000000000000000000001', '[]', 0)")
@@ -110,7 +147,8 @@ describe('作りの移行', () => {
     expect((await headOnce('A')).status).toBe(200)
     const after = await runInDurableObject(stub, (inst, state) => {
       expect(state.storage.sql.exec("SELECT sql FROM sqlite_master WHERE name = 'requests'").one().sql).not.toContain('AUTOINCREMENT')
-      expect(state.storage.sql.exec<{ v: number }>('SELECT db_version AS v FROM meta').one().v).toBe(2)
+      expect(state.storage.sql.exec<{ v: number }>('SELECT db_version AS v FROM meta').one().v).toBe(3)
+      expect(state.storage.sql.exec<{ n: number }>('SELECT day_records AS n FROM meta').one().n).toBe(0)
       expect(state.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM requests').one().n).toBe(0)
       ;(inst as unknown as { hasSchema: null }).hasSchema = null
       return (inst as unknown as { writtenRows: number }).writtenRows
@@ -123,6 +161,25 @@ describe('作りの移行', () => {
     const again = (await (await push('A', [await record('1')], 'r000000000000000000001')).json()) as { results: { status: number }[] }
     expect(again.results[0].status).toBe(409)
     expect((await push('A', [await record('2')])).status).toBe(200)
+  })
+  it('版 2 の領域は最初に触ったときに 1 日の件数の列を足し、その日は数え直す', async () => {
+    setup({ RECORDS_PER_DAY: '2' })
+    await create('A')
+    await push('A', [await record('1')])
+    const stub = asDo(spaceStub(await spaceIdOf('A')))
+    // 版 2 の作りに戻し、実体が落ちたことにする
+    await runInDurableObject(stub, (inst, state) => {
+      state.storage.sql.exec('ALTER TABLE meta DROP COLUMN day_records')
+      state.storage.sql.exec('UPDATE meta SET db_version = 2')
+      Object.assign(inst as unknown as object, { hasSchema: null, live: null })
+    })
+    expect((await headOnce('A')).status).toBe(200)
+    await runInDurableObject(stub, (_o, state) => {
+      expect(state.storage.sql.exec<{ v: number }>('SELECT db_version AS v FROM meta').one().v).toBe(3)
+      expect(state.storage.sql.exec<{ n: number }>('SELECT day_records AS n FROM meta').one().n).toBe(0)
+    })
+    expect((await push('A', [await record('2'), await record('3')])).status).toBe(200)
+    expect((await push('A', [await record('4')])).status).toBe(429)
   })
 })
 

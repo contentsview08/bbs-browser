@@ -1,4 +1,4 @@
-// 領域 1 つの Durable Object。通番・保存・楽観ロック・領域ごとの回数を持つ。中身は暗号文のまま扱う
+// 領域 1 つの Durable Object。通番・保存・楽観ロック・領域ごとの回数と 1 日の件数を持つ。中身は暗号文のまま扱う
 import { DurableObject } from 'cloudflare:workers'
 import { DAY, HOUR, MINUTE, loadConfig, type Config, type Env } from './config'
 import { failure, result, type ApiResult } from './http'
@@ -15,7 +15,7 @@ const FLUSH_MS = 10 * MINUTE
 /** 台帳へ知らせられなかったときの送り直しの間隔 */
 const RETELL_MS = 5 * MINUTE
 /** 作り方が変わったら上げる。既存の領域は最初に触ったときに migrate() で追いつく */
-const DB_VERSION = 2
+const DB_VERSION = 3
 /** 台帳へ未通知の削除の印(KV)。meta ごと消えた後も残す必要があるので SQL の外に置く */
 const UNTOLD_KEY = 'untold'
 
@@ -45,6 +45,7 @@ CREATE TABLE meta (
   minute_count INTEGER NOT NULL,
   day INTEGER NOT NULL,
   day_count INTEGER NOT NULL,
+  day_records INTEGER NOT NULL,
   full_pulls TEXT NOT NULL,
   reported_at INTEGER NOT NULL,
   reported_day INTEGER NOT NULL,
@@ -83,6 +84,8 @@ interface Meta {
   minute_count: number
   day: number
   day_count: number
+  /** その日に受け付けたレコードの数。409 で書かなかったものは入れない */
+  day_records: number
   full_pulls: string
   reported_at: number
   reported_day: number
@@ -95,6 +98,7 @@ interface Live {
   minute_count: number
   day: number
   day_count: number
+  day_records: number
   last_used: number
   /** 最後に DB へ写した時刻 */
   flushed_at: number
@@ -132,6 +136,8 @@ export interface SpaceInfo {
   last_used?: number
   used_bytes?: number
   record_count?: number
+  /** 今日受け付けたレコードの数。日が変わっていれば 0 */
+  records_today?: number
 }
 
 class QuotaExceeded extends Error {}
@@ -184,7 +190,7 @@ export class SpaceDO extends DurableObject<Env> {
     if (rows.length === 0) return null
     const m = rows[0] as unknown as Meta
     // DB より新しい値はメモリにある
-    if (this.live) Object.assign(m, { minute: this.live.minute, minute_count: this.live.minute_count, day: this.live.day, day_count: this.live.day_count, last_used: this.live.last_used })
+    if (this.live) Object.assign(m, { minute: this.live.minute, minute_count: this.live.minute_count, day: this.live.day, day_count: this.live.day_count, day_records: this.live.day_records, last_used: this.live.last_used })
     return m
   }
 
@@ -200,6 +206,8 @@ export class SpaceDO extends DurableObject<Env> {
         this.write('DROP TABLE requests')
         this.write(SCHEMA_REQUESTS)
       }
+      // 版 3 で 1 日の件数の列。その日の分は数え直しになる(1 日だけ上限が甘くなる)
+      if (v < 3) this.write('ALTER TABLE meta ADD COLUMN day_records INTEGER NOT NULL DEFAULT 0')
       this.write('UPDATE meta SET db_version = ? WHERE id = 1', DB_VERSION)
     })
   }
@@ -246,7 +254,7 @@ export class SpaceDO extends DurableObject<Env> {
 
   /** 最終使用を今にする(メモリだけ)。回数は数えない */
   private touch(m: Meta, now: number): void {
-    if (!this.live) this.live = { minute: m.minute, minute_count: m.minute_count, day: m.day, day_count: m.day_count, last_used: m.last_used, flushed_at: m.last_used, minute_crossed: false }
+    if (!this.live) this.live = { minute: m.minute, minute_count: m.minute_count, day: m.day, day_count: m.day_count, day_records: m.day_records, last_used: m.last_used, flushed_at: m.last_used, minute_crossed: false }
     this.live.last_used = now
     m.last_used = now
   }
@@ -268,6 +276,7 @@ export class SpaceDO extends DurableObject<Env> {
     const day = Math.floor(now / DAY)
     const minuteCount = live.minute === minute ? live.minute_count : 0
     const dayCount = live.day === day ? live.day_count : 0
+    const dayRecords = live.day === day ? live.day_records : 0
     // 超えた要求は数えない。連打で書き込みの費用を増やさないため
     if (cfg.ratePerMinute > 0 && minuteCount >= cfg.ratePerMinute) return limited((minute + 1) * MINUTE - now)
     if (cfg.ratePerDay > 0 && dayCount >= cfg.ratePerDay) return limited((day + 1) * DAY - now)
@@ -276,13 +285,14 @@ export class SpaceDO extends DurableObject<Env> {
     live.minute_count = minuteCount + 1
     live.day = day
     live.day_count = dayCount + 1
-    Object.assign(m, { minute, minute_count: live.minute_count, day, day_count: live.day_count })
+    live.day_records = dayRecords
+    Object.assign(m, { minute, minute_count: live.minute_count, day, day_count: live.day_count, day_records: dayRecords })
     return m
   }
 
   /** 回数と最終使用を DB に写す */
   private flush(m: Meta): void {
-    this.write('UPDATE meta SET minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', m.minute, m.minute_count, m.day, m.day_count, m.last_used)
+    this.write('UPDATE meta SET minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', m.minute, m.minute_count, m.day, m.day_count, m.day_records, m.last_used)
     this.flushed(m.last_used)
   }
 
@@ -316,7 +326,7 @@ export class SpaceDO extends DurableObject<Env> {
       m.reported_at = now
       m.reported_day = day
       // 回数と最終使用もこの 1 行に乗せる
-      this.write('UPDATE meta SET reported_at = ?, reported_day = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', now, day, m.minute, m.minute_count, m.day, m.day_count, now)
+      this.write('UPDATE meta SET reported_at = ?, reported_day = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', now, day, m.minute, m.minute_count, m.day, m.day_count, m.day_records, now)
       this.flushed(now)
     } catch {
       // 次の要求でまた試す
@@ -348,8 +358,8 @@ export class SpaceDO extends DurableObject<Env> {
     this.ctx.storage.transactionSync(() => {
       this.write(SCHEMA)
       this.write(
-        `INSERT INTO meta (id, space_id, epoch, next, gc_floor, created_at, last_used, used_bytes, record_count, ever_written, minute, minute_count, day, day_count, full_pulls, reported_at, reported_day, db_version)
-         VALUES (1, ?, ?, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, 0, '[]', ?, ?, ?)`,
+        `INSERT INTO meta (id, space_id, epoch, next, gc_floor, created_at, last_used, used_bytes, record_count, ever_written, minute, minute_count, day, day_count, day_records, full_pulls, reported_at, reported_day, db_version)
+         VALUES (1, ?, ?, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, '[]', ?, ?, ?)`,
         spaceId, epoch, now, now, now, day, DB_VERSION,
       )
     })
@@ -393,7 +403,7 @@ export class SpaceDO extends DurableObject<Env> {
       if (pulls.length >= cfg.fullPullPerHour) return limited(HOUR)
       pulls.push(now)
       m.full_pulls = JSON.stringify(pulls)
-      this.write('UPDATE meta SET full_pulls = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1', m.full_pulls, m.minute, m.minute_count, m.day, m.day_count, now)
+      this.write('UPDATE meta SET full_pulls = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', m.full_pulls, m.minute, m.minute_count, m.day, m.day_count, m.day_records, now)
       this.flushed(now)
     }
     const page: ReturnType<typeof toWire>[] = []
@@ -427,6 +437,11 @@ export class SpaceDO extends DurableObject<Env> {
       return replay
     }
     const cfg = this.config
+    // 送られた件数で先に決め、途中まで書かない。超えた要求は 1 行も書かず、日の境目まで待たせる
+    if (cfg.recordsPerDay > 0 && m.day_records + input.records.length > cfg.recordsPerDay) {
+      this.flushIfDue(m)
+      return limited((m.day + 1) * DAY - m.last_used)
+    }
     let out: ReturnType<SpaceDO['applyPush']>
     try {
       out = this.ctx.storage.transactionSync(() => this.applyPush(input, m, cfg))
@@ -437,7 +452,8 @@ export class SpaceDO extends DurableObject<Env> {
       }
       throw e
     }
-    Object.assign(m, { next: out.next, used_bytes: out.bytes, record_count: out.count, ever_written: out.written })
+    Object.assign(m, { next: out.next, used_bytes: out.bytes, record_count: out.count, ever_written: out.written, day_records: out.day_records })
+    if (this.live) this.live.day_records = out.day_records
     this.flushed(m.last_used)
     await this.report(m)
     return result(200, { results: out.results, epoch: m.epoch, gc_floor: m.gc_floor, ...paceOf(cfg) })
@@ -463,9 +479,10 @@ export class SpaceDO extends DurableObject<Env> {
   }
 
   /** トランザクションの中で呼ぶ。m は書き換えず、新しい値を返す(途中で失敗しても m が崩れないように) */
-  private applyPush(input: PushInput, m: Meta, cfg: Config): { results: unknown[]; next: number; bytes: number; count: number; written: number } {
+  private applyPush(input: PushInput, m: Meta, cfg: Config): { results: unknown[]; next: number; bytes: number; count: number; written: number; day_records: number } {
     const now = m.last_used
     let next = m.next
+    let dayRecords = m.day_records
     let bytes = m.used_bytes
     let count = m.record_count
     let conflictBytes = 0
@@ -482,6 +499,7 @@ export class SpaceDO extends DurableObject<Env> {
         continue
       }
       next++
+      dayRecords++
       bytes += r.ciphertext.length - (cur?.ciphertext.length ?? 0)
       if (!cur) count++
       // 置き換えは行の更新で(INSERT OR REPLACE は削除と挿入で索引も 2 度書く)
@@ -499,15 +517,15 @@ export class SpaceDO extends DurableObject<Env> {
     const written = next !== m.next ? 1 : m.ever_written
     // 回数と最終使用もこの 1 行に乗せる
     this.write(
-      'UPDATE meta SET next = ?, used_bytes = ?, record_count = ?, ever_written = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, last_used = ? WHERE id = 1',
-      next, bytes, count, written, m.minute, m.minute_count, m.day, m.day_count, now,
+      'UPDATE meta SET next = ?, used_bytes = ?, record_count = ?, ever_written = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1',
+      next, bytes, count, written, m.minute, m.minute_count, m.day, m.day_count, dayRecords, now,
     )
     this.write('INSERT INTO requests (request_id, results, at, head) VALUES (?, ?, ?, ?)', input.request_id, JSON.stringify(stored), now, next)
     // 保存の枠の外で溜まらないよう件数で切る。毎回ではなく、通番が TRIM_EVERY の区切りを越えたときだけ(実体が落ちても区切りは変わらない)
     if (Math.floor(next / TRIM_EVERY) !== Math.floor(m.next / TRIM_EVERY)) {
       this.write('DELETE FROM requests WHERE head < (SELECT head FROM requests ORDER BY head DESC LIMIT 1 OFFSET ?)', REQUESTS_KEPT - TRIM_EVERY - 1)
     }
-    return { results, next, bytes, count, written }
+    return { results, next, bytes, count, written, day_records: dayRecords }
   }
 
   /** 端末からの領域の削除 */
@@ -539,7 +557,7 @@ export class SpaceDO extends DurableObject<Env> {
   info(): SpaceInfo {
     const m = this.meta()
     if (!m) return { exists: false }
-    return { exists: true, epoch: m.epoch, created_at: m.created_at, last_used: m.last_used, used_bytes: m.used_bytes, record_count: m.record_count }
+    return { exists: true, epoch: m.epoch, created_at: m.created_at, last_used: m.last_used, used_bytes: m.used_bytes, record_count: m.record_count, records_today: m.day === Math.floor(runtime.now() / DAY) ? m.day_records : 0 }
   }
 
   /** 放置削除と片づけ。alarm から呼ぶ */

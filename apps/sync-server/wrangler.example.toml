@@ -16,6 +16,9 @@ PACE_HEAD_SEC = "0"
 PACE_PUSH_SEC = "0"
 # 領域ごとの 1 日の回数。既定 6000 は Paid 向け。Free で 100 人なら 1 人 1,000 要求に収めるため "1200" 程度に下げる(docs/sync-design.md の費用)
 # RATE_PER_DAY = "1200"
+# 領域ごとの 1 日に受け付けるレコードの数。正規のアプリは 1 日に数百件(送信は 5 分ごと、1 回に既読と閲覧履歴)。
+# 1 件が 2 行なので、壊れた端末が要求の上限いっぱいに 100 件ずつ送っても、Free の 100,000 行を 1 領域で使い切らせないための上限。超えた要求は 429 で 1 行も書かない
+RECORDS_PER_DAY = "3000"
 # 実際のウィジェットのサイトキーを入れて使う
 TURNSTILE_SITEKEY = ""
 
@@ -76,6 +79,7 @@ SOURCE_LIMIT = "1000"
 # 試運転は 15 秒ごとに同期するので、領域ごとの上限を広げる(2 台で 1 分に最大 16 回)
 RATE_PER_MINUTE = "60"
 RATE_PER_DAY = "20000"
+RECORDS_PER_DAY = "3000"
 POW_BITS = "16"
 TICKET_KID = "k1"
 # Cloudflare の公式のテスト用のキー(文書: turnstile/troubleshooting/testing)。誰でも通るので検証用の環境だけで使う

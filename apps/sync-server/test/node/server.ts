@@ -28,7 +28,7 @@ export async function testOp(mf: Miniflare, op: string, body: Record<string, unk
 
 /** シナリオの server の項目を環境変数の値にする。偽サーバーにない作成の検査は切る */
 export function scenarioOverrides(options: Record<string, unknown>, extra: Record<string, string> = {}): Record<string, string> {
-  const o: Record<string, string> = { POW_BITS: '0', SOURCE_LIMIT: '0', EMPTY_SPACE_DAYS: '0', RATE_PER_MINUTE: '0', RATE_PER_DAY: '0', FULL_PULL_PER_HOUR: '0', ...extra }
+  const o: Record<string, string> = { POW_BITS: '0', SOURCE_LIMIT: '0', EMPTY_SPACE_DAYS: '0', RATE_PER_MINUTE: '0', RATE_PER_DAY: '0', RECORDS_PER_DAY: '0', FULL_PULL_PER_HOUR: '0', ...extra }
   if (options.space_limit !== undefined) o.SPACE_LIMIT = String(options.space_limit)
   if (options.quota_bytes !== undefined) o.QUOTA_BYTES = String(options.quota_bytes)
   if (options.quota_records !== undefined) o.QUOTA_RECORDS = String(options.quota_records)

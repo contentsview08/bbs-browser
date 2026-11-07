@@ -1,11 +1,15 @@
 import { NumberField, Toggle } from '../SettingParts'
-import { type SettingsProps, Section } from './common'
+import { Choice, type SettingsProps, Section } from './common'
+
+/** 開いているスレの自動更新の間隔(秒)。スマホ版の選択肢と同じ */
+const AUTO_REFRESH_CHOICES = [0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))
 
 export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
     <>
       <Section title="開いているスレの自動更新" note="実況板など、流れの速いスレ向けです。差分だけを取りに行きます">
-        <NumberField value={s.autoRefreshSec} min={0} max={3600} unit="秒ごと" zeroLabel="しない" presets={[0, 5, 10, 30, 60]} onChange={(v) => update('autoRefreshSec', v)} />
+        {/* 自由な数は入れさせない(1 秒ごとのような設定が掲示板の負担になる)。選択肢はスマホ版と同じ */}
+        <Choice value={AUTO_REFRESH_CHOICES.some((o) => o.key === s.autoRefreshSec) ? s.autoRefreshSec : 0} options={AUTO_REFRESH_CHOICES} onChange={(v) => update('autoRefreshSec', v)} />
       </Section>
       <Section
         advanced title="お気に入りのスレの新着"

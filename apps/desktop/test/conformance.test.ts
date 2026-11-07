@@ -16,6 +16,7 @@ import {
   youtubeLinksIn,
 } from '../src/utils/postBody'
 import { favIncrease } from '../src/utils/watch'
+import { threadUnread, unreadFirstOrder } from '../src/utils/unread'
 import { matchRanges, newRule, patternError, postMatcher, type NgTarget } from '../src/utils/ng'
 
 interface Case<I, E> {
@@ -78,6 +79,13 @@ describe('ng.json', () => {
     const post: Post = { no: 1, name: target === 'posterName' ? text : '', mail: '', date: '', id: target === 'posterId' ? text : undefined, body: target === 'content' ? text : '' }
     expect(postMatcher([newRule(target, pattern, { isRegex })])(post)).toBe(expected.match)
     if (expected.ranges) expect(matchRanges({ pattern, isRegex, target }, text)).toEqual(expected.ranges)
+  })
+})
+
+describe('unread-first.json', () => {
+  it.each(load<{ key: string; postCount: number; readNo?: number }[], string[]>('unread-first.json'))('$name', (c) => {
+    const unread = (t: (typeof c.input)[number]) => threadUnread(t.readNo === undefined ? undefined : { readNo: t.readNo }, t.postCount) > 0
+    expect(unreadFirstOrder(c.input, unread).map((t) => t.key)).toEqual(expectedOf(c))
   })
 })
 

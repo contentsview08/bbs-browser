@@ -136,6 +136,17 @@ sealed interface Page {
         /** 差分の行から絞り込んだ: "new"(新しく立ったスレ)/ null */
         var only by mutableStateOf<String?>(null)
         val newThread = ReplyState(board.url)
+        private var unreadTopOf: Triple<List<ThreadSummary>, String?, Boolean>? = null
+        private var unreadTopKeys: Set<String> = emptySet()
+        /** 「未読を上に」で上へ置くスレ。読むたびに行が動かないよう、一覧を取り直す・タブを押すまで変えない */
+        fun unreadTop(compute: () -> Set<String>): Set<String> {
+            val of = unreadTopOf
+            if (of == null || of.first !== threads || of.second != tab || of.third != reversed) {
+                unreadTopKeys = compute()
+                unreadTopOf = Triple(threads, tab, reversed)
+            }
+            return unreadTopKeys
+        }
     }
 
     class Thread(val summary: ThreadSummary) : Page {

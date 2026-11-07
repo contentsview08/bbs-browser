@@ -104,6 +104,8 @@ import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.bbs.ThreadSummary
 import io.github.contentsview08.obb.data.ThreadState
+import io.github.contentsview08.obb.data.threadUnread
+import io.github.contentsview08.obb.data.unreadFirstOrder
 import kotlinx.coroutines.launch
 
 /** 一覧のタブ(PC 版の LIST_TABS と同じ)。どれも選ばなければ設定の並び */
@@ -156,7 +158,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val ngMatcher = remember(ngRules) { io.github.contentsview08.obb.data.NgMatcher(ngRules) }
     val sort = vm.prefs.threadSort
     val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val shown = remember(page.threads, page.states, tab, query, ngMatcher, sort, keywords, page.reversed, page.only) {
+    val unreadFirst = vm.prefs.unreadFirst
+    // 既読が進むたびに並べ直さないよう、中身で絞るタブのときだけ既読の変化をきっかけにする
+    val statesKey = if (tab == ListTab.UNREAD || tab == ListTab.VISITED) page.states else null
+    val shown = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, page.reversed, page.only, unreadFirst) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
@@ -176,6 +181,11 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             ListTab.COUNT -> list.sortedByDescending { it.postCount }.let { if (page.reversed) it.reversed() else it }
             ListTab.MOMENTUM -> list.sortedByDescending { momentum(it, now) }.let { if (page.reversed) it.reversed() else it }
             ListTab.NEWEST -> list.sortedByDescending { it.createdAt ?: 0 }.let { if (page.reversed) it.reversed() else it }
+        }
+        // 未読のタブの中はすべて未読なので分けない
+        if (unreadFirst && tab != ListTab.UNREAD) {
+            val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
+            list = unreadFirstOrder(list) { it.key in top }
         }
         if (keywords.isNotEmpty()) {
             val (hit, rest) = list.partition { t -> keywords.any { t.title.contains(it, ignoreCase = true) } }
@@ -473,7 +483,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     NewThreadSheet(vm, page)
 }
 
-private fun unreadOf(t: ThreadSummary, state: ThreadState?): Int = if (state == null) 0 else maxOf(0, t.postCount - state.readNo)
+private fun unreadOf(t: ThreadSummary, state: ThreadState?): Int = threadUnread(state?.readNo, t.postCount)
 
 private fun threadTitleText(t: ThreadSummary, isNew: Boolean, isFavorite: Boolean) = buildAnnotatedString {
     if (isNew) { appendInlineContent("new", "[新]"); append(" ") }

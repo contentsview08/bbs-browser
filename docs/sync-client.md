@@ -558,7 +558,7 @@ class UserOps {
 | --- | --- | --- |
 | 見張る言葉 | `keywords`・`grossWords` | 配列 → JSON の文字列 |
 | レスの出し方 | `omitNoname`・`tidyBlankLines`・`urlShorten`・`highlightOp`・`idStyle`・`idShort`・`idPosition`・`dateStyle`・`watchoiShort`・`nameSubtle`・`iconFromWatchoi`・`groupNg`・`ngMode`・`heatStyle`・`blurGross` | 真偽・短い文字列 |
-| 操作 | `openPosition`・`threadSort`・`quickPhrases` | 文字列・JSON の文字列 |
+| 操作 | `openPosition`・`threadSort`・`unreadFirst`・`quickPhrases` | 真偽・文字列・JSON の文字列 |
 | 板ごと | `boardMeta` の `alias`・`omitNoname`・`nonames`(`setting:::boardMeta/<板>`) | JSON の文字列 |
 
 同期しないもの。

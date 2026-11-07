@@ -16,7 +16,7 @@ import { SliderDialog } from './FontSizeSlider'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
-import { threadUnread } from '../utils/unread'
+import { threadUnread, unreadFirstOrder } from '../utils/unread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
@@ -128,6 +128,8 @@ interface Props {
    * 渡さなければ、スレ一覧(threads)を取り直したときに控え直す
    */
   snapshotKey?: unknown
+  /** 未読のスレを上にまとめる(閲覧履歴の見た順は崩さないので、板の一覧だけ) */
+  unreadFirst?: boolean
   /** これが変わったら、その絞り込みにする(サイドバーの「お気に入りのスレ」・「次の未読スレ」から開いたとき)。null なら外す */
   filterRequest?: { key: ListFilter | null; seq: number }
   /** マウスジェスチャーからの、上のタブの頼み(そのタブを押したのと同じ。next・prev は隣のタブ) */
@@ -462,6 +464,14 @@ export default function ThreadListPanel(props: Props) {
     )
     // threads は snapshotKey を渡さないときのきっかけとして入っている
   }, [unreadOnly, snapshotKey])
+  // 読むたびに行が動かないよう、未読の顔ぶれは一覧を取り直す・並びを選び直すまで変えない。
+  // 未読の絞り込みの中はすべて未読なので分けない
+  const unreadTop = useMemo(() => {
+    if (!props.unreadFirst || unreadOnly) return undefined
+    const of = stateOfRef.current
+    return new Set(threads.filter((t) => threadUnread(of(t), t.postCount) > 0).map(threadId))
+    // threads は snapshotKey を渡さないときのきっかけとして入っている
+  }, [props.unreadFirst, unreadOnly, snapshotKey, filter, sort?.mode, sort?.dir])
 
   // 並べ替え・一覧の入れ替えは、タブの印(どれを選んだか)を先に描き、並べ直したカードの組み立ては後回しにする。
   // カードが多いと組み立てに時間がかかり、押してから印が変わるまで固まったように見えるため
@@ -469,6 +479,7 @@ export default function ThreadListPanel(props: Props) {
   const shownThreads = useDeferredValue(threads)
   // サーバーの並び(ふたば)は一覧と一緒に変わるので、一緒に遅らせる(ずれると、一瞬だけ並べ替えていない一覧が出る)
   const shownServerOrder = useDeferredValue(props.serverOrder)
+  const shownUnreadTop = useDeferredValue(unreadTop)
   /** 既読が進むたびに一覧を作り直さないよう、「見たスレ」の絞り込みのときだけ stateOf を見る */
   const visitedStateOf = visitedOnly ? stateOf : undefined
   const visible = useMemo(() => {
@@ -498,10 +509,11 @@ export default function ThreadListPanel(props: Props) {
     }
     // 閲覧履歴の「見た順」を逆にしたら、最近見たものを下に
     if (reversed && !shownSort) list = [...list].reverse()
+    if (shownUnreadTop) list = unreadFirstOrder(list, (t) => shownUnreadTop.has(threadId(t)))
     // 運営のお知らせ・広告のスレは、どの並べ方でも一番下に回す(並びはそのまま)
     if (list.some(isAnnouncement)) list = [...list.filter((t) => !isAnnouncement(t)), ...list.filter(isAnnouncement)]
     return list
-  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds])
+  }, [shownThreads, query, filter, unreadSnapshot, shownSort, props.isNg, momenta, visitedStateOf, shownServerOrder, reversed, props.postedIds, props.favoriteIds, shownUnreadTop])
   const onShownChange = useRef(props.onShownChange)
   onShownChange.current = props.onShownChange
   // visible が作り直されても、顔ぶれ・並び・レス数が変わったときだけ知らせる
@@ -559,7 +571,7 @@ export default function ThreadListPanel(props: Props) {
   useEffect(() => {
     setPage(0)
     // visible は裏の確認や既読の変化でも作り直されるので、きっかけにしない
-  }, [filter, sort?.mode, sort?.dir, reversed, query])
+  }, [filter, sort?.mode, sort?.dir, reversed, query, props.unreadFirst])
   const goPage = (n: number) => {
     setPage(Math.max(0, Math.min(pageCount - 1, n)))
     scrollRef.current?.scrollTo({ top: 0 })

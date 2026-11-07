@@ -150,6 +150,8 @@ class Prefs(context: Context) {
     // ── スレ一覧 ──
     /** 板を開いたときの並び: subject(更新順)/ momentum / newest / count */
     var threadSort by pref("threadSort", "subject")
+    /** 一度見たことがあり新着レスのあるスレを、今の並びのまま一覧の上にまとめる */
+    var unreadFirst by pref("unreadFirst", false)
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
     var keywords by wordsPref("keywords", emptyList(), "\n")
     /** スレ一覧の勢いの示し方: number(数字の色)/ bar(行の下のバー)/ both */
@@ -197,8 +199,8 @@ class Prefs(context: Context) {
     var listTabs by wordsPref("listTabs", listOf("unread", "momentum", "newest"), ",")
     /** 履歴の画面に出すタブと並び(カンマ区切り。PAST_TABS のキー) */
     var pastTabs by wordsPref("pastTabs", PAST_TABS.map { it.first }, ",")
-    /** 履歴の画面のタブの置き場: header / footer */
-    var pastTabsPosition by pref("pastTabsPosition", "header")
+    /** 履歴の画面のタブの置き場: footer / header */
+    var pastTabsPosition by pref("pastTabsPosition", "footer")
     /** 開いていないスレのログを消すまでの日数(0 なら消さない) */
     var logRetentionDays by pref("logRetentionDays", 90)
 

@@ -2677,6 +2677,7 @@ export default function App() {
           fill={single ? (settings.paneMode === 'single' ? 'centered' : 'full') : undefined}
           onResize={(w) => updateSetting('threadPanelWidth', w)}
           defaultSort={history ? 'subject' : settings.threadSort}
+          unreadFirst={!history && !notifView && settings.unreadFirst}
           onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
           serverOrder={!history && listOrder ? orderOf(listOrder) : undefined}
           onSortChange={!history ? onListSort : undefined}

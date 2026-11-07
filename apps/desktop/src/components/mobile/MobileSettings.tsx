@@ -279,6 +279,7 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               ]}
               onChange={(v) => update('threadSort', v)}
             />
+            <SwitchRow label="未読を上に" desc="一度見たことがあり、新着レスのあるスレを今の並びのまま一覧の上にまとめます。見たことのないスレは入りません" checked={s.unreadFirst} onChange={(v) => update('unreadFirst', v)} />
             <NavRow label="タブ" desc="一覧の下に出すタブと、その並び" value={`${s.listTabs.length} 個`} onClick={() => push('listTabs')} />
           </Group>
           <Group title="キーワード" note="スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します">

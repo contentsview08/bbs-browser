@@ -33,6 +33,12 @@ describe('設定の書き出しと読み込み', () => {
     expect(importableSettings(parsed, DEFAULT_SETTINGS).autoRefreshSec).toBe(10)
   })
 
+  it('未読を上にの設定も書き出して戻せる', () => {
+    const parsed = parseBackup(JSON.stringify(settingsFile({ ...DEFAULT_SETTINGS, unreadFirst: true })))
+    if (parsed.kind !== 'settings') throw new Error(parsed.kind)
+    expect(importableSettings(parsed, DEFAULT_SETTINGS).unreadFirst).toBe(true)
+  })
+
   it('知らない項目・型の合わない値・書き出さない項目は読み込まない', () => {
     const parsed = parseBackup(
       JSON.stringify({

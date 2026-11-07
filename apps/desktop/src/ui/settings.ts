@@ -240,6 +240,8 @@ export interface AppSettings {
   lastBoardUrl: string
   // スレ一覧
   threadSort: ThreadSort
+  /** 一度見たことがあり新着レスのあるスレを、今の並びのまま一覧の上にまとめる */
+  unreadFirst: boolean
   /** スレ一覧の上に出すタブと、その並び(左から) */
   listTabs: ListTabKey[]
   /** スマホの履歴の画面のタブと並び(スマホ版の pastTabs と同じ。PC の履歴は 1 つの一覧なので使わない) */
@@ -484,9 +486,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   replyWidth: 380,
   lastBoardUrl: 'https://bbs.eddibb.cc/liveedge/',
   threadSort: 'subject',
+  unreadFirst: false,
   listTabs: ['unread', 'momentum', 'newest'],
   pastTabs: ['unread', 'history', 'fav', 'posts', 'uploads'],
-  pastTabsPosition: 'header',
+  pastTabsPosition: 'footer',
   listPageSize: 100,
   boardMeta: {},
   keywords: [],

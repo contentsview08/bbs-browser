@@ -48,6 +48,14 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
           onChange={(v) => update('threadSort', v)}
         />
       </Section>
+      <Section title="未読のスレ">
+        <Toggle
+          checked={s.unreadFirst}
+          onChange={(v) => update('unreadFirst', v)}
+          label="未読を上に"
+          note="一度見たことがあり、新着レスのあるスレを今の並びのまま一覧の上にまとめます。見たことのないスレは入りません"
+        />
+      </Section>
       <Section title="スレ一覧のタブ" note="スレ一覧の上に出すタブと、その並び(上が左)です。数字キーの 1・2・3… は左から順に当たります">
         <ListTabsEditor value={s.listTabs} onChange={(v) => update('listTabs', v)} />
       </Section>

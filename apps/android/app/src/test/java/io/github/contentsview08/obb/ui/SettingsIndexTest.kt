@@ -21,6 +21,11 @@ class SettingsIndexTest {
         assertFalse(SETTINGS_INDEX.any { it.second.contains("「履歴・未読・スレ・板」") })
     }
 
+    @Test fun 未読を上にと履歴のタブの置き場も索引に入る() {
+        assertTrue(has("list", "未読を上に"))
+        assertTrue(has("history", "タブの置き場"))
+    }
+
     @Test fun テーマと色のページも索引に入る() {
         assertTrue(has("theme", "配色"))
     }

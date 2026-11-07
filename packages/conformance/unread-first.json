@@ -1,0 +1,26 @@
+[
+  {"name": "未読を上にまとめ、かたまりの中と残りの中の順番は変えない", "input": [
+    {"key": "a", "postCount": 10, "readNo": 10},
+    {"key": "b", "postCount": 20, "readNo": 5},
+    {"key": "c", "postCount": 30},
+    {"key": "d", "postCount": 40, "readNo": 39},
+    {"key": "e", "postCount": 50, "readNo": 50}
+  ], "expected": ["b", "d", "a", "c", "e"]},
+  {"name": "見たことのないスレは未読に入れない", "input": [
+    {"key": "a", "postCount": 100},
+    {"key": "b", "postCount": 1, "readNo": 0}
+  ], "expected": ["b", "a"]},
+  {"name": "既読のほうが多いスレは未読に入れない", "input": [
+    {"key": "a", "postCount": 5, "readNo": 10},
+    {"key": "b", "postCount": 11, "readNo": 10}
+  ], "expected": ["b", "a"]},
+  {"name": "未読がなければそのまま", "input": [
+    {"key": "b", "postCount": 3, "readNo": 3},
+    {"key": "a", "postCount": 3}
+  ], "expected": ["b", "a"]},
+  {"name": "すべて未読ならそのまま", "input": [
+    {"key": "b", "postCount": 3, "readNo": 1},
+    {"key": "a", "postCount": 9, "readNo": 2}
+  ], "expected": ["b", "a"]},
+  {"name": "空はそのまま", "input": [], "expected": []}
+]

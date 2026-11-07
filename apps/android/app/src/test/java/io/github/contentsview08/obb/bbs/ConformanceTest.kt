@@ -9,6 +9,8 @@ import io.github.contentsview08.obb.data.ngMatchRanges
 import io.github.contentsview08.obb.data.ngPatternError
 import io.github.contentsview08.obb.data.nextRequest
 import io.github.contentsview08.obb.data.normalizeForSearch
+import io.github.contentsview08.obb.data.threadUnread
+import io.github.contentsview08.obb.data.unreadFirstOrder
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
@@ -158,6 +160,12 @@ class ConformanceTest {
     @Test fun fav_new() = check("fav-new.json") { c ->
         val i = c.getJSONObject("input")
         favIncrease(i.getInt("now"), if (i.has("before")) i.getInt("before") else null, i.getInt("localCount"), i.getInt("readNo"))
+    }
+
+    @Test fun unread_first() = check("unread-first.json") { c ->
+        val input = c.getJSONArray("input")
+        val threads = (0 until input.length()).map { input.getJSONObject(it) }
+        unreadFirstOrder(threads) { threadUnread(if (it.has("readNo")) it.getInt("readNo") else null, it.getInt("postCount")) > 0 }.map { it.getString("key") }
     }
 
     @Test fun post_redirect() = check("post-redirect.json") { c ->

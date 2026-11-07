@@ -10,6 +10,6 @@ class BackupKeysTest {
     }
 
     @Test fun ordinary_settings_are_in_backup() {
-        for (k in listOf("keywords", "gesturesEnabled", "uploadHost", "postName")) assertTrue(k, Prefs.inBackup(k))
+        for (k in listOf("keywords", "gesturesEnabled", "uploadHost", "postName", "unreadFirst", "pastTabsPosition")) assertTrue(k, Prefs.inBackup(k))
     }
 }

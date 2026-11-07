@@ -14,3 +14,10 @@ export function threadUnread(state: { readNo: number } | undefined, ...counts: n
 export function favUnread(fav: { postCount: number; readNo: number }, known: number | undefined): number {
   return fav.postCount === 0 ? 0 : unreadCount(fav.readNo, known ?? fav.postCount)
 }
+
+/** 「未読を上に」の並び。未読のかたまりと残りの、それぞれの中の順番は変えない */
+export function unreadFirstOrder<T>(list: T[], isUnread: (item: T) => boolean): T[] {
+  const top = list.filter(isUnread)
+  if (top.length === 0 || top.length === list.length) return list
+  return [...top, ...list.filter((item) => !isUnread(item))]
+}

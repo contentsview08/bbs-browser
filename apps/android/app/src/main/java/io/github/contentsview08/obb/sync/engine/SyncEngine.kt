@@ -137,10 +137,12 @@ class SyncEngine(
 
     /** 別の領域へ移る途中。走っている周を次の区切りで止め、古い領域の受信を新しい表に混ぜない */
     @Volatile private var halting = false
-    private var headEtag: String? = null
+    /** 直前の確認が「変化なし」(304 か同じ version)だった時刻。自動の周で pull を省く根拠 */
+    private var headFreshAt = 0L
 
     @Volatile private var again = false
     @Volatile private var againManual = false
+    @Volatile private var againQuick = false
     private var last = CycleResult()
     private var deviceChecked = false
     private var reconciled = false
@@ -185,7 +187,7 @@ class SyncEngine(
                 stmts += setState("kinds_resume", canonicalJson(SYNC_GROUPS.filter { sw[it.id] == true }.map { it.id }))
             }
             db.batch(stmts)
-            headEtag = null
+            headFreshAt = 0
         }
     }
 
@@ -225,6 +227,9 @@ class SyncEngine(
     /** 表を消す・別の領域へ移るときはこれを先に通す */
     suspend fun halt() = withContext(io) { halted { } }
 
+    /** 確認に付ける ETag。覚えずに手元の since と epoch から作る(周が失敗しても、送った分だけ since を進めても、ずれない) */
+    private fun headEtag(): String? = t.state("epoch")?.let { "\"$it:${t.state("since")?.toLong() ?: 0L}\"" }
+
     /** GET /head。変化があれば true(次に周を回す)。変化なし・通信の失敗は false。周が走っていれば確かめない */
     suspend fun checkHead(): Boolean = withContext(io) {
         if (!mutex.tryLock()) return@withContext false
@@ -233,15 +238,23 @@ class SyncEngine(
             val material = keyStore.load() ?: return@withContext false
             val head = SyncApi(serverUrl, deriveKeys(material.k).authToken.toHex(), transport, allowLocalhost)
             try {
-                val r = head.head(headEtag)
+                val r = head.head(headEtag())
                 head.pace?.let { pace = it }
-                val version = r.version ?: return@withContext false
-                headEtag = "\"${r.epoch}:$version\""
+                val version = r.version
+                if (version == null) {
+                    headFreshAt = now()
+                    return@withContext false
+                }
                 val since = t.state("since")?.toLong() ?: 0L
-                version > since || (r.gcFloor ?: 0L) > since || r.epoch != t.state("epoch")
+                val changed = version > since || (r.gcFloor ?: 0L) > since || r.epoch != t.state("epoch")
+                headFreshAt = if (changed) 0 else now()
+                changed
             } catch (e: SyncApiError) {
                 // 404・401 は周の流れ(作り直し・止める)で扱う
-                if (e.kind == "http" && (e.status == 404 || e.status == 401)) return@withContext true
+                if (e.kind == "http" && (e.status == 404 || e.status == 401)) {
+                    headFreshAt = 0
+                    return@withContext true
+                }
                 if (e.kind == "http" && e.status == 429) waitFor(e) else retryAt = now() + SyncConfig.backoffDelayMs(attempts++, jitter())
                 false
             }
@@ -263,8 +276,13 @@ class SyncEngine(
     }
 
     /** 走っている間のきっかけは「もう 1 周」の印にする */
-    suspend fun runCycle(manual: Boolean = false): CycleResult = withContext(io) {
+    /**
+     * 走っている間のきっかけは「もう 1 周」にまとめる。
+     * quick は確認の時計と裏に回る瞬間の周。直前の確認が「変化なし」なら pull を省く(前面復帰・手動は省かない)
+     */
+    suspend fun runCycle(manual: Boolean = false, quick: Boolean = false): CycleResult = withContext(io) {
         if (!mutex.tryLock()) {
+            againQuick = if (again) againQuick && quick else quick
             againManual = againManual || manual
             again = true
             return@withContext mutex.withLock {
@@ -273,7 +291,7 @@ class SyncEngine(
             }
         }
         try {
-            last = cycle(manual)
+            last = cycle(manual, quick)
             while (again) runAgain()
             last
         } finally {
@@ -283,10 +301,12 @@ class SyncEngine(
 
     private suspend fun runAgain() {
         val m = againManual
+        val q = againQuick
         again = false
         againManual = false
+        againQuick = false
         val prev = last
-        val next = cycle(m)
+        val next = cycle(m, q)
         // 画面が読み直す印を前の周の分まで渡す
         next.pulled += prev.pulled
         next.pushed += prev.pushed
@@ -310,7 +330,7 @@ class SyncEngine(
     suspend fun pair(k: ByteArray, ticket: String?) = withContext(io) {
         if (ticket != null) checkTicketFor(k, ticket)
         halted {
-            headEtag = null
+            headFreshAt = 0
             pace = null
             val id = newDeviceId()
             keyStore.save(SyncKeyMaterial(k, id, ticket))
@@ -326,7 +346,7 @@ class SyncEngine(
     /** この端末で同期をやめる。手元のデータは消さない */
     suspend fun leave() = withContext(io) {
         halted {
-            headEtag = null
+            headFreshAt = 0
             pace = null
             clearTables()
             keyStore.clear()
@@ -357,7 +377,7 @@ class SyncEngine(
         }
     }
 
-    private suspend fun cycle(manual: Boolean): CycleResult {
+    private suspend fun cycle(manual: Boolean, quick: Boolean): CycleResult {
         val r = CycleResult()
         result = r
         if (halting) {
@@ -401,7 +421,7 @@ class SyncEngine(
             api = SyncApi(serverUrl, keys.authToken.toHex(), transport, allowLocalhost)
             enter("draining")
             drain()
-            flow(manual)
+            flow(manual, quick)
             api.pace?.let { pace = it }
             attempts = 0
             retryAt = 0
@@ -546,11 +566,11 @@ class SyncEngine(
         putState("bad_counts", canonicalJson(counts))
     }
 
-    private suspend fun flow(manual: Boolean) {
+    private suspend fun flow(manual: Boolean, quick: Boolean) {
         // 作り直しとリベースは周の中で 1 度ずつあれば足りる。それ以上はサーバーがおかしいので次の周へ回す
         for (i in 0 until 4) {
             try {
-                step(manual)
+                step(manual, quick)
                 return
             } catch (e: SpaceGone) {
                 onSpaceGone(e)
@@ -561,7 +581,7 @@ class SyncEngine(
         throw SyncApiError("bad_response")
     }
 
-    private suspend fun step(manual: Boolean) {
+    private suspend fun step(manual: Boolean, quick: Boolean) {
         var phase = t.state("phase") ?: "joining"
         if (phase == "recreate_waiting") throw SpaceGone()
         var pulled = false
@@ -591,12 +611,20 @@ class SyncEngine(
         reconciled = true
         if (!seeded && (manual || !filled)) fillMissing()
         filled = true
-        if (!pulled && (manual || now() - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS)) pull(false)
+        val at = now()
+        if (!pulled && (manual || (at - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS && !(quick && headIsFresh(at))))) pull(false)
         applyAll()
         pushAll()
         // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
         if (result.conflicts > 0) applyAll()
     }
+
+    /**
+     * 直前の確認が「変化なし」で、確認の間隔がまだ過ぎていないか。
+     * 確認の時計は前の確認が終わってから数えるので、次の周は間隔よりわずかに遅れて来る。その分 PULL_MIN_GAP_MS を足す。
+     * 省いた間に他の端末が同じレコードを書いていれば 409 で分かり、マージして読み直す
+     */
+    private fun headIsFresh(at: Long): Boolean = headFreshAt > 0 && at - headFreshAt < paceMs(pace).head + SyncConfig.PULL_MIN_GAP_MS
 
     /** pull。joining の全件の読み取りではリベースを見ない(since = 0 がすでに全件なので) */
     private suspend fun pull(joining: Boolean) {
@@ -895,7 +923,7 @@ class SyncEngine(
             }
             keepRunning()
             checkEpoch(res.epoch)
-            settlePush(res.results, prepared.sent)
+            settlePush(res.results, prepared.sent, body.size)
         }
     }
 
@@ -956,9 +984,10 @@ class SyncEngine(
         return Prepared(requestId, rows, rows.associate { it.recordId to it.payload.hlc })
     }
 
-    private fun settlePush(results: List<PushResult>, sent: Map<String, String>) {
+    private fun settlePush(results: List<PushResult>, sent: Map<String, String>, expected: Int) {
         val at = now()
         val stmts = ArrayList<SqlStatement>()
+        val since = t.state("since")?.toLong() ?: 0L
         val local = t.records(results.map { it.recordId })
         for (res in results) {
             val l = local[res.recordId] ?: continue
@@ -988,7 +1017,11 @@ class SyncEngine(
             }
         }
         stmts += listOf(delState("push_inflight"), setState("last_push_at", at.toString()))
+        // 全部 200 で version が since の続きに隙間なく並べば、増えたのは自分の送ったものだけ。読み戻さずに済むよう since を進め、次の確認を 304 にする
+        val advanced = pushedRun(results, expected, since)
+        if (advanced != null) stmts += setState("since", advanced.toString())
         db.batch(stmts)
+        if (advanced != null) headFreshAt = at
     }
 
     /** 全件を読む。途中で切れたら読めた分を返し、呼び出す側が complete = false で扱う */
@@ -1162,4 +1195,17 @@ class SyncEngine(
         writeChunks(stmts, listOf(delState("rebase_accepted"), setState("since", maxOf(read.head, read.gcFloor).toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
         result.pulled += read.full.size
     }
+}
+
+/** 送った全部が 200 で、version が since + 1 から連番で隙間なく並んでいれば、その最後の version。それ以外は null */
+fun pushedRun(results: List<PushResult>, expected: Int, since: Long): Long? {
+    if (expected == 0 || results.size != expected) return null
+    val versions = ArrayList<Long>()
+    for (r in results) {
+        if (r.status != 200L) return null
+        versions += r.version ?: return null
+    }
+    versions.sort()
+    for (i in versions.indices) if (versions[i] != since + 1 + i) return null
+    return since + versions.size
 }

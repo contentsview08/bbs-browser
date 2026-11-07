@@ -28,8 +28,10 @@ export const TRIM_BATCH = 100
 export const TRIM_ROUNDS = 5
 
 /** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/scheduler.ts) */
-export const HEAD_INTERVAL_MS = 15_000
-export const PUSH_INTERVAL_MS = 15_000
+export const HEAD_INTERVAL_MS = 60_000
+export const PUSH_INTERVAL_MS = 300_000
+/** 確認が「変化なし」のたびに間隔を 2 倍にし、ここで止める(Cloudflare の無料枠に 100 人分を収めるため) */
+export const HEAD_BACKOFF_MAX_MS = 300_000
 export const NET_SETTLE_MS = 5_000
 export const NET_MIN_GAP_MS = 30_000
 export const IDLE_STOP_MS = 10 * 60 * 1000

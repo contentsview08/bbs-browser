@@ -24,7 +24,7 @@ import { openRecords, sealPayload, type KindTag } from '../crypto'
 import { SyncError } from '../errors'
 import { compareHlc, HLC_ZERO, hlcObserve, hlcStamp } from '../hlc'
 import { canonicalJson, parseStrictJson } from '../json'
-import type { SyncPace } from './scheduler'
+import { paceMs, type SyncPace } from './scheduler'
 import { checkDeviceId, deriveKeys, generateDeviceId, normalizeBoardUrl, spaceId, type SyncKeys } from '../keys'
 import { LAST_VIEWED_FIELD, makeTombstone, mergePayloads, type SyncPayload } from '../merge'
 import { planRebase, planRecreate, settleRecord, type LocalRecord } from '../rebase'
@@ -193,6 +193,7 @@ export class SyncEngine {
   private running: Promise<CycleResult> | null = null
   private again = false
   private againManual = false
+  private againQuick = false
   private deviceChecked = false
   private reconciled = false
   private filled = false
@@ -201,7 +202,8 @@ export class SyncEngine {
   private applyFailures = 0
   /** 別の領域へ移る途中。走っている周を次の区切りで止め、古い領域の受信を新しい表に混ぜない */
   private halting = false
-  private headEtag: string | null = null
+  /** 直前の確認が「変化なし」(304 か同じ version)だった時刻。自動の周で pull を省く根拠 */
+  private headFreshAt = 0
   private paceValue: SyncPace | null = null
 
   // 周の間だけ持つ
@@ -259,7 +261,7 @@ export class SyncEngine {
       stmts.push(setState('kinds_resume', canonicalJson(SYNC_GROUPS.flatMap((g) => (sw[g.id] ? [g.id] : [])))))
     }
     await this.db.batch(stmts)
-    this.headEtag = null
+    this.headFreshAt = 0
   }
 
   /**
@@ -296,6 +298,12 @@ export class SyncEngine {
     }
   }
 
+  /** 確認に付ける ETag。覚えずに手元の since と epoch から作る(周が失敗しても、送った分だけ since を進めても、ずれない) */
+  private async headEtag(): Promise<string | null> {
+    const epoch = await this.t.state('epoch')
+    return epoch === null ? null : `"${epoch}:${Number((await this.t.state('since')) ?? 0)}"`
+  }
+
   /** GET /head。変化があれば true(次に周を回す)。変化なし・通信の失敗は false。周の中では呼ばない */
   async checkHead(): Promise<boolean> {
     if (this.running || (await this.t.state('enabled')) !== '1' || !(await this.isMasterOn())) return false
@@ -306,15 +314,22 @@ export class SyncEngine {
     const keys = deriveKeys(material.k)
     const api = new SyncApi(this.deps.serverUrl, toHex(keys.auth_token), this.deps.transport, this.deps.allowLocalhost)
     try {
-      const head = await api.head(this.headEtag)
+      const head = await api.head(await this.headEtag())
       if (api.pace) this.paceValue = api.pace
-      if (head.version === null) return false
-      this.headEtag = `"${head.epoch}:${head.version}"`
+      if (head.version === null) {
+        this.headFreshAt = this.deps.now()
+        return false
+      }
       const since = Number((await this.t.state('since')) ?? 0)
-      return head.version > since || (head.gc_floor as number) > since || head.epoch !== (await this.t.state('epoch'))
+      const changed = head.version > since || (head.gc_floor as number) > since || head.epoch !== (await this.t.state('epoch'))
+      this.headFreshAt = changed ? 0 : this.deps.now()
+      return changed
     } catch (e) {
       // 404・401 は周の流れ(作り直し・止める)で扱う
-      if (e instanceof SyncApiError && e.kind === 'http' && (e.status === 404 || e.status === 401)) return true
+      if (e instanceof SyncApiError && e.kind === 'http' && (e.status === 404 || e.status === 401)) {
+        this.headFreshAt = 0
+        return true
+      }
       if (e instanceof SyncApiError && e.kind === 'http' && e.status === 429) this.waitFor(e)
       else this.retryAt = this.deps.now() + backoffDelayMs(this.attempts++, this.jitter())
       return false
@@ -333,26 +348,32 @@ export class SyncEngine {
     this.deps.onState?.(s)
   }
 
-  /** 走っている間のきっかけは「もう 1 周」の印にする */
-  runCycle(o: { manual?: boolean } = {}): Promise<CycleResult> {
+  /**
+   * 走っている間のきっかけは「もう 1 周」の印にする。
+   * quick は確認の時計と裏に回る瞬間の周。直前の確認が「変化なし」なら pull を省く(前面復帰・手動は省かない)
+   */
+  runCycle(o: { manual?: boolean; quick?: boolean } = {}): Promise<CycleResult> {
     if (this.running) {
+      this.againQuick = this.again ? this.againQuick && o.quick === true : o.quick === true
       this.again = true
       this.againManual ||= o.manual === true
       return this.running
     }
-    this.running = this.loop(o.manual === true).finally(() => {
+    this.running = this.loop(o.manual === true, o.quick === true).finally(() => {
       this.running = null
     })
     return this.running
   }
 
-  private async loop(manual: boolean): Promise<CycleResult> {
-    let r = await this.cycle(manual)
+  private async loop(manual: boolean, quick: boolean): Promise<CycleResult> {
+    let r = await this.cycle(manual, quick)
     while (this.again) {
       const m = this.againManual
+      const q = this.againQuick
       this.again = false
       this.againManual = false
-      const next = await this.cycle(m)
+      this.againQuick = false
+      const next = await this.cycle(m, q)
       // 画面が読み直す印を前の周の分まで渡す
       r = { ...next, pulled: r.pulled + next.pulled, pushed: r.pushed + next.pushed, conflicts: r.conflicts + next.conflicts, applied: { ...r.applied, ...next.applied } }
     }
@@ -363,7 +384,7 @@ export class SyncEngine {
   async pair(k: Uint8Array, ticket: string | null): Promise<void> {
     if (ticket !== null) checkTicketFor(k, ticket)
     await this.halt()
-    this.headEtag = null
+    this.headFreshAt = 0
     this.paceValue = null
     const deviceId = this.newDeviceId()
     await this.deps.keyStore.save({ k, deviceId, ticket })
@@ -384,7 +405,7 @@ export class SyncEngine {
   /** この端末で同期をやめる。手元のデータは消さない */
   async leave(): Promise<void> {
     await this.halt()
-    this.headEtag = null
+    this.headFreshAt = 0
     this.paceValue = null
     await this.clearTables()
     await this.deps.keyStore.clear()
@@ -414,7 +435,7 @@ export class SyncEngine {
     }
   }
 
-  private async cycle(manual: boolean): Promise<CycleResult> {
+  private async cycle(manual: boolean, quick: boolean): Promise<CycleResult> {
     const result: CycleResult = { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {} }
     this.result = result
     if (this.halting) {
@@ -463,7 +484,7 @@ export class SyncEngine {
       this.api = new SyncApi(this.deps.serverUrl, toHex(this.keys.auth_token), this.deps.transport, this.deps.allowLocalhost)
       this.enter('draining')
       await this.drain()
-      await this.flow(manual)
+      await this.flow(manual, quick)
       if (this.api.pace) this.paceValue = this.api.pace
       this.attempts = 0
       this.retryAt = 0
@@ -648,11 +669,11 @@ export class SyncEngine {
     await this.putState('bad_counts', canonicalJson(counts))
   }
 
-  private async flow(manual: boolean): Promise<void> {
+  private async flow(manual: boolean, quick: boolean): Promise<void> {
     // 作り直しとリベースは周の中で 1 度ずつあれば足りる。それ以上はサーバーがおかしいので次の周へ回す
     for (let i = 0; i < 4; i++) {
       try {
-        await this.step(manual)
+        await this.step(manual, quick)
         return
       } catch (e) {
         if (e instanceof SpaceGone) await this.onSpaceGone(e)
@@ -663,7 +684,7 @@ export class SyncEngine {
     throw new SyncApiError('bad_response')
   }
 
-  private async step(manual: boolean): Promise<void> {
+  private async step(manual: boolean, quick: boolean): Promise<void> {
     let phase = (await this.t.state('phase')) ?? 'joining'
     if (phase === 'recreate_waiting') throw new SpaceGone()
     let pulled = false
@@ -696,11 +717,21 @@ export class SyncEngine {
     this.reconciled = true
     if (!seeded && (manual || !this.filled)) await this.fillMissing()
     this.filled = true
-    if (!pulled && (manual || this.deps.now() - Number((await this.t.state('last_pull_at')) ?? 0) >= PULL_MIN_GAP_MS)) await this.pull(false)
+    const now = this.deps.now()
+    if (!pulled && (manual || (now - Number((await this.t.state('last_pull_at')) ?? 0) >= PULL_MIN_GAP_MS && !(quick && this.headIsFresh(now))))) await this.pull(false)
     await this.applyAll()
     await this.pushAll()
     // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
     if (this.result.conflicts > 0) await this.applyAll()
+  }
+
+  /**
+   * 直前の確認が「変化なし」で、確認の間隔がまだ過ぎていないか。
+   * 確認の時計は前の確認が終わってから数えるので、次の周は間隔よりわずかに遅れて来る。その分 PULL_MIN_GAP_MS を足す。
+   * 省いた間に他の端末が同じレコードを書いていれば 409 で分かり、マージして読み直す
+   */
+  private headIsFresh(now: number): boolean {
+    return this.headFreshAt > 0 && now - this.headFreshAt < paceMs(this.paceValue).head + PULL_MIN_GAP_MS
   }
 
   /** pull。joining の全件の読み取りではリベースを見ない(since = 0 がすでに全件なので) */
@@ -1052,7 +1083,7 @@ export class SyncEngine {
       }
       if (this.halting) throw new CycleStop('idle')
       await this.checkEpoch(res.epoch)
-      await this.settlePush(res.results, sent)
+      await this.settlePush(res.results, sent, body.length)
     }
   }
 
@@ -1085,9 +1116,10 @@ export class SyncEngine {
     return { requestId, rows, sent }
   }
 
-  private async settlePush(results: { record_id: string; status: number; version?: number; record?: Record<string, unknown> }[], sent: Map<string, string>): Promise<void> {
+  private async settlePush(results: { record_id: string; status: number; version?: number; record?: Record<string, unknown> }[], sent: Map<string, string>, expected: number): Promise<void> {
     const now = this.deps.now()
     const stmts: SqlStatement[] = []
+    const since = Number((await this.t.state('since')) ?? 0)
     const local = await this.t.records(results.map((r) => r.record_id))
     for (const res of results) {
       const l = local.get(res.record_id)
@@ -1120,7 +1152,11 @@ export class SyncEngine {
       }
     }
     stmts.push(delState('push_inflight'), setState('last_push_at', String(now)))
+    // 全部 200 で version が since の続きに隙間なく並べば、増えたのは自分の送ったものだけ。読み戻さずに済むよう since を進め、次の確認を 304 にする
+    const advanced = pushedRun(results, expected, since)
+    if (advanced !== null) stmts.push(setState('since', String(advanced)))
     await this.db.batch(stmts)
+    if (advanced !== null) this.headFreshAt = now
   }
 
   /** 全件を読む。途中で切れたら読めた分を返し、呼び出す側が complete: false で扱う */
@@ -1304,4 +1340,17 @@ export class SyncEngine {
     await this.writeChunks(stmts, [delState('rebase_accepted'), setState('since', String(Math.max(read.head, read.gcFloor))), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
     this.result.pulled += Object.keys(read.full).length
   }
+}
+
+/** 送った全部が 200 で、version が since + 1 から連番で隙間なく並んでいれば、その最後の version。それ以外は null */
+export function pushedRun(results: readonly { status: number; version?: number }[], expected: number, since: number): number | null {
+  if (expected === 0 || results.length !== expected) return null
+  const versions: number[] = []
+  for (const r of results) {
+    if (r.status !== 200 || typeof r.version !== 'number' || !Number.isSafeInteger(r.version)) return null
+    versions.push(r.version)
+  }
+  versions.sort((a, b) => a - b)
+  for (let i = 0; i < versions.length; i++) if (versions[i] !== since + 1 + i) return null
+  return since + versions.length
 }

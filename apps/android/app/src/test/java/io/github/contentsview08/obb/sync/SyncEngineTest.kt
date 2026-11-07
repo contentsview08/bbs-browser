@@ -1,5 +1,7 @@
 package io.github.contentsview08.obb.sync
 
+import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.data.UserOps
 import io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter
 import io.github.contentsview08.obb.sync.adapters.ResolvedBoard
 import io.github.contentsview08.obb.sync.engine.SyncApi
@@ -7,6 +9,8 @@ import io.github.contentsview08.obb.sync.engine.SyncApiError
 import io.github.contentsview08.obb.sync.engine.SyncEngine
 import io.github.contentsview08.obb.sync.engine.checkPowChallenge
 import io.github.contentsview08.obb.sync.engine.powOk
+import io.github.contentsview08.obb.sync.engine.pushedRun
+import io.github.contentsview08.obb.sync.engine.PushResult
 import io.github.contentsview08.obb.sync.engine.solvePow
 import io.github.contentsview08.obb.sync.engine.SyncKeyMaterial
 import io.github.contentsview08.obb.sync.engine.SyncKeyStore
@@ -166,7 +170,8 @@ class SyncEngineTest {
         assertEquals(120.0, e.pace?.headSec)
         head = { SyncResponse(304, "") }
         assertEquals(false, e.checkHead())
-        assertEquals(listOf(null, "\"$epoch:$since\""), etags)
+        // ETag は覚えずに手元の since と epoch から作る
+        assertEquals(listOf("\"$epoch:$since\"", "\"$epoch:$since\""), etags)
         // 304 の間も指示は残る
         assertEquals(120.0, e.pace?.headSec)
         head = { SyncResponse(200, canonicalJson(mapOf("version" to since + 1, "epoch" to epoch, "gc_floor" to 0L))) }
@@ -318,5 +323,147 @@ class SyncEngineTest {
         } catch (e: SyncApiError) {
             assertEquals("bad_response", e.kind)
         }
+    }
+
+    // ── 確認と読み戻し。PC 版の engine.test.ts と同じ場面 ──
+
+    private fun since(db: JdbcSyncSql) = db.query("SELECT value FROM sync_state WHERE key = 'since'").firstOrNull()?.get("value")?.toString()?.toLong() ?: 0L
+    private fun thread(key: String) = ThreadSummary("https://a.5ch.io/x/", key, "t$key", 0, 0, null)
+    private fun traced(s: FakeSyncServer, reqs: MutableList<String>): suspend (SyncRequest) -> SyncResponse = { r ->
+        call(s, r).also { reqs += "${r.method} ${r.url.removePrefix("https://sync.test").substringBefore('?')} ${it.status}" }
+    }
+
+    @Test fun 送った分だけならsinceを進め次の確認は304でchangesを読み戻さない() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val reqs = ArrayList<String>()
+        val db = JdbcSyncSql.open()
+        val e = engine(db, { now }, traced(s, reqs))
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        e.runCycle(true)
+        UserOps(db).setFavoriteThread(thread("1"), "t1", true, now)
+        UserOps(db).setFavoriteThread(thread("2"), "t2", true, now)
+        val before = since(db)
+        e.runCycle(true)
+        assertEquals(before + 2, since(db))
+        reqs.clear()
+        assertEquals(false, e.checkHead())
+        assertEquals(listOf("GET /head 304"), reqs)
+        now += SyncConfig.PULL_MIN_GAP_MS
+        e.runCycle(manual = false, quick = true)
+        assertEquals(emptyList<String>(), reqs.filter { it.startsWith("GET /changes") })
+        db.close()
+    }
+
+    @Test fun 間に別の端末が書いて隙間ができたらsinceを進めず次の確認で変化を見て読む() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val reqs = ArrayList<String>()
+        val dbA = JdbcSyncSql.open()
+        val dbB = JdbcSyncSql.open()
+        val a = engine(dbA, { now }, traced(s, reqs))
+        val b = engine(dbB, { now }) { call(s, it) }
+        val k = ByteArray(32) { 7 }
+        val ticket = signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)
+        a.pair(k, ticket)
+        b.pair(k, ticket)
+        a.runCycle(true)
+        b.runCycle(true)
+        now += SyncConfig.HEAD_INTERVAL_MS
+        assertEquals(false, a.checkHead())
+        UserOps(dbB).setFavoriteThread(thread("1"), "t1", true, now)
+        b.runCycle(true)
+        UserOps(dbA).setFavoriteThread(thread("2"), "t2", true, now)
+        val before = since(dbA)
+        reqs.clear()
+        // 直前の確認が「変化なし」なので pull を省く。送ると version に隙間がある
+        now += 1000
+        a.runCycle(manual = false, quick = true)
+        assertEquals(emptyList<String>(), reqs.filter { it.startsWith("GET /changes") })
+        assertEquals(before, since(dbA))
+        reqs.clear()
+        assertEquals(true, a.checkHead())
+        assertEquals(listOf("GET /head 200"), reqs)
+        // 変化を見たあとの自動の周は pull を省かない
+        a.runCycle(manual = false, quick = true)
+        assertEquals(1, reqs.count { it.startsWith("GET /changes") })
+        assertEquals(listOf("1", "2"), dbA.query("SELECT key FROM favorite_threads ORDER BY key").map { it["key"] })
+        assertEquals(false, a.checkHead())
+        dbA.close()
+        dbB.close()
+    }
+
+    @Test fun 自動の周は直前の確認が変化なしならpullを省く_前面復帰と手動と間隔が過ぎたあとは省かない() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val pulls = AtomicInteger()
+        val db = JdbcSyncSql.open()
+        val e = engine(db, { now }) { r ->
+            if (r.url.contains("/changes")) pulls.incrementAndGet()
+            call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        e.runCycle(true)
+        now += SyncConfig.HEAD_INTERVAL_MS
+        assertEquals(false, e.checkHead())
+        pulls.set(0)
+        now += SyncConfig.PULL_MIN_GAP_MS
+        e.runCycle(manual = false, quick = true)
+        assertEquals(0, pulls.get())
+        e.runCycle(false)
+        assertEquals(1, pulls.get())
+        e.runCycle(true)
+        assertEquals(2, pulls.get())
+        now += SyncConfig.HEAD_INTERVAL_MS
+        e.runCycle(manual = false, quick = true)
+        assertEquals(3, pulls.get())
+        db.close()
+    }
+
+    @Test fun 確認で変化を見たあと周が通信の失敗で終わっても次の確認は304にならず変化を見る() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val dbOther = JdbcSyncSql.open()
+        val other = engine(dbOther, { now }) { call(s, it) }
+        val k = ByteArray(32) { 7 }
+        val ticket = signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)
+        other.pair(k, ticket)
+        other.runCycle(true)
+        var failing = false
+        val reqs = ArrayList<String>()
+        val db = JdbcSyncSql.open()
+        val me = engine(db, { now }) { r ->
+            if (failing && r.url.contains("/changes")) throw SyncApiError("network")
+            traced(s, reqs)(r)
+        }
+        me.pair(k, ticket)
+        me.runCycle(true)
+        UserOps(dbOther).setFavoriteThread(thread("1"), "t1", true, now)
+        other.runCycle(true)
+        now += SyncConfig.HEAD_INTERVAL_MS
+        assertEquals(true, me.checkHead())
+        failing = true
+        assertEquals("offline", me.runCycle(false).state)
+        failing = false
+        now += SyncConfig.BACKOFF_MAX_MS
+        reqs.clear()
+        assertEquals(true, me.checkHead())
+        assertEquals(listOf("GET /head 200"), reqs)
+        me.runCycle(true)
+        assertEquals(listOf("1"), db.query("SELECT key FROM favorite_threads").map { it["key"] })
+        assertEquals(false, me.checkHead())
+        db.close()
+        dbOther.close()
+    }
+
+    @Test fun versionの並びの判定() {
+        fun ok(vararg v: Long) = v.map { PushResult("r$it", 200L, it, null) }
+        assertEquals(5L, pushedRun(ok(4, 3, 5), 3, 2))
+        assertEquals(3L, pushedRun(ok(3), 1, 2))
+        assertEquals(null, pushedRun(ok(3, 5), 2, 2))
+        assertEquals(null, pushedRun(ok(4), 1, 2))
+        assertEquals(null, pushedRun(ok(3), 2, 2))
+        assertEquals(null, pushedRun(listOf(PushResult("a", 200L, 3, null), PushResult("b", 409L, null, emptyMap())), 2, 2))
+        assertEquals(null, pushedRun(emptyList(), 0, 2))
     }
 }

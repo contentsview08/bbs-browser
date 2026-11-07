@@ -32,8 +32,10 @@ object SyncConfig {
     const val TRIM_ROUNDS = 5
 
     /** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/SyncScheduler.kt) */
-    const val HEAD_INTERVAL_MS = 15_000L
-    const val PUSH_INTERVAL_MS = 15_000L
+    const val HEAD_INTERVAL_MS = 60_000L
+    const val PUSH_INTERVAL_MS = 300_000L
+    /** 確認が「変化なし」のたびに間隔を 2 倍にし、ここで止める(Cloudflare の無料枠に 100 人分を収めるため) */
+    const val HEAD_BACKOFF_MAX_MS = 300_000L
     const val NET_SETTLE_MS = 5_000L
     const val NET_MIN_GAP_MS = 30_000L
     const val IDLE_STOP_MS = 10L * 60 * 1000

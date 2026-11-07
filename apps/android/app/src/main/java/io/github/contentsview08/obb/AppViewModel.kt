@@ -509,7 +509,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch { f() }
         }
         override suspend fun enabled() = withContext(Dispatchers.IO) { syncCtl.autoEnabled() }
-        override suspend fun cycle(reason: String) = withContext(Dispatchers.IO) { syncCtl.autoCycle() }
+        override suspend fun cycle(reason: String) = withContext(Dispatchers.IO) { syncCtl.autoCycle(reason) }
         override suspend fun check() = withContext(Dispatchers.IO) { syncCtl.autoCheck() }
         override suspend fun hasChanges() = withContext(Dispatchers.IO) { syncCtl.hasChanges() }
         override fun pace() = syncCtl.pace()
@@ -835,6 +835,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 板のスレ一覧を開く。root なら積み重ねを入れ替える(左のメニューから) */
     fun openBoard(board: Board, root: Boolean = true) {
         drawerOpen = false
+        syncScheduler.activity()
         val page = Page.Threads(board)
         navDir = if (root) 0 else 1
         if (root) stack.clear()
@@ -879,6 +880,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** no: 開いたらそのレスへ飛ぶ(書き込み履歴・画像の「貼ったレス」・URL のレス番号から) */
     fun openThread(t: ThreadSummary, no: Int? = null) {
         drawerOpen = false
+        syncScheduler.activity()
         val page = Page.Thread(t)
         page.jumpNo = no
         forwardPage = null
@@ -1278,6 +1280,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             back()
             // 消したスレを「進む」で開き直さない
             forwardPage = null
+            // メニューの閲覧履歴とスレ一覧の未読の印から、消したスレをすぐ外す
+            for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
+            reloadSide()
             toast = "ログを削除しました"
         }
     }

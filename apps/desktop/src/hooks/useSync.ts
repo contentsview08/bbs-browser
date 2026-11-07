@@ -70,7 +70,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
       setTimer: (f, ms) => window.setTimeout(f, ms),
       clearTimer: (t) => window.clearTimeout(t as number),
       enabled: () => ctl.autoEnabled(),
-      cycle: () => ctl.autoCycle(),
+      cycle: (reason) => ctl.autoCycle(reason),
       check: () => ctl.autoCheck(),
       hasChanges: () => ctl.hasChanges(),
       pace: () => ctl.pace(),

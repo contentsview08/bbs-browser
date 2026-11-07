@@ -6,6 +6,7 @@ import { FakeSyncServer, signTicket } from './fakeServer'
 import { testDb } from './scenarioRunner'
 
 const HEAD_MS = S.HEAD_INTERVAL_MS
+const PUSH_MS = S.PUSH_INTERVAL_MS
 const K = new Uint8Array(32).fill(7)
 const K2 = new Uint8Array(32).fill(9)
 const BOARD = 'https://a.5ch.io/x/'
@@ -43,11 +44,14 @@ function device(name: string, clock: Clock, server: FakeSyncServer, idleStops: b
   const db = testDb()
   let material: S.SyncKeyMaterial | null = null
   const requests: string[] = []
+  // /records が書く SQLite の行数。N 件で 2N + 2(レコードと version の索引が N ずつ、meta と request_id の控えが 1 ずつ。サーバーの cost.test.ts の値)
+  const rows = { n: 0 }
   const base: S.SyncTransport = {
     async send(req) {
       const u = new URL(req.url)
       const res = server.handle({ method: req.method, path: u.pathname + u.search, headers: req.headers, body: req.body })
       requests.push(`${req.method} ${u.pathname} ${res.status}`)
+      if (u.pathname === '/records' && res.status === 200) rows.n += 2 * ((JSON.parse(req.body ?? '{}') as { records?: unknown[] }).records?.length ?? 0) + 2
       return res
     },
   }
@@ -69,14 +73,14 @@ function device(name: string, clock: Clock, server: FakeSyncServer, idleStops: b
     setTimer: clock.setTimer,
     clearTimer: clock.clearTimer,
     enabled: () => ctl.autoEnabled(),
-    cycle: () => ctl.autoCycle(),
+    cycle: (reason) => ctl.autoCycle(reason),
     check: () => ctl.autoCheck(),
     hasChanges: () => ctl.hasChanges(),
     pace: () => ctl.pace(),
     idleStops,
   })
   const engine = new S.SyncEngine({ db, keyStore: { load: async () => material, save: async (v) => void (material = v), clear: async () => void (material = null) }, transport: wrap ? wrap(base) : base, serverUrl: 'https://sync.test', adapters, now: () => clock.now, newDeviceId: () => name })
-  return { db, store, ops: new UserOps(store), ctl, scheduler, engine, requests, material: () => material }
+  return { db, store, ops: new UserOps(store), ctl, scheduler, engine, requests, rows, material: () => material }
 }
 
 async function open(store: LogStore, key: string) {
@@ -97,16 +101,32 @@ describe('自動の同期', () => {
     await a.scheduler.foreground()
     await b.scheduler.foreground()
     a.requests.length = 0
-    await clock.advance(HEAD_MS * 2)
+    await clock.advance(HEAD_MS)
+    expect(a.requests).toEqual(['GET /head 304'])
+    // 変化なしのあとは間隔が 2 倍になる
+    await clock.advance(HEAD_MS)
+    expect(a.requests).toEqual(['GET /head 304'])
+    await clock.advance(HEAD_MS)
+    expect(a.requests).toEqual(['GET /head 304', 'GET /head 304'])
+    await a.scheduler.background()
+    await a.scheduler.foreground()
     a.requests.length = 0
-    await clock.advance(HEAD_MS * 4)
-    expect(a.requests).toEqual(Array(4).fill('GET /head 304'))
+    await clock.advance(HEAD_MS)
+    expect(a.requests).toEqual(['GET /head 304'])
+    // 読んで操作すると確認は 1 分おきに戻り、次の送信の時計で送る。直前の確認が 304 なので /changes は読まず、送った分は読み戻さない
     await open(a.store, '1')
     await a.ops.markRead(thread('1'), 7, clock.now)
+    a.scheduler.activity()
+    a.requests.length = 0
+    await clock.advance(PUSH_MS - HEAD_MS)
+    expect(a.requests).toEqual(['GET /head 304', 'GET /head 304', 'POST /records 200'])
+    // 既読と閲覧履歴の 2 件で 2 × 2 + 2 行
+    expect(a.rows.n).toBe(6)
     a.requests.length = 0
     await clock.advance(HEAD_MS)
-    expect(a.requests.filter((r) => r.startsWith('POST /records'))).toHaveLength(1)
-    await clock.advance(HEAD_MS)
+    expect(a.requests).toEqual(['GET /head 304'])
+    // 相手は次の確認で変化を見て読む
+    await clock.advance(HEAD_MS * 4)
     expect((await b.db.select<{ read_no: number }>('SELECT read_no FROM threads WHERE key = $1', ['1']))[0]?.read_no).toBe(7)
     a.scheduler.dispose()
     b.scheduler.dispose()
@@ -141,8 +161,8 @@ describe('自動の同期', () => {
     a.scheduler.dispose()
   })
 
-  it('1 日の要求の回数: PC 8 時間とスマホ 3 時間、1 分に 1 回読む', async () => {
-    const clock = new Clock()
+  /** 2 台を作って対にし、最初の周を済ませる。回数は 0 から数え直す */
+  async function pairTwo(clock: Clock) {
     const server = new FakeSyncServer({ now: () => clock.now, rate_per_minute: 20, full_pull_per_hour: null })
     const pc = device('pc', clock, server, true)
     const phone = device('phone', clock, server, false)
@@ -153,6 +173,24 @@ describe('自動の同期', () => {
     await phone.engine.runCycle({ manual: true })
     pc.requests.length = 0
     phone.requests.length = 0
+    return { pc, phone }
+  }
+
+  type Dev = Awaited<ReturnType<typeof pairTwo>>['pc']
+  const count = (list: string[], p: string) => list.filter((r) => r.startsWith(p)).length
+  const tally = (d: Dev) => ({ total: d.requests.length, head: count(d.requests, 'GET /head'), changes: count(d.requests, 'GET /changes'), records: count(d.requests, 'POST /records'), rows: d.rows.n, limited: d.requests.filter((r) => r.endsWith(' 429')).length })
+  const show = (name: string, pc: Dev, phone: Dev) => {
+    const a = tally(pc)
+    const b = tally(phone)
+    console.log(`${name}: PC ${a.total}(head ${a.head}・changes ${a.changes}・records ${a.records}・行 ${a.rows})、スマホ ${b.total}(head ${b.head}・changes ${b.changes}・records ${b.records}・行 ${b.rows})、合計 ${a.total + b.total}、行 ${a.rows + b.rows}、429 ${a.limited + b.limited}`)
+    expect(a.limited + b.limited).toBe(0)
+    return { pc: a, phone: b }
+  }
+
+  // 1 日の要求の回数。docs/sync-design.md の「費用」の表の元
+  it('1 日の要求の回数 (a): PC 8 時間とスマホ 3 時間、1 分に 1 回読み続ける', async () => {
+    const clock = new Clock()
+    const { pc, phone } = await pairTwo(clock)
     await pc.scheduler.foreground()
     await open(pc.store, '1')
     for (let m = 1; m <= 8 * 60; m++) {
@@ -168,12 +206,49 @@ describe('自動の同期', () => {
       await phone.ops.markRead(thread('2'), m, clock.now)
     }
     await phone.scheduler.background()
-    const count = (list: string[], p: string) => list.filter((r) => r.startsWith(p)).length
-    const total = pc.requests.length + phone.requests.length
-    const limited = [...pc.requests, ...phone.requests].filter((r) => r.endsWith(' 429')).length
-    console.log(`要求の回数: PC ${pc.requests.length}(head ${count(pc.requests, 'GET /head')}・changes ${count(pc.requests, 'GET /changes')}・records ${count(pc.requests, 'POST /records')})、スマホ ${phone.requests.length}(head ${count(phone.requests, 'GET /head')}・changes ${count(phone.requests, 'GET /changes')}・records ${count(phone.requests, 'POST /records')})、合計 ${total}、429 ${limited}`)
-    expect(limited).toBe(0)
-    expect(total).toBeLessThan(6000)
+    const r = show('(a) 読み続ける', pc, phone)
+    // PC は操作で確認が 1 分おきのまま、送信は 5 分おきで読み戻さない(changes 0)。スマホは操作がないので確認が伸び、送信の周で pull する
+    expect(r.pc).toMatchObject({ total: 481, head: 384, changes: 0, records: 97, rows: 582 })
+    expect(r.phone).toMatchObject({ total: 146, head: 72, changes: 37, records: 37, rows: 222 })
+    // 100 人分の書き込み行が無料枠に収まる
+    expect((r.pc.rows + r.phone.rows) * 100).toBeLessThan(100_000)
+  }, 300_000)
+
+  it('1 日の要求の回数 (b): 読まずに開いているだけ。PC 8 時間とスマホ 3 時間', async () => {
+    const clock = new Clock()
+    const { pc, phone } = await pairTwo(clock)
+    await pc.scheduler.foreground()
+    await clock.advance(8 * 3_600_000)
+    await pc.scheduler.background()
+    await phone.scheduler.foreground()
+    await clock.advance(3 * 3_600_000)
+    await phone.scheduler.background()
+    const r = show('(b) 開いているだけ', pc, phone)
+    // PC は 1・3・7 分で確認して放置で止まる。スマホは 5 分おきまで伸びる
+    expect(r.pc).toMatchObject({ total: 3, head: 3, changes: 0, records: 0, rows: 0 })
+    expect(r.phone).toMatchObject({ total: 38, head: 37, changes: 1, records: 0, rows: 0 })
+  }, 300_000)
+
+  it('1 日の要求の回数 (c): 2 台が同時に前面で 3 時間、PC だけ 1 分に 1 回読む', async () => {
+    const clock = new Clock()
+    const { pc, phone } = await pairTwo(clock)
+    await pc.scheduler.foreground()
+    await phone.scheduler.foreground()
+    await open(pc.store, '1')
+    for (let m = 1; m <= 3 * 60; m++) {
+      await clock.advance(60_000)
+      await pc.ops.markRead(thread('1'), m, clock.now)
+      pc.scheduler.activity()
+    }
+    await clock.advance(HEAD_MS * 5)
+    await pc.scheduler.background()
+    await phone.scheduler.background()
+    const r = show('(c) 2 台同時', pc, phone)
+    // 読んだ分は相手に届いている
+    expect((await phone.db.select<{ read_no: number }>('SELECT read_no FROM threads WHERE key = $1', ['1']))[0]?.read_no).toBe(180)
+    // 読んでいない側は、確認のたびに相手の変更を見て読む
+    expect(r.pc).toMatchObject({ total: 184, head: 146, changes: 1, records: 37, rows: 222 })
+    expect(r.phone).toMatchObject({ total: 129, head: 92, changes: 37, records: 0, rows: 0 })
   }, 300_000)
 })
 

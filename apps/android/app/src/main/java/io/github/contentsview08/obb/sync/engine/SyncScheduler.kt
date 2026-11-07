@@ -41,6 +41,9 @@ fun paceMs(pace: SyncPace?): PaceMs {
     return PaceMs(ms(pace?.headSec, SyncConfig.HEAD_INTERVAL_MS), ms(pace?.pushSec, SyncConfig.PUSH_INTERVAL_MS))
 }
 
+/** 「変化なし」が続いた回数から確認の間隔を決める。基本の間隔より短くせず、上限で止める */
+fun headWaitMs(head: Long, misses: Int): Long = maxOf(head, minOf(SyncConfig.HEAD_BACKOFF_MAX_MS, head shl minOf(misses, 16)))
+
 /** 状態は画面のスレッドでだけ触る */
 class SyncScheduler(private val host: SchedulerHost) {
     private var front = false
@@ -52,6 +55,8 @@ class SyncScheduler(private val host: SchedulerHost) {
     private var lastCheck = 0L
     private var lastPush = 0L
     private var lastSync = 0L
+    /** 確認が「変化なし」だった回数。間隔を伸ばす元。周を回す・操作・前面復帰で 0 に戻す */
+    private var misses = 0
 
     val isPaused get() = paused
 
@@ -69,14 +74,19 @@ class SyncScheduler(private val host: SchedulerHost) {
         }
     }
 
+    /** 次の確認と次の送信の早い方で起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
     private fun schedule() {
         clear(timer)
         timer = null
         if (!front || paused) return
         val p = paceMs(host.pace())
-        timer = host.setTimer({ launchQuiet { tick() } }, minOf(p.head, p.push))
+        val now = host.now()
+        val untilCheck = maxOf(0L, lastCheck + headWaitMs(p.head, misses) - now)
+        val untilPush = maxOf(0L, lastPush + p.push - now)
+        timer = host.setTimer({ launchQuiet { tick() } }, minOf(untilPush, untilCheck))
     }
 
+    /** 走っている間のきっかけは捨てる(走っているものが終わりに時計を掛け直す) */
     private suspend fun guarded(f: suspend () -> Unit) {
         if (busy) return
         busy = true
@@ -84,6 +94,7 @@ class SyncScheduler(private val host: SchedulerHost) {
             f()
         } finally {
             busy = false
+            schedule()
         }
     }
 
@@ -91,6 +102,7 @@ class SyncScheduler(private val host: SchedulerHost) {
         lastSync = host.now()
         lastCheck = lastSync
         lastPush = lastSync
+        misses = 0
         host.cycle(reason)
     }
 
@@ -102,20 +114,20 @@ class SyncScheduler(private val host: SchedulerHost) {
             paused = true
             return
         }
-        try {
-            guarded {
-                if (host.enabled()) {
-                    val p = paceMs(host.pace())
-                    if (now - lastPush >= p.push && host.hasChanges()) {
-                        run("tick")
-                    } else if (now - lastCheck >= p.head) {
-                        lastCheck = now
-                        if (host.check()) run("tick")
-                    }
+        guarded {
+            val p = paceMs(host.pace())
+            val checkDue = now - lastCheck >= headWaitMs(p.head, misses)
+            val pushDue = now - lastPush >= p.push
+            // 送るものがなくても・使っていなくても、次はここから数える(時計が空回りしないように)
+            if (checkDue) lastCheck = now
+            if (pushDue) lastPush = now
+            if (host.enabled()) {
+                if (pushDue && host.hasChanges()) {
+                    run("tick")
+                } else if (checkDue) {
+                    if (host.check()) run("tick") else misses++
                 }
             }
-        } finally {
-            schedule()
         }
     }
 
@@ -124,7 +136,9 @@ class SyncScheduler(private val host: SchedulerHost) {
         front = true
         paused = false
         lastActivity = host.now()
-        schedule()
+        lastCheck = lastActivity
+        lastPush = lastActivity
+        misses = 0
         guarded {
             if (host.enabled()) run("foreground")
         }
@@ -139,13 +153,17 @@ class SyncScheduler(private val host: SchedulerHost) {
         }
     }
 
-    /** 利用者の操作。放置で止めていたら 1 回確認する */
+    /** 利用者の操作。伸ばしていた確認の間隔を基本に戻す。放置で止めていたら 1 回確認する */
     fun activity() {
         lastActivity = host.now()
-        if (!front || !paused) return
-        paused = false
-        lastCheck = 0
-        launchQuiet { tick() }
+        if (!front) return
+        val stretched = misses > 0
+        misses = 0
+        if (paused) {
+            paused = false
+            lastCheck = 0
+            launchQuiet { tick() }
+        } else if (stretched) schedule()
     }
 
     /** ネットワークが戻った。すぐは不安定なので待ち、前回から空いていれば同期する */

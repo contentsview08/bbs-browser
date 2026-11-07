@@ -984,22 +984,33 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 前面に戻る | `focus`・`visibilitychange`(`useSync`) | `MainActivity.onStart`(`vm.appVisible`) |
 | 放置後の操作 | `pointerdown`・`keydown` で最後の時刻を見る | 同じ考えを `Activity.onUserInteraction` で |
 | ネットワークの復帰 | `online` | `ConnectivityManager.NetworkCallback`(前面の間だけ登録) |
-| 確認の 15 秒(試運転の値) | 前面のときだけ `GET /head`。`SyncScheduler` | 同じ |
-| 送信の 15 秒(試運転の値) | 変更があるときだけ | 同じ |
+| 確認(1 分〜5 分) | 前面のときだけ `GET /head`。`SyncScheduler` | 同じ |
+| 送信(5 分) | 変更があるときだけ | 同じ |
 | 手動 | 同期ボタン | 同じ |
 
 - 既読は `readFlush` の呼び出し(タブの切り替え・閉じる)でも周を起こす
-- 値は定数(`packages/sync/src/config.ts`・`SyncConfig.kt`)で揃え、共通テストに入れる
+- 値は定数(`packages/sync/src/config.ts`・`SyncConfig.kt`・`sync-config.json`)で揃え、共通テストに入れる
 
 | 定数 | 値 |
 | --- | --- |
-| `PUSH_INTERVAL_MS` | 15 秒(試運転の値。変更があるときだけ) |
+| `HEAD_INTERVAL_MS` | 1 分(確認の基本の間隔) |
+| `HEAD_BACKOFF_MAX_MS` | 5 分(伸ばした確認の間隔の上限) |
+| `PUSH_INTERVAL_MS` | 5 分(変更があるときだけ) |
 | `PULL_MIN_GAP_MS` | 10 秒 |
 | `IDLE_STOP_MS` | 10 分 |
-| `HEAD_INTERVAL_MS` | 15 秒(試運転の値) |
 | `NET_SETTLE_MS` | 5 秒 |
 | `NET_MIN_GAP_MS` | 30 秒 |
 - pull の間隔の 10 秒はエンジンが守る。手動だけ例外
+
+値は Cloudflare Workers の無料枠(Workers・Durable Objects とも 100,000 要求/日、SQLite の書き込み 100,000 行/日。`/records` は N 件で 2N + 2 行)に利用者 100 人(1 人 PC + スマホ)を収めるために決めた(設計書の「費用」)。要求を減らす仕掛けは 4 つ。
+
+**確認の間隔を伸ばす(`SyncScheduler`)。** `/head` が「変化なし」(304。通信の失敗も同じ扱い)を返すたびに次の確認までの間隔を 2 倍にし、`HEAD_BACKOFF_MAX_MS` で止める(1 → 2 → 4 → 5 分)。基本の間隔に戻すのは、前面に戻った(`foreground`)、利用者の操作(`activity`。放置で止めない端末でも戻すだけは行う)、確認が変化を返した、周を回した(`run`)の 4 つ。操作のときに確認が遅れていればすぐ確認する。サーバーの `pace` はこれまでどおり下限で、指示が上限より長ければ指示のまま。送信の時計は確認とは別に `PUSH_INTERVAL_MS` ごとに起きて、送るものの有無を見る(確認を遠ざけている間も送信は 5 分で出る)。裏に回る瞬間の送信と前面に戻ったときの pull は、この間隔に関係なくすぐ行う。
+
+**確認の ETag は覚えない(エンジン)。** `If-None-Match` は手元の `sync_state` の `epoch` と `since` から `"<epoch>:<since>"` を作って付ける。サーバーの応答を覚えておく形だと、変化を見た直後の周が通信の失敗で終わったときに次の確認が 304 になって取り残しが長引くので、手元が実際に読んだ所だけを根拠にする。
+
+**自分の送ったものを読み戻さない(エンジン `settlePush`)。** `/records` の応答が全部 200 で、返った `version` が「手元の `since` + 1 から連番で隙間なし」なら、増えたのは自分の送ったものだけなので `since` をその最大に進める。次の `/head` は 304 になり、`/changes` で自分のレコードを読み戻さない。隙間がある(間に別の端末が書いた)・409 がある・応答の数が送った数と違うときは何もしない(次の確認が変化を見て読む)。
+
+**自動の周で pull を省く(エンジン `step`)。** 確認の時計と裏に回る瞬間の周(`runCycle` の `quick`)では、直前の確認が「変化なし」で、それから確認の間隔(`pace` があればその値)+ `PULL_MIN_GAP_MS` 未満しか経っていなければ `pull(false)` を飛ばす(確認の時計は前の確認が終わってから数えるので、次の周は間隔よりわずかに遅れて来る。その分の余裕)。省いた間に別の端末が同じレコードを書いていれば `/records` の 409 で分かり、今の流れでマージして読み直す。手動・前面復帰・ネットワークの復帰・合流・作り直し・リベースの流れは変えない。確認が変化を見たあとの周は省かない。
 
 ### 同時実行の防止
 

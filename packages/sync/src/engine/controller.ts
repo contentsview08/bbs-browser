@@ -4,7 +4,7 @@ import { deriveKeys, generateMasterKey, spaceId } from '../keys'
 import { syncMessage } from '../messages'
 import { encodePairingCode, parsePairingCode } from '../pairing'
 import { type CycleResult, type ConfirmChoice, SyncEngine, type SyncKeyStore } from './engine'
-import type { SyncPace } from './scheduler'
+import type { CycleReason, SyncPace } from './scheduler'
 import { masterOn, offKindsOf, parseSwitches, type SyncGroup, type SyncSwitches } from './kinds'
 import { syncMismatches, syncSummary, type MismatchSummary, type SyncSummary } from './summary'
 import { delState, setState, SyncTables, type SqlStatement, type SyncSqlDb } from './tables'
@@ -108,8 +108,8 @@ export class SyncController {
     return this.deps.adapters.filter((a) => !off.has(a.kind))
   }
 
-  private async run(manual: boolean): Promise<CycleResult> {
-    const r = await (await this.engine()).runCycle({ manual })
+  private async run(manual: boolean, quick = false): Promise<CycleResult> {
+    const r = await (await this.engine()).runCycle({ manual, quick })
     this.deps.onCycle?.(r)
     return r
   }
@@ -232,9 +232,9 @@ export class SyncController {
     this.spaceHead = null
   }
 
-  /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す */
-  async autoCycle(): Promise<void> {
-    await this.run(false)
+  /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す。確認の時計と裏に回る瞬間の周は、直前の確認が「変化なし」なら pull を省く */
+  async autoCycle(reason: CycleReason = 'tick'): Promise<void> {
+    await this.run(false, reason === 'tick' || reason === 'background')
   }
 
   async autoCheck(): Promise<boolean> {

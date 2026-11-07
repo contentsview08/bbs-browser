@@ -262,3 +262,133 @@ describe('許可証', () => {
     expect(s.server.spaceCount()).toBe(1)
   })
 })
+
+describe('確認と読み戻し', () => {
+  const since = async (db: SqlDb) => Number((await db.select<{ value: string }>("SELECT value FROM sync_state WHERE key = 'since'"))[0]?.value ?? 0)
+  const tracing = (reqs: string[]) => (t: S.SyncTransport): S.SyncTransport => ({
+    async send(req) {
+      const r = await t.send(req)
+      reqs.push(`${req.method} ${new URL(req.url).pathname} ${r.status}`)
+      return r
+    },
+  })
+
+  it('送った分だけなら since を進め、次の確認は 304。/changes で読み戻さない', async () => {
+    const reqs: string[] = []
+    const s = setup({ wrap: tracing(reqs) })
+    await s.engine.pair(K, TICKET)
+    await s.engine.runCycle({ manual: true })
+    await new UserOps(s.store).favoriteThreadAdd(thread('1'), 1_800_000_000_000)
+    await new UserOps(s.store).favoriteThreadAdd(thread('2'), 1_800_000_000_000)
+    const before = await since(s.db)
+    await s.engine.runCycle({ manual: true })
+    expect(await since(s.db)).toBe(before + 2)
+    reqs.length = 0
+    expect(await s.engine.checkHead()).toBe(false)
+    expect(reqs).toEqual(['GET /head 304'])
+    s.advance(S.PULL_MIN_GAP_MS)
+    await s.engine.runCycle({ quick: true })
+    expect(reqs.filter((r) => r.startsWith('GET /changes'))).toEqual([])
+  })
+
+  it('間に別の端末が書いて隙間ができたら since を進めず、次の確認で変化を見て読む', async () => {
+    let now = 1_800_000_000_000
+    const server = new FakeSyncServer({ now: () => now, rate_per_minute: null, full_pull_per_hour: null })
+    const reqs: string[] = []
+    const a = setup({ now: () => now, server, wrap: tracing(reqs) })
+    const b = setup({ now: () => now, server })
+    await a.engine.pair(K, TICKET)
+    await b.engine.pair(K, TICKET)
+    await a.engine.runCycle({ manual: true })
+    await b.engine.runCycle({ manual: true })
+    now += S.HEAD_INTERVAL_MS
+    expect(await a.engine.checkHead()).toBe(false)
+    await new UserOps(b.store).favoriteThreadAdd(thread('1'), now)
+    await b.engine.runCycle({ manual: true })
+    await new UserOps(a.store).favoriteThreadAdd(thread('2'), now)
+    const before = await since(a.db)
+    reqs.length = 0
+    // 直前の確認が「変化なし」なので pull を省く。送ると version に隙間がある
+    now += 1000
+    await a.engine.runCycle({ quick: true })
+    expect(reqs.filter((r) => r.startsWith('GET /changes'))).toEqual([])
+    expect(await since(a.db)).toBe(before)
+    reqs.length = 0
+    expect(await a.engine.checkHead()).toBe(true)
+    expect(reqs).toEqual(['GET /head 200'])
+    // 変化を見たあとの自動の周は pull を省かない
+    await a.engine.runCycle({ quick: true })
+    expect(reqs.filter((r) => r.startsWith('GET /changes'))).toHaveLength(1)
+    expect((await a.store.listFavoriteThreads()).map((t) => t.thread.key).sort()).toEqual(['1', '2'])
+    expect(await a.engine.checkHead()).toBe(false)
+  })
+
+  it('自動の周は直前の確認が「変化なし」なら pull を省く。前面復帰・手動・間隔が過ぎたあとは省かない', async () => {
+    let pulls = 0
+    const s = setup({ onRequest: (r) => void (r.url.includes('/changes') && pulls++) })
+    await s.engine.pair(K, TICKET)
+    await s.engine.runCycle({ manual: true })
+    s.advance(S.HEAD_INTERVAL_MS)
+    expect(await s.engine.checkHead()).toBe(false)
+    pulls = 0
+    s.advance(S.PULL_MIN_GAP_MS)
+    await s.engine.runCycle({ quick: true })
+    expect(pulls).toBe(0)
+    await s.engine.runCycle()
+    expect(pulls).toBe(1)
+    await s.engine.runCycle({ manual: true })
+    expect(pulls).toBe(2)
+    s.advance(S.HEAD_INTERVAL_MS)
+    await s.engine.runCycle({ quick: true })
+    expect(pulls).toBe(3)
+  })
+
+  it('確認で変化を見たあと周が通信の失敗で終わっても、次の確認は 304 にならず変化を見る', async () => {
+    let now = 1_800_000_000_000
+    const server = new FakeSyncServer({ now: () => now, rate_per_minute: null, full_pull_per_hour: null })
+    const other = setup({ now: () => now, server })
+    await other.engine.pair(K, TICKET)
+    await other.engine.runCycle({ manual: true })
+    let failing = false
+    const reqs: string[] = []
+    const me = setup({
+      now: () => now,
+      server,
+      wrap: (t) => ({
+        async send(req) {
+          if (failing && req.url.includes('/changes')) throw new S.SyncApiError('network')
+          const r = await t.send(req)
+          reqs.push(`${req.method} ${new URL(req.url).pathname} ${r.status}`)
+          return r
+        },
+      }),
+    })
+    await me.engine.pair(K, TICKET)
+    await me.engine.runCycle({ manual: true })
+    await new UserOps(other.store).favoriteThreadAdd(thread('1'), now)
+    await other.engine.runCycle({ manual: true })
+    now += S.HEAD_INTERVAL_MS
+    expect(await me.engine.checkHead()).toBe(true)
+    failing = true
+    expect((await me.engine.runCycle()).state).toBe('offline')
+    failing = false
+    now += S.BACKOFF_MAX_MS
+    reqs.length = 0
+    expect(await me.engine.checkHead()).toBe(true)
+    expect(reqs).toEqual(['GET /head 200'])
+    await me.engine.runCycle({ manual: true })
+    expect((await me.store.listFavoriteThreads()).map((t) => t.thread.key)).toEqual(['1'])
+    expect(await me.engine.checkHead()).toBe(false)
+  })
+
+  it('version の並びの判定', () => {
+    const ok = (v: number[]) => v.map((version) => ({ status: 200, version }))
+    expect(S.pushedRun(ok([4, 3, 5]), 3, 2)).toBe(5)
+    expect(S.pushedRun(ok([3]), 1, 2)).toBe(3)
+    expect(S.pushedRun(ok([3, 5]), 2, 2)).toBeNull()
+    expect(S.pushedRun(ok([4]), 1, 2)).toBeNull()
+    expect(S.pushedRun(ok([3]), 2, 2)).toBeNull()
+    expect(S.pushedRun([{ status: 200, version: 3 }, { status: 409 }], 2, 2)).toBeNull()
+    expect(S.pushedRun([], 0, 2)).toBeNull()
+  })
+})

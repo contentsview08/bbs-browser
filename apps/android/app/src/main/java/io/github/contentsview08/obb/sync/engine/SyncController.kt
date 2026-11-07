@@ -78,7 +78,7 @@ class SyncController(
         return SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = url, adapters = adapters, now = now, allowLocalhost = allowLocalhost).also { engineValue = it }
     }
 
-    private suspend fun run(manual: Boolean): CycleResult = engine().runCycle(manual).also(onCycle)
+    private suspend fun run(manual: Boolean, quick: Boolean = false): CycleResult = engine().runCycle(manual, quick).also(onCycle)
 
     private suspend fun loadKeys(): SyncKeyMaterial? = try {
         keyStore.load()
@@ -195,9 +195,9 @@ class SyncController(
         spaceHead = null
     }
 
-    /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す */
-    suspend fun autoCycle() {
-        run(false)
+    /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す。確認の時計と裏に回る瞬間の周は、直前の確認が「変化なし」なら pull を省く */
+    suspend fun autoCycle(reason: String = "tick") {
+        run(false, reason == "tick" || reason == "background")
     }
 
     suspend fun autoCheck(): Boolean = engine().checkHead()

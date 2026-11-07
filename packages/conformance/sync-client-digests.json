@@ -302,7 +302,7 @@
   "phone": "1e1b003db0c4da962afa8133e331034d8cc78facad205943ee106c06f1901870"
  },
  "NG の追加・編集・削除が 1 要素ずつ届く。編集で消した項目は残らない": {
-  "pc": "62cb5134a95619f94e1711a89131f2e1612728ea9cc3a405ad0a50e921697cf6",
+  "pc": "5501f73639177f67bbc18bc292925137e66e0a3c4eff89636886635407373cc4",
   "phone": "9a7c4226165de58c0ffeb3bb99a13a1a7ff60d8125b8f4ca2245b88bfb7ec508"
  },
  "NG: 同時の編集と削除は HLC の新しい方": {
@@ -540,12 +540,12 @@
   "phone": "52657aa1fd880ccaffabc1ddbdd5e72511ff5a2aa8b4e1c1df0d5410304a05ba"
  },
  "履歴から外したスレとログを消したスレは、手動の同期でも戻らない": {
-  "pc": "8774648110617e1a090bca21fd687639229823206fde18c5739d3c6e9169920a",
-  "phone": "de4a784adbd5845bfd21d39a51537eb0b1691490fcf85fc6f80e3e499ed0febd"
+  "pc": "a332e2faf8720e87646f03740bf6cd5d62b37f0a764c926ba807b28326a3826f",
+  "phone": "0e63678296e364868e78d033bffd72743a49b8553a751b53d5a672bea8e214bc"
  },
  "リセットより前の手元の既読は、次の同期で消える": {
-  "pc": "2c70f2f84e63b24f3a8642adc5116f19fc1ff71c1d05028e7a02576da3791dd4",
-  "phone": "6dc2633d20bdb0ce905d173dcc85bc2deab86daf7e7389298bdc00514d0f2bcc"
+  "pc": "089c408bc7eed6bf6260bc7f2b77bb91db841fecb5ccf43d98e2922dfcab565f",
+  "phone": "75ebafd3c34a54a472abf24f0a9712248b6ca61476ecf015acd5c170fafe12bc"
  },
  "適用のあと、URL の書き方が違う板でも未読が出る": {
   "pc": "e81e93a7bec1c62d1bbcb88afc35566c6a1447bd65d56009c5e872a8ed76ec9b",
@@ -638,8 +638,8 @@
   "phone": "e3c23b6c9290fd0f061dbea76d5c14b23d3dcd559a58dfbd3211a8ffd02745c7"
  },
  "スイッチ: 権限系の削除が両方のオンの端末に伝わり、画像の行は別に消える": {
-  "pc": "a68f1fc744759e47cfd4d07619301eb5addee1e23c3fcb75fd6ab47f979dec34",
-  "phone": "4cfa02ddff1076c4efbe496cc72a79c3001e7385d91388e0a60f6f8a97e4712c"
+  "pc": "234980e4478fa738f100d4dcb78571c59b4b7b14af4192ffd8eda7cb417800af",
+  "phone": "3af176b27f8ed0e28fb6c0e61d07fb9afc3ce501d1b932fd86f281965d872093"
  },
  "スイッチ: 権限系が画像より先に写っても、画像を入れたあとで付く": {
   "pc": "7e5c711c94c47d7d2f468c0245423d82be8818008bbf9cc280272fe412988958",

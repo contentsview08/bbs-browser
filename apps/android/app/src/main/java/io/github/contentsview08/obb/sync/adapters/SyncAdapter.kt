@@ -13,7 +13,14 @@ class AdapterContext(val keys: SyncKeys, val deviceId: String, val now: Long)
 
 open class OpTarget(val recordId: String, val refs: RecordRefs)
 
-class SeedRow(recordId: String, refs: RecordRefs, val payload: SyncPayload, val priority: Long) : OpTarget(recordId, refs)
+class SeedRow(
+    recordId: String,
+    refs: RecordRefs,
+    val payload: SyncPayload,
+    val priority: Long,
+    /** 作ったあと手元へ写し直す。新しいリセットがあれば手元を下げるため */
+    val reapply: Boolean = false,
+) : OpTarget(recordId, refs)
 
 class ApplyPlan(
     val statements: List<SqlStatement>,
@@ -51,6 +58,15 @@ interface SyncAdapter {
 
     /** 今のデータから作る。HLC は元の時刻で、今の時刻を使わない(古いデータが新しい削除に勝たないように) */
     fun seed(ctx: AdapterContext): List<SeedRow>
+
+    /**
+     * 手元にあるのにレコードのない行。古い HLC で作って送る。レコードがあるもの(tombstone を含む)は engine が飛ばす。
+     * 種まきのあとに足された種類と、DB の入れ替えや取りこぼしで増えた行を、手で消さずに揃えるため
+     */
+    fun fill(ctx: AdapterContext): List<SeedRow> = emptyList()
+
+    /** 手元の件数が表と合わない理由ごとの数。要約に出す */
+    fun explain(ctx: AdapterContext): Map<String, Int> = emptyMap()
 
     /** 1 つの操作で複数のレコードが変わる種類。null は作れない操作 */
     fun expand(op: SyncOpRow, ctx: AdapterContext): List<OpEffect>? = null

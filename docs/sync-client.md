@@ -386,7 +386,21 @@ class UserOps {
 
 レコードのあるものを手元の値で作り直さない。適用で足した行の `added_at` は適用の時刻なので、まだ届いていない削除に勝ってしまう。手元の値とマージするのは合流のときだけにする。
 
-閲覧履歴と書き込み履歴は対象にしない(手元で消えているのが正しいことがある)。
+閲覧履歴と書き込み履歴は対象にしない(手元で消えているのが正しいことがある)。手元にある行の補いは次の項で行う。
+
+### 手元にあってレコードのない行の補い
+
+種まきは合流の 1 回だけなので、種まきのあとに足された種類(版の更新)や、DB を戻して増えた行にレコードができない。起動後の最初の周と、手動の同期のたびに `fill` で補う。
+
+| 種類 | 補うもの |
+| --- | --- |
+| `last_view` | `read_at` のある行のうち、レコードのないもの |
+| `post` | 手元の行のうち、レコードのないもの |
+| `read_dev` | 手元の `read_no` が表の `readPosition` より大きいスレで、外した記録のないもの |
+
+- HLC は種まきと同じ元の時刻。新しい削除に勝たない
+- レコードがあれば(tombstone と `trim` を含む)作らない。消したものは戻らない
+- リセットのあるスレでは作らない。手元の方が大きいのはリセットの前の値なので、写し直して下げる。リセットのあとの読みは操作で記録される
 
 ## 4. アダプター
 
@@ -637,7 +651,7 @@ class UserOps {
 | 種類 | 適用 |
 | --- | --- |
 | `read_*` の `trim` の tombstone | 計算し直さない。外した記録を除いて計算すると、手元の既読が下がるため |
-| `read_*` | 同じスレの `read_reset` と全 `read_dev`(`sync_records_thread` で引く)から `readPosition` を計算し、`threads.read_no` に書く。行がなければ何もしない |
+| `read_*` | 同じスレの `read_reset` と全 `read_dev`(`sync_records_thread` で引く)から `readPosition` を計算し、`threads.read_no` に書く。リセットがなければ下げない(まだ送っていない手元の読みを残す)。行がなければ何もしない |
 | `last_view` | 行があれば `read_at`・`title` を更新。なければ下の表 |
 | `last_view` tombstone | `read_at = NULL`。ログは消さない。`trim` なら何もしない |
 | `favorite` | 足す・消す・名前の更新。並びは最後にまとめて振り直す |
@@ -650,7 +664,7 @@ class UserOps {
 | 知らない種類 | 同期の表にだけ持つ |
 
 - `ref_*` は、一度分かったら消さない。tombstone は `body` を残さないので、ここから何のレコードかを知る
-- `read_no` を下げられるのは適用だけ。`markRead` は `MAX` のまま
+- `read_no` を下げられるのは、リセットのあるスレの適用だけ。`markRead` は `MAX` のまま
 
 ### 手元にログのないスレ
 
@@ -705,6 +719,37 @@ class UserOps {
 | PC main | `useSync` フック(`App.tsx` に足さない)。`reloadFavorites`・`reloadFavThreads`・`reloadRecent`、`setStates`・`setHistory`・`patchFav` と同じ形で `readNo` を写す |
 | PC 道具の窓 | `favorites-changed` を出す。設定は `settings-changed` |
 | スマホ | `withContext(Dispatchers.Main)` で `AppViewModel.onSyncApplied`。`reloadSide()`、`Page.Threads.states`、`allUnread`、`postHistory` |
+
+周が重なったとき(走っている周に別のきっかけが来たとき)、`applied` は全部の周の和を渡す。
+
+画面が DB を読み直す場面。適用の有無によらず同期された値を出す。
+
+| 場面 | PC | スマホ |
+| --- | --- | --- |
+| 手動の同期のあと | `useSync` の `syncNow` | `reloadSyncedScreens` |
+| 板の更新・開き直し | `openBoard`。取得の前後で `getThreadStates` | `refreshBoard`。取得の前後で `threadStates` |
+| 履歴の画面を開く・更新 | `openHistory`・`refreshHistory` | `openPast`・`checkNew` |
+| 周の適用のあと | `syncedReads`(履歴の一覧・サイドバーの最近のスレ・板の未読) | `reflectSyncedReads`(`history` を読む Drawer と履歴の画面・板の未読) |
+
+- 板の未読は、行の URL の書き方(http・https、`5ch.net`・`5ch.io`)によらず読む(`boardUrlVariants`)。行は書いた端末の URL のまま残るため
+- 履歴の一覧は両方 `HISTORY_SHOWN`(300 件)。PC の新着の確認は掲示板への要求を増やさないよう、先頭 100 件だけ
+
+### 手元の件数が合わない理由
+
+同期の要約の `notes`(文字列では `?名前=数`)。0 は出さない。文言は `sync-ui.json` の `notes`。
+
+| 名前 | 意味 |
+| --- | --- |
+| `history_no_record` | 手元の履歴のうち、まだ同期の表にないもの。次の手動の同期で送る |
+| `history_over_shown` | 履歴の画面の上限を超える分 |
+| `view_old` | 保持日数より古いので、手元に入れていない履歴 |
+| `view_unresolved` | この端末で開けない掲示板の履歴 |
+| `view_reset` | ログの削除より前の閲覧なので、手元に入れていない履歴 |
+| `view_other` | 手元にまだ入っていない履歴。ほかの理由に当たらないもの |
+| `read_no_row` | 既読の記録だけがあり、手元に行のないスレ(履歴から外したスレなど)。そのスレの板の未読は相手と揃わない |
+| `read_differs` | 手元の既読が同期の表と違うスレ |
+| `ops_waiting` | まだ処理していない操作 |
+| `bad_<理由>` | `bad_counts` の値。捨てた数と、適用に失敗した数(`bad_apply`) |
 
 `threads` が 200 件を超えたら、行ごとに直さず一覧を読み直す。設定は `reapplyNg()`・`rerenderAll` が既存の流れで走る(スマホ)。PC は `settings` の変更で `postMatcher` が作り直される。
 
@@ -895,8 +940,8 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 前面に戻る | `focus`・`visibilitychange`(`useSync`) | `MainActivity.onStart`(`vm.appVisible`) |
 | 放置後の操作 | `pointerdown`・`keydown` で最後の時刻を見る | 同じ考えを `Activity.onUserInteraction` で |
 | ネットワークの復帰 | `online` | `ConnectivityManager.NetworkCallback`(前面の間だけ登録) |
-| 確認の 30 秒 | 前面のときだけ `GET /head`。`SyncScheduler` | 同じ |
-| 送信の 30 秒 | 変更があるときだけ | 同じ |
+| 確認の 15 秒(試運転の値) | 前面のときだけ `GET /head`。`SyncScheduler` | 同じ |
+| 送信の 15 秒(試運転の値) | 変更があるときだけ | 同じ |
 | 手動 | 同期ボタン | 同じ |
 
 - 既読は `readFlush` の呼び出し(タブの切り替え・閉じる)でも周を起こす
@@ -904,10 +949,10 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 | 定数 | 値 |
 | --- | --- |
-| `PUSH_INTERVAL_MS` | 30 秒(変更があるときだけ) |
+| `PUSH_INTERVAL_MS` | 15 秒(試運転の値。変更があるときだけ) |
 | `PULL_MIN_GAP_MS` | 10 秒 |
 | `IDLE_STOP_MS` | 10 分 |
-| `HEAD_INTERVAL_MS` | 30 秒 |
+| `HEAD_INTERVAL_MS` | 15 秒(試運転の値) |
 | `NET_SETTLE_MS` | 5 秒 |
 | `NET_MIN_GAP_MS` | 30 秒 |
 - pull の間隔の 10 秒はエンジンが守る。手動だけ例外
@@ -1324,7 +1369,7 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 50 | 裏に回る瞬間の送信が途中で切れる | 送信待ちが残り、次の前面復帰で同じ `request_id` で届く |
 | 51 | ネットワークの復帰(偽の時計) | 5 秒待つ。前回から 30 秒未満なら同期しない。30 秒以上なら同期する |
 | 52 | 裏にいる間 | 周が始まらず、通信しない |
-| 53 | 変更がない間の 30 秒 | 送らない |
+| 53 | 変更がない間の `HEAD_INTERVAL_MS` | 送らない |
 | 54 | 許可証がない | 作成を送らず `blocked`。手元が残る。通すと続く |
 | 55 | 領域が消える | 同じ許可証で作り直す。ページを通した回数が増えない |
 | 56 | 2 台目 | 許可証を受け取り、Turnstile を通さず作り直せる |

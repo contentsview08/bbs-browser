@@ -182,7 +182,7 @@ fun SyncDevPage(vm: AppViewModel) {
             if (!s.enabled || needTicket) SyncButton(label("start"), !busy) { act("同期を始めました") { vm.syncCtl.start(); vm.reloadSide() } }
             if (!s.enabled) SyncButton(label("add_device"), !busy) { scanning = true }
             if (s.enabled) {
-                SyncButton(label("sync_now"), !busy) { act { vm.syncCtl.syncNow() } }
+                SyncButton(label("sync_now"), !busy) { act { vm.syncCtl.syncNow(); vm.reloadSyncedScreens() } }
                 SyncButton(label("add_device"), !busy) { act { pairing = vm.syncCtl.pairingCode() } }
                 SyncButton(label("leave"), !busy, danger = true) { ask = "leave" }
             }
@@ -253,6 +253,10 @@ private fun SyncSummaryView(summary: SyncSummary, mismatch: MismatchSummary?, en
         }
         Heading("手元(件数:ハッシュ)")
         for (l in summary.local) Mono("${l.area} ${l.count}:${l.hash}")
+        if (summary.notes.isNotEmpty()) {
+            Heading("手元の件数が合わない理由")
+            for ((k, n) in summary.notes) Text("${io.github.contentsview08.obb.sync.SyncText.NOTES[k] ?: k}: $n 件", Modifier.padding(horizontal = 16.dp), color = Palette.textStrong, fontSize = 12.sp)
+        }
         SyncButton("要約をコピー", onClick = onCopy)
         SyncButton("不一致の検査", enabled, onClick = onCheck)
         mismatch?.let { m ->

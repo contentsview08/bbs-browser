@@ -15229,5 +15229,524 @@
     }
    }
   ]
+ },
+ {
+  "name": "種まきのあとに増えた手元の履歴と既読は次の同期で送られ、画面の問い合わせが揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 50,
+    "read_no": 10,
+    "read_ago_ms": 5000
+   },
+   {
+    "device": "pc",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "t2",
+    "post_count": 50,
+    "read_no": 20,
+    "read_ago_ms": 4000
+   },
+   {
+    "device": "pc",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "3",
+    "title": "t3",
+    "post_count": 50,
+    "read_no": 30,
+    "read_ago_ms": 3000
+   },
+   {
+    "device": "phone",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "3",
+    "title": "t3",
+    "post_count": 50,
+    "read_no": 45,
+    "read_ago_ms": 6000
+   },
+   {
+    "device": "phone",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "4",
+    "title": "t4",
+    "post_count": 50,
+    "read_no": 7,
+    "read_ago_ms": 2000
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "summary_notes": {
+       "history_no_record": 3
+      }
+     },
+     "phone": {
+      "summary_notes": {
+       "history_no_record": 2
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "screen_history": [
+       "4:7",
+       "3:45",
+       "2:20",
+       "1:10"
+      ],
+      "screen_read": {
+       "https://a.5ch.io/x/": {
+        "1": 10,
+        "2": 20,
+        "3": 45,
+        "4": 7
+       }
+      },
+      "summary_notes": {}
+     },
+     "phone": {
+      "screen_history": [
+       "4:7",
+       "3:45",
+       "2:20",
+       "1:10"
+      ],
+      "screen_read": {
+       "https://a.5ch.io/x/": {
+        "1": 10,
+        "2": 20,
+        "3": 45,
+        "4": 7
+       }
+      },
+      "summary_notes": {}
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "手で同期を押すと増えた行が送られる。起動し直さなくてよい",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 50,
+    "read_no": 10,
+    "read_ago_ms": 5000
+   },
+   {
+    "op": "post_row_raw",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "no": 3,
+    "body": "本文",
+    "ago_ms": 9000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "history": [
+       "1"
+      ],
+      "post_bodies": [
+       "本文"
+      ],
+      "applied_areas": [
+       "history",
+       "posts"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "履歴から外したスレとログを消したスレは、手動の同期でも戻らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 50
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "no": 10
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "t2",
+    "post_count": 50
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "t2",
+    "no": 20
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "device": "phone",
+    "op": "view_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1"
+   },
+   {
+    "device": "phone",
+    "op": "log_delete",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "t2"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "history": [
+       "2"
+      ],
+      "read_no": {
+       "1": 10,
+       "2": 0
+      },
+      "screen_history": [
+       "2:0"
+      ],
+      "screen_read": {
+       "https://a.5ch.io/x/": {
+        "1": 10,
+        "2": 0
+       }
+      }
+     },
+     "phone": {
+      "history": [],
+      "read_no": {
+       "1": 10
+      },
+      "screen_history": []
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "リセットより前の手元の既読は、次の同期で未読に戻る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 50
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "no": 10
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "device": "pc",
+    "op": "log_delete",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "thread_row_raw",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 50,
+    "read_no": 40,
+    "read_ago_ms": 3600000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "read_no": {
+       "1": 0
+      }
+     },
+     "phone": {
+      "read_no": {
+       "1": 0
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "適用のあと、URL の書き方が違う板でも未読が出る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "http://b.test/x/",
+    "key": "9",
+    "title": "t9",
+    "post_count": 50
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "http://b.test/x/",
+    "key": "9",
+    "title": "t9",
+    "no": 30
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "screen_read": {
+       "https://b.test/x/": {
+        "9": 30
+       },
+       "http://b.test/x/": {
+        "9": 30
+       }
+      },
+      "screen_history": [
+       "9:30"
+      ]
+     },
+     "phone": {
+      "screen_read": {
+       "https://b.test/x/": {
+        "9": 30
+       }
+      },
+      "screen_history": [
+       "9:30"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "周が重なっても、前の周で適用した種類を画面へ渡す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 50
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "no": 10
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync_overlapped"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "applied_areas": [
+       "history"
+      ],
+      "screen_history": [
+       "1:10"
+      ]
+     }
+    }
+   }
+  ]
  }
 ]

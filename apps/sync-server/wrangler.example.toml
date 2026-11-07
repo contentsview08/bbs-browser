@@ -65,6 +65,9 @@ workers_dev = true
 SPACE_LIMIT = "100"
 # 開発で何度も作り直すので、同じ作成元の上限を緩める
 SOURCE_LIMIT = "1000"
+# 試運転は 15 秒ごとに同期するので、領域ごとの上限を広げる(2 台で 1 分に最大 16 回)
+RATE_PER_MINUTE = "60"
+RATE_PER_DAY = "20000"
 POW_BITS = "16"
 TICKET_KID = "k1"
 # Cloudflare の公式のテスト用のキー(文書: turnstile/troubleshooting/testing)。誰でも通るので検証用の環境だけで使う

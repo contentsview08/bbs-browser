@@ -255,6 +255,15 @@ export const deletePostHistoryStatement = (id: number): SqlStatement => ({ sql: 
 
 export const setSettingStatement = (key: string, value: unknown): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', params: [key, JSON.stringify(value)] })
 
+/** 同じ板の URL の書き方。行は書いた端末の URL のまま残るので、板の未読はどの書き方の行も読む */
+export function boardUrlVariants(url: string): string[] {
+  const m = /^https?:\/\/(.*)$/.exec(url)
+  if (!m) return [url]
+  const rest = m[1]
+  const hosts = /(^|\.)5ch\.(io|net)\//.test(rest) ? [rest.replace('5ch.net/', '5ch.io/'), rest.replace('5ch.io/', '5ch.net/')] : [rest]
+  return hosts.flatMap((h) => [`https://${h}`, `http://${h}`])
+}
+
 export class LogStore {
   constructor(readonly db: SqlDb) {}
 
@@ -399,11 +408,18 @@ export class LogStore {
 
   /** スレ一覧に未読数を出すため、板の中で開いたことのあるスレの状態をまとめて返す */
   async getThreadStates(boardUrl: string): Promise<Map<string, ThreadState>> {
+    const urls = boardUrlVariants(boardUrl)
     const rows = await this.db.select<ThreadRow>(
-      'SELECT key, post_count, read_no, status FROM threads WHERE board_url = $1',
-      [boardUrl],
+      `SELECT key, post_count, read_no, status FROM threads WHERE board_url IN (${urls.map((_, i) => `$${i + 1}`).join(', ')})`,
+      urls,
     )
-    return new Map(rows.map((r) => [r.key, { postCount: r.post_count, readNo: r.read_no, status: r.status }]))
+    const out = new Map<string, ThreadState>()
+    for (const r of rows) {
+      // 同じスレの行が別の書き方の URL で残っているときは、読んだ方を使う
+      const had = out.get(r.key)
+      if (!had || r.read_no > had.readNo) out.set(r.key, { postCount: r.post_count, readNo: r.read_no, status: r.status })
+    }
+    return out
   }
 
   async loadThread(thread: ThreadSummary): Promise<ThreadLog | null> {

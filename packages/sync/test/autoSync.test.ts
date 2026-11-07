@@ -5,6 +5,7 @@ import * as S from '../src/index'
 import { FakeSyncServer, signTicket } from './fakeServer'
 import { testDb } from './scenarioRunner'
 
+const HEAD_MS = S.HEAD_INTERVAL_MS
 const K = new Uint8Array(32).fill(7)
 const K2 = new Uint8Array(32).fill(9)
 const BOARD = 'https://a.5ch.io/x/'
@@ -96,16 +97,16 @@ describe('自動の同期', () => {
     await a.scheduler.foreground()
     await b.scheduler.foreground()
     a.requests.length = 0
-    await clock.advance(30_000 * 2)
+    await clock.advance(HEAD_MS * 2)
     a.requests.length = 0
-    await clock.advance(30_000 * 4)
+    await clock.advance(HEAD_MS * 4)
     expect(a.requests).toEqual(Array(4).fill('GET /head 304'))
     await open(a.store, '1')
     await a.ops.markRead(thread('1'), 7, clock.now)
     a.requests.length = 0
-    await clock.advance(30_000)
+    await clock.advance(HEAD_MS)
     expect(a.requests.filter((r) => r.startsWith('POST /records'))).toHaveLength(1)
-    await clock.advance(30_000)
+    await clock.advance(HEAD_MS)
     expect((await b.db.select<{ read_no: number }>('SELECT read_no FROM threads WHERE key = $1', ['1']))[0]?.read_no).toBe(7)
     a.scheduler.dispose()
     b.scheduler.dispose()
@@ -131,7 +132,7 @@ describe('自動の同期', () => {
     const a = device('pc', clock, server, false)
     await a.engine.pair(K, signTicket(S.spaceId(S.deriveKeys(K).auth_token), 4_000_000_000))
     await a.scheduler.foreground()
-    await clock.advance(30_000)
+    await clock.advance(HEAD_MS)
     a.requests.length = 0
     await clock.advance(119_000)
     expect(a.requests.filter((r) => r.startsWith('GET /head')).length).toBeLessThanOrEqual(1)

@@ -30,6 +30,19 @@ export function syncMessage(code: string): string {
 export const SYNC_MESSAGES: Readonly<Record<string, string>> = MESSAGES
 
 /** PC とスマホで同じ言葉にする */
+/** 要約の「合わない理由」の見出し。bad_ で始まるものは捨てた数なので、理由の名前をそのまま出す */
+export const SYNC_NOTES: Record<string, string> = {
+  history_no_record: '手元の履歴のうち、まだ同期の表にないもの(次の同期で送ります)',
+  history_over_shown: '履歴の画面に出す 300 件を超える分',
+  view_old: 'ログの保持日数より古いので、手元に入れていない履歴',
+  view_unresolved: 'この端末で開けない掲示板の履歴',
+  view_reset: 'ログの削除より前の閲覧なので、手元に入れていない履歴',
+  view_other: '手元にまだ入っていない履歴',
+  read_no_row: '既読の記録だけがあり、手元に行のないスレ',
+  read_differs: '手元の既読が同期の表と違うスレ',
+  ops_waiting: 'まだ処理していない操作',
+}
+
 export const SYNC_LABELS = {
   section: '同期(開発中)',
   start: '同期を始める',

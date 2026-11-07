@@ -226,6 +226,7 @@ class SyncHostTest {
         val ui = JSONObject(resource("sync-ui.json"))
         fun table(o: JSONObject) = o.keys().asSequence().associateWith { o.getString(it) }
         assertEquals(table(ui.getJSONObject("labels")), SyncText.LABELS)
+        assertEquals(table(ui.getJSONObject("notes")), SyncText.NOTES)
         assertEquals(table(ui.getJSONObject("messages")), SyncText.MESSAGES)
         assertEquals(ui.getInt("reveal_taps"), SyncText.REVEAL_TAPS)
         assertEquals(ui.getLong("pairing_show_ms"), PAIRING_SHOW_MS)

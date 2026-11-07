@@ -2,6 +2,7 @@ package io.github.contentsview08.obb.sync.engine
 
 import io.github.contentsview08.obb.sync.adapters.AdapterContext
 import io.github.contentsview08.obb.sync.adapters.SyncAdapter
+import io.github.contentsview08.obb.sync.parseStrictJson
 import io.github.contentsview08.obb.sync.sha256
 import io.github.contentsview08.obb.sync.toHex
 import io.github.contentsview08.obb.sync.utf8
@@ -15,7 +16,13 @@ class KindSummary(val kind: String, val live: Int, val tombstones: Int, val pend
 
 class LocalSummary(val area: String, val count: Int, val hash: String)
 
-class SyncSummary(val kinds: List<KindSummary>, val local: List<LocalSummary>, val text: String)
+class SyncSummary(
+    val kinds: List<KindSummary>,
+    val local: List<LocalSummary>,
+    /** 手元の件数が合わない理由ごとの数。0 は入れない */
+    val notes: Map<String, Int>,
+    val text: String,
+)
 
 class MismatchSummary(val differs: Map<String, Int>, val missing: Map<String, Int>, val samples: List<String>)
 
@@ -47,8 +54,17 @@ fun syncSummary(db: SyncSql, adapters: List<SyncAdapter>, ctx: AdapterContext): 
         areas[key] = areas[key].orEmpty() + lines
     }
     val local = areas.entries.sortedBy { it.key }.map { (area, lines) -> LocalSummary(area, lines.size, hashLines(lines)) }
-    val text = (kinds.map { "${it.kind}=${it.live}+${it.tombstones}:${it.hash}" } + local.map { "@${it.area}=${it.count}:${it.hash}" }).joinToString(" ")
-    return SyncSummary(kinds, local, text)
+    val notes = java.util.TreeMap<String, Int>()
+    fun note(k: String, n: Int) {
+        if (n > 0) notes[k] = (notes[k] ?: 0) + n
+    }
+    for (a in adapters) for ((k, n) in a.explain(ctx)) note(k, n)
+    note("ops_waiting", (db.query("SELECT COUNT(*) AS n FROM sync_ops").firstOrNull()?.get("n") as Long? ?: 0L).toInt())
+    (db.query("SELECT value FROM sync_state WHERE key = 'bad_counts'").firstOrNull()?.get("value") as String?)?.let { raw ->
+        for ((k, n) in parseStrictJson(raw) as Map<*, *>) note("bad_$k", (n as Long).toInt())
+    }
+    val text = (kinds.map { "${it.kind}=${it.live}+${it.tombstones}:${it.hash}" } + local.map { "@${it.area}=${it.count}:${it.hash}" } + notes.map { "?${it.key}=${it.value}" }).joinToString(" ")
+    return SyncSummary(kinds, local, notes, text)
 }
 
 /** 重いので押したときだけ。apply は文を作るだけで書かないので、手元と表の違いをそのまま数えられる */

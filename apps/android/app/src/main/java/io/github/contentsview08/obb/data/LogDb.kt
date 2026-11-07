@@ -83,7 +83,21 @@ internal object SiteSql {
 }
 
 /** スレのログと履歴の SQL。JVM のテストでも同じ文を流す */
+/** 同じ板の URL の書き方。行は書いた端末の URL のまま残るので、板の未読はどの書き方の行も読む */
+internal fun boardUrlVariants(url: String): List<String> {
+    val rest = Regex("^https?://(.*)$").find(url)?.groupValues?.get(1) ?: return listOf(url)
+    val fiveCh = Regex("(^|\\.)5ch\\.(io|net)/")
+    val hosts = if (fiveCh.containsMatchIn(rest)) listOf(rest.replaceFirst("5ch.net/", "5ch.io/"), rest.replaceFirst("5ch.io/", "5ch.net/")) else listOf(rest)
+    return hosts.flatMap { listOf("https://$it", "http://$it") }
+}
+
 internal object ThreadLogSql {
+    /** 画面の履歴の一覧。同期のテストも同じ文を流す */
+    const val HISTORY = "SELECT board_url, key, title, post_count, read_no, read_at, created_at FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC LIMIT ?"
+
+    /** 板の未読の数のもと。同期のテストも同じ文を流す */
+    fun threadStates(urls: Int) = "SELECT key, read_no, post_count, status FROM threads WHERE board_url IN (${List(urls) { "?" }.joinToString(", ")})"
+
     const val MARK_READ = "UPDATE threads SET read_no = MAX(read_no, ?), read_at = ? WHERE board_url = ? AND key = ?"
     const val VIEW = "UPDATE threads SET read_at = ? WHERE board_url = ? AND key = ?"
     const val REMOVE_HISTORY = "UPDATE threads SET read_at = NULL WHERE board_url = ? AND key = ?"
@@ -245,8 +259,17 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
 
     /** 板の中で開いたことのあるスレの状態(キー → 既読の位置・手元のレス数) */
     suspend fun threadStates(boardUrl: String): Map<String, ThreadState> = io {
-        readableDatabase.rawQuery("SELECT key, read_no, post_count, status FROM threads WHERE board_url = ?", arrayOf(boardUrl)).use { c ->
-            buildMap { while (c.moveToNext()) put(c.getString(0), ThreadState(c.getInt(1), c.getInt(2), c.getString(3) == "archived")) }
+        val urls = boardUrlVariants(boardUrl)
+        readableDatabase.rawQuery(ThreadLogSql.threadStates(urls.size), urls.toTypedArray()).use { c ->
+            val out = LinkedHashMap<String, ThreadState>()
+            while (c.moveToNext()) {
+                val st = ThreadState(c.getInt(1), c.getInt(2), c.getString(3) == "archived")
+                val key = c.getString(0)
+                // 同じスレの行が別の書き方の URL で残っているときは、読んだ方を使う
+                val had = out[key]
+                out[key] = if (had == null || st.readNo > had.readNo) st else had
+            }
+            out
         }
     }
 
@@ -300,9 +323,9 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         }
     }
 
-    suspend fun history(limit: Int = 300): List<HistoryEntry> = io {
+    suspend fun history(limit: Int = io.github.contentsview08.obb.sync.SyncConfig.HISTORY_SHOWN): List<HistoryEntry> = io {
         readableDatabase.rawQuery(
-            "SELECT board_url, key, title, post_count, read_no, read_at, created_at FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC LIMIT ?",
+            ThreadLogSql.HISTORY,
             arrayOf(limit.toString()),
         ).use { c ->
             buildList {

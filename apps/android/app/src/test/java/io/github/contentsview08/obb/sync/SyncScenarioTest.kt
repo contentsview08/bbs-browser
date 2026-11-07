@@ -41,6 +41,7 @@ import io.github.contentsview08.obb.sync.engine.SyncResponse
 import io.github.contentsview08.obb.sync.engine.CycleResult
 import io.github.contentsview08.obb.sync.engine.checkServerUrl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
@@ -166,7 +167,14 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
 
     fun now() = world.now + skew
 
+    /** 次の要求の前に 1 回だけ呼ぶ。走っている周に別のきっかけを重ねるため */
+    var onSend: (suspend () -> Unit)? = null
+
     private suspend fun send(req: SyncRequest): SyncResponse {
+        onSend?.let { hook ->
+            onSend = null
+            hook()
+        }
         val w = world
         val m = URL_PARTS.matchEntire(req.url)!!
         val pathOnly = m.groupValues[2]
@@ -367,6 +375,25 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
             d.sql.exec("INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at) VALUES (?, ?, ?, ?, ?)", threadSql(s) + listOf(s["created_at"]))
             s["post_count"]?.let { d.sql.exec("UPDATE threads SET post_count = ? WHERE board_url = ? AND key = ?", listOf(it, t.boardUrl, t.key)) }
         }
+        "thread_row_raw" -> d!!.sql.exec(
+            // 操作を通らずに増えた手元の行(種まきのあとに足された種類、戻したバックアップ)
+            "INSERT INTO threads (board_url, key, connector_id, title, post_count, read_no, created_at, read_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            threadSql(s) + listOf(s["post_count"] as Long? ?: 0L, s["read_no"] as Long? ?: 0L, s["created_at"], (s["read_ago_ms"] as Long?)?.let { d.now() - it }),
+        )
+        "post_row_raw" -> d!!.sql.exec(
+            "INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            listOf("2ch-compat", s["board"], s["key"], s["title"] as String? ?: "", s["no"], "", "", s["body"], d.now() - (s["ago_ms"] as Long? ?: 0L)),
+        )
+        "sync_overlapped" -> kotlinx.coroutines.coroutineScope {
+            val dev = d!!
+            var second: kotlinx.coroutines.Deferred<CycleResult>? = null
+            dev.onSend = {
+                second = async(Dispatchers.IO) { dev.engine.runCycle(true) }
+                kotlinx.coroutines.delay(100)
+            }
+            dev.engine.runCycle(true)
+            dev.last = second!!.await()
+        }
         "read" -> d!!.ops.markReadNow(thread(s), s["no"] as Long, d.now())
         "view" -> d!!.ops.threadViewNow(thread(s), d.now())
         "view_remove" -> d!!.ops.historyRemoveNow(thread(s), d.now())
@@ -537,6 +564,19 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         e["ng_rules"]?.let { checkEq("$at の NG の中身", it, d.ng.map(::ngRuleToBody)) }
         e["read_no"]?.let { checkEq("$at の既読", it, d.sql.query("SELECT key, read_no FROM threads ORDER BY key").associate { r -> r["key"] as String to r["read_no"] }) }
         e["history"]?.let { checkEq("$at の閲覧履歴", it, d.sql.query("SELECT key FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC, key").map { r -> r["key"] }) }
+        e["screen_history"]?.let {
+            val rows = d.sql.query(io.github.contentsview08.obb.data.ThreadLogSql.HISTORY, listOf(SyncConfig.HISTORY_SHOWN.toLong()))
+            checkEq("$at の履歴の画面", it, rows.map { r -> "${r["key"]}:${r["read_no"]}" })
+        }
+        (e["screen_read"] as Map<String, Map<String, Any?>>?)?.forEach { (boardUrl, want) ->
+            val urls = io.github.contentsview08.obb.data.boardUrlVariants(boardUrl)
+            val rows = d.sql.query(io.github.contentsview08.obb.data.ThreadLogSql.threadStates(urls.size), urls)
+            checkEq("$at の板の既読 $boardUrl", want, rows.groupBy { r -> r["key"] as String }.toSortedMap().mapValues { (_, v) -> v.maxOf { r -> r["read_no"] as Long } })
+        }
+        e["summary_notes"]?.let {
+            val m = d.keys.value!!
+            checkEq("$at の合わない理由", it, syncSummary(d.sql, d.adapters, AdapterContext(deriveKeys(m.k), m.deviceId, d.now())).notes.mapValues { (_, n) -> n.toLong() })
+        }
         e["thread_rows"]?.let { checkEq("$at のスレの行", it, d.sql.query("SELECT board_url, key, connector_id, title, post_count, read_no, created_at, read_at FROM threads ORDER BY board_url, key")) }
         e["post_rows"]?.let { checkEq("$at の書き込み履歴", it, d.sql.query("SELECT board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, body")) }
         e["post_bodies"]?.let { checkEq("$at の書き込み履歴の本文", it, d.sql.query("SELECT body FROM post_history ORDER BY posted_at, body").map { r -> r["body"] }) }
@@ -705,7 +745,7 @@ class SyncScenarioTest {
         val cfg = load("sync-config.json") as Map<String, Any?>
         val c = cfg["constants"] as Map<String, Long>
         val actual = mapOf(
-            "SCHEMA_VERSION" to SyncConfig.SCHEMA_VERSION, "PULL_MIN_GAP_MS" to SyncConfig.PULL_MIN_GAP_MS, "HTTP_TIMEOUT_MS" to SyncConfig.HTTP_TIMEOUT_MS,
+            "SCHEMA_VERSION" to SyncConfig.SCHEMA_VERSION, "PULL_MIN_GAP_MS" to SyncConfig.PULL_MIN_GAP_MS, "HISTORY_SHOWN" to SyncConfig.HISTORY_SHOWN.toLong(), "HTTP_TIMEOUT_MS" to SyncConfig.HTTP_TIMEOUT_MS,
             "BACKOFF_MIN_MS" to SyncConfig.BACKOFF_MIN_MS, "BACKOFF_MAX_MS" to SyncConfig.BACKOFF_MAX_MS, "MAX_RESPONSE_BYTES" to SyncConfig.MAX_RESPONSE_BYTES.toLong(),
             "PUSH_BATCH_RECORDS" to SyncConfig.PUSH_BATCH_RECORDS.toLong(), "PUSH_BATCH_BYTES" to SyncConfig.PUSH_BATCH_BYTES.toLong(), "PUSH_MAX_ROUNDS" to SyncConfig.PUSH_MAX_ROUNDS.toLong(),
             "APPLY_BATCH" to SyncConfig.APPLY_BATCH.toLong(), "WRITE_BATCH" to SyncConfig.WRITE_BATCH.toLong(), "APPLY_SPLIT_AFTER" to SyncConfig.APPLY_SPLIT_AFTER.toLong(),

@@ -6,7 +6,7 @@ import { expect } from 'vitest'
 import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
 import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
 const SERVER = 'https://sync.test'
@@ -365,6 +365,26 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       if (s.post_count !== undefined) await d.sql.db.execute('UPDATE threads SET post_count = $1 WHERE board_url = $2 AND key = $3', [s.post_count, t.boardUrl, t.key])
       break
     }
+    case 'thread_row_raw':
+      // 操作を通らずに増えた手元の行(種まきのあとに足された種類、戻したバックアップ)
+      await d.sql.db.execute(
+        'INSERT INTO threads (board_url, key, connector_id, title, post_count, read_no, created_at, read_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [s.board, s.key, '2ch-compat', s.title ?? '', s.post_count ?? 0, s.read_no ?? 0, s.created_at ?? null, s.read_ago_ms === undefined ? null : d.now() - s.read_ago_ms],
+      )
+      break
+    case 'post_row_raw':
+      await d.sql.db.execute(
+        'INSERT INTO post_history (connector_id, board_url, key, thread_title, no, name, mail, body, posted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        ['2ch-compat', s.board, s.key, s.title ?? '', s.no ?? null, '', '', s.body, d.now() - (s.ago_ms ?? 0)],
+      )
+      break
+    case 'sync_overlapped': {
+      // 走っている周に別のきっかけが重なる
+      const running = d.engine.runCycle({ manual: true })
+      d.last = await d.engine.runCycle({ manual: true })
+      await running
+      break
+    }
     case 'read':
       await d.ops.markRead(thread(s), s.no, d.now())
       break
@@ -614,6 +634,21 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.history !== undefined) {
       const rows = await d.sql.db.select<{ key: string }>('SELECT key FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC, key')
       expect(rows.map((r) => r.key), `${at} の閲覧履歴`).toEqual(e.history)
+    }
+    if (e.screen_history !== undefined) {
+      const rows = await d.store.history(HISTORY_SHOWN)
+      expect(rows.map((h) => `${h.thread.key}:${h.readNo}`), `${at} の履歴の画面`).toEqual(e.screen_history)
+    }
+    if (e.screen_read !== undefined) {
+      // 板の未読は スレ一覧のレス数 - この値
+      for (const [boardUrl, want] of Object.entries<Record<string, number>>(e.screen_read)) {
+        const st = await d.store.getThreadStates(boardUrl)
+        expect(Object.fromEntries([...st].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => [k, v.readNo])), `${at} の板の既読 ${boardUrl}`).toEqual(want)
+      }
+    }
+    if (e.summary_notes !== undefined) {
+      const m = (await d.keys.load()) as SyncKeyMaterial
+      expect((await syncSummary(d.sql.db, d.adapters, { keys: deriveKeys(m.k), deviceId: m.deviceId, now: d.now() })).notes, `${at} の合わない理由`).toEqual(e.summary_notes)
     }
     if (e.thread_rows !== undefined) expect(await d.sql.db.select('SELECT board_url, key, connector_id, title, post_count, read_no, created_at, read_at FROM threads ORDER BY board_url, key'), `${at} のスレの行`).toEqual(e.thread_rows)
     if (e.post_rows !== undefined) expect(await d.sql.db.select('SELECT board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, body'), `${at} の書き込み履歴`).toEqual(e.post_rows)

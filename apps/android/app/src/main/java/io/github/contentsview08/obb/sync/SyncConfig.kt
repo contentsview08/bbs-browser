@@ -4,6 +4,8 @@ package io.github.contentsview08.obb.sync
 object SyncConfig {
     const val SCHEMA_VERSION = 1L
     const val PULL_MIN_GAP_MS = 10_000L
+    /** 履歴の画面に出す件数 */
+    const val HISTORY_SHOWN = 300
     const val HTTP_TIMEOUT_MS = 10_000L
     const val BACKOFF_MIN_MS = 1_000L
     const val BACKOFF_MAX_MS = 60_000L
@@ -30,8 +32,8 @@ object SyncConfig {
     const val TRIM_ROUNDS = 5
 
     /** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/SyncScheduler.kt) */
-    const val HEAD_INTERVAL_MS = 30_000L
-    const val PUSH_INTERVAL_MS = 30_000L
+    const val HEAD_INTERVAL_MS = 15_000L
+    const val PUSH_INTERVAL_MS = 15_000L
     const val NET_SETTLE_MS = 5_000L
     const val NET_MIN_GAP_MS = 30_000L
     const val IDLE_STOP_MS = 10L * 60 * 1000

@@ -24,6 +24,8 @@ export interface OpTarget {
 export interface SeedRow extends OpTarget {
   payload: SyncPayload
   priority: number
+  /** 作ったあと手元へ写し直す。新しいリセットがあれば手元を下げるため */
+  reapply?: boolean
 }
 
 export interface ApplyPlan {
@@ -54,6 +56,13 @@ export interface SyncAdapter {
   fromOp(op: SyncOpRow, existing: SyncPayload | null, stamp: string, ctx: AdapterContext): Promise<SyncPayload | null>
   /** 今のデータから作る。HLC は元の時刻で、今の時刻を使わない(古いデータが新しい削除に勝たないように) */
   seed(ctx: AdapterContext): Promise<SeedRow[]>
+  /**
+   * 手元にあるのにレコードのない行。古い HLC で作って送る。レコードがあるもの(tombstone を含む)は engine が飛ばす。
+   * 種まきのあとに足された種類と、DB の入れ替えや取りこぼしで増えた行を、手で消さずに揃えるため
+   */
+  fill?(ctx: AdapterContext): Promise<SeedRow[]>
+  /** 手元の件数が表と合わない理由ごとの数。要約に出す */
+  explain?(ctx: AdapterContext): Promise<Record<string, number>>
   /** 1 つの操作で複数のレコードが変わる種類はこちら。null は作れない操作。ある間は target は適用を待たせるためだけに使う */
   expand?(op: SyncOpRow, ctx: AdapterContext): Promise<OpEffect[] | null>
   /** 本文から ref_detail を取る。tombstone には本文がないので、ここで覚えた値で手元の行を探す */

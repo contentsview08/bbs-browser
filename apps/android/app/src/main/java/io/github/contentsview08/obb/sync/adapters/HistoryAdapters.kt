@@ -233,6 +233,43 @@ class LastViewAdapter(private val db: SyncSql, private val host: HistoryHost) : 
         )
     }
 
+    override fun fill(ctx: AdapterContext): List<SeedRow> = seed(ctx)
+
+    /** 手元の履歴と表の履歴が合わない理由ごとの数 */
+    override fun explain(ctx: AdapterContext): Map<String, Int> {
+        val local = db.query("SELECT $THREAD_COLUMNS FROM threads WHERE read_at IS NOT NULL").map(::rowOf)
+        val shown = local.map { "${normalizeBoardUrl(it.boardUrl)}\t${it.key}" }.toSet()
+        val known = db.query("SELECT ref_board, ref_thread FROM sync_records WHERE kind = 'last_view'").map { "${it["ref_board"]}\t${it["ref_thread"]}" }.toSet()
+        var old = 0
+        var unresolved = 0
+        var reset = 0
+        var other = 0
+        val days = host.retentionDays()
+        for (r in db.query("SELECT ref_board, ref_thread, payload FROM sync_records WHERE kind = 'last_view' AND deleted = 0 AND needs_apply = 0")) {
+            val board = r["ref_board"] as String
+            val key = r["ref_thread"] as String
+            if ("$board\t$key" in shown) continue
+            @Suppress("UNCHECKED_CAST")
+            val body = (parseStrictJson(r["payload"] as String) as SyncPayload).body.orEmpty()
+            val viewedAt = body[LAST_VIEWED_FIELD] as Long
+            val latest = readRecords(db, board, key).latest
+            when {
+                days > 0 && ctx.now - viewedAt > days * DAY_MS -> old++
+                host.resolve(body["board_url"] as String) == null -> unresolved++
+                latest != null && Hlc.parse(latest.hlc).wall >= viewedAt -> reset++
+                else -> other++
+            }
+        }
+        return mapOf(
+            "history_over_shown" to maxOf(0, local.size - SyncConfig.HISTORY_SHOWN),
+            "history_no_record" to shown.count { it !in known },
+            "view_old" to old,
+            "view_unresolved" to unresolved,
+            "view_reset" to reset,
+            "view_other" to other,
+        )
+    }
+
     override fun localLines(ctx: AdapterContext): List<String> =
         db.query("SELECT $THREAD_COLUMNS FROM threads WHERE read_at IS NOT NULL").map(::rowOf).map { canonicalJson(listOf(normalizeBoardUrl(it.boardUrl), it.key, it.readAt)) }
 }
@@ -257,7 +294,8 @@ abstract class ReadAdapterBase(protected val db: SyncSql) : SyncAdapter {
         val rec = readRecords(db, r.refBoard!!, key)
         val pos = readPosition(rec.latest, rec.devs)
         val statements = rows.mapNotNull { x ->
-            val next = maxOf(pos, pendingRead(db, x.boardUrl, key))
+            // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
+            val next = maxOf(pos, pendingRead(db, x.boardUrl, key), if (rec.latest == null) x.readNo else 0L)
             if (x.readNo == next) null else SqlStatement("UPDATE threads SET read_no = ? WHERE board_url = ? AND key = ?", listOf(next, x.boardUrl, key))
         }
         return ApplyPlan(statements, statements.isNotEmpty())
@@ -289,6 +327,55 @@ class ReadDevAdapter(db: SyncSql) : ReadAdapterBase(db) {
             val payload = mapOf("kind" to DEV_KIND, "hlc" to hlc, "device_id" to ctx.deviceId, "body" to body)
             if (checkPayload(payload) == null) null else SeedRow(t.recordId, t.refs, payload, SEED_PRIORITY)
         }
+
+    /** 表の既読より手元が進んでいるスレだけ。全スレに端末ごとの記録を増やさない。外した記録のあるスレは送り直さない */
+    override fun fill(ctx: AdapterContext): List<SeedRow> {
+        val rows = seed(ctx)
+        if (rows.isEmpty()) return emptyList()
+        class Group(var latest: SyncPayload? = null, val devs: ArrayList<SyncPayload> = ArrayList(), var trimmed: Boolean = false)
+        val groups = HashMap<String, Group>()
+        for (r in db.query("SELECT kind, payload, deleted, ref_board, ref_thread FROM sync_records WHERE kind IN (?, ?)", listOf(RESET_KIND, DEV_KIND))) {
+            val g = groups.getOrPut("${r["ref_board"]}\t${r["ref_thread"]}") { Group() }
+            @Suppress("UNCHECKED_CAST")
+            val p = parseStrictJson(r["payload"] as String) as SyncPayload
+            if (r["deleted"] == 1L) g.trimmed = g.trimmed || r["kind"] == DEV_KIND
+            else if (r["kind"] == RESET_KIND) g.latest = p
+            else g.devs += p
+        }
+        return rows.mapNotNull { r ->
+            val g = groups["${r.refs.board}\t${r.refs.thread}"]
+            if (g != null && (g.trimmed || readPosition(g.latest, g.devs) >= r.payload.body!!["pos"] as Long)) return@mapNotNull null
+            // リセットのあとの読みは操作で記録される。手元の方が大きいのはリセットの前の値なので、送らずに下げる
+            val latest = g?.latest
+            if (latest != null) {
+                val reset = targetOf(ctx, RESET_KIND, r.payload.body!!["board_url"] as String, r.refs.thread!!) ?: return@mapNotNull null
+                return@mapNotNull SeedRow(reset.recordId, reset.refs, latest, r.priority, reapply = true)
+            }
+            SeedRow(r.recordId, r.refs, r.payload, r.priority, reapply = true)
+        }
+    }
+
+    /** 既読の記録が手元の行に届いていないスレと、手元の値が表の値と違うスレの数 */
+    override fun explain(ctx: AdapterContext): Map<String, Int> {
+        class Group(val board: String, val key: String, var latest: SyncPayload? = null, val devs: ArrayList<SyncPayload> = ArrayList())
+        val groups = LinkedHashMap<String, Group>()
+        for (r in db.query("SELECT ref_board, ref_thread, kind, payload FROM sync_records WHERE kind IN (?, ?) AND deleted = 0 AND needs_apply = 0", listOf(RESET_KIND, DEV_KIND))) {
+            val board = r["ref_board"] as String
+            val key = r["ref_thread"] as String
+            val g = groups.getOrPut("$board\t$key") { Group(board, key) }
+            @Suppress("UNCHECKED_CAST")
+            val p = parseStrictJson(r["payload"] as String) as SyncPayload
+            if (r["kind"] == RESET_KIND) g.latest = p else g.devs += p
+        }
+        var noRow = 0
+        var differs = 0
+        for (g in groups.values) {
+            val local = localRows(db, g.board, g.key)
+            if (local.isEmpty()) noRow++
+            else if (local.any { it.readNo != readPosition(g.latest, g.devs) }) differs++
+        }
+        return mapOf("read_no_row" to noRow, "read_differs" to differs)
+    }
 
     override fun detailOf(p: SyncPayload): String? = p["device_id"] as? String
 

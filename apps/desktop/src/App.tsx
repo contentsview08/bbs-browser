@@ -77,7 +77,7 @@ import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, s
 import { useAccounts } from './hooks/useAccounts'
 import { useSync } from './hooks/useSync'
 import { mergeSyncedHistory, syncedTabReadNo } from './utils/syncRead'
-import { restoreThreadRead } from '@bbs-browser/sync'
+import { HISTORY_SHOWN, restoreThreadRead } from '@bbs-browser/sync'
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -140,6 +140,8 @@ const orderOf = (order: ListSort): { mode: SortMode; dir: 'desc' | 'asc' } =>
       : { mode: 'count', dir: order === 'most' ? 'desc' : 'asc' }
 
 /** 履歴の並びは変えずに、中身(既読・レス数・状態)だけ新しくする。消えたものは外し、新しいものは末尾に */
+const HISTORY_CRAWL_MAX = 100
+
 const mergeHistory = (prev: HistoryEntry[] | undefined, fresh: HistoryEntry[]): HistoryEntry[] => {
   if (!prev) return fresh
   const byId = new Map(fresh.map((h) => [threadId(h.thread), h]))
@@ -317,7 +319,7 @@ export default function App() {
   const historyCache = useRef<HistoryEntry[] | undefined>(undefined)
   /** 閲覧履歴を DB から読み、控えも新しくする */
   const loadHistory = async (s: LogStore) => {
-    const list = (await s.history()).filter((h) => findConnector(h.thread.connectorId))
+    const list = (await s.history(HISTORY_SHOWN)).filter((h) => findConnector(h.thread.connectorId))
     historyCache.current = list
     return list
   }
@@ -669,10 +671,14 @@ export default function App() {
       setNewSince(settingsRef.current.boardVisits[b.url])
       updateSetting('boardVisits', { ...settingsRef.current.boardVisits, [b.url]: Date.now() })
       const startedAt = Date.now()
-      const [list, st] = await Promise.all([connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }), store.getThreadStates(b.url)]).catch((e: unknown) => {
+      // 取得に失敗しても未読の数は DB の最新にする
+      if (sameBoard) setStates(await store.getThreadStates(b.url))
+      const list = await connectorOf(b.connectorId).listThreads(b, ctx, { sort: order }).catch((e: unknown) => {
         if (seq === boardSeq.current) throw e
-        return [undefined, undefined] as const
+        return undefined
       })
+      // 待っている間に同期が書いた既読を落とさないよう、取得のあとで読む
+      const st = list && (await store.getThreadStates(b.url))
       // 待っているあいだに別の板を開いた・並びを変えた(そちらを使う)
       if (!list || !st || seq !== boardSeq.current || listOrderRef.current !== order) return
       rememberList(b.url, list, startedAt)
@@ -716,7 +722,8 @@ export default function App() {
       // 利用者が更新したときだけ、見た順に並べ直す。定期の確認(resort が false)と、板ごとに確かめている途中は並びを変えない(読んでいる間に入れ替わる)
       const list = await loadHistory(store)
       setHistory((prev) => (resort ? list : mergeHistory(prev, list)))
-      const byBoard = groupByBoard(list)
+      // 出す数と確かめる数は別。自動の確認で掲示板への要求を増やさない
+      const byBoard = groupByBoard(list.slice(0, HISTORY_CRAWL_MAX))
       const counts = new Map<string, number>()
       // 巡回の間に板を開いて分かった数を消さないよう、分かった分だけを足す
       const publishCounts = () => setHistoryCounts((m) => withMaxCounts(m, counts))

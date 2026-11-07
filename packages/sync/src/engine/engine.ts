@@ -188,6 +188,7 @@ export class SyncEngine {
   private againManual = false
   private deviceChecked = false
   private reconciled = false
+  private filled = false
   private attempts = 0
   private retryAt = 0
   private applyFailures = 0
@@ -297,7 +298,9 @@ export class SyncEngine {
       const m = this.againManual
       this.again = false
       this.againManual = false
-      r = await this.cycle(m)
+      const next = await this.cycle(m)
+      // 画面が読み直す印を前の周の分まで渡す
+      r = { ...next, pulled: r.pulled + next.pulled, pushed: r.pushed + next.pushed, conflicts: r.conflicts + next.conflicts, applied: { ...r.applied, ...next.applied } }
     }
     return r
   }
@@ -313,6 +316,7 @@ export class SyncEngine {
     await this.db.batch([setState('device_id', deviceId), setState('clock', HLC_ZERO), setState('since', '0'), setState('phase', 'joining'), setState('enabled', '1')])
     this.deviceChecked = true
     this.reconciled = false
+    this.filled = false
   }
 
   /** 同期を始めるページから受け取った許可証を置く。止まっていれば次の手動の同期で続く */
@@ -597,6 +601,7 @@ export class SyncEngine {
     let phase = (await this.t.state('phase')) ?? 'joining'
     if (phase === 'recreate_waiting') throw new SpaceGone()
     let pulled = false
+    let seeded = false
     if ((await this.t.state('recreate_pending')) === '1') {
       await this.finishRecreate()
       pulled = true
@@ -612,10 +617,13 @@ export class SyncEngine {
       this.enter('seeding')
       await this.seedAndPlan()
       phase = 'idle'
+      seeded = true
     } else if (!this.reconciled) {
       await this.reconcile()
     }
     this.reconciled = true
+    if (!seeded && (manual || !this.filled)) await this.fillMissing()
+    this.filled = true
     if (!pulled && (manual || this.deps.now() - Number((await this.t.state('last_pull_at')) ?? 0) >= PULL_MIN_GAP_MS)) await this.pull(false)
     await this.applyAll()
     await this.pushAll()
@@ -778,6 +786,23 @@ export class SyncEngine {
       }
     }
     if (stmts.length > 0) await this.db.batch(stmts)
+  }
+
+  /** 手元にあってレコードのない行を、種まきと同じ古い HLC で作る。消した記録があるものは作らないので、消したものは戻らない */
+  private async fillMissing(): Promise<void> {
+    const ctx = this.ctx()
+    for (const adapter of this.deps.adapters) {
+      const rows = (await adapter.fill?.(ctx)) ?? []
+      for (let i = 0; i < rows.length; i += WRITE_BATCH) {
+        const chunk = rows.slice(i, i + WRITE_BATCH)
+        const local = await this.t.records(chunk.map((r) => r.record_id))
+        const stmts = chunk.flatMap((r) => {
+          if (!local.has(r.record_id)) return [writeRecord({ record_id: r.record_id, kind: r.payload.kind, kind_tag: 'h', schema_version: SCHEMA_VERSION, payload: r.payload, hlc: r.payload.hlc, version: 0, pending: true, priority: r.priority, needs_apply: r.reapply === true, ...r.refs, tomb_at: null })]
+          return r.reapply === true ? [{ sql: 'UPDATE sync_records SET needs_apply = 1 WHERE record_id = $1', params: [r.record_id] }] : []
+        })
+        if (stmts.length > 0) await this.db.batch(stmts)
+      }
+    }
   }
 
   private async applyAll(): Promise<void> {

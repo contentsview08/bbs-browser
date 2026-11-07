@@ -361,6 +361,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 設定で隠したタブは開かず、出しているタブの先頭へ
         val open = if (tab in shown) tab else shown.first()
         prefs.pastTab = open
+        // 同期が書いた最新を出す
+        viewModelScope.launch { reflectSyncedReads(); postHistory = db.postHistory() }
         when (open) {
             "unread" -> { openRoot(Page.AllUnread()); loadAllUnread() }
             "fav" -> openRoot(Page.FavThreads())
@@ -397,6 +399,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 閲覧履歴・お気に入りのスレの新着を確かめる(板ごとにスレ一覧を 1 回だけ読む) */
     fun checkNew(entries: List<HistoryEntry>) {
+        // 通信の成否によらず、同期が書いた最新を出す
+        viewModelScope.launch { reflectSyncedReads() }
         if (checking || entries.isEmpty()) return
         viewModelScope.launch {
             checking = true
@@ -547,6 +551,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun flushSettingOps() = withContext(ngOps) {
         runCatching { db.userOps.settingsWriteNow(settingOps.drain(), System.currentTimeMillis()) }
+    }
+
+    /** 手動の同期のあと。適用の有無によらず、画面が読むものを DB の値にする */
+    suspend fun reloadSyncedScreens() = withContext(Dispatchers.Main) {
+        reflectSyncedReads()
+        postHistory = db.postHistory()
     }
 
     /** 適用で変わった既読と履歴を画面へ。開いているスレは上がったときだけ上げ、「ここから未読」の線とスクロール位置は動かさない */
@@ -843,6 +853,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             page.loading = true
             page.error = null
             val start = System.currentTimeMillis()
+            // 取得に失敗しても未読の数は DB の最新にする
+            page.states = db.threadStates(page.board.url)
             try {
                 val list = TwoCh.listThreads(page.board)
                 page.states = db.threadStates(page.board.url)

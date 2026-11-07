@@ -1,5 +1,5 @@
 // 閲覧履歴と既読。閲覧履歴は last_view:<板>:<スレ>、既読は read_dev(スレ×端末)と read_reset(スレごと)
-import { RESET_TOTAL_MAX } from '../config'
+import { HISTORY_SHOWN, RESET_TOTAL_MAX } from '../config'
 import type { StoredRecord, SyncOpRow, SyncSqlDb } from '../engine/tables'
 import { formatHlc, parseHlc } from '../hlc'
 import { canonicalJson, parseStrictJson } from '../json'
@@ -238,6 +238,33 @@ export class LastViewAdapter implements SyncAdapter {
     }
   }
 
+  fill(ctx: AdapterContext): Promise<SeedRow[]> {
+    return this.seed(ctx)
+  }
+
+  /** 手元の履歴と表の履歴が合わない理由ごとの数 */
+  async explain(ctx: AdapterContext): Promise<Record<string, number>> {
+    const out: Record<string, number> = { history_over_shown: 0, history_no_record: 0, view_old: 0, view_unresolved: 0, view_reset: 0, view_other: 0 }
+    const shown = new Set<string>()
+    const local = await this.db.select<ThreadRow>('SELECT board_url, key, title, read_no, read_at, created_at FROM threads WHERE read_at IS NOT NULL')
+    out.history_over_shown = Math.max(0, local.length - HISTORY_SHOWN)
+    for (const r of local) shown.add(`${normalizeBoardUrl(r.board_url)}\t${r.key}`)
+    const known = new Set((await this.db.select<{ ref_board: string; ref_thread: string }>("SELECT ref_board, ref_thread FROM sync_records WHERE kind = 'last_view'")).map((r) => `${r.ref_board}\t${r.ref_thread}`))
+    for (const k of shown) if (!known.has(k)) out.history_no_record++
+    const days = this.host.retentionDays()
+    for (const r of await this.db.select<{ ref_board: string; ref_thread: string; payload: string }>("SELECT ref_board, ref_thread, payload FROM sync_records WHERE kind = 'last_view' AND deleted = 0 AND needs_apply = 0")) {
+      if (shown.has(`${r.ref_board}\t${r.ref_thread}`)) continue
+      const body = (parseStrictJson(r.payload) as SyncPayload).body ?? {}
+      const viewedAt = body[LAST_VIEWED_FIELD] as number
+      const { latest } = await readRecords(this.db, r.ref_board, r.ref_thread)
+      if (days > 0 && ctx.now - viewedAt > days * DAY_MS) out.view_old++
+      else if (!this.host.resolve(body.board_url as string)) out.view_unresolved++
+      else if (latest && parseHlc(latest.hlc).wall >= viewedAt) out.view_reset++
+      else out.view_other++
+    }
+    return out
+  }
+
   async localLines(): Promise<string[]> {
     const rows = await this.db.select<ThreadRow>('SELECT board_url, key, title, read_no, read_at, created_at FROM threads WHERE read_at IS NOT NULL')
     return rows.map((r) => canonicalJson([normalizeBoardUrl(r.board_url), r.key, r.read_at]))
@@ -273,7 +300,8 @@ abstract class ReadAdapterBase {
     const pos = readPosition(latest, devs)
     const statements = []
     for (const x of rows) {
-      const next = Math.max(pos, await pendingRead(this.db, x.board_url, key))
+      // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
+      const next = Math.max(pos, await pendingRead(this.db, x.board_url, key), latest === null ? x.read_no : 0)
       if (x.read_no !== next) statements.push({ sql: 'UPDATE threads SET read_no = $1 WHERE board_url = $2 AND key = $3', params: [next, x.board_url, key] })
     }
     return { statements, changed: statements.length > 0 }
@@ -309,6 +337,54 @@ export class ReadDevAdapter extends ReadAdapterBase implements SyncAdapter {
       const payload = { kind: DEV_KIND, hlc, device_id: ctx.deviceId, body: { board_url: r.board_url, thread: r.key, base_reset_id: null, pos: r.read_no, steps: [{ at: hlc, pos: r.read_no }] } }
       return checkPayload(payload) === null ? [] : [{ ...t, priority: SEED_PRIORITY, payload }]
     })
+  }
+
+  /** 表の既読より手元が進んでいるスレだけ。全スレに端末ごとの記録を増やさない。外した記録のあるスレは送り直さない */
+  async fill(ctx: AdapterContext): Promise<SeedRow[]> {
+    const rows = await this.seed(ctx)
+    if (rows.length === 0) return []
+    const groups = new Map<string, { latest: SyncPayload | null; devs: SyncPayload[]; trimmed: boolean }>()
+    for (const r of await this.db.select<{ kind: string; payload: string; deleted: number; ref_board: string | null; ref_thread: string | null }>('SELECT kind, payload, deleted, ref_board, ref_thread FROM sync_records WHERE kind IN ($1, $2)', [RESET_KIND, DEV_KIND])) {
+      const id = `${r.ref_board}\t${r.ref_thread}`
+      const g = groups.get(id) ?? { latest: null, devs: [], trimmed: false }
+      const p = parseStrictJson(r.payload) as SyncPayload
+      if (Number(r.deleted) === 1) g.trimmed ||= r.kind === DEV_KIND
+      else if (r.kind === RESET_KIND) g.latest = p
+      else g.devs.push(p)
+      groups.set(id, g)
+    }
+    return rows.flatMap((r) => {
+      const g = groups.get(`${r.refs.ref_board}\t${r.refs.ref_thread}`)
+      if (g && (g.trimmed || readPosition(g.latest, g.devs) >= (r.payload.body?.pos as number))) return []
+      // リセットのあとの読みは操作で記録される。手元の方が大きいのはリセットの前の値なので、送らずに下げる
+      if (g?.latest) {
+        const reset = targetOf(ctx, RESET_KIND, r.payload.body?.board_url as string, r.refs.ref_thread as string)
+        return reset ? [{ ...reset, payload: g.latest, priority: r.priority, reapply: true }] : []
+      }
+      return [{ ...r, reapply: true }]
+    })
+  }
+
+  /** 既読の記録が手元の行に届いていないスレと、手元の値が表の値と違うスレの数 */
+  async explain(): Promise<Record<string, number>> {
+    const rows = await this.db.select<{ ref_board: string; ref_thread: string; kind: string; payload: string }>('SELECT ref_board, ref_thread, kind, payload FROM sync_records WHERE kind IN ($1, $2) AND deleted = 0 AND needs_apply = 0', [RESET_KIND, DEV_KIND])
+    const groups = new Map<string, { board: string; key: string; latest: SyncPayload | null; devs: SyncPayload[] }>()
+    for (const r of rows) {
+      const id = `${r.ref_board}\t${r.ref_thread}`
+      const g = groups.get(id) ?? { board: r.ref_board, key: r.ref_thread, latest: null, devs: [] }
+      const p = parseStrictJson(r.payload) as SyncPayload
+      if (r.kind === RESET_KIND) g.latest = p
+      else g.devs.push(p)
+      groups.set(id, g)
+    }
+    let noRow = 0
+    let differs = 0
+    for (const g of groups.values()) {
+      const local = await localRows(this.db, g.board, g.key)
+      if (local.length === 0) noRow++
+      else if (local.some((x) => x.read_no !== readPosition(g.latest, g.devs))) differs++
+    }
+    return { read_no_row: noRow, read_differs: differs }
   }
 
   detailOf(p: SyncPayload): string | null {

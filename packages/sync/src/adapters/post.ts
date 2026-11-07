@@ -107,6 +107,10 @@ export class PostAdapter implements SyncAdapter {
     return row ? fitted(updateRecord(existing, POST_KIND, bodyOf(row, postId, row.thread_title), stamp, ctx.deviceId)) : null
   }
 
+  fill(ctx: AdapterContext): Promise<SeedRow[]> {
+    return this.seed(ctx)
+  }
+
   async seed(ctx: AdapterContext): Promise<SeedRow[]> {
     const rows = await this.db.select<LocalRow>(`SELECT ${COLUMNS} FROM post_history ORDER BY posted_at DESC, id DESC`)
     const seen = new Set<string>()

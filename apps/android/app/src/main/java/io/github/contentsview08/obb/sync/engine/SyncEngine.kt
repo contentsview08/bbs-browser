@@ -138,6 +138,7 @@ class SyncEngine(
     private var last = CycleResult()
     private var deviceChecked = false
     private var reconciled = false
+    private var filled = false
     private var attempts = 0
     private var retryAt = 0L
     private var applyFailures = 0
@@ -234,7 +235,14 @@ class SyncEngine(
         val m = againManual
         again = false
         againManual = false
-        last = cycle(m)
+        val prev = last
+        val next = cycle(m)
+        // 画面が読み直す印を前の周の分まで渡す
+        next.pulled += prev.pulled
+        next.pushed += prev.pushed
+        next.conflicts += prev.conflicts
+        next.applied += prev.applied
+        last = next
     }
 
     private fun checkTicketFor(k: ByteArray, ticket: String) {
@@ -259,6 +267,7 @@ class SyncEngine(
             db.batch(joinStatements(id))
             deviceChecked = true
             reconciled = false
+            filled = false
         }
     }
 
@@ -496,6 +505,7 @@ class SyncEngine(
         var phase = t.state("phase") ?: "joining"
         if (phase == "recreate_waiting") throw SpaceGone()
         var pulled = false
+        var seeded = false
         if (t.state("recreate_pending") == "1") {
             finishRecreate()
             pulled = true
@@ -510,10 +520,13 @@ class SyncEngine(
         if (phase == "seeding") {
             enter("seeding")
             seedAndPlan()
+            seeded = true
         } else if (!reconciled) {
             reconcile()
         }
         reconciled = true
+        if (!seeded && (manual || !filled)) fillMissing()
+        filled = true
         if (!pulled && (manual || now() - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS)) pull(false)
         applyAll()
         pushAll()
@@ -661,6 +674,29 @@ class SyncEngine(
             }
         }
         if (stmts.isNotEmpty()) db.batch(stmts)
+    }
+
+    /** 手元にあってレコードのない行を、種まきと同じ古い HLC で作る。消した記録があるものは作らないので、消したものは戻らない */
+    private fun fillMissing() {
+        val c = ctx()
+        for (adapter in adapters) {
+            for (chunk in adapter.fill(c).chunked(SyncConfig.WRITE_BATCH)) {
+                val local = t.records(chunk.map { it.recordId })
+                val stmts = chunk.mapNotNull { r ->
+                    if (r.recordId in local) {
+                        if (r.reapply) SqlStatement("UPDATE sync_records SET needs_apply = 1 WHERE record_id = ?", listOf(r.recordId)) else null
+                    } else {
+                        writeRecord(
+                            StoredRecord(
+                                r.recordId, r.payload.kind, "h", SyncConfig.SCHEMA_VERSION, r.payload, 0, pending = true, priority = r.priority, needsApply = r.reapply,
+                                r.refs.board, r.refs.thread, r.refs.detail, r.refs.local, null,
+                            ),
+                        )
+                    }
+                }
+                if (stmts.isNotEmpty()) db.batch(stmts)
+            }
+        }
     }
 
     private fun applyAll() {

@@ -103,13 +103,19 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
 
   const latest = useRef(ctl)
   latest.current = ctl
+  const storeRef = useRef(store)
+  storeRef.current = store
   // 設定の窓は鍵の命令を呼べないので、main で行う
   return useRef({
     syncStatus: () => need(latest.current).status(),
     syncStart: () => need(latest.current).start().then(summary),
     syncPairingCode: () => need(latest.current).pairingCode(),
     syncJoin: (code: string) => need(latest.current).join(code).then(summary),
-    syncNow: () => need(latest.current).syncNow().then(summary),
+    syncNow: () => need(latest.current).syncNow().then((r) => {
+      // 適用の有無によらず、画面が読むものを DB の値にする
+      if (storeRef.current) applied.current.reads(storeRef.current)
+      return summary(r)
+    }),
     syncLeave: () => need(latest.current).leave(),
     syncSetServer: (url: string) => need(latest.current).setServerUrl(url),
     syncConfirm: (choice: ConfirmChoice) => need(latest.current).resolveConfirm(choice).then(summary),

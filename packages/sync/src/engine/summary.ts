@@ -27,6 +27,8 @@ export interface LocalSummary {
 export interface SyncSummary {
   kinds: KindSummary[]
   local: LocalSummary[]
+  /** 手元の件数が合わない理由ごとの数。0 は入れない */
+  notes: Record<string, number>
   /** 種類ごとの件数とハッシュを 1 行にしたもの。貼って見比べる */
   text: string
 }
@@ -64,8 +66,18 @@ export async function syncSummary(db: SyncSqlDb, adapters: readonly SyncAdapter[
     areas.set(key, [...(areas.get(key) ?? []), ...lines])
   }
   const local = [...areas.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([area, lines]) => ({ area, count: lines.length, hash: hashLines(lines) }))
-  const text = [...kinds.map((k) => `${k.kind}=${k.live}+${k.tombstones}:${k.hash}`), ...local.map((l) => `@${l.area}=${l.count}:${l.hash}`)].join(' ')
-  return { kinds, local, text }
+  const notes: Record<string, number> = {}
+  const note = (k: string, n: number) => {
+    if (n > 0) notes[k] = (notes[k] ?? 0) + n
+  }
+  for (const a of adapters) for (const [k, n] of Object.entries((await a.explain?.(ctx)) ?? {})) note(k, n)
+  const [ops] = await db.select<{ n: number }>('SELECT COUNT(*) AS n FROM sync_ops')
+  note('ops_waiting', Number(ops?.n ?? 0))
+  const [bad] = await db.select<{ value: string }>("SELECT value FROM sync_state WHERE key = 'bad_counts'")
+  if (bad) for (const [k, n] of Object.entries(JSON.parse(bad.value) as Record<string, number>)) note(`bad_${k}`, n)
+  const sorted = Object.keys(notes).sort()
+  const text = [...kinds.map((k) => `${k.kind}=${k.live}+${k.tombstones}:${k.hash}`), ...local.map((l) => `@${l.area}=${l.count}:${l.hash}`), ...sorted.map((k) => `?${k}=${notes[k]}`)].join(' ')
+  return { kinds, local, notes, text }
 }
 
 /** 重いので押したときだけ。apply は文を作るだけで書かないので、手元と表の違いをそのまま数えられる */

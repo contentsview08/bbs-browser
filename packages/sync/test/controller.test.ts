@@ -316,6 +316,7 @@ describe('ペアリングのコードと画面の文(共通テスト)', () => {
   it('画面の言葉がスマホと同じ', () => {
     const ui = JSON.parse(readFileSync(new URL('../../conformance/sync-ui.json', import.meta.url), 'utf-8'))
     expect(S.SYNC_LABELS).toEqual(ui.labels)
+    expect(S.SYNC_NOTES).toEqual(ui.notes)
     expect(S.SYNC_MESSAGES).toEqual(ui.messages)
     expect(S.SYNC_REVEAL_TAPS).toBe(ui.reveal_taps)
     expect(S.PAIRING_SHOW_MS).toBe(ui.pairing_show_ms)

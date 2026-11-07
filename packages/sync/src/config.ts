@@ -1,6 +1,8 @@
 // 端末の同期の定数。スマホ版の SyncConfig.kt と packages/conformance/sync-config.json で揃える
 export const SCHEMA_VERSION = 1
 export const PULL_MIN_GAP_MS = 10_000
+/** 履歴の画面に出す件数 */
+export const HISTORY_SHOWN = 300
 export const HTTP_TIMEOUT_MS = 10_000
 export const BACKOFF_MIN_MS = 1_000
 export const BACKOFF_MAX_MS = 60_000
@@ -26,8 +28,8 @@ export const TRIM_BATCH = 100
 export const TRIM_ROUNDS = 5
 
 /** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/scheduler.ts) */
-export const HEAD_INTERVAL_MS = 30_000
-export const PUSH_INTERVAL_MS = 30_000
+export const HEAD_INTERVAL_MS = 15_000
+export const PUSH_INTERVAL_MS = 15_000
 export const NET_SETTLE_MS = 5_000
 export const NET_MIN_GAP_MS = 30_000
 export const IDLE_STOP_MS = 10 * 60 * 1000

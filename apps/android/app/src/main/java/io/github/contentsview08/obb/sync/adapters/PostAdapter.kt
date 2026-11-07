@@ -106,6 +106,8 @@ class PostAdapter(private val db: SyncSql, private val resolve: (String) -> Reso
         return fitted(updateRecord(existing, POST_KIND, bodyOf(row, postId, row.threadTitle), stamp, ctx.deviceId))
     }
 
+    override fun fill(ctx: AdapterContext): List<SeedRow> = seed(ctx)
+
     override fun seed(ctx: AdapterContext): List<SeedRow> {
         val seen = HashSet<String>()
         return db.query("SELECT $COLUMNS FROM post_history ORDER BY posted_at DESC, id DESC").mapNotNull {

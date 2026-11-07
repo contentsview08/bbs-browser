@@ -1,7 +1,7 @@
 // 開発用の同期の画面。隠してあり、版を押して開く。鍵は main の窓にあるので、ここは頼むだけ
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { encode } from 'uqr'
-import { PAIRING_SHOW_MS, SYNC_LABELS as L, syncMessage, type MismatchSummary, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
+import { PAIRING_SHOW_MS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
 import { callMain } from '../../host/crossWindow'
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT } from '../DialogParts'
 import ConfirmDialog from '../ConfirmDialog'
@@ -179,6 +179,16 @@ function SyncSummaryView({ summary, mismatch, busy, onCheck }: { summary: SyncSu
           <li key={l.area}>{`${l.area} ${l.count}:${l.hash}`}</li>
         ))}
       </ul>
+      {Object.keys(summary.notes).length > 0 && (
+        <>
+          <p className="text-c-text-muted mb-1">手元の件数が合わない理由</p>
+          <ul className="text-xs mb-2">
+            {Object.entries(summary.notes).map(([k, n]) => (
+              <li key={k}>{`${SYNC_NOTES[k] ?? k}: ${n} 件`}</li>
+            ))}
+          </ul>
+        </>
+      )}
       <div className="flex gap-2 mb-2">
         <button type="button" className={BTN_SECONDARY} onClick={() => void navigator.clipboard.writeText(summary.text)}>
           要約をコピー

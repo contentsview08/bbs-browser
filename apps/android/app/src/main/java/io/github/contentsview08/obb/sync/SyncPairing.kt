@@ -39,6 +39,19 @@ fun parsePairingCode(code: String, allowLocalhost: Boolean = false): PairingCode
 object SyncText {
     private const val TICKET_AGAIN = "同期を続けるには、もう一度確認が必要です。この端末のデータはそのまま使えます。"
 
+    /** 要約の「合わない理由」の見出し。bad_ で始まるものは捨てた数なので、理由の名前をそのまま出す */
+    val NOTES = mapOf(
+        "history_no_record" to "手元の履歴のうち、まだ同期の表にないもの(次の同期で送ります)",
+        "history_over_shown" to "履歴の画面に出す 300 件を超える分",
+        "view_old" to "ログの保持日数より古いので、手元に入れていない履歴",
+        "view_unresolved" to "この端末で開けない掲示板の履歴",
+        "view_reset" to "ログの削除より前の閲覧なので、手元に入れていない履歴",
+        "view_other" to "手元にまだ入っていない履歴",
+        "read_no_row" to "既読の記録だけがあり、手元に行のないスレ",
+        "read_differs" to "手元の既読が同期の表と違うスレ",
+        "ops_waiting" to "まだ処理していない操作",
+    )
+
     val MESSAGES = mapOf(
         "auth_failed" to "この端末の鍵が使えなくなりました。もう一度つないでください。",
         "capacity_full" to "同期は満員です。枠が空くまで作れません。この端末のデータはそのまま使えます。",

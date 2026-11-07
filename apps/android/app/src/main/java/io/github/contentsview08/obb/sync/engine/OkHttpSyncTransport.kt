@@ -40,6 +40,8 @@ class OkHttpSyncTransport(private val client: OkHttpClient = defaultClient()) : 
         private const val TIMEOUT_MS = 10_000L
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            // UA はサーバー側の WAF で OBB の通信を見分けるのに使う(OBB/<版> で始める)
+            .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", "OBB/${io.github.contentsview08.obb.BuildConfig.VERSION_NAME} (sync; Android)").build()) }
             .followRedirects(false)
             .followSslRedirects(false)
             .cookieJar(CookieJar.NO_COOKIES)

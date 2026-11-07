@@ -48,7 +48,15 @@ pub(crate) fn only_main(window: &tauri::Window) -> Result<(), String> {
 fn client() -> Result<&'static reqwest::Client, String> {
     static CLIENT: OnceLock<Result<reqwest::Client, ()>> = OnceLock::new();
     CLIENT
-        .get_or_init(|| reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).connect_timeout(TIMEOUT_MAX).build().map_err(|_| ()))
+        .get_or_init(|| {
+            // UA はサーバー側の WAF で OBB の通信を見分けるのに使う(OBB/<版> で始める)
+            reqwest::Client::builder()
+                .user_agent(concat!("OBB/", env!("CARGO_PKG_VERSION"), " (sync)"))
+                .redirect(reqwest::redirect::Policy::none())
+                .connect_timeout(TIMEOUT_MAX)
+                .build()
+                .map_err(|_| ())
+        })
         .as_ref()
         .map_err(|_| "network".to_string())
 }

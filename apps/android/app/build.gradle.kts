@@ -67,8 +67,8 @@ android {
         applicationId = "io.github.contentsview08.obb"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
         // ONNX Runtime(AI NG)はネイティブのライブラリを持つので、スマホ(arm64)とエミュレーター(x86_64)の分だけ入れる
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         // 同期サーバーの既定値。元は packages/sync/server-url.json。ビルドのときに環境変数 OBB_SYNC_SERVER_URL で差し替えられる

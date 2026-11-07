@@ -449,7 +449,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 io.github.contentsview08.obb.sync.adapters.SettingAdapter(settingAllow, io.github.contentsview08.obb.data.PrefsSettingsHost(prefs, settingAllow), db.syncSql),
             ) + io.github.contentsview08.obb.sync.adapters.historyAdapters(
                 db.syncSql,
-                io.github.contentsview08.obb.sync.adapters.HistoryHost({ io.github.contentsview08.obb.data.resolveSyncBoard(it) }, { prefs.logRetentionDays }, { io.github.contentsview08.obb.sync.generateDeviceId() }),
+                io.github.contentsview08.obb.sync.adapters.HistoryHost({ io.github.contentsview08.obb.data.resolveSyncBoard(it) }, { prefs.logRetentionDays }, { io.github.contentsview08.obb.sync.generateDeviceId() }, { b, k -> threadPages().any { it.summary.boardUrl == b && it.summary.key == k } }),
             ),
             now = System::currentTimeMillis,
             allowLocalhost = BuildConfig.SYNC_ALLOW_LOCALHOST,
@@ -904,6 +904,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 page.unreadFrom = log.readNo + 1
                 setPosts(page, log.posts)
                 db.userOps.threadView(t)
+                // メニューの閲覧履歴に、開いたスレをすぐ出す
+                history = db.history()
             }
             // 同期で作った空の行は、取り終えるまで「レスなし」と見せない
             page.loaded = log != null && log.posts.isNotEmpty()
@@ -923,7 +925,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val r = TwoCh.fetchPosts(t, log?.cursor)
                 val title = r.title ?: log?.title ?: t.title
                 db.saveFetch(t, r, title)
-                if (log == null) db.userOps.threadView(t)
+                if (log == null) {
+                    db.userOps.threadView(t)
+                    history = db.history()
+                }
                 // 手元にログのあるスレに届いた新着なら、あなた宛てを知らせる(全部取り直したときと、初めて開くスレは知らせない)
                 if (log != null && r.status != FetchStatus.RESET && r.posts.isNotEmpty()) {
                     runCatching { io.github.contentsview08.obb.data.Crawler.notifyReplies(getApplication(), prefs, t, title, r.posts, page.ownNos, page.justPosted) }

@@ -48,6 +48,8 @@ class HistoryHost(
     val retentionDays: () -> Int,
     /** リセットの id。ランダムな値 */
     val newResetId: () -> String,
+    /** 画面で開いているスレか。開いているスレのログは、他の端末の削除が届いても消さない(読んでいる最中の画面の下から消えないように) */
+    val isOpen: (String, String) -> Boolean = { _, _ -> false },
 )
 
 private const val THREAD_COLUMNS = "board_url, key, title, read_no, read_at, created_at"
@@ -278,8 +280,12 @@ class LastViewAdapter(private val db: SyncSql, private val host: HistoryHost) : 
         db.query("SELECT $THREAD_COLUMNS FROM threads WHERE read_at IS NOT NULL").map(::rowOf).map { canonicalJson(listOf(normalizeBoardUrl(it.boardUrl), it.key, it.readAt)) }
 }
 
-/** read_dev と read_reset の適用は同じ。手元の値はどちらも readPosition の結果で、下げることもある */
-abstract class ReadAdapterBase(protected val db: SyncSql) : SyncAdapter {
+/**
+ * read_dev と read_reset の適用は同じ。手元の値はどちらも readPosition の結果で、下げることもある。
+ * リセットより後に誰も読んでいなければ、ログの削除としてこの端末のログと履歴の行も消す(消した端末と同じ見え方にする。
+ * 残すと、読み終えていたスレが全部未読の行として一覧に出続ける)
+ */
+abstract class ReadAdapterBase(protected val db: SyncSql, protected val host: HistoryHost) : SyncAdapter {
     override val area = AREA_READS
     override val reconciles = false
 
@@ -297,10 +303,19 @@ abstract class ReadAdapterBase(protected val db: SyncSql) : SyncAdapter {
         if (rows.isEmpty()) return NOTHING
         val rec = readRecords(db, r.refBoard!!, key)
         val pos = readPosition(rec.latest, rec.devs)
-        val statements = rows.mapNotNull { x ->
+        val resetWall = rec.latest?.let { Hlc.parse(it.hlc).wall }
+        val statements = rows.flatMap { x ->
             // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
-            val next = maxOf(pos, pendingRead(db, x.boardUrl, key), if (rec.latest == null) x.readNo else 0L)
-            if (x.readNo == next) null else SqlStatement("UPDATE threads SET read_no = ? WHERE board_url = ? AND key = ?", listOf(next, x.boardUrl, key))
+            val pending = pendingRead(db, x.boardUrl, key)
+            // 消す前の閲覧しかない履歴の行だけ消す(記録・未処理の読み・閲覧時刻のどれかがリセットより後なら読んでいる)。
+            // 履歴にない行(お気に入りの確認などで取っただけ)と、画面で開いているスレは消さない。
+            // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
+            val canDelete = resetWall != null && resetWall - ctx.now <= DAY_MS && pos == 0L && pending == 0L && !host.isOpen(x.boardUrl, key)
+            if (canDelete && x.readAt != null && x.readAt <= resetWall!!) {
+                return@flatMap listOf("posts", "threads").map { SqlStatement("DELETE FROM $it WHERE board_url = ? AND key = ?", listOf(x.boardUrl, key)) }
+            }
+            val next = maxOf(pos, pending, if (rec.latest == null) x.readNo else 0L)
+            if (x.readNo == next) emptyList() else listOf(SqlStatement("UPDATE threads SET read_no = ? WHERE board_url = ? AND key = ?", listOf(next, x.boardUrl, key)))
         }
         return ApplyPlan(statements, statements.isNotEmpty())
     }
@@ -309,7 +324,7 @@ abstract class ReadAdapterBase(protected val db: SyncSql) : SyncAdapter {
 }
 
 /** 端末の記録は LastViewAdapter の read の操作で作る。種まきと適用だけを受け持つ */
-class ReadDevAdapter(db: SyncSql) : ReadAdapterBase(db) {
+class ReadDevAdapter(db: SyncSql, host: HistoryHost) : ReadAdapterBase(db, host) {
     override val kind = DEV_KIND
     override val ops = emptyList<String>()
     override val seedsAll = false
@@ -389,7 +404,7 @@ class ReadDevAdapter(db: SyncSql) : ReadAdapterBase(db) {
 }
 
 /** ログの削除は全端末で未読に戻す操作。上限を超えた分は手元からだけ消える */
-class ReadResetAdapter(db: SyncSql, private val host: HistoryHost) : ReadAdapterBase(db) {
+class ReadResetAdapter(db: SyncSql, host: HistoryHost) : ReadAdapterBase(db, host) {
     override val kind = RESET_KIND
     override val ops = listOf(OP_LOG_DELETE)
     override val expands = true
@@ -414,4 +429,4 @@ class ReadResetAdapter(db: SyncSql, private val host: HistoryHost) : ReadAdapter
     override fun seed(ctx: AdapterContext) = emptyList<SeedRow>()
 }
 
-fun historyAdapters(db: SyncSql, host: HistoryHost): List<SyncAdapter> = listOf(LastViewAdapter(db, host), ReadDevAdapter(db), ReadResetAdapter(db, host))
+fun historyAdapters(db: SyncSql, host: HistoryHost): List<SyncAdapter> = listOf(LastViewAdapter(db, host), ReadDevAdapter(db, host), ReadResetAdapter(db, host))

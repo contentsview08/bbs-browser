@@ -30,6 +30,8 @@ export interface HistoryHost {
   retentionDays: () => number
   /** リセットの id。ランダムな値 */
   newResetId: () => string
+  /** 画面で開いているスレか。開いているスレのログは、他の端末の削除が届いても消さない(読んでいる最中の画面の下から消えないように) */
+  isOpen?: (boardUrl: string, key: string) => boolean
 }
 
 interface ThreadRow {
@@ -275,12 +277,19 @@ export class LastViewAdapter implements SyncAdapter {
   }
 }
 
-/** read_dev と read_reset の適用は同じ。手元の値はどちらも readPosition の結果で、下げることもある */
+/**
+ * read_dev と read_reset の適用は同じ。手元の値はどちらも readPosition の結果で、下げることもある。
+ * リセットより後に誰も読んでいなければ、ログの削除としてこの端末のログと履歴の行も消す(消した端末と同じ見え方にする。
+ * 残すと、読み終えていたスレが全部未読の行として一覧に出続ける)
+ */
 abstract class ReadAdapterBase {
   readonly area = AREA_READS
   readonly reconciles = false
 
-  constructor(protected readonly db: SyncSqlDb) {}
+  constructor(
+    protected readonly db: SyncSqlDb,
+    protected readonly host: HistoryHost,
+  ) {}
 
   owns(r: StoredRecord): boolean {
     return r.ref_board !== null && r.ref_thread !== null
@@ -294,7 +303,7 @@ abstract class ReadAdapterBase {
     return { statements: [], changed: false }
   }
 
-  async apply(r: StoredRecord): Promise<ApplyPlan> {
+  async apply(r: StoredRecord, ctx: AdapterContext): Promise<ApplyPlan> {
     // 外した記録を除いて計算すると手元の既読が下がる
     if (r.payload.trim === true) return { statements: [], changed: false }
     const key = r.ref_thread as string
@@ -302,13 +311,38 @@ abstract class ReadAdapterBase {
     if (rows.length === 0) return { statements: [], changed: false }
     const { latest, devs } = await readRecords(this.db, r.ref_board as string, key)
     const pos = readPosition(latest, devs)
+    const resetWall = latest === null ? null : parseHlc(latest.hlc).wall
     const statements = []
     for (const x of rows) {
       // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
-      const next = Math.max(pos, await pendingRead(this.db, x.board_url, key), latest === null ? x.read_no : 0)
+      const pending = await pendingRead(this.db, x.board_url, key)
+      // 消す前の閲覧しかない履歴の行だけ消す(記録・未処理の読み・閲覧時刻のどれかがリセットより後なら読んでいる)。
+      // 履歴にない行(お気に入りの確認などで取っただけ)と、画面で開いているスレは消さない。
+      // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
+      const canDelete = resetWall !== null && resetWall - ctx.now <= DAY_MS && pos === 0 && pending === 0 && !this.host.isOpen?.(x.board_url, key)
+      if (canDelete && x.read_at !== null && x.read_at <= (resetWall as number)) {
+        for (const table of ['posts', 'threads']) statements.push({ sql: `DELETE FROM ${table} WHERE board_url = $1 AND key = $2`, params: [x.board_url, key] })
+        continue
+      }
+      const next = Math.max(pos, pending, latest === null ? x.read_no : 0)
       if (x.read_no !== next) statements.push({ sql: 'UPDATE threads SET read_no = $1 WHERE board_url = $2 AND key = $3', params: [next, x.board_url, key] })
     }
     return { statements, changed: statements.length > 0 }
+  }
+
+  /** 不一致の検査は既読の位置だけを見る。ログを消す予定は適用のときだけに効く(あとで作られた行を数え続けないように) */
+  async differs(r: StoredRecord): Promise<boolean> {
+    if (r.payload.trim === true) return false
+    const key = r.ref_thread as string
+    const rows = await localRows(this.db, r.ref_board, key)
+    if (rows.length === 0) return false
+    const { latest, devs } = await readRecords(this.db, r.ref_board as string, key)
+    const pos = readPosition(latest, devs)
+    for (const x of rows) {
+      const next = Math.max(pos, await pendingRead(this.db, x.board_url, key), latest === null ? x.read_no : 0)
+      if (x.read_no !== next) return true
+    }
+    return false
   }
 
   async localLines(): Promise<string[]> {
@@ -321,6 +355,10 @@ export class ReadDevAdapter extends ReadAdapterBase implements SyncAdapter {
   readonly kind = DEV_KIND
   readonly ops: string[] = []
   readonly seedsAll = false
+
+  constructor(db: SyncSqlDb, host: HistoryHost) {
+    super(db, host)
+  }
 
   target(): OpTarget | null {
     return null
@@ -407,8 +445,8 @@ export class ReadResetAdapter extends ReadAdapterBase implements SyncAdapter {
   readonly kind = RESET_KIND
   readonly ops = [OP_LOG_DELETE]
 
-  constructor(db: SyncSqlDb, private readonly host: HistoryHost) {
-    super(db)
+  constructor(db: SyncSqlDb, host: HistoryHost) {
+    super(db, host)
   }
 
   target(op: SyncOpRow, ctx: AdapterContext): OpTarget | null {
@@ -440,6 +478,6 @@ export class ReadResetAdapter extends ReadAdapterBase implements SyncAdapter {
 }
 
 export function historyAdapters(db: SyncSqlDb, host: HistoryHost): SyncAdapter[] {
-  return [new LastViewAdapter(db, host), new ReadDevAdapter(db), new ReadResetAdapter(db, host)]
+  return [new LastViewAdapter(db, host), new ReadDevAdapter(db, host), new ReadResetAdapter(db, host)]
 }
 

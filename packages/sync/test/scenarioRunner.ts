@@ -141,6 +141,8 @@ class Device {
   trace: SyncEngineState[] = []
   idCount = 0
   requestCount = 0
+  /** 画面で開いているスレ(tab_open / tab_close) */
+  openThreads = new Set<string>()
   /** 道具の窓が開いたときに見ていた NG。窓は保存まで読み直さない */
   windows = new Map<string, NgRuleData[]>()
   constructor(readonly name: string, readonly world: World, readonly skew: number, keepDefaults: boolean) {
@@ -197,7 +199,7 @@ class Device {
         new NgAdapter({ ...settingsNgStore(this.sql.db), apply: async (c) => void (await settingsNgStore(this.sql.db).apply(c)), patternOk: ngPatternSyncable, today: dateOf }),
         new PostAdapter(this.sql.db, resolver(this.name)),
         new SettingAdapter(settingsTableHost(this.sql.db, this.name === 'phone' ? 'phone' : 'pc'), this.sql.db),
-        ...historyAdapters(this.sql.db, { resolve: resolver(this.name), retentionDays: () => this.world.retentionDays, newResetId: () => `reset_${this.name}_${++this.resetCount}` }),
+        ...historyAdapters(this.sql.db, { resolve: resolver(this.name), retentionDays: () => this.world.retentionDays, newResetId: () => `reset_${this.name}_${++this.resetCount}`, isOpen: (board, key) => this.openThreads.has(`${board}\t${key}`) }),
     ]
     this.engine = new SyncEngine({
       db: this.sql.db,
@@ -404,6 +406,12 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       break
     case 'log_delete':
       await d.ops.deleteLogs((s.threads ?? [s]).map(thread), d.now())
+      break
+    case 'tab_open':
+      d.openThreads.add(`${s.board}\t${s.key}`)
+      break
+    case 'tab_close':
+      d.openThreads.delete(`${s.board}\t${s.key}`)
       break
     case 'prune':
       await d.store.pruneLogs(d.now() - s.older_than_ms, (s.keep ?? []).map((k: Step) => ({ boardUrl: k.board, key: k.key })))

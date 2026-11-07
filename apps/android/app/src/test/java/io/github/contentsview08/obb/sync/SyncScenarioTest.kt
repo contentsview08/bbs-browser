@@ -163,6 +163,8 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
     var idCount = 0
     var requestCount = 0
     var resetCount = 0
+    /** 画面で開いているスレ(tab_open / tab_close) */
+    val openThreads = HashSet<String>()
     var adapters: List<SyncAdapter> = emptyList()
 
     init {
@@ -233,7 +235,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
             NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
             PostAdapter(sql, resolver(name)),
             SettingAdapter(ALLOW, TableSettingsHost(sql, if (name == "phone") "phone" else "pc"), sql),
-        ) + historyAdapters(sql, HistoryHost(resolver(name), { world.retentionDays }, { "reset_${name}_${++resetCount}" }))
+        ) + historyAdapters(sql, HistoryHost(resolver(name), { world.retentionDays }, { "reset_${name}_${++resetCount}" }, { board, key -> "$board\t$key" in openThreads }))
         engine = SyncEngine(
             db = sql,
             keyStore = keys,
@@ -406,6 +408,8 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "view" -> d!!.ops.threadViewNow(thread(s), d.now())
         "view_remove" -> d!!.ops.historyRemoveNow(thread(s), d.now())
         "log_delete" -> d!!.ops.deleteLogsNow(((s["threads"] as List<Map<String, Any?>>?) ?: listOf(s)).map(::thread), d.now())
+        "tab_open" -> d!!.openThreads += "${s["board"]}\t${s["key"]}"
+        "tab_close" -> d!!.openThreads -= "${s["board"]}\t${s["key"]}"
         "prune" -> {
             val kept = (s["keep"] as List<Map<String, Any?>>?).orEmpty().map { "${it["board"]}\t${it["key"]}" }.toSet()
             val rows = d!!.sql.query(ThreadLogSql.PRUNE_TARGETS, listOf(d.now() - s["older_than_ms"] as Long))

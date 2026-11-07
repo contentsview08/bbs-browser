@@ -315,6 +315,8 @@ export default function App() {
   const [newThreadOpen, setNewThreadOpen] = useState(false)
   /** サイドバーに出す直近の閲覧履歴 */
   const [recentHistory, setRecentHistory] = useState<ThreadSummary[]>([])
+  const recentHistoryRef = useRef(recentHistory)
+  recentHistoryRef.current = recentHistory
   /** 閲覧履歴の控え(最後に DB から読んだもの)。「履歴」のタブを切り替えたとき、DB から読み直す前にまずこれを出す(直前の板の一覧が一瞬映らないように) */
   const historyCache = useRef<HistoryEntry[] | undefined>(undefined)
   /** 閲覧履歴を DB から読み、控えも新しくする */
@@ -931,6 +933,7 @@ export default function App() {
     posts: (s) => void s.listPostHistory().then((list) => setPostHistory((cur) => (cur ? list : cur))),
     reads: (s) => void syncedReads(s),
     retentionDays: () => settingsRef.current.logRetentionDays,
+    isOpen: (boardUrl, key) => tabsRef.current.some((x) => x.thread.boardUrl === boardUrl && x.thread.key === key),
   })
 
   /** 別の端末の履歴と既読を写す。DB は適用が書いてある。開いているタブの位置は上がるときだけ追い、下がっても読んでいる画面を動かさない */
@@ -2201,8 +2204,22 @@ export default function App() {
     patchFav(t, (f) => (no > f.readNo ? { ...f, readNo: no } : f))
     // 閲覧履歴の一覧を出しているときは、その行の既読も進める(しないと未読の印が消えない)
     setHistory((list) => (list?.some((h) => threadId(h.thread) === id && no > h.readNo) ? list.map((h) => (threadId(h.thread) === id && no > h.readNo ? { ...h, readNo: no } : h)) : list))
-    void new UserOps(store).markRead(t, no).catch(backgroundError('既読の保存'))
+    void new UserOps(store)
+      .markRead(t, no)
+      .then(() => historyAfterRead(store, id))
+      .catch(backgroundError('既読の保存'))
   })
+
+  /**
+   * 初めて読んだスレを、書き終えた DB から最近のスレと履歴の一覧に足す。
+   * 開いた直後の読み直しは、既読の書き込み(非同期)と競走して間に合わないことがあるので、書き終えてから読む
+   */
+  const historyAfterRead = async (s: LogStore, id: string) => {
+    if (deletedIds.current.has(id) || recentHistoryRef.current.some((x) => threadId(x) === id)) return
+    await reloadRecent(s)
+    const added = historyCache.current?.find((h) => threadId(h.thread) === id)
+    if (added && historyShownRef.current) setHistory((list) => (list && !list.some((h) => threadId(h.thread) === id) ? [...list, added] : list))
+  }
 
   // ── お気に入り・サイト ──
 

@@ -16,6 +16,8 @@ export interface SyncReloaders {
   /** 閲覧履歴と既読 */
   reads: (s: LogStore) => void
   retentionDays: () => number
+  /** 画面で開いているスレか(開いているスレのログは、他の端末の削除が届いても消さない) */
+  isOpen: (boardUrl: string, key: string) => boolean
 }
 
 export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
@@ -37,7 +39,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
         new NgAdapter(syncNgHost(store.db)),
         new PostAdapter(store.db, resolveSyncBoard),
         new SettingAdapter(syncSettingsHost(store.db), store.db),
-        ...historyAdapters(store.db, { resolve: resolveSyncBoard, retentionDays: () => applied.current.retentionDays(), newResetId: () => crypto.randomUUID().replaceAll('-', '') }),
+        ...historyAdapters(store.db, { resolve: resolveSyncBoard, retentionDays: () => applied.current.retentionDays(), newResetId: () => crypto.randomUUID().replaceAll('-', ''), isOpen: (b, k) => applied.current.isOpen(b, k) }),
       ],
       now: Date.now,
       allowLocalhost: import.meta.env.DEV,

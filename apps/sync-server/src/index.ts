@@ -1,19 +1,22 @@
 // 入口。順番はメソッド → パス → Content-Length → レート制限 → 認証 → 本文 → スキーマ(docs/sync-security.md)
 import { handleAdmin } from './admin/admin'
-import { loadConfig, type Config, type Env } from './config'
+import { DAY, loadConfig, type Config, type Env } from './config'
 import { fromHex, sha256, toHex } from './encoding'
 import { fail, jsonText, logLine, notFound, result, toResponse, type ApiResult } from './http'
 import { ipKeys } from './ip'
 import { issuePow, verifyPow } from './pow'
 import { runtime } from './runtime'
-import { verifyTurnstile } from './turnstile'
-import { BadInput, checkCreate, checkPush, parseSince, parseStrict } from './validate'
+import { startPage } from './start'
+import { checkTicket, issueTicket, parseTicketKeys } from './ticket'
+import { isTestSecret, verifyTurnstile } from './turnstile'
+import { BadInput, checkCreate, checkPush, checkTicketRequest, parseSince, parseStrict } from './validate'
 
 export { LedgerDO } from './ledger'
 export { SpaceDO } from './space'
 
-const KNOWN: Record<string, string[]> = { '/spaces': ['POST'], '/changes': ['GET'], '/records': ['POST'], '/head': ['GET'], '/space': ['GET', 'DELETE'] }
+const KNOWN: Record<string, string[]> = { '/start': ['GET'], '/tickets': ['POST'], '/spaces': ['POST'], '/changes': ['GET'], '/records': ['POST'], '/head': ['GET'], '/space': ['GET', 'DELETE'] }
 const TOKEN = /^Bearer ([0-9a-f]{64})$/
+const TICKET_MAX_BODY = 4096
 
 class BodyError extends Error {
   constructor(readonly status: number, readonly code: string) {
@@ -60,6 +63,14 @@ async function readBody(req: Request, declared: number): Promise<string> {
   }
 }
 
+function refuseBodyHeaders(req: Request): Response | null {
+  // 圧縮された本文は展開しない。展開後の大きさを数えられないため
+  const encoding = req.headers.get('Content-Encoding')
+  if (encoding !== null && encoding.toLowerCase() !== 'identity') return fail(415, 'unsupported_media_type')
+  const type = (req.headers.get('Content-Type') ?? '').split(';')[0].trim().toLowerCase()
+  return type === 'application/json' ? null : fail(415, 'unsupported_media_type')
+}
+
 async function overLimit(binding: RateLimit | undefined, key: string): Promise<boolean> {
   if (!binding) return false
   try {
@@ -70,9 +81,15 @@ async function overLimit(binding: RateLimit | undefined, key: string): Promise<b
   }
 }
 
-async function createSpace(body: string, spaceId: string, ip: string, env: Env, cfg: Config, host: string): Promise<ApiResult> {
+async function createSpace(body: string, spaceId: string, ip: string, env: Env, cfg: Config): Promise<ApiResult> {
   if (await overLimit(env.RL_CREATE, ip)) return { status: 429, body: JSON.stringify({ error: 'rate_limited' }) }
   const input = checkCreate(parseStrict(body))
+  const keys = parseTicketKeys(cfg.ticketKeys)
+  if (!keys) return result(503, { error: 'unavailable' })
+  // PoW の問題を出す前に確かめる。許可証のない要求に計算も署名もさせない
+  if (input.ticket === undefined) return result(403, { error: 'ticket_required' })
+  const check = await checkTicket(keys, spaceId, runtime.now(), input.ticket)
+  if (check !== 'ok') return result(403, { error: check === 'expired' ? 'ticket_expired' : 'ticket_invalid' })
   if (cfg.powBits > 0) {
     if (!env.POW_SECRET) return { status: 503, body: JSON.stringify({ error: 'unavailable' }) }
     if (!input.pow) {
@@ -80,13 +97,6 @@ async function createSpace(body: string, spaceId: string, ip: string, env: Env, 
       return result(403, { error: 'pow_required', pow: { challenge, bits: cfg.powBits } })
     }
     if (!(await verifyPow(env.POW_SECRET, spaceId, cfg.powBits, runtime.now(), input.pow.challenge, input.pow.nonce))) return result(403, { error: 'pow_invalid' })
-  }
-  if (env.TURNSTILE_SECRET) {
-    if (!input.turnstile) return result(403, { error: 'turnstile_required' })
-    const v = await verifyTurnstile(env.TURNSTILE_SECRET, input.turnstile, { ...cfg, turnstileHostname: cfg.turnstileHostname || host })
-    // 検証サービスの障害では作成だけを止める。既存の同期は通らない経路なので動き続ける
-    if (v === 'unavailable') return result(503, { error: 'turnstile_unavailable' })
-    if (v === 'invalid') return result(403, { error: 'turnstile_invalid' })
   }
   const stub = env.SPACE.getByName(spaceId)
   const cur = await stub.existing()
@@ -103,6 +113,24 @@ async function createSpace(body: string, spaceId: string, ip: string, env: Env, 
   }
   await ledger.confirm(spaceId, made.epoch)
   return result(made.created ? 201 : 200, { epoch: made.epoch, created: made.created })
+}
+
+/** 領域にも台帳にも触らない。トークンも受け取らない(鍵は端末の外へ出さない) */
+async function createTicket(body: string, env: Env, cfg: Config, host: string): Promise<ApiResult> {
+  const input = checkTicketRequest(parseStrict(body))
+  const secret = env.TURNSTILE_SECRET
+  const keys = parseTicketKeys(cfg.ticketKeys)
+  const key = keys?.get(cfg.ticketKid)
+  if (!secret || !key) return result(503, { error: 'unavailable' })
+  // テスト用の秘密は誰でも通すので、明示した環境でしか受け付けない
+  const test = isTestSecret(secret)
+  if (test && !cfg.turnstileTestKeys) return result(503, { error: 'unavailable' })
+  const v = await verifyTurnstile(secret, input.turnstile, test ? null : { hostname: cfg.turnstileHostname || host, action: cfg.turnstileAction })
+  // 障害では発行だけを止める。既存の同期はここを通らない
+  if (v === 'unavailable') return result(503, { error: 'turnstile_unavailable' })
+  if (v === 'invalid') return result(403, { error: 'turnstile_invalid' })
+  const exp = Math.floor((runtime.now() + cfg.ticketTtlDays * DAY) / 1000)
+  return result(200, { ticket: await issueTicket(key, cfg.ticketKid, input.space_id, exp), exp })
 }
 
 async function handle(req: Request, env: Env): Promise<Response> {
@@ -130,6 +158,23 @@ async function handle(req: Request, env: Env): Promise<Response> {
   if (await overLimit(env.RL_IP, ip.narrow)) return fail(429, 'rate_limited')
   if (ip.wide && (await overLimit(env.RL_WIDE, ip.wide))) return fail(429, 'rate_limited')
 
+  if (path === '/start') return await startPage(url.search, cfg)
+  if (path === '/tickets') {
+    if (await overLimit(env.RL_TICKET, ip.narrow)) return fail(429, 'rate_limited')
+    if (declared > TICKET_MAX_BODY) return fail(413, 'too_large')
+    const refused = refuseBodyHeaders(req)
+    if (refused) return refused
+    try {
+      const r = await createTicket(await readBody(req, declared), env, cfg, url.hostname)
+      logLine(path, r.status)
+      return toResponse(r)
+    } catch (e) {
+      if (e instanceof BadInput) return fail(400, 'bad_request')
+      if (e instanceof BodyError) return fail(e.status, e.code)
+      throw e
+    }
+  }
+
   const m = TOKEN.exec(req.headers.get('Authorization') ?? '')
   if (!m) {
     if (await overLimit(env.RL_AUTH, ip.narrow)) return fail(429, 'rate_limited')
@@ -141,18 +186,15 @@ async function handle(req: Request, env: Env): Promise<Response> {
   if (cfg.readOnly && isWrite) return fail(503, 'read_only')
 
   if (req.method === 'POST') {
-    // 圧縮された本文は展開しない。展開後の大きさを数えられないため
-    const encoding = req.headers.get('Content-Encoding')
-    if (encoding !== null && encoding.toLowerCase() !== 'identity') return fail(415, 'unsupported_media_type')
-    const type = (req.headers.get('Content-Type') ?? '').split(';')[0].trim().toLowerCase()
-    if (type !== 'application/json') return fail(415, 'unsupported_media_type')
+    const refused = refuseBodyHeaders(req)
+    if (refused) return refused
   }
 
   let r: ApiResult
   try {
     const text = req.method === 'POST' ? await readBody(req, declared) : ''
     const stub = env.SPACE.getByName(spaceId)
-    if (path === '/spaces') r = await createSpace(text, spaceId, ip.narrow, env, cfg, url.hostname)
+    if (path === '/spaces') r = await createSpace(text, spaceId, ip.narrow, env, cfg)
     else if (path === '/records') r = await stub.records(checkPush(parseStrict(text), cfg))
     else if (path === '/changes') {
       const since = parseSince(url.search.slice(1))

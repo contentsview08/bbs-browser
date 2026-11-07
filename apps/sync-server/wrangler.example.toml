@@ -1,5 +1,6 @@
 # 例のファイル。写して wrangler.toml にして使う(wrangler.toml はコミットしない)。アカウント ID と秘密は書かない
-# 秘密は wrangler secret で入れる: POW_SECRET、ADMIN_KEYS、(一般公開で)TURNSTILE_SECRET
+# 秘密は wrangler secret で入れる: POW_SECRET、ADMIN_KEYS、TURNSTILE_SECRET、TICKET_KEYS
+# TICKET_KEYS は { "鍵 ID": "32 バイト以上の Base64URL" } の JSON。署名に使う鍵 ID は TICKET_KID。環境ごとに別の鍵にする
 # 既定の値は省略できる。一覧は src/config.ts
 name = "obb-sync"
 main = "src/index.ts"
@@ -8,6 +9,9 @@ workers_dev = false
 
 [vars]
 SPACE_LIMIT = "100"
+TICKET_KID = "k1"
+# 実際のウィジェットのサイトキーを入れて使う
+TURNSTILE_SITEKEY = ""
 
 [[durable_objects.bindings]]
 name = "SPACE"
@@ -47,6 +51,11 @@ name = "RL_ADMIN"
 namespace_id = "1005"
 simple = { limit = 60, period = 60 }
 
+[[ratelimits]]
+name = "RL_TICKET"
+namespace_id = "1006"
+simple = { limit = 10, period = 60 }
+
 # 検証用。workers.dev に出す。枠 2 の手動のテストは SPACE_LIMIT を 2 にして出す
 [env.verify]
 name = "obb-sync-verify"
@@ -55,6 +64,15 @@ workers_dev = true
 [env.verify.vars]
 SPACE_LIMIT = "100"
 POW_BITS = "16"
+TICKET_KID = "k1"
+# Cloudflare の公式のテスト用のキー(文書: turnstile/troubleshooting/testing)。誰でも通るので検証用の環境だけで使う
+#   サイトキー  必ず通る 1x00000000000000000000AA / 必ず失敗 2x00000000000000000000AB / 操作を求める 3x00000000000000000000FF
+#   秘密        必ず通る 1x0000000000000000000000000000000AA / 必ず失敗 2x0000000000000000000000000000000AA / 使用済み 3x0000000000000000000000000000000AA
+#   秘密は wrangler secret put TURNSTILE_SECRET --env verify で入れる
+# テスト用の秘密の応答は hostname が example.com で action がないので、次の印のある環境でだけ、この 2 つを確かめずに受け付ける
+# 実際のウィジェットにしたら、サイトキーと秘密を入れ替えて TURNSTILE_TEST_KEYS を消す
+TURNSTILE_SITEKEY = "1x00000000000000000000AA"
+TURNSTILE_TEST_KEYS = "1"
 
 [[env.verify.durable_objects.bindings]]
 name = "SPACE"
@@ -88,3 +106,8 @@ simple = { limit = 10, period = 60 }
 name = "RL_ADMIN"
 namespace_id = "2005"
 simple = { limit = 60, period = 60 }
+
+[[env.verify.ratelimits]]
+name = "RL_TICKET"
+namespace_id = "2006"
+simple = { limit = 10, period = 60 }

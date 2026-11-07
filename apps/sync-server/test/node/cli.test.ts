@@ -1,4 +1,5 @@
 // CLI を本物のサーバー(Miniflare)へ通す。署名の文がサーバーと同じであること
+import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,7 +24,11 @@ describe('管理の CLI', () => {
     return run([...args, '--url', ORIGIN, '--key-file', keyFile, '--key-id', 'ops'], { env: {}, out: (s) => lines.push(s), fetch: fetcher, now: () => NOW, ...(ask && { ask }) })
   }
   const createSpace = async (token: string) => {
-    const r = await mf.dispatchFetch(`${ORIGIN}/spaces`, { method: 'POST', headers: withLength('{}', { Authorization: `Bearer ${token.repeat(64)}`, 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.2', 'X-Test-Now': String(NOW) }), body: '{}' })
+    const common = { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.2', 'X-Test-Now': String(NOW) }
+    const ask = JSON.stringify({ turnstile: 'test-pass', space_id: createHash('sha256').update(Buffer.from(token.repeat(64), 'hex')).digest('hex') })
+    const issued = await mf.dispatchFetch(`${ORIGIN}/tickets`, { method: 'POST', headers: withLength(ask, common), body: ask })
+    const body = JSON.stringify({ ticket: ((await issued.json()) as { ticket: string }).ticket })
+    const r = await mf.dispatchFetch(`${ORIGIN}/spaces`, { method: 'POST', headers: withLength(body, { ...common, Authorization: `Bearer ${token.repeat(64)}` }), body })
     expect(r.status).toBe(201)
     await r.text()
   }

@@ -24,7 +24,7 @@ export interface SyncTransport {
   send(req: SyncRequest): Promise<SyncResponse>
 }
 
-export type SyncFailureKind = 'bad_url' | 'network' | 'redirect' | 'too_large' | 'bad_response' | 'no_progress' | 'http'
+export type SyncFailureKind = 'bad_url' | 'bad_ticket' | 'network' | 'redirect' | 'too_large' | 'bad_response' | 'no_progress' | 'http'
 
 export class SyncApiError extends Error {
   constructor(readonly kind: SyncFailureKind, readonly status = 0, readonly code = '', readonly detail: Record<string, unknown> | null = null) {
@@ -40,6 +40,13 @@ const LOCAL_URL = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::[0-9]+)?(?:\/[^?#\s\\
 export function checkServerUrl(url: string, allowLocalhost = false): string {
   if (!HTTPS_URL.test(url) && !(allowLocalhost && LOCAL_URL.test(url))) throw new SyncApiError('bad_url')
   return url.replace(/\/+$/, '')
+}
+
+const TICKET_FORM = /^v1\.([0-9a-f]{64})\.[0-9]{1,12}\.[A-Za-z0-9_-]{1,16}\.[A-Za-z0-9_-]{43}$/
+
+/** 許可証の結び付く領域。形が違えば null。署名と期限はサーバーだけが確かめる(端末の時計を信用しない) */
+export function ticketSpaceId(ticket: string): string | null {
+  return TICKET_FORM.exec(ticket)?.[1] ?? null
 }
 
 export interface ChangesPage {
@@ -108,10 +115,10 @@ export class SyncApi {
     return parsed
   }
 
-  async createSpace(): Promise<{ epoch: string }> {
+  async createSpace(ticket: string): Promise<{ epoch: string }> {
     let r: Record<string, unknown>
     try {
-      r = await this.call('POST', '/spaces', {})
+      r = await this.call('POST', '/spaces', { ticket })
     } catch (e) {
       if (!(e instanceof SyncApiError && e.status === 403 && e.code === 'pow_required')) throw e
       let pow
@@ -121,7 +128,7 @@ export class SyncApi {
         throw bad()
       }
       // 解いて 1 回だけ送り直す。断られたら、ほかの 403 と同じくエンジンが止まる
-      r = await this.call('POST', '/spaces', { pow: { challenge: pow.challenge, nonce: await solvePow(pow.challenge, pow.bits) } })
+      r = await this.call('POST', '/spaces', { ticket, pow: { challenge: pow.challenge, nonce: await solvePow(pow.challenge, pow.bits) } })
     }
     return { epoch: checkEpoch(r.epoch) }
   }

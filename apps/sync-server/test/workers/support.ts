@@ -1,8 +1,11 @@
 // workerd の中のテストの共通の道具
 import { env, SELF, runDurableObjectAlarm } from 'cloudflare:test'
 import type { Env } from '../../src/config'
-import { sha256, toBase64Url, toHex, utf8 } from '../../src/encoding'
+import { fromBase64Url, sha256, toBase64Url, toHex, utf8 } from '../../src/encoding'
 import { runtime } from '../../src/runtime'
+import { issueTicket } from '../../src/ticket'
+import { fakeSiteverify } from '../fakeSiteverify'
+import ticketFile from '../../../../packages/conformance/sync-ticket.json'
 
 export const testEnv = env as unknown as Env
 export const START = 1_800_000_000_000
@@ -15,11 +18,13 @@ export const QUIET: Record<string, string> = { POW_BITS: '0', SOURCE_LIMIT: '0',
 export function setup(overrides: Record<string, string> = {}): void {
   clock.now = START
   runtime.now = () => clock.now
+  runtime.fetch = fakeSiteverify
   runtime.overrides = { ...QUIET, ...overrides }
 }
 
 export function teardown(): void {
   runtime.now = () => Date.now()
+  runtime.fetch = (input, init) => fetch(input, init)
   runtime.overrides = null
   clock.now = START
 }
@@ -33,6 +38,14 @@ export async function spaceIdOf(name: string): Promise<string> {
   const bytes = new Uint8Array(32)
   for (let i = 0; i < 32; i++) bytes[i] = parseInt(t.slice(i * 2, i * 2 + 2), 16)
   return toHex(await sha256(bytes))
+}
+
+export const TICKET_KEY = fromBase64Url(ticketFile.key.secret) as Uint8Array
+export const TICKET_KID = ticketFile.key.kid
+
+/** 発行の手順は別のテストで見る。ほかのテストは署名した許可証をそのまま使う */
+export async function ticketOf(name: string, ttlMs = 365 * 24 * 3600 * 1000): Promise<string> {
+  return await issueTicket(TICKET_KEY, TICKET_KID, await spaceIdOf(name), Math.floor((runtime.now() + ttlMs) / 1000))
 }
 
 export async function recordIdOf(name: string): Promise<string> {
@@ -61,7 +74,7 @@ export async function call(method: string, path: string, o: CallOptions = {}): P
   if (o.auth !== undefined) headers.Authorization = o.auth
   else if (o.token) headers.Authorization = `Bearer ${await tokenOf(o.token)}`
   let body = o.body
-  if (body === undefined && method === 'POST') body = '{}'
+  if (body === undefined && method === 'POST') body = path === '/spaces' && o.token ? JSON.stringify({ ticket: await ticketOf(o.token) }) : '{}'
   if (body !== undefined && !('Content-Type' in headers)) headers['Content-Type'] = 'application/json'
   return await SELF.fetch(`${o.base ?? BASE}${path}`, { method, headers, ...(body !== undefined && { body }) })
 }

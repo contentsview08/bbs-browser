@@ -38,7 +38,11 @@ describe('checkCreate', () => {
     expect(() => checkCreate({ pow: { challenge: 'x' } })).toThrow(BadInput)
     expect(() => checkCreate({ pow: { challenge: 'x', nonce: 'a b' } })).toThrow(BadInput)
     expect(() => checkCreate([])).toThrow(BadInput)
-    expect(() => checkCreate({ turnstile: '' })).toThrow(BadInput)
+    expect(() => checkCreate({ turnstile: 'x' })).toThrow(BadInput)
+    expect(() => checkCreate({ ticket: '' })).toThrow(BadInput)
+    expect(() => checkCreate({ ticket: 1 })).toThrow(BadInput)
+    expect(() => checkCreate({ ticket: 'x'.repeat(257) })).toThrow(BadInput)
+    expect(checkCreate({ ticket: 'x' })).toEqual({ ticket: 'x' })
   })
 })
 

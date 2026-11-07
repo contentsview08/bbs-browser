@@ -1,0 +1,95 @@
+{
+ "_": "許可証の決まり。テスト専用の鍵で、本番では使わない。サーバー・偽サーバー(TS・Kotlin)・端末の形の検査が同じ表を読む",
+ "key": {
+  "kid": "t1",
+  "secret": "8ulrB2EjFxtDkM7iFGbQ_iEKH26nZymgY06AVP8JBE4"
+ },
+ "turnstile": {
+  "pass": "test-pass",
+  "fail": "test-fail",
+  "spent": "test-spent",
+  "down": "test-down"
+ },
+ "cases": [
+  {
+   "name": "正しい",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eg",
+   "result": "ok",
+   "form": true
+  },
+  {
+   "name": "期限ちょうどは切れている",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000300000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eg",
+   "result": "expired",
+   "form": true
+  },
+  {
+   "name": "別の領域",
+   "space_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "now_ms": 1800000000000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eg",
+   "result": "invalid",
+   "form": true
+  },
+  {
+   "name": "署名の改ざん",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eA",
+   "result": "invalid",
+   "form": true
+  },
+  {
+   "name": "期限を延ばした",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1900000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eg",
+   "result": "invalid",
+   "form": true
+  },
+  {
+   "name": "登録のない鍵",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.gone.M2hk2XpKcP7-2aNLBvLxNhgOY2OStrEW_3ck9Zvht_I",
+   "result": "invalid",
+   "form": true
+  },
+  {
+   "name": "別の鍵で署名した同じ鍵 ID",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.t1.D1TnIRSAMhWJyywdH9LdmELNyiuPcTozFjnTOApwwb4",
+   "result": "invalid",
+   "form": true
+  },
+  {
+   "name": "形が違う",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "garbage",
+   "result": "invalid",
+   "form": false
+  },
+  {
+   "name": "版が違う",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v2.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1800000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eg",
+   "result": "invalid",
+   "form": false
+  },
+  {
+   "name": "大文字の 16 進",
+   "space_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "now_ms": 1800000000000,
+   "ticket": "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.1800000300.t1.K1kAh4qCHc6EUz2M9_LoOlw8Z4tBVskE9IqcgZRh8eg",
+   "result": "invalid",
+   "form": false
+  }
+ ]
+}

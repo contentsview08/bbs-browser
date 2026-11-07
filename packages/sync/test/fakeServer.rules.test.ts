@@ -1,11 +1,13 @@
 // 偽サーバーの決まり。後で実物のサーバーでも同じファイルを流す。スマホ版の FakeSyncServerTest.kt も同じファイルを読む
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { toBase64Url, toHex, utf8 } from '../src/index'
+import { ticketSpaceId, toBase64Url, toHex, utf8 } from '../src/index'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { FakeSyncServer, fakeSpaceIdOf } from './fakeServer'
+import { checkFakeTicket, FakeSyncServer, fakeSpaceIdOf } from './fakeServer'
 
 const cases: { name: string; server?: Record<string, unknown>; steps: Record<string, any>[] }[] = JSON.parse(readFileSync(new URL('../../conformance/sync-server-rules.json', import.meta.url), 'utf-8'))
+
+const ticketFile: { cases: { name: string; space_id: string; now_ms: number; ticket: string; result: string; form: boolean }[] } = JSON.parse(readFileSync(new URL('../../conformance/sync-ticket.json', import.meta.url), 'utf-8'))
 
 const tokenOf = (name: string) => toHex(sha256(utf8(`token:${name}`)))
 const recordIdOf = (name: string) => toHex(sha256(utf8(`record:${name}`)))
@@ -43,7 +45,17 @@ describe('sync-server-rules.json', () => {
     const server = new FakeSyncServer({ now: () => now, rate_per_minute: null, full_pull_per_hour: null, ...c.server })
     const send = (method: string, path: string, token: string | null, body?: string, extra: Record<string, string> = {}) =>
       server.handle({ method, path, headers: { ...(token && { Authorization: `Bearer ${tokenOf(token)}` }), ...extra }, ...(body !== undefined && { body }) })
+    const tickets = new Map<string, string>()
+    const requestTicket = (name: string, turnstile: string) => server.handle({ method: 'POST', path: '/tickets', body: JSON.stringify({ turnstile, space_id: fakeSpaceIdOf(tokenOf(name)) }) })
+    const issued = (name: string): string => {
+      if (!tickets.has(name)) tickets.set(name, JSON.parse(requestTicket(name, 'test-pass').body).ticket)
+      return tickets.get(name) as string
+    }
     c.steps.forEach((s, i) => {
+      if (s.issue !== undefined) {
+        issued(s.issue)
+        return
+      }
       if (s.advance_ms !== undefined) {
         // keep_alive はこの間に領域を使い続ける(tombstone の片づけだけを見るため)
         if (s.keep_alive) {
@@ -59,14 +71,20 @@ describe('sync-server-rules.json', () => {
         return
       }
       let res
-      if (s.push !== undefined) {
+      if (s.request_ticket !== undefined) res = requestTicket(s.request_ticket, s.turnstile)
+      else if (s.push !== undefined) {
         const records = s.repeat_records !== undefined ? Array.from({ length: s.repeat_records }, (_, n) => recordBody({ id: n })) : s.records.map(recordBody)
         res = send('POST', '/records', s.push, JSON.stringify({ request_id: s.request_id, records }))
       } else {
         const extra: Record<string, string> = {}
         if (s.raw_auth) extra.Authorization = s.raw_auth
         if (s.if_none_match) extra['If-None-Match'] = s.if_none_match
-        res = send(s.method, s.path, s.token ?? null, s.body, extra)
+        let body = s.body
+        if (s.method === 'POST' && s.path === '/spaces' && body === undefined) {
+          const ticket = s.ticket !== undefined ? issued(s.ticket) : s.ticket_tampered !== undefined ? issued(s.ticket_tampered).replace(/.$/, (c) => (c === 'A' ? 'E' : 'A')) : s.ticket_raw
+          body = JSON.stringify(ticket === undefined ? {} : { ticket })
+        }
+        res = send(s.method, s.path, s.token ?? null, body, extra)
       }
       const e = s.expect
       if (!e) return
@@ -77,5 +95,12 @@ describe('sync-server-rules.json', () => {
       if (e.record_versions) expect(parsed.records.map((r: { version: number }) => r.version)).toEqual(e.record_versions)
       if (e.record_count !== undefined) expect(parsed.records.length).toBe(e.record_count)
     })
+  })
+})
+
+describe('sync-ticket.json', () => {
+  it.each(ticketFile.cases)('$name', (c) => {
+    expect(checkFakeTicket(c.space_id, c.now_ms, c.ticket)).toBe(c.result)
+    expect(ticketSpaceId(c.ticket) !== null).toBe(c.form)
   })
 })

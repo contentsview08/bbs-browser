@@ -15,9 +15,9 @@ function rng(seed: number) {
 
 const SEEDS = [1, 7, 42]
 const ROUNDS = 150
-const PATHS = ['/spaces', '/changes', '/changes?since=0', '/changes?since=-1', '/changes?since=1e9&x=1', '/records', '/head', '/space', '/', '//', '/spaces/', '/SPACES', '/records?x', '/admin', '/admin/v1', '/admin/v1/spaces', `/admin/v1/spaces/${'a'.repeat(64)}`, '/admin/v1/spaces/delete-all', '/admin/v1/audit?limit=x', '/%2e%2e/head', '/head%00', '/constructor', '/__proto__', '/hasOwnProperty']
+const PATHS = ['/start', `/start?space_id=${'a'.repeat(64)}&return=app`, '/start?space_id=%00&return=<script>', '/tickets', '/spaces', '/changes', '/changes?since=0', '/changes?since=-1', '/changes?since=1e9&x=1', '/records', '/head', '/space', '/', '//', '/spaces/', '/SPACES', '/records?x', '/admin', '/admin/v1', '/admin/v1/spaces', `/admin/v1/spaces/${'a'.repeat(64)}`, '/admin/v1/spaces/delete-all', '/admin/v1/audit?limit=x', '/%2e%2e/head', '/head%00', '/constructor', '/__proto__', '/hasOwnProperty']
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
-const JUNK = ['', '{', '[]', 'null', '0', '"x"', '{"__proto__":{"x":1}}', '{"constructor":1}', '{"request_id":null,"records":null}', '\u0000', '😀', '{"pow":{"challenge":"v1.x.y.z.w","nonce":"a"}}', '{"records":[{}],"request_id":"aaaaaaaaaaaaaaaaaaaaaa"}']
+const JUNK = ['', '{', '[]', 'null', '0', '"x"', '{"__proto__":{"x":1}}', '{"constructor":1}', '{"request_id":null,"records":null}', '\u0000', '😀', '{"pow":{"challenge":"v1.x.y.z.w","nonce":"a"}}', '{"ticket":"v1.x.y.z.w"}', '{"ticket":{"a":1}}', '{"turnstile":"test-pass","space_id":"x"}', `{"turnstile":"test-pass","space_id":"${'a'.repeat(64)}"}`, '{"records":[{}],"request_id":"aaaaaaaaaaaaaaaaaaaaaa"}']
 
 describe('ファズ', () => {
   afterEach(teardown)
@@ -51,7 +51,8 @@ describe('ファズ', () => {
       const res = await call(method, path, { auth, ...(body !== undefined && { body }), headers, ip: pick([freshIp(), '', 'not-an-ip', '::1', '1:2:3:4:5:6:7:8:9']) })
       expect(res.status, `${seed}/${i}: ${method} ${path}`).toBeLessThan(500)
       const text = await res.text()
-      if (text !== '') {
+      // 同期を始めるページだけが JSON でない
+      if (text !== '' && !(res.headers.get('Content-Type') ?? '').startsWith('text/html')) {
         const v = JSON.parse(text) as { error?: string }
         if (res.status >= 400) expect(typeof v.error).toBe('string')
       }

@@ -107,6 +107,8 @@ class World {
   log: LogEntry[] = []
   mark = 0
   devices = new Map<string, Device>()
+  /** 同期を始めるページを通した回数。人の操作の代わり */
+  tickets = 0
   constructor(make: MakeServer, options: Record<string, unknown>) {
     this.server = make(() => this.now, options)
   }
@@ -184,6 +186,12 @@ class Device {
       onState: (s) => this.trace.push(s),
     })
   }
+  /** 同期を始めるページを通して許可証を受け取る。画面の手順の代わりなので通信の記録に入れない */
+  async startPage(k: Uint8Array): Promise<string> {
+    this.world.tickets++
+    const res = await this.world.server.handle({ method: 'POST', path: '/tickets', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ turnstile: 'test-pass', space_id: spaceId(deriveKeys(k).auth_token) }) })
+    return JSON.parse(res.body).ticket as string
+  }
   async sync(manual = true) {
     this.trace = []
     this.last = await this.engine.runCycle({ manual })
@@ -238,13 +246,21 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       await d.store.addFavorite({ url: s.url, name: s.name, connectorId: '2ch-compat' } as never)
       break
     case 'pair_first':
-      await d.engine.pair(keyOf(s.device))
+      await d.engine.pair(keyOf(s.device), s.no_ticket ? null : await d.startPage(keyOf(s.device)))
       await d.sync()
       break
-    case 'pair_join':
-      await d.engine.pair((await (w.devices.get(s.from) as Device).keys.load() as SyncKeyMaterial).k)
+    case 'pair_join': {
+      // QR とコピー用のコードの中身は K と許可証
+      const from = (await (w.devices.get(s.from) as Device).keys.load()) as SyncKeyMaterial
+      await d.engine.pair(from.k, from.ticket)
       await d.sync()
       break
+    }
+    case 'start_page': {
+      const k = ((await d.keys.load()) as SyncKeyMaterial).k
+      await d.engine.setTicket(await d.startPage(k))
+      break
+    }
     case 'sync':
       await d.sync()
       break
@@ -324,6 +340,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
   for (const [name, e] of Object.entries(want)) {
     if (name === '$server') {
       if (e.spaces !== undefined) expect(await w.server.spaceCount(), `${label}: サーバーの領域の数`).toBe(e.spaces)
+      if (e.tickets !== undefined) expect(w.tickets, `${label}: 同期を始めるページを通した回数`).toBe(e.tickets)
       if (e.hosts !== undefined) expect([...new Set(w.log.map((l) => l.host))], `${label}: 通信先`).toEqual(e.hosts)
       if (e.request_id_repeated !== undefined) {
         const ids = w.log.flatMap((l) => (l.request_id ? [l.request_id] : []))
@@ -366,6 +383,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.bad_counts !== undefined) expect(await d.state('bad_counts'), `${at} の bad_counts`).toBe(e.bad_counts === null ? null : canonicalJson(e.bad_counts))
     if (e.inflight !== undefined) expect((await d.state('push_inflight')) !== null, `${at} の push_inflight`).toBe(e.inflight)
     if (e.device_id !== undefined) expect(await d.state('device_id'), `${at} の device_id`).toBe(e.device_id)
+    if (e.has_ticket !== undefined) expect(((await d.keys.load())?.ticket ?? null) !== null, `${at} の許可証`).toBe(e.has_ticket)
     if (e.keys !== undefined) expect((await d.keys.load()) !== null, `${at} の鍵`).toBe(e.keys)
     if (e.pending_confirm !== undefined) expect(await d.state('pending_confirm'), `${at} の pending_confirm`).toBe(canonicalJson(e.pending_confirm))
     if (e.trace !== undefined) expect(d.trace, `${at} の状態の順`).toEqual(e.trace)

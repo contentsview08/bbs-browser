@@ -42,9 +42,10 @@ import kotlin.random.Random
 
 // 同期エンジン。PC 版の packages/sync/src/engine/engine.ts と同じ順番で動く。周の順は必ず draining → pull → apply → push
 
-class SyncKeyMaterial(val k: ByteArray, val deviceId: String)
+/** ticket は領域の作成の許可証。k と一緒に動くので一緒に置く。これだけでは領域を作れない(トークンが要る) */
+class SyncKeyMaterial(val k: ByteArray, val deviceId: String, val ticket: String?)
 
-/** 本番は Android Keystore で包んで専用の Prefs に置く(段階 2)。k を同期の表にも settings の Prefs にも置かない */
+/** 本番は Android Keystore で包んで専用の Prefs に置く(段階 4)。k を同期の表にも settings の Prefs にも置かない */
 interface SyncKeyStore {
     suspend fun load(): SyncKeyMaterial?
     suspend fun save(v: SyncKeyMaterial)
@@ -159,10 +160,22 @@ class SyncEngine(
         last = cycle(m)
     }
 
+    private fun checkTicketFor(k: ByteArray, ticket: String) {
+        if (ticketSpaceId(ticket) != spaceId(deriveKeys(k).authToken)) throw SyncApiError("bad_ticket")
+    }
+
+    /** 同期を始めるページから受け取った許可証を置く。止まっていれば次の手動の同期で続く */
+    suspend fun setTicket(ticket: String) = withContext(io) {
+        val material = keyStore.load() ?: throw SyncApiError("bad_ticket")
+        checkTicketFor(material.k, ticket)
+        keyStore.save(SyncKeyMaterial(material.k, material.deviceId, ticket))
+    }
+
     /** 使い始め。鍵と端末 ID を保管してから enabled を立てる。ここから利用者の操作が積まれ始める */
-    suspend fun pair(k: ByteArray) = withContext(io) {
+    suspend fun pair(k: ByteArray, ticket: String?) = withContext(io) {
+        if (ticket != null) checkTicketFor(k, ticket)
         val id = newDeviceId()
-        keyStore.save(SyncKeyMaterial(k, id))
+        keyStore.save(SyncKeyMaterial(k, id, ticket))
         db.batch(joinStatements(id))
         deviceChecked = true
         reconciled = false
@@ -295,7 +308,7 @@ class SyncEngine(
             }
             DeviceCheck.REJOIN -> {
                 val id = newDeviceId()
-                keyStore.save(SyncKeyMaterial(material!!.k, id))
+                keyStore.save(SyncKeyMaterial(material!!.k, id, material.ticket))
                 clearTables()
                 db.batch(joinStatements(id))
                 true
@@ -712,12 +725,14 @@ class SyncEngine(
     private suspend fun onSpaceGone(e: SpaceGone) {
         val known = t.state("epoch")
         val epoch = e.newEpoch ?: try {
-            api.createSpace()
+            val ticket = keyStore.load()?.ticket ?: throw CycleStop(block("ticket_required"))
+            api.createSpace(ticket)
         } catch (err: SyncApiError) {
             if (err.kind == "http" && err.status == 403) {
                 val code = err.code.ifEmpty { "http_403" }
                 noteError(code)
-                if (known == null) throw CycleStop(block(code))
+                // 許可証の問題は待っても直らない。利用者が通し直すまで止まる
+                if (known == null || code.startsWith("ticket_")) throw CycleStop(block(code))
                 db.batch(listOf(setState("phase", "recreate_waiting"), setState("recreate_tried_at", now().toString()), setState("last_error", code)))
                 throw CycleStop("recreate_waiting")
             }

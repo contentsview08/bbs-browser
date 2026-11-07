@@ -16,7 +16,7 @@ fun interface SyncTransport {
     suspend fun send(req: SyncRequest): SyncResponse
 }
 
-class SyncApiError(val kind: String, val status: Int = 0, val code: String = "") : Exception(if (code.isEmpty()) kind else "$kind:$code")
+class SyncApiError(val kind: String, val status: Int = 0, val code: String = "", val detail: Map<String, Any?>? = null) : Exception(if (code.isEmpty()) kind else "$kind:$code")
 
 private val HTTPS_URL = Regex("https://[^/?#@\\s\\\\]+(?:/[^?#\\s\\\\]*)?")
 private val LOCAL_URL = Regex("http://(?:localhost|127\\.0\\.0\\.1)(?::[0-9]+)?(?:/[^?#\\s\\\\]*)?")
@@ -26,6 +26,11 @@ fun checkServerUrl(url: String, allowLocalhost: Boolean = false): String {
     if (!HTTPS_URL.matches(url) && !(allowLocalhost && LOCAL_URL.matches(url))) throw SyncApiError("bad_url")
     return url.trimEnd('/')
 }
+
+private val TICKET_FORM = Regex("v1\\.([0-9a-f]{64})\\.[0-9]{1,12}\\.[A-Za-z0-9_-]{1,16}\\.[A-Za-z0-9_-]{43}")
+
+/** 許可証の結び付く領域。形が違えば null。署名と期限はサーバーだけが確かめる(端末の時計を信用しない) */
+fun ticketSpaceId(ticket: String): String? = TICKET_FORM.matchEntire(ticket)?.groupValues?.get(1)
 
 class ChangesPage(val records: List<Map<String, Any?>>, val head: Long, val more: Boolean, val epoch: String, val gcFloor: Long)
 
@@ -64,11 +69,26 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
         } catch (_: Exception) {
             null
         }
-        if (res.status !in 200..299) throw SyncApiError("http", res.status, ((parsed as? Map<String, Any?>)?.get("error") as? String)?.take(64).orEmpty())
+        val detail = parsed as? Map<String, Any?>
+        if (res.status !in 200..299) throw SyncApiError("http", res.status, (detail?.get("error") as? String)?.take(64).orEmpty(), detail)
         return parsed as? Map<String, Any?> ?: throw bad()
     }
 
-    suspend fun createSpace(): String = checkEpoch(call("POST", "/spaces", emptyMap<String, Any?>())["epoch"])
+    suspend fun createSpace(ticket: String): String {
+        val r = try {
+            call("POST", "/spaces", mapOf("ticket" to ticket))
+        } catch (e: SyncApiError) {
+            if (e.status != 403 || e.code != "pow_required") throw e
+            val pow = try {
+                checkPowChallenge(e.detail?.get("pow"))
+            } catch (_: IllegalArgumentException) {
+                throw bad()
+            }
+            // 解いて 1 回だけ送り直す。断られたら、ほかの 403 と同じくエンジンが止まる
+            call("POST", "/spaces", mapOf("ticket" to ticket, "pow" to mapOf("challenge" to pow.challenge, "nonce" to solvePow(pow.challenge, pow.bits))))
+        }
+        return checkEpoch(r["epoch"])
+    }
 
     suspend fun changes(since: Long): ChangesPage {
         val r = call("GET", "/changes?since=$since")

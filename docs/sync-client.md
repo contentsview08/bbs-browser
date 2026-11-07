@@ -755,7 +755,7 @@ interface SyncApplied {
 5. 消えるものが 10 件以上か、お気に入りが半分以上減るなら確認を出す(数えるのは手元に行のあるレコードと、そのうち `trim` でない tombstone)。答えは `accept_removal`(進める)か `keep_local`(進まない。同期の表と鍵を消して使っていない状態へ戻す。手元は残る)
 6. 写す。そのあと送る
 
-1 台目も同じ流れを通る。`GET /changes?since=0` が 404 なら `POST /spaces` で作る。`epoch` をまだ持っていないので、合わせ直さない。`capacity_full`・`creation_closed` は `blocked`。
+1 台目も同じ流れを通る。`GET /changes?since=0` が 404 なら、許可証を付けて `POST /spaces` で作る。`epoch` をまだ持っていないので、合わせ直さない。`capacity_full`・`creation_closed` は `blocked`。許可証がなければ要求を送らず `blocked`(`ticket_required`)。
 
 | データ | 合流の結果 |
 | --- | --- |
@@ -859,7 +859,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `rebasing` | `planRebase` の実行 |
 | `recreating` | 領域が消えたあとの全件の読み取りと `planRecreate` の実行 |
 | `recreate_waiting` | 作り直したいが満員。前面に来るたび試す |
-| `blocked` | 新規作成の満員・停止・認証失敗。自動で再開しない |
+| `blocked` | 新規作成の満員・停止・認証失敗・許可証の問題。自動で再開しない |
 
 周の順は必ず draining → pull → apply → push。push の前に受け取るのは、409 を減らすため。push の 409 のマージでサーバーの値が勝ったら、周の最後にもう一度 apply を通す。
 
@@ -927,7 +927,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 409 | 応答のレコードを `mergePayloads` して、新しい `version` を `base_version` に再送。応答の `record_id` が送ったものと違えば混ぜず、`bad_counts.swapped` に数える(別のレコードの暗号文のすり替え) |
 | 待ち時間 | `backoffDelayMs(回数, jitter)`。1 秒から最大 60 秒を倍々にし、半分をジッターにする。表は `sync-config.json` |
 | 1 周の送信 | 100 件・1MB ずつ、最大 20 回。残りは次の周 |
-| 413 | 段階 1 は `last_error` に書くだけで `pending` を残す。外す処理は段階 3 |
+| 413 | 段階 1 は `last_error` に書くだけで `pending` を残す。外す処理は段階 5 |
 | 読み取りの上限 | 1 応答 2MB。超えたら捨てて `backoff` |
 | version が進まない | ページングを止める |
 | リダイレクト | 3xx は失敗。たどらない |
@@ -938,14 +938,17 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 | 要求 | 応答 |
 | --- | --- |
-| `POST /spaces` 本文 `{}` | 作成は 201、あれば 200。`{ epoch, created }`。断るときは 403 と `{ error }` |
+| `POST /tickets` 本文 `{ turnstile, space_id }`。トークンなし | 200 と `{ ticket, exp }`。`403 turnstile_invalid`・`503 turnstile_unavailable`・`503 unavailable`。端末は呼ばず、同期を始めるページが呼ぶ |
+| `POST /spaces` 本文 `{ ticket }` | 作成は 201、あれば 200。`{ epoch, created }`。断るときは 403 と `{ error }`(`ticket_required`・`ticket_invalid`・`ticket_expired`・`pow_required`・`pow_invalid`・`capacity_full`・`creation_closed`) |
 | `GET /changes?since=N` | `{ records, head, more, epoch, gc_floor }`。最後のページの後は `since = head` |
 | `POST /records` 本文 `{ request_id, records }` | 200 と `{ results, epoch, gc_floor }`。`results` は `{ record_id, status: 200, version }` か `{ record_id, status: 409, record }` |
 | `GET /head` | `{ version, epoch, gc_floor }`。ETag は `"<epoch>:<version>"`。同じなら 304 |
 | `GET /space` | `{ used_bytes, record_count, quota_bytes, quota_records, epoch, gc_floor }` |
 | `DELETE /space` | `{ deleted: true }` |
 
-- 作成の問題: サーバーが `POW_BITS` を 1 以上にしていると、`POST /spaces` の `{}` は 403 と `{ error: "pow_required", pow: { challenge, bits } }` を返す。端末は `SHA-256("<challenge>:<nonce>")` の先頭 `bits` ビットが 0 になる `nonce`(`[A-Za-z0-9_-]` の 64 文字まで)を探し、本文 `{ pow: { challenge, nonce } }` で 1 回だけ送り直す。問題は 5 分有効で、その領域にしか使えない。`bits` が 28 を超える問題は解かない。例は `packages/conformance/sync-pow.json`。PC は `packages/sync/src/engine/pow.ts`
+- 作成の問題: サーバーが `POW_BITS` を 1 以上にしていると、許可証の通った `POST /spaces` は 403 と `{ error: "pow_required", pow: { challenge, bits } }` を返す。端末は `SHA-256("<challenge>:<nonce>")` の先頭 `bits` ビットが 0 になる `nonce`(`[A-Za-z0-9_-]` の 64 文字まで)を探し、本文 `{ ticket, pow: { challenge, nonce } }` で 1 回だけ送り直す。問題は 5 分有効で、その領域にしか使えない。`bits` が 28 を超える問題は解かない。例は `packages/conformance/sync-pow.json`。PC は `packages/sync/src/engine/pow.ts`、スマホは `obb/sync/engine/SyncPow.kt`
+- 許可証の決まりは `packages/conformance/sync-ticket.json`。端末は形と `space_id` だけを確かめ(`ticketSpaceId`)、合わなければ `bad_ticket` で受け取らない
+- `ticket_*` は待っても直らないので、作り直しのときでも `recreate_waiting` にせず `blocked` にする。`setTicket` で置き直し、手動の同期で続く
 - 作成元の制限と締め出しは、全体の停止と同じ `creation_closed`
 - 1 回の 409 に入るレコードは合計 1.5MB まで(読み取りの上限 2MB に収めるため)。入らない分は `results` に出ないので、送信待ちのまま次の回で送り直す
 - `POST` は `Content-Length` と `Content-Type: application/json` が要る。ないと 413・415。圧縮した本文は 415
@@ -984,7 +987,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | 順 | 最初に気づいた端末 | 他の端末 |
 | --- | --- | --- |
 | 1 | 404 を受ける。確認なしで次へ進む | 作り直しの前なら同じ。後なら `epoch` の変更で気づく |
-| 2 | `POST /spaces`(同じ `K`・同じ `space_id`)。すでにあれば 200 で中身は変わらない | 同じ |
+| 2 | `POST /spaces`(同じ `K`・同じ `space_id`・保管している許可証)。人の操作は要らない。すでにあれば 200 で中身は変わらない | 同じ |
 | 3 | `since = 0` にして新しい `epoch` を保存。全件を受け取る | 同じ |
 | 4 | `planRecreate` で手元と合わせる | 同じ |
 | 5 | `pending` を全部送る。tombstone を先に(`priority = 0`) | 同じ |
@@ -1020,8 +1023,8 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 ```ts
 interface SyncKeyStore {
-  load(): Promise<{ k: Uint8Array; deviceId: string } | null>
-  save(v: { k: Uint8Array; deviceId: string }): Promise<void>
+  load(): Promise<{ k: Uint8Array; deviceId: string; ticket: string | null } | null>
+  save(v: { k: Uint8Array; deviceId: string; ticket: string | null }): Promise<void>
   clear(): Promise<void>
 }
 ```
@@ -1032,6 +1035,7 @@ interface SyncKeyStore {
 | Linux | Secret Service | 使えなければ同期を始めず、理由を出す |
 | スマホ | Android Keystore の AES-GCM の鍵で包み、**専用の Prefs `sync_key`** に置く | `settings` の Prefs に置かない。`Prefs.export` は `sp.all` から除く方式なので、新しい項目が書き出しに入る |
 
+- 許可証は鍵ではないが、`K` と一緒に動くので同じ所に置く。DB の入れ替えで消えない
 - PC の鍵は TypeScript の核で使うため、`main` の WebView のメモリに入る。`innerHTML` を使わない決まりが守りの前提
 - 許可リスト: `Prefs.export`(除く方式)・`settingsFile`(除く方式)に同期の項目が入らないことをテストで確かめる。URL の上書きも除く
 
@@ -1052,7 +1056,7 @@ interface SyncKeyStore {
 | `none` | どちらもない | 同期を使っていない |
 | `ok` | 同じ | そのまま |
 | `clear` | 鍵保管が空で DB にある | `sync_*` を消して `off` に戻す。領域の再参加はペアリングから |
-| `rejoin` | 違う。または DB にない | `sync_records`・`sync_ops` を空にし、`since`・`clock`・`epoch`・`phase`・`push_inflight` も消す。`generateDeviceId` の新しい値を鍵保管と DB に書き、`joining` から |
+| `rejoin` | 違う。または DB にない | `sync_records`・`sync_ops` を空にし、`since`・`clock`・`epoch`・`phase`・`push_inflight` も消す。`generateDeviceId` の新しい値を鍵保管と DB に書き、`joining` から。許可証は残す |
 
 - `device_id` が変わると古い `read_dev` は領域に残るので、既読位置は下がらない
 - 同じ端末の古い DB に戻したときは `ok` になる。`device_id` は重複しない。`since` と `clock` が戻るだけで、次の pull で全部をマージし直して追いつく
@@ -1118,12 +1122,29 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 
 既定はオフ。自分で押した人だけが使う。
 
+### 同期を始める(1 台目)
+
+1. 「同期を使う」→「同期を始める」。`K` を作り、窓で `/start?space_id=…&return=app` を開く
+2. 窓の中で Turnstile を通す
+3. 移動を止めて許可証を受け取り、窓を閉じる。`K` と許可証を鍵保管に置く
+4. 全件を受け取る・種まき
+
+取り消して窓を閉じたら、`K` を捨てて使っていない状態へ戻す。形とその理由は `docs/sync-design.md` の「許可証の受け渡し」。
+
+| 窓の作り | PC | スマホ |
+| --- | --- | --- |
+| 開き方 | `WebviewWindowBuilder` の別窓。`capabilities` の対象に入れない | 専用の `WebView`。`addJavascriptInterface` を使わない |
+| 受け取り | `on_navigation` で `https://obb-sync.invalid/ticket` を止めて `query_pairs` で読み、`main` へだけ渡す | `shouldOverrideUrlLoading` で `isForMainFrame` の同じ URL を止めて読む |
+| 許す先 | 同期サーバーの origin、`challenges.cloudflare.com`、`about:blank`、`about:srcdoc`。ほかは止める | 同じ |
+| Turnstile の要件 | User-Agent を途中で変えない | JavaScript と DOM storage を有効にし、第三者の Cookie を許す。User-Agent を途中で変えない |
+| 片づけ | 窓を閉じる | `clearHistory`・`clearCache`、`destroy` |
+
 ### ペアリング
 
 | 手順 | 既存の端末 | 新しい端末 |
 | --- | --- | --- |
 | 1 | 「端末を追加」 | 「同期を使う」→「ほかの端末につなぐ」 |
-| 2 | QR とコードを 60 秒。残り時間と「他の人に見せないでください」 | スマホは QR、PC はコードを貼る |
+| 2 | `K` と許可証の QR とコードを 60 秒。残り時間と「他の人に見せないでください」 | スマホは QR、PC はコードを貼る。Turnstile は通さない |
 | 3 | 閉じる | 全件を受け取る(進み具合) |
 | 4 | | 確認があれば出す |
 | 5 | | 「同期を始めました」 |
@@ -1153,6 +1174,8 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 404 の後に `capacity_full` | サーバーのデータが消えましたが、いまは満員で作り直せません。この端末のデータはそのまま使えます。空いたら自動で揃います。 | `recreate_waiting`。手元の記録は残す |
 | `capacity_full`(新規) | 同期は満員です。枠が空くまで作れません。この端末のデータはそのまま使えます。 | `blocked`。自動で再試行しない。次に開いたとき再度押せる |
 | `creation_closed` | 同期の新規作成を止めています。この端末のデータはそのまま使えます。 | 同じ。サーバーの全体の停止と作成元の締め出しを同じコードにする |
+| `ticket_required`・`ticket_expired`・`ticket_invalid` | 同期を続けるには、もう一度確認が必要です。この端末のデータはそのまま使えます。 | `blocked`。「同期を始める」を出す。通すと `setTicket` して手動の同期 |
+| ページの `turnstile_unavailable` | 確認の仕組みが止まっています。少し待ってからお試しください。 | 窓の中で出す。既存の同期は続く |
 | 413 | 同期の容量がいっぱいです。古い閲覧履歴を外しました。 | 知らせだけ |
 | 429 | 少し待ってから同期します。 | `backoff` |
 | Secret Service なし | この環境では鍵を安全に保存できないため、同期を使えません。 | `off` |
@@ -1268,6 +1291,12 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 51 | ネットワークの復帰(偽の時計) | 5 秒待つ。前回から 30 秒未満なら同期しない。30 秒以上なら同期する |
 | 52 | 裏にいる間 | 周が始まらず、通信しない |
 | 53 | 変更がない間の 2 分 | 送らない |
+| 54 | 許可証がない | 作成を送らず `blocked`。手元が残る。通すと続く |
+| 55 | 領域が消える | 同じ許可証で作り直す。ページを通した回数が増えない |
+| 56 | 2 台目 | 許可証を受け取り、Turnstile を通さず作り直せる |
+| 57 | 許可証の期限切れ | `blocked`。自動で再試行しない。通し直すと作り直す |
+| 58 | サーバーが許可証を断る | `recreate_waiting` にせず `blocked` |
+| 59 | 計算の問題 | 許可証と答えを送り直して作る |
 
 端末ごとのテスト(共通にしない)。
 
@@ -1285,12 +1314,13 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | --- | --- | --- |
 | 0 | 核 | 済み |
 | 1 | `018_sync.sql`、`sql_batch`、`UserOps` の `favorite_thread_*`、アダプター 1 種類、エンジン(手動)、偽サーバー、テストの枠 | 済み。偽サーバーで PC と スマホがお気に入りのスレを往復する。本番の鍵保管・HTTP・板の判定(`BoardResolver`)はまだつないでいない |
-| 2 | HTTP の実装、鍵、ペアリング、手動の同期ボタン | 検証用の Worker で 2 台が実機で同期する |
-| 3 | きっかけ、まとめ送り、再送、状態の表示、裏に回る瞬間の 1 回の送信、領域の作り直し | 機内モードの復帰で追いつく。シナリオ 30〜38・43〜53 |
-| 4 | 閲覧履歴・既読・板と順序 → 書き込み・画像 → NG → 設定の順に足す。初回の同期 | 全シナリオ。1 万スレの偽データで初回の同期が固まらない |
-| 5 | 試験の説明と同意、満員の表示。枠 2 のシミュレーターにエンジンをつなぐ。検証環境で枠 2 にして PC とスマホのエミュレーターで通す | 限定の試験の前の条件を満たす |
-| 6 | 公開の案内、Turnstile | 公開の前の条件 |
-| 7 | 権限系、ローテーション、リカバリーコード | `sync-design.md` の検証の全部 |
+| 2 | なし(サーバーの段階) | 済み |
+| 3 | 許可証を送る形(`SyncApi.createSpace`・`pair`・`setTicket`)、スマホの PoW、偽サーバーの同じ規則 | シナリオ 54〜59 が PC とスマホで同じ結果 |
+| 4 | HTTP の実装、鍵の保管、許可証の窓、手動の同期ボタン、開発用の設定に隠したペアリング。お気に入りのスレだけ | 検証用の Worker で 2 台が実機で同期する |
+| 5 | 閲覧履歴・既読・板と順序 → 書き込み・画像 → NG → 設定の順に足す。初回の同期。きっかけ、まとめ送り、再送、状態の表示、裏に回る瞬間の 1 回の送信 | 全シナリオ。1 万スレの偽データで初回の同期が固まらない。機内モードの復帰で追いつく |
+| 6 | 試験の説明と同意、満員の表示、実際のウィジェット。枠 2 のシミュレーターにエンジンをつなぐ。検証環境で枠 2 にして PC とスマホのエミュレーターで通す | 限定の試験の前の条件を満たす |
+| 7 | 公開の案内 | 公開の前の条件 |
+| 8 | 権限系、ローテーション、リカバリーコード | `sync-design.md` の検証の全部 |
 
 ## 12. 難しい点と未解決
 
@@ -1332,15 +1362,15 @@ PC とスマホで同じ言葉にする。`bbs-suite/docs/parity.md` の表に�
 | 番号 | 内容 | 案 | 期限 |
 | --- | --- | --- | --- |
 | U1 | ログを消したスレを開き直すと既読が戻るか | **決定: 戻らない。** ログの削除は全端末で未読に戻す。自動整理のあとは戻す |
-| U2 | 限定の試験の既定の URL を `workers.dev` のままにするか | `docs/sync-design.md` の未決事項 | 段階 5 |
+| U2 | 限定の試験の既定の URL を `workers.dev` のままにするか | `docs/sync-design.md` の未決事項 | 段階 6 |
 | U3 | サイトを同期するか | **決定: する。** お気に入りの板とスレも同期する |
-| U4 | 手の「自分のレス」の印 | 同期しない。要るなら `own_mark` を足す | 段階 4 |
-| U5 | スマホのスレ立てが書き込み履歴に入らない | PC に合わせて入れる(別の担当と相談) | 段階 4 |
-| U6 | AI NG の条件と手の印 | 同期しない | 段階 7 の後 |
+| U4 | 手の「自分のレス」の印 | 同期しない。要るなら `own_mark` を足す | 段階 5 |
+| U5 | スマホのスレ立てが書き込み履歴に入らない | PC に合わせて入れる(別の担当と相談) | 段階 5 |
+| U6 | AI NG の条件と手の印 | 同期しない | 段階 8 の後 |
 | U7 | 「未読に戻す」を画面に足すか | **決定: 足さない。** ログの削除が兼ねる |
 | U8 | 配色と字の大きさを同期するか | **決定: しない。** |
-| U9 | 離脱した端末の `read_dev` を片づけるか | まず残す | 段階 7 |
+| U9 | 離脱した端末の `read_dev` を片づけるか | まず残す | 段階 8 |
 | U11 | 書き込みの本文を同期するか | **決定: する。** |
-| U13 | 領域が消えたときに枠が満員で、押し出せる領域もないと作り直せない | 手元は残る。9 章の文言で案内し、前面に来るたび試す。消された領域の持ち主を優先する仕組みは作らない(見分ける情報を持たないため) | 段階 5 |
-| U15 | 一般公開で Turnstile を入れると、確認なしの作り直しで人の操作が要る | 案 1: 消えた `space_id` の短い控えを台帳に持ち、それには PoW だけで通す(再作成を断るのとは逆の使い方。控えは押し出しと削除の後 90 日)。案 2: 作り直しのときだけ画面でつなぎのコードを出す。案 1 が有力だが、控えは IP と結び付かなくても領域の履歴を残すので、プライバシーの説明と合わせて決める | 段階 6 |
-| U14 | 90 日以上オフラインの端末の復活 | 受け入れる。`last_pull_at` が 90 日より古い端末は合流の前に確認を出す案がある | 段階 5 |
+| U13 | 領域が消えたときに枠が満員で、押し出せる領域もないと作り直せない | 手元は残る。9 章の文言で案内し、前面に来るたび試す。消された領域の持ち主を優先する仕組みは作らない(見分ける情報を持たないため) | 段階 6 |
+| U15 | Turnstile を入れると、確認なしの作り直しで人の操作が要る | **解決: 領域の作成の許可証。** 使い始めに 1 度 Turnstile を通し、`space_id` に結び付いた署名つきの許可証を受け取る。作り直しは同じ許可証で人の操作なしに行う。サーバーは保存しないので、消えた領域の控えが要らない(`docs/sync-design.md` の「許可証」) |
+| U14 | 90 日以上オフラインの端末の復活 | 受け入れる。`last_pull_at` が 90 日より古い端末は合流の前に確認を出す案がある | 段階 6 |

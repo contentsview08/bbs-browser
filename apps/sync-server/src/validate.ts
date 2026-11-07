@@ -89,12 +89,12 @@ export function checkPush(body: unknown, cfg: Config): PushInput {
 
 export interface CreateInput {
   pow?: { challenge: string; nonce: string }
-  turnstile?: string
+  ticket?: string
 }
 
 export function checkCreate(body: unknown): CreateInput {
   if (!isObject(body)) throw new BadInput()
-  for (const k of Object.keys(body)) if (k !== 'pow' && k !== 'turnstile') throw new BadInput()
+  for (const k of Object.keys(body)) if (k !== 'pow' && k !== 'ticket') throw new BadInput()
   const out: CreateInput = {}
   if (body.pow !== undefined) {
     const p = body.pow
@@ -103,11 +103,24 @@ export function checkCreate(body: unknown): CreateInput {
     if (typeof p.nonce !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(p.nonce)) throw new BadInput()
     out.pow = { challenge: p.challenge, nonce: p.nonce }
   }
-  if (body.turnstile !== undefined) {
-    if (typeof body.turnstile !== 'string' || body.turnstile.length === 0 || body.turnstile.length > 2048) throw new BadInput()
-    out.turnstile = body.turnstile
+  if (body.ticket !== undefined) {
+    if (typeof body.ticket !== 'string' || body.ticket.length === 0 || body.ticket.length > 256) throw new BadInput()
+    out.ticket = body.ticket
   }
   return out
+}
+
+export interface TicketInput {
+  turnstile: string
+  space_id: string
+}
+
+export function checkTicketRequest(body: unknown): TicketInput {
+  if (!isObject(body) || Object.keys(body).sort().join() !== 'space_id,turnstile') throw new BadInput()
+  // トークンの長さの上限は Turnstile の文書のとおり
+  if (typeof body.turnstile !== 'string' || body.turnstile.length === 0 || body.turnstile.length > 2048) throw new BadInput()
+  if (typeof body.space_id !== 'string' || !/^[0-9a-f]{64}$/.test(body.space_id)) throw new BadInput()
+  return { turnstile: body.turnstile, space_id: body.space_id }
 }
 
 /** Number で読むと巨大な値が丸まるので、桁の形で先に確かめる */

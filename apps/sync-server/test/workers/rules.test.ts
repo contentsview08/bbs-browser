@@ -9,7 +9,7 @@ const cases = rulesJson as unknown as { name: string; server?: Record<string, un
 
 
 function overrides(server: Record<string, unknown> = {}): Record<string, string> {
-  const map: Record<string, string> = { space_limit: 'SPACE_LIMIT', quota_bytes: 'QUOTA_BYTES', quota_records: 'QUOTA_RECORDS', rate_per_minute: 'RATE_PER_MINUTE', full_pull_per_hour: 'FULL_PULL_PER_HOUR', evict_idle_days: 'EVICT_IDLE_DAYS', idle_delete_days: 'IDLE_DELETE_DAYS' }
+  const map: Record<string, string> = { space_limit: 'SPACE_LIMIT', quota_bytes: 'QUOTA_BYTES', quota_records: 'QUOTA_RECORDS', rate_per_minute: 'RATE_PER_MINUTE', full_pull_per_hour: 'FULL_PULL_PER_HOUR', evict_idle_days: 'EVICT_IDLE_DAYS', idle_delete_days: 'IDLE_DELETE_DAYS', ticket_ttl_days: 'TICKET_TTL_DAYS', pow_bits: 'POW_BITS' }
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(server)) {
     if (k === 'creation_closed') out.CREATION_CLOSED = v ? '1' : '0'
@@ -70,7 +70,17 @@ describe('sync-server-rules.json', () => {
     const remember = async (t: unknown) => {
       if (typeof t === 'string') seen.add(await spaceIdOf(t))
     }
+    const tickets = new Map<string, string>()
+    const requestTicket = async (name: string, turnstile: string) => await call('POST', '/tickets', { body: JSON.stringify({ turnstile, space_id: await spaceIdOf(name) }) })
+    const issued = async (name: string): Promise<string> => {
+      if (!tickets.has(name)) tickets.set(name, ((await (await requestTicket(name, 'test-pass')).json()) as { ticket: string }).ticket)
+      return tickets.get(name) as string
+    }
     for (const [i, s] of c.steps.entries()) {
+      if (s.issue !== undefined) {
+        await issued(s.issue)
+        continue
+      }
       if (s.advance_ms !== undefined) {
         // keep_alive はこの間に領域を使い続ける(tombstone の片づけだけを見るため)
         if (s.keep_alive) {
@@ -86,7 +96,8 @@ describe('sync-server-rules.json', () => {
       }
       await remember(s.push ?? s.token)
       let res: Response
-      if (s.push !== undefined) {
+      if (s.request_ticket !== undefined) res = await requestTicket(s.request_ticket, s.turnstile)
+      else if (s.push !== undefined) {
         const records = s.repeat_records !== undefined ? await Promise.all(Array.from({ length: s.repeat_records }, (_, n) => recordBody({ id: n }))) : await Promise.all(s.records.map(recordBody))
         res = await call('POST', '/records', { token: s.push, body: JSON.stringify({ request_id: s.request_id, records }) })
       } else {
@@ -96,7 +107,12 @@ describe('sync-server-rules.json', () => {
           const real = [...epochs].find(([, alias]) => s.if_none_match.includes(alias))?.[0] as string
           headers['If-None-Match'] = `"${real}:${/:(\d+)"/.exec(s.if_none_match)?.[1]}"`
         }
-        res = await call(s.method, s.path, { ...(s.raw_auth ? { auth: s.raw_auth } : s.token ? { token: s.token } : {}), ...(s.body !== undefined && { body: s.body }), headers })
+        let body = s.body
+        if (s.method === 'POST' && s.path === '/spaces' && body === undefined) {
+          const ticket = s.ticket !== undefined ? await issued(s.ticket) : s.ticket_tampered !== undefined ? (await issued(s.ticket_tampered)).replace(/.$/, (x) => (x === 'A' ? 'E' : 'A')) : s.ticket_raw
+          body = JSON.stringify(ticket === undefined ? {} : { ticket })
+        }
+        res = await call(s.method, s.path, { ...(s.raw_auth ? { auth: s.raw_auth } : s.token ? { token: s.token } : {}), ...(body !== undefined && { body }), headers })
       }
       const text = await res.text()
       const parsed = text === '' ? null : JSON.parse(text)

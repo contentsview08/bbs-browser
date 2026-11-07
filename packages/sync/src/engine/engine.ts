@@ -40,18 +40,24 @@ import {
   type StoredRecord,
   type SyncSqlDb,
 } from './tables'
-import { SyncApi, SyncApiError, type SyncTransport } from './transport'
+import { SyncApi, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
 export interface SyncKeyMaterial {
   k: Uint8Array
   deviceId: string
+  /** 領域の作成の許可証。k と一緒に動くので一緒に置く。これだけでは領域を作れない(トークンが要る) */
+  ticket: string | null
 }
 
-/** 本番は OS の鍵保管に置く(段階 2)。k を同期の表にも settings にも置かない */
+/** 本番は OS の鍵保管に置く(段階 4)。k を同期の表にも settings にも置かない */
 export interface SyncKeyStore {
   load(): Promise<SyncKeyMaterial | null>
   save(v: SyncKeyMaterial): Promise<void>
   clear(): Promise<void>
+}
+
+function checkTicketFor(k: Uint8Array, ticket: string): void {
+  if (ticketSpaceId(ticket) !== spaceId(deriveKeys(k).auth_token)) throw new SyncApiError('bad_ticket')
 }
 
 export type SyncEngineState =
@@ -231,12 +237,21 @@ export class SyncEngine {
   }
 
   /** 使い始め。鍵と端末 ID を保管してから enabled を立てる。ここから利用者の操作が積まれ始める */
-  async pair(k: Uint8Array): Promise<void> {
+  async pair(k: Uint8Array, ticket: string | null): Promise<void> {
+    if (ticket !== null) checkTicketFor(k, ticket)
     const deviceId = this.newDeviceId()
-    await this.deps.keyStore.save({ k, deviceId })
+    await this.deps.keyStore.save({ k, deviceId, ticket })
     await this.db.batch([setState('device_id', deviceId), setState('clock', HLC_ZERO), setState('since', '0'), setState('phase', 'joining'), setState('enabled', '1')])
     this.deviceChecked = true
     this.reconciled = false
+  }
+
+  /** 同期を始めるページから受け取った許可証を置く。止まっていれば次の手動の同期で続く */
+  async setTicket(ticket: string): Promise<void> {
+    const material = await this.deps.keyStore.load()
+    if (!material) throw new SyncApiError('bad_ticket')
+    checkTicketFor(material.k, ticket)
+    await this.deps.keyStore.save({ ...material, ticket })
   }
 
   /** この端末で同期をやめる。手元のデータは消さない */
@@ -369,7 +384,7 @@ export class SyncEngine {
         return false
       case 'rejoin': {
         const deviceId = this.newDeviceId()
-        await this.deps.keyStore.save({ k: (material as SyncKeyMaterial).k, deviceId })
+        await this.deps.keyStore.save({ ...(material as SyncKeyMaterial), deviceId })
         await this.clearTables()
         await this.db.batch([setState('device_id', deviceId), setState('clock', HLC_ZERO), setState('since', '0'), setState('phase', 'joining'), setState('enabled', '1')])
         return true
@@ -850,12 +865,15 @@ export class SyncEngine {
     const known = await this.t.state('epoch')
     let epoch = e.newEpoch
     if (epoch === undefined) {
+      const ticket = (await this.deps.keyStore.load())?.ticket ?? null
+      if (ticket === null) throw new CycleStop(await this.block('ticket_required'))
       try {
-        epoch = (await this.api.createSpace()).epoch
+        epoch = (await this.api.createSpace(ticket)).epoch
       } catch (err) {
         if (err instanceof SyncApiError && err.kind === 'http' && err.status === 403) {
           await this.noteError(err.code || 'http_403')
-          if (known === null) throw new CycleStop(await this.block(err.code || 'http_403'))
+          // 許可証の問題は待っても直らない。利用者が通し直すまで止まる
+          if (known === null || err.code.startsWith('ticket_')) throw new CycleStop(await this.block(err.code || 'http_403'))
           await this.db.batch([setState('phase', 'recreate_waiting'), setState('recreate_tried_at', String(this.deps.now())), setState('last_error', err.code || 'http_403')])
           throw new CycleStop('recreate_waiting')
         }

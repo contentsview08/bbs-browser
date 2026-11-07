@@ -62,8 +62,15 @@ describe('静的な決まり', () => {
     const t = readFileSync(join(root, 'wrangler.example.toml'), 'utf-8')
     const live = t.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')
     expect(live).not.toMatch(/account_id/)
-    expect(live).not.toMatch(/POW_SECRET|TURNSTILE_SECRET|ADMIN_KEYS/)
+    expect(live).not.toMatch(/POW_SECRET|TURNSTILE_SECRET|ADMIN_KEYS|TICKET_KEYS/)
     expect(live).not.toMatch(/\b[0-9a-f]{32}\b/)
+  })
+  it('テスト用の Turnstile のキーは検証用の環境だけに置く', () => {
+    const t = readFileSync(join(root, 'wrangler.example.toml'), 'utf-8')
+    const lines = t.split('\n').filter((l) => !l.trim().startsWith('#'))
+    const head = lines.slice(0, lines.findIndex((l) => l.startsWith('[env.verify]'))).join('\n')
+    expect(head).not.toMatch(/TURNSTILE_TEST_KEYS|[123]x0000/)
+    expect(lines.join('\n')).toMatch(/TURNSTILE_TEST_KEYS = "1"/)
   })
   it('サーバーのテストの口は入口から参照しない', () => {
     for (const { p, text } of src) expect(/harness-worker|__test/.test(text), p).toBe(false)

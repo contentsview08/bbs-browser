@@ -2,7 +2,12 @@ package io.github.contentsview08.obb.sync
 
 import io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter
 import io.github.contentsview08.obb.sync.adapters.ResolvedBoard
+import io.github.contentsview08.obb.sync.engine.SyncApi
+import io.github.contentsview08.obb.sync.engine.SyncApiError
 import io.github.contentsview08.obb.sync.engine.SyncEngine
+import io.github.contentsview08.obb.sync.engine.checkPowChallenge
+import io.github.contentsview08.obb.sync.engine.powOk
+import io.github.contentsview08.obb.sync.engine.solvePow
 import io.github.contentsview08.obb.sync.engine.SyncKeyMaterial
 import io.github.contentsview08.obb.sync.engine.SyncKeyStore
 import io.github.contentsview08.obb.sync.engine.SyncRequest
@@ -12,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -63,7 +69,7 @@ class SyncEngineTest {
             gate.await()
             call(s, r).also { active.decrementAndGet() }
         }
-        e.pair(ByteArray(32) { 7 })
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
         val first = async(Dispatchers.Default) { e.runCycle(true) }
         entered.await()
         val others = List(3) { async(Dispatchers.Default) { e.runCycle(true) } }
@@ -86,7 +92,7 @@ class SyncEngineTest {
             if (r.url.contains("/changes")) pulls.incrementAndGet()
             call(s, r)
         }
-        e.pair(ByteArray(32) { 7 })
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
         e.runCycle(true)
         pulls.set(0)
         e.runCycle(false)
@@ -97,5 +103,89 @@ class SyncEngineTest {
         e.runCycle(true)
         assertEquals(2, pulls.get())
         db.close()
+    }
+
+    @Test fun 別の領域の許可証を受け取らない() = runBlocking {
+        val now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        val e = engine(db, { now }) { call(s, it) }
+        val k = ByteArray(32) { 7 }
+        val good = signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)
+        val other = signTicket("c".repeat(64), 4_000_000_000)
+        for (bad in listOf(other, "garbage")) {
+            try {
+                e.pair(k, bad)
+                fail("受け取った: $bad")
+            } catch (err: SyncApiError) {
+                assertEquals("bad_ticket", err.kind)
+            }
+        }
+        e.pair(k, null)
+        try {
+            e.setTicket(other)
+            fail("受け取った")
+        } catch (err: SyncApiError) {
+            assertEquals("bad_ticket", err.kind)
+        }
+        e.setTicket(good)
+        assertEquals("idle", e.runCycle(true).state)
+        assertEquals(1, s.spaces.size)
+        db.close()
+    }
+
+    @Test fun 許可証を本文に入れて送り問題が出たら両方を送り直す() = runBlocking {
+        val now = 1_800_000_000_000L
+        val s = FakeSyncServer(now = { now }, ratePerMinute = null, fullPullPerHour = null, powBits = 8)
+        val bodies = ArrayList<String>()
+        val db = JdbcSyncSql.open()
+        val e = engine(db, { now }) { r ->
+            if (r.url.endsWith("/spaces")) bodies += r.body!!
+            call(s, r)
+        }
+        val k = ByteArray(32) { 7 }
+        val ticket = signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)
+        e.pair(k, ticket)
+        e.runCycle(true)
+        assertEquals(2, bodies.size)
+        assertEquals(mapOf("ticket" to ticket), parseStrictJson(bodies[0]))
+        assertEquals(setOf("ticket", "pow"), (parseStrictJson(bodies[1]) as Map<*, *>).keys)
+        assertEquals(1, s.spaces.size)
+        db.close()
+    }
+
+    @Test fun 計算の問題の判定が共通の表と同じ() {
+        val cases = parseStrictJson(javaClass.classLoader!!.getResourceAsStream("sync-pow.json")!!.readBytes().toString(Charsets.UTF_8)) as List<*>
+        assertEquals(true, cases.size > 2)
+        for (v in cases) {
+            val c = v as Map<*, *>
+            assertEquals(c.toString(), c["ok"], powOk(c["challenge"] as String, c["nonce"] as String, (c["bits"] as Long).toInt()))
+        }
+    }
+
+    @Test fun 解いた答えが判定を通る() = runBlocking {
+        val nonce = solvePow("x.y", 10)
+        assertEquals(true, powOk("x.y", nonce, 10))
+    }
+
+    @Test fun サーバーが無理な難易度を出しても解き始めない() {
+        for (bad in listOf<Any?>(null, 1L, mapOf("challenge" to "x", "bits" to 40L), mapOf("challenge" to 1L, "bits" to 4L), mapOf("challenge" to "", "bits" to 4L), mapOf("challenge" to "x"))) {
+            try {
+                checkPowChallenge(bad)
+                fail("受け取った: $bad")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        assertEquals(4, checkPowChallenge(mapOf("challenge" to "x", "bits" to 4L)).bits)
+    }
+
+    @Test fun 問題の難易度が無理ならエンジンを止めずに失敗にする() = runBlocking {
+        val api = SyncApi("https://sync.test", "a".repeat(64), { SyncResponse(403, canonicalJson(mapOf("error" to "pow_required", "pow" to mapOf("challenge" to "x", "bits" to 40L)))) })
+        try {
+            api.createSpace("t")
+            fail("通った")
+        } catch (e: SyncApiError) {
+            assertEquals("bad_response", e.kind)
+        }
     }
 }

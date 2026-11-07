@@ -5,7 +5,7 @@ import worker from '../../src/index'
 import { leadingZeroBits } from '../../src/pow'
 import { sha256, utf8 } from '../../src/encoding'
 import { runtime } from '../../src/runtime'
-import { advance, BASE, call, clock, cipher, freshIp, ledger, push, record, recordIdOf, requestId, setup, spaceIdOf, spaceStub, teardown, testEnv, tokenOf, until429 } from './support'
+import { advance, BASE, call, clock, cipher, freshIp, ledger, push, record, recordIdOf, requestId, setup, spaceIdOf, spaceStub, teardown, testEnv, ticketOf, tokenOf, until429 } from './support'
 
 const create = (token: string, o = {}) => call('POST', '/spaces', { token, ...o })
 const errorOf = async (r: Response) => ((await r.json()) as { error: string }).error
@@ -328,7 +328,7 @@ describe('PoW', () => {
     expect(c.error).toBe('pow_required')
     expect(c.pow.bits).toBe(6)
     const nonce = await solve(c.pow.challenge)
-    const res = await create('A', { body: JSON.stringify({ pow: { challenge: c.pow.challenge, nonce } }) })
+    const res = await create('A', { body: JSON.stringify({ ticket: await ticketOf('A'), pow: { challenge: c.pow.challenge, nonce } }) })
     expect(res.status).toBe(201)
   })
   it('作成の前に DO を起こさない', async () => {
@@ -342,7 +342,7 @@ describe('PoW', () => {
     const c = await challenge('A')
     const nonce = await solve(c.pow.challenge)
     clock.now += 300_000
-    const res = await create('A', { body: JSON.stringify({ pow: { challenge: c.pow.challenge, nonce } }) })
+    const res = await create('A', { body: JSON.stringify({ ticket: await ticketOf('A'), pow: { challenge: c.pow.challenge, nonce } }) })
     expect(res.status).toBe(403)
     expect(await errorOf(res)).toBe('pow_invalid')
   })
@@ -350,14 +350,15 @@ describe('PoW', () => {
     setup({ POW_BITS: '4' })
     const c = await challenge('A')
     const nonce = await solve(c.pow.challenge)
-    const res = await create('B', { body: JSON.stringify({ pow: { challenge: c.pow.challenge, nonce } }) })
+    const res = await create('B', { body: JSON.stringify({ ticket: await ticketOf('B'), pow: { challenge: c.pow.challenge, nonce } }) })
     expect(await errorOf(res)).toBe('pow_invalid')
   })
   it('改ざんした問題・解けていない答え・難易度を下げた問題', async () => {
     setup({ POW_BITS: '8' })
     const c = await challenge('A')
     const parts = c.pow.challenge.split('.')
-    const send = (ch: string, nonce: string) => create('A', { body: JSON.stringify({ pow: { challenge: ch, nonce } }) })
+    const ticket = await ticketOf('A')
+    const send = (ch: string, nonce: string) => create('A', { body: JSON.stringify({ ticket, pow: { challenge: ch, nonce } }) })
     const longer = [...parts]
     longer[2] = String(Number(parts[2]) + 1000)
     expect(await errorOf(await send(longer.join('.'), 'x'))).toBe('pow_invalid')
@@ -375,48 +376,9 @@ describe('PoW', () => {
   })
   it('秘密がなければ作成を止める。問題を偽造させない', async () => {
     setup({ POW_BITS: '4' })
-    const res = await worker.fetch(new Request(`${BASE}/spaces`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenOf('A')}`, 'Content-Type': 'application/json', 'Content-Length': '2', 'CF-Connecting-IP': freshIp() }, body: '{}' }), { ...testEnv, POW_SECRET: undefined })
+    const body = JSON.stringify({ ticket: await ticketOf('A') })
+    const res = await worker.fetch(new Request(`${BASE}/spaces`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenOf('A')}`, 'Content-Type': 'application/json', 'Content-Length': String(body.length), 'CF-Connecting-IP': freshIp() }, body }), { ...testEnv, POW_SECRET: undefined })
     expect(res.status).toBe(503)
-  })
-})
-
-describe('Turnstile', () => {
-  const envWith = { ...testEnv, TURNSTILE_SECRET: 'sec' }
-  const send = async (token: string, body: unknown) =>
-    await worker.fetch(new Request(`${BASE}/spaces`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenOf(token)}`, 'Content-Type': 'application/json', 'Content-Length': String(JSON.stringify(body).length), 'CF-Connecting-IP': freshIp() }, body: JSON.stringify(body) }), envWith)
-  afterEach(() => {
-    teardown()
-    runtime.fetch = (input, init) => fetch(input, init)
-  })
-  it('通ったときだけ作る。hostname と action を確かめる', async () => {
-    setup()
-    runtime.fetch = async () => Response.json({ success: true, hostname: 'sync.test', action: 'create-space' })
-    expect((await send('A', {})).status).toBe(403)
-    expect((await send('A', { turnstile: 'tok' })).status).toBe(201)
-    runtime.fetch = async () => Response.json({ success: true, hostname: 'evil.test', action: 'create-space' })
-    expect(await errorOf(await send('B', { turnstile: 'tok' }))).toBe('turnstile_invalid')
-    runtime.fetch = async () => Response.json({ success: true, hostname: 'sync.test', action: 'other' })
-    expect(await errorOf(await send('B', { turnstile: 'tok' }))).toBe('turnstile_invalid')
-  })
-  it('再利用したトークンを断る', async () => {
-    setup()
-    runtime.fetch = async () => Response.json({ success: false, 'error-codes': ['timeout-or-duplicate'] })
-    const res = await send('A', { turnstile: 'used' })
-    expect(res.status).toBe(403)
-    expect(await errorOf(res)).toBe('turnstile_invalid')
-  })
-  it('検証サービスの障害では新規作成だけが止まり、既存の同期は続く', async () => {
-    setup()
-    await create('A')
-    runtime.fetch = async () => {
-      throw new Error('down')
-    }
-    const res = await send('B', { turnstile: 'tok' })
-    expect(res.status).toBe(503)
-    expect(await errorOf(res)).toBe('turnstile_unavailable')
-    runtime.fetch = async () => new Response('bad', { status: 500 })
-    expect((await send('B', { turnstile: 'tok' })).status).toBe(503)
-    expect((await call('GET', '/head', { token: 'A' })).status).toBe(200)
   })
 })
 

@@ -1,5 +1,6 @@
 package io.github.contentsview08.obb.sync
 
+import io.github.contentsview08.obb.sync.engine.ticketSpaceId
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -48,6 +49,7 @@ class FakeSyncServerTest {
                 creationClosed = o["creation_closed"] == true,
                 ratePerMinute = (o["rate_per_minute"] as Long?)?.toInt(),
                 fullPullPerHour = (o["full_pull_per_hour"] as Long?)?.toInt(),
+                ticketTtlDays = o["ticket_ttl_days"] as Long? ?: 365,
             )
             fun send(method: String, path: String, token: String?, body: String? = null, extra: Map<String, String> = emptyMap()): FakeResponse {
                 val headers = LinkedHashMap<String, String>()
@@ -55,7 +57,14 @@ class FakeSyncServerTest {
                 headers += extra
                 return server.handle(FakeRequest(method, path, headers, body))
             }
+            val tickets = HashMap<String, String>()
+            fun requestTicket(name: String, turnstile: String) = server.handle(FakeRequest("POST", "/tickets", emptyMap(), canonicalJson(mapOf("turnstile" to turnstile, "space_id" to fakeSpaceIdOf(tokenOf(name))))))
+            fun issued(name: String): String = tickets.getOrPut(name) { (parseStrictJson(requestTicket(name, "test-pass").body) as Map<String, Any?>)["ticket"] as String }
             (c["steps"] as List<Map<String, Any?>>).forEachIndexed { i, s ->
+                (s["issue"] as String?)?.let {
+                    issued(it)
+                    return@forEachIndexed
+                }
                 val at = "${c["name"]} 手順 $i"
                 val adv = s["advance_ms"] as Long?
                 if (adv != null) {
@@ -72,14 +81,23 @@ class FakeSyncServerTest {
                     for (n in 0 until s["count"] as Long) server.injectRecord(id, recordIdOf("inj$n"), "h", 1, false, nonce, cipher(272))
                     return@forEachIndexed
                 }
-                val res = if (s["push"] != null) {
+                val res = if (s["request_ticket"] != null) {
+                    requestTicket(s["request_ticket"] as String, s["turnstile"] as String)
+                } else if (s["push"] != null) {
                     val records = if (s["repeat_records"] != null) List((s["repeat_records"] as Long).toInt()) { n -> recordBody(mapOf("id" to n)) } else (s["records"] as List<Map<*, *>>).map(::recordBody)
                     send("POST", "/records", s["push"] as String, canonicalJson(mapOf("request_id" to s["request_id"], "records" to records)))
                 } else {
                     val extra = LinkedHashMap<String, String>()
                     (s["raw_auth"] as String?)?.let { extra["Authorization"] = it }
                     (s["if_none_match"] as String?)?.let { extra["If-None-Match"] = it }
-                    send(s["method"] as String, s["path"] as String, s["token"] as String?, s["body"] as String?, extra)
+                    var body = s["body"] as String?
+                    if (s["method"] == "POST" && s["path"] == "/spaces" && body == null) {
+                        val ticket = (s["ticket"] as String?)?.let { issued(it) }
+                            ?: (s["ticket_tampered"] as String?)?.let { n -> issued(n).let { t -> t.dropLast(1) + (if (t.last() == 'A') "E" else "A") } }
+                            ?: s["ticket_raw"] as String?
+                        body = canonicalJson(if (ticket == null) emptyMap<String, Any?>() else mapOf("ticket" to ticket))
+                    }
+                    send(s["method"] as String, s["path"] as String, s["token"] as String?, body, extra)
                 }
                 val e = s["expect"] as Map<String, Any?>? ?: return@forEachIndexed
                 assertEquals("$at の status", (e["status"] as Long).toInt(), res.status)
@@ -89,6 +107,18 @@ class FakeSyncServerTest {
                 (e["record_versions"] as List<Long>?)?.let { assertEquals(at, it, (parsed!!["records"] as List<Map<String, Any?>>).map { r -> r["version"] }) }
                 (e["record_count"] as Long?)?.let { assertEquals(at, it.toInt(), (parsed!!["records"] as List<*>).size) }
             }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    @Test fun 許可証の表のとおりに判定する() {
+        val file = parseStrictJson(javaClass.classLoader!!.getResourceAsStream("sync-ticket.json")!!.readBytes().toString(Charsets.UTF_8)) as Map<String, Any?>
+        val cases = file["cases"] as List<Map<String, Any?>>
+        assertEquals(true, cases.size >= 10)
+        for (c in cases) {
+            val ticket = c["ticket"] as String
+            assertEquals(c["name"].toString(), c["result"], checkFakeTicket(c["space_id"] as String, c["now_ms"] as Long, ticket))
+            assertEquals(c["name"].toString(), c["form"], ticketSpaceId(ticket) != null)
         }
     }
 }

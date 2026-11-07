@@ -11,6 +11,7 @@ export interface Env {
   RL_AUTH?: RateLimit
   RL_CREATE?: RateLimit
   RL_ADMIN?: RateLimit
+  RL_TICKET?: RateLimit
   POW_SECRET?: string
   TURNSTILE_SECRET?: string
   ADMIN_KEYS?: string
@@ -47,6 +48,13 @@ export interface Config {
   powTtlSec: number
   turnstileHostname: string
   turnstileAction: string
+  turnstileSitekey: string
+  /** 公式のテスト用の秘密を受け入れる。検証用の環境だけで立てる */
+  turnstileTestKeys: boolean
+  /** JSON の { 鍵 ID: Base64URL }。読むのは作成と発行のときだけ */
+  ticketKeys: string
+  ticketKid: string
+  ticketTtlDays: number
   creationClosed: boolean
   readOnly: boolean
   requireHttps: boolean
@@ -92,6 +100,11 @@ export function loadConfig(env: Env): Config {
     powTtlSec: int(e.POW_TTL_SEC, 300),
     turnstileHostname: text(e.TURNSTILE_HOSTNAME, ''),
     turnstileAction: text(e.TURNSTILE_ACTION, 'create-space'),
+    turnstileSitekey: text(e.TURNSTILE_SITEKEY, ''),
+    turnstileTestKeys: flag(e.TURNSTILE_TEST_KEYS, false),
+    ticketKeys: text(e.TICKET_KEYS, ''),
+    ticketKid: text(e.TICKET_KID, ''),
+    ticketTtlDays: int(e.TICKET_TTL_DAYS, 365),
     creationClosed: flag(e.CREATION_CLOSED, false),
     readOnly: flag(e.READ_ONLY, false),
     requireHttps: flag(e.REQUIRE_HTTPS, true),

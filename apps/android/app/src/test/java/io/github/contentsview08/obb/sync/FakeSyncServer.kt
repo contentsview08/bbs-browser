@@ -1,5 +1,7 @@
 package io.github.contentsview08.obb.sync
 
+import io.github.contentsview08.obb.sync.engine.powOk
+
 // テスト用の同期サーバー。決まりは docs/sync-design.md の API と packages/conformance/sync-server-rules.json。PC 版の packages/sync/test/fakeServer.ts と同じ規則
 
 class FakeRequest(val method: String, val path: String, val headers: Map<String, String> = emptyMap(), val body: String? = null)
@@ -32,11 +34,33 @@ private const val PAGE_BYTES = 1024 * 1024
 private const val MAX_CIPHERTEXT = 16 * 1024
 private const val MAX_SAFE = 9007199254740991L
 private val RECORD_KEYS = setOf("base_version", "ciphertext", "deleted", "kind_tag", "nonce", "record_id", "schema_version")
-private val KNOWN = mapOf("/spaces" to listOf("POST"), "/changes" to listOf("GET"), "/records" to listOf("POST"), "/head" to listOf("GET"), "/space" to listOf("GET", "DELETE"))
+private val KNOWN = mapOf("/tickets" to listOf("POST"), "/spaces" to listOf("POST"), "/changes" to listOf("GET"), "/records" to listOf("POST"), "/head" to listOf("GET"), "/space" to listOf("GET", "DELETE"))
 private val BEARER = Regex("Bearer ([0-9a-f]{64})")
 private val SINCE = Regex("since=(0|[1-9][0-9]*)")
 private val REQUEST_ID = Regex("[A-Za-z0-9_-]{22}")
 private val HEX_64 = Regex("[0-9a-f]{64}")
+
+private const val POW_TTL_SEC = 300L
+private val TICKET_FORM = Regex("(v1\\.([0-9a-f]{64})\\.([0-9]{1,12})\\.([A-Za-z0-9_-]{1,16}))\\.([A-Za-z0-9_-]{43})")
+
+@Suppress("UNCHECKED_CAST")
+private val TICKET_FILE = parseStrictJson(FakeSyncServer::class.java.classLoader!!.getResourceAsStream("sync-ticket.json")!!.readBytes().toString(Charsets.UTF_8)) as Map<String, Any?>
+private val TICKET_KID = (TICKET_FILE["key"] as Map<*, *>)["kid"] as String
+private val TICKET_KEY = fromBase64Url((TICKET_FILE["key"] as Map<*, *>)["secret"] as String)
+
+private fun mac(text: String) = toBase64Url(hmacSha256(TICKET_KEY, utf8(text)))
+
+fun signTicket(spaceId: String, expSec: Long): String {
+    val payload = "v1.$spaceId.$expSec.$TICKET_KID"
+    return "$payload.${mac("obb-sync-ticket-v1:$payload")}"
+}
+
+fun checkFakeTicket(spaceId: String, nowMs: Long, ticket: String): String {
+    val m = TICKET_FORM.matchEntire(ticket) ?: return "invalid"
+    val g = m.groupValues
+    if (g[4] != TICKET_KID || g[5] != mac("obb-sync-ticket-v1:${g[1]}") || g[2] != spaceId) return "invalid"
+    return if (g[3].toLong() * 1000 <= nowMs) "expired" else "ok"
+}
 
 private fun isCount(v: Any?) = v is Long && v in 0..MAX_SAFE
 private fun json(status: Int, value: Any?, headers: Map<String, String> = emptyMap()) = FakeResponse(status, headers, canonicalJson(value))
@@ -62,6 +86,9 @@ class FakeSyncServer(
     /** null は数えない */
     private val ratePerMinute: Int? = 20,
     private val fullPullPerHour: Int? = 3,
+    private val ticketTtlDays: Long = 365,
+    /** 0 は問題を出さない */
+    private val powBits: Long = 0,
 ) {
     val spaces = LinkedHashMap<String, FakeSpace>()
     private var epochs = 0
@@ -108,9 +135,10 @@ class FakeSyncServer(
         val methods = KNOWN[path] ?: return fail(404, "not_found")
         if (req.method !in methods) return fail(405, "method_not_allowed")
         if ((req.body?.length ?: 0) > MAX_BODY) return fail(413, "too_large")
+        if (path == "/tickets") return tickets(req.body.orEmpty())
         val m = BEARER.matchEntire(req.headers["Authorization"].orEmpty()) ?: return fail(401, "unauthorized")
         val id = fakeSpaceIdOf(m.groupValues[1])
-        if (path == "/spaces") return createSpace(id)
+        if (path == "/spaces") return createSpace(id, req.body.orEmpty())
         val space = spaces[id] ?: return fail(404, "space_not_found")
         val t = now()
         if (ratePerMinute != null) {
@@ -138,7 +166,52 @@ class FakeSyncServer(
 
     private fun usedBytes(s: FakeSpace): Long = s.records.values.sumOf { it.ciphertext.length.toLong() }
 
-    private fun createSpace(id: String): FakeResponse {
+    /** Turnstile の結果はトークンの値で決める(apps/sync-server/test/fakeSiteverify.ts と同じ) */
+    @Suppress("UNCHECKED_CAST")
+    private fun tickets(text: String): FakeResponse {
+        val b = try {
+            parseStrictJson(text) as? Map<String, Any?>
+        } catch (_: Exception) {
+            null
+        } ?: return fail(400, "bad_request")
+        if (b.keys != setOf("space_id", "turnstile")) return fail(400, "bad_request")
+        val turnstile = b["turnstile"] as? String
+        val id = b["space_id"] as? String
+        if (turnstile.isNullOrEmpty() || id == null || !HEX_64.matches(id)) return fail(400, "bad_request")
+        if (turnstile == "test-down") return fail(503, "turnstile_unavailable")
+        if (turnstile != "test-pass") return fail(403, "turnstile_invalid")
+        val exp = Math.floorDiv(now() + ticketTtlDays * DAY, 1000L)
+        return json(200, mapOf("ticket" to signTicket(id, exp), "exp" to exp))
+    }
+
+    private fun checkFakePow(id: String, challenge: Any?, nonce: Any?): Boolean {
+        if (challenge !is String || nonce !is String) return false
+        val p = challenge.split(".")
+        if (p.size != 5 || p[1] != id || p[2].toLong() * 1000 <= now() || p[3].toLong() < powBits) return false
+        if (p[4] != mac(p.subList(0, 4).joinToString("."))) return false
+        return powOk(challenge, nonce, p[3].toInt())
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun createSpace(id: String, text: String): FakeResponse {
+        val b = try {
+            parseStrictJson(text) as? Map<String, Any?>
+        } catch (_: Exception) {
+            null
+        } ?: return fail(400, "bad_request")
+        if (b.keys.any { it != "ticket" && it != "pow" }) return fail(400, "bad_request")
+        if (!b.containsKey("ticket")) return fail(403, "ticket_required")
+        val ticket = b["ticket"] as? String ?: return fail(400, "bad_request")
+        val check = checkFakeTicket(id, now(), ticket)
+        if (check != "ok") return fail(403, if (check == "expired") "ticket_expired" else "ticket_invalid")
+        if (powBits > 0) {
+            val pow = b["pow"] as? Map<String, Any?>
+            if (pow == null) {
+                val payload = "v1.$id.${Math.floorDiv(now(), 1000L) + POW_TTL_SEC}.$powBits"
+                return json(403, mapOf("error" to "pow_required", "pow" to mapOf("challenge" to "$payload.${mac(payload)}", "bits" to powBits)))
+            }
+            if (!checkFakePow(id, pow["challenge"], pow["nonce"])) return fail(403, "pow_invalid")
+        }
         val t = now()
         spaces[id]?.let {
             it.lastUsed = t

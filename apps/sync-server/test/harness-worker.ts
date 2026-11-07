@@ -5,6 +5,9 @@ import worker from '../src/index'
 import type { Env } from '../src/config'
 import { fromHex, randomToken, sha256, toHex } from '../src/encoding'
 import { runtime } from '../src/runtime'
+import { fakeSiteverify } from './fakeSiteverify'
+
+runtime.fetch = fakeSiteverify
 
 export interface InjectRecord {
   record_id: string

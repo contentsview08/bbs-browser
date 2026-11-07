@@ -4684,7 +4684,8 @@
      "1"
     ],
     "pending": 0,
-    "state": "idle"
+    "state": "idle",
+    "has_ticket": true
    },
    "$server": {
     "of": {
@@ -5085,6 +5086,406 @@
     "bad_counts": {
      "swapped": 1
     }
+   }
+  }
+ },
+ {
+  "name": "許可証がなければ作成を送らず止まり、手元が残る。通すと続く",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "pair_first",
+    "no_ticket": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "phase": "blocked",
+      "last_error": "ticket_required",
+      "has_ticket": false,
+      "favorite_threads": [
+       "1"
+      ],
+      "requests": {
+       "GET /changes": 1
+      }
+     },
+     "$server": {
+      "spaces": 0,
+      "tickets": 0
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "start_page"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "has_ticket": true,
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "spaces": 1,
+    "tickets": 1
+   }
+  }
+ },
+ {
+  "name": "領域が消えても、同じ許可証で人の操作なしに作り直す",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "spaces": 1,
+    "tickets": 1,
+    "of": {
+     "pc": {
+      "exists": true,
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "2 台目は許可証を受け取り、Turnstile を通さず作り直せる",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "has_ticket": true,
+      "favorite_threads": [
+       "1"
+      ]
+     },
+     "$server": {
+      "tickets": 1
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "state": "idle",
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "pc": {
+    "state": "idle",
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "$server": {
+    "spaces": 1,
+    "tickets": 1
+   }
+  }
+ },
+ {
+  "name": "許可証の期限が切れると止まり、手元が残る。通し直すと作り直す",
+  "devices": [
+   "pc"
+  ],
+  "server": {
+   "ticket_ttl_days": 1
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 86400000
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "phase": "blocked",
+      "last_error": "ticket_expired",
+      "favorite_threads": [
+       "1"
+      ],
+      "state": "blocked"
+     },
+     "$server": {
+      "spaces": 0,
+      "tickets": 1
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "blocked"
+     },
+     "$server": {
+      "spaces": 0
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "start_page"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0
+   },
+   "$server": {
+    "spaces": 1,
+    "tickets": 2,
+    "of": {
+     "pc": {
+      "records": 1
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "サーバーが許可証を断ると、作り直しの待ちにせず止まる",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "server_response",
+    "path": "/spaces",
+    "status": 403,
+    "body": {
+     "error": "ticket_invalid"
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "blocked",
+    "phase": "blocked",
+    "last_error": "ticket_invalid",
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "$server": {
+    "spaces": 0
+   }
+  }
+ },
+ {
+  "name": "計算の問題を解いて作る。許可証を付けて送り直す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "server": {
+   "pow_bits": 8
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "spaces": 1,
+      "tickets": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "state": "idle",
+    "favorite_threads": [
+     "1"
+    ]
+   },
+   "$server": {
+    "spaces": 1,
+    "tickets": 1
    }
   }
  }

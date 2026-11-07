@@ -1,6 +1,14 @@
 // テスト用の同期サーバー。決まりは docs/sync-design.md の API と packages/conformance/sync-server-rules.json。スマホ版の FakeSyncServer.kt と同じ規則
+import { readFileSync } from 'node:fs'
+import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { fromBase64Url, fromHex, toHex } from '../src/index'
+import { fromBase64Url, fromHex, toBase64Url, toHex, utf8 } from '../src/index'
+import { powOk } from '../src/engine/pow'
+
+const TICKET = JSON.parse(readFileSync(new URL('../../conformance/sync-ticket.json', import.meta.url), 'utf-8')) as { key: { kid: string; secret: string } }
+const TICKET_KEY = fromBase64Url(TICKET.key.secret)
+const TICKET_FORM = /^(v1\.([0-9a-f]{64})\.([0-9]{1,12})\.([A-Za-z0-9_-]{1,16}))\.([A-Za-z0-9_-]{43})$/
+const POW_TTL_SEC = 300
 
 export interface FakeServerOptions {
   now: () => number
@@ -14,6 +22,9 @@ export interface FakeServerOptions {
   /** null は数えない */
   rate_per_minute?: number | null
   full_pull_per_hour?: number | null
+  ticket_ttl_days?: number
+  /** 0 は問題を出さない */
+  pow_bits?: number
 }
 
 export interface FakeRequest {
@@ -80,7 +91,7 @@ const PAGE_RECORDS = 500
 const PAGE_BYTES = 1024 * 1024
 const MAX_CIPHERTEXT = 16 * 1024
 const RECORD_KEYS = ['base_version', 'ciphertext', 'deleted', 'kind_tag', 'nonce', 'record_id', 'schema_version']
-const KNOWN: Record<string, string[]> = { '/spaces': ['POST'], '/changes': ['GET'], '/records': ['POST'], '/head': ['GET'], '/space': ['GET', 'DELETE'] }
+const KNOWN: Record<string, string[]> = { '/tickets': ['POST'], '/spaces': ['POST'], '/changes': ['GET'], '/records': ['POST'], '/head': ['GET'], '/space': ['GET', 'DELETE'] }
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
 const json = (status: number, value: unknown, headers: Record<string, string> = {}): FakeResponse => ({ status, headers, body: JSON.stringify(value) })
@@ -99,6 +110,32 @@ export function fakeSpaceIdOf(tokenHex: string): string {
   return toHex(sha256(fromHex(tokenHex)))
 }
 
+const mac = (text: string) => toBase64Url(hmac(sha256, TICKET_KEY, utf8(text)))
+
+export function signTicket(spaceId: string, expSec: number): string {
+  const payload = `v1.${spaceId}.${expSec}.${TICKET.key.kid}`
+  return `${payload}.${mac(`obb-sync-ticket-v1:${payload}`)}`
+}
+
+export function checkFakeTicket(spaceId: string, nowMs: number, ticket: string): 'ok' | 'invalid' | 'expired' {
+  const m = TICKET_FORM.exec(ticket)
+  if (!m || m[4] !== TICKET.key.kid || m[5] !== mac(`obb-sync-ticket-v1:${m[1]}`) || m[2] !== spaceId) return 'invalid'
+  return Number(m[3]) * 1000 <= nowMs ? 'expired' : 'ok'
+}
+
+function signPow(spaceId: string, expSec: number, bits: number): string {
+  const payload = `v1.${spaceId}.${expSec}.${bits}`
+  return `${payload}.${mac(payload)}`
+}
+
+function checkFakePow(spaceId: string, nowMs: number, bits: number, challenge: unknown, nonce: unknown): boolean {
+  if (typeof challenge !== 'string' || typeof nonce !== 'string') return false
+  const p = challenge.split('.')
+  if (p.length !== 5 || p[1] !== spaceId || Number(p[2]) * 1000 <= nowMs || Number(p[3]) < bits) return false
+  if (p[4] !== mac(p.slice(0, 4).join('.'))) return false
+  return powOk(challenge, nonce, Number(p[3]))
+}
+
 export class FakeSyncServer implements ScenarioServer {
   readonly spaces = new Map<string, Space>()
   private epochs = 0
@@ -115,6 +152,8 @@ export class FakeSyncServer implements ScenarioServer {
       creation_closed: false,
       rate_per_minute: 20,
       full_pull_per_hour: 3,
+      ticket_ttl_days: 365,
+      pow_bits: 0,
       ...options,
     }
   }
@@ -172,11 +211,12 @@ export class FakeSyncServer implements ScenarioServer {
     if (!methods) return fail(404, 'not_found')
     if (!methods.includes(req.method)) return fail(405, 'method_not_allowed')
     if ((req.body?.length ?? 0) > MAX_BODY) return fail(413, 'too_large')
+    if (path === '/tickets') return this.tickets(req.body ?? '')
     const auth = req.headers?.Authorization ?? ''
     const m = /^Bearer ([0-9a-f]{64})$/.exec(auth)
     if (!m) return fail(401, 'unauthorized')
     const id = fakeSpaceIdOf(m[1])
-    if (path === '/spaces') return this.createSpace(id)
+    if (path === '/spaces') return this.createSpace(id, req.body ?? '')
     const space = this.spaces.get(id)
     if (!space) return fail(404, 'space_not_found')
     const now = this.o.now()
@@ -209,7 +249,42 @@ export class FakeSyncServer implements ScenarioServer {
     return n
   }
 
-  private createSpace(id: string): FakeResponse {
+  /** Turnstile の結果はトークンの値で決める(apps/sync-server/test/fakeSiteverify.ts と同じ) */
+  private tickets(text: string): FakeResponse {
+    let v: unknown
+    try {
+      v = JSON.parse(text)
+    } catch {
+      return fail(400, 'bad_request')
+    }
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return fail(400, 'bad_request')
+    const b = v as Record<string, unknown>
+    if (Object.keys(b).sort().join() !== 'space_id,turnstile') return fail(400, 'bad_request')
+    if (typeof b.turnstile !== 'string' || b.turnstile === '' || typeof b.space_id !== 'string' || !/^[0-9a-f]{64}$/.test(b.space_id)) return fail(400, 'bad_request')
+    if (b.turnstile === 'test-down') return fail(503, 'turnstile_unavailable')
+    if (b.turnstile !== 'test-pass') return fail(403, 'turnstile_invalid')
+    const exp = Math.floor((this.o.now() + this.o.ticket_ttl_days * DAY) / 1000)
+    return json(200, { ticket: signTicket(b.space_id, exp), exp })
+  }
+
+  private createSpace(id: string, text: string): FakeResponse {
+    let v: unknown
+    try {
+      v = JSON.parse(text)
+    } catch {
+      return fail(400, 'bad_request')
+    }
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return fail(400, 'bad_request')
+    const b = v as { ticket?: unknown; pow?: { challenge?: unknown; nonce?: unknown } }
+    if (Object.keys(b).some((k) => k !== 'ticket' && k !== 'pow')) return fail(400, 'bad_request')
+    if (b.ticket === undefined) return fail(403, 'ticket_required')
+    if (typeof b.ticket !== 'string') return fail(400, 'bad_request')
+    const check = checkFakeTicket(id, this.o.now(), b.ticket)
+    if (check !== 'ok') return fail(403, check === 'expired' ? 'ticket_expired' : 'ticket_invalid')
+    if (this.o.pow_bits > 0) {
+      if (!b.pow) return json(403, { error: 'pow_required', pow: { challenge: signPow(id, Math.floor(this.o.now() / 1000) + POW_TTL_SEC, this.o.pow_bits), bits: this.o.pow_bits } })
+      if (!checkFakePow(id, this.o.now(), this.o.pow_bits, b.pow.challenge, b.pow.nonce)) return fail(403, 'pow_invalid')
+    }
     const now = this.o.now()
     const existing = this.spaces.get(id)
     if (existing) {

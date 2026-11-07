@@ -9,6 +9,11 @@ export function jsonText(status: number, body: string, extra: Record<string, str
   return new Response(body, { status, headers: { ...BASE, 'Content-Type': 'application/json', ...extra } })
 }
 
+/** Referer は origin だけにする。Turnstile にホスト名は要るが、space_id の入った問い合わせは渡さない */
+export function htmlText(body: string, csp: string): Response {
+  return new Response(body, { status: 200, headers: { ...BASE, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp, 'Referrer-Policy': 'strict-origin', 'X-Frame-Options': 'DENY' } })
+}
+
 export const fail = (status: number, error: string): Response => jsonText(status, JSON.stringify({ error }))
 
 /** 定義のないパスと管理 API の失敗で同じ応答にする */

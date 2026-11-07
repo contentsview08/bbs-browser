@@ -1,4 +1,5 @@
 // Node から Miniflare の本物のサーバーを動かす。共通シナリオと CLI のテストで使う
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { Miniflare } from 'miniflare'
@@ -6,6 +7,7 @@ import type { FakeRequest, FakeResponse, ScenarioServer, ScenarioSpace } from '.
 
 const ENTRY = fileURLToPath(new URL('../harness-worker.ts', import.meta.url))
 export const ORIGIN = 'https://sync.test'
+const TICKET = JSON.parse(readFileSync(new URL('../../../../packages/conformance/sync-ticket.json', import.meta.url), 'utf-8')) as { key: { kid: string; secret: string } }
 
 export async function startServer(bindings: Record<string, string> = {}): Promise<Miniflare> {
   const out = await build({ entryPoints: [ENTRY], bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', conditions: ['workerd', 'worker'], mainFields: ['module', 'main'], external: ['cloudflare:*'], write: false, logLevel: 'silent' })
@@ -13,7 +15,7 @@ export async function startServer(bindings: Record<string, string> = {}): Promis
     modules: [{ type: 'ESModule', path: 'harness.mjs', contents: out.outputFiles[0].text }],
     compatibilityDate: '2026-03-01',
     durableObjects: { SPACE: { className: 'SpaceDO', useSQLite: true }, LEDGER: { className: 'LedgerDO', useSQLite: true } },
-    bindings: { POW_SECRET: 'test-pow-secret', ...bindings },
+    bindings: { POW_SECRET: 'test-pow-secret', TURNSTILE_SECRET: 'test-turnstile-secret', TICKET_KEYS: JSON.stringify({ [TICKET.key.kid]: TICKET.key.secret }), TICKET_KID: TICKET.key.kid, ...bindings },
   })
 }
 
@@ -31,6 +33,8 @@ export function scenarioOverrides(options: Record<string, unknown>, extra: Recor
   if (options.quota_bytes !== undefined) o.QUOTA_BYTES = String(options.quota_bytes)
   if (options.quota_records !== undefined) o.QUOTA_RECORDS = String(options.quota_records)
   if (options.creation_closed === true) o.CREATION_CLOSED = '1'
+  if (options.ticket_ttl_days !== undefined) o.TICKET_TTL_DAYS = String(options.ticket_ttl_days)
+  if (options.pow_bits !== undefined) o.POW_BITS = String(options.pow_bits)
   return o
 }
 

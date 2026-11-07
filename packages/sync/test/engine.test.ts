@@ -4,7 +4,7 @@ import initSqlJs from 'sql.js'
 import { describe, expect, it } from 'vitest'
 import { LogStore, UserOps, type SqlDb } from '../../logstore/src/index'
 import * as S from '../src/index'
-import { FakeSyncServer } from './fakeServer'
+import { FakeSyncServer, signTicket } from './fakeServer'
 
 const migrations = (await import('node:fs')).readdirSync(new URL('../../logstore/migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(`../../logstore/migrations/${f}`, import.meta.url), 'utf-8'))
 const SQL = await initSqlJs()
@@ -67,6 +67,7 @@ function setup(o: { lease?: string; db?: SqlDb; now?: () => number; server?: Fak
 }
 
 const K = new Uint8Array(32).fill(7)
+const TICKET = signTicket(S.spaceId(S.deriveKeys(K).auth_token), 4_000_000_000)
 
 describe('sync-config.json', () => {
   const cfg = JSON.parse(readFileSync(new URL('../../conformance/sync-config.json', import.meta.url), 'utf-8'))
@@ -108,7 +109,7 @@ describe('同時実行の防止', () => {
         },
       }),
     })
-    await s.engine.pair(K)
+    await s.engine.pair(K, TICKET)
     const first = s.engine.runCycle({ manual: true })
     const others = [s.engine.runCycle({ manual: true }), s.engine.runCycle({ manual: true }), s.engine.runCycle({ manual: true })]
     await new Promise((r) => setTimeout(r, 0))
@@ -126,8 +127,8 @@ describe('同時実行の防止', () => {
     const server = new FakeSyncServer({ now: () => now, rate_per_minute: null, full_pull_per_hour: null })
     const a = setup({ db, lease: 'a', now: () => now, server })
     const b = setup({ db, lease: 'b', now: () => now, server })
-    await a.engine.pair(K)
-    b.setKeys({ k: K, deviceId: 'dev' })
+    await a.engine.pair(K, TICKET)
+    b.setKeys({ k: K, deviceId: 'dev', ticket: TICKET })
     expect((await a.engine.runCycle({ manual: true })).state).toBe('idle')
     const r = await b.engine.runCycle({ manual: true })
     expect(r.skipped).toBe('lease')
@@ -139,7 +140,7 @@ describe('同時実行の防止', () => {
   it('pull は自動のきっかけなら 10 秒あける。手動は例外', async () => {
     let pulls = 0
     const s = setup({ onRequest: (r) => void (r.url.includes('/changes') && pulls++) })
-    await s.engine.pair(K)
+    await s.engine.pair(K, TICKET)
     await s.engine.runCycle({ manual: true })
     pulls = 0
     await s.engine.runCycle()
@@ -156,7 +157,7 @@ describe('同時実行の防止', () => {
     let now = 1_800_000_000_000
     const server = new FakeSyncServer({ now: () => now, rate_per_minute: null, full_pull_per_hour: null })
     const other = setup({ now: () => now, server })
-    await other.engine.pair(K)
+    await other.engine.pair(K, TICKET)
     await new UserOps(other.store).favoriteThreadAdd(thread('1'), now)
     await other.engine.runCycle({ manual: true })
     now += 1000
@@ -175,7 +176,7 @@ describe('同時実行の防止', () => {
       },
     }
     const me = setup({ db: wrapped, now: () => now, server })
-    await me.engine.pair(K)
+    await me.engine.pair(K, TICKET)
     await me.engine.runCycle({ manual: true })
     expect(interfered).toBe(true)
     // 入れ違いの直後は適用が行を書く。次の周で操作が処理され、全端末で消える
@@ -202,7 +203,7 @@ describe('通信の口', () => {
       now: () => 1,
       newDeviceId: () => 'dev',
     })
-    await engine.pair(K)
+    await engine.pair(K, TICKET)
     const r = await engine.runCycle({ manual: true })
     expect(r.state).toBe('blocked')
     expect(sent).toBe(0)
@@ -217,7 +218,7 @@ describe('通信の口', () => {
         },
       }),
     })
-    await s.engine.pair(K)
+    await s.engine.pair(K, TICKET)
     expect((await s.engine.runCycle({ manual: true })).state).toBe('backoff')
     expect((await s.db.select<{ value: string }>("SELECT value FROM sync_state WHERE key = 'last_error'"))[0].value).toBe('too_large')
   })
@@ -225,7 +226,7 @@ describe('通信の口', () => {
   it('要求の本文に平文を載せない。トークンはヘッダーだけ', async () => {
     const bodies: string[] = []
     const s = setup({ onRequest: (r) => void (r.body && bodies.push(r.body)) })
-    await s.engine.pair(K)
+    await s.engine.pair(K, TICKET)
     await new UserOps(s.store).favoriteThreadAdd({ ...thread('1'), title: 'ひみつのスレタイ' }, 1)
     await s.engine.runCycle({ manual: true })
     const all = bodies.join('\n')
@@ -233,5 +234,31 @@ describe('通信の口', () => {
     expect(all).not.toContain('ひみつ')
     expect(all).not.toContain('a.5ch.io')
     expect(all).not.toContain(S.toHex(S.deriveKeys(K).auth_token))
+  })
+})
+
+describe('許可証', () => {
+  it('別の領域の許可証を受け取らない。置き換えても鍵はそのまま', async () => {
+    const s = setup()
+    const other = signTicket('c'.repeat(64), 4_000_000_000)
+    await expect(s.engine.pair(K, other)).rejects.toThrow('bad_ticket')
+    await expect(s.engine.pair(K, 'garbage')).rejects.toThrow('bad_ticket')
+    await expect(s.engine.setTicket(TICKET)).rejects.toThrow('bad_ticket')
+    await s.engine.pair(K, null)
+    await expect(s.engine.setTicket(other)).rejects.toThrow('bad_ticket')
+    await s.engine.setTicket(TICKET)
+    expect((await s.engine.runCycle({ manual: true })).state).toBe('idle')
+    expect(s.server.spaceCount()).toBe(1)
+  })
+  it('許可証を作成の本文に入れ、トークンと一緒に送る。問題が出たら両方を送り直す', async () => {
+    const bodies: string[] = []
+    const s = setup({ onRequest: (r) => void (r.url.endsWith('/spaces') && bodies.push(r.body as string)) })
+    s.server.o.pow_bits = 4
+    await s.engine.pair(K, TICKET)
+    await s.engine.runCycle({ manual: true })
+    expect(bodies.length).toBe(2)
+    expect(JSON.parse(bodies[0])).toEqual({ ticket: TICKET })
+    expect(Object.keys(JSON.parse(bodies[1])).sort()).toEqual(['pow', 'ticket'])
+    expect(s.server.spaceCount()).toBe(1)
   })
 })

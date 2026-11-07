@@ -49,7 +49,11 @@ private class World(o: Map<String, Any?>) {
         creationClosed = o["creation_closed"] == true,
         ratePerMinute = null,
         fullPullPerHour = null,
+        ticketTtlDays = o["ticket_ttl_days"] as Long? ?: 365,
+        powBits = o["pow_bits"] as Long? ?: 0,
     )
+    /** 同期を始めるページを通した回数。人の操作の代わり */
+    var tickets = 0
     val faults = ArrayList<Fault>()
     val log = ArrayList<LogEntry>()
     var mark = 0
@@ -115,6 +119,13 @@ private class Device(val name: String, val world: World, val skew: Long) {
         return SyncResponse(res.status, res.body, res.headers)
     }
 
+    /** 同期を始めるページを通して許可証を受け取る。画面の手順の代わりなので通信の記録に入れない */
+    fun startPage(k: ByteArray): String {
+        world.tickets++
+        val res = world.server.handle(FakeRequest("POST", "/tickets", emptyMap(), canonicalJson(mapOf("turnstile" to "test-pass", "space_id" to spaceId(deriveKeys(k).authToken)))))
+        return (parseStrictJson(res.body) as Map<String, Any?>)["ticket"] as String
+    }
+
     fun newEngine() {
         engine = SyncEngine(
             db = sql,
@@ -175,13 +186,17 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
             listOf(s["url"], "2ch-compat", s["name"]),
         )
         "pair_first" -> {
-            d!!.engine.pair(keyOf(s["device"] as String))
+            val k = keyOf(s["device"] as String)
+            d!!.engine.pair(k, if (s["no_ticket"] == true) null else d.startPage(k))
             d.sync()
         }
         "pair_join" -> {
-            d!!.engine.pair(w.devices.getValue(s["from"] as String).keys.value!!.k)
+            // QR とコピー用のコードの中身は K と許可証
+            val from = w.devices.getValue(s["from"] as String).keys.value!!
+            d!!.engine.pair(from.k, from.ticket)
             d.sync()
         }
+        "start_page" -> d!!.engine.setTicket(d.startPage(material().k))
         "sync" -> d!!.sync()
         "sync_auto" -> d!!.sync(false)
         "restart" -> d!!.newEngine()
@@ -229,6 +244,7 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         val e = ev as Map<String, Any?>
         if (name == "\$server") {
             e["spaces"]?.let { assertEquals("$label: サーバーの領域の数", (it as Long).toInt(), w.server.spaces.size) }
+            e["tickets"]?.let { assertEquals("$label: 同期を始めるページを通した回数", (it as Long).toInt(), w.tickets) }
             e["hosts"]?.let { checkEq("$label: 通信先", it, w.log.map { l -> l.host }.distinct()) }
             e["request_id_repeated"]?.let {
                 val ids = w.log.mapNotNull { l -> l.requestId }
@@ -263,6 +279,7 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         if (e.containsKey("bad_counts")) assertEquals("$at の bad_counts", e["bad_counts"]?.let { canonicalJson(it) }, d.state("bad_counts"))
         e["inflight"]?.let { assertEquals("$at の push_inflight", it, d.state("push_inflight") != null) }
         e["device_id"]?.let { assertEquals("$at の device_id", it, d.state("device_id")) }
+        e["has_ticket"]?.let { assertEquals("$at の許可証", it, d.keys.value?.ticket != null) }
         e["keys"]?.let { assertEquals("$at の鍵", it, d.keys.value != null) }
         e["pending_confirm"]?.let { assertEquals("$at の pending_confirm", canonicalJson(it), d.state("pending_confirm")) }
         e["trace"]?.let { checkEq("$at の状態の順", it, d.trace) }

@@ -15,7 +15,9 @@ import {
   settleDone,
   staggerDelays,
   type PostRect,
+  type ScrollPosition,
 } from '../src/utils/threadScroll'
+
 
 describe('openTarget: 開いたときの行き先', () => {
   const base = { savedFound: false, openPosition: 'unread' as const, unreadFrom: 1, hasUnreadPost: false }
@@ -72,6 +74,46 @@ describe('openTarget: 開いたときの行き先', () => {
       expect(openTarget({ ...base, openPosition: 'bottom', closed: { no: 578, offset: 0 } })).toEqual({ kind: 'bottom', pendingUnread: false })
     })
   })
+
+  // スマホ版 ThreadScrollTest と同じ場面
+  describe('同期で既読が進んだとき', () => {
+    const base = { savedFound: true, openPosition: 'unread' as const }
+    const open = (saved: ScrollPosition | undefined, savedFound: boolean, readNo: number, hasUnreadPost: boolean) =>
+      openTarget({ ...base, saved, savedFound, readNo, unreadFrom: readNo + 1, hasUnreadPost })
+
+    it('覚えたときより既読が先なら、既読の次から', () => {
+      expect(open({ no: 95, offset: 0, readNo: 100 }, true, 200, true)).toEqual({ kind: 'unread', no: 201 })
+    })
+    it('既読の次がまだ手元になければ、一番下で新着を待つ', () => {
+      expect(open({ no: 95, offset: 0, readNo: 100 }, true, 200, false)).toEqual({ kind: 'bottom', pendingUnread: true })
+    })
+    it('覚えたときの既読が今と同じなら覚えた位置', () => {
+      const saved = { no: 95, offset: -12, readNo: 100 }
+      expect(open(saved, true, 100, true)).toEqual({ kind: 'saved', position: saved })
+    })
+    it('覚えた位置の方が先(既読の書き込みが追いついていない)なら覚えた位置', () => {
+      const saved = { no: 115, offset: 0, readNo: 120 }
+      expect(open(saved, true, 100, true)).toEqual({ kind: 'saved', position: saved })
+    })
+    it('どちらもなければ先頭', () => {
+      expect(open(undefined, false, 0, false)).toEqual({ kind: 'top' })
+    })
+    it('覚えた位置のレスが手元にない(ログを取り直した)なら既読の次', () => {
+      expect(open({ no: 500, offset: 0, readNo: 500 }, false, 500, true)).toEqual({ kind: 'unread', no: 501 })
+    })
+    it('覚えた位置が見つからず既読も 0 なら先頭', () => {
+      expect(open({ no: 500, offset: 0, readNo: 500 }, false, 0, false)).toEqual({ kind: 'top' })
+    })
+    it('既読を添えていない古い覚えはそのまま使う', () => {
+      const saved = { no: 95, offset: 0 }
+      expect(open(saved, true, 200, true)).toEqual({ kind: 'saved', position: saved })
+    })
+    it('閉じたときの位置も、既読が進んでいれば使わない', () => {
+      const closed = { no: 578, offset: 0, readNo: 1000 }
+      expect(openTarget({ ...base, savedFound: false, closed, readNo: 1200, unreadFrom: 1201, hasUnreadPost: false })).toEqual({ kind: 'bottom', pendingUnread: true })
+      expect(openTarget({ ...base, savedFound: false, closed, readNo: 1000, unreadFrom: 1001, hasUnreadPost: false })).toEqual({ kind: 'saved', position: closed, pendingUnread: true })
+    })
+  })
 })
 
 describe('newPostsTarget: 新着が届いたときの行き先', () => {
@@ -100,6 +142,11 @@ describe('newPostsTarget: 新着が届いたときの行き先', () => {
 
   it('読んでいる途中で一番下にいれば、動かして見せる', () => {
     expect(newPostsTarget(base)).toEqual({ no: 101, animate: true })
+  })
+
+  it('同期で既読が手元のレスより先なら、新着の頭は既読の次', () => {
+    expect(newPostsTarget({ ...base, opening: true, readNo: 200 })).toEqual({ no: 201, animate: false })
+    expect(newPostsTarget({ ...base, readNo: 200 })).toEqual({ no: 201, animate: true })
   })
 
   it('一番下にいなければ動かさない', () => {

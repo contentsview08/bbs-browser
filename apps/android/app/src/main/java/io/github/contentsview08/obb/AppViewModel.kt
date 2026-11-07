@@ -44,11 +44,14 @@ import io.github.contentsview08.obb.ui.RenderMemo
 import io.github.contentsview08.obb.ui.renderPostsReusing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.withContext
 
 /** 読んでいた位置(offset はレスの中のずれ、bottom は一番下にいたか) */
-data class ScrollPos(val no: Int, val offset: Int, val bottom: Boolean)
+/** 読んでいた位置。readNo は覚えたときの既読(開き直すときに、同期で既読が先へ進んだかを見分ける。古い覚えには無い) */
+data class ScrollPos(val no: Int, val offset: Int, val bottom: Boolean, val readNo: Int? = null)
 
 /** 読み込めなかった理由を、人に分かる言葉にする(通信の失敗は英語の決まり文句なので言い換える) */
 fun loadErrorText(e: Throwable): String = when (e) {
@@ -178,6 +181,8 @@ sealed interface Page {
         var archived by mutableStateOf(false)
         var error by mutableStateOf<String?>(null)
         var readNo = 0
+        /** 画面が入れる。待っている既読と位置を今すぐ書く(一覧へ戻る直前に呼び、戻った先が古い既読で未読を数えないように) */
+        var flushRead: (() -> Unit)? = null
         /** 自分の書き込みのレス番号 */
         var ownNos by mutableStateOf<Set<Int>>(emptySet())
         /** いま書き込んだ本文(その取り直しで、自分宛ての知らせを出さないため) */
@@ -285,14 +290,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 設定の「今すぐ消す」 */
+    /** 設定の「今すぐ消す」。残す日数が 0(消さない)なら何もしない */
     fun pruneLogsNow() {
+        val days = prefs.logRetentionDays
+        if (days <= 0) {
+            toast = "残す日数が 0 なので消しません"
+            return
+        }
         viewModelScope.launch {
-            val days = prefs.logRetentionDays.takeIf { it > 0 } ?: 30
-            val n = db.pruneLogs(System.currentTimeMillis() - days * 86_400_000L)
+            val n = pruneLogs(days)
             reloadSide()
             toast = "$n 件のスレのログを消しました"
         }
+    }
+
+    /** しばらく開いていないスレのログを消す。開いているスレは残し、消したスレの覚えた位置も捨てる(開き直したとき古い位置へ戻らないように)。消した数を返す */
+    private suspend fun pruneLogs(days: Int): Int {
+        val gone = db.pruneLogs(System.currentTimeMillis() - days * 86_400_000L, threadPages().map { it.summary })
+        forgetPositions(gone.map { (board, key) -> board + key })
+        return gone.size
     }
 
     /**
@@ -303,13 +319,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val positionCache = HashMap<String, ScrollPos?>()
 
     fun position(id: String): ScrollPos? = positionCache.getOrPut(id) {
-        positionStore.getString(id, null)?.split(',')?.takeIf { it.size == 3 }?.let { ScrollPos(it[0].toInt(), it[1].toInt(), it[2] == "1") }
+        positionStore.getString(id, null)?.split(',')?.takeIf { it.size in 3..4 }?.let { ScrollPos(it[0].toInt(), it[1].toInt(), it[2] == "1", it.getOrNull(3)?.toIntOrNull()) }
     }
 
     fun savePosition(id: String, pos: ScrollPos) {
         if (positionCache[id] == pos) return
         positionCache[id] = pos
-        positionStore.edit().putString(id, "${pos.no},${pos.offset},${if (pos.bottom) 1 else 0}").apply()
+        positionStore.edit().putString(id, "${pos.no},${pos.offset},${if (pos.bottom) 1 else 0}${pos.readNo?.let { ",$it" } ?: ""}").apply()
     }
 
     /** 覚えた位置を捨てる(ログの削除)。開き直すと先頭か既読の次から始まる */
@@ -470,8 +486,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             openStartWindow = { url ->
                 val d = kotlinx.coroutines.CompletableDeferred<String?>()
                 syncStartResult = d
-                withContext(Dispatchers.Main) { syncStartUrl = url }
-                d.await()
+                try {
+                    withContext(Dispatchers.Main) { syncStartUrl = url }
+                    d.await()
+                } finally {
+                    // 途中で取り消されても窓の値を残さない(残ると、次に設定を開いたとき古い窓が出る)
+                    withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+                        if (syncStartResult === d) {
+                            syncStartResult = null
+                            syncStartUrl = null
+                        }
+                    }
+                }
             },
             onCycle = { r ->
                 if (r.favoriteThreads || io.github.contentsview08.obb.sync.adapters.AREA_FAVORITE_BOARDS in r.applied) reloadSide()
@@ -495,6 +521,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun syncStatus() = withContext(Dispatchers.IO) { syncCtl.status() }
+
+    /** 同期の操作(始める・参加・やめる・今すぐ)。画面を離れても途中で切れないように viewModelScope で動かす。失敗なら出す文 */
+    fun syncRun(f: suspend () -> Unit): kotlinx.coroutines.Deferred<String?> = viewModelScope.async { syncAttempt(f) }
 
     /** 画面の操作を行い、失敗なら出す文を返す */
     suspend fun syncAttempt(f: suspend () -> Unit): String? = try {
@@ -636,10 +665,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun back(): Boolean {
         if (stack.size <= 1) return false
+        flushRead(stack.last())
         navDir = -1
         forwardPage = stack.removeAt(stack.lastIndex) as? Page.Thread
         refreshTopAfterBack()
         return true
+    }
+
+    /** スレの画面を外す前に、待っている既読を書く。一覧の読み直しと同じ列に、この順で入る */
+    private fun flushRead(p: Page) {
+        (p as? Page.Thread)?.flushRead?.invoke()
     }
 
     /** 戻った先の一覧の未読の数を新しくする */
@@ -668,6 +703,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 戻る先の一覧から選んだ画面まで、まとめて戻る */
     fun popTo(index: Int) {
         if (index !in 0 until stack.lastIndex) return
+        for (i in index + 1..stack.lastIndex) flushRead(stack[i])
         navDir = -1
         forwardPage = stack.last() as? Page.Thread
         while (stack.lastIndex > index) stack.removeAt(stack.lastIndex)
@@ -685,6 +721,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 左のメニューから開く(積み重ねを入れ替える) */
     fun openRoot(page: Page) {
         drawerOpen = false
+        for (p in stack) flushRead(p)
         navDir = 0
         stack.clear()
         stack.add(page)
@@ -734,8 +771,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * まだ足していない id のものだけを足し、足した id を覚える。板一覧は開いたときに取る
      */
     private suspend fun applyPresets() {
-        val json = runCatching { getApplication<android.app.Application>().assets.open("sites.json").bufferedReader().use { it.readText() } }.getOrNull() ?: return
-        val o = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return
+        // assets の読み出しと解析は画面のスレッドでしない
+        val o = withContext(Dispatchers.IO) {
+            runCatching { getApplication<android.app.Application>().assets.open("sites.json").bufferedReader().use { it.readText() } }.getOrNull()
+                ?.let { json -> runCatching { org.json.JSONObject(json) }.getOrNull() }
+        } ?: return
         val done = prefs.presetsApplied.split(',').filter { it.isNotEmpty() }.toMutableSet()
         val before = done.size
         val have = db.siteMenuUrls().map { it.first }.toSet()
@@ -1662,7 +1702,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { uploads = db.listUploads() }
         viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
         // 起動したら、しばらく開いていないスレのログを消す(設定)
-        if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { db.pruneLogs(System.currentTimeMillis() - prefs.logRetentionDays * 86_400_000L) } }
+        if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { pruneLogs(prefs.logRetentionDays) } }
         // 定期確認: アプリを開いている間は、閲覧履歴・お気に入りのスレ・キーワードをそれぞれの間隔で。閉じている間は WorkManager で
         viewModelScope.launch {
             val clock = io.github.contentsview08.obb.data.CrawlClock()

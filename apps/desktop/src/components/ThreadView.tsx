@@ -46,7 +46,8 @@ import { animateScroll, closedPosition, framesIn, useThreadScroll } from '../hoo
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, spanOf, stepCursor } from '../utils/cursor'
-import type { ScrollPosition } from '../utils/threadScroll'
+import { openTarget, type ScrollPosition } from '../utils/threadScroll'
+
 import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
@@ -915,21 +916,19 @@ export default function ThreadView(props: Props) {
     const posts = log.posts
     const n = posts.length
     const at = (no: number) => posts.findIndex((p) => p.no >= no)
-    // 全部読み終えたスレは、閉じたときの位置へ戻す
-    const allRead = !posts.some((p) => p.no >= unreadFrom)
-    const pos = props.initialPosition ?? (settings.openPosition === 'unread' && unreadFrom > 1 && allRead ? closedPosition(props.threadKey) : undefined)
-    // 開く位置(utils/threadScroll.ts の openTarget と同じ順で決める)
-    const anchor =
-      pos?.bottom || (!pos && settings.openPosition === 'bottom')
-        ? n - 1
-        : pos
-          ? at(pos.no)
-          : settings.openPosition === 'unread' && unreadFrom > 1
-            ? (() => {
-                const i = at(unreadFrom)
-                return i < 0 ? n - 1 : i
-              })()
-            : 0
+    const found = (p?: ScrollPosition) => !!p && posts.some((x) => x.no === p.no)
+    const closed = closedPosition(props.threadKey)
+    // 開く位置(useThreadScroll が動かす先と同じ決まり)
+    const t = openTarget({
+      saved: props.initialPosition,
+      savedFound: found(props.initialPosition),
+      closed: found(closed) ? closed : undefined,
+      openPosition: settings.openPosition,
+      unreadFrom,
+      hasUnreadPost: posts.some((p) => p.no === unreadFrom),
+      readNo: log.readNo,
+    })
+    const anchor = t.kind === 'bottom' ? n - 1 : t.kind === 'saved' ? at(t.position.no) : t.kind === 'unread' ? at(t.no) : 0
     if (n === 0) return { lo: 0, hi: 0 }
     const a = anchor < 0 ? n - 1 : anchor
     const lo = Math.max(0, a - FIRST_RENDER / 2)

@@ -70,6 +70,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
@@ -299,6 +300,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
     }
     LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew) }
+    // 一覧へ戻る直前に、待っている既読と位置を書く(位置が決まる前は、まだ読んでいないので書かない)
+    DisposableEffect(page, scroller) {
+        val flush = { if (ctl.positioned) reportRead(ctl, scroller, vm, page) }
+        page.flushRead = flush
+        onDispose { if (page.flushRead === flush) page.flushRead = null }
+    }
     // grew のあとに外す(同じ組み立てで新着と取得の終わりが届いたときも、新着で位置を動かさないように)
     LaunchedEffect(fetched) { if (fetched) ctl.keepJump = false }
     LaunchedEffect(listState) {
@@ -898,7 +905,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
 private fun reportRead(ctl: ThreadScrollCtl, scroller: ThreadScroller, vm: AppViewModel, page: Page.Thread) {
     val (last, pos) = scroller.progress()
-    if (pos != null) vm.savePosition(page.summary.id, pos)
+    // 位置にはそのときの既読を添える(開き直すとき、同期で既読が先へ進んでいれば覚えた位置ではなく既読の次から)
+    if (pos != null) vm.savePosition(page.summary.id, pos.copy(readNo = maxOf(ctl.sent, last, page.readNo)))
+
     if (last > ctl.sent) {
         ctl.sent = last
         vm.markRead(page, last)

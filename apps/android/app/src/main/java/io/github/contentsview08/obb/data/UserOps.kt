@@ -28,7 +28,13 @@ internal fun isSyncGroupOn(sql: SyncSql, group: String): Boolean = try {
     false
 }
 
-class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = { isSyncGroupOn(sql, it) }) {
+/** dispatcher: 書く列。LogDb の読み書きと同じ列を渡すと、書いた直後の読みがその書きを見る */
+class UserOps(
+    private val sql: SyncSql,
+    private val isOn: (String) -> Boolean = { isSyncGroupOn(sql, it) },
+    private val dispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+) {
+
     /** sync_ops には手元の識別だけを書く。スレタイなどはエンジンが処理するときに今のデータから読む */
     private fun opStatement(op: String, t: ThreadSummary, now: Long) = SqlStatement(
         "INSERT INTO sync_ops (op, target, num, args, at_ms) VALUES (?, ?, NULL, ?, ?)",
@@ -41,7 +47,7 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
         else sql.exec(change.sql, change.args)
     }
 
-    suspend fun setFavoriteThread(t: ThreadSummary, title: String, on: Boolean, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
+    suspend fun setFavoriteThread(t: ThreadSummary, title: String, on: Boolean, now: Long = System.currentTimeMillis()) = withContext(dispatcher) {
         setFavoriteThreadNow(t, title, on, now)
     }
 
@@ -60,25 +66,25 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
         write("favorites", listOf(change)) { listOf(plainOp(if (on) "favorite_board_add" else "favorite_board_remove", board.url, mapOf("url" to board.url), now)) }
     }
 
-    suspend fun setFavorite(board: Board, on: Boolean, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { setFavoriteNow(board, on, now) }
+    suspend fun setFavorite(board: Board, on: Boolean, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { setFavoriteNow(board, on, now) }
 
     internal fun reorderFavoritesNow(urls: List<String>, now: Long) {
         val changes = urls.mapIndexed { i, u -> SqlStatement(FavoriteBoardSql.REORDER, listOf(i.toLong(), u)) }
         write("favorites", changes) { listOf(plainOp("favorite_board_order", "order", mapOf("urls" to urls), now)) }
     }
 
-    suspend fun reorderFavorites(urls: List<String>, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { reorderFavoritesNow(urls, now) }
+    suspend fun reorderFavorites(urls: List<String>, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { reorderFavoritesNow(urls, now) }
 
     internal fun addSiteNow(menuUrl: String, name: String, now: Long) =
         write("sites", listOf(SqlStatement(SiteSql.ADD, SiteSql.addArgs(menuUrl, name)))) { listOf(plainOp("site_add", menuUrl, mapOf("menu_url" to menuUrl), now)) }
 
-    suspend fun addSite(menuUrl: String, name: String, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { addSiteNow(menuUrl, name, now) }
+    suspend fun addSite(menuUrl: String, name: String, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { addSiteNow(menuUrl, name, now) }
 
     internal fun removeSiteNow(menuUrl: String, now: Long) = write("sites", listOf(SqlStatement(SiteSql.REMOVE_BOARDS, listOf(menuUrl)), SqlStatement(SiteSql.REMOVE, listOf(menuUrl)))) {
         listOf(plainOp("site_remove", menuUrl, mapOf("menu_url" to menuUrl), now))
     }
 
-    suspend fun removeSite(menuUrl: String, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { removeSiteNow(menuUrl, now) }
+    suspend fun removeSite(menuUrl: String, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { removeSiteNow(menuUrl, now) }
 
     /** 削除ページの URL は操作に書かない。エンジンが処理するときに今のデータから読む */
     private fun uploadOps(u: UploadRecord, now: Long, images: Boolean, secret: Boolean): List<SqlStatement> =
@@ -88,10 +94,10 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
     internal fun addUploadNow(u: UploadRecord, now: Long) =
         sql.batch(listOf(SqlStatement(UploadSql.ADD, UploadSql.addArgs(u, now).toList())) + uploadOps(u, now, isOn("images"), isOn("secret")))
 
-    suspend fun addUpload(u: UploadRecord, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { addUploadNow(u, now) }
+    suspend fun addUpload(u: UploadRecord, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { addUploadNow(u, now) }
 
     /** バックアップから戻すのも利用者の操作 */
-    suspend fun importUploads(list: List<UploadRecord>, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
+    suspend fun importUploads(list: List<UploadRecord>, now: Long = System.currentTimeMillis()) = withContext(dispatcher) {
         val images = isOn("images")
         val secret = isOn("secret")
         sql.batch(list.map { SqlStatement(UploadSql.IMPORT, UploadSql.importArgs(it).toList()) } + list.flatMap { uploadOps(it, now, images, secret) })
@@ -114,19 +120,19 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
         }
     }
 
-    suspend fun markRead(t: ThreadSummary, no: Int, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { markReadNow(t, no.toLong(), now) }
+    suspend fun markRead(t: ThreadSummary, no: Int, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { markReadNow(t, no.toLong(), now) }
 
     /** スレを開いたときの最終閲覧時刻 */
     internal fun threadViewNow(t: ThreadSummary, now: Long) =
         write("history", listOf(SqlStatement(ThreadLogSql.VIEW, listOf(now, t.boardUrl, t.key)))) { listOf(opStatement("view", t, now)) }
 
-    suspend fun threadView(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { threadViewNow(t, now) }
+    suspend fun threadView(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { threadViewNow(t, now) }
 
     /** 履歴から外す。ログと既読は残す。全端末の履歴から外れる */
     internal fun historyRemoveNow(t: ThreadSummary, now: Long) =
         write("history", listOf(SqlStatement(ThreadLogSql.REMOVE_HISTORY, listOf(t.boardUrl, t.key)))) { listOf(opStatement("view_remove", t, now)) }
 
-    suspend fun historyRemove(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { historyRemoveNow(t, now) }
+    suspend fun historyRemove(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { historyRemoveNow(t, now) }
 
     /** ログの削除は全端末で未読に戻す操作を兼ねる。自動整理は LogDb.pruneLogs を使い、ここを通らない */
     internal fun deleteLogsNow(threads: List<ThreadSummary>, now: Long) {
@@ -141,7 +147,7 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
         }
     }
 
-    suspend fun deleteLogs(threads: List<ThreadSummary>, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { deleteLogsNow(threads, now) }
+    suspend fun deleteLogs(threads: List<ThreadSummary>, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { deleteLogsNow(threads, now) }
 
     internal fun postAddNow(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String, now: Long) =
         write("posts", listOf(SqlStatement(PostHistorySql.ADD, PostHistorySql.addArgs(t, title, no, name, mail, body, now)))) {
@@ -149,14 +155,14 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
         }
 
     suspend fun postAdd(t: ThreadSummary, title: String, no: Int?, name: String, mail: String, body: String, now: Long = System.currentTimeMillis()) =
-        withContext(Dispatchers.IO) { postAddNow(t, title, no, name, mail, body, now) }
+        withContext(dispatcher) { postAddNow(t, title, no, name, mail, body, now) }
 
     /** 消した後は行がないので、ID を作るのに要る値を操作に書く */
     internal fun postRemoveNow(e: PostHistoryEntry, now: Long) = write("posts", listOf(SqlStatement(PostHistorySql.REMOVE, listOf(e.id)))) {
         listOf(plainOp("post_remove", "${e.thread.boardUrl}\t${e.thread.key}\t${e.postedAt}", mapOf("board_url" to e.thread.boardUrl, "key" to e.thread.key, "posted_at" to e.postedAt, "body" to e.body), now))
     }
 
-    suspend fun postRemove(e: PostHistoryEntry, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { postRemoveNow(e, now) }
+    suspend fun postRemove(e: PostHistoryEntry, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { postRemoveNow(e, now) }
 
     /** 自分のレスの印。書き込みで付いた印も手で付けた印も同じ経路。外すと全端末から外れる。まとめて付け外すときは 1 つのトランザクション */
     internal fun setOwnPostsNow(t: ThreadSummary, nos: Collection<Int>, own: Boolean, now: Long) {
@@ -169,13 +175,13 @@ class UserOps(private val sql: SyncSql, private val isOn: (String) -> Boolean = 
         }
     }
 
-    suspend fun setOwnPosts(t: ThreadSummary, nos: Collection<Int>, own: Boolean, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { setOwnPostsNow(t, nos, own, now) }
+    suspend fun setOwnPosts(t: ThreadSummary, nos: Collection<Int>, own: Boolean, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { setOwnPostsNow(t, nos, own, now) }
 
     internal fun ownAddNow(t: ThreadSummary, no: Int, now: Long) = setOwnPostsNow(t, listOf(no), true, now)
 
     internal fun ownRemoveNow(t: ThreadSummary, no: Int, now: Long) = setOwnPostsNow(t, listOf(no), false, now)
 
-    suspend fun ownAdd(t: ThreadSummary, no: Int, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) { ownAddNow(t, no, now) }
+    suspend fun ownAdd(t: ThreadSummary, no: Int, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { ownAddNow(t, no, now) }
 
     /** 設定の変更を積む。スマホの今の値は Prefs にあるので、changes は共通テストが settings 表へ書く文 */
     internal fun settingsWriteNow(ops: List<SettingOp>, now: Long, changes: List<SqlStatement> = emptyList()) {

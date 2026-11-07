@@ -602,11 +602,12 @@ export function useThreadScroll(o: Options) {
     })
     // 描かれているのは画面とその上下半画面ほど(content-visibility の範囲)なので、そこだけ覚える
     rememberHeights(measured, rects, box.top - box.height / 2, box.bottom + box.height / 2)
-    if (pos) position.current = pos
     if (last > sent.current) {
       sent.current = last
       latest.current.onRead(last)
     }
+    // 位置にはそのときの既読を添える(開き直すとき、同期で既読が先へ進んでいれば覚えた位置ではなく既読の次から)
+    if (pos) position.current = { ...pos, readNo: sent.current }
   }, [rootRef, listRef, headerOffset])
 
   // ── 開いたとき ──
@@ -628,6 +629,7 @@ export function useThreadScroll(o: Options) {
       openPosition: latest.current.openPosition,
       unreadFrom,
       hasUnreadPost: byNo.has(unreadFrom),
+      readNo: sent.current,
     })
     if (t.kind === 'bottom') {
       animateScroll(root, () => root.scrollHeight, 0)
@@ -753,7 +755,14 @@ export function useThreadScroll(o: Options) {
     // 空のログで開いて手元のログが届いたとき(最初の中身)は新着ではない。位置は上の「開いたとき」が合わせている。
     // 新着として扱うと pendingUnread を消してしまい、あとで本当の新着が届いても未読の頭へ移らない
     if (prevLastNo === 0) return
-    const fresh = log.posts.filter((p) => p.no > prevLastNo).map((p) => p.no)
+    // 既読より後のレスだけが新着。別の端末で読んだ分が同期で既読になっていれば、あとから届いても光らせない
+    const read = Math.max(sent.current, log.readNo)
+    const fresh = log.posts.filter((p) => p.no > prevLastNo && p.no > read).map((p) => p.no)
+    if (fresh.length === 0) {
+      // 一番下で未読を待っていた・開いた直後なら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける
+      if (!heldJump.current && (pendingUnread.current || (untouched.current && firstGrowth.current))) scrollToUnread(read + 1)
+      return
+    }
     if (heldJump.current) {
       // 飛んだレスの光を消さず、位置も動かさない
       setFlashNos((m) => new Map([...staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS), ...m]))
@@ -773,8 +782,9 @@ export function useThreadScroll(o: Options) {
       unreadFrom,
       hasUnreadPost: byNo.has(unreadFrom),
       prevLastNo,
-      readNo: sent.current,
+      readNo: read,
       opening,
+
       autoScrollOnNew: latest.current.autoScrollOnNew,
       atBottom: atBottom.current,
     })

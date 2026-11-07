@@ -80,6 +80,35 @@ fun staggerDelays(nos: List<Int>): Map<Int, Int> {
     return nos.mapIndexed { i, n -> n to Math.round(i * d) }.toMap()
 }
 
+/** 開いたときの行き先(PC 版の OpenTarget の写し) */
+sealed class OpenTarget {
+    data class Saved(val pos: ScrollPos) : OpenTarget()
+    /** pendingUnread: 未読の頭がまだ手元にないので、新着が届いたらそこへ移る */
+    data class Bottom(val pendingUnread: Boolean) : OpenTarget()
+    data class Unread(val no: Int) : OpenTarget()
+    data object Top : OpenTarget()
+}
+
+/**
+ * 開いたとき(最初にレスが出たとき)にどこへ置くか(PC 版の openTarget と同じ決まり)。
+ * - 覚えた位置があっても、覚えたときの既読より今の既読が先(別の端末で読み進めた分が同期で届いた)なら使わず、既読の次へ
+ * - 覚えた位置のレスが手元にあればそこへ(一番下で閉じたなら一番下)。ログを取り直して見つからなければ、覚えた位置は使わない
+ * - 覚えた位置が使えなければ設定どおり。「最初の未読」がまだ手元にない(前回最後まで読んでいた)ときは、一番下に置いて新着を待つ
+ * - 既読が 0 で覚えた位置もなければ先頭
+ * 覚えた位置の no は画面の上に見えていたレスなので、既読そのものとは比べない(既読は 1 画面ぶん先にある)。
+ * 既読を添えていない古い覚えは、そのまま使う
+ */
+fun openTarget(saved: ScrollPos?, savedFound: Boolean, openPosition: String, readNo: Int, unreadFrom: Int, hasUnreadPost: Boolean): OpenTarget {
+    val advanced = saved?.readNo != null && readNo > saved.readNo
+    if (saved != null && !advanced) {
+        if (saved.bottom) return OpenTarget.Bottom(pendingUnread = false)
+        if (savedFound) return OpenTarget.Saved(saved)
+    }
+    if (openPosition == "bottom") return OpenTarget.Bottom(pendingUnread = false)
+    if (openPosition == "unread" && unreadFrom > 1) return if (hasUnreadPost) OpenTarget.Unread(unreadFrom) else OpenTarget.Bottom(pendingUnread = true)
+    return OpenTarget.Top
+}
+
 /** shown は今並んでいるレス(絞り込み後)、footer は重なっている下の帯の高さ(px) */
 class ThreadScroller(
     private val ctl: ThreadScrollCtl,
@@ -114,24 +143,19 @@ class ThreadScroller(
     fun toUnread(no: Int, animate: Boolean = false) { scope.launch { toUnreadNow(no, animate) } }
     fun toBottom(animate: Boolean = false) { scope.launch { toBottomNow(animate) } }
 
-    /**
-     * 開いたときの位置。覚えた位置 → 設定(一番下・最初の未読)→ 先頭(PC 版の openTarget)。
-     * 最初の未読がまだ手元にない(前回最後まで読んでいた)ときは、一番下に置いて新着を待つ
-     */
+    /** 開いたときの位置(どこへ置くかは openTarget が決める) */
     suspend fun open(saved: ScrollPos?, openPosition: String) {
         val page = ctl.page
         val posts = page.index.posts
         ctl.sent = maxOf(ctl.sent, page.readNo)
         val savedIdx = saved?.let { s -> shown().indexOfFirst { it.no == s.no } } ?: -1
         val unreadFrom = page.unreadFrom
-        val hasUnread = posts.any { it.no == unreadFrom }
-        when {
-            saved?.bottom == true -> toBottomNow()
+        when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom })) {
+            is OpenTarget.Bottom -> { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
             // 覚えたずれは「上の帯の下からの位置」(上へはみ出していれば負)。scrollToItem は送る量なので符号を返す
-            saved != null && savedIdx >= 0 -> state.scrollToItem(savedIdx, -saved.offset)
-            openPosition == "bottom" -> toBottomNow()
-            openPosition == "unread" && unreadFrom > 1 -> if (hasUnread) toUnreadNow(unreadFrom) else { toBottomNow(); ctl.pendingUnread = true }
-            else -> state.scrollToItem(0)
+            is OpenTarget.Saved -> state.scrollToItem(savedIdx, -t.pos.offset)
+            is OpenTarget.Unread -> toUnreadNow(t.no)
+            OpenTarget.Top -> state.scrollToItem(0)
         }
         // この時点で手元にあるレスは「新着」として扱わない
         ctl.prevCount = posts.size
@@ -153,8 +177,15 @@ class ThreadScroller(
         val prevLastNo = ctl.lastMax
         ctl.lastMax = posts.lastOrNull()?.no ?: 0
         if (!grew || !ctl.positioned) return
-        val fresh = posts.filter { it.no > prevLastNo }.map { it.no }
-        if (fresh.isEmpty()) return
+        // 既読より後のレスだけが新着。別の端末で読んだ分が同期で既読になっていれば、あとから届いても光らせず、札も出さない
+        val read = maxOf(ctl.sent, page.readNo)
+        val fresh = posts.filter { it.no > prevLastNo && it.no > read }.map { it.no }
+        val head = maxOf(prevLastNo, read) + 1
+        if (fresh.isEmpty()) {
+            // 一番下で未読を待っていた・開いた直後なら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける
+            if (!ctl.keepJump && (ctl.pendingUnread || (ctl.untouched && ctl.firstGrowth))) toUnread(head)
+            return
+        }
         ctl.flashAt = System.currentTimeMillis()
         // 動きを減らすときは、浮き上がりも光りもしない
         if (!Motion.reduced) ctl.flash = staggerDelays(fresh)
@@ -162,11 +193,10 @@ class ThreadScroller(
         val opening = ctl.untouched && ctl.firstGrowth
         ctl.firstGrowth = false
         val unreadFrom = page.unreadFrom
-        val head = prevLastNo + 1
         when {
             ctl.keepJump -> {}
             ctl.pendingUnread && posts.any { it.no == unreadFrom } -> toUnread(unreadFrom)
-            opening -> if (ctl.sent >= prevLastNo) toUnread(head)
+            opening -> if (read >= prevLastNo) toUnread(head)
             autoScrollOnNew && ctl.atBottom -> toUnread(head, animate = true)
         }
         ctl.pendingUnread = false

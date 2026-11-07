@@ -13,6 +13,8 @@ export interface ScrollPosition {
   offset: number
   /** 一番下まで見ていた。戻すときはレスの位置ではなく一番下へ戻す(レスの高さの見積もりでずれないように) */
   bottom?: boolean
+  /** 覚えたときの既読。開き直すときに、同期で既読が先へ進んだかを見分ける(古い覚えには無い) */
+  readNo?: number
 }
 
 /** 開いたときの行き先 */
@@ -24,8 +26,12 @@ export type OpenTarget =
 
 /**
  * 開いたとき(最初にレスが出たとき)にどこへ置くか。
- * タブを切り替えて戻ってきたときの位置があればそれを優先し、なければ設定どおりにする。
- * 「最初の未読」がまだ手元にない(前回最後まで読んでいた)ときは、閉じたときの位置があればそこ、なければ一番下に置いて新着を待つ
+ * - 覚えた位置(タブを切り替えて戻ってきたとき)があっても、覚えたときの既読より今の既読が先(別の端末で読み進めた分が同期で届いた)なら使わず、既読の次へ
+ * - 覚えた位置のレスが画面にあればそこへ(一番下で閉じたなら一番下)。ログを取り直して見つからなければ、覚えた位置は使わない
+ * - 覚えた位置が使えなければ設定どおり。「最初の未読」がまだ手元にない(前回最後まで読んでいた)ときは、
+ *   閉じたときの位置(これも既読が進んでいれば使わない)があればそこ、なければ一番下に置いて新着を待つ
+ * - 既読が 0 で覚えた位置もなければ先頭
+ * 覚えた位置の no は画面の上に見えていたレスなので、既読そのものとは比べない(既読は 1 画面ぶん先にある)。既読を添えていない古い覚えはそのまま使う
  */
 export function openTarget(input: {
   saved?: ScrollPosition
@@ -37,14 +43,18 @@ export function openTarget(input: {
   unreadFrom: number
   /** unreadFrom のレスが手元のログにあるか */
   hasUnreadPost: boolean
+  /** 今の既読(省くと unreadFrom - 1) */
+  readNo?: number
 }): OpenTarget {
-  const { saved } = input
+  const readNo = input.readNo ?? input.unreadFrom - 1
+  const usable = (p?: ScrollPosition) => (p && !(p.readNo !== undefined && readNo > p.readNo) ? p : undefined)
+  const saved = usable(input.saved)
   if (saved?.bottom) return { kind: 'bottom', pendingUnread: false }
   if (saved && input.savedFound) return { kind: 'saved', position: saved }
   if (input.openPosition === 'bottom') return { kind: 'bottom', pendingUnread: false }
   if (input.openPosition === 'unread' && input.unreadFrom > 1) {
     if (input.hasUnreadPost) return { kind: 'unread', no: input.unreadFrom }
-    const closed = input.closed
+    const closed = usable(input.closed)
     return closed && !closed.bottom ? { kind: 'saved', position: closed, pendingUnread: true } : { kind: 'bottom', pendingUnread: true }
   }
   return { kind: 'top' }
@@ -74,7 +84,9 @@ export function newPostsTarget(input: {
   atBottom: boolean
 }): NewPostsTarget {
   if (input.pendingUnread && input.hasUnreadPost) return { no: input.unreadFrom, animate: false }
-  const head = input.prevLastNo + 1
+  // 同期で既読が届いた分より先へ進んでいれば、新着の頭はその次
+  const head = Math.max(input.prevLastNo, input.readNo) + 1
+
   if (input.opening) return input.readNo >= input.prevLastNo ? { no: head, animate: false } : undefined
   if (!input.autoScrollOnNew || !input.atBottom) return undefined
   return { no: head, animate: true }

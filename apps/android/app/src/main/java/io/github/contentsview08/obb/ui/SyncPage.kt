@@ -154,7 +154,9 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
         busy = true
         message = null
         scope.launch {
-            val failed = vm.syncAttempt(f)
+            // 操作そのものは ViewModel で動かす(画面を離れても切れない)。ここで待つのは画面に出す分だけ
+            val failed = vm.syncRun(f).await()
+
             val now = vm.syncStatus()
             st = now
             summary = runCatching { vm.syncSummary() }.getOrNull()

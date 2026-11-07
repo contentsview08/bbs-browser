@@ -395,9 +395,9 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         readableDatabase.rawQuery("SELECT 1 FROM favorite_threads WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { it.moveToFirst() }
     }
 
-    /** お気に入りのスレを足す・外す利用者の操作はここだけを通す */
+    /** お気に入りのスレを足す・外す利用者の操作はここだけを通す。読み書きの列もこの DB と同じ(既読を書いた直後の一覧の読みが、古い値を見ない) */
     val syncSql by lazy { AndroidSyncSql { writableDatabase } }
-    val userOps by lazy { UserOps(syncSql) }
+    val userOps by lazy { UserOps(syncSql, dispatcher = lane) }
 
     // ── 書き込み履歴 ──
 
@@ -425,12 +425,14 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
 
     /**
      * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの。PC 版の pruneLogs と同じ)。
-     * お気に入りのスレ・自分が書き込んだスレは残す。消したスレの数を返す。
+     * お気に入りのスレ・自分が書き込んだスレと、keep のスレ(開いている画面)は残す。消したスレ(板の URL とキー)を返す。
      */
-    suspend fun pruneLogs(before: Long): Int = io {
+    suspend fun pruneLogs(before: Long, keep: Collection<ThreadSummary> = emptyList()): List<Pair<String, String>> = io {
         val db = writableDatabase
-        val rows = db.rawQuery(ThreadLogSql.PRUNE_TARGETS, arrayOf(before.toString())
-        ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) } }
+        val kept = keep.map { it.boardUrl to it.key }.toSet()
+        val rows = db.rawQuery(ThreadLogSql.PRUNE_TARGETS, arrayOf(before.toString()))
+            .use { c -> buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) } }
+            .filter { it !in kept }
         db.beginTransaction()
         try {
             for ((b, k) in rows) for (sql in ThreadLogSql.DELETE_LOG) db.execSQL(sql, arrayOf(b, k))
@@ -438,7 +440,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         } finally {
             db.endTransaction()
         }
-        rows.size
+        rows
     }
 
     /** ファビコンのキャッシュ(data: URL と取った時刻) */
@@ -449,8 +451,15 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         writableDatabase.execSQL("INSERT OR REPLACE INTO favicons (key, data, fetched_at) VALUES (?, ?, ?)", arrayOf<Any>(key, data, System.currentTimeMillis()))
     }
 
-    private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
+    /**
+     * 読み書きは 1 本の列に通す。別々の launch から呼んでも呼んだ順に DB へ届く
+     * (Dispatchers.IO のままだと、既読を書く前に一覧を読んでしまい、読み終えたスレに未読の数が残る)
+     */
+    private val lane = Dispatchers.IO.limitedParallelism(1)
+
+    private suspend fun <T> io(block: () -> T): T = withContext(lane) { block() }
 }
+
 
 private fun migrationNames(context: Context): List<String> = (context.assets.list("migrations") ?: emptyArray()).filter { it.endsWith(".sql") }.sorted()
 

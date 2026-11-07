@@ -320,8 +320,8 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
     var menuFor by remember { mutableStateOf<io.github.contentsview08.obb.bbs.ThreadSummary?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
     menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
-    // お気に入りのスレは、開いたときに新着を確かめる
-    androidx.compose.runtime.LaunchedEffect(tab) { if (tab == "fav") vm.checkNew(entries) }
+    // お気に入りのスレは、開いたときに新着を確かめる(開いた直後は一覧がまだ空なので、そろったときにも)
+    androidx.compose.runtime.LaunchedEffect(tab, entries.size) { if (tab == "fav") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val swipe = rememberSwipeState()
     // 閲覧のタブのスレタイ検索。ふだんの一覧は 300 件までなので、探すあいだは全部から探す

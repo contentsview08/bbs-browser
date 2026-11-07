@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Forum
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -93,12 +95,14 @@ fun DrawerContent(vm: AppViewModel) {
     if (urlDialog) OpenUrlDialog(vm) { urlDialog = false }
 }
 
-/** URL を開く(左のメニュー・板を探す)。クリップボードに URL があれば、はじめから入れておく */
+/** URL を開く(左のメニュー・板を探す)。クリップボードは、開いただけでは読まず、貼り付けのボタンを押したときだけ読む(SyncPage の「コードを貼る」と同じ) */
 @Composable
 fun OpenUrlDialog(vm: AppViewModel, onDismiss: () -> Unit) {
-        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-        var url by rememberSaveable {
-            mutableStateOf(runCatching { clipboard.getText()?.text?.trim() }.getOrNull()?.takeIf { Regex("^(h?ttps?://|//)?[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/\\S*$").matches(it) } ?: "")
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var url by rememberSaveable { mutableStateOf("") }
+        fun paste() {
+            val clip = context.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+            if (clip != null && Regex("^(h?ttps?://|//)?[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/\\S*$").matches(clip)) url = clip else vm.toast = "クリップボードに URL がありません"
         }
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -106,6 +110,7 @@ fun OpenUrlDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             text = {
                 OutlinedTextField(
                     url, { url = it }, singleLine = true, placeholder = { Text("https://…/test/read.cgi/板/番号/") },
+                    trailingIcon = { IconButton(onClick = { paste() }) { Icon(Icons.Filled.ContentPaste, "貼り付け", tint = Palette.textMuted) } },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (vm.openUrl(url)) onDismiss() else vm.toast = BAD_URL_NOTICE }),
                 )

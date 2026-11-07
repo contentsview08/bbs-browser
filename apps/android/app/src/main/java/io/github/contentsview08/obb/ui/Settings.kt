@@ -448,8 +448,9 @@ private fun WritePage(vm: AppViewModel) {
             "上げ先", p.uploadHost,
             io.github.contentsview08.obb.data.Uploader.HOSTS.map { h -> h.key to "${h.name}(${if (h.kind == "web") "サイトの画面" else "API"})・${h.note}" },
         ) { p.uploadHost = it }
-        if (p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID") { p.imgurClientId = it.trim() }
-        if (p.uploadHost == "imgbb") TextRow("imgbb の API キー", p.imgbbApiKey, "api.imgbb.com で発行した API キー") { p.imgbbApiKey = it.trim() }
+        // 鍵は画面をのぞかれても読めないよう伏せる
+        if (p.uploadHost == "imgur") TextRow("imgur の Client-ID", p.imgurClientId, "api.imgur.com で登録した Client-ID", secret = true) { p.imgurClientId = it.trim() }
+        if (p.uploadHost == "imgbb") TextRow("imgbb の API キー", p.imgbbApiKey, "api.imgbb.com で発行した API キー", secret = true) { p.imgbbApiKey = it.trim() }
         ChoiceRow(
             "大きい画像を縮める", p.uploadMaxDimension.toString(),
             listOf(0, 1280, 1920, 2560, 4096).map { it.toString() to if (it == 0) "縮めない" else "長い辺 ${it}px まで" },
@@ -516,7 +517,11 @@ private fun NotifyPage(vm: AppViewModel) {
     val p = vm.prefs
     val context = androidx.compose.ui.platform.LocalContext.current
     val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
-        if (!ok) vm.toast = "通知が許可されていません。Android の設定 → アプリ → OBB → 通知 から許可してください"
+        // 拒まれたら、届かない通知をオンのまま見せない
+        if (!ok) {
+            p.osNotify = false
+            vm.toast = "通知が許可されていません。Android の設定 → アプリ → OBB → 通知 から許可してください"
+        }
     }
     Group("OS の通知", note = "新着を Android の通知で知らせます。アプリを開いている間は、お気に入りのスレとキーワードをそれぞれの間隔で確かめます。アプリを閉じている間は「スクロールと更新」の閲覧履歴の間隔で確かめます(15 分より短くならず、端末の省電力の設定で遅れたり止められたりすることがあります)") {
         SwitchRow("OS の通知に出す", p.osNotify) { on ->

@@ -9,6 +9,10 @@ class BackupKeysTest {
         for (k in listOf("honoUser", "honoPassword", "imgbbApiKey", "imgurClientId", "lastBoardUrl", "lastBoardName")) assertFalse(k, Prefs.inBackup(k))
     }
 
+    @Test fun device_state_and_drafts_are_not_in_backup() {
+        for (k in listOf("boardVisits", "recentBoards", "newThreadDrafts")) assertFalse(k, Prefs.inBackup(k))
+    }
+
     @Test fun ordinary_settings_are_in_backup() {
         for (k in listOf("keywords", "gesturesEnabled", "uploadHost", "postName", "unreadFirst", "pastTabsPosition")) assertTrue(k, Prefs.inBackup(k))
     }

@@ -85,6 +85,9 @@ object Crawler {
 
         val seen = context.getSharedPreferences("crawl", Context.MODE_PRIVATE)
         val edit = seen.edit()
+        // 覚え書きが増え続けないよう、いまのお気に入りのスレ・書き込み履歴・お気に入り板にないものの鍵を消す(これから書く鍵とは重ならない)
+        val ownThreads = (db.postHistory().map { it.thread } + db.ownPostThreads()).distinctBy { it.id }
+        for (k in staleSeenKeys(seen.all.keys, favs.mapTo(HashSet()) { it.thread.id }, ownThreads.mapTo(HashSet()) { it.id }, db.favorites().mapTo(HashSet()) { it.url })) edit.remove(k)
         // お気に入りのスレの新着
         if (prefs.notifyFav) {
             val hits = ArrayList<Pair<ThreadSummary, Int>>()
@@ -102,7 +105,7 @@ object Crawler {
         // あなた宛てのレス
         if (prefs.notifyReply && scope.history) {
             var fetched = 0
-            for (t in (db.postHistory().map { it.thread } + db.ownPostThreads()).distinctBy { it.id }) {
+            for (t in ownThreads) {
                 val c = counts[t.id] ?: continue
                 if (c <= 0) continue
                 val key = "o:${t.id}"
@@ -151,6 +154,19 @@ object Crawler {
         if (!prefs.osNotify || !prefs.notifyReply || own.isEmpty()) return
         val replies = posts.filter { p -> p.no !in own && p.body.trim() != justPosted && anchorsOf(p.body).any { it in own } }
         for (p in replies.take(MAX_NOTIFY)) Notifier.show(context, "あなた宛てのレス: $title", "${p.no}: ${p.body}", TwoCh.webUrl(t))
+    }
+
+    /**
+     * 覚え書き(crawl)のうち、消してよい鍵: お気に入りのスレ(f:)・書き込んだスレ(o:)・お気に入り板(k:)で、いまはないもの。
+     * ほかの鍵(scheduled など)は残す
+     */
+    internal fun staleSeenKeys(keys: Set<String>, favIds: Set<String>, ownIds: Set<String>, boardUrls: Set<String>): List<String> = keys.filter { k ->
+        when {
+            k.startsWith("f:") -> k.removePrefix("f:") !in favIds
+            k.startsWith("o:") -> k.removePrefix("o:") !in ownIds
+            k.startsWith("k:") -> k.removePrefix("k:") !in boardUrls
+            else -> false
+        }
     }
 
     /** 本文のアンカーが指すレスの番号。スレ表示(bbs/PostBody.kt)と同じ解析 */

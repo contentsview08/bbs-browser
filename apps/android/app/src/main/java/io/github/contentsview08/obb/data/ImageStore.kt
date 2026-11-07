@@ -118,8 +118,9 @@ object ImageStore {
 
     private val client by lazy {
         // 止まったまま回り続けないように、データが届かないときと全体の時間で切る
+        // リダイレクトは自分でたどる(行き先ごとに isAutoLoadable を確かめるため。openCheckingRedirects)
         OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(3, TimeUnit.MINUTES)
-            .followRedirects(true).followSslRedirects(true).addInterceptor(HttpsFirst).build()
+            .followRedirects(false).followSslRedirects(false).addInterceptor(HttpsFirst).build()
     }
 
     fun init(context: Context) {
@@ -150,11 +151,16 @@ object ImageStore {
 
     /**
      * 画像を頼む(画面に出たとき・押したとき)。手元にあればすぐ Done。viewer = true ならビューアーの枠で取る。
-     * 失敗していたら、もう一度取り直す。取り消したものは、ビューアーで開くか retry = true(押したとき)でだけ取り直す
+     * 失敗していたら、もう一度取り直す。取り消したものは、ビューアーで開くか retry = true(押したとき)でだけ取り直す。
+     * 家の中のアドレスなど、表示しただけでは読まない URL は、押すまで「取り消し」と同じ扱い(どの画面から来ても、ここで止める)
      */
     fun request(url: String, viewer: Boolean = false, retry: Boolean = false) {
         cached(url)?.let { f -> if (stateOf(url) !is State.Done) cell(url).value = State.Done(f); return }
         val s = stateOf(url)
+        if (!isAutoLoadable(url) && !viewer && !retry) {
+            if (s == null) cell(url).value = State.Canceled
+            return
+        }
         if (s is State.Canceled && !viewer && !retry) return
         if (s is State.Queued || s is State.Loading) {
             // サムネイルの順番待ちをビューアーの枠へ移す
@@ -189,10 +195,13 @@ object ImageStore {
         // 取り消した分の後始末と、頼み直した分のファイルが重ならないように、回ごとに別の名前にする
         val part = File(dir, "${out.name}.${System.nanoTime()}.part")
         return try {
-            val req = Request.Builder().url(url).header("Accept", "image/*,*/*;q=0.8").build()
-            val call = client.newCall(req)
-            run.onCancel { call.cancel() }
-            call.execute().use { res ->
+            // 取り消しは、たどっている途中のどの段の通信にも届くよう、この回の印(run)を付けた call をまとめて止める
+            run.onCancel { for (c in client.dispatcher.runningCalls() + client.dispatcher.queuedCalls()) if (c.request().tag() === run) c.cancel() }
+            val opened = openCheckingRedirects(client, url) { u ->
+                if (run.canceled) throw java.io.IOException("取り消しました")
+                Request.Builder().url(u).header("Accept", "image/*,*/*;q=0.8").tag(run).build()
+            } ?: error("読みに行けない場所へのリダイレクト")
+            opened.use { res ->
                 if (!res.isSuccessful) error("HTTP ${res.code}")
                 val body = res.body ?: error("中身がありません")
                 val total = body.contentLength()

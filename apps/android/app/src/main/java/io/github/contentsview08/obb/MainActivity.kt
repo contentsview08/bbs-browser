@@ -80,10 +80,15 @@ class MainActivity : ComponentActivity() {
         vm.syncBackground()
     }
 
-    /** 通知を押して開いたとき: そのスレ・板をアプリの中で開く */
+    /**
+     * 通知を押して開いたとき: そのスレ・板をアプリの中で開く。
+     * この Activity は exported なので、自前の action が付いた intent だけを読み、URL も掲示板の板・スレの形(家の中のアドレスでない)に限る
+     */
     private fun openFromNotification(intent: android.content.Intent?) {
-        val url = intent?.getStringExtra(io.github.contentsview08.obb.data.Notifier.OPEN_URL) ?: return
+        if (intent?.action != io.github.contentsview08.obb.data.Notifier.ACTION_OPEN_URL) return
+        val url = intent.getStringExtra(io.github.contentsview08.obb.data.Notifier.OPEN_URL) ?: return
         intent.removeExtra(io.github.contentsview08.obb.data.Notifier.OPEN_URL)
+        if (!io.github.contentsview08.obb.data.isAutoLoadable(url) || io.github.contentsview08.obb.bbs.UrlRoute.parse(url) == null) return
         vm.openUrl(url)
     }
 

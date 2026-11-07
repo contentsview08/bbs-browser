@@ -7,6 +7,8 @@ import io.github.contentsview08.obb.sync.adapters.BOARD_META_KEY
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.properties.ReadWriteProperty
@@ -488,8 +490,8 @@ class Prefs(context: Context) {
     /** バックアップ: 設定を JSON に(最後に開いた板と秘密の値は除く) */
     fun export(): JSONObject = exportedSettings(sp.all, knownKeys)
 
-    /** バックアップから戻す(戻したあとはアプリを開き直すと全部に効く) */
-    fun import(o: JSONObject) {
+    /** バックアップから戻す(戻したあとはアプリを開き直すと全部に効く)。commit はディスクに書くので IO で */
+    suspend fun import(o: JSONObject) = withContext(Dispatchers.IO) {
         val e = sp.edit()
         for ((k, v) in restoredSettings(o, floatKeys)) {
             if (k !in knownKeys) continue
@@ -504,8 +506,14 @@ class Prefs(context: Context) {
     }
 
     companion object {
-        /** バックアップに入れない項目: 最後に開いた板と、アカウント・API キー(ファイルは人に渡したりクラウドに置いたりするので) */
-        private val NOT_IN_BACKUP = setOf("lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId")
+        /**
+         * バックアップに入れない項目: 最後に開いた板と、アカウント・API キー(ファイルは人に渡したりクラウドに置いたりするので)、
+         * 端末だけの状態・書きかけ(板を開いた回数・最近の板・スレ立ての下書き。PC の utils/backup.ts も boardVisits を除く)
+         */
+        private val NOT_IN_BACKUP = setOf(
+            "lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId",
+            "boardVisits", "recentBoards", "newThreadDrafts",
+        )
 
         internal fun inBackup(key: String) = key !in NOT_IN_BACKUP
 

@@ -91,7 +91,7 @@ fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: Conten
                 modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier),
             )
             is io.github.contentsview08.obb.data.ImageStore.State.Failed -> Column(
-                Modifier.matchParentSize().clickable { io.github.contentsview08.obb.data.ImageStore.request(url) },
+                Modifier.matchParentSize().clickable { io.github.contentsview08.obb.data.ImageStore.request(url, retry = true) },
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
             ) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.BrokenImage, null, Modifier.size(20.dp), tint = Palette.textMuted)
@@ -160,7 +160,8 @@ private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, 
 
 /**
  * リンクのカード(PC 版の LinkPreview と同じ)。画面に出たときに初めてページを取りに行き、題・説明・サイト名・絵を出す。
- * 何も取れなければ出さない(リンクの文字は本文にある)。3 つまで
+ * 何も取れなければ出さない(リンクの文字は本文にある)。3 つまで。
+ * autoLoad でなければ(モバイル通信など)ページも取りに行かず、カードを出さない
  */
 @Composable
 fun LinkCards(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit) {
@@ -173,8 +174,9 @@ fun LinkCards(urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit) {
 private fun LinkCard(url: String, autoLoad: Boolean, onOpen: (String) -> Unit) {
     var state by remember(url) { mutableStateOf<Ogp?>(null) }
     var done by remember(url) { mutableStateOf(false) }
-    LaunchedEffect(url) { state = OgpFetcher.fetch(url); done = true }
+    LaunchedEffect(url, autoLoad) { if (autoLoad && !done) { state = OgpFetcher.fetch(url); done = true } }
     val ogp = state
+    if (!autoLoad && ogp == null) return
     if (done && ogp == null) return
     val shape = RoundedCornerShape(5.dp)
     Row(

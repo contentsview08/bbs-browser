@@ -559,7 +559,7 @@ private fun ThreadRow(
                     Spacer(Modifier.width(8.dp))
                     Text(t.authorId, Modifier.weight(1f, fill = false), color = Palette.textMuted, fontSize = (11 * k).sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (archived) { Spacer(Modifier.width(8.dp)); Text("dat落ち", color = Palette.textMuted, fontSize = (11 * k).sp) }
+                if (archived) { Spacer(Modifier.width(8.dp)); Text("dat 落ち", color = Palette.textMuted, fontSize = (11 * k).sp) }
                 }
                 // 勢い・レス数は幅をそろえ、数字の桁を縦にそろえる
                 Text(

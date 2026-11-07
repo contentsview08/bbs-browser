@@ -100,7 +100,39 @@ class BackupFileTest {
         val u2 = UploadRecord("https://i.test/b.png", "b.png", 0, 1700000000001)
         val o = backupJson(JSONObject(), emptyList(), emptyList(), emptyList(), listOf(u, u2))
         assertEquals("OBB", o.getString("app"))
-        assertEquals(listOf(u, u2), parseBackup(o.toString(2)).uploads)
+        // 削除ページの URL は秘密なので書き出さない。ほかは戻る
+        assertFalse(o.toString().contains("i.test/del"))
+        assertEquals(listOf(u.copy(deleteUrl = null), u2), parseBackup(o.toString(2)).uploads)
+    }
+
+    @Test fun 手で書かれた削除ページのURLは読める() {
+        val b = parseBackup("""{"app":"OBB","uploads":[{"url":"https://i.test/a.png","uploadedAt":1,"deleteUrl":"https://i.test/del"}]}""")
+        assertEquals("https://i.test/del", b.uploads[0].deleteUrl)
+    }
+
+    @Test fun 端末だけの状態と書きかけは書き出さず読み戻さない() {
+        val all = mapOf("boardVisits" to "{\"u\":1}", "recentBoards" to "[]", "newThreadDrafts" to "{}", "postName" to "n")
+        assertEquals(setOf("postName"), exportedSettings(all, all.keys).keys().asSequence().toSet())
+        assertEquals(setOf("postName"), roundTrip(JSONObject().put("boardVisits", JSONObject().put("u", 1)).put("recentBoards", org.json.JSONArray()).put("newThreadDrafts", JSONObject()).put("postName", "n")).keys)
+    }
+
+    @Test fun 扱えないURLの板とスレとサイトは外して数える() {
+        val b = parseBackup(
+            """{"app":"OBB",
+               "favoriteBoards":[{"url":"https://x.test/a/","name":"A"},{"url":"http://192.168.1.1/a/","name":"家"},{"url":"https://x.test/not-a-board","name":"形"},{"url":"https://may.2chan.net/b/","name":"ふたば"}],
+               "favoriteThreads":[{"boardUrl":"https://x.test/a/","key":"1","title":"t"},{"boardUrl":"http://localhost/a/","key":"2","title":"t2"}],
+               "sites":[{"url":"https://x.test/bbsmenu.json","name":"s"},{"url":"http://router.local/menu.json","name":"家"}]}""",
+        )
+        assertEquals(listOf("https://x.test/a/"), b.boards.map { it.url })
+        assertEquals(listOf("1"), b.threads.map { it.key })
+        assertEquals(listOf("https://x.test/bbsmenu.json"), b.sites.map { it.first })
+        assertEquals(5, b.dropped)
+    }
+
+    @Test fun 板のURLは同期と同じく5chioにそろえる() {
+        val b = parseBackup("""{"app":"OBB","favoriteBoards":[{"url":"https://mi.5ch.net/news4vip/","name":"A"}]}""")
+        assertEquals(listOf("https://mi.5ch.io/news4vip/"), b.boards.map { it.url })
+        assertEquals(0, b.dropped)
     }
 
     @Test fun JSONの項目はPCのファイルと同じくJSONのまま書いて文字列に戻す() {
@@ -122,7 +154,7 @@ class BackupFileTest {
     }
 
     @Test fun 知らない項目の配列は戻さず知っている項目の配列は戻す() {
-        val s = restoredSettings(JSONObject("""{"other":[1],"listTabs":["unread"],"boardVisits":{"u":1}}"""), emptySet())
-        assertEquals(mapOf("listTabs" to """["unread"]""", "boardVisits" to """{"u":1}"""), s)
+        val s = restoredSettings(JSONObject("""{"other":[1],"listTabs":["unread"],"boardMeta":{"u":{"alias":"a"}}}"""), emptySet())
+        assertEquals(mapOf("listTabs" to """["unread"]""", "boardMeta" to """{"u":{"alias":"a"}}"""), s)
     }
 }

@@ -37,4 +37,10 @@ class CrawlerTest {
     @Test fun 分が0なら見ない() {
         assertEquals(null, CrawlClock().due(100 * min, 0, 0, 0))
     }
+
+    @Test fun 覚え書きはいまのお気に入りと書き込み履歴とお気に入り板にないものだけ消す() {
+        val keys = setOf("f:a", "f:b", "o:a", "o:c", "k:https://x.test/a/", "k:https://x.test/z/", "scheduled")
+        val stale = Crawler.staleSeenKeys(keys, favIds = setOf("a"), ownIds = setOf("a"), boardUrls = setOf("https://x.test/a/"))
+        assertEquals(setOf("f:b", "o:c", "k:https://x.test/z/"), stale.toSet())
+    }
 }

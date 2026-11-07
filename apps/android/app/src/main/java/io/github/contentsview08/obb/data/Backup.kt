@@ -16,6 +16,8 @@ internal class BackupFile(
     val threads: List<ThreadSummary>,
     val sites: List<Pair<String, String>>,
     val uploads: List<UploadRecord>,
+    /** 板・スレ・サイトのうち、この端末で扱えない URL(家の中のアドレス・ふたば・板の形でないもの)で外した行の数 */
+    val dropped: Int = 0,
 )
 
 internal fun backupJson(settings: JSONObject, boards: List<Board>, threads: List<ThreadSummary>, sites: List<Pair<String, String>>, uploads: List<UploadRecord> = emptyList()): JSONObject =
@@ -25,8 +27,9 @@ internal fun backupJson(settings: JSONObject, boards: List<Board>, threads: List
         .put("sites", JSONArray().apply { for ((u, n) in sites) put(JSONObject().put("url", u).put("name", n)) })
         .put("uploads", JSONArray().apply { for (u in uploads) put(uploadJson(u)) })
 
+// 削除ページの URL(deleteUrl)は、知った人が画像を消せる秘密なので書き出さない(読み込みは受ける)
 private fun uploadJson(u: UploadRecord): JSONObject = JSONObject().put("url", u.url).put("name", u.name).put("size", u.size).put("uploadedAt", u.uploadedAt)
-    .put("withAccount", u.withAccount).put("hash", u.hash).put("deleteUrl", u.deleteUrl)
+    .put("withAccount", u.withAccount).put("hash", u.hash)
 
 private fun uploadOf(o: JSONObject) = UploadRecord(
     o.getString("url"), o.optString("name"), o.optLong("size"), o.getLong("uploadedAt"), o.optBoolean("withAccount"),
@@ -61,13 +64,15 @@ internal fun parseBackup(text: String): BackupFile {
     val settings = o.optJSONObject("settings")
     // 読めない NG が 1 つでもあると、読むときに全部を捨てることになる
     settings?.optJSONArray("ngRules")?.let { a -> for (i in 0 until a.length()) NgRule.fromJson(a.getJSONObject(i)) }
-    return BackupFile(
-        settings,
-        rows("favoriteBoards").map { Board(it.getString("url"), it.getString("name")) },
-        rows("favoriteThreads").map { ThreadSummary(it.getString("boardUrl"), it.getString("key"), it.getString("title"), 0, 0, null) },
-        rows("sites").map { it.getString("url") to it.getString("name") },
-        rows("uploads").map(::uploadOf),
-    )
+    // 板・スレ・サイトの URL は、同期で受けるときと同じ検査を通す(ファイルは人の手で書き換えられる)
+    var dropped = 0
+    fun <T> kept(list: List<T?>): List<T> = list.filterNotNull().also { dropped += list.size - it.size }
+    val boards = kept(rows("favoriteBoards").map { r -> resolveSyncBoard(r.getString("url"))?.let { Board(it.boardUrl, r.getString("name")) } })
+    val threads = kept(rows("favoriteThreads").map { r ->
+        resolveSyncBoard(r.getString("boardUrl"))?.let { ThreadSummary(it.boardUrl, r.getString("key"), r.getString("title"), 0, 0, null) }
+    })
+    val sites = kept(rows("sites").map { r -> r.getString("url").takeIf { resolveSyncSite(it) != null }?.let { it to r.getString("name") } })
+    return BackupFile(settings, boards, threads, sites, rows("uploads").map(::uploadOf), dropped)
 }
 
 /**

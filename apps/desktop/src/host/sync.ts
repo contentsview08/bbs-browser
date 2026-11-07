@@ -2,16 +2,21 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { allConnectors } from '@bbs-browser/connectors'
+import { settingsNgStore, type SqlDb } from '@bbs-browser/logstore'
 import {
   fromBase64Url,
   SyncResponseTooLarge,
   toBase64Url,
   type BoardResolver,
+  type NgHost,
+  type SiteResolver,
   type SyncKeyMaterial,
   type SyncKeyStore,
   type SyncTransport,
 } from '@bbs-browser/sync'
 import serverUrl from '@bbs-browser/sync/server-url.json'
+import { applyRemoteSettings } from '../ui/settings'
+import { ngPatternSyncable, todayDateString, type NgRule } from '../utils/ng'
 
 /** 既定のサーバーは packages/sync/server-url.json。ビルドのときに VITE_OBB_SYNC_SERVER_URL で差し替えられる */
 export const DEFAULT_SYNC_SERVER: string = import.meta.env.VITE_OBB_SYNC_SERVER_URL || serverUrl.default
@@ -100,6 +105,22 @@ export function openSyncStartWindow(url: string): Promise<string | null> {
 }
 
 /** この端末で扱える板か。今の正しい URL とコネクタはコネクタが決める */
+/** サイトの入口を受け持つコネクタ。なければ 2 ちゃんねる互換(App の addSite と同じ) */
+export const resolveSyncSite: SiteResolver = (menuUrl) => allConnectors().find((c) => c.handlesSite?.(menuUrl))?.id ?? '2ch-compat'
+
+/** PC の NG は settings 表。適用したら全部の窓の設定へ写す */
+export function syncNgHost(db: SqlDb): NgHost {
+  const store = settingsNgStore(db)
+  return {
+    read: store.read,
+    async apply(changes) {
+      applyRemoteSettings({ ngRules: (await store.apply(changes)) as NgRule[] })
+    },
+    patternOk: ngPatternSyncable,
+    today: (nowMs) => todayDateString(new Date(nowMs)),
+  }
+}
+
 export const resolveSyncBoard: BoardResolver = (boardUrl) => {
   const c = allConnectors().find((x) => x.canHandle(boardUrl))
   return c ? { boardUrl: c.canonicalBoardUrl?.(boardUrl) ?? boardUrl, connectorId: c.id } : null

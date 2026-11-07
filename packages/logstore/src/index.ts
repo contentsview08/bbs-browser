@@ -198,6 +198,42 @@ export function removeFavoriteThreadStatement(thread: ThreadSummary): SqlStateme
   return { sql: 'DELETE FROM favorite_threads WHERE board_url = $1 AND key = $2', params: [thread.boardUrl, thread.key] }
 }
 
+export function addFavoriteBoardStatement(board: Board): SqlStatement {
+  return {
+    sql: `INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort)
+       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))`,
+    params: [board.url, board.connectorId, board.name],
+  }
+}
+
+export const removeFavoriteBoardStatement = (url: string): SqlStatement => ({ sql: 'DELETE FROM favorite_boards WHERE url = $1', params: [url] })
+
+export const reorderFavoriteStatements = (urls: string[]): SqlStatement[] => urls.map((url, i) => ({ sql: 'UPDATE favorite_boards SET sort = $1 WHERE url = $2', params: [i, url] }))
+
+export function addSiteStatement(site: SiteConfig): SqlStatement {
+  return {
+    sql: `INSERT OR IGNORE INTO sites (menu_url, connector_id, name, sort)
+       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort), 0) + 1 FROM sites))`,
+    params: [site.menuUrl, site.connectorId, site.name],
+  }
+}
+
+export const removeSiteStatements = (menuUrl: string): SqlStatement[] => [
+  { sql: 'DELETE FROM boards WHERE site_menu_url = $1', params: [menuUrl] },
+  { sql: 'DELETE FROM sites WHERE menu_url = $1', params: [menuUrl] },
+]
+
+export function addUploadStatement(u: Omit<UploadRecord, 'uploadedAt'>, now: number): SqlStatement {
+  return {
+    sql: 'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account, hash, delete_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    params: [u.url, u.name, u.size, now, u.withAccount ? 1 : 0, u.hash ?? null, u.deleteUrl ?? null],
+  }
+}
+
+export const removeUploadStatement = (url: string): SqlStatement => ({ sql: 'DELETE FROM uploads WHERE url = $1', params: [url] })
+
+export const setSettingStatement = (key: string, value: unknown): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', params: [key, JSON.stringify(value)] })
+
 export class LogStore {
   constructor(readonly db: SqlDb) {}
 
@@ -211,16 +247,12 @@ export class LogStore {
   }
 
   async addSite(site: SiteConfig): Promise<void> {
-    await this.db.execute(
-      `INSERT OR IGNORE INTO sites (menu_url, connector_id, name, sort)
-       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort), 0) + 1 FROM sites))`,
-      [site.menuUrl, site.connectorId, site.name],
-    )
+    const { sql, params } = addSiteStatement(site)
+    await this.db.execute(sql, params)
   }
 
   async removeSite(menuUrl: string): Promise<void> {
-    await this.db.execute('DELETE FROM boards WHERE site_menu_url = $1', [menuUrl])
-    await this.db.execute('DELETE FROM sites WHERE menu_url = $1', [menuUrl])
+    for (const { sql, params } of removeSiteStatements(menuUrl)) await this.db.execute(sql, params)
   }
 
   async getBoards(menuUrl: string): Promise<Board[]> {
@@ -253,11 +285,8 @@ export class LogStore {
   }
 
   async addFavorite(board: Board): Promise<void> {
-    await this.db.execute(
-      `INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort)
-       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))`,
-      [board.url, board.connectorId, board.name],
-    )
+    const { sql, params } = addFavoriteBoardStatement(board)
+    await this.db.execute(sql, params)
   }
 
   /** お気に入り板の名前を直す(掲示板側で板名が変わったとき。板の情報を取ったら写す) */
@@ -267,22 +296,19 @@ export class LogStore {
 
   /** お気に入り板を、渡した URL の並びにする */
   async reorderFavorites(urls: string[]): Promise<void> {
-    for (const [i, url] of urls.entries()) {
-      await this.db.execute('UPDATE favorite_boards SET sort = $1 WHERE url = $2', [i, url])
-    }
+    for (const { sql, params } of reorderFavoriteStatements(urls)) await this.db.execute(sql, params)
   }
 
   async removeFavorite(url: string): Promise<void> {
-    await this.db.execute('DELETE FROM favorite_boards WHERE url = $1', [url])
+    const { sql, params } = removeFavoriteBoardStatement(url)
+    await this.db.execute(sql, params)
   }
 
   // ── 画像のアップロード履歴 ──
 
   async addUpload(u: Omit<UploadRecord, 'uploadedAt'>, now = Date.now()): Promise<void> {
-    await this.db.execute(
-      'INSERT OR REPLACE INTO uploads (url, name, size, uploaded_at, with_account, hash, delete_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [u.url, u.name, u.size, now, u.withAccount ? 1 : 0, u.hash ?? null, u.deleteUrl ?? null],
-    )
+    const { sql, params } = addUploadStatement(u, now)
+    await this.db.execute(sql, params)
   }
 
   /** 同じ中身(hash)の画像を前に上げていれば、その URL(いちばん新しいもの) */
@@ -301,7 +327,8 @@ export class LogStore {
 
   /** 履歴から消す(サーバー上のファイルを消すのは呼ぶ側) */
   async removeUpload(url: string): Promise<void> {
-    await this.db.execute('DELETE FROM uploads WHERE url = $1', [url])
+    const { sql, params } = removeUploadStatement(url)
+    await this.db.execute(sql, params)
   }
 
   // ── ファビコンのキャッシュ ──
@@ -343,7 +370,8 @@ export class LogStore {
   }
 
   async setSetting(key: string, value: unknown): Promise<void> {
-    await this.db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', [key, JSON.stringify(value)])
+    const { sql, params } = setSettingStatement(key, value)
+    await this.db.execute(sql, params)
   }
 
   // ── スレ ──
@@ -704,3 +732,4 @@ export class LogStore {
 }
 
 export * from './userOps'
+export * from './ngRules'

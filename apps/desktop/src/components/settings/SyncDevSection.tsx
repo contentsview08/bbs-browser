@@ -49,7 +49,7 @@ export function SyncDevSection() {
   if (!st) return null
   const needTicket = st.lastError?.startsWith('ticket_')
   return (
-    <Section title={L.section} note="お気に入りのスレだけを同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です">
+    <Section title={L.section} note="お気に入りのスレと板、サイト、上げた画像の履歴、NG を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です">
       <dl className="text-sm text-c-text-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mb-3">
         <dt className="text-c-text-muted">状態</dt>
         <dd>{st.state}</dd>

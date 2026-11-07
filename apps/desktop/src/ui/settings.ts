@@ -8,9 +8,9 @@ import type { DateStyle } from '../utils/displayDate'
 import { isMobile } from '../utils/platform'
 import { ensureFont, onFontSwitch } from '../host/fonts'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LogStore } from '@bbs-browser/logstore'
+import { applyNgDiff, isEmptyNgDiff, ngDiff, UserOps, type LogStore, type NgDiff } from '@bbs-browser/logstore'
 import type { ThreadSummary } from '@bbs-browser/connectors'
-import type { NgRule } from '../utils/ng'
+import { todayDateString, type NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
@@ -918,7 +918,19 @@ export function applyCssVar(name: string, value: string) {
 
 export type PaneMode = 'split' | 'single' | 'auto'
 
-export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
+/**
+ * before は NG(配列まるごとの項目)のときに渡す、value を作るもとになった配列。そこからの差分だけを今の値に重ねて保存し、同期へ積む。
+ * 渡さないとき(設定の読み込み)は、消えた要素を全端末から消さない
+ */
+export type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K], before?: AppSettings[K]) => void
+
+const REMOTE_SETTINGS_EVENT = 'obb-remote-settings'
+
+/** 同期の適用で変わった設定を画面へ写す。DB へは適用が書いてあるので pendingWrites に入れない */
+export function applyRemoteSettings(patch: Partial<AppSettings>): void {
+  window.dispatchEvent(new CustomEvent(REMOTE_SETTINGS_EVENT, { detail: patch }))
+  for (const [key, value] of Object.entries(patch)) void broadcast('settings-changed', { key, value })
+}
 
 /** 設定を変えてから DB に書くまで待つ時間 */
 const SAVE_DELAY_MS = 400
@@ -957,12 +969,27 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
     apply(settings, opts)
     // opts は固定
   }, [settings])
+  // まだ DB に書いていない NG の差分。ほかから来た値に重ねて、保存待ちの変更を画面から消さない
+  const pendingNg = useRef<{ diff: NgDiff<NgRule>; at: number }[]>([])
+  const ngNow = useRef(settings.ngRules)
+  ngNow.current = settings.ngRules
+  const withPendingNg = (rules: NgRule[]) => pendingNg.current.reduce((r, p) => applyNgDiff(r, p.diff), rules)
   // ほかのウィンドウで変えた設定を写す
   useEffect(() => {
-    const off = onBroadcast<{ key: keyof AppSettings; value: unknown }>('settings-changed', ({ key, value }) =>
-      setSettings((s) => ({ ...s, [key]: value as AppSettings[typeof key] })),
-    )
-    return () => void off.then((f) => f())
+    const off = onBroadcast<{ key: keyof AppSettings; value: unknown }>('settings-changed', ({ key, value }) => {
+      if (key === 'ngRules') ngNow.current = withPendingNg(value as NgRule[])
+      setSettings((s) => ({ ...s, [key]: key === 'ngRules' ? ngNow.current : (value as AppSettings[typeof key]) }))
+    })
+    const remote = (e: Event) => {
+      const patch = (e as CustomEvent<Partial<AppSettings>>).detail
+      if (patch.ngRules) ngNow.current = withPendingNg(patch.ngRules)
+      setSettings((s) => ({ ...s, ...patch, ...(patch.ngRules && { ngRules: ngNow.current }) }))
+    }
+    window.addEventListener(REMOTE_SETTINGS_EVENT, remote)
+    return () => {
+      window.removeEventListener(REMOTE_SETTINGS_EVENT, remote)
+      void off.then((f) => f())
+    }
   }, [])
   // 設定のウィンドウでスライダーを動かしている間の見た目(css-preview)を、メインの画面に映す(決めたら settings-changed で来る)
   useEffect(() => {
@@ -986,10 +1013,24 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
   const flush = useCallback(() => {
     if (writeTimer.current) clearTimeout(writeTimer.current)
     writeTimer.current = undefined
-    if (!store || pendingWrites.current.size === 0) return
+    if (!store) return
     const writes = [...pendingWrites.current.entries()]
     pendingWrites.current.clear()
     for (const [key, value] of writes) void store.setSetting(key, value as AppSettings[typeof key]).catch(backgroundError('設定の保存'))
+    if (pendingNg.current.length === 0) return
+    const ng = pendingNg.current.splice(0)
+    void (async () => {
+      const ops = new UserOps(store)
+      let saved: NgRule[] | undefined
+      for (const p of ng) saved = await ops.ngChange(p.diff, p.at)
+      // ほかの窓の変更と重ねた結果を、全部の窓へ揃える
+      if (saved) {
+        ngNow.current = withPendingNg(saved)
+        const rules = ngNow.current
+        setSettings((s) => ({ ...s, ngRules: rules }))
+        void broadcast('settings-changed', { key: 'ngRules', value: saved })
+      }
+    })().catch(backgroundError('NG の保存'))
   }, [store])
   // 閉じるとき・裏に回ったときは、待っているぶんを書いてしまう
   useEffect(() => {
@@ -1002,7 +1043,19 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
     }
   }, [flush])
   const update = useCallback<UpdateSetting>(
-    (key, value) => {
+    (key, value, before) => {
+      if (key === 'ngRules') {
+        const seen = (before ?? ngNow.current) as NgRule[]
+        const diff = ngDiff(seen, value as NgRule[], todayDateString(), { keepRemoved: before === undefined })
+        if (isEmptyNgDiff(diff)) return
+        pendingNg.current.push({ diff, at: Date.now() })
+        ngNow.current = applyNgDiff(ngNow.current, diff)
+        const rules = ngNow.current
+        setSettings((s) => ({ ...s, ngRules: rules }))
+        void broadcast('settings-changed', { key, value: rules })
+        if (!writeTimer.current) writeTimer.current = setTimeout(flush, SAVE_DELAY_MS)
+        return
+      }
       setSettings((s) => ({ ...s, [key]: value }))
       void broadcast('settings-changed', { key, value })
       pendingWrites.current.set(key, value)

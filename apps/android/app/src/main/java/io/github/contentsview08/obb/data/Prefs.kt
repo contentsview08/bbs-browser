@@ -340,19 +340,39 @@ class Prefs(context: Context) {
 
     var ngRules by mutableStateOf(loadNg())
         private set
-    /** NG を足す(同じもの = 種類・文字・正規表現か・効く板が同じ、は重ねない)。同じ id のものがあれば差し替える(直したとき) */
-    fun addNg(rule: NgRule) {
-        if (rule.pattern.isBlank()) return
+    /** NG を足す(同じもの = 種類・文字・正規表現か・効く板が同じ、は重ねない)。同じ id のものがあれば差し替える(直したとき)。変えたら true */
+    @Synchronized
+    fun addNg(rule: NgRule): Boolean {
+        if (rule.pattern.isBlank()) return false
         if (ngRules.any { it.id == rule.id }) saveNg(ngRules.map { if (it.id == rule.id) rule else it })
         else if (ngRules.none { it.sameAs(rule) }) saveNg(ngRules + rule)
+        else return false
+        return true
     }
+    @Synchronized
     fun removeNg(rule: NgRule) = saveNg(ngRules.filter { it.id != rule.id })
-    /** NG をまとめて置き換える(まとめて削除・期限切れの片づけなど) */
-    fun setNg(list: List<NgRule>) = saveNg(list)
+    /** 期限切れの片づけ。手元からだけ消す */
+    @Synchronized
+    fun dropExpiredNg(today: String) = saveNg(ngRules.filter { it.expiresOnDate == null || it.expiresOnDate >= today })
+
+    /** 同期の適用。今の値に重ねて、操作として積まない */
+    @Synchronized
+    fun applyRemoteNg(diff: NgDiff) = saveNg(applyNgDiff(ngRules, diff))
+
+    /** バックアップから戻した値を読み直す。戻す前の配列を返す */
+    @Synchronized
+    fun reloadNg(): List<NgRule> {
+        val before = ngRules
+        ngRules = loadNg()
+        return before
+    }
 
     private fun loadNg(): List<NgRule> = runCatching {
         val arr = JSONArray(sp.getString("ngRules", "[]"))
-        List(arr.length()) { NgRule.fromJson(arr.getJSONObject(it)) }
+        val list = List(arr.length()) { NgRule.fromJson(arr.getJSONObject(it)) }
+        // id のない古い行は読むたびに新しい id になり、同期で別のレコードに見えるので、一度決めたら残す
+        if ((0 until arr.length()).any { arr.getJSONObject(it).optString("id").isEmpty() }) sp.edit().putString("ngRules", JSONArray().apply { for (r in list) put(r.toJson()) }.toString()).apply()
+        list
     }.getOrDefault(emptyList())
 
     private fun saveNg(list: List<NgRule>) {

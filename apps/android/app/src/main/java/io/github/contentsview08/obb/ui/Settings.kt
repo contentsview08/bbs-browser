@@ -618,7 +618,7 @@ private fun NgPage(vm: AppViewModel) {
         HorizontalDivider(color = Palette.border)
         ActionRow("NG を足す", Icons.Filled.Add) { adding = true }
         val expiredCount = p.ngRules.count { it.expiresOnDate != null && it.expiresOnDate < today }
-        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.setNg(p.ngRules.filter { it.expiresOnDate == null || it.expiresOnDate >= today }) }
+        if (expiredCount > 0) ActionRow("期限の切れた $expiredCount 件を片づける", androidx.compose.material.icons.Icons.Filled.Delete) { vm.dropExpiredNg() }
     }
     // 「この板だけ」にできる板: 開いているスレの板、なければ開いているスレ一覧の板
     val board = when (val pg = vm.stack.lastOrNull { it is io.github.contentsview08.obb.Page.Thread || it is io.github.contentsview08.obb.Page.Threads }) {

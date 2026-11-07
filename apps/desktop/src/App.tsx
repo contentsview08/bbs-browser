@@ -867,7 +867,7 @@ export default function App() {
     void run(null, async () => {
       if (!store || !favorites) return
       setFavorites(urls.map((u) => favorites.find((f) => f.url === u)!).filter(Boolean))
-      await store.reorderFavorites(urls)
+      await new UserOps(store).favoriteBoardReorder(urls)
     })
   /** スレ一覧(subject.txt)から分かったレス数(スレの id → レス数)。ログには入れず、未読の数にだけ使う */
   const [favCounts, setFavCounts] = useState(new Map<string, number>())
@@ -913,7 +913,12 @@ export default function App() {
     setFavThreads((list) => (list.some((f) => threadId(f.thread) === id) ? list.map((f) => (threadId(f.thread) === id ? patch(f) : f)) : list))
   }
 
-  const syncRpc = useSync(store, (s) => void reloadFavThreads(s))
+  const syncRpc = useSync(store, {
+    favoriteThreads: (s) => void reloadFavThreads(s),
+    favoriteBoards: (s) => void reloadFavorites(s),
+    sites: (s) => void s.listSites().then(setSites),
+    uploads: (s) => void s.listUploads().then((list) => setUploads((cur) => (cur ? list : cur))),
+  })
 
   const toggleFavoriteThread = (t: ThreadSummary) => {
     if (!store) return
@@ -2133,7 +2138,7 @@ export default function App() {
   useEffect(() => {
     if (!settingsLoaded) return
     const kept = pruneExpired(settings.ngRules)
-    if (kept.length !== settings.ngRules.length) updateSetting('ngRules', kept)
+    if (kept.length !== settings.ngRules.length) updateSetting('ngRules', kept, settings.ngRules)
   }, [settingsLoaded])
 
   /**
@@ -2168,13 +2173,13 @@ export default function App() {
     const board = { connectorId: b.connectorId, url: b.url, name: b.name }
     // 先に画面を変えてから、DB は裏で書く
     setFavorites((list) => (on ? list?.filter((f) => f.url !== b.url) : [...(list ?? []), board]))
-    void run(null, () => (on ? store.removeFavorite(b.url) : store.addFavorite(board)))
+    void run(null, () => (on ? new UserOps(store).favoriteBoardRemove(b.url) : new UserOps(store).favoriteBoardAdd(board)))
   }
 
   const addFavoriteUrl = async (url: string) => {
     if (!store) return
     const r = await resolve(url)
-    await store.addFavorite(r.board)
+    await new UserOps(store).favoriteBoardAdd(r.board)
     await reloadFavorites(store)
   }
 
@@ -2184,14 +2189,14 @@ export default function App() {
     // サイトの入口を受け持つコネクタ(hono-bbs の /boards など)があればそれ、なければ 2ch 互換(bbsmenu)
     const connectorId = allConnectors().find((c) => c.handlesSite?.(menuUrl))?.id ?? '2ch-compat'
     const s: SiteConfig = { connectorId, name: name || host, menuUrl }
-    await store.addSite(s)
+    await new UserOps(store).siteAdd(s)
     setSites(await store.listSites())
   }
 
   const removeSite = (menuUrl: string) =>
     run(null, async () => {
       if (!store) return
-      await store.removeSite(menuUrl)
+      await new UserOps(store).siteRemove(menuUrl)
       const list = await store.listSites()
       setSites(list)
     })
@@ -2250,7 +2255,7 @@ export default function App() {
   // NG を足す。同じ id のものがあれば差し替える(NG の画面から直したとき)
   const addNg = useCallback(
     (rule: NgRule) =>
-      updateSetting('ngRules', settings.ngRules.some((r) => r.id === rule.id) ? settings.ngRules.map((r) => (r.id === rule.id ? rule : r)) : [...settings.ngRules, rule]),
+      updateSetting('ngRules', settings.ngRules.some((r) => r.id === rule.id) ? settings.ngRules.map((r) => (r.id === rule.id ? rule : r)) : [...settings.ngRules, rule], settings.ngRules),
     [settings.ngRules, updateSetting],
   )
 
@@ -2282,7 +2287,7 @@ export default function App() {
     openInBrowser: useEvent((t: ThreadSummary) => void openUrl(connectorOf(t.connectorId).threadWebUrl(t))),
     openUrl: useEvent((url: string) => void openLink(url)),
     addNg: useEvent((rule: NgRule) => addNg(rule)),
-    removeNg: useEvent((rules: NgRule[]) => updateSetting('ngRules', settings.ngRules.filter((r) => !rules.some((x) => x.id === r.id)))),
+    removeNg: useEvent((rules: NgRule[]) => updateSetting('ngRules', settings.ngRules.filter((r) => !rules.some((x) => x.id === r.id)), settings.ngRules)),
     editNg: useEvent((rule: NgRule, values: Partial<Record<NgTarget, string>>) => setNgDraft({ target: rule.target, pattern: rule.pattern, rule, values })),
     markTroll: useEvent((t: ThreadSummary, p: Post, troll: boolean | null, reason?: string) => markTroll(t, p, troll, reason)),
     ngDraft: useEvent((target: NgTarget, text: string, values?: Partial<Record<NgTarget, string>>) => setNgDraft({ target, pattern: text, values })),
@@ -2300,7 +2305,7 @@ export default function App() {
       confirmDeleteLogs([id], [], { stayOnList: true, after: returnToList })
     }),
     uploaded: useEvent((u: UploadedFile) => {
-      void store?.addUpload(u).catch(backgroundError('アップロード履歴の保存'))
+      if (store) void new UserOps(store).uploadAdd(u).catch(backgroundError('アップロード履歴の保存'))
     }),
     openNextUnread: useEvent(() => {
       const next = nextUnreadRef.current
@@ -2474,7 +2479,7 @@ export default function App() {
     onRemoveFavorite: (url: string) =>
       void run(null, async () => {
         if (!store) return
-        await store.removeFavorite(url)
+        await new UserOps(store).favoriteBoardRemove(url)
         await reloadFavorites(store)
       }),
     onReorderFavorites: reorderFavorites,
@@ -2862,7 +2867,7 @@ export default function App() {
             if (!store) return
             // サーバー上で消せてから、履歴からも外す
             await deleteFromCatbox(url, settings.catboxUserhash.trim())
-            await store.removeUpload(url)
+            await new UserOps(store).uploadRemove(url)
             setUploads(await store.listUploads())
           }}
           onClose={() => setUploads(undefined)}
@@ -2980,7 +2985,7 @@ export default function App() {
               : board && { url: board.url, name: board.name }
           }
           onSubmit={addNg}
-          onDelete={(rule) => updateSetting('ngRules', settings.ngRules.filter((r) => r.id !== rule.id))}
+          onDelete={(rule) => updateSetting('ngRules', settings.ngRules.filter((r) => r.id !== rule.id), settings.ngRules)}
           onClose={() => setNgDraft(undefined)}
         />
       )}

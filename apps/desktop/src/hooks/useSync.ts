@@ -1,13 +1,22 @@
 // 同期のきっかけと、設定の窓からの頼みごと。自動の送信はまだ持たない(手動と前面復帰だけ)
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
-import { FavoriteThreadAdapter, SyncController, type ConfirmChoice, type CycleResult } from '@bbs-browser/sync'
-import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, syncKeyHint, syncKeyStore, syncTransport } from '../host/sync'
+import { favoriteBoardAdapters, FavoriteThreadAdapter, ImageAdapter, NgAdapter, SiteAdapter, SyncController, type ConfirmChoice, type CycleResult } from '@bbs-browser/sync'
+import { broadcast } from '../host/crossWindow'
+import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncTransport } from '../host/sync'
 import { isAppVisible } from '../utils/visibility'
 
-export function useSync(store: LogStore | undefined, onFavoriteThreads: (s: LogStore) => void) {
-  const applied = useRef(onFavoriteThreads)
-  applied.current = onFavoriteThreads
+/** 適用で変わった種類ごとに、画面が読み直すもの。NG は設定の流れで写る */
+export interface SyncReloaders {
+  favoriteThreads: (s: LogStore) => void
+  favoriteBoards: (s: LogStore) => void
+  sites: (s: LogStore) => void
+  uploads: (s: LogStore) => void
+}
+
+export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
+  const applied = useRef(reloaders)
+  applied.current = reloaders
   const ctl = useMemo(() => {
     if (!store) return undefined
     return new SyncController({
@@ -15,14 +24,29 @@ export function useSync(store: LogStore | undefined, onFavoriteThreads: (s: LogS
       keyStore: syncKeyStore,
       transport: syncTransport,
       defaultServerUrl: DEFAULT_SYNC_SERVER,
-      adapters: [new FavoriteThreadAdapter(store.db, resolveSyncBoard)],
+      adapters: [
+        new FavoriteThreadAdapter(store.db, resolveSyncBoard),
+        ...favoriteBoardAdapters(store.db, resolveSyncBoard),
+        new SiteAdapter(store.db, resolveSyncSite),
+        new ImageAdapter(store.db),
+        new NgAdapter(syncNgHost(store.db)),
+      ],
       now: Date.now,
       allowLocalhost: import.meta.env.DEV,
       leaseOwner: crypto.randomUUID(),
       keyHint: syncKeyHint,
       openStartWindow: openSyncStartWindow,
       onCycle: (r: CycleResult) => {
-        if (r.applied.favoriteThreads) applied.current(store)
+        if (r.applied.favoriteThreads) applied.current.favoriteThreads(store)
+        if (r.applied.favoriteBoards) {
+          applied.current.favoriteBoards(store)
+          void broadcast('favorites-changed', null)
+        }
+        if (r.applied.sites) {
+          applied.current.sites(store)
+          void broadcast('sites-changed', null)
+        }
+        if (r.applied.uploads) applied.current.uploads(store)
       },
     })
   }, [store])

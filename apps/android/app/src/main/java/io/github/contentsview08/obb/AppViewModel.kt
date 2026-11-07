@@ -26,6 +26,7 @@ import io.github.contentsview08.obb.data.HistoryEntry
 import io.github.contentsview08.obb.data.Http
 import io.github.contentsview08.obb.data.LogDb
 import io.github.contentsview08.obb.data.NgRule
+import io.github.contentsview08.obb.data.ngDiff
 import io.github.contentsview08.obb.data.PostHistoryEntry
 import io.github.contentsview08.obb.data.shownPastTabs
 import io.github.contentsview08.obb.data.Prefs
@@ -432,7 +433,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             keyStore = syncKeys.first,
             transport = io.github.contentsview08.obb.sync.engine.OkHttpSyncTransport(),
             defaultServerUrl = BuildConfig.SYNC_SERVER_URL,
-            adapters = listOf(io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) }),
+            adapters = listOf(
+                io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) },
+            ) + io.github.contentsview08.obb.sync.adapters.favoriteBoardAdapters(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) } + listOf(
+                io.github.contentsview08.obb.sync.adapters.SiteAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncSite(it) },
+                io.github.contentsview08.obb.sync.adapters.ImageAdapter(db.syncSql),
+                io.github.contentsview08.obb.sync.adapters.NgAdapter(io.github.contentsview08.obb.data.SyncNgHost({ prefs.ngRules }, { prefs.applyRemoteNg(it) })),
+            ),
             now = System::currentTimeMillis,
             allowLocalhost = BuildConfig.SYNC_ALLOW_LOCALHOST,
             keyHint = syncKeys.second,
@@ -442,7 +449,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.Main) { syncStartUrl = url }
                 d.await()
             },
-            onCycle = { r -> if (r.favoriteThreads) reloadSide() },
+            onCycle = { r ->
+                if (r.favoriteThreads || io.github.contentsview08.obb.sync.adapters.AREA_FAVORITE_BOARDS in r.applied) reloadSide()
+                if (io.github.contentsview08.obb.sync.adapters.AREA_SITES in r.applied) viewModelScope.launch {
+                    sites = db.siteMenuUrls()
+                    if (siteUrl != null && sites.none { it.first == siteUrl }) { siteUrl = null; boards = emptyList() }
+                }
+                if (io.github.contentsview08.obb.sync.adapters.AREA_UPLOADS in r.applied) viewModelScope.launch { uploads = db.listUploads() }
+                if (io.github.contentsview08.obb.sync.adapters.AREA_NG in r.applied) viewModelScope.launch { reapplyNg() }
+            },
         )
     }
 
@@ -620,7 +635,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val url = if (menuUrl.contains("bbsmenu")) menuUrl.trim() else if (Machi.isSiteUrl(menuUrl)) "https://machi.to/" else HonoBbs.detectSite(menuUrl) ?: menuUrl.trim()
                 val list = TwoCh.listBoards(url)
                 if (list.isEmpty()) throw IllegalStateException("板が 1 つもありません")
-                db.addSite(url, name.trim().ifEmpty { url.removePrefix("https://").substringBefore('/') })
+                db.userOps.addSite(url, name.trim().ifEmpty { url.removePrefix("https://").substringBefore('/') })
                 db.replaceBoards(url, list)
                 sites = db.siteMenuUrls()
                 toast = "サイトを足しました(${list.size} 板)"
@@ -632,7 +647,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeSite(menuUrl: String) {
         viewModelScope.launch {
-            db.removeSite(menuUrl)
+            db.userOps.removeSite(menuUrl)
             sites = db.siteMenuUrls()
             if (siteUrl == menuUrl) { siteUrl = null; boards = emptyList() }
         }
@@ -644,7 +659,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (i !in list.indices || j !in list.indices) return
         list.add(j, list.removeAt(i))
         favorites = list
-        viewModelScope.launch { db.reorderFavorites(list.map { it.url }) }
+        viewModelScope.launch { db.userOps.reorderFavorites(list.map { it.url }) }
     }
 
     /** 画像をまとめて保存する(画像一覧を閉じても続ける) */
@@ -678,11 +693,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val text = withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } } ?: throw IllegalStateException("読めませんでした")
                 // 先に全部読む(途中の行が壊れていても、半分だけ戻さない)
                 val b = io.github.contentsview08.obb.data.parseBackup(text)
-                b.settings?.let { prefs.import(it) }
-                for (x in b.boards) db.setFavorite(x, true)
+                b.settings?.let {
+                    prefs.import(it)
+                    val before = prefs.reloadNg()
+                    // 戻すのは消す操作ではないので、ファイルにない要素を全端末から消さない
+                    changeNg(ngDiff(before, prefs.ngRules, io.github.contentsview08.obb.data.today(), keepRemoved = true))
+                    reapplyNg()
+                }
+                for (x in b.boards) db.userOps.setFavorite(x, true)
                 for (t in b.threads) db.userOps.setFavoriteThread(t, t.title, true)
-                for ((u, n) in b.sites) db.addSite(u, n)
-                db.importUploads(b.uploads)
+                for ((u, n) in b.sites) db.userOps.addSite(u, n)
+                db.userOps.importUploads(b.uploads)
                 uploads = db.listUploads()
                 favorites = db.favorites()
                 sites = db.siteMenuUrls()
@@ -717,7 +738,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleFavorite(board: Board) {
         viewModelScope.launch {
             val on = !isFavorite(board)
-            db.setFavorite(board, on)
+            db.userOps.setFavorite(board, on)
             favorites = db.favorites()
             toast = if (on) "お気に入り板に足しました" else "お気に入り板から外しました"
         }
@@ -923,25 +944,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** NG を足して、開いているスレに当て直す */
+    /** 操作の順で積む。順が入れ替わると、消したものが足し直しで戻る */
+    private val ngOps = Dispatchers.IO.limitedParallelism(1)
+
+    private fun changeNg(diff: io.github.contentsview08.obb.data.NgDiff) {
+        val at = System.currentTimeMillis()
+        viewModelScope.launch(ngOps) { db.userOps.ngChangeNow(diff, at) }
+    }
+
     fun addNg(rule: NgRule) {
-        prefs.addNg(rule)
+        if (prefs.addNg(rule)) changeNg(io.github.contentsview08.obb.data.NgDiff(upsert = listOf(rule)))
         reapplyNg()
         toast = "NG に足しました"
     }
 
     fun removeNg(rule: NgRule) {
         prefs.removeNg(rule)
+        // 期限の切れたものは、どの端末でも同じ結果になるので送らない
+        changeNg(ngDiff(listOf(rule), emptyList(), io.github.contentsview08.obb.data.today()))
         reapplyNg()
     }
 
-    /** NG を直す(同じ id を差し替える)・まとめて置き換える */
+    /** NG を直す(同じ id を差し替える) */
     fun saveNg(rule: NgRule) {
-        prefs.addNg(rule)
+        if (prefs.addNg(rule)) changeNg(io.github.contentsview08.obb.data.NgDiff(upsert = listOf(rule)))
         reapplyNg()
     }
 
-    fun setNg(list: List<NgRule>) {
-        prefs.setNg(list)
+    /** 期限の切れた NG を片づける。手元からだけ消し、送らない */
+    fun dropExpiredNg() {
+        prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
         reapplyNg()
     }
 
@@ -1164,7 +1196,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun addUpload(url: String, name: String, size: Long, hash: String?, deleteUrl: String? = null) {
-        db.addUpload(io.github.contentsview08.obb.data.UploadRecord(url, name, size, System.currentTimeMillis(), hash = hash, deleteUrl = deleteUrl))
+        db.userOps.addUpload(io.github.contentsview08.obb.data.UploadRecord(url, name, size, System.currentTimeMillis(), hash = hash, deleteUrl = deleteUrl))
         uploads = db.listUploads()
     }
 

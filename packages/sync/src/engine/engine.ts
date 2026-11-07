@@ -1,6 +1,6 @@
 // 同期エンジン。周の順は必ず draining → pull → apply → push。通信・時計・鍵保管は外から渡すので、偽物で試せる
 import { randomBytes } from '@noble/ciphers/utils.js'
-import type { AdapterContext, ApplyPlan, RecordRefs, SyncAdapter } from '../adapters/types'
+import type { AdapterContext, ApplyPlan, OpEffect, OpTarget, RecordRefs, SyncAdapter } from '../adapters/types'
 import { toBase64Url, toHex } from '../bytes'
 import {
   APPLY_BATCH,
@@ -102,8 +102,8 @@ export interface CycleResult {
   pulled: number
   pushed: number
   conflicts: number
-  /** 画面が読み直すもの。適用で手元が変わったときだけ立つ */
-  applied: { favoriteThreads: boolean }
+  /** 画面が読み直すもの。キーはアダプターの area。適用で手元が変わったときだけ立つ */
+  applied: Record<string, boolean>
   /** 周を始めなかった理由 */
   skipped?: 'backoff' | 'lease' | 'waiting'
 }
@@ -146,10 +146,10 @@ interface InflightEntry {
 
 const emptyRefs: RecordRefs = { ref_board: null, ref_thread: null, ref_detail: null, ref_local: null }
 
-function refsFromBody(p: SyncPayload): RecordRefs {
+function refsFromBody(p: SyncPayload, detail: string | null): RecordRefs {
   const board = p.body?.board_url
   const thread = p.body?.thread
-  return { ...emptyRefs, ref_board: typeof board === 'string' ? normalizeBoardUrl(board) : null, ref_thread: typeof thread === 'string' ? thread : null }
+  return { ...emptyRefs, ref_board: typeof board === 'string' ? normalizeBoardUrl(board) : null, ref_thread: typeof thread === 'string' ? thread : null, ref_detail: detail }
 }
 
 /** 一度分かった ref は消さない。tombstone は本文を残さないので、ここから何のレコードかを知る */
@@ -285,7 +285,7 @@ export class SyncEngine {
   }
 
   private async cycle(manual: boolean): Promise<CycleResult> {
-    const result: CycleResult = { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: { favoriteThreads: false } }
+    const result: CycleResult = { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {} }
     this.result = result
     const finish = (s: SyncEngineState) => {
       this.enter(s)
@@ -418,6 +418,11 @@ export class SyncEngine {
     if (!(await this.takeLease())) throw new CycleStop('idle')
   }
 
+  private refsOfBody(p: SyncPayload): RecordRefs {
+    const adapter = this.deps.adapters.find((a) => a.kind === p.kind && a.detailOf)
+    return refsFromBody(p, adapter?.detailOf?.(p) ?? null)
+  }
+
   private ctx(): AdapterContext {
     return { keys: this.keys, deviceId: this.deviceId, now: this.deps.now() }
   }
@@ -431,25 +436,18 @@ export class SyncEngine {
       let clock = (await this.t.state('clock')) ?? HLC_ZERO
       const stmts: SqlStatement[] = []
       const touched = new Map<string, StoredRecord>()
-      for (const op of ops) {
-        stmts.push(delOp(op.seq))
-        const adapter = this.deps.adapters.find((a) => a.ops.includes(op.op)) as SyncAdapter
-        const target = adapter.target(op, ctx)
-        if (!target) {
-          await this.countBad('local')
-          continue
-        }
+      const put = async (target: OpTarget, make: OpEffect['make'], atMs: number): Promise<void> => {
         const existing = touched.get(target.record_id) ?? (await this.t.record(target.record_id)) ?? undefined
-        const stamped = hlcStamp(clock, op.at_ms, this.deviceId, existing?.payload.hlc)
-        const payload = await adapter.fromOp(op, existing?.payload ?? null, stamped.stamp, ctx)
-        if (payload === null) continue
+        const stamped = hlcStamp(clock, atMs, this.deviceId, existing?.payload.hlc)
+        const payload = make(existing?.payload ?? null, stamped.stamp)
+        if (payload === null) return
         if (checkPayload(payload) === null) {
           await this.countBad('local')
-          continue
+          return
         }
         clock = stamped.clock
         const settled = settleRecord(payload, existing?.version ?? 0, existing && asLocal(existing), ctx.now)
-        const row: StoredRecord = {
+        touched.set(target.record_id, {
           record_id: target.record_id,
           kind: payload.kind,
           kind_tag: existing?.kind_tag ?? 'h',
@@ -462,8 +460,30 @@ export class SyncEngine {
           needs_apply: true,
           ...keepRefs(refsOf(existing), target.refs),
           tomb_at: settled.tomb_at ?? null,
+        })
+      }
+      for (const op of ops) {
+        const adapter = this.deps.adapters.find((a) => a.ops.includes(op.op)) as SyncAdapter
+        if (adapter.expand) {
+          // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
+          if (touched.size > 0) break
+          stmts.push(delOp(op.seq))
+          const effects = await adapter.expand(op, ctx)
+          if (effects === null) await this.countBad('local')
+          for (const e of effects ?? []) await put(e.target, e.make, op.at_ms)
+          break
         }
-        touched.set(target.record_id, row)
+        stmts.push(delOp(op.seq))
+        const target = adapter.target(op, ctx)
+        if (!target) {
+          await this.countBad('local')
+          continue
+        }
+        // fromOp は読み取りがあるので、先に作って中で使う
+        const existing = touched.get(target.record_id) ?? (await this.t.record(target.record_id)) ?? undefined
+        const stamp = hlcStamp(clock, op.at_ms, this.deviceId, existing?.payload.hlc).stamp
+        const made = await adapter.fromOp(op, existing?.payload ?? null, stamp, ctx)
+        await put(target, () => made, op.at_ms)
       }
       for (const r of touched.values()) stmts.push(writeRecord(r))
       stmts.push(setState('clock', clock))
@@ -596,7 +616,7 @@ export class SyncEngine {
       pending: !fromServer,
       priority: l?.priority ?? 5,
       needs_apply: !l || !same(l.payload, payload) || l.needs_apply,
-      ...keepRefs(refsOf(l), refsFromBody(payload)),
+      ...keepRefs(refsOf(l), this.refsOfBody(payload)),
       tomb_at: settled.tomb_at ?? null,
     }
   }
@@ -656,6 +676,7 @@ export class SyncEngine {
     const ctx = this.ctx()
     const stmts: SqlStatement[] = []
     for (const adapter of this.deps.adapters) {
+      if (adapter.reconciles === false) continue
       const rows = await adapter.seed(ctx)
       const local = await this.t.records(rows.map((r) => r.record_id))
       for (const r of rows) {
@@ -684,36 +705,47 @@ export class SyncEngine {
     let after = ''
     for (;;) {
       const rows = await this.t.toApply(this.kinds, after, APPLY_BATCH)
-      if (rows.length === 0) return
+      if (rows.length === 0) break
       after = rows[rows.length - 1].record_id
-      const items: { id: string; plan: ApplyPlan }[] = []
+      const items: { id: string; area: string; plan: ApplyPlan }[] = []
       for (const r of rows) {
         if (waiting.has(r.record_id)) continue
         const adapter = this.deps.adapters.find((a) => a.kind === r.kind && a.owns(r))
         if (!adapter) {
           // 本文も ref もない tombstone は手元のどれか分からない。後で種まきが同じ ID を作れば ref が埋まって写せる
-          if (r.ref_board === null && r.payload.body === undefined) items.push({ id: r.record_id, plan: { statements: [], changed: false } })
+          if (r.ref_board === null && r.ref_detail === null && r.payload.body === undefined) items.push({ id: r.record_id, area: '', plan: { statements: [], changed: false } })
           continue
         }
-        items.push({ id: r.record_id, plan: await adapter.apply(r, ctx) })
+        items.push({ id: r.record_id, area: adapter.area, plan: await adapter.apply(r, ctx) })
       }
       await this.writeApplied(items)
     }
+    for (const adapter of this.deps.adapters) {
+      const plan = await adapter.afterApply?.(ctx)
+      if (!plan) continue
+      if (plan.statements.length > 0) await this.db.batch(plan.statements)
+      if (plan.changed) this.result.applied[adapter.area] = true
+      if (plan.bad) await this.countBad(plan.bad)
+    }
   }
 
-  private async writeApplied(items: { id: string; plan: ApplyPlan }[]): Promise<void> {
+  private async writeApplied(items: { id: string; area: string; plan: ApplyPlan }[]): Promise<void> {
     if (items.length === 0) return
+    const done = async (x: { area: string; plan: ApplyPlan }) => {
+      if (x.plan.changed) this.result.applied[x.area] = true
+      if (x.plan.bad) await this.countBad(x.plan.bad)
+    }
     try {
       await this.db.batch(items.flatMap((x) => [...x.plan.statements, clearNeedsApply(x.id)]))
       this.applyFailures = 0
-      if (items.some((x) => x.plan.changed)) this.result.applied.favoriteThreads = true
+      for (const x of items) await done(x)
     } catch (e) {
       // 全部戻っているので needs_apply が残る。続けて失敗するなら 1 件ずつ分けて、原因のレコードだけを除ける
       if (++this.applyFailures < APPLY_SPLIT_AFTER) throw e
       for (const x of items) {
         try {
           await this.db.batch([...x.plan.statements, clearNeedsApply(x.id)])
-          if (x.plan.changed) this.result.applied.favoriteThreads = true
+          await done(x)
         } catch {
           await this.db.execute('UPDATE sync_records SET needs_apply = 0 WHERE record_id = $1', [x.id])
           await this.countBad('apply')
@@ -912,7 +944,7 @@ export class SyncEngine {
       pending,
       priority: priority ?? l?.priority ?? 5,
       needs_apply: !l || !same(l.payload, settled.payload) || l.needs_apply,
-      ...keepRefs(refsOf(l), refsFromBody(settled.payload)),
+      ...keepRefs(refsOf(l), this.refsOfBody(settled.payload)),
       tomb_at: settled.tomb_at ?? null,
     }
   }
@@ -972,7 +1004,7 @@ export class SyncEngine {
     if (plan.removed.length > 0) {
       stmts.push(setState('rebase_backup', canonicalJson(liveRemoved.map((id) => {
         const r = byId.get(id) as StoredRecord
-        return { record_id: id, kind: r.kind, ref_board: r.ref_board, ref_thread: r.ref_thread }
+        return { record_id: id, kind: r.kind, ref_board: r.ref_board, ref_thread: r.ref_thread, ref_detail: r.ref_detail }
       }))))
     }
     for (const [id, settled] of Object.entries(plan.records)) {
@@ -982,11 +1014,11 @@ export class SyncEngine {
       const r = byId.get(id) as StoredRecord
       // すでに tombstone のものは今のデータに触らない。行を消すだけ
       if (!isDeleted(r.payload)) {
-        const adapter = this.deps.adapters.find((a) => a.kind === r.kind)
-        if (adapter?.owns(r)) {
+        const adapter = this.deps.adapters.find((a) => a.kind === r.kind && a.owns(r))
+        if (adapter) {
           const removal = await adapter.remove(r)
           stmts.push(...removal.statements)
-          if (removal.changed) this.result.applied.favoriteThreads = true
+          if (removal.changed) this.result.applied[adapter.area] = true
         }
       }
       stmts.push(delRecord(id))

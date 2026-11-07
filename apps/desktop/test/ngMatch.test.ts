@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Post, ThreadSummary } from '@bbs-browser/connectors'
-import { daysLaterDateString, isActive, isValidPattern, matchRanges, newRule, pruneExpired, postMatcher, threadMatcher, todayDateString, type NgRule } from '../src/utils/ng'
+import { daysLaterDateString, isActive, isValidPattern, matchRanges, newRule, pruneExpired, postMatcher, threadMatcher, todayDateString, type NgRule , ngRegExp, ngRiskyPattern } from '../src/utils/ng'
 
 const post = (o: Partial<Post> = {}): Post => ({ no: 1, name: '名無し', mail: '', date: '', id: 'AbC123', body: '今日は Rust の話', ...o })
 const thread = (o: Partial<ThreadSummary> = {}): ThreadSummary => ({
@@ -161,5 +162,20 @@ describe('isValidPattern・matchRanges: NG の試し', () => {
     expect(matchRanges({ pattern: '(', isRegex: true, target: 'content' }, 'ab')).toEqual([])
     expect(matchRanges({ pattern: '', isRegex: true, target: 'content' }, 'ab')).toEqual([])
     expect(matchRanges({ pattern: 'a', isRegex: false, target: 'content' }, 'a'.repeat(500))).toHaveLength(200)
+  })
+})
+
+describe('同期で来た式の検査(ng-risky.json)', () => {
+  const cases = JSON.parse(readFileSync(new URL('../../../packages/conformance/ng-risky.json', import.meta.url), 'utf-8')) as { name: string; pattern: string; risky: boolean }[]
+  it.each(cases)('$name: $pattern', (c) => {
+    expect(ngRiskyPattern(c.pattern)).toBe(c.risky)
+  })
+  it('通す式は、当たらない長い本文でもすぐ終わる', () => {
+    const text = `${'a'.repeat(3000)}!`
+    for (const c of cases.filter((x) => !x.risky && !x.pattern.includes('.*'))) {
+      const started = Date.now()
+      ngRegExp(c.pattern).test(text)
+      expect(Date.now() - started, c.pattern).toBeLessThan(1000)
+    }
   })
 })

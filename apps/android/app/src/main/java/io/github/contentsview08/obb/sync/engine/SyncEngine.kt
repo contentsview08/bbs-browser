@@ -9,6 +9,8 @@ import io.github.contentsview08.obb.sync.SyncError
 import io.github.contentsview08.obb.sync.SyncKeys
 import io.github.contentsview08.obb.sync.SyncPayload
 import io.github.contentsview08.obb.sync.adapters.AdapterContext
+import io.github.contentsview08.obb.sync.adapters.AREA_FAVORITE_THREADS
+import io.github.contentsview08.obb.sync.adapters.OpTarget
 import io.github.contentsview08.obb.sync.adapters.ApplyPlan
 import io.github.contentsview08.obb.sync.adapters.SyncAdapter
 import io.github.contentsview08.obb.sync.body
@@ -58,8 +60,9 @@ class CycleResult {
     var pushed = 0
     var conflicts = 0
 
-    /** 画面が読み直すもの。適用で手元が変わったときだけ立つ */
-    var favoriteThreads = false
+    /** 画面が読み直すもの。値はアダプターの area。適用で手元が変わったときだけ入る */
+    val applied = HashSet<String>()
+    val favoriteThreads get() = AREA_FAVORITE_THREADS in applied
 
     /** 周を始めなかった理由 */
     var skipped: String? = null
@@ -82,9 +85,9 @@ private class FullRead {
 
 private class Prepared(val requestId: String, val rows: List<StoredRecord>, val sent: Map<String, String>)
 
-private fun refsFromBody(p: SyncPayload): RecordRefs {
+private fun refsFromBody(p: SyncPayload, detail: String?): RecordRefs {
     val board = p.body?.get("board_url") as? String
-    return RecordRefs(board?.let(::normalizeBoardUrl), p.body?.get("thread") as? String)
+    return RecordRefs(board?.let(::normalizeBoardUrl), p.body?.get("thread") as? String, detail)
 }
 
 private fun same(a: SyncPayload, b: SyncPayload) = canonicalJson(a) == canonicalJson(b)
@@ -324,6 +327,11 @@ class SyncEngine(
 
     private fun ctx() = AdapterContext(keys, deviceId, now())
 
+    private fun refsOfBody(p: SyncPayload): RecordRefs {
+        val detail = adapters.firstNotNullOfOrNull { a -> if (a.kind == p.kind) a.detailOf(p) else null }
+        return refsFromBody(p, detail)
+    }
+
     /** sync_ops を前から処理する。適用と入れ違った操作でも手元が揃うよう、needs_apply を立てて写し直す */
     private fun drain() {
         while (true) {
@@ -333,20 +341,13 @@ class SyncEngine(
             var clock = t.state("clock") ?: Hlc.ZERO
             val stmts = ArrayList<SqlStatement>()
             val touched = LinkedHashMap<String, StoredRecord>()
-            for (op in ops) {
-                stmts += delOp(op.seq)
-                val adapter = adapters.first { op.op in it.ops }
-                val target = adapter.target(op, c)
-                if (target == null) {
-                    countBad("local")
-                    continue
-                }
+            fun put(target: OpTarget, atMs: Long, make: (SyncPayload?, String) -> SyncPayload?) {
                 val existing = touched[target.recordId] ?: t.record(target.recordId)
-                val stamped = Hlc.stamp(clock, op.atMs, deviceId, existing?.payload?.hlc)
-                val payload = adapter.fromOp(op, existing?.payload, stamped.stamp, c) ?: continue
+                val stamped = Hlc.stamp(clock, atMs, deviceId, existing?.payload?.hlc)
+                val payload = make(existing?.payload, stamped.stamp) ?: return
                 if (checkPayload(payload) == null) {
                     countBad("local")
-                    continue
+                    return
                 }
                 clock = stamped.clock
                 val settled = settleRecord(payload, existing?.version ?: 0, existing?.asLocal(), c.now)
@@ -355,6 +356,25 @@ class SyncEngine(
                     target.recordId, payload.kind, existing?.kindTag ?: "h", existing?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
                     pending = true, priority = 0, needsApply = true, refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
                 )
+            }
+            for (op in ops) {
+                val adapter = adapters.first { op.op in it.ops }
+                if (adapter.expands) {
+                    // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
+                    if (touched.isNotEmpty()) break
+                    stmts += delOp(op.seq)
+                    val effects = adapter.expand(op, c)
+                    if (effects == null) countBad("local")
+                    for (e in effects.orEmpty()) put(e.target, op.atMs, e.make)
+                    break
+                }
+                stmts += delOp(op.seq)
+                val target = adapter.target(op, c)
+                if (target == null) {
+                    countBad("local")
+                    continue
+                }
+                put(target, op.atMs) { existing, stamp -> adapter.fromOp(op, existing, stamp, c) }
             }
             for (r in touched.values) stmts += writeRecord(r)
             stmts += setState("clock", clock)
@@ -472,7 +492,7 @@ class SyncEngine(
         val payload = if (l != null) mergePayloads(l.payload, server) else server
         val fromServer = same(payload, server)
         val settled = settleRecord(payload, maxOf(l?.version ?: 0, version), l?.asLocal(), at)
-        val refs = refsFromBody(payload).over(l?.refs)
+        val refs = refsOfBody(payload).over(l?.refs)
         return StoredRecord(
             id, payload.kind, if (fromServer) meta.kindTag else l!!.kindTag, if (fromServer) meta.schemaVersion else l!!.schemaVersion, payload, settled.version,
             pending = !fromServer, priority = l?.priority ?: 5, needsApply = l == null || !same(l.payload, payload) || l.needsApply,
@@ -527,6 +547,7 @@ class SyncEngine(
         val c = ctx()
         val stmts = ArrayList<SqlStatement>()
         for (adapter in adapters) {
+            if (!adapter.reconciles) continue
             val rows = adapter.seed(c)
             val local = t.records(rows.map { it.recordId })
             for (r in rows) {
@@ -555,38 +576,50 @@ class SyncEngine(
         var after = ""
         while (true) {
             val rows = t.toApply(kinds, after, SyncConfig.APPLY_BATCH)
-            if (rows.isEmpty()) return
+            if (rows.isEmpty()) break
             after = rows.last().recordId
-            val items = ArrayList<Pair<String, ApplyPlan>>()
+            val items = ArrayList<ApplyItem>()
             for (r in rows) {
                 if (r.recordId in waiting) continue
                 val adapter = adapters.firstOrNull { it.kind == r.kind && it.owns(r) }
                 if (adapter == null) {
                     // 本文も ref もない tombstone は手元のどれか分からない。後で種まきが同じ ID を作れば ref が埋まって写せる
-                    if (r.refBoard == null && r.payload["body"] == null) items += r.recordId to ApplyPlan(emptyList(), false)
+                    if (r.refBoard == null && r.refDetail == null && r.payload["body"] == null) items += ApplyItem(r.recordId, "", ApplyPlan(emptyList(), false))
                     continue
                 }
-                items += r.recordId to adapter.apply(r, c)
+                items += ApplyItem(r.recordId, adapter.area, adapter.apply(r, c))
             }
             writeApplied(items)
         }
+        for (adapter in adapters) {
+            val plan = adapter.afterApply(c) ?: continue
+            if (plan.statements.isNotEmpty()) db.batch(plan.statements)
+            if (plan.changed) result.applied += adapter.area
+            plan.bad?.let { countBad(it) }
+        }
     }
 
-    private fun writeApplied(items: List<Pair<String, ApplyPlan>>) {
+    private class ApplyItem(val id: String, val area: String, val plan: ApplyPlan)
+
+    private fun writeApplied(items: List<ApplyItem>) {
         if (items.isEmpty()) return
+        fun done(x: ApplyItem) {
+            if (x.plan.changed) result.applied += x.area
+            x.plan.bad?.let { countBad(it) }
+        }
         try {
-            db.batch(items.flatMap { (id, plan) -> plan.statements + clearNeedsApply(id) })
+            db.batch(items.flatMap { it.plan.statements + clearNeedsApply(it.id) })
             applyFailures = 0
-            if (items.any { it.second.changed }) result.favoriteThreads = true
+            items.forEach { done(it) }
         } catch (e: Exception) {
             // 全部戻っているので needs_apply が残る。続けて失敗するなら 1 件ずつ分けて、原因のレコードだけを除ける
             if (++applyFailures < SyncConfig.APPLY_SPLIT_AFTER) throw e
-            for ((id, plan) in items) {
+            for (x in items) {
                 try {
-                    db.batch(plan.statements + clearNeedsApply(id))
-                    if (plan.changed) result.favoriteThreads = true
+                    db.batch(x.plan.statements + clearNeedsApply(x.id))
+                    done(x)
                 } catch (_: Exception) {
-                    db.exec("UPDATE sync_records SET needs_apply = 0 WHERE record_id = ?", listOf(id))
+                    db.exec("UPDATE sync_records SET needs_apply = 0 WHERE record_id = ?", listOf(x.id))
                     countBad("apply")
                 }
             }
@@ -760,7 +793,7 @@ class SyncEngine(
     }
 
     private fun rowFromPlan(l: StoredRecord?, id: String, settled: LocalRecord, meta: ServerMeta?, pending: Boolean, priority: Long? = null): StoredRecord {
-        val refs = refsFromBody(settled.payload).over(l?.refs)
+        val refs = refsOfBody(settled.payload).over(l?.refs)
         return StoredRecord(
             id, settled.payload.kind, l?.kindTag ?: meta?.kindTag ?: "h", l?.schemaVersion ?: meta?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, settled.payload, settled.version,
             pending = pending, priority = priority ?: l?.priority ?: 5, needsApply = l == null || !same(l.payload, settled.payload) || l.needsApply,
@@ -825,7 +858,7 @@ class SyncEngine(
         }
         val stmts = ArrayList<SqlStatement>()
         if (plan.removed.isNotEmpty()) {
-            val backup = liveRemoved.map { id -> byId.getValue(id).let { mapOf("record_id" to id, "kind" to it.kind, "ref_board" to it.refBoard, "ref_thread" to it.refThread) } }
+            val backup = liveRemoved.map { id -> byId.getValue(id).let { mapOf("record_id" to id, "kind" to it.kind, "ref_board" to it.refBoard, "ref_thread" to it.refThread, "ref_detail" to it.refDetail) } }
             stmts += setState("rebase_backup", canonicalJson(backup))
         }
         for ((id, settled) in plan.records) stmts += writeRecord(rowFromPlan(byId[id], id, settled, read.meta[id], id in plan.pending))
@@ -837,7 +870,7 @@ class SyncEngine(
                 if (adapter != null) {
                     val removal = adapter.remove(r)
                     stmts += removal.statements
-                    if (removal.changed) result.favoriteThreads = true
+                    if (removal.changed) result.applied += adapter.area
                 }
             }
             stmts += delRecord(id)

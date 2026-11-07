@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import initSqlJs from 'sql.js'
 import { describe, expect, it } from 'vitest'
-import { LogStore, UserOps, type SqlDb } from '../src/index'
+import { applyNgDiff, LogStore, ngDiff, ngRuleFromBody, ngRuleToBody, UserOps, type SqlDb } from '../src/index'
 
 const names = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort()
 const read = (f: string) => readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf-8')
@@ -155,5 +155,30 @@ describe('拾いの入口の検査', () => {
   it('画面はお気に入りのスレの関数を直接呼ばない', () => {
     const offenders = walk(new URL('../../../apps/desktop/src/', import.meta.url)).filter((f) => /\.(addFavoriteThread|removeFavoriteThread)\(/.test(readFileSync(decodeURIComponent(f), 'utf-8')))
     expect(offenders).toEqual([])
+  })
+})
+
+describe('NG の差分', () => {
+  const a = { id: 'a', target: 'content', pattern: 'a', isRegex: false, enabled: true }
+  const b = { ...a, id: 'b', pattern: 'b' }
+  const x = { ...a, id: 'x', pattern: 'x' }
+  const old = { ...a, id: 'old', expiresOnDate: '2020-01-01' }
+
+  it('窓の見ていた配列と比べるので、窓の知らない要素は消す差分に出ず、今の値に残る', () => {
+    const d = ngDiff([a], [a, b], '2027-01-01')
+    expect(d).toEqual({ upsert: [b], remove: [], drop: [] })
+    expect(applyNgDiff([a, x], d)).toEqual([a, x, b])
+  })
+
+  it('期限切れと読み込みは送らず、手元からだけ消す', () => {
+    expect(ngDiff([a, old], [a], '2027-01-01')).toEqual({ upsert: [], remove: [], drop: ['old'] })
+    expect(ngDiff([a, b], [b], '2027-01-01', { keepRemoved: true })).toEqual({ upsert: [], remove: [], drop: ['a'] })
+    expect(ngDiff([a, b], [b], '2027-01-01')).toEqual({ upsert: [], remove: ['a'], drop: [] })
+  })
+
+  it('本文と行き来しても同じ', () => {
+    const full = { id: 'n', target: 'posterId', pattern: 'ID', isRegex: true, enabled: false, expiresOnDate: '2030-01-01', boardUrl: 'https://a.5ch.io/x/', boardName: '板', note: 'メモ', createdAt: 5 }
+    expect(ngRuleFromBody(ngRuleToBody(full))).toEqual(full)
+    expect(ngRuleFromBody(ngRuleToBody(a))).toEqual(a)
   })
 })

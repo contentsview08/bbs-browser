@@ -1,9 +1,23 @@
 package io.github.contentsview08.obb.sync
 
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.bbs.Board
+import io.github.contentsview08.obb.data.FavoriteBoardSql
 import io.github.contentsview08.obb.data.FavoriteThreadSql
+import io.github.contentsview08.obb.data.NgRule
+import io.github.contentsview08.obb.data.SiteSql
+import io.github.contentsview08.obb.data.SyncNgHost
+import io.github.contentsview08.obb.data.UploadRecord
+import io.github.contentsview08.obb.data.UploadSql
 import io.github.contentsview08.obb.data.UserOps
+import io.github.contentsview08.obb.data.applyNgDiff
+import io.github.contentsview08.obb.data.ngDiff
+import io.github.contentsview08.obb.data.ngRuleToBody
 import io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter
+import io.github.contentsview08.obb.sync.adapters.ImageAdapter
+import io.github.contentsview08.obb.sync.adapters.NgAdapter
+import io.github.contentsview08.obb.sync.adapters.SiteAdapter
+import io.github.contentsview08.obb.sync.adapters.favoriteBoardAdapters
 import io.github.contentsview08.obb.sync.adapters.ResolvedBoard
 import io.github.contentsview08.obb.sync.engine.SyncEngine
 import io.github.contentsview08.obb.sync.engine.SyncKeyMaterial
@@ -66,8 +80,14 @@ private fun resolver(device: String): (String) -> ResolvedBoard? = { url ->
 }
 
 @Suppress("UNCHECKED_CAST")
-private class Device(val name: String, val world: World, val skew: Long) {
-    val sql = JdbcSyncSql.open()
+private class Device(val name: String, val world: World, val skew: Long, keepDefaults: Boolean) {
+    val sql = JdbcSyncSql.open().also { if (!keepDefaults) { it.script("DELETE FROM sites"); it.script("DELETE FROM favorite_boards") } }
+
+    /** スマホの置き場は Prefs。テストはメモリに同じ順で持つ */
+    var ng: List<NgRule> = emptyList()
+
+    /** 道具の窓が開いたときに見ていた NG。窓は保存まで読み直さない */
+    val windows = HashMap<String, List<NgRule>>()
     val ops = UserOps(sql)
     val keys = MemoryKeyStore()
     lateinit var engine: SyncEngine
@@ -132,7 +152,11 @@ private class Device(val name: String, val world: World, val skew: Long) {
             keyStore = keys,
             transport = { send(it) },
             serverUrl = "https://sync.test",
-            adapters = listOf(FavoriteThreadAdapter(sql, resolver(name))),
+            adapters = listOf(FavoriteThreadAdapter(sql, resolver(name))) + favoriteBoardAdapters(sql, resolver(name)) + listOf(
+                SiteAdapter(sql) { url -> if (name == "phone" && url.contains("2chan.net")) null else "2ch-compat" },
+                ImageAdapter(sql),
+                NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
+            ),
             now = { now() },
             newDeviceId = { if (idCount++ == 0) name else "${name}_$idCount" },
             newRequestId = {
@@ -157,9 +181,34 @@ private class Device(val name: String, val world: World, val skew: Long) {
     /** 今のデータと同期の表の全部。PC とスマホで同じ文字列になる */
     fun digest(): String {
         val favorites = sql.query("SELECT board_url, key, connector_id, title, created_at, sort, added_at FROM favorite_threads ORDER BY board_url, key")
-        val records = sql.query("SELECT record_id, kind, kind_tag, schema_version, payload, hlc, deleted, version, pending, priority, needs_apply, ref_board, ref_thread, tomb_at FROM sync_records ORDER BY record_id")
-        return sha256(utf8(canonicalJson(mapOf("favorites" to favorites, "records" to records)))).toHex()
+        val boards = sql.query("SELECT url, connector_id, name, sort FROM favorite_boards ORDER BY url")
+        val sites = sql.query("SELECT menu_url, connector_id, name, sort FROM sites ORDER BY menu_url")
+        val uploads = sql.query("SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url")
+        val records = sql.query("SELECT record_id, kind, kind_tag, schema_version, payload, hlc, deleted, version, pending, priority, needs_apply, ref_board, ref_thread, ref_detail, tomb_at FROM sync_records ORDER BY record_id")
+        return sha256(utf8(canonicalJson(mapOf("favorites" to favorites, "boards" to boards, "sites" to sites, "uploads" to uploads, "ng" to ng.map(::ngRuleToBody), "records" to records)))).toHex()
     }
+}
+
+/** 端末の日付の代わり。時差で結果が変わらないよう UTC で決める */
+private fun dateOf(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+
+private fun ruleOf(o: Map<String, Any?>) = NgRule(
+    o["target"] as String, o["pattern"] as String, o["isRegex"] == true, o["enabled"] != false,
+    o["expiresOnDate"] as String?, o["boardUrl"] as String?, o["boardName"] as String?, o["note"] as String?, o["id"] as String, o["createdAt"] as Long? ?: 0L,
+)
+
+private fun uploadOf(s: Map<String, Any?>, now: Long) = UploadRecord(s["url"] as String, s["name"] as String? ?: "", s["size"] as Long? ?: 0L, now, s["with_account"] == true, s["hash"] as String?, s["delete_url"] as String?)
+
+/** 窓が見ている配列から新しい配列を作り、その窓の差分だけを保存する */
+@Suppress("UNCHECKED_CAST")
+private fun windowChange(d: Device, view: List<NgRule>, s: Map<String, Any?>): List<NgRule> {
+    val removed = (s["remove"] as List<String>?).orEmpty().toSet()
+    val edits = (s["edit"] as List<Map<String, Any?>>?).orEmpty().map(::ruleOf).associateBy { it.id }
+    val after = view.filter { it.id !in removed }.map { edits[it.id] ?: it } + (s["add"] as List<Map<String, Any?>>?).orEmpty().map(::ruleOf)
+    val diff = ngDiff(view, after, dateOf(d.now()))
+    d.ng = applyNgDiff(d.ng, diff)
+    d.ops.ngChangeNow(diff, d.now())
+    return after
 }
 
 private fun thread(s: Map<String, Any?>) = ThreadSummary(s["board"] as String, s["key"] as String, s["title"] as String? ?: "", 0, 0, s["created_at"] as Long?)
@@ -185,6 +234,30 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
             "INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))",
             listOf(s["url"], "2ch-compat", s["name"]),
         )
+        "favorite_board_add" -> d!!.ops.setFavoriteNow(Board(s["url"] as String, s["name"] as String? ?: ""), true, d.now())
+        "favorite_board_remove" -> d!!.ops.setFavoriteNow(Board(s["url"] as String, ""), false, d.now())
+        "favorite_board_order" -> d!!.ops.reorderFavoritesNow(s["urls"] as List<String>, d.now())
+        "site_add" -> d!!.ops.addSiteNow(s["url"] as String, s["name"] as String? ?: "", d.now())
+        "site_remove" -> d!!.ops.removeSiteNow(s["url"] as String, d.now())
+        "preset_site_add" -> d!!.sql.exec(SiteSql.ADD, SiteSql.addArgs(s["url"] as String, s["name"] as String? ?: ""))
+        "boards_cache" -> d!!.sql.exec("INSERT INTO boards (site_menu_url, url, connector_id, name, sort) VALUES (?, ?, '2ch-compat', 'x', 0)", listOf(s["site"], s["url"]))
+        "upload_add" -> d!!.ops.addUploadNow(uploadOf(s, d.now()), d.now())
+        "upload_remove" -> d!!.ops.removeUploadNow(s["url"] as String, d.now())
+        "ng_change" -> windowChange(d!!, d.ng, s)
+        "ng_prune" -> {
+            val today = dateOf(d!!.now())
+            val diff = ngDiff(d.ng, d.ng.filter { it.expiresOnDate == null || it.expiresOnDate >= today }, today)
+            d.ng = applyNgDiff(d.ng, diff)
+            d.ops.ngChangeNow(diff, d.now())
+        }
+        "ng_window_open" -> d!!.windows[s["window"] as String] = d.ng
+        "ng_window_change" -> d!!.windows[s["window"] as String] = windowChange(d, d.windows.getValue(s["window"] as String), s)
+        "ng_write_raw" -> d!!.ng = (s["rules"] as List<Map<String, Any?>>).map(::ruleOf)
+        "ng_import" -> {
+            val diff = ngDiff(d!!.ng, (s["rules"] as List<Map<String, Any?>>).map(::ruleOf), dateOf(d.now()), keepRemoved = true)
+            d.ng = applyNgDiff(d.ng, diff)
+            d.ops.ngChangeNow(diff, d.now())
+        }
         "pair_first" -> {
             val k = keyOf(s["device"] as String)
             d!!.engine.pair(k, if (s["no_ticket"] == true) null else d.startPage(k))
@@ -266,6 +339,24 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         e["favorite_threads"]?.let { checkEq("$at のお気に入り", it, d.sql.query("SELECT key FROM favorite_threads ORDER BY key").map { r -> r["key"] }) }
         e["favorite_rows"]?.let { checkEq("$at のお気に入りの行", it, d.sql.query("SELECT board_url, key, title, created_at FROM favorite_threads ORDER BY board_url, key")) }
         e["favorite_boards"]?.let { checkEq("$at のお気に入り板", it, d.sql.query("SELECT url FROM favorite_boards ORDER BY url").map { r -> r["url"] }) }
+        e["favorite_board_order"]?.let { checkEq("$at のお気に入り板の並び", it, d.sql.query("SELECT url FROM favorite_boards ORDER BY sort, url").map { r -> r["url"] }) }
+        e["favorite_board_rows"]?.let { checkEq("$at のお気に入り板の行", it, d.sql.query("SELECT url, connector_id, name FROM favorite_boards ORDER BY url")) }
+        e["sites"]?.let { checkEq("$at のサイト", it, d.sql.query("SELECT menu_url FROM sites ORDER BY menu_url").map { r -> r["menu_url"] }) }
+        e["site_rows"]?.let { checkEq("$at のサイトの行", it, d.sql.query("SELECT menu_url, connector_id, name FROM sites ORDER BY menu_url")) }
+        e["boards_cached"]?.let { assertEquals("$at の板一覧", (it as Long).toInt(), d.count("FROM boards")) }
+        e["uploads"]?.let { checkEq("$at の画像", it, d.sql.query("SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url")) }
+        e["ng_ids"]?.let { checkEq("$at の NG", it, d.ng.map { r -> r.id }) }
+        e["ng_rules"]?.let { checkEq("$at の NG の中身", it, d.ng.map(::ngRuleToBody)) }
+        e["kinds"]?.let { checkEq("$at の種類ごとのレコード数", it, d.sql.query("SELECT kind, COUNT(*) AS n FROM sync_records GROUP BY kind").associate { r -> r["kind"] as String to r["n"] }) }
+        e["max_order_key"]?.let {
+            val longest = d.sql.query("SELECT payload FROM sync_records WHERE kind = 'order' AND deleted = 0").maxOfOrNull { r -> ((parseStrictJson(r["payload"] as String) as Map<String, Any?>)["body"] as Map<String, Any?>)["key"].toString().length } ?: 0
+            assertEquals("$at の順序キーの長さ", true, longest <= (it as Long))
+        }
+        e["record_lacks"]?.let { texts ->
+            val rows = d.sql.query("SELECT payload FROM sync_records").map { r -> r["payload"] as String }
+            for (text in texts as List<String>) assertEquals("$at のレコードに $text がない", false, rows.any { p -> p.contains(text) })
+        }
+        e["applied_areas"]?.let { checkEq("$at の適用の種類", it, d.last?.applied.orEmpty().sorted()) }
         e["state"]?.let { assertEquals("$at の状態", it, d.engine.state) }
         e["phase"]?.let { assertEquals("$at の phase", it, d.state("phase")) }
         e["pending"]?.let { assertEquals("$at の未送信", (it as Long).toInt(), d.count("FROM sync_records WHERE pending = 1")) }
@@ -299,13 +390,20 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
 private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> {
     val w = World(c["server"] as Map<String, Any?>? ?: emptyMap())
     val skews = c["skew_ms"] as Map<String, Long>? ?: emptyMap()
-    for (name in c["devices"] as List<String>) w.devices[name] = Device(name, w, skews[name] ?: 0)
+    for (name in c["devices"] as List<String>) w.devices[name] = Device(name, w, skews[name] ?: 0, c["keep_defaults"] == true)
     for ((name, seed) in (c["seed"] as Map<String, Map<String, Any?>>?).orEmpty()) {
         val d = w.devices.getValue(name)
         for (f in (seed["favorite_threads"] as List<Map<String, Any?>>?).orEmpty()) {
             val t = thread(f)
             d.sql.exec(FavoriteThreadSql.ADD, FavoriteThreadSql.addArgs(t, t.title, START - (f["added_ago_ms"] as Long? ?: 0)))
         }
+        for (b in (seed["favorite_boards"] as List<Map<String, Any?>>?).orEmpty()) d.sql.exec(FavoriteBoardSql.ADD, FavoriteBoardSql.addArgs(Board(b["url"] as String, b["name"] as String? ?: "")))
+        for (x in (seed["sites"] as List<Map<String, Any?>>?).orEmpty()) d.sql.exec(SiteSql.ADD, SiteSql.addArgs(x["url"] as String, x["name"] as String? ?: ""))
+        for (u in (seed["uploads"] as List<Map<String, Any?>>?).orEmpty()) {
+            val at = START - (u["ago_ms"] as Long? ?: 0)
+            d.sql.exec(UploadSql.ADD, UploadSql.addArgs(uploadOf(u, at), at).toList())
+        }
+        (seed["ng"] as List<Map<String, Any?>>?)?.let { d.ng = it.map(::ruleOf) }
     }
     val label = c["name"] as String
     for (s in c["steps"] as List<Map<String, Any?>>) runStep(w, s, label)

@@ -43,7 +43,7 @@ export function BackupTab({
         return `設定を読み込みました(${Object.keys(values).length} 項目)`
       }
       const { rules, added } = mergeNgRules(s.ngRules, parsed.rules, () => crypto.randomUUID())
-      update('ngRules', rules)
+      update('ngRules', rules, s.ngRules)
       return `NG を ${added} 件足しました(同じものは足していません)`
     })
 

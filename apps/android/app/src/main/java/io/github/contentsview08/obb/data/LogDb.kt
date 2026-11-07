@@ -65,6 +65,23 @@ internal object UploadSql {
         arrayOf(u.url, u.name, u.size, u.uploadedAt, if (u.withAccount) 1 else 0, u.hash, u.deleteUrl)
 }
 
+/** お気に入り板とサイトの SQL。JVM のテストでも同じ文を流す */
+internal object FavoriteBoardSql {
+    const val ADD = "INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))"
+    const val REMOVE = "DELETE FROM favorite_boards WHERE url = ?"
+    const val REORDER = "UPDATE favorite_boards SET sort = ? WHERE url = ?"
+
+    fun addArgs(board: Board): List<Any?> = listOf(board.url, connectorOf(board.url), board.name)
+}
+
+internal object SiteSql {
+    const val ADD = "INSERT OR REPLACE INTO sites (menu_url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM sites))"
+    const val REMOVE_BOARDS = "DELETE FROM boards WHERE site_menu_url = ?"
+    const val REMOVE = "DELETE FROM sites WHERE menu_url = ?"
+
+    fun addArgs(menuUrl: String, name: String): List<Any?> = listOf(menuUrl, if (io.github.contentsview08.obb.bbs.HonoBbs.isSiteUrl(menuUrl)) "honobbs" else "2ch-compat", name)
+}
+
 /** お気に入りのスレの SQL。JVM のテストでも同じ文を流す */
 internal object FavoriteThreadSql {
     const val ADD = "INSERT OR IGNORE INTO favorite_threads (board_url, key, connector_id, title, created_at, sort, added_at) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_threads), ?)"
@@ -136,11 +153,8 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
 
     suspend fun setFavorite(board: Board, on: Boolean) = io {
         if (on) {
-            writableDatabase.execSQL(
-                "INSERT OR IGNORE INTO favorite_boards (url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM favorite_boards))",
-                arrayOf(board.url, connectorOf(board.url), board.name),
-            )
-        } else writableDatabase.execSQL("DELETE FROM favorite_boards WHERE url = ?", arrayOf(board.url))
+            writableDatabase.execSQL(FavoriteBoardSql.ADD, FavoriteBoardSql.addArgs(board).toTypedArray())
+        } else writableDatabase.execSQL(FavoriteBoardSql.REMOVE, arrayOf(board.url))
     }
 
     /** お気に入り板の並びを入れ替える(urls の順に並べ直す) */
@@ -157,10 +171,7 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
 
     /** 板一覧の取得元(bbsmenu)を足す・外す */
     suspend fun addSite(menuUrl: String, name: String) = io {
-        writableDatabase.execSQL(
-            "INSERT OR REPLACE INTO sites (menu_url, connector_id, name, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM sites))",
-            arrayOf(menuUrl, if (io.github.contentsview08.obb.bbs.HonoBbs.isSiteUrl(menuUrl)) "honobbs" else "2ch-compat", name),
-        )
+        writableDatabase.execSQL(SiteSql.ADD, SiteSql.addArgs(menuUrl, name).toTypedArray())
     }
 
     suspend fun removeSite(menuUrl: String) = io {

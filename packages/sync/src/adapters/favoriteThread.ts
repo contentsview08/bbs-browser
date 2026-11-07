@@ -10,6 +10,7 @@ import type { AdapterContext, ApplyPlan, OpTarget, SeedRow, SyncAdapter } from '
 export const FAVORITE_KIND = 'favorite'
 export const FAVORITE_THREAD_ADD = 'favorite_thread_add'
 export const FAVORITE_THREAD_REMOVE = 'favorite_thread_remove'
+export const AREA_FAVORITE_THREADS = 'favoriteThreads'
 const TITLE_MAX = 1024
 const SEED_PRIORITY = 1
 
@@ -49,6 +50,7 @@ function bodyOf(r: LocalRow): Record<string, unknown> {
 
 export class FavoriteThreadAdapter implements SyncAdapter {
   readonly kind = FAVORITE_KIND
+  readonly area = AREA_FAVORITE_THREADS
   readonly ops = [FAVORITE_THREAD_ADD, FAVORITE_THREAD_REMOVE]
 
   constructor(private readonly db: SyncSqlDb, private readonly resolve: BoardResolver) {}

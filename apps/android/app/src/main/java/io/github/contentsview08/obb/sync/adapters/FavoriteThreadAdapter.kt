@@ -20,6 +20,7 @@ import io.github.contentsview08.obb.sync.updateRecord
 const val FAVORITE_KIND = "favorite"
 const val FAVORITE_THREAD_ADD = "favorite_thread_add"
 const val FAVORITE_THREAD_REMOVE = "favorite_thread_remove"
+const val AREA_FAVORITE_THREADS = "favoriteThreads"
 private const val TITLE_MAX = 1024
 private const val SEED_PRIORITY = 1L
 private const val TITLE_SQL = "COALESCE(NULLIF((SELECT t.title FROM threads AS t WHERE t.board_url = f.board_url AND t.key = f.key), ''), f.title) AS title"
@@ -34,6 +35,7 @@ class FavoriteThreadAdapter(
     private val resolve: (String) -> ResolvedBoard?,
 ) : SyncAdapter {
     override val kind = FAVORITE_KIND
+    override val area = AREA_FAVORITE_THREADS
     override val ops = listOf(FAVORITE_THREAD_ADD, FAVORITE_THREAD_REMOVE)
 
     private fun targetOf(ctx: AdapterContext, boardUrl: String, key: String): OpTarget? {

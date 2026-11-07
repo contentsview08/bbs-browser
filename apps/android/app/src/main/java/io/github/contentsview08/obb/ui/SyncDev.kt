@@ -156,7 +156,7 @@ fun SyncDevPage(vm: AppViewModel) {
     val s = st ?: return
     val needTicket = s.lastError?.startsWith("ticket_") == true
     Column(Modifier.padding(horizontal = 12.dp, vertical = 16.dp)) {
-        Text("お気に入りのスレだけを同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です", Modifier.padding(horizontal = 8.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
+        Text("お気に入りのスレと板、サイト、上げた画像の履歴、NG を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です", Modifier.padding(horizontal = 8.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
         Column(Modifier.fillMaxWidth().background(Palette.surface)) {
             StatusRow("状態", s.state)
             StatusRow(label("status_space"), s.space ?: "―")

@@ -18,3 +18,10 @@ fun resolveSyncBoard(url: String): ResolvedBoard? = when {
     isBoardUrl(url) -> ResolvedBoard(UrlRoute.to5chIo(url), "2ch-compat")
     else -> null
 }
+
+/** サイトの入口を受け持つコネクタ。LogDb の addSite と同じ。ふたばのサイトは手元に入れない */
+fun resolveSyncSite(url: String): String? = when {
+    FUTABA.containsMatchIn(url) -> null
+    HonoBbs.isSiteUrl(url) -> "honobbs"
+    else -> "2ch-compat"
+}

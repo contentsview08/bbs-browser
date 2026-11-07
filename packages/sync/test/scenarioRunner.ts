@@ -3,9 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs'
 import initSqlJs from 'sql.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { expect } from 'vitest'
-import { LogStore, UserOps, type SqlDb } from '../../logstore/src/index'
+import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
+import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, FavoriteThreadAdapter, recordId, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, favoriteBoardAdapters, FavoriteThreadAdapter, ImageAdapter, NgAdapter, recordId, SiteAdapter, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
 const SERVER = 'https://sync.test'
@@ -18,7 +19,9 @@ export interface Scenario {
   name: string
   devices: string[]
   server?: Record<string, unknown>
-  seed?: Record<string, { favorite_threads?: Step[] }>
+  seed?: Record<string, { favorite_threads?: Step[]; favorite_boards?: Step[]; sites?: Step[]; uploads?: Step[]; ng?: NgRuleData[] }>
+  /** 移行の SQL が入れる 5ch とエッヂを残す。ふだんは空から始めて、各シナリオの件数を読みやすくする */
+  keep_defaults?: boolean
   skew_ms?: Record<string, number>
   steps: Step[]
   expected?: Record<string, any>
@@ -131,8 +134,11 @@ class Device {
   trace: SyncEngineState[] = []
   idCount = 0
   requestCount = 0
-  constructor(readonly name: string, readonly world: World, readonly skew: number) {
+  /** 道具の窓が開いたときに見ていた NG。窓は保存まで読み直さない */
+  windows = new Map<string, NgRuleData[]>()
+  constructor(readonly name: string, readonly world: World, readonly skew: number, keepDefaults: boolean) {
     this.sql = sqlDb(this.dbFail)
+    if (!keepDefaults) this.sql.rawExec('DELETE FROM sites; DELETE FROM favorite_boards')
     this.store = new LogStore(this.sql.db)
     this.ops = new UserOps(this.store)
     this.newEngine()
@@ -175,7 +181,13 @@ class Device {
       keyStore: this.keys,
       transport: this.transport,
       serverUrl: SERVER,
-      adapters: [new FavoriteThreadAdapter(this.sql.db, resolver(this.name))],
+      adapters: [
+        new FavoriteThreadAdapter(this.sql.db, resolver(this.name)),
+        ...favoriteBoardAdapters(this.sql.db, resolver(this.name)),
+        new SiteAdapter(this.sql.db, (url) => (this.name === 'phone' && url.includes('2chan.net') ? null : '2ch-compat')),
+        new ImageAdapter(this.sql.db),
+        new NgAdapter({ ...settingsNgStore(this.sql.db), apply: async (c) => void (await settingsNgStore(this.sql.db).apply(c)), patternOk: ngPatternSyncable, today: dateOf }),
+      ],
       now: this.now,
       newDeviceId: () => (this.idCount++ === 0 ? this.name : `${this.name}_${this.idCount}`),
       newRequestId: () => {
@@ -206,9 +218,29 @@ class Device {
   /** 今のデータと同期の表の全部。PC とスマホで同じ文字列になる */
   async digest(): Promise<string> {
     const favorites = await this.sql.db.select('SELECT board_url, key, connector_id, title, created_at, sort, added_at FROM favorite_threads ORDER BY board_url, key')
-    const records = await this.sql.db.select('SELECT record_id, kind, kind_tag, schema_version, payload, hlc, deleted, version, pending, priority, needs_apply, ref_board, ref_thread, tomb_at FROM sync_records ORDER BY record_id')
-    return toHex(sha256(utf8(canonicalJson({ favorites, records }))))
+    const boards = await this.sql.db.select('SELECT url, connector_id, name, sort FROM favorite_boards ORDER BY url')
+    const sites = await this.sql.db.select('SELECT menu_url, connector_id, name, sort FROM sites ORDER BY menu_url')
+    const uploads = await this.sql.db.select('SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url')
+    const ng = await settingsNgStore(this.sql.db).read()
+    const records = await this.sql.db.select('SELECT record_id, kind, kind_tag, schema_version, payload, hlc, deleted, version, pending, priority, needs_apply, ref_board, ref_thread, ref_detail, tomb_at FROM sync_records ORDER BY record_id')
+    return toHex(sha256(utf8(canonicalJson({ favorites, boards, sites, uploads, ng, records }))))
   }
+}
+
+/** 端末の日付の代わり。時差で結果が変わらないよう UTC で決める */
+const dateOf = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+const board = (s: Step) => ({ url: s.url, name: s.name ?? '', connectorId: '2ch-compat' })
+const site = (s: Step) => ({ menuUrl: s.url, name: s.name ?? '', connectorId: '2ch-compat' })
+const upload = (s: Step) => ({ url: s.url, name: s.name ?? '', size: s.size ?? 0, withAccount: s.with_account === true, hash: s.hash, deleteUrl: s.delete_url })
+
+/** 窓が見ている配列から新しい配列を作り、その窓の差分だけを保存する */
+async function windowChange(d: Device, view: NgRuleData[], s: Step): Promise<NgRuleData[]> {
+  const removed = new Set<string>(s.remove ?? [])
+  const edits = new Map<string, NgRuleData>((s.edit ?? []).map((r: NgRuleData) => [r.id, r]))
+  const after = [...view.filter((r) => !removed.has(r.id)).map((r) => edits.get(r.id) ?? r), ...(s.add ?? [])]
+  await d.ops.ngChange(ngDiff(view, after, dateOf(d.now())), d.now())
+  return after
 }
 
 const thread = (s: Step): ThreadSummary => ({
@@ -245,6 +277,55 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     case 'preset_board_add':
       await d.store.addFavorite({ url: s.url, name: s.name, connectorId: '2ch-compat' } as never)
       break
+    case 'favorite_board_add':
+      await d.ops.favoriteBoardAdd(board(s), d.now())
+      break
+    case 'favorite_board_remove':
+      await d.ops.favoriteBoardRemove(s.url, d.now())
+      break
+    case 'favorite_board_order':
+      await d.ops.favoriteBoardReorder(s.urls, d.now())
+      break
+    case 'site_add':
+      await d.ops.siteAdd(site(s), d.now())
+      break
+    case 'site_remove':
+      await d.ops.siteRemove(s.url, d.now())
+      break
+    case 'preset_site_add':
+      await d.store.addSite(site(s))
+      break
+    case 'boards_cache':
+      await d.store.replaceBoards(s.site, [{ url: s.url, name: 'x', connectorId: '2ch-compat' }])
+      break
+    case 'upload_add':
+      await d.ops.uploadAdd(upload(s), d.now())
+      break
+    case 'upload_remove':
+      await d.ops.uploadRemove(s.url, d.now())
+      break
+    case 'ng_change':
+      await windowChange(d, await readNgRules(d.sql.db), s)
+      break
+    case 'ng_prune': {
+      const view = await readNgRules(d.sql.db)
+      await d.ops.ngChange(ngDiff(view, view.filter((r) => !r.expiresOnDate || r.expiresOnDate >= dateOf(d.now())), dateOf(d.now())), d.now())
+      break
+    }
+    case 'ng_window_open':
+      d.windows.set(s.window, await readNgRules(d.sql.db))
+      break
+    case 'ng_window_change':
+      d.windows.set(s.window, await windowChange(d, d.windows.get(s.window) as NgRuleData[], s))
+      break
+    case 'ng_write_raw':
+      await d.sql.db.batch([setSettingStatement('ngRules', s.rules)])
+      break
+    case 'ng_import': {
+      const view = await readNgRules(d.sql.db)
+      await d.ops.ngChange(ngDiff(view, s.rules, dateOf(d.now()), { keepRemoved: true }), d.now())
+      break
+    }
     case 'pair_first':
       await d.engine.pair(keyOf(s.device), s.no_ticket ? null : await d.startPage(keyOf(s.device)))
       await d.sync()
@@ -370,6 +451,36 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
       const rows = await d.sql.db.select<{ url: string }>('SELECT url FROM favorite_boards ORDER BY url')
       expect(rows.map((r) => r.url), `${at} のお気に入り板`).toEqual(e.favorite_boards)
     }
+    if (e.favorite_board_order !== undefined) {
+      const rows = await d.sql.db.select<{ url: string }>('SELECT url FROM favorite_boards ORDER BY sort, url')
+      expect(rows.map((r) => r.url), `${at} のお気に入り板の並び`).toEqual(e.favorite_board_order)
+    }
+    if (e.favorite_board_rows !== undefined) {
+      expect(await d.sql.db.select('SELECT url, connector_id, name FROM favorite_boards ORDER BY url'), `${at} のお気に入り板の行`).toEqual(e.favorite_board_rows)
+    }
+    if (e.sites !== undefined) {
+      const rows = await d.sql.db.select<{ menu_url: string }>('SELECT menu_url FROM sites ORDER BY menu_url')
+      expect(rows.map((r) => r.menu_url), `${at} のサイト`).toEqual(e.sites)
+    }
+    if (e.site_rows !== undefined) expect(await d.sql.db.select('SELECT menu_url, connector_id, name FROM sites ORDER BY menu_url'), `${at} のサイトの行`).toEqual(e.site_rows)
+    if (e.boards_cached !== undefined) expect(await d.count('FROM boards'), `${at} の板一覧`).toBe(e.boards_cached)
+    if (e.uploads !== undefined) expect(await d.sql.db.select('SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url'), `${at} の画像`).toEqual(e.uploads)
+    if (e.ng_ids !== undefined) expect((await readNgRules(d.sql.db)).map((r) => r.id), `${at} の NG`).toEqual(e.ng_ids)
+    if (e.ng_rules !== undefined) expect(await settingsNgStore(d.sql.db).read(), `${at} の NG の中身`).toEqual(e.ng_rules)
+    if (e.kinds !== undefined) {
+      const rows = await d.sql.db.select<{ kind: string; n: number }>('SELECT kind, COUNT(*) AS n FROM sync_records GROUP BY kind')
+      expect(Object.fromEntries(rows.map((r) => [r.kind, r.n])), `${at} の種類ごとのレコード数`).toEqual(e.kinds)
+    }
+    if (e.max_order_key !== undefined) {
+      const rows = await d.sql.db.select<{ payload: string }>("SELECT payload FROM sync_records WHERE kind = 'order' AND deleted = 0")
+      const longest = Math.max(0, ...rows.map((r) => ((JSON.parse(r.payload) as { body: { key: string } }).body.key).length))
+      expect(longest, `${at} の順序キーの長さ`).toBeLessThanOrEqual(e.max_order_key)
+    }
+    if (e.record_lacks !== undefined) {
+      const rows = await d.sql.db.select<{ payload: string }>('SELECT payload FROM sync_records')
+      for (const text of e.record_lacks) expect(rows.some((r) => r.payload.includes(text)), `${at} のレコードに ${text} がない`).toBe(false)
+    }
+    if (e.applied_areas !== undefined) expect(Object.keys(d.last?.applied ?? {}).sort(), `${at} の適用の種類`).toEqual(e.applied_areas)
     if (e.state !== undefined) expect(d.engine.state, `${at} の状態`).toBe(e.state)
     if (e.phase !== undefined) expect(await d.state('phase'), `${at} の phase`).toBe(e.phase)
     if (e.pending !== undefined) expect(await d.count('FROM sync_records WHERE pending = 1'), `${at} の未送信`).toBe(e.pending)
@@ -387,7 +498,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.keys !== undefined) expect((await d.keys.load()) !== null, `${at} の鍵`).toBe(e.keys)
     if (e.pending_confirm !== undefined) expect(await d.state('pending_confirm'), `${at} の pending_confirm`).toBe(canonicalJson(e.pending_confirm))
     if (e.trace !== undefined) expect(d.trace, `${at} の状態の順`).toEqual(e.trace)
-    if (e.applied !== undefined) expect(d.last?.applied.favoriteThreads, `${at} の適用`).toBe(e.applied)
+    if (e.applied !== undefined) expect(d.last?.applied.favoriteThreads === true, `${at} の適用`).toBe(e.applied)
     if (e.pushed !== undefined) expect(d.last?.pushed, `${at} の送信数`).toBe(e.pushed)
     if (e.conflicts !== undefined) expect(d.last?.conflicts, `${at} の 409`).toBe(e.conflicts)
     if (e.skipped !== undefined) expect(d.last?.skipped ?? null, `${at} の skipped`).toBe(e.skipped)
@@ -401,10 +512,14 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
 
 export async function runScenario(c: Scenario, make: MakeServer = makeFake): Promise<Record<string, string>> {
   const w = new World(make, c.server ?? {})
-  for (const name of c.devices) w.devices.set(name, new Device(name, w, c.skew_ms?.[name] ?? 0))
+  for (const name of c.devices) w.devices.set(name, new Device(name, w, c.skew_ms?.[name] ?? 0, c.keep_defaults === true))
   for (const [name, seed] of Object.entries(c.seed ?? {})) {
     const d = w.devices.get(name) as Device
     for (const f of seed.favorite_threads ?? []) await d.store.addFavoriteThread(thread(f), START - (f.added_ago_ms ?? 0))
+    for (const b of seed.favorite_boards ?? []) await d.store.addFavorite(board(b))
+    for (const x of seed.sites ?? []) await d.store.addSite(site(x))
+    for (const u of seed.uploads ?? []) await d.store.addUpload(upload(u), START - (u.ago_ms ?? 0))
+    if (seed.ng) await d.store.setSetting('ngRules', seed.ng)
   }
   for (const s of c.steps) await runStep(w, s, c)
   if (c.expected) await check(w, c.expected, c.name)

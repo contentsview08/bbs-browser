@@ -3,7 +3,7 @@
 // お気に入り板・サイト・アカウントは DB に直に書き、*-changed でメインに知らせる。メインでしかできないこと(板の一覧を取る・ログイン・板を開く)は callMain で頼む
 import { useEffect, useMemo, useState } from 'react'
 import type { Board, LoginResult, SiteConfig } from '@bbs-browser/connectors'
-import type { AccountRecord, LogStore } from '@bbs-browser/logstore'
+import { UserOps, type AccountRecord, type LogStore } from '@bbs-browser/logstore'
 import { openLogStore } from '../host/logStore'
 import { useSettings } from '../ui/settings'
 import { broadcast, callMain, onBroadcast, onToolOpen, toolKindOfThisWindow } from '../host/crossWindow'
@@ -27,7 +27,7 @@ export default function ToolWindow() {
   return kind === 'ng' ? (
     <div className="h-full w-full flex flex-col bg-c-surface text-c-text-body">
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5">
-        <NgManager rules={settings.ngRules} onChange={(v) => update('ngRules', v)} />
+        <NgManager rules={settings.ngRules} onChange={(v) => update('ngRules', v, settings.ngRules)} />
       </div>
     </div>
   ) : (
@@ -76,21 +76,21 @@ function SettingsWindow({ store, settings, update }: { store: LogStore; settings
       },
       onAddFavoriteUrl: (url: string) => callMain<void>('addFavoriteUrl', url).then(reloadFavorites),
       onRemoveFavorite: (url: string) =>
-        void store
-          .removeFavorite(url)
+        void new UserOps(store)
+          .favoriteBoardRemove(url)
           .then(() => reloadFavorites())
           .then(() => broadcast('favorites-changed', null))
           .catch(backgroundError('お気に入り板')),
       onReorderFavorites: (urls: string[]) =>
-        void store
-          .reorderFavorites(urls)
+        void new UserOps(store)
+          .favoriteBoardReorder(urls)
           .then(() => reloadFavorites())
           .then(() => broadcast('favorites-changed', null))
           .catch(backgroundError('お気に入り板の並べ替え')),
       onAddSite: (name: string, menuUrl: string) => callMain<void>('addSite', { name, menuUrl }).then(reloadSites),
       onRemoveSite: (menuUrl: string) =>
-        void store
-          .removeSite(menuUrl)
+        void new UserOps(store)
+          .siteRemove(menuUrl)
           .then(() => reloadSites())
           .then(() => broadcast('sites-changed', null))
           .catch(backgroundError('BBS メニュー')),

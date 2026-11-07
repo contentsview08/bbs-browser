@@ -48,7 +48,7 @@ export function NgTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 
         {canOpenToolWindow && !isMobile ? (
           <ManagerRow label="NG の管理表を開く" note="検索・絞り込み・まとめて操作・書き出し。別のウィンドウで開きます" count={rules.length} onOpen={() => void openToolWindow('ng')} />
         ) : (
-          <NgManager rules={rules} onChange={(v) => update('ngRules', v)} />
+          <NgManager rules={rules} onChange={(v) => update('ngRules', v, rules)} />
         )}
       </Section>
     </>

@@ -737,8 +737,7 @@
      "1"
     ],
     "favorite_boards": [
-     "https://b.5ch.io/y/",
-     "https://bbs.eddibb.cc/liveedge/"
+     "https://b.5ch.io/y/"
     ]
    }
   }
@@ -5486,6 +5485,3594 @@
    "$server": {
     "spaces": 1,
     "tickets": 1
+   }
+  }
+ },
+ {
+  "name": "同期を始めない限り、4 種類とも積まれず通信もしない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "a"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://a.5ch.io/aa/"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_remove",
+    "url": "https://a.5ch.io/aa/"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s.example/menu.json",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://f.example/1.png",
+    "name": "1.png",
+    "size": 1
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ops": 0,
+    "records": 0,
+    "state_rows": 0,
+    "state": "off",
+    "requests": {},
+    "favorite_boards": [],
+    "sites": [
+     "https://s.example/menu.json"
+    ],
+    "ng_ids": [
+     "n1"
+    ]
+   },
+   "$server": {
+    "spaces": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板の追加が別の端末へ届き、消すと届く。送り返さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "板A"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "板B"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_board_rows": [
+       {
+        "url": "https://a.5ch.io/aa/",
+        "connector_id": "2ch-compat",
+        "name": "板A"
+       },
+       {
+        "url": "https://b.5ch.io/bb/",
+        "connector_id": "2ch-compat",
+        "name": "板B"
+       }
+      ],
+      "favorite_board_order": [
+       "https://a.5ch.io/aa/",
+       "https://b.5ch.io/bb/"
+      ],
+      "applied_areas": [
+       "favoriteBoards"
+      ],
+      "pending": 0,
+      "ops": 0
+     },
+     "pc": {
+      "kinds": {
+       "favorite": 2,
+       "order": 2
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "pushed": 0,
+      "applied_areas": [],
+      "pending": 0,
+      "ops": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_remove",
+    "url": "https://a.5ch.io/aa/"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_boards": [
+     "https://b.5ch.io/bb/"
+    ],
+    "kinds": {
+     "favorite": 2,
+     "order": 2
+    },
+    "applied_areas": [
+     "favoriteBoards"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "favorite_boards": [
+     "https://b.5ch.io/bb/"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板の並べ替え: 動いた項目のレコードだけ変わり、sort が揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "https://a.5ch.io/aa/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "https://b.5ch.io/bb/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://c.5ch.io/cc/",
+    "name": "https://c.5ch.io/cc/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://d.5ch.io/dd/",
+    "name": "https://d.5ch.io/dd/"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://d.5ch.io/dd/",
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://c.5ch.io/cc/"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pushed": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_board_order": [
+     "https://d.5ch.io/dd/",
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://c.5ch.io/cc/"
+    ],
+    "applied_areas": [
+     "favoriteBoards"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "favorite_board_order": [
+     "https://d.5ch.io/dd/",
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://c.5ch.io/cc/"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板の並べ替え: 2 台が別の項目を同時に動かすと、両方の動きが残り収束する",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "https://a.5ch.io/aa/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "https://b.5ch.io/bb/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://c.5ch.io/cc/",
+    "name": "https://c.5ch.io/cc/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://d.5ch.io/dd/",
+    "name": "https://d.5ch.io/dd/"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://b.5ch.io/bb/",
+     "https://c.5ch.io/cc/",
+     "https://a.5ch.io/aa/",
+     "https://d.5ch.io/dd/"
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://d.5ch.io/dd/",
+     "https://c.5ch.io/cc/"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_board_order": [
+     "https://b.5ch.io/bb/",
+     "https://d.5ch.io/dd/",
+     "https://c.5ch.io/cc/",
+     "https://a.5ch.io/aa/"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "favorite_board_order": [
+     "https://b.5ch.io/bb/",
+     "https://d.5ch.io/dd/",
+     "https://c.5ch.io/cc/",
+     "https://a.5ch.io/aa/"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板の並べ替え: 2 台が同じ項目を別の位置へ動かすと、新しい方が勝つ",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "https://a.5ch.io/aa/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "https://b.5ch.io/bb/"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://c.5ch.io/cc/",
+    "name": "https://c.5ch.io/cc/"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://c.5ch.io/cc/",
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/"
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://a.5ch.io/aa/",
+     "https://c.5ch.io/cc/",
+     "https://b.5ch.io/bb/"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_board_order": [
+     "https://a.5ch.io/aa/",
+     "https://c.5ch.io/cc/",
+     "https://b.5ch.io/bb/"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "favorite_board_order": [
+     "https://a.5ch.io/aa/",
+     "https://c.5ch.io/cc/",
+     "https://b.5ch.io/bb/"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板の種まき: 合流で領域の順が崩れず、手元だけの項目は末尾に足す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "favorite_boards": [
+     {
+      "url": "https://a.5ch.io/aa/",
+      "name": "https://a.5ch.io/aa/"
+     },
+     {
+      "url": "https://b.5ch.io/bb/",
+      "name": "https://b.5ch.io/bb/"
+     },
+     {
+      "url": "https://c.5ch.io/cc/",
+      "name": "https://c.5ch.io/cc/"
+     }
+    ]
+   },
+   "phone": {
+    "favorite_boards": [
+     {
+      "url": "https://d.5ch.io/dd/",
+      "name": "https://d.5ch.io/dd/"
+     },
+     {
+      "url": "https://c.5ch.io/cc/",
+      "name": "https://c.5ch.io/cc/"
+     },
+     {
+      "url": "https://a.5ch.io/aa/",
+      "name": "https://a.5ch.io/aa/"
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_board_order": [
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://c.5ch.io/cc/",
+     "https://d.5ch.io/dd/"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "favorite_board_order": [
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://c.5ch.io/cc/",
+     "https://d.5ch.io/dd/"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板の順序キーが長くなりすぎたら、リストを振り直しても順が同じ",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "favorite",
+     "https://a.5ch.io/aa/",
+     ""
+    ],
+    "payload": {
+     "kind": "favorite",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "board_url": "https://a.5ch.io/aa/",
+      "board_name": "a"
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "favorite",
+     "https://b.5ch.io/bb/",
+     ""
+    ],
+    "payload": {
+     "kind": "favorite",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "board_url": "https://b.5ch.io/bb/",
+      "board_name": "b"
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "favorite",
+     "https://c.5ch.io/cc/",
+     ""
+    ],
+    "payload": {
+     "kind": "favorite",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "board_url": "https://c.5ch.io/cc/",
+      "board_name": "c"
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "order",
+     "https://a.5ch.io/aa/",
+     ""
+    ],
+    "payload": {
+     "kind": "order",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "board_url": "https://a.5ch.io/aa/",
+      "key": "5"
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "order",
+     "https://b.5ch.io/bb/",
+     ""
+    ],
+    "payload": {
+     "kind": "order",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "board_url": "https://b.5ch.io/bb/",
+      "key": "50000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "order",
+     "https://c.5ch.io/cc/",
+     ""
+    ],
+    "payload": {
+     "kind": "order",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "board_url": "https://c.5ch.io/cc/",
+      "key": "6"
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_board_order": [
+       "https://a.5ch.io/aa/",
+       "https://b.5ch.io/bb/",
+       "https://c.5ch.io/cc/"
+      ]
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://a.5ch.io/aa/",
+     "https://c.5ch.io/cc/",
+     "https://b.5ch.io/bb/"
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_board_order": [
+     "https://a.5ch.io/aa/",
+     "https://c.5ch.io/cc/",
+     "https://b.5ch.io/bb/"
+    ],
+    "max_order_key": 256,
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "favorite_board_order": [
+     "https://a.5ch.io/aa/",
+     "https://c.5ch.io/cc/",
+     "https://b.5ch.io/bb/"
+    ],
+    "max_order_key": 16,
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板: プリセットの追加は積まれず、消す操作は他の板とお気に入りのスレに触らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "preset_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "a"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0,
+      "pending": 0,
+      "records": 0
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "b"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://b.5ch.io/bb/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_remove",
+    "url": "https://b.5ch.io/bb/"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_boards": [
+     "https://a.5ch.io/aa/"
+    ],
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "favorite_boards": [],
+    "favorite_threads": [
+     "1"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板: スマホにないふたばは手元に入れず持ち続け、並べ替えでも消えない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://may.2chan.net/b/",
+    "name": "二次裏"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "a"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_boards": [
+       "https://a.5ch.io/aa/"
+      ],
+      "kinds": {
+       "favorite": 2,
+       "order": 2
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "b"
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://b.5ch.io/bb/",
+     "https://a.5ch.io/aa/"
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_board_order": [
+     "https://b.5ch.io/bb/",
+     "https://a.5ch.io/aa/"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "favorite_boards": [
+     "https://a.5ch.io/aa/",
+     "https://b.5ch.io/bb/",
+     "https://may.2chan.net/b/"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "お気に入り板: HTTP と 5ch.net の揺れは同じレコードで、行を二重に作らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "favorite_boards": [
+     {
+      "url": "http://a.5ch.net/aa/",
+      "name": "a"
+     }
+    ]
+   },
+   "phone": {
+    "favorite_boards": [
+     {
+      "url": "https://a.5ch.io/aa/",
+      "name": "a"
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "favorite_boards": [
+     "http://a.5ch.net/aa/"
+    ],
+    "kinds": {
+     "favorite": 1,
+     "order": 1
+    },
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "favorite_boards": [
+     "https://a.5ch.io/aa/"
+    ],
+    "kinds": {
+     "favorite": 1,
+     "order": 1
+    },
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "サイトの追加と削除が別の端末へ届く。名前が届き、板一覧は消えるがお気に入り板は残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s1.example/bbsmenu.json",
+    "name": "サイト1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "a"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "site_rows": [
+       {
+        "menu_url": "https://s1.example/bbsmenu.json",
+        "connector_id": "2ch-compat",
+        "name": "サイト1"
+       }
+      ],
+      "applied_areas": [
+       "favoriteBoards",
+       "sites"
+      ],
+      "pending": 0,
+      "ops": 0
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "boards_cache",
+    "site": "https://s1.example/bbsmenu.json",
+    "url": "https://a.5ch.io/aa/"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "boards_cached": 1
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "site_remove",
+    "url": "https://s1.example/bbsmenu.json"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "sites": [],
+    "boards_cached": 0,
+    "favorite_boards": [
+     "https://a.5ch.io/aa/"
+    ],
+    "applied_areas": [
+     "sites"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "sites": [],
+    "kinds": {
+     "site": 1,
+     "favorite": 1,
+     "order": 1
+    },
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "サイト: プリセットは積まれない。種まきでは手元の全部が送られ、領域で消したものは合流で消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "keep_defaults": true,
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "sites": [
+       "https://menu.5ch.io/bbsmenu.json"
+      ],
+      "favorite_boards": [
+       "https://bbs.eddibb.cc/liveedge/"
+      ],
+      "kinds": {
+       "site": 1,
+       "favorite": 1,
+       "order": 1
+      },
+      "pending": 0
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "preset_site_add",
+    "url": "https://s1.example/bbsmenu.json",
+    "name": "p"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0,
+      "pending": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "site_remove",
+    "url": "https://menu.5ch.io/bbsmenu.json"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_remove",
+    "url": "https://bbs.eddibb.cc/liveedge/"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "confirm",
+      "sites": [
+       "https://menu.5ch.io/bbsmenu.json"
+      ]
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "confirm",
+    "choice": "accept_removal"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "sites": [],
+    "favorite_boards": [],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "sites": [
+     "https://s1.example/bbsmenu.json"
+    ],
+    "favorite_boards": [],
+    "kinds": {
+     "site": 1,
+     "favorite": 1,
+     "order": 1
+    },
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "サイト: URL の揺れは同じレコード。ふたばのサイトはスマホの手元に入らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "http://S1.example/bbsmenu.json",
+    "name": "x"
+   },
+   {
+    "device": "phone",
+    "op": "site_add",
+    "url": "https://s1.example/bbsmenu.json",
+    "name": "y"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "sites": [
+       "http://S1.example/bbsmenu.json"
+      ],
+      "kinds": {
+       "site": 1
+      }
+     },
+     "phone": {
+      "sites": [
+       "https://s1.example/bbsmenu.json"
+      ],
+      "kinds": {
+       "site": 1
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://www.2chan.net/menu.json",
+    "name": "f"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "sites": [
+     "https://s1.example/bbsmenu.json"
+    ],
+    "kinds": {
+     "site": 2
+    },
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "kinds": {
+     "site": 2
+    },
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "上げた画像: 追加と削除が届き、削除キーとハッシュは送らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://f.example/1.png",
+    "name": "1.png",
+    "size": 10,
+    "with_account": true,
+    "hash": "h1",
+    "delete_url": "https://f.example/del/SECRET"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "uploads": [
+       {
+        "url": "https://f.example/1.png",
+        "name": "1.png",
+        "size": 10,
+        "uploaded_at": 1800000000000,
+        "with_account": 1,
+        "hash": "h1",
+        "delete_url": "https://f.example/del/SECRET"
+       }
+      ],
+      "kinds": {
+       "image": 1
+      },
+      "record_lacks": [
+       "SECRET",
+       "h1"
+      ]
+     },
+     "phone": {
+      "uploads": [
+       {
+        "url": "https://f.example/1.png",
+        "name": "1.png",
+        "size": 10,
+        "uploaded_at": 1800000000000,
+        "with_account": 0,
+        "hash": null,
+        "delete_url": null
+       }
+      ],
+      "record_lacks": [
+       "SECRET",
+       "h1"
+      ],
+      "applied_areas": [
+       "uploads"
+      ],
+      "pending": 0,
+      "ops": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "upload_remove",
+    "url": "https://f.example/1.png"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "uploads": [],
+    "kinds": {
+     "image": 1
+    },
+    "applied_areas": [
+     "uploads"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "uploads": [],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "上げた画像: 受信で手元のハッシュと削除キーを消さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "phone",
+    "op": "upload_add",
+    "url": "https://f.example/1.png",
+    "name": "old",
+    "size": 1,
+    "hash": "hp",
+    "delete_url": "https://f.example/del/P"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://f.example/1.png",
+    "name": "new",
+    "size": 2
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "uploads": [
+     {
+      "url": "https://f.example/1.png",
+      "name": "new",
+      "size": 2,
+      "uploaded_at": 1800000001000,
+      "with_account": 0,
+      "hash": "hp",
+      "delete_url": "https://f.example/del/P"
+     }
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "uploads": [
+     {
+      "url": "https://f.example/1.png",
+      "name": "new",
+      "size": 2,
+      "uploaded_at": 1800000001000,
+      "with_account": 0,
+      "hash": null,
+      "delete_url": null
+     }
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "上げた画像の種まき: 古い行は新しい削除に負ける。合流は和集合",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "uploads": [
+     {
+      "url": "https://f.example/1.png",
+      "name": "1.png",
+      "size": 1,
+      "ago_ms": 9000
+     }
+    ]
+   },
+   "phone": {
+    "uploads": [
+     {
+      "url": "https://f.example/1.png",
+      "name": "1.png",
+      "size": 1,
+      "ago_ms": 9000
+     },
+     {
+      "url": "https://f.example/2.png",
+      "name": "2.png",
+      "size": 2,
+      "ago_ms": 5000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "upload_remove",
+    "url": "https://f.example/1.png"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "state": "confirm"
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "confirm",
+    "choice": "accept_removal"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "uploads": [
+     {
+      "url": "https://f.example/2.png",
+      "name": "2.png",
+      "size": 2,
+      "uploaded_at": 1799999995000,
+      "with_account": 0,
+      "hash": null,
+      "delete_url": null
+     }
+    ],
+    "kinds": {
+     "image": 2
+    },
+    "phase": "idle",
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "uploads": [
+     {
+      "url": "https://f.example/2.png",
+      "name": "2.png",
+      "size": 2,
+      "uploaded_at": 1799999995000,
+      "with_account": 0,
+      "hash": null,
+      "delete_url": null
+     }
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG の追加・編集・削除が 1 要素ずつ届く。編集で消した項目は残らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "a",
+      "isRegex": false,
+      "enabled": true,
+      "expiresOnDate": "2030-01-01",
+      "note": "メモ",
+      "createdAt": 5
+     },
+     {
+      "id": "n2",
+      "target": "posterId",
+      "pattern": "ID1",
+      "isRegex": false,
+      "enabled": true,
+      "boardUrl": "https://a.5ch.io/aa/",
+      "boardName": "板"
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "ng_rules": [
+       {
+        "id": "n1",
+        "type": "content",
+        "value": "a",
+        "is_regex": false,
+        "enabled": true,
+        "expires_on": "2030-01-01",
+        "note": "メモ",
+        "created_at": 5
+       },
+       {
+        "id": "n2",
+        "type": "posterId",
+        "value": "ID1",
+        "is_regex": false,
+        "enabled": true,
+        "board_url": "https://a.5ch.io/aa/",
+        "board_name": "板"
+       }
+      ],
+      "applied_areas": [
+       "ng"
+      ],
+      "pending": 0,
+      "ops": 0
+     },
+     "pc": {
+      "kinds": {
+       "ng": 2
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "edit": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "a2",
+      "isRegex": false,
+      "enabled": false,
+      "createdAt": 5
+     }
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ng_rules": [
+       {
+        "id": "n1",
+        "type": "content",
+        "value": "a2",
+        "is_regex": false,
+        "enabled": false,
+        "created_at": 5
+       },
+       {
+        "id": "n2",
+        "type": "posterId",
+        "value": "ID1",
+        "is_regex": false,
+        "enabled": true,
+        "board_url": "https://a.5ch.io/aa/",
+        "board_name": "板"
+       }
+      ],
+      "pending": 0,
+      "ops": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "remove": [
+     "n1"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ng_ids": [
+     "n2"
+    ],
+    "kinds": {
+     "ng": 2
+    },
+    "applied_areas": [
+     "ng"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "ng_ids": [
+     "n2"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 同時の編集と削除は HLC の新しい方",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "n2",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "edit": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "pc",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "remove": [
+     "n1"
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "edit": [
+     {
+      "id": "n2",
+      "target": "content",
+      "pattern": "ph",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "remove": [
+     "n2"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ng_ids": [],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "ng_ids": [],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 期限切れの自動の片づけは tombstone にならず、手元からだけ消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "old",
+      "target": "content",
+      "pattern": "o",
+      "isRegex": false,
+      "enabled": true,
+      "expiresOnDate": "2027-01-16"
+     },
+     {
+      "id": "keep",
+      "target": "content",
+      "pattern": "k",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 259200000
+   },
+   {
+    "device": "pc",
+    "op": "ng_prune"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ng_ids": [
+       "keep"
+      ],
+      "ops": 0,
+      "tombstones": 0
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ng_ids": [
+     "keep"
+    ],
+    "tombstones": 0,
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "ng_ids": [
+     "keep",
+     "old"
+    ],
+    "tombstones": 0,
+    "pushed": 0,
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 手で片づけても、期限の切れたものは送らない。消す操作で消えた有効な NG だけが届く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "old",
+      "target": "content",
+      "pattern": "o",
+      "isRegex": false,
+      "enabled": true,
+      "expiresOnDate": "2027-01-16"
+     },
+     {
+      "id": "live",
+      "target": "content",
+      "pattern": "l",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 259200000
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "remove": [
+     "old",
+     "live"
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ng_ids": [],
+    "tombstones": 1,
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "ng_ids": [
+     "old"
+    ],
+    "tombstones": 1,
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 古い窓の保存は別の窓の追加を tombstone にせず、手元からも消さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "base",
+      "target": "content",
+      "pattern": "b",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_open",
+    "window": "settings"
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_open",
+    "window": "ng"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_change",
+    "window": "ng",
+    "add": [
+     {
+      "id": "from_ng",
+      "target": "content",
+      "pattern": "n",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_change",
+    "window": "settings",
+    "add": [
+     {
+      "id": "from_settings",
+      "target": "content",
+      "pattern": "s",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ng_ids": [
+       "base",
+       "from_ng",
+       "from_settings"
+      ],
+      "ops": 3
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_change",
+    "window": "settings",
+    "edit": [
+     {
+      "id": "base",
+      "target": "content",
+      "pattern": "b2",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ng_ids": [
+     "base",
+     "from_ng",
+     "from_settings"
+    ],
+    "tombstones": 0,
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "ng_rules": [
+     {
+      "id": "base",
+      "type": "content",
+      "value": "b2",
+      "is_regex": false,
+      "enabled": true
+     },
+     {
+      "id": "from_ng",
+      "type": "content",
+      "value": "n",
+      "is_regex": false,
+      "enabled": true
+     },
+     {
+      "id": "from_settings",
+      "type": "content",
+      "value": "s",
+      "is_regex": false,
+      "enabled": true
+     }
+    ],
+    "tombstones": 0,
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 古い窓が消した要素だけが tombstone になり、知らない要素は残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "a",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "b",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_open",
+    "window": "settings"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "from_phone",
+      "target": "content",
+      "pattern": "p",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_window_change",
+    "window": "settings",
+    "remove": [
+     "a"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ng_ids": [
+     "b",
+     "from_phone"
+    ],
+    "tombstones": 1,
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "ng_ids": [
+     "from_phone",
+     "b"
+    ],
+    "tombstones": 1,
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 読めない式と固まる式は手元に入れず、同期の表に残し、止まらない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "bad1"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "bad1",
+      "type": "content",
+      "value": "(a+",
+      "is_regex": true
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "bad2"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "bad2",
+      "type": "content",
+      "value": "(a+)+$",
+      "is_regex": true
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "bad3"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "bad3",
+      "type": "content",
+      "value": "(.*)*x",
+      "is_regex": true
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "bad4"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "bad4",
+      "type": "content",
+      "value": "(a|a)*b",
+      "is_regex": true
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "bad5"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "bad5",
+      "type": "content",
+      "value": "a(?i)b",
+      "is_regex": true
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "bad6"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "bad6",
+      "type": "nanika",
+      "value": "x"
+     }
+    }
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "good"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "good",
+      "type": "content",
+      "value": "ok",
+      "is_regex": true
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "ng_ids": [
+       "good"
+      ],
+      "kinds": {
+       "ng": 7
+      },
+      "bad_counts": {
+       "ng_rule": 6
+      },
+      "needs_apply": 0,
+      "state": "idle",
+      "pending": 0
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "bad_counts": {
+       "ng_rule": 6
+      },
+      "pending": 0
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "after",
+      "target": "content",
+      "pattern": "z",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ng_ids": [
+     "good",
+     "after"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "ng_ids": [
+     "after",
+     "good"
+    ],
+    "bad_counts": {
+     "ng_rule": 6
+    },
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG: 期限の切れたものは受信でも手元に入らず、種まきでも送らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "ng": [
+     {
+      "id": "live",
+      "target": "content",
+      "pattern": "l",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "stale",
+      "target": "content",
+      "pattern": "s",
+      "isRegex": false,
+      "enabled": true,
+      "expiresOnDate": "2020-01-01"
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "op": "server_inject",
+    "device": "pc",
+    "record": [
+     "ng",
+     null,
+     "",
+     "e1"
+    ],
+    "payload": {
+     "kind": "ng",
+     "hlc": "0000000003e8.0000.pc",
+     "device_id": "pc",
+     "body": {
+      "id": "e1",
+      "type": "content",
+      "value": "x",
+      "expires_on": "2020-01-01"
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ng_ids": [
+     "live"
+    ],
+    "kinds": {
+     "ng": 2
+    },
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "ng_ids": [
+     "live",
+     "stale"
+    ],
+    "kinds": {
+     "ng": 2
+    },
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG の種まき: 合流は和集合で、同じ内容で id が違うものは両方残る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "ng": [
+     {
+      "id": "p1",
+      "target": "content",
+      "pattern": "a",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 100
+     },
+     {
+      "id": "same_pc",
+      "target": "content",
+      "pattern": "dup",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 100
+     }
+    ]
+   },
+   "phone": {
+    "ng": [
+     {
+      "id": "f1",
+      "target": "content",
+      "pattern": "b",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 100
+     },
+     {
+      "id": "same_ph",
+      "target": "content",
+      "pattern": "dup",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 100
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "ng_ids": [
+     "p1",
+     "same_pc",
+     "f1",
+     "same_ph"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "phone": {
+    "ng_ids": [
+     "f1",
+     "same_ph",
+     "p1",
+     "same_pc"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG の起動時の照合: 取りこぼしは低い HLC でレコードになり、値の違いは表の値へ戻す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "real",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "ng_write_raw",
+    "rules": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "wrong",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "missed",
+      "target": "content",
+      "pattern": "m",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 7
+     }
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "restart"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ng_rules": [
+     {
+      "id": "n1",
+      "type": "content",
+      "value": "real",
+      "is_regex": false,
+      "enabled": true
+     },
+     {
+      "id": "missed",
+      "type": "content",
+      "value": "m",
+      "is_regex": false,
+      "enabled": true,
+      "created_at": 7
+     }
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "ng_rules": [
+     {
+      "id": "n1",
+      "type": "content",
+      "value": "real",
+      "is_regex": false,
+      "enabled": true
+     },
+     {
+      "id": "missed",
+      "type": "content",
+      "value": "m",
+      "is_regex": false,
+      "enabled": true,
+      "created_at": 7
+     }
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "NG の読み込み: 足した分だけ送り、なくなった分は全端末から消さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "a",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "b",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_import",
+    "rules": [
+     {
+      "id": "b",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "c",
+      "target": "content",
+      "pattern": "c",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1,
+      "ng_ids": [
+       "b",
+       "c"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ng_ids": [
+     "a",
+     "b",
+     "c"
+    ],
+    "tombstones": 0,
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "tombstones": 0,
+    "ng_ids": [
+     "b",
+     "c"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "リベース: お気に入り板・サイト・画像・NG の片づいた削除を手元から消す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "a"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "b"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s1.example/bbsmenu.json",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s2.example/menu/",
+    "name": "s2"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://f.example/1.png",
+    "name": "1",
+    "size": 1
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://f.example/2.png",
+    "name": "2",
+    "size": 1
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     },
+     {
+      "id": "n2",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "offline"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_remove",
+    "url": "https://a.5ch.io/aa/"
+   },
+   {
+    "device": "pc",
+    "op": "site_remove",
+    "url": "https://s1.example/bbsmenu.json"
+   },
+   {
+    "device": "pc",
+    "op": "upload_remove",
+    "url": "https://f.example/1.png"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "remove": [
+     "n1"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 3888000000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 3888000000
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "online"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 20000
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_boards": [
+     "https://b.5ch.io/bb/"
+    ],
+    "sites": [
+     "https://s2.example/menu/"
+    ],
+    "uploads": [
+     {
+      "url": "https://f.example/2.png",
+      "name": "2",
+      "size": 1,
+      "uploaded_at": 1800000000000,
+      "with_account": 0,
+      "hash": null,
+      "delete_url": null
+     }
+    ],
+    "ng_ids": [
+     "n2"
+    ],
+    "pending": 0,
+    "ops": 0
+   }
+  }
+ },
+ {
+  "name": "領域が消えても、4 種類とも手元から作り直して揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://a.5ch.io/aa/",
+    "name": "a"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_board_add",
+    "url": "https://b.5ch.io/bb/",
+    "name": "b"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s1.example/bbsmenu.json",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://f.example/1.png",
+    "name": "1",
+    "size": 1
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "x",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "favorite_board_order",
+    "urls": [
+     "https://b.5ch.io/bb/",
+     "https://a.5ch.io/aa/"
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "op": "server_delete_space",
+    "device": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "favorite_board_order": [
+     "https://b.5ch.io/bb/",
+     "https://a.5ch.io/aa/"
+    ],
+    "sites": [
+     "https://s1.example/bbsmenu.json"
+    ],
+    "ng_ids": [
+     "n1"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "favorite_board_order": [
+     "https://b.5ch.io/bb/",
+     "https://a.5ch.io/aa/"
+    ],
+    "sites": [
+     "https://s1.example/bbsmenu.json"
+    ],
+    "ng_ids": [
+     "n1"
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "$server": {
+    "of": {
+     "pc": {
+      "records": 7
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "適用待ちの NG に操作が重なると、操作を先に処理して手元が操作の結果になる",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "old",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "edit": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "pc",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 1000
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "edit": [
+     {
+      "id": "n1",
+      "target": "content",
+      "pattern": "phone",
+      "isRegex": false,
+      "enabled": true
+     }
+    ]
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "phone": {
+    "ng_rules": [
+     {
+      "id": "n1",
+      "type": "content",
+      "value": "phone",
+      "is_regex": false,
+      "enabled": true
+     }
+    ],
+    "pending": 0,
+    "ops": 0
+   },
+   "pc": {
+    "ng_rules": [
+     {
+      "id": "n1",
+      "type": "content",
+      "value": "phone",
+      "is_regex": false,
+      "enabled": true
+     }
+    ],
+    "pending": 0,
+    "ops": 0
    }
   }
  }

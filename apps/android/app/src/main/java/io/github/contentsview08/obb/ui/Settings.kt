@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.AlertDialog
@@ -94,15 +95,13 @@ import io.github.contentsview08.obb.data.BoardMeta
 import io.github.contentsview08.obb.bbs.siteDomain
 import io.github.contentsview08.obb.bbs.uniqueSiteDomains
 import io.github.contentsview08.obb.data.filterLicenses
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import io.github.contentsview08.obb.data.parseLicenses
 import io.github.contentsview08.obb.data.spdxLinks
 
 private val TITLES = mapOf(
     "theme" to "テーマと色", "text" to "文字", "list" to "スレ一覧", "thread" to "スレ表示", "media" to "画像と動画",
     "write" to "書き込み", "gestures" to "ジェスチャー", "behavior" to "スクロールと更新", "notify" to "通知", "ng" to "NG",
-    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "syncdev" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
+    "sites" to "お気に入り板", "menus" to "BBS メニュー", "accounts" to "掲示板ごとの設定", "history" to "履歴", "backup" to "バックアップ", "about" to "このアプリについて", "custom" to "自分の配色", "licenses" to "使っているソフトウェア", "sync" to io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"),
 )
 
 /** 詳しい設定も出すか(設定の「詳しい設定を出す」か、検索から開いたとき) */
@@ -117,7 +116,7 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
     // ページの下の画面(使っているソフトウェア・自分の配色)は、戻ると親のページへ。検索から開いたページの詳しい設定は、そのページを出るまで出しておく
     val goBack = {
         sub = when (sub) {
-            "licenses", "syncdev" -> "about"
+            "licenses" -> "about"
             "custom" -> "theme"
             else -> if (sub?.startsWith(SITE_PAGE) == true) "accounts" else null
         }
@@ -158,11 +157,11 @@ fun SettingsScreen(vm: AppViewModel, start: String? = null) {
                 "backup" -> BackupPage(vm)
                 "about" -> AboutPage(vm) { sub = it }
                 "custom" -> CustomSchemeEditor(vm.prefs)
-                "syncdev" -> SyncDevPage(vm)
+                "sync" -> SyncPage(vm, LocalAdvanced.current)
                 else -> if (sub?.startsWith(SITE_PAGE) == true) SiteSettings(vm, sub.orEmpty().removePrefix(SITE_PAGE))
             }
             // 詳しい項目を隠しているときは、ページの下に出し方を書いておく(押すとその場で出す)
-            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus", "accounts", "syncdev", "history") && sub?.startsWith(SITE_PAGE) != true && !(vm.prefs.showAdvanced || viaSearch)) {
+            if (sub != null && sub !in setOf("about", "backup", "custom", "sites", "menus", "accounts", "history") && sub?.startsWith(SITE_PAGE) != true && !(vm.prefs.showAdvanced || viaSearch)) {
                 Text(
                     "詳しい設定も出す",
                     Modifier.padding(16.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Palette.border, RoundedCornerShape(6.dp))
@@ -244,6 +243,7 @@ private fun SettingsTop(vm: AppViewModel, openFromSearch: (String) -> Unit, open
     }
     Group {
         SwitchRow("詳しい設定を出す", p.showAdvanced, desc = "オフのときは、よく使う項目だけを出します(検索ではいつも全部から探せます)") { p.showAdvanced = it }
+        NavRow(Icons.Filled.CloudSync, Color(0xFF2563EB), io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section"), desc = "別の端末と履歴やお気に入りを同期") { open("sync") }
         NavRow(Icons.Filled.Backup, Color(0xFF64748B), "バックアップ") { open("backup") }
         NavRow(Icons.Filled.Info, Color(0xFF6B7280), "このアプリについて") { open("about") }
     }
@@ -1043,24 +1043,9 @@ private fun AboutPage(vm: AppViewModel, open: (String) -> Unit) {
     Group("ライセンス", note = "このアプリに入っているオープンソースのソフトウェアと、そのライセンスを見られます") {
         ActionRow("使っているソフトウェア") { open("licenses") }
     }
-    var syncDev by remember { mutableStateOf(io.github.contentsview08.obb.data.syncDevOpen(context)) }
-    if (syncDev) Group { ActionRow(io.github.contentsview08.obb.sync.SyncText.LABELS.getValue("section")) { open("syncdev") } }
-    var taps by remember { mutableStateOf(0) }
-    var lastTap by remember { mutableStateOf(0L) }
     Group {
         InfoRow("名前", "OBB(Open BBS Browser)")
-        // 続けて押すと開発用の同期の画面を出す。間が 2 秒空くと数え直す
-        Box(Modifier.pointerInput(Unit) {
-            detectTapGestures {
-                val t = System.currentTimeMillis()
-                taps = if (t - lastTap > 2000) 1 else taps + 1
-                lastTap = t
-                if (taps >= io.github.contentsview08.obb.sync.SyncText.REVEAL_TAPS) {
-                    io.github.contentsview08.obb.data.openSyncDev(context)
-                    syncDev = true
-                }
-            }
-        }) { InfoRow("版", version) }
+        InfoRow("版", version)
         InfoRow("AA の字", "aahub_light")
     }
 }
@@ -1121,7 +1106,7 @@ private fun LicensesPage() {
 
 /** 項目のまとまり。見出しと、下に小さな説明 */
 @Composable
-private fun Group(title: String? = null, note: String? = null, content: @Composable () -> Unit) {
+internal fun Group(title: String? = null, note: String? = null, content: @Composable () -> Unit) {
     if (title != null) Text(title, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp), color = Palette.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     else Spacer(Modifier.height(16.dp))
     Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Palette.surface).border(1.dp, Palette.border, RoundedCornerShape(8.dp))) {
@@ -1145,7 +1130,7 @@ private fun NavRow(icon: ImageVector, color: Color, label: String, desc: String?
 }
 
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, desc: String? = null, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(label: String, checked: Boolean, desc: String? = null, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.heightIn(min = 54.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(label, color = Palette.textStrong, fontSize = 15.sp)

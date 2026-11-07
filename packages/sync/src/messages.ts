@@ -21,6 +21,7 @@ const MESSAGES: Record<string, string> = {
   rate_limited: '少し待ってから同期します。',
   too_many_rebases: 'サーバーの状態が何度も変わったので、同期を止めました。',
   quota_exceeded: '同期の容量がいっぱいです。',
+  sync_off: '先に「同期を使う」をオンにしてください。',
 }
 
 export function syncMessage(code: string): string {
@@ -44,7 +45,21 @@ export const SYNC_NOTES: Record<string, string> = {
 }
 
 export const SYNC_LABELS = {
-  section: '同期(開発中)',
+  section: '同期(実験的)',
+  intro: '履歴やお気に入りを暗号化して、別の端末と同期します。実験的な機能です。サーバーは保管庫ではなく、端末の間の中継の置き場なので、しばらく使わないとサーバーのデータは消えます。この端末のデータは消えません。',
+  master: '同期を使う',
+  master_note: 'オフの間は通信も送信待ちも起きません。鍵とサーバーのデータは残るので、オンに戻すと続きから同期します。',
+  kinds: '同期するもの',
+  kinds_note: '切った種類は送らず、受け取っても手元へ写しません。サーバーのデータは消えません。オンに戻すと追いつきます。',
+  kinds_resume_note: '切っていた間に手元で消したものは、オンに戻すと同期のデータから戻ります。',
+  secret_ask_title: '画像の削除キー・管理トークンを同期しますか?',
+  secret_ask_body: '上げた画像を置き場から消すための値を、暗号化して同期します。これを持つ人はその画像を消せます。同期につないだ端末のどれかが漏れると、値も漏れたものと考えてください。暗号化の鍵を変えても守れません。ほかの端末には自動で広がりません。使う端末ごとにオンにしてください。',
+  secret_ask_ok: '危険を理解してオンにする',
+  secret_note: '既定はオフです。オフの間は、この端末からサーバーへ送らず、届いても読みません。',
+  advanced: '詳しい設定',
+  leave_ask: 'この端末の鍵と同期の表を消します。この端末のお気に入りは消えません。サーバーのデータはそのままです。',
+  server_ask: '新しいサーバーに認証の情報を送ります。',
+  search_note: '履歴・お気に入り・NG などを別の端末と同期(端末を追加・コードで参加)',
   start: '同期を始める',
   add_device: '端末を追加',
   join: 'コードで参加',
@@ -59,5 +74,14 @@ export const SYNC_LABELS = {
   scan: 'QR を読む',
 } as const
 
-/** このアプリについての版を押す回数 */
-export const SYNC_REVEAL_TAPS = 7
+/** スイッチの見出し。並びと既定は engine/kinds.ts */
+export const SYNC_GROUP_LABELS = {
+  history: '閲覧履歴と既読',
+  favorites: 'お気に入り(スレ・板)',
+  sites: 'サイト',
+  posts: '書き込み履歴',
+  images: '上げた画像の履歴',
+  ng: 'NG',
+  settings: '設定',
+  secret: '画像の削除キー・管理トークン',
+} as const

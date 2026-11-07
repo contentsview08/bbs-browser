@@ -65,6 +65,7 @@ export type SettingsTab =
   | 'menus'
   | 'accounts'
   | 'backup'
+  | 'sync'
   | 'about'
 
 /** 高度な設定を見せるか(設定画面の左下のチェック) */

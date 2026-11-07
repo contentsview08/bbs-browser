@@ -43,6 +43,7 @@ import {
   type StoredRecord,
   type SyncSqlDb,
 } from './tables'
+import { kindsOfGroups, masterOn, offKindsOf, parseSwitches, SECRET_KIND, SYNC_GROUPS, type SyncGroup, type SyncSwitches } from './kinds'
 import { SyncApi, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
 export interface SyncKeyMaterial {
@@ -151,6 +152,9 @@ const LAST_VIEW = 'last_view'
 /** 外す順。書き込みと画像は閲覧履歴の後。docs/sync-client.md の「容量を超えるとき」 */
 const TRIM_ORDER: readonly (readonly string[])[] = [[LAST_VIEW, 'read_dev'], ['image'], ['post']]
 
+/** 応答に待ち時間がないときの、権限系の読み直しの間隔 */
+const REFETCH_RETRY_MS = 3_600_000
+
 const emptyRefs: RecordRefs = { ref_board: null, ref_thread: null, ref_detail: null, ref_local: null }
 
 function refsFromBody(p: SyncPayload, detail: string | null): RecordRefs {
@@ -171,6 +175,9 @@ const refsOf = (r: StoredRecord | undefined): RecordRefs | undefined =>
   r && { ref_board: r.ref_board, ref_thread: r.ref_thread, ref_detail: r.ref_detail, ref_local: r.ref_local }
 
 const same = (a: SyncPayload, b: SyncPayload) => canonicalJson(a) === canonicalJson(b)
+
+/** 権限系だけ k_secret で封をする */
+const tagOfKind = (kind: string): KindTag => (kind === SECRET_KIND ? 's' : 'h')
 
 export class SyncEngine {
   private readonly t: SyncTables
@@ -203,6 +210,8 @@ export class SyncEngine {
   private spaceIdValue = ''
   private deviceId = ''
   private result!: CycleResult
+  /** この周で切っている種類。周の途中で切り替えるときは halt で周を終わらせてから書く */
+  private offKinds: ReadonlySet<string> = new Set()
 
   constructor(deps: SyncEngineDeps) {
     this.deps = deps
@@ -224,10 +233,55 @@ export class SyncEngine {
     return this.paceValue
   }
 
-  /** 送るものがあるか。通信しない */
+  /** 送るものがあるか。通信しない。切っている種類の送信待ちは数えない(自動の同期を空回りさせない) */
   async hasChanges(): Promise<boolean> {
-    const [row] = await this.db.select<{ n: number }>('SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1) AS n')
+    if (!(await this.isMasterOn())) return false
+    const off = [...offKindsOf(await this.switches())]
+    const marks = off.map((_, i) => `$${i + 1}`).join(', ')
+    const [row] = await this.db.select<{ n: number }>(`SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1${off.length > 0 ? ` AND kind NOT IN (${marks})` : ''}) AS n`, off)
     return Number(row?.n ?? 0) > 0
+  }
+
+  private async isMasterOn(): Promise<boolean> {
+    return masterOn(await this.t.state('master'), await this.t.state('enabled'))
+  }
+
+  async switches(): Promise<SyncSwitches> {
+    return parseSwitches(await this.t.state('kinds'))
+  }
+
+  /** 同期自体のスイッチ。切っても鍵と領域は残す。戻したら切っていた間の手元の行を補う */
+  async setMaster(on: boolean): Promise<void> {
+    await this.halt()
+    const stmts: SqlStatement[] = [setState('master', on ? '1' : '0')]
+    if (on && (await this.t.state('enabled')) === '1') {
+      const sw = await this.switches()
+      stmts.push(setState('kinds_resume', canonicalJson(SYNC_GROUPS.flatMap((g) => (sw[g.id] ? [g.id] : [])))))
+    }
+    await this.db.batch(stmts)
+    this.headEtag = null
+  }
+
+  /**
+   * 種類ごとのスイッチ。切ってもサーバーのデータは消さない。
+   * 権限系を切ったら同期の表の平文を残さない(手元の削除ページは残るので、オンに戻せば作り直せる)
+   */
+  async setKind(group: SyncGroup, on: boolean): Promise<void> {
+    await this.halt()
+    const sw = await this.switches()
+    if (sw[group] === on) return
+    sw[group] = on
+    const saved = Object.fromEntries(SYNC_GROUPS.flatMap((g) => (sw[g.id] === g.default ? [] : [[g.id, sw[g.id]]])))
+    const raw = await this.t.state('kinds_resume')
+    const resume = new Set((raw ? parseStrictJson(raw) : []) as string[])
+    if (on) resume.add(group)
+    else resume.delete(group)
+    const stmts: SqlStatement[] = [setState('kinds', canonicalJson(saved)), resume.size > 0 ? setState('kinds_resume', canonicalJson([...resume])) : delState('kinds_resume')]
+    if (group === 'secret') {
+      if (on) stmts.push(setState('secret_refetch', '0'))
+      else stmts.push(delState('secret_refetch'), { sql: 'DELETE FROM sync_records WHERE kind = $1', params: [SECRET_KIND] }, { sql: "DELETE FROM sync_ops WHERE op IN ('secret_put', 'secret_remove')" }, delState('push_inflight'))
+    }
+    await this.db.batch(stmts)
   }
 
   /** 走っている周を止めて、終わるまで待つ。表を消す・別の領域へ移るときはこれを先に通す */
@@ -244,7 +298,7 @@ export class SyncEngine {
 
   /** GET /head。変化があれば true(次に周を回す)。変化なし・通信の失敗は false。周の中では呼ばない */
   async checkHead(): Promise<boolean> {
-    if (this.running || (await this.t.state('enabled')) !== '1') return false
+    if (this.running || (await this.t.state('enabled')) !== '1' || !(await this.isMasterOn())) return false
     if ((await this.t.state('phase')) !== 'idle' || this.deps.now() < this.retryAt) return false
     const material = await this.deps.keyStore.load()
     if (!material) return false
@@ -313,7 +367,7 @@ export class SyncEngine {
     this.paceValue = null
     const deviceId = this.newDeviceId()
     await this.deps.keyStore.save({ k, deviceId, ticket })
-    await this.db.batch([setState('device_id', deviceId), setState('clock', HLC_ZERO), setState('since', '0'), setState('phase', 'joining'), setState('enabled', '1')])
+    await this.db.batch([setState('device_id', deviceId), setState('clock', HLC_ZERO), setState('since', '0'), setState('phase', 'joining'), setState('enabled', '1'), delState('master'), delState('kinds_resume')])
     this.deviceChecked = true
     this.reconciled = false
     this.filled = false
@@ -372,6 +426,8 @@ export class SyncEngine {
       result.state = s
       return result
     }
+    // 切っている間は鍵保管にも通信にも触らない
+    if ((await this.t.state('master')) === '0') return finish('off')
     if (!this.deviceChecked && !(await this.checkDevice())) return finish('off')
     if ((await this.t.state('enabled')) !== '1') return finish('off')
     const material = await this.deps.keyStore.load()
@@ -383,6 +439,7 @@ export class SyncEngine {
     this.keys = deriveKeys(material.k)
     this.spaceIdValue = spaceId(this.keys.auth_token)
     this.deviceId = material.deviceId
+    this.offKinds = offKindsOf(await this.switches())
 
     let phase = (await this.t.state('phase')) ?? 'joining'
     if (phase === 'confirm') return finish('confirm')
@@ -506,6 +563,10 @@ export class SyncEngine {
     return refsFromBody(p, adapter?.detailOf?.(p) ?? null)
   }
 
+  private onAdapters(): SyncAdapter[] {
+    return this.deps.adapters.filter((a) => !this.offKinds.has(a.kind))
+  }
+
   private ctx(): AdapterContext {
     return { keys: this.keys, deviceId: this.deviceId, now: this.deps.now() }
   }
@@ -534,7 +595,7 @@ export class SyncEngine {
         touched.set(target.record_id, {
           record_id: target.record_id,
           kind: payload.kind,
-          kind_tag: existing?.kind_tag ?? 'h',
+          kind_tag: existing?.kind_tag ?? tagOfKind(payload.kind),
           schema_version: existing?.schema_version ?? SCHEMA_VERSION,
           payload,
           hlc: payload.hlc,
@@ -548,6 +609,11 @@ export class SyncEngine {
       }
       for (const op of ops) {
         const adapter = this.deps.adapters.find((a) => a.ops.includes(op.op)) as SyncAdapter
+        // 権限系は切ったあとに残った操作も処理しない。ほかの種類は切る前の変更なので、送信待ちとして持ち続ける
+        if (adapter.kind === SECRET_KIND && this.offKinds.has(SECRET_KIND)) {
+          stmts.push(delOp(op.seq))
+          continue
+        }
         if (adapter.expand) {
           // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
           if (touched.size > 0) break
@@ -613,12 +679,18 @@ export class SyncEngine {
       phase = 'seeding'
       pulled = true
     }
+    // 権限系のレコードは切っている間は開かずに読み飛ばしたので、最初から読み直す
+    if (Number((await this.t.state('secret_refetch')) ?? Infinity) <= this.deps.now()) pulled = (await this.refetchSecrets()) || pulled
     if (phase === 'seeding') {
       this.enter('seeding')
       await this.seedAndPlan()
       phase = 'idle'
       seeded = true
-    } else if (!this.reconciled) {
+      await this.db.batch([delState('kinds_resume')])
+    } else {
+      await this.catchUp()
+    }
+    if (!seeded && !this.reconciled) {
       await this.reconcile()
     }
     this.reconciled = true
@@ -668,10 +740,16 @@ export class SyncEngine {
     else if (known !== epoch) throw new SpaceGone(epoch)
   }
 
+  /** 権限系を切っている端末は開かない。version は呼ぶ側が数えるので、読み飛ばしてもページングは進む */
+  private readable(raw: readonly Record<string, unknown>[]): Record<string, unknown>[] {
+    return this.offKinds.has(SECRET_KIND) ? raw.filter((r) => r.kind_tag !== 's') : [...raw]
+  }
+
   private async mergePage(raw: Record<string, unknown>[], since: number, gcFloor: number): Promise<void> {
     const now = this.deps.now()
-    const opened = openRecords(this.keys, this.spaceIdValue, raw)
-    const metaOf = new Map(raw.map((r) => [r.record_id as string, r]))
+    const readable = this.readable(raw)
+    const opened = openRecords(this.keys, this.spaceIdValue, readable)
+    const metaOf = new Map(readable.map((r) => [r.record_id as string, r]))
     const local = await this.t.records(opened.records.map((r) => r.record_id))
     let clock = (await this.t.state('clock')) ?? HLC_ZERO
     const stmts: SqlStatement[] = []
@@ -710,45 +788,80 @@ export class SyncEngine {
     }
   }
 
+  /** 全件の読み取りには 1 時間の回数の制限がある。断られても権限系の分だけ後回しにして、ほかの同期を止めない */
+  private async refetchSecrets(): Promise<boolean> {
+    const before = (await this.t.state('since')) ?? '0'
+    await this.putState('since', '0')
+    try {
+      await this.pull(true)
+    } catch (e) {
+      if (!(e instanceof SyncApiError && e.kind === 'http' && e.status === 429)) throw e
+      const sec = e.detail?.retry_after_sec
+      const wait = typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.ceil(sec * 1000) : REFETCH_RETRY_MS
+      await this.db.batch([setState('since', before), setState('secret_refetch', String(this.deps.now() + wait))])
+      return false
+    }
+    await this.db.batch([delState('secret_refetch')])
+    return true
+  }
+
+  /** 今のデータをレコードと合わせる。元の時刻の HLC なので、後から消したものには負け、切っていた間に増えたものは勝つ */
+  private async seedOne(adapter: SyncAdapter, ctx: AdapterContext): Promise<void> {
+    const rows = await adapter.seed(ctx)
+    // 件数の多い人でも 1 回の呼び出しを小さく保つ。ID が決まっているので途中で切れてもやり直せる
+    for (let i = 0; i < rows.length; i += WRITE_BATCH) {
+      const chunk = rows.slice(i, i + WRITE_BATCH)
+      const local = await this.t.records(chunk.map((r) => r.record_id))
+      const stmts: SqlStatement[] = []
+      for (const r of chunk) {
+        const l = local.get(r.record_id)
+        const payload = l ? mergePayloads(l.payload, r.payload) : r.payload
+        const changed = !l || !same(l.payload, payload)
+        const settled = settleRecord(payload, l?.version ?? 0, l && asLocal(l), ctx.now)
+        stmts.push(
+          writeRecord({
+            record_id: r.record_id,
+            kind: payload.kind,
+            kind_tag: l?.kind_tag ?? tagOfKind(payload.kind),
+            schema_version: l?.schema_version ?? SCHEMA_VERSION,
+            payload,
+            hlc: payload.hlc,
+            version: settled.version,
+            pending: changed || (l?.pending ?? false),
+            priority: l?.priority ?? r.priority,
+            needs_apply: l?.needs_apply ?? false,
+            ...keepRefs(refsOf(l), r.refs),
+            tomb_at: settled.tomb_at ?? null,
+          }),
+        )
+      }
+      if (stmts.length > 0) await this.db.batch(stmts)
+    }
+  }
+
+  /**
+   * スイッチをオンに戻したあと。切っていた間に増えた手元の行を種まきで補い、切っていた間に受け取った分と手元の違いを全部写し直す。
+   * 切っていた間の手元の削除は積んでいないので、同期の表の値へ戻る
+   */
+  private async catchUp(): Promise<void> {
+    const raw = await this.t.state('kinds_resume')
+    if (raw === null) return
+    const groups = (parseStrictJson(raw) as string[]).filter((g) => !kindsOfGroups([g]).some((k) => this.offKinds.has(k)))
+    const ctx = this.ctx()
+    const kinds = kindsOfGroups(groups)
+    for (const adapter of this.deps.adapters) if (kinds.includes(adapter.kind)) await this.seedOne(adapter, ctx)
+    const marks = kinds.map((_, i) => `$${i + 1}`).join(', ')
+    await this.db.batch([...(kinds.length > 0 ? [{ sql: `UPDATE sync_records SET needs_apply = 1 WHERE kind IN (${marks})`, params: kinds }] : []), delState('kinds_resume')])
+  }
+
   /** 種まきと合流の残り。古い HLC なので新しい削除に勝たない。ID が決まっているのでやり直しても重ならない */
   private async seedAndPlan(): Promise<void> {
     const ctx = this.ctx()
-    for (const adapter of this.deps.adapters) {
-      const rows = await adapter.seed(ctx)
-      // 件数の多い人でも 1 回の呼び出しを小さく保つ。ID が決まっているので途中で切れてもやり直せる
-      for (let i = 0; i < rows.length; i += WRITE_BATCH) {
-        const chunk = rows.slice(i, i + WRITE_BATCH)
-        const local = await this.t.records(chunk.map((r) => r.record_id))
-        const stmts: SqlStatement[] = []
-        for (const r of chunk) {
-          const l = local.get(r.record_id)
-          const payload = l ? mergePayloads(l.payload, r.payload) : r.payload
-          const changed = !l || !same(l.payload, payload)
-          const settled = settleRecord(payload, l?.version ?? 0, l && asLocal(l), ctx.now)
-          stmts.push(
-            writeRecord({
-              record_id: r.record_id,
-              kind: payload.kind,
-              kind_tag: l?.kind_tag ?? 'h',
-              schema_version: l?.schema_version ?? SCHEMA_VERSION,
-              payload,
-              hlc: payload.hlc,
-              version: settled.version,
-              pending: changed || (l?.pending ?? false),
-              priority: l?.priority ?? r.priority,
-              needs_apply: l?.needs_apply ?? false,
-              ...keepRefs(refsOf(l), r.refs),
-              tomb_at: settled.tomb_at ?? null,
-            }),
-          )
-        }
-        if (stmts.length > 0) await this.db.batch(stmts)
-      }
-    }
+    for (const adapter of this.onAdapters()) await this.seedOne(adapter, ctx)
     // 消えるものがなければ全件を見ない(種類ごとの exists は 1 件ごとに DB を読むので)
     const count = async (where: (r: StoredRecord) => boolean): Promise<number> => {
       let n = 0
-      for (const adapter of this.deps.adapters) {
+      for (const adapter of this.onAdapters()) {
         for (const r of await this.t.recordsOfKind(adapter.kind)) {
           if (where(r) && adapter.owns(r) && (await adapter.exists(r))) n++
         }
@@ -771,14 +884,14 @@ export class SyncEngine {
   private async reconcile(): Promise<void> {
     const ctx = this.ctx()
     const stmts: SqlStatement[] = []
-    for (const adapter of this.deps.adapters) {
+    for (const adapter of this.onAdapters()) {
       if (adapter.reconciles === false) continue
       const rows = await adapter.seed(ctx)
       const local = await this.t.records(rows.map((r) => r.record_id))
       for (const r of rows) {
         if (local.has(r.record_id)) continue
         const settled = settleRecord(r.payload, 0, undefined, ctx.now)
-        stmts.push(writeRecord({ record_id: r.record_id, kind: r.payload.kind, kind_tag: 'h', schema_version: SCHEMA_VERSION, payload: r.payload, hlc: r.payload.hlc, version: 0, pending: true, priority: r.priority, needs_apply: false, ...r.refs, tomb_at: settled.tomb_at ?? null }))
+        stmts.push(writeRecord({ record_id: r.record_id, kind: r.payload.kind, kind_tag: tagOfKind(r.payload.kind), schema_version: SCHEMA_VERSION, payload: r.payload, hlc: r.payload.hlc, version: 0, pending: true, priority: r.priority, needs_apply: false, ...r.refs, tomb_at: settled.tomb_at ?? null }))
       }
       for (const r of await this.t.recordsOfKind(adapter.kind)) {
         if (r.needs_apply || !adapter.owns(r) || r.payload.trim === true) continue
@@ -791,13 +904,13 @@ export class SyncEngine {
   /** 手元にあってレコードのない行を、種まきと同じ古い HLC で作る。消した記録があるものは作らないので、消したものは戻らない */
   private async fillMissing(): Promise<void> {
     const ctx = this.ctx()
-    for (const adapter of this.deps.adapters) {
+    for (const adapter of this.onAdapters()) {
       const rows = (await adapter.fill?.(ctx)) ?? []
       for (let i = 0; i < rows.length; i += WRITE_BATCH) {
         const chunk = rows.slice(i, i + WRITE_BATCH)
         const local = await this.t.records(chunk.map((r) => r.record_id))
         const stmts = chunk.flatMap((r) => {
-          if (!local.has(r.record_id)) return [writeRecord({ record_id: r.record_id, kind: r.payload.kind, kind_tag: 'h', schema_version: SCHEMA_VERSION, payload: r.payload, hlc: r.payload.hlc, version: 0, pending: true, priority: r.priority, needs_apply: r.reapply === true, ...r.refs, tomb_at: null })]
+          if (!local.has(r.record_id)) return [writeRecord({ record_id: r.record_id, kind: r.payload.kind, kind_tag: tagOfKind(r.payload.kind), schema_version: SCHEMA_VERSION, payload: r.payload, hlc: r.payload.hlc, version: 0, pending: true, priority: r.priority, needs_apply: r.reapply === true, ...r.refs, tomb_at: null })]
           return r.reapply === true ? [{ sql: 'UPDATE sync_records SET needs_apply = 1 WHERE record_id = $1', params: [r.record_id] }] : []
         })
         if (stmts.length > 0) await this.db.batch(stmts)
@@ -817,7 +930,8 @@ export class SyncEngine {
     }
     let after = ''
     for (;;) {
-      const rows = await this.t.toApply(this.kinds, after, APPLY_BATCH)
+      // 切っている種類は needs_apply を残し、オンに戻したときに写す
+      const rows = await this.t.toApply(this.kinds.filter((k) => !this.offKinds.has(k)), after, APPLY_BATCH)
       if (rows.length === 0) break
       after = rows[rows.length - 1].record_id
       const items: { id: string; area: string; plan: ApplyPlan }[] = []
@@ -833,7 +947,7 @@ export class SyncEngine {
       }
       await this.writeApplied(items)
     }
-    for (const adapter of this.deps.adapters) {
+    for (const adapter of this.onAdapters()) {
       const plan = await adapter.afterApply?.(ctx)
       if (!plan) continue
       if (plan.statements.length > 0) await this.db.batch(plan.statements)
@@ -873,7 +987,9 @@ export class SyncEngine {
    * read_reset は外さない(外すと、消したログの既読が戻る)。お気に入り・NG・設定も外さない。外せるものがなければ false
    */
   private async trimForQuota(): Promise<boolean> {
-    for (const kinds of TRIM_ORDER) {
+    for (const group of TRIM_ORDER) {
+      const kinds = group.filter((k) => !this.offKinds.has(k))
+      if (kinds.length === 0) continue
       const marks = kinds.map((_, i) => `$${i + 2}`).join(', ')
       const rows = await this.t.selectRecords(`deleted = 0 AND kind IN (${marks}) AND (version > 0 OR pending = 1) ORDER BY hlc, record_id LIMIT $1`, [TRIM_BATCH, ...kinds])
       if (rows.length === 0) continue
@@ -948,12 +1064,12 @@ export class SyncEngine {
       const local = await this.t.records(inflight.records.map((x) => x.record_id))
       const rows = inflight.records.flatMap((x) => {
         const r = local.get(x.record_id)
-        return r?.pending ? [r] : []
+        return r?.pending && !this.offKinds.has(r.kind) ? [r] : []
       })
       if (rows.length > 0) return { requestId: inflight.request_id, rows, sent: new Map(inflight.records.map((x) => [x.record_id, x.hlc])) }
       await this.db.execute('DELETE FROM sync_state WHERE key = $1', ['push_inflight'])
     }
-    const candidates = await this.t.pendingRecords(PUSH_BATCH_RECORDS)
+    const candidates = await this.t.pendingRecords(PUSH_BATCH_RECORDS, [...this.offKinds])
     if (candidates.length === 0) return null
     let bytes = 0
     const rows: StoredRecord[] = []
@@ -1021,9 +1137,10 @@ export class SyncEngine {
         return out
       }
       await this.checkEpoch(page.epoch)
-      const opened = openRecords(this.keys, this.spaceIdValue, page.records)
+      const readable = this.readable(page.records)
+      const opened = openRecords(this.keys, this.spaceIdValue, readable)
       for (const f of opened.failed) await this.countBad(f.reason)
-      const metaOf = new Map(page.records.map((r) => [r.record_id as string, r]))
+      const metaOf = new Map(readable.map((r) => [r.record_id as string, r]))
       for (const r of opened.records) {
         out.full[r.record_id] = { payload: r.payload, version: r.version }
         const m = metaOf.get(r.record_id) as Record<string, unknown>
@@ -1092,7 +1209,7 @@ export class SyncEngine {
     return {
       record_id: id,
       kind: settled.payload.kind,
-      kind_tag: l?.kind_tag ?? (fromServer ? meta.kind_tag : 'h'),
+      kind_tag: l?.kind_tag ?? (fromServer ? meta.kind_tag : tagOfKind(settled.payload.kind)),
       schema_version: l?.schema_version ?? (fromServer ? meta.schema_version : SCHEMA_VERSION),
       payload: settled.payload,
       hlc: settled.payload.hlc,
@@ -1170,7 +1287,7 @@ export class SyncEngine {
       const r = byId.get(id) as StoredRecord
       // すでに tombstone のものは今のデータに触らない。行を消すだけ
       if (!isDeleted(r.payload)) {
-        const adapter = this.deps.adapters.find((a) => a.kind === r.kind && a.owns(r))
+        const adapter = this.onAdapters().find((a) => a.kind === r.kind && a.owns(r))
         if (adapter) {
           const removal = await adapter.remove(r)
           stmts.push(...removal.statements)

@@ -33,6 +33,20 @@ for m in re.finditer(r"private fun (\w+Page)\(", src):
         elif r.group(3) or r.group(4):
             rows.append((keys[fn], r.group(3) or titles[keys[fn]], r.group(4) or ""))
 
+# 同期の小画面は別のファイル(ui/SyncPage.kt)で、文言は sync-ui.json にある
+rows += [
+    ("sync", "同期を使う", "別の端末と履歴やお気に入りを同期(実験的)"),
+    ("sync", "同期を始める", ""),
+    ("sync", "端末を追加", "QR・コードで別の端末をつなぐ"),
+    ("sync", "コードで参加", ""),
+    ("sync", "今すぐ同期", ""),
+    ("sync", "この端末で同期をやめる", ""),
+    ("sync", "同期するもの", "閲覧履歴と既読・お気に入り・サイト・書き込み履歴・上げた画像の履歴・NG・設定"),
+    ("sync", "画像の削除キー・管理トークン", ""),
+    ("sync", "サーバーの URL", "詳しい設定"),
+]
+
+
 def esc(s):
     return s.replace("\\", "\\\\").replace('"', '\\"')
 

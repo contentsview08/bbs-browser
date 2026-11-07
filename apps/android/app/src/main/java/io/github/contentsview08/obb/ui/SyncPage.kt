@@ -98,6 +98,7 @@ import io.github.contentsview08.obb.data.syncStartNav
 import io.github.contentsview08.obb.data.SyncStartNav
 import io.github.contentsview08.obb.sync.SyncText
 import io.github.contentsview08.obb.sync.engine.PAIRING_SHOW_MS
+import io.github.contentsview08.obb.sync.engine.SYNC_GROUPS
 import io.github.contentsview08.obb.sync.engine.MismatchSummary
 import io.github.contentsview08.obb.sync.engine.SyncStatus
 import io.github.contentsview08.obb.sync.engine.SyncSummary
@@ -106,7 +107,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-// 開発用の同期の画面。隠してあり、版を押して開く。PC の設定の SyncDevSection.tsx と同じ言葉
+// 同期の小画面。PC の設定の SyncTab.tsx と同じ言葉
 
 private fun label(key: String) = SyncText.LABELS.getValue(key)
 private fun clock(ms: Long?) = if (ms == null) "―" else DateFormat.getDateTimeInstance().format(Date(ms))
@@ -127,7 +128,7 @@ private fun StatusRow(name: String, value: String, valueColor: Color = Palette.t
 }
 
 @Composable
-fun SyncDevPage(vm: AppViewModel) {
+fun SyncPage(vm: AppViewModel, advanced: Boolean) {
     val scope = rememberCoroutineScope()
     var st by remember { mutableStateOf<SyncStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -162,9 +163,12 @@ fun SyncDevPage(vm: AppViewModel) {
     }
     val s = st ?: return
     val needTicket = s.lastError?.startsWith("ticket_") == true
-    Column(Modifier.padding(horizontal = 12.dp, vertical = 16.dp)) {
-        Text("お気に入りのスレと板、サイト、上げた画像の履歴、NG、書き込み履歴、閲覧履歴と既読、設定を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です", Modifier.padding(horizontal = 8.dp, vertical = 8.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
-        Column(Modifier.fillMaxWidth().background(Palette.surface)) {
+    Group(note = label("intro")) {
+        SwitchRow(label("master"), s.master, desc = label("master_note")) { on -> if (!busy) act { vm.syncCtl.setMaster(on); if (on) vm.reloadSyncedScreens() } }
+    }
+    message?.let { Text(it, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), color = Palette.textStrong, fontSize = 14.sp) }
+    if (s.master) {
+        Group("状態") {
             StatusRow("状態", s.state)
             StatusRow(label("status_space"), s.space ?: "―")
             StatusRow(label("status_pending"), "${s.pending} 件")
@@ -174,11 +178,13 @@ fun SyncDevPage(vm: AppViewModel) {
             StatusRow(label("status_error"), s.lastErrorText ?: "―", if (s.lastError != null) Palette.markDanger else Palette.textMuted)
         }
         s.confirmLost?.let { lost ->
-            Text("同期のデータで削除された $lost 件が、この端末からも消えます。", Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
-            SyncButton("消さない", !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
-            SyncButton("進める", !busy) { act { vm.syncCtl.resolveConfirm("accept_removal") } }
+            Group {
+                Text("同期のデータで削除された $lost 件が、この端末からも消えます。", Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
+                SyncButton("消さない", !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
+                SyncButton("進める", !busy) { act { vm.syncCtl.resolveConfirm("accept_removal") } }
+            }
         }
-        Column(Modifier.fillMaxWidth().padding(top = 12.dp).background(Palette.surface)) {
+        Group {
             if (!s.enabled || needTicket) SyncButton(label("start"), !busy) { act("同期を始めました") { vm.syncCtl.start(); vm.reloadSide() } }
             if (!s.enabled) SyncButton(label("add_device"), !busy) { scanning = true }
             if (s.enabled) {
@@ -187,13 +193,24 @@ fun SyncDevPage(vm: AppViewModel) {
                 SyncButton(label("leave"), !busy, danger = true) { ask = "leave" }
             }
         }
-        if (s.enabled) summary?.let { sum ->
-            SyncSummaryView(sum, mismatch, !busy, onCopy = { copyText(context, sum.text); vm.toast = "コピーしました" }, onCheck = { act { mismatch = vm.syncMismatches() } })
+    }
+    Group(label("kinds"), note = label("kinds_note") + label("kinds_resume_note")) {
+        for (g in SYNC_GROUPS) {
+            val on = s.kinds[g.id] == true
+            SwitchRow(g.label, on, desc = if (g.id == "secret") label("secret_note") else null) { next ->
+                if (busy) return@SwitchRow
+                if (next && g.id == "secret") ask = "secret"
+                else act { vm.syncCtl.setKind(g.id, next); if (next) vm.reloadSyncedScreens() }
+            }
         }
-        Text(label("server_url"), Modifier.padding(start = 8.dp, top = 16.dp), color = Palette.textMuted, fontSize = 13.sp)
-        OutlinedTextField(url ?: s.serverOverride.orEmpty(), { url = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(s.serverUrl, fontSize = 12.sp) })
+    }
+    if (s.master && s.enabled) summary?.let { sum ->
+        SyncSummaryView(sum, mismatch, !busy, onCopy = { copyText(context, sum.text); vm.toast = "コピーしました" }, onCheck = { act { mismatch = vm.syncMismatches() } })
+    }
+    if (advanced) Group(label("advanced")) {
+        Text(label("server_url"), Modifier.padding(start = 16.dp, top = 12.dp), color = Palette.textMuted, fontSize = 13.sp)
+        OutlinedTextField(url ?: s.serverOverride.orEmpty(), { url = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, placeholder = { Text(s.serverUrl, fontSize = 12.sp) })
         SyncButton("変える", !busy && url != null) { ask = "server" }
-        message?.let { Text(it, Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp) }
     }
     pairing?.let { code ->
         PairingWindow(code, onScan = { pairing = null; scanning = true }, onEnd = { pairing = null })
@@ -208,6 +225,8 @@ fun SyncDevPage(vm: AppViewModel) {
         onMove = { read ->
             act("同期を移りました", after = { scanning = false }) {
                 vm.syncCtl.leave()
+                // やめるとスイッチは既定へ戻るので、続けて入るためにオンにする
+                vm.syncCtl.setMaster(true)
                 vm.syncCtl.join(read)
             }
         },
@@ -223,16 +242,20 @@ fun SyncDevPage(vm: AppViewModel) {
         },
     )
     if (ask != null) {
-        val leaving = ask == "leave"
+        val which = ask
         AlertDialog(
             onDismissRequest = { ask = null },
-            title = { Text(if (leaving) label("leave") else label("server_url")) },
-            text = { Text(if (leaving) "この端末の鍵と同期の表を消します。この端末のお気に入りは消えません。サーバーのデータはそのままです。" else "新しいサーバーに認証の情報を送ります。") },
+            title = { Text(when (which) { "leave" -> label("leave"); "secret" -> label("secret_ask_title"); else -> label("server_url") }) },
+            text = { Text(when (which) { "leave" -> label("leave_ask"); "secret" -> label("secret_ask_body"); else -> label("server_ask") }) },
             confirmButton = {
                 TextButton({
                     ask = null
-                    if (leaving) act { vm.syncCtl.leave() } else act { vm.syncCtl.setServerUrl(url.orEmpty()); url = null }
-                }) { Text(if (leaving) "同期をやめる" else "変える") }
+                    when (which) {
+                        "leave" -> act { vm.syncCtl.leave() }
+                        "secret" -> act { vm.syncCtl.setKind("secret", true) }
+                        else -> act { vm.syncCtl.setServerUrl(url.orEmpty()); url = null }
+                    }
+                }) { Text(when (which) { "leave" -> "同期をやめる"; "secret" -> label("secret_ask_ok"); else -> "変える" }) }
             },
             dismissButton = { TextButton({ ask = null }) { Text("閉じる") } },
         )

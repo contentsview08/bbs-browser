@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { SyncResponseTooLarge } from '@bbs-browser/sync'
 import { DEFAULT_SETTINGS } from '../src/ui/settings'
 import { settingsFile } from '../src/utils/backup'
-import { versionTapCounter } from '../src/utils/syncDev'
 
 const invoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a: unknown[]) => invoke(...a) }))
@@ -52,15 +51,6 @@ describe('同期の PC の部品', () => {
     expect(caps.remote).toBeUndefined()
   })
 
-  it('版を続けて 7 回押すと開く。間が空くと数え直す', () => {
-    let t = 0
-    const tap = versionTapCounter(() => t)
-    for (let i = 0; i < 6; i++) expect(tap()).toBe(false)
-    t += 3000
-    expect(tap()).toBe(false)
-    for (let i = 0; i < 5; i++) expect(tap()).toBe(false)
-    expect(tap()).toBe(true)
-  })
 })
 
 describe('端末を足す QR', () => {

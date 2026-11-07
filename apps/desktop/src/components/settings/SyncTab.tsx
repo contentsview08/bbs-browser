@@ -1,23 +1,26 @@
-// 開発用の同期の画面。隠してあり、版を押して開く。鍵は main の窓にあるので、ここは頼むだけ
-import { useEffect, useMemo, useRef, useState } from 'react'
+// 同期の分類。鍵は main の窓にあるので、ここは頼むだけ
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { encode } from 'uqr'
-import { PAIRING_SHOW_MS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
+import { PAIRING_SHOW_MS, SYNC_GROUP_LABELS, SYNC_GROUPS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncGroup, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
 import { callMain } from '../../host/crossWindow'
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT } from '../DialogParts'
 import ConfirmDialog from '../ConfirmDialog'
-import { Section } from './common'
+import { Toggle } from '../SettingParts'
+import { SearchContext, Section } from './common'
 
 const errorText = (e: unknown) => syncMessage(e instanceof Error ? e.message.split(':').pop() || e.message : String(e))
 const clock = (ms: number | null) => (ms === null ? '―' : new Date(ms).toLocaleString())
 
-export function SyncDevSection() {
+export function SyncTab() {
   const [st, setSt] = useState<SyncStatus>()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string>()
   const [code, setCode] = useState('')
   const [url, setUrl] = useState<string>()
   const [pairing, setPairing] = useState<string>()
-  const [ask, setAsk] = useState<'leave' | 'server'>()
+  const [ask, setAsk] = useState<'leave' | 'server' | 'secret'>()
+  // 検索の結果にも並ぶので、探している間は読み直さない
+  const searching = useContext(SearchContext).trim() !== ''
 
   const [summary, setSummary] = useState<SyncSummary | null>()
   const [mismatch, setMismatch] = useState<MismatchSummary | null>()
@@ -26,9 +29,10 @@ export function SyncDevSection() {
   useEffect(() => {
     refresh()
     refreshSummary()
+    if (searching) return
     const id = window.setInterval(refresh, 1000)
     return () => window.clearInterval(id)
-  }, [])
+  }, [searching])
 
   const act = async (f: () => Promise<unknown>, done?: string) => {
     setBusy(true)
@@ -49,92 +53,114 @@ export function SyncDevSection() {
       const r = await callMain<{ code: string }>('syncPairingCode')
       setPairing(r.code)
     })
+  const setKind = (group: SyncGroup, on: boolean) => void act(() => callMain('syncSetKind', { group, on })).then(refreshSummary)
 
   if (!st) return null
   const needTicket = st.lastError?.startsWith('ticket_')
   return (
-    <Section title={L.section} note="お気に入りのスレと板、サイト、上げた画像の履歴、NG、書き込み履歴、閲覧履歴と既読、設定を同期します。サーバーは保管庫ではなく、端末の間の中継の置き場です">
-      <dl className="text-sm text-c-text-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mb-3">
-        <dt className="text-c-text-muted">状態</dt>
-        <dd>{st.state}</dd>
-        <dt className="text-c-text-muted">{L.status_space}</dt>
-        <dd className="font-mono">{st.space ?? '―'}</dd>
-        <dt className="text-c-text-muted">{L.status_pending}</dt>
-        <dd>{st.pending} 件</dd>
-        <dt className="text-c-text-muted">最後の受信</dt>
-        <dd>{clock(st.lastPullAt)}</dd>
-        <dt className="text-c-text-muted">最後の送信</dt>
-        <dd>{clock(st.lastPushAt)}</dd>
-        <dt className="text-c-text-muted">{L.status_error}</dt>
-        <dd style={st.lastError ? { color: 'var(--c-error)' } : undefined}>{st.lastErrorText ?? '―'}</dd>
-      </dl>
-      {st.confirm && (
-        <div className="mb-3 text-sm text-c-text-body">
-          <p className="mb-2">同期のデータで削除された {st.confirm.lost} 件が、この端末からも消えます。</p>
-          <div className="flex gap-2">
-            <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'keep_local'))}>
-              消さない
-            </button>
-            <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'accept_removal'))}>
-              進める
-            </button>
+    <>
+      <Section title={L.section} note={L.intro}>
+        {/* 切っている間に隠れる項目も検索で見つける */}
+        <span hidden>{L.search_note}</span>
+        <Toggle checked={st.master} label={L.master} note={L.master_note} onChange={(v) => void act(() => callMain('syncSetMaster', v)).then(refreshSummary)} />
+        {message && <p className="text-sm text-c-text-body mt-2">{message}</p>}
+      </Section>
+      {st.master && (
+        <Section title="状態">
+          <dl className="text-sm text-c-text-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mb-3">
+            <dt className="text-c-text-muted">状態</dt>
+            <dd>{st.state}</dd>
+            <dt className="text-c-text-muted">{L.status_space}</dt>
+            <dd className="font-mono">{st.space ?? '―'}</dd>
+            <dt className="text-c-text-muted">{L.status_pending}</dt>
+            <dd>{st.pending} 件</dd>
+            <dt className="text-c-text-muted">最後の受信</dt>
+            <dd>{clock(st.lastPullAt)}</dd>
+            <dt className="text-c-text-muted">最後の送信</dt>
+            <dd>{clock(st.lastPushAt)}</dd>
+            <dt className="text-c-text-muted">{L.status_error}</dt>
+            <dd style={st.lastError ? { color: 'var(--c-error)' } : undefined}>{st.lastErrorText ?? '―'}</dd>
+          </dl>
+          {st.confirm && (
+            <div className="mb-3 text-sm text-c-text-body">
+              <p className="mb-2">同期のデータで削除された {st.confirm.lost} 件が、この端末からも消えます。</p>
+              <div className="flex gap-2">
+                <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'keep_local'))}>
+                  消さない
+                </button>
+                <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'accept_removal'))}>
+                  進める
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {(!st.enabled || needTicket) && (
+              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncStart'), '同期を始めました')}>
+                {L.start}
+              </button>
+            )}
+            {st.enabled && (
+              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncNow')).then(refreshSummary)}>
+                {L.sync_now}
+              </button>
+            )}
+            {st.enabled && (
+              <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void showPairing()}>
+                {L.add_device}
+              </button>
+            )}
+            {st.enabled && (
+              <button type="button" className={BTN_DANGER} style={{ background: 'var(--c-error)' }} disabled={busy} onClick={() => setAsk('leave')}>
+                {L.leave}
+              </button>
+            )}
           </div>
-        </div>
+          {!st.enabled && (
+            <div className="flex gap-2 mb-3">
+              <input className={`${INPUT} flex-1`} value={code} placeholder="obb1." autoComplete="off" spellCheck={false} onChange={(e) => setCode(e.target.value)} />
+              <button
+                type="button"
+                className={BTN_SECONDARY}
+                disabled={busy || code.trim() === ''}
+                onClick={() =>
+                  void act(async () => {
+                    await callMain('syncJoin', code)
+                    setCode('')
+                  }, '同期を始めました')
+                }
+              >
+                {L.join}
+              </button>
+            </div>
+          )}
+          {pairing && <PairingCode code={pairing} onEnd={() => setPairing(undefined)} />}
+        </Section>
       )}
-      <div className="flex flex-wrap gap-2 mb-3">
-        {(!st.enabled || needTicket) && (
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncStart'), '同期を始めました')}>
-            {L.start}
-          </button>
-        )}
-        {st.enabled && (
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncNow')).then(refreshSummary)}>
-            {L.sync_now}
-          </button>
-        )}
-        {st.enabled && (
-          <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void showPairing()}>
-            {L.add_device}
-          </button>
-        )}
-        {st.enabled && (
-          <button type="button" className={BTN_DANGER} style={{ background: 'var(--c-error)' }} disabled={busy} onClick={() => setAsk('leave')}>
-            {L.leave}
-          </button>
-        )}
-      </div>
-      {!st.enabled && (
-        <div className="flex gap-2 mb-3">
-          <input className={`${INPUT} flex-1`} value={code} placeholder="obb1." autoComplete="off" spellCheck={false} onChange={(e) => setCode(e.target.value)} />
-          <button
-            type="button"
-            className={BTN_SECONDARY}
-            disabled={busy || code.trim() === ''}
-            onClick={() =>
-              void act(async () => {
-                await callMain('syncJoin', code)
-                setCode('')
-              }, '同期を始めました')
-            }
-          >
-            {L.join}
+      <Section title={L.kinds} note={`${L.kinds_note}${L.kinds_resume_note}`}>
+        {SYNC_GROUPS.filter((g) => g.id !== 'secret').map((g) => (
+          <Toggle key={g.id} checked={st.kinds[g.id]} label={SYNC_GROUP_LABELS[g.id]} onChange={(v) => setKind(g.id, v)} />
+        ))}
+        <Toggle checked={st.kinds.secret} label={SYNC_GROUP_LABELS.secret} note={L.secret_note} onChange={(v) => (v ? setAsk('secret') : setKind('secret', false))} />
+      </Section>
+      {st.master && st.enabled && summary && (
+        <Section title="同期の要約">
+          <SyncSummaryView summary={summary} mismatch={mismatch} busy={busy} onCheck={() => void act(async () => setMismatch(await callMain<MismatchSummary | null>('syncMismatches')))} />
+        </Section>
+      )}
+      <Section advanced title={L.advanced}>
+        <label className="block text-sm text-c-text-muted mb-1">{L.server_url}</label>
+        <div className="flex gap-2 mb-2">
+          <input className={`${INPUT} flex-1 font-mono`} value={url ?? st.serverOverride ?? ''} placeholder={st.serverUrl} autoComplete="off" spellCheck={false} onChange={(e) => setUrl(e.target.value)} />
+          <button type="button" className={BTN_SECONDARY} disabled={busy || url === undefined} onClick={() => setAsk('server')}>
+            変える
           </button>
         </div>
-      )}
-      {st.enabled && summary && <SyncSummaryView summary={summary} mismatch={mismatch} busy={busy} onCheck={() => void act(async () => setMismatch(await callMain<MismatchSummary | null>('syncMismatches')))} />}
-      {pairing && <PairingCode code={pairing} onEnd={() => setPairing(undefined)} />}
-      <label className="block text-sm text-c-text-muted mb-1">{L.server_url}</label>
-      <div className="flex gap-2 mb-2">
-        <input className={`${INPUT} flex-1 font-mono`} value={url ?? st.serverOverride ?? ''} placeholder={st.serverUrl} autoComplete="off" spellCheck={false} onChange={(e) => setUrl(e.target.value)} />
-        <button type="button" className={BTN_SECONDARY} disabled={busy || url === undefined} onClick={() => setAsk('server')}>
-          変える
-        </button>
-      </div>
-      {message && <p className="text-sm text-c-text-body">{message}</p>}
+      </Section>
       {ask === 'leave' && (
         <ConfirmDialog
           title={L.leave}
-          message="この端末の鍵と同期の表を消します。この端末のお気に入りは消えません。サーバーのデータはそのままです。"
+          message={L.leave_ask}
           okLabel="同期をやめる"
           onClose={(ok) => {
             setAsk(undefined)
@@ -145,7 +171,7 @@ export function SyncDevSection() {
       {ask === 'server' && (
         <ConfirmDialog
           title={L.server_url}
-          message="新しいサーバーに認証の情報を送ります。"
+          message={L.server_ask}
           okLabel="変える"
           onClose={(ok) => {
             setAsk(undefined)
@@ -157,7 +183,18 @@ export function SyncDevSection() {
           }}
         />
       )}
-    </Section>
+      {ask === 'secret' && (
+        <ConfirmDialog
+          title={L.secret_ask_title}
+          message={L.secret_ask_body}
+          okLabel={L.secret_ask_ok}
+          onClose={(ok) => {
+            setAsk(undefined)
+            if (ok) setKind('secret', true)
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -166,7 +203,6 @@ function SyncSummaryView({ summary, mismatch, busy, onCheck }: { summary: SyncSu
   const counts = (m: Record<string, number>) => Object.entries(m).map(([k, n]) => `${k} ${n}`).join('、') || 'なし'
   return (
     <div className="mb-3 text-sm text-c-text-body">
-      <p className="font-bold mb-1">同期の要約</p>
       <p className="text-c-text-muted mb-1">同期の表(生きている+削除:ハッシュ)</p>
       <ul className="font-mono text-xs mb-2">
         {summary.kinds.map((k) => (

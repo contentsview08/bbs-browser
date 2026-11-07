@@ -46,6 +46,8 @@ const thread = (key: string) => ({ connectorId: '2ch-compat', boardUrl: 'https:/
 
 function device(server: TestServer, o: { keyFail?: boolean; window?: (url: string) => string | null } = {}) {
   const { raw, db } = newDb()
+  // 画面で「同期を使う」をオンにしたあとの状態
+  raw.exec("INSERT INTO sync_state (key, value) VALUES ('master', '1')")
   const c = { requests: [] as S.SyncRequest[], keyReads: 0, windows: [] as string[], material: null as S.SyncKeyMaterial | null }
   const keyStore: S.SyncKeyStore = {
     load: async () => {
@@ -103,6 +105,67 @@ describe('使っていない間', () => {
     expect(d.c.requests).toHaveLength(0)
     expect(d.c.keyReads).toBe(0)
     expect(await d.db.select('SELECT * FROM sync_ops')).toHaveLength(0)
+  })
+})
+
+describe('スイッチ', () => {
+  it('既定はオフで、オンにするまで始められない', async () => {
+    const d = device(newServer())
+    d.raw.exec("DELETE FROM sync_state WHERE key = 'master'")
+    const st = await d.ctl.status()
+    expect(st.master).toBe(false)
+    expect(st.kinds).toEqual({ history: true, favorites: true, sites: true, posts: true, images: true, ng: true, settings: true, secret: false })
+    await expect(d.ctl.start()).rejects.toMatchObject({ code: 'sync_off' })
+    await expect(d.ctl.join('obb1.x')).rejects.toMatchObject({ code: 'sync_off' })
+    expect(d.c.windows).toHaveLength(0)
+    await d.ctl.setMaster(true)
+    expect((await d.ctl.status()).master).toBe(true)
+    await d.ctl.start()
+    expect((await d.ctl.status()).enabled).toBe(true)
+  })
+
+  it('オフの間は通信も積みも鍵保管も触らず、鍵は残る。オンで続きから動く', async () => {
+    const server = newServer()
+    const d = device(server)
+    await d.ctl.start()
+    await d.ctl.setMaster(false)
+    d.c.requests.length = 0
+    const reads = d.c.keyReads
+    await d.ops.favoriteThreadAdd(thread('1'))
+    expect(await d.ctl.foreground()).toBeNull()
+    expect(await d.ctl.autoEnabled()).toBe(false)
+    expect(await d.ctl.autoCheck()).toBe(false)
+    expect(await d.ctl.hasChanges()).toBe(false)
+    await d.ctl.syncNow()
+    expect(d.c.requests).toHaveLength(0)
+    expect(d.c.keyReads).toBe(reads)
+    expect(await d.db.select('SELECT * FROM sync_ops')).toHaveLength(0)
+    const st = await d.ctl.status()
+    expect(st.state).toBe('off')
+    expect(st.enabled).toBe(true)
+    expect(d.c.material).not.toBeNull()
+    await d.ctl.setMaster(true)
+    expect(d.c.requests.length).toBeGreaterThan(0)
+    expect(await d.db.select<{ n: number }>("SELECT COUNT(*) AS n FROM sync_records WHERE kind = 'favorite' AND pending = 0")).toEqual([{ n: 1 }])
+  })
+
+  it('切っている種類の送信待ちは数えず、自動の同期を起こさない', async () => {
+    const d = device(newServer())
+    await d.ctl.start()
+    await d.ops.favoriteThreadAdd(thread('1'))
+    expect(await d.ctl.hasChanges()).toBe(true)
+    await d.ctl.syncNow()
+    await d.raw.exec("UPDATE sync_records SET pending = 1 WHERE kind = 'favorite'")
+    await d.ctl.setKind('favorites', false)
+    expect(await d.ctl.hasChanges()).toBe(false)
+    expect((await d.ctl.status()).pending).toBe(0)
+  })
+
+  it('スイッチは同期の許可リストと設定の書き出しに入らない', () => {
+    const allow = JSON.parse(readFileSync(new URL('../settings-allowlist.json', import.meta.url), 'utf-8'))
+    const names = [...allow.items.map((i: { name: string }) => i.name), ...allow.board_meta.fields]
+    for (const n of ['syncKinds', 'syncMaster', 'kinds', 'master', 'secret']) expect(names).not.toContain(n)
+    expect(allow.never).toEqual(expect.arrayContaining(['syncKinds', 'syncMaster']))
   })
 })
 
@@ -318,7 +381,7 @@ describe('ペアリングのコードと画面の文(共通テスト)', () => {
     expect(S.SYNC_LABELS).toEqual(ui.labels)
     expect(S.SYNC_NOTES).toEqual(ui.notes)
     expect(S.SYNC_MESSAGES).toEqual(ui.messages)
-    expect(S.SYNC_REVEAL_TAPS).toBe(ui.reveal_taps)
+    expect(S.SYNC_GROUPS.map((g) => ({ id: g.id, label: S.SYNC_GROUP_LABELS[g.id], default: g.default, kinds: g.kinds }))).toEqual(ui.groups)
     expect(S.PAIRING_SHOW_MS).toBe(ui.pairing_show_ms)
   })
 

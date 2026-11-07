@@ -15748,5 +15748,2569 @@
     }
    }
   ]
+ },
+ {
+  "name": "スイッチ: history を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "history",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc1",
+    "title": "t",
+    "post_count": 10
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc1",
+    "title": "t",
+    "no": 5
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc9",
+    "title": "tpc9"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "phone1",
+    "title": "t",
+    "post_count": 10
+   },
+   {
+    "device": "phone",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "phone1",
+    "title": "t",
+    "no": 5
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "history": [
+       "pc1"
+      ]
+     },
+     "phone": {
+      "history": [
+       "phone1"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "history",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "history": [
+       "pc1",
+       "phone1"
+      ]
+     },
+     "phone": {
+      "history": [
+       "pc1",
+       "phone1"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: favorites を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc1",
+    "title": "tpc1"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://pc9.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "phone1",
+    "title": "tphone1"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "pc1"
+      ]
+     },
+     "phone": {
+      "favorite_threads": [
+       "phone1"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "pc1",
+       "phone1"
+      ]
+     },
+     "phone": {
+      "favorite_threads": [
+       "pc1",
+       "phone1"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: sites を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://pc1.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc9",
+    "title": "tpc9"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "site_add",
+    "url": "https://phone1.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "sites": [
+       "https://pc1.5ch.io/bbsmenu.html"
+      ]
+     },
+     "phone": {
+      "sites": [
+       "https://phone1.5ch.io/bbsmenu.html"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "sites": [
+       "https://pc1.5ch.io/bbsmenu.html",
+       "https://phone1.5ch.io/bbsmenu.html"
+      ]
+     },
+     "phone": {
+      "sites": [
+       "https://pc1.5ch.io/bbsmenu.html",
+       "https://phone1.5ch.io/bbsmenu.html"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: posts を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "posts",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "post_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t",
+    "no": 1,
+    "body": "pc1"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc9",
+    "title": "tpc9"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "post_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t",
+    "no": 1,
+    "body": "phone1"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "post_bodies": [
+       "pc1"
+      ]
+     },
+     "phone": {
+      "post_bodies": [
+       "phone1"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "posts",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "post_bodies": [
+       "pc1",
+       "phone1"
+      ]
+     },
+     "phone": {
+      "post_bodies": [
+       "pc1",
+       "phone1"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: images を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "images",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/pc1.png",
+    "name": "n",
+    "size": 1
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc9",
+    "title": "tpc9"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "upload_add",
+    "url": "https://img.test/phone1.png",
+    "name": "n",
+    "size": 1
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "images",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: ng を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "ng",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "pc1",
+      "target": "content",
+      "pattern": "pc1",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 1000
+     }
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc9",
+    "title": "tpc9"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "ng_change",
+    "add": [
+     {
+      "id": "phone1",
+      "target": "content",
+      "pattern": "phone1",
+      "isRegex": false,
+      "enabled": true,
+      "createdAt": 1000
+     }
+    ]
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ng_ids": [
+       "pc1"
+      ]
+     },
+     "phone": {
+      "ng_ids": [
+       "phone1"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "ng",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ng_ids": [
+       "pc1",
+       "phone1"
+      ]
+     },
+     "phone": {
+      "ng_ids": [
+       "phone1",
+       "pc1"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: settings を切って両方で変更し、再びオンで揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "settings",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "setting_change",
+    "name": "keywords",
+    "value": [
+     "pc1"
+    ]
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "pc9",
+    "title": "tpc9"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "setting_change",
+    "name": "keywords",
+    "value": [
+     "phone1"
+    ]
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "settings": {
+       "keywords": [
+        "phone1"
+       ]
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "settings",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "settings": {
+       "keywords": [
+        "phone1"
+       ]
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 同期自体を切ると通信も積みも起きず、戻すと続きから揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "set_master",
+    "on": false
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "b",
+    "title": "tb"
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "post_count": 3
+   },
+   {
+    "device": "pc",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "no": 2
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0,
+      "requests": {},
+      "state": "off",
+      "keys": true,
+      "favorite_threads": [
+       "a",
+       "b"
+      ]
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "c",
+    "title": "tc"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "a",
+       "b"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_master",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "a",
+       "b",
+       "c"
+      ],
+      "sites": [
+       "https://s.5ch.io/bbsmenu.html"
+      ],
+      "read_no": {
+       "r": 2
+      }
+     },
+     "phone": {
+      "favorite_threads": [
+       "a",
+       "b",
+       "c"
+      ],
+      "sites": [
+       "https://s.5ch.io/bbsmenu.html"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 切る前の送信待ちは切っている間は送らず、戻すと送る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "offline"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "b",
+    "title": "tb"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "online"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": false
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pending": 1,
+      "requests": {
+       "GET /changes": 1
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "a"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "a",
+       "b"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 切っている間に手元で外したものは、戻すと同期の表から戻る",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "b",
+    "title": "tb"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0,
+      "favorite_threads": [
+       "b"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "a",
+       "b"
+      ]
+     },
+     "phone": {
+      "favorite_threads": [
+       "a",
+       "b"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 切っている間の他の端末の削除は、戻すと手元からも消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "b",
+    "title": "tb"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": false
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "a",
+       "b"
+      ],
+      "needs_apply": 1
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "b"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 切っている間は読み直しても手元に写らず、version は進む",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "site_add",
+    "url": "https://s.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "sites": [],
+      "needs_apply": 1,
+      "kinds": {
+       "site": 1
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "sites": [
+       "https://s.5ch.io/bbsmenu.html"
+      ],
+      "needs_apply": 0
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 履歴を切っている間は開いても受け取った既読を写さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "phone",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "post_count": 9
+   },
+   {
+    "device": "phone",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "no": 5
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "history",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "post_count": 9
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "read_no": {
+       "r": 0
+      }
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "history",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "read_no": {
+       "r": 5
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 同期を切っている間は開いても受け取った既読を写さない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "phone",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "post_count": 9
+   },
+   {
+    "device": "phone",
+    "op": "read",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "no": 5
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "prune",
+    "older_than_ms": -1000
+   },
+   {
+    "device": "pc",
+    "op": "set_master",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "open",
+    "board": "https://a.5ch.io/x/",
+    "key": "r",
+    "title": "t",
+    "post_count": 9
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "read_no": {
+       "r": 0
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 全部切っても鍵と領域は残り、全部戻すと揃う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "history",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "posts",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "images",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "ng",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "settings",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "a",
+    "title": "ta"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "post_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t",
+    "no": 1,
+    "body": "本文"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 0
+     }
+    }
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pending": 0,
+      "requests": {
+       "GET /changes": 1
+      },
+      "keys": true
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "b",
+    "title": "tb"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "a"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "history",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "favorites",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "posts",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "images",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "ng",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "settings",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "a",
+       "b"
+      ],
+      "post_bodies": [
+       "本文"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 同期をやめるとスイッチは既定に戻る",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "sites",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "leave"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state_rows": 0,
+      "keys": false
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "device": "pc",
+    "op": "site_add",
+    "url": "https://s.5ch.io/bbsmenu.html",
+    "name": "s"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "s_records": 0
+       }
+      }
+     },
+     "pc": {
+      "kinds": {
+       "image": 1,
+       "site": 1
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系は既定で切れていて、どの端末もオフなら一切サーバーに出ない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "uploads": [
+     {
+      "url": "https://img.test/a.png",
+      "name": "n",
+      "size": 1,
+      "delete_url": "https://imgbb.test/del/KEYA",
+      "ago_ms": 1000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/b.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYB"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYA",
+       "https://imgbb.test/del/KEYB",
+       "imgbb.test"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 0,
+        "h_lacks": [
+         "imgbb.test"
+        ]
+       }
+      }
+     },
+     "pc": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA",
+       "https://img.test/b.png": "https://imgbb.test/del/KEYB"
+      },
+      "ops": 0,
+      "record_lacks": [
+       "imgbb.test"
+      ]
+     },
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": null,
+       "https://img.test/b.png": null
+      },
+      "record_lacks": [
+       "imgbb.test"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系をオンにした端末だけが積み、k_secret で送り、オフの端末は読まない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "pc": {
+    "uploads": [
+     {
+      "url": "https://img.test/a.png",
+      "name": "n",
+      "size": 1,
+      "delete_url": "https://imgbb.test/del/KEYA",
+      "ago_ms": 1000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYA",
+       "imgbb.test"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 1,
+        "h_lacks": [
+         "imgbb.test"
+        ]
+       }
+      }
+     },
+     "pc": {
+      "secrets_sent": 1,
+      "kinds_has": [
+       "secret"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/b.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYB"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 2,
+      "ops_lack": [
+       "imgbb.test"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYB"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 2,
+        "h_lacks": [
+         "imgbb.test"
+        ]
+       }
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": null,
+       "https://img.test/b.png": null
+      },
+      "record_lacks": [
+       "imgbb.test"
+      ],
+      "kinds_lack": [
+       "secret"
+      ],
+      "bad_counts": null
+     }
+    }
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "phone",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA",
+       "https://img.test/b.png": "https://imgbb.test/del/KEYB"
+      },
+      "secrets_sent": 0
+     }
+    }
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA",
+       "https://img.test/b.png": "https://imgbb.test/del/KEYB"
+      }
+     },
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA",
+       "https://img.test/b.png": "https://imgbb.test/del/KEYB"
+      }
+     }
+    }
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYA",
+       "https://imgbb.test/del/KEYB"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 2
+       }
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系を切ると表の平文を消し、オフの間は送らず、戻すと補う",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": false
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "record_lacks": [
+       "imgbb.test"
+      ],
+      "kinds_lack": [
+       "secret"
+      ],
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA"
+      }
+     }
+    }
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/b.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYB"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "ops": 1,
+      "ops_lack": [
+       "imgbb.test"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYB"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 1
+       }
+      }
+     },
+     "pc": {
+      "secrets_sent": 0,
+      "record_lacks": [
+       "imgbb.test"
+      ]
+     }
+    }
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYB"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 2
+       }
+      }
+     },
+     "pc": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA",
+       "https://img.test/b.png": "https://imgbb.test/del/KEYB"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 切る前に積んだ権限系の操作と、応答待ちの権限系は、切ったら送らない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "device": "pc",
+    "op": "offline"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "online"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": false
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "s_records": 0
+       }
+      }
+     },
+     "pc": {
+      "secrets_sent": 0,
+      "ops": 0,
+      "kinds_lack": [
+       "secret"
+      ],
+      "inflight": false
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系をオフの端末は壊れた権限系のレコードも開かない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "server_inject_secret",
+    "url": "https://img.test/a.png",
+    "value": "x",
+    "corrupt": true
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "bad_counts": null
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "bad_counts": {
+       "decrypt": 1
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系の削除が両方のオンの端末に伝わり、画像の行は別に消える",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "phone",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA"
+      }
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "upload_remove",
+    "url": "https://img.test/a.png"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "delete_urls": {},
+      "record_lacks": [
+       "imgbb.test"
+      ]
+     },
+     "phone": {
+      "delete_urls": {},
+      "record_lacks": [
+       "imgbb.test"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系が画像より先に写っても、画像を入れたあとで付く",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "phone",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "phone",
+    "op": "set_kind",
+    "group": "images",
+    "on": false
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "delete_urls": {}
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "set_kind",
+    "group": "images",
+    "on": true
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": "https://imgbb.test/del/KEYA"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: 権限系をオフのまま領域が消えても、作り直しに出ない。オンの端末が送り直す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "device": "pc",
+    "op": "server_delete_space"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "phone": {
+        "s_records": 0,
+        "h_lacks": [
+         "imgbb.test"
+        ]
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "sent_lacks": [
+       "https://imgbb.test/del/KEYA"
+      ],
+      "of": {
+       "pc": {
+        "s_records": 1
+       }
+      }
+     },
+     "phone": {
+      "delete_urls": {
+       "https://img.test/a.png": null
+      },
+      "record_lacks": [
+       "imgbb.test"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "スイッチ: DB を別の端末へ入れたら権限系のスイッチを引き継がない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "set_kind",
+    "group": "secret",
+    "on": true
+   },
+   {
+    "device": "pc",
+    "op": "upload_add",
+    "url": "https://img.test/a.png",
+    "name": "n",
+    "size": 1,
+    "delete_url": "https://imgbb.test/del/KEYA"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "tamper_device_id"
+   },
+   {
+    "device": "pc",
+    "op": "restart"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "record_lacks": [
+       "imgbb.test"
+      ],
+      "kinds_lack": [
+       "secret"
+      ]
+     }
+    }
+   }
+  ]
  }
 ]

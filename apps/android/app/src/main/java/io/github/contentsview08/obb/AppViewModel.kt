@@ -443,6 +443,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ) + io.github.contentsview08.obb.sync.adapters.favoriteBoardAdapters(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) } + listOf(
                 io.github.contentsview08.obb.sync.adapters.SiteAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncSite(it) },
                 io.github.contentsview08.obb.sync.adapters.ImageAdapter(db.syncSql),
+                io.github.contentsview08.obb.sync.adapters.SecretAdapter(db.syncSql),
                 io.github.contentsview08.obb.sync.adapters.NgAdapter(io.github.contentsview08.obb.data.SyncNgHost({ prefs.ngRules }, { prefs.applyRemoteNg(it) })),
                 io.github.contentsview08.obb.sync.adapters.PostAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) },
                 io.github.contentsview08.obb.sync.adapters.SettingAdapter(settingAllow, io.github.contentsview08.obb.data.PrefsSettingsHost(prefs, settingAllow), db.syncSql),

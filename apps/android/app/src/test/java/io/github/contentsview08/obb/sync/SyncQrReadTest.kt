@@ -46,6 +46,8 @@ class SyncQrReadTest {
             keyHint = { keys.value != null },
             openStartWindow = { url -> signTicket(Regex("space_id=([0-9a-f]{64})").find(url)!!.groupValues[1], 4_000_000_000L) },
         )
+        // 画面で「同期を使う」をオンにしたあとの状態
+        init { db.exec("INSERT INTO sync_state (key, value) VALUES ('master', '1')", emptyList()) }
         val ops = io.github.contentsview08.obb.data.UserOps(db)
         fun favorites() = db.query("SELECT key FROM favorite_threads ORDER BY key").map { it["key"] as String }
     }
@@ -120,6 +122,7 @@ class SyncQrReadTest {
         // 確認で閉じたら何も変わらない
         assertEquals(me.space, a.ctl.status().space)
         a.ctl.leave()
+        a.ctl.setMaster(true)
         a.ctl.join(read.code)
 
         val moved = a.ctl.status()

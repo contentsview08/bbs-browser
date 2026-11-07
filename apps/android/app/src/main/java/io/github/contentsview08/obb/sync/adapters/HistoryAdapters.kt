@@ -15,6 +15,7 @@ import io.github.contentsview08.obb.sync.engine.SqlStatement
 import io.github.contentsview08.obb.sync.engine.StoredRecord
 import io.github.contentsview08.obb.sync.engine.SyncOpRow
 import io.github.contentsview08.obb.sync.engine.SyncSql
+import io.github.contentsview08.obb.sync.engine.parseSwitches
 import io.github.contentsview08.obb.sync.hlc
 import io.github.contentsview08.obb.sync.makeReset
 import io.github.contentsview08.obb.sync.makeTombstone
@@ -105,6 +106,9 @@ private val NOTHING = ApplyPlan(emptyList(), false)
 fun restoreThreadRead(db: SyncSql, boardUrl: String, key: String, connectorId: String, title: String, createdAt: Long?): Boolean {
     val board = normalizeBoardUrl(boardUrl)
     if (board == null || localRows(db, board, key).isNotEmpty()) return false
+    // 切っている間は受け取った記録を手元へ写さない
+    val state = db.query("SELECT key, value FROM sync_state WHERE key IN ('master', 'kinds')").associate { it["key"] as String to it["value"] as String }
+    if (state["master"] == "0" || parseSwitches(state["kinds"])["history"] != true) return false
     val r = readRecords(db, board, key)
     val pos = readPosition(r.latest, r.devs)
     if (pos <= 0) return false

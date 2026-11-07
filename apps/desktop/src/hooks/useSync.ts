@@ -1,7 +1,7 @@
 // 同期のきっかけと、設定の窓からの頼みごと。自動の同期は前面にいる間だけ(きっかけの決まりは SyncScheduler)
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
-import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, PostAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult } from '@bbs-browser/sync'
+import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type SyncGroup } from '@bbs-browser/sync'
 import { broadcast } from '../host/crossWindow'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
 import { isAppVisible } from '../utils/visibility'
@@ -33,6 +33,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
         ...favoriteBoardAdapters(store.db, resolveSyncBoard),
         new SiteAdapter(store.db, resolveSyncSite),
         new ImageAdapter(store.db),
+        new SecretAdapter(store.db),
         new NgAdapter(syncNgHost(store.db)),
         new PostAdapter(store.db, resolveSyncBoard),
         new SettingAdapter(syncSettingsHost(store.db), store.db),
@@ -117,6 +118,8 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
       return summary(r)
     }),
     syncLeave: () => need(latest.current).leave(),
+    syncSetMaster: (on: boolean) => need(latest.current).setMaster(on),
+    syncSetKind: (a: { group: SyncGroup; on: boolean }) => need(latest.current).setKind(a.group, a.on),
     syncSetServer: (url: string) => need(latest.current).setServerUrl(url),
     syncConfirm: (choice: ConfirmChoice) => need(latest.current).resolveConfirm(choice).then(summary),
     syncSummary: () => need(latest.current).summary(),

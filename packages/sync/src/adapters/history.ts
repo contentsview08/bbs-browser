@@ -1,4 +1,5 @@
 // 閲覧履歴と既読。閲覧履歴は last_view:<板>:<スレ>、既読は read_dev(スレ×端末)と read_reset(スレごと)
+import { parseSwitches } from '../engine/kinds'
 import { HISTORY_SHOWN, RESET_TOTAL_MAX } from '../config'
 import type { StoredRecord, SyncOpRow, SyncSqlDb } from '../engine/tables'
 import { formatHlc, parseHlc } from '../hlc'
@@ -91,6 +92,9 @@ const createdAtOf = (body: Record<string, unknown>, key: string): number | null 
 export async function restoreThreadRead(db: SyncSqlDb, t: { boardUrl: string; key: string; connectorId: string; title: string; createdAt?: number | null }): Promise<boolean> {
   const board = normalizeBoardUrl(t.boardUrl)
   if (board === null || (await localRows(db, board, t.key)).length > 0) return false
+  // 切っている間は受け取った記録を手元へ写さない
+  const state = new Map((await db.select<{ key: string; value: string }>("SELECT key, value FROM sync_state WHERE key IN ('master', 'kinds')")).map((r) => [r.key, r.value]))
+  if (state.get('master') === '0' || !parseSwitches(state.get('kinds') ?? null).history) return false
   const { latest, devs } = await readRecords(db, board, t.key)
   const pos = readPosition(latest, devs)
   if (pos <= 0) return false

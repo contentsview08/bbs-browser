@@ -111,12 +111,16 @@ export class SyncTables {
     return (await this.db.select<RecordRow>(`SELECT ${COLUMNS} FROM sync_records WHERE ${where}`, params)).map(fromRow)
   }
 
-  async pendingRecords(limit: number): Promise<StoredRecord[]> {
-    return (await this.db.select<RecordRow>(`SELECT ${COLUMNS} FROM sync_records WHERE pending = 1 ORDER BY priority, hlc, record_id LIMIT $1`, [limit])).map(fromRow)
+  /** except は切っている種類。送信待ちのまま残し、送らない */
+  async pendingRecords(limit: number, except: readonly string[] = []): Promise<StoredRecord[]> {
+    const marks = except.map((_, i) => `$${i + 2}`).join(', ')
+    const skip = except.length > 0 ? `AND kind NOT IN (${marks}) ` : ''
+    return (await this.db.select<RecordRow>(`SELECT ${COLUMNS} FROM sync_records WHERE pending = 1 ${skip}ORDER BY priority, hlc, record_id LIMIT $1`, [limit, ...except])).map(fromRow)
   }
 
   /** 写す順を決めておく。afterId より後を返すので、飛ばした行を読み直さない */
   async toApply(kinds: readonly string[], afterId: string, limit: number): Promise<StoredRecord[]> {
+    if (kinds.length === 0) return []
     const marks = kinds.map((_, i) => `$${i + 3}`).join(', ')
     const rows = await this.db.select<RecordRow>(
       `SELECT ${COLUMNS} FROM sync_records WHERE needs_apply = 1 AND record_id > $1 AND kind IN (${marks}) ORDER BY record_id LIMIT $2`,

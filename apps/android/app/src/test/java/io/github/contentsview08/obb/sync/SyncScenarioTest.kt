@@ -29,6 +29,7 @@ import io.github.contentsview08.obb.sync.engine.SqlStatement
 import io.github.contentsview08.obb.sync.engine.syncMismatches
 import io.github.contentsview08.obb.sync.engine.syncSummary
 import io.github.contentsview08.obb.sync.adapters.ImageAdapter
+import io.github.contentsview08.obb.sync.adapters.SecretAdapter
 import io.github.contentsview08.obb.sync.adapters.NgAdapter
 import io.github.contentsview08.obb.sync.adapters.SiteAdapter
 import io.github.contentsview08.obb.sync.adapters.favoriteBoardAdapters
@@ -64,7 +65,7 @@ private class MemoryKeyStore : SyncKeyStore {
 
 private class Fault(val kind: String, var times: Int, val path: String?, val status: Int? = null, val body: Any? = null, val location: String? = null, val other: String? = null, var skip: Int = 0)
 
-private class LogEntry(val device: String, val method: String, val path: String, val host: String, val requestId: String?)
+private class LogEntry(val device: String, val method: String, val path: String, val host: String, val requestId: String?, val secrets: Int = 0)
 
 private val URL_PARTS = Regex("https?://([^/?]+)([^?]*)(\\?.*)?")
 
@@ -85,6 +86,9 @@ private class World(o: Map<String, Any?>) {
     var tickets = 0
     val faults = ArrayList<Fault>()
     val log = ArrayList<LogEntry>()
+
+    /** 端末が送った本文の全部。権限系の値が平文で出ていないかを見る */
+    val sent = ArrayList<String>()
     var mark = 0
     val devices = LinkedHashMap<String, Device>()
     var retentionDays = 0
@@ -179,8 +183,11 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         val m = URL_PARTS.matchEntire(req.url)!!
         val pathOnly = m.groupValues[2]
         val path = pathOnly + m.groupValues[3]
-        val requestId = req.body?.let { (parseStrictJson(it) as Map<String, Any?>)["request_id"] as String? }
-        w.log += LogEntry(name, req.method, pathOnly, m.groupValues[1], requestId)
+        val parsed = req.body?.let { parseStrictJson(it) as Map<String, Any?> }
+        val requestId = parsed?.get("request_id") as String?
+        val secrets = (parsed?.get("records") as List<Map<String, Any?>>?)?.count { it["kind_tag"] == "s" } ?: 0
+        w.log += LogEntry(name, req.method, pathOnly, m.groupValues[1], requestId, secrets)
+        req.body?.let { w.sent += it }
         if (!online) throw IllegalStateException("offline")
         val f = w.faults.firstOrNull { it.times > 0 && (it.path == null || it.path == pathOnly) }
         val real = FakeRequest(req.method, path, req.headers, req.body)
@@ -222,6 +229,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         adapters = listOf(FavoriteThreadAdapter(sql, resolver(name))) + favoriteBoardAdapters(sql, resolver(name)) + listOf(
             SiteAdapter(sql) { url -> if (name == "phone" && url.contains("2chan.net")) null else "2ch-compat" },
             ImageAdapter(sql),
+            SecretAdapter(sql),
             NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
             PostAdapter(sql, resolver(name)),
             SettingAdapter(ALLOW, TableSettingsHost(sql, if (name == "phone") "phone" else "pc"), sql),
@@ -489,6 +497,14 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "sync_auto" -> d!!.sync(false)
         "restart" -> d!!.newEngine()
         "leave" -> d!!.engine.leave()
+        "set_master" -> d!!.engine.setMaster(s["on"] as Boolean)
+        "set_kind" -> d!!.engine.setKind(s["group"] as String, s["on"] as Boolean)
+        "server_inject_secret" -> {
+            // 別の端末が権限系を送った状態。corrupt は開けない暗号文
+            val keys = deriveKeys(material().k)
+            val id = recordId(keys.kId, "secret", null, "", s["url"] as String)
+            w.server.injectRecord(spaceId(keys.authToken), id, "s", 1, false, toBase64Url(ByteArray(24)), toBase64Url(ByteArray(272)))
+        }
         "confirm" -> d!!.engine.resolveConfirm(s["choice"] as String)
         "offline" -> d!!.online = false
         "online" -> d!!.online = true
@@ -538,6 +554,9 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
                 val ids = w.log.mapNotNull { l -> l.requestId }
                 assertEquals("$label: 同じ request_id の送り直し", it, ids.toSet().size < ids.size)
             }
+            e["sent_lacks"]?.let { texts ->
+                for (text in texts as List<String>) assertEquals("$label: 送った本文に $text がない", false, w.sent.any { b -> b.contains(text) })
+            }
             for ((dev, vv) in (e["of"] as Map<String, Any?>?).orEmpty()) {
                 val v = vv as Map<String, Any?>
                 val m = w.devices.getValue(dev).keys.value
@@ -546,6 +565,13 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
                 v["records"]?.let { assertEquals("$label: $dev の領域のレコード数", it, sp?.records?.size?.toLong()) }
                 v["head"]?.let { assertEquals("$label: $dev の領域の version", it, sp?.next) }
                 v["gc_floor"]?.let { assertEquals("$label: $dev の gc_floor", it, sp?.gcFloor) }
+                v["s_records"]?.let { assertEquals("$label: $dev の領域の権限系のレコード数", it, sp?.records.orEmpty().values.count { r -> r.kindTag == "s" }.toLong()) }
+                v["h_lacks"]?.let { texts ->
+                    // 履歴系の鍵で開けるものに、権限系の値が混ざっていない
+                    val k = deriveKeys(m!!.k)
+                    val opened = openRecords(k, spaceId(k.authToken), sp?.records.orEmpty().values.filter { r -> r.kindTag == "h" }.map { r -> r.toMap() })
+                    for (text in texts as List<String>) assertEquals("$label: $dev の履歴系に $text がない", false, opened.records.any { r -> canonicalJson(r.payload).contains(text) })
+                }
             }
             continue
         }
@@ -583,6 +609,20 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         e["own_posts"]?.let { checkEq("$at の自分のレス", it, d.sql.query("SELECT key, no FROM own_posts ORDER BY key, no")) }
         e["settings"]?.let { checkEq("$at の設定", it, TableSettingsHost(d.sql, "pc").read()) }
         e["kinds"]?.let { checkEq("$at の種類ごとのレコード数", it, d.sql.query("SELECT kind, COUNT(*) AS n FROM sync_records GROUP BY kind").associate { r -> r["kind"] as String to r["n"] }) }
+        e["ops_lack"]?.let { texts ->
+            val rows = d.sql.query("SELECT target, args FROM sync_ops")
+            for (text in texts as List<String>) assertEquals("$at の sync_ops に $text がない", false, rows.any { r -> "${r["target"]} ${r["args"]}".contains(text) })
+        }
+        e["secrets_sent"]?.let { assertEquals("$at の送った権限系の数", (it as Long).toInt(), w.log.drop(w.mark).filter { l -> l.device == name }.sumOf { l -> l.secrets }) }
+        e["delete_urls"]?.let { checkEq("$at の削除ページ", it, d.sql.query("SELECT url, delete_url FROM uploads ORDER BY url").associate { r -> r["url"] as String to r["delete_url"] }) }
+        e["kinds_lack"]?.let { kinds ->
+            val rows = d.sql.query("SELECT DISTINCT kind FROM sync_records").map { r -> r["kind"] }
+            for (k in kinds as List<String>) assertEquals("$at の表に $k がない", false, k in rows)
+        }
+        e["kinds_has"]?.let { kinds ->
+            val rows = d.sql.query("SELECT DISTINCT kind FROM sync_records").map { r -> r["kind"] }
+            for (k in kinds as List<String>) assertEquals("$at の表に $k がある", true, k in rows)
+        }
         e["max_order_key"]?.let {
             val longest = d.sql.query("SELECT payload FROM sync_records WHERE kind = 'order' AND deleted = 0").maxOfOrNull { r -> ((parseStrictJson(r["payload"] as String) as Map<String, Any?>)["body"] as Map<String, Any?>)["key"].toString().length } ?: 0
             assertEquals("$at の順序キーの長さ", true, longest <= (it as Long))

@@ -1,6 +1,7 @@
 // 設定画面。左に分類、右に中身。変更はその場で反映・保存する(「保存」ボタンはない)。
 
 import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { SYNC_LABELS } from '@bbs-browser/sync'
 import { useDialogRect } from '../hooks/useDialogRect'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import CustomSchemeEditor from './mobile/CustomSchemeEditor'
@@ -17,6 +18,7 @@ import { NgTab } from './settings/NgTab'
 import { NotifyTab } from './settings/NotifyTab'
 import { PostsTab } from './settings/PostsTab'
 import { RefreshTab } from './settings/RefreshTab'
+import { SyncTab } from './settings/SyncTab'
 import { ThreadsTab } from './settings/ThreadsTab'
 import { ToolbarsTab } from './settings/ToolbarsTab'
 import { UploadTab } from './settings/UploadTab'
@@ -43,6 +45,7 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
   { key: 'menus', name: 'BBS メニュー', icon: 'dns' },
   { key: 'accounts', name: '掲示板ごとの設定', icon: 'tune' },
   { key: 'backup', name: 'バックアップ', icon: 'backup' },
+  { key: 'sync', name: SYNC_LABELS.section, icon: 'sync' },
   { key: 'about', name: 'このアプリについて', icon: 'info' },
 ]
 
@@ -142,6 +145,8 @@ export default function SettingsDialog(props: SettingsProps) {
         return <AccountsTab {...props} />
       case 'backup':
         return <BackupTab {...props} />
+      case 'sync':
+        return <SyncTab />
       case 'about':
         return <AboutTab settings={props.settings} update={props.update} />
     }

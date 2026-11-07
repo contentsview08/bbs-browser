@@ -3,7 +3,6 @@ package io.github.contentsview08.obb.sync
 import io.github.contentsview08.obb.data.KeyBlob
 import io.github.contentsview08.obb.data.KeyWrap
 import io.github.contentsview08.obb.data.Prefs
-import io.github.contentsview08.obb.data.SYNC_DEV_PREFS
 import io.github.contentsview08.obb.data.SYNC_KEY_PREFS
 import io.github.contentsview08.obb.data.SyncStartNav
 import io.github.contentsview08.obb.data.WrappedSyncKeyStore
@@ -26,6 +25,7 @@ import io.github.contentsview08.obb.sync.engine.SyncResponseTooLarge
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
+import io.github.contentsview08.obb.sync.engine.SYNC_GROUPS
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -82,6 +82,8 @@ class SyncHostTest {
             keyHint = { keys.value != null },
             openStartWindow = { url -> windows += url; window(url) },
         )
+        // 画面で「同期を使う」をオンにしたあとの状態
+        init { db.exec("INSERT INTO sync_state (key, value) VALUES ('master', '1')", emptyList()) }
         val ops = io.github.contentsview08.obb.data.UserOps(db)
         fun favorites() = db.query("SELECT key FROM favorite_threads ORDER BY key").map { it["key"] as String }
     }
@@ -90,6 +92,56 @@ class SyncHostTest {
 
     private var clock = 1_800_000_000_000L
     private fun server() = FakeSyncServer(now = { clock }, ratePerMinute = null, fullPullPerHour = null)
+
+    @Test fun 既定はオフでオンにするまで始められない() = runBlocking {
+        val d = Device(server(), { clock })
+        d.db.exec("DELETE FROM sync_state WHERE key = 'master'", emptyList())
+        val st = d.ctl.status()
+        assertFalse(st.master)
+        assertEquals(mapOf("history" to true, "favorites" to true, "sites" to true, "posts" to true, "images" to true, "ng" to true, "settings" to true, "secret" to false), st.kinds)
+        assertEquals("sync_off", runCatching { d.ctl.start() }.exceptionOrNull().let { (it as SyncHostError).code })
+        assertEquals("sync_off", runCatching { d.ctl.join("obb1.x") }.exceptionOrNull().let { (it as SyncHostError).code })
+        assertEquals(0, d.windows.size)
+        d.ctl.setMaster(true)
+        d.ctl.start()
+        assertTrue(d.ctl.status().enabled)
+    }
+
+    @Test fun オフの間は通信も積みも鍵保管も触らず鍵は残りオンで続きから動く() = runBlocking {
+        val d = Device(server(), { clock })
+        d.ctl.start()
+        d.ctl.setMaster(false)
+        d.requests.clear()
+        val reads = d.keys.reads
+        d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
+        assertNull(d.ctl.foreground())
+        assertFalse(d.ctl.autoEnabled())
+        assertFalse(d.ctl.autoCheck())
+        assertFalse(d.ctl.hasChanges())
+        d.ctl.syncNow()
+        assertEquals(0, d.requests.size)
+        assertEquals(reads, d.keys.reads)
+        assertEquals(0, d.db.query("SELECT * FROM sync_ops").size)
+        val st = d.ctl.status()
+        assertEquals("off", st.state)
+        assertTrue(st.enabled)
+        assertTrue(d.keys.value != null)
+        d.ctl.setMaster(true)
+        assertTrue(d.requests.isNotEmpty())
+        assertEquals(1L, d.db.query("SELECT COUNT(*) AS n FROM sync_records WHERE kind = 'favorite' AND pending = 0").first()["n"])
+    }
+
+    @Test fun 切っている種類の送信待ちは数えない() = runBlocking {
+        val d = Device(server(), { clock })
+        d.ctl.start()
+        d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
+        assertTrue(d.ctl.hasChanges())
+        d.ctl.syncNow()
+        d.db.exec("UPDATE sync_records SET pending = 1 WHERE kind = 'favorite'", emptyList())
+        d.ctl.setKind("favorites", false)
+        assertFalse(d.ctl.hasChanges())
+        assertEquals(0L, d.ctl.status().pending)
+    }
 
     @Test fun 使っていない間は通信せず鍵保管を開かず操作を積まない() = runBlocking {
         val d = Device(server(), { clock })
@@ -228,7 +280,16 @@ class SyncHostTest {
         assertEquals(table(ui.getJSONObject("labels")), SyncText.LABELS)
         assertEquals(table(ui.getJSONObject("notes")), SyncText.NOTES)
         assertEquals(table(ui.getJSONObject("messages")), SyncText.MESSAGES)
-        assertEquals(ui.getInt("reveal_taps"), SyncText.REVEAL_TAPS)
+        val groups = ui.getJSONArray("groups")
+        assertEquals(groups.length(), SYNC_GROUPS.size)
+        SYNC_GROUPS.forEachIndexed { i, g ->
+            val j = groups.getJSONObject(i)
+            assertEquals(j.getString("id"), g.id)
+            assertEquals(j.getString("label"), g.label)
+            assertEquals(j.getBoolean("default"), g.default)
+            val kinds = j.getJSONArray("kinds")
+            assertEquals((0 until kinds.length()).map { kinds.getString(it) }, g.kinds)
+        }
         assertEquals(ui.getLong("pairing_show_ms"), PAIRING_SHOW_MS)
     }
 
@@ -273,7 +334,6 @@ class SyncHostTest {
 
     @Test fun 鍵はバックアップにも書き出しにも入らない() {
         assertNotEquals("settings", SYNC_KEY_PREFS)
-        assertNotEquals("settings", SYNC_DEV_PREFS)
         val out = exportedSettings(mapOf("blob" to "秘密", "open" to true, "keywords" to "[]"), setOf("keywords"))
         assertFalse(out.has("blob"))
         assertFalse(out.has("open"))

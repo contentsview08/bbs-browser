@@ -51,7 +51,6 @@ class WrappedSyncKeyStore(private val wrap: KeyWrap, private val blob: KeyBlob) 
 }
 
 internal const val SYNC_KEY_PREFS = "sync_key"
-internal const val SYNC_DEV_PREFS = "sync_dev"
 private const val BLOB_KEY = "blob"
 private const val KEY_ALIAS = "obb_sync_wrap"
 private const val GCM_IV = 12
@@ -93,11 +92,4 @@ fun androidSyncKeyStore(context: Context): Pair<SyncKeyStore, () -> Boolean> {
         override fun delete() { sp.edit().remove(BLOB_KEY).commit() }
     }
     return WrappedSyncKeyStore(AndroidKeystoreWrap(), blob) to { sp.contains(BLOB_KEY) }
-}
-
-/** 開発用の同期の画面を出すか。書き出しに入らないよう、設定の Prefs に置かない */
-fun syncDevOpen(context: Context) = context.getSharedPreferences(SYNC_DEV_PREFS, Context.MODE_PRIVATE).getBoolean("open", false)
-
-fun openSyncDev(context: Context) {
-    context.getSharedPreferences(SYNC_DEV_PREFS, Context.MODE_PRIVATE).edit().putBoolean("open", true).apply()
 }

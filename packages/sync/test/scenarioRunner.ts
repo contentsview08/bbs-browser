@@ -6,7 +6,7 @@ import { expect } from 'vitest'
 import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
 import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
 const SERVER = 'https://sync.test'
@@ -98,6 +98,8 @@ interface LogEntry {
   path: string
   host: string
   request_id?: string
+  /** 権限系のレコードの数 */
+  secrets?: number
 }
 
 /** シナリオの server の項目と時計を受け取って、相手のサーバーを作る */
@@ -110,6 +112,8 @@ class World {
   server: ScenarioServer
   faults: Fault[] = []
   log: LogEntry[] = []
+  /** 端末が送った本文の全部。権限系の値が平文で出ていないかを見る */
+  sent: string[] = []
   mark = 0
   devices = new Map<string, Device>()
   /** 同期を始めるページを通した回数。人の操作の代わり */
@@ -152,8 +156,11 @@ class Device {
       const w = this.world
       const url = new URL(req.url)
       const path = url.pathname + url.search
-      const requestId = req.body ? (JSON.parse(req.body).request_id as string | undefined) : undefined
-      w.log.push({ device: this.name, method: req.method, path: url.pathname, host: url.host, ...(requestId && { request_id: requestId }) })
+      const parsed = req.body ? (JSON.parse(req.body) as { request_id?: string; records?: { kind_tag?: string }[] }) : undefined
+      const requestId = parsed?.request_id
+      const secrets = parsed?.records?.filter((r) => r.kind_tag === 's').length
+      w.log.push({ device: this.name, method: req.method, path: url.pathname, host: url.host, ...(requestId && { request_id: requestId }), ...(secrets && { secrets }) })
+      if (req.body) w.sent.push(req.body)
       if (!this.online) throw new Error('offline')
       const f = w.faults.find((x) => x.times > 0 && (x.path === undefined || x.path === url.pathname))
       if (f && (f.skip ?? 0) > 0) f.skip = (f.skip as number) - 1
@@ -186,6 +193,7 @@ class Device {
         ...favoriteBoardAdapters(this.sql.db, resolver(this.name)),
         new SiteAdapter(this.sql.db, (url) => (this.name === 'phone' && url.includes('2chan.net') ? null : '2ch-compat')),
         new ImageAdapter(this.sql.db),
+        new SecretAdapter(this.sql.db),
         new NgAdapter({ ...settingsNgStore(this.sql.db), apply: async (c) => void (await settingsNgStore(this.sql.db).apply(c)), patternOk: ngPatternSyncable, today: dateOf }),
         new PostAdapter(this.sql.db, resolver(this.name)),
         new SettingAdapter(settingsTableHost(this.sql.db, this.name === 'phone' ? 'phone' : 'pc'), this.sql.db),
@@ -513,6 +521,12 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     case 'leave':
       await d.engine.leave()
       break
+    case 'set_master':
+      await d.engine.setMaster(s.on)
+      break
+    case 'set_kind':
+      await d.engine.setKind(s.group as SyncGroup, s.on)
+      break
     case 'confirm':
       await d.engine.resolveConfirm(s.choice)
       break
@@ -556,6 +570,13 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       else await w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: s.payload.deleted === true, ...sealPayload(keys, { space_id: sid, record_id: id, kind_tag: 'h', schema_version: 1 }, s.payload) })
       break
     }
+    case 'server_inject_secret': {
+      // 別の端末が権限系を送った状態。corrupt は開けない暗号文
+      const keys = deriveKeys((await d.keys.load() as SyncKeyMaterial).k)
+      const id = recordId(keys.k_id, 'secret', null, '', s.url)
+      await w.server.injectRecord(spaceId(keys.auth_token), { record_id: id, kind_tag: 's', schema_version: 1, deleted: false, nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) })
+      break
+    }
     case 'db_fail':
       d.dbFail.push({ match: s.match, times: s.times ?? 1 })
       break
@@ -587,6 +608,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
         const ids = w.log.flatMap((l) => (l.request_id ? [l.request_id] : []))
         expect(new Set(ids).size < ids.length, `${label}: 同じ request_id の送り直し`).toBe(e.request_id_repeated)
       }
+      if (e.sent_lacks !== undefined) for (const text of e.sent_lacks) expect(w.sent.some((b) => b.includes(text)), `${label}: 送った本文に ${text} がない`).toBe(false)
       for (const [dev, v] of Object.entries<any>(e.of ?? {})) {
         const m = await (w.devices.get(dev) as Device).keys.load()
         const sp = m ? await w.server.space(spaceId(deriveKeys(m.k).auth_token)) : undefined
@@ -594,6 +616,13 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
         if (v.records !== undefined) expect(sp?.records.size, `${label}: ${dev} の領域のレコード数`).toBe(v.records)
         if (v.head !== undefined) expect(sp?.next, `${label}: ${dev} の領域の version`).toBe(v.head)
         if (v.gc_floor !== undefined) expect(sp?.gc_floor, `${label}: ${dev} の gc_floor`).toBe(v.gc_floor)
+        const held = [...(sp?.records.values() ?? [])]
+        if (v.s_records !== undefined) expect(held.filter((r) => r.kind_tag === 's').length, `${label}: ${dev} の領域の権限系のレコード数`).toBe(v.s_records)
+        if (v.h_lacks !== undefined) {
+          // 履歴系の鍵で開けるものに、権限系の値が混ざっていない
+          const opened = openRecords(deriveKeys((m as SyncKeyMaterial).k), spaceId(deriveKeys((m as SyncKeyMaterial).k).auth_token), held.filter((r) => r.kind_tag === 'h') as never[])
+          for (const text of v.h_lacks) expect(opened.records.some((r) => canonicalJson(r.payload).includes(text)), `${label}: ${dev} の履歴系に ${text} がない`).toBe(false)
+        }
       }
       continue
     }
@@ -661,6 +690,23 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.kinds !== undefined) {
       const rows = await d.sql.db.select<{ kind: string; n: number }>('SELECT kind, COUNT(*) AS n FROM sync_records GROUP BY kind')
       expect(Object.fromEntries(rows.map((r) => [r.kind, r.n])), `${at} の種類ごとのレコード数`).toEqual(e.kinds)
+    }
+    if (e.ops_lack !== undefined) {
+      const rows = await d.sql.db.select<{ target: string; args: string | null }>('SELECT target, args FROM sync_ops')
+      for (const text of e.ops_lack) expect(rows.some((r) => `${r.target} ${r.args}`.includes(text)), `${at} の sync_ops に ${text} がない`).toBe(false)
+    }
+    if (e.secrets_sent !== undefined) expect(w.log.slice(w.mark).filter((l) => l.device === name).reduce((n, l) => n + (l.secrets ?? 0), 0), `${at} の送った権限系の数`).toBe(e.secrets_sent)
+    if (e.delete_urls !== undefined) {
+      const rows = await d.sql.db.select<{ url: string; delete_url: string | null }>('SELECT url, delete_url FROM uploads ORDER BY url')
+      expect(Object.fromEntries(rows.map((r) => [r.url, r.delete_url])), `${at} の削除ページ`).toEqual(e.delete_urls)
+    }
+    if (e.kinds_lack !== undefined) {
+      const rows = await d.sql.db.select<{ kind: string }>('SELECT DISTINCT kind FROM sync_records')
+      for (const k of e.kinds_lack) expect(rows.some((r) => r.kind === k), `${at} の表に ${k} がない`).toBe(false)
+    }
+    if (e.kinds_has !== undefined) {
+      const rows = await d.sql.db.select<{ kind: string }>('SELECT DISTINCT kind FROM sync_records')
+      for (const k of e.kinds_has) expect(rows.some((r) => r.kind === k), `${at} の表に ${k} がある`).toBe(true)
     }
     if (e.max_order_key !== undefined) {
       const rows = await d.sql.db.select<{ payload: string }>("SELECT payload FROM sync_records WHERE kind = 'order' AND deleted = 0")

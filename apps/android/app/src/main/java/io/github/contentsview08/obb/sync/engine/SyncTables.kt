@@ -140,15 +140,20 @@ class SyncTables(val db: SyncSql) {
 
     fun selectRecords(where: String, args: List<Any?>): List<StoredRecord> = db.query("SELECT $COLUMNS FROM sync_records WHERE $where", args).map(::fromRow)
 
-    fun pendingRecords(limit: Int): List<StoredRecord> =
-        db.query("SELECT $COLUMNS FROM sync_records WHERE pending = 1 ORDER BY priority, hlc, record_id LIMIT ?", listOf(limit.toLong())).map(::fromRow)
+    /** except は切っている種類。送信待ちのまま残し、送らない */
+    fun pendingRecords(limit: Int, except: Collection<String> = emptyList()): List<StoredRecord> {
+        val skip = if (except.isEmpty()) "" else "AND kind NOT IN (${marks(except.size)}) "
+        return db.query("SELECT $COLUMNS FROM sync_records WHERE pending = 1 ${skip}ORDER BY priority, hlc, record_id LIMIT ?", except.toList<Any?>() + limit.toLong()).map(::fromRow)
+    }
 
     /** 写す順を決めておく。afterId より後を返すので、飛ばした行を読み直さない */
-    fun toApply(kinds: List<String>, afterId: String, limit: Int): List<StoredRecord> =
-        db.query(
+    fun toApply(kinds: List<String>, afterId: String, limit: Int): List<StoredRecord> {
+        if (kinds.isEmpty()) return emptyList()
+        return db.query(
             "SELECT $COLUMNS FROM sync_records WHERE needs_apply = 1 AND record_id > ? AND kind IN (${marks(kinds.size)}) ORDER BY record_id LIMIT ?",
             listOf<Any?>(afterId) + kinds + limit.toLong(),
         ).map(::fromRow)
+    }
 
     fun ops(names: List<String>, limit: Int): List<SyncOpRow> {
         if (names.isEmpty()) return emptyList()

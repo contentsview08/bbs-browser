@@ -10,8 +10,6 @@ import { canCheckUpdate, compareVersions, fetchLatestRelease, installUpdate, typ
 import { VideoPlaybackHelp } from '../MediaFailed'
 import { canPlayVideo } from '../../utils/videoSupport'
 import { type SettingsProps, Section } from './common'
-import { SyncDevSection } from './SyncDevSection'
-import { openSyncDev, syncDevOpen, versionTapCounter } from '../../utils/syncDev'
 
 /** 運営要望板(この製品の掲示板)。要望・不具合はここか GitHub の Issues へ */
 export const OPERATION_BOARD_URL = 'https://red-edge.net/boards/operation01/'
@@ -22,8 +20,6 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
   const [selfUpdate, setSelfUpdate] = useState<boolean>()
   const [paths, setPaths] = useState<DataPaths>()
   const [licensesOpen, setLicensesOpen] = useState(false)
-  const [syncDev, setSyncDev] = useState(syncDevOpen)
-  const [tapVersion] = useState(versionTapCounter)
   useEffect(() => {
     void getVersion().then(setVersion, () => setVersion(undefined))
     void canSelfUpdate().then(setSelfUpdate, () => setSelfUpdate(false))
@@ -35,16 +31,7 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         <p className="text-sm text-c-text-body leading-relaxed">
           掲示板を読む専用ブラウザです。組み込みのコネクタで 2ch 互換(5ch・eddibb・bbspink など)・したらば・まちBBS・ふたば・hono-bbs を読めます。
         </p>
-        <p
-          className="text-xs text-c-text-muted mt-1 select-none"
-          onClick={() => {
-            if (!tapVersion()) return
-            openSyncDev()
-            setSyncDev(true)
-          }}
-        >
-          版 {version ?? ''}
-        </p>
+        <p className="text-xs text-c-text-muted mt-1 select-none">版 {version ?? ''}</p>
       </Section>
       {canCheckUpdate && <UpdateSection version={version} selfUpdate={selfUpdate} autoUpdate={s.autoUpdate} onAutoUpdate={(v) => update('autoUpdate', v)} />}
       {canCheckUpdate && !canPlayVideo('video.mp4') && (
@@ -59,7 +46,6 @@ export function AboutTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         <OpenRow label="使っているソフトウェア" onOpen={() => setLicensesOpen(true)} />
         {licensesOpen && <LicensesDialog onClose={() => setLicensesOpen(false)} />}
       </Section>
-      {syncDev && <SyncDevSection />}
       <Section desktopOnly title="データの保存場所" note={paths?.portable ? 'ZIP 版: 展開したフォルダの data に置きます。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります' : undefined}>
         <p className="text-sm font-mono text-c-text-body break-all">{paths?.db ?? '%APPDATA%\\io.github.contentsview08.obb\\bbs-browser.db'}</p>
         <p className="text-xs text-c-text-muted mt-1">ログ・既読位置・設定はすべてこのファイルに入っています</p>

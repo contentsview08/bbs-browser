@@ -555,6 +555,103 @@
   "pc": "0b60658da45e864a810042e92f094b49d4da000befde63ed409756d6dd3f3511",
   "phone": "f86b8d88008110565a7e0f66433ab6edbc8d1b0ceb9d4618ff84520d13f9962d"
  },
+ "スイッチ: history を切って両方で変更し、再びオンで揃う": {
+  "pc": "fa3c925dc57a5750ac7f0a9924c8565eddc6573dcd75cf661f70a3a35753ce46",
+  "phone": "de1d7c0a97780eb7100e5bb5f3a6c0b7984e0dfd0551e843998048b6d15c5307"
+ },
+ "スイッチ: favorites を切って両方で変更し、再びオンで揃う": {
+  "pc": "628ad3966c7c86beea6ad644e393bcd87b9ba367edbb21befeaed671a95ac3f5",
+  "phone": "d1b1946d1325179f576116500f8b30b16473b29055abd061d37745def81c0b05"
+ },
+ "スイッチ: sites を切って両方で変更し、再びオンで揃う": {
+  "pc": "8065b4ed4ab6e29d1a55f57a394b1c9b6511e50c1b485009dc278ae1a30ed4a8",
+  "phone": "a3fcc9383edc6cd7350ebf0c1f6c2ec81bd638fe76298628bb8fad510ce10be1"
+ },
+ "スイッチ: posts を切って両方で変更し、再びオンで揃う": {
+  "pc": "3509948874521d0f194c96ff3d33d6bad41b178d0f3d6caaad706ab32fc618ad",
+  "phone": "e855a012b4eba53916ba74cc34e73bb177f8a4a5e01fb0735cc36dbdc0ca2ec9"
+ },
+ "スイッチ: images を切って両方で変更し、再びオンで揃う": {
+  "pc": "189931e263410fb9feebe478ade0990d0995f2c5d99e919dbbebcf4d2762068f",
+  "phone": "de5117c1ad2baa4731ac4b89c17b4546d62f89b1167931d00b8496b076bdcd38"
+ },
+ "スイッチ: ng を切って両方で変更し、再びオンで揃う": {
+  "pc": "e547332157280d5e070676939fc37aaf4b4fd061b1d792c3d3d2a45033acbb36",
+  "phone": "cfeba4057b07a8c191f0d9850b2e4adfb9cd467e42f956cee8ab6be69e56b0ef"
+ },
+ "スイッチ: settings を切って両方で変更し、再びオンで揃う": {
+  "pc": "c0b35c278b34ef955e679664d04b8c753edc9cb819e0b17c5956cb4f42d7a202",
+  "phone": "90a9b3e764a9480a410eba7e89e0c2d25f55e1c0720c8ccd622fbd617f7af0b7"
+ },
+ "スイッチ: 同期自体を切ると通信も積みも起きず、戻すと続きから揃う": {
+  "pc": "f8d455399aa3b813ddacc3597944491f53fa18dfa0386bbdc0b7cd88e2ce4d22",
+  "phone": "ece21139cd1db78005c99c75756910f60fe0ef860bb81a3a57261ccadb68a1ed"
+ },
+ "スイッチ: 切る前の送信待ちは切っている間は送らず、戻すと送る": {
+  "pc": "ab3459e3a66cd7f998b7f80ccb000c542f717c50f7173df2ba7ee6be378d4eb8",
+  "phone": "8b80e617c41defcaa19bf5adecb9f4d93cf66bd7387dbf81dbf6aed7eac81dae"
+ },
+ "スイッチ: 切っている間に手元で外したものは、戻すと同期の表から戻る": {
+  "pc": "0297f45ca21525810d16656d7630be7f1cd0911c96029df4116d1698dde584cb",
+  "phone": "8b80e617c41defcaa19bf5adecb9f4d93cf66bd7387dbf81dbf6aed7eac81dae"
+ },
+ "スイッチ: 切っている間の他の端末の削除は、戻すと手元からも消える": {
+  "pc": "b9b87aba8bdfd70bdd963ff0646fb23632e7f7db6920dc00ab91bcd3af696d13",
+  "phone": "01c2a6edfcb20d7cda510bf48f8de0a786db45252b6e913650d1fb42ad7c1035"
+ },
+ "スイッチ: 切っている間は読み直しても手元に写らず、version は進む": {
+  "pc": "6ca4b2471a2067fed73dd231f12bcc23d8e951f107b78b46dc29b67b143b8dfd",
+  "phone": "67c0da8924ee3872120eaa824eb976e3dbb19c807ecaed7e67ff327e9056266b"
+ },
+ "スイッチ: 履歴を切っている間は開いても受け取った既読を写さない": {
+  "pc": "b349f08ba83b4ccf2e32b4412f92204e3ae5e42615b13ce3f5105d39e19032f9",
+  "phone": "a6b5dd5608535971c94ffdf9070e93009dfd993c70e18c7552a7e563560ec23a"
+ },
+ "スイッチ: 同期を切っている間は開いても受け取った既読を写さない": {
+  "pc": "0ecdadb3d3d4b152923aff3ad1495a9bacb96b8961007ba3afc3066a16794a7e",
+  "phone": "a6b5dd5608535971c94ffdf9070e93009dfd993c70e18c7552a7e563560ec23a"
+ },
+ "スイッチ: 全部切っても鍵と領域は残り、全部戻すと揃う": {
+  "pc": "2279abf380e5d70915cc04b78f26ee450b7226c5173ddffa8788e3b05580eab1",
+  "phone": "e96df311b64d2dcc908f3e88f4d366c422ed7684084e58e5559898882571da78"
+ },
+ "スイッチ: 同期をやめるとスイッチは既定に戻る": {
+  "pc": "f797a41628a2dc977b10a5d503ff55e9b822d8bf6ab87a10b76ff4e2df8e0307"
+ },
+ "スイッチ: 権限系は既定で切れていて、どの端末もオフなら一切サーバーに出ない": {
+  "pc": "4be02cec2b6ae7f8323c9be20100aa4227ac952f69264f63c40e0e38dd7b09b8",
+  "phone": "cb0f3da570c81b8eed170f1e6cfd66ff9aee34d1d995c677b155f2af954f861a"
+ },
+ "スイッチ: 権限系をオンにした端末だけが積み、k_secret で送り、オフの端末は読まない": {
+  "pc": "823c2b0216a3751ff05b5f0bc17b0296141c6cb2db80f0c549d63dd855a1d602",
+  "phone": "e512668fb4339e2392eeabcae400e05df558246906b950bfa0ad1a827b7a877d"
+ },
+ "スイッチ: 権限系を切ると表の平文を消し、オフの間は送らず、戻すと補う": {
+  "pc": "6bd09449060de2f7603e8faa9315e779bba9f544f69fb9a3fe90e1dab57a7439",
+  "phone": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271"
+ },
+ "スイッチ: 切る前に積んだ権限系の操作と、応答待ちの権限系は、切ったら送らない": {
+  "pc": "26fc898281fed1441ffc1d152ca5f0af15189b735e8e2dd116174e11e54bfdce"
+ },
+ "スイッチ: 権限系をオフの端末は壊れた権限系のレコードも開かない": {
+  "pc": "55f28649b98cfc4af2c3b0541fca5521c6ab5a7666725974dc28c00565cf0271",
+  "phone": "e3c23b6c9290fd0f061dbea76d5c14b23d3dcd559a58dfbd3211a8ffd02745c7"
+ },
+ "スイッチ: 権限系の削除が両方のオンの端末に伝わり、画像の行は別に消える": {
+  "pc": "a68f1fc744759e47cfd4d07619301eb5addee1e23c3fcb75fd6ab47f979dec34",
+  "phone": "4cfa02ddff1076c4efbe496cc72a79c3001e7385d91388e0a60f6f8a97e4712c"
+ },
+ "スイッチ: 権限系が画像より先に写っても、画像を入れたあとで付く": {
+  "pc": "7e5c711c94c47d7d2f468c0245423d82be8818008bbf9cc280272fe412988958",
+  "phone": "23cdf648ac8244775536485da2f8c0d42b5bc3286c1258a8b3c329305707af04"
+ },
+ "スイッチ: 権限系をオフのまま領域が消えても、作り直しに出ない。オンの端末が送り直す": {
+  "pc": "7e5c711c94c47d7d2f468c0245423d82be8818008bbf9cc280272fe412988958",
+  "phone": "62bbda8c975202aca8fa76b294a7d753446d834ce9446c9854b6da1288d0afa9"
+ },
+ "スイッチ: DB を別の端末へ入れたら権限系のスイッチを引き継がない": {
+  "pc": "31a39d76a86782001226970b6c86be98d59216061a8c6745f06dd2cf740c0971"
+ },
  "乱数 全部 1": {
   "pc": "904517771d0315c3c9796430a8913f63d1f2ca0f96b9298f35a461c62910333a",
   "phone": "8305ccb84eba785da51bd71a0191fdc49b119ac39dc1ca83ed52a15e20c70405",

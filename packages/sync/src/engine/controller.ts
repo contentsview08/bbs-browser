@@ -5,6 +5,7 @@ import { syncMessage } from '../messages'
 import { encodePairingCode, parsePairingCode } from '../pairing'
 import { type CycleResult, type ConfirmChoice, SyncEngine, type SyncKeyStore } from './engine'
 import type { SyncPace } from './scheduler'
+import { masterOn, offKindsOf, parseSwitches, type SyncGroup, type SyncSwitches } from './kinds'
 import { syncMismatches, syncSummary, type MismatchSummary, type SyncSummary } from './summary'
 import { delState, setState, SyncTables, type SqlStatement, type SyncSqlDb } from './tables'
 import { checkServerUrl, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
@@ -20,7 +21,11 @@ export class SyncHostError extends Error {
 }
 
 export interface SyncStatus {
+  /** 領域に入っている(鍵がある) */
   enabled: boolean
+  /** 同期自体のスイッチ */
+  master: boolean
+  kinds: SyncSwitches
   state: string
   /** 領域の先頭。鍵は出さない */
   space: string | null
@@ -94,6 +99,15 @@ export class SyncController {
     return (await this.t.state('enabled')) === '1'
   }
 
+  private async isMasterOn(): Promise<boolean> {
+    return masterOn(await this.t.state('master'), await this.t.state('enabled'))
+  }
+
+  private async onAdapters(): Promise<readonly SyncAdapter[]> {
+    const off = offKindsOf(parseSwitches(await this.t.state('kinds')))
+    return this.deps.adapters.filter((a) => !off.has(a.kind))
+  }
+
   private async run(manual: boolean): Promise<CycleResult> {
     const r = await (await this.engine()).runCycle({ manual })
     this.deps.onCycle?.(r)
@@ -124,16 +138,24 @@ export class SyncController {
       const v = await this.t.state(key)
       return v === null ? null : Number(v)
     }
-    const [row] = await this.deps.db.select<{ n: number }>('SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1) + (SELECT COUNT(*) FROM sync_ops) AS n')
+    const kinds = parseSwitches(await this.t.state('kinds'))
+    const off = [...offKindsOf(kinds)]
+    const marks = off.map((_, i) => `$${i + 1}`).join(', ')
+    // 切っている種類は送らないので数えない
+    const [row] = await this.deps.db.select<{ n: number }>(`SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1${off.length > 0 ? ` AND kind NOT IN (${marks})` : ''}) + (SELECT COUNT(*) FROM sync_ops) AS n`, off)
+    const master = await this.isMasterOn()
     const rawConfirm = await this.t.state('pending_confirm')
     const lastError = await this.t.state('last_error')
-    if (enabled && this.spaceHead === null) {
+    // 切っている間は鍵保管を開かない
+    if (enabled && master && this.spaceHead === null) {
       const m = await this.deps.keyStore.load().catch(() => null)
       if (m) this.spaceHead = spaceId(deriveKeys(m.k).auth_token).slice(0, 12)
     }
     return {
       enabled,
-      state: enabled ? (this.engineValue?.state === 'off' || !this.engineValue ? ((await this.t.state('phase')) ?? 'idle') : this.engineValue.state) : 'off',
+      master,
+      kinds,
+      state: !master ? 'off' : enabled ? (this.engineValue?.state === 'off' || !this.engineValue ? ((await this.t.state('phase')) ?? 'idle') : this.engineValue.state) : 'off',
       space: enabled ? this.spaceHead : null,
       pending: Number(row?.n ?? 0),
       lastError,
@@ -148,6 +170,7 @@ export class SyncController {
 
   /** 同期を始める。1 台目は K を作り、窓を閉じたら捨てる。止まっている領域は同じ K で確認を通し直す */
   async start(): Promise<CycleResult> {
+    if (!(await this.isMasterOn())) throw new SyncHostError('sync_off')
     const url = checkServerUrl(await this.serverUrl(), this.deps.allowLocalhost)
     const material = await this.loadKeys()
     const resuming = material !== null && (await this.isEnabled())
@@ -172,6 +195,7 @@ export class SyncController {
   }
 
   async join(code: string): Promise<CycleResult> {
+    if (!(await this.isMasterOn())) throw new SyncHostError('sync_off')
     if (await this.isEnabled()) throw new SyncHostError('already_on')
     const c = parsePairingCode(code, this.deps.allowLocalhost)
     await this.loadKeys()
@@ -188,8 +212,19 @@ export class SyncController {
 
   /** 前面に戻ったとき。pull の間隔はエンジンが守る。使っていないなら何もしない */
   async foreground(): Promise<CycleResult | null> {
-    if (!(await this.isEnabled()) && !this.deps.keyHint()) return null
+    if (!(await this.autoEnabled())) return null
     return this.run(false)
+  }
+
+  /** オフの間は通信も積みも起きない。鍵と領域は残すので、オンに戻せば続きから動く */
+  async setMaster(on: boolean): Promise<void> {
+    await (await this.engine()).setMaster(on)
+    if (on && (await this.isEnabled())) await this.run(true)
+  }
+
+  async setKind(group: SyncGroup, on: boolean): Promise<void> {
+    await (await this.engine()).setKind(group, on)
+    if (on && (await this.isEnabled()) && (await this.isMasterOn())) await this.run(true)
   }
 
   async leave(): Promise<void> {
@@ -211,6 +246,7 @@ export class SyncController {
   }
 
   async autoEnabled(): Promise<boolean> {
+    if ((await this.t.state('master')) === '0') return false
     return (await this.isEnabled()) || this.deps.keyHint()
   }
 
@@ -219,7 +255,7 @@ export class SyncController {
   }
 
   private async adapterContext(): Promise<AdapterContext | null> {
-    if (!(await this.isEnabled())) return null
+    if (!(await this.isEnabled()) || !(await this.isMasterOn())) return null
     const m = await this.deps.keyStore.load().catch(() => null)
     return m && { keys: deriveKeys(m.k), deviceId: m.deviceId, now: this.deps.now() }
   }
@@ -227,13 +263,13 @@ export class SyncController {
   /** 種類ごとの件数とハッシュ。本文や URL は出さない */
   async summary(): Promise<SyncSummary | null> {
     const ctx = await this.adapterContext()
-    return ctx && syncSummary(this.deps.db, this.deps.adapters, ctx)
+    return ctx && syncSummary(this.deps.db, await this.onAdapters(), ctx)
   }
 
   /** 手元と同期の表の違いを数える。件数によって時間がかかるので押したときだけ */
   async mismatches(): Promise<MismatchSummary | null> {
     const ctx = await this.adapterContext()
-    return ctx && syncMismatches(this.deps.db, this.deps.adapters, ctx)
+    return ctx && syncMismatches(this.deps.db, await this.onAdapters(), ctx)
   }
 
   async resolveConfirm(choice: ConfirmChoice): Promise<CycleResult> {

@@ -20,7 +20,11 @@ const val PAIRING_SHOW_MS = 60_000L
 class SyncHostError(val code: String) : Exception(code)
 
 class SyncStatus(
+    /** 領域に入っている(鍵がある) */
     val enabled: Boolean,
+    /** 同期自体のスイッチ */
+    val master: Boolean,
+    val kinds: Map<String, Boolean>,
     val state: String,
     /** 領域の先頭。鍵は出さない */
     val space: String?,
@@ -58,6 +62,11 @@ class SyncController(
     private fun overrideUrl(): String? = t.state("server_url")
     private fun serverUrl(): String = overrideUrl() ?: defaultServerUrl
     private fun isEnabled() = t.state("enabled") == "1"
+    private fun isMasterOn() = masterOn(t.state("master"), t.state("enabled"))
+    private fun onAdapters(): List<SyncAdapter> {
+        val off = offKindsOf(parseSwitches(t.state("kinds")))
+        return adapters.filter { it.kind !in off }
+    }
 
     private suspend fun engine(): SyncEngine {
         val url = serverUrl()
@@ -95,9 +104,15 @@ class SyncController(
 
     suspend fun status(): SyncStatus {
         val enabled = isEnabled()
-        val pending = db.query("SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1) + (SELECT COUNT(*) FROM sync_ops) AS n").firstOrNull()?.get("n") as? Long ?: 0L
+        val kinds = parseSwitches(t.state("kinds"))
+        val off = offKindsOf(kinds).toList()
+        val skip = if (off.isEmpty()) "" else " AND kind NOT IN (${off.joinToString(", ") { "?" }})"
+        // 切っている種類は送らないので数えない
+        val pending = db.query("SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1$skip) + (SELECT COUNT(*) FROM sync_ops) AS n", off).firstOrNull()?.get("n") as? Long ?: 0L
+        val master = isMasterOn()
         val lastError = t.state("last_error")
-        if (enabled && spaceHead == null) {
+        // 切っている間は鍵保管を開かない
+        if (enabled && master && spaceHead == null) {
             val m = try { keyStore.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             if (m != null) spaceHead = spaceOf(m.k).take(12)
         }
@@ -106,7 +121,9 @@ class SyncController(
         val confirm = t.state("pending_confirm")?.let { (parseStrictJson(it) as Map<String, Any?>)["lost"] as? Long ?: 0L }
         return SyncStatus(
             enabled = enabled,
-            state = if (!enabled) "off" else if (running == null || running == "off") t.state("phase") ?: "idle" else running,
+            master = master,
+            kinds = kinds,
+            state = if (!enabled || !master) "off" else if (running == null || running == "off") t.state("phase") ?: "idle" else running,
             space = if (enabled) spaceHead else null,
             pending = pending,
             lastError = lastError,
@@ -121,6 +138,7 @@ class SyncController(
 
     /** 同期を始める。1 台目は K を作り、窓を閉じたら捨てる。止まっている領域は同じ K で確認を通し直す */
     suspend fun start(): CycleResult {
+        if (!isMasterOn()) throw SyncHostError("sync_off")
         val url = checkServerUrl(serverUrl(), allowLocalhost)
         val material = loadKeys()
         val resuming = material != null && isEnabled()
@@ -142,6 +160,7 @@ class SyncController(
     }
 
     suspend fun join(code: String): CycleResult {
+        if (!isMasterOn()) throw SyncHostError("sync_off")
         if (isEnabled()) throw SyncHostError("already_on")
         val c = parsePairingCode(code, allowLocalhost)
         loadKeys()
@@ -156,8 +175,19 @@ class SyncController(
 
     /** 前面に戻ったとき。pull の間隔はエンジンが守る。使っていないなら何もしない */
     suspend fun foreground(): CycleResult? {
-        if (!isEnabled() && !keyHint()) return null
+        if (!autoEnabled()) return null
         return run(false)
+    }
+
+    /** オフの間は通信も積みも起きない。鍵と領域は残すので、オンに戻せば続きから動く */
+    suspend fun setMaster(on: Boolean) {
+        engine().setMaster(on)
+        if (on && isEnabled()) run(true)
+    }
+
+    suspend fun setKind(group: String, on: Boolean) {
+        engine().setKind(group, on)
+        if (on && isEnabled() && isMasterOn()) run(true)
     }
 
     suspend fun leave() {
@@ -174,22 +204,22 @@ class SyncController(
 
     suspend fun hasChanges(): Boolean = engine().hasChanges()
 
-    fun autoEnabled(): Boolean = isEnabled() || keyHint()
+    fun autoEnabled(): Boolean = t.state("master") != "0" && (isEnabled() || keyHint())
 
     fun pace(): SyncPace? = engineValue?.pace
 
     private suspend fun adapterContext(): AdapterContext? {
         // 使っていない間は鍵保管を開かない
-        if (!isEnabled()) return null
+        if (!isEnabled() || !isMasterOn()) return null
         val m = try { keyStore.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { null } ?: return null
         return AdapterContext(deriveKeys(m.k), m.deviceId, now())
     }
 
     /** 種類ごとの件数とハッシュ。本文や URL は出さない */
-    suspend fun summary(): SyncSummary? = adapterContext()?.let { syncSummary(db, adapters, it) }
+    suspend fun summary(): SyncSummary? = adapterContext()?.let { syncSummary(db, onAdapters(), it) }
 
     /** 手元と同期の表の違いを数える。件数によって時間がかかるので押したときだけ */
-    suspend fun mismatches(): MismatchSummary? = adapterContext()?.let { syncMismatches(db, adapters, it) }
+    suspend fun mismatches(): MismatchSummary? = adapterContext()?.let { syncMismatches(db, onAdapters(), it) }
 
     suspend fun resolveConfirm(choice: String): CycleResult {
         engine().resolveConfirm(choice)

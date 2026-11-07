@@ -101,6 +101,12 @@ private val TRIM_ORDER = listOf(listOf(LAST_VIEW_KIND, DEV_KIND), listOf(IMAGE_K
 
 private fun same(a: SyncPayload, b: SyncPayload) = canonicalJson(a) == canonicalJson(b)
 
+/** 権限系だけ k_secret で封をする */
+private fun tagOfKind(kind: String) = if (kind == SECRET_KIND) "s" else "h"
+
+/** 応答に待ち時間がないときの、権限系の読み直しの間隔 */
+private const val REFETCH_RETRY_MS = 3_600_000L
+
 @Suppress("UNCHECKED_CAST")
 class SyncEngine(
     private val db: SyncSql,
@@ -150,14 +156,58 @@ class SyncEngine(
     private var deviceId = ""
     private lateinit var result: CycleResult
 
+    /** この周で切っている種類。周の途中で切り替えるときは halted で周を終わらせてから書く */
+    private var offKinds: Set<String> = emptySet()
+
     private fun enter(s: String) {
         state = s
         onState(s)
     }
 
-    /** 送るものがあるか。通信しない */
+    /** 送るものがあるか。通信しない。切っている種類の送信待ちは数えない(自動の同期を空回りさせない) */
     suspend fun hasChanges(): Boolean = withContext(io) {
-        ((db.query("SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1) AS n").firstOrNull()?.get("n") as Long?) ?: 0L) > 0
+        if (!isMasterOn()) return@withContext false
+        val off = offKindsOf(switches()).toList()
+        val skip = if (off.isEmpty()) "" else " AND kind NOT IN (${off.joinToString(", ") { "?" }})"
+        ((db.query("SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1$skip) AS n", off).firstOrNull()?.get("n") as Long?) ?: 0L) > 0
+    }
+
+    private fun isMasterOn() = masterOn(t.state("master"), t.state("enabled"))
+
+    private fun switches() = parseSwitches(t.state("kinds"))
+
+    /** 同期自体のスイッチ。切っても鍵と領域は残す。戻したら切っていた間の手元の行を補う */
+    suspend fun setMaster(on: Boolean) = withContext(io) {
+        halted {
+            val stmts = arrayListOf(setState("master", if (on) "1" else "0"))
+            if (on && t.state("enabled") == "1") {
+                val sw = switches()
+                stmts += setState("kinds_resume", canonicalJson(SYNC_GROUPS.filter { sw[it.id] == true }.map { it.id }))
+            }
+            db.batch(stmts)
+            headEtag = null
+        }
+    }
+
+    /**
+     * 種類ごとのスイッチ。切ってもサーバーのデータは消さない。
+     * 権限系を切ったら同期の表の平文を残さない(手元の削除ページは残るので、オンに戻せば作り直せる)
+     */
+    suspend fun setKind(group: String, on: Boolean) = withContext(io) {
+        halted {
+            val sw = switches().toMutableMap()
+            if (sw[group] == on) return@halted
+            sw[group] = on
+            val saved = SYNC_GROUPS.filter { sw[it.id] != it.default }.associate { it.id to sw[it.id] }
+            val resume = (t.state("kinds_resume")?.let { parseStrictJson(it) as List<*> }.orEmpty()).map { it as String }.toMutableSet()
+            if (on) resume += group else resume -= group
+            val stmts = arrayListOf(setState("kinds", canonicalJson(saved)), if (resume.isEmpty()) delState("kinds_resume") else setState("kinds_resume", canonicalJson(resume.toList())))
+            if (group == "secret") {
+                if (on) stmts += setState("secret_refetch", "0")
+                else stmts += listOf(delState("secret_refetch"), SqlStatement("DELETE FROM sync_records WHERE kind = ?", listOf(SECRET_KIND)), SqlStatement("DELETE FROM sync_ops WHERE op IN ('secret_put', 'secret_remove')"), delState("push_inflight"))
+            }
+            db.batch(stmts)
+        }
     }
 
     /** 走っている周を止めて、終わるまで待つ。その後で block を動かす間は次の周も入れない(裏のスレッドで周と表の削除が重ならないように) */
@@ -179,7 +229,7 @@ class SyncEngine(
     suspend fun checkHead(): Boolean = withContext(io) {
         if (!mutex.tryLock()) return@withContext false
         try {
-            if (t.state("enabled") != "1" || t.state("phase") != "idle" || now() < retryAt) return@withContext false
+            if (t.state("enabled") != "1" || !isMasterOn() || t.state("phase") != "idle" || now() < retryAt) return@withContext false
             val material = keyStore.load() ?: return@withContext false
             val head = SyncApi(serverUrl, deriveKeys(material.k).authToken.toHex(), transport, allowLocalhost)
             try {
@@ -271,7 +321,7 @@ class SyncEngine(
         }
     }
 
-    private fun joinStatements(id: String) = listOf(setState("device_id", id), setState("clock", Hlc.ZERO), setState("since", "0"), setState("phase", "joining"), setState("enabled", "1"))
+    private fun joinStatements(id: String) = listOf(setState("device_id", id), setState("clock", Hlc.ZERO), setState("since", "0"), setState("phase", "joining"), setState("enabled", "1"), delState("master"), delState("kinds_resume"))
 
     /** この端末で同期をやめる。手元のデータは消さない */
     suspend fun leave() = withContext(io) {
@@ -319,12 +369,15 @@ class SyncEngine(
             r.state = s
             return r
         }
+        // 切っている間は鍵保管にも通信にも触らない
+        if (t.state("master") == "0") return finish("off")
         if (!deviceChecked && !checkDevice()) return finish("off")
         if (t.state("enabled") != "1") return finish("off")
         val material = keyStore.load() ?: return finish("off")
         keys = deriveKeys(material.k)
         spaceIdValue = spaceId(keys.authToken)
         deviceId = material.deviceId
+        offKinds = offKindsOf(switches())
 
         var phase = t.state("phase") ?: "joining"
         if (phase == "confirm") return finish("confirm")
@@ -423,6 +476,8 @@ class SyncEngine(
 
     private fun ctx() = AdapterContext(keys, deviceId, now())
 
+    private fun onAdapters() = adapters.filter { it.kind !in offKinds }
+
     private fun refsOfBody(p: SyncPayload): RecordRefs {
         val detail = adapters.firstNotNullOfOrNull { a -> if (a.kind == p.kind) a.detailOf(p) else null }
         return refsFromBody(p, detail)
@@ -450,12 +505,17 @@ class SyncEngine(
                 val settled = settleRecord(payload, existing?.version ?: 0, existing?.asLocal(), c.now)
                 val refs = target.refs.over(existing?.refs)
                 touched[target.recordId] = StoredRecord(
-                    target.recordId, payload.kind, existing?.kindTag ?: "h", existing?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
+                    target.recordId, payload.kind, existing?.kindTag ?: tagOfKind(payload.kind), existing?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
                     pending = true, priority = 0, needsApply = true, refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
                 )
             }
             for (op in ops) {
                 val adapter = adapters.first { op.op in it.ops }
+                // 権限系は切ったあとに残った操作も処理しない。ほかの種類は切る前の変更なので、送信待ちとして持ち続ける
+                if (adapter.kind == SECRET_KIND && SECRET_KIND in offKinds) {
+                    stmts += delOp(op.seq)
+                    continue
+                }
                 if (adapter.expands) {
                     // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
                     if (touched.isNotEmpty()) break
@@ -517,13 +577,17 @@ class SyncEngine(
             phase = "seeding"
             pulled = true
         }
+        // 権限系のレコードは切っている間は開かずに読み飛ばしたので、最初から読み直す
+        if ((t.state("secret_refetch")?.toLongOrNull() ?: Long.MAX_VALUE) <= now() && refetchSecrets()) pulled = true
         if (phase == "seeding") {
             enter("seeding")
             seedAndPlan()
+            db.batch(listOf(delState("kinds_resume")))
             seeded = true
-        } else if (!reconciled) {
-            reconcile()
+        } else {
+            catchUp()
         }
+        if (!seeded && !reconciled) reconcile()
         reconciled = true
         if (!seeded && (manual || !filled)) fillMissing()
         filled = true
@@ -569,10 +633,14 @@ class SyncEngine(
         if (known == null) putState("epoch", epoch) else if (known != epoch) throw SpaceGone(epoch)
     }
 
+    /** 権限系を切っている端末は開かない。version は呼ぶ側が数えるので、読み飛ばしてもページングは進む */
+    private fun readable(raw: List<Map<String, Any?>>) = if (SECRET_KIND in offKinds) raw.filter { it["kind_tag"] != "s" } else raw
+
     private fun mergePage(raw: List<Map<String, Any?>>, since: Long, gcFloor: Long) {
         val at = now()
-        val opened = openRecords(keys, spaceIdValue, raw)
-        val metaOf = raw.associateBy { it["record_id"] as? String }
+        val page = readable(raw)
+        val opened = openRecords(keys, spaceIdValue, page)
+        val metaOf = page.associateBy { it["record_id"] as? String }
         val local = t.records(opened.records.map { it.recordId })
         var clock = t.state("clock") ?: Hlc.ZERO
         val stmts = ArrayList<SqlStatement>()
@@ -604,34 +672,68 @@ class SyncEngine(
     }
 
     /** 種まきと合流の残り。古い HLC なので新しい削除に勝たない。ID が決まっているのでやり直しても重ならない */
+    /** 全件の読み取りには 1 時間の回数の制限がある。断られても権限系の分だけ後回しにして、ほかの同期を止めない */
+    private suspend fun refetchSecrets(): Boolean {
+        val before = t.state("since") ?: "0"
+        putState("since", "0")
+        try {
+            pull(true)
+        } catch (e: SyncApiError) {
+            if (e.kind != "http" || e.status != 429) throw e
+            val sec = (e.detail?.get("retry_after_sec") as? Number)?.toDouble()
+            val wait = if (sec != null && sec.isFinite() && sec > 0) ceil(sec * 1000).toLong() else REFETCH_RETRY_MS
+            db.batch(listOf(setState("since", before), setState("secret_refetch", (now() + wait).toString())))
+            return false
+        }
+        db.batch(listOf(delState("secret_refetch")))
+        return true
+    }
+
+    /** 今のデータをレコードと合わせる。元の時刻の HLC なので、後から消したものには負け、切っていた間に増えたものは勝つ */
+    private fun seedOne(adapter: SyncAdapter, c: AdapterContext) {
+        // 件数の多い人でも 1 回の呼び出しを小さく保つ。ID が決まっているので途中で切れてもやり直せる
+        for (chunk in adapter.seed(c).chunked(SyncConfig.WRITE_BATCH)) {
+            val local = t.records(chunk.map { it.recordId })
+            val stmts = ArrayList<SqlStatement>()
+            for (r in chunk) {
+                val l = local[r.recordId]
+                val payload = if (l != null) mergePayloads(l.payload, r.payload) else r.payload
+                val changed = l == null || !same(l.payload, payload)
+                val settled = settleRecord(payload, l?.version ?: 0, l?.asLocal(), c.now)
+                val refs = r.refs.over(l?.refs)
+                stmts += writeRecord(
+                    StoredRecord(
+                        r.recordId, payload.kind, l?.kindTag ?: tagOfKind(payload.kind), l?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
+                        pending = changed || (l?.pending ?: false), priority = l?.priority ?: r.priority, needsApply = l?.needsApply ?: false,
+                        refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
+                    ),
+                )
+            }
+            if (stmts.isNotEmpty()) db.batch(stmts)
+        }
+    }
+
+    /**
+     * スイッチをオンに戻したあと。切っていた間に増えた手元の行を種まきで補い、切っていた間に受け取った分と手元の違いを全部写し直す。
+     * 切っていた間の手元の削除は積んでいないので、同期の表の値へ戻る
+     */
+    private fun catchUp() {
+        val raw = t.state("kinds_resume") ?: return
+        val groups = (parseStrictJson(raw) as List<*>).map { it as String }.filter { g -> kindsOfGroups(listOf(g)).none { it in offKinds } }
+        val c = ctx()
+        val kinds = kindsOfGroups(groups)
+        for (adapter in adapters) if (adapter.kind in kinds) seedOne(adapter, c)
+        val mark = if (kinds.isEmpty()) emptyList() else listOf(SqlStatement("UPDATE sync_records SET needs_apply = 1 WHERE kind IN (${kinds.joinToString(", ") { "?" }})", kinds))
+        db.batch(mark + delState("kinds_resume"))
+    }
+
     private fun seedAndPlan() {
         val c = ctx()
-        for (adapter in adapters) {
-            // 件数の多い人でも 1 回の呼び出しを小さく保つ。ID が決まっているので途中で切れてもやり直せる
-            for (chunk in adapter.seed(c).chunked(SyncConfig.WRITE_BATCH)) {
-                val local = t.records(chunk.map { it.recordId })
-                val stmts = ArrayList<SqlStatement>()
-                for (r in chunk) {
-                    val l = local[r.recordId]
-                    val payload = if (l != null) mergePayloads(l.payload, r.payload) else r.payload
-                    val changed = l == null || !same(l.payload, payload)
-                    val settled = settleRecord(payload, l?.version ?: 0, l?.asLocal(), c.now)
-                    val refs = r.refs.over(l?.refs)
-                    stmts += writeRecord(
-                        StoredRecord(
-                            r.recordId, payload.kind, l?.kindTag ?: "h", l?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, payload, settled.version,
-                            pending = changed || (l?.pending ?: false), priority = l?.priority ?: r.priority, needsApply = l?.needsApply ?: false,
-                            refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
-                        ),
-                    )
-                }
-                if (stmts.isNotEmpty()) db.batch(stmts)
-            }
-        }
+        for (adapter in onAdapters()) seedOne(adapter, c)
         // 消えるものがなければ全件を見ない(種類ごとの exists は 1 件ごとに DB を読むので)
         fun count(where: (StoredRecord) -> Boolean): Long {
             var n = 0L
-            for (adapter in adapters) {
+            for (adapter in onAdapters()) {
                 for (r in t.recordsOfKind(adapter.kind)) {
                     if (where(r) && adapter.owns(r) && adapter.exists(r)) n++
                 }
@@ -652,9 +754,10 @@ class SyncEngine(
      * レコードのあるものを手元から作らない(適用の時刻を持つ行が、まだ届いていない削除に勝ってしまう)
      */
     private fun reconcile() {
+        // 切っている種類は照合しない(手元と違っていて正しい)
         val c = ctx()
         val stmts = ArrayList<SqlStatement>()
-        for (adapter in adapters) {
+        for (adapter in onAdapters()) {
             if (!adapter.reconciles) continue
             val rows = adapter.seed(c)
             val local = t.records(rows.map { it.recordId })
@@ -663,7 +766,7 @@ class SyncEngine(
                 val settled = settleRecord(r.payload, 0, null, c.now)
                 stmts += writeRecord(
                     StoredRecord(
-                        r.recordId, r.payload.kind, "h", SyncConfig.SCHEMA_VERSION, r.payload, 0, pending = true, priority = r.priority, needsApply = false,
+                        r.recordId, r.payload.kind, tagOfKind(r.payload.kind), SyncConfig.SCHEMA_VERSION, r.payload, 0, pending = true, priority = r.priority, needsApply = false,
                         r.refs.board, r.refs.thread, r.refs.detail, r.refs.local, settled.tombAt,
                     ),
                 )
@@ -679,7 +782,7 @@ class SyncEngine(
     /** 手元にあってレコードのない行を、種まきと同じ古い HLC で作る。消した記録があるものは作らないので、消したものは戻らない */
     private fun fillMissing() {
         val c = ctx()
-        for (adapter in adapters) {
+        for (adapter in onAdapters()) {
             for (chunk in adapter.fill(c).chunked(SyncConfig.WRITE_BATCH)) {
                 val local = t.records(chunk.map { it.recordId })
                 val stmts = chunk.mapNotNull { r ->
@@ -688,7 +791,7 @@ class SyncEngine(
                     } else {
                         writeRecord(
                             StoredRecord(
-                                r.recordId, r.payload.kind, "h", SyncConfig.SCHEMA_VERSION, r.payload, 0, pending = true, priority = r.priority, needsApply = r.reapply,
+                                r.recordId, r.payload.kind, tagOfKind(r.payload.kind), SyncConfig.SCHEMA_VERSION, r.payload, 0, pending = true, priority = r.priority, needsApply = r.reapply,
                                 r.refs.board, r.refs.thread, r.refs.detail, r.refs.local, null,
                             ),
                         )
@@ -707,7 +810,8 @@ class SyncEngine(
         val waiting = t.ops(opNames, 1000).mapNotNull { op -> adapters.firstOrNull { op.op in it.ops }?.target(op, c)?.recordId }.toSet()
         var after = ""
         while (true) {
-            val rows = t.toApply(kinds, after, SyncConfig.APPLY_BATCH)
+            // 切っている種類は needs_apply を残し、オンに戻したときに写す
+            val rows = t.toApply(kinds.filter { it !in offKinds }, after, SyncConfig.APPLY_BATCH)
             if (rows.isEmpty()) break
             after = rows.last().recordId
             val items = ArrayList<ApplyItem>()
@@ -723,7 +827,7 @@ class SyncEngine(
             }
             writeApplied(items)
         }
-        for (adapter in adapters) {
+        for (adapter in onAdapters()) {
             val plan = adapter.afterApply(c) ?: continue
             if (plan.statements.isNotEmpty()) db.batch(plan.statements)
             if (plan.changed) result.applied += adapter.area
@@ -797,7 +901,9 @@ class SyncEngine(
 
     /** 容量を超えた。古いものから trim の tombstone にしてサーバーから外す。手元は消さない。外せるものがなければ false */
     private fun trimForQuota(): Boolean {
-        for (trimKinds in TRIM_ORDER) {
+        for (order in TRIM_ORDER) {
+            val trimKinds = order.filter { it !in offKinds }
+            if (trimKinds.isEmpty()) continue
             val marks = trimKinds.joinToString(", ") { "?" }
             val rows = t.selectRecords("deleted = 0 AND kind IN ($marks) AND (version > 0 OR pending = 1) ORDER BY hlc, record_id LIMIT ?", trimKinds + SyncConfig.TRIM_BATCH.toLong())
             if (rows.isEmpty()) continue
@@ -831,11 +937,11 @@ class SyncEngine(
             val inflight = parseStrictJson(raw) as Map<String, Any?>
             val entries = inflight["records"] as List<Map<String, Any?>>
             val local = t.records(entries.map { it["record_id"] as String })
-            val rows = entries.mapNotNull { x -> local[x["record_id"] as String]?.takeIf { it.pending } }
+            val rows = entries.mapNotNull { x -> local[x["record_id"] as String]?.takeIf { it.pending && it.kind !in offKinds } }
             if (rows.isNotEmpty()) return Prepared(inflight["request_id"] as String, rows, entries.associate { (it["record_id"] as String) to (it["hlc"] as String) })
             db.exec("DELETE FROM sync_state WHERE key = ?", listOf("push_inflight"))
         }
-        val candidates = t.pendingRecords(SyncConfig.PUSH_BATCH_RECORDS)
+        val candidates = t.pendingRecords(SyncConfig.PUSH_BATCH_RECORDS, offKinds)
         if (candidates.isEmpty()) return null
         var bytes = 0L
         val rows = ArrayList<StoredRecord>()
@@ -899,9 +1005,10 @@ class SyncEngine(
                 return out
             }
             checkEpoch(page.epoch)
-            val opened = openRecords(keys, spaceIdValue, page.records)
+            val shown = readable(page.records)
+            val opened = openRecords(keys, spaceIdValue, shown)
             for (f in opened.failed) countBad(f.reason)
-            val metaOf = page.records.associateBy { it["record_id"] as? String }
+            val metaOf = shown.associateBy { it["record_id"] as? String }
             for (r in opened.records) {
                 out.full[r.recordId] = LocalRecord(r.payload, r.version)
                 val m = metaOf.getValue(r.recordId)
@@ -967,7 +1074,7 @@ class SyncEngine(
     private fun rowFromPlan(l: StoredRecord?, id: String, settled: LocalRecord, meta: ServerMeta?, pending: Boolean, priority: Long? = null): StoredRecord {
         val refs = refsOfBody(settled.payload).over(l?.refs)
         return StoredRecord(
-            id, settled.payload.kind, l?.kindTag ?: meta?.kindTag ?: "h", l?.schemaVersion ?: meta?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, settled.payload, settled.version,
+            id, settled.payload.kind, l?.kindTag ?: meta?.kindTag ?: tagOfKind(settled.payload.kind), l?.schemaVersion ?: meta?.schemaVersion ?: SyncConfig.SCHEMA_VERSION, settled.payload, settled.version,
             pending = pending, priority = priority ?: l?.priority ?: 5, needsApply = l == null || !same(l.payload, settled.payload) || l.needsApply,
             refs.board, refs.thread, refs.detail, refs.local, settled.tombAt,
         )
@@ -1038,7 +1145,7 @@ class SyncEngine(
             val r = byId.getValue(id)
             // すでに tombstone のものは今のデータに触らない。行を消すだけ
             if (!isDeleted(r.payload)) {
-                val adapter = adapters.firstOrNull { it.kind == r.kind && it.owns(r) }
+                val adapter = onAdapters().firstOrNull { it.kind == r.kind && it.owns(r) }
                 if (adapter != null) {
                     val removal = adapter.remove(r)
                     stmts += removal.statements

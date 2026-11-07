@@ -36,7 +36,7 @@ reqwest = "0.12"
 # 画像のキャッシュのファイル名(URL のハッシュ)。tauri が使っているものと同じ版
 sha2 = "0.10"
 # 画像のキャッシュの同時数・取り消し。tauri が使っているものと同じ版
-tokio = { version = "1", features = ["sync", "macros"] }
+tokio = { version = "1", features = ["sync", "macros", "time"] }
 
 # 自動更新。パソコンの版だけ
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

@@ -13,6 +13,8 @@ mod post_http;
 mod sql_batch;
 mod update;
 mod web_upload;
+#[cfg(desktop)]
+mod window_state;
 
 use chosen_paths::ChosenPaths;
 use media_cache::MediaCache;
@@ -646,6 +648,8 @@ pub fn run() {
             }
             migrate_old_data_dir(app.handle());
             apply_pending_restore(app.handle());
+            #[cfg(desktop)]
+            window_state::setup(app.handle());
             backup_before_migrations(app.handle());
             app.manage(post_http::PostCookies::load(app.handle()));
             app.manage(ChosenPaths::default());

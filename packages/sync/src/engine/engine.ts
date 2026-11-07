@@ -84,6 +84,13 @@ export type SyncEngineState =
 
 export type ConfirmChoice = 'accept_removal' | 'keep_local'
 
+/** 画面に出す確認。join・rebase は適用の前に止まる確認、join_data は参加で手元を送る前の確認(host はふだんと違うサーバーのとき) */
+export interface SyncConfirm {
+  type: string
+  lost: number
+  host?: string | null
+}
+
 export interface SyncEngineDeps {
   db: SyncSqlDb
   keyStore: SyncKeyStore
@@ -110,6 +117,8 @@ export interface CycleResult {
   applied: Record<string, boolean>
   /** 周を始めなかった理由 */
   skipped?: 'backoff' | 'lease' | 'waiting' | 'halting'
+  /** 参加で手元を送る前に止まった確認(周は回していない) */
+  confirm?: SyncConfirm
 }
 
 /** 領域がない・作り直された。newEpoch は応答で分かった新しい値 */
@@ -412,9 +421,9 @@ export class SyncEngine {
     this.enter('off')
   }
 
-  /** サーバーの URL の上書きは同期の中身ではないので残す */
+  /** サーバーの URL の上書きも消す。参加のコードで入った先に、やめたあとも向いたままにしない */
   private clearTables(): Promise<void> {
-    return this.db.batch([{ sql: 'DELETE FROM sync_records' }, { sql: 'DELETE FROM sync_ops' }, { sql: "DELETE FROM sync_state WHERE key <> 'server_url'" }])
+    return this.db.batch([{ sql: 'DELETE FROM sync_records' }, { sql: 'DELETE FROM sync_ops' }, { sql: 'DELETE FROM sync_state' }])
   }
 
   /**

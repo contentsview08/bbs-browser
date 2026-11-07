@@ -76,6 +76,7 @@ import { useViewState } from './hooks/useViewState'
 import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, showThread, step, updateNearest } from './utils/viewState'
 import { useAccounts } from './hooks/useAccounts'
 import { useSync } from './hooks/useSync'
+import { forgetClosedPosition } from './hooks/useThreadScroll'
 import { mergeSyncedHistory, syncedTabReadNo } from './utils/syncRead'
 import { HISTORY_SHOWN, restoreThreadRead } from '@bbs-browser/sync'
 import { useNotifications } from './hooks/useNotifications'
@@ -933,10 +934,12 @@ export default function App() {
     posts: (s) => void s.listPostHistory().then((list) => setPostHistory((cur) => (cur ? list : cur))),
     reads: (s) => void syncedReads(s),
     retentionDays: () => settingsRef.current.logRetentionDays,
-    isOpen: (boardUrl, key) => tabsRef.current.some((x) => x.thread.boardUrl === boardUrl && x.thread.key === key),
   })
 
-  /** 別の端末の履歴と既読を写す。DB は適用が書いてある。開いているタブの位置は上がるときだけ追い、下がっても読んでいる画面を動かさない */
+  /**
+   * 別の端末の履歴と既読を写す。DB は適用が書いてある。開いているタブの位置は上がるときだけ追い、下がっても読んでいる画面を動かさない。
+   * 他の端末のログの削除で行がなくなったスレは、タブも閉じる(消した端末と同じ見え方。開き直すと先頭から)
+   */
   const syncedReads = async (s: LogStore) => {
     await reloadRecent(s)
     await reloadFavThreads(s)
@@ -951,6 +954,10 @@ export default function App() {
     const boards = [...new Set(tabsRef.current.map((x) => x.thread.boardUrl))]
     const known = new Map<string, number>()
     for (const url of boards) for (const [key, state] of await s.getThreadStates(url)) known.set(`${url}\t${key}`, state.readNo)
+    // 読み込んであるのに行がない = 削除が写った。読み込む前のタブは、読み込みで同期の表から戻るか空で始まる
+    const gone = new Map<string, ThreadSummary>()
+    for (const x of tabsRef.current) if (x.log && !known.has(`${x.thread.boardUrl}\t${x.thread.key}`)) gone.set(x.id, x.thread)
+    if (gone.size > 0) dropThreads(gone)
     setTabs((ts) => mapKeep(ts, (x) => {
       const next = syncedTabReadNo(x.readNo, known.get(`${x.thread.boardUrl}\t${x.thread.key}`))
       return next === x.readNo ? x : { ...x, readNo: next }
@@ -1301,16 +1308,16 @@ export default function App() {
     else updateView((s) => selectQuietly(s, next.id))
   }
 
-  /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
-  const deleteLogs = (ids: string[], extra: ThreadSummary[] = [], stayOnList?: boolean) => {
-    if (!store) return
-    for (const id of ids) deletedIds.current.add(id)
-    for (const t of extra) deletedIds.current.add(threadId(t))
-    // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
-    const targets = new Map<string, ThreadSummary>()
-    for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
-    for (const t of extra) targets.set(threadId(t), t)
-    // 先に画面から消す(DB の処理を待たない)
+  /**
+   * ログを消したスレを画面から外す(手元の削除と、他の端末の削除が写ったときの両方)。
+   * タブを閉じ(開き直すの一覧に入れない)、覚えた位置を捨て、戻る・進むの履歴・閲覧履歴・一覧の印から外す
+   */
+  const dropThreads = (targets: Map<string, ThreadSummary>, stayOnList?: boolean) => {
+    // 消す前に始まった取得・既読の記録と、閉じるときに届く既読を書き戻さない
+    for (const id of targets.keys()) {
+      deletedIds.current.add(id)
+      forgetClosedPosition(id)
+    }
     // スマホはタブを使わない: 開いているスレを消したら、隣のタブを選ぶのではなく、消したスレを履歴から外して前の画面へ戻る
     const closingShown = isMobile && !!view.current.activeId && targets.has(view.current.activeId)
     closeTabs([...targets.keys()].filter((id) => tabsRef.current.some((t) => t.id === id)), closingShown || stayOnList, false)
@@ -1332,6 +1339,17 @@ export default function App() {
       keys.forEach((k) => next.delete(k))
       return next
     })
+  }
+
+  /** ログを消してタブを閉じる(Delete キー・タブの右クリック・スレ表示のボタン) */
+  const deleteLogs = (ids: string[], extra: ThreadSummary[] = [], stayOnList?: boolean) => {
+    if (!store) return
+    // タブで開いているスレに加えて、閲覧履歴から選んだスレ(タブにないもの)も消す
+    const targets = new Map<string, ThreadSummary>()
+    for (const t of tabsRef.current) if (ids.includes(t.id)) targets.set(t.id, t.thread)
+    for (const t of extra) targets.set(threadId(t), t)
+    // 先に画面から消す(DB の処理を待たない)
+    dropThreads(targets, stayOnList)
     // DB は裏で消す。取りに行っている最中のスレは、終わるのを待ってから(消したあとに書き戻されないように)
     void run(null, async () => {
       await Promise.all([...targets.keys()].map((id) => inflight.current.get(id)?.catch(() => undefined)))

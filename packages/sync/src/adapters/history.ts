@@ -30,8 +30,6 @@ export interface HistoryHost {
   retentionDays: () => number
   /** リセットの id。ランダムな値 */
   newResetId: () => string
-  /** 画面で開いているスレか。開いているスレのログは、他の端末の削除が届いても消さない(読んでいる最中の画面の下から消えないように) */
-  isOpen?: (boardUrl: string, key: string) => boolean
 }
 
 interface ThreadRow {
@@ -317,9 +315,9 @@ abstract class ReadAdapterBase {
       // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
       const pending = await pendingRead(this.db, x.board_url, key)
       // 消す前の閲覧しかない履歴の行だけ消す(記録・未処理の読み・閲覧時刻のどれかがリセットより後なら読んでいる)。
-      // 履歴にない行(お気に入りの確認などで取っただけ)と、画面で開いているスレは消さない。
+      // 履歴にない行(お気に入りの確認などで取っただけ)は消さない。画面で開いているスレも消す(画面は適用の結果を受けて閉じる)。
       // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
-      const canDelete = resetWall !== null && resetWall - ctx.now <= DAY_MS && pos === 0 && pending === 0 && !this.host.isOpen?.(x.board_url, key)
+      const canDelete = resetWall !== null && resetWall - ctx.now <= DAY_MS && pos === 0 && pending === 0
       if (canDelete && x.read_at !== null && x.read_at <= (resetWall as number)) {
         for (const table of ['posts', 'threads']) statements.push({ sql: `DELETE FROM ${table} WHERE board_url = $1 AND key = $2`, params: [x.board_url, key] })
         continue

@@ -12027,7 +12027,7 @@
   ]
  },
  {
-  "name": "履歴: 読んでいる最中(開いているスレ): DB の既読は下がるがログは残り、読み進めると上がる",
+  "name": "履歴: 読んでいる最中(開いているスレ): 他の端末の削除で行も消え(画面が閉じる)、開き直して読み進めると上がる",
   "devices": [
    "pc",
    "phone"
@@ -12057,12 +12057,6 @@
     "key": "1",
     "title": "t1",
     "post_count": 100
-   },
-   {
-    "op": "tab_open",
-    "device": "pc",
-    "board": "https://a.5ch.io/x/",
-    "key": "1"
    },
    {
     "op": "read",
@@ -12105,11 +12099,18 @@
     "op": "expect",
     "expect": {
      "pc": {
-      "read_no": {
-       "1": 0
-      }
+      "read_no": {},
+      "history": []
      }
     }
+   },
+   {
+    "op": "open",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t1",
+    "post_count": 100
    },
    {
     "op": "read",
@@ -18284,6 +18285,136 @@
       ]
      }
     }
+   }
+  ]
+ },
+ {
+  "name": "参加: 手元にデータがあれば確認が出て、やめると送らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "phone": {
+    "favorite_threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "k1",
+      "title": "t",
+      "added_ago_ms": 100000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc",
+    "asks": true,
+    "choice": "keep_local"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "keys": false,
+      "state": "off",
+      "records": 0,
+      "ops": 0,
+      "favorite_threads": [
+       "k1"
+      ],
+      "requests": {}
+     }
+    }
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc",
+    "asks": true,
+    "choice": "accept_removal"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "favorite_threads": [
+       "k1"
+      ]
+     },
+     "phone": {
+      "keys": true,
+      "state": "idle",
+      "favorite_threads": [
+       "k1"
+      ]
+     }
+    }
+   },
+   {
+    "op": "converged"
+   }
+  ]
+ },
+ {
+  "name": "参加: まっさらな端末は確認なし",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "keep_defaults": true,
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "k1",
+    "title": "t"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc",
+    "asks": false
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "keys": true,
+      "state": "idle",
+      "favorite_threads": [
+       "k1"
+      ]
+     }
+    }
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
    }
   ]
  }

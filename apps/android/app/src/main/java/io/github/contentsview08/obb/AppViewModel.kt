@@ -312,6 +312,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         positionStore.edit().putString(id, "${pos.no},${pos.offset},${if (pos.bottom) 1 else 0}").apply()
     }
 
+    /** 覚えた位置を捨てる(ログの削除)。開き直すと先頭か既読の次から始まる */
+    private fun forgetPositions(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val e = positionStore.edit()
+        for (id in ids) {
+            positionCache.remove(id)
+            e.remove(id)
+        }
+        e.apply()
+    }
+
     /** 掲示板のスレ一覧で分かった、いまのレス数(スレの id → 数)。閲覧履歴・お気に入りのスレの新着に使う。-1 は dat 落ち */
     var remoteCounts by mutableStateOf<Map<String, Int>>(emptyMap())
         private set
@@ -449,10 +460,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 io.github.contentsview08.obb.sync.adapters.SettingAdapter(settingAllow, io.github.contentsview08.obb.data.PrefsSettingsHost(prefs, settingAllow), db.syncSql),
             ) + io.github.contentsview08.obb.sync.adapters.historyAdapters(
                 db.syncSql,
-                io.github.contentsview08.obb.sync.adapters.HistoryHost({ io.github.contentsview08.obb.data.resolveSyncBoard(it) }, { prefs.logRetentionDays }, { io.github.contentsview08.obb.sync.generateDeviceId() }, { b, k -> threadPages().any { it.summary.boardUrl == b && it.summary.key == k } }),
+                io.github.contentsview08.obb.sync.adapters.HistoryHost({ io.github.contentsview08.obb.data.resolveSyncBoard(it) }, { prefs.logRetentionDays }, { io.github.contentsview08.obb.sync.generateDeviceId() }),
             ),
             now = System::currentTimeMillis,
             allowLocalhost = BuildConfig.SYNC_ALLOW_LOCALHOST,
+            presetUrls = presetUrls(),
             keyHint = syncKeys.second,
             openStartWindow = { url ->
                 val d = kotlinx.coroutines.CompletableDeferred<String?>()
@@ -560,14 +572,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         postHistory = db.postHistory()
     }
 
-    /** 適用で変わった既読と履歴を画面へ。開いているスレは上がったときだけ上げ、「ここから未読」の線とスクロール位置は動かさない */
+    /**
+     * 適用で変わった既読と履歴を画面へ。開いているスレは上がったときだけ上げ、「ここから未読」の線とスクロール位置は動かさない。
+     * 他の端末のログの削除で行がなくなったスレは、画面も閉じる(消した端末と同じ見え方。開き直すと先頭から)
+     */
     private suspend fun reflectSyncedReads() {
         val hist = db.history()
         history = hist
         favThreads = db.favoriteThreads()
         allUnread = unreadEntries(hist, remoteCounts)
         for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
-        for (p in threadPages()) p.readNo = io.github.contentsview08.obb.data.openReadNoAfterSync(p.readNo, db.readNo(p.summary))
+        for (p in threadPages()) {
+            val readNo = db.readNo(p.summary)
+            // 読み込んであるのに行がない = 削除が写った。読み込む前の画面は、読み込みで同期の表から戻るか空で始まる
+            if (readNo == null && p.loaded) dropThreadPage(p)
+            else p.readNo = io.github.contentsview08.obb.data.openReadNoAfterSync(p.readNo, readNo)
+        }
+    }
+
+    /** ログが消えたスレの画面を外す。いま見ている画面なら戻ると同じ動きで前の画面へ。「進む」にも残さない。知らせは出さない */
+    private fun dropThreadPage(p: Page.Thread) {
+        forgetPositions(listOf(p.summary.id))
+        if (forwardPage === p) {
+            forwardPage = null
+            return
+        }
+        if (stack.size <= 1) return
+        val shown = stack.last() === p
+        stack.remove(p)
+        if (shown) {
+            navDir = -1
+            refreshTopAfterBack()
+        }
+    }
+
+    /** 最初から入っている掲示板・板の URL(assets の sites.json)。同期の参加の確認で、手元のデータに数えない */
+    private fun presetUrls(): List<String> {
+        val json = runCatching { getApplication<android.app.Application>().assets.open("sites.json").bufferedReader().use { it.readText() } }.getOrNull() ?: return emptyList()
+        val o = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return emptyList()
+        val out = ArrayList<String>()
+        o.optJSONArray("sites")?.let { a -> for (i in 0 until a.length()) out += a.getJSONObject(i).getString("menu") }
+        o.optJSONArray("boards")?.let { a -> for (i in 0 until a.length()) out += a.getJSONObject(i).getString("url") }
+        return out
     }
 
     /** スレ一覧に戻る前に見ていたスレ(「進む」で開き直す) */
@@ -1162,6 +1208,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLogOf(t: ThreadSummary) {
         viewModelScope.launch {
             db.userOps.deleteLogs(listOf(t))
+            forgetPositions(listOf(t.id))
             if (forwardPage?.summary?.id == t.id) forwardPage = null
             (stack.lastOrNull() as? Page.Threads)?.let { it.states = db.threadStates(it.board.url) }
             reloadSide()
@@ -1183,6 +1230,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLogsOf(list: List<ThreadSummary>) {
         viewModelScope.launch {
             db.userOps.deleteLogs(list)
+            forgetPositions(list.map { it.id })
             if (list.any { it.id == forwardPage?.summary?.id }) forwardPage = null
             // スタックの下のスレ一覧も、既読の印を読み直す
             for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
@@ -1277,6 +1325,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLog(page: Page.Thread) {
         viewModelScope.launch {
             db.userOps.deleteLogs(listOf(page.summary))
+            forgetPositions(listOf(page.summary.id))
             back()
             // 消したスレを「進む」で開き直さない
             forwardPage = null

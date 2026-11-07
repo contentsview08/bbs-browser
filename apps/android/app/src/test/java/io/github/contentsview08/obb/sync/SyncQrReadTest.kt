@@ -18,6 +18,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 // カメラが読んだ文字から先の扱い。カメラそのものは JVM で動かないので、読み取った文字を渡して確かめる
+/** 最初から入っている掲示板・板。参加の確認で手元のデータに数えない */
+@Suppress("UNCHECKED_CAST")
+private val PRESET_URLS: List<String> = (parseStrictJson(java.io.File("../../../packages/presets/sites.json").readText()) as Map<String, Any?>).let { p ->
+    (p["sites"] as List<Map<String, Any?>>).map { it["menu"] as String } + (p["boards"] as List<Map<String, Any?>>).map { it["url"] as String }
+}
+
 class SyncQrReadTest {
     private var clock = 1_800_000_000_000L
 
@@ -43,6 +49,7 @@ class SyncQrReadTest {
             defaultServerUrl = "https://sync.test",
             adapters = listOf(FavoriteThreadAdapter(db) { ResolvedBoard(it, "2ch-compat") }),
             now = now,
+            presetUrls = PRESET_URLS,
             keyHint = { keys.value != null },
             openStartWindow = { url -> signTicket(Regex("space_id=([0-9a-f]{64})").find(url)!!.groupValues[1], 4_000_000_000L) },
         )

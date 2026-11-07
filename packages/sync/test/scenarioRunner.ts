@@ -6,10 +6,13 @@ import { expect } from 'vitest'
 import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
 import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, hasLocalData, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import presets from '../../presets/sites.json'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
 
 const SERVER = 'https://sync.test'
+/** 最初から入っている掲示板・板。参加の確認で手元のデータに数えない(SyncController と同じ) */
+const PRESET_URLS = [...presets.sites.map((x) => x.menu), ...presets.boards.map((x) => x.url)]
 const START = 1_800_000_000_000
 const migrations = readdirSync(new URL('../../logstore/migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(`../../logstore/migrations/${f}`, import.meta.url), 'utf-8'))
 const SQL = await initSqlJs()
@@ -141,8 +144,6 @@ class Device {
   trace: SyncEngineState[] = []
   idCount = 0
   requestCount = 0
-  /** 画面で開いているスレ(tab_open / tab_close) */
-  openThreads = new Set<string>()
   /** 道具の窓が開いたときに見ていた NG。窓は保存まで読み直さない */
   windows = new Map<string, NgRuleData[]>()
   constructor(readonly name: string, readonly world: World, readonly skew: number, keepDefaults: boolean) {
@@ -199,7 +200,7 @@ class Device {
         new NgAdapter({ ...settingsNgStore(this.sql.db), apply: async (c) => void (await settingsNgStore(this.sql.db).apply(c)), patternOk: ngPatternSyncable, today: dateOf }),
         new PostAdapter(this.sql.db, resolver(this.name)),
         new SettingAdapter(settingsTableHost(this.sql.db, this.name === 'phone' ? 'phone' : 'pc'), this.sql.db),
-        ...historyAdapters(this.sql.db, { resolve: resolver(this.name), retentionDays: () => this.world.retentionDays, newResetId: () => `reset_${this.name}_${++this.resetCount}`, isOpen: (board, key) => this.openThreads.has(`${board}\t${key}`) }),
+        ...historyAdapters(this.sql.db, { resolve: resolver(this.name), retentionDays: () => this.world.retentionDays, newResetId: () => `reset_${this.name}_${++this.resetCount}` }),
     ]
     this.engine = new SyncEngine({
       db: this.sql.db,
@@ -407,12 +408,6 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     case 'log_delete':
       await d.ops.deleteLogs((s.threads ?? [s]).map(thread), d.now())
       break
-    case 'tab_open':
-      d.openThreads.add(`${s.board}\t${s.key}`)
-      break
-    case 'tab_close':
-      d.openThreads.delete(`${s.board}\t${s.key}`)
-      break
     case 'prune':
       await d.store.pruneLogs(d.now() - s.older_than_ms, (s.keep ?? []).map((k: Step) => ({ boardUrl: k.board, key: k.key })))
       break
@@ -508,6 +503,11 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     case 'pair_join': {
       // QR とコピー用のコードの中身は K と許可証
       const from = (await (w.devices.get(s.from) as Device).keys.load()) as SyncKeyMaterial
+      // 手元に送るものがあれば確認が出る(SyncController.join と同じ条件。サーバーは 1 つなので URL の違いは起きない)。
+      // asks はその有無の期待、choice は答え。やめる(keep_local)なら鍵も書かず何も送らない
+      const asks = await hasLocalData(d.sql.db, d.adapters, { keys: deriveKeys(from.k), deviceId: '', now: d.now() }, PRESET_URLS)
+      if (s.asks !== undefined) expect(asks, `${c.name}: ${s.device} の参加の確認`).toBe(s.asks)
+      if (asks && s.choice === 'keep_local') break
       await d.engine.pair(from.k, from.ticket)
       await d.sync()
       break

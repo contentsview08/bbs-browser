@@ -48,8 +48,6 @@ class HistoryHost(
     val retentionDays: () -> Int,
     /** リセットの id。ランダムな値 */
     val newResetId: () -> String,
-    /** 画面で開いているスレか。開いているスレのログは、他の端末の削除が届いても消さない(読んでいる最中の画面の下から消えないように) */
-    val isOpen: (String, String) -> Boolean = { _, _ -> false },
 )
 
 private const val THREAD_COLUMNS = "board_url, key, title, read_no, read_at, created_at"
@@ -308,9 +306,9 @@ abstract class ReadAdapterBase(protected val db: SyncSql, protected val host: Hi
             // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
             val pending = pendingRead(db, x.boardUrl, key)
             // 消す前の閲覧しかない履歴の行だけ消す(記録・未処理の読み・閲覧時刻のどれかがリセットより後なら読んでいる)。
-            // 履歴にない行(お気に入りの確認などで取っただけ)と、画面で開いているスレは消さない。
+            // 履歴にない行(お気に入りの確認などで取っただけ)は消さない。画面で開いているスレも消す(画面は適用の結果を受けて閉じる)。
             // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
-            val canDelete = resetWall != null && resetWall - ctx.now <= DAY_MS && pos == 0L && pending == 0L && !host.isOpen(x.boardUrl, key)
+            val canDelete = resetWall != null && resetWall - ctx.now <= DAY_MS && pos == 0L && pending == 0L
             if (canDelete && x.readAt != null && x.readAt <= resetWall!!) {
                 return@flatMap listOf("posts", "threads").map { SqlStatement("DELETE FROM $it WHERE board_url = ? AND key = ?", listOf(x.boardUrl, key)) }
             }

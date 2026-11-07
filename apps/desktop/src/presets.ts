@@ -12,6 +12,9 @@ interface Presets {
 
 const PRESETS = JSON.parse(raw) as Presets
 
+/** 最初から入っている掲示板・板の URL。同期の参加の確認で、手元のデータに数えないもの */
+export const PRESET_URLS: readonly string[] = [...PRESETS.sites.map((s) => s.menu), ...PRESETS.boards.map((b) => b.url)]
+
 /** 足したら、足し終えた id の並びを返す(何も足さなければ undefined) */
 export async function applyPresets(store: LogStore, applied: string[]): Promise<string[] | undefined> {
   const done = new Set(applied)

@@ -3,6 +3,7 @@ package io.github.contentsview08.obb.sync.engine
 import io.github.contentsview08.obb.sync.PairingCode
 import io.github.contentsview08.obb.sync.SyncText
 import io.github.contentsview08.obb.sync.adapters.AdapterContext
+import io.github.contentsview08.obb.sync.adapters.NG_KIND
 import io.github.contentsview08.obb.sync.adapters.SyncAdapter
 import io.github.contentsview08.obb.sync.deriveKeys
 import io.github.contentsview08.obb.sync.encodePairingCode
@@ -15,6 +16,24 @@ import kotlinx.coroutines.CancellationException
 // 画面から使う同期の入口。PC 版の packages/sync/src/engine/controller.ts と同じ順番。使っていない間は鍵保管にも通信にも触らない
 
 const val PAIRING_SHOW_MS = 60_000L
+/** 参加で手元を送る前の確認の種類 */
+const val JOIN_DATA_CONFIRM = "join_data"
+
+/**
+ * 参加のとき、種まきで相手へ送るものが手元にあるか。閲覧履歴・お気に入り(スレ・板)・書き込み履歴・サイト・NG を見る
+ * (設定と上げた画像は数えない)。最初から入っている掲示板・板は、まっさらな端末にもあるので数えない
+ */
+fun hasLocalData(db: SyncSql, adapters: List<SyncAdapter>, ctx: AdapterContext, presetUrls: List<String>): Boolean {
+    fun any(sql: String, params: List<Any?> = emptyList()) = (db.query("SELECT COUNT(*) AS n $sql", params).firstOrNull()?.get("n") as? Long ?: 0L) > 0L
+    fun notPreset(col: String) = if (presetUrls.isEmpty()) "" else " WHERE $col NOT IN (${presetUrls.joinToString(", ") { "?" }})"
+    if (any("FROM threads WHERE read_at IS NOT NULL")) return true
+    if (any("FROM favorite_threads")) return true
+    if (any("FROM post_history")) return true
+    if (any("FROM favorite_boards${notPreset("url")}", presetUrls)) return true
+    if (any("FROM sites${notPreset("menu_url")}", presetUrls)) return true
+    val ng = adapters.firstOrNull { it.kind == NG_KIND } ?: return false
+    return !ng.localLines(ctx).isNullOrEmpty()
+}
 
 /** 利用者の操作を続けられない理由。文は SyncText.message */
 class SyncHostError(val code: String) : Exception(code)
@@ -37,7 +56,7 @@ class SyncStatus(
     val serverUrl: String,
     /** 開発用の上書き。なければ既定値 */
     val serverOverride: String?,
-    val confirmLost: Long?,
+    val confirm: SyncConfirm?,
 )
 
 class SyncController(
@@ -48,6 +67,8 @@ class SyncController(
     private val adapters: List<SyncAdapter>,
     private val now: () -> Long,
     private val allowLocalhost: Boolean = false,
+    /** 最初から入っている掲示板・板の URL。まっさらな端末にもあるので、参加の確認では手元のデータに数えない */
+    private val presetUrls: List<String> = emptyList(),
     /** 鍵保管に値があるかもしれない。使ったことのない人の鍵保管を開かないための控え */
     private val keyHint: () -> Boolean,
     /** /start の窓を開く。許可証か、閉じたら null */
@@ -58,6 +79,8 @@ class SyncController(
     private var engineValue: SyncEngine? = null
     private var engineUrl = ""
     private var spaceHead: String? = null
+    /** 確認を待っている参加。答えが出るまで鍵も URL も書かない */
+    private var pendingJoin: Pair<PairingCode, SyncConfirm>? = null
 
     private fun overrideUrl(): String? = t.state("server_url")
     private fun serverUrl(): String = overrideUrl() ?: defaultServerUrl
@@ -118,12 +141,15 @@ class SyncController(
         }
         val running = engineValue?.state
         @Suppress("UNCHECKED_CAST")
-        val confirm = t.state("pending_confirm")?.let { (parseStrictJson(it) as Map<String, Any?>)["lost"] as? Long ?: 0L }
+        val confirm = pendingJoin?.second ?: t.state("pending_confirm")?.let { raw ->
+            val m = parseStrictJson(raw) as Map<String, Any?>
+            SyncConfirm(m["type"] as? String ?: "", m["lost"] as? Long ?: 0L)
+        }
         return SyncStatus(
             enabled = enabled,
             master = master,
             kinds = kinds,
-            state = if (!enabled || !master) "off" else if (running == null || running == "off") t.state("phase") ?: "idle" else running,
+            state = if (!master) "off" else if (!enabled) (if (pendingJoin != null) "confirm" else "off") else if (running == null || running == "off") t.state("phase") ?: "idle" else running,
             space = if (enabled) spaceHead else null,
             pending = pending,
             lastError = lastError,
@@ -132,7 +158,7 @@ class SyncController(
             lastPushAt = t.state("last_push_at")?.toLongOrNull(),
             serverUrl = serverUrl(),
             serverOverride = overrideUrl(),
-            confirmLost = confirm,
+            confirm = confirm,
         )
     }
 
@@ -159,14 +185,31 @@ class SyncController(
         return encodePairingCode(PairingCode(m.k, serverUrl(), ticket))
     }
 
+    /**
+     * QR・コードで参加する。手元の全部が相手の鍵で読める形で相手のサーバーへ行くので、送るものがあるか、
+     * ふだんと違うサーバーなら先に確認を返す(state が confirm。答えは resolveConfirm)。まっさらな端末で既定のサーバーならそのまま入る
+     */
     suspend fun join(code: String): CycleResult {
         if (!isMasterOn()) throw SyncHostError("sync_off")
         if (isEnabled()) throw SyncHostError("already_on")
         val c = parsePairingCode(code, allowLocalhost)
         loadKeys()
+        pendingJoin = null
+        val otherServer = c.serverUrl != defaultServerUrl
+        val ctx = AdapterContext(deriveKeys(c.k), "", now())
+        if (otherServer || hasLocalData(db, adapters, ctx, presetUrls)) {
+            val confirm = SyncConfirm(JOIN_DATA_CONFIRM, 0L, if (otherServer) java.net.URI(c.serverUrl).host else null)
+            pendingJoin = c to confirm
+            return CycleResult().also { it.state = "confirm"; it.confirm = confirm }
+        }
+        return finishJoin(c)
+    }
+
+    /** URL は pair が通ってから書く。失敗した参加の先を残さない */
+    private suspend fun finishJoin(c: PairingCode): CycleResult {
         engineValue?.halt()
-        writeServerUrl(c.serverUrl)
         pair(c.k, c.ticket)
+        writeServerUrl(c.serverUrl)
         spaceHead = spaceOf(c.k).take(12)
         return run(true)
     }
@@ -190,7 +233,9 @@ class SyncController(
         if (on && isEnabled() && isMasterOn()) run(true)
     }
 
+    /** 鍵と同期の表を消し、サーバーの URL も既定へ戻す。手元のデータは消さない */
     suspend fun leave() {
+        pendingJoin = null
         engine().leave()
         spaceHead = null
     }
@@ -222,6 +267,10 @@ class SyncController(
     suspend fun mismatches(): MismatchSummary? = adapterContext()?.let { syncMismatches(db, onAdapters(), it) }
 
     suspend fun resolveConfirm(choice: String): CycleResult {
+        pendingJoin?.let { (code, _) ->
+            pendingJoin = null
+            return if (choice == "keep_local") CycleResult() else finishJoin(code)
+        }
         engine().resolveConfirm(choice)
         return run(true)
     }

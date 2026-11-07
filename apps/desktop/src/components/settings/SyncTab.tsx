@@ -1,7 +1,7 @@
 // 同期の分類。鍵は main の窓にあるので、ここは頼むだけ
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { encode } from 'uqr'
-import { PAIRING_SHOW_MS, SYNC_GROUP_LABELS, SYNC_GROUPS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncGroup, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
+import { JOIN_DATA_CONFIRM, PAIRING_SHOW_MS, SYNC_GROUP_LABELS, SYNC_GROUPS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncConfirm, type SyncGroup, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
 import { callMain } from '../../host/crossWindow'
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT } from '../DialogParts'
 import ConfirmDialog from '../ConfirmDialog'
@@ -10,6 +10,7 @@ import { SearchContext, Section } from './common'
 
 const errorText = (e: unknown) => syncMessage(e instanceof Error ? e.message.split(':').pop() || e.message : String(e))
 const clock = (ms: number | null) => (ms === null ? '―' : new Date(ms).toLocaleString())
+const JOINED = '同期を始めました'
 
 export function SyncTab() {
   const [st, setSt] = useState<SyncStatus>()
@@ -81,7 +82,21 @@ export function SyncTab() {
             <dt className="text-c-text-muted">{L.status_error}</dt>
             <dd style={st.lastError ? { color: 'var(--c-error)' } : undefined}>{st.lastErrorText ?? '―'}</dd>
           </dl>
-          {st.confirm && (
+          {st.confirm?.type === JOIN_DATA_CONFIRM && (
+            <div className="mb-3 text-sm text-c-text-body">
+              <p className="mb-2">{L.join_ask}</p>
+              {st.confirm.host && <p className="mb-2">{L.join_ask_server.replace('{host}', st.confirm.host)}</p>}
+              <div className="flex gap-2">
+                <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'keep_local'))}>
+                  {L.join_cancel}
+                </button>
+                <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'accept_removal'), JOINED)}>
+                  {L.join_ok}
+                </button>
+              </div>
+            </div>
+          )}
+          {st.confirm && st.confirm.type !== JOIN_DATA_CONFIRM && (
             <div className="mb-3 text-sm text-c-text-body">
               <p className="mb-2">同期のデータで削除された {st.confirm.lost} 件が、この端末からも消えます。</p>
               <div className="flex gap-2">
@@ -96,7 +111,7 @@ export function SyncTab() {
           )}
           <div className="flex flex-wrap gap-2 mb-3">
             {(!st.enabled || needTicket) && (
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncStart'), '同期を始めました')}>
+              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncStart'), JOINED)}>
                 {L.start}
               </button>
             )}
@@ -116,7 +131,7 @@ export function SyncTab() {
               </button>
             )}
           </div>
-          {!st.enabled && (
+          {!st.enabled && !st.confirm && (
             <div className="flex gap-2 mb-3">
               <input className={`${INPUT} flex-1`} value={code} placeholder="obb1." autoComplete="off" spellCheck={false} onChange={(e) => setCode(e.target.value)} />
               <button
@@ -125,9 +140,11 @@ export function SyncTab() {
                 disabled={busy || code.trim() === ''}
                 onClick={() =>
                   void act(async () => {
-                    await callMain('syncJoin', code)
+                    // 手元に送るものがあるときは確認で止まる(状態の欄に出る)。「同期を始めました」は参加したときだけ
+                    const r = await callMain<{ confirm: SyncConfirm | null }>('syncJoin', code)
                     setCode('')
-                  }, '同期を始めました')
+                    if (!r.confirm && !(await callMain<SyncStatus>('syncStatus')).lastError) setMessage(JOINED)
+                  })
                 }
               >
                 {L.join}

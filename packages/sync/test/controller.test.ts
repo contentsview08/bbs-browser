@@ -4,7 +4,10 @@ import initSqlJs from 'sql.js'
 import { describe, expect, it } from 'vitest'
 import { LogStore, UserOps, type SqlDb } from '../../logstore/src/index'
 import * as S from '../src/index'
+import presets from '../../presets/sites.json'
 import { FakeSyncServer, signTicket } from './fakeServer'
+
+const PRESET_URLS = [...presets.sites.map((x) => x.menu), ...presets.boards.map((x) => x.url)]
 
 const dir = new URL('../../logstore/migrations/', import.meta.url)
 const migrations = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(f, dir), 'utf-8'))
@@ -75,6 +78,7 @@ function device(server: TestServer, o: { keyFail?: boolean; window?: (url: strin
     defaultServerUrl: URL_A,
     adapters: [new S.FavoriteThreadAdapter(db, (u) => ({ boardUrl: u, connectorId: '2ch-compat' }))],
     now: () => server.nowForTest(),
+    presetUrls: PRESET_URLS,
     keyHint: () => c.material !== null,
     openStartWindow: async (url) => {
       c.windows.push(url)
@@ -241,14 +245,63 @@ describe('端末の追加', () => {
     await expect(a.ctl.join((await a.ctl.pairingCode()).code)).rejects.toMatchObject({ code: 'already_on' })
   })
 
-  it('コードのサーバーへ行く', async () => {
+  it('ふだんと違うサーバーのコードは確認を出し、参加するとそのサーバーへ行く', async () => {
     const server = newServer()
     const b = device(server)
     const k = new Uint8Array(32).fill(3)
     const ticket = signTicket(S.spaceId(S.deriveKeys(k).auth_token), 4_000_000_000)
-    await b.ctl.join(S.encodePairingCode({ k, serverUrl: 'https://other.test', ticket }))
+    const r = await b.ctl.join(S.encodePairingCode({ k, serverUrl: 'https://other.test', ticket }))
+    expect(r.state).toBe('confirm')
+    expect(r.confirm).toEqual({ type: 'join_data', lost: 0, host: 'other.test' })
+    // 答えが出るまで鍵も URL も書かず、通信もしない
+    const st = await b.ctl.status()
+    expect(st.state).toBe('confirm')
+    expect(st.confirm?.type).toBe('join_data')
+    expect(st.serverOverride).toBeNull()
+    expect(b.c.material).toBeNull()
+    expect(b.c.requests).toHaveLength(0)
+    await b.ctl.resolveConfirm('accept_removal')
     expect((await b.ctl.status()).serverOverride).toBe('https://other.test')
+    expect(b.c.requests.length).toBeGreaterThan(0)
     expect(b.c.requests.every((r) => r.url.startsWith('https://other.test/'))).toBe(true)
+  })
+
+  it('手元にデータがあれば確認を出し、やめると何も送らない', async () => {
+    const server = newServer()
+    const a = device(server)
+    const b = device(server)
+    await a.ctl.start()
+    const { code } = await a.ctl.pairingCode()
+    await b.ops.favoriteThreadAdd(thread('9'))
+    const r = await b.ctl.join(code)
+    expect(r.confirm).toEqual({ type: 'join_data', lost: 0, host: null })
+    await b.ctl.resolveConfirm('keep_local')
+    const st = await b.ctl.status()
+    expect(st.enabled).toBe(false)
+    expect(st.state).toBe('off')
+    expect(st.confirm).toBeNull()
+    expect(b.c.material).toBeNull()
+    expect(b.c.requests).toHaveLength(0)
+    expect((await b.store.listFavoriteThreads()).map((f) => f.thread.key)).toEqual(['9'])
+    // もう一度読めば、参加できる
+    await b.ctl.join(code)
+    await b.ctl.resolveConfirm('accept_removal')
+    expect((await b.ctl.status()).enabled).toBe(true)
+    await a.ctl.syncNow()
+    expect((await a.store.listFavoriteThreads()).map((f) => f.thread.key)).toEqual(['9'])
+  })
+
+  it('最初から入っている掲示板・板は手元のデータに数えない', async () => {
+    const server = newServer()
+    const a = device(server)
+    const b = device(server)
+    await a.ctl.start()
+    // 移行の SQL が入れる 5ch とエッヂが残っている
+    expect(await b.db.select('SELECT 1 FROM sites')).toHaveLength(1)
+    expect(await b.db.select('SELECT 1 FROM favorite_boards')).toHaveLength(1)
+    const r = await b.ctl.join((await a.ctl.pairingCode()).code)
+    expect(r.confirm).toBeUndefined()
+    expect((await b.ctl.status()).enabled).toBe(true)
   })
 })
 
@@ -315,7 +368,7 @@ describe('前面の同期', () => {
 })
 
 describe('離脱とサーバーの URL', () => {
-  it('手元のお気に入りを残し、鍵と同期の表を消し、URL の上書きは残す', async () => {
+  it('手元のお気に入りを残し、鍵と同期の表を消し、URL は既定へ戻す', async () => {
     const a = device(newServer())
     await a.ctl.setServerUrl('https://other.test')
     await a.ctl.start()
@@ -325,7 +378,7 @@ describe('離脱とサーバーの URL', () => {
     expect(a.c.material).toBeNull()
     expect(await a.db.select('SELECT * FROM sync_records')).toHaveLength(0)
     expect((await a.store.listFavoriteThreads()).length).toBe(1)
-    expect((await a.ctl.status()).serverOverride).toBe('https://other.test')
+    expect((await a.ctl.status()).serverOverride).toBeNull()
     const n = a.c.requests.length
     await a.ops.favoriteThreadAdd(thread('2'))
     await a.ctl.foreground()

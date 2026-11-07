@@ -60,6 +60,9 @@ interface SyncKeyStore {
     suspend fun clear()
 }
 
+/** 画面に出す確認。join・rebase は適用の前に止まる確認、join_data は参加で手元を送る前の確認(host はふだんと違うサーバーのとき) */
+class SyncConfirm(val type: String, val lost: Long, val host: String? = null)
+
 class CycleResult {
     var state = "off"
     var pulled = 0
@@ -72,6 +75,9 @@ class CycleResult {
 
     /** 周を始めなかった理由 */
     var skipped: String? = null
+
+    /** 参加で手元を送る前に止まった確認(周は回していない) */
+    var confirm: SyncConfirm? = null
 }
 
 private class SpaceGone(val newEpoch: String? = null) : Exception("space_gone")
@@ -354,8 +360,8 @@ class SyncEngine(
         }
     }
 
-    /** サーバーの URL の上書きは同期の中身ではないので残す */
-    private fun clearTables() = db.batch(listOf(SqlStatement("DELETE FROM sync_records"), SqlStatement("DELETE FROM sync_ops"), SqlStatement("DELETE FROM sync_state WHERE key <> 'server_url'")))
+    /** サーバーの URL の上書きも消す。参加のコードで入った先に、やめたあとも向いたままにしない */
+    private fun clearTables() = db.batch(listOf(SqlStatement("DELETE FROM sync_records"), SqlStatement("DELETE FROM sync_ops"), SqlStatement("DELETE FROM sync_state")))
 
     /**
      * 確認の答え。合流で keep_local は「進まない」なのでやめる。

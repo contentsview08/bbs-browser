@@ -40,6 +40,12 @@ import java.nio.file.Files
 import java.nio.file.Paths
 
 // 画面の入口の決まり。PC 版の packages/sync/test/controller.test.ts と同じことを確かめる
+/** 最初から入っている掲示板・板。参加の確認で手元のデータに数えない */
+@Suppress("UNCHECKED_CAST")
+private val PRESET_URLS: List<String> = (parseStrictJson(File("../../../packages/presets/sites.json").readText()) as Map<String, Any?>).let { p ->
+    (p["sites"] as List<Map<String, Any?>>).map { it["menu"] as String } + (p["boards"] as List<Map<String, Any?>>).map { it["url"] as String }
+}
+
 class SyncHostTest {
     private fun resource(name: String) = javaClass.classLoader!!.getResourceAsStream(name)!!.bufferedReader(Charsets.UTF_8).use { it.readText() }
 
@@ -79,6 +85,7 @@ class SyncHostTest {
             defaultServerUrl = "https://sync.test",
             adapters = listOf(FavoriteThreadAdapter(db) { ResolvedBoard(it, "2ch-compat") }),
             now = now,
+            presetUrls = PRESET_URLS,
             keyHint = { keys.value != null },
             openStartWindow = { url -> windows += url; window(url) },
         )
@@ -204,6 +211,66 @@ class SyncHostTest {
         assertEquals(emptyList<String>(), a.favorites())
     }
 
+    @Test fun ふだんと違うサーバーのコードは確認を出し参加するとそのサーバーへ行く() = runBlocking {
+        val b = Device(server(), { clock })
+        val k = ByteArray(32) { 3 }
+        val ticket = signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000L)
+        val r = b.ctl.join(encodePairingCode(PairingCode(k, "https://other.test", ticket)))
+        assertEquals("confirm", r.state)
+        assertEquals("join_data", r.confirm?.type)
+        assertEquals("other.test", r.confirm?.host)
+        // 答えが出るまで鍵も URL も書かず、通信もしない
+        val st = b.ctl.status()
+        assertEquals("confirm", st.state)
+        assertEquals("join_data", st.confirm?.type)
+        assertNull(st.serverOverride)
+        assertNull(b.keys.value)
+        assertEquals(0, b.requests.size)
+        b.ctl.resolveConfirm("accept_removal")
+        assertEquals("https://other.test", b.ctl.status().serverOverride)
+        assertTrue(b.requests.isNotEmpty())
+        assertTrue(b.requests.all { it.url.startsWith("https://other.test/") })
+    }
+
+    @Test fun 手元にデータがあれば確認を出しやめると何も送らない() = runBlocking {
+        val s = server()
+        val a = Device(s, { clock })
+        val b = Device(s, { clock })
+        a.ctl.start()
+        val code = a.ctl.pairingCode()
+        b.ops.setFavoriteThreadNow(t("9"), "t9", true, clock)
+        val r = b.ctl.join(code)
+        assertEquals("join_data", r.confirm?.type)
+        assertNull(r.confirm?.host)
+        b.ctl.resolveConfirm("keep_local")
+        val st = b.ctl.status()
+        assertFalse(st.enabled)
+        assertEquals("off", st.state)
+        assertNull(st.confirm)
+        assertNull(b.keys.value)
+        assertEquals(0, b.requests.size)
+        assertEquals(listOf("9"), b.favorites())
+        // もう一度読めば、参加できる
+        b.ctl.join(code)
+        b.ctl.resolveConfirm("accept_removal")
+        assertTrue(b.ctl.status().enabled)
+        a.ctl.syncNow()
+        assertEquals(listOf("9"), a.favorites())
+    }
+
+    @Test fun 最初から入っている掲示板と板は手元のデータに数えない() = runBlocking {
+        val s = server()
+        val a = Device(s, { clock })
+        val b = Device(s, { clock })
+        a.ctl.start()
+        // 移行の SQL が入れる 5ch とエッヂが残っている
+        assertEquals(1, b.db.query("SELECT 1 FROM sites").size)
+        assertEquals(1, b.db.query("SELECT 1 FROM favorite_boards").size)
+        val r = b.ctl.join(a.ctl.pairingCode())
+        assertNull(r.confirm)
+        assertTrue(b.ctl.status().enabled)
+    }
+
     @Test fun 通信できなくても手元は残り戻ると追いつく() = runBlocking {
         val s = server()
         val a = Device(s, { clock })
@@ -223,7 +290,7 @@ class SyncHostTest {
         assertEquals(listOf("1"), b.favorites())
     }
 
-    @Test fun 離脱で手元を残しURLの上書きは残す() = runBlocking {
+    @Test fun 離脱で手元を残しURLは既定へ戻す() = runBlocking {
         val d = Device(server(), { clock })
         d.ctl.setServerUrl("https://other.test")
         d.ctl.start()
@@ -233,7 +300,7 @@ class SyncHostTest {
         assertNull(d.keys.value)
         assertEquals(0, d.db.query("SELECT * FROM sync_records").size)
         assertEquals(listOf("1"), d.favorites())
-        assertEquals("https://other.test", d.ctl.status().serverOverride)
+        assertNull(d.ctl.status().serverOverride)
         val n = d.requests.size
         d.ops.setFavoriteThreadNow(t("2"), "t2", true, clock)
         d.ctl.foreground()

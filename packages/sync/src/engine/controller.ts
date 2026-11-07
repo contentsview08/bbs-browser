@@ -1,9 +1,10 @@
 // 画面から使う同期の入口。鍵・窓・HTTP は親が渡す。使っていない間は鍵保管にも通信にも触らない
+import { NG_KIND } from '../adapters/ng'
 import type { AdapterContext, SyncAdapter } from '../adapters/types'
 import { deriveKeys, generateMasterKey, spaceId } from '../keys'
 import { syncMessage } from '../messages'
-import { encodePairingCode, parsePairingCode } from '../pairing'
-import { type CycleResult, type ConfirmChoice, SyncEngine, type SyncKeyStore } from './engine'
+import { encodePairingCode, parsePairingCode, type PairingCode } from '../pairing'
+import { type CycleResult, type ConfirmChoice, type SyncConfirm, SyncEngine, type SyncKeyStore } from './engine'
 import type { CycleReason, SyncPace } from './scheduler'
 import { masterOn, offKindsOf, parseSwitches, type SyncGroup, type SyncSwitches } from './kinds'
 import { syncMismatches, syncSummary, type MismatchSummary, type SyncSummary } from './summary'
@@ -11,6 +12,8 @@ import { delState, setState, SyncTables, type SqlStatement, type SyncSqlDb } fro
 import { checkServerUrl, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
 export const PAIRING_SHOW_MS = 60_000
+/** 参加で手元を送る前の確認の種類 */
+export const JOIN_DATA_CONFIRM = 'join_data'
 
 /** 利用者の操作を続けられない理由。文は syncMessage */
 export class SyncHostError extends Error {
@@ -38,7 +41,7 @@ export interface SyncStatus {
   serverUrl: string
   /** 開発用の上書き。なければ既定値 */
   serverOverride: string | null
-  confirm: { type: string; lost: number } | null
+  confirm: SyncConfirm | null
 }
 
 export interface SyncControllerDeps {
@@ -50,6 +53,8 @@ export interface SyncControllerDeps {
   now: () => number
   allowLocalhost?: boolean
   leaseOwner?: string
+  /** 最初から入っている掲示板・板の URL。まっさらな端末にもあるので、参加の確認では手元のデータに数えない */
+  presetUrls?: readonly string[]
   /** 鍵保管に値があるかもしれない。使ったことのない人の鍵保管を起動のたびに開かないための控え */
   keyHint: () => boolean
   /** /start の窓を開く。許可証か、閉じたら null */
@@ -57,11 +62,29 @@ export interface SyncControllerDeps {
   onCycle?: (r: CycleResult) => void
 }
 
+/**
+ * 参加のとき、種まきで相手へ送るものが手元にあるか。閲覧履歴・お気に入り(スレ・板)・書き込み履歴・サイト・NG を見る
+ * (設定と上げた画像は数えない)。最初から入っている掲示板・板は、まっさらな端末にもあるので数えない
+ */
+export async function hasLocalData(db: SyncSqlDb, adapters: readonly SyncAdapter[], ctx: AdapterContext, presetUrls: readonly string[]): Promise<boolean> {
+  const any = async (sql: string, params: unknown[] = []) => Number((await db.select<{ n: number }>(`SELECT COUNT(*) AS n ${sql}`, params))[0]?.n ?? 0) > 0
+  const notPreset = (col: string) => (presetUrls.length > 0 ? ` WHERE ${col} NOT IN (${presetUrls.map((_, i) => `$${i + 1}`).join(', ')})` : '')
+  if (await any('FROM threads WHERE read_at IS NOT NULL')) return true
+  if (await any('FROM favorite_threads')) return true
+  if (await any('FROM post_history')) return true
+  if (await any(`FROM favorite_boards${notPreset('url')}`, [...presetUrls])) return true
+  if (await any(`FROM sites${notPreset('menu_url')}`, [...presetUrls])) return true
+  const ng = adapters.find((a) => a.kind === NG_KIND)
+  return ((await ng?.localLines?.(ctx)) ?? []).length > 0
+}
+
 export class SyncController {
   private readonly t: SyncTables
   private engineValue: SyncEngine | null = null
   private engineUrl = ''
   private spaceHead: string | null = null
+  /** 確認を待っている参加。答えが出るまで鍵も URL も書かない */
+  private pendingJoin: { code: PairingCode; confirm: SyncConfirm } | null = null
 
   constructor(private readonly deps: SyncControllerDeps) {
     this.t = new SyncTables(deps.db)
@@ -155,7 +178,7 @@ export class SyncController {
       enabled,
       master,
       kinds,
-      state: !master ? 'off' : enabled ? (this.engineValue?.state === 'off' || !this.engineValue ? ((await this.t.state('phase')) ?? 'idle') : this.engineValue.state) : 'off',
+      state: !master ? 'off' : enabled ? (this.engineValue?.state === 'off' || !this.engineValue ? ((await this.t.state('phase')) ?? 'idle') : this.engineValue.state) : this.pendingJoin ? 'confirm' : 'off',
       space: enabled ? this.spaceHead : null,
       pending: Number(row?.n ?? 0),
       lastError,
@@ -164,7 +187,7 @@ export class SyncController {
       lastPushAt: await num('last_push_at'),
       serverUrl: await this.serverUrl(),
       serverOverride: await this.overrideUrl(),
-      confirm: rawConfirm === null ? null : (JSON.parse(rawConfirm) as { type: string; lost: number }),
+      confirm: this.pendingJoin?.confirm ?? (rawConfirm === null ? null : (JSON.parse(rawConfirm) as SyncConfirm)),
     }
   }
 
@@ -194,14 +217,31 @@ export class SyncController {
     return { code: encodePairingCode({ k: m.k, serverUrl: await this.serverUrl(), ticket: m.ticket }), showMs: PAIRING_SHOW_MS }
   }
 
+  /**
+   * QR・コードで参加する。手元の全部が相手の鍵で読める形で相手のサーバーへ行くので、送るものがあるか、
+   * ふだんと違うサーバーなら先に確認を返す(state が confirm。答えは resolveConfirm)。まっさらな端末で既定のサーバーならそのまま入る
+   */
   async join(code: string): Promise<CycleResult> {
     if (!(await this.isMasterOn())) throw new SyncHostError('sync_off')
     if (await this.isEnabled()) throw new SyncHostError('already_on')
     const c = parsePairingCode(code, this.deps.allowLocalhost)
     await this.loadKeys()
+    this.pendingJoin = null
+    const otherServer = c.serverUrl !== this.deps.defaultServerUrl
+    const ctx: AdapterContext = { keys: deriveKeys(c.k), deviceId: '', now: this.deps.now() }
+    if (otherServer || (await hasLocalData(this.deps.db, this.deps.adapters, ctx, this.deps.presetUrls ?? []))) {
+      const confirm: SyncConfirm = { type: JOIN_DATA_CONFIRM, lost: 0, host: otherServer ? new URL(c.serverUrl).host : null }
+      this.pendingJoin = { code: c, confirm }
+      return { state: 'confirm', pulled: 0, pushed: 0, conflicts: 0, applied: {}, confirm }
+    }
+    return this.finishJoin(c)
+  }
+
+  /** URL は pair が通ってから書く。失敗した参加の先を残さない */
+  private async finishJoin(c: PairingCode): Promise<CycleResult> {
     await this.engineValue?.halt()
-    await this.writeServerUrl(c.serverUrl)
     await this.pair(c.k, c.ticket)
+    await this.writeServerUrl(c.serverUrl)
     this.spaceHead = spaceId(deriveKeys(c.k).auth_token).slice(0, 12)
     return this.run(true)
   }
@@ -227,7 +267,9 @@ export class SyncController {
     if (on && (await this.isEnabled()) && (await this.isMasterOn())) await this.run(true)
   }
 
+  /** 鍵と同期の表を消し、サーバーの URL も既定へ戻す。手元のデータは消さない */
   async leave(): Promise<void> {
+    this.pendingJoin = null
     await (await this.engine()).leave()
     this.spaceHead = null
   }
@@ -273,6 +315,12 @@ export class SyncController {
   }
 
   async resolveConfirm(choice: ConfirmChoice): Promise<CycleResult> {
+    const join = this.pendingJoin
+    if (join) {
+      this.pendingJoin = null
+      if (choice === 'keep_local') return { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {} }
+      return this.finishJoin(join.code)
+    }
     await (await this.engine()).resolveConfirm(choice)
     return this.run(true)
   }

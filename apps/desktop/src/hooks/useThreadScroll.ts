@@ -64,6 +64,16 @@ const heights = new HeightCache()
 const closedPositions = new PositionMemory()
 /** タブを閉じたときの位置(開く位置を決めるときに見る) */
 export const closedPosition = (threadKey: string) => closedPositions.get(threadKey)
+/** ログを消したスレ。閉じるときの位置の覚えを捨てたあとに、閉じられるスレ表示が書き戻さないように(開き直したら外す) */
+const droppedThreads = new Set<string>()
+/**
+ * 覚えた位置を捨てる(ログの削除)。開き直すと先頭か既読の次から始まる。
+ * タブを閉じる処理と同じ描画で呼ばれ、スレ表示はそのあとで外れるので、外れるときの保存も止める
+ */
+export function forgetClosedPosition(threadKey: string) {
+  closedPositions.delete(threadKey)
+  droppedThreads.add(threadKey)
+}
 
 /** スクロール領域ごとの、いま動かしている(留めている)のをやめる関数。新しく動かすときに前のをやめる */
 const moving = new WeakMap<HTMLElement, () => void>()
@@ -635,10 +645,13 @@ export function useThreadScroll(o: Options) {
     reportRead()
   }, [log, unreadFrom, byNo, rootRef, headerOffset, reportRead, scrollToUnread])
 
-  // 画面から外れるときに、読んでいた位置を渡す
+  // 開き直したスレは、閉じるときの位置をまた覚える
+  useEffect(() => void droppedThreads.delete(latest.current.threadKey), [])
+
+  // 画面から外れるときに、読んでいた位置を渡す(ログを消したスレは渡さない)
   useEffect(
     () => () => {
-      if (!position.current) return
+      if (!position.current || droppedThreads.has(latest.current.threadKey)) return
       latest.current.onSavePosition(position.current)
       closedPositions.set(latest.current.threadKey, position.current)
     },

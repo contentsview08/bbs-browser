@@ -97,6 +97,8 @@ import io.github.contentsview08.obb.data.SyncQrRead
 import io.github.contentsview08.obb.data.syncStartNav
 import io.github.contentsview08.obb.data.SyncStartNav
 import io.github.contentsview08.obb.sync.SyncText
+import io.github.contentsview08.obb.sync.engine.CycleResult
+import io.github.contentsview08.obb.sync.engine.JOIN_DATA_CONFIRM
 import io.github.contentsview08.obb.sync.engine.PAIRING_SHOW_MS
 import io.github.contentsview08.obb.sync.engine.SYNC_GROUPS
 import io.github.contentsview08.obb.sync.engine.MismatchSummary
@@ -111,6 +113,7 @@ import java.util.Date
 
 private fun label(key: String) = SyncText.LABELS.getValue(key)
 private fun clock(ms: Long?) = if (ms == null) "―" else DateFormat.getDateTimeInstance().format(Date(ms))
+private const val JOINED = "同期を始めました"
 
 @Composable
 private fun SyncButton(text: String, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
@@ -161,6 +164,14 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
             after()
         }
     }
+    /** 参加。手元に送るものがあるか、ふだんと違うサーバーなら確認で止まる(状態の欄に出る)ので、done は参加したときだけ */
+    fun join(done: String, f: suspend () -> CycleResult) {
+        var r: CycleResult? = null
+        act(after = {
+            scanning = false
+            if (r != null && r?.confirm == null && st?.lastError == null) message = done
+        }) { r = f() }
+    }
     val s = st ?: return
     val needTicket = s.lastError?.startsWith("ticket_") == true
     Group(note = label("intro")) {
@@ -177,16 +188,23 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
             StatusRow("最後の送信", clock(s.lastPushAt))
             StatusRow(label("status_error"), s.lastErrorText ?: "―", if (s.lastError != null) Palette.markDanger else Palette.textMuted)
         }
-        s.confirmLost?.let { lost ->
+        s.confirm?.let { c ->
             Group {
-                Text("同期のデータで削除された $lost 件が、この端末からも消えます。", Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
-                SyncButton("消さない", !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
-                SyncButton("進める", !busy) { act { vm.syncCtl.resolveConfirm("accept_removal") } }
+                if (c.type == JOIN_DATA_CONFIRM) {
+                    Text(label("join_ask"), Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
+                    c.host?.let { Text(label("join_ask_server").replace("{host}", it), Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), color = Palette.textStrong, fontSize = 14.sp) }
+                    SyncButton(label("join_cancel"), !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
+                    SyncButton(label("join_ok"), !busy) { act(JOINED) { vm.syncCtl.resolveConfirm("accept_removal"); vm.reloadSyncedScreens() } }
+                } else {
+                    Text("同期のデータで削除された ${c.lost} 件が、この端末からも消えます。", Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
+                    SyncButton("消さない", !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
+                    SyncButton("進める", !busy) { act { vm.syncCtl.resolveConfirm("accept_removal") } }
+                }
             }
         }
         Group {
-            if (!s.enabled || needTicket) SyncButton(label("start"), !busy) { act("同期を始めました") { vm.syncCtl.start(); vm.reloadSide() } }
-            if (!s.enabled) SyncButton(label("add_device"), !busy) { scanning = true }
+            if (!s.enabled || needTicket) SyncButton(label("start"), !busy) { act(JOINED) { vm.syncCtl.start(); vm.reloadSide() } }
+            if (!s.enabled && s.confirm == null) SyncButton(label("add_device"), !busy) { scanning = true }
             if (s.enabled) {
                 SyncButton(label("sync_now"), !busy) { act { vm.syncCtl.syncNow(); vm.reloadSyncedScreens() } }
                 SyncButton(label("add_device"), !busy) { act { pairing = vm.syncCtl.pairingCode() } }
@@ -221,9 +239,9 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
         space = s.space,
         pending = s.pending,
         onDismiss = { scanning = false },
-        onJoin = { read -> act("同期を始めました", after = { scanning = false }) { vm.syncCtl.join(read) } },
+        onJoin = { read -> join(JOINED) { vm.syncCtl.join(read) } },
         onMove = { read ->
-            act("同期を移りました", after = { scanning = false }) {
+            join("同期を移りました") {
                 vm.syncCtl.leave()
                 // やめるとスイッチは既定へ戻るので、続けて入るためにオンにする
                 vm.syncCtl.setMaster(true)
@@ -233,7 +251,7 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
         onOwn = {
             scanning = false
             if (s.enabled) act { pairing = vm.syncCtl.pairingCode() }
-            else act("同期を始めました") {
+            else act(JOINED) {
                 vm.syncCtl.start()
                 vm.reloadSide()
                 // 領域を作れなかったときは、相手に渡しても使えない

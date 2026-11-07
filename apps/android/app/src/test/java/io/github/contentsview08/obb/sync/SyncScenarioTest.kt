@@ -41,6 +41,7 @@ import io.github.contentsview08.obb.sync.engine.SyncRequest
 import io.github.contentsview08.obb.sync.engine.SyncResponse
 import io.github.contentsview08.obb.sync.engine.CycleResult
 import io.github.contentsview08.obb.sync.engine.checkServerUrl
+import io.github.contentsview08.obb.sync.engine.hasLocalData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -95,6 +96,11 @@ private class World(o: Map<String, Any?>) {
 }
 
 private val ALLOW = SettingAllowlist(java.io.File("../../../packages/sync/settings-allowlist.json").readText())
+/** 最初から入っている掲示板・板。参加の確認で手元のデータに数えない(SyncController と同じ) */
+@Suppress("UNCHECKED_CAST")
+private val PRESET_URLS: List<String> = (parseStrictJson(java.io.File("../../../packages/presets/sites.json").readText()) as Map<String, Any?>).let { p ->
+    (p["sites"] as List<Map<String, Any?>>).map { it["menu"] as String } + (p["boards"] as List<Map<String, Any?>>).map { it["url"] as String }
+}
 
 /** settings 表の置き場。TS の settingsTableHost と同じ。スマホの実物は Prefs の裏 */
 @Suppress("UNCHECKED_CAST")
@@ -163,8 +169,6 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
     var idCount = 0
     var requestCount = 0
     var resetCount = 0
-    /** 画面で開いているスレ(tab_open / tab_close) */
-    val openThreads = HashSet<String>()
     var adapters: List<SyncAdapter> = emptyList()
 
     init {
@@ -235,7 +239,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
             NgAdapter(SyncNgHost({ ng }, { ng = applyNgDiff(ng, it) }, ::dateOf)),
             PostAdapter(sql, resolver(name)),
             SettingAdapter(ALLOW, TableSettingsHost(sql, if (name == "phone") "phone" else "pc"), sql),
-        ) + historyAdapters(sql, HistoryHost(resolver(name), { world.retentionDays }, { "reset_${name}_${++resetCount}" }, { board, key -> "$board\t$key" in openThreads }))
+        ) + historyAdapters(sql, HistoryHost(resolver(name), { world.retentionDays }, { "reset_${name}_${++resetCount}" }))
         engine = SyncEngine(
             db = sql,
             keyStore = keys,
@@ -408,8 +412,6 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "view" -> d!!.ops.threadViewNow(thread(s), d.now())
         "view_remove" -> d!!.ops.historyRemoveNow(thread(s), d.now())
         "log_delete" -> d!!.ops.deleteLogsNow(((s["threads"] as List<Map<String, Any?>>?) ?: listOf(s)).map(::thread), d.now())
-        "tab_open" -> d!!.openThreads += "${s["board"]}\t${s["key"]}"
-        "tab_close" -> d!!.openThreads -= "${s["board"]}\t${s["key"]}"
         "prune" -> {
             val kept = (s["keep"] as List<Map<String, Any?>>?).orEmpty().map { "${it["board"]}\t${it["key"]}" }.toSet()
             val rows = d!!.sql.query(ThreadLogSql.PRUNE_TARGETS, listOf(d.now() - s["older_than_ms"] as Long))
@@ -493,7 +495,12 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "pair_join" -> {
             // QR とコピー用のコードの中身は K と許可証
             val from = w.devices.getValue(s["from"] as String).keys.value!!
-            d!!.engine.pair(from.k, from.ticket)
+            // 手元に送るものがあれば確認が出る(SyncController.join と同じ条件。サーバーは 1 つなので URL の違いは起きない)。
+            // asks はその有無の期待、choice は答え。やめる(keep_local)なら鍵も書かず何も送らない
+            val asks = hasLocalData(d!!.sql, d.adapters, AdapterContext(deriveKeys(from.k), "", d.now()), PRESET_URLS)
+            s["asks"]?.let { assertEquals("$label: ${s["device"]} の参加の確認", it, asks) }
+            if (asks && s["choice"] == "keep_local") return
+            d.engine.pair(from.k, from.ticket)
             d.sync()
         }
         "start_page" -> d!!.engine.setTicket(d.startPage(material().k))

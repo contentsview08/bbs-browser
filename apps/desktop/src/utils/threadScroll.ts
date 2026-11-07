@@ -234,6 +234,9 @@ export class PositionMemory {
     this.map.set(thread, pos)
     while (this.map.size > this.limit) this.map.delete(this.map.keys().next().value!)
   }
+  delete(thread: string) {
+    this.map.delete(thread)
+  }
 }
 
 /**

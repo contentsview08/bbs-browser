@@ -24,6 +24,10 @@ describe('openTarget: 開いたときの行き先', () => {
     expect(openTarget(base)).toEqual({ kind: 'top' })
   })
 
+  it('ログを消したスレを開き直すと、覚えた位置がなく既読も 0 なので先頭', () => {
+    expect(openTarget({ ...base, saved: undefined, closed: undefined, unreadFrom: 1, hasUnreadPost: true })).toEqual({ kind: 'top' })
+  })
+
   it('読みかけのスレは最初の未読へ', () => {
     expect(openTarget({ ...base, unreadFrom: 51, hasUnreadPost: true })).toEqual({ kind: 'unread', no: 51 })
   })
@@ -277,6 +281,13 @@ describe('PositionMemory', () => {
     m.set('c', { no: 4, offset: 0 })
     expect(m.get('b')).toBeUndefined()
     expect(m.get('a')?.no).toBe(3)
+  })
+
+  it('捨てたスレは覚えていない', () => {
+    const m = new PositionMemory()
+    m.set('a', { no: 1, offset: 0 })
+    m.delete('a')
+    expect(m.get('a')).toBeUndefined()
   })
 })
 

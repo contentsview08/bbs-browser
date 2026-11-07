@@ -4,6 +4,7 @@ import type { LogStore } from '@bbs-browser/logstore'
 import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type SyncGroup } from '@bbs-browser/sync'
 import { broadcast } from '../host/crossWindow'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
+import { PRESET_URLS } from '../presets'
 import { isAppVisible } from '../utils/visibility'
 
 /** 適用で変わった種類ごとに、画面が読み直すもの。NG は設定の流れで写る */
@@ -13,11 +14,9 @@ export interface SyncReloaders {
   sites: (s: LogStore) => void
   uploads: (s: LogStore) => void
   posts: (s: LogStore) => void
-  /** 閲覧履歴と既読 */
+  /** 閲覧履歴と既読(行が消えたスレのタブを閉じるのもここ) */
   reads: (s: LogStore) => void
   retentionDays: () => number
-  /** 画面で開いているスレか(開いているスレのログは、他の端末の削除が届いても消さない) */
-  isOpen: (boardUrl: string, key: string) => boolean
 }
 
 export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
@@ -39,11 +38,12 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
         new NgAdapter(syncNgHost(store.db)),
         new PostAdapter(store.db, resolveSyncBoard),
         new SettingAdapter(syncSettingsHost(store.db), store.db),
-        ...historyAdapters(store.db, { resolve: resolveSyncBoard, retentionDays: () => applied.current.retentionDays(), newResetId: () => crypto.randomUUID().replaceAll('-', ''), isOpen: (b, k) => applied.current.isOpen(b, k) }),
+        ...historyAdapters(store.db, { resolve: resolveSyncBoard, retentionDays: () => applied.current.retentionDays(), newResetId: () => crypto.randomUUID().replaceAll('-', '') }),
       ],
       now: Date.now,
       allowLocalhost: import.meta.env.DEV,
       leaseOwner: crypto.randomUUID(),
+      presetUrls: PRESET_URLS,
       keyHint: syncKeyHint,
       openStartWindow: openSyncStartWindow,
       onCycle: (r: CycleResult) => {
@@ -134,4 +134,5 @@ const need = (c: SyncController | undefined): SyncController => {
   return c
 }
 
-const summary = (r: CycleResult) => ({ state: r.state, pulled: r.pulled, pushed: r.pushed })
+/** 設定の窓へ返す分。confirm は参加で手元を送る前の確認(画面が出す) */
+const summary = (r: CycleResult) => ({ state: r.state, pulled: r.pulled, pushed: r.pushed, confirm: r.confirm ?? null })

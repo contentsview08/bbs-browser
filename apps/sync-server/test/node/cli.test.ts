@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Miniflare } from 'miniflare'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkKeyFile, keygen, run } from '../../scripts/admin.mjs'
+import { checkKeyFile, keygen, run, summarize } from '../../scripts/admin.mjs'
 import { ORIGIN, startServer, testOp, withLength } from './server'
 
 const NOW = 1_800_000_000_000
@@ -88,5 +88,27 @@ describe('管理の CLI', () => {
     // WSL の /mnt/c や Windows では mode が効かないので、効く環境でだけ確かめる
     if ((statSync(loose).mode & 0o077) !== 0) expect(() => checkKeyFile(loose, 'linux')).toThrow('権限')
     expect(() => checkKeyFile(loose, 'win32')).not.toThrow()
+  })
+})
+
+describe('stats のまとめ', () => {
+  const day = 86400000
+  const now = Date.UTC(2026, 10, 7)
+  const space = (id: string, o: Record<string, unknown>) => ({ space_id: id.repeat(64), created_at: now - day, last_access_at: now, used_bytes: 0, record_count: 0, req_recent: 0, source_mac: id.repeat(64), ...o })
+
+  it('使用中の数・中身なし・作成元の集中を出す', () => {
+    const text = summarize(
+      [space('a', { used_bytes: 2048, record_count: 3, source_mac: 'c'.repeat(64) }), space('b', { last_access_at: now - 10 * day, source_mac: 'c'.repeat(64) })],
+      { limit: 100, creation_open: true },
+      now,
+    )
+    expect(text).toContain('領域: 2 / 100(新規作成 受付中)')
+    expect(text).toContain('使用中: 1 日 1 / 7 日 1 / 14 日 2 / 30 日 2')
+    expect(text).toContain('中身なし: 1')
+    expect(text).toContain(`${'c'.repeat(12)}  2 件`)
+  })
+
+  it('空でも落ちない', () => {
+    expect(summarize([], null, now)).toContain('領域: 0 / ?')
   })
 })

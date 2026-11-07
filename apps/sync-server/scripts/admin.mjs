@@ -17,6 +17,7 @@ const USAGE = `使い方: node scripts/admin.mjs <命令> [--url https://...] [-
   delete-all [--dry-run]                     環境と件数を出し、確認の文字の入力を求める
   job <job_id>
   capacity
+  stats                                      領域の使われ方のまとめ(人が読む形)
   creation open|close
   signals
   block <作成元の値> [--days N]
@@ -26,6 +27,37 @@ const USAGE = `使い方: node scripts/admin.mjs <命令> [--url https://...] [-
 環境変数: OBB_ADMIN_URL・OBB_ADMIN_KEY_FILE・OBB_ADMIN_KEY_ID`
 
 const b64url = (b) => Buffer.from(b).toString('base64url')
+
+const DAY_MS = 86400000
+
+/** 領域の一覧を、人が読むまとめにする */
+export function summarize(spaces, capacity, now = Date.now()) {
+  const active = (days) => spaces.filter((s) => s.last_access_at >= now - days * DAY_MS).length
+  const bytes = spaces.reduce((n, s) => n + (s.used_bytes ?? 0), 0)
+  const records = spaces.reduce((n, s) => n + (s.record_count ?? 0), 0)
+  const count = (key) => {
+    const m = new Map()
+    for (const s of spaces) if (key(s)) m.set(key(s), (m.get(key(s)) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+  }
+  const short = (id) => String(id).slice(0, 12)
+  const lines = [
+    `領域: ${spaces.length} / ${capacity?.limit ?? '?'}(新規作成 ${capacity?.creation_open === false ? '停止中' : '受付中'})`,
+    `使用中: 1 日 ${active(1)} / 7 日 ${active(7)} / 14 日 ${active(14)} / 30 日 ${active(30)}`,
+    `中身なし: ${spaces.filter((s) => !s.record_count).length}`,
+    `合計: ${(bytes / 1048576).toFixed(2)} MB、${records} レコード、直近の要求 ${spaces.reduce((n, s) => n + (s.req_recent ?? 0), 0)} 回`,
+    '',
+    '大きい順(上位 5):',
+    ...[...spaces].sort((a, b) => (b.used_bytes ?? 0) - (a.used_bytes ?? 0)).slice(0, 5).map((s) => `  ${short(s.space_id)}  ${((s.used_bytes ?? 0) / 1024).toFixed(1)} KB  ${s.record_count ?? 0} 件`),
+    '要求の多い順(上位 5):',
+    ...[...spaces].sort((a, b) => (b.req_recent ?? 0) - (a.req_recent ?? 0)).slice(0, 5).map((s) => `  ${short(s.space_id)}  ${s.req_recent ?? 0} 回`),
+    '作成の多い日(上位 5):',
+    ...count((s) => (s.created_at ? new Date(s.created_at).toISOString().slice(0, 10) : '')).slice(0, 5).map(([d, n]) => `  ${d}  ${n} 件`),
+    '同じ作成元の多い順(2 件以上):',
+    ...count((s) => s.source_mac).filter(([, n]) => n >= 2).slice(0, 5).map(([m, n]) => `  ${short(m)}  ${n} 件`),
+  ]
+  return lines.join('\n')
+}
 
 export function parseArgs(argv) {
   const flags = {}
@@ -177,6 +209,19 @@ export async function run(argv, deps = {}) {
       return show(await call('POST', '/admin/v1/creation', { open: args[0] === 'open' }))
     case 'signals':
       return show(await call('GET', '/admin/v1/signals'))
+    case 'stats': {
+      const spaces = []
+      let cursor = null
+      do {
+        const r = await call('GET', `/admin/v1/spaces?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+        if (r.status !== 200) return show(r)
+        spaces.push(...r.body.spaces)
+        cursor = r.body.next_cursor
+      } while (cursor)
+      const capacity = await call('GET', '/admin/v1/capacity')
+      out(summarize(spaces, capacity.body, deps.now?.() ?? Date.now()))
+      return 0
+    }
     case 'block':
       return show(await call('POST', '/admin/v1/sources/block', { value: args[0], ...(flags.days !== undefined && { days: Number(flags.days) }) }))
     case 'unblock':

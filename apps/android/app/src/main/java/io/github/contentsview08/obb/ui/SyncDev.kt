@@ -6,8 +6,11 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.graphics.Matrix
+import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -15,8 +18,11 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.media.ImageReader
+import android.net.Uri
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.Settings
+import android.util.Size as CameraSize
 import android.view.Surface
 import android.view.TextureView
 import android.view.WindowManager
@@ -28,6 +34,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +44,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,6 +52,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -54,11 +63,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,9 +86,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.contentsview08.obb.AppViewModel
+import io.github.contentsview08.obb.BuildConfig
 import io.github.contentsview08.obb.data.decodeQrLuma
 import io.github.contentsview08.obb.data.qrMatrix
+import io.github.contentsview08.obb.data.readSyncQr
+import io.github.contentsview08.obb.data.SyncQrRead
 import io.github.contentsview08.obb.data.syncStartNav
 import io.github.contentsview08.obb.data.SyncStartNav
 import io.github.contentsview08.obb.sync.SyncText
@@ -113,7 +130,6 @@ fun SyncDevPage(vm: AppViewModel) {
     var st by remember { mutableStateOf<SyncStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var code by remember { mutableStateOf("") }
     var url by remember { mutableStateOf<String?>(null) }
     var pairing by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<String?>(null) }
@@ -124,7 +140,7 @@ fun SyncDevPage(vm: AppViewModel) {
             delay(1000)
         }
     }
-    fun act(done: String? = null, f: suspend () -> Unit) {
+    fun act(done: String? = null, after: () -> Unit = {}, f: suspend () -> Unit) {
         busy = true
         message = null
         scope.launch {
@@ -134,6 +150,7 @@ fun SyncDevPage(vm: AppViewModel) {
             // 窓を通っても領域を作れないことがある。その理由は状態の最後のエラーに出る
             message = failed ?: done?.takeIf { now.lastError == null }
             busy = false
+            after()
         }
     }
     val s = st ?: return
@@ -155,17 +172,11 @@ fun SyncDevPage(vm: AppViewModel) {
         }
         Column(Modifier.fillMaxWidth().padding(top = 12.dp).background(Palette.surface)) {
             if (!s.enabled || needTicket) SyncButton(label("start"), !busy) { act("同期を始めました") { vm.syncCtl.start(); vm.reloadSide() } }
+            if (!s.enabled) SyncButton(label("add_device"), !busy) { scanning = true }
             if (s.enabled) {
                 SyncButton(label("sync_now"), !busy) { act { vm.syncCtl.syncNow() } }
                 SyncButton(label("add_device"), !busy) { act { pairing = vm.syncCtl.pairingCode() } }
                 SyncButton(label("leave"), !busy, danger = true) { ask = "leave" }
-            }
-        }
-        if (!s.enabled) {
-            OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true, placeholder = { Text("obb1.") })
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp).background(Palette.surface)) {
-                Box(Modifier.weight(1f)) { SyncButton(label("join"), !busy && code.isNotBlank()) { act("同期を始めました") { vm.syncCtl.join(code); code = "" } } }
-                Box(Modifier.weight(1f)) { SyncButton(label("scan"), !busy) { scanning = true } }
             }
         }
         Text(label("server_url"), Modifier.padding(start = 8.dp, top = 16.dp), color = Palette.textMuted, fontSize = 13.sp)
@@ -173,12 +184,33 @@ fun SyncDevPage(vm: AppViewModel) {
         SyncButton("変える", !busy && url != null) { ask = "server" }
         message?.let { Text(it, Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp) }
     }
-    pairing?.let { PairingWindow(it) { pairing = null } }
-    vm.syncStartUrl?.let { SyncStartWindow(it, vm::finishSyncStart) }
-    if (scanning) QrScanWindow({ scanning = false }) { read ->
-        scanning = false
-        act("同期を始めました") { vm.syncCtl.join(read) }
+    pairing?.let { code ->
+        PairingWindow(code, onScan = { pairing = null; scanning = true }, onEnd = { pairing = null })
     }
+    vm.syncStartUrl?.let { SyncStartWindow(it, vm::finishSyncStart) }
+    if (scanning) QrScanWindow(
+        enabled = s.enabled,
+        space = s.space,
+        pending = s.pending,
+        onDismiss = { scanning = false },
+        onJoin = { read -> act("同期を始めました", after = { scanning = false }) { vm.syncCtl.join(read) } },
+        onMove = { read ->
+            act("同期を移りました", after = { scanning = false }) {
+                vm.syncCtl.leave()
+                vm.syncCtl.join(read)
+            }
+        },
+        onOwn = {
+            scanning = false
+            if (s.enabled) act { pairing = vm.syncCtl.pairingCode() }
+            else act("同期を始めました") {
+                vm.syncCtl.start()
+                vm.reloadSide()
+                // 領域を作れなかったときは、相手に渡しても使えない
+                if (vm.syncStatus().lastError == null) pairing = vm.syncCtl.pairingCode()
+            }
+        },
+    )
     if (ask != null) {
         val leaving = ask == "leave"
         AlertDialog(
@@ -248,7 +280,7 @@ private fun SyncStartWindow(url: String, onDone: (String?) -> Unit) {
 
 /** QR とコピー用のコード。60 秒で消す。表示の間は画面の撮影を止める */
 @Composable
-private fun PairingWindow(code: String, onEnd: () -> Unit) {
+private fun PairingWindow(code: String, onScan: () -> Unit, onEnd: () -> Unit) {
     val context = LocalContext.current
     var left by remember { mutableLongStateOf(PAIRING_SHOW_MS / 1000) }
     var copied by remember { mutableStateOf(false) }
@@ -285,6 +317,7 @@ private fun PairingWindow(code: String, onEnd: () -> Unit) {
             Text(code, color = Palette.textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton({ copySecret(context, code); copied = true }) { Text(label("copy")) }
+                TextButton(onScan) { Text("カメラで読む") }
                 TextButton(onEnd) { Text("閉じる") }
             }
         }
@@ -302,41 +335,167 @@ private fun clearClipboard(context: Context) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("", ""))
 }
 
-/** カメラで QR を読む。使うときだけ権限を聞く */
+/**
+ * 端末を足す相手の QR を読む。開いたらすぐカメラを動かし、obb1 のコードなら確認なしで参加する。
+ * 同期している端末では、別の領域のときだけ移るかを聞く
+ */
 @Composable
-private fun QrScanWindow(onDismiss: () -> Unit, onCode: (String) -> Unit) {
+private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDismiss: () -> Unit, onJoin: (String) -> Unit, onMove: (String) -> Unit, onOwn: () -> Unit) {
     val context = LocalContext.current
-    var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
+    val view = LocalView.current
+    fun hasCamera() = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    var granted by remember { mutableStateOf(hasCamera()) }
     var denied by remember { mutableStateOf(false) }
+    var broken by remember { mutableStateOf(false) }
+    var pasting by remember { mutableStateOf(false) }
+    var pasted by remember { mutableStateOf("") }
+    var hint by remember { mutableStateOf<String?>(null) }
+    var hintTick by remember { mutableIntStateOf(0) }
+    var taken by remember { mutableStateOf<String?>(null) }
+    var moving by remember { mutableStateOf<SyncQrRead.OtherSpace?>(null) }
+    var declined by remember { mutableStateOf<String?>(null) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         granted = it
         denied = !it
     }
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
+    val life by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val resumed = life.isAtLeast(Lifecycle.State.RESUMED)
+    // 設定で許可して戻ってきたら、そのまま読み始める
+    LaunchedEffect(resumed) {
+        if (resumed && hasCamera()) {
+            granted = true
+            denied = false
+        }
+    }
+    // 同じ QR が映っている間は延び、外すと消える
+    LaunchedEffect(hintTick) {
+        delay(2500)
+        hint = null
+    }
+    fun say(text: String) {
+        hint = text
+        hintTick++
+    }
+    fun handle(text: String): Boolean {
+        if (text == declined) {
+            say("別の同期の QR です")
+            return false
+        }
+        return when (val r = readSyncQr(text, enabled, space, BuildConfig.SYNC_ALLOW_LOCALHOST)) {
+            is SyncQrRead.Join -> {
+                Haptics.confirm(view)
+                taken = "同期を始めています"
+                onJoin(r.code)
+                true
+            }
+            is SyncQrRead.OtherSpace -> {
+                Haptics.confirm(view)
+                moving = r
+                false
+            }
+            SyncQrRead.SameSpace -> {
+                say("この端末はすでにこの同期を使っています")
+                false
+            }
+            is SyncQrRead.Bad -> {
+                say(SyncText.message(r.reason))
+                false
+            }
+        }
+    }
     FullWindow(onDismiss = onDismiss) {
-        Column(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding().navigationBarsPadding().imePadding()) {
             Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 52.dp).padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onDismiss) { Icon(Icons.Filled.Close, "閉じる", tint = Palette.textStrong) }
-                Text(label("scan"), color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(label(if (pasting) "join" else "scan"), color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
-            if (granted) QrCameraView(onCode, Modifier.fillMaxWidth().weight(1f))
-            else if (denied) Text("カメラを使えません。コードを貼って参加できます。", Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                val done = taken
+                when {
+                    done != null -> Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Filled.CheckCircle, null, Modifier.size(48.dp), tint = Palette.accent)
+                        Text("読み取りました", color = Palette.textStrong, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(done, color = Palette.textMuted, fontSize = 14.sp)
+                    }
+                    pasting -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(pasted, { pasted = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("obb1.") })
+                        SyncButton(label("join"), pasted.isNotBlank()) { handle(pasted) }
+                        hint?.let { Text(it, color = Palette.markDanger, fontSize = 14.sp) }
+                    }
+                    granted && !broken -> {
+                        // 映像の上なので、配色によらず黒地と白で読めるようにする
+                        Box(Modifier.fillMaxSize().background(Color.Black))
+                        // 確認の間と裏にいる間は、カメラを手放す
+                        if (resumed && moving == null) QrCameraView(::handle, { broken = true }, Modifier.fillMaxSize())
+                        Box(Modifier.align(Alignment.Center).fillMaxWidth(0.7f).aspectRatio(1f).border(2.dp, Color.White))
+                        Text(
+                            hint ?: "QR を枠に入れてください",
+                            Modifier.align(Alignment.BottomCenter).padding(16.dp).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 12.dp, vertical = 6.dp),
+                            color = Color.White,
+                            fontSize = 14.sp,
+                        )
+                    }
+                    denied || broken -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            if (broken) "カメラを開けません。コードを貼って参加できます。"
+                            else "QR を読むにはカメラの許可が必要です。カメラの映像は QR を読むだけに使います。設定で許可するか、コードを貼って参加できます。",
+                            color = Palette.textStrong,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                        )
+                        if (!broken) SyncButton("設定を開く") {
+                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+                        }
+                    }
+                }
+            }
+            if (taken == null) Column(Modifier.fillMaxWidth().background(Palette.surface)) {
+                if (pasting) SyncButton("カメラで読む") { pasting = false }
+                else SyncButton("コードを貼る") {
+                    val clip = context.getSystemService(ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+                    if (pasted.isBlank() && clip?.trim()?.startsWith("obb1.") == true) pasted = clip
+                    pasting = true
+                }
+                SyncButton(if (enabled) "自分の QR を出す" else "自分で始める(QR を出す)", onClick = onOwn)
+            }
+        }
+        moving?.let { m ->
+            AlertDialog(
+                onDismissRequest = { declined = m.code; moving = null },
+                title = { Text("今の同期から移りますか") },
+                text = {
+                    val unsent = if (pending > 0) "まだ送っていない $pending 件は、今の同期に届きません。" else ""
+                    Text("この QR は別の同期のものです(${m.serverUrl})。今の同期をやめて、こちらに移ります。この端末のお気に入りは消えず、移った先へ送られます。今の同期のサーバーのデータはそのままです。$unsent")
+                },
+                confirmButton = {
+                    TextButton({
+                        moving = null
+                        taken = "同期を移っています"
+                        onMove(m.code)
+                    }) { Text("移る") }
+                },
+                dismissButton = { TextButton({ declined = m.code; moving = null }) { Text("閉じる") } },
+            )
         }
     }
 }
 
+/** [onText] が true を返すまで読み続ける */
 @SuppressLint("MissingPermission")
 @Composable
-private fun QrCameraView(onCode: (String) -> Unit, modifier: Modifier) {
+private fun QrCameraView(onText: (String) -> Boolean, onFail: () -> Unit, modifier: Modifier) {
     val context = LocalContext.current
-    val camera = remember { QrCamera(context, onCode) }
+    val text by rememberUpdatedState(onText)
+    val fail by rememberUpdatedState(onFail)
+    val camera = remember { QrCamera(context, { text(it) }, { fail() }) }
     DisposableEffect(camera) { onDispose { camera.close() } }
     AndroidView(
         factory = { ctx ->
             TextureView(ctx).apply {
                 surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                    override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) = camera.open(t)
-                    override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {}
+                    override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) = camera.open(this@apply, t)
+                    override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) = camera.fit(this@apply)
                     override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean { camera.close(); return true }
                     override fun onSurfaceTextureUpdated(t: SurfaceTexture) {}
                 }
@@ -346,64 +505,135 @@ private fun QrCameraView(onCode: (String) -> Unit, modifier: Modifier) {
     )
 }
 
-/** Camera2 で明るさだけを読み、zxing に渡す。依存を増やさないため CameraX を使わない */
-private class QrCamera(context: Context, private val onCode: (String) -> Unit) {
+/** Camera2 で明るさだけを読み、zxing に渡す。依存を増やさないため CameraX を使わない。片づけはカメラの糸の上で順に行う */
+private class QrCamera(context: Context, private val onText: (String) -> Boolean, private val onFail: () -> Unit) {
     private val manager = context.getSystemService(CameraManager::class.java)
     private val main = Handler(context.mainLooper)
     private var thread: HandlerThread? = null
+    private var handler: Handler? = null
     private var device: CameraDevice? = null
     private var reader: ImageReader? = null
+    private var surface: Surface? = null
+    private var preview: CameraSize? = null
     @Volatile private var done = false
+    @Volatile private var closed = false
+    // 開いている途中で糸を止めると onOpened が届かず、カメラを握ったままになる
+    @Volatile private var opening = false
+
+    private fun fail() = main.post { if (!closed) onFail() }
 
     @SuppressLint("MissingPermission")
-    fun open(texture: SurfaceTexture) {
-        val id = manager.cameraIdList.firstOrNull { manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK } ?: manager.cameraIdList.firstOrNull() ?: return
-        val map = manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return
-        val size = map.getOutputSizes(ImageFormat.YUV_420_888).filter { it.width <= 1280 }.maxByOrNull { it.width * it.height } ?: return
-        val t = HandlerThread("qr").also { it.start(); thread = it }
-        val handler = Handler(t.looper)
-        texture.setDefaultBufferSize(size.width, size.height)
-        val preview = Surface(texture)
-        val r = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also { reader = it }
-        r.setOnImageAvailableListener({ ir ->
-            val img = ir.acquireLatestImage() ?: return@setOnImageAvailableListener
-            img.use {
-                if (done) return@use
-                val plane = it.planes[0]
-                val bytes = ByteArray(plane.buffer.remaining()).also { b -> plane.buffer.get(b) }
-                decodeQrLuma(bytes, it.width, it.height, plane.rowStride)?.let { text ->
-                    done = true
-                    main.post { onCode(text) }
-                }
+    fun open(view: TextureView, texture: SurfaceTexture) {
+        if (closed) return
+        try {
+            val id = manager.cameraIdList.firstOrNull { manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK } ?: manager.cameraIdList.firstOrNull()
+            val map = id?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
+            val size = map?.getOutputSizes(ImageFormat.YUV_420_888)?.filter { it.width <= 1280 }?.maxByOrNull { it.width * it.height }
+            if (id == null || size == null) {
+                fail()
+                return
             }
-        }, handler)
-        manager.openCamera(id, object : CameraDevice.StateCallback() {
-            override fun onOpened(c: CameraDevice) {
-                device = c
-                @Suppress("DEPRECATION")
-                c.createCaptureSession(listOf(preview, r.surface), object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(s: CameraCaptureSession) {
-                        val req = c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-                            addTarget(preview)
-                            addTarget(r.surface)
-                            set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                        }
-                        runCatching { s.setRepeatingRequest(req.build(), null, handler) }
+            val t = HandlerThread("qr").also { it.start(); thread = it }
+            val h = Handler(t.looper).also { handler = it }
+            texture.setDefaultBufferSize(size.width, size.height)
+            preview = size
+            fit(view)
+            val out = Surface(texture).also { surface = it }
+            val r = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also { reader = it }
+            r.setOnImageAvailableListener({ ir ->
+                val img = ir.acquireLatestImage() ?: return@setOnImageAvailableListener
+                img.use {
+                    if (done) return@use
+                    val plane = it.planes[0]
+                    val bytes = ByteArray(plane.buffer.remaining()).also { b -> plane.buffer.get(b) }
+                    decodeQrLuma(bytes, it.width, it.height, plane.rowStride)?.let { text ->
+                        main.post { if (!done && !closed && onText(text)) done = true }
                     }
-                    override fun onConfigureFailed(s: CameraCaptureSession) {}
-                }, handler)
-            }
-            override fun onDisconnected(c: CameraDevice) = c.close()
-            override fun onError(c: CameraDevice, error: Int) = c.close()
-        }, handler)
+                }
+            }, h)
+            opening = true
+            manager.openCamera(id, object : CameraDevice.StateCallback() {
+                override fun onOpened(c: CameraDevice) {
+                    opening = false
+                    device = c
+                    if (closed) {
+                        release()
+                        return
+                    }
+                    try {
+                        @Suppress("DEPRECATION")
+                        c.createCaptureSession(listOf(out, r.surface), object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(s: CameraCaptureSession) {
+                                if (closed) return
+                                val req = c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                                    addTarget(out)
+                                    addTarget(r.surface)
+                                    set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                                }
+                                runCatching { s.setRepeatingRequest(req.build(), null, h) }
+                            }
+                            override fun onConfigureFailed(s: CameraCaptureSession) { fail() }
+                        }, h)
+                    } catch (_: Exception) {
+                        fail()
+                    }
+                }
+                override fun onDisconnected(c: CameraDevice) = lost(c)
+                override fun onError(c: CameraDevice, error: Int) = lost(c)
+            }, h)
+        } catch (_: Exception) {
+            opening = false
+            fail()
+        }
     }
 
-    fun close() {
+    private fun lost(c: CameraDevice) {
+        opening = false
+        c.close()
+        if (closed) release() else fail()
+    }
+
+    /** 映像を歪めず、枠いっぱいに切り抜いて出す */
+    fun fit(view: TextureView) {
+        val p = preview ?: return
+        val w = view.width.toFloat()
+        val h = view.height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val rotation = view.display?.rotation ?: Surface.ROTATION_0
+        val cx = w / 2
+        val cy = h / 2
+        val m = Matrix()
+        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
+            val buffer = RectF(0f, 0f, p.height.toFloat(), p.width.toFloat())
+            buffer.offset(cx - buffer.centerX(), cy - buffer.centerY())
+            m.setRectToRect(RectF(0f, 0f, w, h), buffer, Matrix.ScaleToFit.FILL)
+            val scale = maxOf(h / p.height, w / p.width)
+            m.postScale(scale, scale, cx, cy)
+            m.postRotate(if (rotation == Surface.ROTATION_90) -90f else 90f, cx, cy)
+        } else {
+            // 映像は端末の縦向きにそろえて渡されるので、幅と高さを入れ替えて比べる
+            val content = p.height.toFloat() / p.width
+            val frame = w / h
+            if (content > frame) m.setScale(content / frame, 1f, cx, cy) else m.setScale(1f, frame / content, cx, cy)
+            if (rotation == Surface.ROTATION_180) m.postRotate(180f, cx, cy)
+        }
+        view.setTransform(m)
+    }
+
+    private fun release() {
         device?.close()
         device = null
         reader?.close()
         reader = null
+        surface?.release()
+        surface = null
         thread?.quitSafely()
         thread = null
+    }
+
+    fun close() {
+        if (closed) return
+        closed = true
+        handler?.post { if (!opening) release() }
     }
 }

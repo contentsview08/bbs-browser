@@ -9,6 +9,10 @@ import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.google.zxing.qrcode.encoder.Encoder
+import io.github.contentsview08.obb.sync.deriveKeys
+import io.github.contentsview08.obb.sync.engine.SyncApiError
+import io.github.contentsview08.obb.sync.parsePairingCode
+import io.github.contentsview08.obb.sync.spaceId
 import java.net.URI
 
 // QR の読み書きと、同期を始める窓の移動の決まり。画面に依存しないので JVM のテストで確かめる
@@ -26,6 +30,33 @@ fun decodeQrLuma(luma: ByteArray, width: Int, height: Int, rowStride: Int): Stri
     QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), mapOf(DecodeHintType.TRY_HARDER to true)).text
 } catch (_: ReaderException) {
     null
+} catch (_: RuntimeException) {
+    // 細工した QR で zxing が落ちても、カメラの処理を止めない
+    null
+}
+
+/** 読み取ったコードの扱い。同じ領域の判定は K から出した領域の ID で行う */
+sealed class SyncQrRead {
+    class Join(val code: String) : SyncQrRead()
+    class OtherSpace(val code: String, val serverUrl: String) : SyncQrRead()
+    data object SameSpace : SyncQrRead()
+    /** reason は SyncText.message のコード */
+    class Bad(val reason: String) : SyncQrRead()
+}
+
+/** [space] は状態の領域の先頭。鍵を読めない間は null で、別の領域として確認に回す */
+fun readSyncQr(text: String, enabled: Boolean, space: String?, allowLocalhost: Boolean = false): SyncQrRead {
+    val c = try {
+        parsePairingCode(text, allowLocalhost)
+    } catch (e: SyncApiError) {
+        return SyncQrRead.Bad(e.code.ifEmpty { e.kind })
+    } catch (_: RuntimeException) {
+        // QR の中身は外から来るので、検査の中の想定外も読めないコードとして扱う
+        return SyncQrRead.Bad("bad_code")
+    }
+    if (!enabled) return SyncQrRead.Join(text)
+    val same = space != null && spaceId(deriveKeys(c.k).authToken).startsWith(space)
+    return if (same) SyncQrRead.SameSpace else SyncQrRead.OtherSpace(text, c.serverUrl)
 }
 
 sealed class SyncStartNav {

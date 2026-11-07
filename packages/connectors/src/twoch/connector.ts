@@ -266,12 +266,16 @@ export function routeTwoChUrl(rawUrl: string): TwoChRoute | null {
   return { kind: 'board', boardUrl: `${b[1]}/${b[2]}/` }
 }
 
+/** 正規表現に文字列をそのまま入れるためのエスケープ */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /** itest の板のページから、その板のあるサーバー(mercury.bbspink.com など)を探す */
 async function serverOf(domain: string, board: string, ctx: ConnectorContext): Promise<string> {
   const page = `https://itest.${domain}/subback/${board}`
   const res = await ctx.http.get(page)
   ensureOk(res, page)
-  const re = new RegExp(`https?://([a-z0-9]+)\\.${domain.replace('.', '\\.')}/${board}/`)
+  // 板の名前は URL から来るので、正規表現の記号が入っていてもそのままの文字として探す
+  const re = new RegExp(`https?://([a-z0-9]+)\\.${escapeRegExp(domain)}/${escapeRegExp(board)}/`)
   const m = re.exec(ctx.decode(res.body, 'utf-8'))
   if (!m || m[1] === 'itest') throw new Error(`板のサーバーが分かりませんでした: ${page}`)
   return `${m[1]}.${domain}`

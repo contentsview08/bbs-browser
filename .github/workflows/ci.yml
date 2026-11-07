@@ -30,3 +30,7 @@ jobs:
       - name: 単体テスト(packages/conformance の共通のケースを含む)
         working-directory: apps/android
         run: bash gradlew testDebugUnitTest --console=plain
+      # R8 を通した配布用のビルドが壊れていないかも見る(keystore.properties がないので署名は開発用の鍵。配るものではない)
+      - name: 配布用ビルド
+        working-directory: apps/android
+        run: bash gradlew assembleRelease --console=plain

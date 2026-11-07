@@ -92,11 +92,21 @@ tasks.register("licensesGen") {
                 "url" to (url ?: "https://mvnrepository.com/artifact/${id.group}/${id.module}"), "kind" to "gradle", "texts" to refs,
             )
         }
+        // 手で書いた一覧。全文は text(そのまま)か textFile(リポジトリからの道)で添える。
+        // 依存の管理の中にあるのに jar が全文を持たないもの(ONNX Runtime)は、同じ名前・版の行に全文だけを足す
         @Suppress("UNCHECKED_CAST")
         val manual = (JsonSlurper().parse(repo.resolve("scripts/licenses-manual.json")) as List<Map<String, Any>>)
             .filter { (it["apps"] as? List<*>)?.contains("android") == true }
-            .map { m -> LinkedHashMap(m - "apps" - "textFile").apply { put("texts", emptyList<Any>()) } }
-        val all = (rows + manual).sortedWith(compareBy({ (it["name"] as String).lowercase() }, { it["version"] as String }))
+        val extraRows = ArrayList<LinkedHashMap<String, Any>>()
+        for (m in manual) {
+            val texts = ArrayList<Map<String, Any>>()
+            (m["text"] as? String)?.let { texts += textRef("LICENSE", it.trim()) }
+            (m["textFile"] as? String)?.let { texts += textRef(it.substringAfterLast('/'), repo.resolve(it).readText().replace("\r\n", "\n").trim()) }
+            val row = rows.firstOrNull { it["name"] == m["name"] && it["version"] == m["version"] }
+            if (row != null) (row["texts"] as MutableList<Map<String, Any>>) += texts
+            else extraRows += LinkedHashMap(m - "apps" - "text" - "textFile").apply { put("texts", texts) }
+        }
+        val all = (rows + extraRows).sortedWith(compareBy({ (it["name"] as String).lowercase() }, { it["version"] as String }))
         val json = JsonGenerator.Options().disableUnicodeEscaping().build()
         val out = project.file("src/main/assets/licenses.json")
         out.writeText("{\"packages\":[\n" + all.joinToString(",\n") { json.toJson(it) } + "\n],\"texts\":[\n" + texts.joinToString(",\n") { json.toJson(it) } + "\n]}\n")

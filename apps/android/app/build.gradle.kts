@@ -1,3 +1,4 @@
+import java.util.Properties
 import javax.inject.Inject
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -75,6 +76,22 @@ android {
         val syncServer = providers.environmentVariable("OBB_SYNC_SERVER_URL").orNull ?: syncDefault
         buildConfigField("String", "SYNC_SERVER_URL", "\"$syncServer\"")
     }
+    // 配布用の鍵は apps/android/keystore.properties(git には入れない。書き方は bbs-suite の docs/workflows.md)から読む。
+    // ないときは手元の開発用の鍵で署名する(CI と手元の試しを止めないため。その APK は配らない)
+    val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
+        Properties().apply { f.inputStream().use { load(it) } }
+    }
+    signingConfigs {
+        if (keystoreProps != null) {
+            create("release") {
+                // 相対パスは apps/android からの位置
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
     buildTypes {
         // http://localhost の同期サーバーは開発の版だけ。-PobbSyncAllowLocalhost で R8 を通した版でも試せる
         getByName("debug") { buildConfigField("boolean", "SYNC_ALLOW_LOCALHOST", "true") }
@@ -84,9 +101,12 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // 手元の開発用の鍵で署名する(配るときは自分の鍵に)
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
+    }
+    packaging {
+        // コルーチンのデバッグ用の表・Kotlin のビルド情報・各ライブラリの版の印は、動かすのに要らない
+        resources.excludes += listOf("DebugProbesKt.bin", "kotlin-tooling-metadata.json", "META-INF/*.version")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -127,6 +127,27 @@ class HonoBbsTest {
         }
     }
 
+    @Test fun 認証ページのURLがhttpでなければ開かずにエラーにする() {
+        for (bad in listOf("javascript:alert(1)", "intent://x#Intent;end", "file:///etc/passwd")) {
+            val (r, _) = write {
+                if (it.url.endsWith("/auth/turnstile/pair")) res(200, """{"data":{"url":"$bad","code":"ABC"}}""")
+                else res(403, """{"error":"TURNSTILE_REQUIRED"}""")
+            }
+            assertTrue(bad, r is PostResult.Error)
+        }
+    }
+
+    @Test fun APIの場所はhttpのURLだけを信じる() {
+        // 形が http(s) でないものは、ページを読めても既定の api.<ホスト> に戻す
+        for ((i, bad) in listOf("javascript:alert(1)", "http", "httpx://api.evil.test/api/v1", "https://").withIndex()) {
+            val origin = "https://meta$i.test"
+            val s = FakeServer { res(200, """<meta name="bbs-api" content="$bad">""") }
+            assertEquals(bad, apiOf(origin), s.run { HonoBbs.apiFor("$origin/boards/b/") })
+        }
+        val s = FakeServer { res(200, """<meta name="bbs-api" content="https://api.other.test/v1/">""") }
+        assertEquals("https://api.other.test/v1", s.run { HonoBbs.apiFor("https://metaok.test/boards/b/") })
+    }
+
     @Test fun つなぎのコードをもらえなくても認証の案内にする() {
         val (r, _) = write { if (it.url.endsWith("/pair")) res(500, "<html>") else res(403, """{"error":"TURNSTILE_REQUIRED"}""") }
         val a = r as PostResult.Auth

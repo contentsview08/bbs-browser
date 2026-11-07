@@ -146,6 +146,26 @@ class DatFetchTest {
         assertEquals(DatCursor(text.size.toLong(), 1, null, kako = true), r.cursor)
     }
 
+    @Test fun datが302で返っても過去ログに回る() {
+        // 5ch が本当に 302 を返すかは確かめられないので、返したときに過去ログへ行くことだけを固める
+        val text = bytes(line("一", "スレタイ"))
+        for (c in listOf<DatCursor?>(null, cursor())) {
+            val (r, sent) = fetch(c, fiveCh) { if (it.url == kakoUrl) res(200, text) else res(302, "", mapOf("location" to "https://mi.5ch.io/x/kako/")) }
+            assertEquals(listOf(datUrlOf(fiveCh), kakoUrl), sent.map { it.url })
+            assertTrue(r.archived)
+            assertEquals(1, r.posts.size)
+        }
+    }
+
+    @Test fun datが302で過去ログもなければ手元のログを残す() {
+        val c = cursor()
+        val (r, _) = fetch(c) { res(302) }
+        assertEquals(FetchStatus.ARCHIVED, r.status)
+        assertSame(c, r.cursor)
+    }
+
+    private fun datUrlOf(t: ThreadSummary) = "${t.boardUrl}dat/${t.key}.dat"
+
     @Test fun 初めて開いたスレの過去ログは置き換えにしない() {
         val (r, _) = fetch(null, fiveCh) { if (it.url == kakoUrl) res(200, bytes(line("一"))) else res(404) }
         assertEquals(FetchStatus.UPDATED, r.status)

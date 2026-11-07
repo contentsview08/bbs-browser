@@ -177,10 +177,13 @@ private fun completeLines(b: ByteArray): ByteArray {
     return if (i < 0) ByteArray(0) else b.copyOf(i + 1)
 }
 
+/** 過去ログ(oyster)を持つサーバー */
+private val KAKO_HOST = Regex("(?:^|\\.)(?:5ch\\.io|5ch\\.net|bbspink\\.com)$")
+
 /** 5ch・bbspink の過去ログ(dat 落ちしたスレ)。板/oyster/キーの頭 4 桁/キー.dat */
 private fun kakoDatUrl(t: ThreadSummary): String? {
     val host = java.net.URI(t.boardUrl).host ?: return null
-    if (!Regex("(?:^|\\.)(?:5ch\\.io|5ch\\.net|bbspink\\.com)$").containsMatchIn(host)) return null
+    if (!KAKO_HOST.containsMatchIn(host)) return null
     return "${t.boardUrl}oyster/${t.key.take(4)}/${t.key}.dat"
 }
 
@@ -242,7 +245,8 @@ object TwoCh {
     /** 書き込む前に、板が UTF-8 かを確かめる。まだ分からなければ SETTING.TXT を 1 度だけ見る。読めなければ Shift_JIS で送る */
     private suspend fun isUtf8Board(postUrl: String, bbs: String?): Boolean {
         if (bbs.isNullOrEmpty()) return false
-        val boardUrl = postUrl.replace(Regex("test/bbs\\.cgi.*$"), "$bbs/")
+        // 板の名前に $ があっても置き換えの印として読まれないようにする
+        val boardUrl = postUrl.replace(Regex("test/bbs\\.cgi.*$"), Regex.escapeReplacement("$bbs/"))
         val key = boardKey(boardUrl)
         synchronized(utf8Boards) { utf8Boards[key]?.let { return it } }
         runCatching {
@@ -327,6 +331,9 @@ object TwoCh {
     /** dat を取る。cursor があれば、その続き(Range)だけ */
     suspend fun fetchPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult = withContext(Dispatchers.Default) { readPosts(thread, cursor) }
 
+    /**
+     * dat と過去ログの取得はリダイレクトをたどらない。dat 落ちを 302 で知らせる掲示板があり、たどると行き先のページ(200)を読んでしまって見分けられない
+     */
     private suspend fun readPosts(thread: ThreadSummary, cursor: DatCursor?): FetchResult {
         if (HonoBbs.isBoardUrl(thread.boardUrl)) return HonoBbs.fetchPosts(thread, cursor)
         if (Shitaraba.isBoardUrl(thread.boardUrl)) return Shitaraba.fetchPosts(thread, cursor)
@@ -337,7 +344,7 @@ object TwoCh {
         suspend fun archived(): FetchResult {
             val kako = kakoDatUrl(thread)
             if (kako != null) {
-                val res = Http.get(kako)
+                val res = Http.get(kako, followRedirects = false)
                 if (res.status == 200 && res.body.isNotEmpty()) {
                     val body = completeLines(res.body)
                     val text = textOf(res, body)
@@ -354,7 +361,7 @@ object TwoCh {
         }
 
         suspend fun fetchAll(): FetchResult {
-            val res = Http.get(url)
+            val res = Http.get(url, followRedirects = false)
             if (res.status == 404 || res.status == 302) return archived()
             ensureOk(res, url)
             val body = completeLines(res.body)
@@ -379,7 +386,7 @@ object TwoCh {
         val headers = HashMap<String, String>()
         headers["Range"] = "bytes=${cursor.bytes - 1}-"
         cursor.lastModified?.let { headers["If-Modified-Since"] = it }
-        val res = Http.get(url, headers)
+        val res = Http.get(url, headers, followRedirects = false)
         if (res.status == 304) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor)
         if (res.status == 404 || res.status == 302) return archived()
         if (res.status == 416 || res.status == 200) return fetchAll()

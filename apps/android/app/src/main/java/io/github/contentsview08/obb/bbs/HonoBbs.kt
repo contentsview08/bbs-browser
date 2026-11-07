@@ -21,6 +21,7 @@ import java.util.Base64
 private val THREAD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:/([0-9][0-9,-]*n?))?/?(?:[?#].*)?$")
 private val BOARD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/?(?:[?#].*)?$")
 private val SITE_URL = Regex("^(https?://[^/]+)/boards/?(?:[?#].*)?$")
+private val API_URL = Regex("^https?://")
 private val FIRST_IMAGE = Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)(?:\\?\\S*)?(?=\\s|$)", RegexOption.IGNORE_CASE)
 
 object HonoBbs {
@@ -84,7 +85,9 @@ object HonoBbs {
         val res = runCatching { Http.get("$origin/") }.getOrNull()?.takeIf { it.status == 200 }
         val found = res?.let {
             Regex("<meta\\s+name=[\"']bbs-api[\"']\\s+content=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
-                .find(String(it.body, Charsets.UTF_8))?.groupValues?.get(1)?.takeIf { u -> u.startsWith("http") }?.trimEnd('/')
+                .find(String(it.body, Charsets.UTF_8))?.groupValues?.get(1)
+                // http(s) の URL の形のものだけ(PC 版と同じ ^https?://)。ページに別の仕組みの URL が書かれていても API にしない
+                ?.takeIf { u -> API_URL.containsMatchIn(u) && u.toHttpUrlOrNull() != null }?.trimEnd('/')
         }
         val base = found ?: "${origin.replaceFirst(Regex("^(https?://)"), "$1api.")}/api/v1"
         // ページを読めなかったときの決めつけは覚えない(一時的な失敗で、再起動まで違う API へ行き続けないように)
@@ -396,9 +399,12 @@ object HonoBbs {
         if (error == "TURNSTILE_REQUIRED" || error == "TURNSTILE_INVALID") {
             val pair = runCatching { json(Http.postJson("$api/auth/turnstile/pair", "{}")).optJSONObject("data") }.getOrNull()
             if (pair != null) {
+                // 認証ページはブラウザで開くので、http(s) 以外の URL は開かない
+                val url = pair.str("url")
+                if (url != null && url.toHttpUrlOrNull() == null) return PostResult.Error("認証ページの URL が読めませんでした")
                 return PostResult.Auth(
                     "この掲示板は、書き込みの前に人の確認(Turnstile)が要ります。認証ページを開いて確認が済んだら、もう一度送ってください",
-                    pair.str("url"), pair.str("code"),
+                    url, pair.str("code"),
                 )
             }
             return PostResult.Auth("この掲示板は、書き込みの前に人の確認(Turnstile)が要ります", "$api/auth/turnstile", null)

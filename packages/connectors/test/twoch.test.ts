@@ -197,6 +197,27 @@ describe('resolveUrl', () => {
     )
   })
 
+  it('itest の板の名前に正規表現の記号があっても、そのままの文字として探す', async () => {
+    // 板の名前は URL の文字そのまま。c++ は「+」が繰り返しの記号なので、エスケープしないと正規表現が作れない
+    const ctx2 = fakeCtx(async (url): Promise<HttpResponse> => {
+      if (url === 'https://itest.5ch.io/subback/c++')
+        return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<a href="https://peace.5ch.io/c++/">PC版</a>') }
+      if (url === 'https://peace.5ch.io/c++/subject.txt')
+        return { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' }, body: new TextEncoder().encode('1788606033.dat<>スレ (1)\n') }
+      return { status: 404, headers: {}, body: new Uint8Array() }
+    })
+    expect((await twoChConnector.resolveUrl('https://itest.5ch.io/subback/c++', ctx2))?.board.url).toBe('https://peace.5ch.io/c++/')
+  })
+
+  it('itest の板のページで、ドメインの . をほかの文字で埋めた URL はサーバーにしない', async () => {
+    const ctx2 = fakeCtx(async (url): Promise<HttpResponse> => {
+      if (url === 'https://itest.5ch.io/subback/prog')
+        return { status: 200, headers: { 'content-type': 'text/html' }, body: new TextEncoder().encode('<a href="https://evil.5chXio/prog/">x</a>') }
+      return { status: 404, headers: {}, body: new Uint8Array() }
+    })
+    await expect(twoChConnector.resolveUrl('https://itest.5ch.net/subback/prog', ctx2)).rejects.toThrow('板のサーバーが分かりませんでした')
+  })
+
   it('/test/read.cgi/ の前に道があるスレの URL も開く', async () => {
     const r = await twoChConnector.resolveUrl('https://example.com/bbs/test/read.cgi/news/1788606033/', ctx)
     expect(r?.board.url).toBe('https://example.com/bbs/news/')

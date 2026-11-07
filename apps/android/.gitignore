@@ -5,3 +5,7 @@ local.properties
 .idea/
 *.iml
 .kotlin/
+# 配布用の署名の鍵と、その置き場・パスワード
+keystore.properties
+*.jks
+*.keystore

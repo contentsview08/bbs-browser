@@ -33,6 +33,12 @@ object Http {
 
     private const val MAX_REDIRECTS = 5
 
+    /** 読む応答(dat・スレ一覧)の上限。これより大きいものは掲示板の中身ではない */
+    private const val READ_MAX_BYTES = 16L * 1024 * 1024
+
+    /** 書き込みの応答などのページの上限 */
+    private const val PAGE_MAX_BYTES = 4L * 1024 * 1024
+
     private lateinit var jar: SavedCookieJar
     private lateinit var postJar: SavedCookieJar
     private val client by lazy {
@@ -57,15 +63,16 @@ object Http {
     /** 読むときはリダイレクトをたどる(板・スレが別のサーバーへ移ったとき。5ch の http → https など)。書き込み(POST)は execute で 1 段ずつたどる */
     private val getClient by lazy { client.newBuilder().followRedirects(true).followSslRedirects(true).build() }
 
-    suspend fun get(url: String, headers: Map<String, String> = emptyMap()): HttpResponse = fake?.invoke("GET", url, headers, null) ?: withContext(Dispatchers.IO) {
-        val req = Request.Builder().url(url).header("User-Agent", USER_AGENT)
-        for ((k, v) in headers) req.header(k, v)
-        getClient.newCall(req.build()).execute().use { res ->
-            val h = HashMap<String, String>()
-            for (name in res.headers.names()) h[name.lowercase()] = res.header(name) ?: ""
-            HttpResponse(res.code, h, res.body?.bytes() ?: ByteArray(0))
+    /**
+     * 読む。followRedirects を false にすると、リダイレクトをたどらずに 301・302 をそのまま返す
+     * (dat 落ちを 302 で知らせる掲示板のため。ふだんの読み取りはたどる)
+     */
+    suspend fun get(url: String, headers: Map<String, String> = emptyMap(), followRedirects: Boolean = true): HttpResponse =
+        fake?.invoke("GET", url, headers, null) ?: withContext(Dispatchers.IO) {
+            val req = Request.Builder().url(url).header("User-Agent", USER_AGENT)
+            for ((k, v) in headers) req.header(k, v)
+            (if (followRedirects) getClient else client).newCall(req.build()).execute().use { res -> toResponse(res, READ_MAX_BYTES) }
         }
-    }
 
     /** フォームを送る(body はエンコード済みの application/x-www-form-urlencoded) */
     suspend fun postForm(url: String, body: ByteArray, headers: Map<String, String> = emptyMap()): HttpResponse = fake?.invoke("POST", url, headers, body) ?: withContext(Dispatchers.IO) {
@@ -103,10 +110,21 @@ object Http {
         }
     }
 
-    private fun toResponse(res: okhttp3.Response): HttpResponse {
+    private fun toResponse(res: okhttp3.Response, maxBytes: Long = PAGE_MAX_BYTES): HttpResponse {
         val h = HashMap<String, String>()
         for (name in res.headers.names()) h[name.lowercase()] = res.header(name) ?: ""
-        return HttpResponse(res.code, h, res.body?.bytes() ?: ByteArray(0))
+        return HttpResponse(res.code, h, readBody(res, maxBytes))
+    }
+
+    /** 本文を上限まで読む。Content-Length が上限を超えていれば読まずに、途中で超えても失敗にする(メモリを食い尽くさないため) */
+    private fun readBody(res: okhttp3.Response, maxBytes: Long): ByteArray {
+        val body = res.body ?: return ByteArray(0)
+        val url = res.request.url
+        if (body.contentLength() > maxBytes) throw IOException("応答が大きすぎます(${maxBytes shr 20}MB まで): $url")
+        val source = body.source()
+        // 上限より 1 バイト多く頼み、届けば超えている
+        if (source.request(maxBytes + 1)) throw IOException("応答が大きすぎます(${maxBytes shr 20}MB まで): $url")
+        return source.readByteArray()
     }
 
     /** POST を送り、リダイレクトを nextRequest の決まりで 1 段ずつたどる。途中で渡される Cookie も置き場に入る */
@@ -193,7 +211,8 @@ private class SavedCookieJar(context: Context, name: String) : CookieJar {
     private fun load(): MutableList<Cookie> {
         val out = ArrayList<Cookie>()
         val arr = runCatching { JSONArray(prefs.getString("all", "[]")) }.getOrNull() ?: return out
-        for (i in 0 until arr.length()) out += cookieFromJson(arr.getJSONObject(i))
+        // 壊れた 1 件のために起動で落ちないよう、読めないものだけを捨てる
+        for (i in 0 until arr.length()) runCatching { cookieFromJson(arr.getJSONObject(i)) }.onSuccess { out += it }
         return out
     }
 }

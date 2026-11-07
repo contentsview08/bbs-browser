@@ -747,6 +747,15 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
   }
 }
 
+let lastYield = Date.now()
+
+/** 偽のサーバーと SQLite は待ちが起きないので、ときどき譲らないと vitest の通信が 60 秒で切れる */
+async function yieldToEventLoop(): Promise<void> {
+  if (Date.now() - lastYield < 1000) return
+  await new Promise((resolve) => setTimeout(resolve))
+  lastYield = Date.now()
+}
+
 export async function runScenario(c: Scenario, make: MakeServer = makeFake): Promise<Record<string, string>> {
   const w = new World(make, c.server ?? {})
   w.retentionDays = c.retention_days ?? 0
@@ -772,7 +781,10 @@ export async function runScenario(c: Scenario, make: MakeServer = makeFake): Pro
       )
     }
   }
-  for (const s of c.steps) await runStep(w, s, c)
+  for (const s of c.steps) {
+    await runStep(w, s, c)
+    await yieldToEventLoop()
+  }
   if (c.expected) await check(w, c.expected, c.name)
   const digests: Record<string, string> = {}
   for (const [name, d] of w.devices) digests[name] = await d.digest()

@@ -67,7 +67,8 @@ function PopupWindow(props: {
       top: fitsAbove ? entry.triggerY - height - 4 : minTop,
       maxHeight: fitsAbove ? Math.min(spaceAbove, limit) : limit,
       overflowY: 'auto',
-      zIndex: 9001 + props.stackIndex,
+      // 2 つおき。一番上のすぐ下に網掛けの層(shadeZ)を挟むため
+      zIndex: 9001 + props.stackIndex * 2,
       opacity: props.isTop ? 1 : 0.97,
       // 一番上以外は押せないようにする。下のポップアップの上を押しても、背面の幕に届いて一番上だけが閉じる
       // (押せるままだと、下のポップアップの中のアンカーなどが反応して、新しいポップアップが開いてしまう)
@@ -155,9 +156,49 @@ function popupIndexAt(x: number, y: number): number | undefined {
   return found
 }
 
+/** 一番上のポップアップのすぐ下に入れる網掛けの層の z(ポップアップは 9001 + 段 * 2) */
+function shadeZ(count: number): number {
+  return 9000 + (count - 1) * 2
+}
+
+const SHADE_FADE_MS = 120
+
 export default function PostPopup(props: Props) {
   const down = useRef(false)
-  if (props.popups.length === 0) return null
+  const open = props.popups.length > 0
+  // 網掛けの層: 一番上以外(本文と下の段)を少し沈めて、操作が届くポップアップを浮かせる。
+  // 出し入れを短いフェードにするため、閉じたあともフェードが終わるまで層だけ残す
+  const [shadeOn, setShadeOn] = useState(false)
+  const [shadeMounted, setShadeMounted] = useState(open)
+  useEffect(() => {
+    if (open) {
+      setShadeMounted(true)
+      // 置いた直後に opacity を変えると transition が走らないので、1 コマ待つ
+      const id = requestAnimationFrame(() => setShadeOn(true))
+      return () => cancelAnimationFrame(id)
+    }
+    setShadeOn(false)
+    const t = setTimeout(() => setShadeMounted(false), SHADE_FADE_MS)
+    return () => clearTimeout(t)
+  }, [open])
+
+  if (!open && !shadeMounted) return null
+  const r = props.containerRect
+  const shade = shadeMounted && (
+    <div
+      className="fixed pointer-events-none"
+      style={{
+        ...(r ? { left: r.left, top: r.top, width: r.width, height: r.height } : { inset: 0 }),
+        // 背景色を薄く重ねる。暗い配色は少し暗く、明るい配色は少し白くなる
+        background: 'var(--c-base)',
+        opacity: shadeOn ? 0.3 : 0,
+        transition: `opacity ${SHADE_FADE_MS}ms ease-out`,
+        zIndex: shadeZ(Math.max(1, props.popups.length)),
+      }}
+    />
+  )
+  // 全部閉じたあとのフェードアウト中は、層だけ(背面の幕は置かない。操作を遮らないように)
+  if (!open) return createPortal(shade, document.body)
   return createPortal(
     <div
       className="fixed inset-0"
@@ -183,6 +224,7 @@ export default function PostPopup(props: Props) {
         if (e.target === e.currentTarget) props.onOverlayMove?.(e.clientX, e.clientY)
       }}
     >
+      {shade}
       {props.popups.map((entry, i) => (
         <PopupWindow
           key={entry.id}

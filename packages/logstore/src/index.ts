@@ -634,13 +634,18 @@ export class LogStore {
       status: 'active' | 'archived' | null
       log_title: string | null
     }>(
-      `SELECT f.board_url, f.key, f.connector_id, f.title, f.created_at,
+      // 結び付けの ON の中の副問い合わせから外の表を見ると、古い SQLite(PC の sqlx が持つもの)は列を見つけられない。
+      // 先に副問い合わせで行の番号を取ってから結ぶ
+      `SELECT ff.board_url, ff.key, ff.connector_id, ff.title, ff.created_at,
               t.post_count, t.read_no, t.status, t.title AS log_title
-       FROM favorite_threads AS f
-       LEFT JOIN threads AS t ON t.rowid = (
-         SELECT t2.rowid FROM threads AS t2 WHERE t2.key = f.key AND t2.board_url IN (${boardUrlVariantsSql('f.board_url')})
-         ORDER BY t2.board_url = f.board_url DESC, t2.read_no DESC LIMIT 1)
-       ORDER BY f.sort`,
+       FROM (
+         SELECT f.board_url, f.key, f.connector_id, f.title, f.created_at, f.sort,
+           (SELECT t2.rowid FROM threads AS t2 WHERE t2.key = f.key AND t2.board_url IN (${boardUrlVariantsSql('f.board_url')})
+            ORDER BY t2.board_url = f.board_url DESC, t2.read_no DESC LIMIT 1) AS log_rowid
+         FROM favorite_threads AS f
+       ) AS ff
+       LEFT JOIN threads AS t ON t.rowid = ff.log_rowid
+       ORDER BY ff.sort`,
     )
     return rows.map((r) => ({
       // ログのスレタイがあればそちら(URL から開いて足したスレは、足したときのスレタイが空のことがある)

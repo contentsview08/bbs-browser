@@ -56,8 +56,7 @@ private fun parsedJson(s: String): Any? = runCatching {
 
 /** ファイルを読む。別の JSON や壊れた行は例外(何も戻さない) */
 internal fun parseBackup(text: String): BackupFile {
-    val read = JSONObject(text)
-    val o = if (read.optString("app") == LEGACY_BACKUP_APP) currentFromLegacy(read) else read
+    val o = JSONObject(text)
     if (o.optString("app") != BACKUP_APP) throw IllegalArgumentException("このアプリのバックアップではありません")
     if (o.optInt("version") > BACKUP_VERSION) throw IllegalArgumentException("新しい版のアプリで書き出したファイルです。アプリを更新してください")
     fun rows(name: String): List<JSONObject> = o.optJSONArray(name)?.let { a -> List(a.length()) { a.getJSONObject(it) } } ?: emptyList()

@@ -94,7 +94,8 @@ internal fun legacySettings(old: JSONObject): JSONObject {
     px("listFontScale", "listFontPx", LIST_FONT_BASE_PX)
     if (old.has("barFontScale")) barPxOfScale(scale("barFontScale"), basePxOfScale(base)).takeIf { it != 0f }?.let { out.put("barFontPx", it.toDouble()) }
     if (old.has("lineHeight")) old.optDouble("lineHeight").toFloat().takeIf { it != POST_LINE_HEIGHT }?.let { out.put("postLineHeight", it.toDouble()) }
-    if (old.has("postPad")) out.put("postPadPx", orUnset(old.getInt("postPad"), -1, POST_PAD_PX))
+    // 古いファイルの余白の既定は 8 だった。いまの既定が変わっても「決めていない」の判定は当時の値で
+    if (old.has("postPad")) out.put("postPadPx", orUnset(old.getInt("postPad"), -1, 8))
     if (old.has("listPad")) out.put("listPadPx", orUnset(old.getInt("listPad"), -1, LIST_PAD_PX))
     if (old.has("headerHeight")) out.put("headerPx", orUnset(old.getInt("headerHeight"), 0, HEADER_PX))
     if (old.has("footerHeight")) out.put("footerPx", orUnset(old.getInt("footerHeight"), 0, FOOTER_PX))

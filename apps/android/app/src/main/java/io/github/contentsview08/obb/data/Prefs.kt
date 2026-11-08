@@ -161,10 +161,6 @@ class Prefs(context: Context) {
     var footerHeight: Int
         get() = orDefault(footerPx, 0, FOOTER_PX)
         set(v) { footerPx = orUnset(v, 0, FOOTER_PX) }
-    var barFontPx by pref("barFontPx", 0f)
-    var barFontScale: Float
-        get() = barScaleOfPx(barFontPx, mobileFontPx)
-        set(v) { barFontPx = barPxOfScale(v, mobileFontPx) }
 
     // ── スレ一覧 ──
     /** 板を開いたときの並び: subject(更新順)/ momentum / newest / count */

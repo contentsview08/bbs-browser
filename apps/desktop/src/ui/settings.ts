@@ -875,7 +875,8 @@ function apply(s: AppSettings, o: { font?: boolean } = {}) {
   else root.style.removeProperty('--header-height')
   if (s.footerPx) root.style.setProperty('--footer-bar-h', `${s.footerPx}px`)
   else root.style.removeProperty('--footer-bar-h')
-  root.style.setProperty('--bar-zoom', s.barFontPx ? String(s.barFontPx / base) : '1')
+  // 帯の字は基本の文字に従う(別に変える設定は持たない。barFontPx は古い保存の名残で読まない)
+  root.style.setProperty('--bar-zoom', '1')
   if (s.postLineHeight) root.style.setProperty('--post-line-height', String(s.postLineHeight))
   else root.style.removeProperty('--post-line-height')
   // 余白(px)。決めていなければ、見た目・密度の既定のまま

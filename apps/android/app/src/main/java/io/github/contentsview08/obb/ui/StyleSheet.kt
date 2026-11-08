@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -246,16 +245,14 @@ private fun SheetSwitch(label: String, checked: Boolean, onChange: (Boolean) -> 
 private fun SheetLabel(t: String) =
     Text(t, Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
 
-/** 配色の丸を横一列に。丸の中に、その配色の帯・地・差し色を描く(名前だけより、押す前に色が分かる) */
+/** 配色の丸を並べ、右端まで来たら次の行へ(横にスクロールすると全部が見えない)。丸の中に、その配色の帯・地・差し色を描く(名前だけより、押す前に色が分かる) */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SchemeRow(p: Prefs) {
     val current = Palette.scheme.key
     val schemes = allSchemes()
-    // 開いたときに、いま使っている配色が見える所から並べる
-    val state = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (schemes.indexOfFirst { it.key == current } - 2).coerceAtLeast(0))
-    androidx.compose.foundation.lazy.LazyRow(Modifier.fillMaxWidth(), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        items(schemes.size, key = { schemes[it].key }) { i ->
-            val s = schemes[i]
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        for (s in schemes) {
             val on = s.key == current
             Column(
                 Modifier.width(68.dp).clip(RoundedCornerShape(8.dp)).clickable {
@@ -282,10 +279,11 @@ private fun SchemeRow(p: Prefs) {
     }
 }
 
-/** 差し色の丸を横一列に。左端の「テーマ」はテーマの色に戻す */
+/** 差し色の丸を並べ、右端まで来たら次の行へ。左端の「テーマ」はテーマの色に戻す */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AccentRow(p: Prefs) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         @Composable fun dot(c: Color, label: String, on: Boolean, onClick: () -> Unit) {
             Column(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(28.dp).background(c, CircleShape).border(if (on) 3.dp else 1.dp, if (on) Palette.textStrong else Palette.border, CircleShape))
@@ -301,10 +299,11 @@ private fun AccentRow(p: Prefs) {
 @Composable
 private fun PostStyleRow(p: Prefs) = ChipRow(POST_STYLES, p.postStyle) { p.postStyle = it }
 
-/** 選ぶものを横並びの札で。名前の括弧の中の説明は、狭いので省く */
+/** 選ぶものを札で並べ、右端まで来たら次の行へ。名前の括弧の中の説明は、狭いので省く */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ChipRow(options: List<Pair<String, String>>, value: String, onPick: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for ((k, name) in options) {
             val on = value == k
             val shape = RoundedCornerShape(16.dp)
@@ -362,7 +361,6 @@ fun FontSizeSlider(label: String, scale: Float, base: Int, onChange: (Float) -> 
 fun BarSliders(p: Prefs) {
     SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 32f..120f, 0, "${p.headerHeight}", io.github.contentsview08.obb.data.HEADER_PX.toFloat()) { p.headerHeight = it.toInt() }
     SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 32f..110f, 0, "${p.footerHeight}", io.github.contentsview08.obb.data.FOOTER_PX.toFloat()) { p.footerHeight = it.toInt() }
-    SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.6f..1.6f, 19, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
     SizeSlider("基本の文字", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
 }
 

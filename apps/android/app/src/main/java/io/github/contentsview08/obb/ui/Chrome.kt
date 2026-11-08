@@ -183,7 +183,8 @@ fun HeaderBar(
         }
         Spacer(Modifier.width(8.dp))
         // 題は 2 行まで。入りきらなければ字を小さくして収める。押すとメニュー(スレ・板の操作)
-        val size = 15f * prefs.barFontScale
+        // 帯の字は基本の文字に従う(別に変える設定は持たない)
+        val size = 15f
         androidx.compose.foundation.text.BasicText(
             title,
             Modifier.weight(1f).then(if (onTitle != null) Modifier.clickable(onClick = onTitle) else Modifier).padding(vertical = 4.dp),

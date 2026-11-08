@@ -398,16 +398,6 @@ export function BarSliders(props: { settings: AppSettings; update: UpdateSetting
         onCommit={(px) => update('footerPx', px)}
         resettable
       />
-      <FontSizeSlider
-        label="ヘッダー・フッターの文字"
-        value={s.barFontPx}
-        base={base}
-        {...scaledPxRange(base)}
-        format={(px) => `${Math.round((px / base) * 100)}%`}
-        preview={(px) => setCssVar('--bar-zoom', String(px / base))}
-        onCommit={(px) => update('barFontPx', px)}
-        resettable
-      />
     </>
   )
 }

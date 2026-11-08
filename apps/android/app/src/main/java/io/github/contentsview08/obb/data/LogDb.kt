@@ -95,8 +95,12 @@ internal object ThreadLogSql {
     /** 画面の履歴の一覧。同期のテストも同じ文を流す */
     const val HISTORY = "SELECT board_url, key, title, post_count, read_no, read_at, created_at FROM threads WHERE read_at IS NOT NULL ORDER BY read_at DESC LIMIT ?"
 
-    /** 板の未読の数のもと。同期のテストも同じ文を流す */
-    fun threadStates(urls: Int) = "SELECT key, read_no, post_count, status FROM threads WHERE board_url IN (${List(urls) { "?" }.joinToString(", ")})"
+    /**
+     * 板の未読の数のもと。同期のテストも同じ文を流す。
+     * のぞいただけのスレ(読んでいない・履歴にない・お気に入りでない行)は、開いたスレに数えない
+     */
+    fun threadStates(urls: Int) = "SELECT key, read_no, post_count, status FROM threads WHERE board_url IN (${List(urls) { "?" }.joinToString(", ")}) " +
+        "AND (read_no > 0 OR read_at IS NOT NULL OR EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = threads.board_url AND f.key = threads.key))"
 
     const val MARK_READ = "UPDATE threads SET read_no = MAX(read_no, ?), read_at = ? WHERE board_url = ? AND key = ?"
     const val VIEW = "UPDATE threads SET read_at = ? WHERE board_url = ? AND key = ?"

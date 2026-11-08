@@ -1013,6 +1013,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** のぞく: 手元のログ(なければ null) */
+    suspend fun peekLog(t: ThreadSummary): io.github.contentsview08.obb.data.ThreadLog? = db.loadThread(t)
+
+    /**
+     * のぞく: 新着を取ってログに足し、読み直したログを返す。のぞいただけで履歴に出たり既読が進んだりしないよう、
+     * 既読(read_no)と閲覧(read_at)は書かない
+     */
+    suspend fun peekFetch(t: ThreadSummary): io.github.contentsview08.obb.data.ThreadLog? {
+        val log = db.loadThread(t)
+        val r = TwoCh.fetchPosts(t, log?.cursor)
+        db.saveFetch(t, r, r.title ?: log?.title ?: t.title)
+        return db.loadThread(t)
+    }
+
     /** 新着を取る。取り直しの最中なら何もしない(null)。終わりを待つときは返した Job を join する。quiet: 自動更新から呼ぶとき(今は動きを変えない) */
     fun refreshThread(page: Page.Thread, firstOpen: Boolean = false, quiet: Boolean = false): Job? {
         if (page.loading) return null

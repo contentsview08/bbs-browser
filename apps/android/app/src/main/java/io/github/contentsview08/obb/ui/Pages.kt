@@ -266,13 +266,16 @@ private const val PAST_TAB_HEIGHT = 44
 @Composable
 private fun PastRow(
     vm: AppViewModel, t: io.github.contentsview08.obb.bbs.ThreadSummary, meta: String, total: Int?, unread: Int,
-    archived: Boolean = false, own: String? = null, ownNo: Int? = null, checked: Boolean? = null, onLongClick: (() -> Unit)? = null, onClick: (() -> Unit)? = null,
+    archived: Boolean = false, own: String? = null, ownNo: Int? = null, checked: Boolean? = null, onLongClick: ((androidx.compose.ui.geometry.Rect?) -> Unit)? = null, onClick: (() -> Unit)? = null,
 ) = WithoutBaseFont {
+    // のぞく窓をこの行の位置から広げる
+    val anchor = rememberPeekAnchor()
+    val view = androidx.compose.ui.platform.LocalView.current
     // スレ一覧と同じく、字の大きさはスレ一覧の文字で決める
     val k = vm.prefs.listFontScale
     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick) { if (onClick != null) onClick() else vm.openThread(t) }.graphicsLayer { alpha = if (archived) 0.6f else 1f },
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).peekAnchor(anchor).combinedClickable(onLongClick = onLongClick?.let { f -> { f(anchor.screenRect(view)) } }) { if (onClick != null) onClick() else vm.openThread(t) }.graphicsLayer { alpha = if (archived) 0.6f else 1f },
     ) {
         // 左の帯: 未読があれば未読の色(未読が多いほど濃く)
         Box(Modifier.width(3.dp).fillMaxHeight().background(if (unread > 0) Palette.unread.copy(alpha = 0.35f + 0.65f * minOf(1f, kotlin.math.log10(unread + 1f) / 2.5f)) else Color.Transparent))
@@ -317,9 +320,9 @@ internal fun postedHeadLine(body: String): String? = body.lines().firstOrNull { 
 @Composable
 fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, empty: String, onRefresh: (() -> Unit)? = null) {
     val refresh = onRefresh ?: { vm.checkNew(entries) }
-    var menuFor by remember { mutableStateOf<io.github.contentsview08.obb.bbs.ThreadSummary?>(null) }
+    var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val hv = androidx.compose.ui.platform.LocalView.current
-    menuFor?.let { t -> ThreadMenu(vm, t, hasLog = true) { menuFor = null } }
+    menuFor?.let { p -> ThreadPeek(vm, p, hasLog = true) { menuFor = null } }
     // お気に入りのスレは、開いたときに新着を確かめる(開いた直後は一覧がまだ空なので、そろったときにも)
     androidx.compose.runtime.LaunchedEffect(tab, entries.size) { if (tab == "fav") vm.checkNew(entries) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -382,7 +385,8 @@ fun ThreadEntryList(vm: AppViewModel, tab: String, entries: List<HistoryEntry>, 
                 val id = h.thread.id
                 fun toggle() { selected = if (id in selected) selected - id else selected + id }
                 if (selecting) PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, checked = id in selected, onLongClick = { toggle() }, onClick = { toggle() })
-                else PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, onLongClick = { Haptics.longPress(hv); menuFor = h.thread })
+                // のぞく窓が掲示板で分かったレス数を使えるように(新着を取りに行くかの目安)
+                else PastRow(vm, h.thread, meta, total, unread, archived = remote == -1, onLongClick = { from -> Haptics.longPress(hv); menuFor = PeekTarget(h.thread, from, knownCount = total) })
             }
             item { Spacer(Modifier.navigationBarsPadding()) }
         }}

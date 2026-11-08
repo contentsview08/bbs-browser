@@ -201,10 +201,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
         }
     }
 
-    var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
+    var menuFor by remember { mutableStateOf<PeekTarget?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     var styleSheet by remember { mutableStateOf(false) }
-    menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
+    menuFor?.let { p -> ThreadPeek(vm, p, page.states[p.thread.key] != null) { menuFor = null } }
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.only != null) {
         if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false; page.only = null }
     }
@@ -346,7 +346,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         ThreadRow(
                             t, pinchScale ?: prefs.listFontScale, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                             isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds, thumbAllowed = thumbAllowed,
-                            onLongClick = { Haptics.longPress(hapticView); menuFor = t },
+                            onLongClick = { from -> Haptics.longPress(hapticView); menuFor = PeekTarget(t, from) },
                         ) { vm.openThread(t) }
                         HorizontalDivider(color = Palette.border)
                     }
@@ -497,8 +497,12 @@ private fun threadTitleText(t: ThreadSummary, isNew: Boolean, isFavorite: Boolea
 @Composable
 private fun ThreadRow(
     t: ThreadSummary, k: Float, state: ThreadState?, momentum: Double, rank: Double, now: Long,
-    isNew: Boolean, isFavorite: Boolean, thumbAllowed: Boolean, onLongClick: () -> Unit, onClick: () -> Unit,
+    isNew: Boolean, isFavorite: Boolean, thumbAllowed: Boolean, onLongClick: (androidx.compose.ui.geometry.Rect?) -> Unit, onClick: () -> Unit,
 ) = WithoutBaseFont {
+    // のぞく窓をこの行の位置から広げる
+    val anchor = rememberPeekAnchor()
+    val view = androidx.compose.ui.platform.LocalView.current
+    val longClick = { onLongClick(anchor.screenRect(view)) }
     val unread = unreadOf(t, state)
     val prefs = LocalPrefs.current
     val pad = prefs.listPad.dp
@@ -511,7 +515,7 @@ private fun ThreadRow(
         rank >= 0.3 -> Palette.heatWarm
         else -> Palette.textMuted
     }
-    Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min).graphicsLayer { alpha = if (archived) 0.6f else 1f }) {
+    Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min).peekAnchor(anchor).graphicsLayer { alpha = if (archived) 0.6f else 1f }) {
         // 未読が多いほど左の帯を濃くする。札を見なくても溜まり具合が分かるように
         if (visited) Box(
             Modifier.width(3.dp).fillMaxHeight().background(
@@ -520,7 +524,7 @@ private fun ThreadRow(
         )
         if (compact) {
             Row(
-                Modifier.fillMaxWidth().combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad / 2 + 2.dp, bottom = pad / 2 + 2.dp),
+                Modifier.fillMaxWidth().combinedClickable(onLongClick = longClick, onClick = onClick).padding(start = 14.dp, end = 12.dp, top = pad / 2 + 2.dp, bottom = pad / 2 + 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -538,7 +542,7 @@ private fun ThreadRow(
         }
         val thumb = rememberListThumb(t.thumb, thumbAllowed)
         Row(
-            Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = onLongClick, onClick = onClick)
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min).combinedClickable(onLongClick = longClick, onClick = onClick)
                 .padding(start = 14.dp, end = 12.dp, top = if (thumb != null) 2.dp else pad, bottom = if (thumb != null) 2.dp else pad),
         ) {
         if (thumb != null) {

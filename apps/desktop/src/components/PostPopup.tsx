@@ -111,8 +111,8 @@ function PopupWindow(props: {
       data-popup-top={props.isTop || undefined}
       data-index={props.stackIndex}
       // 一番上(操作が届く)だけ枠を文字の強い色にする。背景が本文と同じ色なので、枠がないとどこまでがポップアップか分からない。
-      // 差し色にしないのは、元のレスの下線が差し色で見分けにくいため。太さは変えない(太いと重い)。影は本文の上で浮いて見えるよう濃くする
-      className={`post-popup border rounded-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
+      // 差し色にしないのは、元のレスの下線が差し色で見分けにくいため。一番上は 2px(3px は重く、1px は細すぎる)。影は本文の上で浮いて見えるよう濃くする
+      className={`post-popup ${props.isTop ? 'border-2' : 'border'} rounded-lg custom-scrollbar ${style.visibility === 'visible' ? 'rise-in' : ''}`}
       style={{ ...style, borderColor: props.isTop ? 'var(--c-text-strong)' : 'var(--c-border-strong)', boxShadow: '0 8px 28px rgba(0, 0, 0, 0.45)' }}
       onClick={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}

@@ -33,6 +33,14 @@ export interface ApplyPlan {
   changed: boolean
   /** bad_counts に数える理由。手元に入れないと決めたとき */
   bad?: string
+  /** ログの削除が写って手元の行を消したスレ。画面はこれだけを閉じる(行がないことから削除を推し量らない) */
+  dropped?: DroppedThread[]
+}
+
+/** board_url は手元の threads の行の書き方 */
+export interface DroppedThread {
+  board_url: string
+  key: string
 }
 
 /** 1 つの操作で変わるレコードの 1 つ。make の stamp は hlcStamp の値 */

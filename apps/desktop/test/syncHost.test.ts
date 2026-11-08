@@ -10,7 +10,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => undefi
 
 const { decodeKeyMaterial, encodeKeyMaterial, syncTransport, resolveSyncBoard, DEFAULT_SYNC_SERVER } = await import('../src/host/sync')
 
-const REQ = { method: 'POST' as const, url: 'https://sync.test/records', headers: { Authorization: 'Bearer t' }, body: '{}', maxBytes: 10, timeoutMs: 10_000 }
+const REQ = { method: 'POST' as const, url: 'https://sync.test/records', headers: { Authorization: 'Bearer t' }, body: '{}', maxBytes: 10, timeoutMs: 60_000, idleTimeoutMs: 10_000 }
 
 describe('同期の PC の部品', () => {
   it('鍵の値を読み戻せ、壊れた値は鍵なしとして扱う', () => {
@@ -24,7 +24,7 @@ describe('同期の PC の部品', () => {
     invoke.mockResolvedValueOnce({ status: 200, body: '{}' })
     expect(await syncTransport.send(REQ)).toEqual({ status: 200, body: '{}' })
     expect(invoke.mock.calls[0][0]).toBe('sync_http')
-    expect(invoke.mock.calls[0][1].req).toMatchObject({ url: REQ.url, body: '{}', max_bytes: 10, timeout_ms: 10_000 })
+    expect(invoke.mock.calls[0][1].req).toMatchObject({ url: REQ.url, body: '{}', max_bytes: 10, timeout_ms: 60_000, idle_timeout_ms: 10_000 })
     invoke.mockRejectedValueOnce('network')
     await expect(syncTransport.send(REQ)).rejects.toThrow('network')
     invoke.mockRejectedValueOnce('too_large')

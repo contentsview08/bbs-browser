@@ -3,9 +3,13 @@ export const SCHEMA_VERSION = 1
 export const PULL_MIN_GAP_MS = 10_000
 /** 履歴の画面に出す件数 */
 export const HISTORY_SHOWN = 300
-export const HTTP_TIMEOUT_MS = 10_000
+/** 通信の打ち切り。無通信が続く時間と、1 回の要求の全体の時間。遅い回線でも 1MB のページを読み切れるよう全体は長めにする */
+export const HTTP_IDLE_TIMEOUT_MS = 10_000
+export const HTTP_TOTAL_TIMEOUT_MS = 60_000
 export const BACKOFF_MIN_MS = 1_000
 export const BACKOFF_MAX_MS = 60_000
+/** 429 の待ちの上限。サーバーが 1 時間・翌日と言ってきても、この間隔で 1 回だけ試す(日の上限は翌日まで待たずに戻れるように) */
+export const RETRY_WAIT_MAX_MS = 600_000
 export const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 export const PUSH_BATCH_RECORDS = 100
 export const PUSH_BATCH_BYTES = 1024 * 1024
@@ -32,6 +36,8 @@ export const HEAD_INTERVAL_MS = 60_000
 export const PUSH_INTERVAL_MS = 300_000
 /** 確認が「変化なし」のたびに間隔を 2 倍にし、ここで止める(Cloudflare の無料枠に 100 人分を収めるため) */
 export const HEAD_BACKOFF_MAX_MS = 300_000
+/** サーバーの指示する間隔の上限。タイマーの上限(2^31-1 ms)を超えてすぐ発火しないように */
+export const PACE_MAX_MS = 3_600_000
 export const NET_SETTLE_MS = 5_000
 export const NET_MIN_GAP_MS = 30_000
 export const IDLE_STOP_MS = 10 * 60 * 1000

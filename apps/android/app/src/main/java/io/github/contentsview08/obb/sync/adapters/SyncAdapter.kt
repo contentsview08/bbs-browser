@@ -27,7 +27,12 @@ class ApplyPlan(
     val changed: Boolean,
     /** bad_counts に数える理由。手元に入れないと決めたとき */
     val bad: String? = null,
+    /** ログの削除が写って手元の行を消したスレ。画面はこれだけを閉じる(行がないことから削除を推し量らない) */
+    val dropped: List<DroppedThread> = emptyList(),
 )
+
+/** boardUrl は手元の threads の行の書き方 */
+data class DroppedThread(val boardUrl: String, val key: String)
 
 /** 1 つの操作で変わるレコードの 1 つ。make の stamp は Hlc.stamp の値 */
 class OpEffect(

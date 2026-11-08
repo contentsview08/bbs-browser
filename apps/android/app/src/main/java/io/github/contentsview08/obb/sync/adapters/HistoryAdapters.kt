@@ -302,6 +302,7 @@ abstract class ReadAdapterBase(protected val db: SyncSql, protected val host: Hi
         val rec = readRecords(db, r.refBoard!!, key)
         val pos = readPosition(rec.latest, rec.devs)
         val resetWall = rec.latest?.let { Hlc.parse(it.hlc).wall }
+        val dropped = ArrayList<DroppedThread>()
         val statements = rows.flatMap { x ->
             // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
             val pending = pendingRead(db, x.boardUrl, key)
@@ -310,12 +311,13 @@ abstract class ReadAdapterBase(protected val db: SyncSql, protected val host: Hi
             // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
             val canDelete = resetWall != null && resetWall - ctx.now <= DAY_MS && pos == 0L && pending == 0L
             if (canDelete && x.readAt != null && x.readAt <= resetWall!!) {
+                dropped += DroppedThread(x.boardUrl, key)
                 return@flatMap listOf("posts", "threads").map { SqlStatement("DELETE FROM $it WHERE board_url = ? AND key = ?", listOf(x.boardUrl, key)) }
             }
             val next = maxOf(pos, pending, if (rec.latest == null) x.readNo else 0L)
             if (x.readNo == next) emptyList() else listOf(SqlStatement("UPDATE threads SET read_no = ? WHERE board_url = ? AND key = ?", listOf(next, x.boardUrl, key)))
         }
-        return ApplyPlan(statements, statements.isNotEmpty())
+        return ApplyPlan(statements, statements.isNotEmpty(), dropped = dropped)
     }
 
     override fun localLines(ctx: AdapterContext): List<String> = emptyList()

@@ -3574,6 +3574,191 @@
   }
  },
  {
+  "name": "gc_floor の変更: 全件の読み取りが途中で切れた分はリベースの回数に数えない",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "t"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_remove",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": ""
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 1,
+    "body": {
+     "records": [],
+     "head": 10,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 10
+    }
+   },
+   {
+    "op": "server_fail",
+    "path": "/changes",
+    "status": 500,
+    "times": 1
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "phase": "idle",
+      "last_error": "http_500"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 1,
+    "body": {
+     "records": [],
+     "head": 10,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 10
+    }
+   },
+   {
+    "op": "server_fail",
+    "path": "/changes",
+    "status": 500,
+    "times": 1
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "phase": "idle",
+      "last_error": "http_500"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 1,
+    "body": {
+     "records": [],
+     "head": 10,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 10
+    }
+   },
+   {
+    "op": "server_fail",
+    "path": "/changes",
+    "status": 500,
+    "times": 1
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "phase": "idle",
+      "last_error": "http_500"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 1,
+    "body": {
+     "records": [],
+     "head": 10,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 10
+    }
+   },
+   {
+    "op": "server_fail",
+    "path": "/changes",
+    "status": 500,
+    "times": 1
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "phase": "idle",
+      "last_error": "http_500"
+     }
+    }
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "times": 2,
+    "body": {
+     "records": [],
+     "head": 10,
+     "more": false,
+     "epoch": "$epoch",
+     "gc_floor": 10
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "phase": "idle",
+    "last_error": null
+   }
+  }
+ },
+ {
   "name": "再送: 500 は偽の時計で待ってから試す。待つ間は通信しない",
   "devices": [
    "pc",
@@ -3749,7 +3934,7 @@
   }
  },
  {
-  "name": "429 は待って試す",
+  "name": "送信の 429 は送信だけを待って試す。周は止めない",
   "devices": [
    "pc",
    "phone"
@@ -3784,7 +3969,9 @@
     "op": "expect",
     "expect": {
      "pc": {
-      "state": "backoff"
+      "state": "idle",
+      "pending": 1,
+      "last_error": "http_429"
      }
     }
    },
@@ -3800,7 +3987,197 @@
   "expected": {
    "pc": {
     "state": "idle",
-    "pending": 0
+    "pending": 0,
+    "last_error": null
+   }
+  }
+ },
+ {
+  "name": "日の上限の送信の 429: 読むのと確認は続け、送信は 10 分おきに 1 回だけ試す",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "phone",
+    "op": "pair_join",
+    "from": "pc"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 10000
+   },
+   {
+    "op": "server_response",
+    "path": "/records",
+    "status": 429,
+    "body": {
+     "error": "rate_limited",
+     "retry_after_sec": 86400
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle",
+      "pending": 1,
+      "last_error": "rate_limited"
+     }
+    }
+   },
+   {
+    "device": "phone",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "2",
+    "title": "title2"
+   },
+   {
+    "device": "phone",
+    "op": "sync"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 60000
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "idle",
+      "pending": 1,
+      "favorite_threads": [
+       "1",
+       "2"
+      ],
+      "requests": {
+       "GET /changes": 1
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 540000
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "pending": 0,
+    "last_error": null
+   },
+   "phone": {}
+  }
+ },
+ {
+  "name": "日の上限の 429: サーバーが翌日と言っても 10 分で試す",
+  "devices": [
+   "pc"
+  ],
+  "steps": [
+   {
+    "device": "pc",
+    "op": "pair_first"
+   },
+   {
+    "device": "pc",
+    "op": "favorite_thread_add",
+    "board": "https://a.5ch.io/x/",
+    "key": "1",
+    "title": "title1"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 10000
+   },
+   {
+    "op": "server_response",
+    "path": "/changes",
+    "status": 429,
+    "body": {
+     "error": "rate_limited",
+     "retry_after_sec": 86400
+    }
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "pending": 1,
+      "last_error": "rate_limited"
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 590000
+   },
+   {
+    "device": "pc",
+    "op": "mark"
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "state": "backoff",
+      "requests": {}
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 10000
+   },
+   {
+    "device": "pc",
+    "op": "sync_auto"
+   }
+  ],
+  "expected": {
+   "pc": {
+    "state": "idle",
+    "pending": 0,
+    "last_error": null
    }
   }
  },
@@ -12030,10 +12407,17 @@
         "key": "1",
         "no": 501
        }
+      ],
+      "dropped": [
+       {
+        "board_url": "https://a.5ch.io/x/",
+        "key": "1"
+       }
       ]
      },
      "phone": {
-      "read_no": {}
+      "read_no": {},
+      "dropped": []
      }
     }
    },
@@ -18888,6 +19272,148 @@
    },
    {
     "op": "converged"
+   }
+  ]
+ },
+ {
+  "name": "参加: 自分のレスの印だけでも確認が出て、やめると送らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "phone": {
+    "own_posts": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "no": 2,
+      "ago_ms": 5000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc",
+    "asks": true,
+    "choice": "keep_local"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "keys": false,
+      "state": "off",
+      "records": 0,
+      "ops": 0,
+      "requests": {}
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "参加: 上げた画像の履歴だけでも確認が出て、やめると送らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "phone": {
+    "uploads": [
+     {
+      "url": "https://f.example/1.png",
+      "name": "1.png",
+      "size": 1,
+      "ago_ms": 9000
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc",
+    "asks": true,
+    "choice": "keep_local"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "keys": false,
+      "state": "off",
+      "records": 0,
+      "ops": 0,
+      "requests": {}
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "参加: 履歴から外したスレの既読だけでも確認が出て、やめると送らない",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "seed": {
+   "phone": {
+    "threads": [
+     {
+      "board": "https://a.5ch.io/x/",
+      "key": "1",
+      "title": "t",
+      "post_count": 10,
+      "read_no": 5
+     }
+    ]
+   }
+  },
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc",
+    "asks": true,
+    "choice": "keep_local"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "keys": false,
+      "state": "off",
+      "records": 0,
+      "ops": 0,
+      "requests": {}
+     }
+    }
    }
   ]
  },

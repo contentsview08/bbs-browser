@@ -652,6 +652,7 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
             val rows = d.sql.query("SELECT payload FROM sync_records").map { r -> r["payload"] as String }
             for (text in texts as List<String>) assertEquals("$at のレコードに $text がない", false, rows.any { p -> p.contains(text) })
         }
+        e["dropped"]?.let { checkEq("$at の閉じるスレ", it, d.last?.dropped.orEmpty().map { x -> mapOf("board_url" to x.boardUrl, "key" to x.key) }) }
         e["applied_areas"]?.let { checkEq("$at の適用の種類", it, d.last?.applied.orEmpty().sorted()) }
         e["state"]?.let { assertEquals("$at の状態", it, d.engine.state) }
         e["phase"]?.let { assertEquals("$at の phase", it, d.state("phase")) }
@@ -807,14 +808,14 @@ class SyncScenarioTest {
         val cfg = load("sync-config.json") as Map<String, Any?>
         val c = cfg["constants"] as Map<String, Long>
         val actual = mapOf(
-            "SCHEMA_VERSION" to SyncConfig.SCHEMA_VERSION, "PULL_MIN_GAP_MS" to SyncConfig.PULL_MIN_GAP_MS, "HISTORY_SHOWN" to SyncConfig.HISTORY_SHOWN.toLong(), "HTTP_TIMEOUT_MS" to SyncConfig.HTTP_TIMEOUT_MS,
-            "BACKOFF_MIN_MS" to SyncConfig.BACKOFF_MIN_MS, "BACKOFF_MAX_MS" to SyncConfig.BACKOFF_MAX_MS, "MAX_RESPONSE_BYTES" to SyncConfig.MAX_RESPONSE_BYTES.toLong(),
+            "SCHEMA_VERSION" to SyncConfig.SCHEMA_VERSION, "PULL_MIN_GAP_MS" to SyncConfig.PULL_MIN_GAP_MS, "HISTORY_SHOWN" to SyncConfig.HISTORY_SHOWN.toLong(), "HTTP_IDLE_TIMEOUT_MS" to SyncConfig.HTTP_IDLE_TIMEOUT_MS, "HTTP_TOTAL_TIMEOUT_MS" to SyncConfig.HTTP_TOTAL_TIMEOUT_MS,
+            "BACKOFF_MIN_MS" to SyncConfig.BACKOFF_MIN_MS, "BACKOFF_MAX_MS" to SyncConfig.BACKOFF_MAX_MS, "RETRY_WAIT_MAX_MS" to SyncConfig.RETRY_WAIT_MAX_MS, "MAX_RESPONSE_BYTES" to SyncConfig.MAX_RESPONSE_BYTES.toLong(),
             "PUSH_BATCH_RECORDS" to SyncConfig.PUSH_BATCH_RECORDS.toLong(), "PUSH_BATCH_BYTES" to SyncConfig.PUSH_BATCH_BYTES.toLong(), "PUSH_MAX_ROUNDS" to SyncConfig.PUSH_MAX_ROUNDS.toLong(),
             "APPLY_BATCH" to SyncConfig.APPLY_BATCH.toLong(), "WRITE_BATCH" to SyncConfig.WRITE_BATCH.toLong(), "APPLY_SPLIT_AFTER" to SyncConfig.APPLY_SPLIT_AFTER.toLong(),
             "REBASE_LIMIT" to SyncConfig.REBASE_LIMIT.toLong(), "REBASE_WINDOW_MS" to SyncConfig.REBASE_WINDOW_MS, "RECREATE_RETRY_MS" to SyncConfig.RECREATE_RETRY_MS,
             "JOIN_CONFIRM_MIN" to SyncConfig.JOIN_CONFIRM_MIN.toLong(), "RESET_BATCH_MAX" to SyncConfig.RESET_BATCH_MAX.toLong(), "RESET_TOTAL_MAX" to SyncConfig.RESET_TOTAL_MAX.toLong(),
             "TRIM_BATCH" to SyncConfig.TRIM_BATCH.toLong(), "TRIM_ROUNDS" to SyncConfig.TRIM_ROUNDS.toLong(),
-            "HEAD_INTERVAL_MS" to SyncConfig.HEAD_INTERVAL_MS, "PUSH_INTERVAL_MS" to SyncConfig.PUSH_INTERVAL_MS, "HEAD_BACKOFF_MAX_MS" to SyncConfig.HEAD_BACKOFF_MAX_MS, "NET_SETTLE_MS" to SyncConfig.NET_SETTLE_MS,
+            "HEAD_INTERVAL_MS" to SyncConfig.HEAD_INTERVAL_MS, "PUSH_INTERVAL_MS" to SyncConfig.PUSH_INTERVAL_MS, "HEAD_BACKOFF_MAX_MS" to SyncConfig.HEAD_BACKOFF_MAX_MS, "PACE_MAX_MS" to SyncConfig.PACE_MAX_MS, "NET_SETTLE_MS" to SyncConfig.NET_SETTLE_MS,
             "NET_MIN_GAP_MS" to SyncConfig.NET_MIN_GAP_MS, "IDLE_STOP_MS" to SyncConfig.IDLE_STOP_MS,
         )
         assertEquals(c.toSortedMap(), actual.toSortedMap())

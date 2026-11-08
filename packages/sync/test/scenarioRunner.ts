@@ -734,6 +734,7 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
       const rows = await d.sql.db.select<{ payload: string }>('SELECT payload FROM sync_records')
       for (const text of e.record_lacks) expect(rows.some((r) => r.payload.includes(text)), `${at} のレコードに ${text} がない`).toBe(false)
     }
+    if (e.dropped !== undefined) expect(d.last?.dropped ?? [], `${at} の閉じるスレ`).toEqual(e.dropped)
     if (e.applied_areas !== undefined) expect(Object.keys(d.last?.applied ?? {}).sort(), `${at} の適用の種類`).toEqual(e.applied_areas)
     if (e.state !== undefined) expect(d.engine.state, `${at} の状態`).toBe(e.state)
     if (e.phase !== undefined) expect(await d.state('phase'), `${at} の phase`).toBe(e.phase)

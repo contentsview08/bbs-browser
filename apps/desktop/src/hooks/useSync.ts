@@ -1,7 +1,7 @@
 // 同期のきっかけと、設定の窓からの頼みごと。自動の同期は前面にいる間だけ(きっかけの決まりは SyncScheduler)
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
-import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type SyncGroup } from '@bbs-browser/sync'
+import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type DroppedThread, type SyncGroup } from '@bbs-browser/sync'
 import { broadcast } from '../host/crossWindow'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
 import { PRESET_URLS } from '../presets'
@@ -16,8 +16,8 @@ export interface SyncReloaders {
   posts: (s: LogStore) => void
   /** 自分のレスの印(開いているタブの印を読み直す) */
   ownPosts: (s: LogStore) => void
-  /** 閲覧履歴と既読(行が消えたスレのタブを閉じるのもここ) */
-  reads: (s: LogStore) => void
+  /** 閲覧履歴と既読。dropped は他の端末のログの削除が写ったスレ(タブを閉じる) */
+  reads: (s: LogStore, dropped: readonly DroppedThread[]) => void
   retentionDays: () => number
 }
 
@@ -62,7 +62,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
         if (r.applied.uploads) applied.current.uploads(store)
         if (r.applied.posts) applied.current.posts(store)
         if (r.applied.ownPosts) applied.current.ownPosts(store)
-        if (r.applied.history || r.applied.reads) applied.current.reads(store)
+        if (r.applied.history || r.applied.reads || r.dropped.length > 0) applied.current.reads(store, r.dropped)
       },
     })
   }, [store])
@@ -95,6 +95,8 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     window.addEventListener('online', network)
     window.addEventListener('pointerdown', activity, { passive: true })
     window.addEventListener('keydown', activity)
+    // ホイールだけで読み続けても放置と見なさない
+    window.addEventListener('wheel', activity, { passive: true })
     document.addEventListener('visibilitychange', visibility)
     return () => {
       scheduler.dispose()
@@ -104,6 +106,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
       window.removeEventListener('online', network)
       window.removeEventListener('pointerdown', activity)
       window.removeEventListener('keydown', activity)
+      window.removeEventListener('wheel', activity)
       document.removeEventListener('visibilitychange', visibility)
     }
   }, [ctl])
@@ -119,8 +122,8 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     syncPairingCode: () => need(latest.current).pairingCode(),
     syncJoin: (code: string) => need(latest.current).join(code).then(summary),
     syncNow: () => need(latest.current).syncNow().then((r) => {
-      // 適用の有無によらず、画面が読むものを DB の値にする
-      if (storeRef.current) applied.current.reads(storeRef.current)
+      // 適用の有無によらず、画面が読むものを DB の値にする。閉じるスレは onCycle が渡し済み
+      if (storeRef.current) applied.current.reads(storeRef.current, [])
       return summary(r)
     }),
     syncLeave: () => need(latest.current).leave(),

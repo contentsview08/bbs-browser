@@ -20,15 +20,18 @@ const val PAIRING_SHOW_MS = 60_000L
 const val JOIN_DATA_CONFIRM = "join_data"
 
 /**
- * 参加のとき、種まきで相手へ送るものが手元にあるか。閲覧履歴・お気に入り(スレ・板)・書き込み履歴・サイト・NG を見る
- * (設定と上げた画像は数えない)。最初から入っている掲示板・板は、まっさらな端末にもあるので数えない
+ * 参加のとき、種まきで相手へ送るものが手元にあるか。閲覧履歴・既読・お気に入り(スレ・板)・書き込み履歴・自分のレスの印・
+ * 上げた画像の履歴・サイト・NG を見る(設定は数えない)。最初から入っている掲示板・板は、まっさらな端末にもあるので数えない。
+ * 既読は履歴から外したスレの分も種まきで送るので、read_at がなくても read_no があれば数える
  */
 fun hasLocalData(db: SyncSql, adapters: List<SyncAdapter>, ctx: AdapterContext, presetUrls: List<String>): Boolean {
     fun any(sql: String, params: List<Any?> = emptyList()) = (db.query("SELECT COUNT(*) AS n $sql", params).firstOrNull()?.get("n") as? Long ?: 0L) > 0L
     fun notPreset(col: String) = if (presetUrls.isEmpty()) "" else " WHERE $col NOT IN (${presetUrls.joinToString(", ") { "?" }})"
-    if (any("FROM threads WHERE read_at IS NOT NULL")) return true
+    if (any("FROM threads WHERE read_at IS NOT NULL OR read_no > 0")) return true
     if (any("FROM favorite_threads")) return true
     if (any("FROM post_history")) return true
+    if (any("FROM own_posts")) return true
+    if (any("FROM uploads")) return true
     if (any("FROM favorite_boards${notPreset("url")}", presetUrls)) return true
     if (any("FROM sites${notPreset("menu_url")}", presetUrls)) return true
     val ng = adapters.firstOrNull { it.kind == NG_KIND } ?: return false

@@ -7,7 +7,8 @@ import kotlinx.coroutines.CancellationException
 
 // サーバーとの通信の口。実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
 
-class SyncRequest(val method: String, val url: String, val headers: Map<String, String>, val body: String?, val maxBytes: Int, val timeoutMs: Long)
+/** timeoutMs は要求の全体の上限、idleTimeoutMs は無通信がこれだけ続いたら打ち切る時間 */
+class SyncRequest(val method: String, val url: String, val headers: Map<String, String>, val body: String?, val maxBytes: Int, val timeoutMs: Long, val idleTimeoutMs: Long = timeoutMs)
 
 class SyncResponse(val status: Int, val body: String, val headers: Map<String, String> = emptyMap())
 
@@ -67,7 +68,7 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
         if (body != null) headers["Content-Type"] = "application/json"
         if (etag != null) headers["If-None-Match"] = etag
         val res = try {
-            transport.send(SyncRequest(method, base + path, headers, body?.let { canonicalJson(it) }, SyncConfig.MAX_RESPONSE_BYTES, SyncConfig.HTTP_TIMEOUT_MS))
+            transport.send(SyncRequest(method, base + path, headers, body?.let { canonicalJson(it) }, SyncConfig.MAX_RESPONSE_BYTES, SyncConfig.HTTP_TOTAL_TIMEOUT_MS, SyncConfig.HTTP_IDLE_TIMEOUT_MS))
         } catch (e: CancellationException) {
             throw e
         } catch (_: SyncResponseTooLarge) {

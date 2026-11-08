@@ -28,7 +28,7 @@ export const syncTransport: SyncTransport = {
   async send(req) {
     try {
       return await invoke<{ status: number; body: string }>('sync_http', {
-        req: { method: req.method, url: req.url, headers: req.headers, body: req.body ?? null, max_bytes: req.maxBytes, timeout_ms: req.timeoutMs },
+        req: { method: req.method, url: req.url, headers: req.headers, body: req.body ?? null, max_bytes: req.maxBytes, timeout_ms: req.timeoutMs, idle_timeout_ms: req.idleTimeoutMs },
       })
     } catch (e) {
       if (e === 'too_large') throw new SyncResponseTooLarge()

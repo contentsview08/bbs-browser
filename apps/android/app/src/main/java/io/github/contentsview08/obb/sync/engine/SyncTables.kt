@@ -94,7 +94,11 @@ fun writeRecord(r: StoredRecord) = SqlStatement(
 fun setState(key: String, value: String) = SqlStatement("INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)", listOf(key, value))
 fun delState(key: String) = SqlStatement("DELETE FROM sync_state WHERE key = ?", listOf(key))
 fun delRecord(id: String) = SqlStatement("DELETE FROM sync_records WHERE record_id = ?", listOf(id))
-fun delOp(seq: Long) = SqlStatement("DELETE FROM sync_ops WHERE seq = ?", listOf(seq))
+/**
+ * 処理した操作を消す。読んだ時点と同じ値の行だけを消す。既読は同じ行を上書きして 1 行にまとめるので、
+ * 読んでから消すまでの間に進んだ値を、送らないまま消さないように(残った行は次の drain で送る)
+ */
+fun delOp(op: SyncOpRow) = SqlStatement("DELETE FROM sync_ops WHERE seq = ? AND num IS ? AND at_ms = ?", listOf(op.seq, op.num, op.atMs))
 fun clearNeedsApply(id: String) = SqlStatement("UPDATE sync_records SET needs_apply = 0 WHERE record_id = ?", listOf(id))
 
 /** minSdk 26 の SQLite は 1 つの文のプレースホルダーが 999 個まで */

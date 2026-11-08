@@ -9,7 +9,7 @@ import type { ScenarioServer } from './fakeServer'
 const BASE = process.env.OBB_SYNC_VERIFY ?? ''
 const url = (f: string) => new URL(`../../conformance/${f}`, import.meta.url)
 const NAMES = (process.env.OBB_SYNC_VERIFY_NAMES ?? '').split(',').filter(Boolean)
-// 領域ごと 20 回/分。超えると 429 で結果が変わるので間を空ける
+// 1 分の上限(領域ごと 60 回・IP ごと 60 回)に当たると 429 で結果が変わるので、余裕を持って間を空ける
 const GAP_MS = 3100
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

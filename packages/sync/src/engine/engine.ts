@@ -1,6 +1,6 @@
 // 同期エンジン。周の順は必ず draining → pull → apply → push。通信・時計・鍵保管は外から渡すので、偽物で試せる
 import { randomBytes } from '@noble/ciphers/utils.js'
-import type { AdapterContext, ApplyPlan, OpEffect, OpTarget, RecordRefs, SyncAdapter } from '../adapters/types'
+import type { AdapterContext, ApplyPlan, DroppedThread, OpEffect, OpTarget, RecordRefs, SyncAdapter } from '../adapters/types'
 import { toBase64Url, toHex } from '../bytes'
 import {
   APPLY_BATCH,
@@ -14,6 +14,7 @@ import {
   PUSH_MAX_ROUNDS,
   REBASE_LIMIT,
   REBASE_WINDOW_MS,
+  RETRY_WAIT_MAX_MS,
   TRIM_BATCH,
   TRIM_ROUNDS,
   RECREATE_RETRY_MS,
@@ -115,6 +116,8 @@ export interface CycleResult {
   conflicts: number
   /** 画面が読み直すもの。キーはアダプターの area。適用で手元が変わったときだけ立つ */
   applied: Record<string, boolean>
+  /** 他の端末のログの削除が写って、手元の行を消したスレ。画面が閉じるのはこれだけ */
+  dropped: DroppedThread[]
   /** 周を始めなかった理由 */
   skipped?: 'backoff' | 'lease' | 'waiting' | 'halting'
   /** 参加で手元を送る前に止まった確認(周は回していない) */
@@ -208,6 +211,10 @@ export class SyncEngine {
   private filled = false
   private attempts = 0
   private retryAt = 0
+  /** 送信だけの待ち。/records の 429(日の件数の上限など)では pull と確認を止めない */
+  private pushRetryAt = 0
+  /** この周で送信を後回しにした理由。周が通っても画面に出す */
+  private pushDeferred: string | null = null
   private applyFailures = 0
   /** 別の領域へ移る途中。走っている周を次の区切りで止め、古い領域の受信を新しい表に混ぜない */
   private halting = false
@@ -246,7 +253,7 @@ export class SyncEngine {
 
   /** 送るものがあるか。通信しない。切っている種類の送信待ちは数えない(自動の同期を空回りさせない) */
   async hasChanges(): Promise<boolean> {
-    if (!(await this.isMasterOn())) return false
+    if (!(await this.isMasterOn()) || this.deps.now() < this.pushRetryAt) return false
     const off = [...offKindsOf(await this.switches())]
     const marks = off.map((_, i) => `$${i + 1}`).join(', ')
     const [row] = await this.db.select<{ n: number }>(`SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1${off.length > 0 ? ` AND kind NOT IN (${marks})` : ''}) AS n`, off)
@@ -345,11 +352,15 @@ export class SyncEngine {
     }
   }
 
-  /** 429 の応答の指示より早く試さない */
+  /** 429 の応答の指示より早く試さない。ただし RETRY_WAIT_MAX_MS より長くは待たない */
   private waitFor(e: SyncApiError): void {
+    this.retryAt = this.deps.now() + this.waitMs(e)
+  }
+
+  private waitMs(e: SyncApiError): number {
     const sec = e.detail?.retry_after_sec
-    const told = typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.ceil(sec * 1000) : 0
-    this.retryAt = this.deps.now() + Math.max(told, backoffDelayMs(this.attempts++, this.jitter()))
+    const told = typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.ceil(Math.min(sec * 1000, RETRY_WAIT_MAX_MS)) : 0
+    return Math.min(RETRY_WAIT_MAX_MS, Math.max(told, backoffDelayMs(this.attempts++, this.jitter())))
   }
 
   private enter(s: SyncEngineState): void {
@@ -384,7 +395,7 @@ export class SyncEngine {
       this.againQuick = false
       const next = await this.cycle(m, q)
       // 画面が読み直す印を前の周の分まで渡す
-      r = { ...next, pulled: r.pulled + next.pulled, pushed: r.pushed + next.pushed, conflicts: r.conflicts + next.conflicts, applied: { ...r.applied, ...next.applied } }
+      r = { ...next, pulled: r.pulled + next.pulled, pushed: r.pushed + next.pushed, conflicts: r.conflicts + next.conflicts, applied: { ...r.applied, ...next.applied }, dropped: [...r.dropped, ...next.dropped] }
     }
     return r
   }
@@ -445,8 +456,9 @@ export class SyncEngine {
   }
 
   private async cycle(manual: boolean, quick: boolean): Promise<CycleResult> {
-    const result: CycleResult = { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {} }
+    const result: CycleResult = { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {}, dropped: [] }
     this.result = result
+    this.pushDeferred = null
     if (this.halting) {
       result.skipped = 'halting'
       return result
@@ -497,7 +509,8 @@ export class SyncEngine {
       if (this.api.pace) this.paceValue = this.api.pace
       this.attempts = 0
       this.retryAt = 0
-      await this.db.execute('DELETE FROM sync_state WHERE key = $1', ['last_error'])
+      if (this.pushDeferred !== null) await this.noteError(this.pushDeferred)
+      else await this.db.execute('DELETE FROM sync_state WHERE key = $1', ['last_error'])
       return finish('idle')
     } catch (e) {
       return finish(await this.failed(e))
@@ -641,19 +654,19 @@ export class SyncEngine {
         const adapter = this.deps.adapters.find((a) => a.ops.includes(op.op)) as SyncAdapter
         // 権限系は切ったあとに残った操作も処理しない。ほかの種類は切る前の変更なので、送信待ちとして持ち続ける
         if (adapter.kind === SECRET_KIND && this.offKinds.has(SECRET_KIND)) {
-          stmts.push(delOp(op.seq))
+          stmts.push(delOp(op))
           continue
         }
         if (adapter.expand) {
           // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
           if (touched.size > 0) break
-          stmts.push(delOp(op.seq))
+          stmts.push(delOp(op))
           const effects = await adapter.expand(op, ctx)
           if (effects === null) await this.countBad('local')
           for (const e of effects ?? []) await put(e.target, e.make, op.at_ms, e.floor)
           break
         }
-        stmts.push(delOp(op.seq))
+        stmts.push(delOp(op))
         const target = adapter.target(op, ctx)
         if (!target) {
           await this.countBad('local')
@@ -729,7 +742,7 @@ export class SyncEngine {
     const now = this.deps.now()
     if (!pulled && (manual || (now - Number((await this.t.state('last_pull_at')) ?? 0) >= PULL_MIN_GAP_MS && !(quick && this.headIsFresh(now))))) await this.pull(false)
     await this.applyAll()
-    await this.pushAll()
+    await this.pushAll(manual)
     // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
     if (this.result.conflicts > 0) await this.applyAll()
   }
@@ -837,7 +850,7 @@ export class SyncEngine {
     } catch (e) {
       if (!(e instanceof SyncApiError && e.kind === 'http' && e.status === 429)) throw e
       const sec = e.detail?.retry_after_sec
-      const wait = typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.ceil(sec * 1000) : REFETCH_RETRY_MS
+      const wait = typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.ceil(Math.min(sec * 1000, REFETCH_RETRY_MS)) : REFETCH_RETRY_MS
       await this.db.batch([setState('since', before), setState('secret_refetch', String(this.deps.now() + wait))])
       return false
     }
@@ -992,6 +1005,7 @@ export class SyncEngine {
       if (!plan) continue
       if (plan.statements.length > 0) await this.db.batch(plan.statements)
       if (plan.changed) this.result.applied[adapter.area] = true
+      if (plan.dropped) this.result.dropped.push(...plan.dropped)
       if (plan.bad) await this.countBad(plan.bad)
     }
   }
@@ -1000,6 +1014,7 @@ export class SyncEngine {
     if (items.length === 0) return
     const done = async (x: { area: string; plan: ApplyPlan }) => {
       if (x.plan.changed) this.result.applied[x.area] = true
+      if (x.plan.dropped) this.result.dropped.push(...x.plan.dropped)
       if (x.plan.bad) await this.countBad(x.plan.bad)
     }
     try {
@@ -1056,7 +1071,8 @@ export class SyncEngine {
     return false
   }
 
-  private async pushAll(): Promise<void> {
+  private async pushAll(manual: boolean): Promise<void> {
+    if (!manual && this.deps.now() < this.pushRetryAt) return
     this.enter('pushing')
     let trims = 0
     for (let round = 0; round < PUSH_MAX_ROUNDS; round++) {
@@ -1088,11 +1104,19 @@ export class SyncEngine {
           trims++
           continue
         }
+        // 送信の 429(日の件数の上限など)は送信だけを後回しにする。読んだ分の適用と確認は続ける。
+        // 送り直しは同じ request_id で行うので、push_inflight は残す
+        if (e instanceof SyncApiError && e.kind === 'http' && e.status === 429) {
+          this.pushRetryAt = this.deps.now() + this.waitMs(e)
+          this.pushDeferred = e.code || 'http_429'
+          return
+        }
         throw e
       }
       if (this.halting) throw new CycleStop('idle')
       await this.checkEpoch(res.epoch)
       await this.settlePush(res.results, sent, body.length)
+      this.pushRetryAt = 0
     }
   }
 
@@ -1203,13 +1227,17 @@ export class SyncEngine {
     }
   }
 
-  /** gc_floor と epoch の変更はサーバーが決める値なので、回数を制限する */
-  private async countRebase(): Promise<void> {
+  /**
+   * gc_floor と epoch の変更はサーバーが決める値なので、回数を制限する。
+   * 数えるのは合わせ直しを終えたときだけ(通信の失敗や全件読みの 429 で途中で切れた分を数えると、それだけで止まる)。
+   * 返す文は終えたときの書き込みに入れる
+   */
+  private async checkRebaseLimit(): Promise<SqlStatement> {
     const now = this.deps.now()
     const raw = await this.t.state('rebase_log')
     const log = ((raw ? parseStrictJson(raw) : []) as number[]).filter((at) => now - at < REBASE_WINDOW_MS)
     if (log.length >= REBASE_LIMIT) throw new CycleStop(await this.block('too_many_rebases'))
-    await this.putState('rebase_log', JSON.stringify([...log, now]))
+    return setState('rebase_log', JSON.stringify([...log, now]))
   }
 
   private async onSpaceGone(e: SpaceGone): Promise<void> {
@@ -1237,9 +1265,10 @@ export class SyncEngine {
       await this.putState('epoch', epoch)
       return
     }
-    await this.countRebase()
+    const counted = await this.checkRebaseLimit()
     this.enter('recreating')
     await this.db.batch([
+      counted,
       setState('epoch', epoch),
       setState('since', '0'),
       setState('recreate_pending', '1'),
@@ -1297,7 +1326,7 @@ export class SyncEngine {
   /** since < gc_floor。全件を正にして、消えたものを手元から消す */
   private async rebase(): Promise<void> {
     this.enter('rebasing')
-    await this.countRebase()
+    const counted = await this.checkRebaseLimit()
     const read = await this.readFull()
     const complete = read.failure === null
     const now = this.deps.now()
@@ -1337,6 +1366,7 @@ export class SyncEngine {
           const removal = await adapter.remove(r)
           stmts.push(...removal.statements)
           if (removal.changed) this.result.applied[adapter.area] = true
+          if (removal.dropped) this.result.dropped.push(...removal.dropped)
         }
       }
       stmts.push(delRecord(id))
@@ -1346,7 +1376,7 @@ export class SyncEngine {
       if (stmts.length > 0) await this.writeChunks(stmts, [])
       throw read.failure
     }
-    await this.writeChunks(stmts, [delState('rebase_accepted'), setState('since', String(Math.max(read.head, read.gcFloor))), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
+    await this.writeChunks(stmts, [counted, delState('rebase_accepted'), setState('since', String(Math.max(read.head, read.gcFloor))), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
     this.result.pulled += Object.keys(read.full).length
   }
 }

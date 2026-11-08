@@ -279,7 +279,8 @@ export class SpaceDO extends DurableObject<Env> {
     const dayRecords = live.day === day ? live.day_records : 0
     // 超えた要求は数えない。連打で書き込みの費用を増やさないため
     if (cfg.ratePerMinute > 0 && minuteCount >= cfg.ratePerMinute) return limited((minute + 1) * MINUTE - now)
-    if (cfg.ratePerDay > 0 && dayCount >= cfg.ratePerDay) return limited((day + 1) * DAY - now)
+    // 日の上限の待ちは 1 時間で丸める。端末は 10 分おきに試すので、日の境目まで黙って止めない
+    if (cfg.ratePerDay > 0 && dayCount >= cfg.ratePerDay) return limited(Math.min(HOUR, (day + 1) * DAY - now))
     if (live.minute !== minute) live.minute_crossed = true
     live.minute = minute
     live.minute_count = minuteCount + 1
@@ -437,10 +438,10 @@ export class SpaceDO extends DurableObject<Env> {
       return replay
     }
     const cfg = this.config
-    // 送られた件数で先に決め、途中まで書かない。超えた要求は 1 行も書かず、日の境目まで待たせる
+    // 送られた件数で先に決め、途中まで書かない。超えた要求は 1 行も書かない。待ちは日の上限と同じく 1 時間で丸める
     if (cfg.recordsPerDay > 0 && m.day_records + input.records.length > cfg.recordsPerDay) {
       this.flushIfDue(m)
-      return limited((m.day + 1) * DAY - m.last_used)
+      return limited(Math.min(HOUR, (m.day + 1) * DAY - m.last_used))
     }
     let out: ReturnType<SpaceDO['applyPush']>
     try {

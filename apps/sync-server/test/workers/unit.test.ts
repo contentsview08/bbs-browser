@@ -78,11 +78,11 @@ describe('PoW', () => {
 describe('loadConfig', () => {
   it('既定は設計の値', () => {
     const c = loadConfig({} as Env)
-    expect([c.spaceLimit, c.evictIdleDays, c.idleDeleteDays, c.emptySpaceDays, c.tombGcDays, c.quotaBytes, c.quotaRecords, c.maxPushRecords, c.maxBodyBytes, c.maxCiphertextBytes, c.ratePerMinute, c.ratePerDay, c.recordsPerDay, c.fullPullPerHour, c.sourceLimit]).toEqual([100, 14, 90, 7, 90, 10485760, 50000, 100, 1048576, 16384, 20, 6000, 3000, 3, 5])
+    expect([c.spaceLimit, c.evictIdleDays, c.idleDeleteDays, c.emptySpaceDays, c.tombGcDays, c.quotaBytes, c.quotaRecords, c.maxPushRecords, c.maxBodyBytes, c.maxCiphertextBytes, c.ratePerMinute, c.ratePerDay, c.recordsPerDay, c.fullPullPerHour, c.sourceLimit]).toEqual([100, 14, 90, 7, 90, 10485760, 50000, 100, 1048576, 16384, 60, 6000, 20000, 3, 5])
   })
   it('読めない値は既定に戻す。制限が外れない', () => {
     const c = loadConfig({ SPACE_LIMIT: 'abc', RATE_PER_MINUTE: '-1', QUOTA_BYTES: '1e9' } as unknown as Env)
-    expect([c.spaceLimit, c.ratePerMinute, c.quotaBytes]).toEqual([100, 20, 10485760])
+    expect([c.spaceLimit, c.ratePerMinute, c.quotaBytes]).toEqual([100, 60, 10485760])
   })
   it('環境変数で変えられる', () => {
     const c = loadConfig({ SPACE_LIMIT: '2', CREATION_CLOSED: '1', READ_ONLY: 'true', ALLOWED_HOSTS: 'A.test, b.test' } as unknown as Env)

@@ -36,8 +36,9 @@ interface SchedulerHost {
 
 class PaceMs(val head: Long, val push: Long)
 
+/** 既定より短くせず、PACE_MAX_MS より長くしない(大きな値で時刻の足し算があふれないように、掛ける前に丸める) */
 fun paceMs(pace: SyncPace?): PaceMs {
-    fun ms(sec: Double?, base: Long) = if (sec != null && sec.isFinite() && sec > 0) maxOf(base, ceil(sec * 1000).toLong()) else base
+    fun ms(sec: Double?, base: Long) = if (sec != null && sec.isFinite() && sec > 0) minOf(SyncConfig.PACE_MAX_MS, maxOf(base, ceil(minOf(sec * 1000, SyncConfig.PACE_MAX_MS.toDouble())).toLong())) else base
     return PaceMs(ms(pace?.headSec, SyncConfig.HEAD_INTERVAL_MS), ms(pace?.pushSec, SyncConfig.PUSH_INTERVAL_MS))
 }
 

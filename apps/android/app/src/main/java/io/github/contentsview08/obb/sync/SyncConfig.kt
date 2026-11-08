@@ -6,9 +6,13 @@ object SyncConfig {
     const val PULL_MIN_GAP_MS = 10_000L
     /** 履歴の画面に出す件数 */
     const val HISTORY_SHOWN = 300
-    const val HTTP_TIMEOUT_MS = 10_000L
+    /** 通信の打ち切り。無通信が続く時間と、1 回の要求の全体の時間。遅い回線でも 1MB のページを読み切れるよう全体は長めにする */
+    const val HTTP_IDLE_TIMEOUT_MS = 10_000L
+    const val HTTP_TOTAL_TIMEOUT_MS = 60_000L
     const val BACKOFF_MIN_MS = 1_000L
     const val BACKOFF_MAX_MS = 60_000L
+    /** 429 の待ちの上限。サーバーが 1 時間・翌日と言ってきても、この間隔で 1 回だけ試す(日の上限は翌日まで待たずに戻れるように) */
+    const val RETRY_WAIT_MAX_MS = 600_000L
     const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
     const val PUSH_BATCH_RECORDS = 100
     const val PUSH_BATCH_BYTES = 1024 * 1024
@@ -36,6 +40,8 @@ object SyncConfig {
     const val PUSH_INTERVAL_MS = 300_000L
     /** 確認が「変化なし」のたびに間隔を 2 倍にし、ここで止める(Cloudflare の無料枠に 100 人分を収めるため) */
     const val HEAD_BACKOFF_MAX_MS = 300_000L
+    /** サーバーの指示する間隔の上限。足し算があふれず、確認が止まりっぱなしにならないように */
+    const val PACE_MAX_MS = 3_600_000L
     const val NET_SETTLE_MS = 5_000L
     const val NET_MIN_GAP_MS = 30_000L
     const val IDLE_STOP_MS = 10L * 60 * 1000

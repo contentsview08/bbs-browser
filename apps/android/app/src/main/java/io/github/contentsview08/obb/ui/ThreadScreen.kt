@@ -522,9 +522,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val bottomPull = remember { PullState { Haptics.confirm(view) } }
     val pullConn = remember(page) { PullConnection(topPull, bottomPull, density.density, scope) { refresh()?.join() } }
     if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
+        val maxPosts = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) null else AUTO_REFRESH_MAX_POSTS
         while (true) {
             delay(prefs.autoRefreshSec * 1000L)
-            // アプリが裏にある間は掲示板へ取りに行かない
+            // アプリが裏にある間と、もう増えないスレ(dat 落ち・上限到達)では掲示板へ取りに行かない。もう増えないスレは開き直すまで止める
+            if (!shouldAutoRefresh(true, page.archived, page.index.posts.size, maxPosts)) break
             if (vm.appVisible && !page.loading) vm.refreshThread(page, quiet = true)
         }
     }

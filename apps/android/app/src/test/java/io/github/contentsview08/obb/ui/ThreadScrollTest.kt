@@ -59,4 +59,14 @@ class ThreadScrollTest {
         assertEquals(OpenTarget.Top, open(saved, true, 200, true, position = "top"))
         assertEquals(OpenTarget.Bottom(pendingUnread = false), open(saved, true, 200, true, position = "bottom"))
     }
+
+    // PC 版 test/autoRefresh.test.ts と同じ場面
+    @Test fun 自動の取得はdat落ちと上限に届いたスレと見えていないときは行かない() {
+        assertEquals(true, shouldAutoRefresh(true, false, 999, AUTO_REFRESH_MAX_POSTS))
+        assertEquals(false, shouldAutoRefresh(true, false, 1000, AUTO_REFRESH_MAX_POSTS))
+        assertEquals(false, shouldAutoRefresh(true, true, 10, AUTO_REFRESH_MAX_POSTS))
+        assertEquals(false, shouldAutoRefresh(false, false, 10, AUTO_REFRESH_MAX_POSTS))
+        // 上限のない掲示板(hono-bbs)は数では止めない
+        assertEquals(true, shouldAutoRefresh(true, false, 5000, null))
+    }
 }

@@ -132,6 +132,9 @@
  "gc_floor の繰り返しの変更: 回数を超えると止まる": {
   "pc": "60c88ced7cc7abc3b6de49c5fb0670405e227046849055acf01393f180a81df8"
  },
+ "gc_floor の変更: 全件の読み取りが途中で切れた分はリベースの回数に数えない": {
+  "pc": "4e469cca8ae4abd6cd3f5e61e9116cd7fd7efb7987e84b27742f3d01e2aedc70"
+ },
  "再送: 500 は偽の時計で待ってから試す。待つ間は通信しない": {
   "pc": "79f923fd62442f5bb1e6aa0c9f7bf6a2feb86503c614b5aa78739bff3ab3910d",
   "phone": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a"
@@ -140,9 +143,16 @@
   "pc": "79f923fd62442f5bb1e6aa0c9f7bf6a2feb86503c614b5aa78739bff3ab3910d",
   "phone": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a"
  },
- "429 は待って試す": {
+ "送信の 429 は送信だけを待って試す。周は止めない": {
   "pc": "79f923fd62442f5bb1e6aa0c9f7bf6a2feb86503c614b5aa78739bff3ab3910d",
   "phone": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a"
+ },
+ "日の上限の送信の 429: 読むのと確認は続け、送信は 10 分おきに 1 回だけ試す": {
+  "pc": "2ff2092aca74200ec2deb0598d44791ecf2dafc321292fe1fae7c4ec8f14dc80",
+  "phone": "d4cd34574959d80abad6f4948fda031006fd956bf32b105cb78c49c3b9c77053"
+ },
+ "日の上限の 429: サーバーが翌日と言っても 10 分で試す": {
+  "pc": "79f923fd62442f5bb1e6aa0c9f7bf6a2feb86503c614b5aa78739bff3ab3910d"
  },
  "送信中に同じレコードを変えると pending が残り、次で送る": {
   "pc": "783d5bbeef1c2b576046409004b894007e9e3563b99aec44979b7f53bf059db4",
@@ -671,6 +681,18 @@
  "参加: 手元にデータがあれば確認が出て、やめると送らない": {
   "pc": "78e6fa2e7e1ca8d62cdbaf8cc8b18573e02f6a279f573b7e6d4f2edda489b0a3",
   "phone": "5bbd542a53821c0ff49a0419ebcb3afe108d38e2978ff3e408a75f176100a0d6"
+ },
+ "参加: 自分のレスの印だけでも確認が出て、やめると送らない": {
+  "pc": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a",
+  "phone": "51aafdbc48c636b979a577aad5cbbbf1058405b4cb8a9f56a829dabefb9da055"
+ },
+ "参加: 上げた画像の履歴だけでも確認が出て、やめると送らない": {
+  "pc": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a",
+  "phone": "2f728c5ee39dcbb069e315a37bc215ca02f3fe304895f28bc6c837fe2087d06f"
+ },
+ "参加: 履歴から外したスレの既読だけでも確認が出て、やめると送らない": {
+  "pc": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a",
+  "phone": "d736a3f066989ea07861578bb68c809902dd5e8e9a4d55dc652d96e2a15741f6"
  },
  "参加: まっさらな端末は確認なし": {
   "pc": "2a0404fa246e644b2e57a7b56849700dc686f3c6a7cdf6b97df570f336fc32c7",

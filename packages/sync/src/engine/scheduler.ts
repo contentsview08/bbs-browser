@@ -1,5 +1,5 @@
 // 自動の同期のきっかけ。前面にいる間だけ動く。時計とタイマーは外から渡すので、偽の時計で試せる
-import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, PUSH_INTERVAL_MS } from '../config'
+import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, PACE_MAX_MS, PUSH_INTERVAL_MS } from '../config'
 
 /** サーバーが応答で指示する「最低これだけ空ける」。アプリはこれより短くしない */
 export interface SyncPace {
@@ -26,8 +26,9 @@ export interface SchedulerHost {
   idleStops: boolean
 }
 
+/** 既定より短くせず、PACE_MAX_MS より長くしない */
 export function paceMs(pace: SyncPace | null): { head: number; push: number } {
-  const ms = (sec: number | undefined, base: number) => (typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.max(base, Math.ceil(sec * 1000)) : base)
+  const ms = (sec: number | undefined, base: number) => (typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.min(PACE_MAX_MS, Math.max(base, Math.ceil(sec * 1000))) : base)
   return { head: ms(pace?.head_sec, HEAD_INTERVAL_MS), push: ms(pace?.push_sec, PUSH_INTERVAL_MS) }
 }
 

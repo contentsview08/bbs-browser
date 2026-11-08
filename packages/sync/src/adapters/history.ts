@@ -9,7 +9,7 @@ import { LAST_VIEWED_FIELD, makeTombstone, updateRecord, type SyncPayload } from
 import { DEV_KIND, makeReset, readPosition, recordRead, RESET_KIND, resetFloor, type ThreadRef } from '../read'
 import { checkPayload } from '../schema'
 import type { BoardResolver } from './favoriteThread'
-import type { AdapterContext, ApplyPlan, OpEffect, OpTarget, SeedRow, SyncAdapter } from './types'
+import type { AdapterContext, ApplyPlan, DroppedThread, OpEffect, OpTarget, SeedRow, SyncAdapter } from './types'
 
 export const LAST_VIEW_KIND = 'last_view'
 export const OP_READ = 'read'
@@ -311,6 +311,7 @@ abstract class ReadAdapterBase {
     const pos = readPosition(latest, devs)
     const resetWall = latest === null ? null : parseHlc(latest.hlc).wall
     const statements = []
+    const dropped: DroppedThread[] = []
     for (const x of rows) {
       // 下げるのはリセットだけ。まだ送っていない手元の読みを、他の端末の記録で下げない
       const pending = await pendingRead(this.db, x.board_url, key)
@@ -320,12 +321,13 @@ abstract class ReadAdapterBase {
       const canDelete = resetWall !== null && resetWall - ctx.now <= DAY_MS && pos === 0 && pending === 0
       if (canDelete && x.read_at !== null && x.read_at <= (resetWall as number)) {
         for (const table of ['posts', 'threads']) statements.push({ sql: `DELETE FROM ${table} WHERE board_url = $1 AND key = $2`, params: [x.board_url, key] })
+        dropped.push({ board_url: x.board_url, key })
         continue
       }
       const next = Math.max(pos, pending, latest === null ? x.read_no : 0)
       if (x.read_no !== next) statements.push({ sql: 'UPDATE threads SET read_no = $1 WHERE board_url = $2 AND key = $3', params: [next, x.board_url, key] })
     }
-    return { statements, changed: statements.length > 0 }
+    return { statements, changed: statements.length > 0, ...(dropped.length > 0 && { dropped }) }
   }
 
   /** 不一致の検査は既読の位置だけを見る。ログを消す予定は適用のときだけに効く(あとで作られた行を数え続けないように) */

@@ -40,7 +40,7 @@ function newDb(): SqlDb {
 
 const thread = (key: string) => ({ connectorId: '2ch-compat', boardUrl: 'https://a.5ch.io/x/', key, title: `t${key}`, postCount: 0, order: 0 })
 
-function setup(o: { lease?: string; db?: SqlDb; now?: () => number; server?: FakeSyncServer; wrap?: (t: S.SyncTransport) => S.SyncTransport; onRequest?: (r: S.SyncRequest) => void } = {}) {
+function setup(o: { lease?: string; db?: SqlDb; now?: () => number; server?: FakeSyncServer; wrap?: (t: S.SyncTransport) => S.SyncTransport; onRequest?: (r: S.SyncRequest) => void; adapters?: (db: SqlDb) => S.SyncAdapter[] } = {}) {
   let now = 1_800_000_000_000
   const clock = o.now ?? (() => now)
   const server = o.server ?? new FakeSyncServer({ now: clock, rate_per_minute: null, full_pull_per_hour: null })
@@ -58,7 +58,7 @@ function setup(o: { lease?: string; db?: SqlDb; now?: () => number; server?: Fak
     keyStore: { load: async () => material, save: async (v) => void (material = v), clear: async () => void (material = null) },
     transport: o.wrap ? o.wrap(base) : base,
     serverUrl: 'https://sync.test',
-    adapters: [new S.FavoriteThreadAdapter(db, (u) => ({ boardUrl: u, connectorId: '2ch-compat' }))],
+    adapters: o.adapters?.(db) ?? [new S.FavoriteThreadAdapter(db, (u) => ({ boardUrl: u, connectorId: '2ch-compat' }))],
     now: clock,
     newDeviceId: () => 'dev',
     leaseOwner: o.lease,
@@ -186,6 +186,93 @@ describe('同時実行の防止', () => {
     await other.engine.runCycle({ manual: true })
     expect(await me.store.listFavoriteThreads()).toEqual([])
     expect(await other.store.listFavoriteThreads()).toEqual([])
+  })
+})
+
+describe('既読の送信待ち', () => {
+  it('読んでから消すまでの間に既読が進んでも、進んだ値を送らずに消さない', async () => {
+    const db = newDb()
+    const resolve = (u: string) => ({ boardUrl: u, connectorId: '2ch-compat' })
+    const t = thread('1')
+    let interfere = false
+    const wrapped: SqlDb = {
+      ...db,
+      execute: db.execute,
+      batch: db.batch,
+      async select<T>(sql: string, params?: unknown[]) {
+        const rows = await db.select<T>(sql, params)
+        // drain が送信待ちを読んだ直後に、スクロールで同じスレの既読が進む
+        if (interfere && sql.includes('FROM sync_ops WHERE op IN')) {
+          interfere = false
+          await new UserOps(new LogStore(db)).markRead(t, 80, 1_800_000_000_500)
+        }
+        return rows
+      },
+    }
+    const s = setup({ db: wrapped, adapters: (d) => S.historyAdapters(d, { resolve, retentionDays: () => 0, newResetId: () => 'r' }) })
+    await s.engine.pair(K, TICKET)
+    await s.engine.runCycle({ manual: true })
+    await db.execute('INSERT INTO threads (board_url, key, connector_id, title) VALUES ($1, $2, $3, $4)', [t.boardUrl, t.key, '2ch-compat', 't1'])
+    await new UserOps(new LogStore(db)).markRead(t, 50, 1_800_000_000_000)
+    interfere = true
+    await s.engine.runCycle({ manual: true })
+    expect(interfere).toBe(false)
+    expect(await db.select('SELECT num FROM sync_ops')).toEqual([])
+    const [dev] = await db.select<{ payload: string }>("SELECT payload FROM sync_records WHERE kind = 'read_dev'")
+    expect((JSON.parse(dev.payload) as { body: { pos: number } }).body.pos).toBe(80)
+  })
+})
+
+describe('429 の待ち', () => {
+  it('/records の 429 は送信だけを待つ。pull と確認は続け、待ちは 10 分で丸める', async () => {
+    let limited = true
+    const paths: string[] = []
+    const s = setup({
+      wrap: (t) => ({
+        async send(req) {
+          paths.push(`${req.method} ${new URL(req.url).pathname}`)
+          if (limited && req.url.endsWith('/records')) return { status: 429, body: JSON.stringify({ error: 'rate_limited', retry_after_sec: 86_400 }) }
+          return t.send(req)
+        },
+      }),
+    })
+    await s.engine.pair(K, TICKET)
+    await s.engine.runCycle({ manual: true })
+    await new UserOps(s.store).favoriteThreadAdd(thread('1'), 1)
+    s.advance(S.PULL_MIN_GAP_MS)
+    const r = await s.engine.runCycle()
+    expect(r.state).toBe('idle')
+    expect(await s.engine.hasChanges()).toBe(false)
+    expect((await s.db.select<{ value: string }>("SELECT value FROM sync_state WHERE key = 'last_error'"))[0].value).toBe('rate_limited')
+    paths.length = 0
+    s.advance(S.PULL_MIN_GAP_MS)
+    await s.engine.runCycle()
+    await s.engine.checkHead()
+    expect(paths).toEqual(['GET /changes', 'GET /head'])
+    limited = false
+    s.advance(S.RETRY_WAIT_MAX_MS)
+    expect(await s.engine.hasChanges()).toBe(true)
+    expect((await s.engine.runCycle()).pushed).toBe(1)
+    expect(await s.db.select("SELECT value FROM sync_state WHERE key = 'last_error'")).toEqual([])
+  })
+
+  it('周全体の 429 も、サーバーが翌日と言ってきても 10 分で試す', async () => {
+    let limited = true
+    const s = setup({
+      wrap: (t) => ({
+        async send(req) {
+          if (limited && req.url.includes('/changes')) return { status: 429, body: JSON.stringify({ error: 'rate_limited', retry_after_sec: 1e12 }) }
+          return t.send(req)
+        },
+      }),
+    })
+    await s.engine.pair(K, TICKET)
+    expect((await s.engine.runCycle({ manual: true })).state).toBe('backoff')
+    limited = false
+    s.advance(S.RETRY_WAIT_MAX_MS - 1)
+    expect((await s.engine.runCycle()).skipped).toBe('backoff')
+    s.advance(1)
+    expect((await s.engine.runCycle()).state).toBe('idle')
   })
 })
 

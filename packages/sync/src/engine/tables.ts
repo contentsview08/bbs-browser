@@ -73,7 +73,11 @@ export function writeRecord(r: StoredRecord): SqlStatement {
 export const setState = (key: string, value: string): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO sync_state (key, value) VALUES ($1, $2)', params: [key, value] })
 export const delState = (key: string): SqlStatement => ({ sql: 'DELETE FROM sync_state WHERE key = $1', params: [key] })
 export const delRecord = (id: string): SqlStatement => ({ sql: 'DELETE FROM sync_records WHERE record_id = $1', params: [id] })
-export const delOp = (seq: number): SqlStatement => ({ sql: 'DELETE FROM sync_ops WHERE seq = $1', params: [seq] })
+/**
+ * 処理した操作を消す。読んだ時点と同じ値の行だけを消す。既読は同じ行を上書きして 1 行にまとめるので、
+ * 読んでから消すまでの間に進んだ値を、送らないまま消さないように(残った行は次の drain で送る)
+ */
+export const delOp = (op: SyncOpRow): SqlStatement => ({ sql: 'DELETE FROM sync_ops WHERE seq = $1 AND num IS $2 AND at_ms = $3', params: [op.seq, op.num, op.at_ms] })
 export const clearNeedsApply = (id: string): SqlStatement => ({ sql: 'UPDATE sync_records SET needs_apply = 0 WHERE record_id = $1', params: [id] })
 
 export class SyncTables {

@@ -14,6 +14,7 @@ import io.github.contentsview08.obb.sync.adapters.AdapterContext
 import io.github.contentsview08.obb.sync.adapters.AREA_FAVORITE_THREADS
 import io.github.contentsview08.obb.sync.adapters.OpTarget
 import io.github.contentsview08.obb.sync.adapters.ApplyPlan
+import io.github.contentsview08.obb.sync.adapters.DroppedThread
 import io.github.contentsview08.obb.sync.adapters.IMAGE_KIND
 import io.github.contentsview08.obb.sync.adapters.LAST_VIEW_KIND
 import io.github.contentsview08.obb.sync.adapters.POST_KIND
@@ -72,6 +73,9 @@ class CycleResult {
     /** 画面が読み直すもの。値はアダプターの area。適用で手元が変わったときだけ入る */
     val applied = HashSet<String>()
     val favoriteThreads get() = AREA_FAVORITE_THREADS in applied
+
+    /** 他の端末のログの削除が写って、手元の行を消したスレ。画面が閉じるのはこれだけ */
+    val dropped = ArrayList<DroppedThread>()
 
     /** 周を始めなかった理由 */
     var skipped: String? = null
@@ -155,6 +159,10 @@ class SyncEngine(
     private var filled = false
     private var attempts = 0
     private var retryAt = 0L
+    /** 送信だけの待ち。/records の 429(日の件数の上限など)では pull と確認を止めない */
+    @Volatile private var pushRetryAt = 0L
+    /** この周で送信を後回しにした理由。周が通っても画面に出す */
+    private var pushDeferred: String? = null
     private var applyFailures = 0
 
     // 周の間だけ持つ
@@ -174,7 +182,7 @@ class SyncEngine(
 
     /** 送るものがあるか。通信しない。切っている種類の送信待ちは数えない(自動の同期を空回りさせない) */
     suspend fun hasChanges(): Boolean = withContext(io) {
-        if (!isMasterOn()) return@withContext false
+        if (!isMasterOn() || now() < pushRetryAt) return@withContext false
         val off = offKindsOf(switches()).toList()
         val skip = if (off.isEmpty()) "" else " AND kind NOT IN (${off.joinToString(", ") { "?" }})"
         ((db.query("SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1$skip) AS n", off).firstOrNull()?.get("n") as Long?) ?: 0L) > 0
@@ -269,11 +277,16 @@ class SyncEngine(
         }
     }
 
-    /** 429 の応答の指示より早く試さない */
+    /** 429 の応答の指示より早く試さない。ただし RETRY_WAIT_MAX_MS より長くは待たない */
     private fun waitFor(e: SyncApiError) {
+        retryAt = now() + waitMs(e)
+    }
+
+    /** 掛ける前に丸めるので、大きな値でも Long があふれない */
+    private fun waitMs(e: SyncApiError): Long {
         val sec = (e.detail?.get("retry_after_sec") as? Number)?.toDouble()
-        val told = if (sec != null && sec.isFinite() && sec > 0) ceil(sec * 1000).toLong() else 0L
-        retryAt = now() + maxOf(told, SyncConfig.backoffDelayMs(attempts++, jitter()))
+        val told = if (sec != null && sec.isFinite() && sec > 0) ceil(minOf(sec * 1000, SyncConfig.RETRY_WAIT_MAX_MS.toDouble())).toLong() else 0L
+        return minOf(SyncConfig.RETRY_WAIT_MAX_MS, maxOf(told, SyncConfig.backoffDelayMs(attempts++, jitter())))
     }
 
     /** 長い周の途中で止められていたら、区切りで抜ける */
@@ -318,6 +331,7 @@ class SyncEngine(
         next.pushed += prev.pushed
         next.conflicts += prev.conflicts
         next.applied += prev.applied
+        next.dropped.addAll(0, prev.dropped)
         last = next
     }
 
@@ -386,6 +400,7 @@ class SyncEngine(
     private suspend fun cycle(manual: Boolean, quick: Boolean): CycleResult {
         val r = CycleResult()
         result = r
+        pushDeferred = null
         if (halting) {
             r.skipped = "halting"
             return r
@@ -431,7 +446,8 @@ class SyncEngine(
             api.pace?.let { pace = it }
             attempts = 0
             retryAt = 0
-            db.exec("DELETE FROM sync_state WHERE key = ?", listOf("last_error"))
+            val deferred = pushDeferred
+            if (deferred != null) noteError(deferred) else db.exec("DELETE FROM sync_state WHERE key = ?", listOf("last_error"))
             finish("idle")
         } catch (e: CancellationException) {
             throw e
@@ -539,19 +555,19 @@ class SyncEngine(
                 val adapter = adapters.first { op.op in it.ops }
                 // 権限系は切ったあとに残った操作も処理しない。ほかの種類は切る前の変更なので、送信待ちとして持ち続ける
                 if (adapter.kind == SECRET_KIND && SECRET_KIND in offKinds) {
-                    stmts += delOp(op.seq)
+                    stmts += delOp(op)
                     continue
                 }
                 if (adapter.expands) {
                     // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
                     if (touched.isNotEmpty()) break
-                    stmts += delOp(op.seq)
+                    stmts += delOp(op)
                     val effects = adapter.expand(op, c)
                     if (effects == null) countBad("local")
                     for (e in effects.orEmpty()) put(e.target, op.atMs, e.floor, e.make)
                     break
                 }
-                stmts += delOp(op.seq)
+                stmts += delOp(op)
                 val target = adapter.target(op, c)
                 if (target == null) {
                     countBad("local")
@@ -620,7 +636,7 @@ class SyncEngine(
         val at = now()
         if (!pulled && (manual || (at - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS && !(quick && headIsFresh(at))))) pull(false)
         applyAll()
-        pushAll()
+        pushAll(manual)
         // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
         if (result.conflicts > 0) applyAll()
     }
@@ -715,7 +731,7 @@ class SyncEngine(
         } catch (e: SyncApiError) {
             if (e.kind != "http" || e.status != 429) throw e
             val sec = (e.detail?.get("retry_after_sec") as? Number)?.toDouble()
-            val wait = if (sec != null && sec.isFinite() && sec > 0) ceil(sec * 1000).toLong() else REFETCH_RETRY_MS
+            val wait = if (sec != null && sec.isFinite() && sec > 0) ceil(minOf(sec * 1000, REFETCH_RETRY_MS.toDouble())).toLong() else REFETCH_RETRY_MS
             db.batch(listOf(setState("since", before), setState("secret_refetch", (now() + wait).toString())))
             return false
         }
@@ -865,6 +881,7 @@ class SyncEngine(
             val plan = adapter.afterApply(c) ?: continue
             if (plan.statements.isNotEmpty()) db.batch(plan.statements)
             if (plan.changed) result.applied += adapter.area
+            result.dropped += plan.dropped
             plan.bad?.let { countBad(it) }
         }
     }
@@ -875,6 +892,7 @@ class SyncEngine(
         if (items.isEmpty()) return
         fun done(x: ApplyItem) {
             if (x.plan.changed) result.applied += x.area
+            result.dropped += x.plan.dropped
             x.plan.bad?.let { countBad(it) }
         }
         try {
@@ -897,7 +915,8 @@ class SyncEngine(
         }
     }
 
-    private suspend fun pushAll() {
+    private suspend fun pushAll(manual: Boolean) {
+        if (!manual && now() < pushRetryAt) return
         enter("pushing")
         var trims = 0
         for (round in 0 until SyncConfig.PUSH_MAX_ROUNDS) {
@@ -925,11 +944,19 @@ class SyncEngine(
                     trims++
                     continue
                 }
+                // 送信の 429(日の件数の上限など)は送信だけを後回しにする。読んだ分の適用と確認は続ける。
+                // 送り直しは同じ request_id で行うので、push_inflight は残す
+                if (e.kind == "http" && e.status == 429) {
+                    pushRetryAt = now() + waitMs(e)
+                    pushDeferred = e.code.ifEmpty { "http_429" }
+                    return
+                }
                 throw e
             }
             keepRunning()
             checkEpoch(res.epoch)
             settlePush(res.results, prepared.sent, body.size)
+            pushRetryAt = 0
         }
     }
 
@@ -1065,13 +1092,17 @@ class SyncEngine(
         }
     }
 
-    /** gc_floor と epoch の変更はサーバーが決める値なので、回数を制限する */
-    private fun countRebase() {
+    /**
+     * gc_floor と epoch の変更はサーバーが決める値なので、回数を制限する。
+     * 数えるのは合わせ直しを終えたときだけ(通信の失敗や全件読みの 429 で途中で切れた分を数えると、それだけで止まる)。
+     * 返す文は終えたときの書き込みに入れる
+     */
+    private fun checkRebaseLimit(): SqlStatement {
         val at = now()
         val raw = t.state("rebase_log")
         val log = (if (raw != null) parseStrictJson(raw) as List<Long> else emptyList()).filter { at - it < SyncConfig.REBASE_WINDOW_MS }
         if (log.size >= SyncConfig.REBASE_LIMIT) throw CycleStop(block("too_many_rebases"))
-        putState("rebase_log", canonicalJson(log + at))
+        return setState("rebase_log", canonicalJson(log + at))
     }
 
     private suspend fun onSpaceGone(e: SpaceGone) {
@@ -1096,10 +1127,11 @@ class SyncEngine(
             putState("epoch", epoch)
             return
         }
-        countRebase()
+        val counted = checkRebaseLimit()
         enter("recreating")
         db.batch(
             listOf(
+                counted,
                 setState("epoch", epoch),
                 setState("since", "0"),
                 setState("recreate_pending", "1"),
@@ -1152,7 +1184,7 @@ class SyncEngine(
     /** since < gc_floor。全件を正にして、消えたものを手元から消す */
     private suspend fun rebase() {
         enter("rebasing")
-        countRebase()
+        val counted = checkRebaseLimit()
         val read = readFull()
         val complete = read.failure == null
         val at = now()
@@ -1189,6 +1221,7 @@ class SyncEngine(
                     val removal = adapter.remove(r)
                     stmts += removal.statements
                     if (removal.changed) result.applied += adapter.area
+                    result.dropped += removal.dropped
                 }
             }
             stmts += delRecord(id)
@@ -1198,7 +1231,7 @@ class SyncEngine(
             if (stmts.isNotEmpty()) writeChunks(stmts, emptyList())
             throw read.failure!!
         }
-        writeChunks(stmts, listOf(delState("rebase_accepted"), setState("since", maxOf(read.head, read.gcFloor).toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
+        writeChunks(stmts, listOf(counted, delState("rebase_accepted"), setState("since", maxOf(read.head, read.gcFloor).toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
         result.pulled += read.full.size
     }
 }

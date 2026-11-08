@@ -77,8 +77,8 @@ import { canBack, canForward, forget, nextAfterClose, selectQuietly, showList, s
 import { useAccounts } from './hooks/useAccounts'
 import { useSync } from './hooks/useSync'
 import { forgetClosedPosition } from './hooks/useThreadScroll'
-import { mergeSyncedHistory, syncedTabReadNo } from './utils/syncRead'
-import { HISTORY_SHOWN, restoreThreadRead } from '@bbs-browser/sync'
+import { droppedTabIds, mergeSyncedHistory, mergeSyncedStates, syncedTabReadNo } from './utils/syncRead'
+import { HISTORY_SHOWN, restoreThreadRead, type DroppedThread } from '@bbs-browser/sync'
 import { useNotifications } from './hooks/useNotifications'
 import { ensureNotifyPermission, sendOsNotification } from './utils/osNotify'
 import { useWatchLists } from './hooks/useWatchLists'
@@ -935,15 +935,16 @@ export default function App() {
     uploads: (s) => void s.listUploads().then((list) => setUploads((cur) => (cur ? list : cur))),
     posts: (s) => void s.listPostHistory().then((list) => setPostHistory((cur) => (cur ? list : cur))),
     ownPosts: (s) => void syncedOwnPosts(s),
-    reads: (s) => void syncedReads(s),
+    reads: (s, dropped) => void syncedReads(s, dropped),
     retentionDays: () => settingsRef.current.logRetentionDays,
   })
 
   /**
    * 別の端末の履歴と既読を写す。DB は適用が書いてある。開いているタブの位置は上がるときだけ追い、下がっても読んでいる画面を動かさない。
-   * 他の端末のログの削除で行がなくなったスレは、タブも閉じる(消した端末と同じ見え方。開き直すと先頭から)
+   * 他の端末のログの削除が写ったスレ(dropped)は、タブも閉じる(消した端末と同じ見え方。開き直すと先頭から)。
+   * 行がないことからは推し量らない(取得中・取得に失敗したタブにも行はない)
    */
-  const syncedReads = async (s: LogStore) => {
+  const syncedReads = async (s: LogStore, dropped: readonly DroppedThread[]) => {
     await reloadRecent(s)
     await reloadFavThreads(s)
     const list = await loadHistory(s)
@@ -952,18 +953,20 @@ export default function App() {
     const b = boardRef.current
     if (b) {
       const st = await s.getThreadStates(b.url)
-      setStates(st)
+      // 画面が先に進めた既読(DB への書き込みがまだのもの)を戻さない
+      if (boardRef.current?.url === b.url) setStates((cur) => mergeSyncedStates(cur, st))
     }
     const boards = [...new Set(tabsRef.current.map((x) => x.thread.boardUrl))]
     const known = new Map<string, number>()
     for (const url of boards) for (const [key, state] of await s.getThreadStates(url)) known.set(`${url}\t${key}`, state.readNo)
-    // 読み込んであるのに行がない = 削除が写った。読み込む前のタブは、読み込みで同期の表から戻るか空で始まる
-    const gone = new Map<string, ThreadSummary>()
-    for (const x of tabsRef.current) if (x.log && !known.has(`${x.thread.boardUrl}\t${x.thread.key}`)) gone.set(x.id, x.thread)
-    if (gone.size > 0) dropThreads(gone)
+    const goneIds = new Set(droppedTabIds(tabsRef.current, dropped))
+    // 同期は利用者の操作ではないので、フォーカスも戻るの履歴も動かさない
+    if (goneIds.size > 0) dropThreads(new Map(tabsRef.current.filter((x) => goneIds.has(x.id)).map((x) => [x.id, x.thread])), true)
+    // ログの既読も上げる。開き直すときの位置(既読の次)と、更新で届くレスの新着の判定がログの値を見るため
     setTabs((ts) => mapKeep(ts, (x) => {
       const next = syncedTabReadNo(x.readNo, known.get(`${x.thread.boardUrl}\t${x.thread.key}`))
-      return next === x.readNo ? x : { ...x, readNo: next }
+      const log = x.log && next > x.log.readNo ? { ...x.log, readNo: next } : x.log
+      return next === x.readNo && log === x.log ? x : { ...x, readNo: next, log }
     }))
   }
 
@@ -1319,7 +1322,12 @@ export default function App() {
     const next = nextAfterClose(view.current.activeId, ts.map((t) => t.id), ids)
     if (!next.changed) return
     if (next.id && !stayOnList) selectTab(next.id)
-    else updateView((s) => selectQuietly(s, next.id))
+    else {
+      updateView((s) => selectQuietly(s, next.id))
+      // 裏で選んだタブがそのまま表に出るとき(2 画面・同期で閉じたとき)は、まだ読み込んでいなければ読み込む
+      const tab = ts.find((t) => t.id === next.id)
+      if (store && tab && !tab.log && !(single && view.current.listOpen)) void run('posts', () => loadTab(store, tab.thread))
+    }
   }
 
   /**

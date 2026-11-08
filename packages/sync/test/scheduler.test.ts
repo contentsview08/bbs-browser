@@ -221,6 +221,8 @@ describe('自動の同期のきっかけ', () => {
     expect(paceMs(null)).toEqual({ head: HEAD_INTERVAL_MS, push: PUSH_INTERVAL_MS })
     expect(paceMs({ head_sec: 180, push_sec: 5 })).toEqual({ head: 180_000, push: PUSH_INTERVAL_MS })
     expect(paceMs({ head_sec: -1, push_sec: Number.NaN })).toEqual({ head: HEAD_INTERVAL_MS, push: PUSH_INTERVAL_MS })
+    // 大きすぎる指示はタイマーの上限を超えてすぐ発火するので、1 時間で丸める
+    expect(paceMs({ head_sec: 99_999_999, push_sec: 1e300 })).toEqual({ head: 3_600_000, push: 3_600_000 })
     const { c, log, s } = setup({ pace: { head_sec: 180 } })
     await s.foreground()
     await c.advance(179_000)

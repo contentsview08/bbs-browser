@@ -447,7 +447,12 @@ describe('入口', () => {
     expect(await errorOf(over)).toBe('rate_limited')
     clock.now += 60_000
     for (let i = 0; i < 5; i++) expect((await call('GET', '/head', { token: 'A', ip: freshIp() })).status).toBe(200)
-    expect((await call('GET', '/head', { token: 'A', ip: freshIp() })).status).toBe(429)
+    const daily = await call('GET', '/head', { token: 'A', ip: freshIp() })
+    expect(daily.status).toBe(429)
+    // 日の上限でも、待ちは日の境目までではなく長くても 1 時間
+    const wait = ((await daily.json()) as { retry_after_sec: number }).retry_after_sec
+    expect(wait).toBeGreaterThan(0)
+    expect(wait).toBeLessThanOrEqual(60 * 60)
     clock.now += 24 * 60 * 60 * 1000
     expect((await call('GET', '/head', { token: 'A', ip: freshIp() })).status).toBe(200)
   })

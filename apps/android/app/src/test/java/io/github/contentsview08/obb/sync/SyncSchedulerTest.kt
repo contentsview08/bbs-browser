@@ -255,6 +255,8 @@ class SyncSchedulerTest {
         assertEquals(HEAD_INTERVAL_MS to PUSH_INTERVAL_MS, pair(null))
         assertEquals(180_000L to PUSH_INTERVAL_MS, pair(SyncPace(180.0, 5.0)))
         assertEquals(HEAD_INTERVAL_MS to PUSH_INTERVAL_MS, pair(SyncPace(-1.0, Double.NaN)))
+        // 大きすぎる指示は 1 時間で丸める(時刻の足し算があふれて確認が空回りしないように)
+        assertEquals(3_600_000L to 3_600_000L, pair(SyncPace(99_999_999.0, 1e300)))
         val x = Setup(paceValue = SyncPace(headSec = 180.0))
         x.s.foreground()
         x.c.advance(179_000)

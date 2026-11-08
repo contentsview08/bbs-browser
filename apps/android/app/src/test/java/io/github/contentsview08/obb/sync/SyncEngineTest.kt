@@ -3,6 +3,10 @@ package io.github.contentsview08.obb.sync
 import io.github.contentsview08.obb.bbs.ThreadSummary
 import io.github.contentsview08.obb.data.UserOps
 import io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter
+import io.github.contentsview08.obb.sync.adapters.HistoryHost
+import io.github.contentsview08.obb.sync.adapters.historyAdapters
+import io.github.contentsview08.obb.sync.engine.SqlStatement
+import io.github.contentsview08.obb.sync.engine.SyncSql
 import io.github.contentsview08.obb.sync.adapters.ResolvedBoard
 import io.github.contentsview08.obb.sync.engine.SyncApi
 import io.github.contentsview08.obb.sync.engine.SyncApiError
@@ -40,12 +44,14 @@ class SyncEngineTest {
 
     private fun server(now: () -> Long) = FakeSyncServer(now = now, ratePerMinute = null, fullPullPerHour = null)
 
-    private fun engine(db: JdbcSyncSql, now: () -> Long, send: suspend (SyncRequest) -> SyncResponse) = SyncEngine(
+    private fun engine(db: SyncSql, now: () -> Long, send: suspend (SyncRequest) -> SyncResponse) = engineWith(db, now, false, send)
+
+    private fun engineWith(db: SyncSql, now: () -> Long, history: Boolean, send: suspend (SyncRequest) -> SyncResponse) = SyncEngine(
         db = db,
         keyStore = Keys(),
         transport = { send(it) },
         serverUrl = "https://sync.test",
-        adapters = listOf(FavoriteThreadAdapter(db) { ResolvedBoard(it, "2ch-compat") }),
+        adapters = if (history) historyAdapters(db, HistoryHost({ ResolvedBoard(it, "2ch-compat") }, { 0 }, { "r" })) else listOf(FavoriteThreadAdapter(db) { ResolvedBoard(it, "2ch-compat") }),
         now = now,
         newDeviceId = { "dev" },
     )
@@ -178,6 +184,87 @@ class SyncEngineTest {
         assertEquals(true, e.checkHead())
         head = { SyncResponse(404, "{}") }
         assertEquals(true, e.checkHead())
+        db.close()
+    }
+
+    @Test fun 読んでから消すまでの間に既読が進んでも進んだ値を送らずに消さない() = runBlocking {
+        val now = 1_800_000_000_000L
+        val s = server { now }
+        val raw = JdbcSyncSql.open()
+        val t = ThreadSummary("https://a.5ch.io/x/", "1", "t1", 0, 0, null)
+        var interfere = false
+        // drain が送信待ちを読んだ直後に、スクロールで同じスレの既読が進む
+        val db = object : SyncSql {
+            override fun exec(sql: String, args: List<Any?>) = raw.exec(sql, args)
+            override fun batch(statements: List<SqlStatement>) = raw.batch(statements)
+            override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> {
+                val rows = raw.query(sql, args)
+                if (interfere && sql.contains("FROM sync_ops WHERE op IN")) {
+                    interfere = false
+                    UserOps(raw).markReadNow(t, 80, now + 500)
+                }
+                return rows
+            }
+        }
+        val e = engineWith(db, { now }, true) { call(s, it) }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        e.runCycle(true)
+        raw.exec("INSERT INTO threads (board_url, key, connector_id, title) VALUES (?, ?, ?, ?)", listOf(t.boardUrl, t.key, "2ch-compat", "t1"))
+        UserOps(raw).markReadNow(t, 50, now)
+        interfere = true
+        e.runCycle(true)
+        assertEquals(false, interfere)
+        assertEquals(0L, raw.query("SELECT COUNT(*) AS n FROM sync_ops").first()["n"])
+        val dev = raw.query("SELECT payload FROM sync_records WHERE kind = 'read_dev'").first()["payload"] as String
+        assertEquals(80L, ((parseStrictJson(dev) as Map<*, *>)["body"] as Map<*, *>)["pos"])
+        raw.close()
+    }
+
+    @Test fun recordsの429は送信だけを待ちpullと確認は続け待ちは10分で丸める() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        var limited = true
+        val paths = ArrayList<String>()
+        val e = engine(db, { now }) { r ->
+            paths += "${r.method} ${r.url.removePrefix("https://sync.test").substringBefore('?')}"
+            if (limited && r.url.endsWith("/records")) SyncResponse(429, canonicalJson(mapOf("error" to "rate_limited", "retry_after_sec" to 86_400L))) else call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        e.runCycle(true)
+        UserOps(db).setFavoriteThreadNow(ThreadSummary("https://a.5ch.io/x/", "1", "t1", 0, 0, null), "t1", true, 1)
+        now += SyncConfig.PULL_MIN_GAP_MS
+        assertEquals("idle", e.runCycle(false).state)
+        assertEquals(false, e.hasChanges())
+        assertEquals("rate_limited", db.query("SELECT value FROM sync_state WHERE key = 'last_error'").first()["value"])
+        paths.clear()
+        now += SyncConfig.PULL_MIN_GAP_MS
+        e.runCycle(false)
+        e.checkHead()
+        assertEquals(listOf("GET /changes", "GET /head"), paths)
+        limited = false
+        now += SyncConfig.RETRY_WAIT_MAX_MS
+        assertEquals(true, e.hasChanges())
+        assertEquals(1, e.runCycle(false).pushed)
+        assertEquals(0, db.query("SELECT value FROM sync_state WHERE key = 'last_error'").size)
+        db.close()
+    }
+
+    @Test fun 周全体の429もサーバーが翌日と言ってきても10分で試す() = runBlocking {
+        var now = 1_800_000_000_000L
+        val s = server { now }
+        val db = JdbcSyncSql.open()
+        var limited = true
+        val e = engine(db, { now }) { r ->
+            if (limited && r.url.contains("/changes")) SyncResponse(429, canonicalJson(mapOf("error" to "rate_limited", "retry_after_sec" to 1_000_000_000_000L))) else call(s, r)
+        }
+        ByteArray(32) { 7 }.let { k -> e.pair(k, signTicket(spaceId(deriveKeys(k).authToken), 4_000_000_000)) }
+        assertEquals("backoff", e.runCycle(true).state)
+        limited = false
+        now += SyncConfig.RETRY_WAIT_MAX_MS - 1
+        assertEquals("backoff", e.runCycle(false).skipped)
+        now += 1
+        assertEquals("idle", e.runCycle(false).state)
         db.close()
     }
 

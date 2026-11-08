@@ -1,5 +1,5 @@
 // サーバーとの通信の口。実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
-import { HTTP_TIMEOUT_MS, MAX_RESPONSE_BYTES } from '../config'
+import { HTTP_IDLE_TIMEOUT_MS, HTTP_TOTAL_TIMEOUT_MS, MAX_RESPONSE_BYTES } from '../config'
 import { parseStrictJson } from '../json'
 import { checkPowChallenge, solvePow } from './pow'
 import type { SyncPace } from './scheduler'
@@ -11,7 +11,10 @@ export interface SyncRequest {
   body?: string
   /** 読みながら数えて、超えたら打ち切る */
   maxBytes: number
+  /** 要求の全体の上限 */
   timeoutMs: number
+  /** 無通信がこれだけ続いたら打ち切る */
+  idleTimeoutMs: number
 }
 
 export interface SyncResponse {
@@ -111,7 +114,8 @@ export class SyncApi {
         headers,
         ...(body !== undefined && { body: JSON.stringify(body) }),
         maxBytes: MAX_RESPONSE_BYTES,
-        timeoutMs: HTTP_TIMEOUT_MS,
+        timeoutMs: HTTP_TOTAL_TIMEOUT_MS,
+        idleTimeoutMs: HTTP_IDLE_TIMEOUT_MS,
       })
     } catch (e) {
       throw new SyncApiError(e instanceof SyncResponseTooLarge ? 'too_large' : 'network')

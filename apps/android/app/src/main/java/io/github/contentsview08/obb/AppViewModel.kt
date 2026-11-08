@@ -509,7 +509,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (io.github.contentsview08.obb.sync.adapters.AREA_NG in r.applied) viewModelScope.launch { reapplyNg() }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_POSTS in r.applied) viewModelScope.launch { postHistory = db.postHistory() }
                 if (io.github.contentsview08.obb.sync.adapters.AREA_OWN_POSTS in r.applied) viewModelScope.launch { reflectSyncedOwnPosts() }
-                if (io.github.contentsview08.obb.sync.adapters.AREA_HISTORY in r.applied || io.github.contentsview08.obb.sync.adapters.AREA_READS in r.applied) viewModelScope.launch { reflectSyncedReads() }
+                if (io.github.contentsview08.obb.sync.adapters.AREA_HISTORY in r.applied || io.github.contentsview08.obb.sync.adapters.AREA_READS in r.applied || r.dropped.isNotEmpty()) {
+                    val dropped = r.dropped.toList()
+                    viewModelScope.launch { reflectSyncedReads(dropped) }
+                }
             },
         )
     }
@@ -605,19 +608,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * 適用で変わった既読と履歴を画面へ。開いているスレは上がったときだけ上げ、「ここから未読」の線とスクロール位置は動かさない。
-     * 他の端末のログの削除で行がなくなったスレは、画面も閉じる(消した端末と同じ見え方。開き直すと先頭から)
+     * 他の端末のログの削除が写ったスレ(dropped)は、画面も閉じる(消した端末と同じ見え方。開き直すと先頭から)。
+     * 行がないことからは推し量らない(初めて開くスレの取得中や、取得に失敗した画面にも行はない)
      */
-    private suspend fun reflectSyncedReads() {
+    private suspend fun reflectSyncedReads(dropped: List<io.github.contentsview08.obb.sync.adapters.DroppedThread> = emptyList()) {
         val hist = db.history()
         history = hist
         favThreads = db.favoriteThreads()
         allUnread = unreadEntries(hist, remoteCounts)
         for (p in stack) if (p is Page.Threads) p.states = db.threadStates(p.board.url)
+        // 板の URL の書き方の揺れ(http・https、5ch.net・5ch.io)をそろえて比べる
+        fun idOf(boardUrl: String, key: String) = "${io.github.contentsview08.obb.sync.normalizeBoardUrl(boardUrl) ?: boardUrl}\t$key"
+        val gone = dropped.map { idOf(it.boardUrl, it.key) }.toSet()
         for (p in threadPages()) {
-            val readNo = db.readNo(p.summary)
-            // 読み込んであるのに行がない = 削除が写った。読み込む前の画面は、読み込みで同期の表から戻るか空で始まる
-            if (readNo == null && p.loaded) dropThreadPage(p)
-            else p.readNo = io.github.contentsview08.obb.data.openReadNoAfterSync(p.readNo, readNo)
+            if (idOf(p.summary.boardUrl, p.summary.key) in gone) dropThreadPage(p)
+            else p.readNo = io.github.contentsview08.obb.data.openReadNoAfterSync(p.readNo, db.readNo(p.summary))
         }
     }
 

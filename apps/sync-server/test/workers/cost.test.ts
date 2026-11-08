@@ -106,7 +106,8 @@ describe('1 日の件数', () => {
     const body = (await over.json()) as { error: string; retry_after_sec: number }
     expect(body.error).toBe('rate_limited')
     expect(body.retry_after_sec).toBeGreaterThan(0)
-    expect(body.retry_after_sec).toBeLessThanOrEqual(24 * 60 * 60)
+    // 日の境目までではなく、長くても 1 時間
+    expect(body.retry_after_sec).toBeLessThanOrEqual(60 * 60)
     expect((await written('A')) - before).toBe(0)
     // 古い base_version で送り直したものは 409 で書かないので数えない
     const conflict = (await (await push('A', [await record('1')])).json()) as { results: { status: number }[] }

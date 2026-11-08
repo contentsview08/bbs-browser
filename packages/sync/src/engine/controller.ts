@@ -63,15 +63,18 @@ export interface SyncControllerDeps {
 }
 
 /**
- * 参加のとき、種まきで相手へ送るものが手元にあるか。閲覧履歴・お気に入り(スレ・板)・書き込み履歴・サイト・NG を見る
- * (設定と上げた画像は数えない)。最初から入っている掲示板・板は、まっさらな端末にもあるので数えない
+ * 参加のとき、種まきで相手へ送るものが手元にあるか。閲覧履歴・既読・お気に入り(スレ・板)・書き込み履歴・自分のレスの印・
+ * 上げた画像の履歴・サイト・NG を見る(設定は数えない)。最初から入っている掲示板・板は、まっさらな端末にもあるので数えない。
+ * 既読は履歴から外したスレの分も種まきで送るので、read_at がなくても read_no があれば数える
  */
 export async function hasLocalData(db: SyncSqlDb, adapters: readonly SyncAdapter[], ctx: AdapterContext, presetUrls: readonly string[]): Promise<boolean> {
   const any = async (sql: string, params: unknown[] = []) => Number((await db.select<{ n: number }>(`SELECT COUNT(*) AS n ${sql}`, params))[0]?.n ?? 0) > 0
   const notPreset = (col: string) => (presetUrls.length > 0 ? ` WHERE ${col} NOT IN (${presetUrls.map((_, i) => `$${i + 1}`).join(', ')})` : '')
-  if (await any('FROM threads WHERE read_at IS NOT NULL')) return true
+  if (await any('FROM threads WHERE read_at IS NOT NULL OR read_no > 0')) return true
   if (await any('FROM favorite_threads')) return true
   if (await any('FROM post_history')) return true
+  if (await any('FROM own_posts')) return true
+  if (await any('FROM uploads')) return true
   if (await any(`FROM favorite_boards${notPreset('url')}`, [...presetUrls])) return true
   if (await any(`FROM sites${notPreset('menu_url')}`, [...presetUrls])) return true
   const ng = adapters.find((a) => a.kind === NG_KIND)
@@ -232,7 +235,7 @@ export class SyncController {
     if (otherServer || (await hasLocalData(this.deps.db, this.deps.adapters, ctx, this.deps.presetUrls ?? []))) {
       const confirm: SyncConfirm = { type: JOIN_DATA_CONFIRM, lost: 0, host: otherServer ? new URL(c.serverUrl).host : null }
       this.pendingJoin = { code: c, confirm }
-      return { state: 'confirm', pulled: 0, pushed: 0, conflicts: 0, applied: {}, confirm }
+      return { state: 'confirm', pulled: 0, pushed: 0, conflicts: 0, applied: {}, dropped: [], confirm }
     }
     return this.finishJoin(c)
   }
@@ -318,7 +321,7 @@ export class SyncController {
     const join = this.pendingJoin
     if (join) {
       this.pendingJoin = null
-      if (choice === 'keep_local') return { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {} }
+      if (choice === 'keep_local') return { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {}, dropped: [] }
       return this.finishJoin(join.code)
     }
     await (await this.engine()).resolveConfirm(choice)

@@ -21,7 +21,14 @@ class OkHttpSyncTransport(private val client: OkHttpClient = defaultClient()) : 
         val body = req.body?.toByteArray(Charsets.UTF_8)?.toRequestBody(JSON_TYPE)
         val b = Request.Builder().url(req.url).method(req.method, body)
         for ((k, v) in req.headers) b.header(k, v)
-        val call = client.newBuilder().callTimeout(minOf(req.timeoutMs, TIMEOUT_MS), TimeUnit.MILLISECONDS).build().newCall(b.build())
+        // 無通信の打ち切りと全体の打ち切りを分ける。全体を短くすると、遅い回線で 1MB のページが毎回同じところで切れて先へ進まない
+        val idle = minOf(req.idleTimeoutMs, IDLE_MS)
+        val call = client.newBuilder()
+            .readTimeout(idle, TimeUnit.MILLISECONDS)
+            .writeTimeout(idle, TimeUnit.MILLISECONDS)
+            .callTimeout(minOf(req.timeoutMs, TOTAL_MS), TimeUnit.MILLISECONDS)
+            .build()
+            .newCall(b.build())
         call.execute().use { res ->
             val out = ByteArrayOutputStream()
             val buf = ByteArray(8192)
@@ -37,7 +44,8 @@ class OkHttpSyncTransport(private val client: OkHttpClient = defaultClient()) : 
     }
 
     companion object {
-        private const val TIMEOUT_MS = 10_000L
+        private const val IDLE_MS = io.github.contentsview08.obb.sync.SyncConfig.HTTP_IDLE_TIMEOUT_MS
+        private const val TOTAL_MS = io.github.contentsview08.obb.sync.SyncConfig.HTTP_TOTAL_TIMEOUT_MS
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             // UA はサーバー側の WAF で OBB の通信を見分けるのに使う(OBB/<版> で始める)
@@ -46,8 +54,10 @@ class OkHttpSyncTransport(private val client: OkHttpClient = defaultClient()) : 
             .followSslRedirects(false)
             .cookieJar(CookieJar.NO_COOKIES)
             .retryOnConnectionFailure(false)
-            .connectTimeout(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            .callTimeout(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .connectTimeout(IDLE_MS, TimeUnit.MILLISECONDS)
+            .readTimeout(IDLE_MS, TimeUnit.MILLISECONDS)
+            .writeTimeout(IDLE_MS, TimeUnit.MILLISECONDS)
+            .callTimeout(TOTAL_MS, TimeUnit.MILLISECONDS)
             .build()
     }
 }

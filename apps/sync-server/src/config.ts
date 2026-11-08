@@ -96,11 +96,13 @@ export function loadConfig(env: Env): Config {
     pageRecords: int(e.PAGE_RECORDS, 500),
     pageBytes: int(e.PAGE_BYTES, 1024 * 1024),
     conflictBytes: int(e.CONFLICT_BYTES, 1536 * 1024),
-    ratePerMinute: int(e.RATE_PER_MINUTE, 20),
-    // 前面で 30 秒ごとの確認と送信。2 台を 11 時間使って最大 2,640 回なので余裕を持たせる
+    // 合流(全件の読み取りと種まきの送信)は 1 分に 20 回を超える
+    ratePerMinute: int(e.RATE_PER_MINUTE, 60),
+    // 日の上限は乱用の歯止め。費用は端末の間隔と PACE_HEAD_SEC・PACE_PUSH_SEC で調整する。2 台を前面で使い続けても届かない値にする
     ratePerDay: int(e.RATE_PER_DAY, 6000),
-    // 正規のアプリは 1 日に数百件(送信は 5 分ごと、1 回に既読と閲覧履歴)。1 件が 2 行なので、要求の上限いっぱいに 100 件ずつ送られると 1 領域で Free の 100,000 行を使い切れてしまう
-    recordsPerDay: int(e.RECORDS_PER_DAY, 3000),
+    // ふだんは 1 日に数百件だが、合流・1 台目の種まき・作り直し・ログのまとめ削除は正規でも数千件になる(1,600 スレの履歴で約 3,200 件)。
+    // 容量(QUOTA_RECORDS 50,000 件)の範囲で、壊れた端末が送り続けても 1 日で容量を使い切らない値
+    recordsPerDay: int(e.RECORDS_PER_DAY, 20_000),
     paceHeadSec: int(e.PACE_HEAD_SEC, 0),
     pacePushSec: int(e.PACE_PUSH_SEC, 0),
     fullPullPerHour: int(e.FULL_PULL_PER_HOUR, 3),

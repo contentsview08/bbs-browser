@@ -89,6 +89,13 @@ sealed class OpenTarget {
     data object Top : OpenTarget()
 }
 
+/** 自動の取得でレスの数の上限とみなす数(PC 版のコネクタの maxPosts。hono-bbs は上限がない) */
+const val AUTO_REFRESH_MAX_POSTS = 1000
+
+/** 開いているスレを自動で取りに行くか。PC 版 utils/autoRefresh.ts の shouldAutoRefresh と同じ。見えていないとき・もう増えないスレ(dat 落ち・上限到達)では行かない */
+fun shouldAutoRefresh(visible: Boolean, archived: Boolean, postCount: Int, maxPosts: Int?): Boolean =
+    visible && !archived && (maxPosts == null || postCount < maxPosts)
+
 /**
  * 開いたとき(最初にレスが出たとき)にどこへ置くか(PC 版の openTarget と同じ決まり)。
  * - 覚えた位置があっても、覚えたときの既読より今の既読が先(別の端末で読み進めた分が同期で届いた)なら使わず、既読の次へ

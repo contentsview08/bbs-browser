@@ -576,8 +576,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   haptics: true,
   customScheme: '',
   // スマホは頭を短く(スマホ版と同じ。年と秒の下の桁を省く・ID は 6 文字)
-  dateStyle: isMobile ? 'md_w_hms' : 'full',
-  idShort: isMobile,
+  dateStyle: isMobile ? 'md_hm' : 'full',
+  idShort: false,
   postName: '',
   postMail: '',
 }

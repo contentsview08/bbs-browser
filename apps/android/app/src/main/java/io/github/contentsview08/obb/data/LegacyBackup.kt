@@ -89,7 +89,8 @@ internal fun legacySettings(old: JSONObject): JSONObject {
         if (old.has(from) || s != 1f) pxOfScale(s, basePx).takeIf { it != 0 }?.let { out.put(to, it) }
     }
     px("bodyScale", "postBodyPx", POST_BODY_BASE_PX)
-    px("postHeadScale", "postHeadPx", POST_HEAD_BASE_PX)
+    // 古い倍率はレスの頭の字 12px を基準にしていたので、いまの既定が変わっても同じ大きさに戻す
+    px("postHeadScale", "postHeadPx", 12)
     px("listFontScale", "listFontPx", LIST_FONT_BASE_PX)
     if (old.has("barFontScale")) barPxOfScale(scale("barFontScale"), basePxOfScale(base)).takeIf { it != 0f }?.let { out.put("barFontPx", it.toDouble()) }
     if (old.has("lineHeight")) old.optDouble("lineHeight").toFloat().takeIf { it != POST_LINE_HEIGHT }?.let { out.put("postLineHeight", it.toDouble()) }

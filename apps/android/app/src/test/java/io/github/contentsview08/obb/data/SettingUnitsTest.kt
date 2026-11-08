@@ -8,7 +8,7 @@ class SettingUnitsTest {
     @Test fun 決めていない文字は今の既定の大きさ() {
         assertEquals(1f, scaleOfPx(0, POST_BODY_BASE_PX), 0f)
         assertEquals(15f, scaleOfPx(0, POST_BODY_BASE_PX) * POST_BODY_BASE_PX, 0f)
-        assertEquals(12f, scaleOfPx(0, POST_HEAD_BASE_PX) * POST_HEAD_BASE_PX, 0f)
+        assertEquals(10f, scaleOfPx(0, POST_HEAD_BASE_PX) * POST_HEAD_BASE_PX, 0f)
         assertEquals(1f, baseScaleOfPx(MOBILE_FONT_PX), 0f)
         assertEquals(1f, barScaleOfPx(0f, MOBILE_FONT_PX), 0f)
     }

@@ -8,7 +8,7 @@ import kotlin.math.roundToInt
 /** 基本の文字の既定(PC の mobileFontPx と同じ)。倍率 1 にあたる */
 const val MOBILE_FONT_PX = 14f
 const val POST_BODY_BASE_PX = 15
-const val POST_HEAD_BASE_PX = 12
+const val POST_HEAD_BASE_PX = 10
 const val LIST_FONT_BASE_PX = 15
 const val POST_LINE_HEIGHT = 1.47f
 const val POST_PAD_PX = 8

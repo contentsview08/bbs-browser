@@ -204,7 +204,6 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
     val favIds = remember(vm.favThreads) { vm.favThreads.map { it.thread.id }.toSet() }
     var styleSheet by remember { mutableStateOf(false) }
-    var sizeDialog by remember { mutableStateOf(false) }
     menuFor?.let { t -> ThreadMenu(vm, t, page.states[t.key] != null) { menuFor = null } }
     androidx.activity.compose.BackHandler(enabled = searching || query.isNotEmpty() || page.tab != null || page.only != null) {
         if (searching || query.isNotEmpty()) { searching = false; query = "" } else { page.tab = null; page.reversed = false; page.only = null }
@@ -470,7 +469,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                 ),
                 listOf(
-                    styleMenuItem(vm.prefs, onTheme = { styleSheet = true }, onSize = { sizeDialog = true }),
+                    styleMenuItem { styleSheet = true },
                     MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
                         MenuItem("板名をコピー", Icons.Filled.ContentCopy) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
                         MenuItem("板の URL をコピー", Icons.Filled.Link) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },
@@ -481,13 +480,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             header = { MenuInfo(page.board.name, "${page.threads.size}スレ") },
         ) { menu = false }
     }
-    if (styleSheet) StyleSheet(vm.prefs) { styleSheet = false }
-    if (sizeDialog) SizeDialog({ sizeDialog = false }) {
-        val p = vm.prefs
-        FontSizeSlider("スレ一覧の文字", p.listFontScale, 15) { p.listFontScale = it }
-        SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..40f, 39, "${p.listPad}dp", 9f) { p.listPad = snapInt(it) }
-        BarSliders(p)
-    }
+    if (styleSheet) StyleSheet(vm.prefs, thread = false) { styleSheet = false }
     NewThreadSheet(vm, page)
 }
 

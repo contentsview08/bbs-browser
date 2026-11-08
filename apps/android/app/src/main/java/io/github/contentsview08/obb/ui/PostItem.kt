@@ -102,8 +102,9 @@ fun PostItem(
     val showThumbs = prefs.thumbMode != io.github.contentsview08.obb.data.ThumbMode.NEVER
     val images = if (showThumbs) info?.images ?: emptyList() else emptyList()
     val youtube = if (showThumbs) info?.youtube ?: emptyList() else emptyList()
-    val bodySize = (15 * prefs.bodyScale).sp
-    val headSize = (12 * prefs.postHeadScale).sp
+    // 倍率は設定の基準の大きさに掛ける(基準を変えても見た目と設定の数字がずれないように)
+    val bodySize = (io.github.contentsview08.obb.data.POST_BODY_BASE_PX * prefs.bodyScale).sp
+    val headSize = (io.github.contentsview08.obb.data.POST_HEAD_BASE_PX * prefs.postHeadScale).sp
     val pad = prefs.postPad.dp
     val shownBody = if (imagesExpanded) r.bodyExpanded ?: r.body else r.body
     val body = @Composable { mod: Modifier ->
@@ -185,7 +186,8 @@ fun PostItem(
             val bubble = if (own) Palette.lineOwnBg else Palette.lineBubble
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
+            // 上下の余白(設定)は、吹き出しと吹き出しの間の余白にする
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = lineBubbleGap(prefs.postPad).dp), verticalAlignment = Alignment.Top) {
                 // 自分のレスは右に寄せる。ツリーの中は線でつなぐので左にそろえ、色だけ自分の色にする(PC 版と同じ)
                 val right = own && !LocalInTree.current
                 if (!right) { Box(Modifier.width(AVATAR)) { if (!continued) { Avatar(seed, r.beIcon, AVATAR, avatarMod); IconCount(iconCount) } }; Spacer(Modifier.width(8.dp)) }
@@ -202,8 +204,9 @@ fun PostItem(
                     val side = @Composable {
                         Column(horizontalAlignment = if (right) Alignment.End else Alignment.Start) {
                             if (right) r.sideReplies?.let { Text(it, fontSize = headSize, lineHeight = 1.3.em, inlineContent = chips) }
-                            r.sideNo?.let { Text(it, color = if (own) Palette.own else if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp) }
-                            Text(r.sideTime, color = if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = 10.sp, lineHeight = 12.sp)
+                            // 番号と時刻もレスの頭の字なので、頭の文字の大きさに合わせる
+                            r.sideNo?.let { Text(it, color = if (own) Palette.own else if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = headSize, lineHeight = 1.2.em) }
+                            Text(r.sideTime, color = if (Palette.onSky(style)) Palette.skyMuted else Palette.textMuted, fontSize = headSize, lineHeight = 1.2.em)
                         }
                     }
                     Row(verticalAlignment = Alignment.Bottom) {
@@ -223,6 +226,8 @@ fun PostItem(
                             if (toOwn) { Spacer(Modifier.width(6.dp)); OwnChip("返信", Palette.onSky(style)) }
                         }
                     }
+                    // サムネイル・リンクの札が吹き出しにくっつかないよう、少し離す
+                    if (images.isNotEmpty() || youtube.isNotEmpty() || (prefs.showLinkPreview && !info?.links.isNullOrEmpty())) Spacer(Modifier.height(5.dp))
                     // 右の吹き出しのリンクの札と画像は、左の端を吹き出しの左にそろえる。吹き出しより広ければ右の端にそろえて、画面の中に収める
                     if (right) Box(
                         Modifier.fillMaxWidth().layout { m, c ->
@@ -297,6 +302,12 @@ fun PostItem(
         Column(Modifier.fillMaxWidth()) { inner() }
     }
 }
+
+/**
+ * LINE 風の 1 レスの上と下の余白(dp。吹き出しの間はこの 2 倍)。設定の「レスの上下の余白」から決める。
+ * 既定(POST_PAD_PX = 2)で 6dp。0 で吹き出しがほぼ接する 1dp。既定より上は 1 ずつ増やす(最大の 40 で 44dp)
+ */
+fun lineBubbleGap(pad: Int): Float = if (pad <= io.github.contentsview08.obb.data.POST_PAD_PX) 1f + pad * 2.5f else pad + 4f
 
 /** 返信先の 1 行(小さいアイコン・本文の頭)。押すと返信先をポップアップで出す */
 @Composable

@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -22,10 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ColorLens
-import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -51,8 +47,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
@@ -256,15 +250,8 @@ fun MenuInfo(title: String, detail: String) {
     HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = Palette.border)
 }
 
-/** ︙ の「表示スタイル」とその小項目(スレ一覧・スレ表示で共通) */
-fun styleMenuItem(p: io.github.contentsview08.obb.data.Prefs, onTheme: () -> Unit, onSize: () -> Unit) =
-    MenuItem("表示スタイル", Icons.Filled.Palette, children = listOf(
-        MenuItem("テーマと差し色", Icons.Filled.ColorLens, onClick = onTheme),
-        MenuItem("レスの見た目", Icons.Filled.ViewAgenda, children = POST_STYLES.map { (k, name) ->
-            MenuItem(name, Icons.Filled.ViewAgenda, checked = p.postStyle == k) { p.postStyle = k }
-        }) {},
-        MenuItem("文字の大きさ・余白", Icons.Filled.FormatSize, onClick = onSize),
-    )) {}
+/** ︙ の「表示スタイル」(スレ一覧・スレ表示で共通)。押すと下から表示スタイルのシートを出す */
+fun styleMenuItem(onOpen: () -> Unit) = MenuItem("表示スタイル", Icons.Filled.Palette, onClick = onOpen)
 
 /** メニューの出る所: 右上(︙)・左上(題)・真ん中(長押し) */
 enum class MenuAt { TopEnd, TopStart, Center }
@@ -493,155 +480,6 @@ fun Skeleton(top: androidx.compose.ui.unit.Dp, post: Boolean) {
                 }
             }
             HorizontalDivider(color = Palette.border.copy(alpha = 0.5f))
-        }
-    }
-}
-
-/** 「文字の大きさ・余白」の小さな画面で、いま動かしているスライダー(動かしている間は、ほかを透かして後ろの画面を見せる) */
-class SizeDrag { var active by mutableStateOf<String?>(null) }
-val LocalSizeDrag = androidx.compose.runtime.compositionLocalOf<SizeDrag?> { null }
-
-/** 「文字の大きさ・余白」の 1 行(名前・いまの値・スライダー・元に戻す) */
-@Composable
-fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int, text: String, default: Float, onChange: (Float) -> Unit) {
-    val drag = LocalSizeDrag.current
-    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val dragged by source.collectIsDraggedAsState()
-    val pressed by source.collectIsPressedAsState()
-    androidx.compose.runtime.LaunchedEffect(dragged || pressed) {
-        if (drag != null) { if (dragged || pressed) drag.active = label else if (drag.active == label) drag.active = null }
-    }
-    // ほかのスライダーを動かしている間は、この行を隠す
-    val hidden = drag?.active != null && drag.active != label
-    val a by androidx.compose.animation.core.animateFloatAsState(if (hidden) 0f else 1f, androidx.compose.animation.core.tween(150), label = "row")
-    Column(Modifier.fillMaxWidth().graphicsLayer { alpha = a }.padding(vertical = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp)
-            // 値の桁や「元に戻す」で名前の折り返しが変わると、窓の高さが変わってスライダーが指から逃げる
-            Text(text, Modifier.widthIn(min = 44.dp), color = Palette.accent, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End)
-            val canReset = value != default
-            Text(
-                "元に戻す",
-                Modifier.padding(start = 10.dp).graphicsLayer { alpha = if (canReset) 1f else 0f }.clickable(enabled = canReset) { onChange(default) },
-                color = Palette.textMuted, fontSize = 12.sp, maxLines = 1,
-            )
-        }
-        androidx.compose.material3.Slider(
-            value, onChange, valueRange = range, steps = steps, interactionSource = source,
-            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.accent, activeTrackColor = Palette.accent),
-        )
-    }
-}
-
-/** 文字の大きさのスライダー。base は倍率 1 のときの大きさ */
-@Composable
-fun FontSizeSlider(label: String, scale: Float, base: Int, onChange: (Float) -> Unit) {
-    SizeSlider(label, scale * base, FONT_MIN.toFloat()..FONT_MAX.toFloat(), FONT_MAX - FONT_MIN - 1, "${fontSizeOf(scale, base)}", base.toFloat()) { onChange(scaleOf(it.roundToInt(), base)) }
-}
-
-/** 基本の文字と、ヘッダー・フッターの高さと文字 */
-@Composable
-fun BarSliders(p: io.github.contentsview08.obb.data.Prefs) {
-    SizeSlider("ヘッダーの高さ", p.headerHeight.toFloat(), 32f..120f, 0, "${p.headerHeight}dp", 54f) { p.headerHeight = it.toInt() }
-    SizeSlider("フッターの高さ", p.footerHeight.toFloat(), 32f..110f, 0, "${p.footerHeight}dp", 52f) { p.footerHeight = it.toInt() }
-    SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.6f..1.6f, 19, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
-    // 動かすと帯やメニューの字が変わって確かめやすいよう、一番下に置く
-    SizeSlider("基本の文字(メニュー・ボタン・ポップアップ)", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
-}
-
-/**
- * 真ん中に出す「文字の大きさ・余白」の小さな画面。動かすと後ろの画面がすぐ変わる。
- * スライダーを動かしている間は、そのスライダーだけを残して、画面の地や暗い幕を透かす(後ろの字の大きさを見ながら合わせられるように)
- */
-@Composable
-fun SizeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    val drag = remember { SizeDrag() }
-    val dragging = drag.active != null
-    val bg by androidx.compose.animation.core.animateFloatAsState(if (dragging) 0f else 1f, androidx.compose.animation.core.tween(150), label = "bg")
-    // Dialog は密度が変わると窓を作り直すので、外側から基本の文字を外す(内側だけだと、動かした瞬間につかみが離れる)
-    WithoutBaseFont { FullWindow(onDismiss = onDismiss) {
-        val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
-        Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f * bg))
-                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { onDismiss() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                Modifier.padding(horizontal = 24.dp).fillMaxWidth()
-                    .background(Palette.surface.copy(alpha = bg), shape).border(1.dp, Palette.border.copy(alpha = bg), shape)
-                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) {}
-                    .padding(20.dp),
-            ) {
-                Text("文字の大きさ・余白", Modifier.graphicsLayer { alpha = bg }, color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                Column(Modifier.heightIn(max = 480.dp).verticalScroll(androidx.compose.foundation.rememberScrollState(), enabled = !dragging)) {
-                    androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides drag) { content() }
-                }
-                Row(Modifier.fillMaxWidth().graphicsLayer { alpha = bg }, horizontalArrangement = Arrangement.End) {
-                    androidx.compose.material3.TextButton(onClick = onDismiss) { Text("閉じる") }
-                }
-            }
-        }
-    } }
-}
-
-/**
- * テーマと差し色。真ん中に浮かぶ(レスの見た目と文字の大きさは ︙ の「表示スタイル」の別の小項目)
- */
-@Composable
-fun StyleSheet(p: io.github.contentsview08.obb.data.Prefs, onDismiss: () -> Unit) {
-    CenterPanel("テーマと差し色", onDismiss) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-            @Composable fun group(t: String) = Text(t, Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp), color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            group("テーマ")
-            val current = Palette.scheme.key
-            // 2 列の見本(地・帯・面・差し色を小さく描く)。名前だけより、押す前に色が分かる
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (pair in allSchemes().chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (s in pair) {
-                        val on = s.key == current
-                        val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                        Row(
-                            Modifier.weight(1f).clip(shape).border(if (on) 2.dp else 1.dp, if (on) Palette.accent else Palette.border, shape)
-                                .clickable {
-                                    // スマホのダーク・ライトに合わせているときは、いまの明るさの方の配色を変える(PC 版の pickSchemeNow)
-                                    if (p.followOsTheme) { if (s.dark == Palette.dark) { if (s.dark) p.darkScheme = s.key else p.lightScheme = s.key } else { p.followOsTheme = false; p.scheme = s.key } }
-                                    else p.scheme = s.key
-                                }
-                                .padding(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            // 見本: 上に帯、地の上に面の棒 2 本、右下に差し色の丸
-                            Column(Modifier.size(width = 34.dp, height = 40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp)).background(s.base).border(1.dp, s.border, androidx.compose.foundation.shape.RoundedCornerShape(5.dp))) {
-                                Box(Modifier.fillMaxWidth().height(8.dp).background(s.bar))
-                                Box(Modifier.padding(start = 4.dp, top = 5.dp).width(24.dp).height(5.dp).background(s.surface2, androidx.compose.foundation.shape.RoundedCornerShape(2.dp)))
-                                Box(Modifier.padding(start = 4.dp, top = 3.dp).width(17.dp).height(5.dp).background(s.textMuted.copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)))
-                                Box(Modifier.padding(start = 20.dp, top = 3.dp).size(8.dp).background(s.accent, androidx.compose.foundation.shape.CircleShape))
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(s.name, Modifier.weight(1f), color = if (on) Palette.textStrong else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else null, maxLines = 2)
-                        }
-                    }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = Palette.border)
-            group("差し色")
-            // 丸を押して選ぶ。左端の「テーマ」はテーマの色に戻す
-            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                @Composable fun dot(c: Color, label: String, on: Boolean, onClick: () -> Unit) {
-                    Column(Modifier.clickable(onClick = onClick).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            Modifier.size(30.dp).background(c, androidx.compose.foundation.shape.CircleShape)
-                                .border(if (on) 3.dp else 1.dp, if (on) Palette.textStrong else Palette.border, androidx.compose.foundation.shape.CircleShape),
-                        )
-                        Text(label, color = if (on) Palette.textStrong else Palette.textMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
-                    }
-                }
-                dot(Palette.scheme.accent, "テーマ", p.accent.isEmpty()) { p.accent = "" }
-                for (a in ACCENTS) dot(if (Palette.dark) a.dark else a.light, a.name, p.accent == a.key) { p.accent = a.key }
-            }
         }
     }
 }

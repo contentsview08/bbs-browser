@@ -187,7 +187,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     var confirmDelete by remember { mutableStateOf(false) }
     fun askDeleteLog() { if (vm.prefs.confirmDeleteLog) confirmDelete = true else vm.deleteLog(page) }
     fun favoriteItem() = MenuItem(if (page.favorite) "お気に入りのスレから外す" else "お気に入りのスレに足す", if (page.favorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder) { vm.toggleFavoriteThread(page) }
-    var fontDialog by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
     val safeName = remember(page.title) { page.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60) }
     val saveText = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")) { uri -> if (uri != null) vm.saveThread(page, uri, html = false) }
@@ -748,7 +747,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
                 ),
                 listOf(
-                    styleMenuItem(vm.prefs, onTheme = { styleSheet = true }, onSize = { fontDialog = true }),
+                    styleMenuItem { styleSheet = true },
                     MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
                         MenuItem("スレタイをコピー", Icons.Filled.ContentCopy) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
                         MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },
@@ -779,7 +778,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) { menu = false }
     }
     aaZoom?.let { n -> page.rendered[n]?.let { AaZoom(it) { aaZoom = null } } }
-    if (styleSheet) StyleSheet(vm.prefs) { styleSheet = false }
+    if (styleSheet) StyleSheet(vm.prefs, thread = true) { styleSheet = false }
 
     if (ngEditing != null) {
         val r = ngEditing!!
@@ -884,15 +883,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 NextCandidates(page) { nextSheet = false; vm.openThread(it) }
             }
         }
-    }
-
-    if (fontDialog) SizeDialog({ fontDialog = false }) {
-        val pr = vm.prefs
-        FontSizeSlider("レスの本文", pr.bodyScale, 15) { pr.bodyScale = it }
-        FontSizeSlider("レスの頭(名前・日付・ID)", pr.postHeadScale, 12) { pr.postHeadScale = it }
-        SizeSlider("レスの本文の行間", pr.lineHeight, 1.0f..3.0f, 39, "%.2f".format(pr.lineHeight), 1.47f) { pr.lineHeight = if (it == 1.47f) it else snapTo(it, 20) }
-        SizeSlider("レスの上下の余白", pr.postPad.toFloat(), 0f..40f, 39, "${pr.postPad}dp", 8f) { pr.postPad = snapInt(it) }
-        BarSliders(pr)
     }
 
     if (confirmDelete) ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLog(page) }) { confirmDelete = false }

@@ -647,5 +647,5 @@ WebSocket は、同時利用のリアルタイム性が本当に必要になっ�
 
 ## 未決事項
 
-- [ ] 本番のドメイン。限定の試験を `workers.dev` のまま行うか
+- [x] 本番のドメインは `sync.red-edge.net`(限定の試験から。Turnstile と WAF は本物。`workers.dev` は検証用だけ)
 - [ ] 端末側の未解決(`docs/sync-client.md` の 12 章)

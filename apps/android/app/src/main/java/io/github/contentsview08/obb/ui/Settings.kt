@@ -487,6 +487,11 @@ private fun BehaviorPage(vm: AppViewModel) {
     Group("スクロール") {
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
         if (LocalAdvanced.current) SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
+        // 自動で流すのは、スレ表示の ︙ から入れる。次の更新までに溜まった分を読み終える速さで流し、ここの速さより遅くはしない
+        ChoiceRow(
+            "自動で流す速さ", p.autoScrollSpeed,
+            listOf("slow" to "ゆっくり(1 秒に 1 行)", "normal" to "ふつう(1 秒に 2 行)", "fast" to "速い(1 秒に 4 行)"),
+        ) { p.autoScrollSpeed = it }
         if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {

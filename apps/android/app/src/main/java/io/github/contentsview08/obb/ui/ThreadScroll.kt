@@ -72,6 +72,23 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var flashAt = 0L
     /** 押して飛んだレス(番号と、押した時刻)。一瞬光らせる */
     var jumpFlash by mutableStateOf<Pair<Int, Long>?>(null)
+
+    // ── 自動で流す(ui/AutoScroll.kt) ──
+    /** 自動で流している(スレを閉じたらやめる) */
+    var autoOn by mutableStateOf(false)
+    /** 指で触ったので止めている。自分で一番下まで戻ったら続ける */
+    var autoPaused by mutableStateOf(false)
+    /** 一度一番下に着いた。以後は次の更新に合わせて流す */
+    var autoCaughtUp = false
+    /** 溜まった分が多すぎるときの札に出す、画面より下のレスの数(0 なら出さない) */
+    var autoBacklog by mutableStateOf(0)
+    /** 自動更新が最後に動いた時刻(ms。0 なら動いていない)。次の更新までの時間をここから出す */
+    var autoRefreshAt = 0L
+    /** 自動で流していて、止めていない */
+    val autoRunning get() = autoOn && !autoPaused
+
+    fun startAuto() { autoOn = true; autoPaused = false; autoCaughtUp = false; autoBacklog = 0 }
+    fun stopAuto() { autoOn = false; autoPaused = false; autoBacklog = 0 }
 }
 
 /** PC 版の staggerDelays の写し */
@@ -174,7 +191,7 @@ class ThreadScroller(
      * 新着が届いたとき(PC 版の newPostsTarget): 光らせ、
      * - 開いたときに未読の頭がなかったなら、届いた未読の頭へすぐ移る
      * - 開いて最初の取得の分で、利用者がまだ触っていなければ、それまでを読み終えていたときだけ新着の頭へすぐ移る
-     * - 読んでいる途中は、設定がオンで一番下を見ているときだけ、新着の頭へ動かして見せる
+     * - 読んでいる途中は、設定がオンで一番下を見ているときだけ、新着の頭へ動かして見せる(自動で流している間は除く)
      */
     fun grew(autoScrollOnNew: Boolean) {
         val page = ctl.page
@@ -204,14 +221,16 @@ class ThreadScroller(
             ctl.keepJump -> {}
             ctl.pendingUnread && posts.any { it.no == unreadFrom } -> toUnread(unreadFrom)
             opening -> if (read >= prevLastNo) toUnread(head)
-            autoScrollOnNew && ctl.atBottom -> toUnread(head, animate = true)
+            // 自動で流している間は、流す方が新着まで運ぶ(送る動きどうしがぶつからないように)
+            autoScrollOnNew && ctl.atBottom && !ctl.autoRunning -> toUnread(head, animate = true)
         }
         ctl.pendingUnread = false
         // 新着の頭が画面の外なら、下から「新着 +N」を少しのあいだ出す(送り終わるのを待ってから確かめる)
         val first = fresh.first()
         scope.launch {
             delay(450)
-            if (!isVisible(first)) {
+            // 自動で流している間は、新着は流れてくるので知らせない(溜まりすぎたときは別の札)
+            if (!isVisible(first) && !ctl.autoRunning) {
                 ctl.newToast = fresh.size to first
                 delay(NEW_TOAST_MS)
                 if (ctl.newToast?.second == first) ctl.newToast = null

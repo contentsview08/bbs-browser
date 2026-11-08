@@ -70,6 +70,7 @@ val SETTINGS_INDEX = listOf(
     Triple("behavior", "スクロール", ""),
     Triple("behavior", "下へスクロールしたら、ヘッダーとフッターを隠す", "上へスクロールすると、すぐ戻ります"),
     Triple("behavior", "いちばん下を見ているときは、新着まで送る", ""),
+    Triple("behavior", "自動で流す速さ", ""),
     Triple("behavior", "ログを削除する前に確かめる", ""),
     Triple("behavior", "更新", ""),
     Triple("behavior", "書き込み欄の右に更新ボタン", ""),

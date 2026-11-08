@@ -587,10 +587,12 @@ export class LogStore {
     await this.db.execute(sql, params)
   }
 
+  /** 同期で届いた印は板の URL の書き方(5ch.io / 5ch.net、http / https)が違うことがあるので、書き方によらず引く */
   async getOwnPosts(thread: ThreadSummary): Promise<number[]> {
+    const urls = boardUrlVariants(thread.boardUrl)
     const rows = await this.db.select<{ no: number }>(
-      'SELECT no FROM own_posts WHERE board_url = $1 AND key = $2 ORDER BY no',
-      [thread.boardUrl, thread.key],
+      `SELECT DISTINCT no FROM own_posts WHERE board_url IN (${urls.map((_, i) => `$${i + 1}`).join(', ')}) AND key = $${urls.length + 1} ORDER BY no`,
+      [...urls, thread.key],
     )
     return rows.map((r) => r.no)
   }

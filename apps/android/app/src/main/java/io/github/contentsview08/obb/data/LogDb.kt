@@ -346,8 +346,10 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
     // ── 書き込み ──
 
     /** 自分のレスの印(「自分」の絞り込み・自分への返信の印に使う)。付ける・外すは UserOps(同期に乗せる) */
+    /** 同期で届いた印は板の URL の書き方(5ch.io / 5ch.net、http / https)が違うことがあるので、書き方によらず引く */
     suspend fun ownPosts(t: ThreadSummary): Set<Int> = io {
-        readableDatabase.rawQuery("SELECT no FROM own_posts WHERE board_url = ? AND key = ?", arrayOf(t.boardUrl, t.key)).use { c ->
+        val urls = boardUrlVariants(t.boardUrl)
+        readableDatabase.rawQuery("SELECT no FROM own_posts WHERE board_url IN (${urls.joinToString(", ") { "?" }}) AND key = ?", (urls + t.key).toTypedArray()).use { c ->
             buildSet { while (c.moveToNext()) add(c.getInt(0)) }
         }
     }

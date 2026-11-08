@@ -214,4 +214,23 @@ class HonoBbsTest {
         s.run { HonoBbs.createPost(thread(other), input) }
         assertFalse(s.sent.any { it.url.endsWith("/auth/login") || it.text.contains("secret-pass") || it.headers.containsKey("Authorization") })
     }
+
+    // ── API の場所 ──
+
+    @Test fun 家の中や自分の端末を指すAPIの印は受けず決めつけにする() {
+        val apis = listOf("http://127.0.0.1:8787/api/v1", "http://192.168.0.1/api", "http://localhost/api/v1", "http://router.lan/api", "http://[::1]/api", "http://0x7f.1/api", "http://2130706433/api")
+        for ((i, api) in apis.withIndex()) {
+            val web = "https://evil$i.example.com"
+            val s = FakeServer { res(200, """<meta name="bbs-api" content="$api">""") }
+            assertEquals(api, "https://api.evil$i.example.com/api/v1", s.run { HonoBbs.apiFor("$web/boards/b/") })
+        }
+    }
+
+    @Test fun 同じホストとその下とほかの公開のサイトのAPIは受ける() {
+        assertTrue(HonoBbs.apiBaseAllowed("http://localhost:5173", "http://localhost:8787/api/v1"))
+        assertTrue(HonoBbs.apiBaseAllowed("https://bbs.example.com", "https://api.bbs.example.com/api/v1"))
+        assertTrue(HonoBbs.apiBaseAllowed("https://bbs.example.com", "https://hono-bbs.x.workers.dev/api/v1"))
+        assertFalse(HonoBbs.apiBaseAllowed("https://bbs.example.com", "javascript:alert(1)"))
+        assertFalse(HonoBbs.apiBaseAllowed("https://bbs.example.com", "http://10.0.0.1/api/v1"))
+    }
 }

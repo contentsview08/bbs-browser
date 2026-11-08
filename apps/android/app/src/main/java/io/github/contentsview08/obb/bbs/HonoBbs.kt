@@ -21,8 +21,23 @@ import java.util.Base64
 private val THREAD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:/([0-9][0-9,-]*n?))?/?(?:[?#].*)?$")
 private val BOARD_URL = Regex("^(https?://[^/]+)/boards/([A-Za-z0-9_-]+)/?(?:[?#].*)?$")
 private val SITE_URL = Regex("^(https?://[^/]+)/boards/?(?:[?#].*)?$")
-private val API_URL = Regex("^https?://")
 private val FIRST_IMAGE = Regex("https?://\\S+?\\.(?:jpe?g|png|gif|webp)(?:\\?\\S*)?(?=\\s|$)", RegexOption.IGNORE_CASE)
+private val PRIVATE_NAME = Regex("\\.(?:local|localhost|lan|home|internal|intranet|corp|home\\.arpa)$")
+private val IPV4 = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.\\d{1,3}\\.\\d{1,3}$")
+private val HEX_PART = Regex("(?:^|\\.)0x", RegexOption.IGNORE_CASE)
+
+/** 家の中・自分の端末を指す名前とアドレス(数字の変わった書き方・IPv6 も含める) */
+private fun isPrivateHost(host: String): Boolean {
+    val h = host.lowercase().trimEnd('.')
+    if (h == "localhost" || PRIVATE_NAME.containsMatchIn(h)) return true
+    if (h.startsWith("[") || h.contains(':') || !h.contains('.')) return true
+    IPV4.matchEntire(h)?.let { m ->
+        val a = m.groupValues[1].toInt()
+        val b = m.groupValues[2].toInt()
+        return a == 0 || a == 10 || a == 127 || (a == 100 && b in 64..127) || (a == 169 && b == 254) || (a == 172 && b in 16..31) || (a == 192 && b == 168) || a >= 224
+    }
+    return h.all { it.isDigit() || it == '.' } || HEX_PART.containsMatchIn(h)
+}
 
 object HonoBbs {
     fun isBoardUrl(url: String) = BOARD_URL.matches(url)
@@ -80,14 +95,26 @@ object HonoBbs {
     /** web のオリジン → API の場所。一度調べたら覚えておく */
     private val apiBases = HashMap<String, String>()
 
+    /**
+     * <meta name="bbs-api"> の行き先を受けてよいか。API の場所は相手のページが決めるので、
+     * 同じホストかその下(api.<ホスト>)か、家の中・自分の端末でないところだけにする(リンクを押しただけで家の中の機器へ通信しないように)。
+     * http(s) の URL の形のものだけ(ページに別の仕組みの URL が書かれていても API にしない)
+     */
+    fun apiBaseAllowed(origin: String, api: String): Boolean {
+        val page = origin.toHttpUrlOrNull() ?: return false
+        // toHttpUrlOrNull は http・https 以外を受けない
+        val target = api.toHttpUrlOrNull() ?: return false
+        if (target.host == page.host || target.host.endsWith(".${page.host}")) return true
+        return !isPrivateHost(target.host)
+    }
+
     private suspend fun apiBaseOf(origin: String): String {
         synchronized(apiBases) { apiBases[origin]?.let { return it } }
         val res = runCatching { Http.get("$origin/") }.getOrNull()?.takeIf { it.status == 200 }
         val found = res?.let {
             Regex("<meta\\s+name=[\"']bbs-api[\"']\\s+content=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
                 .find(String(it.body, Charsets.UTF_8))?.groupValues?.get(1)
-                // http(s) の URL の形のものだけ(PC 版と同じ ^https?://)。ページに別の仕組みの URL が書かれていても API にしない
-                ?.takeIf { u -> API_URL.containsMatchIn(u) && u.toHttpUrlOrNull() != null }?.trimEnd('/')
+                ?.takeIf { u -> apiBaseAllowed(origin, u) }?.trimEnd('/')
         }
         val base = found ?: "${origin.replaceFirst(Regex("^(https?://)"), "$1api.")}/api/v1"
         // ページを読めなかったときの決めつけは覚えない(一時的な失敗で、再起動まで違う API へ行き続けないように)

@@ -131,10 +131,7 @@ class SyncController(
     suspend fun status(): SyncStatus {
         val enabled = isEnabled()
         val kinds = parseSwitches(t.state("kinds"))
-        val off = offKindsOf(kinds).toList()
-        val skip = if (off.isEmpty()) "" else " AND kind NOT IN (${off.joinToString(", ") { "?" }})"
-        // 切っている種類は送らないので数えない
-        val pending = db.query("SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1$skip) + (SELECT COUNT(*) FROM sync_ops) AS n", off).firstOrNull()?.get("n") as? Long ?: 0L
+        val pending = t.pendingCount(offKindsOf(kinds), adapters.flatMap { it.ops })
         val master = isMasterOn()
         val lastError = t.state("last_error")
         // 切っている間は鍵保管を開かない

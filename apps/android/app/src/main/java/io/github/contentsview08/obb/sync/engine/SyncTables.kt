@@ -159,6 +159,16 @@ class SyncTables(val db: SyncSql) {
         ).map(::fromRow)
     }
 
+    /**
+     * 送信待ちの数。切っている種類のレコードは送らないので数えない。sync_ops は処理できる操作(names)だけを数える
+     * (新しい版で積んだ操作が残った DB を開いても「送信待ちあり」が続かないように)
+     */
+    fun pendingCount(offKinds: Collection<String>, names: Collection<String>): Long {
+        val records = "SELECT COUNT(*) FROM sync_records WHERE pending = 1" + if (offKinds.isEmpty()) "" else " AND kind NOT IN (${marks(offKinds.size)})"
+        val ops = if (names.isEmpty()) "SELECT 0" else "SELECT COUNT(*) FROM sync_ops WHERE op IN (${marks(names.size)})"
+        return db.query("SELECT ($records) + ($ops) AS n", offKinds.toList<Any?>() + names.toList()).firstOrNull()?.get("n") as Long? ?: 0L
+    }
+
     fun ops(names: List<String>, limit: Int): List<SyncOpRow> {
         if (names.isEmpty()) return emptyList()
         return db.query("SELECT seq, op, target, num, args, at_ms FROM sync_ops WHERE op IN (${marks(names.size)}) ORDER BY seq LIMIT ?", names + limit.toLong()).map {

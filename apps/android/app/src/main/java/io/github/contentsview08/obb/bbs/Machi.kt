@@ -21,6 +21,8 @@ private val SITE_URL = Regex("^https?://(?:www\\.)?machi\\.to/?(?:index\\.html)?
 private val THREAD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/bbs/(?:read|offlaw|json)\\.cgi/([a-z0-9]+)/([0-9]+)")
 private val BOARD_URL = Regex("^https?://(?:[a-z0-9]+\\.)?machi\\.to/([a-z0-9]+)/?(?:subject\\.txt|index\\.html)?(?:[?#].*)?$")
 private val ERROR_TAG = Regex("<ERROR>([\\s\\S]*?)</ERROR>", RegexOption.IGNORE_CASE)
+/** スレがないことを示すエラーの文(offlaw.cgi は「スレッドを発見できません」) */
+private val GONE_ERROR = Regex("発見できません|見つかりません|存在しません")
 private val DATE_ID = Regex("^(.*?)\\s*ID:(\\S+)\\s*$")
 private val TOP_LINK = Regex("<a\\s+href=\"/([a-z0-9]+)/\"[^>]*>([^<]+)", RegexOption.IGNORE_CASE)
 /** 板ではないパス */
@@ -129,7 +131,12 @@ object Machi {
         if (res.status == 404) return FetchResult(FetchStatus.ARCHIVED, emptyList(), cursor)
         if (res.status != 200) throw IllegalStateException("HTTP ${res.status}: $url")
         val text = decode(res)
-        if (ERROR_TAG.containsMatchIn(text)) return FetchResult(FetchStatus.ARCHIVED, emptyList(), cursor)
+        // dat 落ちにするのはスレがないと言われたときだけ。混雑などの一時的なエラーで、自動の更新から外さない
+        ERROR_TAG.find(text)?.let { m ->
+            val error = m.groupValues[1].trim()
+            if (GONE_ERROR.containsMatchIn(error)) return FetchResult(FetchStatus.ARCHIVED, emptyList(), cursor)
+            throw IllegalStateException("まちBBS のエラー: ${error.take(200)}")
+        }
         val posts = ArrayList<Post>()
         var title: String? = null
         for (line in text.split('\n')) {

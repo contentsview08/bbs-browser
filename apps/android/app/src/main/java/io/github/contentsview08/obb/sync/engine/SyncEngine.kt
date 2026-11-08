@@ -183,9 +183,7 @@ class SyncEngine(
     /** 送るものがあるか。通信しない。切っている種類の送信待ちは数えない(自動の同期を空回りさせない) */
     suspend fun hasChanges(): Boolean = withContext(io) {
         if (!isMasterOn() || now() < pushRetryAt) return@withContext false
-        val off = offKindsOf(switches()).toList()
-        val skip = if (off.isEmpty()) "" else " AND kind NOT IN (${off.joinToString(", ") { "?" }})"
-        ((db.query("SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1$skip) AS n", off).firstOrNull()?.get("n") as Long?) ?: 0L) > 0
+        t.pendingCount(offKindsOf(switches()), opNames) > 0
     }
 
     private fun isMasterOn() = masterOn(t.state("master"), t.state("enabled"))
@@ -562,9 +560,14 @@ class SyncEngine(
                     // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
                     if (touched.isNotEmpty()) break
                     stmts += delOp(op)
-                    val effects = adapter.expand(op, c)
-                    if (effects == null) countBad("local")
-                    for (e in effects.orEmpty()) put(e.target, op.atMs, e.floor, e.make)
+                    try {
+                        val effects = adapter.expand(op, c)
+                        if (effects == null) countBad("local")
+                        for (e in effects.orEmpty()) put(e.target, op.atMs, e.floor, e.make)
+                    } catch (_: SyncError) {
+                        dropBadOp()
+                        touched.clear()
+                    }
                     break
                 }
                 stmts += delOp(op)
@@ -573,13 +576,23 @@ class SyncEngine(
                     countBad("local")
                     continue
                 }
-                put(target, op.atMs, null) { existing, stamp -> adapter.fromOp(op, existing, stamp, c) }
+                try {
+                    put(target, op.atMs, null) { existing, stamp -> adapter.fromOp(op, existing, stamp, c) }
+                } catch (_: SyncError) {
+                    dropBadOp()
+                }
             }
             for (r in touched.values) stmts += writeRecord(r)
             stmts += setState("clock", clock)
             db.batch(stmts)
         }
     }
+
+    /**
+     * 値から作れない操作(壁時計が上限の HLC を上書きするなど)は捨てて数える。残すと周の最初で毎回止まり、同期全体が動かなくなる。
+     * DB の読み取りの失敗などは一時的なので、SyncError 以外は捕まえず、操作を残したまま周を失敗させる
+     */
+    private fun dropBadOp() = countBad("local")
 
     private fun countBad(reason: String) {
         val raw = t.state("bad_counts")

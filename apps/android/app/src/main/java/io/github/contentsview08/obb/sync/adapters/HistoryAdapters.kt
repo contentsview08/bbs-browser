@@ -89,6 +89,20 @@ private fun readRecords(db: SyncSql, board: String, key: String): ReadRecords {
     return ReadRecords(rows.firstOrNull { it.first == RESET_KIND }?.second, rows.filter { it.first == DEV_KIND }.map { it.second })
 }
 
+/**
+ * この端末の記録を容量超過で外していて、それがリセットより後か。外した記録は中身がないので、
+ * そのあいだは手元の既読を下げない根拠にする(残った他の端末の記録だけで計算すると下がる)
+ */
+@Suppress("UNCHECKED_CAST")
+private fun ownTrimAfterReset(db: SyncSql, board: String, key: String, deviceId: String, latest: SyncPayload?): Boolean {
+    val row = db.query(
+        "SELECT payload FROM sync_records WHERE kind = ? AND ref_board = ? AND ref_thread = ? AND ref_detail = ? AND deleted = 1",
+        listOf(DEV_KIND, board, key, deviceId),
+    ).firstOrNull() ?: return false
+    val p = parseStrictJson(row["payload"] as String) as SyncPayload
+    return p["trim"] == true && (latest == null || Hlc.compare(p.hlc, latest.hlc) > 0)
+}
+
 /** まだ処理していない読みを足す。下がった値を書いたあとで、読んだ位置へ戻る動きを見せない */
 private fun pendingRead(db: SyncSql, boardUrl: String, key: String): Long =
     db.query("SELECT num FROM sync_ops WHERE op = 'read' AND target = ?", listOf("$boardUrl\t$key")).firstOrNull()?.get("num") as Long? ?: 0L
@@ -301,6 +315,7 @@ abstract class ReadAdapterBase(protected val db: SyncSql, protected val host: Hi
         if (rows.isEmpty()) return NOTHING
         val rec = readRecords(db, r.refBoard!!, key)
         val pos = readPosition(rec.latest, rec.devs)
+        val trimmed = ownTrimAfterReset(db, r.refBoard!!, key, ctx.deviceId, rec.latest)
         val resetWall = rec.latest?.let { Hlc.parse(it.hlc).wall }
         val dropped = ArrayList<DroppedThread>()
         val statements = rows.flatMap { x ->
@@ -309,12 +324,12 @@ abstract class ReadAdapterBase(protected val db: SyncSql, protected val host: Hi
             // 消す前の閲覧しかない履歴の行だけ消す(記録・未処理の読み・閲覧時刻のどれかがリセットより後なら読んでいる)。
             // 履歴にない行(お気に入りの確認などで取っただけ)は消さない。画面で開いているスレも消す(画面は適用の結果を受けて閉じる)。
             // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
-            val canDelete = resetWall != null && resetWall - ctx.now <= DAY_MS && pos == 0L && pending == 0L
+            val canDelete = resetWall != null && resetWall - ctx.now <= DAY_MS && pos == 0L && pending == 0L && !trimmed
             if (canDelete && x.readAt != null && x.readAt <= resetWall!!) {
                 dropped += DroppedThread(x.boardUrl, key)
                 return@flatMap listOf("posts", "threads").map { SqlStatement("DELETE FROM $it WHERE board_url = ? AND key = ?", listOf(x.boardUrl, key)) }
             }
-            val next = maxOf(pos, pending, if (rec.latest == null) x.readNo else 0L)
+            val next = maxOf(pos, pending, if (rec.latest == null || trimmed) x.readNo else 0L)
             if (x.readNo == next) emptyList() else listOf(SqlStatement("UPDATE threads SET read_no = ? WHERE board_url = ? AND key = ?", listOf(next, x.boardUrl, key)))
         }
         return ApplyPlan(statements, statements.isNotEmpty(), dropped = dropped)

@@ -1,5 +1,6 @@
 import { NumberField, Toggle } from '../SettingParts'
 import { Choice, type SettingsProps, Section } from './common'
+import { AUTO_SCROLL_SPEEDS } from '../../utils/autoScroll'
 
 /** 開いているスレの自動更新の間隔(秒)。スマホ版の選択肢と同じ */
 const AUTO_REFRESH_CHOICES = [0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))
@@ -10,6 +11,12 @@ export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'setting
       <Section title="開いているスレの自動更新" note="実況板など、流れの速いスレ向けです。差分だけを取りに行きます">
         {/* 自由な数は入れさせない(1 秒ごとのような設定が掲示板の負担になる)。選択肢はスマホ版と同じ */}
         <Choice value={AUTO_REFRESH_CHOICES.some((o) => o.key === s.autoRefreshSec) ? s.autoRefreshSec : 0} options={AUTO_REFRESH_CHOICES} onChange={(v) => update('autoRefreshSec', v)} />
+      </Section>
+      <Section
+        title="自動で流す速さ"
+        note="スレ表示の ︙ の「自動で流す」の速さです。読み残しはこの速さで流し、追いついた後は次の自動更新までに読み終える速さ(最大でこの 6 倍)で流します"
+      >
+        <Choice value={s.autoScrollSpeed} options={AUTO_SCROLL_SPEEDS} onChange={(v) => update('autoScrollSpeed', v)} />
       </Section>
       <Section
         advanced title="お気に入りのスレの新着"

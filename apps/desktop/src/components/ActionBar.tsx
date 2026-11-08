@@ -88,6 +88,7 @@ const MENU_GROUP: Record<string, string> = {
   gallery: 'スレ',
   search: 'スレ',
   refresh: 'スレ',
+  autoScroll: '移動',
   top: '移動',
   bottom: '移動',
   openBoard: '移動',

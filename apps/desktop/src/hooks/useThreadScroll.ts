@@ -77,6 +77,8 @@ export function forgetClosedPosition(threadKey: string) {
 
 /** スクロール領域ごとの、いま動かしている(留めている)のをやめる関数。新しく動かすときに前のをやめる */
 const moving = new WeakMap<HTMLElement, () => void>()
+/** その領域を、いま動かしている(runMove の最中・留めている)か。自動で流すのは、その間は動かさない */
+export const isMoving = (root: HTMLElement) => moving.has(root)
 /** スクロール領域ごとの、動きが終わったら基準のレスを見張りへ引き継ぐ関数 */
 const handOff = new WeakMap<HTMLElement, (el?: HTMLElement) => void>()
 /** スクロール領域ごとの、利用者が動かした回数。絞り込みの一番下まで読んだかの判断に使う */
@@ -893,6 +895,9 @@ export function useThreadScroll(o: Options) {
     }
   }, [rootRef, listRef, updateJump, reportRead, recordAnchor, fixAnchor, noteUserMove])
 
+  /** 開いたときの位置決めが済んだか */
+  const isPositioned = useCallback(() => positioned.current, [])
+
   // 裏のタブから表に戻したときも、見えている分を既読にする
   useEffect(() => {
     if (o.active && positioned.current) {
@@ -918,6 +923,7 @@ export function useThreadScroll(o: Options) {
     noteUserMove,
     /** いま見えているところまでの既読を、待たずにすぐ知らせる(更新の直前など) */
     flushRead: reportRead,
+    isPositioned,
     rememberRendered,
   }
 }

@@ -23,6 +23,7 @@ import {
   type UpdateSetting,
 } from '../../ui/settings'
 import { ensureNotifyPermission } from '../../utils/osNotify'
+import { AUTO_SCROLL_SPEEDS } from '../../utils/autoScroll'
 import FontSizeSlider, { BarSliders, cssPx, setCssVar } from '../FontSizeSlider'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from '../ActionBar'
 import { AccountsTab } from '../settings/AccountsTab'
@@ -420,6 +421,13 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               value={s.autoRefreshSec}
               options={[0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))}
               onChange={(v) => update('autoRefreshSec', v)}
+            />
+            <ChoiceRow
+              label="自動で流す速さ"
+              desc="︙ の「自動で流す」の速さ。追いついた後は、次の自動更新までに読み終える速さで流します"
+              value={s.autoScrollSpeed}
+              options={AUTO_SCROLL_SPEEDS}
+              onChange={(v) => update('autoScrollSpeed', v)}
             />
             <ChoiceRow
               label="お気に入りのスレの新着を確かめる"

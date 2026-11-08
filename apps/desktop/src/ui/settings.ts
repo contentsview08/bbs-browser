@@ -13,6 +13,7 @@ import { settingOpsOf } from '@bbs-browser/sync'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import { todayDateString, type NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
+import type { AutoScrollSpeed } from '../utils/autoScroll'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
 import { DEFAULT_UPLOAD_HOST, migrateUploadHost, type UploadHost } from '../host/uploader'
@@ -308,6 +309,8 @@ export interface AppSettings {
   autoRefreshSec: number
   /** いちばん下を見ているときに新着が来たら、新着まで自動でスクロールする */
   autoScrollOnNew: boolean
+  /** 自動で流す速さ(既定の速さ。最大はその 6 倍。utils/autoScroll.ts)。端末ごとの操作の好みなので同期しない */
+  autoScrollSpeed: AutoScrollSpeed
   /** お気に入りのスレの新着の数を確かめる間隔(分)。0 なら確かめない(スレ一覧だけ取るので軽い) */
   favCheckMin: number
   /** お気に入り板のスレ一覧を見に行き、キーワードに合うスレが立ったら知らせる間隔(分)。0 なら見に行かない */
@@ -519,6 +522,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
+  autoScrollSpeed: 'normal',
   favCheckMin: 5,
   keywordWatchMin: 10,
   keywordWatchSince: {},

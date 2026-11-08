@@ -92,6 +92,7 @@ import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
 import { reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from './utils/autoRefresh'
+import { noteAutoRefreshTick } from './hooks/useAutoScroll'
 import { favUnread, threadUnread, unreadCount } from './utils/unread'
 import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
@@ -1459,8 +1460,13 @@ export default function App() {
   const autoRefreshRef = useRef(autoRefresh)
   autoRefreshRef.current = autoRefresh
   useEffect(() => {
-    if (!activeId || settings.autoRefreshSec <= 0) return
-    const id = setInterval(() => autoRefreshRef.current(), settings.autoRefreshSec * 1000)
+    if (!activeId || settings.autoRefreshSec <= 0) return noteAutoRefreshTick(undefined)
+    // 自動で流すが、次の更新の時刻に合わせて流せるように、回った時刻を知らせる
+    noteAutoRefreshTick(Date.now())
+    const id = setInterval(() => {
+      noteAutoRefreshTick(Date.now())
+      autoRefreshRef.current()
+    }, settings.autoRefreshSec * 1000)
     return () => clearInterval(id)
   }, [activeId, settings.autoRefreshSec])
 

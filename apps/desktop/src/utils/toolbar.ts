@@ -39,6 +39,7 @@ const THREAD_ACTIONS: BarActionDef[] = [
   { id: 'openBoard', name: '板に戻る', icon: 'list', placement: 'menu' },
   { id: 'findNext', name: '次スレを探す', icon: 'skip_next', placement: 'menu' },
   { id: 'gallery', name: '画像一覧', icon: 'photo_library', placement: 'menu' },
+  { id: 'autoScroll', name: '自動で流す', icon: 'autoplay', placement: 'menu' },
   { id: 'top', name: '先頭へ', icon: 'vertical_align_top', placement: 'menu', mobileOnly: true },
   { id: 'bottom', name: '一番下へ', icon: 'vertical_align_bottom', placement: 'menu', mobileOnly: true },
   { id: 'reply', name: '書き込む', icon: 'edit', placement: 'menu', mobile: 'footer', mobileOnly: true },
@@ -77,7 +78,7 @@ const BAR_ACTIONS: Record<BarArea, BarActionDef[]> = { thread: THREAD_ACTIONS, l
  */
 const MOBILE_MENU_HIDDEN = new Set(['drawer', 'back', 'reply'])
 const MOBILE_MENU_ORDER: Record<BarArea, string[]> = {
-  thread: ['favorite', 'gallery', 'findNext', 'search', 'openBoard', 'top', 'bottom', 'style', 'fontSize', 'copyUrl', 'share', 'openBrowser', 'refresh', 'delete'],
+  thread: ['favorite', 'gallery', 'findNext', 'search', 'autoScroll', 'openBoard', 'top', 'bottom', 'style', 'fontSize', 'copyUrl', 'share', 'openBrowser', 'refresh', 'delete'],
   list: ['newThread', 'favorite', 'search', 'top', 'style', 'fontSize', 'refresh'],
 }
 export function mobileMenuActions<T extends { id: string }>(area: BarArea, actions: T[], placements: Record<string, Placement>, custom?: string[]): T[] {

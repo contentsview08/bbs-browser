@@ -43,6 +43,7 @@ import type { UploadedFile } from '../host/uploader'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, closedPosition, framesIn, useThreadScroll } from '../hooks/useThreadScroll'
+import { useAutoScroll } from '../hooks/useAutoScroll'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, spanOf, stepCursor } from '../utils/cursor'
@@ -1092,6 +1093,11 @@ export default function ThreadView(props: Props) {
     },
     [indexOfNo, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, unreadFrom],
   )
+  /** 自動で流す(︙ とキーで入れる・やめる)。開いているスレに対して効き、タブを切り替えたら・閉じたらやめる */
+  const [autoScroll, setAutoScroll] = useState(false)
+  useEffect(() => {
+    if (!props.active) setAutoScroll(false)
+  }, [props.active])
   /** レスの高さを変える設定。変わったら、覚えた高さと見積もりの補正を使わない */
   const layoutKey = useMemo(
     () =>
@@ -1130,6 +1136,7 @@ export default function ThreadView(props: Props) {
     noteUserMove,
     flushRead,
     rememberRendered,
+    isPositioned,
   } = useThreadScroll({
     rootRef: ref,
     listRef,
@@ -1147,11 +1154,27 @@ export default function ThreadView(props: Props) {
     onSavePosition: props.onSavePosition,
     onRead,
     openPosition: settings.openPosition,
-    autoScrollOnNew: settings.autoScrollOnNew,
+    // 自動で流している間は、新着へ送らずに流れで追いかける(送ると一気に飛んでしまう)
+    autoScrollOnNew: settings.autoScrollOnNew && !autoScroll,
     showThumbnails: settings.thumbLoad !== 'never',
     showLinkPreview: settings.showLinkPreview,
     jumpTo: props.jumpTo,
   })
+  const autoFlow = useAutoScroll({
+    rootRef: ref,
+    listRef,
+    on: autoScroll,
+    active: props.active,
+    speed: settings.autoScrollSpeed,
+    autoRefreshSec: settings.autoRefreshSec,
+    ready: isPositioned,
+    flushRead,
+    jumpToBottom: () => jumpToBottom(),
+  })
+  const toggleAutoScroll = () => {
+    showQuick(true, autoScroll ? '自動で流すのをやめました' : '自動で流します')
+    setAutoScroll((v) => !v)
+  }
 
   // 仮想スクロール: スクロールしたら、見えているレスの前後だけ中身を作るよう、範囲を動かす(WIN_BEFORE・WIN_AFTER)。
   // 範囲の外のレスは、覚えた高さ(なければ見積もり)の空の箱にする(枠は全部あるので、既読・ミニマップ・キー操作はそのまま効く)
@@ -1269,6 +1292,7 @@ export default function ThreadView(props: Props) {
         ]
       : []),
     { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
+    { id: 'autoScroll', label: '自動で流す', icon: 'autoplay', active: autoScroll, fillWhenActive: true, onClick: toggleAutoScroll },
     ...(props.onUpdateSetting
       ? [
           {
@@ -1582,6 +1606,7 @@ export default function ThreadView(props: Props) {
       setShowNext(true)
       jumpToBottom()
     },
+    autoScroll: toggleAutoScroll,
   }
 
   // キー操作(設定で割り当てを変えられる)。開いているタブで、入力欄にいないときだけ。
@@ -1716,7 +1741,8 @@ export default function ThreadView(props: Props) {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(toastTimer.current), [])
   useEffect(() => {
-    if (flashNos.size === 0 || !props.active) return
+    // 自動で流している間は、流れで新着まで行くので出さない(溜まりすぎたときは別の札)
+    if (flashNos.size === 0 || !props.active || autoScroll) return
     const first = Math.min(...flashNos.keys())
     const count = flashNos.size
     const check = setTimeout(() => {
@@ -1732,7 +1758,7 @@ export default function ThreadView(props: Props) {
       toastTimer.current = setTimeout(() => setNewToast(undefined), NEW_TOAST_MS)
     }, 450)
     return () => clearTimeout(check)
-  }, [flashNos, props.active])
+  }, [flashNos, props.active, autoScroll])
   // 札が出ているあいだに、自分でスクロールして新着の頭が見えたら(通り越したときも)、札を消す
   // (通り越したあとに札を押すと、上の新着の頭へ戻ってしまうため)
   useEffect(() => {
@@ -2299,6 +2325,19 @@ export default function ThreadView(props: Props) {
           新着 +{newToast.count}
         </button>
       )}
+      {/* 自動で流していて、溜まった分が多すぎる(画面 10 枚を超えた)ときの札。押すと一番下へ飛び、そこから流し続ける */}
+      {autoFlow.backlog !== undefined && (
+        <button
+          type="button"
+          onClick={autoFlow.jumpToEnd}
+          className="absolute left-1/2 z-20 flex items-center gap-1 px-4 py-2 rounded-full shadow-md text-sm font-bold badge-in hover:brightness-110"
+          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)', bottom: 'calc(var(--footer-offset, 0px) + 20px)' }}
+          title="いちばん下へ飛ぶ"
+        >
+          新着 {autoFlow.backlog} 件
+          <span className="material-symbols-outlined text-lg leading-none">arrow_drop_down</span>
+        </button>
+      )}
       <div
         ref={topPull.indicatorRef}
         className="absolute left-0 right-0 flex justify-center pointer-events-none z-[9]"
@@ -2319,7 +2358,8 @@ export default function ThreadView(props: Props) {
         onWheel={onWheel}
         onScroll={(e) => {
           onScrollPull()
-          if (isMobile && settings.hideBarsOnScroll) hideBars.onScroll(e)
+          // 自動で流している間は、ヘッダーとフッターを隠さない(指で動かしていないので)
+          if (isMobile && settings.hideBarsOnScroll && !autoFlow.flowing()) hideBars.onScroll(e)
         }}
         onTouchStart={
           isMobile

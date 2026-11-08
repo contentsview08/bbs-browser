@@ -173,7 +173,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                             }
                             "post" -> PostDisplayTab(p)
                             else -> {
-                                SheetLabel("テーマ")
+                                SheetLabel("カラーテーマ")
                                 SchemeRow(p)
                                 SheetLabel("差し色")
                                 AccentRow(p)

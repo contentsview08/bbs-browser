@@ -239,7 +239,7 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
   const body =
     shown === 'look' ? (
       <>
-        <p className={LABEL}>テーマ</p>
+        <p className={LABEL}>カラーテーマ</p>
         <SchemeTiles settings={settings} update={update} />
         <p className={LABEL}>差し色</p>
         <AccentDots settings={settings} update={update} />

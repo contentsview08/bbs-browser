@@ -511,7 +511,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hideBarsOnScroll: true,
   showLinkPreview: true,
   openLinksInApp: isMobile,
-  omitNoname: true,
+  omitNoname: !isMobile,
   tidyBlankLines: true,
   urlShorten: true,
   idStyle: 'none',

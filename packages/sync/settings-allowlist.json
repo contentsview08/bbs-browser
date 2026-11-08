@@ -2,7 +2,7 @@
   "items": [
     { "name": "keywords", "type": "words", "default": [] },
     { "name": "grossWords", "type": "words", "default": ["グロ"] },
-    { "name": "omitNoname", "type": "bool", "default": true },
+    { "name": "omitNoname", "type": "bool", "default": { "pc": true, "phone": false } },
     { "name": "tidyBlankLines", "type": "bool", "default": true },
     { "name": "urlShorten", "type": "bool", "default": true },
     { "name": "highlightOp", "type": "bool", "default": true },

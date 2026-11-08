@@ -226,7 +226,7 @@ class Prefs(context: Context) {
     // ── スレ表示 ──
     /** 開く位置: unread(最初の未読)/ top / bottom */
     var openPosition by pref("openPosition", "unread")
-    var omitNoname by pref("omitNoname", true)
+    var omitNoname by pref("omitNoname", false)
     /** 空行を整える(3 行以上続く空行を 1 行に) */
     var tidyBlankLines by pref("tidyBlankLines", true)
     var highlightOp by pref("highlightOp", true)

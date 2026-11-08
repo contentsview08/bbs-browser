@@ -8,6 +8,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="OBB"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="true"

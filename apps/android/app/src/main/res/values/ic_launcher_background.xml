@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PC 版のアイコンの地の色 -->
+    <color name="ic_launcher_background">#2e5caa</color>
+</resources>

@@ -634,14 +634,16 @@ export class LogStore {
       status: 'active' | 'archived' | null
       log_title: string | null
     }>(
-      // 結び付けの ON の中の副問い合わせから外の表を見ると、古い SQLite(PC の sqlx が持つもの)は列を見つけられない。
-      // 先に副問い合わせで行の番号を取ってから結ぶ
+      // ログの行は、同じ書き方の URL の行を先に、なければ書き方の違う行のうち読んだ所の大きいもの。
+      // SQLite は副問い合わせの ORDER BY で外の表の列を使えない(no such column)ので、2 つの副問い合わせを COALESCE でつなぐ
       `SELECT ff.board_url, ff.key, ff.connector_id, ff.title, ff.created_at,
               t.post_count, t.read_no, t.status, t.title AS log_title
        FROM (
          SELECT f.board_url, f.key, f.connector_id, f.title, f.created_at, f.sort,
-           (SELECT t2.rowid FROM threads AS t2 WHERE t2.key = f.key AND t2.board_url IN (${boardUrlVariantsSql('f.board_url')})
-            ORDER BY t2.board_url = f.board_url DESC, t2.read_no DESC LIMIT 1) AS log_rowid
+           COALESCE(
+             (SELECT t2.rowid FROM threads AS t2 WHERE t2.key = f.key AND t2.board_url = f.board_url LIMIT 1),
+             (SELECT t2.rowid FROM threads AS t2 WHERE t2.key = f.key AND t2.board_url IN (${boardUrlVariantsSql('f.board_url')}) ORDER BY t2.read_no DESC LIMIT 1)
+           ) AS log_rowid
          FROM favorite_threads AS f
        ) AS ff
        LEFT JOIN threads AS t ON t.rowid = ff.log_rowid

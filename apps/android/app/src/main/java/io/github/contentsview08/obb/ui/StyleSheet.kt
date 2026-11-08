@@ -191,7 +191,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
 }
 
 /** シートのタブ(保存の名前と見出し) */
-private val STYLE_TABS = listOf("look" to "見た目", "size" to "文字と余白", "post" to "レスの表示")
+private val STYLE_TABS = listOf("look" to "スキン", "size" to "文字と余白", "post" to "レスの表示")
 
 /** タブの帯。スレ表示の絞り込みのタブと同じく、選んでいるタブは差し色の字と下線と淡い面 */
 @Composable

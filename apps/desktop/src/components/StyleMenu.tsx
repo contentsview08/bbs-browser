@@ -207,7 +207,7 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
   const { active, scope } = useSliderDragScope()
   const thread = props.from === 'thread'
   const tabs: { key: StyleTab; name: string }[] = [
-    { key: 'look', name: '見た目' },
+    { key: 'look', name: 'スキン' },
     { key: 'size', name: '文字と余白' },
     ...(thread ? [{ key: 'post' as const, name: 'レスの表示' }] : []),
   ]

@@ -71,7 +71,9 @@ export async function syncSummary(db: SyncSqlDb, adapters: readonly SyncAdapter[
     if (n > 0) notes[k] = (notes[k] ?? 0) + n
   }
   for (const a of adapters) for (const [k, n] of Object.entries((await a.explain?.(ctx)) ?? {})) note(k, n)
-  const [ops] = await db.select<{ n: number }>('SELECT COUNT(*) AS n FROM sync_ops')
+  // この版で処理できる操作だけを数える(送信待ちの数と同じ決まり。知らない操作は永久に残るので数えない)
+  const opNames = [...new Set(adapters.flatMap((a) => a.ops))]
+  const [ops] = opNames.length === 0 ? [{ n: 0 }] : await db.select<{ n: number }>(`SELECT COUNT(*) AS n FROM sync_ops WHERE op IN (${opNames.map((_, i) => `$${i + 1}`).join(', ')})`, opNames)
   note('ops_waiting', Number(ops?.n ?? 0))
   const [bad] = await db.select<{ value: string }>("SELECT value FROM sync_state WHERE key = 'bad_counts'")
   if (bad) for (const [k, n] of Object.entries(JSON.parse(bad.value) as Record<string, number>)) note(`bad_${k}`, n)

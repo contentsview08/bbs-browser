@@ -155,7 +155,10 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                 androidx.compose.runtime.key(tab) {
                     Column(Modifier.fillMaxWidth().weight(1f).nestedScroll(nested).verticalScroll(rememberScrollState(), enabled = !dragging).padding(top = 4.dp, bottom = 12.dp)) {
                         when (tab) {
-                            "size" -> Column(Modifier.padding(horizontal = 16.dp)) { androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides sizeDrag) {
+                            "size" -> Column {
+                                // 見出しはほかのタブと同じ形。タブの帯とスライダーの間を空ける役もある
+                                Box(Modifier.graphicsLayer { alpha = bg }) { SheetLabel("文字と余白") }
+                                Column(Modifier.padding(horizontal = 16.dp)) { androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides sizeDrag) {
                                 if (thread) {
                                     FontSizeSlider("本文の文字", p.bodyScale, POST_BODY_BASE_PX) { p.bodyScale = it }
                                     FontSizeSlider("レスの頭の文字", p.postHeadScale, POST_HEAD_BASE_PX) { p.postHeadScale = it }
@@ -167,6 +170,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                                 }
                                 BarSliders(p)
                             } }
+                            }
                             "post" -> PostDisplayTab(p)
                             else -> {
                                 SheetLabel("テーマ")

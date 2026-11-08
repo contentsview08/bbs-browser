@@ -3,9 +3,11 @@ package io.github.contentsview08.obb.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -27,9 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
@@ -98,37 +98,49 @@ import kotlinx.coroutines.launch
 
 // ── 中身の選び方(画面から切り離してテストする) ──
 
-/** のぞいたときに出すレスの種類: 開いたことがない(頭の 3 レス)・新着・新着がない(最後の数レス) */
+/** のぞいたときの開く位置の決まり: 開いたことがない(1 番目から)・新着(新着の頭から)・新着がない(一番下) */
 enum class PeekKind { FIRST, NEW, LAST }
 
-class PeekPick(val kind: PeekKind, val posts: List<Post>, /** 新着の数(出すのは頭の PEEK_NEW_MAX まで) */ val newCount: Int = 0)
+/**
+ * のぞく窓に並べるもの。posts は手元のレス全部(番号順)。
+ * newFrom: 新着の頭の posts の中の位置(新着のないときは -1)。見出し「新着 N 件」はその前に置く
+ */
+class PeekPick(val kind: PeekKind, val posts: List<Post>, val newCount: Int = 0, val newFrom: Int = -1)
 
-internal const val PEEK_FIRST = 3
-internal const val PEEK_LAST = 3
-/** 新着が多いスレでも、のぞく窓を組み立てる重さを抑える */
-internal const val PEEK_NEW_MAX = 50
-/** レスごとに出す本文の行数 */
-internal const val PEEK_BODY_LINES = 4
+/** 長すぎる本文だけ、この行数で切る */
+internal const val PEEK_BODY_LINES = 12
 
 /** readNo: 開いたことがあれば既読の番号、なければ null */
 internal fun peekPick(posts: List<Post>, readNo: Int?): PeekPick {
-    val sorted = posts.sortedBy { it.no }
-    if (readNo == null) return PeekPick(PeekKind.FIRST, sorted.take(PEEK_FIRST))
-    val fresh = sorted.filter { it.no > readNo }
-    if (fresh.isNotEmpty()) return PeekPick(PeekKind.NEW, fresh.take(PEEK_NEW_MAX), fresh.size)
-    return PeekPick(PeekKind.LAST, sorted.takeLast(PEEK_LAST))
+    val sorted = posts.distinctBy { it.no }.sortedBy { it.no }
+    if (readNo == null) return PeekPick(PeekKind.FIRST, sorted)
+    val from = sorted.indexOfFirst { it.no > readNo }
+    if (from >= 0) return PeekPick(PeekKind.NEW, sorted, sorted.size - from, from)
+    return PeekPick(PeekKind.LAST, sorted)
 }
 
 /**
- * 取りに行くか。開いたことがないスレは頭のレスが手元にそろっていなければ、開いたスレは新着が手元になければ。
+ * 並べる項目の数と、開いたときに見せる項目の位置。新着の見出しは新着の頭の前に、新着がないときの見出しは一番下に置く
+ * (見出しも 1 項目に数える)
+ */
+internal fun peekItemCount(pick: PeekPick): Int = pick.posts.size + if (pick.kind == PeekKind.FIRST) 0 else 1
+
+internal fun peekStartIndex(pick: PeekPick): Int = when (pick.kind) {
+    PeekKind.FIRST -> 0
+    PeekKind.NEW -> pick.newFrom
+    PeekKind.LAST -> peekItemCount(pick) - 1
+}
+
+/**
+ * 取りに行くか。開いたことがないスレは一覧のレス数より手元が少なければ(全部を取って並べる)、開いたスレは新着が手元になければ。
  * knownCount: 一覧で分かっているレス数(分からなければ 0)。dat 落ちのスレは新着が増えないので取りに行かない
  */
 internal fun peekNeedsFetch(posts: List<Post>, readNo: Int?, knownCount: Int, archived: Boolean): Boolean {
-    if (readNo == null) return posts.size < minOf(PEEK_FIRST, maxOf(knownCount, 1))
+    if (readNo == null) return posts.isEmpty() || posts.size < knownCount
     return !archived && posts.none { it.no > readNo }
 }
 
-/** 本文の頭の数行。前後の空行は省き、続きがあれば「…」で閉じる */
+/** 本文。前後の空行は省き、長すぎるものだけ頭の数行で切って「…」で閉じる */
 internal fun peekBody(body: String, lines: Int = PEEK_BODY_LINES): String {
     val all = body.lines().dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
     return if (all.size <= lines) all.joinToString("\n") else all.take(lines).joinToString("\n").trimEnd() + "…"
@@ -212,19 +224,17 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
     var sheet by remember { mutableStateOf<List<MenuItem>?>(null) }
     LaunchedEffect(Unit) {
         if (Motion.reduced) show.snapTo(1f)
-        else show.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 420f))
+        else show.animateTo(1f, tween(PEEK_MS, easing = PeekEasing))
     }
-    /** ぼかしを付けた窓。閉じはじめに外す */
-    val blurred = remember { arrayOfNulls<android.view.Window>(1) }
     fun close() {
         if (closing) return
         closing = true
-        // 縮んでいく間は後ろをはっきり見せる
-        blurred[0]?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
         scope.launch {
             if (!Motion.reduced) {
-                launch { drag.animateTo(0f, tween(220)) }
-                show.animateTo(0f, tween(220, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)))
+                // 開くときと同じ道・同じ曲線で行へ戻る。曲線を時間で裏返すと行に着く瞬間が一番速くなり、止まるところで跳ねて見える。
+                // なぞって下げた分も同じ時間で戻す
+                launch { drag.animateTo(0f, tween(PEEK_MS, easing = PeekEasing)) }
+                show.animateTo(0f, tween(PEEK_MS, easing = PeekEasing))
             }
             onDismiss()
         }
@@ -253,7 +263,7 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
     )
 
     FullWindow(onDismiss = { close() }) {
-        BlurBehind { blurred[0] = it }
+        BlurBehind { show.value }
         val density = LocalDensity.current
         val dialogView = LocalView.current
         // 元の行を、この窓の座標に直す
@@ -301,7 +311,8 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                 val radius = with(density) { 14.dp.toPx() }
                 Column(
                     Modifier.weight(1f, fill = false).fillMaxWidth()
-                        .onPlaced { c -> val b = c.boundsInWindow(); if (b != card) card = b }
+                        // 閉じる間は測り直さない(届いたレスで高さが変わると、縮む先の大きさが途中で飛ぶ)
+                        .onPlaced { c -> if (closing) return@onPlaced; val b = c.boundsInWindow(); if (b != card) card = b }
                         .graphicsLayer {
                             val c = card
                             val p = show.value
@@ -323,6 +334,8 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                             translationY = (from.top - c.top) * (1f - p) + drag.value
                             val visibleH = from.height + (c.height - from.height) * p
                             shape = PeekClip(visibleH / s, radius * p.coerceIn(0f, 1f))
+                            // 行の上に重なる最後のわずかな間に溶かす。窓を消した瞬間に行の字と入れ替わって見えないように
+                            alpha = (p / 0.2f).coerceIn(0f, 1f)
                             clip = true
                             shadowElevation = 16.dp.toPx() * p.coerceIn(0f, 1f)
                         }
@@ -330,21 +343,32 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                 ) {
                     PeekHeader(vm, t, Modifier.then(dragModifier).clickable { open(null) })
                     HorizontalDivider(color = Palette.border)
-                    val posts = log?.posts.orEmpty()
-                    val pick = peekPick(posts, readNo)
-                    Column(Modifier.weight(1f, fill = false).nestedScroll(pullDown).verticalScroll(rememberScrollState()).padding(bottom = 6.dp)) {
-                        PeekCaption(pick, fetching)
-                        val shown = when {
-                            pick.posts.isNotEmpty() -> pick.posts
-                            // hono-bbs はスレ一覧の時点で 1 レス目を持っているので、届くまでそれを出す
-                            pick.kind == PeekKind.FIRST && t.preview != null -> listOf(Post(1, "", "", "", t.authorId, t.preview))
-                            else -> emptyList()
+                    val pick = remember(log, readNo) { peekPick(log?.posts.orEmpty(), readNo) }
+                    val list = rememberLazyListState()
+                    // 開いたときの位置は、中身がそろったとき(取ってきて新着が見つかったときも)に 1 度だけ決める
+                    var placedFor by remember { mutableStateOf<PeekKind?>(null) }
+                    LaunchedEffect(pick.kind, pick.posts.isNotEmpty()) {
+                        if (pick.posts.isEmpty() || placedFor == pick.kind) return@LaunchedEffect
+                        placedFor = pick.kind
+                        list.scrollToItem(peekStartIndex(pick))
+                    }
+                    // hono-bbs はスレ一覧の時点で 1 レス目を持っているので、届くまでそれを出す
+                    val preview = if (pick.posts.isEmpty() && pick.kind == PeekKind.FIRST && t.preview != null) Post(1, "", "", "", t.authorId, t.preview) else null
+                    LazyColumn(Modifier.weight(1f, fill = false).nestedScroll(pullDown), state = list, contentPadding = PaddingValues(bottom = 6.dp)) {
+                        val posts = pick.posts
+                        if (preview != null) item(key = "preview", contentType = "post") { PeekPost(preview) { open(null) } }
+                        for (i in posts.indices) {
+                            if (i == pick.newFrom) item(key = "new", contentType = "caption") { PeekCaption("新着 ${pick.newCount} 件", Palette.unreadInk, false) }
+                            val p = posts[i]
+                            item(key = p.no, contentType = "post") { PeekPost(p) { open(peekJumpNo(pick.kind, p.no)) } }
                         }
-                        for (p in shown) PeekPost(p) { open(peekJumpNo(pick.kind, p.no)) }
+                        if (pick.kind == PeekKind.LAST) item(key = "last", contentType = "caption") {
+                            PeekCaption(if (fetching) "新着を確かめています" else "新着はありません", Palette.textMuted, fetching)
+                        }
                         when {
-                            (!localDone || fetching) && shown.size < PEEK_FIRST && pick.kind == PeekKind.FIRST -> PeekSkeleton(PEEK_FIRST - shown.size)
-                            shown.isEmpty() && failed -> PeekNote("読み込めませんでした")
-                            shown.isEmpty() && localDone && !fetching -> PeekNote("レスがありません")
+                            (!localDone || fetching) && pick.kind == PeekKind.FIRST -> item(key = "skeleton", contentType = "skeleton") { PeekSkeleton(maxOf(1, 3 - posts.size)) }
+                            posts.isEmpty() && preview == null && failed -> item(key = "note", contentType = "note") { PeekNote("読み込めませんでした") }
+                            posts.isEmpty() && preview == null && localDone && !fetching -> item(key = "note", contentType = "note") { PeekNote("レスがありません") }
                         }
                     }
                 }
@@ -375,19 +399,26 @@ private class PeekAction(
     val children: List<MenuItem>? = null, val onClick: () -> Unit,
 )
 
-/** 窓の後ろをぼかす(端末がウィンドウをまたぐぼかしに対応していれば)。対応していなければ暗くするだけ */
+/** 開き・閉じの長さと曲線(どちらも着く所でゆっくりになる) */
+private const val PEEK_MS = 300
+private val PeekEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+/**
+ * 窓の後ろをぼかす(端末がウィンドウをまたぐぼかしに対応していれば)。対応していなければ暗くするだけ。
+ * ぼかしの強さは開き具合に合わせて変え、暗さと同じ時間で消す(一度に外すと閉じはじめに後ろが急にはっきりする)
+ */
 @Composable
-private fun BlurBehind(onWindow: (android.view.Window) -> Unit) {
+private fun BlurBehind(progress: () -> Float) {
     val view = LocalView.current
-    val px = with(LocalDensity.current) { 18.dp.roundToPx() }
-    DisposableEffect(Unit) {
-        val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-        if (w != null && android.os.Build.VERSION.SDK_INT >= 31 && w.windowManager.isCrossWindowBlurEnabled) {
-            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-            w.attributes = w.attributes.also { it.blurBehindRadius = px }
-            onWindow(w)
+    val px = with(LocalDensity.current) { 18.dp.toPx() }
+    LaunchedEffect(Unit) {
+        val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return@LaunchedEffect
+        if (android.os.Build.VERSION.SDK_INT < 31 || !w.windowManager.isCrossWindowBlurEnabled) return@LaunchedEffect
+        w.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+        // 窓の設定を毎コマ書き直さないよう、整数の半径が変わったときだけ
+        androidx.compose.runtime.snapshotFlow { (px * progress().coerceIn(0f, 1f)).toInt() }.collect { r ->
+            w.attributes = w.attributes.also { it.blurBehindRadius = r }
         }
-        onDispose {}
     }
 }
 
@@ -413,24 +444,15 @@ private fun PeekHeader(vm: AppViewModel, t: ThreadSummary, modifier: Modifier) =
     }
 }
 
-/** 中身の上の小さな見出し(新着の数・新着がないこと)と、取りに行っている印 */
+/** 中身の中の小さな見出し(新着の数・新着がないこと)。取りに行っている間は印を添える */
 @Composable
-private fun PeekCaption(pick: PeekPick, fetching: Boolean) = WithoutBaseFont {
-    val text = when (pick.kind) {
-        PeekKind.FIRST -> null
-        PeekKind.NEW -> "新着 ${pick.newCount} 件" + if (pick.newCount > pick.posts.size) "(頭の ${pick.posts.size} 件)" else ""
-        PeekKind.LAST -> if (fetching) null else "新着はありません"
-    }
-    val checking = fetching && pick.kind != PeekKind.FIRST
-    if (text == null && !checking) return@WithoutBaseFont
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (text != null) Text(text, Modifier.weight(1f), color = if (pick.kind == PeekKind.NEW) Palette.unreadInk else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        else Spacer(Modifier.weight(1f))
+private fun PeekCaption(text: String, color: Color, checking: Boolean) = WithoutBaseFont {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         if (checking) {
             androidx.compose.material3.CircularProgressIndicator(Modifier.size(12.dp), color = Palette.textMuted, strokeWidth = 1.5.dp)
             Spacer(Modifier.width(6.dp))
-            Text("新着を確かめています", color = Palette.textMuted, fontSize = 11.sp)
         }
+        Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -451,7 +473,7 @@ private fun PeekPost(p: Post, onClick: () -> Unit) = WithoutBaseFont {
         }
         Text(
             peekBody(p.body), Modifier.padding(top = 3.dp), color = Palette.textBody, fontSize = 14.sp, lineHeight = 20.sp,
-            maxLines = PEEK_BODY_LINES + 1, overflow = TextOverflow.Ellipsis,
+            maxLines = PEEK_BODY_LINES, overflow = TextOverflow.Ellipsis,
         )
     }
 }

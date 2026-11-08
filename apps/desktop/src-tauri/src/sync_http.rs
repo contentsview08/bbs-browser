@@ -9,7 +9,10 @@ use std::time::Duration;
 
 use tauri::Url;
 
-const TIMEOUT_MAX: Duration = Duration::from_secs(10);
+/// 要求全体の上限。遅い回線でも 1MB のページを読み切れるよう長めにし、止まったままの通信は無通信の打ち切りで切る
+const TIMEOUT_MAX: Duration = Duration::from_secs(60);
+/// 無通信の打ち切りの上限
+const IDLE_MAX: Duration = Duration::from_secs(10);
 
 #[derive(serde::Deserialize)]
 pub struct SyncHttpRequest {
@@ -19,6 +22,9 @@ pub struct SyncHttpRequest {
     body: Option<String>,
     max_bytes: usize,
     timeout_ms: u64,
+    /// 無通信の打ち切り(ms)。古い画面は送らないので、なければ 10 秒
+    #[serde(default)]
+    idle_timeout_ms: Option<u64>,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -81,13 +87,15 @@ async fn send(req: SyncHttpRequest, dev: bool) -> Result<SyncHttpResponse, Strin
     if let Some(body) = req.body {
         b = b.body(body);
     }
+    let idle = Duration::from_millis(req.idle_timeout_ms.unwrap_or(10_000)).min(IDLE_MAX);
     let mut res = b.send().await.map_err(|_| "network".to_string())?;
     let status = res.status().as_u16();
     if res.content_length().is_some_and(|n| n > req.max_bytes as u64) {
         return Err("too_large".into());
     }
     let mut body = Vec::new();
-    while let Some(chunk) = res.chunk().await.map_err(|_| "network".to_string())? {
+    // 1 つの塊が idle のあいだ届かなければ打ち切る(全体の時間は timeout が見る)
+    while let Some(chunk) = tokio::time::timeout(idle, res.chunk()).await.map_err(|_| "network".to_string())?.map_err(|_| "network".to_string())? {
         if body.len() + chunk.len() > req.max_bytes {
             return Err("too_large".into());
         }
@@ -146,7 +154,7 @@ mod tests {
     }
 
     fn get(url: String, max_bytes: usize) -> SyncHttpRequest {
-        SyncHttpRequest { method: "GET".into(), url, headers: BTreeMap::new(), body: None, max_bytes, timeout_ms: 10_000 }
+        SyncHttpRequest { method: "GET".into(), url, headers: BTreeMap::new(), body: None, max_bytes, timeout_ms: 10_000, idle_timeout_ms: None }
     }
 
     #[test]
@@ -170,7 +178,7 @@ mod tests {
         let mut headers = BTreeMap::new();
         headers.insert("Authorization".to_string(), "Bearer abc".to_string());
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        let req = SyncHttpRequest { method: "POST".into(), url: format!("{base}/records"), headers, body: Some(body.clone()), max_bytes: 1000, timeout_ms: 10_000 };
+        let req = SyncHttpRequest { method: "POST".into(), url: format!("{base}/records"), headers, body: Some(body.clone()), max_bytes: 1000, timeout_ms: 10_000, idle_timeout_ms: None };
         let r = tauri::async_runtime::block_on(send(req, true)).unwrap();
         assert_eq!(r.status, 200);
         let got = rx.recv().unwrap().to_lowercase();

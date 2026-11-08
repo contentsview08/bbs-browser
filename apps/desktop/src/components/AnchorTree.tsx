@@ -43,8 +43,9 @@ export default function AnchorTree(props: {
   // スマホは画面の幅が狭く、罫線でつなぐと本文が窮屈になるので、レスの左に縦線を引いて段をずらすだけにする
   if (isMobile) return <StepTree {...props} />
   // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
-  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + 12} />
-  if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} />
+  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + 12} top="var(--post-pad, var(--post-padding-y))" />
+  // LINE 風のレスの上の余白は、吹き出しの間の余白(app.css の --line-gap)
+  if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} top="var(--line-gap)" />
   return (
     <div className="flex flex-col">
       {props.rows.map((r, i) => (
@@ -93,16 +94,16 @@ export default function AnchorTree(props: {
  * Discord 風・LINE 風のアンカーツリー。親のアイコンの下から縦線を下ろし、子のアイコンの真ん中の高さで右へ曲げて、子のアイコンにつなぐ。
  * 段の幅をアイコンと隙間の分にして、子のアイコンが親の本文の始まりにそろうようにする
  */
-function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode; step: number }) {
+function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode; step: number; top: string }) {
   const D_STEP = props.step
   const line = (key: string, style: CSSProperties) => (
     <span key={key} aria-hidden className="absolute pointer-events-none" style={{ borderColor: LINE, borderStyle: 'solid', borderWidth: 0, ...style }} />
   )
   /** 段 depth のレスの、アイコンの真ん中の横位置(行の左端から) */
   const x = (depth: number) => `calc(${depth * D_STEP}px + var(--post-padding-x) + ${D_HALF}px)`
-  /** レスの枠の上端から、アイコンの真ん中・アイコンの下端までの高さ */
-  const midY = `calc(var(--post-pad, var(--post-padding-y)) + ${D_HALF}px)`
-  const bottomY = `calc(var(--post-pad, var(--post-padding-y)) + ${D_HALF * 2 + 2}px)`
+  /** レスの枠の上端から、アイコンの真ん中・アイコンの下端までの高さ(top はレスの枠の上端からアイコンの上端まで) */
+  const midY = `calc(${props.top} + ${D_HALF}px)`
+  const bottomY = `calc(${props.top} + ${D_HALF * 2 + 2}px)`
   return (
     <div className="flex flex-col">
       {props.rows.map((r, i) => {

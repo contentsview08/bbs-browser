@@ -173,7 +173,7 @@ function ThreadCard({
 
   /**
    * スマホ: カード・Discord 風・LINE 風を同じ形にそろえる。
-   * 左に見た目ごとのアイコン、1 段目にスレタイ(3 行まで)、2 段目の左に 立った時間・立てた人の ID・dat落ち、右に 勢い・レス数・未読
+   * 左に見た目ごとのアイコン、1 段目にスレタイ(3 行まで)、2 段目の左に 立った時間・立てた人の ID・dat 落ち、右に 勢い・レス数・未読
    */
   const unified = () => {
     const leading =
@@ -226,7 +226,7 @@ function ThreadCard({
               {thread.authorId}
             </span>
           )}
-          {archived && <span className="flex-shrink-0">dat落ち</span>}
+          {archived && <span className="flex-shrink-0">dat 落ち</span>}
           <span className="ml-auto flex-shrink-0 flex items-center gap-3">
             {momentumEl('min-w-[3ch]')}
             <span className="tabular-nums" title="レス数">
@@ -262,7 +262,7 @@ function ThreadCard({
   )
 
   /**
-   * 閲覧履歴の行: 左に未読の帯、スレタイ、下に 板・いつ見たか・dat落ち、右に レス数と未読。
+   * 閲覧履歴の行: 左に未読の帯、スレタイ、下に 板・いつ見たか・dat 落ち、右に レス数と未読。
    * チェックの列は幅を決めて置く(チェックを入れても行がずれないように)
    */
   const historyRow = (meta: NonNullable<typeof historyMeta>) => (
@@ -286,7 +286,7 @@ function ThreadCard({
           <BoardIcon boardUrl={thread.boardUrl} override={meta.icon} size={14} />
           <span className="truncate">{meta.boardName}</span>
           {meta.readAt && <span className="flex-shrink-0 whitespace-nowrap">・{relativeTime(new Date(meta.readAt))}に見た</span>}
-          {archived && <span className="flex-shrink-0">・dat落ち</span>}
+          {archived && <span className="flex-shrink-0">・dat 落ち</span>}
         </div>
       </div>
       <span className="flex-shrink-0 flex flex-col items-end gap-0.5">
@@ -342,9 +342,9 @@ function ThreadCard({
           {favStar}
           {threadBadges}
           {thread.title}
-          {/* dat落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる(右に列で置くと、長いスレタイが 3 行にもなる) */}
+          {/* dat 落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる(右に列で置くと、長いスレタイが 3 行にもなる) */}
           <span className="inline-flex items-center gap-1.5 ml-1.5 align-[0.0625rem] whitespace-nowrap font-normal">
-            {archived && <span className="text-[0.625rem] text-c-text-muted">dat落ち</span>}
+            {archived && <span className="text-[0.625rem] text-c-text-muted">dat 落ち</span>}
             {thread.authorId && !authorIcon && (
               <span className="font-mono text-[0.625rem] text-c-text-muted" title="立てた人の ID">
                 {thread.authorId}
@@ -362,7 +362,7 @@ function ThreadCard({
       // 専ブラ風: 印・スレタイ・レス数・新着・勢い・立った時間を 1 行の表に
       <div className="grid items-center gap-x-2 text-[0.8125rem] leading-snug" style={{ gridTemplateColumns: `${onSelect ? 'auto ' : ''}1.5em minmax(0,1fr) 4ch 4ch 6ch 5.5em` }}>
         {checkbox}
-        <span className="text-center text-[0.6875rem] font-bold select-none" title={archived ? 'dat落ち' : isNew ? '新しいスレ' : unreadCount > 0 ? '新着あり' : visited ? '既読' : ''}>
+        <span className="text-center text-[0.6875rem] font-bold select-none" title={archived ? 'dat 落ち' : isNew ? '新しいスレ' : unreadCount > 0 ? '新着あり' : visited ? '既読' : ''}>
           {archived ? <span className="text-c-text-muted">落</span> : isNew ? <span style={{ color: 'var(--c-new-badge-bg)' }}>新</span> : unreadCount > 0 ? <span style={{ color: 'var(--c-unread)' }}>●</span> : visited ? <span className="text-c-text-muted">○</span> : null}
         </span>
         <span className="thread-row-title min-w-0" style={{ color: titleColor }}>
@@ -403,7 +403,7 @@ function ThreadCard({
             <span className="tabular-nums">{thread.postCount} レス</span>
             <span>·</span>
             {momentumEl()}
-            {archived && <span>· dat落ち</span>}
+            {archived && <span>· dat 落ち</span>}
             {thread.authorId && !authorIcon && <span className="font-mono truncate" title="立てた人の ID">· {thread.authorId}</span>}
           </div>
         </div>
@@ -436,7 +436,7 @@ function ThreadCard({
                   <span className="truncate">{thread.authorId}</span>
                 </span>
               )}
-              {archived && <span className="whitespace-nowrap">dat落ち</span>}
+              {archived && <span className="whitespace-nowrap">dat 落ち</span>}
               <div className="flex items-center gap-5 ml-auto">
                 {momentumEl('font-bold min-w-[5ch]')}
                 <span className="font-mono tabular-nums text-right min-w-[4ch]">{thread.postCount}</span>

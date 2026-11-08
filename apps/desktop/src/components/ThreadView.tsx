@@ -32,11 +32,11 @@ import { postWebUrl, shareItems } from '../utils/share'
 import MediaGallery, { collectMedia } from './MediaGallery'
 import type { PostAccountOption } from './PostAccountMenu'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarContextMenu, type BarAction } from './ActionBar'
-import { inBar, mobileMenuActions, orderBy, resolvePlacements, type Placement } from '../utils/toolbar'
+import { inBar, mobileMenuActions, orderBy, resolvePlacements } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
 import { onWifi } from '../utils/network'
-import StyleMenu, { StyleMenuItems } from './StyleMenu'
-import { BaseFontSlider, PostFontSliders, SliderDialog } from './FontSizeSlider'
+import { StyleDialog } from './StyleMenu'
+import { BaseFontSlider, PostFontSliders } from './FontSizeSlider'
 import { REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import type { NextThreadCandidate } from '../utils/nextThread'
 import type { UploadedFile } from '../host/uploader'
@@ -645,8 +645,8 @@ export default function ThreadView(props: Props) {
   const [filters, setFilters] = useState<Set<PostFilter>>(new Set())
   /** スマホ: スレタイを押して出す、スレの操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
-  /** ︙ の「文字の大きさ・余白」の画面 */
-  const [fontDialog, setFontDialog] = useState(false)
+  /** ︙ の「表示スタイル」の画面 */
+  const [styleOpen, setStyleOpen] = useState(false)
   /** スマホ: スレタイを 2 行に収める(入りきらなければ字を小さく)。スレタイ・幅が変わったら測り直す */
   const titleFitRef = useRef<HTMLSpanElement>(null)
   useLayoutEffect(() => {
@@ -1275,19 +1275,15 @@ export default function ThreadView(props: Props) {
             id: 'style',
             label: '表示スタイル',
             icon: 'palette',
-            render: (where: Placement) => <StyleMenu settings={settings} update={props.onUpdateSetting!} up={inBar(where, 'footer')} />,
-            children: [
-              { id: 'styleTheme', label: 'テーマと差し色', icon: 'color_lens', submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} section="theme" /> },
-              { id: 'stylePost', label: 'レスの見た目', icon: 'view_agenda', submenu: <StyleMenuItems settings={settings} update={props.onUpdateSetting} section="post" /> },
-              { id: 'styleSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setFontDialog(true) },
-            ],
+            active: styleOpen,
+            onClick: () => setStyleOpen(true),
           },
           {
+            // 帯に置いたときのボタン。中身は表示スタイルの画面と同じ(︙ には並べない。foldMenuActions)
             id: 'fontSize',
             label: '文字の大きさ・余白',
             icon: 'format_size',
-            // 動かすと後ろの画面の大きさが変わるので、メニューの中ではなく、真ん中に出す小さな画面で変える
-            onClick: () => setFontDialog(true),
+            onClick: () => setStyleOpen(true),
           },
         ]
       : []),
@@ -2092,7 +2088,7 @@ export default function ThreadView(props: Props) {
             </h2>
             {log.status === 'archived' && (
               <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-c-surface3 text-c-text-muted">
-                dat落ち
+                dat 落ち
               </span>
             )}
           </div>
@@ -2535,11 +2531,19 @@ export default function ThreadView(props: Props) {
           onClose={() => setGalleryOpen(false)}
         />
       )}
-      {fontDialog && props.onUpdateSetting && (
-        <SliderDialog title="文字の大きさ・余白" onClose={() => setFontDialog(false)}>
-          {!isMobile && <BaseFontSlider settings={settings} update={props.onUpdateSetting} />}
-          <PostFontSliders settings={settings} update={props.onUpdateSetting} />
-        </SliderDialog>
+      {styleOpen && props.onUpdateSetting && (
+        <StyleDialog
+          settings={settings}
+          update={props.onUpdateSetting}
+          from="thread"
+          onClose={() => setStyleOpen(false)}
+          sliders={
+            <>
+              {!isMobile && <BaseFontSlider settings={settings} update={props.onUpdateSetting} />}
+              <PostFontSliders settings={settings} update={props.onUpdateSetting} />
+            </>
+          }
+        />
       )}
       {titleSheet && (
         <ActionSheet

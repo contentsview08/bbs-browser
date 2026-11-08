@@ -485,9 +485,19 @@ article.post-discord {
 .line-bubble-own p {
   color: inherit !important;
 }
-[data-post-style='line'] article[data-variant='line'] {
-  padding-top: 4px;
-  padding-bottom: 4px;
+/* LINE 風: 「レスの上下の余白」(--post-pad)は、吹き出しと吹き出しの間の余白にする。レスの間の gap はなくし、
+   1 レスの上と下の余白 --line-gap(吹き出しの間はこの 2 倍)に含める。PostArticle が上下の padding(既定の余白まで)と margin(残り)に分けて使う。
+   既定(--post-padding-y)のときは、これまでの「上下の余白 + gap の半分(6px)」と同じ。0 で上下 1px(吹き出しがほぼ接する)。
+   既定より小さいときは 1px から既定まで比で縮め、大きいときは 1 ずつ増やす(--line-gap-slope = (既定 + 5) / 既定) */
+html:root[data-post-style='line'] {
+  --list-gap-post: 0px;
+  --line-gap-slope: 2.25;
+  --line-pad: var(--post-pad, var(--post-padding-y));
+  --line-gap: min(calc(1px + var(--line-pad) * var(--line-gap-slope)), calc(var(--line-pad) + 6px));
+}
+/* スマホは既定の余白が 7px */
+html:root[data-platform='mobile'][data-post-style='line'] {
+  --line-gap-slope: 1.7143;
 }
 
 /* スレ一覧の行(カード以外の見た目)。カードの面と枠をなくし、マウスを乗せた行・開いているスレだけ色を付ける */

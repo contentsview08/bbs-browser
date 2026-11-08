@@ -47,8 +47,7 @@ import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
 import { PostHistoryList } from './components/PostHistoryDialog'
-import StyleMenu, { OPEN_FONT_DIALOG, StyleMenuItems } from './components/StyleMenu'
-import { BaseFontSlider, ListFontSliders, SliderDialog } from './components/FontSizeSlider'
+import { BaseFontSlider, ListFontSliders } from './components/FontSizeSlider'
 import { resolvePlacements } from './utils/toolbar'
 import TabBar from './components/TabBar'
 import ThreadListPanel, { threadId, type SortMode } from './components/ThreadListPanel'
@@ -385,13 +384,6 @@ export default function App() {
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number; flash?: boolean }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
-  /** 表示スタイルのメニューから開く、基本の文字の画面 */
-  const [baseFontDialog, setBaseFontDialog] = useState(false)
-  useEffect(() => {
-    const open = () => setBaseFontDialog(true)
-    window.addEventListener(OPEN_FONT_DIALOG, open)
-    return () => window.removeEventListener(OPEN_FONT_DIALOG, open)
-  }, [])
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   /** コマンドパレット(Ctrl+K・:) */
@@ -2817,11 +2809,7 @@ export default function App() {
           onFilterChange={history ? changePastFilter : undefined}
           postedIds={history ? postedIds : undefined}
           onNewThread={!history && board && connectorOf(board.connectorId).createThread ? () => setNewThreadOpen(true) : undefined}
-          style={{
-            button: (up) => <StyleMenu settings={settings} update={updateSetting} up={up} />,
-            theme: <StyleMenuItems settings={settings} update={updateSetting} section="theme" />,
-            post: <StyleMenuItems settings={settings} update={updateSetting} section="post" />,
-          }}
+          style={{ settings, update: updateSetting }}
           fontSize={
             <>
               {!isMobile && <BaseFontSlider settings={settings} update={updateSetting} />}
@@ -3071,11 +3059,6 @@ export default function App() {
       )}
       {paletteOpen && <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} />}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
-      {baseFontDialog && (
-        <SliderDialog title="文字サイズ" onClose={() => setBaseFontDialog(false)}>
-          <BaseFontSlider settings={settings} update={updateSetting} />
-        </SliderDialog>
-      )}
       {ngDraft && (
         <NgRuleDialog
           draft={ngDraft}

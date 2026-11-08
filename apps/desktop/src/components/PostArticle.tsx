@@ -193,6 +193,7 @@ function shortDate(date: string): string {
 /**
  * スマホ: AA の字を、横幅に収まるまで小さくする(横にずらして読むと、スワイプの操作とぶつかるため)。
  * 一度もとの大きさに戻して測り、はみ出す分だけ縮める(読めなくならないよう 5px まで)。幅が変わったら測り直す
+ * ref のコールバックとして使う。AA の表示をやめたら、返した関数で字の大きさと見張りを元に戻す
  */
 function fitAA(el: HTMLElement | null) {
   if (!el) return
@@ -228,6 +229,13 @@ function fitAA(el: HTMLElement | null) {
     })
     tagged.aaObserver.observe(box ?? el)
   }
+  return () => {
+    tagged.aaObserver?.disconnect()
+    tagged.aaObserver = undefined
+    tagged.aaFit = undefined
+    delete el.dataset.aaFit
+    el.style.fontSize = ''
+  }
 }
 
 type AAElement = HTMLElement & { aaObserver?: ResizeObserver; aaFit?: () => void }
@@ -240,6 +248,10 @@ function watchFontLoads() {
     document.querySelectorAll<AAElement>('[data-aa-fit]').forEach((e) => e.aaFit?.())
   })
 }
+
+/** LINE 風のレスの上下の padding と margin(合わせて --line-gap) */
+const LINE_PAD = 'min(var(--line-gap), var(--post-padding-y))'
+const LINE_MARGIN = 'max(0px, calc(var(--line-gap) - var(--post-padding-y)))'
 
 /** 操作バーをレスの枠の上へはみ出させられるか。WebKit は overflow-clip-margin がなく、content-visibility の枠で切り取られる */
 const CAN_OVERHANG = typeof CSS !== 'undefined' && CSS.supports('overflow-clip-margin', '4rem')
@@ -292,14 +304,25 @@ function PostArticle(props: Props) {
   /** サムネイルを読みに行かない設定のとき、押して読んだサムネイル(何番目か) */
   const [loadedThumbs, setLoadedThumbs] = useState<Set<number>>()
 
-  const frame = {
-    paddingLeft: 'var(--post-padding-x)',
-    paddingRight: 'var(--post-padding-x)',
-    paddingBottom: 'var(--post-pad, var(--post-padding-y))',
-    // Discord 風で続けて書いたレスは、前のレスに寄せる
-    paddingTop: props.continued ? '2px' : props.showTopDivider ? undefined : 'var(--post-pad, var(--post-padding-y))',
-    borderTopColor: props.showTopDivider ? 'var(--post-divider-color, var(--c-border))' : undefined,
-  }
+  const frame =
+    (props.variant ?? 'card') === 'line'
+      ? {
+          // LINE 風: 上下の余白は吹き出しの間の余白(app.css の --line-gap)。人気の地を敷く範囲(padding)は既定の余白までにし、残りは外(margin)に取る
+          paddingLeft: 'var(--post-padding-x)',
+          paddingRight: 'var(--post-padding-x)',
+          paddingBottom: LINE_PAD,
+          paddingTop: props.continued ? '2px' : LINE_PAD,
+          marginTop: LINE_MARGIN,
+          marginBottom: LINE_MARGIN,
+        }
+      : {
+          paddingLeft: 'var(--post-padding-x)',
+          paddingRight: 'var(--post-padding-x)',
+          paddingBottom: 'var(--post-pad, var(--post-padding-y))',
+          // Discord 風で続けて書いたレスは、前のレスに寄せる
+          paddingTop: props.continued ? '2px' : props.showTopDivider ? undefined : 'var(--post-pad, var(--post-padding-y))',
+          borderTopColor: props.showTopDivider ? 'var(--post-divider-color, var(--c-border))' : undefined,
+        }
   const frameClass = `group w-full ${props.showTopDivider ? 'border-t pt-2' : ''} ${props.flash ? 'flash-new' : ''}`
 
   // NG: 番号だけ残して「あぼーん」と出す。押すとその場で中身を見られる
@@ -1076,9 +1099,10 @@ function PostArticle(props: Props) {
   // 自分の書き込みは右に寄せる。ただしアンカーツリーの中では、線でアイコンをつなぐため左にそろえる(緑の吹き出しはそのまま)
   const right = props.isOwn && !props.alignLeft
   const lineSide = (
-    <div className={`flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${right ? 'items-end' : 'items-start'}`}>
+    // 番号と時刻もレスの頭の字なので、頭の文字の大きさ(post-head-zoomed)に合わせる
+    <div className={`post-head-zoomed flex-shrink-0 flex flex-col gap-0.5 pb-0.5 text-[10px] text-c-text-muted leading-tight ${right ? 'items-end' : 'items-start'}`}>
       {/* 右の吹き出しの返信の数は、番号の上に置く */}
-      {right && repliesBtn && <span className="post-head-zoomed">{repliesBtn}</span>}
+      {right && repliesBtn}
       {/* スマホは横幅が貴重なので、番号も小さくする */}
       <span className="text-[11px]">{numBtn('#', isMobile ? 'text-[10px]' : 'text-[11px]')}</span>
       <span title={post.date}>{time}</span>

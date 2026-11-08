@@ -40,7 +40,7 @@ export default function GestureRecorder(props: {
     <SliderDialog title={`「${props.action}」のなぞり方`} onClose={props.onClose}>
       <div className="px-4 pb-3">
         <p className="mb-3 text-[13px] leading-relaxed text-c-text-muted">
-          下の枠の中で、割り当てたい形をなぞってください(左右どちらかから始めて、向きを 3 回まで変えられます)。
+          下の枠の中で、割り当てたい形をなぞってください(左右どちらかから始めて、向きは 3 つまで。2 回まで変えられます)。
         </p>
         <div
           ref={padRef}

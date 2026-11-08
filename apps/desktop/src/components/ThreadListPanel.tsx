@@ -12,7 +12,7 @@ import RefreshButton from './RefreshButton'
 import { ActionButtons, MOBILE_HEAD_BTN, MOBILE_HEAD_ICON, MoreMenu, useBarContextMenu, type BarAction } from './ActionBar'
 import { inBar, mobileMenuActions, orderBy, type Placement } from '../utils/toolbar'
 import ActionSheet, { type SheetItem } from './ActionSheet'
-import { SliderDialog } from './FontSizeSlider'
+import { StyleDialog } from './StyleMenu'
 import { LIST_REFRESH_COOLDOWN_MS } from '../utils/cooldown'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import { momentum, rankMomentum } from '../utils/thread'
@@ -20,7 +20,7 @@ import { threadUnread, unreadFirstOrder } from '../utils/unread'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
-import { LIST_FILTERS, isListTabActive, tabDefOf, type ListFilter, type ListTabKey, type ThreadSort } from '../ui/settings'
+import { LIST_FILTERS, isListTabActive, tabDefOf, type AppSettings, type ListFilter, type ListTabKey, type ThreadSort, type UpdateSetting } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
 import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
@@ -90,9 +90,9 @@ interface Props {
   authorIcon?: boolean
   /** 行の形がコンパクト(スレタイ 1 行と数だけ。設定 listShape) */
   compact?: boolean
-  /** 表示スタイルのメニュー。帯に置くボタン(up ならメニューを上に開く)と、︙ の中に出す中身 */
-  style?: { button: (up: boolean) => ReactNode; theme: ReactNode; post: ReactNode }
-  /** ︙ の「文字の大きさ」の中身(スレ一覧の大きさのスライダー) */
+  /** 表示スタイルの画面で変える設定 */
+  style?: { settings: AppSettings; update: UpdateSetting }
+  /** 表示スタイルの画面の「文字と余白」の中身(スレ一覧の大きさのスライダー) */
   fontSize?: ReactNode
   /** 操作ボタンの置き場所(設定) */
   placements: Record<string, Placement>
@@ -594,8 +594,8 @@ export default function ThreadListPanel(props: Props) {
   useEffect(() => () => clearTimeout(noteTimer.current), [])
   /** スマホ: 板名を押して出す、板の操作のメニュー */
   const [titleSheet, setTitleSheet] = useState(false)
-  /** ︙ の「文字の大きさ・余白」の画面 */
-  const [fontDialog, setFontDialog] = useState(false)
+  /** ︙ の「表示スタイル」の画面 */
+  const [styleOpen, setStyleOpen] = useState(false)
   const copyText = (text: string, done: string) =>
     void navigator.clipboard.writeText(text).then(
       () => showNote(done),
@@ -722,21 +722,11 @@ export default function ThreadListPanel(props: Props) {
           },
         ]
       : []),
-    // 動かすと一覧の大きさが変わるので、メニューの中ではなく、真ん中に出す小さな画面で変える
-    ...(props.fontSize ? [{ id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setFontDialog(true) }] : []),
     ...(props.style
       ? [
-          {
-            id: 'style',
-            label: '表示スタイル',
-            icon: 'palette',
-            render: (where: Placement) => props.style!.button(inBar(where, 'footer')),
-            children: [
-              { id: 'styleTheme', label: 'テーマと差し色', icon: 'color_lens', submenu: props.style.theme },
-              { id: 'stylePost', label: 'レスの見た目', icon: 'view_agenda', submenu: props.style.post },
-              ...(props.fontSize ? [{ id: 'styleSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setFontDialog(true) }] : []),
-            ],
-          },
+          // 帯に置いたときのボタン。中身は表示スタイルの画面と同じ(︙ には並べない。foldMenuActions)
+          { id: 'fontSize', label: '文字の大きさ・余白', icon: 'format_size', onClick: () => setStyleOpen(true) },
+          { id: 'style', label: '表示スタイル', icon: 'palette', active: styleOpen, onClick: () => setStyleOpen(true) },
         ]
       : []),
     ...(props.onRefresh
@@ -1247,10 +1237,8 @@ export default function ThreadListPanel(props: Props) {
           />
         </div>
       )}
-      {fontDialog && (
-        <SliderDialog title="文字の大きさ・余白" onClose={() => setFontDialog(false)}>
-          {props.fontSize}
-        </SliderDialog>
+      {styleOpen && props.style && (
+        <StyleDialog settings={props.style.settings} update={props.style.update} from="list" sliders={props.fontSize} onClose={() => setStyleOpen(false)} />
       )}
       {titleSheet && (
         <ActionSheet

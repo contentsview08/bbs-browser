@@ -107,7 +107,7 @@ const MENU_FOLDERS: Record<BarArea, MenuFolder[]> = {
 /**
  * ︙ の一覧を、大項目と小項目に分ける。まとまりは最初の操作の場所に置き、操作の順は保つ。
  * 1 つしかないまとまりは、押す手間が増えるだけなので作らない。
- * 文字の大きさ・余白は表示スタイルの小項目にあるので、並べない
+ * 文字の大きさ・余白は表示スタイルの画面にあるので、並べない
  */
 export function foldMenuActions<T extends { id: string }>(area: BarArea, actions: T[], make: (folder: MenuFolder, members: T[]) => T): T[] {
   const out: T[] = []

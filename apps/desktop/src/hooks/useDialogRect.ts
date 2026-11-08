@@ -5,7 +5,8 @@ import { useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEven
 
 export type DialogRect = { x: number; y: number; w: number; h: number }
 
-export function useDialogRect(key: string, def: { w: number; h: number; minW: number; minH: number }) {
+/** def.place: 初めて開くときの置き場所(既定は真ん中。left・right は左上・右上に寄せ、反対の側を見えるままにする) */
+export function useDialogRect(key: string, def: { w: number; h: number; minW: number; minH: number; place?: 'left' | 'right' }) {
   /** 画面に収める: 上の帯(つかんで動かす所)がいつも見えるように、上は 8px から、左右・下も少しは画面に残す */
   const fit = (r: DialogRect): DialogRect => {
     const vw = window.innerWidth
@@ -17,7 +18,7 @@ export function useDialogRect(key: string, def: { w: number; h: number; minW: nu
   const load = (): DialogRect => {
     const w = Math.min(def.w, window.innerWidth - 48)
     const h = Math.min(def.h, window.innerHeight - 48)
-    const d = { x: (window.innerWidth - w) / 2, y: (window.innerHeight - h) / 2, w, h }
+    const d = def.place ? { x: def.place === 'right' ? window.innerWidth - w - 24 : 24, y: 64, w, h } : { x: (window.innerWidth - w) / 2, y: (window.innerHeight - h) / 2, w, h }
     try {
       const v = JSON.parse(localStorage.getItem(key) ?? 'null') as DialogRect | null
       return fit(v && [v.x, v.y, v.w, v.h].every(Number.isFinite) ? v : d)

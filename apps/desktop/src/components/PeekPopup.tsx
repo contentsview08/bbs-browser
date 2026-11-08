@@ -24,7 +24,8 @@ export default function PeekPopup(props: { thread: ThreadSummary; onOpen: () => 
           if (e.key === 'p' || e.key === 'P') {
             e.preventDefault()
             props.onClose()
-          } else if (e.key === 'Enter') {
+          } else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
+            // ボタンの上の Enter は、そのボタンを押す(× で閉じる)
             e.preventDefault()
             props.onClose()
             props.onOpen()

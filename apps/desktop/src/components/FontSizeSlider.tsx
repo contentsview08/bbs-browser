@@ -1,7 +1,7 @@
-// 文字の大きさを 1px ずつ変えるスライダー(︙ の「文字の大きさ」と、設定の「文字サイズ」)。
+// 文字の大きさを 1px ずつ変えるスライダー(︙ の「表示スタイル」と、設定の「文字サイズ」)。
 // 動かしている間は、画面の変数(CSS)だけを書き換えて、その場で大きさを変える。設定に保存するのは指(マウス)を離したとき
 // (動かすたびに保存すると、そのたびに DB へ書いて重い)
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
@@ -308,21 +308,9 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
   const backdrop = useBackdropClose(props.onClose)
-  // つかんでいるスライダーの行。あるときは、その行のほか(題・ほかの行)を見えなくする
-  const [active, setActive] = useState<HTMLElement | null>(null)
-  // 指(マウス)を画面の外で離したときも戻す
-  useEffect(() => {
-    if (!active) return
-    const up = () => setActive(null)
-    window.addEventListener('pointerup', up)
-    window.addEventListener('pointercancel', up)
-    return () => {
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', up)
-    }
-  }, [active])
+  const { active, scope } = useSliderDragScope()
   return createPortal(
-    <SliderDrag.Provider value={{ active, set: setActive }}>
+    <SliderDragScope scope={scope}>
     {/* スマホは、画面の横いっぱいに下から出す(上には、変わっていく画面が見える)。幕は透明(外を押すと閉じる受け皿としてだけ置く) */}
     <div className={`fixed inset-0 z-[9800] flex ${isMobile ? 'items-end' : 'items-center justify-center p-4'}`} {...backdrop}>
       <div
@@ -349,9 +337,36 @@ export function SliderDialog(props: { title: string; onClose: () => void; childr
         {props.children}
       </div>
     </div>
-    </SliderDrag.Provider>,
+    </SliderDragScope>,
     document.body,
   )
+}
+
+/**
+ * スライダーを並べる画面の入れ物で使う: 中のスライダーをつかんでいる間、active が立つ(入れ物ごと見えなくし、つかんでいる行だけを残す)。
+ * 中身は SliderDragScope で包む
+ */
+export function useSliderDragScope() {
+  // つかんでいるスライダーの行
+  const [active, setActive] = useState<HTMLElement | null>(null)
+  // 指(マウス)を画面の外で離したときも戻す
+  useEffect(() => {
+    if (!active) return
+    const up = () => setActive(null)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [active])
+  const scope = useMemo(() => ({ active, set: setActive }), [active])
+  return { active: active !== null, scope }
+}
+
+/** useSliderDragScope の scope を中のスライダーへ渡す */
+export function SliderDragScope(props: { scope: ReturnType<typeof useSliderDragScope>['scope']; children: ReactNode }) {
+  return <SliderDrag.Provider value={props.scope}>{props.children}</SliderDrag.Provider>
 }
 
 /** スマホ: ヘッダー・フッターの高さと文字の大きさのスライダー(スレ一覧・スレ表示のどちらの「文字の大きさ・余白」にも出す) */

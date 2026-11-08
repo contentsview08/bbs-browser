@@ -608,13 +608,13 @@ class UserOps {
 
 ### 設定の許可リスト
 
-許可リストは `packages/sync/settings-allowlist.json` に置き、PC とスマホが読む(スマホは Gradle が assets へ写す)。値はどちらの端末でも同じ意味のものだけを入れる。`never` は入れてはいけない項目で、テストで確かめる。既定値が端末で違う項目(`idShort`・`dateStyle`)は `default` を端末ごとに書く。
+許可リストは `packages/sync/settings-allowlist.json` に置き、PC とスマホが読む(スマホは Gradle が assets へ写す)。**見た目の設定(名前欄・ID・日時・ワッチョイ・勢い・スレ主の強調・開く位置・配色・字の大きさ)は同期しない**(端末ごとに違ってよいもの。PC とスマホで既定も違う)。値はどちらの端末でも同じ意味のものだけを入れる。`never` は入れてはいけない項目で、テストで確かめる。既定値が端末で違う項目(`idShort`・`dateStyle`)は `default` を端末ごとに書く。
 
 | 群 | 項目(PC の名前) | 値の形 |
 | --- | --- | --- |
 | 見張る言葉 | `keywords`・`grossWords` | 配列 → JSON の文字列 |
-| レスの出し方 | `omitNoname`・`tidyBlankLines`・`urlShorten`・`highlightOp`・`idStyle`・`idShort`・`idPosition`・`dateStyle`・`watchoiShort`・`nameSubtle`・`iconFromWatchoi`・`groupNg`・`ngMode`・`heatStyle`・`blurGross` | 真偽・短い文字列 |
-| 操作 | `openPosition`・`threadSort`・`unreadFirst`・`quickPhrases` | 真偽・文字列・JSON の文字列 |
+| レスの出し方 | `omitNoname`・`tidyBlankLines`・`urlShorten`・`groupNg`・`ngMode`・`blurGross` | 真偽・短い列挙 |
+| 操作 | `threadSort`・`unreadFirst`・`quickPhrases` | 文字列・真偽・JSON の文字列 |
 | 板ごと | `boardMeta` の `alias`・`omitNoname`・`nonames`(`setting:::boardMeta/<板>`) | JSON の文字列 |
 
 同期しないもの。

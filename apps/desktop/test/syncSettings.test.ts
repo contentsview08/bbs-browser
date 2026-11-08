@@ -25,11 +25,11 @@ describe('設定の許可リスト', () => {
     expect(settingOpsOf('boardMeta', { 'https://a/x/': { defaultName: '変えた' } }, { 'https://a/x/': { defaultName: '前' } })).toEqual([])
   })
   it('範囲の外の値を通さない', () => {
-    expect(settingToWire('idStyle', '爆発')).toBeNull()
+    expect(settingToWire('threadSort', '爆発')).toBeNull()
     expect(settingToWire('omitNoname', 'true')).toBeNull()
     expect(settingToWire('keywords', 'x'.repeat(5000))).toBeNull()
     expect(settingToWire('keywords', ['x'.repeat(5000)])).toBeNull()
     expect(settingFromWire('keywords', '{"a":1}')).toBeUndefined()
-    expect(settingFromWire('idStyle', 'color')).toBe('color')
+    expect(settingFromWire('threadSort', 'newest')).toBe('newest')
   })
 })

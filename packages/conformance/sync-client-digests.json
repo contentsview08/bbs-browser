@@ -508,8 +508,8 @@
   "phone": "772906c3a75fa3fd5dcd3f02829036e237596ea7b91f0835ee16518a329cca25"
  },
  "設定: 許可リストの項目は全端末に届き、種類ごとに最新が勝つ": {
-  "pc": "079056169c15088a3fa5e4e739f42253c50c376773e6e79824030696b42995ef",
-  "phone": "5448733c19c9c8d287894257aa23a99a2ac107735de600ef2da48d3e8c7af013"
+  "pc": "bff2b56e3b7209aca88243bfcbdf624b9903ca9d5c89ebf9c49ed17485c8f731",
+  "phone": "41ca2dfabc460424c26d568a513b8cd4e03cf86bfa8a5d53a5aa8826ccd6fbed"
  },
  "設定: 秘密の項目と配色と字の大きさは積まず、受けても書かない": {
   "pc": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a",
@@ -517,11 +517,11 @@
  },
  "設定: 範囲の外の値は手元に入れず、同期の表には残し、止まらない": {
   "pc": "042e9b0dc9cd1df3fca2ebb8c55e9927cd7ac2e9f7ecd1083610d3fd5ae6514a",
-  "phone": "897283053ffa6e73cb12ab72e9360f30382c07f3fc8df099e829a6bb29b0c36f"
+  "phone": "c55bbf16ebcd728a7b201940b32d4bbfd93259e02c466592a7cfa635641a958f"
  },
  "設定: 1 台目の種まきは既定と違うものだけで、2 台目は領域の値を使う": {
-  "pc": "ffe4381e1f67d4da57a91e1a191c697eedc8ed4cde10aa55c582f20cd9ae2a80",
-  "phone": "c362900596a24924eca502aa6907ffa609e94d33cce1054cc57704db3d0a317c"
+  "pc": "f5cdf9561a6c2ff9706dfe52272cb80469af6582a768d85adb97800958266849",
+  "phone": "4f215b9b1a9ef1efbbe614ab156d34819a4deffb85c6bb4040bbf7eaeac93c9e"
  },
  "設定: 板ごとの設定は別名と名無しだけを送り、名前欄の既定値はどの端末でも手元に残す": {
   "pc": "c3e5fc07c93b64bdeeabcc7a2e3576078b4a4b14e76e935a555531dc1fcb6fdc",

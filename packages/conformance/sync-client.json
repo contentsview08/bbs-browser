@@ -14017,8 +14017,8 @@
    {
     "op": "setting_change",
     "device": "phone",
-    "name": "idStyle",
-    "value": "color"
+    "name": "threadSort",
+    "value": "newest"
    },
    {
     "op": "advance_ms",
@@ -14064,7 +14064,7 @@
     "expect": {
      "pc": {
       "settings": {
-       "idStyle": "color",
+       "threadSort": "newest",
        "keywords": [
         "見張る",
         "言葉"
@@ -14076,7 +14076,7 @@
      },
      "phone": {
       "settings": {
-       "idStyle": "color",
+       "threadSort": "newest",
        "keywords": [
         "見張る",
         "言葉"
@@ -14279,14 +14279,14 @@
      "setting",
      null,
      "",
-     "idStyle"
+     "threadSort"
     ],
     "payload": {
      "kind": "setting",
      "hlc": "01a3185c0000.0000.other",
      "device_id": "other",
      "body": {
-      "key": "idStyle",
+      "key": "threadSort",
       "value": "爆発"
      }
     }
@@ -14342,14 +14342,14 @@
   "seed": {
    "pc": {
     "settings": {
-     "idStyle": "icon",
+     "threadSort": "momentum",
      "ngMode": "hide",
      "omitNoname": true
     }
    },
    "phone": {
     "settings": {
-     "idStyle": "color",
+     "threadSort": "newest",
      "unreadFirst": true
     }
    }
@@ -14391,7 +14391,7 @@
     "expect": {
      "phone": {
       "settings": {
-       "idStyle": "icon",
+       "threadSort": "momentum",
        "ngMode": "hide",
        "unreadFirst": true
       },
@@ -14402,7 +14402,7 @@
      },
      "pc": {
       "settings": {
-       "idStyle": "icon",
+       "threadSort": "momentum",
        "ngMode": "hide",
        "omitNoname": true
       },

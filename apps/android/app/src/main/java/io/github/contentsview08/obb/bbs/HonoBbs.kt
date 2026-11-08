@@ -221,6 +221,7 @@ object HonoBbs {
         val (origin, id) = parts(board.url)
         val api = apiBaseOf(origin)
         val out = ArrayList<ThreadSummary>()
+        val seen = HashSet<String>()
         var cursor: String? = null
         // 何ページにも分かれていればたどる(板のスレの上限までなので、たどりきれる)
         for (page in 0 until 20) {
@@ -232,6 +233,8 @@ object HonoBbs {
             val arr = body.getJSONArray("data")
             for (i in 0 until arr.length()) {
                 val t = arr.getJSONObject(i)
+                // ページをたどる間にスレが上がると、次のページにも同じスレが出る。先に出た方(新しい位置)を残す
+                if (!seen.add(t.getString("id"))) continue
                 val fp = t.optJSONObject("firstPost")?.takeIf { !it.optBoolean("isDeleted") }
                 val content = fp?.str("content")
                 out += ThreadSummary(

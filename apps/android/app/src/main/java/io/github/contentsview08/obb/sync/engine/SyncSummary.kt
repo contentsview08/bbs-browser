@@ -59,7 +59,12 @@ fun syncSummary(db: SyncSql, adapters: List<SyncAdapter>, ctx: AdapterContext): 
         if (n > 0) notes[k] = (notes[k] ?: 0) + n
     }
     for (a in adapters) for ((k, n) in a.explain(ctx)) note(k, n)
-    note("ops_waiting", (db.query("SELECT COUNT(*) AS n FROM sync_ops").firstOrNull()?.get("n") as Long? ?: 0L).toInt())
+    // 処理できる操作だけを数える(新しい版で積んだ操作が残った DB を開いても、待ちがあるように見せない。送信待ちの数と同じ)
+    val names = adapters.flatMap { it.ops }.distinct()
+    if (names.isNotEmpty()) {
+        val marks = names.joinToString(", ") { "?" }
+        note("ops_waiting", (db.query("SELECT COUNT(*) AS n FROM sync_ops WHERE op IN ($marks)", names).firstOrNull()?.get("n") as Long? ?: 0L).toInt())
+    }
     (db.query("SELECT value FROM sync_state WHERE key = 'bad_counts'").firstOrNull()?.get("value") as String?)?.let { raw ->
         for ((k, n) in parseStrictJson(raw) as Map<*, *>) note("bad_$k", (n as Long).toInt())
     }

@@ -65,6 +65,17 @@ class HonoBbsTest {
         assertEquals(listOf(1, 2), s.run { HonoBbs.fetchPosts(thread(origin), null) }.posts.map { it.no })
     }
 
+    @Test fun スレ一覧のページをたどる間に上がったスレは1つにする() {
+        val k2 = "66666666-7777-8888-9999-000000000000"
+        fun th(id: String) = """{"id":"$id","title":"$id","postCount":1,"createdAt":"2026-09-19T19:02:29.239Z"}"""
+        val s = server {
+            if (it.url.contains("cursor=c")) res(200, """{"data":[${th(k2)}],"nextCursor":null}""")
+            else res(200, """{"data":[${th(key)},${th(k2)}],"nextCursor":"c"}""")
+        }
+        val list = s.run { HonoBbs.listThreads(Board("$origin/boards/b/", "b")) }
+        assertEquals(listOf(key to 0, k2 to 1), list.map { it.key to it.order })
+    }
+
     @Test fun 新着がなければ位置を保つ() {
         val r = server { res(200, """{"data":[]}""") }.run { HonoBbs.fetchPosts(thread(origin), DatCursor(0, 5, null)) }
         assertEquals(FetchStatus.NOT_MODIFIED, r.status)

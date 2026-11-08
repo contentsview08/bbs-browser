@@ -553,4 +553,17 @@ class SyncEngineTest {
         assertEquals(null, pushedRun(listOf(PushResult("a", 200L, 3, null), PushResult("b", 409L, null, emptyMap())), 2, 2))
         assertEquals(null, pushedRun(emptyList(), 0, 2))
     }
+
+    @Test fun この版で処理できない操作は送信待ちにも診断の待ちにも数えない() {
+        val db = JdbcSyncSql.open()
+        val adapters = listOf(FavoriteThreadAdapter(db) { ResolvedBoard(it, "2ch-compat") })
+        db.batch(
+            listOf("favorite_thread_add", "future_op").map {
+                SqlStatement("INSERT INTO sync_ops (op, target, num, args, at_ms) VALUES (?, ?, NULL, NULL, 1)", listOf(it, it))
+            },
+        )
+        assertEquals(1L, io.github.contentsview08.obb.sync.engine.SyncTables(db).pendingCount(emptyList(), adapters.flatMap { it.ops }))
+        val ctx = io.github.contentsview08.obb.sync.adapters.AdapterContext(deriveKeys(ByteArray(32)), "dev", 1)
+        assertEquals(1, io.github.contentsview08.obb.sync.engine.syncSummary(db, adapters, ctx).notes["ops_waiting"])
+    }
 }

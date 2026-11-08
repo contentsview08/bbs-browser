@@ -15,7 +15,9 @@ TICKET_KID = "k1"
 PACE_HEAD_SEC = "0"
 PACE_PUSH_SEC = "0"
 # 領域ごとの 1 日の回数。既定 6000 は Paid 向け。Free で 100 人なら 1 人 1,000 要求に収めるため "1200" 程度に下げる(docs/sync-design.md の費用)
-# RATE_PER_DAY = "1200"
+# # 合流(全件の読み取りと種まきの送信)は 1 分に 20 回を超えるので 60。日の上限と IP の上限で抑える
+RATE_PER_MINUTE = "60"
+RATE_PER_DAY = "1200"
 # 領域ごとの 1 日に受け付けるレコードの数。正規のアプリは 1 日に数百件(送信は 5 分ごと、1 回に既読と閲覧履歴)。
 # 1 件が 2 行なので、壊れた端末が要求の上限いっぱいに 100 件ずつ送っても、Free の 100,000 行を 1 領域で使い切らせないための上限。超えた要求は 429 で 1 行も書かない
 RECORDS_PER_DAY = "3000"
@@ -40,7 +42,7 @@ new_sqlite_classes = ["SpaceDO", "LedgerDO"]
 [[ratelimits]]
 name = "RL_IP"
 namespace_id = "1001"
-simple = { limit = 30, period = 60 }
+simple = { limit = 60, period = 60 }
 
 [[ratelimits]]
 name = "RL_WIDE"

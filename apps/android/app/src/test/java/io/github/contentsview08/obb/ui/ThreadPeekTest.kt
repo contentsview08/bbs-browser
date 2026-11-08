@@ -76,4 +76,20 @@ class ThreadPeekTest {
         assertEquals(2, peekJumpNo(PeekKind.FIRST, 2))
         assertEquals(12, peekJumpNo(PeekKind.NEW, 12))
     }
+
+    @Test fun 本文の画像とYouTubeを見分ける() {
+        val (images, youtube) = peekMedia("見て\nhttps://i.imgur.com/abc.jpeg\nhttps://i.imgur.com/abc.jpeg\nhttps://youtu.be/dQw4w9WgXcQ\nhttps://example.com/page")
+        assertEquals(1, images.size)
+        assertTrue(images[0].contains("abc"))
+        assertEquals(listOf("dQw4w9WgXcQ"), youtube.map { it.first })
+        assertEquals(emptyList<String>(), peekMedia("文字だけ").first)
+    }
+
+    @Test fun サムネイルは2行までで残りは数() {
+        assertEquals(3 to 0, peekThumbFit(3, 4))
+        assertEquals(8 to 0, peekThumbFit(8, 4))
+        // 9 枚で 4 枚ずつ 2 行なら、7 枚と「+2」
+        assertEquals(7 to 2, peekThumbFit(9, 4))
+        assertEquals(1 to 4, peekThumbFit(5, 0, rows = 2))
+    }
 }

@@ -125,7 +125,7 @@ fun StoredImage(url: String, modifier: Modifier = Modifier, contentScale: Conten
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
+internal fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit, blurred: Boolean = false, play: Boolean = false, size: Int = 96) {
     // 家の中のアドレスは、押すまで読まない。手元にある画像(どの画面で取ったものでも)は、自動で読まない設定でもそのまま出す
     var load by rememberSaveable(url) {
         mutableStateOf(io.github.contentsview08.obb.data.ImageStore.cached(url) != null || (autoLoad && io.github.contentsview08.obb.data.isAutoLoadable(url)))

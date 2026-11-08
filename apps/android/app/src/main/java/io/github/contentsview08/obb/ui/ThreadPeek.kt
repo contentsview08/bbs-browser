@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
@@ -88,7 +89,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
+import io.github.contentsview08.obb.bbs.BodyToken
 import io.github.contentsview08.obb.bbs.Post
+import io.github.contentsview08.obb.bbs.bodyTokens
+import io.github.contentsview08.obb.bbs.isYoutubeUrl
+import io.github.contentsview08.obb.bbs.splitBeIcon
+import io.github.contentsview08.obb.bbs.toImageUrl
+import io.github.contentsview08.obb.bbs.youtubeIdOf
+import io.github.contentsview08.obb.data.normalizeForSearch
 import io.github.contentsview08.obb.bbs.ThreadSummary
 import io.github.contentsview08.obb.bbs.TwoCh
 import io.github.contentsview08.obb.data.NgRule
@@ -144,6 +152,27 @@ internal fun peekNeedsFetch(posts: List<Post>, readNo: Int?, knownCount: Int, ar
 internal fun peekBody(body: String, lines: Int = PEEK_BODY_LINES): String {
     val all = body.lines().dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
     return if (all.size <= lines) all.joinToString("\n") else all.take(lines).joinToString("\n").trimEnd() + "…"
+}
+
+/**
+ * レスの本文にある画像(サムネイルの URL)と YouTube(動画の ID と URL)。見分け方はスレ表示(PostIndex)と同じ。
+ * 同じものは 1 つにする
+ */
+internal fun peekMedia(body: String): Pair<List<String>, List<Pair<String, String>>> {
+    val images = ArrayList<String>()
+    val youtube = ArrayList<Pair<String, String>>()
+    for (t in bodyTokens(splitBeIcon(body).second)) if (t is BodyToken.Url) {
+        val img = toImageUrl(t.url)
+        if (img != null) { if (img !in images) images += img }
+        else if (isYoutubeUrl(t.url)) youtubeIdOf(t.url)?.let { id -> if (youtube.none { it.first == id }) youtube += id to t.url }
+    }
+    return images to youtube
+}
+
+/** サムネイルを並べる数。rows 行に入りきらなければ、最後の 1 枠を「+N」にする。戻りは(出す数, N) */
+internal fun peekThumbFit(total: Int, perRow: Int, rows: Int = 2): Pair<Int, Int> {
+    val cap = maxOf(1, perRow) * rows
+    return if (total <= cap) total to 0 else (cap - 1) to (total - (cap - 1))
 }
 
 /** 中身を押したときに開く位置。頭から読むスレは 1 レス目なら位置を決めない(ふつうに開く) */
@@ -305,7 +334,10 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                     .clickable(remember { MutableInteractionSource() }, null) { close() },
             )
             Column(
-                Modifier.align(Alignment.Center).systemBarsPadding().padding(horizontal = 16.dp, vertical = 20.dp).widthIn(max = 560.dp).fillMaxWidth(),
+                // 高さは画面の 65% まで。上下に後ろの画面を残して、外を押せば閉じると分かるようにする。
+                // 縦は真ん中より少し下(親指が操作の列に届くように。上には 2 割ほど残る)
+                Modifier.align(androidx.compose.ui.BiasAlignment(0f, 0.25f)).systemBarsPadding().padding(horizontal = 20.dp)
+                    .heightIn(max = maxHeight * 0.65f).widthIn(max = 560.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val radius = with(density) { 14.dp.toPx() }
@@ -341,7 +373,7 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                         }
                         .background(Palette.surface),
                 ) {
-                    PeekHeader(vm, t, Modifier.then(dragModifier).clickable { open(null) })
+                    PeekHeader(vm, t, Modifier.then(dragModifier).clickable { open(null) }, onClose = { close() })
                     HorizontalDivider(color = Palette.border)
                     val pick = remember(log, readNo) { peekPick(log?.posts.orEmpty(), readNo) }
                     val list = rememberLazyListState()
@@ -354,13 +386,27 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                     }
                     // hono-bbs はスレ一覧の時点で 1 レス目を持っているので、届くまでそれを出す
                     val preview = if (pick.posts.isEmpty() && pick.kind == PeekKind.FIRST && t.preview != null) Post(1, "", "", "", t.authorId, t.preview) else null
+                    // サムネイルの読み方はスレ表示と同じ設定に従う(通信の状態は窓ごとに 1 回だけ調べる)
+                    val thumbContext = LocalContext.current
+                    val thumbs = remember(vm.prefs.thumbMode, vm.prefs.blurGross, vm.prefs.grossWords) {
+                        val mode = vm.prefs.thumbMode
+                        if (mode == io.github.contentsview08.obb.data.ThumbMode.NEVER) null
+                        else PeekThumbs(
+                            autoLoad = when (mode) {
+                                io.github.contentsview08.obb.data.ThumbMode.ALWAYS -> true
+                                io.github.contentsview08.obb.data.ThumbMode.WIFI -> isWifi(thumbContext)
+                                else -> false
+                            },
+                            grossWords = if (vm.prefs.blurGross) vm.prefs.grossWords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() } else emptyList(),
+                        )
+                    }
                     LazyColumn(Modifier.weight(1f, fill = false).nestedScroll(pullDown), state = list, contentPadding = PaddingValues(bottom = 6.dp)) {
                         val posts = pick.posts
-                        if (preview != null) item(key = "preview", contentType = "post") { PeekPost(preview) { open(null) } }
+                        if (preview != null) item(key = "preview", contentType = "post") { PeekPost(preview, thumbs) { open(null) } }
                         for (i in posts.indices) {
                             if (i == pick.newFrom) item(key = "new", contentType = "caption") { PeekCaption("新着 ${pick.newCount} 件", Palette.unreadInk, false) }
                             val p = posts[i]
-                            item(key = p.no, contentType = "post") { PeekPost(p) { open(peekJumpNo(pick.kind, p.no)) } }
+                            item(key = p.no, contentType = "post") { PeekPost(p, thumbs) { open(peekJumpNo(pick.kind, p.no)) } }
                         }
                         if (pick.kind == PeekKind.LAST) item(key = "last", contentType = "caption") {
                             PeekCaption(if (fetching) "新着を確かめています" else "新着はありません", Palette.textMuted, fetching)
@@ -430,17 +476,26 @@ private fun boardLabel(vm: AppViewModel, url: String): String =
         ?: url.removePrefix("https://").removePrefix("http://").trimEnd('/')
 
 @Composable
-private fun PeekHeader(vm: AppViewModel, t: ThreadSummary, modifier: Modifier) = WithoutBaseFont {
+private fun PeekHeader(vm: AppViewModel, t: ThreadSummary, modifier: Modifier, onClose: () -> Unit) = WithoutBaseFont {
     val now = System.currentTimeMillis()
-    Column(modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp)) {
-        Text(t.title.ifEmpty { t.key }, color = Palette.textStrong, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+    Column(modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 10.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Text(
+                t.title.ifEmpty { t.key }, Modifier.weight(1f).padding(top = 6.dp), color = Palette.textStrong, fontSize = 16.sp, lineHeight = 22.sp,
+                fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis,
+            )
+            // 閉じ方が分かるように(外を押す・下へなぞる・戻るでも閉じる)
+            Box(Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Close, "閉じる", tint = Palette.textMuted, modifier = Modifier.size(20.dp))
+            }
+        }
         val meta = listOfNotNull(
             boardLabel(vm, t.boardUrl),
             if (t.postCount > 0) "${t.postCount}レス" else null,
             if (t.postCount > 0 && t.createdAt != null) "勢い ${momentumText(momentum(t, now))}" else null,
             t.createdAt?.let { relativeTime(it, now) },
         ).joinToString(" ・ ")
-        Text(meta, Modifier.padding(top = 4.dp), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(meta, Modifier.padding(top = 2.dp, end = 10.dp), color = Palette.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -457,7 +512,7 @@ private fun PeekCaption(text: String, color: Color, checking: Boolean) = Without
 }
 
 @Composable
-private fun PeekPost(p: Post, onClick: () -> Unit) = WithoutBaseFont {
+private fun PeekPost(p: Post, thumbs: PeekThumbs?, onClick: () -> Unit) = WithoutBaseFont {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${p.no}", color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -475,6 +530,41 @@ private fun PeekPost(p: Post, onClick: () -> Unit) = WithoutBaseFont {
             peekBody(p.body), Modifier.padding(top = 3.dp), color = Palette.textBody, fontSize = 14.sp, lineHeight = 20.sp,
             maxLines = PEEK_BODY_LINES, overflow = TextOverflow.Ellipsis,
         )
+        if (thumbs != null) PeekThumbRow(p, thumbs, onClick)
+    }
+}
+
+/** サムネイルの読み方。autoLoad でなければ「画像」の札を出し、押したものだけ読む。grossWords: 当たるレスはぼかす */
+private class PeekThumbs(val autoLoad: Boolean, val grossWords: List<String>)
+
+private const val PEEK_THUMB = 68
+
+/**
+ * レスの画像を小さく横に並べる(どんな画像があるかの見本)。右端で折り返して 2 行まで、残りは「+N」。
+ * 押してもビューアーは開かず、レスを押したのと同じくスレを開く
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun PeekThumbRow(p: Post, thumbs: PeekThumbs, onClick: () -> Unit) {
+    val media = remember(p.no, p.body) { peekMedia(p.body) }
+    // YouTube はスレ表示と同じく動画の絵に再生の印を重ねる
+    val all = remember(media) { media.first.map { it to false } + media.second.map { (id, _) -> "https://i.ytimg.com/vi/$id/hqdefault.jpg" to true } }
+    if (all.isEmpty()) return
+    val blurred = remember(p.no, p.body, thumbs) { thumbs.grossWords.isNotEmpty() && normalizeForSearch(p.body).let { b -> thumbs.grossWords.any { b.contains(it) } } }
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        val gap = 6.dp
+        val perRow = ((maxWidth + gap) / (PEEK_THUMB.dp + gap)).toInt()
+        val (n, more) = peekThumbFit(all.size, perRow)
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
+            for ((url, play) in all.take(n)) Thumbnail(url, thumbs.autoLoad, { onClick() }, blurred, play = play, size = PEEK_THUMB)
+            if (more > 0) {
+                val shape = RoundedCornerShape(5.dp)
+                Box(
+                    Modifier.size(PEEK_THUMB.dp).clip(shape).background(Palette.surface2).border(1.dp, Palette.border, shape).clickable(onClick = onClick),
+                    contentAlignment = Alignment.Center,
+                ) { Text("+$more", color = Palette.textMuted, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+            }
+        }
     }
 }
 

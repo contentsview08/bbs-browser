@@ -1,5 +1,8 @@
 package io.github.contentsview08.obb.ui
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -123,13 +126,17 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                     }
                 }
             }
+            // スライダーを動かしている間は、そのスライダーだけを残して面と他の行を透かす(後ろの画面の変化を見ながら合わせられるように)
+            val sizeDrag = remember { SizeDrag() }
+            val dragging = sizeDrag.active != null
+            val bg by androidx.compose.animation.core.animateFloatAsState(if (dragging) 0f else 1f, androidx.compose.animation.core.tween(150), label = "sheetBg")
             // 外(上に見えている画面)を押したら閉じる。暗くはしない
             Box(Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, null) { close() })
             val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(sheetHeight)
                     .graphicsLayer { translationY = (1f - show.value) * sheetPx + drag }
-                    .shadow(18.dp, shape).clip(shape).background(Palette.surface).border(1.dp, Palette.border, shape)
+                    .shadow((18 * bg).dp, shape).clip(shape).background(Palette.surface.copy(alpha = bg)).border(1.dp, Palette.border.copy(alpha = bg), shape)
                     .clickable(remember { MutableInteractionSource() }, null) {}
                     .navigationBarsPadding(),
             ) {
@@ -140,18 +147,20 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                         Orientation.Vertical, onDragStopped = { v -> settle(v) },
                     ),
                     contentAlignment = Alignment.Center,
-                ) { Box(Modifier.size(width = 36.dp, height = 4.dp).background(Palette.textMuted.copy(alpha = 0.45f), CircleShape)) }
-                Column(Modifier.fillMaxWidth().weight(1f).nestedScroll(nested).verticalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
-                    SheetLabel("テーマ")
-                    SchemeRow(p)
-                    SheetLabel("差し色")
-                    AccentRow(p)
-                    if (thread) {
-                        SheetLabel("レスの見た目")
-                        PostStyleRow(p)
+                ) { Box(Modifier.size(width = 36.dp, height = 4.dp).background(Palette.textMuted.copy(alpha = 0.45f * bg), CircleShape)) }
+                Column(Modifier.fillMaxWidth().weight(1f).nestedScroll(nested).verticalScroll(rememberScrollState(), enabled = !dragging).padding(bottom = 12.dp)) {
+                    Column(Modifier.graphicsLayer { alpha = bg }) {
+                        SheetLabel("テーマ")
+                        SchemeRow(p)
+                        SheetLabel("差し色")
+                        AccentRow(p)
+                        if (thread) {
+                            SheetLabel("レスの見た目")
+                            PostStyleRow(p)
+                        }
+                        SheetLabel("文字と余白")
                     }
-                    SheetLabel("文字と余白")
-                    Column(Modifier.padding(horizontal = 16.dp)) {
+                    Column(Modifier.padding(horizontal = 16.dp)) { androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides sizeDrag) {
                         if (thread) {
                             FontSizeSlider("本文の文字", p.bodyScale, POST_BODY_BASE_PX) { p.bodyScale = it }
                             FontSizeSlider("レスの頭の文字", p.postHeadScale, POST_HEAD_BASE_PX) { p.postHeadScale = it }
@@ -162,7 +171,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                             SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..40f, 39, "${p.listPad}", LIST_PAD_PX.toFloat()) { p.listPad = snapInt(it) }
                         }
                         BarSliders(p)
-                    }
+                    } }
                 }
             }
         }
@@ -248,10 +257,20 @@ private fun PostStyleRow(p: Prefs) {
  */
 @Composable
 fun SizeSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int, text: String, default: Float, onChange: (Float) -> Unit) {
-    Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+    val sizeDrag = LocalSizeDrag.current
+    val source = remember { MutableInteractionSource() }
+    val dragged by source.collectIsDraggedAsState()
+    val pressed by source.collectIsPressedAsState()
+    androidx.compose.runtime.LaunchedEffect(dragged || pressed) {
+        if (sizeDrag != null) { if (dragged || pressed) sizeDrag.active = label else if (sizeDrag.active == label) sizeDrag.active = null }
+    }
+    // ほかのスライダーを動かしている間は、この行を隠す
+    val hidden = sizeDrag?.active != null && sizeDrag.active != label
+    val a by androidx.compose.animation.core.animateFloatAsState(if (hidden) 0f else 1f, androidx.compose.animation.core.tween(150), label = "row")
+    Row(Modifier.fillMaxWidth().height(40.dp).graphicsLayer { alpha = a }, verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(112.dp), color = Palette.textBody, fontSize = 13.sp, lineHeight = 15.sp, maxLines = 2)
         Slider(
-            value, onChange, Modifier.weight(1f), valueRange = range, steps = steps,
+            value, onChange, Modifier.weight(1f), valueRange = range, steps = steps, interactionSource = source,
             // 目盛りの点は細かすぎて読めず、うるさいだけなので描かない
             colors = SliderDefaults.colors(thumbColor = Palette.accent, activeTrackColor = Palette.accent, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
         )
@@ -278,3 +297,7 @@ fun BarSliders(p: Prefs) {
     SizeSlider("ヘッダー・フッターの文字", p.barFontScale, 0.6f..1.6f, 19, "${percent(p.barFontScale)}%", 1f) { p.barFontScale = snapTo(it, 20) }
     SizeSlider("基本の文字", p.fontScale, 0.6f..1.6f, 19, "${percent(p.fontScale)}%", 1f) { p.fontScale = snapTo(it, 20) }
 }
+
+/** いま動かしているスライダーの名前。動かしている間は、ほかの行と面を透かす */
+class SizeDrag { var active by mutableStateOf<String?>(null) }
+val LocalSizeDrag = androidx.compose.runtime.compositionLocalOf<SizeDrag?> { null }

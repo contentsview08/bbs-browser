@@ -466,10 +466,10 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     MenuItem(if (fav) "お気に入り板から外す" else "お気に入り板に追加", if (fav) Icons.Filled.Star else Icons.Outlined.Star) { vm.toggleFavorite(page.board) },
                     MenuItem("更新", Icons.Filled.Refresh) { vm.refreshBoard(page) },
                     MenuItem("スレッド検索", Icons.Filled.Search) { searching = true; bars.show() },
+                    styleMenuItem { styleSheet = true },
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                 ),
                 listOf(
-                    styleMenuItem { styleSheet = true },
                     MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
                         MenuItem("板名をコピー", Icons.Filled.ContentCopy) { copyText(context, page.board.name); vm.toast = "板名をコピーしました" },
                         MenuItem("板の URL をコピー", Icons.Filled.Link) { copyText(context, page.board.url); vm.toast = "URL をコピーしました" },

@@ -737,6 +737,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     favoriteItem(),
                     MenuItem("更新", Icons.Filled.Refresh) { refresh() },
                     MenuItem("レス検索", Icons.Filled.Search) { searching = true; bars.show() },
+                    styleMenuItem { styleSheet = true },
                     MenuItem(if (filter == Filter.OWN) "自分の書き込みの絞り込みを外す" else "自分の書き込みだけ(${counts[Filter.OWN] ?: 0})", Icons.Filled.Person) { filter = if (filter == Filter.OWN) null else Filter.OWN },
                     MenuItem("画像一覧", Icons.Filled.PhotoLibrary) { gallery = true },
                     MenuItem("次スレを探す", Icons.Filled.SkipNext) { vm.findNext(page); nextSheet = true },
@@ -747,7 +748,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
                 ),
                 listOf(
-                    styleMenuItem { styleSheet = true },
                     MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(
                         MenuItem("スレタイをコピー", Icons.Filled.ContentCopy) { copyText(context, page.title); vm.toast = "スレタイをコピーしました" },
                         MenuItem("URL をコピー", Icons.Filled.Link) { copyText(context, TwoCh.webUrl(page.summary)); vm.toast = "URL をコピーしました" },

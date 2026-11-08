@@ -415,7 +415,7 @@ export const twoChConnector: Connector = {
     const archived = async (): Promise<FetchPostsResult> => {
       const kako = kakoDatUrl(thread)
       if (kako) {
-        const res = await ctx.http.get(kako)
+        const res = await ctx.http.get(kako, { noRedirect: true })
         if (res.status === 200 && res.body.length > 0) {
           const body = completeLines(res.body)
           const text = ctx.decode(body, encodingOf(res, body))
@@ -433,8 +433,9 @@ export const twoChConnector: Connector = {
       return { status: 'archived', posts: [], cursor }
     }
 
+    // dat 落ちを 302 で知らせる板があるので、dat はリダイレクトをたどらずに取る(スマホ版と同じ)
     const fetchAll = async (): Promise<FetchPostsResult> => {
-      const res = await ctx.http.get(url)
+      const res = await ctx.http.get(url, { noRedirect: true })
       if (res.status === 404 || res.status === 302) return archived()
       ensureOk(res, url)
       const body = completeLines(res.body)
@@ -461,7 +462,7 @@ export const twoChConnector: Connector = {
     // 1 バイト手前から取り、その 1 バイトが改行であることで「前回までの内容が変わっていない」と確かめる
     const headers: Record<string, string> = { Range: `bytes=${cursor.bytes - 1}-` }
     if (cursor.lastModified) headers['If-Modified-Since'] = cursor.lastModified
-    const res = await ctx.http.get(url, { headers })
+    const res = await ctx.http.get(url, { headers, noRedirect: true })
 
     if (res.status === 304) return { status: 'notModified', posts: [], cursor }
     if (res.status === 404 || res.status === 302) return archived()

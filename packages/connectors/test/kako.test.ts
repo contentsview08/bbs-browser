@@ -69,3 +69,32 @@ describe('dat 落ちしたスレの過去ログ', () => {
     expect(got).toEqual(['https://bbs.eddibb.cc/liveedge/dat/1792148654.dat'])
   })
 })
+
+describe('dat 落ちを 302 で知らせる板', () => {
+  /** リダイレクトをたどる通信なら行き先の HTML(200)を返し、たどらない取り方なら 302 をそのまま返す */
+  function redirecting() {
+    const asked: { url: string; noRedirect: boolean }[] = []
+    const ctx: ConnectorContext = {
+      decode: (b) => new TextDecoder('utf-8').decode(b),
+      http: {
+        async get(url, opts): Promise<HttpResponse> {
+          asked.push({ url, noRedirect: opts?.noRedirect === true })
+          if (opts?.noRedirect) return { status: 302, headers: { location: 'https://example.test/dead.html' }, body: new Uint8Array() }
+          return { status: 200, headers: { 'content-type': 'text/html' }, body: enc.encode('<html>スレッドは落ちました</html>') }
+        },
+        post: async () => {
+          throw new Error('書き込まない')
+        },
+      },
+    }
+    return { ctx, asked }
+  }
+
+  it('差分の取得でも全部の取得でも、dat はたどらずに取り、302 を dat 落ちにする', async () => {
+    const t = thread('https://example.test/board/')
+    const { ctx, asked } = redirecting()
+    expect(await twoChConnector.fetchPosts(t, { bytes: 10, postCount: 1 }, ctx)).toMatchObject({ status: 'archived' })
+    expect(await twoChConnector.fetchPosts(t, null, ctx)).toMatchObject({ status: 'archived' })
+    expect(asked.every((a) => a.noRedirect)).toBe(true)
+  })
+})

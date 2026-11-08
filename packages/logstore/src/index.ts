@@ -60,9 +60,14 @@ export function applyFetch(before: ThreadLog | null, thread: ThreadSummary, resu
     readNo: 0,
     status: 'active',
   }
-  // 変わらなくても、dat 落ちと分かったら(過去ログから取ったスレ)印だけは付ける
-  if (result.status === 'notModified')
-    return result.archived && base.status !== 'archived' ? { ...base, status: 'archived' } : base
+  // 変わらなくても、dat 落ちと分かったら(過去ログから取ったスレ)印だけは付ける。
+  // そのときは続きの印も受け取る(したらばは新着のないまま過去ログ倉庫に入ったことを印で返す。次から取りに行かないように)。
+  // ふつうの変化なしの印は受け取らない(レスのない印を持つと、次から差分だけを取りに行く)
+  if (result.status === 'notModified') {
+    const status = result.archived ? 'archived' : base.status
+    const cursor = result.archived && base.posts.length > 0 ? (result.cursor ?? base.cursor) : base.cursor
+    return status === base.status && JSON.stringify(cursor) === JSON.stringify(base.cursor) ? base : { ...base, status, cursor }
+  }
   if (result.status === 'archived') return base.status === 'archived' ? base : { ...base, status: 'archived' }
   let posts: Post[]
   // 同じ番号は後のものを残す(INSERT OR REPLACE と同じ)
@@ -258,10 +263,14 @@ export const addOwnPostStatement = (thread: ThreadSummary, no: number, now: numb
   params: [thread.boardUrl, thread.key, no, now],
 })
 
-export const removeOwnPostStatement = (thread: ThreadSummary, no: number): SqlStatement => ({
-  sql: 'DELETE FROM own_posts WHERE board_url = $1 AND key = $2 AND no = $3',
-  params: [thread.boardUrl, thread.key, no],
-})
+/** 印は書いた端末の URL の書き方のまま入る(同期で入る行は 5ch.io・https)ので、どの書き方の印も外す */
+export const removeOwnPostStatement = (thread: ThreadSummary, no: number): SqlStatement => {
+  const urls = boardUrlVariants(thread.boardUrl)
+  return {
+    sql: `DELETE FROM own_posts WHERE board_url IN (${urls.map((_, i) => `$${i + 3}`).join(', ')}) AND key = $1 AND no = $2`,
+    params: [thread.key, no, ...urls],
+  }
+}
 
 export const setSettingStatement = (key: string, value: unknown): SqlStatement => ({ sql: 'INSERT OR REPLACE INTO settings (key, value) VALUES ($1, $2)', params: [key, JSON.stringify(value)] })
 
@@ -272,6 +281,16 @@ export function boardUrlVariants(url: string): string[] {
   const rest = m[1]
   const hosts = /(^|\.)5ch\.(io|net)\//.test(rest) ? [rest.replace('5ch.net/', '5ch.io/'), rest.replace('5ch.io/', '5ch.net/')] : [rest]
   return hosts.flatMap((h) => [`https://${h}`, `http://${h}`])
+}
+
+/**
+ * SQL の中で、列の板の URL と同じ板の書き方を並べる(boardUrlVariants と同じ 4 通り)。
+ * `board_url IN (…)` に使うと、主キーの索引のまま引ける
+ */
+function boardUrlVariantsSql(col: string): string {
+  const canonical = `REPLACE(REPLACE(${col}, 'http://', 'https://'), '5ch.net/', '5ch.io/')`
+  const net = `REPLACE(${canonical}, '5ch.io/', '5ch.net/')`
+  return [canonical, `REPLACE(${canonical}, 'https://', 'http://')`, net, `REPLACE(${net}, 'https://', 'http://')`].join(', ')
 }
 
 export class LogStore {
@@ -470,10 +489,14 @@ export class LogStore {
     )
 
     if (result.status === 'notModified') {
-      // 過去ログから取ったスレは、変わらなくても dat 落ちの印を付け直す(前に取ったときに付け損ねていても直るように)
+      // 過去ログから取ったスレは、変わらなくても dat 落ちの印を付け直す(前に取ったときに付け損ねていても直るように)。
+      // そのときは続きの印も書く(したらばは新着のないまま過去ログ倉庫に入ったことを印で返す)。前の印がある(レスを取ってある)スレだけ。
+      // ふつうの変化なしの印は書かない(レスのない印を持つと、次から差分だけを取りに行く)
+      const cursor = result.archived && result.cursor ? JSON.stringify(result.cursor) : null
       await this.db.execute(
-        `UPDATE threads SET fetched_at = $1, status = CASE WHEN $2 = 1 THEN 'archived' ELSE status END WHERE board_url = $3 AND key = $4`,
-        [now, result.archived ? 1 : 0, ...where],
+        `UPDATE threads SET fetched_at = $1, status = CASE WHEN $2 = 1 THEN 'archived' ELSE status END,
+           cursor = CASE WHEN $3 IS NOT NULL AND cursor IS NOT NULL THEN $3 ELSE cursor END WHERE board_url = $4 AND key = $5`,
+        [now, result.archived ? 1 : 0, cursor, ...where],
       )
       return
     }
@@ -510,16 +533,15 @@ export class LogStore {
     )
   }
 
-  /** スレのログ(レス・既読位置・自分の書き込みの印)をまとめて消す */
+  /**
+   * スレのログ(レス・既読位置)を消す。自分のレスの印は残す(書き込み履歴が残るため。同期を使うときの
+   * deleteThreadStatements とスマホ版のログの削除と同じ)
+   */
   async deleteThread(thread: ThreadSummary): Promise<void> {
     const where = [thread.boardUrl, thread.key]
-    // 先に threads を消す。途中で落ちても「ログのないスレ」になるだけで、次に開けば取り直す。
-    // 残りの 2 つは互いに関係しないので、待ち合わせずに同時に流す
+    // 先に threads を消す。途中で落ちても「ログのないスレ」になるだけで、次に開けば取り直す
     await this.db.execute('DELETE FROM threads WHERE board_url = $1 AND key = $2', where)
-    await Promise.all([
-      this.db.execute('DELETE FROM posts WHERE board_url = $1 AND key = $2', where),
-      this.db.execute('DELETE FROM own_posts WHERE board_url = $1 AND key = $2', where),
-    ])
+    await this.db.execute('DELETE FROM posts WHERE board_url = $1 AND key = $2', where)
   }
 
   /**
@@ -530,8 +552,8 @@ export class LogStore {
     const rows = await this.db.select<{ board_url: string; key: string; connector_id: string }>(
       `SELECT t.board_url, t.key, t.connector_id FROM threads t
        WHERE COALESCE(t.read_at, t.fetched_at, 0) < $1
-         AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key)
-         AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)`,
+         AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.key = t.key AND f.board_url IN (${boardUrlVariantsSql('t.board_url')}))
+         AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.key = t.key AND o.board_url IN (${boardUrlVariantsSql('t.board_url')}))`,
       [before],
     )
     const kept = new Set(keep.map((k) => `${k.boardUrl}\t${k.key}`))
@@ -615,7 +637,9 @@ export class LogStore {
       `SELECT f.board_url, f.key, f.connector_id, f.title, f.created_at,
               t.post_count, t.read_no, t.status, t.title AS log_title
        FROM favorite_threads AS f
-       LEFT JOIN threads AS t ON t.board_url = f.board_url AND t.key = f.key
+       LEFT JOIN threads AS t ON t.rowid = (
+         SELECT t2.rowid FROM threads AS t2 WHERE t2.key = f.key AND t2.board_url IN (${boardUrlVariantsSql('f.board_url')})
+         ORDER BY t2.board_url = f.board_url DESC, t2.read_no DESC LIMIT 1)
        ORDER BY f.sort`,
     )
     return rows.map((r) => ({
@@ -718,16 +742,6 @@ export class LogStore {
 
   async deleteAccount(connectorId: string, accountId: string): Promise<void> {
     await this.db.execute('DELETE FROM accounts WHERE connector_id = $1 AND account_id = $2', [connectorId, accountId])
-  }
-
-  // ── バックアップ ──
-
-  /**
-   * DB 全体を path に書き出す(SQLite の VACUUM INTO)。使っている最中でも壊れない写しになる。
-   * path に既にファイルがあると失敗するので、呼ぶ側で空けておく
-   */
-  async backupTo(path: string): Promise<void> {
-    await this.db.execute('VACUUM INTO $1', [path])
   }
 
   // ── 書き込み履歴 ──

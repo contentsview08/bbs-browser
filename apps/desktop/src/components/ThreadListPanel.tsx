@@ -540,21 +540,23 @@ export default function ThreadListPanel(props: Props) {
 
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
-   * 複数のキーワードに当たるスレは、先に登録したキーワードの方に入れる
+   * 複数のキーワードに当たるスレは、先に登録したキーワードの方に入れる。
+   * 運営のお知らせはキーワードに当たってもまとまりに入れず(数えず)、「その他のスレ」の最後に置く(スマホ版の keywordGroups と同じ)
    */
   const keywordGroups = useMemo(() => {
     const keywords = (props.keywords ?? []).map((k) => k.trim()).filter(Boolean)
     if (keywords.length === 0) return undefined
+    const normal = visible.filter((t) => !isAnnouncement(t))
     const taken = new Set<string>()
     const groups: { keyword: string; threads: ThreadSummary[] }[] = []
     for (const keyword of keywords) {
       const k = normalizeForSearch(keyword)
-      const hits = visible.filter((t) => !taken.has(threadId(t)) && normalizedOf(t).title.includes(k))
+      const hits = normal.filter((t) => !taken.has(threadId(t)) && normalizedOf(t).title.includes(k))
       hits.forEach((t) => taken.add(threadId(t)))
       if (hits.length > 0) groups.push({ keyword, threads: hits })
     }
     if (groups.length === 0) return undefined
-    return { groups, rest: visible.filter((t) => !taken.has(threadId(t))) }
+    return { groups, rest: [...normal.filter((t) => !taken.has(threadId(t))), ...visible.filter(isAnnouncement)] }
   }, [visible, props.keywords])
 
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──

@@ -2590,7 +2590,7 @@ export default function App() {
     onLogin: saveAndLogin,
     onSaveAccount: (a: Parameters<typeof saveAccount>[0]) => void run(null, () => saveAccount(a)),
     onDeleteAccount: (c: Parameters<typeof deleteAccount>[0], a: Parameters<typeof deleteAccount>[1]) => void run(null, () => deleteAccount(c, a)),
-    onBackupDb: () => (store ? backupDatabase(store) : Promise.resolve(false)),
+    onBackupDb: () => (store ? backupDatabase() : Promise.resolve(false)),
     onRestoreDb: restoreDatabase,
     onPruneLogs: pruneLogs,
     onClose: () => setSettingsTab(undefined),

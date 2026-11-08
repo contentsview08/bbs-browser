@@ -162,6 +162,7 @@ pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title
     if page.scheme() != "https" {
         return Err("https のページだけ開けます".into());
     }
+    let accept = link_matcher(&pattern)?;
     close_and_wait(&app).await;
     let script = WATCH
         .replace("__PATTERN__", &serde_json::to_string(&pattern).map_err(|e| e.to_string())?)
@@ -183,8 +184,8 @@ pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title
         .initialization_script(&paste)
         .on_navigation(move |u| {
             if u.as_str().starts_with(FOUND) {
-                if let Some((_, v)) = u.query_pairs().find(|(k, _)| k == "u") {
-                    let _ = main.emit_to("main", "web-upload-link", v.to_string());
+                if let Some(link) = found_link(u, &accept) {
+                    let _ = main.emit_to("main", "web-upload-link", link);
                 }
                 return false;
             }
@@ -193,4 +194,49 @@ pub async fn open_web_upload(app: AppHandle, url: String, pattern: String, title
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// 拾うリンクの形に全体が一致するか。JavaScript の形で書いた表(utils/webUpload.ts)は、Rust の regex でも同じに読める範囲で書く
+fn link_matcher(pattern: &str) -> Result<regex::Regex, String> {
+    regex::Regex::new(&format!("^(?:{pattern})$")).map_err(|e| format!("リンクの形が読めません: {e}"))
+}
+
+/// 見張りから来た移動の u を取り出す。窓の中のどのページでも同じ移動を起こせるので、
+/// サイトのリンクの形に合うものだけを本文へ渡す(宣伝の URL などを差し込まれないように)
+fn found_link(u: &Url, accept: &regex::Regex) -> Option<String> {
+    let (_, v) = u.query_pairs().find(|(k, _)| k == "u")?;
+    accept.is_match(&v).then(|| v.into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const IMGUR: &str = r"https://i\.imgur\.com/[A-Za-z0-9]{5,}\.(?:jpe?g|png|gif|webp|mp4)";
+
+    fn found(u: &str) -> Url {
+        format!("{FOUND}?u={}", u.replace('%', "%25").replace('&', "%26").replace('#', "%23")).parse().unwrap()
+    }
+
+    #[test]
+    fn サイトの形に全体が合うリンクだけを渡す() {
+        let m = link_matcher(IMGUR).unwrap();
+        assert_eq!(found_link(&found("https://i.imgur.com/abcde12.png"), &m).as_deref(), Some("https://i.imgur.com/abcde12.png"));
+        assert_eq!(found_link(&found("https://evil.example/ad"), &m), None);
+        // 前後に余計なものが付いたものも断る
+        assert_eq!(found_link(&found("https://i.imgur.com/abcde12.png https://evil.example/"), &m), None);
+        assert_eq!(found_link(&found("x https://i.imgur.com/abcde12.png"), &m), None);
+        assert_eq!(found_link(&format!("{FOUND}?x=1").parse().unwrap(), &m), None);
+    }
+
+    #[test]
+    fn 表のリンクの形はどれも読める() {
+        // 画面の表(String.raw`…` の pattern)をそのまま読む
+        let table = include_str!("../../src/utils/webUpload.ts");
+        let patterns: Vec<&str> = table.split("pattern: String.raw`").skip(1).map(|x| x.split('`').next().unwrap()).collect();
+        assert!(patterns.len() >= 3);
+        for p in patterns {
+            assert!(link_matcher(p).is_ok(), "{p}");
+        }
+    }
 }

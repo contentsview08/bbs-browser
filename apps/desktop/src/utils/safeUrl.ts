@@ -56,7 +56,20 @@ export function isRedirectStatus(status: number): boolean {
   return [301, 302, 303, 307, 308].includes(status)
 }
 
-const MAX_REDIRECTS = 5
+export const MAX_REDIRECTS = 5
+
+/**
+ * コネクタの読む通信で、リダイレクトの行き先へ移ってよいか。自動で読める先か、元と同じオリジンだけ
+ * (相手のサーバーに家の中・自分の PC のアドレスへ向けられても、そこへは通信しない)
+ */
+export function redirectAllowed(from: string, to: string): boolean {
+  if (isAutoLoadable(to)) return true
+  try {
+    return new URL(from).origin === new URL(to).origin
+  } catch {
+    return false
+  }
+}
 
 /**
  * リダイレクトを 1 段ずつたどり、行き先ごとに isAutoLoadable を確かめて取る(send は自動でたどらない通信)。

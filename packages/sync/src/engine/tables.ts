@@ -133,6 +133,19 @@ export class SyncTables {
     return rows.map(fromRow)
   }
 
+  /**
+   * 送信待ちの数。切っている種類のレコードは送らないので数えない。sync_ops は処理できる操作(names)だけを数える
+   * (新しい版で積んだ操作が残った DB を開いても「送信待ちあり」が続かないように)
+   */
+  async pendingCount(offKinds: readonly string[], names: readonly string[]): Promise<number> {
+    const kindMarks = offKinds.map((_, i) => `$${i + 1}`).join(', ')
+    const opMarks = names.map((_, i) => `$${offKinds.length + i + 1}`).join(', ')
+    const records = `SELECT COUNT(*) FROM sync_records WHERE pending = 1${offKinds.length > 0 ? ` AND kind NOT IN (${kindMarks})` : ''}`
+    const ops = names.length > 0 ? `SELECT COUNT(*) FROM sync_ops WHERE op IN (${opMarks})` : 'SELECT 0'
+    const [row] = await this.db.select<{ n: number }>(`SELECT (${records}) + (${ops}) AS n`, [...offKinds, ...names])
+    return Number(row?.n ?? 0)
+  }
+
   async ops(names: readonly string[], limit: number): Promise<SyncOpRow[]> {
     if (names.length === 0) return []
     const marks = names.map((_, i) => `$${i + 2}`).join(', ')

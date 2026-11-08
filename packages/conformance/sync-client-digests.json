@@ -698,6 +698,14 @@
   "pc": "2a0404fa246e644b2e57a7b56849700dc686f3c6a7cdf6b97df570f336fc32c7",
   "phone": "9c63629e2f733775312f72ee062c08bdfe4e7a5f77586b3dfbd67b9b3f2accb9"
  },
+ "作れない操作(壁時計が上限の HLC を上書きする)は捨てて数え、同期は止まらない": {
+  "pc": "50a13e9c6fe3115d917ae58349ec178c60544a02f322177224995f4ff24602ee",
+  "phone": "9baa807d8f39a3ae3b488a18bdcb2c6192e765fa9d8971221587e1da3ff60756"
+ },
+ "履歴: 容量超過で外した自分の既読は、ログの削除の後でも他の端末の読みで下がらない": {
+  "pc": "1bb591d921f8a866c656f362c7f2c9d4e484fa9eaf4542eb3cd00ca08c840322",
+  "phone": "a086fd709250c0afe660d282a7e9acf446e0b75e9cc59fbe8ce07ee38fe55d97"
+ },
  "乱数 全部 1": {
   "pc": "7b47fdf3a8f1ae4852153b724c970ec6577018556a0894e95f213c6b102f17ed",
   "phone": "5e8fc222321eba9ab3cc168165d6b133e04f2c3858e9ff2b56aa0b7f7cac157a",

@@ -484,10 +484,11 @@ fn read_json_file(chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
-/// DB のバックアップ先を空ける。SQLite の VACUUM INTO は書き出し先が既にあると失敗するので、
-/// ダイアログで上書きを選んだときは先に消す(.db だけ)
+/// DB 全体をダイアログで選んだ先へ書き出す(SQLite の VACUUM INTO。使っている最中でも壊れない写しになる)。
+/// VACUUM INTO は書き出し先が既にあると失敗するので、上書きを選んだときは先に消す(.db だけ)。
+/// 画面の SQL の口は VACUUM を断るので、書き出しはここでだけ行う
 #[tauri::command]
-fn prepare_db_backup(chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result<(), String> {
+async fn backup_db(app: tauri::AppHandle, chosen: tauri::State<'_, ChosenPaths>, path: String) -> Result<(), String> {
     let path = chosen.take(&path)?;
     if !has_extension(&path, &["db", "sqlite", "sqlite3"]) {
         return Err("バックアップの名前は .db で終わるようにしてください".into());
@@ -495,7 +496,11 @@ fn prepare_db_backup(chosen: tauri::State<'_, ChosenPaths>, path: String) -> Res
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
-    Ok(())
+    let target = path.to_string_lossy().into_owned();
+    sql_batch::with_pool(&app, async |pool| {
+        sqlx::query("VACUUM INTO $1").bind(target).execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// DB の復元を頼む。選んだファイルが SQLite かを確かめてから置き場にコピーし、アプリを起動し直す
@@ -699,10 +704,12 @@ pub fn run() {
             write_json_file,
             write_text_file,
             read_json_file,
-            prepare_db_backup,
+            backup_db,
             schedule_db_restore,
             post_http::http_post,
             sql_batch::sql_batch,
+            sql_batch::sql_execute,
+            sql_batch::sql_select,
             sync_http::sync_http,
             sync_key::sync_key_load,
             sync_key::sync_key_save,

@@ -96,6 +96,11 @@ describe('まちBBS のコネクタ', () => {
     expect(await machiConnector.fetchPosts(thread, null, ctx)).toMatchObject({ status: 'archived' })
   })
 
+  it('スレがないと言われたとき以外の <ERROR> は、dat 落ちにせずエラーにする', async () => {
+    const { ctx } = fake({ [OFFLAW]: { body: new TextEncoder().encode('<ERROR>Server busy</ERROR>') } })
+    await expect(machiConnector.fetchPosts(thread, null, ctx)).rejects.toThrow('Server busy')
+  })
+
   it('板の一覧はトップページから(板でないリンクは除き、同じ板は 1 つ)', async () => {
     const { ctx } = fake({ 'https://machi.to/': { body: fixture('machi-top.html') } })
     const list = await machiConnector.listBoards({ connectorId: 'machi', name: 'まちBBS', menuUrl: 'https://machi.to/' }, ctx)

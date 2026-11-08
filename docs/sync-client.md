@@ -374,6 +374,8 @@ class UserOps {
 適用と利用者の操作は別々に DB へ書くので、順番が前後することがある。後の操作が勝ち、手元も揃うように次を守る。
 
 - `sync_ops` を処理したレコードには `needs_apply = 1` を立て、周の中で写し直す。適用が書いた行を、次の周で操作の結果へ戻せる
+- 値から作れない操作(壁時計が上限の HLC を上書きするなど。`SyncError`)は捨てて `bad_counts.local` に数える。残すと周の最初で毎回止まる。DB の読み取りの失敗などは操作を残して周を失敗させる
+- 送信待ちの数(`hasChanges`・画面の「送信待ち N 件」)は、この版のアダプターが処理できる操作だけを数える(新しい版で積んだ操作が残った DB を開いても空回りしない)
 - 適用は、まだ処理していない操作のあるレコードを飛ばし、次の周へ回す(`needs_apply` を残す)
 
 ### 起動時の照合
@@ -711,7 +713,7 @@ class UserOps {
 
 | 種類 | 適用 |
 | --- | --- |
-| `read_*` の `trim` の tombstone | 計算し直さない。外した記録を除いて計算すると、手元の既読が下がるため |
+| `read_*` の `trim` の tombstone | 計算し直さない。外した記録を除いて計算すると、手元の既読が下がるため。この端末の `read_dev` をリセットより後に外していれば、ほかの記録の適用でも手元の既読を下限にし、ログも消さない |
 | `read_*` | 同じスレの `read_reset` と全 `read_dev`(`sync_records_thread` で引く)から `readPosition` を計算し、`threads.read_no` に書く。リセットがなければ下げない(まだ送っていない手元の読みを残す)。行がなければ何もしない。リセットがあり、`readPosition` が 0 で、未処理の読みがなく、行の `read_at` がリセットの壁時計以前なら、`posts` と `threads` の行を消す(ログの削除を写す) |
 | `last_view` | 行があれば `read_at`・`title` を更新。なければ下の表 |
 | `last_view` tombstone | `read_at = NULL`。ログは消さない。`trim` なら何もしない |
@@ -1028,11 +1030,12 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `IDLE_STOP_MS` | 10 分 |
 | `NET_SETTLE_MS` | 5 秒 |
 | `NET_MIN_GAP_MS` | 30 秒 |
+| `NUDGE_MIN_GAP_MS` | 30 秒(PC の窓の行き来 `focus`・`blur` で周を回す最低の間隔。PC だけなので `sync-config.json` には置かない) |
 - pull の間隔の 10 秒はエンジンが守る。手動だけ例外
 
 値は Cloudflare Workers の無料枠(Workers・Durable Objects とも 100,000 要求/日、SQLite の書き込み 100,000 行/日。`/records` は N 件で 2N + 2 行)に利用者 100 人(1 人 PC + スマホ)を収めるために決めた(設計書の「費用」)。要求を減らす仕掛けは 4 つ。
 
-**確認の間隔を伸ばす(`SyncScheduler`)。** `/head` が「変化なし」(304。通信の失敗も同じ扱い)を返すたびに次の確認までの間隔を 2 倍にし、`HEAD_BACKOFF_MAX_MS` で止める(1 → 2 → 4 → 5 分)。基本の間隔に戻すのは、前面に戻った(`foreground`)、利用者の操作(`activity`。放置で止めない端末でも戻すだけは行う)、確認が変化を返した、周を回した(`run`)の 4 つ。操作のときに確認が遅れていればすぐ確認する。サーバーの `pace` はこれまでどおり下限で、指示が上限より長ければ指示のまま(ただし `PACE_MAX_MS` の 1 時間で丸める)。送信の時計は確認とは別に `PUSH_INTERVAL_MS` ごとに起きて、送るものの有無を見る(確認を遠ざけている間も送信は 5 分で出る)。裏に回る瞬間の送信と前面に戻ったときの pull は、この間隔に関係なくすぐ行う。
+**確認の間隔を伸ばす(`SyncScheduler`)。** `/head` が「変化なし」(304。通信の失敗も同じ扱い)を返すたびに次の確認までの間隔を 2 倍にし、`HEAD_BACKOFF_MAX_MS` で止める(1 → 2 → 4 → 5 分)。基本の間隔に戻すのは、前面に戻った(`foreground`)、利用者の操作(`activity`。放置で止めない端末でも戻すだけは行う)、確認が変化を返した、周を回した(`run`)の 4 つ。操作のときに確認が遅れていればすぐ確認する。サーバーの `pace` はこれまでどおり下限で、指示が上限より長ければ指示のまま(ただし `PACE_MAX_MS` の 1 時間で丸める)。送信の時計は確認とは別に `PUSH_INTERVAL_MS` ごとに起きて、送るものの有無を見る(確認を遠ざけている間も送信は 5 分で出る)。裏に回る瞬間(`visibilitychange`)と窓を閉じるとき(`pagehide`)の送信は、この間隔に関係なくすぐ行う。PC の窓の行き来(`focus` の pull と `blur` の送信)は、直前の周から `NUDGE_MIN_GAP_MS` 空くまで回さない(Alt+Tab を繰り返しても 1 分の要求の上限に当たらないように)。
 
 **確認の ETag は覚えない(エンジン)。** `If-None-Match` は手元の `sync_state` の `epoch` と `since` から `"<epoch>:<since>"` を作って付ける。サーバーの応答を覚えておく形だと、変化を見た直後の周が通信の失敗で終わったときに次の確認が 304 になって取り残しが長引くので、手元が実際に読んだ所だけを根拠にする。
 
@@ -1049,6 +1052,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | PC の 2 つの起動 | `engine_lease`。`UPDATE sync_state … WHERE 期限切れ or 自分` が 1 行なら持ち主。30 秒ごとに延ばす。取れなければ動かない |
 | スマホの画面 | `AppViewModel` が持つ `Mutex`。`LogDb` と `Prefs` は画面と同じもの |
 | エンジンと利用者の操作 | `sync_ops` を挟むので触れ合わない。後の操作が後の HLC で勝つ |
+| PC のエンジンの作成 | `SyncController.engine()` は呼び出しを順に並べ、同じ先へのエンジンを 1 つだけ作る(同じ `leaseOwner` の 2 つのエンジンは lease で排他できないため) |
 
 ### 前面の間だけ動く
 
@@ -1056,7 +1060,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 | 場面 | PC | スマホ |
 | --- | --- | --- |
-| 裏に回る瞬間 | `visibilitychange` か `blur` で、送信待ちがあれば 1 回だけ周を回す | `onStop` で 1 回だけ周を回す(`viewModelScope`)。止められてもよい |
+| 裏に回る瞬間 | `visibilitychange` で、送信待ちがあれば 1 回だけ周を回す。`blur` も同じだが、直前の周から `NUDGE_MIN_GAP_MS` 空くまでは回さない | `onStop` で 1 回だけ周を回す(`viewModelScope`)。止められてもよい |
 | 窓を閉じる | **`CloseRequested` の処理は今ない。** `on_window_event` を足し、main を閉じるとき `sync-flush` を送って 1 回だけ試す。待つのは最大 3 秒 | なし(`onStop` と同じ) |
 | 送れなかった | 送信待ちが DB に残り、次の前面復帰で送る | 同じ |
 | 裏にいる間 | 周を始めない。時計を止める | 同じ |

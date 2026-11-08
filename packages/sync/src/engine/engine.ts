@@ -254,10 +254,7 @@ export class SyncEngine {
   /** 送るものがあるか。通信しない。切っている種類の送信待ちは数えない(自動の同期を空回りさせない) */
   async hasChanges(): Promise<boolean> {
     if (!(await this.isMasterOn()) || this.deps.now() < this.pushRetryAt) return false
-    const off = [...offKindsOf(await this.switches())]
-    const marks = off.map((_, i) => `$${i + 1}`).join(', ')
-    const [row] = await this.db.select<{ n: number }>(`SELECT (SELECT COUNT(*) FROM sync_ops) + (SELECT COUNT(*) FROM sync_records WHERE pending = 1${off.length > 0 ? ` AND kind NOT IN (${marks})` : ''}) AS n`, off)
-    return Number(row?.n ?? 0) > 0
+    return (await this.t.pendingCount([...offKindsOf(await this.switches())], this.opNames)) > 0
   }
 
   private async isMasterOn(): Promise<boolean> {
@@ -661,9 +658,14 @@ export class SyncEngine {
           // 前の操作の結果を読むので、先に書いてから 1 件だけで処理する
           if (touched.size > 0) break
           stmts.push(delOp(op))
-          const effects = await adapter.expand(op, ctx)
-          if (effects === null) await this.countBad('local')
-          for (const e of effects ?? []) await put(e.target, e.make, op.at_ms, e.floor)
+          try {
+            const effects = await adapter.expand(op, ctx)
+            if (effects === null) await this.countBad('local')
+            for (const e of effects ?? []) await put(e.target, e.make, op.at_ms, e.floor)
+          } catch (e) {
+            await this.dropBadOp(e)
+            touched.clear()
+          }
           break
         }
         stmts.push(delOp(op))
@@ -672,16 +674,29 @@ export class SyncEngine {
           await this.countBad('local')
           continue
         }
-        // fromOp は読み取りがあるので、先に作って中で使う
-        const existing = touched.get(target.record_id) ?? (await this.t.record(target.record_id)) ?? undefined
-        const stamp = hlcStamp(clock, op.at_ms, this.deviceId, existing?.payload.hlc).stamp
-        const made = await adapter.fromOp(op, existing?.payload ?? null, stamp, ctx)
-        await put(target, () => made, op.at_ms)
+        try {
+          // fromOp は読み取りがあるので、先に作って中で使う
+          const existing = touched.get(target.record_id) ?? (await this.t.record(target.record_id)) ?? undefined
+          const stamp = hlcStamp(clock, op.at_ms, this.deviceId, existing?.payload.hlc).stamp
+          const made = await adapter.fromOp(op, existing?.payload ?? null, stamp, ctx)
+          await put(target, () => made, op.at_ms)
+        } catch (e) {
+          await this.dropBadOp(e)
+        }
       }
       for (const r of touched.values()) stmts.push(writeRecord(r))
       stmts.push(setState('clock', clock))
       await this.db.batch(stmts)
     }
+  }
+
+  /**
+   * 値から作れない操作(壁時計が上限の HLC を上書きするなど)は捨てて数える。残すと周の最初で毎回止まり、同期全体が動かなくなる。
+   * DB の読み取りの失敗などは一時的なので、操作を残したまま周を失敗させる
+   */
+  private async dropBadOp(e: unknown): Promise<void> {
+    if (!(e instanceof SyncError)) throw e
+    await this.countBad('local')
   }
 
   private async countBad(reason: string): Promise<void> {

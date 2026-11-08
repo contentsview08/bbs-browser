@@ -1,6 +1,6 @@
 // 自動の同期を偽の時計で確かめる。エンジンと偽サーバーは本物と同じ流れ
 import { describe, expect, it } from 'vitest'
-import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, headWaitMs, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, paceMs, PUSH_INTERVAL_MS, SyncScheduler, type SchedulerHost } from '../src/index'
+import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, headWaitMs, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, NUDGE_MIN_GAP_MS, paceMs, PUSH_INTERVAL_MS, SyncScheduler, type SchedulerHost } from '../src/index'
 
 class FakeClock {
   now = 1_800_000_000_000
@@ -164,6 +164,26 @@ describe('自動の同期のきっかけ', () => {
     s.networkBack()
     await c.advance(NET_SETTLE_MS * 2)
     expect(log).toEqual(['foreground', 'background'])
+  })
+  it('窓の行き来では、直前の周から 30 秒空くまで周を回さない。裏へ回る・閉じるときは間隔によらず送る', async () => {
+    const { c, log, s, state } = setup()
+    await s.foreground()
+    state.changes = true
+    for (let i = 0; i < 10; i++) {
+      await s.flush()
+      await s.foreground()
+      await c.advance(1_000)
+    }
+    expect(log).toEqual(['foreground'])
+    await c.advance(NUDGE_MIN_GAP_MS)
+    await s.flush()
+    expect(log).toEqual(['foreground', 'background'])
+    state.changes = true
+    await s.flush(true)
+    expect(log).toEqual(['foreground', 'background', 'background'])
+    state.changes = true
+    await s.background()
+    expect(log).toEqual(['foreground', 'background', 'background', 'background'])
   })
   it('裏に回るときに送るものがなければ通信しない', async () => {
     const { log, s } = setup()

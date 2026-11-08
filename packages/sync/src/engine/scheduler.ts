@@ -1,5 +1,5 @@
 // 自動の同期のきっかけ。前面にいる間だけ動く。時計とタイマーは外から渡すので、偽の時計で試せる
-import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, PACE_MAX_MS, PUSH_INTERVAL_MS } from '../config'
+import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, NUDGE_MIN_GAP_MS, PACE_MAX_MS, PUSH_INTERVAL_MS } from '../config'
 
 /** サーバーが応答で指示する「最低これだけ空ける」。アプリはこれより短くしない */
 export interface SyncPace {
@@ -113,7 +113,12 @@ export class SyncScheduler {
     })
   }
 
-  /** 前面に戻った。すぐ 1 回 pull して、時計を動かし始める */
+  /** 直前に周を回していれば、窓の行き来では回さない */
+  private recentlySynced(): boolean {
+    return this.lastSync > 0 && this.host.now() - this.lastSync < NUDGE_MIN_GAP_MS
+  }
+
+  /** 前面に戻った。すぐ 1 回 pull して(直前に回していなければ)、時計を動かし始める */
   foreground(): Promise<void> {
     this.front = true
     this.paused = false
@@ -121,6 +126,10 @@ export class SyncScheduler {
     this.lastCheck = this.lastActivity
     this.lastPush = this.lastActivity
     this.misses = 0
+    if (this.recentlySynced()) {
+      this.schedule()
+      return Promise.resolve()
+    }
     return this.guarded(async () => {
       if (await this.host.enabled()) await this.run('foreground')
     })
@@ -130,11 +139,12 @@ export class SyncScheduler {
   background(): Promise<void> {
     this.front = false
     this.stopTimers()
-    return this.flush()
+    return this.flush(true)
   }
 
-  /** 送るものがあれば 1 回だけ試す。窓から離れたときと閉じるとき。時計は止めない */
-  flush(): Promise<void> {
+  /** 送るものがあれば 1 回だけ試す。時計は止めない。force は閉じるときと裏へ回るとき(次の機会がないので間隔によらず送る) */
+  flush(force = false): Promise<void> {
+    if (!force && this.recentlySynced()) return Promise.resolve()
     return this.guarded(async () => {
       if ((await this.host.enabled()) && (await this.host.hasChanges())) await this.run('background')
     })

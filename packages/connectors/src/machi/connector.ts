@@ -18,6 +18,8 @@ import { createdAtOfKey, isCgiSubject, parseCgiSubject } from '../common'
 import { machiError, parseMachiTop, parseMachiWrite, parseOfflaw } from './parse'
 
 const ID = 'machi'
+/** スレがないことを示すエラーの文(offlaw.cgi は「スレッドを発見できません」) */
+const isGoneError = (message: string) => /発見できません|見つかりません|存在しません/.test(message)
 const ORIGIN = 'https://machi.to'
 
 interface MachiCursor {
@@ -166,7 +168,12 @@ export const machiConnector: Connector = {
     if (res.status === 404) return { status: 'archived', posts: [], cursor }
     if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${url}`)
     const text = decode(res, ctx)
-    if (machiError(text) !== undefined) return { status: 'archived', posts: [], cursor }
+    // dat 落ちにするのはスレがないと言われたときだけ。混雑などの一時的なエラーで、自動の更新から外さない
+    const error = machiError(text)
+    if (error !== undefined) {
+      if (isGoneError(error)) return { status: 'archived', posts: [], cursor }
+      throw new Error(`まちBBS のエラー: ${error.slice(0, 200)}`)
+    }
     const { posts, title } = parseOfflaw(text)
     const lastNo = posts.at(-1)?.no ?? cursor?.lastNo ?? 0
     const next: MachiCursor = { lastNo }

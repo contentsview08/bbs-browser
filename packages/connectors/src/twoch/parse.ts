@@ -25,7 +25,13 @@ export function parseBbsMenuJson(text: string): MenuBoard[] {
       if (isBoardUrl(b.url)) boards.push({ url: b.url, name: b.board_name, category: b.category_name })
     }
   }
-  return boards
+  return distinctByUrl(boards)
+}
+
+/** 同じ板が 2 つのカテゴリに載っていても 1 つにする(先に出た方。スマホ版の distinctBy と同じ) */
+function distinctByUrl(boards: MenuBoard[]): MenuBoard[] {
+  const seen = new Set<string>()
+  return boards.filter((b) => !seen.has(b.url) && !!seen.add(b.url))
 }
 
 /** 一般的な bbsmenu.html。<B>カテゴリ</B> の後に <A HREF=板URL>板名</A> が並ぶ形 */
@@ -41,7 +47,7 @@ export function parseBbsMenuHtml(html: string): MenuBoard[] {
     const url = m[2]
     if (category && isBoardUrl(url)) boards.push({ url, name: decodeEntities(m[3].trim()), category })
   }
-  return boards
+  return distinctByUrl(boards)
 }
 
 export interface SubjectEntry {
@@ -53,9 +59,12 @@ export interface SubjectEntry {
 /** subject.txt の 1 行 = `1789358916.dat<>スレタイ (323)`。したらば系の `.cgi,` も受ける */
 export function parseSubjectTxt(text: string): SubjectEntry[] {
   const entries: SubjectEntry[] = []
+  // 同じスレが 2 行ある板がある。先の行(上の位置)を残す(スマホ版と同じ)
+  const seen = new Set<string>()
   for (const line of text.split('\n')) {
     const m = /^(\d+)\.(?:dat<>|cgi,)(.*)\((\d+)\)\s*$/.exec(line.trimEnd())
-    if (!m) continue
+    if (!m || seen.has(m[1])) continue
+    seen.add(m[1])
     entries.push({ key: m[1], title: decodeEntities(m[2].trim()), postCount: Number(m[3]) })
   }
   return entries

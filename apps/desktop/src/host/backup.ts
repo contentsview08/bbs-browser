@@ -2,7 +2,6 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { pickOpenPath, pickSavePath } from './dialog'
-import type { LogStore } from '@bbs-browser/logstore'
 import { backupFileName } from '../utils/backup'
 
 /** JSON を書き出す。保存先を選ばなかったら false */
@@ -21,11 +20,11 @@ export async function openJson(): Promise<string | undefined> {
 }
 
 /** ログ・設定・NG を含む DB 全体を書き出す。保存先を選ばなかったら false */
-export async function backupDatabase(store: LogStore): Promise<boolean> {
+export async function backupDatabase(): Promise<boolean> {
   const path = await pickSavePath(backupFileName('db'), 'SQLite', ['db'])
   if (!path) return false
-  await invoke('prepare_db_backup', { path })
-  await store.backupTo(path)
+  // 書き出しは Rust で行う(画面の SQL の口は VACUUM INTO を断る)
+  await invoke('backup_db', { path })
   return true
 }
 

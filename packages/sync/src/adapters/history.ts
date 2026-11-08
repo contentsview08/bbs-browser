@@ -2,7 +2,7 @@
 import { parseSwitches } from '../engine/kinds'
 import { HISTORY_SHOWN, RESET_TOTAL_MAX } from '../config'
 import type { StoredRecord, SyncOpRow, SyncSqlDb } from '../engine/tables'
-import { formatHlc, parseHlc } from '../hlc'
+import { compareHlc, formatHlc, parseHlc } from '../hlc'
 import { canonicalJson, parseStrictJson } from '../json'
 import { normalizeBoardUrl, recordId } from '../keys'
 import { LAST_VIEWED_FIELD, makeTombstone, updateRecord, type SyncPayload } from '../merge'
@@ -74,6 +74,16 @@ async function readRecords(db: SyncSqlDb, board: string, key: string): Promise<{
   const rows = await db.select<{ kind: string; payload: string }>('SELECT kind, payload FROM sync_records WHERE kind IN ($1, $2) AND ref_board = $3 AND ref_thread = $4 AND deleted = 0 ORDER BY record_id', [RESET_KIND, DEV_KIND, board, key])
   const parsed = rows.map((r) => ({ kind: r.kind, p: parseStrictJson(r.payload) as SyncPayload }))
   return { latest: parsed.find((r) => r.kind === RESET_KIND)?.p ?? null, devs: parsed.filter((r) => r.kind === DEV_KIND).map((r) => r.p) }
+}
+
+/**
+ * この端末の記録を容量超過で外していて、それがリセットより後か。外した記録は中身がないので、
+ * そのあいだは手元の既読を下げない根拠にする(残った他の端末の記録だけで計算すると下がる)
+ */
+async function ownTrimAfterReset(db: SyncSqlDb, board: string, key: string, deviceId: string, latest: SyncPayload | null): Promise<boolean> {
+  const rows = await db.select<{ payload: string }>('SELECT payload FROM sync_records WHERE kind = $1 AND ref_board = $2 AND ref_thread = $3 AND ref_detail = $4 AND deleted = 1', [DEV_KIND, board, key, deviceId])
+  const p = rows[0] ? (parseStrictJson(rows[0].payload) as SyncPayload) : null
+  return p !== null && p.trim === true && (latest === null || compareHlc(p.hlc, latest.hlc) > 0)
 }
 
 /** まだ処理していない読みを足す。下がった値を書いたあとで、読んだ位置へ戻る動きを見せない */
@@ -309,6 +319,7 @@ abstract class ReadAdapterBase {
     if (rows.length === 0) return { statements: [], changed: false }
     const { latest, devs } = await readRecords(this.db, r.ref_board as string, key)
     const pos = readPosition(latest, devs)
+    const trimmed = await ownTrimAfterReset(this.db, r.ref_board as string, key, ctx.deviceId, latest)
     const resetWall = latest === null ? null : parseHlc(latest.hlc).wall
     const statements = []
     const dropped: DroppedThread[] = []
@@ -318,28 +329,29 @@ abstract class ReadAdapterBase {
       // 消す前の閲覧しかない履歴の行だけ消す(記録・未処理の読み・閲覧時刻のどれかがリセットより後なら読んでいる)。
       // 履歴にない行(お気に入りの確認などで取っただけ)は消さない。画面で開いているスレも消す(画面は適用の結果を受けて閉じる)。
       // 時計が 1 日以上先の端末のリセットは HLC が追わず、後に読んだ記録も前に見えるので、消さずに未読にするだけ
-      const canDelete = resetWall !== null && resetWall - ctx.now <= DAY_MS && pos === 0 && pending === 0
+      const canDelete = resetWall !== null && resetWall - ctx.now <= DAY_MS && pos === 0 && pending === 0 && !trimmed
       if (canDelete && x.read_at !== null && x.read_at <= (resetWall as number)) {
         for (const table of ['posts', 'threads']) statements.push({ sql: `DELETE FROM ${table} WHERE board_url = $1 AND key = $2`, params: [x.board_url, key] })
         dropped.push({ board_url: x.board_url, key })
         continue
       }
-      const next = Math.max(pos, pending, latest === null ? x.read_no : 0)
+      const next = Math.max(pos, pending, latest === null || trimmed ? x.read_no : 0)
       if (x.read_no !== next) statements.push({ sql: 'UPDATE threads SET read_no = $1 WHERE board_url = $2 AND key = $3', params: [next, x.board_url, key] })
     }
     return { statements, changed: statements.length > 0, ...(dropped.length > 0 && { dropped }) }
   }
 
   /** 不一致の検査は既読の位置だけを見る。ログを消す予定は適用のときだけに効く(あとで作られた行を数え続けないように) */
-  async differs(r: StoredRecord): Promise<boolean> {
+  async differs(r: StoredRecord, ctx: AdapterContext): Promise<boolean> {
     if (r.payload.trim === true) return false
     const key = r.ref_thread as string
     const rows = await localRows(this.db, r.ref_board, key)
     if (rows.length === 0) return false
     const { latest, devs } = await readRecords(this.db, r.ref_board as string, key)
     const pos = readPosition(latest, devs)
+    const trimmed = await ownTrimAfterReset(this.db, r.ref_board as string, key, ctx.deviceId, latest)
     for (const x of rows) {
-      const next = Math.max(pos, await pendingRead(this.db, x.board_url, key), latest === null ? x.read_no : 0)
+      const next = Math.max(pos, await pendingRead(this.db, x.board_url, key), latest === null || trimmed ? x.read_no : 0)
       if (x.read_no !== next) return true
     }
     return false

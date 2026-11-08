@@ -88,6 +88,7 @@ export class SyncController {
   private spaceHead: string | null = null
   /** 確認を待っている参加。答えが出るまで鍵も URL も書かない */
   private pendingJoin: { code: PairingCode; confirm: SyncConfirm } | null = null
+  private engineQueue: Promise<unknown> = Promise.resolve()
 
   constructor(private readonly deps: SyncControllerDeps) {
     this.t = new SyncTables(deps.db)
@@ -101,7 +102,14 @@ export class SyncController {
     return (await this.overrideUrl()) ?? this.deps.defaultServerUrl
   }
 
-  private async engine(): Promise<SyncEngine> {
+  /** 作り直しを順に行う。呼び出しが重なっても、同じ先へのエンジンは 1 つだけ(同じ leaseOwner の 2 つの周が並ばないように) */
+  private engine(): Promise<SyncEngine> {
+    const next = this.engineQueue.then(() => this.ensureEngine())
+    this.engineQueue = next.catch(() => undefined)
+    return next
+  }
+
+  private async ensureEngine(): Promise<SyncEngine> {
     const url = await this.serverUrl()
     if (this.engineValue === null || this.engineUrl !== url) {
       // 古い先へ走っている周を残さない
@@ -165,10 +173,7 @@ export class SyncController {
       return v === null ? null : Number(v)
     }
     const kinds = parseSwitches(await this.t.state('kinds'))
-    const off = [...offKindsOf(kinds)]
-    const marks = off.map((_, i) => `$${i + 1}`).join(', ')
-    // 切っている種類は送らないので数えない
-    const [row] = await this.deps.db.select<{ n: number }>(`SELECT (SELECT COUNT(*) FROM sync_records WHERE pending = 1${off.length > 0 ? ` AND kind NOT IN (${marks})` : ''}) + (SELECT COUNT(*) FROM sync_ops) AS n`, off)
+    const pending = await this.t.pendingCount([...offKindsOf(kinds)], this.deps.adapters.flatMap((a) => [...a.ops]))
     const master = await this.isMasterOn()
     const rawConfirm = await this.t.state('pending_confirm')
     const lastError = await this.t.state('last_error')
@@ -183,7 +188,7 @@ export class SyncController {
       kinds,
       state: !master ? 'off' : enabled ? (this.engineValue?.state === 'off' || !this.engineValue ? ((await this.t.state('phase')) ?? 'idle') : this.engineValue.state) : this.pendingJoin ? 'confirm' : 'off',
       space: enabled ? this.spaceHead : null,
-      pending: Number(row?.n ?? 0),
+      pending,
       lastError,
       lastErrorText: lastError === null ? null : syncMessage(lastError),
       lastPullAt: await num('last_pull_at'),

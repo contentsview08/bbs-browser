@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { twoChConnector } from '../src/twoch/connector'
-import { parseBbsMenuHtml, parseDatLine, parseSubjectTxt, splitAuthorId } from '../src/twoch/parse'
+import { parseBbsMenuHtml, parseBbsMenuJson, parseDatLine, parseSubjectTxt, splitAuthorId } from '../src/twoch/parse'
 import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types'
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)))
@@ -60,6 +60,14 @@ describe('parse', () => {
       { key: '1789358916', title: 'テスト用スレ Part1', postCount: 3 },
       { key: '1789000000', title: '(括弧つき) スレ', postCount: 1000 },
     ])
+  })
+
+  it('subject.txt と bbsmenu の同じスレ・同じ板は 1 つにする(先に出た方)', () => {
+    expect(parseSubjectTxt('1.dat<>a (1)\n2.dat<>b (2)\n1.dat<>a2 (3)\n').map((e) => [e.key, e.title])).toEqual([['1', 'a'], ['2', 'b']])
+    const menu = { menu_list: [{ category_content: [{ url: 'https://egg.5ch.io/software/', board_name: 'ソフト', category_name: 'PC' }] }, { category_content: [{ url: 'https://egg.5ch.io/software/', board_name: 'ソフト2', category_name: '他' }] }] }
+    expect(parseBbsMenuJson(JSON.stringify(menu))).toEqual([{ url: 'https://egg.5ch.io/software/', name: 'ソフト', category: 'PC' }])
+    const html = '<B>PC</B><A HREF=https://egg.5ch.io/software/>ソフト</A><B>他</B><A HREF=https://egg.5ch.io/software/>ソフト2</A>'
+    expect(parseBbsMenuHtml(html)).toEqual([{ url: 'https://egg.5ch.io/software/', name: 'ソフト', category: 'PC' }])
   })
 
   it('bbsmenu.html からカテゴリつきで板だけを拾う', () => {

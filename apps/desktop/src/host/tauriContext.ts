@@ -6,22 +6,46 @@ import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import type { ConnectorContext, HttpRequestOptions, HttpResponse } from '@bbs-browser/connectors'
 import { fetchHttpsFirst } from '../utils/httpsFirst'
+import { readCapped } from '../utils/cappedBody'
+import { isRedirectStatus, MAX_REDIRECTS, redirectAllowed } from '../utils/safeUrl'
 import { MONAZILLA_UA as USER_AGENT } from './userAgent'
 
 const READ_TIMEOUT_MS = 30_000
 const UPLOAD_TIMEOUT_MS = 180_000
+/** 応答の大きさの上限(スマホ版の Http.kt の READ_MAX_BYTES と同じ)。大きな dat でも数 MB に収まる */
+export const READ_MAX_BYTES = 16 * 1024 * 1024
 
 async function request(url: string, init: RequestInit, opts?: HttpRequestOptions): Promise<HttpResponse> {
   // ファイルを付けた multipart の本文(バイト列)も、そのまま送る
   // 返事のないサーバーで、更新や書き込みが止まったままにならないように。ファイルを送るときは長めに待つ
   const limit = init.body ? UPLOAD_TIMEOUT_MS : READ_TIMEOUT_MS
+  const signal = AbortSignal.timeout(limit)
+  const headers = { 'User-Agent': USER_AGENT, ...opts?.headers }
   try {
-    const res = await fetch(url, { ...init, headers: { 'User-Agent': USER_AGENT, ...opts?.headers }, signal: AbortSignal.timeout(limit) })
-    const headers: Record<string, string> = {}
+    let res: Response
+    if (init.method === 'GET') {
+      // GET のリダイレクトは 1 段ずつたどり、行き先を確かめる(noRedirect なら 3xx をそのまま返す)
+      const send = (u: string) => fetch(u, { ...init, headers, signal, maxRedirections: 0 })
+      let current = url
+      res = await send(current)
+      for (let i = 0; !opts?.noRedirect && isRedirectStatus(res.status); i++) {
+        const location = res.headers.get('location')
+        if (!location) break
+        const next = new URL(location, current).href
+        if (i >= MAX_REDIRECTS) throw new Error(`リダイレクトが多すぎます: ${url}`)
+        if (!redirectAllowed(current, next)) throw new Error(`家の中・自分の PC のアドレスへのリダイレクトは読みません: ${next}`)
+        void res.body?.cancel().catch(() => undefined)
+        current = next
+        res = await send(current)
+      }
+    } else {
+      res = await fetch(url, { ...init, headers, signal })
+    }
+    const out: Record<string, string> = {}
     res.headers.forEach((value, key) => {
-      headers[key.toLowerCase()] = value
+      out[key.toLowerCase()] = value
     })
-    return { status: res.status, headers, body: new Uint8Array(await res.arrayBuffer()) }
+    return { status: res.status, headers: out, body: await readCapped(res, READ_MAX_BYTES) }
   } catch (e) {
     if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw new Error(`サーバーから返事がありません(${limit / 1000} 秒)`)
     throw e
@@ -58,12 +82,14 @@ const getHttpsFirst = (url: string, opts?: HttpRequestOptions) => fetchHttpsFirs
 function get(url: string, opts?: HttpRequestOptions): Promise<HttpResponse> {
   if (opts?.headers && Object.keys(opts.headers).length > 0) return getHttpsFirst(url, opts)
   const now = Date.now()
-  const hit = recent.get(url)
+  // たどらない取り方は結果が違うので、別に覚える
+  const key = opts?.noRedirect ? `noRedirect ${url}` : url
+  const hit = recent.get(key)
   if (hit && now - hit.at < REUSE_MS) return hit.res
   const res = getHttpsFirst(url, opts)
-  recent.set(url, { at: now, res })
+  recent.set(key, { at: now, res })
   // 失敗したものは使い回さない
-  res.catch(() => recent.delete(url))
+  res.catch(() => recent.delete(key))
   // 古いものを捨てる
   for (const [k, v] of recent) if (now - v.at >= REUSE_MS) recent.delete(k)
   return res

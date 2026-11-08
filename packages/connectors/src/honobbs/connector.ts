@@ -57,6 +57,37 @@ function parts(boardUrl: string): { origin: string; boardId: string } {
 
 const boardUrlOf = (origin: string, boardId: string) => `${origin}/boards/${boardId}/`
 
+/** 家の中・自分の PC を指す名前とアドレス(数字の変わった書き方も含める) */
+function isPrivateHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.+$/, '')
+  if (h === 'localhost' || /\.(?:local|localhost|lan|home|internal|intranet|corp|home\.arpa)$/.test(h)) return true
+  if (h.startsWith('[') || !h.includes('.')) return true
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(h)
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])]
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224
+  }
+  return /^[0-9.]+$/.test(h) || /(?:^|\.)0x/i.test(h)
+}
+
+/**
+ * <meta name="bbs-api"> の行き先を受けてよいか。API の場所は相手のページが決めるので、
+ * 同じホストかその下(api.<ホスト>)か、家の中・自分の PC でないところだけにする(リンクを押しただけで家の中の機器へ通信しないように)
+ */
+export function apiBaseAllowed(origin: string, api: string): boolean {
+  let page: URL
+  let target: URL
+  try {
+    page = new URL(origin)
+    target = new URL(api)
+  } catch {
+    return false
+  }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') return false
+  if (target.hostname === page.hostname || target.hostname.endsWith(`.${page.hostname}`)) return true
+  return !isPrivateHost(target.hostname)
+}
+
 /** API の場所を見つける。web のページの <meta name="bbs-api"> を読み、なければ api.<ホスト> と決めてかかる */
 export async function apiBaseOf(origin: string, ctx: ConnectorContext): Promise<string> {
   const known = apiBases.get(origin)
@@ -69,7 +100,7 @@ export async function apiBaseOf(origin: string, ctx: ConnectorContext): Promise<
       read = true
       const html = ctx.decode(res.body, 'utf-8')
       const m = /<meta\s+name=["']bbs-api["']\s+content=["']([^"']+)["']/i.exec(html)
-      if (m && /^https?:\/\//.test(m[1])) base = m[1].replace(/\/+$/, '')
+      if (m && apiBaseAllowed(origin, m[1])) base = m[1].replace(/\/+$/, '')
     }
   } catch {
     // 読めなければ、決まった形にしておく
@@ -321,6 +352,7 @@ export const honoBbsConnector: Connector = {
     const { origin, boardId } = parts(board.url)
     const api = await apiBaseOf(origin, ctx)
     const threads: ApiThread[] = []
+    const seen = new Set<string>()
     let cursor: string | undefined
     // 何ページにも分かれていればたどる(板のスレの上限までなので、たどりきれる)
     for (let page = 0; page < 20; page++) {
@@ -329,7 +361,12 @@ export const honoBbsConnector: Connector = {
       if (res.status === 404) throw new Error(`hono-bbs の板が見つかりません(HTTP 404): ${board.url}`)
       if (res.status !== 200) throw new Error(`HTTP ${res.status}: ${url}`)
       const body = json<{ data: ApiThread[]; nextCursor?: string | null }>(res, ctx)
-      threads.push(...body.data)
+      // ページをたどる間にスレが上がると、次のページにも同じスレが出る。先に出た方(新しい位置)を残す
+      for (const t of body.data) {
+        if (seen.has(t.id)) continue
+        seen.add(t.id)
+        threads.push(t)
+      }
       if (!body.nextCursor) break
       cursor = body.nextCursor
     }

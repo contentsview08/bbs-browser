@@ -165,6 +165,16 @@ describe('スイッチ', () => {
     expect((await d.ctl.status()).pending).toBe(0)
   })
 
+  it('この版で処理できない操作は送信待ちに数えない', async () => {
+    const d = device(newServer())
+    await d.ctl.start()
+    d.raw.exec("INSERT INTO sync_ops (op, target, num, args, at_ms) VALUES ('future_op', 'x', NULL, NULL, 1)")
+    expect(await d.ctl.hasChanges()).toBe(false)
+    expect((await d.ctl.status()).pending).toBe(0)
+    await d.ops.favoriteThreadAdd(thread('1'))
+    expect(await d.ctl.hasChanges()).toBe(true)
+  })
+
   it('スイッチは同期の許可リストと設定の書き出しに入らない', () => {
     const allow = JSON.parse(readFileSync(new URL('../settings-allowlist.json', import.meta.url), 'utf-8'))
     const names = [...allow.items.map((i: { name: string }) => i.name), ...allow.board_meta.fields]
@@ -319,6 +329,14 @@ describe('前面の同期', () => {
     server.advance(10_001)
     await a.ctl.foreground()
     expect(a.c.requests.length).toBeGreaterThan(n)
+  })
+
+  it('起動直後に入口が重なっても、エンジンは 1 つだけ作る', async () => {
+    const d = device(newServer())
+    const make = () => (d.ctl as unknown as { engine(): Promise<object> }).engine()
+    const [a, b, c] = await Promise.all([make(), make(), make()])
+    expect(b).toBe(a)
+    expect(c).toBe(a)
   })
 
   it('通信できなくても手元は残り、戻ると追いつく', async () => {

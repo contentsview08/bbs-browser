@@ -26,6 +26,8 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 # sql_batch のトランザクション。tauri-plugin-sql が使っているものと同じ版
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "json", "runtime-tokio"] }
 fontdb = "0.24"
+# 置き場の窓から来たリンクがサイトの形に合うかを確かめる(web_upload.rs)。tauri の依存にあるものと同じ版
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 書き込みの Cookie を自分で持つ(post_http.rs)。plugin-http が使っているものと同じ版。

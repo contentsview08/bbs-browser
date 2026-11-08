@@ -107,7 +107,7 @@ function SettingsWindow({ store, settings, update }: { store: LogStore; settings
           .then(() => reloadAccounts())
           .then(() => broadcast('accounts-changed', null))
           .catch(backgroundError('アカウントの削除')),
-      onBackupDb: () => backupDatabase(store),
+      onBackupDb: () => backupDatabase(),
       onRestoreDb: restoreDatabase,
       onPruneLogs: () => callMain<number>('pruneLogs'),
     }),

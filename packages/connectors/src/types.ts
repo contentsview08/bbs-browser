@@ -21,6 +21,11 @@ export interface HttpRequestOptions {
    * ページを見たときに渡された Cookie が書き込みに要る掲示板(ふたば)で使う。excludeCookies は効かない
    */
   sameCookiesAsGet?: boolean
+  /**
+   * GET のリダイレクトをたどらず、3xx をそのまま返す。dat 落ちを 302 で知らせる板を見分けるため
+   * (たどると行き先の HTML を読み、dat 落ちに気付かない)
+   */
+  noRedirect?: boolean
 }
 
 /** サーバーに頼めるスレ一覧の並び順。勢い・新しい・古い・レスの多い・少ない順 */

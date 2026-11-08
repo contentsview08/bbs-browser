@@ -40,6 +40,9 @@ export const HEAD_BACKOFF_MAX_MS = 300_000
 export const PACE_MAX_MS = 3_600_000
 export const NET_SETTLE_MS = 5_000
 export const NET_MIN_GAP_MS = 30_000
+/** 窓の行き来(focus・blur)で周を回す最低の間隔。Alt+Tab を繰り返しても 1 分の要求の上限に当たらないように。
+ * 裏へ回る・閉じるときの送信はこの間隔によらない。PC の窓のきっかけだけに使うので sync-config.json には置かない */
+export const NUDGE_MIN_GAP_MS = 30_000
 export const IDLE_STOP_MS = 10 * 60 * 1000
 
 /** 打ち切った回数から次の待ち時間を決める。jitter は 0 以上 1 未満 */

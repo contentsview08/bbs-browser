@@ -580,7 +580,7 @@ obb-sync-admin-v1
 | `GET /head` 304 | 1(領域) | 1(meta。実体の起動直後は sqlite_master で + 1) | 0。1 時間に 1 回、台帳への報告と一緒に 1 行(そのとき台帳の呼び出しが + 1) |
 | `GET /head` 200 | 1 | 1 | 分の境目をまたいだか 10 分たっていれば 1。同じ分なら 0 |
 | `GET /changes` k 件 | 1 | 1 + k(+1。ページの先を見る) | 0(`/head` と同じ条件で 1。`since=0` の全件は 1) |
-| `POST /records` N 件(重複なし) | 1 | 1 + N + 1(request_id の確認) | 2N + 2(records 1 + version の索引 1 を N 件。tombstone は + 1。meta 1、requests 1)。16 件の採番ごとに requests の片づけで + 数行 |
+| `POST /records` N 件(重複なし) | 1 | 1 + N + 1(request_id の確認) | 2N + 2(records 1 + version の索引 1 を N 件。tombstone は + 1。meta 1、採番した要求だけ requests 1 行(すべて 409 なら 0))。16 件の採番ごとに requests の片づけで + 数行 |
 | `POST /records` 1 日の件数を超えた 429 | 1 | 1 + 1(request_id の確認) | 0(`/head` と同じ条件で 1) |
 | `POST /spaces` 新規 | 4〜(領域の存在確認・台帳の予約・領域の作成・台帳の確定。押し出しの確認が入れば + 最大 5) | 数行 | 領域: 表と索引の作成 + meta 1。台帳: spaces 1 + 索引 2、source_events 1 + 索引 2 + sqlite_sequence 1、確定の UPDATE 1 + 索引 1 |
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apiBaseOf, honoBbsConnector, formatDate } from '../src/honobbs/connector'
+import { apiBaseAllowed, apiBaseOf, honoBbsConnector, formatDate } from '../src/honobbs/connector'
 import { twoChConnector } from '../src/twoch/connector'
 import type { ConnectorContext, HttpResponse, ThreadSummary } from '../src/types'
 
@@ -65,6 +65,33 @@ describe('hono-bbs のコネクタ', () => {
     expect(await apiBaseOf(origin, ctx)).toBe('https://api.nometa.example.com/api/v1')
     expect(await apiBaseOf(origin, ctx)).toBe('https://api.nometa.example.com/api/v1')
     expect(got).toHaveLength(1)
+  })
+
+  it('API の場所: 家の中・自分の PC を指す印は受けず、決めつけにする', async () => {
+    for (const [i, api] of ['http://127.0.0.1:8787/api/v1', 'http://192.168.0.1/api', 'http://localhost/api/v1', 'http://router.lan/api', 'http://[::1]/api'].entries()) {
+      const origin = `https://evil${i}.example.com`
+      const { ctx } = fake({ [`${origin}/`]: { body: `<meta name="bbs-api" content="${api}">` } })
+      expect(await apiBaseOf(origin, ctx), api).toBe(`https://api.evil${i}.example.com/api/v1`)
+    }
+    // 同じホストとその下、ほかの公開のサイト(workers.dev に置いた API など)は受ける
+    expect(apiBaseAllowed('http://localhost:5173', 'http://localhost:8787/api/v1')).toBe(true)
+    expect(apiBaseAllowed('https://bbs.example.com', 'https://api.bbs.example.com/api/v1')).toBe(true)
+    expect(apiBaseAllowed('https://bbs.example.com', 'https://hono-bbs.x.workers.dev/api/v1')).toBe(true)
+    expect(apiBaseAllowed('https://bbs.example.com', 'javascript:alert(1)')).toBe(false)
+  })
+
+  it('スレ一覧のページをたどる間に上がったスレは 1 つにする', async () => {
+    const T2 = '7aefe762-1722-4b73-80f5-59db564142c7'
+    const th = (id: string) => ({ id, boardId: 'livejupter', title: id, postCount: 1, createdAt: '2026-09-19T19:02:29.239Z' })
+    // 別のサイトにする(API の場所はサイトごとに覚えるので、ほかの試験の数え方に響かないように)
+    const web = 'https://dup.example.com'
+    const { ctx } = fake({
+      [`${web}/`]: { body: page },
+      [`${API}/boards/livejupter/threads?limit=500`]: { body: { data: [th(T1), th(T2)], nextCursor: 'c' } },
+      [`${API}/boards/livejupter/threads?limit=500&cursor=c`]: { body: { data: [th(T2)], nextCursor: null } },
+    })
+    const list = await honoBbsConnector.listThreads({ ...board, url: `${web}/boards/livejupter/` }, ctx)
+    expect(list.map((t) => [t.key, t.order])).toEqual([[T1, 0], [T2, 1]])
   })
 
   it('日付は日本時間の 2ch の形にする', () => {

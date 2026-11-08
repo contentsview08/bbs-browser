@@ -123,6 +123,21 @@ describe('スレのログ', () => {
     expect(log?.posts).toHaveLength(1)
   })
 
+  it('新着がなくても、変わった続きの印は残す(したらばの過去ログ倉庫の印)', async () => {
+    await store.saveFetch(thread, { status: 'updated', posts: [post(1)], cursor: { lastNo: 1 } })
+    const r = { status: 'notModified' as const, posts: [], cursor: { lastNo: 1, kako: true }, archived: true }
+    await store.saveFetch(thread, r)
+    const log = await store.loadThread(thread)
+    expect(log).toMatchObject({ status: 'archived', cursor: { lastNo: 1, kako: true } })
+    expect(log?.posts).toHaveLength(1)
+    // 画面の控えも同じ印を持つ
+    const before = { title: 't', posts: [post(1)], cursor: { lastNo: 1 }, postCount: 1, readNo: 0, status: 'active' as const }
+    expect(applyFetch(before, thread, r)).toMatchObject({ status: 'archived', cursor: { lastNo: 1, kako: true } })
+    // 印が変わらなければ同じものを返す(画面を描き直さない)
+    const same = { ...before, cursor: { lastNo: 1 } }
+    expect(applyFetch(same, thread, { status: 'notModified', posts: [], cursor: { lastNo: 1 } })).toBe(same)
+  })
+
   it('同じ差分を二度保存しても(cursor 更新前に落ちた場合)重複しない', async () => {
     const r = { status: 'updated' as const, posts: [post(1), post(2)], cursor: { bytes: 100 } }
     await store.saveFetch(thread, r)
@@ -227,7 +242,7 @@ describe('自分の書き込み', () => {
 })
 
 describe('ログの削除', () => {
-  it('レス・既読位置・自分の書き込みを消し、ほかのスレは残す', async () => {
+  it('レス・既読位置を消し、自分の書き込みの印とほかのスレは残す', async () => {
     const other = { ...thread, key: '1' }
     await store.saveFetch(thread, { status: 'updated', posts: [post(1), post(2)], cursor: { bytes: 100 } })
     await store.saveFetch(other, { status: 'updated', posts: [post(1)], cursor: { bytes: 50 } })
@@ -236,7 +251,8 @@ describe('ログの削除', () => {
 
     await store.deleteThread(thread)
     expect(await store.loadThread(thread)).toBeNull()
-    expect(await store.getOwnPosts(thread)).toEqual([])
+    // 書き込み履歴が残るので、印も残す(同期を使うときとスマホ版と同じ)
+    expect(await store.getOwnPosts(thread)).toEqual([2])
     expect(await store.history()).toEqual([])
     expect((await store.loadThread(other))?.posts).toHaveLength(1)
   })
@@ -325,6 +341,39 @@ describe('お気に入りのスレ', () => {
     ])
     await store.removeFavoriteThread(other)
     expect(await store.listFavoriteThreads()).toHaveLength(1)
+  })
+})
+
+describe('板の URL の書き方の違い(同期で入る行は 5ch.io・https)', () => {
+  const local: ThreadSummary = { connectorId: '2ch-compat', boardUrl: 'http://egg.5ch.net/software/', key: '1700000000', title: 't', postCount: 0, order: 0 }
+  const synced: ThreadSummary = { ...local, boardUrl: 'https://egg.5ch.io/software/' }
+
+  it('自分のレスの印は、どの書き方で入っていても外せる。ログを消しても印は残す', async () => {
+    await store.saveFetch(local, { status: 'updated', posts: [post(1)], cursor: null })
+    await store.addOwnPost(synced, 1)
+    await store.addOwnPost(synced, 2)
+    await store.deleteThread(local)
+    expect(await store.getOwnPosts(local)).toEqual([1, 2])
+    await store.removeOwnPost(local, 1)
+    expect(await store.getOwnPosts(local)).toEqual([2])
+  })
+
+  it('古いログの整理は、書き方の違うお気に入り・自分のレスのスレも残す', async () => {
+    const other = { ...local, key: '1700000001' }
+    await store.saveFetch(local, { status: 'updated', posts: [post(1)], cursor: null }, 100)
+    await store.saveFetch(other, { status: 'updated', posts: [post(1)], cursor: null }, 100)
+    await store.addFavoriteThread(synced)
+    await store.addOwnPost({ ...synced, key: other.key }, 1)
+    expect(await store.pruneLogs(1000)).toBe(0)
+  })
+
+  it('お気に入りの一覧は、書き方の違うログの既読とレス数を出す。行が 2 つあっても 1 つだけ出す', async () => {
+    await store.addFavoriteThread(synced)
+    await store.saveFetch(local, { status: 'updated', posts: [post(1), post(2)], cursor: null })
+    await store.markRead(local, 2)
+    await store.saveFetch({ ...local, boardUrl: 'https://egg.5ch.net/software/' }, { status: 'updated', posts: [post(1)], cursor: null })
+    const list = await store.listFavoriteThreads()
+    expect(list.map((f) => [f.thread.key, f.postCount, f.readNo])).toEqual([[local.key, 2, 2]])
   })
 })
 

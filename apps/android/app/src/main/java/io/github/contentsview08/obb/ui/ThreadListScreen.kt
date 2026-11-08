@@ -1,5 +1,7 @@
 package io.github.contentsview08.obb.ui
 
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.background
@@ -187,11 +189,15 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
             list = unreadFirstOrder(list) { it.key in top }
         }
-        if (keywords.isNotEmpty()) {
-            val (hit, rest) = list.partition { t -> keywords.any { t.title.contains(it, ignoreCase = true) } }
-            list = hit + rest
-        }
+        if (keywords.isNotEmpty()) list = keywordGroups(list, keywords).flatMap { it.second }
         list.filterNot { it.announcement } + list.filter { it.announcement }
+    }
+    // キーワードのまとまりの頭に出す帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)
+    val bandBefore = remember(shown, keywords) {
+        if (keywords.isEmpty()) emptyMap() else keywordGroups(shown, keywords).filter { it.second.isNotEmpty() }.let { groups ->
+            if (groups.none { it.first != null }) emptyMap()
+            else groups.associate { (k, ts) -> ts.first().key to ListBand(k ?: "その他のスレ", ts.size, accent = k != null) }
+        }
     }
 
     var menuFor by remember { mutableStateOf<ThreadSummary?>(null) }
@@ -336,6 +342,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                     ),
                 ) {
                     items(shown, key = { it.key }, contentType = { 0 }) { t ->
+                        bandBefore[t.key]?.let { KeywordBand(it) }
                         ThreadRow(
                             t, pinchScale ?: prefs.listFontScale, page.states[t.key], momentum(t, now), rank[t.key] ?: 0.0, now,
                             isNew = page.newSince?.let { s -> (t.createdAt ?: 0) > s } == true, isFavorite = t.id in favIds, thumbAllowed = thumbAllowed,
@@ -642,5 +649,37 @@ fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, on
                 }
             },
         )
+    }
+}
+
+/** スレ一覧の帯(キーワードのまとまりの頭)。PC の Band と同じ見た目 */
+class ListBand(val label: String, val count: Int, val accent: Boolean)
+
+/**
+ * キーワードごとにスレをまとめる。先のキーワードに当たったスレは後のキーワードに数えない。
+ * 戻りは (キーワード, スレ) の並びで、最後に (null, 残り)。並びは元の一覧の順
+ */
+internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>): List<Pair<String?, List<ThreadSummary>>> {
+    val taken = HashSet<String>()
+    val groups = ArrayList<Pair<String?, List<ThreadSummary>>>()
+    for (k in keywords) {
+        val hits = list.filter { it.key !in taken && it.title.contains(k, ignoreCase = true) }
+        hits.forEach { taken += it.key }
+        if (hits.isNotEmpty()) groups += k to hits
+    }
+    groups += null to list.filter { it.key !in taken }
+    return groups
+}
+
+@Composable
+private fun KeywordBand(b: ListBand) {
+    Row(
+        Modifier.fillMaxWidth().background(if (b.accent) Palette.accentWash else Palette.surface2).padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (b.accent) Icons.Filled.Sell else Icons.AutoMirrored.Filled.List, null, Modifier.size(16.dp), tint = if (b.accent) Palette.accent else Palette.textMuted)
+        Spacer(Modifier.width(6.dp))
+        Text(b.label, color = if (b.accent) Palette.accent else Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(b.count.toString(), color = if (b.accent) Palette.accent else Palette.textMuted, fontSize = 12.sp)
     }
 }

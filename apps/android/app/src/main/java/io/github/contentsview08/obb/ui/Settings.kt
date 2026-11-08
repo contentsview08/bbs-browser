@@ -385,6 +385,11 @@ private fun HistoryPage(vm: AppViewModel) {
     }
 }
 
+/** 選べるもの。表示スタイルのシートの「レスの表示」と同じ言葉にするため、ここにまとめる */
+internal val DATE_STYLES = listOf("md_w_hms" to "月日・曜日・時刻(11/02(月) 19:01:15)", "md_hm" to "月日と時分(11/02 19:01)", "full" to "すべて(年・秒の下の桁まで)")
+internal val ID_POSITIONS = listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")
+internal val HEAT_STYLES = listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色")
+
 @Composable
 private fun ThreadPage(vm: AppViewModel) {
     val p = vm.prefs
@@ -396,20 +401,14 @@ private fun ThreadPage(vm: AppViewModel) {
         SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
         if (LocalAdvanced.current) SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行にまとめます") { p.tidyBlankLines = it }
         SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
-        ChoiceRow(
-            "日時の出し方", p.dateStyle,
-            listOf("md_w_hms" to "月日・曜日・時刻(11/02(月) 19:01:15)", "md_hm" to "月日と時分(11/02 19:01)", "full" to "すべて(年・秒の下の桁まで)"),
-        ) { p.dateStyle = it }
+        ChoiceRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
-        ChoiceRow("ID の位置", p.idPosition, listOf("header" to "日時の後ろ", "topRight" to "レスの右上", "bottomRight" to "レスの右下")) { p.idPosition = it }
+        ChoiceRow("ID の位置", p.idPosition, ID_POSITIONS) { p.idPosition = it }
         SwitchRow("名前欄を目立たなくする", p.nameSubtle, desc = "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます") { p.nameSubtle = it }
         SwitchRow("ワッチョイを短く出す", p.watchoiShort, desc = "「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)") { p.watchoiShort = it }
         SwitchRow("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi, desc = "Discord 風・LINE 風のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます") { p.iconFromWatchoi = it }
-        ChoiceRow(
-            "人気のレスの示し方", p.heatStyle,
-            listOf("left" to "左の帯", "right" to "右の帯", "text" to "本文の色"),
-        ) { p.heatStyle = it }
+        ChoiceRow("人気のレスの示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
     }
     if (LocalAdvanced.current) Group("リンク") {

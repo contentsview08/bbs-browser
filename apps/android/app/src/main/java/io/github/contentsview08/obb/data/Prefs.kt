@@ -271,6 +271,8 @@ class Prefs(context: Context) {
     var showAdvanced by pref("showAdvanced", false)
     /** 過去のスレの画面で最後に見たタブ(unread / history / fav / posts) */
     var pastTab by pref("pastTab", "history")
+    /** 表示スタイルのシートで最後に見たタブ(look / size / post)。端末ごとの状態なので同期しない */
+    var styleTab by pref("styleTab", "look")
     /** NG のレスの見せ方: aborn(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示。スマホだけ) */
     var ngMode by pref("ngMode", "aborn")
     /** 2 つ以上続いたあぼーんを 1 行にまとめる(PC 版と同じ既定) */

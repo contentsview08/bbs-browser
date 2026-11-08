@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -70,8 +71,8 @@ import kotlin.math.roundToInt
 
 /**
  * 表示スタイルのシート(︙ の「表示スタイル」)。下から半分ほどの高さで出し、上に見えている画面で変えた結果を見ながら合わせられるよう、背景は暗くしない。
- * 上から テーマ・差し色・レスの見た目(スレ表示だけ)・文字と余白。下へなぞるか、外を押すか、戻るで閉じる。
- * thread: スレ表示から開いたか(スレ一覧はレスの見た目に関係しないので、その行を出さない)
+ * 上のタブで「見た目」(テーマ・差し色・レスの見た目)・「文字と余白」・「レスの表示」を切り替える。下へなぞるか、外を押すか、戻るで閉じる。
+ * thread: スレ表示から開いたか(スレ一覧はレスに関係しないので、レスの見た目の行と「レスの表示」のタブを出さない)
  */
 @Composable
 fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
@@ -94,7 +95,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
     WithoutBaseFont { FullWindow(onDismiss = { close() }) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
-            // よく使う上の 3 つ(テーマ・差し色・レスの見た目)が最初に収まる高さで、上には画面が半分ほど見えるように
+            // 「見た目」のタブ(テーマ・差し色・レスの見た目)が収まる高さで、上には画面が半分ほど見えるように
             val sheetHeight = (maxHeight * 0.5f).coerceIn(minOf(380.dp, maxHeight - 80.dp), maxHeight - 80.dp)
             val sheetPx = with(density) { sheetHeight.toPx() }
             // 指を離したとき: 3 割より下へずらしていたら閉じる。足りなければ戻す
@@ -148,34 +149,97 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                     ),
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(width = 36.dp, height = 4.dp).background(Palette.textMuted.copy(alpha = 0.45f * bg), CircleShape)) }
-                Column(Modifier.fillMaxWidth().weight(1f).nestedScroll(nested).verticalScroll(rememberScrollState(), enabled = !dragging).padding(bottom = 12.dp)) {
-                    Column(Modifier.graphicsLayer { alpha = bg }) {
-                        SheetLabel("テーマ")
-                        SchemeRow(p)
-                        SheetLabel("差し色")
-                        AccentRow(p)
-                        if (thread) {
-                            SheetLabel("レスの見た目")
-                            PostStyleRow(p)
+                val tabs = if (thread) STYLE_TABS else STYLE_TABS.filter { it.first != "post" }
+                val tab = p.styleTab.takeIf { k -> tabs.any { it.first == k } } ?: tabs.first().first
+                SheetTabs(tabs, tab, Modifier.graphicsLayer { alpha = bg }) { p.styleTab = it }
+                // 高さはシートで決めてあるので、タブを変えても変わらない。はみ出す分は中でスクロールする(タブごとに一番上から)
+                androidx.compose.runtime.key(tab) {
+                    Column(Modifier.fillMaxWidth().weight(1f).nestedScroll(nested).verticalScroll(rememberScrollState(), enabled = !dragging).padding(top = 4.dp, bottom = 12.dp)) {
+                        when (tab) {
+                            "size" -> Column(Modifier.padding(horizontal = 16.dp)) { androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides sizeDrag) {
+                                if (thread) {
+                                    FontSizeSlider("本文の文字", p.bodyScale, POST_BODY_BASE_PX) { p.bodyScale = it }
+                                    FontSizeSlider("レスの頭の文字", p.postHeadScale, POST_HEAD_BASE_PX) { p.postHeadScale = it }
+                                    SizeSlider("行間", p.lineHeight, 1.0f..3.0f, 39, "%.2f".format(p.lineHeight), POST_LINE_HEIGHT) { p.lineHeight = if (it == POST_LINE_HEIGHT) it else snapTo(it, 20) }
+                                    SizeSlider("レスの上下の余白", p.postPad.toFloat(), 0f..40f, 39, "${p.postPad}", POST_PAD_PX.toFloat()) { p.postPad = snapInt(it) }
+                                } else {
+                                    FontSizeSlider("スレ一覧の文字", p.listFontScale, 15) { p.listFontScale = it }
+                                    SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..40f, 39, "${p.listPad}", LIST_PAD_PX.toFloat()) { p.listPad = snapInt(it) }
+                                }
+                                BarSliders(p)
+                            } }
+                            "post" -> PostDisplayTab(p)
+                            else -> {
+                                SheetLabel("テーマ")
+                                SchemeRow(p)
+                                SheetLabel("差し色")
+                                AccentRow(p)
+                                if (thread) {
+                                    SheetLabel("レスの見た目")
+                                    PostStyleRow(p)
+                                }
+                            }
                         }
-                        SheetLabel("文字と余白")
                     }
-                    Column(Modifier.padding(horizontal = 16.dp)) { androidx.compose.runtime.CompositionLocalProvider(LocalSizeDrag provides sizeDrag) {
-                        if (thread) {
-                            FontSizeSlider("本文の文字", p.bodyScale, POST_BODY_BASE_PX) { p.bodyScale = it }
-                            FontSizeSlider("レスの頭の文字", p.postHeadScale, POST_HEAD_BASE_PX) { p.postHeadScale = it }
-                            SizeSlider("行間", p.lineHeight, 1.0f..3.0f, 39, "%.2f".format(p.lineHeight), POST_LINE_HEIGHT) { p.lineHeight = if (it == POST_LINE_HEIGHT) it else snapTo(it, 20) }
-                            SizeSlider("レスの上下の余白", p.postPad.toFloat(), 0f..40f, 39, "${p.postPad}", POST_PAD_PX.toFloat()) { p.postPad = snapInt(it) }
-                        } else {
-                            FontSizeSlider("スレ一覧の文字", p.listFontScale, 15) { p.listFontScale = it }
-                            SizeSlider("スレの上下の余白", p.listPad.toFloat(), 0f..40f, 39, "${p.listPad}", LIST_PAD_PX.toFloat()) { p.listPad = snapInt(it) }
-                        }
-                        BarSliders(p)
-                    } }
                 }
             }
         }
     } }
+}
+
+/** シートのタブ(保存の名前と見出し) */
+private val STYLE_TABS = listOf("look" to "見た目", "size" to "文字と余白", "post" to "レスの表示")
+
+/** タブの帯。スレ表示の絞り込みのタブと同じく、選んでいるタブは差し色の字と下線と淡い面 */
+@Composable
+private fun SheetTabs(tabs: List<Pair<String, String>>, current: String, modifier: Modifier, onSelect: (String) -> Unit) {
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth()) {
+            for ((k, name) in tabs) {
+                val on = k == current
+                Box(
+                    Modifier.weight(1f).background(if (on) Palette.accentWash else Color.Transparent).clickable { onSelect(k) }.heightIn(min = 40.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(name, color = if (on) Palette.accent else Palette.textMuted, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else null, maxLines = 1)
+                    if (on) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(Palette.accent))
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
+    }
+}
+
+/**
+ * 「レスの表示」: 設定の「スレ表示」の本文・リンクにある、レスの出し方の項目(言葉も同じ)。
+ * 後ろの画面ですぐ確かめられるので、説明は省いて 1 行ずつに詰める
+ */
+@Composable
+private fun PostDisplayTab(p: Prefs) {
+    SheetSwitch("名無しの名前を省く", p.omitNoname) { p.omitNoname = it }
+    SheetSwitch("名前欄を目立たなくする", p.nameSubtle) { p.nameSubtle = it }
+    SheetSwitch("スレ主に「主」の印", p.highlightOp) { p.highlightOp = it }
+    SheetLabel("日時の出し方")
+    ChipRow(DATE_STYLES, p.dateStyle) { p.dateStyle = it }
+    SheetSwitch("ID を短く出す", p.idShort) { p.idShort = it }
+    SheetSwitch("ID ごとに色を付ける", p.idStyle == "color") { p.idStyle = if (it) "color" else "none" }
+    SheetLabel("ID の位置")
+    ChipRow(ID_POSITIONS, p.idPosition) { p.idPosition = it }
+    SheetSwitch("ワッチョイを短く出す", p.watchoiShort) { p.watchoiShort = it }
+    SheetSwitch("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi) { p.iconFromWatchoi = it }
+    SheetLabel("人気のレスの示し方")
+    ChipRow(HEAT_STYLES, p.heatStyle) { p.heatStyle = it }
+    SheetSwitch("空行を整える", p.tidyBlankLines) { p.tidyBlankLines = it }
+    SheetSwitch("URL を短く見せる", p.urlShorten) { p.urlShorten = it }
+}
+
+@Composable
+private fun SheetSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.heightIn(min = 44.dp).padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), color = Palette.textBody, fontSize = 14.sp, lineHeight = 18.sp)
+        Spacer(Modifier.width(10.dp))
+        androidx.compose.material3.Switch(checked, onChange, colors = accentSwitchColors())
+    }
 }
 
 @Composable
@@ -233,18 +297,22 @@ private fun AccentRow(p: Prefs) {
     }
 }
 
-/** レスの見た目の切り替え(POST_STYLES の順に横並び)。名前の括弧の中の説明は、狭いので省く */
+/** レスの見た目の切り替え(POST_STYLES の順に横並び) */
 @Composable
-private fun PostStyleRow(p: Prefs) {
+private fun PostStyleRow(p: Prefs) = ChipRow(POST_STYLES, p.postStyle) { p.postStyle = it }
+
+/** 選ぶものを横並びの札で。名前の括弧の中の説明は、狭いので省く */
+@Composable
+private fun ChipRow(options: List<Pair<String, String>>, value: String, onPick: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((k, name) in POST_STYLES) {
-            val on = p.postStyle == k
+        for ((k, name) in options) {
+            val on = value == k
             val shape = RoundedCornerShape(16.dp)
             Text(
                 name.substringBefore('('),
                 Modifier.clip(shape).background(if (on) Palette.accent else Palette.surface2, shape)
                     .border(1.dp, if (on) Palette.accent else Palette.border, shape)
-                    .clickable { p.postStyle = k }.padding(horizontal = 11.dp, vertical = 7.dp),
+                    .clickable { onPick(k) }.padding(horizontal = 11.dp, vertical = 7.dp),
                 color = if (on) Palette.accentText else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else null, maxLines = 1,
             )
         }

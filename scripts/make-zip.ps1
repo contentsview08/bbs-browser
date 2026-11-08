@@ -14,13 +14,14 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe $stage
 @"
 このファイルが OBB.exe と同じフォルダにあると、ログ・設定をこのフォルダの data に置きます(ZIP 版の印)。
-消すと、インストーラー版と同じ %APPDATA%\io.github.contentsview08.obb\ を使います。
+data フォルダがあるときも ZIP 版として動きます。インストーラー版と同じ %APPDATA%\io.github.contentsview08.obb\ を使うには、このファイルと data の両方を消します。
 "@ | Set-Content -Encoding UTF8 (Join-Path $stage 'portable.txt')
 @"
 OBB $version(ZIP 版)
 
 このフォルダがそのままインストール先です。OBB.exe を起動するだけで使えます(インストールは要りません)。
-ログ・既読・設定・Cookie はこのフォルダの data に入ります。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります。
+ログ・既読・設定・Cookie・画面のデータ(WebView2)・画像のキャッシュは、このフォルダの data に入ります。フォルダごと消せばまっさらになり、別の場所に展開すれば別のデータになります。
+同期の鍵だけは Windows の資格情報に置きます(展開した場所ごとに別の鍵。同期をやめると消えます)。
 Windows 10/11 に入っている WebView2 を使います。起動しないときは、Microsoft の「WebView2 ランタイム」を入れてください。
 "@ | Set-Content -Encoding UTF8 (Join-Path $stage 'はじめにお読みください.txt')
 

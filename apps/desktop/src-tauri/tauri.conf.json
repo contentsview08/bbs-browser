@@ -59,7 +59,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": "all",
+    "targets": ["nsis", "deb", "appimage"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -68,7 +68,7 @@
     ],
     "publisher": "contentsview08",
     "shortDescription": "コネクタで掲示板を読む専用ブラウザ",
-    "longDescription": "5ch・したらば・ふたばなどを、掲示板ごとのコネクタで読む PC 向けの専用ブラウザ。外付けのコネクタで自作の掲示板も読める",
+    "longDescription": "5ch・したらば・まちBBS・ふたば・hono-bbs などを、掲示板ごとに組み込んだコネクタで読む PC 向けの専用ブラウザ",
     "category": "Utility",
     "linux": {
       "deb": {
@@ -90,9 +90,6 @@
           "Japanese"
         ],
         "displayLanguageSelector": false
-      },
-      "wix": {
-        "language": "ja-JP"
       }
     }
   },

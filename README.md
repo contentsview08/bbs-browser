@@ -87,7 +87,7 @@ npm run dev      # 初回は Rust のビルドで数分かかる
 ```powershell
 npm test         # コネクタ・logstore・desktop のテスト(vitest)
 npm run typecheck
-npm run build    # インストーラー(MSI / NSIS)を作る
+npm run build    # インストーラー(NSIS)を作る
 ```
 
 本番の掲示板への試し書き込みはテストでは行わない(偽サーバーで確かめる)。
@@ -107,8 +107,8 @@ gradlew.bat testDebugUnitTest
 ```powershell
 npm install
 # 署名の鍵を渡す(渡さないと、インストーラーを作ったあとの署名で失敗する)
-$env:CI = 'true'; $env:TAURI_SIGNING_PRIVATE_KEY = "$env:USERPROFILE\.tauri\obb-updater.key"
-npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)と msi ができる
+$env:CI = 'true'; $env:TAURI_SIGNING_PRIVATE_KEY = "$env:USERPROFILE\.obb\obb-updater.key"
+npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)ができる
 ```
 
 - インストーラーは、管理者の権限なしで、使う人のフォルダに入れる(NSIS の currentUser)。WebView2 がなければ入れる
@@ -125,7 +125,7 @@ npm run build    # apps/desktop/src-tauri/target/release/bundle/ に nsis(.exe)�
 | ファイル | いつ | 何をする |
 |---|---|---|
 | `ci.yml` | main への push・PR | 型チェックとテスト(Linux。Android の単体テストも) |
-| `release.yml` | 版の印(タグ `v*`)を push したとき | テスト → Windows と Linux でビルド → setup.exe・msi・ZIP・.deb・AppImage・latest.json・署名を Releases に**下書き**で置く。確かめてから公開する |
+| `release.yml` | 版の印(タグ `v*`)を push したとき | テスト → Windows と Linux でビルド → setup.exe・ZIP・.deb・AppImage・latest.json・署名を Releases に**下書き**で置く。確かめてから公開する |
 | `pages.yml` | main で `site/` が変わったとき | 公式サイトを GitHub Pages に出す |
 
 リリースの手順: `npm run version:set -- 0.2.0` → CHANGELOG と `docs/releases/v0.2.0.md` を書く → コミット → `git tag v0.2.0` → `git push origin main --tags`。
@@ -145,4 +145,4 @@ npm run version:set -- 0.2.0   # apps/desktop/package.json・Cargo.toml と、�
 
 スマホ版の版は `npm run version:set` では変わらない。`apps/android/app/build.gradle.kts` の `versionName` を手でそろえ、`versionCode` を 1 つ増やす。
 
-上げたら `CHANGELOG.md` に書き足し、`git tag v0.2.0` で印を付ける。msi は版に `-beta` などの文字を入れられないので、数字だけにする。
+上げたら `CHANGELOG.md` に書き足し、`git tag v0.2.0` で印を付ける。版は数字だけにする(`x.y.z`)。

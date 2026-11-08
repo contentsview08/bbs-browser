@@ -36,10 +36,16 @@ impl PostCookies {
         Self { store: Mutex::new(store), path }
     }
 
-    /// 期限のない Cookie(ブラウザを閉じたら消えるもの)も含めて保存する。次に起動したときも書き込みの認証が続くように
+    /// 期限のない Cookie(ブラウザを閉じたら消えるもの)も含めて保存する。次に起動したときも書き込みの認証が続くように。
+    /// 一時ファイルに書いてから置き換える(途中で落ちて壊れたファイルは、次の起動で黙って空として読まれ、認証が全部消える)
     fn save(&self, store: &CookieStore) {
-        if let Ok(mut f) = std::fs::File::create(&self.path) {
-            let _ = cookie_store::serde::json::save_incl_expired_and_nonpersistent(store, &mut f);
+        let mut json = Vec::new();
+        if cookie_store::serde::json::save_incl_expired_and_nonpersistent(store, &mut json).is_err() {
+            return;
+        }
+        let tmp = self.path.with_extension("tmp");
+        if std::fs::write(&tmp, json).is_ok() {
+            let _ = std::fs::rename(&tmp, &self.path);
         }
     }
 }

@@ -1,11 +1,10 @@
-// 更新の確かめと取り込み(PC)。手動の確認は、GitHub の最新のリリースを見て版を比べ、インストーラーを落として開く。
-// 起動時の自動更新(runAutoUpdate)は、リリースの latest.json を見て、署名を確かめてから入れ替える。
-// 公開リポジトリなので、トークンなしで GitHub の API を読む。
-// 落とすのは Rust 側(update.rs。一時フォルダに置いて開く)
+// 更新の確かめと取り込み(PC)。版の比べと説明は、GitHub の最新のリリースを見る(公開リポジトリなので、トークンなしで API を読む)。
+// 入れ替えは手動でも起動時でも plugin-updater だけで行う(latest.json の URL を落とし、minisign の署名を確かめてから入れる)。
+// 画面から好きな URL のインストーラーを落として開ける口を作らないため
 import { fetch } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { check } from '@tauri-apps/plugin-updater'
+import { check, type Update } from '@tauri-apps/plugin-updater'
 
 export const canCheckUpdate = true
 
@@ -19,8 +18,6 @@ export interface ReleaseInfo {
   notes: string
   /** リリースのページ */
   url: string
-  /** Windows のインストーラー(.exe か .msi)。なければ undefined */
-  asset?: { name: string; url: string; size: number }
 }
 
 const HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'bbs-browser' }
@@ -30,21 +27,8 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: HEADERS })
   if (res.status === 404) throw new Error('リリースが見つかりません(まだ 1 つも公開していません)')
   if (!res.ok) throw new Error(`GitHub から取れませんでした(${res.status})`)
-  const j = (await res.json()) as { tag_name: string; body?: string; html_url: string; assets?: { name: string; url: string; size: number }[] }
-  // インストーラーを落として開くのは Windows だけ。Linux はリリースのページを開く
-  const assets = /windows/i.test(navigator.userAgent) ? (j.assets ?? []) : []
-  const asset = assets.find((a) => /-setup\.exe$/i.test(a.name)) ?? assets.find((a) => /\.(exe|msi)$/i.test(a.name))
-  return {
-    version: j.tag_name.replace(/^v/i, ''),
-    notes: j.body ?? '',
-    url: j.html_url,
-    asset: asset ? { name: asset.name, url: asset.url, size: asset.size } : undefined,
-  }
-}
-
-/** インストーラーを落として開く(インストーラーが立ち上がる。アプリは利用者が閉じる) */
-export function installUpdate(asset: NonNullable<ReleaseInfo['asset']>): Promise<string> {
-  return invoke<string>('download_update', { url: asset.url, name: asset.name })
+  const j = (await res.json()) as { tag_name: string; body?: string; html_url: string }
+  return { version: j.tag_name.replace(/^v/i, ''), notes: j.body ?? '', url: j.html_url }
 }
 
 /** 自動更新の進み具合 */
@@ -67,13 +51,10 @@ const DOWNLOAD_STALL_MS = 30000
 export const canSelfUpdate = () => invoke<boolean>('can_self_update')
 
 /**
- * 起動時の自動更新。新しい版があれば落として入れ替え、起動し直す(Windows は入れ替えの時点でこのアプリが終わり、インストーラーが起動し直す)。
- * 入れ替えられない入れ方(ZIP 版・.deb)では何もしない。つながらない・失敗したときは Error で返すので、呼ぶ側はそのまま使い続ける
+ * 署名を確かめながら落として入れ替え、起動し直す(Windows は入れ替えの時点でこのアプリが終わり、インストーラーが起動し直す)。
+ * 落とすのが止まったら Error
  */
-export async function runAutoUpdate(onProgress: (p: AutoUpdateProgress) => void): Promise<void> {
-  if (!(await canSelfUpdate())) return
-  const update = await check({ timeout: CHECK_TIMEOUT_MS })
-  if (!update) return
+async function install(update: Update, onProgress: (p: AutoUpdateProgress) => void): Promise<void> {
   const version = update.version
   onProgress({ version })
   await new Promise<void>((resolve, reject) => {
@@ -99,6 +80,28 @@ export async function runAutoUpdate(onProgress: (p: AutoUpdateProgress) => void)
   })
   await update.install()
   await relaunch()
+}
+
+/**
+ * 起動時の自動更新。新しい版があれば落として入れ替え、起動し直す。
+ * 入れ替えられない入れ方(ZIP 版・.deb)では何もしない。つながらない・失敗したときは Error で返すので、呼ぶ側はそのまま使い続ける
+ */
+export async function runAutoUpdate(onProgress: (p: AutoUpdateProgress) => void): Promise<void> {
+  if (!(await canSelfUpdate())) return
+  const update = await check({ timeout: CHECK_TIMEOUT_MS })
+  if (update) await install(update, onProgress)
+}
+
+/**
+ * 手動の更新(設定 → このアプリについて)。自動更新と同じ道で、署名を確かめてから入れ替える。
+ * 入れ替えられない入れ方では呼ばない(画面はリリースのページを開く)
+ */
+export async function installUpdate(onProgress: (p: AutoUpdateProgress) => void): Promise<void> {
+  if (!(await canSelfUpdate())) throw new Error('この入れ方は自動で入れ替えられません。リリースのページから入れてください')
+  const update = await check({ timeout: CHECK_TIMEOUT_MS })
+  // リリースの公開から latest.json が読めるまでに少し間がある
+  if (!update) throw new Error('入れ替えられる新しい版がまだありません。少し待ってからもう一度試してください')
+  await install(update, onProgress)
 }
 
 /** 版の比べ(1.2.3 の形。a が b より新しければ 1) */

@@ -14,7 +14,6 @@ mod sql_batch;
 mod sync_http;
 mod sync_key;
 mod sync_start;
-mod update;
 mod web_upload;
 #[cfg(desktop)]
 mod window_state;
@@ -27,10 +26,11 @@ use media_cache::MediaCache;
 // ふつう(インストーラー版)は OS の決まりの場所(%APPDATA%\<identifier>\)。
 // ZIP 版は「展開したフォルダがインストール先」: exe と同じフォルダに portable.txt か data フォルダがあれば、
 // DB・設定・Cookie・背景画像をそのフォルダの data\ に置く(フォルダごと消せばまっさら、別の場所に展開すれば別のデータ)。
+// Tauri とプラグインが自分で決める置き場(WebView2 のデータ・plugin-http の Cookie・キャッシュ)も、run() で data\ に寄せる。
 // 置き場を決めるのはここだけ。ほかの所は app_data_dir()/app_config_dir() を直に呼ばず、data_dir()/db_dir() を使う
 
 /// ZIP 版(ポータブル)のデータフォルダ。exe の隣に portable.txt か data\ があればそこ(なければ None)
-fn portable_dir() -> Option<PathBuf> {
+pub(crate) fn portable_dir() -> Option<PathBuf> {
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     let data = exe_dir.join("data");
     if data.is_dir() || exe_dir.join("portable.txt").is_file() {
@@ -91,7 +91,7 @@ fn can_self_update() -> bool {
 }
 
 /// DB・バックアップの置き場(tauri-plugin-sql の既定は app_config_dir)
-fn db_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn db_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     match portable_dir() {
         Some(d) => Ok(d),
         None => app.path().app_config_dir().map_err(|e| e.to_string()),
@@ -379,7 +379,7 @@ async fn save_image(app: tauri::AppHandle, cache: tauri::State<'_, Arc<MediaCach
     let cache = cache.inner().clone();
     // 自動で読まないアドレスは、押して読むことにしたものだけがここへ来る。キャッシュには置かない
     let (source, from_cache, temporary) = if cache.is_allowed(&url) {
-        let (path, hit) = cache.ensure(&url).await?;
+        let (path, hit) = cache.ensure(&url, true).await?;
         (path, hit, false)
     } else {
         (cache.fetch_uncached(&url).await?, false, true)
@@ -631,6 +631,12 @@ fn reload_when_web_process_dies(app: &tauri::App) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    // ZIP 版: app_*_dir をすべて data\ にする。WebView2 のデータ(localStorage など。どの窓も既定は app_local_data_dir)と
+    // plugin-http の Cookie(app_cache_dir。置き場を指定できない)が %LOCALAPPDATA% に残らないように
+    if let Some(dir) = portable_dir() {
+        context.config_mut().app.app_directories_override = Some(tauri::utils::config::AppDirectoriesOverride::Root(dir));
+    }
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol(media_cache::SCHEME, media_cache::handle_protocol)
         .plugin(tauri_plugin_http::init())
@@ -706,10 +712,9 @@ pub fn run() {
             chosen_paths::pick_save_path,
             chosen_paths::pick_open_path,
             web_upload::open_web_upload,
-            web_upload::close_web_upload,
-            update::download_update
+            web_upload::close_web_upload
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 

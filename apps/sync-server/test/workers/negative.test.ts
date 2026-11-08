@@ -286,6 +286,18 @@ describe('request_id と同時の書き込み', () => {
       expect(state.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM requests').one().n).toBeLessThanOrEqual(64)
     })
   })
+  it('すべて 409 の要求を新しい request_id で繰り返しても、requests の行は増え続けない', async () => {
+    const r1 = await record('1')
+    await push('A', [r1])
+    // base_version を直さずに送り直す壊れた端末。通番は進まない
+    for (let i = 0; i < 100; i++) {
+      const res = (await (await push('A', [r1])).json()) as { results: { status: number }[] }
+      expect(res.results[0].status).toBe(409)
+    }
+    await runInDurableObject(asDo(spaceStub(await spaceIdOf('A'))), (_o, state) => {
+      expect(state.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM requests').one().n).toBeLessThanOrEqual(64)
+    })
+  })
   it('同時の書き込みで通番の重複も取りこぼしもない', async () => {
     const sets = await Promise.all(Array.from({ length: 20 }, async (_, i) => [await record(`c${i}a`), await record(`c${i}b`)]))
     const res = await Promise.all(sets.map((s) => push('A', s)))

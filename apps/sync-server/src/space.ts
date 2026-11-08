@@ -291,10 +291,11 @@ export class SpaceDO extends DurableObject<Env> {
     return m
   }
 
-  /** 回数と最終使用を DB に写す */
+  /** 回数と最終使用を DB に写す。m は台帳を待つ間に古くなっていることがあるので、メモリの値を優先する */
   private flush(m: Meta): void {
-    this.write('UPDATE meta SET minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', m.minute, m.minute_count, m.day, m.day_count, m.day_records, m.last_used)
-    this.flushed(m.last_used)
+    const cur = this.live ?? m
+    this.write('UPDATE meta SET minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', cur.minute, cur.minute_count, cur.day, cur.day_count, cur.day_records, cur.last_used)
+    this.flushed(cur.last_used)
   }
 
   private flushed(now: number): void {
@@ -326,9 +327,12 @@ export class SpaceDO extends DurableObject<Env> {
       })
       m.reported_at = now
       m.reported_day = day
+      // 台帳を待つ間にほかの要求が回数を進めているので、m ではなく今の値を書く。消されたか作り直されていれば書かない
+      const cur = this.meta()
+      if (!cur || cur.epoch !== m.epoch) return
       // 回数と最終使用もこの 1 行に乗せる
-      this.write('UPDATE meta SET reported_at = ?, reported_day = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', now, day, m.minute, m.minute_count, m.day, m.day_count, m.day_records, now)
-      this.flushed(now)
+      this.write('UPDATE meta SET reported_at = ?, reported_day = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1', now, day, cur.minute, cur.minute_count, cur.day, cur.day_count, cur.day_records, cur.last_used)
+      this.flushed(cur.last_used)
     } catch {
       // 次の要求でまた試す
     }
@@ -521,7 +525,9 @@ export class SpaceDO extends DurableObject<Env> {
       'UPDATE meta SET next = ?, used_bytes = ?, record_count = ?, ever_written = ?, minute = ?, minute_count = ?, day = ?, day_count = ?, day_records = ?, last_used = ? WHERE id = 1',
       next, bytes, count, written, m.minute, m.minute_count, m.day, m.day_count, dayRecords, now,
     )
-    this.write('INSERT INTO requests (request_id, results, at, head) VALUES (?, ?, ?, ?)', input.request_id, JSON.stringify(stored), now, next)
+    // 採番しなかった要求(すべて 409)は覚えない。送り直しても 409 で今の値が返り、写しと同じ応答になる。
+    // 覚えると片づけ(通番の区切りで動く)に掛からず、409 を繰り返す端末で行が増え続ける
+    if (next !== m.next) this.write('INSERT INTO requests (request_id, results, at, head) VALUES (?, ?, ?, ?)', input.request_id, JSON.stringify(stored), now, next)
     // 保存の枠の外で溜まらないよう件数で切る。毎回ではなく、通番が TRIM_EVERY の区切りを越えたときだけ(実体が落ちても区切りは変わらない)
     if (Math.floor(next / TRIM_EVERY) !== Math.floor(m.next / TRIM_EVERY)) {
       this.write('DELETE FROM requests WHERE head < (SELECT head FROM requests ORDER BY head DESC LIMIT 1 OFFSET ?)', REQUESTS_KEPT - TRIM_EVERY - 1)

@@ -1,7 +1,7 @@
 // 費用: 1 要求あたりの書き行、1 日の件数、作りの移行、端末の不具合の検知、停止のときに起こさないこと
 import { runInDurableObject } from 'cloudflare:test'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DAY, MINUTE } from '../../src/config'
+import { DAY, HOUR, MINUTE, type Env } from '../../src/config'
 import { call, clock, ledger, push, record, setup, spaceIdOf, spaceStub, teardown } from './support'
 
 const asDo = (s: unknown) => s as DurableObjectStub
@@ -116,6 +116,27 @@ describe('1 日の件数', () => {
     expect((await push('A', [await record('4'), await record('5')])).status).toBe(200)
     expect(await dayRecords('A')).toBe(5)
     expect((await push('A', [await record('6')])).status).toBe(429)
+  })
+  it('台帳への報告を待つ間に進んだ件数を、要求の初めの値で上書きしない', async () => {
+    setup()
+    await create('A')
+    const id = await spaceIdOf('A')
+    let release = (): void => {}
+    const gate = new Promise<void>((r) => (release = r))
+    let calls = 0
+    // 最初の報告だけ待たせる。その間に別の要求が件数を進めて報告を済ませる
+    await runInDurableObject(asDo(spaceStub(id)), (inst) => {
+      const o = inst as unknown as { env: Env }
+      o.env = { ...o.env, LEDGER: { getByName: () => ({ report: () => (calls++ === 0 ? gate : Promise.resolve()) }) } } as unknown as Env
+    })
+    clock.now += HOUR
+    const head = call('GET', '/head', { token: 'A' })
+    while (calls === 0) await new Promise((r) => setTimeout(r, 5))
+    expect((await push('A', [await record('1'), await record('2')])).status).toBe(200)
+    expect(await dayRecords('A')).toBe(2)
+    release()
+    expect((await head).status).toBe(200)
+    expect(await dayRecords('A')).toBe(2)
   })
   it('日が変わると数え直す', async () => {
     setup({ RECORDS_PER_DAY: '2' })

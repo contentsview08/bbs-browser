@@ -104,6 +104,23 @@ android {
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
+    // 開発用の鍵の release は app-release.apk という同じ名前で出てくるので、配る APK と取り違えないよう出力の最後に大きく知らせる
+    if (keystoreProps == null) {
+        tasks.matching { it.name == "assembleRelease" }.configureEach {
+            doLast {
+                logger.warn(
+                    """
+                    |
+                    |================================================================
+                    |  警告: keystore.properties がないので、release を開発用の鍵
+                    |  (CN=Android Debug)で署名しました。この APK は配らないこと。
+                    |  配ると、配布用の鍵の版を入れた人は上書き更新できなくなります。
+                    |================================================================
+                    """.trimMargin(),
+                )
+            }
+        }
+    }
     packaging {
         // コルーチンのデバッグ用の表・Kotlin のビルド情報・各ライブラリの版の印は、動かすのに要らない
         resources.excludes += listOf("DebugProbesKt.bin", "kotlin-tooling-metadata.json", "META-INF/*.version")

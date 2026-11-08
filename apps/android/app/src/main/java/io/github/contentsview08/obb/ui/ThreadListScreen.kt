@@ -105,6 +105,7 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.data.normalizeForSearch
 import io.github.contentsview08.obb.data.ThreadState
 import io.github.contentsview08.obb.data.threadUnread
 import io.github.contentsview08.obb.data.unreadFirstOrder
@@ -189,8 +190,8 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
             list = unreadFirstOrder(list) { it.key in top }
         }
-        if (keywords.isNotEmpty()) list = keywordGroups(list, keywords).flatMap { it.second }
-        list.filterNot { it.announcement } + list.filter { it.announcement }
+        if (keywords.isNotEmpty()) keywordGroups(list, keywords).flatMap { it.second }
+        else list.filterNot { it.announcement } + list.filter { it.announcement }
     }
     // キーワードのまとまりの頭に出す帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)
     val bandBefore = remember(shown, keywords) {
@@ -657,17 +658,23 @@ class ListBand(val label: String, val count: Int, val accent: Boolean)
 
 /**
  * キーワードごとにスレをまとめる。先のキーワードに当たったスレは後のキーワードに数えない。
- * 戻りは (キーワード, スレ) の並びで、最後に (null, 残り)。並びは元の一覧の順
+ * 当たりは検索と同じく全角半角・大文字小文字・カナとかなを同じに扱う(normalizeForSearch。PC と同じ)。
+ * 戻りは (キーワード, スレ) の並びで、最後に (null, 残り)。並びは元の一覧の順。
+ * 運営のお知らせはどのまとまりにも入れず、残りの最後に置く(一番下に回すので、キーワードの帯の下に並ばない)
  */
 internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>): List<Pair<String?, List<ThreadSummary>>> {
+    val (normal, notices) = list.partition { !it.announcement }
+    val titles = normal.associate { it.key to normalizeForSearch(it.title) }
     val taken = HashSet<String>()
     val groups = ArrayList<Pair<String?, List<ThreadSummary>>>()
     for (k in keywords) {
-        val hits = list.filter { it.key !in taken && it.title.contains(k, ignoreCase = true) }
+        val nk = normalizeForSearch(k)
+        if (nk.isEmpty()) continue
+        val hits = normal.filter { it.key !in taken && titles.getValue(it.key).contains(nk) }
         hits.forEach { taken += it.key }
         if (hits.isNotEmpty()) groups += k to hits
     }
-    groups += null to list.filter { it.key !in taken }
+    groups += null to normal.filter { it.key !in taken } + notices
     return groups
 }
 

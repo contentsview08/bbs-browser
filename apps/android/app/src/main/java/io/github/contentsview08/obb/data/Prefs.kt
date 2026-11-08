@@ -173,12 +173,8 @@ class Prefs(context: Context) {
     var unreadFirst by pref("unreadFirst", false)
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
     var keywords by wordsPref("keywords", emptyList(), "\n")
-    /** スレ一覧の勢いの示し方: number(数字の色)/ bar(行の下のバー)/ both */
-    var momentumStyle by pref("momentumStyle", "number")
     /** スレ一覧の行の形: normal / compact(スレタイ 1 行と数だけ) */
     var listShape by pref("listShape", "normal")
-    /** スレ一覧を見出し(キーワード・新しいスレ・新着のある読んだスレ・その他)で区切る */
-    var listSections by pref("listSections", false)
     /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */
     private var recentBoardsJson by pref("recentBoards", "[]")
     fun recentBoards(): List<Triple<String, String, Long>> = runCatching {
@@ -273,12 +269,8 @@ class Prefs(context: Context) {
     var customScheme by pref("customScheme", "")
     /** 設定で、詳しい項目も出す */
     var showAdvanced by pref("showAdvanced", false)
-    /** 本文のアンカーを押したら、ポップアップではなくその下に差し込む */
-    var anchorInline by pref("anchorInline", false)
     /** 過去のスレの画面で最後に見たタブ(unread / history / fav / posts) */
     var pastTab by pref("pastTab", "history")
-    /** 返信の連なりの起点のレスの下に「この会話 (N)」を出す */
-    var showConversations by pref("showConversations", false)
     /** NG のレスの見せ方: aborn(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示。スマホだけ) */
     var ngMode by pref("ngMode", "aborn")
     /** 2 つ以上続いたあぼーんを 1 行にまとめる(PC 版と同じ既定) */

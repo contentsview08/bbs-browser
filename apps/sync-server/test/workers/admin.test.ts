@@ -303,8 +303,9 @@ describe('削除', () => {
     await runDurableObjectAlarm(asDo(ledger()))
     expect((await spaceStub(id).info()).exists).toBe(true)
     expect((await spaceStub(id).info()).record_count).toBe(1)
-    const after = ((await (await signed('GET', `/admin/v1/jobs/${job.id}`)).json()) as { job: { state: string } }).job
-    expect(after.state).toBe('done')
+    const after = ((await (await signed('GET', `/admin/v1/jobs/${job.id}`)).json()) as { job: { state: string; done: number; total: number } }).job
+    // 外した領域は件数からも引くので、done が total に届く
+    expect(after).toMatchObject({ state: 'done', done: 0, total: 0 })
     const cap = (await (await signed('GET', '/admin/v1/capacity')).json()) as { active: number; deleting: number }
     expect(cap).toMatchObject({ active: 1, deleting: 0 })
   })

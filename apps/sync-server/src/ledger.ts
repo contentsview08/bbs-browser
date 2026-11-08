@@ -171,7 +171,8 @@ export class LedgerDO extends DurableObject<Env> {
         return { ok: true }
       }
       if (cur && cur.slot_moved === 0) {
-        // 管理者の削除の途中に作り直された。枠は持ったままで、消す対象から外す
+        // 管理者の削除の途中に作り直された。枠は持ったままで、消す対象から外す。外した分は件数からも引く(done が total に届くように)
+        this.sql.exec('UPDATE jobs SET total = total - 1 WHERE id IN (SELECT job_id FROM job_items WHERE space_id = ?)', spaceId)
         this.sql.exec('DELETE FROM job_items WHERE space_id = ?', spaceId)
         this.sql.exec("UPDATE spaces SET state = 'pending', state_at = ?, epoch = NULL WHERE space_id = ?", now, spaceId)
         return { ok: true }

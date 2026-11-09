@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBB プライバシーポリシー</title>
+<meta name="description" content="OBB(Open BBS Browser)が扱うデータと、Google ドライブの同期での Google のデータの扱い。">
+<link rel="icon" href="assets/icon.png">
+<style>
+  /* 色はトップページ(index.html)と同じ */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --border: #d2d2d4;
+    --text: #1f2328; --muted: #5a6270; --strong: #0f1115; --accent: #4757c9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1e24; --surface: #23272f; --border: #343a44;
+      --text: #d6d9de; --muted: #8b93a1; --strong: #f1f3f6; --accent: #8f9bf5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo UI', 'Noto Sans JP', 'Hiragino Sans', system-ui, sans-serif;
+    font-size: 16px; line-height: 1.8; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  .back { font-size: 14px; }
+  h1 { color: var(--strong); font-size: 26px; line-height: 1.4; margin: 16px 0 4px; }
+  h2 { color: var(--strong); font-size: 19px; margin: 36px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { color: var(--strong); font-size: 16px; margin: 20px 0 4px; }
+  .date { color: var(--muted); font-size: 14px; margin: 0; }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin: 16px 0; }
+  .box p { margin: 0; }
+  code { font-family: Consolas, ui-monospace, monospace; font-size: 14px; }
+  footer { max-width: 760px; margin: 0 auto; padding: 0 16px 48px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">← OBB のトップへ</a>
+  <h1>OBB プライバシーポリシー</h1>
+  <p class="date">2026 年 11 月 9 日</p>
+
+  <div class="box">
+    <p>OBB(Open BBS Browser。以下「このアプリ」)は、掲示板を読み書きするための、オープンソースのアプリです(Windows・Linux・Android)。開発者はサーバーを持たず、利用者のデータを受け取りません。データは利用者の端末と、利用者が同期を使う場合は利用者自身の Google ドライブにだけ置かれます。</p>
+  </div>
+
+  <h2>1. 端末に置くデータ</h2>
+  <p>このアプリは、使うために次のデータを利用者の端末の中に保存します。開発者には送られません。</p>
+  <ul>
+    <li>読んだスレのログ、既読の位置、閲覧履歴、お気に入り、書き込み履歴、NG の設定、アプリの設定</li>
+    <li>掲示板にログインしたときの Cookie など、掲示板とのやりとりに要る情報</li>
+    <li>表示した画像のキャッシュ</li>
+  </ul>
+  <p>これらは、アプリの設定から消せます。アプリを消すか、データのフォルダを消すと、すべて消えます。</p>
+
+  <h2>2. 掲示板などへの通信</h2>
+  <p>このアプリは、利用者が開いた掲示板(5ch・したらば・まちBBS・ふたば・hono-bbs を使う掲示板など)や、本文の中の画像のある場所へ、端末から直接つなぎます。書き込みは、利用者が送ったときだけ、その掲示板へ送ります。それぞれの掲示板での情報の扱いは、その掲示板の決まりに従います。</p>
+  <p>新しい版があるかを確かめるため、GitHub(このアプリの配布の場所)へつなぎます。利用の状況を集める仕組み(アクセス解析・広告・クラッシュの報告など)は入っていません。</p>
+
+  <h2>3. Google ドライブでの同期(使う場合だけ)</h2>
+  <p>同期は既定でオフです。利用者が同期を始めたときだけ、次のとおり Google のアカウントのデータを使います。</p>
+
+  <h3>3.1 求める許可</h3>
+  <ul>
+    <li><code>https://www.googleapis.com/auth/drive.appdata</code>(Google ドライブの、このアプリ専用の隠しフォルダの読み書き)だけを求めます。利用者のほかのファイル・フォルダは、見ることも変えることもできません。</li>
+  </ul>
+
+  <h3>3.2 使う Google のデータと、使い方</h3>
+  <ul>
+    <li><strong>アプリ専用の隠しフォルダ:</strong> 端末の間で閲覧履歴・既読・お気に入り・書き込み履歴・NG・設定をそろえるためのファイルを置き、読みます。中身は端末で暗号化してから置きます。鍵は利用者の端末にだけあり、Google と開発者は中身を読めません。</li>
+    <li><strong>Google アカウントのメールアドレスと利用者の識別子:</strong> どのアカウントで同期しているかを画面に出すため、また、別のアカウントの同期に誤って入らないよう確かめるために読みます。端末の中にだけ置きます。</li>
+    <li><strong>ドライブで使っている量:</strong> このアプリのファイルの大きさを足して、設定の画面に出します。</li>
+  </ul>
+  <p>これらのデータを、同期のほかの目的に使うこと、開発者や第三者に送ること、広告に使うこと、人が読むことはありません。</p>
+
+  <h3>3.3 許可の扱い</h3>
+  <ul>
+    <li>Google から受け取る許可(トークン)は、PC では OS の資格情報の保管庫に、Android では端末の鍵の保管庫で暗号化して置きます。</li>
+    <li>2 台目の端末を加えるときは、利用者が自分で、許可と暗号化の鍵を QR かコードで渡します。このコードは、自分の端末のあいだだけで使ってください。</li>
+  </ul>
+
+  <h3>3.4 やめ方と消し方</h3>
+  <ul>
+    <li>アプリの同期の設定の「この端末で同期をやめる」で、その端末の許可と鍵を消します。「Google の接続を切る(全端末)」で、Google への許可も取り消します。</li>
+    <li>Google のアカウントの <a href="https://myaccount.google.com/connections">サードパーティとの接続</a> から、いつでも許可を取り消せます。</li>
+    <li>ドライブに置いた同期のデータは、パソコンのブラウザで Google ドライブの「設定」→「アプリの管理」→ このアプリの「オプション」→「隠しアプリデータを削除」で消せます。</li>
+  </ul>
+
+  <h3>3.5 Google API の利用者データのポリシー</h3>
+  <p>このアプリが Google API から受け取った情報の使い方と、ほかのアプリへの受け渡しは、<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>(Limited Use の要件を含む)に従います。</p>
+
+  <h2>4. 子ども</h2>
+  <p>このアプリは、年齢を問わず個人を特定する情報を集めません。</p>
+
+  <h2>5. このポリシーの変更</h2>
+  <p>変えるときは、このページを書き換え、上の日付を新しくします。大きく変えるときは、リリースの説明でも知らせます。</p>
+
+  <h2>6. 問い合わせ</h2>
+  <p>このポリシーとデータの扱いについての問い合わせは、<a href="https://github.com/contentsview08/bbs-browser/issues">GitHub の Issues</a> へどうぞ。</p>
+
+  <h2 lang="en">Summary in English</h2>
+  <div lang="en">
+    <p>OBB is an open-source bulletin board browser. The developer runs no server and receives no user data. App data stays on your device. If you turn on sync, OBB requests only the <code>drive.appdata</code> scope to store encrypted sync files in its hidden app-data folder in your own Google Drive; it cannot see your other files. It also reads your Google account's email address and permission ID to show which account is syncing and to prevent joining a different account's sync. Tokens are kept in the OS credential store (PC) or the Android Keystore. Google user data is not transferred to the developer or third parties, not used for ads, and not read by humans. OBB's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. You can revoke access at any time from your <a href="https://myaccount.google.com/connections">Google Account</a>, and delete the sync data from Google Drive settings → Manage apps. Contact: <a href="https://github.com/contentsview08/bbs-browser/issues">GitHub Issues</a>.</p>
+  </div>
+</main>
+<footer>
+  <a href="./">OBB</a> · <a href="https://github.com/contentsview08/bbs-browser">GitHub</a> · Apache License 2.0
+</footer>
+</body>
+</html>

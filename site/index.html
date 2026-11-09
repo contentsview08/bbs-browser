@@ -136,7 +136,7 @@
   <div class="buttons">
     <a class="btn primary" id="dl-win" href="https://github.com/contentsview08/bbs-browser/releases/latest">Windows 版(インストーラー)</a>
     <a class="btn" id="dl-zip" href="https://github.com/contentsview08/bbs-browser/releases/latest">ZIP 版 <small>インストール不要</small></a>
-    <span class="btn disabled">Android 版 <small>準備中</small></span>
+    <a class="btn" id="dl-apk" href="https://github.com/contentsview08/bbs-browser/releases/latest">Android 版 <small>APK</small></a>
   </div>
   <p class="version" id="version"></p>
 </section>
@@ -152,7 +152,8 @@
       <div class="card"><div class="icon">◐</div><h3>配色とレスの見た目</h3><p>ダーク・ライトを含む 13 の配色と自分の配色、差し色。レスはカード・Discord 風・LINE 風・専ブラ風・まとめ風。書体は同梱 16 書体と OS のフォント。</p></div>
       <div class="card"><div class="icon">↑</div><h3>画像を上げて貼る</h3><p>書き込み欄に貼るかドラッグするだけ。上げ先は imgur・catbox・imgbb など 6 つ。位置情報(EXIF)はいつも取り除きます。</p></div>
       <div class="card"><div class="icon">●</div><h3>通知センター</h3><p>自分へのレス・お気に入りのスレの新着・キーワードに合うスレが立ったことを溜めておき、押すとそのレスへ。</p></div>
-      <div class="card"><div class="icon">=</div><h3>Web でも同じ画面</h3><p><a href="https://red-edge.net/boards/operation01">掲示板</a>の Web はこの専ブラと同じ画面。スマホ版(Android)は準備中です。</p></div>
+      <div class="card"><div class="icon">=</div><h3>Web でも同じ画面</h3><p><a href="https://red-edge.net/boards/operation01">掲示板</a>の Web はこの専ブラと同じ画面。スマホの Web は Android 版と同じ見た目です。</p></div>
+      <div class="card"><div class="icon">⇄</div><h3>自分の Google ドライブで同期</h3><p>閲覧履歴・既読・お気に入り・NG・設定を、PC とスマホでそろえます(実験的・既定はオフ)。暗号化して自分のドライブの隠しフォルダに置くだけで、開発者のサーバーは通りません。<a href="privacy.html">プライバシーポリシー</a></p></div>
       <div class="card"><div class="icon">▣</div><h3>ZIP 版は展開するだけ</h3><p>展開したフォルダがそのままインストール先。ログも設定もその中の data に入り、フォルダごと消せばまっさらに戻ります。</p></div>
     </div>
   </div>
@@ -192,7 +193,7 @@
 <section id="install">
   <div class="wrap">
     <h2>入れ方</h2>
-    <p class="sub">どちらも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。Android 版は準備中です。困ったら <a href="https://red-edge.net/boards/operation01">掲示板の運営板</a>へどうぞ。</p>
+    <p class="sub">どれも <a href="https://github.com/contentsview08/bbs-browser/releases/latest">最新のリリース</a> から。Android 版は <code>OBB_x.y.z_android.apk</code> を落として入れます(Android 8 以上。Play ストアにはありません)。困ったら <a href="https://red-edge.net/boards/operation01">掲示板の運営板</a>へどうぞ。</p>
     <div class="steps">
       <div class="card"><h3>Windows(インストーラー)</h3><ol>
         <li><code>OBB_x.y.z_x64-setup.exe</code> を落として実行</li>
@@ -220,6 +221,7 @@
   <a href="https://github.com/contentsview08/bbs-browser/releases">Releases</a>
   <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a>
   <a href="https://red-edge.net/boards/operation01">掲示板</a>
+  <a href="privacy.html">プライバシーポリシー</a>
   <div style="margin-top:10px">要望・不具合は <a href="https://github.com/contentsview08/bbs-browser/issues">Issues</a> か <a href="https://red-edge.net/boards/operation01">掲示板(運営板)</a>へ</div>
   <div style="margin-top:6px">Apache License 2.0 · <a href="https://github.com/contentsview08/bbs-browser/blob/main/LICENSE">LICENSE</a></div>
 </footer>
@@ -240,7 +242,7 @@
     document.addEventListener('keydown', (e) => { if (!lb.classList.contains('show')) return; if (e.key === 'Escape') hide(); else if (e.key === 'ArrowLeft') show(i - 1); else if (e.key === 'ArrowRight') show(i + 1) })
   })()
 
-  // 最新のリリースを GitHub から読み、版と落とす先(インストーラー・ZIP)をボタンに入れる。読めなければ Releases のページのまま
+  // 最新のリリースを GitHub から読み、版と落とす先(インストーラー・ZIP・APK)をボタンに入れる。読めなければ Releases のページのまま
   (async () => {
     try {
       const r = await fetch('https://api.github.com/repos/contentsview08/bbs-browser/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
@@ -253,6 +255,8 @@
       const mb = (a) => a ? ` <small>${(a.size / 1048576).toFixed(0)} MB</small>` : '';
       if (setup) { const b = document.getElementById('dl-win'); b.href = setup.browser_download_url; b.innerHTML = 'Windows 版(インストーラー)' + mb(setup); }
       if (zip) { const b = document.getElementById('dl-zip'); b.href = zip.browser_download_url; b.innerHTML = 'ZIP 版 <small>インストール不要</small>' + mb(zip); }
+      const apk = find(/\.apk$/i)
+      if (apk) { const b = document.getElementById('dl-apk'); b.href = apk.browser_download_url; b.innerHTML = 'Android 版 <small>APK</small>' + mb(apk); }
       const v = document.getElementById('version');
       v.textContent = `最新: ${j.tag_name}(${new Date(j.published_at).toLocaleDateString('ja-JP')})`;
     } catch {}

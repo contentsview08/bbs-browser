@@ -206,12 +206,14 @@ class Device {
     const w = this.world
     const url = new URL(req.url)
     const cls = driveClass(req)
+    const kind = driveKind(req)
     const content = cls === '/records' ? uploadContent(req) : null
     const secretIds = content?.records?.filter((r) => r.kind_tag === 's').map((r) => r.record_id as string)
     w.log.push({ device: this.name, method: req.method, path: url.pathname, host: url.host, ...(secretIds && secretIds.length > 0 && { secretIds }) })
     if (req.body) w.sent.push(req.body)
     if (!this.online) throw new Error('offline')
-    const f = w.faults.find((x) => x.times > 0 && (x.path === undefined || x.path === cls))
+    // drive: で始まる道は Drive だけの要求の種類(まとめ直しの途中の失敗など)
+    const f = w.faults.find((x) => x.times > 0 && (x.path === undefined || x.path === cls || x.path === kind))
     if (f && (f.skip ?? 0) > 0) f.skip = (f.skip as number) - 1
     else if (f) {
       f.times--
@@ -676,6 +678,10 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
     case 'mark':
       w.mark = w.log.length
       break
+    case 'repeat':
+      // 同じ手順を times 回。文字列の {i} は回の番号(1 から)
+      for (let i = 1; i <= s.times; i++) for (const x of s.steps as Step[]) await runStep(w, withIndex(x, i) as Step, c)
+      break
     case 'expect':
       await check(w, s.expect, c.name)
       break
@@ -899,6 +905,14 @@ export async function runScenarioOn(store: Store, c: Scenario, make: MakeServer 
   return { digests, data, drive: w.drive }
 }
 
+/** repeat の {i} を回の番号に置き換える */
+function withIndex(v: unknown, i: number): unknown {
+  if (typeof v === 'string') return v.replaceAll('{i}', String(i))
+  if (Array.isArray(v)) return v.map((x) => withIndex(x, i))
+  if (v !== null && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, withIndex(x, i)]))
+  return v
+}
+
 /** server_inject で置く「他の端末」 */
 const INJECTED_DEVICE = 'injected'
 
@@ -909,6 +923,17 @@ function driveClass(req: SyncRequest): string {
   if (req.method === 'GET') return '/changes'
   if (req.method === 'DELETE') return '/spaces'
   return uploadContent(req) === null ? '/spaces' : '/records'
+}
+
+/** Drive だけの要求の種類。故障の道 drive:… に使う */
+function driveKind(req: SyncRequest): string {
+  const path = new URL(req.url).pathname
+  if (path.endsWith('/changes/startPageToken')) return 'drive:token'
+  if (path.endsWith('/changes')) return 'drive:changes'
+  if (req.method === 'DELETE') return 'drive:delete'
+  if (req.method === 'GET') return path.endsWith('/files') ? 'drive:list' : 'drive:media'
+  const content = uploadContent(req) as { type?: string } | null
+  return content === null ? 'drive:space' : `drive:${content.type ?? ''}`
 }
 
 /** セグメントの上書き・作成の本文。目印(中身が空)は null */
@@ -932,6 +957,10 @@ async function checkDrive(w: World, drive: FakeDrive, e: Record<string, any>, la
   if (e.tickets !== undefined) expect(w.tickets, `${label}: 同期を始めるページを通した回数`).toBe(e.tickets)
   if (e.hosts !== undefined) expect([...new Set(w.log.map((l) => l.host))], `${label}: 通信先`).toEqual((e.hosts as string[]).map((h) => (h === new URL(SERVER).host ? FAKE_DRIVE_HOST : h)))
   if (e.sent_lacks !== undefined) for (const text of e.sent_lacks) expect(w.sent.some((b) => b.includes(text)), `${label}: 送った本文に ${text} がない`).toBe(false)
+  // mark からの一覧(files.list)とダウンロードの数。まとめ直しで呼び出しが増えすぎないことを見る
+  const since = w.log.slice(w.mark)
+  if (e.lists_at_most !== undefined) expect(since.filter((l) => l.method === 'GET' && l.path === '/drive/v3/files').length, `${label}: Drive の一覧の数`).toBeLessThanOrEqual(e.lists_at_most)
+  if (e.downloads_at_most !== undefined) expect(since.filter((l) => l.method === 'GET' && l.path.startsWith('/drive/v3/files/')).length, `${label}: Drive のダウンロードの数`).toBeLessThanOrEqual(e.downloads_at_most)
   for (const [dev, v] of Object.entries<any>(e.of ?? {})) {
     const m = await (w.devices.get(dev) as Device).keys.load()
     const sid = m ? spaceId(deriveKeys(m.k).auth_token) : ''
@@ -940,6 +969,10 @@ async function checkDrive(w: World, drive: FakeDrive, e: Record<string, any>, la
     const ids = (tag?: string) => new Set(held.filter((r) => tag === undefined || r.kind_tag === tag).map((r) => r.record_id)).size
     if (v.exists !== undefined) expect(files.some((f) => f.appProperties.t === 'space'), `${label}: ${dev} の領域`).toBe(v.exists)
     if (v.records !== undefined) expect(ids(), `${label}: ${dev} の領域のレコード数`).toBe(v.records)
+    if (v.files_at_most !== undefined) expect(files.length, `${label}: ${dev} の領域のファイルの数`).toBeLessThanOrEqual(v.files_at_most)
+    if (v.bytes_at_most !== undefined) expect(files.reduce((n, f) => n + new TextEncoder().encode(f.content).length, 0), `${label}: ${dev} の領域の大きさ`).toBeLessThanOrEqual(v.bytes_at_most)
+    if (v.record_copies_at_most !== undefined) expect(held.length, `${label}: ${dev} の領域のレコードの写しの数(書き手ごと・ファイルごとに数える)`).toBeLessThanOrEqual(v.record_copies_at_most)
+    if (v.snap_parts !== undefined) expect(files.filter((f) => f.appProperties.t === 'snap').length, `${label}: ${dev} の領域のスナップショットの部分の数`).toBe(v.snap_parts)
     if (v.s_records !== undefined) expect(ids('s'), `${label}: ${dev} の領域の権限系のレコード数`).toBe(v.s_records)
     if (v.h_lacks !== undefined) {
       const k = deriveKeys((m as SyncKeyMaterial).k)

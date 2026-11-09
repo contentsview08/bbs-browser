@@ -1,6 +1,6 @@
 // Drive の置き場(drive.ts)の、共通シナリオでは書けない決まり。偽の Drive(fakeDrive.ts)を相手にし、本物の Google には繋がない
 import { describe, expect, it } from 'vitest'
-import { deriveKeys, driveRemote, openRecords, recordId, sealPayload, spaceId, SyncApiError, writeRecord, type SyncPayload, type SyncRemote, type SyncSqlDb, type SyncTransport } from '../src/index'
+import { deriveKeys, driveRemote, driveUsage, openRecords, parseHlc, recordId, sealPayload, spaceId, SyncApiError, writeRecord, type SyncPayload, type SyncRemote, type SyncSqlDb, type SyncTransport } from '../src/index'
 import { FAKE_DRIVE_TOKEN, FakeDrive } from './fakeDrive'
 import { keyOf, testDb } from './scenarioRunner'
 
@@ -181,6 +181,180 @@ describe('Drive の置き場', () => {
     await read(pc.db, pc.remote(), 0)
     w.drive.quotaBytes = 10
     await expect(pc.remote().pushRecords('r', [await stored(pc.db, '1')])).rejects.toMatchObject({ kind: 'http', status: 413, code: 'quota_exceeded' })
+  })
+})
+
+const DAY = 24 * 60 * 60 * 1000
+
+/** エンジンの代わりに、変更を読み続ける端末 */
+function follower(d: { db: SyncSqlDb; remote: () => SyncRemote }) {
+  let since = 0
+  return async () => {
+    const page = await read(d.db, d.remote(), since)
+    since = page.head
+    return page
+  }
+}
+
+/** 1 日 1 件ずつ送る。日が変わるたびに前のセグメントが閉じる */
+async function pushDays(w: { now: number }, d: { db: SyncSqlDb; remote: () => SyncRemote }, prefix: string, n: number, after?: () => Promise<unknown>) {
+  for (let i = 0; i < n; i++) {
+    w.now += DAY
+    await d.remote().pushRecords('r', [await stored(d.db, `${prefix}${i}`)])
+    await after?.()
+  }
+}
+
+describe('Drive のまとめ直し', () => {
+  const kinds = (drive: FakeDrive, device: string) => drive.filesOf(sid).filter((f) => f.appProperties.d === device).map((f) => `${f.appProperties.t}${f.appProperties.n ?? ''}`).sort()
+
+  it('条件を満たすまでは、手元の控えを見るだけで通信しない', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    await pc.remote().createSpace(null)
+    await pushDays(w, pc, 'a', 7)
+    const units = w.drive.units
+    await pc.remote().maintain?.()
+    expect(w.drive.units).toBe(units)
+    expect(kinds(w.drive, 'pc')).toHaveLength(7)
+  })
+
+  it('閉じたセグメントが 7 つで 1 つのスナップショットにまとめ、古いものを消す。使っている量が減り、1 日 1 回まで', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    await pc.remote().createSpace(null)
+    await pushDays(w, pc, 'a', 8)
+    const used = await driveUsage({ transport: { send: async (req) => w.drive.handle(req) }, accessToken: async () => FAKE_DRIVE_TOKEN })
+    const calls = { ...w.drive.calls }
+    await pc.remote().maintain?.()
+    // 作る 1 回 + 消す 7 回だけ。一覧も読み戻しもしない
+    expect(w.drive.calls['files.create'] - calls['files.create']).toBe(1)
+    expect(w.drive.calls['files.delete'] ?? 0).toBe(7)
+    expect(w.drive.calls['files.list']).toBe(calls['files.list'])
+    expect(w.drive.calls['files.get(media)'] ?? 0).toBe(0)
+    expect(kinds(w.drive, 'pc')).toEqual(['seg8', 'snap'])
+    const snap = w.drive.filesOf(sid).find((f) => f.appProperties.t === 'snap')!
+    expect(snap.appProperties).toMatchObject({ u: '7', p: '1/1', g: '0' })
+    expect(openRecords(keys, sid, (JSON.parse(snap.content).records as Record<string, unknown>[]).map((r) => ({ ...r, version: 1 }))).records).toHaveLength(7)
+    expect(await driveUsage({ transport: { send: async (req) => w.drive.handle(req) }, accessToken: async () => FAKE_DRIVE_TOKEN })).toBeLessThan(used)
+    // 同じ日にまた 7 つ閉じても、次の日までまとめ直さない
+    for (let i = 0; i < 7; i++) {
+      w.now += 60_000
+      await pc.db.batch([{ sql: "UPDATE sync_state SET value = json_set(value, '$.day', '') WHERE key = 'drive_seg'" }])
+      await pc.remote().pushRecords('r', [await stored(pc.db, `b${i}`)])
+    }
+    await pc.remote().maintain?.()
+    expect(kinds(w.drive, 'pc').filter((k) => k === 'snap')).toHaveLength(1)
+    w.now += DAY
+    await pc.remote().maintain?.()
+    expect(kinds(w.drive, 'pc')).toEqual(['seg15', 'snap'])
+  })
+
+  it('読み続けている端末はスナップショットを落とさない。しばらく読まなかった端末はスナップショットで追いつく', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    const phone = device('phone')
+    const tablet = device('tablet')
+    await pc.remote().createSpace(null)
+    const phoneRead = follower(phone)
+    const tabletRead = follower(tablet)
+    await phoneRead()
+    await tabletRead()
+    await pushDays(w, pc, 'a', 3, phoneRead)
+    await tabletRead()
+    await pushDays(w, pc, 'b', 5, phoneRead)
+    const before = w.drive.calls['files.get(media)']
+    await pc.remote().maintain?.()
+    // phone は閉じたセグメントを最後の版まで読んでいるので、新しいセグメントの 1 回だけ
+    const page = await phoneRead()
+    expect(page.records).toEqual([])
+    expect(w.drive.calls['files.get(media)']).toBe(before)
+    // tablet は消えたセグメントの分をスナップショット(読んだ分も含む)と新しいセグメントで読む
+    const lag = await tabletRead()
+    expect(openRecords(keys, sid, lag.records).records.map((r) => r.payload.body?.thread).sort()).toEqual(['a0', 'a1', 'a2', 'b0', 'b1', 'b2', 'b3', 'b4'])
+    expect(w.drive.calls['files.get(media)']).toBe(before + 2)
+  })
+
+  it('2 台が同時にまとめ直しても、互いのファイルを消さない。あとから参加した端末は全部を読める', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    const phone = device('phone')
+    await pc.remote().createSpace(null)
+    await read(phone.db, phone.remote(), 0)
+    for (let i = 0; i < 8; i++) {
+      w.now += DAY
+      await pc.remote().pushRecords('r', [await stored(pc.db, `p${i}`)])
+      await phone.remote().pushRecords('r', [await stored(phone.db, `q${i}`)])
+    }
+    await Promise.all([pc.remote().maintain?.(), phone.remote().maintain?.()])
+    expect(kinds(w.drive, 'pc')).toEqual(['seg8', 'snap'])
+    expect(kinds(w.drive, 'phone')).toEqual(['seg8', 'snap'])
+    const tablet = device('tablet')
+    const page = await read(tablet.db, tablet.remote(), 0)
+    expect(new Set(openRecords(keys, sid, page.records).records.map((r) => r.payload.body?.thread)).size).toBe(16)
+    // 読んだのはスナップショット 2 つと開いているセグメント 2 つ
+    expect(page.records).toHaveLength(16)
+  })
+
+  it('容量の超過でスナップショットを作れなければ周を止めず、1 日おいて続きから作る', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    await pc.remote().createSpace(null)
+    await pushDays(w, pc, 'a', 8)
+    w.drive.quotaBytes = [...w.drive.files.values()].reduce((n, f) => n + f.content.length, 0)
+    await expect(pc.remote().maintain?.()).resolves.toBeUndefined()
+    w.drive.quotaBytes = Infinity
+    const units = w.drive.units
+    w.now += DAY - 1
+    await pc.remote().maintain?.()
+    expect(w.drive.units).toBe(units)
+    w.now += 1
+    await pc.remote().maintain?.()
+    expect(kinds(w.drive, 'pc')).toEqual(['seg8', 'snap'])
+  })
+
+  it('表にないレコード(権限系を切った)は古いファイルから引き継ぎ、90 日より古い tombstone は落として g に書く', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    await pc.remote().createSpace(null)
+    // 100 日前に消したもの
+    const oldTomb = '01a115606000.0000.pc'
+    const id = recordId(keys.k_id, 'favorite', 'https://a.5ch.io/x/', 'gone')
+    const p: SyncPayload = { ...payload('gone', oldTomb), deleted: true }
+    await pc.db.batch([writeRecord({ record_id: id, kind: 'favorite', kind_tag: 'h', schema_version: 1, payload: p, hlc: oldTomb, version: 0, pending: true, priority: 0, needs_apply: false, ref_board: null, ref_thread: null, ref_detail: null, ref_local: null, tomb_at: null })])
+    w.now += DAY
+    await pc.remote().pushRecords('r', [{ record_id: id, kind_tag: 'h', schema_version: 1, ...sealPayload(keys, { space_id: sid, record_id: id, kind_tag: 'h', schema_version: 1 }, p) }])
+    await pushDays(w, pc, 'a', 7)
+    const kept = recordId(keys.k_id, 'favorite', 'https://a.5ch.io/x/', 'a0')
+    await pc.db.batch([{ sql: 'DELETE FROM sync_records WHERE record_id = $1', params: [kept] }])
+    expect(parseHlc(oldTomb).wall).toBeLessThan(w.now - 90 * DAY)
+    await pc.remote().maintain?.()
+    const snap = w.drive.filesOf(sid).find((f) => f.appProperties.t === 'snap')!
+    const ids = (JSON.parse(snap.content).records as { record_id: string }[]).map((r) => r.record_id)
+    expect(ids).toContain(kept)
+    expect(ids).not.toContain(id)
+    expect(ids).toHaveLength(6)
+    expect(Number(snap.appProperties.g)).toBe(w.now - 90 * DAY)
+  })
+
+  it('部分の揃わないスナップショットは読まず、揃ったら全部の部分を読む', async () => {
+    const { w, device } = world()
+    const pc = device('pc')
+    await pc.remote().createSpace(null)
+    const pcRead = follower(pc)
+    await pcRead()
+    const part = (i: number, key: string) => {
+      const p = payload(key)
+      const rid = recordId(keys.k_id, 'favorite', 'https://a.5ch.io/x/', key)
+      const rec = { record_id: rid, kind_tag: 'h', schema_version: 1, ...sealPayload(keys, { space_id: sid, record_id: rid, kind_tag: 'h', schema_version: 1 }, p) }
+      const props = { f: '1', s: sid, t: 'snap', d: 'other', u: '3', uv: '2', g: '0', p: `${i}/2` }
+      w.drive.putFile(`obbsync1.x.other.snap.3.${i}of2`, props, JSON.stringify({ obbsync: 1, space: sid, device: 'other', type: 'snap', u: 3, uv: 2, g: 0, p: `${i}/2`, records: [rec] }))
+    }
+    part(1, 's1')
+    expect((await pcRead()).records).toEqual([])
+    part(2, 's2')
+    const page = await pcRead()
+    expect(openRecords(keys, sid, page.records).records.map((r) => r.payload.body?.thread).sort()).toEqual(['s1', 's2'])
   })
 })
 

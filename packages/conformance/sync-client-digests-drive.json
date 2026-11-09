@@ -630,6 +630,24 @@
   "pc": "353edfc66702fe55456c3301ab6ccb8967092022be5f5fff350c81aa39a18d7e",
   "phone": "2bf698c57534968c34610503f68661af82750e1d9d19a6d1676288167e02929b"
  },
+ "Drive: 120 日使っても、まとめ直しでファイルの数と大きさが一定の範囲に収まり、後から参加した端末も揃う": {
+  "pc": "2ddc91f33fbeedfdf6a694b4a320ce9f4bb344c00c46d723ddff51385b43fb94",
+  "phone": "2673cad49d1e5aed831e109184d1c54b749ec4b0f588385847bb2f0a275025e3",
+  "tablet": "63b889e59dcfabe1c3c353cc074bf6fb970d34ac5e30ed87366b7143e9072440"
+ },
+ "Drive: まとめ直しが途中で失敗しても壊れず、途中で参加した端末も、その間読まなかった端末も追いつく": {
+  "pc": "34a35ff21b1abebea6988e419600360f81686ef81d02f2c400b8904e540f26fe",
+  "phone": "7740de64ce7f15d27d79baaf7da9f69f72e96075620571f5772a96249f0cdb50",
+  "tablet": "b0096e788e006e21aff1696452185febdc3d5ed2105b0b98ef3f50775d194bf8"
+ },
+ "Drive: 2 台が同じころにまとめ直しても、互いのファイルを消さずに揃う": {
+  "pc": "55077e608da530a6dabc045b17beae69ad3fc37dc7019377450d1c44a0840108",
+  "phone": "e78f0c33c388e2dd06b28660aa39dbe16fd77b7505cb48f55fc63349c12afad4"
+ },
+ "Drive: 長く読まなかった間に相手が古い tombstone を落としていたら、全件で合わせ直して消えたものを戻さない": {
+  "pc": "d194cffb3ea3eb637297879b37939e4e296ad0e8c959177b804f12841460b012",
+  "phone": "a28904e1d7efbe960139de3bcf616cd0ca1603607e7e84b3805d5f237a7d576c"
+ },
  "乱数 全部 1": {
   "pc": "33a9ddb8ed20d52b7d4ad471c38d914a1a27ba998b66feca846b1096fd469cb6",
   "phone": "79283590172513c9d9572cfbfd2e0186ba73354a911c904075450773f410acd3",

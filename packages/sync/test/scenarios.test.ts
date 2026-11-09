@@ -35,14 +35,17 @@ describe('sync-client.json', () => {
 })
 
 describe('sync-client.json を Drive の置き場で', () => {
+  // まとめ直しのシナリオは 120 日を回すので、既定の 5 秒では足りない
   it.each(onDrive)('$name', async (c) => {
     const drive = await runScenarioOn('drive', c)
-    // 今のデータ(画面が読むもの)は置き場によらず同じ
-    const server = await runScenarioOn('server', c)
-    expect(drive.data).toEqual(server.data)
+    // 今のデータ(画面が読むもの)は置き場によらず同じ。Drive だけのシナリオは比べる相手がない
+    if (!c.stores || c.stores.includes('server')) {
+      const server = await runScenarioOn('server', c)
+      expect(drive.data).toEqual(server.data)
+    }
     nextDrive[c.name] = drive.digests
     if (!updateDrive) expect(drive.digests).toEqual(driveDigests[c.name])
-  })
+  }, 60_000)
   afterAll(() => {
     if (updateDrive) writeFileSync(url('sync-client-digests-drive.json'), `${JSON.stringify(nextDrive, null, 1)}\n`)
   })

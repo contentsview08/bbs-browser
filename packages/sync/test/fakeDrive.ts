@@ -116,6 +116,11 @@ export class FakeDrive {
     }
   }
 
+  /** 他の端末が書いたファイルを、そのまま置く(部分の揃わないスナップショットなど) */
+  putFile(name: string, appProperties: Record<string, string>, content: string): string {
+    return this.create({ name, parents: ['appDataFolder'], appProperties }, content).id
+  }
+
   /** 領域のファイルにあるレコード。同じ ID が書き手ごとにあれば全部 */
   recordsOf(spaceId: string): Record<string, unknown>[] {
     return this.filesOf(spaceId).flatMap((f) => {

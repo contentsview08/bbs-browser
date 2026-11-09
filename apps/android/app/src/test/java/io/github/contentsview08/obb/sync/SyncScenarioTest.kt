@@ -243,12 +243,14 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         val w = world
         val m = URL_PARTS.matchEntire(req.url)!!
         val cls = driveClass(req)
+        val kind = driveKind(req)
         val content = if (cls == "/records") uploadContent(req) else null
         val secretIds = (content?.get("records") as List<Map<String, Any?>>?).orEmpty().filter { it["kind_tag"] == "s" }.map { it["record_id"] as String }
         w.log += LogEntry(name, req.method, m.groupValues[2], m.groupValues[1], null, secretIds = secretIds)
         req.body?.let { w.sent += it }
         if (!online) throw IllegalStateException("offline")
-        val f = w.faults.firstOrNull { it.times > 0 && (it.path == null || it.path == cls) }
+        // drive: で始まる道は Drive だけの要求の種類(まとめ直しの途中の失敗など)
+        val f = w.faults.firstOrNull { it.times > 0 && (it.path == null || it.path == cls || it.path == kind) }
         if (f != null && f.skip > 0) f.skip--
         else if (f != null) {
             f.times--
@@ -380,6 +382,25 @@ private fun driveClass(req: SyncRequest): String {
     return if (uploadContent(req) == null) "/spaces" else "/records"
 }
 
+/** Drive だけの要求の種類。故障の道 drive:… に使う */
+private fun driveKind(req: SyncRequest): String {
+    val path = URL_PARTS.matchEntire(req.url)!!.groupValues[2]
+    if (path.endsWith("/changes/startPageToken")) return "drive:token"
+    if (path.endsWith("/changes")) return "drive:changes"
+    if (req.method == "DELETE") return "drive:delete"
+    if (req.method == "GET") return if (path.endsWith("/files")) "drive:list" else "drive:media"
+    val content = uploadContent(req) ?: return "drive:space"
+    return "drive:${content["type"] ?: ""}"
+}
+
+/** repeat の {i} を回の番号に置き換える */
+private fun withIndex(v: Any?, i: Int): Any? = when (v) {
+    is String -> v.replace("{i}", i.toString())
+    is List<*> -> v.map { withIndex(it, i) }
+    is Map<*, *> -> v.entries.associate { (k, x) -> k to withIndex(x, i) }
+    else -> v
+}
+
 /** セグメントの上書き・作成の本文。目印(中身が空)は null */
 @Suppress("UNCHECKED_CAST")
 private fun uploadContent(req: SyncRequest): Map<String, Any?>? {
@@ -443,10 +464,11 @@ private fun snapshot(d: Device, full: Boolean): Map<String, String> {
 }
 
 /** 全部の端末を比べ、違いを 1 行ずつ出す。ログを消した端末は行がないので、full でなければ両方にあるものだけを手元の値として比べる */
-internal fun diffSnapshots(an: String, a: Map<String, String>, bn: String, b: Map<String, String>, full: Boolean): List<String> {
+internal fun diffSnapshots(an: String, a: Map<String, String>, bn: String, b: Map<String, String>, full: Boolean, ignoreTombstones: Boolean = false): List<String> {
     val lines = ArrayList<String>()
     for (k in (a.keys + b.keys).sorted()) {
         if (a[k] == b[k] || k.startsWith("#")) continue
+        if (ignoreTombstones && k.startsWith("record ") && listOf(a[k], b[k]).all { it == null || it.contains("\"deleted\":true") }) continue
         if (!full && !k.startsWith("record ") && !k.startsWith("書き込み履歴 ") && (a[k] == null || b[k] == null)) continue
         lines += "$k ${a["#$k"] ?: b["#$k"] ?: ""}\n  $an: ${a[k] ?: "(ない)"}\n  $bn: ${b[k] ?: "(ない)"}"
     }
@@ -537,9 +559,10 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         }
         "settle" -> {
             // 新しい変更が出なくなるまで全端末を回す。止まらなければ下の確かめで落ちる
+            val targets = (s["devices"] as List<String>?)?.map { w.devices.getValue(it) } ?: w.devices.values.toList()
             for (round in 0 until 400) {
                 var moved = false
-                for (x in w.devices.values) {
+                for (x in targets) {
                     val r = x.sync()
                     if (r.pulled > 0 || r.pushed > 0 || r.conflicts > 0) moved = true
                 }
@@ -552,7 +575,7 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
             val full = s["full"] != false
             val snaps = names.map { snapshot(w.devices.getValue(it), full) }
             for (i in 1 until names.size) {
-                val lines = diffSnapshots(names[0], snaps[0], names[i], snaps[i], full)
+                val lines = diffSnapshots(names[0], snaps[0], names[i], snaps[i], full, s["ignore_tombstones"] == true)
                 if (lines.isNotEmpty()) fail("$label: ${names[0]} と ${names[i]} の違い(${lines.size} 件)\n${lines.take(40).joinToString("\n")}")
             }
         }
@@ -663,6 +686,8 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "tamper_device_id" -> d!!.sql.script("UPDATE sync_state SET value = 'copied' WHERE key = 'device_id'")
         "clear_keys" -> d!!.keys.clear()
         "mark" -> w.mark = w.log.size
+        // 同じ手順を times 回。文字列の {i} は回の番号(1 から)
+        "repeat" -> for (i in 1..(s["times"] as Long).toInt()) for (x in s["steps"] as List<Map<String, Any?>>) runStep(w, withIndex(x, i) as Map<String, Any?>, label)
         "expect" -> check(w, s["expect"] as Map<String, Any?>, label)
         else -> throw IllegalStateException("知らない op: $op")
     }
@@ -807,6 +832,10 @@ private fun checkDrive(w: World, drive: FakeDrive, e: Map<String, Any?>, label: 
     e["sent_lacks"]?.let { texts ->
         for (text in texts as List<String>) assertEquals("$label: 送った本文に $text がない", false, w.sent.any { b -> b.contains(text) })
     }
+    // mark からの一覧(files.list)とダウンロードの数。まとめ直しで呼び出しが増えすぎないことを見る
+    val since = w.log.drop(w.mark)
+    e["lists_at_most"]?.let { atMost("$label: Drive の一覧の数", since.count { l -> l.method == "GET" && l.path == "/drive/v3/files" }, it) }
+    e["downloads_at_most"]?.let { atMost("$label: Drive のダウンロードの数", since.count { l -> l.method == "GET" && l.path.startsWith("/drive/v3/files/") }, it) }
     for ((dev, vv) in (e["of"] as Map<String, Any?>?).orEmpty()) {
         val v = vv as Map<String, Any?>
         val m = w.devices.getValue(dev).keys.value
@@ -816,6 +845,10 @@ private fun checkDrive(w: World, drive: FakeDrive, e: Map<String, Any?>, label: 
         fun ids(tag: String? = null) = held.filter { tag == null || it["kind_tag"] == tag }.map { it["record_id"] }.toSet().size.toLong()
         v["exists"]?.let { assertEquals("$label: $dev の領域", it, files.any { f -> f.appProperties["t"] == "space" }) }
         v["records"]?.let { assertEquals("$label: $dev の領域のレコード数", it, ids()) }
+        v["files_at_most"]?.let { atMost("$label: $dev の領域のファイルの数", files.size, it) }
+        v["bytes_at_most"]?.let { atMost("$label: $dev の領域の大きさ", files.sumOf { f -> f.content.toByteArray(Charsets.UTF_8).size }, it) }
+        v["record_copies_at_most"]?.let { atMost("$label: $dev の領域のレコードの写しの数(書き手ごと・ファイルごとに数える)", held.size, it) }
+        v["snap_parts"]?.let { assertEquals("$label: $dev の領域のスナップショットの部分の数", it, files.count { f -> f.appProperties["t"] == "snap" }.toLong()) }
         v["s_records"]?.let { assertEquals("$label: $dev の領域の権限系のレコード数", it, ids("s")) }
         v["h_lacks"]?.let { texts ->
             val k = deriveKeys(m!!.k)
@@ -823,6 +856,10 @@ private fun checkDrive(w: World, drive: FakeDrive, e: Map<String, Any?>, label: 
             for (text in texts as List<String>) assertEquals("$label: $dev の履歴系に $text がない", false, opened.records.any { r -> canonicalJson(r.payload).contains(text) })
         }
     }
+}
+
+private fun atMost(label: String, got: Int, max: Any?) {
+    if (got > (max as Long)) fail("$label: $got が $max を超えた")
 }
 
 private class RunResult(val digests: Map<String, String>, val data: Map<String, String>)
@@ -884,7 +921,7 @@ class SyncScenarioTest {
     private fun load(file: String) = parseStrictJson(javaClass.classLoader!!.getResourceAsStream(file)!!.readBytes().toString(Charsets.UTF_8))
 
     @Test fun 共通シナリオがPCと同じ結果になる() = runBlocking {
-        val scenarios = load("sync-client.json") as List<Map<String, Any?>>
+        val scenarios = (load("sync-client.json") as List<Map<String, Any?>>).filter { c -> (c["stores"] as List<String>?)?.contains("server") != false }
         val digests = load("sync-client-digests.json") as Map<String, Map<String, String>>
         val fails = ArrayList<String>()
         for (c in scenarios) {
@@ -928,8 +965,9 @@ class SyncScenarioTest {
             val name = c["name"] as String
             try {
                 val drive = runScenarioOn("drive", c)
-                val server = runScenarioOn("server", c)
-                if (canonicalJson(drive.data) != canonicalJson(server.data)) fails += "$name: 今のデータがサーバーと違う"
+                // Drive だけのシナリオは比べる相手がない
+                val server = if ((c["stores"] as List<String>?)?.contains("server") != false) runScenarioOn("server", c) else null
+                if (server != null && canonicalJson(drive.data) != canonicalJson(server.data)) fails += "$name: 今のデータがサーバーと違う"
                 else if (canonicalJson(drive.digests) != canonicalJson(digests[name])) fails += "$name: digest が PC と違う"
             } catch (e: Throwable) {
                 fails += "$name: ${e.message ?: e}"

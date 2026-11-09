@@ -19830,5 +19830,664 @@
     }
    }
   }
+ },
+ {
+  "name": "Drive: 120 日使っても、まとめ直しでファイルの数と大きさが一定の範囲に収まり、後から参加した端末も揃う",
+  "stores": [
+   "drive"
+  ],
+  "store_note": "Drive のまとめ直し(自分のファイルを自分のスナップショットへまとめ直す)は Drive だけにある",
+  "devices": [
+   "pc",
+   "phone",
+   "tablet"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone"
+    ]
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "repeat",
+    "times": 120,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "favorite_thread_add",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "f{i}",
+      "title": "f{i}"
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "t{i}",
+      "title": "t{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "t{i}",
+      "no": 10
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "home",
+      "title": "home"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "home",
+      "no": 10
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     },
+     {
+      "op": "sync",
+      "device": "phone"
+     },
+     {
+      "op": "favorite_thread_remove",
+      "device": "phone",
+      "board": "https://a.5ch.io/x/",
+      "key": "f{i}",
+      "title": "f{i}"
+     },
+     {
+      "op": "open",
+      "device": "phone",
+      "board": "https://a.5ch.io/x/",
+      "key": "p{i}",
+      "title": "p{i}"
+     },
+     {
+      "op": "read",
+      "device": "phone",
+      "board": "https://a.5ch.io/x/",
+      "key": "p{i}",
+      "no": 5
+     },
+     {
+      "op": "open",
+      "device": "phone",
+      "board": "https://a.5ch.io/x/",
+      "key": "home",
+      "title": "home"
+     },
+     {
+      "op": "read",
+      "device": "phone",
+      "board": "https://a.5ch.io/x/",
+      "key": "home",
+      "no": 10
+     },
+     {
+      "op": "sync",
+      "device": "phone"
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone"
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "lists_at_most": 0,
+      "downloads_at_most": 240,
+      "of": {
+       "pc": {
+        "files_at_most": 19,
+        "bytes_at_most": 400000,
+        "record_copies_at_most": 700,
+        "snap_parts": 2,
+        "records": 574
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "mark"
+   },
+   {
+    "op": "pair_join",
+    "device": "tablet",
+    "from": "pc"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged",
+    "ignore_tombstones": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "downloads_at_most": 4
+     },
+     "tablet": {
+      "favorite_threads": []
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "Drive: まとめ直しが途中で失敗しても壊れず、途中で参加した端末も、その間読まなかった端末も追いつく",
+  "stores": [
+   "drive"
+  ],
+  "store_note": "Drive のまとめ直し(自分のファイルを自分のスナップショットへまとめ直す)は Drive だけにある",
+  "devices": [
+   "pc",
+   "phone",
+   "tablet"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone"
+    ]
+   },
+   {
+    "op": "repeat",
+    "times": 7,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "favorite_thread_add",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "b{i}",
+      "title": "b{i}"
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "snap_parts": 0
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "advance_ms",
+    "ms": 86400000
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "b8",
+    "title": "b8"
+   },
+   {
+    "op": "server_fail",
+    "path": "drive:snap",
+    "status": 500
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "pc": {
+      "pending": 0
+     },
+     "$server": {
+      "of": {
+       "pc": {
+        "snap_parts": 0
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "server_fail",
+    "path": "drive:delete",
+    "status": 500,
+    "skip": 2
+   },
+   {
+    "op": "advance_ms",
+    "ms": 60000
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "snap_parts": 1
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "pair_join",
+    "device": "tablet",
+    "from": "pc"
+   },
+   {
+    "op": "converged",
+    "devices": [
+     "pc",
+     "tablet"
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "converged",
+    "devices": [
+     "pc",
+     "phone"
+    ]
+   },
+   {
+    "op": "clear_faults"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 60000
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "snap_parts": 1,
+        "files_at_most": 3
+       }
+      }
+     },
+     "phone": {
+      "favorite_threads": [
+       "b1",
+       "b2",
+       "b3",
+       "b4",
+       "b5",
+       "b6",
+       "b7",
+       "b8"
+      ]
+     },
+     "tablet": {
+      "favorite_threads": [
+       "b1",
+       "b2",
+       "b3",
+       "b4",
+       "b5",
+       "b6",
+       "b7",
+       "b8"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "Drive: 2 台が同じころにまとめ直しても、互いのファイルを消さずに揃う",
+  "stores": [
+   "drive"
+  ],
+  "store_note": "Drive のまとめ直し(自分のファイルを自分のスナップショットへまとめ直す)は Drive だけにある",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "repeat",
+    "times": 7,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "favorite_thread_add",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "c{i}",
+      "title": "c{i}"
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     },
+     {
+      "op": "favorite_thread_add",
+      "device": "phone",
+      "board": "https://a.5ch.io/x/",
+      "key": "d{i}",
+      "title": "d{i}"
+     },
+     {
+      "op": "sync",
+      "device": "phone"
+     }
+    ]
+   },
+   {
+    "op": "advance_ms",
+    "ms": 86400000
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "c8",
+    "title": "c8"
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "phone",
+    "board": "https://a.5ch.io/x/",
+    "key": "d8",
+    "title": "d8"
+   },
+   {
+    "op": "favorite_thread_remove",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "d1",
+    "title": "d1"
+   },
+   {
+    "op": "server_fail",
+    "path": "drive:delete",
+    "status": 500
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "clear_faults"
+   },
+   {
+    "op": "advance_ms",
+    "ms": 60000
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged"
+   },
+   {
+    "op": "summary_same"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "snap_parts": 2,
+        "files_at_most": 5
+       }
+      }
+     },
+     "pc": {
+      "favorite_threads": [
+       "c1",
+       "c2",
+       "c3",
+       "c4",
+       "c5",
+       "c6",
+       "c7",
+       "c8",
+       "d2",
+       "d3",
+       "d4",
+       "d5",
+       "d6",
+       "d7",
+       "d8"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "Drive: 長く読まなかった間に相手が古い tombstone を落としていたら、全件で合わせ直して消えたものを戻さない",
+  "stores": [
+   "drive"
+  ],
+  "store_note": "Drive のまとめ直し(自分のファイルを自分のスナップショットへまとめ直す)は Drive だけにある",
+  "devices": [
+   "pc",
+   "phone"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "x",
+    "title": "x"
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "y",
+    "title": "y"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "x",
+       "y"
+      ]
+     }
+    }
+   },
+   {
+    "op": "favorite_thread_remove",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "x",
+    "title": "x"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "repeat",
+    "times": 100,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v{i}",
+      "title": "v{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "snap_parts": 1
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "y"
+      ],
+      "phase": "idle",
+      "state": "idle"
+     }
+    }
+   },
+   {
+    "op": "settle"
+   },
+   {
+    "op": "converged",
+    "ignore_tombstones": true
+   }
+  ]
  }
 ]

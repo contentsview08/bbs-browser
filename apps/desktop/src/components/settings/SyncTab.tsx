@@ -1,7 +1,7 @@
 // 同期の分類。鍵は main の窓にあるので、ここは頼むだけ
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { encode } from 'uqr'
-import { JOIN_DATA_CONFIRM, PAIRING_SHOW_MS, SYNC_GROUP_LABELS, SYNC_GROUPS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncConfirm, type SyncGroup, type SyncStatus, type SyncSummary } from '@bbs-browser/sync'
+import { DRIVE_LABELS as D, JOIN_DATA_CONFIRM, PAIRING_SHOW_MS, SYNC_GROUP_LABELS, SYNC_GROUPS, SYNC_LABELS as L, SYNC_NOTES, syncMessage, type MismatchSummary, type SyncConfirm, type SyncGroup, type SyncStatus, type SyncStore, type SyncSummary } from '@bbs-browser/sync'
 import { callMain } from '../../host/crossWindow'
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT } from '../DialogParts'
 import ConfirmDialog from '../ConfirmDialog'
@@ -19,7 +19,11 @@ export function SyncTab() {
   const [code, setCode] = useState('')
   const [url, setUrl] = useState<string>()
   const [pairing, setPairing] = useState<string>()
-  const [ask, setAsk] = useState<'leave' | 'server' | 'secret'>()
+  const [ask, setAsk] = useState<'leave' | 'server' | 'secret' | 'revoke'>()
+  /** 使っている間に替えようとしている置き場(確認を出す) */
+  const [nextStore, setNextStore] = useState<SyncStore>()
+  /** ブラウザでの Google のログインを待っている */
+  const [loggingIn, setLoggingIn] = useState(false)
   // 検索の結果にも並ぶので、探している間は読み直さない
   const searching = useContext(SearchContext).trim() !== ''
 
@@ -54,10 +58,22 @@ export function SyncTab() {
       const r = await callMain<{ code: string }>('syncPairingCode')
       setPairing(r.code)
     })
+  /** Google のログインを含む操作。待っている間は「やめる」を出す */
+  const withLogin = (f: () => Promise<unknown>, done?: string) => {
+    setLoggingIn(true)
+    return act(f, done).finally(() => setLoggingIn(false))
+  }
+  const chooseStore = (next: SyncStore) => {
+    if (!st || next === st.store) return
+    if (st.enabled) setNextStore(next)
+    else void act(() => callMain('syncSetStore', next))
+  }
   const setKind = (group: SyncGroup, on: boolean) => void act(() => callMain('syncSetKind', { group, on })).then(refreshSummary)
 
   if (!st) return null
   const needTicket = st.lastError?.startsWith('ticket_')
+  const drive = st.store === 'drive'
+  const needLogin = drive && st.lastError === 'google_auth_failed'
   return (
     <>
       <Section title={L.section} note={L.intro}>
@@ -71,6 +87,8 @@ export function SyncTab() {
           <dl className="text-sm text-c-text-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 mb-3">
             <dt className="text-c-text-muted">状態</dt>
             <dd>{st.state}</dd>
+            <dt className="text-c-text-muted">{D.store}</dt>
+            <dd>{drive ? `${D.store_drive}${st.drive?.email ? `(${st.drive.email})` : ''}` : D.store_server}</dd>
             <dt className="text-c-text-muted">{L.status_space}</dt>
             <dd className="font-mono">{st.space ?? '―'}</dd>
             <dt className="text-c-text-muted">{L.status_pending}</dt>
@@ -109,10 +127,32 @@ export function SyncTab() {
               </div>
             </div>
           )}
+          {st.drive && (
+            <div className="mb-3 text-sm text-c-text-body">
+              <p className="text-c-text-muted mb-1">{D.store}</p>
+              <div className="flex flex-wrap gap-4">
+                {(['server', 'drive'] as const).map((v) => (
+                  <label key={v} className="flex items-center gap-1">
+                    <input type="radio" name="sync-store" checked={st.store === v} disabled={busy || (v === 'drive' && st.drive?.unavailable !== null)} onChange={() => chooseStore(v)} />
+                    {v === 'drive' ? D.store_drive : D.store_server}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-c-text-muted mt-1">{st.drive.unavailable ? syncMessage(st.drive.unavailable) : D.store_note}</p>
+            </div>
+          )}
+          {loggingIn && (
+            <div className="mb-3 flex items-center gap-2 text-sm text-c-text-body">
+              <span>{D.login_waiting}</span>
+              <button type="button" className={BTN_SECONDARY} onClick={() => void callMain('syncGoogleCancel').catch(() => undefined)}>
+                {D.login_cancel}
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 mb-3">
-            {(!st.enabled || needTicket) && (
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void act(() => callMain('syncStart'), JOINED)}>
-                {L.start}
+            {(!st.enabled || needTicket || needLogin) && (
+              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void (drive ? withLogin : act)(() => callMain('syncStart'), needLogin ? undefined : JOINED)}>
+                {needLogin ? D.relogin : drive ? D.start_drive : L.start}
               </button>
             )}
             {st.enabled && (
@@ -120,7 +160,7 @@ export function SyncTab() {
                 {L.sync_now}
               </button>
             )}
-            {st.enabled && (
+            {st.enabled && !drive && (
               <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void showPairing()}>
                 {L.add_device}
               </button>
@@ -131,7 +171,7 @@ export function SyncTab() {
               </button>
             )}
           </div>
-          {!st.enabled && !st.confirm && (
+          {!st.enabled && !st.confirm && !drive && (
             <div className="flex gap-2 mb-3">
               <input className={`${INPUT} flex-1`} value={code} placeholder="obb1." autoComplete="off" spellCheck={false} onChange={(e) => setCode(e.target.value)} />
               <button
@@ -166,14 +206,46 @@ export function SyncTab() {
         </Section>
       )}
       <Section advanced title={L.advanced}>
-        <label className="block text-sm text-c-text-muted mb-1">{L.server_url}</label>
-        <div className="flex gap-2 mb-2">
-          <input className={`${INPUT} flex-1 font-mono`} value={url ?? st.serverOverride ?? ''} placeholder={st.serverUrl} autoComplete="off" spellCheck={false} onChange={(e) => setUrl(e.target.value)} />
-          <button type="button" className={BTN_SECONDARY} disabled={busy || url === undefined} onClick={() => setAsk('server')}>
-            変える
+        {!drive && (
+          <>
+            <label className="block text-sm text-c-text-muted mb-1">{L.server_url}</label>
+            <div className="flex gap-2 mb-2">
+              <input className={`${INPUT} flex-1 font-mono`} value={url ?? st.serverOverride ?? ''} placeholder={st.serverUrl} autoComplete="off" spellCheck={false} onChange={(e) => setUrl(e.target.value)} />
+              <button type="button" className={BTN_SECONDARY} disabled={busy || url === undefined} onClick={() => setAsk('server')}>
+                変える
+              </button>
+            </div>
+          </>
+        )}
+        {drive && st.enabled && (
+          <button type="button" className={BTN_DANGER} style={{ background: 'var(--c-error)' }} disabled={busy} onClick={() => setAsk('revoke')}>
+            {D.revoke}
           </button>
-        </div>
+        )}
       </Section>
+      {nextStore && (
+        <ConfirmDialog
+          title={D.store}
+          message={D.store_ask}
+          okLabel="変える"
+          onClose={(ok) => {
+            const next = nextStore
+            setNextStore(undefined)
+            if (ok) void (next === 'drive' ? withLogin : act)(() => callMain('syncSetStore', next))
+          }}
+        />
+      )}
+      {ask === 'revoke' && (
+        <ConfirmDialog
+          title={D.revoke}
+          message={D.revoke_ask}
+          okLabel="接続を切る"
+          onClose={(ok) => {
+            setAsk(undefined)
+            if (ok) void act(() => callMain('syncGoogleRevoke'))
+          }}
+        />
+      )}
       {ask === 'leave' && (
         <ConfirmDialog
           title={L.leave}

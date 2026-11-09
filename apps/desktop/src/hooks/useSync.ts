@@ -1,8 +1,9 @@
 // 同期のきっかけと、設定の窓からの頼みごと。自動の同期は前面にいる間だけ(きっかけの決まりは SyncScheduler)
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
-import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type DroppedThread, type SyncGroup } from '@bbs-browser/sync'
+import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type DroppedThread, type SyncGroup, type SyncStore } from '@bbs-browser/sync'
 import { broadcast } from '../host/crossWindow'
+import { cancelGoogleLogin, googleDrive } from '../host/google'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
 import { PRESET_URLS } from '../presets'
 import { isAppVisible } from '../utils/visibility'
@@ -31,6 +32,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
       keyStore: syncKeyStore,
       transport: syncTransport,
       defaultServerUrl: DEFAULT_SYNC_SERVER,
+      drive: googleDrive,
       adapters: [
         new FavoriteThreadAdapter(store.db, resolveSyncBoard),
         ...favoriteBoardAdapters(store.db, resolveSyncBoard),
@@ -131,6 +133,9 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     syncSetMaster: (on: boolean) => need(latest.current).setMaster(on),
     syncSetKind: (a: { group: SyncGroup; on: boolean }) => need(latest.current).setKind(a.group, a.on),
     syncSetServer: (url: string) => need(latest.current).setServerUrl(url),
+    syncSetStore: (store: SyncStore) => need(latest.current).setStore(store),
+    syncGoogleCancel: () => cancelGoogleLogin(),
+    syncGoogleRevoke: () => need(latest.current).revokeGoogle(),
     syncConfirm: (choice: ConfirmChoice) => need(latest.current).resolveConfirm(choice).then(summary),
     syncSummary: () => need(latest.current).summary(),
     syncMismatches: () => need(latest.current).mismatches(),

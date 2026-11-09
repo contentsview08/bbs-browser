@@ -51,7 +51,7 @@ pub(crate) fn only_main(window: &tauri::Window) -> Result<(), String> {
     }
 }
 
-fn client() -> Result<&'static reqwest::Client, String> {
+pub(crate) fn client() -> Result<&'static reqwest::Client, String> {
     static CLIENT: OnceLock<Result<reqwest::Client, ()>> = OnceLock::new();
     CLIENT
         .get_or_init(|| {
@@ -106,21 +106,41 @@ async fn send(req: SyncHttpRequest, dev: bool) -> Result<SyncHttpResponse, Strin
     Ok(SyncHttpResponse { status, body: String::from_utf8_lossy(&body).into_owned() })
 }
 
+/// Drive の置き場は、アクセストークンの代わりに目印を付けて頼む。本物は Rust が持ち、Drive の API の先にだけ付ける(画面へ出さない)
+async fn fill_google_token(window: &tauri::Window, req: &mut SyncHttpRequest) -> Result<(), String> {
+    if !req.headers.values().any(|v| v == crate::google_auth::TOKEN_SLOT) {
+        return Ok(());
+    }
+    let url: Url = req.url.parse().map_err(|_| "bad_url".to_string())?;
+    if !crate::google_auth::is_api_url(&url) {
+        return Err("bad_url".into());
+    }
+    // 直前に画面が取り直しているので、ここで取れないのは通信の失敗と同じに扱う
+    let token = crate::google_auth::access_token(window, false).await.map_err(|_| "network".to_string())?;
+    for v in req.headers.values_mut() {
+        if v == crate::google_auth::TOKEN_SLOT {
+            *v = format!("Bearer {token}");
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub async fn sync_http(window: tauri::Window, req: SyncHttpRequest) -> Result<SyncHttpResponse, String> {
+pub async fn sync_http(window: tauri::Window, mut req: SyncHttpRequest) -> Result<SyncHttpResponse, String> {
     only_main(&window)?;
+    fill_google_token(&window, &mut req).await?;
     send(req, cfg!(debug_assertions)).await
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
 
     /// 決まった応答を順に返す小さなサーバー。受け取った要求の文字列を送り返す
-    fn serve(replies: Vec<Vec<u8>>) -> (String, mpsc::Receiver<String>) {
+    pub(crate) fn serve(replies: Vec<Vec<u8>>) -> (String, mpsc::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
         let (tx, rx) = mpsc::channel();
@@ -151,7 +171,7 @@ mod tests {
         (base, rx)
     }
 
-    fn ok(body: &str, extra: &str) -> Vec<u8> {
+    pub(crate) fn ok(body: &str, extra: &str) -> Vec<u8> {
         format!("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\n{extra}Content-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
     }
 

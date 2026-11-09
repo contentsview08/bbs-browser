@@ -124,6 +124,27 @@ pub async fn sync_key_clear(window: tauri::Window) -> Result<(), String> {
     blocking(move || clear(SERVICE, &prepare(&dir, portable)?)).await
 }
 
+/// Google の更新用のトークンの名前。K と同じく DB の置き場ごとに分ける(K と組で意味を持つため)
+fn google_user(db_dir: &Path) -> String {
+    format!("google-{}", &user_for(db_dir)[LEGACY_USER.len() + 1..])
+}
+
+/// Google のトークンは画面へ出さないので命令にせず、google_auth だけが使う
+pub(crate) async fn google_load(window: &tauri::Window) -> Result<Option<String>, String> {
+    let (dir, _) = place(window)?;
+    blocking(move || load(SERVICE, &google_user(&dir))).await
+}
+
+pub(crate) async fn google_save(window: &tauri::Window, value: String) -> Result<(), String> {
+    let (dir, _) = place(window)?;
+    blocking(move || save(SERVICE, &google_user(&dir), &value)).await
+}
+
+pub(crate) async fn google_clear(window: &tauri::Window) -> Result<(), String> {
+    let (dir, _) = place(window)?;
+    blocking(move || clear(SERVICE, &google_user(&dir))).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +202,8 @@ mod tests {
         assert!(installed.starts_with("keys-"));
         assert_eq!(installed.len(), "keys-".len() + 16);
         assert!(installed["keys-".len()..].bytes().all(|b| b.is_ascii_hexdigit()));
+        let google = google_user(Path::new(r"D:\OBB\data"));
+        assert_eq!(google, format!("google-{}", &zip_a["keys-".len()..]));
     }
 
     #[test]

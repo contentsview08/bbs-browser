@@ -24,8 +24,22 @@ const MESSAGES: Record<string, string> = {
   sync_off: '先に「同期を使う」をオンにしてください。',
 }
 
+/**
+ * Google ドライブの置き場の文(docs/sync-drive.md 5.7)。今は PC だけが使うので sync-ui.json の外に置く。
+ * スマホが Drive を使う段(D4)で sync-ui.json の messages へ移す
+ */
+export const DRIVE_MESSAGES: Readonly<Record<string, string>> = {
+  google_auth_failed: 'Google との接続が切れました。もう一度 Google でログインしてください。この端末のデータはそのまま使えます。',
+  google_other_account: '前と違う Google アカウントです。同期のデータは前のアカウントにあります。',
+  google_unavailable: 'この版には Google の同期の設定が入っていないため、Google ドライブで同期できません。',
+  google_login_denied: 'Google のログインがやめられました。',
+  google_login_timeout: 'Google のログインが 5 分のうちに終わらなかったので、やめました。',
+  google_login_failed: 'Google のログインに失敗しました。もう一度お試しください。',
+  drive_pairing_later: 'Google ドライブの同期では、端末の追加はまだ使えません。',
+}
+
 export function syncMessage(code: string): string {
-  return MESSAGES[code] ?? `同期できませんでした(${code})`
+  return MESSAGES[code] ?? DRIVE_MESSAGES[code] ?? `同期できませんでした(${code})`
 }
 
 export const SYNC_MESSAGES: Readonly<Record<string, string>> = MESSAGES
@@ -88,4 +102,19 @@ export const SYNC_GROUP_LABELS = {
   ng: 'NG',
   settings: '設定',
   secret: '画像の削除キー・管理トークン',
+} as const
+
+/** Google ドライブの置き場の画面の言葉(PC だけ。DRIVE_MESSAGES と同じく D4 で sync-ui.json へ移す) */
+export const DRIVE_LABELS = {
+  store: '同期の置き場',
+  store_server: '同期サーバー',
+  store_drive: 'Google ドライブ',
+  store_note: 'Google ドライブでは、アプリ専用の見えないフォルダに暗号化したまま置きます。Google にも中身は読めません。',
+  store_ask: '置き場を変えると、この端末のデータを新しい置き場へ全部送り直します。前の置き場のデータはそのまま残ります。',
+  start_drive: 'Google でログインして同期を始める',
+  relogin: 'Google でログインし直す',
+  login_waiting: 'ブラウザで Google にログインしてください(5 分まで待ちます)',
+  login_cancel: 'ログインをやめる',
+  revoke: 'Google の接続を切る(全端末)',
+  revoke_ask: 'Google に OBB の許可の取り消しを送り、この端末で同期をやめます。同じ許可を使うほかの端末も止まります。Google ドライブのデータは残ります。',
 } as const

@@ -43,15 +43,51 @@ export interface SyncStatus {
   /** 開発用の上書き。なければ既定値 */
   serverOverride: string | null
   confirm: SyncConfirm | null
+  /** 置き場の種類(docs/sync-drive.md 7.1) */
+  store: SyncStore
+  /** Google ドライブの置き場の様子。Drive を渡されていない端末は null */
+  drive: DriveStatus | null
 }
+
+export type SyncStore = 'server' | 'drive'
+
+export interface DriveStatus {
+  /** 使えない理由(ビルドにクライアントがないなど)。使えるなら null */
+  unavailable: string | null
+  /** ログインしているアカウントのメール。置き場が Drive の間だけ見る(ほかの人の鍵保管を開かない) */
+  email: string | null
+}
+
+/** Google のログインとトークンは親(PC では Rust)が持つ。トークンはここを通らない */
+export interface DriveAuth {
+  /** 使えない理由のコード(ビルドにクライアントがないなど)。使えるなら null */
+  unavailable(): Promise<string | null>
+  /**
+   * 既定のブラウザでログインし、更新用のトークンを親の鍵保管に置く。expect は前のアカウント(permissionId)で、
+   * 違うアカウントなら置き換えずに google_other_account で断る
+   */
+  login(expect: string | null): Promise<{ account: string }>
+  /** ログインしているアカウント。通信しない */
+  account(): Promise<{ account: string; email: string } | null>
+  /** 手元のトークンを消す。Google へ取り消しは送らない(同じ許可を使う他の端末を止めないため) */
+  forget(): Promise<void>
+  /** Google へ取り消しを送り、手元のトークンも消す。全端末が止まる */
+  revoke(): Promise<void>
+  remote: SyncRemoteFactory
+}
+
+/** 置き場を替えたときに捨てる Drive の控え。新しい置き場では全件から読み直す */
+const DRIVE_STATE_KEYS = ['drive_token', 'drive_seen', 'drive_space', 'drive_seg', 'drive_read_at', 'google_account']
 
 export interface SyncControllerDeps {
   db: SyncSqlDb
   keyStore: SyncKeyStore
   transport: SyncTransport
   defaultServerUrl: string
-  /** 置き場。なければ同期サーバー(Drive の置き場を選ぶ画面はまだない) */
+  /** 置き場の差し替え(テスト用)。あれば置き場の種類によらずこれを使う */
   remote?: SyncRemoteFactory
+  /** Google ドライブの置き場。なければ同期サーバーだけ */
+  drive?: DriveAuth
   adapters: readonly SyncAdapter[]
   now: () => number
   allowLocalhost?: boolean
@@ -105,6 +141,26 @@ export class SyncController {
     return (await this.overrideUrl()) ?? this.deps.defaultServerUrl
   }
 
+  private async store(): Promise<SyncStore> {
+    return (await this.t.state('store')) === 'drive' && this.deps.drive ? 'drive' : 'server'
+  }
+
+  private async needDrive(): Promise<DriveAuth> {
+    const d = this.deps.drive
+    if (!d) throw new SyncHostError('google_unavailable')
+    const why = await d.unavailable()
+    if (why !== null) throw new SyncHostError(why)
+    return d
+  }
+
+  /** ログインして、アカウントを同期の表に置く。前のアカウントと違えば止める(6 章) */
+  private async driveLogin(): Promise<void> {
+    const before = await this.t.state('google_account')
+    const { account } = await (await this.needDrive()).login(before)
+    if (before !== null && before !== account) throw new SyncHostError('google_other_account')
+    await this.deps.db.batch([setState('google_account', account)])
+  }
+
   /** 作り直しを順に行う。呼び出しが重なっても、同じ先へのエンジンは 1 つだけ(同じ leaseOwner の 2 つの周が並ばないように) */
   private engine(): Promise<SyncEngine> {
     const next = this.engineQueue.then(() => this.ensureEngine())
@@ -113,7 +169,9 @@ export class SyncController {
   }
 
   private async ensureEngine(): Promise<SyncEngine> {
-    const url = await this.serverUrl()
+    const store = await this.store()
+    // Drive の置き場では URL を使わないが、置き場が替わったらエンジンを作り直す
+    const url = store === 'drive' ? 'drive:' : await this.serverUrl()
     if (this.engineValue === null || this.engineUrl !== url) {
       // 古い先へ走っている周を残さない
       await this.engineValue?.halt()
@@ -122,8 +180,8 @@ export class SyncController {
         db: this.deps.db,
         keyStore: this.deps.keyStore,
         transport: this.deps.transport,
-        serverUrl: url,
-        remote: this.deps.remote,
+        serverUrl: store === 'drive' ? this.deps.defaultServerUrl : url,
+        remote: this.deps.remote ?? (store === 'drive' ? this.deps.drive?.remote : undefined),
         adapters: this.deps.adapters,
         now: this.deps.now,
         leaseOwner: this.deps.leaseOwner,
@@ -160,7 +218,7 @@ export class SyncController {
     }
   }
 
-  private async pair(k: Uint8Array, ticket: string): Promise<void> {
+  private async pair(k: Uint8Array, ticket: string | null): Promise<void> {
     const engine = await this.engine()
     try {
       await engine.pair(k, ticket)
@@ -181,6 +239,7 @@ export class SyncController {
     const master = await this.isMasterOn()
     const rawConfirm = await this.t.state('pending_confirm')
     const lastError = await this.t.state('last_error')
+    const store = await this.store()
     // 切っている間は鍵保管を開かない
     if (enabled && master && this.spaceHead === null) {
       const m = await this.deps.keyStore.load().catch(() => null)
@@ -200,12 +259,15 @@ export class SyncController {
       serverUrl: await this.serverUrl(),
       serverOverride: await this.overrideUrl(),
       confirm: this.pendingJoin?.confirm ?? (rawConfirm === null ? null : (JSON.parse(rawConfirm) as SyncConfirm)),
+      store,
+      drive: this.deps.drive ? { unavailable: await this.deps.drive.unavailable(), email: store === 'drive' ? ((await this.deps.drive.account().catch(() => null))?.email ?? null) : null } : null,
     }
   }
 
   /** 同期を始める。1 台目は K を作り、窓を閉じたら捨てる。止まっている領域は同じ K で確認を通し直す */
   async start(): Promise<CycleResult> {
     if (!(await this.isMasterOn())) throw new SyncHostError('sync_off')
+    if ((await this.store()) === 'drive') return this.startDrive()
     const url = checkServerUrl(await this.serverUrl(), this.deps.allowLocalhost)
     const material = await this.loadKeys()
     const resuming = material !== null && (await this.isEnabled())
@@ -220,9 +282,55 @@ export class SyncController {
     return this.run(true)
   }
 
+  /**
+   * Google ドライブで始める(docs/sync-drive.md 5.2)。先にログインし、通ってから K を作る(ログインをやめたら何も残さない)。
+   * 使っている最中(期限切れ・取り消しで止まった)なら、K と同期の表はそのままでトークンだけを置き直す
+   */
+  private async startDrive(): Promise<CycleResult> {
+    await this.needDrive()
+    const material = await this.loadKeys()
+    const resuming = material !== null && (await this.isEnabled())
+    await this.driveLogin()
+    if (!resuming) {
+      const k = generateMasterKey()
+      await this.pair(k, null)
+      this.spaceHead = spaceId(deriveKeys(k).auth_token).slice(0, 12)
+    }
+    return this.run(true)
+  }
+
+  /**
+   * 置き場を替える(7.1・7.3)。使っている間なら、今のサーバーの URL を変えたときと同じく全件を合わせ直す(手元が正なので運ぶものはない)。
+   * Drive へは先にログインする。サーバーへ戻すときは Google のトークンを手元から消す(取り消しは送らない)
+   */
+  async setStore(next: SyncStore): Promise<void> {
+    const current = await this.store()
+    if (next === current) return
+    const enabled = await this.isEnabled()
+    if (next === 'drive') {
+      await this.needDrive()
+      // 使う前なら選ぶだけ(ログインは「同期を始める」で 1 回)
+      if (enabled) await this.driveLogin()
+    }
+    await this.engineValue?.halt()
+    const stmts: SqlStatement[] = [next === 'drive' ? setState('store', 'drive') : delState('store'), ...DRIVE_STATE_KEYS.filter((k) => next === 'server' || k !== 'google_account').map(delState)]
+    if (enabled) stmts.push(setState('since', '0'), setState('recreate_pending', '1'), delState('epoch'), delState('gc_floor'), delState('push_inflight'), delState('last_error'))
+    await this.deps.db.batch(stmts)
+    if (next === 'server') await this.deps.drive?.forget()
+    if (next === 'drive' && enabled && (await this.isMasterOn())) await this.run(true)
+  }
+
+  /** Google へ取り消しを送り、この端末で同期をやめる(5.7「全端末で Google の接続を切る」)。Drive のファイルは残る */
+  async revokeGoogle(): Promise<void> {
+    await (await this.needDrive()).revoke()
+    await this.leave()
+  }
+
   /** QR とコピー用のコードの中身。表示は 60 秒で消す */
   async pairingCode(): Promise<{ code: string; showMs: number }> {
     if (!(await this.isEnabled())) throw new SyncHostError('already_on')
+    // obb2(K + トークン)は次の段(D4)。obb1 を出すとサーバーの端末として参加してしまう
+    if ((await this.store()) === 'drive') throw new SyncHostError('drive_pairing_later')
     const m = await this.loadKeys()
     if (m === null) throw new SyncHostError('key_store_unavailable')
     if (m.ticket === null) throw new SyncHostError('ticket_required')
@@ -252,7 +360,11 @@ export class SyncController {
   /** URL は pair が通ってから書く。失敗した参加の先を残さない */
   private async finishJoin(c: PairingCode): Promise<CycleResult> {
     await this.engineValue?.halt()
+    const wasDrive = (await this.store()) === 'drive'
     await this.pair(c.k, c.ticket)
+    // obb1 はサーバーの領域。Drive を選んでいても、コードの先に合わせる
+    await this.deps.db.batch([delState('store'), ...DRIVE_STATE_KEYS.map(delState)])
+    if (wasDrive) await this.deps.drive?.forget()
     await this.writeServerUrl(c.serverUrl)
     this.spaceHead = spaceId(deriveKeys(c.k).auth_token).slice(0, 12)
     return this.run(true)
@@ -282,8 +394,11 @@ export class SyncController {
   /** 鍵と同期の表を消し、サーバーの URL も既定へ戻す。手元のデータは消さない */
   async leave(): Promise<void> {
     this.pendingJoin = null
+    const wasDrive = (await this.store()) === 'drive'
     await (await this.engine()).leave()
     this.spaceHead = null
+    // 同期の表と一緒に置き場の選択も消える。Google のトークンも手元から消す(取り消しは送らない)
+    if (wasDrive) await this.deps.drive?.forget()
   }
 
   /** 自動の同期の口。周の結果は手動と同じ流れで画面へ渡す。確認の時計と裏に回る瞬間の周は、直前の確認が「変化なし」なら pull を省く */

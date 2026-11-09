@@ -8,7 +8,10 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod chosen_paths;
 mod fonts;
+mod google_auth;
 mod media_cache;
+#[cfg(test)]
+mod oauth_env;
 mod post_http;
 mod sql_batch;
 mod sync_http;
@@ -711,6 +714,13 @@ pub fn run() {
             sql_batch::sql_execute,
             sql_batch::sql_select,
             sync_http::sync_http,
+            google_auth::google_available,
+            google_auth::google_account,
+            google_auth::google_login,
+            google_auth::google_access_token,
+            google_auth::google_login_cancel,
+            google_auth::google_forget,
+            google_auth::google_revoke,
             sync_key::sync_key_load,
             sync_key::sync_key_save,
             sync_key::sync_key_clear,

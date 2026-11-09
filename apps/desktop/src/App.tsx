@@ -92,7 +92,6 @@ import { favIncreases } from './utils/watch'
 import { LIST_REFRESH_COOLDOWN_MS, REFRESH_COOLDOWN_MS } from './utils/cooldown'
 import { isAppVisible } from './utils/visibility'
 import { reachedMaxPosts, shouldAutoRefresh, updateCheckDue } from './utils/autoRefresh'
-import { noteAutoRefreshTick } from './hooks/useAutoScroll'
 import { favUnread, threadUnread, unreadCount } from './utils/unread'
 import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
@@ -1459,16 +1458,14 @@ export default function App() {
   }
   const autoRefreshRef = useRef(autoRefresh)
   autoRefreshRef.current = autoRefresh
+  /** 実況モードを入れているタブ。開いているタブなら、ふだんの自動更新の代わりに実況モードの間隔で更新する */
+  const [liveTabId, setLiveTabId] = useState<string>()
+  const refreshSec = liveTabId !== undefined && liveTabId === activeId ? settings.liveRefreshSec : settings.autoRefreshSec
   useEffect(() => {
-    if (!activeId || settings.autoRefreshSec <= 0) return noteAutoRefreshTick(undefined)
-    // 自動で流すが、次の更新の時刻に合わせて流せるように、回った時刻を知らせる
-    noteAutoRefreshTick(Date.now())
-    const id = setInterval(() => {
-      noteAutoRefreshTick(Date.now())
-      autoRefreshRef.current()
-    }, settings.autoRefreshSec * 1000)
+    if (!activeId || refreshSec <= 0) return
+    const id = setInterval(() => autoRefreshRef.current(), refreshSec * 1000)
     return () => clearInterval(id)
-  }, [activeId, settings.autoRefreshSec])
+  }, [activeId, refreshSec])
 
   /** キー操作の対象: 選んでいるタブがあれば、それと開いているタブ。なければ開いているタブだけ */
   const targetTabs = () => {
@@ -2461,6 +2458,7 @@ export default function App() {
     registerReadFlush: useEvent((flush: (() => void) | undefined) => {
       readFlush.current = flush
     }),
+    setLive: useEvent((id: string, on: boolean) => setLiveTabId((cur) => (on ? id : cur === id ? undefined : cur))),
     loadDraft: useEvent(async (t: ThreadSummary) => store?.getDraft(t)),
     saveDraft: useEvent((t: ThreadSummary, body: string) => void store?.setDraft(t, body).catch(backgroundError('下書きの保存'))),
   }

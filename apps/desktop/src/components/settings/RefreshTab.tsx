@@ -1,6 +1,7 @@
 import { NumberField, Toggle } from '../SettingParts'
 import { Choice, type SettingsProps, Section } from './common'
-import { AUTO_SCROLL_SPEEDS } from '../../utils/autoScroll'
+import { formatLiveSpeed, LIVE_REFRESH_CHOICES } from '../../utils/autoScroll'
+import LiveSpeedSlider from '../LiveSpeedSlider'
 
 /** 開いているスレの自動更新の間隔(秒)。スマホ版の選択肢と同じ */
 const AUTO_REFRESH_CHOICES = [0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))
@@ -13,10 +14,21 @@ export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'setting
         <Choice value={AUTO_REFRESH_CHOICES.some((o) => o.key === s.autoRefreshSec) ? s.autoRefreshSec : 0} options={AUTO_REFRESH_CHOICES} onChange={(v) => update('autoRefreshSec', v)} />
       </Section>
       <Section
-        title="自動で流す速さ"
-        note="スレ表示の ︙ の「自動で流す」の速さです。読み残しはこの速さで流し、追いついた後は次の自動更新までに読み終える速さ(最大でこの 6 倍)で流します"
+        title="実況モード"
+        note="スレ表示の ︙ の「実況モード」(キー A)。入れている間はこの間隔でスレを更新し、読み残しを流す速さで流します。追いついた後は、届いたレスを 1 つずつ下に積みます。流す速さは、スレ表示の右上のつまみでも変えられます"
       >
-        <Choice value={s.autoScrollSpeed} options={AUTO_SCROLL_SPEEDS} onChange={(v) => update('autoScrollSpeed', v)} />
+        <div className="flex flex-col gap-3">
+          <div>
+            <p className="mb-1.5 text-sm text-c-text-body">更新の間隔</p>
+            <Choice value={s.liveRefreshSec} options={LIVE_REFRESH_CHOICES.map((n) => ({ key: n, name: `${n} 秒ごと` }))} onChange={(v) => update('liveRefreshSec', v)} />
+          </div>
+          <div className="max-w-md">
+            <p className="mb-1.5 text-sm text-c-text-body">
+              流す速さ <span className="ml-1 tabular-nums font-bold text-c-text-strong">{formatLiveSpeed(s.liveScrollSpeed)}</span>
+            </p>
+            <LiveSpeedSlider value={s.liveScrollSpeed} onChange={(v) => update('liveScrollSpeed', v)} />
+          </div>
+        </div>
       </Section>
       <Section
         advanced title="お気に入りのスレの新着"

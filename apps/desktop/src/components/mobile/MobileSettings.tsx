@@ -23,7 +23,7 @@ import {
   type UpdateSetting,
 } from '../../ui/settings'
 import { ensureNotifyPermission } from '../../utils/osNotify'
-import { AUTO_SCROLL_SPEEDS } from '../../utils/autoScroll'
+import { formatLiveSpeed, LIVE_REFRESH_CHOICES, LIVE_SPEED_STEPS, liveSpeedOfStep, liveStepOfSpeed } from '../../utils/autoScroll'
 import FontSizeSlider, { BarSliders, cssPx, setCssVar } from '../FontSizeSlider'
 import { MOBILE_HEAD_BTN, MOBILE_HEAD_ICON } from '../ActionBar'
 import { AccountsTab } from '../settings/AccountsTab'
@@ -35,7 +35,7 @@ import { ListTabsEditor, SettingsEmbed, type SettingsProps } from '../settings/c
 import { NgTab } from '../settings/NgTab'
 import { ToolbarsTab } from '../settings/ToolbarsTab'
 import { UserhashInput } from '../settings/UploadTab'
-import { ActionRow, ChoiceRow, Group, NavRow, SwitchRow, TextRow, WordList } from './ui'
+import { ActionRow, ChoiceRow, Group, NavRow, SliderRow, SwitchRow, TextRow, WordList } from './ui'
 import LicensesDialog from '../LicensesDialog'
 
 type PageId =
@@ -423,17 +423,27 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               onChange={(v) => update('autoRefreshSec', v)}
             />
             <ChoiceRow
-              label="自動で流す速さ"
-              desc="︙ の「自動で流す」の速さ。追いついた後は、次の自動更新までに読み終える速さで流します"
-              value={s.autoScrollSpeed}
-              options={AUTO_SCROLL_SPEEDS}
-              onChange={(v) => update('autoScrollSpeed', v)}
-            />
-            <ChoiceRow
               label="お気に入りのスレの新着を確かめる"
               value={s.favCheckMin}
               options={[0, 3, 5, 10, 30].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 分ごと` }))}
               onChange={(v) => update('favCheckMin', v)}
+            />
+          </Group>
+          <Group title="実況モード" note="スレ表示の ︙ の「実況モード」。入れている間はこの間隔で更新し、読み残しを流す速さで流します。追いついた後は、届いたレスを 1 つずつ下に積みます">
+            <ChoiceRow
+              label="更新の間隔"
+              value={s.liveRefreshSec}
+              options={LIVE_REFRESH_CHOICES.map((n) => ({ key: n, name: `${n} 秒ごと` }))}
+              onChange={(v) => update('liveRefreshSec', v)}
+            />
+            <SliderRow
+              label="流す速さ"
+              value={liveStepOfSpeed(s.liveScrollSpeed)}
+              min={0}
+              max={LIVE_SPEED_STEPS}
+              step={1}
+              format={(v) => formatLiveSpeed(liveSpeedOfStep(v))}
+              onChange={(v) => update('liveScrollSpeed', liveSpeedOfStep(v))}
             />
           </Group>
         </>

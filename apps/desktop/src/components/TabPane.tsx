@@ -88,6 +88,8 @@ export interface TabEvents {
   threadUrl: (t: ThreadSummary) => string
   /** 開いているタブの「既読をすぐ知らせる」関数を預かる(更新の直前に呼ぶ) */
   registerReadFlush: (flush: (() => void) | undefined) => void
+  /** そのタブの実況モードを入れた・やめた */
+  setLive: (id: string, on: boolean) => void
   /** 設定を変える(︙ の表示スタイル) */
   updateSetting: UpdateSetting
 }
@@ -176,6 +178,7 @@ function TabPane({
   const isNgHere = useCallback((p: Post) => isNg(p, thread.boardUrl), [isNg, thread.boardUrl])
   const onOpenInBrowser = useCallback(() => ev.openInBrowser(thread), [ev, thread])
   const onDeleteLog = useCallback(() => ev.deleteLog(id), [ev, id])
+  const onLiveChange = useCallback((on: boolean) => ev.setLive(id, on), [ev, id])
   const title = tab.log.title || thread.title
   const draft = useMemo(() => ({ load: () => ev.loadDraft(thread), save: (body: string) => ev.saveDraft(thread, body), key: `reply:${thread.boardUrl}${thread.key}` }), [ev, thread])
   const onFindNext = useCallback(() => ev.findNext(thread, title), [ev, thread, title])
@@ -246,6 +249,7 @@ function TabPane({
       draft={draft}
       threadUrl={ev.threadUrl(thread)}
       registerReadFlush={ev.registerReadFlush}
+      onLiveChange={onLiveChange}
       postLimits={postLimits}
       postByteLength={postByteLength}
       maxPosts={maxPosts}

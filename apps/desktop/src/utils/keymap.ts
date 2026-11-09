@@ -69,7 +69,7 @@ export const KEY_ACTIONS: { key: KeyAction; name: string; where: 'view' | 'app' 
   { key: 'gallery', name: '画像一覧', where: 'view' },
   { key: 'copyUrl', name: 'スレの URL をコピー(スレ一覧では選んでいるスレ)', where: 'view' },
   { key: 'findNext', name: '次スレを探す', where: 'view' },
-  { key: 'autoScroll', name: '自動で流す(入れる・やめる)', where: 'view' },
+  { key: 'autoScroll', name: '実況モード(入れる・やめる)', where: 'view' },
   { key: 'peek', name: 'スレを開かずに中身をのぞく(スレ一覧で。中身が一緒に届く掲示板だけ)', where: 'view' },
   { key: 'switchPane', name: 'キーを受け取る方を、スレ一覧とスレ表示で入れ替える(1 画面なら見せる方を入れ替える)', where: 'app' },
   { key: 'nextTab', name: '次のタブ', where: 'app' },

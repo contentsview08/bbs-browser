@@ -487,11 +487,6 @@ private fun BehaviorPage(vm: AppViewModel) {
     Group("スクロール") {
         SwitchRow("下へスクロールしたら、ヘッダーとフッターを隠す", p.hideBarsOnScroll, desc = "上へスクロールすると、すぐ戻ります") { p.hideBarsOnScroll = it }
         if (LocalAdvanced.current) SwitchRow("いちばん下を見ているときは、新着まで送る", p.autoScrollOnNew) { p.autoScrollOnNew = it }
-        // 自動で流すのは、スレ表示の ︙ から入れる。次の更新までに溜まった分を読み終える速さで流し、ここの速さより遅くはしない
-        ChoiceRow(
-            "自動で流す速さ", p.autoScrollSpeed,
-            listOf("slow" to "ゆっくり(1 秒に 1 行)", "normal" to "ふつう(1 秒に 2 行)", "fast" to "速い(1 秒に 4 行)"),
-        ) { p.autoScrollSpeed = it }
         if (LocalAdvanced.current) SwitchRow("ログを削除する前に確かめる", p.confirmDeleteLog) { p.confirmDeleteLog = it }
     }
     Group("更新") {
@@ -500,6 +495,13 @@ private fun BehaviorPage(vm: AppViewModel) {
             "開いているスレの自動更新", p.autoRefreshSec.toString(),
             listOf(0, 5, 10, 20, 30, 60).map { it.toString() to if (it == 0) "しない" else "$it 秒ごと" },
         ) { p.autoRefreshSec = it.toInt() }
+    }
+    Group("実況モード", note = "スレ表示の ︙ の「実況モード」で入ります。下まで読むまでは流す速さで流し、追いついた後は届いたレスを 1 つずつ下に積みます。流す速さは、実況モードの間に右上のスライダーでも変えられます") {
+        ChoiceRow(
+            "更新の間隔", p.liveRefreshSec.toString(),
+            LIVE_REFRESH_CHOICES.map { it.toString() to "$it 秒ごと" },
+        ) { p.liveRefreshSec = it.toInt() }
+        SliderRow("流す速さ", posOfLiveSpeed(p.liveSpeed), 0f..1f, steps = 0, label = "1 秒に ${liveSpeedText(p.liveSpeed)} 行") { p.liveSpeed = liveSpeedOfPos(it) }
     }
     if (LocalAdvanced.current) Group("お気に入りのスレの新着", note = "お気に入りのスレがある板のスレ一覧を取り、新着の数だけ確かめます(本文は開いたときに取ります)。アプリを開いている間だけ確かめます。掲示板に負担をかけないよう、5 分より短くはできません") {
         ChoiceRow(

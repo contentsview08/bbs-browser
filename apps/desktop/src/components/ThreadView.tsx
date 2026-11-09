@@ -43,7 +43,8 @@ import type { UploadedFile } from '../host/uploader'
 import PullSpinner from './PullSpinner'
 import { useWheelPullRefresh } from '../hooks/useWheelPullRefresh'
 import { animateScroll, closedPosition, framesIn, useThreadScroll } from '../hooks/useThreadScroll'
-import { useAutoScroll } from '../hooks/useAutoScroll'
+import { useAutoScroll, useLiveReveal } from '../hooks/useAutoScroll'
+import { LiveSpeedOverlay } from './LiveSpeedSlider'
 import { useDragHeight } from '../hooks/useDragHeight'
 import DragEdge from './DragEdge'
 import { CURSOR_MARGIN, CURSOR_SCROLL_MS, DOUBLE_ESC_MS, firstAfter, followDelta, frameIndexOf, isDoublePress, isNear, isSeen, keepCursorOnNew, pickAfterPage, pickAfterPageAt, spanOf, stepCursor } from '../utils/cursor'
@@ -175,6 +176,8 @@ interface Props {
    * 「ここから未読」を古い位置で引き直さないようにする
    */
   registerReadFlush?: (flush: (() => void) | undefined) => void
+  /** 実況モードを入れた・やめた(入れている間は、App がそのスレを実況モードの間隔で更新する) */
+  onLiveChange?: (on: boolean) => void
   /** 書き込みの下書き(このスレの書きかけ) */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
@@ -529,7 +532,25 @@ const PostFrame = memo(function PostFrame(props: {
 })
 
 export default function ThreadView(props: Props) {
-  const { log, unreadFrom, settings, onRead } = props
+  const { unreadFrom, settings, onRead } = props
+  /** 実況モード(︙ とキーで入れる・やめる)。開いているスレに対して効き、タブを切り替えたら・閉じたらやめる */
+  const [liveMode, setLiveMode] = useState(false)
+  useEffect(() => {
+    if (!props.active) setLiveMode(false)
+  }, [props.active])
+  const liveOn = liveMode && props.active
+  const onLiveChange = props.onLiveChange
+  useEffect(() => {
+    if (!liveOn || !onLiveChange) return
+    onLiveChange(true)
+    return () => onLiveChange(false)
+  }, [liveOn, onLiveChange])
+  // ライブの段で、まだ出していないレスは、ログから外しておく(作らない・既読にしない・新着の札も出さない)
+  const reveal = useLiveReveal(props.log.posts, settings.liveRefreshSec)
+  const log = useMemo(
+    () => (reveal.count === undefined || reveal.count >= props.log.posts.length ? props.log : { ...props.log, posts: props.log.posts.slice(0, reveal.count) }),
+    [props.log, reveal.count],
+  )
   // 見えているタブだけ、判定が届くたびに計算し直す(隠れたタブは、見せるときに計算し直す)
   const trollJudgeRef = useRef(props.trollJudge)
   if (props.active) trollJudgeRef.current = props.trollJudge
@@ -1093,11 +1114,6 @@ export default function ThreadView(props: Props) {
     },
     [indexOfNo, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, unreadFrom],
   )
-  /** 自動で流す(︙ とキーで入れる・やめる)。開いているスレに対して効き、タブを切り替えたら・閉じたらやめる */
-  const [autoScroll, setAutoScroll] = useState(false)
-  useEffect(() => {
-    if (!props.active) setAutoScroll(false)
-  }, [props.active])
   /** レスの高さを変える設定。変わったら、覚えた高さと見積もりの補正を使わない */
   const layoutKey = useMemo(
     () =>
@@ -1154,8 +1170,8 @@ export default function ThreadView(props: Props) {
     onSavePosition: props.onSavePosition,
     onRead,
     openPosition: settings.openPosition,
-    // 自動で流している間は、新着へ送らずに流れで追いかける(送ると一気に飛んでしまう)
-    autoScrollOnNew: settings.autoScrollOnNew && !autoScroll,
+    // 実況モードの間は、新着へ送らずに流れ・積み上げで追いかける(送ると一気に飛んでしまう)
+    autoScrollOnNew: settings.autoScrollOnNew && !liveMode,
     showThumbnails: settings.thumbLoad !== 'never',
     showLinkPreview: settings.showLinkPreview,
     jumpTo: props.jumpTo,
@@ -1163,17 +1179,16 @@ export default function ThreadView(props: Props) {
   const autoFlow = useAutoScroll({
     rootRef: ref,
     listRef,
-    on: autoScroll,
+    on: liveMode,
     active: props.active,
-    speed: settings.autoScrollSpeed,
-    autoRefreshSec: settings.autoRefreshSec,
+    speed: settings.liveScrollSpeed,
     ready: isPositioned,
     flushRead,
-    jumpToBottom: () => jumpToBottom(),
+    reveal,
   })
-  const toggleAutoScroll = () => {
-    showQuick(true, autoScroll ? '自動で流すのをやめました' : '自動で流します')
-    setAutoScroll((v) => !v)
+  const toggleLiveMode = () => {
+    showQuick(true, liveMode ? '実況モードをやめました' : '実況モードにしました')
+    setLiveMode((v) => !v)
   }
 
   // 仮想スクロール: スクロールしたら、見えているレスの前後だけ中身を作るよう、範囲を動かす(WIN_BEFORE・WIN_AFTER)。
@@ -1292,7 +1307,7 @@ export default function ThreadView(props: Props) {
         ]
       : []),
     { id: 'gallery', label: '画像一覧', icon: 'photo_library', active: galleryOpen, onClick: () => setGalleryOpen(true) },
-    { id: 'autoScroll', label: '自動で流す', icon: 'autoplay', active: autoScroll, fillWhenActive: true, onClick: toggleAutoScroll },
+    { id: 'autoScroll', label: '実況モード', icon: 'live_tv', active: liveMode, fillWhenActive: true, onClick: toggleLiveMode },
     ...(props.onUpdateSetting
       ? [
           {
@@ -1606,7 +1621,7 @@ export default function ThreadView(props: Props) {
       setShowNext(true)
       jumpToBottom()
     },
-    autoScroll: toggleAutoScroll,
+    autoScroll: toggleLiveMode,
   }
 
   // キー操作(設定で割り当てを変えられる)。開いているタブで、入力欄にいないときだけ。
@@ -1741,8 +1756,8 @@ export default function ThreadView(props: Props) {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(toastTimer.current), [])
   useEffect(() => {
-    // 自動で流している間は、流れで新着まで行くので出さない(溜まりすぎたときは別の札)
-    if (flashNos.size === 0 || !props.active || autoScroll) return
+    // 実況モードの間は、流れ・積み上げで新着まで行くので出さない
+    if (flashNos.size === 0 || !props.active || liveMode) return
     const first = Math.min(...flashNos.keys())
     const count = flashNos.size
     const check = setTimeout(() => {
@@ -1758,7 +1773,7 @@ export default function ThreadView(props: Props) {
       toastTimer.current = setTimeout(() => setNewToast(undefined), NEW_TOAST_MS)
     }, 450)
     return () => clearTimeout(check)
-  }, [flashNos, props.active, autoScroll])
+  }, [flashNos, props.active, liveMode])
   // 札が出ているあいだに、自分でスクロールして新着の頭が見えたら(通り越したときも)、札を消す
   // (通り越したあとに札を押すと、上の新着の頭へ戻ってしまうため)
   useEffect(() => {
@@ -2325,18 +2340,13 @@ export default function ThreadView(props: Props) {
           新着 +{newToast.count}
         </button>
       )}
-      {/* 自動で流していて、溜まった分が多すぎる(画面 10 枚を超えた)ときの札。押すと一番下へ飛び、そこから流し続ける */}
-      {autoFlow.backlog !== undefined && (
-        <button
-          type="button"
-          onClick={autoFlow.jumpToEnd}
-          className="absolute left-1/2 z-20 flex items-center gap-1 px-4 py-2 rounded-full shadow-md text-sm font-bold badge-in hover:brightness-110"
-          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-text)', bottom: 'calc(var(--footer-offset, 0px) + 20px)' }}
-          title="いちばん下へ飛ぶ"
-        >
-          新着 {autoFlow.backlog} 件
-          <span className="material-symbols-outlined text-lg leading-none">arrow_drop_down</span>
-        </button>
+      {/* 実況モードの流す速さ。右上に置き、ミニマップ(右端)・新着の札(下)と重ねない */}
+      {liveOn && (
+        <LiveSpeedOverlay
+          value={settings.liveScrollSpeed}
+          onChange={(v) => props.onUpdateSetting?.('liveScrollSpeed', v)}
+          style={{ top: (headerInScroll ? headerHeight : 0) + 8, right: isMobile ? (settings.showMinimap ? 40 : 8) : settings.showMinimap ? 44 : 20 }}
+        />
       )}
       <div
         ref={topPull.indicatorRef}
@@ -2358,7 +2368,7 @@ export default function ThreadView(props: Props) {
         onWheel={onWheel}
         onScroll={(e) => {
           onScrollPull()
-          // 自動で流している間は、ヘッダーとフッターを隠さない(指で動かしていないので)
+          // 実況モードで動かしている間は、ヘッダーとフッターを隠さない(指で動かしていないので)
           if (isMobile && settings.hideBarsOnScroll && !autoFlow.flowing()) hideBars.onScroll(e)
         }}
         onTouchStart={
@@ -2378,6 +2388,8 @@ export default function ThreadView(props: Props) {
 
         <div
           ref={listRef}
+          // ライブの段では、届いたレスをポンと出す(app.css)
+          data-live={autoFlow.live || undefined}
           className="flex-1 flex flex-col"
           // スマホ: フッターは本文の上に重ねるので、最後のレスがその下に隠れないよう、下に余白を足す
           style={{

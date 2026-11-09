@@ -43,7 +43,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
@@ -228,8 +228,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         }
     }
     val counts = remember(index, own) { Filter.entries.associateWith { index.count(it, own) } }
-    val shown = remember(index, filter, own, query) {
+    // 実況モードでまだ出していないレスは並べない
+    val liveLimit = page.scroll.liveLimit
+    val shown = remember(index, filter, own, query, liveLimit) {
         var list = index.posts
+        if (liveLimit != Int.MAX_VALUE) list = list.filter { it.no <= liveLimit }
         val f = filter
         if (f != null) list = list.filter { index.matches(it, f, own) }
         val terms = io.github.contentsview08.obb.data.searchTerms(query)
@@ -299,7 +302,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             bars.show()
         }
     }
-    LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew) }
+    LaunchedEffect(index.posts.size) { scroller.grew(vm.prefs.autoScrollOnNew, vm.prefs.liveRefreshSec * 1000L) }
     // 一覧へ戻る直前に、待っている既読と位置を書く(位置が決まる前は、まだ読んでいないので書かない)
     DisposableEffect(page, scroller) {
         val flush = { if (ctl.positioned) reportRead(ctl, scroller, vm, page) }
@@ -315,28 +318,20 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 if (ctl.positioned) reportRead(ctl, scroller, vm, page)
             }
     }
-    // 利用者がスクロールしたら、それ以降の新着へは動かして見せる。自動で流しているなら止める
+    // 利用者がスクロールしたら、それ以降の新着へは動かして見せる
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect {
-            if (it is androidx.compose.foundation.interaction.DragInteraction.Start) {
-                ctl.untouched = false
-                if (ctl.autoOn) ctl.autoPaused = true
-            }
+            if (it is androidx.compose.foundation.interaction.DragInteraction.Start) ctl.untouched = false
         }
     }
-    // 自動で流すのは開いているスレに対して。閉じたらやめる
-    DisposableEffect(page) { onDispose { ctl.stopAuto() } }
-    if (ctl.autoOn) LaunchedEffect(page, listState) {
-        runAutoScroll(
+    // 実況モードは開いているスレに対して。閉じたらやめる
+    DisposableEffect(page) { onDispose { ctl.stopLive() } }
+    if (ctl.liveOn) LaunchedEffect(page, listState) {
+        runLiveMode(
             ctl, listState,
-            lastIndex = { shownNow.value.size - 1 },
-            // 本文の 1 行(本文の字 × 行間)
+            // 本文の 1 行(本文の字 × 行間)。字を大きくしても体感の速さが変わらないように
             lineHeightPx = { with(density) { (io.github.contentsview08.obb.data.POST_BODY_BASE_PX * vm.prefs.bodyScale).sp.toPx() } * vm.prefs.lineHeight },
-            speedKey = { vm.prefs.autoScrollSpeed },
-            msToNext = {
-                val sec = vm.prefs.autoRefreshSec
-                if (sec <= 0 || ctl.autoRefreshAt == 0L) null else ctl.autoRefreshAt + sec * 1000L - System.currentTimeMillis()
-            },
+            speed = { vm.prefs.liveSpeed },
             report = { reportRead(ctl, scroller, vm, page) },
         )
     }
@@ -420,12 +415,23 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             launch { flash!!.animateTo(0f, tween(1000, easing = androidx.compose.animation.core.LinearEasing)) }
             anim.animateTo(1f, tween(180, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)))
         }
+        // 実況モードのライブの段で出たレスは、ポンと出る(少し小さく下から現れて、元の大きさに)
+        val popAt = ctl.livePop[p.no]?.takeIf { inMain && System.currentTimeMillis() - it < LIVE_POP_MS }
+        val pop = remember(p.no, popAt) { if (popAt != null) Animatable(0f) else null }
+        if (pop != null) LaunchedEffect(pop) { pop.animateTo(1f, tween(LIVE_POP_MS, easing = CubicBezierEasing(0.34f, 1.4f, 0.64f, 1f))) }
         // 光る色は色みのない白か黒。強調色だと配色によって見分けにくい
         val whiteFlash = Palette.dark || Palette.onSky(style)
         val flashColor = if (whiteFlash) Color.White else Color.Black
         Box(
             Modifier
                 .then(if (anim != null) Modifier.graphicsLayer { alpha = anim.value; translationY = (1f - anim.value) * 8.dp.toPx() } else Modifier)
+                .then(if (pop != null) Modifier.graphicsLayer {
+                    val v = pop.value
+                    alpha = v.coerceIn(0f, 1f)
+                    scaleX = 0.94f + 0.06f * v; scaleY = scaleX
+                    translationY = (1f - v) * 16.dp.toPx()
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+                } else Modifier)
                 .then(if (jumpGlow != null) Modifier.drawBehind { drawRect(flashColor.copy(alpha = 0.28f * jumpGlow.value)) } else Modifier)
                 .then(if (inMain && p.no in traced) Modifier.drawBehind { drawRect(if (Palette.onSky(style)) Palette.selectionWash(style) else Palette.accent.copy(alpha = 0.14f)); drawRect(Palette.accent, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) } else Modifier)
                 .then(if (flash != null) Modifier.drawBehind {
@@ -542,21 +548,15 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val topPull = remember { PullState { Haptics.confirm(view) } }
     val bottomPull = remember { PullState { Haptics.confirm(view) } }
     val pullConn = remember(page) { PullConnection(topPull, bottomPull, density.density, scope) { refresh()?.join() } }
-    if (prefs.autoRefreshSec > 0) LaunchedEffect(prefs.autoRefreshSec, page) {
+    // 実況モードの間は、ふだんの自動更新の設定とは別に、実況モードの間隔で取りに行く(下まで読んでいなくても)
+    val refreshSec = if (ctl.liveOn) prefs.liveRefreshSec else prefs.autoRefreshSec
+    if (refreshSec > 0) LaunchedEffect(refreshSec, page) {
         val maxPosts = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) null else AUTO_REFRESH_MAX_POSTS
-        // 自動で流す速さは、次の更新の時刻から決める
-        ctl.autoRefreshAt = System.currentTimeMillis()
-        try {
-            while (true) {
-                delay(prefs.autoRefreshSec * 1000L)
-                ctl.autoRefreshAt = System.currentTimeMillis()
-                // アプリが裏にある間と、もう増えないスレ(dat 落ち・上限到達)では掲示板へ取りに行かない。もう増えないスレは開き直すまで止める
-                if (!shouldAutoRefresh(true, page.archived, page.index.posts.size, maxPosts)) break
-                if (vm.appVisible && !page.loading) vm.refreshThread(page, quiet = true)
-            }
-        } finally {
-            // もう更新しないので、自動で流すのは自動更新がオフのときと同じく下で止まる
-            ctl.autoRefreshAt = 0L
+        while (true) {
+            delay(refreshSec * 1000L)
+            // アプリが裏にある間と、もう増えないスレ(dat 落ち・上限到達)では掲示板へ取りに行かない。もう増えないスレは開き直すまで止める
+            if (!shouldAutoRefresh(true, page.archived, page.index.posts.size, maxPosts)) break
+            if (vm.appVisible && !page.loading) vm.refreshThread(page, quiet = true)
         }
     }
     // キーボードが出たら、スレ表示ごと縮め、本文をキーボードの高さだけ送る。下のレスが隠れずに上がるように
@@ -681,7 +681,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     shown, index, own, toOwn, if (filter == null && query.isBlank()) page.unreadFrom else null, listState,
                     // フッターが隠れても伸ばさない。伸び縮みすると縮図が動いて見にくい
                     Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 4.dp.toPx() }, bottom = { footerH + 4.dp.toPx() }).padding(end = 2.dp),
-                    onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show(); if (ctl.autoOn) ctl.autoPaused = true },
+                    onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show(); if (ctl.liveOn && ctl.livePhase == LivePhase.LIVE) ctl.leaveLive() },
                     readNo = page.readNo,
                 )
             } else if (shown.size > 1) {
@@ -724,17 +724,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             PullSpinner(topPull, 1, Modifier.align(Alignment.TopCenter).barPadding(top = { bars.topHeight * (1f - bars.hidden) }))
             PullSpinner(bottomPull, -1, Modifier.align(Alignment.BottomCenter).barPadding(bottom = { footerH * footerShown() }))
 
-            // 自動で流しても追いつかないほど溜まった: 押すと一番下へ飛ぶ
-            if (ctl.autoRunning && ctl.autoBacklog > 0) {
-                Row(
-                    Modifier.align(Alignment.BottomCenter).barPadding(bottom = { footerH * footerShown() + 20.dp.toPx() })
-                        .shadow(8.dp, RoundedCornerShape(50)).background(Palette.accent, RoundedCornerShape(50))
-                        .clickable { ctl.autoBacklog = 0; scroller.toBottom() }.padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("新着 ${ctl.autoBacklog} 件 ▼", color = Palette.accentText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+            // 実況モードの流す速さ。ヘッダーの下の右(縮図の左)に。動かすと設定の値がそのまま変わる
+            if (ctl.liveOn) LiveSpeedSlider(
+                prefs.liveSpeed, { prefs.liveSpeed = it },
+                Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 8.dp.toPx() })
+                    .padding(end = if (vm.prefs.showMinimap && shown.size > 1) 26.dp else 10.dp),
+                onTouch = { swipe.claimed = true },
+            )
 
             ctl.newToast?.let { (count, first) ->
                 val slide = remember(first) { Animatable(0f) }
@@ -788,7 +784,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     MenuItem("板に戻る", Icons.AutoMirrored.Filled.List) { vm.openBoardOf(page) },
                     MenuItem("先頭へ", Icons.Filled.VerticalAlignTop) { scope.launch { listState.scrollToItem(0); bars.show() } },
                     MenuItem("一番下へ", Icons.Filled.VerticalAlignBottom) { scroller.toBottom(); bars.show() },
-                    MenuItem("自動で流す", Icons.Filled.PlayArrow, checked = ctl.autoOn) { if (ctl.autoOn) ctl.stopAuto() else ctl.startAuto() },
+                    MenuItem("実況モード", Icons.Filled.LiveTv, checked = ctl.liveOn) { if (ctl.liveOn) ctl.stopLive() else ctl.startLive() },
                 ),
                 listOf(
                     MenuItem("コピー", Icons.Filled.ContentCopy, children = listOf(

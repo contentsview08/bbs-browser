@@ -329,8 +329,9 @@ class Prefs(context: Context) {
     /** ログを削除する前に確かめる(確かめる画面の「次回から表示しない」で切れる) */
     var confirmDeleteLog by pref("confirmDeleteLog", true)
     var autoScrollOnNew by pref("autoScrollOnNew", true)
-    /** 自動で流す速さ(ui/AutoScroll.kt の AUTO_SCROLL_SPEEDS のキー)。端末ごとの操作の好みなので同期しない */
-    var autoScrollSpeed by pref("autoScrollSpeed", "normal")
+    /** 実況モードの更新の間隔(秒)と流す速さ(1 秒に流す本文の行。ui/LiveMode.kt)。端末ごとの操作の好みなので同期しない */
+    var liveRefreshSec by pref("liveRefreshSec", 5)
+    var liveSpeed by pref("liveSpeed", 2f)
     /** 開いているスレの自動更新(秒。0 ならしない) */
     var autoRefreshSec by pref("autoRefreshSec", 0)
     var showRefreshFab by pref("showRefreshFab", true)

@@ -1,78 +1,63 @@
 import { describe, expect, it } from 'vitest'
-import { autoScrollBacklogged, autoScrollBaseSpeed, autoScrollSpeed, msToNextRefresh } from '../src/utils/autoScroll'
+import {
+  clampLiveRefresh,
+  clampLiveSpeed,
+  formatLiveSpeed,
+  LIVE_SPEED_DEFAULT,
+  LIVE_SPEED_MAX,
+  LIVE_SPEED_MIN,
+  LIVE_SPEED_STEPS,
+  liveScrollPxPerSec,
+  liveSpeedOfStep,
+  liveStepOfSpeed,
+} from '../src/utils/autoScroll'
 
-// 行の高さ 10px なら、ふつう = 20px/秒(最大 120)、ゆっくり = 10(最大 60)、速い = 40(最大 240)
-const LINE = 10
-
-describe('自動で流す速さ', () => {
-  it('追いつくまでは既定の速さで一定', () => {
-    expect(autoScrollSpeed(100_000, 5000, LINE, 'normal', false)).toBe(20)
-    expect(autoScrollSpeed(30, 5000, LINE, 'normal', false)).toBe(20)
-    expect(autoScrollSpeed(100_000, 5000, LINE, 'slow', false)).toBe(10)
-    expect(autoScrollSpeed(100_000, 5000, LINE, 'fast', false)).toBe(40)
+describe('実況モードの流す速さ', () => {
+  it('行は本文の 1 行の高さ(字を大きくすると px の速さも上がる)', () => {
+    expect(liveScrollPxPerSec(2, 26)).toBe(52)
+    expect(liveScrollPxPerSec(0.5, 20)).toBe(10)
+    expect(liveScrollPxPerSec(2, 0)).toBe(0)
   })
 
-  it('追いついた後は、次の更新の時刻にちょうど下に着く速さ', () => {
-    // 残り 500px・次の更新まで 10 秒 → 50px/秒
-    expect(autoScrollSpeed(500, 10_000, LINE, 'normal', true)).toBeCloseTo(50)
+  it('幅の外の速さは幅に入れ、数でなければ既定', () => {
+    expect(clampLiveSpeed(100)).toBe(LIVE_SPEED_MAX)
+    expect(clampLiveSpeed(0.1)).toBe(LIVE_SPEED_MIN)
+    expect(clampLiveSpeed('normal')).toBe(LIVE_SPEED_DEFAULT)
+    expect(clampLiveSpeed(NaN)).toBe(LIVE_SPEED_DEFAULT)
   })
 
-  it('追いついた後も、既定の速さより遅くしない(早く着いたら下で待つ)', () => {
-    // 残り 40px・10 秒 → 4px/秒 だが、ふつうの 20px/秒
-    expect(autoScrollSpeed(40, 10_000, LINE, 'normal', true)).toBe(20)
-    expect(autoScrollSpeed(40, 10_000, LINE, 'fast', true)).toBe(40)
-  })
-
-  it('最大の速さ(既定の 6 倍)を超えない', () => {
-    expect(autoScrollSpeed(100_000, 10_000, LINE, 'normal', true)).toBe(120)
-    expect(autoScrollSpeed(100_000, 10_000, LINE, 'slow', true)).toBe(60)
-    expect(autoScrollSpeed(100_000, 10_000, LINE, 'fast', true)).toBe(240)
-  })
-
-  it('下に着いていれば 0', () => {
-    expect(autoScrollSpeed(0, 10_000, LINE, 'normal', true)).toBe(0)
-    expect(autoScrollSpeed(-3, 10_000, LINE, 'normal', false)).toBe(0)
-  })
-
-  it('更新が遅れた(次の更新までが 0 以下)ら、残りの距離 × 0.5 / 秒で寄せる', () => {
-    expect(autoScrollSpeed(100, 0, LINE, 'normal', true)).toBe(50)
-    expect(autoScrollSpeed(10, -2000, LINE, 'normal', true)).toBe(5)
-    // 遠ければ最大の速さまで
-    expect(autoScrollSpeed(10_000, -1, LINE, 'normal', true)).toBe(120)
-  })
-
-  it('自動更新がオフなら、新着は既定の速さで流し、下で止まる', () => {
-    const off = msToNextRefresh(0, 1000, 5000)
-    expect(off).toBe(Infinity)
-    expect(autoScrollSpeed(300, off, LINE, 'normal', true)).toBe(20)
-    expect(autoScrollSpeed(0, off, LINE, 'normal', true)).toBe(0)
-  })
-
-  it('既定の速さは 1 秒に 1・2・4 行(行は本文の 1 行の高さ)', () => {
-    expect(autoScrollBaseSpeed(26, 'slow')).toBe(26)
-    expect(autoScrollBaseSpeed(26, 'normal')).toBe(52)
-    expect(autoScrollBaseSpeed(26, 'fast')).toBe(104)
-  })
-
-  it('知らない速さはふつうとして扱う', () => {
-    expect(autoScrollBaseSpeed(LINE, 'zzz' as never)).toBe(20)
+  it('更新の間隔は選択肢のどれかにする', () => {
+    expect(clampLiveRefresh(10)).toBe(10)
+    expect(clampLiveRefresh(7)).toBe(5)
+    expect(clampLiveRefresh(undefined)).toBe(5)
   })
 })
 
-describe('次の自動更新までの時間', () => {
-  it('前回の時刻と間隔から出す', () => {
-    expect(msToNextRefresh(10, 1000, 4000)).toBe(7000)
-    expect(msToNextRefresh(10, 1000, 12_000)).toBe(-1000)
+describe('速さのつまみ(対数の目盛り)', () => {
+  it('両端は 0.5 行と 40 行', () => {
+    expect(liveSpeedOfStep(0)).toBe(0.5)
+    expect(liveSpeedOfStep(LIVE_SPEED_STEPS)).toBe(40)
   })
-  it('まだ回っていなければ Infinity', () => {
-    expect(msToNextRefresh(10, undefined, 4000)).toBe(Infinity)
-  })
-})
 
-describe('溜まりすぎの札', () => {
-  it('画面 10 枚を超えたら出す', () => {
-    expect(autoScrollBacklogged(8000, 800)).toBe(false)
-    expect(autoScrollBacklogged(8001, 800)).toBe(true)
-    expect(autoScrollBacklogged(100, 0)).toBe(false)
+  it('真ん中は掛け算の真ん中(約 4.5 行)。遅い側を細かく選べる', () => {
+    expect(liveSpeedOfStep(LIVE_SPEED_STEPS / 2)).toBeCloseTo(4.5, 1)
+  })
+
+  it('既定の 2 行は、目盛りに戻しても 2 行', () => {
+    expect(liveSpeedOfStep(liveStepOfSpeed(2))).toBe(2)
+  })
+
+  it('つまみで選んだ速さは、目盛りに戻して読み直しても同じ速さ', () => {
+    for (let s = 0; s <= LIVE_SPEED_STEPS; s++) {
+      const v = liveSpeedOfStep(s)
+      expect(liveSpeedOfStep(liveStepOfSpeed(v))).toBe(v)
+    }
+  })
+
+  it('10 行より遅いと 0.1 行、速いと 1 行に丸める', () => {
+    expect(formatLiveSpeed(2)).toBe('1 秒に 2 行')
+    expect(formatLiveSpeed(0.54)).toBe('1 秒に 0.5 行')
+    expect(formatLiveSpeed(4.47)).toBe('1 秒に 4.5 行')
+    expect(formatLiveSpeed(23.4)).toBe('1 秒に 23 行')
   })
 })

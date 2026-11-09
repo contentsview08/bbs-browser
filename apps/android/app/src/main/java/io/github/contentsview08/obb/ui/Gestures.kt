@@ -36,6 +36,8 @@ class SwipeState {
     /** なぞっている向きの並び(「→↑」)と、指の軌跡(なぞっている間だけ描く) */
     var arrows by mutableStateOf("")
     val path = androidx.compose.runtime.mutableStateListOf<Offset>()
+    /** 今の指は、上に重なった部品(スライダーなど)が受け取った。ジェスチャーにしない。指を置くたびに戻す */
+    var claimed = false
 }
 
 @Composable
@@ -67,6 +69,7 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
             fun dominant(d: Offset) = if (abs(d.x) >= abs(d.y)) (if (d.x >= 0) "right" else "left") else (if (d.y >= 0) "down" else "up")
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                state.claimed = false
                 val fromEdge = down.position.x < edge
                 val segs = ArrayList<String>()
                 var anchor = down.position
@@ -78,6 +81,7 @@ fun Modifier.swipeGestures(state: SwipeState, map: Map<String, SwipeAction>, onE
                 try {
                     while (true) {
                         val ev = awaitPointerEvent(PointerEventPass.Initial)
+                        if (state.claimed) break
                         // 2 本指(拡大など)になったらやめる
                         if (ev.changes.count { it.pressed } > 1) break
                         val c = ev.changes.firstOrNull { it.id == down.id } ?: break

@@ -344,6 +344,21 @@ html:root[data-scheme='line-light'][data-post-style='line'] {
 .post-enter {
   animation: post-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) var(--enter-delay, 0ms) backwards;
 }
+/* 実況モードのライブの段: 届いたレスを 1 つずつ、下からポンと出す(少し縮めた所から、わずかに行き過ぎて戻る) */
+@keyframes post-pop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+[data-live] > .post-enter {
+  transform-origin: 50% 100%;
+  animation: post-pop 240ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
 
 /* タブ(Chrome 風)。開いていないタブは帯と同じ色(面なし)で、タブの間に短い縦線だけを置く。
    開いているタブとスレのヘッダーは同じ色にして、境界線なしでつなげる。

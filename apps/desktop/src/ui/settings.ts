@@ -13,7 +13,7 @@ import { settingOpsOf } from '@bbs-browser/sync'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import { todayDateString, type NgRule } from '../utils/ng'
 import type { Keymap } from '../utils/keymap'
-import type { AutoScrollSpeed } from '../utils/autoScroll'
+import { clampLiveRefresh, clampLiveSpeed, LIVE_REFRESH_DEFAULT, LIVE_SPEED_DEFAULT } from '../utils/autoScroll'
 import { backgroundError } from '../utils/backgroundError'
 import type { BarLayout, BarOrder } from '../utils/toolbar'
 import { DEFAULT_UPLOAD_HOST, migrateUploadHost, type UploadHost } from '../host/uploader'
@@ -309,8 +309,10 @@ export interface AppSettings {
   autoRefreshSec: number
   /** いちばん下を見ているときに新着が来たら、新着まで自動でスクロールする */
   autoScrollOnNew: boolean
-  /** 自動で流す速さ(既定の速さ。最大はその 6 倍。utils/autoScroll.ts)。端末ごとの操作の好みなので同期しない */
-  autoScrollSpeed: AutoScrollSpeed
+  /** 実況モードの間、開いているスレを更新する間隔(秒。utils/autoScroll.ts の選択肢)。端末ごとの操作の好みなので同期しない */
+  liveRefreshSec: number
+  /** 実況モードの、追いつくまでに流す速さ(1 秒に何行)。同期しない */
+  liveScrollSpeed: number
   /** お気に入りのスレの新着の数を確かめる間隔(分)。0 なら確かめない(スレ一覧だけ取るので軽い) */
   favCheckMin: number
   /** お気に入り板のスレ一覧を見に行き、キーワードに合うスレが立ったら知らせる間隔(分)。0 なら見に行かない */
@@ -522,7 +524,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageSaveDir: '',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
-  autoScrollSpeed: 'normal',
+  liveRefreshSec: LIVE_REFRESH_DEFAULT,
+  liveScrollSpeed: LIVE_SPEED_DEFAULT,
   favCheckMin: 5,
   keywordWatchMin: 10,
   keywordWatchSince: {},
@@ -805,6 +808,8 @@ export function migrateValues(s: Partial<AppSettings>): Partial<AppSettings> {
   }
   if (s.swipeGestures !== undefined) out.swipeGestures = withoutOldGestures(s.swipeGestures)
   if (s.mouseGestures !== undefined) out.mouseGestures = migrateMouseGestures(s.mouseGestures)
+  if (s.liveRefreshSec !== undefined) out.liveRefreshSec = clampLiveRefresh(s.liveRefreshSec)
+  if (s.liveScrollSpeed !== undefined) out.liveScrollSpeed = clampLiveSpeed(s.liveScrollSpeed)
   return out
 }
 
@@ -953,7 +958,7 @@ export function useSettings(store: LogStore | undefined, opts: { font?: boolean 
   useEffect(() => {
     if (!store) return
     void store.getSettings().then((saved) => {
-      // いまある項目だけを写し、消した項目は migrateOld で写す
+      // いまある項目だけを写し、消した項目は migrateOld で写す(写し先のない項目は捨てる)
       const known = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([k]) => k in DEFAULT_SETTINGS)) as Partial<AppSettings>
       // 基本の文字を本文から切り離す前に大きさを変えていた人は、見えていた大きさを本文の既定として引き継ぐ。
       // 既定のままの人も保存する(切り離したあとに変えた基本の文字を、次の起動で引き継がないように)

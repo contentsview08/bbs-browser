@@ -77,7 +77,7 @@ export function forgetClosedPosition(threadKey: string) {
 
 /** スクロール領域ごとの、いま動かしている(留めている)のをやめる関数。新しく動かすときに前のをやめる */
 const moving = new WeakMap<HTMLElement, () => void>()
-/** その領域を、いま動かしている(runMove の最中・留めている)か。自動で流すのは、その間は動かさない */
+/** その領域を、いま動かしている(runMove の最中・留めている)か。実況モードは、その間は動かさない */
 export const isMoving = (root: HTMLElement) => moving.has(root)
 /** スクロール領域ごとの、動きが終わったら基準のレスを見張りへ引き継ぐ関数 */
 const handOff = new WeakMap<HTMLElement, (el?: HTMLElement) => void>()

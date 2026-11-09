@@ -1,5 +1,5 @@
 // スマホの設定などで使う、スマホ向けの部品(Android の設定画面と同じ考え方)。
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 
@@ -216,5 +216,33 @@ export function WordList(props: { items: string[]; placeholder: string; onChange
         </button>
       </div>
     </>
+  )
+}
+
+/** つまみで値を決める行(上に名前と今の値)。値は離したときに決める */
+export function SliderRow(props: { label: string; desc?: ReactNode; value: number; min: number; max: number; step: number; format: (v: number) => string; onChange: (v: number) => void }) {
+  const [v, setV] = useState(props.value)
+  // ほかの所(スレ表示のつまみなど)で値が変わったら合わせる
+  useEffect(() => setV(props.value), [props.value])
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="flex-1 min-w-0 text-[17px] leading-snug text-c-text-strong">{props.label}</span>
+        <span className="flex-shrink-0 text-[14px] text-c-accent tabular-nums">{props.format(v)}</span>
+      </div>
+      {props.desc && <span className="block mt-0.5 text-[14px] leading-relaxed text-c-text-muted">{props.desc}</span>}
+      <input
+        type="range"
+        min={props.min}
+        max={props.max}
+        step={props.step}
+        value={v}
+        onChange={(e) => setV(Number(e.target.value))}
+        onPointerUp={() => v !== props.value && props.onChange(v)}
+        onKeyUp={() => v !== props.value && props.onChange(v)}
+        className="w-full h-10 accent-[var(--c-accent)]"
+        style={{ touchAction: 'pan-y' }}
+      />
+    </div>
   )
 }

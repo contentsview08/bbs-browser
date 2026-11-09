@@ -73,23 +73,69 @@ class ThreadScrollCtl(val page: Page.Thread) {
     /** 押して飛んだレス(番号と、押した時刻)。一瞬光らせる */
     var jumpFlash by mutableStateOf<Pair<Int, Long>?>(null)
 
-    // ── 自動で流す(ui/AutoScroll.kt) ──
-    /** 自動で流している(スレを閉じたらやめる) */
-    var autoOn by mutableStateOf(false)
-    /** 指で触ったので止めている。自分で一番下まで戻ったら続ける */
-    var autoPaused by mutableStateOf(false)
-    /** 一度一番下に着いた。以後は次の更新に合わせて流す */
-    var autoCaughtUp = false
-    /** 溜まった分が多すぎるときの札に出す、画面より下のレスの数(0 なら出さない) */
-    var autoBacklog by mutableStateOf(0)
-    /** 自動更新が最後に動いた時刻(ms。0 なら動いていない)。次の更新までの時間をここから出す */
-    var autoRefreshAt = 0L
-    /** 自動で流していて、止めていない */
-    val autoRunning get() = autoOn && !autoPaused
+    // ── 実況モード(ui/LiveMode.kt) ──
+    /** 実況モードに入っている(スレを閉じたらやめる) */
+    var liveOn by mutableStateOf(false)
+    var livePhase by mutableStateOf(LivePhase.CATCH_UP)
+    /** 出しているレスの最後の番号。これより後のレスは、出す時刻まで並べない */
+    var liveLimit by mutableStateOf(Int.MAX_VALUE)
+    /** 出す順のレス(番号と、出す時刻 ms) */
+    private val liveQueue = ArrayDeque<Pair<Int, Long>>()
+    /** 前の更新で最後に出す(出した)レスの書き込みの時刻。次の更新の分は、ここからの差だけ遅らせる */
+    private var liveBase: Long? = null
+    /** ライブの段で出たレス → 出た時刻(ms)。ポンと出る動きに使う */
+    var livePop by mutableStateOf<Map<Int, Long>>(emptyMap())
+    /** 実況モードで、指で外していない(新着の送る動き・札はこちらが受け持つ) */
+    val liveRunning get() = liveOn && livePhase != LivePhase.PAUSED
 
-    fun startAuto() { autoOn = true; autoPaused = false; autoCaughtUp = false; autoBacklog = 0 }
-    fun stopAuto() { autoOn = false; autoPaused = false; autoBacklog = 0 }
+    fun startLive() { liveOn = true; livePhase = LivePhase.CATCH_UP; showAllLive() }
+    fun stopLive() { liveOn = false; livePhase = LivePhase.CATCH_UP; showAllLive() }
+
+    /** 一番下に着いた: 今あるレスは全部出ているので、ここから後を 1 つずつ積む */
+    fun enterLive() {
+        livePhase = LivePhase.LIVE
+        liveQueue.clear()
+        val last = page.index.posts.lastOrNull()
+        liveLimit = last?.no ?: 0
+        liveBase = last?.let { postTimeMs(it.date) }
+    }
+
+    /** 指で上へ動かした: 隠していたレスを全部出し、自分で一番下へ戻るまで待つ */
+    fun leaveLive() { livePhase = LivePhase.PAUSED; showAllLive() }
+
+    private fun showAllLive() { liveQueue.clear(); liveLimit = Int.MAX_VALUE; liveBase = null }
+
+    /**
+     * ライブの段で更新が届いた: まだ出す順に入れていないレスを、出す時刻を決めて並べる。
+     * 前の分が残っていれば、その後ろに続ける。溜まりすぎたら全部出す
+     */
+    fun queueLive(nowMs: Long, intervalMs: Long) {
+        val after = maxOf(liveLimit, liveQueue.lastOrNull()?.first ?: 0)
+        val fresh = page.index.posts.filter { it.no > after }
+        if (fresh.isEmpty()) return
+        val times = fresh.map { postTimeMs(it.date) }
+        val (at, flush) = liveQueueTimes(nowMs, liveRevealSchedule(times, liveBase, intervalMs), liveQueue.lastOrNull()?.second, intervalMs)
+        fresh.forEachIndexed { i, p -> liveQueue.addLast(p.no to at[i]) }
+        liveBase = times.last()
+        if (flush) {
+            liveLimit = liveQueue.last().first
+            liveQueue.clear()
+        }
+    }
+
+    /** 出す時刻の来たレスを出す */
+    fun revealDue(nowMs: Long) {
+        var shown: Int? = null
+        while (liveQueue.isNotEmpty() && liveQueue.first().second <= nowMs) shown = liveQueue.removeFirst().first
+        val no = shown ?: return
+        // 先に動きを決めてから並べる(並んだ最初の描画から動くように)
+        if (!Motion.reduced) livePop = livePop.filterValues { nowMs - it < LIVE_POP_MS * 2 } + ((liveLimit + 1)..no).associateWith { nowMs }
+        liveLimit = no
+    }
 }
+
+/** 実況モードの段: 追いつくまで・追いついた後(ライブ)・指で外した */
+enum class LivePhase { CATCH_UP, LIVE, PAUSED }
 
 /** PC 版の staggerDelays の写し */
 fun staggerDelays(nos: List<Int>): Map<Int, Int> {
@@ -191,9 +237,10 @@ class ThreadScroller(
      * 新着が届いたとき(PC 版の newPostsTarget): 光らせ、
      * - 開いたときに未読の頭がなかったなら、届いた未読の頭へすぐ移る
      * - 開いて最初の取得の分で、利用者がまだ触っていなければ、それまでを読み終えていたときだけ新着の頭へすぐ移る
-     * - 読んでいる途中は、設定がオンで一番下を見ているときだけ、新着の頭へ動かして見せる(自動で流している間は除く)
+     * - 読んでいる途中は、設定がオンで一番下を見ているときだけ、新着の頭へ動かして見せる(実況モードの間は除く)
+     * 実況モードのライブの段では、届いたレスは隠して 1 つずつ出す(光らせず、札も出さない)
      */
-    fun grew(autoScrollOnNew: Boolean) {
+    fun grew(autoScrollOnNew: Boolean, liveIntervalMs: Long) {
         val page = ctl.page
         val posts = page.index.posts
         val grew = posts.size > ctl.prevCount
@@ -201,6 +248,12 @@ class ThreadScroller(
         val prevLastNo = ctl.lastMax
         ctl.lastMax = posts.lastOrNull()?.no ?: 0
         if (!grew || !ctl.positioned) return
+        if (ctl.liveOn && ctl.livePhase == LivePhase.LIVE) {
+            ctl.firstGrowth = false
+            ctl.pendingUnread = false
+            ctl.queueLive(System.currentTimeMillis(), liveIntervalMs)
+            return
+        }
         // 既読より後のレスだけが新着。別の端末で読んだ分が同期で既読になっていれば、あとから届いても光らせず、札も出さない
         val read = maxOf(ctl.sent, page.readNo)
         val fresh = posts.filter { it.no > prevLastNo && it.no > read }.map { it.no }
@@ -221,16 +274,16 @@ class ThreadScroller(
             ctl.keepJump -> {}
             ctl.pendingUnread && posts.any { it.no == unreadFrom } -> toUnread(unreadFrom)
             opening -> if (read >= prevLastNo) toUnread(head)
-            // 自動で流している間は、流す方が新着まで運ぶ(送る動きどうしがぶつからないように)
-            autoScrollOnNew && ctl.atBottom && !ctl.autoRunning -> toUnread(head, animate = true)
+            // 実況モードの間は、流す方が新着まで運ぶ(送る動きどうしがぶつからないように)
+            autoScrollOnNew && ctl.atBottom && !ctl.liveRunning -> toUnread(head, animate = true)
         }
         ctl.pendingUnread = false
         // 新着の頭が画面の外なら、下から「新着 +N」を少しのあいだ出す(送り終わるのを待ってから確かめる)
         val first = fresh.first()
         scope.launch {
             delay(450)
-            // 自動で流している間は、新着は流れてくるので知らせない(溜まりすぎたときは別の札)
-            if (!isVisible(first) && !ctl.autoRunning) {
+            // 実況モードの間は、新着は流れてくるので知らせない
+            if (!isVisible(first) && !ctl.liveRunning) {
                 ctl.newToast = fresh.size to first
                 delay(NEW_TOAST_MS)
                 if (ctl.newToast?.second == first) ctl.newToast = null
@@ -263,7 +316,8 @@ class ThreadScroller(
         var last = items.last().key as Int
         // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
         val filtering = ctl.page.filter != null || (ctl.page.searching && ctl.page.query.isNotBlank())
-        if (ctl.atBottom && !filtering) last = maxOf(last, ctl.page.index.posts.lastOrNull()?.no ?: 0)
+        // 実況モードでまだ出していないレスは読んでいない
+        if (ctl.atBottom && !filtering) last = maxOf(last, minOf(ctl.page.index.posts.lastOrNull()?.no ?: 0, ctl.liveLimit))
         val top = items.firstOrNull { it.offset + it.size > 0 }
         return last to top?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
     }

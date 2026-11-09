@@ -1,55 +1,52 @@
-// 自動で流す(オートスクロール)の速さの決まり。測るのと動かすのは hooks/useAutoScroll.ts、ここは答えだけを返す。
-// スマホ版も同じ式で流す(bbs-suite の docs/autoscroll.md)。
+// 実況モードの、追いつくまでの段の流す速さと、その設定の決まり(bbs-suite の docs/autoscroll.md)。
+// 測るのと動かすのは hooks/useAutoScroll.ts、ここは答えだけを返す。スマホ版も同じ値と式を使う。
 
-/** 自動で流す速さの選択肢 */
-export type AutoScrollSpeed = 'slow' | 'normal' | 'fast'
+/** 流す速さ(1 秒に何行)の幅と既定 */
+export const LIVE_SPEED_MIN = 0.5
+export const LIVE_SPEED_MAX = 40
+export const LIVE_SPEED_DEFAULT = 2
+/** 実況モードの更新の間隔(秒)の選択肢と既定 */
+export const LIVE_REFRESH_CHOICES = [3, 5, 10, 20, 30]
+export const LIVE_REFRESH_DEFAULT = 5
+/** スライダーの目盛りの数(0〜この値。対数の目盛りなので、遅い側を細かく選べる) */
+export const LIVE_SPEED_STEPS = 100
 
-/** 既定の速さ(1 秒に何行)。追いつくまでの一定の速さと、追いついた後の最低の速さを兼ねる */
-export const AUTO_SCROLL_SPEEDS: { key: AutoScrollSpeed; name: string; linesPerSec: number }[] = [
-  { key: 'slow', name: 'ゆっくり', linesPerSec: 1 },
-  { key: 'normal', name: 'ふつう', linesPerSec: 2 },
-  { key: 'fast', name: '速い', linesPerSec: 4 },
-]
-
-/** 最大の速さは既定の速さの何倍か(別の設定にしない) */
-export const AUTO_SCROLL_MAX_RATIO = 6
-/** 次の更新の時刻を過ぎたとき、残りの距離のこの割合を 1 秒で寄せる(下に近づくほどゆっくりになる) */
-export const AUTO_SCROLL_LATE_RATIO = 0.5
-/** 溜まった分がこの画面の枚数を超えたら、「新着 N 件」の札を出す */
-export const AUTO_SCROLL_BACKLOG_SCREENS = 10
-
-/** 既定の速さ(px/秒)。行は本文の 1 行の高さなので、字を大きくしても体感の速さは変わらない。知らない値は「ふつう」 */
-export function autoScrollBaseSpeed(lineHeightPx: number, speedKey: AutoScrollSpeed): number {
-  const lines = (AUTO_SCROLL_SPEEDS.find((s) => s.key === speedKey) ?? AUTO_SCROLL_SPEEDS[1]).linesPerSec
-  return lines * lineHeightPx
+/** 速さを、見せやすい細かさに丸める(10 行より遅いときは 0.1 行、速いときは 1 行。スマホ版と同じ) */
+function roundSpeed(v: number): number {
+  return v < 10 ? Math.round(v * 10) / 10 : Math.round(v)
 }
 
-/**
- * 流す速さ(px/秒)。
- * - 追いつくまで(caughtUp が false): 既定の速さで一定に流す
- * - 追いついた後: 残りの距離 ÷ 次の更新までの時間(次の更新の時刻にちょうど下に着く)。既定の速さより遅くせず、最大の速さを超えない
- * - 次の更新の時刻を過ぎた(msToNext が 0 以下): 残りの距離に比べた速さで寄せる(最大の速さは超えない)
- * - 自動更新がオフ(msToNext が Infinity): 新着が来たら既定の速さで流し、下に着いたら止まる
- * 下に着いていれば(残りが 0 以下)0
- */
-export function autoScrollSpeed(remainingPx: number, msToNext: number, lineHeightPx: number, speedKey: AutoScrollSpeed, caughtUp: boolean): number {
-  if (!(remainingPx > 0) || !(lineHeightPx > 0)) return 0
-  const base = autoScrollBaseSpeed(lineHeightPx, speedKey)
-  const max = base * AUTO_SCROLL_MAX_RATIO
-  if (!caughtUp) return base
-  if (Number.isNaN(msToNext)) return base
-  if (msToNext <= 0) return Math.min(max, remainingPx * AUTO_SCROLL_LATE_RATIO)
-  const fit = remainingPx / (msToNext / 1000)
-  return Math.min(max, Math.max(base, fit))
+/** 保存してある速さを、幅の中に入れる。数でなければ既定 */
+export function clampLiveSpeed(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return LIVE_SPEED_DEFAULT
+  return Math.min(LIVE_SPEED_MAX, Math.max(LIVE_SPEED_MIN, v))
 }
 
-/** 溜まった分が多すぎて、札を出すほどか(残りの距離が画面 AUTO_SCROLL_BACKLOG_SCREENS 枚を超えた) */
-export function autoScrollBacklogged(remainingPx: number, viewHeightPx: number): boolean {
-  return viewHeightPx > 0 && remainingPx > viewHeightPx * AUTO_SCROLL_BACKLOG_SCREENS
+/** 保存してある更新の間隔を、選択肢のどれかにする。選択肢になければ既定 */
+export function clampLiveRefresh(v: unknown): number {
+  return typeof v === 'number' && LIVE_REFRESH_CHOICES.includes(v) ? v : LIVE_REFRESH_DEFAULT
 }
 
-/** 次の自動更新までの時間(ms)。自動更新がオフ・まだ回っていなければ Infinity */
-export function msToNextRefresh(autoRefreshSec: number, lastRefreshAt: number | undefined, now: number): number {
-  if (!(autoRefreshSec > 0) || lastRefreshAt === undefined) return Infinity
-  return lastRefreshAt + autoRefreshSec * 1000 - now
+/** スライダーの目盛り(0〜LIVE_SPEED_STEPS)→ 速さ(1 秒に何行) */
+export function liveSpeedOfStep(step: number): number {
+  const r = Math.min(1, Math.max(0, step / LIVE_SPEED_STEPS))
+  return roundSpeed(LIVE_SPEED_MIN * (LIVE_SPEED_MAX / LIVE_SPEED_MIN) ** r)
+}
+
+/** 速さ → スライダーの目盛り。丸めでずれるので、隣の目盛りがちょうどその速さならそちらにする(戻したときに値が変わらないように) */
+export function liveStepOfSpeed(speed: number): number {
+  const v = clampLiveSpeed(speed)
+  const s = Math.round((Math.log(v / LIVE_SPEED_MIN) / Math.log(LIVE_SPEED_MAX / LIVE_SPEED_MIN)) * LIVE_SPEED_STEPS)
+  return [s, s - 1, s + 1].find((c) => c >= 0 && c <= LIVE_SPEED_STEPS && liveSpeedOfStep(c) === v) ?? s
+}
+
+/** 速さの見せ方(設定の画面) */
+export function formatLiveSpeed(speed: number): string {
+  return `1 秒に ${roundSpeed(speed)} 行`
+}
+
+/** 速さ(px/秒)。行は本文の 1 行の高さなので、字を大きくしても体感の速さは変わらない */
+export function liveScrollPxPerSec(linesPerSec: number, lineHeightPx: number): number {
+  if (!(lineHeightPx > 0)) return 0
+  return clampLiveSpeed(linesPerSec) * lineHeightPx
 }

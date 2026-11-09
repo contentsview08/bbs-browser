@@ -1,7 +1,7 @@
 // 同期のきっかけと、設定の窓からの頼みごと。自動の同期は前面にいる間だけ(きっかけの決まりは SyncScheduler)
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
-import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type DroppedThread, type SyncGroup, type SyncStore } from '@bbs-browser/sync'
+import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type DroppedThread, type SyncGroup, type SyncIntervalId } from '@bbs-browser/sync'
 import { broadcast } from '../host/crossWindow'
 import { cancelGoogleLogin, googleDrive } from '../host/google'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
@@ -69,6 +69,8 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     })
   }, [store])
 
+  /** 間隔を選び直したときに時計を掛け直す */
+  const schedulerRef = useRef<SyncScheduler | null>(null)
   useEffect(() => {
     if (!ctl) return
     const scheduler = new SyncScheduler({
@@ -80,8 +82,10 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
       check: () => ctl.autoCheck(),
       hasChanges: () => ctl.hasChanges(),
       pace: () => ctl.pace(),
+      interval: () => ctl.intervalMs(),
       idleStops: true,
     })
+    schedulerRef.current = scheduler
     const quiet = (p: Promise<void>) => void p.catch(() => undefined)
     const visibility = () => quiet(isAppVisible() ? scheduler.foreground() : scheduler.background())
     const focus = () => {
@@ -103,6 +107,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     document.addEventListener('visibilitychange', visibility)
     return () => {
       scheduler.dispose()
+      if (schedulerRef.current === scheduler) schedulerRef.current = null
       window.removeEventListener('focus', focus)
       window.removeEventListener('blur', flush)
       window.removeEventListener('pagehide', closing)
@@ -132,8 +137,11 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     syncLeave: () => need(latest.current).leave(),
     syncSetMaster: (on: boolean) => need(latest.current).setMaster(on),
     syncSetKind: (a: { group: SyncGroup; on: boolean }) => need(latest.current).setKind(a.group, a.on),
-    syncSetServer: (url: string) => need(latest.current).setServerUrl(url),
-    syncSetStore: (store: SyncStore) => need(latest.current).setStore(store),
+    syncDriveUsage: () => need(latest.current).driveUsage(),
+    syncSetInterval: async (id: SyncIntervalId) => {
+      await need(latest.current).setSyncInterval(id)
+      schedulerRef.current?.intervalChanged()
+    },
     syncGoogleCancel: () => cancelGoogleLogin(),
     syncGoogleRevoke: () => need(latest.current).revokeGoogle(),
     syncConfirm: (choice: ConfirmChoice) => need(latest.current).resolveConfirm(choice).then(summary),

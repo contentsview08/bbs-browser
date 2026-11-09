@@ -58,8 +58,14 @@ export interface DriveRemoteOptions {
   newEpoch?: () => string
 }
 
-export function driveRemote(o: DriveRemoteOptions): SyncRemoteFactory {
-  return (c) => new DriveRemote(c, o)
+/** 置き場の作り方に、設定の画面が使う「使っている量」を添える */
+export type DriveRemoteFactory = SyncRemoteFactory & {
+  /** appDataFolder の全ファイルの大きさの合計(バイト)。周とは別に、画面を開いたときと同期の後だけ呼ぶ */
+  usage(): Promise<number>
+}
+
+export function driveRemote(o: DriveRemoteOptions): DriveRemoteFactory {
+  return Object.assign((c: RemoteContext) => new DriveRemote(c, o), { usage: () => driveUsage(o) })
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -113,6 +119,54 @@ function checkFile(v: unknown): DriveFile {
   return v as unknown as DriveFile
 }
 
+async function driveRequest(o: DriveRemoteOptions, method: SyncRequest['method'], url: string, body?: string, contentType?: string, maxBytes = MAX_RESPONSE_BYTES): Promise<SyncResponse> {
+  for (let attempt = 0; ; attempt++) {
+    const headers: Record<string, string> = { Authorization: `Bearer ${await o.accessToken(attempt > 0)}` }
+    if (contentType !== undefined) headers['Content-Type'] = contentType
+    let res: SyncResponse
+    try {
+      res = await o.transport.send({ method, url, headers, ...(body !== undefined && { body }), maxBytes, timeoutMs: HTTP_TOTAL_TIMEOUT_MS, idleTimeoutMs: HTTP_IDLE_TIMEOUT_MS })
+    } catch (e) {
+      throw new SyncApiError(e instanceof SyncResponseTooLarge ? 'too_large' : 'network')
+    }
+    if (res.status >= 300 && res.status < 400) throw new SyncApiError('redirect', res.status)
+    if (res.body.length > maxBytes) throw new SyncApiError('too_large')
+    // アクセストークンの期限切れ。1 回だけ取り直して送り直す
+    if (res.status === 401 && attempt === 0) continue
+    if (res.status === 401) throw new SyncApiError('http', 401, 'google_auth_failed')
+    return res
+  }
+}
+
+async function driveJson(o: DriveRemoteOptions, method: SyncRequest['method'], url: string): Promise<Record<string, unknown>> {
+  const res = await driveRequest(o, method, url)
+  if (!ok(res)) throw driveError(res)
+  return parseObject(res.body)
+}
+
+/**
+ * appDataFolder で使っている量。files.list の size(今の版の大きさ)を全ページ足す。
+ * 古い版・ほかの領域のファイルも appDataFolder にある分は数える(Drive の容量の見え方に近づける)。古い版の分は size に出ないので入らない
+ */
+export async function driveUsage(o: DriveRemoteOptions): Promise<number> {
+  let total = 0
+  let page: string | null = null
+  for (;;) {
+    const q: Record<string, string> = { spaces: 'appDataFolder', pageSize: '1000', fields: 'nextPageToken,files(size)' }
+    if (page !== null) q.pageToken = page
+    const r = await driveJson(o, 'GET', `${DRIVE_API}/files?${query(q)}`)
+    if (!Array.isArray(r.files)) throw bad()
+    for (const f of r.files) {
+      // size は 10 進の文字列(int64)。ないもの(中身のないファイル)は 0
+      const n = isObject(f) && typeof f.size === 'string' && /^\d{1,15}$/.test(f.size) ? Number(f.size) : 0
+      total += n
+    }
+    if (r.nextPageToken === undefined) return total
+    if (typeof r.nextPageToken !== 'string' || r.nextPageToken === page) throw new SyncApiError('no_progress')
+    page = r.nextPageToken
+  }
+}
+
 export class DriveRemote implements SyncRemote {
   readonly pace = null
   readonly needsTicket = false
@@ -124,29 +178,12 @@ export class DriveRemote implements SyncRemote {
 
   // ── 通信 ──
 
-  private async request(method: SyncRequest['method'], url: string, body?: string, contentType?: string, maxBytes = MAX_RESPONSE_BYTES): Promise<SyncResponse> {
-    for (let attempt = 0; ; attempt++) {
-      const headers: Record<string, string> = { Authorization: `Bearer ${await this.o.accessToken(attempt > 0)}` }
-      if (contentType !== undefined) headers['Content-Type'] = contentType
-      let res: SyncResponse
-      try {
-        res = await this.o.transport.send({ method, url, headers, ...(body !== undefined && { body }), maxBytes, timeoutMs: HTTP_TOTAL_TIMEOUT_MS, idleTimeoutMs: HTTP_IDLE_TIMEOUT_MS })
-      } catch (e) {
-        throw new SyncApiError(e instanceof SyncResponseTooLarge ? 'too_large' : 'network')
-      }
-      if (res.status >= 300 && res.status < 400) throw new SyncApiError('redirect', res.status)
-      if (res.body.length > maxBytes) throw new SyncApiError('too_large')
-      // アクセストークンの期限切れ。1 回だけ取り直して送り直す
-      if (res.status === 401 && attempt === 0) continue
-      if (res.status === 401) throw new SyncApiError('http', 401, 'google_auth_failed')
-      return res
-    }
+  private request(method: SyncRequest['method'], url: string, body?: string, contentType?: string, maxBytes = MAX_RESPONSE_BYTES): Promise<SyncResponse> {
+    return driveRequest(this.o, method, url, body, contentType, maxBytes)
   }
 
-  private async json(method: SyncRequest['method'], url: string): Promise<Record<string, unknown>> {
-    const res = await this.request(method, url)
-    if (!ok(res)) throw driveError(res)
-    return parseObject(res.body)
+  private json(method: SyncRequest['method'], url: string): Promise<Record<string, unknown>> {
+    return driveJson(this.o, method, url)
   }
 
   private async startToken(): Promise<string> {

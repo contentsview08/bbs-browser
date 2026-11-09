@@ -30,10 +30,10 @@ class FakeClock {
   }
 }
 
-function setup(o: { idleStops?: boolean; changes?: boolean; changed?: boolean; enabled?: boolean; pace?: { head_sec?: number; push_sec?: number } } = {}) {
+function setup(o: { idleStops?: boolean; changes?: boolean; changed?: boolean; enabled?: boolean; pace?: { head_sec?: number; push_sec?: number }; interval?: number | null } = {}) {
   const c = new FakeClock()
   const log: string[] = []
-  const state = { changes: o.changes ?? false, changed: o.changed ?? false, enabled: o.enabled ?? true, pace: o.pace ?? null }
+  const state = { changes: o.changes ?? false, changed: o.changed ?? false, enabled: o.enabled ?? true, pace: o.pace ?? null, interval: o.interval === undefined ? HEAD_INTERVAL_MS : o.interval }
   const host: SchedulerHost = {
     now: () => c.now,
     setTimer: c.setTimer,
@@ -49,6 +49,7 @@ function setup(o: { idleStops?: boolean; changes?: boolean; changed?: boolean; e
     },
     hasChanges: async () => state.changes,
     pace: () => state.pace,
+    interval: () => state.interval,
     idleStops: o.idleStops ?? false,
   }
   return { c, log, state, s: new SyncScheduler(host) }
@@ -264,5 +265,68 @@ describe('自動の同期のきっかけ', () => {
     await c.advance(HEAD_INTERVAL_MS * 4)
     await s.background()
     expect(log).toEqual([])
+  })
+})
+
+describe('利用者の選ぶ同期の間隔', () => {
+  it('30 秒なら 30 秒で確かめ、変化なしが続くと伸ばして 5 分で止める', async () => {
+    const { c, log, s } = setup({ interval: 30_000 })
+    await s.foreground()
+    await c.advance(30_000)
+    expect(heads(log)).toBe(1)
+    await c.advance(60_000)
+    expect(heads(log)).toBe(2)
+    await c.advance(HEAD_BACKOFF_MAX_MS * 3)
+    expect(headWaitMs(30_000, 20)).toBe(HEAD_BACKOFF_MAX_MS)
+  })
+
+  it('15 分なら 15 分より短くしない', async () => {
+    const { c, log, s } = setup({ interval: 900_000 })
+    await s.foreground()
+    await c.advance(900_000 - 1)
+    expect(heads(log)).toBe(0)
+    await c.advance(1)
+    expect(heads(log)).toBe(1)
+    await c.advance(900_000)
+    expect(heads(log)).toBe(2)
+  })
+
+  it('手動のみは確かめに行かず、前面に戻っても送るものがなければ周を回さない。送るものは送る', async () => {
+    const { c, log, s, state } = setup({ interval: null })
+    await s.foreground()
+    await c.advance(PUSH_INTERVAL_MS * 3)
+    expect(log).toEqual([])
+    state.changes = true
+    await c.advance(PUSH_INTERVAL_MS)
+    expect(log).toEqual(['tick'])
+    state.changes = true
+    await s.background()
+    expect(log).toEqual(['tick', 'background'])
+    await c.advance(NUDGE_MIN_GAP_MS)
+    await s.foreground()
+    expect(log).toEqual(['tick', 'background'])
+    await s.background()
+    await c.advance(NUDGE_MIN_GAP_MS)
+    state.changes = true
+    await s.foreground()
+    expect(log).toEqual(['tick', 'background', 'foreground'])
+    s.networkBack()
+    await c.advance(NET_SETTLE_MS + NET_MIN_GAP_MS)
+    expect(heads(log)).toBe(0)
+  })
+
+  it('選び直すと次の確認を新しい間隔で掛け直す', async () => {
+    const { c, log, s, state } = setup({ interval: 900_000 })
+    await s.foreground()
+    await c.advance(60_000)
+    state.interval = 30_000
+    s.intervalChanged()
+    await c.advance(0)
+    expect(heads(log)).toBe(1)
+  })
+
+  it('サーバーの指示より短くしない', () => {
+    expect(paceMs({ head_sec: 120 }, 30_000).head).toBe(120_000)
+    expect(paceMs(null, 900_000).head).toBe(900_000)
   })
 })

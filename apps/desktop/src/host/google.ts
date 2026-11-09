@@ -51,6 +51,20 @@ export const googleDrive: DriveAuth = {
       throw hostError(e)
     }
   },
+  async pairingToken() {
+    try {
+      return await invoke<string>('google_pairing_token')
+    } catch (e) {
+      throw hostError(e)
+    }
+  },
+  async adopt(refreshToken, expect) {
+    try {
+      return await invoke<{ account: string; email: string }>('google_adopt', { refreshToken, expect })
+    } catch (e) {
+      throw hostError(e)
+    }
+  },
   remote: driveRemote({ transport: syncTransport, accessToken: googleAccessToken }),
 }
 

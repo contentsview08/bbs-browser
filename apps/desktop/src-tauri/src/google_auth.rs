@@ -32,6 +32,10 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 
 const AUTH_FAILED: &str = "google_auth_failed";
 const LOGIN_FAILED: &str = "google_login_failed";
+/** 端末を足すコードで受け取ったトークンが使えない */
+const PAIRING_FAILED: &str = "google_pairing_failed";
+/** Google の更新用のトークンは 100 文字ほど。コード(obb2)の決まりと同じ上限 */
+const REFRESH_TOKEN_MAX: usize = 512;
 
 /// ビルドのときに入れたクライアント(build.rs)。公式にもデスクトップのシークレットは秘密にできない値で、守りは PKCE とループバックが受け持つ
 struct Client {
@@ -185,6 +189,26 @@ async fn about(ep: &Endpoints, access_token: &str) -> Result<GoogleAccount, Stri
     let r = call(crate::sync_http::client()?.get(u).bearer_auth(access_token)).await?;
     let user = r.body.get("user").filter(|_| r.status == 200).ok_or_else(|| LOGIN_FAILED.to_string())?;
     Ok(GoogleAccount { account: str_of(user, "permissionId").ok_or_else(|| LOGIN_FAILED.to_string())?, email: str_of(user, "emailAddress").unwrap_or_default() })
+}
+
+/** コードで受け取ったトークンの形。印字できる ASCII だけ(packages/sync の pairing.ts と同じ) */
+fn refresh_token_ok(t: &str) -> bool {
+    !t.is_empty() && t.len() <= REFRESH_TOKEN_MAX && t.bytes().all(|b| (0x21..=0x7e).contains(&b))
+}
+
+/** コードで受け取ったトークンで 1 回取り直し、どのアカウントかを確かめる。使えないトークンは google_pairing_failed */
+async fn check_adopted(ep: &Endpoints, c: &Client, refresh_token: &str, expect: Option<&str>) -> Result<(Stored, Tokens), String> {
+    if !refresh_token_ok(refresh_token) {
+        return Err("bad_code".into());
+    }
+    let t = refresh(ep, c, refresh_token).await.map_err(|e| if e == AUTH_FAILED { PAIRING_FAILED.to_string() } else { e })?;
+    let account = about(ep, &t.access_token).await.map_err(|_| PAIRING_FAILED.to_string())?;
+    if expect.is_some_and(|e| e != account.account) {
+        return Err("google_other_account".into());
+    }
+    // 取り直しで入れ替わったら新しい方を残す
+    let kept = t.refresh_token.clone().unwrap_or_else(|| refresh_token.to_string());
+    Ok((Stored { refresh_token: kept, account: account.account, email: account.email }, t))
 }
 
 // ── ループバックの口 ──
@@ -379,6 +403,29 @@ pub async fn google_login(window: tauri::Window, expect: Option<String>) -> Resu
 pub async fn google_access_token(window: tauri::Window, fresh: bool) -> Result<(), String> {
     only_main(&window)?;
     access_token(&window, fresh).await.map(|_| ())
+}
+
+/// 端末を足すコード(obb2)に入れる更新用のトークン。画面へ出すのはこの命令だけで、コードを出している間だけ画面が持つ
+#[tauri::command]
+pub async fn google_pairing_token(window: tauri::Window) -> Result<String, String> {
+    only_main(&window)?;
+    let mut s = session().lock().await;
+    ensure_loaded(&window, &mut s).await?;
+    s.stored.as_ref().map(|x| x.refresh_token.clone()).ok_or_else(|| AUTH_FAILED.to_string())
+}
+
+/// コードで受け取った更新用のトークンを Google に確かめてから鍵保管に置く。この端末は Google のログインをしない。
+/// expect と違うアカウントなら置き換えない
+#[tauri::command]
+pub async fn google_adopt(window: tauri::Window, refresh_token: String, expect: Option<String>) -> Result<GoogleAccount, String> {
+    only_main(&window)?;
+    let c = client().ok_or_else(|| "google_unavailable".to_string())?;
+    let (stored, t) = check_adopted(&Endpoints::google(), &c, &refresh_token, expect.as_deref()).await?;
+    let account = GoogleAccount { account: stored.account.clone(), email: stored.email.clone() };
+    let mut s = session().lock().await;
+    crate::sync_key::google_save(&window, serde_json::to_string(&stored).map_err(|_| PAIRING_FAILED.to_string())?).await?;
+    *s = Session { loaded: true, stored: Some(stored), access: Some((t.access_token.clone(), expiry(&t))) };
+    Ok(account)
 }
 
 /// 進んでいるログインをやめる
@@ -582,6 +629,36 @@ mod tests {
         assert_eq!(r("rt1").unwrap_err(), "google_auth_failed");
         assert_eq!(r("rt1").unwrap_err(), "server");
         assert_eq!(r("rt1").unwrap().refresh_token.as_deref(), Some("rt-new"));
+    }
+
+    #[test]
+    fn コードのトークンを確かめてから受け取る() {
+        let (base, rx) = serve(vec![
+            ok(r#"{"access_token":"at5","expires_in":3599,"token_type":"Bearer"}"#, ""),
+            ok(r#"{"user":{"permissionId":"0123","emailAddress":"a@example.test"}}"#, ""),
+            fail("400 Bad Request", r#"{"error":"invalid_grant"}"#),
+            ok(r#"{"access_token":"at6","expires_in":3599}"#, ""),
+            ok(r#"{"user":{"permissionId":"9999","emailAddress":"b@example.test"}}"#, ""),
+            ok(r#"{"access_token":"at7","expires_in":3599,"refresh_token":"rt-next"}"#, ""),
+            ok(r#"{"user":{"permissionId":"0123","emailAddress":"a@example.test"}}"#, ""),
+        ]);
+        let e = ep(&base);
+        // Stored は Debug を持たない(トークンを表示に出さない)ので、失敗は err() で取り出す
+        let run = |rt: &'static str, expect: Option<&'static str>| tauri::async_runtime::block_on(check_adopted(&e, &C, rt, expect));
+        let (stored, t) = run("1//rt-shared", None).unwrap();
+        assert_eq!((stored.refresh_token.as_str(), stored.account.as_str(), stored.email.as_str()), ("1//rt-shared", "0123", "a@example.test"));
+        assert_eq!(t.access_token, "at5");
+        assert!(rx.recv().unwrap().contains("grant_type=refresh_token"));
+        assert!(rx.recv().unwrap().to_lowercase().contains("authorization: bearer at5"));
+        // 使えないトークン・違うアカウント
+        assert_eq!(run("rt-dead", None).err().unwrap(), "google_pairing_failed");
+        assert_eq!(run("rt-other", Some("0123")).err().unwrap(), "google_other_account");
+        // 取り直しで入れ替わったら新しい方を置く
+        assert_eq!(run("rt-old", Some("0123")).unwrap().0.refresh_token, "rt-next");
+        // 形の違うものは送らない
+        for bad in ["", "a b", "トークン", &"x".repeat(REFRESH_TOKEN_MAX + 1)] {
+            assert_eq!(tauri::async_runtime::block_on(check_adopted(&e, &C, bad, None)).err().unwrap(), "bad_code");
+        }
     }
 
     #[test]

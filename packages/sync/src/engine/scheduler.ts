@@ -22,14 +22,16 @@ export interface SchedulerHost {
   /** 送るものがあるか(通信しない) */
   hasChanges(): Promise<boolean>
   pace(): SyncPace | null
+  /** 利用者の選んだ確認の間隔。null は手動のみ(自動では確かめず、この端末の変更を送るだけ)。ないときは既定の HEAD_INTERVAL_MS */
+  interval?(): number | null
   /** PC は放置で確認を止める。スマホは前面なら操作がなくても見ている */
   idleStops: boolean
 }
 
-/** 既定より短くせず、PACE_MAX_MS より長くしない */
-export function paceMs(pace: SyncPace | null): { head: number; push: number } {
+/** 既定(head は利用者の選んだ間隔)より短くせず、PACE_MAX_MS より長くしない */
+export function paceMs(pace: SyncPace | null, head = HEAD_INTERVAL_MS): { head: number; push: number } {
   const ms = (sec: number | undefined, base: number) => (typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? Math.min(PACE_MAX_MS, Math.max(base, Math.ceil(sec * 1000))) : base)
-  return { head: ms(pace?.head_sec, HEAD_INTERVAL_MS), push: ms(pace?.push_sec, PUSH_INTERVAL_MS) }
+  return { head: ms(pace?.head_sec, head), push: ms(pace?.push_sec, PUSH_INTERVAL_MS) }
 }
 
 /** 「変化なし」が続いた回数から確認の間隔を決める。基本の間隔より短くせず、上限で止める */
@@ -56,14 +58,32 @@ export class SyncScheduler {
     return this.paused
   }
 
+  /** 手動のみなら null */
+  private headBase(): number | null {
+    const v = this.host.interval ? this.host.interval() : HEAD_INTERVAL_MS
+    return v === null ? null : Math.max(1_000, v)
+  }
+
+  private paces(): { head: number | null; push: number } {
+    const base = this.headBase()
+    const p = paceMs(this.host.pace(), base ?? HEAD_INTERVAL_MS)
+    return { head: base === null ? null : p.head, push: p.push }
+  }
+
+  /** 間隔を選び直したとき。次の確認を新しい間隔で掛け直す */
+  intervalChanged(): void {
+    this.misses = 0
+    this.schedule()
+  }
+
   /** 次の確認と次の送信の早い方で起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
   private schedule(): void {
     if (this.timer !== null) this.host.clearTimer(this.timer)
     this.timer = null
     if (!this.front || this.paused) return
-    const { head, push } = paceMs(this.host.pace())
+    const { head, push } = this.paces()
     const now = this.host.now()
-    const untilCheck = Math.max(0, this.lastCheck + headWaitMs(head, this.misses) - now)
+    const untilCheck = head === null ? Infinity : Math.max(0, this.lastCheck + headWaitMs(head, this.misses) - now)
     const untilPush = Math.max(0, this.lastPush + push - now)
     this.timer = this.host.setTimer(() => void this.tick().catch(() => undefined), Math.min(untilPush, untilCheck))
   }
@@ -97,8 +117,8 @@ export class SyncScheduler {
       return
     }
     await this.guarded(async () => {
-      const { head, push } = paceMs(this.host.pace())
-      const checkDue = now - this.lastCheck >= headWaitMs(head, this.misses)
+      const { head, push } = this.paces()
+      const checkDue = head !== null && now - this.lastCheck >= headWaitMs(head, this.misses)
       const pushDue = now - this.lastPush >= push
       // 送るものがなくても・使っていなくても、次はここから数える(時計が空回りしないように)
       if (checkDue) this.lastCheck = now
@@ -131,7 +151,8 @@ export class SyncScheduler {
       return Promise.resolve()
     }
     return this.guarded(async () => {
-      if (await this.host.enabled()) await this.run('foreground')
+      // 手動のみでは、前面に戻っても確かめに行かない。送るものがあれば送る
+      if ((await this.host.enabled()) && (this.headBase() !== null || (await this.host.hasChanges()))) await this.run('foreground')
     })
   }
 
@@ -170,7 +191,7 @@ export class SyncScheduler {
       this.netTimer = null
       if (!this.front || this.host.now() - this.lastSync < NET_MIN_GAP_MS) return
       void this.guarded(async () => {
-        if (await this.host.enabled()) await this.run('network')
+        if ((await this.host.enabled()) && (this.headBase() !== null || (await this.host.hasChanges()))) await this.run('network')
       }).catch(() => undefined)
     }, NET_SETTLE_MS)
   }

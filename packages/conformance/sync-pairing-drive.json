@@ -1,0 +1,50 @@
+[
+  {
+    "name": "形どおりのコードを作って読める",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.MS8vMGUtZmFrZS1yZWZyZXNoLXRva2VuX2Zvci50ZXN0cw",
+    "k_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "refresh_token": "1//0e-fake-refresh-token_for.tests",
+    "encode": true
+  },
+  {
+    "name": "前後の空白は無視する",
+    "code": "  obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.MS8vMGUtZmFrZS1yZWZyZXNoLXRva2VuX2Zvci50ZXN0cw\n",
+    "k_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+    "refresh_token": "1//0e-fake-refresh-token_for.tests"
+  },
+  {
+    "name": "サーバーのコード(obb1)は読まない",
+    "code": "obb1.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.MS8vMGUtZmFrZS1yZWZyZXNoLXRva2VuX2Zvci50ZXN0cw",
+    "error": "bad_code"
+  },
+  {
+    "name": "区切りが多い",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.MS8vMGUtZmFrZS1yZWZyZXNoLXRva2VuX2Zvci50ZXN0cw.x",
+    "error": "bad_code"
+  },
+  {
+    "name": "K が 32 バイトでない",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw.MS8vMGUtZmFrZS1yZWZyZXNoLXRva2VuX2Zvci50ZXN0cw",
+    "error": "bad_code"
+  },
+  {
+    "name": "トークンが空",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.",
+    "error": "bad_code"
+  },
+  {
+    "name": "トークンに空白がある",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.YSBi",
+    "error": "bad_code"
+  },
+  {
+    "name": "トークンに ASCII の外の文字がある",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.44OI44O844Kv44Oz",
+    "error": "bad_code"
+  },
+  {
+    "name": "Base64URL の外の文字",
+    "code": "obb2.BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc.MS8vMGUtZmFrZS1yZWZyZXNoLXRva2VuX2Zvci50ZXN0cw==",
+    "error": "bad_code"
+  }
+]

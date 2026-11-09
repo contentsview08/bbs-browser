@@ -45,6 +45,26 @@ export const NET_MIN_GAP_MS = 30_000
 export const NUDGE_MIN_GAP_MS = 30_000
 export const IDLE_STOP_MS = 10 * 60 * 1000
 
+/**
+ * 利用者が選ぶ同期の間隔(ほかの端末の変化を確かめる間隔)。端末ごとの設定で、同期しない。
+ * manual は自動で確かめない(今すぐ同期と、この端末の変更の送り出しだけ)。変化なしが続いたときの伸ばし方・放置で止める・裏で止めるは間隔によらず残す
+ */
+export const SYNC_INTERVALS = [
+  { id: '30s', ms: 30_000 },
+  { id: '1m', ms: 60_000 },
+  { id: '5m', ms: 300_000 },
+  { id: '15m', ms: 900_000 },
+  { id: 'manual', ms: null },
+] as const
+export type SyncIntervalId = (typeof SYNC_INTERVALS)[number]['id']
+export const DEFAULT_SYNC_INTERVAL: SyncIntervalId = '1m'
+
+/** 間隔の ms。手動のみは null。知らない値は既定 */
+export function syncIntervalMs(id: string | null): number | null {
+  const found = SYNC_INTERVALS.find((x) => x.id === id)
+  return found ? found.ms : HEAD_INTERVAL_MS
+}
+
 /** 打ち切った回数から次の待ち時間を決める。jitter は 0 以上 1 未満 */
 export function backoffDelayMs(attempt: number, jitter: number): number {
   const base = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** Math.min(attempt, 16))

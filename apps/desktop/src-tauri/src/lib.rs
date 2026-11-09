@@ -719,6 +719,8 @@ pub fn run() {
             google_auth::google_login,
             google_auth::google_access_token,
             google_auth::google_login_cancel,
+            google_auth::google_pairing_token,
+            google_auth::google_adopt,
             google_auth::google_forget,
             google_auth::google_revoke,
             sync_key::sync_key_load,

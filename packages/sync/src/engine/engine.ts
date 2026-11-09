@@ -91,6 +91,8 @@ export interface SyncConfirm {
   type: string
   lost: number
   host?: string | null
+  /** Google ドライブで参加するときの、コードのアカウントのメール */
+  account?: string | null
 }
 
 export interface SyncEngineDeps {
@@ -110,6 +112,8 @@ export interface SyncEngineDeps {
   leaseOwner?: string
   allowLocalhost?: boolean
   onState?: (s: SyncEngineState) => void
+  /** 利用者の選んだ確認の間隔(ms)。手動のみは null。直前の確認を信じてよい長さに使う */
+  interval?: () => number | null
 }
 
 export interface CycleResult {
@@ -440,7 +444,8 @@ export class SyncEngine {
 
   /** サーバーの URL の上書きも消す。参加のコードで入った先に、やめたあとも向いたままにしない */
   private clearTables(): Promise<void> {
-    return this.db.batch([{ sql: 'DELETE FROM sync_records' }, { sql: 'DELETE FROM sync_ops' }, { sql: 'DELETE FROM sync_state' }])
+    // 同期の間隔は端末の好みなので、やめても作り直しても残す
+    return this.db.batch([{ sql: 'DELETE FROM sync_records' }, { sql: 'DELETE FROM sync_ops' }, { sql: "DELETE FROM sync_state WHERE key <> 'interval'" }])
   }
 
   /**
@@ -778,7 +783,7 @@ export class SyncEngine {
    * 省いた間に他の端末が同じレコードを書いていれば 409 で分かり、マージして読み直す
    */
   private headIsFresh(now: number): boolean {
-    return this.headFreshAt > 0 && now - this.headFreshAt < paceMs(this.paceValue).head + PULL_MIN_GAP_MS
+    return this.headFreshAt > 0 && now - this.headFreshAt < paceMs(this.paceValue, this.deps.interval?.() ?? undefined).head + PULL_MIN_GAP_MS
   }
 
   /** pull。joining の全件の読み取りではリベースを見ない(since = 0 がすでに全件なので) */

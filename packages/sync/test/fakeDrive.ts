@@ -46,6 +46,8 @@ export class FakeDrive {
   tokens = new Set([FAKE_DRIVE_TOKEN])
   /** 利用者の Drive の空き。超えたら 403 storageQuotaExceeded */
   quotaBytes = Infinity
+  /** 1 ページに返す数の上限。本物も pageSize より少なく返すことがあるので、ページを辿るかを確かめる */
+  pageCap = Infinity
 
   constructor(private readonly now: () => number) {}
 
@@ -197,9 +199,9 @@ export class FakeDrive {
 
   private pageSize(q: URLSearchParams): number | null {
     const raw = q.get('pageSize')
-    if (raw === null) return 100
+    if (raw === null) return Math.min(100, this.pageCap)
     const n = Number(raw)
-    return Number.isSafeInteger(n) && n >= 1 && n <= 1000 ? n : null
+    return Number.isSafeInteger(n) && n >= 1 && n <= 1000 ? Math.min(n, this.pageCap) : null
   }
 
   /** appDataFolder の中は spaces=appDataFolder を付けないと見えない */

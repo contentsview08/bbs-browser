@@ -35,7 +35,8 @@ export const DRIVE_MESSAGES: Readonly<Record<string, string>> = {
   google_login_denied: 'Google のログインがやめられました。',
   google_login_timeout: 'Google のログインが 5 分のうちに終わらなかったので、やめました。',
   google_login_failed: 'Google のログインに失敗しました。もう一度お試しください。',
-  drive_pairing_later: 'Google ドライブの同期では、端末の追加はまだ使えません。',
+  google_pairing_failed: 'このコードの Google の接続は使えなくなっています。同期している端末で「端末を追加」を出し直してください。',
+  server_sync_ended: '同期サーバーでの同期は終わったので、この端末の同期をやめた状態に戻しました。Google でログインして同期を始め直してください。この端末のデータはそのまま使えます。',
 }
 
 export function syncMessage(code: string): string {
@@ -107,14 +108,53 @@ export const SYNC_GROUP_LABELS = {
 /** Google ドライブの置き場の画面の言葉(PC だけ。DRIVE_MESSAGES と同じく D4 で sync-ui.json へ移す) */
 export const DRIVE_LABELS = {
   store: '同期の置き場',
-  store_server: '同期サーバー',
   store_drive: 'Google ドライブ',
   store_note: 'Google ドライブでは、アプリ専用の見えないフォルダに暗号化したまま置きます。Google にも中身は読めません。',
-  store_ask: '置き場を変えると、この端末のデータを新しい置き場へ全部送り直します。前の置き場のデータはそのまま残ります。',
   start_drive: 'Google でログインして同期を始める',
   relogin: 'Google でログインし直す',
   login_waiting: 'ブラウザで Google にログインしてください(5 分まで待ちます)',
   login_cancel: 'ログインをやめる',
   revoke: 'Google の接続を切る(全端末)',
   revoke_ask: 'Google に OBB の許可の取り消しを送り、この端末で同期をやめます。同じ許可を使うほかの端末も止まります。Google ドライブのデータは残ります。',
+  // SYNC_LABELS のうちサーバーのことを書いた文の、Google ドライブ版(SYNC_LABELS は sync-ui.json と揃えるので触らない)
+  intro: '履歴やお気に入りを暗号化して、自分の Google ドライブを通して別の端末と同期します。実験的な機能です。この端末のデータは消えません。',
+  master_note: 'オフの間は通信も送信待ちも起きません。鍵と Google ドライブのデータは残るので、オンに戻すと続きから同期します。',
+  kinds_note: '切った種類は送らず、受け取っても手元へ写しません。Google ドライブのデータは消えません。オンに戻すと追いつきます。',
+  secret_note: '既定はオフです。オフの間は、この端末から送らず、届いても読みません。',
+  leave_ask: 'この端末の鍵と同期の表、Google の接続を消します。この端末のお気に入りは消えません。Google ドライブのデータとほかの端末はそのままです。',
+  pairing_note: '同期する端末で「コードで参加」に貼るか、QR を読んでください。Google のログインは要りません。',
+  join_placeholder: 'obb2.',
+  join_ask_account: 'Google アカウント: {email}',
+  usage: 'ドライブで使っている量',
+  interval: '同期の間隔',
+  interval_note: 'ほかの端末の変更を確かめる間隔です。この端末の変更は、アプリを離れるときなどに間隔によらず送ります。変化のない間や操作のない間は、確かめる間隔を自動で延ばします。この端末だけの設定です。',
 } as const
+
+/** 同期の間隔の選択肢の見出し。並びと既定は config.ts の SYNC_INTERVALS */
+export const SYNC_INTERVAL_LABELS = {
+  '30s': '30 秒',
+  '1m': '1 分',
+  '5m': '5 分',
+  '15m': '15 分',
+  manual: '手動のみ',
+} as const
+
+/**
+ * ドライブで使っている量の表し方。1024 ごとに KB・MB・GB へ上げ、小数 1 桁(四捨五入)。1 MB 未満は KB で出す(0 は 0.0 KB)。
+ * 例: 1234567 → 1.2 MB。スマホも同じ表し方にする
+ */
+export function formatDriveUsage(bytes: number): string {
+  const units = ['KB', 'MB', 'GB'] as const
+  let v = Math.max(0, bytes) / 1024
+  let i = 0
+  while (i < units.length - 1 && v >= 1024) {
+    v /= 1024
+    i++
+  }
+  // 1023.96 KB のように丸めて 1024.0 になるものは上の単位にする
+  if (i < units.length - 1 && Math.round(v * 10) / 10 >= 1024) {
+    v /= 1024
+    i++
+  }
+  return `${v.toFixed(1)} ${units[i]}`
+}

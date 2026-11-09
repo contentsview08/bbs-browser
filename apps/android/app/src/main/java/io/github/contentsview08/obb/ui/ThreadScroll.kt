@@ -87,9 +87,13 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var livePop by mutableStateOf<Map<Int, Long>>(emptyMap())
     /** 実況モードで、指で外していない(新着の送る動き・札はこちらが受け持つ) */
     val liveRunning get() = liveOn && livePhase != LivePhase.PAUSED
+    /** 次に自動で取りに行く時刻(ms)。0 は取りに行っている間(更新ボタンに残りを出す) */
+    var liveNextAt by mutableStateOf(0L)
+    /** 入ってすぐの更新が済んだ。済むまではライブの段に入らない(その更新で届いたレスは、追いつくまでの段として流して見せる) */
+    var livePrimed = false
 
-    fun startLive() { liveOn = true; livePhase = LivePhase.CATCH_UP; showAllLive() }
-    fun stopLive() { liveOn = false; livePhase = LivePhase.CATCH_UP; showAllLive() }
+    fun startLive() { liveOn = true; livePhase = LivePhase.CATCH_UP; liveNextAt = 0L; livePrimed = false; showAllLive() }
+    fun stopLive() { liveOn = false; livePhase = LivePhase.CATCH_UP; liveNextAt = 0L; livePrimed = false; showAllLive() }
 
     /** 一番下に着いた: 今あるレスは全部出ているので、ここから後を 1 つずつ積む */
     fun enterLive() {

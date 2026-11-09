@@ -178,6 +178,8 @@ interface Props {
   registerReadFlush?: (flush: (() => void) | undefined) => void
   /** 実況モードを入れた・やめた(入れている間は、App がそのスレを実況モードの間隔で更新する) */
   onLiveChange?: (on: boolean) => void
+  /** 実況モードで、次に取りに行く時刻(取りに行っている間は undefined。App が決める) */
+  liveRefreshAt?: number
   /** 書き込みの下書き(このスレの書きかけ) */
   draft?: { load: () => Promise<string | undefined>; save: (body: string) => void }
   /** この板で使えるアカウント(書き込み欄の ︙ で選ぶ) */
@@ -545,6 +547,12 @@ export default function ThreadView(props: Props) {
     onLiveChange(true)
     return () => onLiveChange(false)
   }, [liveOn, onLiveChange])
+  // 入ってすぐの更新が済むまでは、ライブの段に入らない(その更新で届いたレスは、追いつくまでの段として流して見せる)
+  const livePrimed = useRef(false)
+  useEffect(() => {
+    if (!liveOn) livePrimed.current = false
+    else if (props.liveRefreshAt !== undefined) livePrimed.current = true
+  }, [liveOn, props.liveRefreshAt])
   // ライブの段で、まだ出していないレスは、ログから外しておく(作らない・既読にしない・新着の札も出さない)
   const reveal = useLiveReveal(props.log.posts, settings.liveRefreshSec)
   const log = useMemo(
@@ -640,7 +648,10 @@ export default function ThreadView(props: Props) {
   // 手で更新したあとのクールダウン中(App が決める)は、引っぱっても数えない
   const refreshReadyRef = useRef(props.refreshReadyAt)
   refreshReadyRef.current = props.refreshReadyAt
-  const canRefresh = () => Date.now() >= (refreshReadyRef.current ?? 0)
+  const liveOnRef = useRef(liveOn)
+  liveOnRef.current = liveOn
+  // 実況モードの間は、引っぱっても更新しない(自動で取りに行くので)
+  const canRefresh = () => !liveOnRef.current && Date.now() >= (refreshReadyRef.current ?? 0)
   const topPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: 1, canRefresh })
   const bottomPull = useWheelPullRefresh({ onRefresh: props.onRefresh, sign: -1, canRefresh })
   // スマホ: 指で引っぱって更新する(上の端で下へ・下の端で上へ)
@@ -1183,9 +1194,14 @@ export default function ThreadView(props: Props) {
     active: props.active,
     speed: settings.liveScrollSpeed,
     ready: isPositioned,
+    canGoLive: () => livePrimed.current,
     flushRead,
     reveal,
   })
+  /** 更新ボタンの出し方。実況モードの間は、次に自動で取りに行くまでの残り(取りに行っている間は回る) */
+  const refreshButtonState = liveOn
+    ? { live: true, loading: props.loading || props.liveRefreshAt === undefined, readyAt: props.liveRefreshAt, cooldownMs: settings.liveRefreshSec * 1000 }
+    : { loading: props.loading, readyAt: props.refreshReadyAt, cooldownMs: REFRESH_COOLDOWN_MS }
   const toggleLiveMode = () => {
     showQuick(true, liveMode ? '実況モードをやめました' : '実況モードにしました')
     setLiveMode((v) => !v)
@@ -1351,7 +1367,8 @@ export default function ThreadView(props: Props) {
       id: 'refresh',
       label: '更新',
       icon: 'refresh',
-      disabled: props.loading,
+      // 実況モードの間は自動で取りに行くので押せない
+      disabled: props.loading || liveOn,
       // 押せるかは押した時点で決める(描いた時刻で決めると、クールダウンが明けても描き直すまで押せない)
       // クールダウン中に押したときは、取りに行かずに既読の位置だけ引き直す(App の refreshThread)
       onClick: () => void props.onRefresh(),
@@ -1360,10 +1377,8 @@ export default function ThreadView(props: Props) {
         <RefreshButton
           className={ICON_BTN}
           onClick={() => void props.onRefresh()}
-          loading={props.loading}
-          readyAt={props.refreshReadyAt}
-          cooldownMs={REFRESH_COOLDOWN_MS}
-          coolingAction="既読の位置(ここから未読)だけ更新します"
+          {...refreshButtonState}
+          coolingAction={liveOn ? undefined : '既読の位置(ここから未読)だけ更新します'}
         />
       ),
     },
@@ -2466,7 +2481,16 @@ export default function ThreadView(props: Props) {
               variant="chat"
               // フッターの右端(送るボタンの右)に更新ボタン(設定で消せる)
               trailing={
-                refreshFab && (
+                refreshFab &&
+                (liveOn ? (
+                  // 実況モードの間は、次の更新までの残りを出して押せなくする(スマホ版と同じ)
+                  <RefreshButton
+                    className="flex-shrink-0 w-11 h-11 ml-1.5 mr-3 rounded-full flex items-center justify-center text-c-text-muted"
+                    onClick={() => undefined}
+                    size={28}
+                    {...refreshButtonState}
+                  />
+                ) : (
                   <button
                     type="button"
                     onClick={() => void props.onRefresh()}
@@ -2475,7 +2499,7 @@ export default function ThreadView(props: Props) {
                   >
                     <span className={`material-symbols-outlined text-[28px] ${props.loading ? 'animate-spin' : ''}`}>refresh</span>
                   </button>
-                )
+                ))
               }
               layout="bottom"
               onFocusChange={(f) => {

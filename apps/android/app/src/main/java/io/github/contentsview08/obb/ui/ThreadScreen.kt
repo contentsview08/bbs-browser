@@ -269,7 +269,11 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ThreadScroller(ctl, listState, scope, { shownNow.value }, { footerH }, with(density) { 80.dp.toPx() })
     }
     // 更新の前に既読を知らせる。「ここから未読」を古い位置で引き直さないように
-    fun refresh(): kotlinx.coroutines.Job? { reportRead(ctl, scroller, vm, page); return vm.refreshThread(page) }
+    fun refresh(): kotlinx.coroutines.Job? {
+        // 実況モードの間は、実況モードの間隔で取りに行くので、手では取りに行かない(更新ボタンは残りの時間を出して押せなくしている)
+        if (ctl.liveOn) { vm.toast = "実況モードの間は自動で更新します"; return null }
+        reportRead(ctl, scroller, vm, page); return vm.refreshThread(page)
+    }
     LaunchedEffect(page, index.posts.isNotEmpty()) {
         if (ctl.positioned || index.posts.isEmpty()) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
@@ -548,8 +552,28 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val topPull = remember { PullState { Haptics.confirm(view) } }
     val bottomPull = remember { PullState { Haptics.confirm(view) } }
     val pullConn = remember(page) { PullConnection(topPull, bottomPull, density.density, scope) { refresh()?.join() } }
-    // 実況モードの間は、ふだんの自動更新の設定とは別に、実況モードの間隔で取りに行く(下まで読んでいなくても)
-    val refreshSec = if (ctl.liveOn) prefs.liveRefreshSec else prefs.autoRefreshSec
+    // 実況モードの間は、ふだんの自動更新の設定とは別に、実況モードの間隔で取りに行く(下まで読んでいなくても)。
+    // 入ったらすぐ取りに行き、取り終えてから間隔ごとに。次に取りに行く時刻を更新ボタンに出す
+    if (ctl.liveOn) LaunchedEffect(prefs.liveRefreshSec, page) {
+        val maxPosts = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) null else AUTO_REFRESH_MAX_POSTS
+        try {
+            while (true) {
+                ctl.liveNextAt = 0L
+                // ほかの取得(開いたときの取得など)の最中なら、それが済むのを待つ
+                while (page.loading) delay(100)
+                if (vm.appVisible && shouldAutoRefresh(true, page.archived, page.index.posts.size, maxPosts)) {
+                    reportRead(ctl, scroller, vm, page)
+                    vm.refreshThread(page, quiet = true)?.join()
+                }
+                // 届いたレスが並んでから(高さが変わってから)ライブの段に入れるよう、少し描くのを待つ
+                if (!ctl.livePrimed) { repeat(2) { androidx.compose.runtime.withFrameNanos { } }; ctl.livePrimed = true }
+                val ms = prefs.liveRefreshSec * 1000L
+                ctl.liveNextAt = System.currentTimeMillis() + ms
+                delay(ms)
+            }
+        } finally { ctl.liveNextAt = 0L }
+    }
+    val refreshSec = if (ctl.liveOn) 0 else prefs.autoRefreshSec
     if (refreshSec > 0) LaunchedEffect(refreshSec, page) {
         val maxPosts = if (io.github.contentsview08.obb.bbs.HonoBbs.isBoardUrl(page.summary.boardUrl)) null else AUTO_REFRESH_MAX_POSTS
         while (true) {
@@ -751,7 +775,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerH = it.height.toFloat() }
                     .graphicsLayer { translationY = (1f - footerShown()) * footerH },
-            ) { ThreadFooter(vm, page) { refresh() } }
+            ) { ThreadFooter(vm, page, live = if (ctl.liveOn) LiveRefresh(ctl.liveNextAt, prefs.liveRefreshSec * 1000L) else null) { refresh() } }
 
         }
         pinchLabel?.let {

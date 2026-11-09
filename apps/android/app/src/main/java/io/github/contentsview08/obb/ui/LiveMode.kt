@@ -201,9 +201,9 @@ suspend fun runLiveMode(
             continue
         }
         when (ctl.livePhase) {
-            LivePhase.PAUSED -> if (rem <= lh) ctl.enterLive()
+            LivePhase.PAUSED -> if (rem <= lh && ctl.livePrimed) ctl.enterLive()
             LivePhase.CATCH_UP -> {
-                if (rem < 1f) ctl.enterLive()
+                if (rem < 1f) { if (ctl.livePrimed) ctl.enterLive() }
                 else {
                     carry += minOf(speed() * lh * dt, rem)
                     // 1 px に満たない分は溜めて送る(遅いときに止まって見えないように)
@@ -290,5 +290,48 @@ fun LiveSpeedSlider(speed: Float, onChange: (Float) -> Unit, modifier: Modifier 
             Box(Modifier.padding(start = thumb / 2).width(usable * pos).height(3.dp).background(Palette.accent, RoundedCornerShape(50)))
             Box(Modifier.offset(x = usable * pos).size(thumb).background(Palette.accent, CircleShape))
         }
+    }
+}
+
+// ── 更新ボタンの残りの時間 ──
+
+/** 実況モードの更新の予定。nextAt は次に自動で取りに行く時刻(ms。0 は取りに行っている間)、intervalMs は間隔 */
+data class LiveRefresh(val nextAt: Long, val intervalMs: Long)
+
+/**
+ * 実況モードの間の更新ボタンの中身。次に取りに行くまでの残りを、減っていく輪と秒数で出す(押せないことが見て分かるように)。
+ * 取りに行っている間・残りが尽きた後は、回る更新のアイコン。PC 版・Web の RefreshButton(live)と同じ形
+ */
+@Composable
+fun LiveRefreshCountdown(live: LiveRefresh, loading: Boolean, iconSize: androidx.compose.ui.unit.Dp) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(live.nextAt) {
+        while (live.nextAt > 0L) {
+            now = withFrameNanos { System.currentTimeMillis() }
+            if (now >= live.nextAt) break
+        }
+    }
+    val left = if (live.nextAt > 0L) (live.nextAt - now).coerceAtLeast(0L) else 0L
+    if (left <= 0L || loading) {
+        SpinningRefreshIcon("実況モード: 更新しています", Palette.textMuted, iconSize)
+        return
+    }
+    val ratio = if (live.intervalMs > 0) (left.toFloat() / live.intervalMs).coerceIn(0f, 1f) else 0f
+    val track = Palette.border
+    val arc = Palette.accent
+    Box(Modifier.size(iconSize + 4.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+            val w = 2.dp.toPx()
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            val inset = w / 2
+            val sz = androidx.compose.ui.geometry.Size(size.width - w, size.height - w)
+            val tl = androidx.compose.ui.geometry.Offset(inset, inset)
+            drawArc(track, 0f, 360f, false, tl, sz, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+            drawArc(arc, -90f, 360f * ratio, false, tl, sz, style = stroke)
+        }
+        Text(
+            ((left + 999) / 1000).toString(), color = Palette.textMuted, fontSize = maxOf(11, (iconSize.value * 0.46f).roundToInt()).sp,
+            fontWeight = FontWeight.Bold, maxLines = 1,
+        )
     }
 }

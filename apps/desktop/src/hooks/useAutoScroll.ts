@@ -102,6 +102,8 @@ interface Options {
   speed: number
   /** 開いたときの位置決めが済んだか */
   ready: () => boolean
+  /** ライブの段に入ってよいか(入ってすぐの更新が済むまでは、一番下にいても追いつくまでの段で待つ) */
+  canGoLive: () => boolean
   /** いま見えているところまでの既読を知らせる */
   flushRead: () => void
   /** ライブの段で出すレス(useLiveReveal) */
@@ -178,7 +180,7 @@ export function useAutoScroll(o: Options) {
       const touching = now - touchedAt < TOUCH_GRACE_MS
       if (paused.current) {
         // 自分で一番下まで戻ったら、ライブの段に戻る
-        if (touching || rest > AT_END_PX) return
+        if (touching || rest > AT_END_PX || !latest.current.canGoLive()) return
         paused.current = false
         enterLive()
       }
@@ -207,7 +209,7 @@ export function useAutoScroll(o: Options) {
       // 自分の書いた位置から動いていたら(上のレスの高さが変わって位置を直した など)、今の位置から続ける
       if (!Number.isFinite(pos) || Math.abs(root.scrollTop - written.current) >= 1) pos = root.scrollTop
       if (max - pos <= AT_END_PX) {
-        enterLive()
+        if (latest.current.canGoLive()) enterLive()
         return
       }
       if (now - measuredAt >= MEASURE_MS) {

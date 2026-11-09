@@ -1380,6 +1380,8 @@ export default function App() {
   const refreshThread = () =>
     run('posts', async () => {
       if (!store || !activeTab) return
+      // 実況モードの間は、実況モードの間隔で取りに行くので、手では取りに行かない(更新ボタンは残りの時間を出して押せなくしている)
+      if (activeTab.id === liveTabId) return
       const now = Date.now()
       // 既読の記録が間に合っていないと、「ここから未読」を古い位置で引き直してしまうので、先に記録する
       readFlush.current?.()
@@ -1449,23 +1451,47 @@ export default function App() {
    * - dat 落ち・1000 到達で、もう増えないスレ
    * 前の取得が終わっていなければ、fetchThread がその回を飛ばす
    */
-  const autoRefresh = () => {
+  const autoRefresh = async () => {
     const t = activeTab
     if (!store || !t?.log) return
     if (!shouldAutoRefresh({ visible: isAppVisible(), status: t.log.status, postCount: t.log.posts.length, maxPosts: findConnector(t.thread.connectorId)?.maxPosts })) return
     readFlush.current?.()
-    void fetchThread(store, t.thread).catch(() => undefined)
+    await fetchThread(store, t.thread).catch(() => undefined)
   }
   const autoRefreshRef = useRef(autoRefresh)
   autoRefreshRef.current = autoRefresh
   /** 実況モードを入れているタブ。開いているタブなら、ふだんの自動更新の代わりに実況モードの間隔で更新する */
   const [liveTabId, setLiveTabId] = useState<string>()
-  const refreshSec = liveTabId !== undefined && liveTabId === activeId ? settings.liveRefreshSec : settings.autoRefreshSec
+  const liveId = liveTabId !== undefined && liveTabId === activeId ? liveTabId : undefined
+  const refreshSec = liveId ? 0 : settings.autoRefreshSec
   useEffect(() => {
     if (!activeId || refreshSec <= 0) return
-    const id = setInterval(() => autoRefreshRef.current(), refreshSec * 1000)
+    const id = setInterval(() => void autoRefreshRef.current(), refreshSec * 1000)
     return () => clearInterval(id)
   }, [activeId, refreshSec])
+  // 実況モード: 入ったらすぐ取りに行き、取り終えてから間隔ごとに取りに行く。
+  // 次に取りに行く時刻をタブに持たせ、更新ボタンに残りを出す(取りに行っている間は持たせない)
+  const patchTabRef = useRef(patchTab)
+  patchTabRef.current = patchTab
+  const liveSec = settings.liveRefreshSec
+  useEffect(() => {
+    if (!liveId) return
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const cycle = async () => {
+      patchTabRef.current(liveId, { liveRefreshAt: undefined })
+      await autoRefreshRef.current()
+      if (stopped) return
+      patchTabRef.current(liveId, { liveRefreshAt: Date.now() + liveSec * 1000 })
+      timer = setTimeout(() => void cycle(), liveSec * 1000)
+    }
+    void cycle()
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      patchTabRef.current(liveId, { liveRefreshAt: undefined })
+    }
+  }, [liveId, liveSec])
 
   /** キー操作の対象: 選んでいるタブがあれば、それと開いているタブ。なければ開いているタブだけ */
   const targetTabs = () => {

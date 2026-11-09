@@ -88,7 +88,7 @@ import io.github.contentsview08.obb.bbs.shiftJisByteLength
  * 返事(エラー・書き込みました)は欄の上の面に出す。書き込めたらキーボードをしまう。キーボードが出たら、その上に持ち上がる
  */
 @Composable
-fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
+fun ThreadFooter(vm: AppViewModel, page: Page.Thread, live: LiveRefresh? = null, onRefresh: () -> Unit) {
     val r = page.reply
     val focus = remember { FocusRequester() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -258,7 +258,10 @@ fun ThreadFooter(vm: AppViewModel, page: Page.Thread, onRefresh: () -> Unit) {
                 val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                 val pressed by press.collectIsPressedAsState()
                 val sink by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.86f else 1f, label = "sink")
-                Box(
+                // 実況モードの間は、次の更新までの残りを出して押せなくする(押しても沈まない)
+                if (live != null) Box(Modifier.padding(start = 6.dp, end = 4.dp).size((control + 4).dp), contentAlignment = Alignment.Center) {
+                    LiveRefreshCountdown(live, page.loading, 28.dp)
+                } else Box(
                     Modifier.padding(start = 6.dp, end = 4.dp).size((control + 4).dp).graphicsLayer { scaleX = sink; scaleY = sink }
                         .clickable(interactionSource = press, indication = null, onClick = onRefresh),
                     contentAlignment = Alignment.Center,

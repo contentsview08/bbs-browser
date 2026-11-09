@@ -30,6 +30,8 @@ export interface Tab {
   error?: string
   /** 手で更新したあとのクールダウンが明ける時刻 */
   refreshReadyAt?: number
+  /** 実況モードで、次に取りに行く時刻(取りに行っている間・実況モードでないときは持たない) */
+  liveRefreshAt?: number
   /** レスへの反応の数(ふたばのそうだねなど)。キーはレスの画面の番号(ref があれば ref)、中は反応の id → 数 */
   reactions?: Map<number, Record<string, number>>
 }
@@ -245,6 +247,7 @@ function TabPane({
       onOpenNextUnread={ev.openNextUnread}
       isFavorite={favorite}
       refreshReadyAt={tab.refreshReadyAt}
+      liveRefreshAt={tab.liveRefreshAt}
       postAccounts={postAccounts}
       draft={draft}
       threadUrl={ev.threadUrl(thread)}

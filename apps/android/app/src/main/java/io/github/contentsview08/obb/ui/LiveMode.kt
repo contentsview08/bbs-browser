@@ -23,9 +23,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +42,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.pow
@@ -222,7 +226,29 @@ suspend fun runLiveMode(
         // 動き続けている間は位置が止まらず、ふだんの既読の書き込み(止まってから 0.3 秒後)が来ないので、ここで知らせる
         val ms = now / 1_000_000
         if (ms - reportedAt >= 1000) { reportedAt = ms; report() }
+        // することのない間(ライブで下に着いて次に出す時刻まで・外れて止まっている間)は、毎フレーム起きずに眠る
+        val idle = when (ctl.livePhase) {
+            LivePhase.LIVE -> rem < 0.5f
+            LivePhase.PAUSED -> !(rem <= lh && ctl.livePrimed)
+            LivePhase.CATCH_UP -> false
+        }
+        if (idle) {
+            sleepUntilChanged(ctl, state, if (ctl.livePhase == LivePhase.LIVE) ctl.nextRevealAt() else null)
+            prev = 0L
+        }
     }
+}
+
+/**
+ * untilMs まで(null なら何か変わるまで)眠る。指で動かす・レスが並ぶ(並びの寸法が変わる)・段が変わる・
+ * 出す順に足されたときは、その時点で起きる
+ */
+private suspend fun sleepUntilChanged(ctl: ThreadScrollCtl, state: LazyListState, untilMs: Long?) {
+    val wait = untilMs?.let { it - System.currentTimeMillis() } ?: Long.MAX_VALUE
+    if (wait <= 0L) return
+    fun key() = listOf(state.isScrollInProgress, state.layoutInfo, ctl.livePhase, ctl.positioned, ctl.livePrimed, ctl.liveQueued, ctl.liveLimit)
+    val before = key()
+    withTimeoutOrNull(wait) { snapshotFlow { key() }.first { it != before } }
 }
 
 private suspend fun scrollQuietly(state: LazyListState, px: Float) {
@@ -304,19 +330,26 @@ data class LiveRefresh(val nextAt: Long, val intervalMs: Long)
  */
 @Composable
 fun LiveRefreshCountdown(live: LiveRefresh, loading: Boolean, iconSize: androidx.compose.ui.unit.Dp) {
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    fun leftMs() = if (live.nextAt > 0L) (live.nextAt - System.currentTimeMillis()).coerceAtLeast(0L) else 0L
+    // 秒の数字は 1 秒ごとに書き換える(毎フレーム書くとフッターごと組み直す)
+    var secs by remember(live.nextAt) { mutableLongStateOf((leftMs() + 999) / 1000) }
+    // 輪は描く段階で時刻を読む。フレームの合図だけを描く段階で読み、組み直さずに描き直す
+    val frame = remember { mutableLongStateOf(0L) }
     LaunchedEffect(live.nextAt) {
-        while (live.nextAt > 0L) {
-            now = withFrameNanos { System.currentTimeMillis() }
-            if (now >= live.nextAt) break
+        while (true) {
+            val left = leftMs()
+            secs = (left + 999) / 1000
+            if (left <= 0L) break
+            delay(left - (secs - 1) * 1000)
         }
     }
-    val left = if (live.nextAt > 0L) (live.nextAt - now).coerceAtLeast(0L) else 0L
-    if (left <= 0L || loading) {
+    if (secs > 0L && !loading) LaunchedEffect(live.nextAt) {
+        while (leftMs() > 0L) withFrameNanos { frame.longValue = it }
+    }
+    if (secs <= 0L || loading) {
         SpinningRefreshIcon("実況モード: 更新しています", Palette.textMuted, iconSize)
         return
     }
-    val ratio = if (live.intervalMs > 0) (left.toFloat() / live.intervalMs).coerceIn(0f, 1f) else 0f
     val track = Palette.border
     val arc = Palette.accent
     Box(Modifier.size(iconSize + 4.dp), contentAlignment = Alignment.Center) {
@@ -326,11 +359,13 @@ fun LiveRefreshCountdown(live: LiveRefresh, loading: Boolean, iconSize: androidx
             val inset = w / 2
             val sz = androidx.compose.ui.geometry.Size(size.width - w, size.height - w)
             val tl = androidx.compose.ui.geometry.Offset(inset, inset)
+            frame.longValue
+            val ratio = if (live.intervalMs > 0) (leftMs().toFloat() / live.intervalMs).coerceIn(0f, 1f) else 0f
             drawArc(track, 0f, 360f, false, tl, sz, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
             drawArc(arc, -90f, 360f * ratio, false, tl, sz, style = stroke)
         }
         Text(
-            ((left + 999) / 1000).toString(), color = Palette.textMuted, fontSize = maxOf(11, (iconSize.value * 0.46f).roundToInt()).sp,
+            secs.toString(), color = Palette.textMuted, fontSize = maxOf(11, (iconSize.value * 0.46f).roundToInt()).sp,
             fontWeight = FontWeight.Bold, maxLines = 1,
         )
     }

@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -90,7 +91,10 @@ class ThreadScrollCtl(val page: Page.Thread) {
     /** 次に自動で取りに行く時刻(ms)。0 は取りに行っている間(更新ボタンに残りを出す) */
     var liveNextAt by mutableStateOf(0L)
     /** 入ってすぐの更新が済んだ。済むまではライブの段に入らない(その更新で届いたレスは、追いつくまでの段として流して見せる) */
-    var livePrimed = false
+    var livePrimed by mutableStateOf(false)
+    /** 出す順に足すたびに進める。実況モードの動きが、出すもののない間の眠りから起きる合図 */
+    var liveQueued by mutableIntStateOf(0)
+        private set
 
     fun startLive() { liveOn = true; livePhase = LivePhase.CATCH_UP; liveNextAt = 0L; livePrimed = false; showAllLive() }
     fun stopLive() { liveOn = false; livePhase = LivePhase.CATCH_UP; liveNextAt = 0L; livePrimed = false; showAllLive() }
@@ -125,7 +129,11 @@ class ThreadScrollCtl(val page: Page.Thread) {
             liveLimit = liveQueue.last().first
             liveQueue.clear()
         }
+        liveQueued++
     }
+
+    /** 次に出す時刻(ms)。出す予定がなければ null */
+    fun nextRevealAt(): Long? = liveQueue.firstOrNull()?.second
 
     /** 出す時刻の来たレスを出す */
     fun revealDue(nowMs: Long) {

@@ -114,12 +114,14 @@ private val NOTHING = ApplyPlan(emptyList(), false)
 
 /**
  * ログのないスレを開くとき、同期の表から既読と履歴を戻す(自動整理のあとに開き直すと既読が戻る)。
- * ログの削除はリセットを書くので、戻るのはリセットより後の読みだけになる
+ * ログの削除はリセットを書くので、戻るのはリセットより後の読みだけになる。
+ * のぞいただけの行(既読も閲覧もない)はログのないのと同じに扱う。のぞいたあとに開いても、ほかの端末の既読が戻るように
  */
 @Suppress("UNCHECKED_CAST")
 fun restoreThreadRead(db: SyncSql, boardUrl: String, key: String, connectorId: String, title: String, createdAt: Long?): Boolean {
-    val board = normalizeBoardUrl(boardUrl)
-    if (board == null || localRows(db, board, key).isNotEmpty()) return false
+    val board = normalizeBoardUrl(boardUrl) ?: return false
+    val local = localRows(db, board, key)
+    if (local.any { it.readNo > 0 || it.readAt != null }) return false
     // 切っている間は受け取った記録を手元へ写さない
     val state = db.query("SELECT key, value FROM sync_state WHERE key IN ('master', 'kinds')").associate { it["key"] as String to it["value"] as String }
     if (state["master"] == "0" || parseSwitches(state["kinds"])["history"] != true) return false
@@ -128,10 +130,15 @@ fun restoreThreadRead(db: SyncSql, boardUrl: String, key: String, connectorId: S
     if (pos <= 0) return false
     val view = db.query("SELECT payload FROM sync_records WHERE kind = 'last_view' AND ref_board = ? AND ref_thread = ? AND deleted = 0", listOf(board, key)).firstOrNull()
     val viewedAt = view?.let { (parseStrictJson(it["payload"] as String) as SyncPayload).body?.get(LAST_VIEWED_FIELD) as? Long }
-    db.exec(
-        "INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at, read_no, read_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        listOf(boardUrl, key, connectorId, title, createdAt, pos, viewedAt),
-    )
+    if (local.isEmpty()) {
+        db.exec(
+            "INSERT OR IGNORE INTO threads (board_url, key, connector_id, title, created_at, read_no, read_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            listOf(boardUrl, key, connectorId, title, createdAt, pos, viewedAt),
+        )
+    } else {
+        // のぞいただけの行は取ったレスを残したまま既読と閲覧だけ足す(別の書き方の URL で行を増やさない)
+        for (r in local) db.exec("UPDATE threads SET read_no = MAX(read_no, ?), read_at = COALESCE(read_at, ?) WHERE board_url = ? AND key = ?", listOf(pos, viewedAt, r.boardUrl, r.key))
+    }
     return true
 }
 

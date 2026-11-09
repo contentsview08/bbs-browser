@@ -112,6 +112,15 @@ internal object ThreadLogSql {
         "WHERE COALESCE(t.read_at, t.fetched_at, 0) < CAST(? AS INTEGER) " +
         "AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key) " +
         "AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)"
+
+    /**
+     * のぞいただけの行(既読も閲覧もない)。一覧から消す手段がなく、残す日数が「消さない」でも溜まるので、
+     * 残す日数とは別に短い期間で消す。既読や閲覧の付いた行は PRUNE_TARGETS の決まりに任せる
+     */
+    const val PRUNE_PEEKED = "SELECT t.board_url, t.key FROM threads t " +
+        "WHERE t.read_no = 0 AND t.read_at IS NULL AND COALESCE(t.fetched_at, 0) < CAST(? AS INTEGER) " +
+        "AND NOT EXISTS (SELECT 1 FROM favorite_threads f WHERE f.board_url = t.board_url AND f.key = t.key) " +
+        "AND NOT EXISTS (SELECT 1 FROM own_posts o WHERE o.board_url = t.board_url AND o.key = t.key)"
 }
 
 /** 自分のレスの印の SQL。JVM のテストでも同じ文を流す */
@@ -448,10 +457,10 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
      * しばらく開いていないスレのログを消す(最後に読んだ時刻、なければ取った時刻が before より前のもの。PC 版の pruneLogs と同じ)。
      * お気に入りのスレ・自分が書き込んだスレと、keep のスレ(開いている画面)は残す。消したスレ(板の URL とキー)を返す。
      */
-    suspend fun pruneLogs(before: Long, keep: Collection<ThreadSummary> = emptyList()): List<Pair<String, String>> = io {
+    suspend fun pruneLogs(before: Long, keep: Collection<ThreadSummary> = emptyList(), peekedOnly: Boolean = false): List<Pair<String, String>> = io {
         val db = writableDatabase
         val kept = keep.map { it.boardUrl to it.key }.toSet()
-        val rows = db.rawQuery(ThreadLogSql.PRUNE_TARGETS, arrayOf(before.toString()))
+        val rows = db.rawQuery(if (peekedOnly) ThreadLogSql.PRUNE_PEEKED else ThreadLogSql.PRUNE_TARGETS, arrayOf(before.toString()))
             .use { c -> buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1)) } }
             .filter { it !in kept }
         db.beginTransaction()

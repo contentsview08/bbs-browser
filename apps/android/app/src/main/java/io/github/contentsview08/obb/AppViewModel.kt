@@ -62,6 +62,29 @@ fun loadErrorText(e: Throwable): String = when (e) {
     else -> e.message ?: e.toString()
 }
 
+/** のぞいただけのログを残す長さ。のぞき直したときに取り直さずに済む程度 */
+private const val PEEKED_KEEP_MS = 86_400_000L
+
+/** スレのレスの組み立て方のもと(AppViewModel.threadRenderRecipe)。posts を回すところだけ build に残す */
+data class RenderRecipe(val base: RenderOptions, val omit: Boolean, val nonames: List<String>) {
+    // そのスレで一番多い名前も名無しとみなす(板の既定の名前は、使っていない掲示板が多い。PC・Web と同じ)
+    fun build(posts: List<Post>): RenderOptions =
+        base.copy(extraNonames = if (omit) nonames + listOfNotNull(mostCommonName(posts)) else emptyList())
+}
+
+/**
+ * 更新で画面に入れる並び。のぞく窓が先に DB へ足したレスは、取り直しても届かない(cursor が進んでいる)ので、
+ * 画面にないレスを DB の分からも入れる。変わらなければ null
+ */
+internal fun mergeRefreshed(shown: List<Post>, stored: List<Post>, fetched: List<Post>, reset: Boolean): List<Post>? {
+    if (reset) return fetched.distinctBy { it.no }
+    val have = HashSet<Int>(shown.size * 2).apply { shown.forEach { add(it.no) } }
+    val missing = stored.filter { it.no !in have }
+    if (missing.isEmpty() && fetched.isEmpty()) return null
+    // 同じ番号が 2 回入らないように(差分の取得で重なって返る掲示板があると、スレ表示の LazyColumn のキーが重なって落ちる)
+    return shown + (missing + fetched).filter { it.no !in have }.distinctBy { it.no }.sortedBy { it.no }
+}
+
 /** 書き込み欄の状態(スレごと、スレ立てでも使う)。boardUrl: 書き込む板(画像の上げ先を板で選ぶ。hono-bbs の板は、その掲示板の画像の置き場) */
 class ReplyState(val boardUrl: String = "") {
     /** 本文の欄に入っている(書いている)。書いている間はフッターを隠さない */
@@ -306,7 +329,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** しばらく開いていないスレのログを消す。開いているスレは残し、消したスレの覚えた位置も捨てる(開き直したとき古い位置へ戻らないように)。消した数を返す */
     private suspend fun pruneLogs(days: Int): Int {
-        val gone = db.pruneLogs(System.currentTimeMillis() - days * 86_400_000L, threadPages().map { it.summary })
+        val now = System.currentTimeMillis()
+        val keep = threadPages().map { it.summary }
+        val gone = (if (days > 0) db.pruneLogs(now - days * 86_400_000L, keep) else emptyList()) +
+            // のぞいただけのログは残す日数によらず消す(一覧から消せず、「消さない」だと溜まる)
+            db.pruneLogs(now - PEEKED_KEEP_MS, keep, peekedOnly = true)
         forgetPositions(gone.map { (board, key) -> board + key })
         return gone.size
     }
@@ -1002,14 +1029,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** のぞく: 手元のログ(なければ null) */
-    suspend fun peekLog(t: ThreadSummary): io.github.contentsview08.obb.data.ThreadLog? = db.loadThread(t)
+    /** のぞく: 手元のログ(なければ null)。同期で分かっている既読を先に戻し、窓もそこを基準に出す */
+    suspend fun peekLog(t: ThreadSummary): io.github.contentsview08.obb.data.ThreadLog? {
+        db.restoreThreadRead(t)
+        return db.loadThread(t)
+    }
 
     /**
      * のぞく: 新着を取ってログに足し、読み直したログを返す。のぞいただけで履歴に出たり既読が進んだりしないよう、
      * 既読(read_no)と閲覧(read_at)は書かない
      */
     suspend fun peekFetch(t: ThreadSummary): io.github.contentsview08.obb.data.ThreadLog? {
+        // のぞいて作った行が、あとで同期の既読を戻すのを止めないように、先に戻しておく
+        db.restoreThreadRead(t)
         val log = db.loadThread(t)
         val r = TwoCh.fetchPosts(t, log?.cursor)
         db.saveFetch(t, r, r.title ?: log?.title ?: t.title)
@@ -1042,12 +1074,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (r.status == FetchStatus.ARCHIVED || r.archived) page.archived = true
                 // 「ここから未読」は、更新したときにその時点の既読の次へ引き直す(開いたときの取得では動かさない)
                 if (!firstOpen) page.unreadFrom = page.readNo + 1
-                if (r.posts.isNotEmpty() || r.status == FetchStatus.RESET) {
-                    val old = if (r.status == FetchStatus.RESET) emptyList() else renderSeq[page]?.second ?: page.index.posts
-                    // 同じ番号が 2 回入らないように(差分の取得で重なって返る掲示板があると、スレ表示の LazyColumn のキーが重なって落ちる)
-                    val all: List<Post> = (old + r.posts).distinctBy { it.no }
-                    setPosts(page, all)
-                }
+                val shown = renderSeq[page]?.second ?: page.index.posts
+                mergeRefreshed(shown, log?.posts.orEmpty(), r.posts, r.status == FetchStatus.RESET)?.let { setPosts(page, it) }
             } catch (e: Exception) {
                 page.error = loadErrorText(e)
             } finally {
@@ -1068,12 +1096,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val seq = (renderSeq[page]?.first ?: 0) + 1
         renderSeq[page] = seq to posts
         val rules = prefs.ngRules
-        val o = threadRenderOptions(page.summary.boardUrl, posts)
+        val recipe = threadRenderRecipe(page.summary.boardUrl)
         val collapse = prefs.tidyBlankLines
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val oldIndex = page.index
         val oldMemo = page.renderMemo
         val result = withContext(Dispatchers.Default) {
+            val o = recipe.build(posts)
             val i = PostIndex.build(posts, collapse, gross, oldIndex)
             Triple(i, renderPostsReusing(i, page.links, o, oldMemo), ngOf(posts, rules, page.summary.boardUrl))
         }
@@ -1171,16 +1200,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reapplyNg()
     }
 
-    /** スレのレスの組み立て方(スレ表示とのぞく窓で同じにする) */
-    fun threadRenderOptions(boardUrl: String, posts: List<Post>): RenderOptions {
+    /**
+     * スレのレスの組み立て方(スレ表示とのぞく窓で同じにする)。設定はここで読み、全レスを回す一番多い名前は
+     * build で数える(画面のスレッドで回さず、組み立てと一緒に裏で数えられるように)
+     */
+    fun threadRenderRecipe(boardUrl: String): RenderRecipe {
         // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま。
         // 板ごとの設定で、省くかどうかと、ほかに名無しとみなす名前を変えられる
         val meta = prefs.boardMeta[boardUrl]
         val omit = meta?.omitNoname ?: prefs.omitNoname
         val noname = if (omit) TwoCh.cachedNoname(boardUrl) else null
-        // そのスレで一番多い名前も名無しとみなす(板の既定の名前は、使っていない掲示板が多い。PC・Web と同じ)
-        val common = if (omit) mostCommonName(posts) else null
-        return renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() + listOfNotNull(common) else emptyList())
+        return RenderRecipe(renderOptions(noname), omit, if (omit) meta?.nonames.orEmpty() else emptyList())
     }
 
     /** のぞく: 自分の書き込みの番号(LINE 風の右の吹き出しなど、スレ表示と同じ見た目にするため) */
@@ -1718,7 +1748,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { uploads = db.listUploads() }
         viewModelScope.launch { snapshotFlow { renderKey() }.drop(1).collectLatest { rerenderAll() } }
         // 起動したら、しばらく開いていないスレのログを消す(設定)
-        if (prefs.logRetentionDays > 0) viewModelScope.launch { runCatching { pruneLogs(prefs.logRetentionDays) } }
+        viewModelScope.launch { runCatching { pruneLogs(prefs.logRetentionDays) } }
         // 定期確認: アプリを開いている間は、閲覧履歴・お気に入りのスレ・キーワードをそれぞれの間隔で。閉じている間は WorkManager で
         viewModelScope.launch {
             val clock = io.github.contentsview08.obb.data.CrawlClock()

@@ -118,6 +118,9 @@ enum class PeekKind { FIRST, NEW, LAST }
  */
 class PeekPick(val kind: PeekKind, val posts: List<Post>, val newCount: Int = 0, val newFrom: Int = -1)
 
+/** 頭から読むスレで、先に組み立てて出すレスの数(窓に入りきる分より多め) */
+internal const val PEEK_FIRST_BATCH = 30
+
 /** 長すぎる本文だけ、この行数で切る */
 internal const val PEEK_BODY_LINES = 12
 
@@ -384,15 +387,20 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                     // レスはスレ表示と同じ組み立て・同じ部品(PostItem)で描く。スキン・配色・字と余白の設定がそのまま効くように
                     val style = vm.prefs.postStyle
                     val src = preview?.let { listOf(it) } ?: livePick.posts
-                    val options = vm.threadRenderOptions(t.boardUrl, src)
+                    val recipe = vm.threadRenderRecipe(t.boardUrl)
                     val tidy = vm.prefs.tidyBlankLines
                     val fromWatchoi = vm.prefs.iconFromWatchoi
                     val links = remember { PostLinks() }
                     var own by remember(t.id) { mutableStateOf<Set<Int>>(emptySet()) }
                     LaunchedEffect(t.id) { own = runCatching { vm.peekOwnPosts(t) }.getOrDefault(emptySet()) }
                     var shown by remember(t.id) { mutableStateOf<PeekRendered?>(null) }
-                    LaunchedEffect(livePick, preview, options, tidy, fromWatchoi, Palette.scheme.key) {
-                        shown = withContext(Dispatchers.Default) { peekRender(livePick, preview, tidy, fromWatchoi, links, options) }
+                    LaunchedEffect(livePick, preview, recipe, tidy, fromWatchoi, Palette.scheme.key) {
+                        // 頭から読むスレは、窓に入る分を先に組み立てて出し、残りはそのあとで足す(長いスレでも待たせない)
+                        if (preview == null && livePick.kind == PeekKind.FIRST && livePick.posts.size > PEEK_FIRST_BATCH) {
+                            val head = PeekPick(PeekKind.FIRST, livePick.posts.take(PEEK_FIRST_BATCH))
+                            shown = withContext(Dispatchers.Default) { peekRender(head, null, tidy, fromWatchoi, links, recipe.build(livePick.posts)) }
+                        }
+                        shown = withContext(Dispatchers.Default) { peekRender(livePick, preview, tidy, fromWatchoi, links, recipe.build(src)) }
                     }
                     val pick = shown?.pick ?: PeekPick(livePick.kind, emptyList())
                     val list = rememberLazyListState()

@@ -1,11 +1,14 @@
-// サーバーとの通信の口。実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
+// 同期サーバーとの通信の口(置き場の 1 つ。ほかの置き場は remote.ts の SyncRemote で差し替える)。
+// 実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
 import { HTTP_IDLE_TIMEOUT_MS, HTTP_TOTAL_TIMEOUT_MS, MAX_RESPONSE_BYTES } from '../config'
 import { parseStrictJson } from '../json'
 import { checkPowChallenge, solvePow } from './pow'
+import type { SyncRemote } from './remote'
 import type { SyncPace } from './scheduler'
+import type { SqlStatement } from './tables'
 
 export interface SyncRequest {
-  method: 'GET' | 'POST' | 'DELETE'
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   url: string
   headers: Record<string, string>
   body?: string
@@ -62,6 +65,10 @@ export interface ChangesPage {
   more: boolean
   epoch: string
   gc_floor: number
+  /** 読んだ分と同じバッチで書く、置き場の続きの控え(Drive の token など)。書き終える前に落ちたら次も同じ所から読む */
+  commit?: SqlStatement[]
+  /** 開く前に捨てたもの(bad_counts の理由) */
+  bad?: string[]
 }
 
 export interface PushResult {
@@ -93,7 +100,8 @@ export interface HeadResult {
   gc_floor?: number
 }
 
-export class SyncApi {
+export class SyncApi implements SyncRemote {
+  readonly needsTicket = true
   private readonly base: string
   /** 応答に書いてあった「最低これだけ空ける」。古いサーバーは書かない */
   pace: SyncPace | null = null
@@ -146,7 +154,7 @@ export class SyncApi {
     }
   }
 
-  async createSpace(ticket: string): Promise<{ epoch: string }> {
+  async createSpace(ticket: string | null): Promise<{ epoch: string }> {
     let r: Record<string, unknown>
     try {
       r = await this.call('POST', '/spaces', { ticket })

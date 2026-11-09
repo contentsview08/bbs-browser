@@ -6,9 +6,10 @@ import { expect } from 'vitest'
 import { LogStore, ngDiff, readNgRules, settingsNgStore, setSettingStatement, UserOps, type NgRuleData, type SqlDb } from '../../logstore/src/index'
 import { ngPatternSyncable } from '../../../apps/desktop/src/utils/ng'
 import type { ThreadSummary } from '../../connectors/src/index'
-import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, hasLocalData, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, OwnPostAdapter, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
+import { canonicalJson, deriveKeys, HISTORY_SHOWN, favoriteBoardAdapters, FavoriteThreadAdapter, hasLocalData, historyAdapters, ImageAdapter, NgAdapter, normalizeBoardUrl, OwnPostAdapter, PostAdapter, postIdOf, recordId, restoreThreadRead, SecretAdapter, SettingAdapter, settingOpsOf, settingsTableHost, SiteAdapter, syncMismatches, syncSummary, type SyncAdapter, openRecords, sealPayload, spaceId, SyncEngine, toBase64Url, toHex, utf8, driveRemote, type CycleResult, type SyncEngineState, type SyncKeyMaterial, type SyncKeyStore, type SyncGroup, type SyncRequest, type SyncResponse, type SyncTransport } from '../src/index'
 import presets from '../../presets/sites.json'
 import { FakeSyncServer, fakeSpaceIdOf, type ScenarioServer } from './fakeServer'
+import { driveFail, FakeDrive, FAKE_DRIVE_HOST, FAKE_DRIVE_TOKEN } from './fakeDrive'
 
 const SERVER = 'https://sync.test'
 /** 最初から入っている掲示板・板。参加の確認で手元のデータに数えない(SyncController と同じ) */
@@ -18,8 +19,14 @@ const migrations = readdirSync(new URL('../../logstore/migrations/', import.meta
 const SQL = await initSqlJs()
 
 export type Step = Record<string, any>
+/** 置き場。drive は偽の Drive(fakeDrive.ts)を相手にする */
+export type Store = 'server' | 'drive'
+
 export interface Scenario {
   name: string
+  /** 流す置き場。なければ両方。片方だけのときは store_note に理由を書く */
+  stores?: Store[]
+  store_note?: string
   devices: string[]
   server?: Record<string, unknown>
   seed?: Record<string, { favorite_threads?: Step[]; favorite_boards?: Step[]; sites?: Step[]; uploads?: Step[]; ng?: NgRuleData[]; threads?: Step[]; posts?: Step[]; own_posts?: Step[]; settings?: Record<string, unknown> }>
@@ -103,6 +110,8 @@ interface LogEntry {
   request_id?: string
   /** 権限系のレコードの数 */
   secrets?: number
+  /** Drive: 送ったセグメントの権限系のレコード ID(前に送った分も毎回入るので、ID で数える) */
+  secretIds?: string[]
 }
 
 /** シナリオの server の項目と時計を受け取って、相手のサーバーを作る */
@@ -122,8 +131,11 @@ class World {
   /** 同期を始めるページを通した回数。人の操作の代わり */
   tickets = 0
   retentionDays = 0
-  constructor(make: MakeServer, options: Record<string, unknown>) {
+  /** drive のときの置き場。許可証(人の操作の代わり)は drive でも server が出す */
+  drive: FakeDrive | null
+  constructor(make: MakeServer, options: Record<string, unknown>, readonly store: Store) {
     this.server = make(() => this.now, options)
+    this.drive = store === 'drive' ? new FakeDrive(() => this.now) : null
   }
 }
 
@@ -156,6 +168,7 @@ class Device {
   now = () => this.world.now + this.skew
   transport: SyncTransport = {
     send: async (req: SyncRequest): Promise<SyncResponse> => {
+      if (this.world.drive) return this.driveSend(this.world.drive, req)
       const w = this.world
       const url = new URL(req.url)
       const path = url.pathname + url.search
@@ -188,6 +201,38 @@ class Device {
       return await w.server.handle({ method: req.method, path, headers: req.headers, body: req.body })
     },
   }
+  /** Drive への要求。故障はサーバーの道(/changes・/records・/spaces・/head)を Drive の要求の種類に写して当てる */
+  private async driveSend(drive: FakeDrive, req: SyncRequest): Promise<SyncResponse> {
+    const w = this.world
+    const url = new URL(req.url)
+    const cls = driveClass(req)
+    const content = cls === '/records' ? uploadContent(req) : null
+    const secretIds = content?.records?.filter((r) => r.kind_tag === 's').map((r) => r.record_id as string)
+    w.log.push({ device: this.name, method: req.method, path: url.pathname, host: url.host, ...(secretIds && secretIds.length > 0 && { secretIds }) })
+    if (req.body) w.sent.push(req.body)
+    if (!this.online) throw new Error('offline')
+    const f = w.faults.find((x) => x.times > 0 && (x.path === undefined || x.path === cls))
+    if (f && (f.skip ?? 0) > 0) f.skip = (f.skip as number) - 1
+    else if (f) {
+      f.times--
+      if (f.kind === 'unreachable') throw new Error('unreachable')
+      if (f.kind === 'redirect') return { status: 302, headers: { Location: f.location as string }, body: '' }
+      if (f.kind === 'drop') {
+        drive.handle({ method: req.method, url: req.url, headers: req.headers, body: req.body })
+        throw new Error('dropped')
+      }
+      if (f.kind === 'status') return driveStatus(f.status as number)
+      if (f.kind === 'response') {
+        const body = f.body as { error?: unknown } | undefined
+        const status = f.status ?? 200
+        if (status === 413 && body?.error === 'quota_exceeded') return driveFail(403, 'storageQuotaExceeded')
+        // 日の上限は利用者の上限の 403 に写す。待ちの秒の指示は Drive にない
+        if (status === 429) return body?.error === 'rate_limited' ? driveFail(403, 'userRateLimitExceeded') : driveStatus(429)
+      }
+      throw new Error(`Drive に写せない故障: ${f.kind} ${f.path ?? ''} ${f.status ?? ''}`)
+    }
+    return drive.handle({ method: req.method, url: req.url, headers: req.headers, body: req.body })
+  }
   resetCount = 0
   adapters: SyncAdapter[] = []
   newEngine() {
@@ -208,6 +253,7 @@ class Device {
       keyStore: this.keys,
       transport: this.transport,
       serverUrl: SERVER,
+      ...(this.world.store === 'drive' && { remote: driveRemote({ transport: this.transport, accessToken: async () => FAKE_DRIVE_TOKEN }) }),
       adapters: this.adapters,
       now: this.now,
       newDeviceId: () => (this.idCount++ === 0 ? this.name : `${this.name}_${this.idCount}`),
@@ -252,6 +298,21 @@ class Device {
     const m = await this.keys.load()
     const summary = m ? (await syncSummary(this.sql.db, this.adapters, { keys: deriveKeys(m.k), deviceId: m.deviceId, now: this.now() })).text : ''
     return toHex(sha256(utf8(canonicalJson({ favorites, boards, sites, uploads, ng, threads, posts, own, settings, records, summary }))))
+  }
+  /** 今のデータ(画面が読むもの)だけ。同期の表の version は置き場で意味が違うので入れない */
+  async dataDigest(): Promise<string> {
+    const sel = (sql: string) => this.sql.db.select(sql)
+    return toHex(sha256(utf8(canonicalJson({
+      favorites: await sel('SELECT board_url, key, connector_id, title, created_at, sort, added_at FROM favorite_threads ORDER BY board_url, key'),
+      boards: await sel('SELECT url, connector_id, name, sort FROM favorite_boards ORDER BY url'),
+      sites: await sel('SELECT menu_url, connector_id, name, sort FROM sites ORDER BY menu_url'),
+      uploads: await sel('SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url'),
+      ng: await settingsNgStore(this.sql.db).read(),
+      threads: await sel('SELECT board_url, key, connector_id, title, post_count, read_no, status, created_at, read_at FROM threads ORDER BY board_url, key'),
+      posts: await sel('SELECT connector_id, board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, board_url, key, body'),
+      own: await sel('SELECT board_url, key, no, posted_at FROM own_posts ORDER BY board_url, key, no'),
+      settings: [...(await settingsTableHost(this.sql.db, 'pc').read())].map(([k, v]) => [k, canonicalJson(v)]).sort(([a], [b]) => (a < b ? -1 : 1)),
+    }))))
   }
 }
 
@@ -569,28 +630,37 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
       w.faults.push({ kind: 'response', times: s.times ?? 1, path: s.path, status: s.status, body: s.body })
       break
     case 'server_swap_conflict': {
+      if (w.drive) throw new Error('Drive には 409 がない')
       const keys = deriveKeys((await d.keys.load() as SyncKeyMaterial).k)
       w.faults.push({ kind: 'swap', times: 1, path: '/records', other: recordId(keys.k_id, s.other[0], s.other[1], s.other[2]) })
       break
     }
     case 'server_delete_space':
-      await w.server.deleteSpace(await spaceOf(d)())
+      if (w.drive) w.drive.deleteSpace(await spaceOf(d)())
+      else await w.server.deleteSpace(await spaceOf(d)())
       break
     case 'server_bump_epoch':
-      await w.server.bumpEpoch(await spaceOf(d)())
+      if (w.drive) w.drive.bumpEpoch(await spaceOf(d)())
+      else await w.server.bumpEpoch(await spaceOf(d)())
       break
     case 'server_inject': {
       const keys = deriveKeys((await d.keys.load() as SyncKeyMaterial).k)
       const id = recordId(keys.k_id, s.record[0], s.record[1], s.record[2], s.record[3])
       const sid = spaceId(keys.auth_token)
-      if (s.corrupt) await w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: false, nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) })
-      else await w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: s.payload.deleted === true, ...sealPayload(keys, { space_id: sid, record_id: id, kind_tag: 'h', schema_version: 1 }, s.payload) })
+      const sealed = s.corrupt ? { nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) } : sealPayload(keys, { space_id: sid, record_id: id, kind_tag: 'h', schema_version: 1 }, s.payload)
+      // Drive では他の端末のセグメントとして置く
+      if (w.drive) w.drive.putRecord(sid, INJECTED_DEVICE, { record_id: id, kind_tag: 'h', schema_version: 1, ...sealed })
+      else await w.server.injectRecord(sid, { record_id: id, kind_tag: 'h', schema_version: 1, deleted: s.corrupt ? false : s.payload.deleted === true, ...sealed })
       break
     }
     case 'server_inject_secret': {
       // 別の端末が権限系を送った状態。corrupt は開けない暗号文
       const keys = deriveKeys((await d.keys.load() as SyncKeyMaterial).k)
       const id = recordId(keys.k_id, 'secret', null, '', s.url)
+      if (w.drive) {
+        w.drive.putRecord(spaceId(keys.auth_token), INJECTED_DEVICE, { record_id: id, kind_tag: 's', schema_version: 1, nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) })
+        break
+      }
       await w.server.injectRecord(spaceId(keys.auth_token), { record_id: id, kind_tag: 's', schema_version: 1, deleted: false, nonce: toBase64Url(new Uint8Array(24)), ciphertext: toBase64Url(new Uint8Array(272)) })
       break
     }
@@ -616,6 +686,10 @@ async function runStep(w: World, s: Step, c: Scenario): Promise<void> {
 
 async function check(w: World, want: Record<string, any>, label: string): Promise<void> {
   for (const [name, e] of Object.entries(want)) {
+    if (name === '$server' && w.drive) {
+      await checkDrive(w, w.drive, e, label)
+      continue
+    }
     if (name === '$server') {
       if (e.spaces !== undefined) expect(await w.server.spaceCount(), `${label}: サーバーの領域の数`).toBe(e.spaces)
       if (e.spaces_at_most !== undefined) expect(await w.server.spaceCount(), `${label}: サーバーの領域の数の上限`).toBeLessThanOrEqual(e.spaces_at_most)
@@ -712,7 +786,8 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
       const rows = await d.sql.db.select<{ target: string; args: string | null }>('SELECT target, args FROM sync_ops')
       for (const text of e.ops_lack) expect(rows.some((r) => `${r.target} ${r.args}`.includes(text)), `${at} の sync_ops に ${text} がない`).toBe(false)
     }
-    if (e.secrets_sent !== undefined) expect(w.log.slice(w.mark).filter((l) => l.device === name).reduce((n, l) => n + (l.secrets ?? 0), 0), `${at} の送った権限系の数`).toBe(e.secrets_sent)
+    if (e.secrets_sent !== undefined && w.drive) expect(new Set(w.log.slice(w.mark).filter((l) => l.device === name).flatMap((l) => l.secretIds ?? [])).size, `${at} の送った権限系の数`).toBe(e.secrets_sent)
+    else if (e.secrets_sent !== undefined) expect(w.log.slice(w.mark).filter((l) => l.device === name).reduce((n, l) => n + (l.secrets ?? 0), 0), `${at} の送った権限系の数`).toBe(e.secrets_sent)
     if (e.delete_urls !== undefined) {
       const rows = await d.sql.db.select<{ url: string; delete_url: string | null }>('SELECT url, delete_url FROM uploads ORDER BY url')
       expect(Object.fromEntries(rows.map((r) => [r.url, r.delete_url])), `${at} の削除ページ`).toEqual(e.delete_urls)
@@ -745,7 +820,8 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.needs_apply !== undefined) expect(await d.count('FROM sync_records WHERE needs_apply = 1'), `${at} の needs_apply`).toBe(e.needs_apply)
     if (e.state_rows !== undefined) expect(await d.count('FROM sync_state'), `${at} の sync_state`).toBe(e.state_rows)
     if (e.last_error !== undefined) expect(await d.state('last_error'), `${at} の last_error`).toBe(e.last_error)
-    if (e.since !== undefined) expect(await d.state('since'), `${at} の since`).toBe(String(e.since))
+    // Drive の since は端末の中だけの通番なので比べない
+    if (e.since !== undefined && !w.drive) expect(await d.state('since'), `${at} の since`).toBe(String(e.since))
     if (e.bad_counts !== undefined) expect(await d.state('bad_counts'), `${at} の bad_counts`).toBe(e.bad_counts === null ? null : canonicalJson(e.bad_counts))
     if (e.inflight !== undefined) expect((await d.state('push_inflight')) !== null, `${at} の push_inflight`).toBe(e.inflight)
     if (e.device_id !== undefined) expect(await d.state('device_id'), `${at} の device_id`).toBe(e.device_id)
@@ -757,7 +833,10 @@ async function check(w: World, want: Record<string, any>, label: string): Promis
     if (e.pushed !== undefined) expect(d.last?.pushed, `${at} の送信数`).toBe(e.pushed)
     if (e.conflicts !== undefined) expect(d.last?.conflicts, `${at} の 409`).toBe(e.conflicts)
     if (e.skipped !== undefined) expect(d.last?.skipped ?? null, `${at} の skipped`).toBe(e.skipped)
-    if (e.requests !== undefined) {
+    if (e.requests !== undefined && w.drive) {
+      // 要求の数え方は置き場で違う。「通信しない」だけを比べる
+      if (Object.keys(e.requests).length === 0) expect(w.log.slice(w.mark).filter((l) => l.device === name).map((l) => `${l.method} ${l.path}`), `${at} の通信`).toEqual([])
+    } else if (e.requests !== undefined) {
       const seen: Record<string, number> = {}
       for (const l of w.log.slice(w.mark)) if (l.device === name) seen[`${l.method} ${l.path}`] = (seen[`${l.method} ${l.path}`] ?? 0) + 1
       expect(seen, `${at} の通信`).toEqual(e.requests)
@@ -775,7 +854,13 @@ async function yieldToEventLoop(): Promise<void> {
 }
 
 export async function runScenario(c: Scenario, make: MakeServer = makeFake): Promise<Record<string, string>> {
-  const w = new World(make, c.server ?? {})
+  return (await runScenarioOn('server', c, make)).digests
+}
+
+/** 置き場を選んで流す。data は今のデータだけの digest(置き場によらず同じになるはずのもの) */
+export async function runScenarioOn(store: Store, c: Scenario, make: MakeServer = makeFake): Promise<{ digests: Record<string, string>; data: Record<string, string>; drive: FakeDrive | null }> {
+  if (c.stores && !c.stores.includes(store)) throw new Error(`${c.name} は ${store} では流さない: ${c.store_note ?? ''}`)
+  const w = new World(make, c.server ?? {}, store)
   w.retentionDays = c.retention_days ?? 0
   for (const name of c.devices) w.devices.set(name, new Device(name, w, c.skew_ms?.[name] ?? 0, c.keep_defaults === true))
   for (const [name, seed] of Object.entries(c.seed ?? {})) {
@@ -806,6 +891,60 @@ export async function runScenario(c: Scenario, make: MakeServer = makeFake): Pro
   }
   if (c.expected) await check(w, c.expected, c.name)
   const digests: Record<string, string> = {}
-  for (const [name, d] of w.devices) digests[name] = await d.digest()
-  return digests
+  const data: Record<string, string> = {}
+  for (const [name, d] of w.devices) {
+    digests[name] = await d.digest()
+    data[name] = await d.dataDigest()
+  }
+  return { digests, data, drive: w.drive }
+}
+
+/** server_inject で置く「他の端末」 */
+const INJECTED_DEVICE = 'injected'
+
+/** Drive の要求を、故障を当てるサーバーの道に分ける */
+function driveClass(req: SyncRequest): string {
+  const path = new URL(req.url).pathname
+  if (path.endsWith('/changes/startPageToken')) return '/head'
+  if (req.method === 'GET') return '/changes'
+  if (req.method === 'DELETE') return '/spaces'
+  return uploadContent(req) === null ? '/spaces' : '/records'
+}
+
+/** セグメントの上書き・作成の本文。目印(中身が空)は null */
+function uploadContent(req: SyncRequest): { records?: Record<string, unknown>[] } | null {
+  const b = /boundary=([^;]+)/.exec(req.headers['Content-Type'] ?? '')?.[1]
+  if (!b || !req.body) return null
+  const part = req.body.split(`--${b}`)[2] ?? ''
+  const text = part.slice(part.indexOf('\r\n\r\n') + 4).replace(/\r\n$/, '')
+  return text === '' ? null : (JSON.parse(text) as { records?: Record<string, unknown>[] })
+}
+
+function driveStatus(status: number): SyncResponse {
+  const r = status === 401 ? driveFail(401, 'authError') : status === 429 ? driveFail(429, 'rateLimitExceeded') : status >= 500 ? driveFail(status, 'backendError') : driveFail(status, 'failed')
+  return { status: r.status, headers: r.headers, body: r.body }
+}
+
+/** $server の期待を Drive に写す。head・gc_floor・request_id はサーバーだけの値なので比べない */
+async function checkDrive(w: World, drive: FakeDrive, e: Record<string, any>, label: string): Promise<void> {
+  if (e.spaces !== undefined) expect(drive.spaceCount(), `${label}: Drive の領域の数`).toBe(e.spaces)
+  if (e.spaces_at_most !== undefined) expect(drive.spaceCount(), `${label}: Drive の領域の数の上限`).toBeLessThanOrEqual(e.spaces_at_most)
+  if (e.tickets !== undefined) expect(w.tickets, `${label}: 同期を始めるページを通した回数`).toBe(e.tickets)
+  if (e.hosts !== undefined) expect([...new Set(w.log.map((l) => l.host))], `${label}: 通信先`).toEqual((e.hosts as string[]).map((h) => (h === new URL(SERVER).host ? FAKE_DRIVE_HOST : h)))
+  if (e.sent_lacks !== undefined) for (const text of e.sent_lacks) expect(w.sent.some((b) => b.includes(text)), `${label}: 送った本文に ${text} がない`).toBe(false)
+  for (const [dev, v] of Object.entries<any>(e.of ?? {})) {
+    const m = await (w.devices.get(dev) as Device).keys.load()
+    const sid = m ? spaceId(deriveKeys(m.k).auth_token) : ''
+    const files = m ? drive.filesOf(sid) : []
+    const held = m ? drive.recordsOf(sid) : []
+    const ids = (tag?: string) => new Set(held.filter((r) => tag === undefined || r.kind_tag === tag).map((r) => r.record_id)).size
+    if (v.exists !== undefined) expect(files.some((f) => f.appProperties.t === 'space'), `${label}: ${dev} の領域`).toBe(v.exists)
+    if (v.records !== undefined) expect(ids(), `${label}: ${dev} の領域のレコード数`).toBe(v.records)
+    if (v.s_records !== undefined) expect(ids('s'), `${label}: ${dev} の領域の権限系のレコード数`).toBe(v.s_records)
+    if (v.h_lacks !== undefined) {
+      const k = deriveKeys((m as SyncKeyMaterial).k)
+      const opened = openRecords(k, sid, held.filter((r) => r.kind_tag === 'h').map((r) => ({ ...r, version: 0 })))
+      for (const text of v.h_lacks) expect(opened.records.some((r) => canonicalJson(r.payload).includes(text)), `${label}: ${dev} の履歴系に ${text} がない`).toBe(false)
+    }
+  }
 }

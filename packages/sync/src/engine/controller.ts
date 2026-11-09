@@ -9,6 +9,7 @@ import type { CycleReason, SyncPace } from './scheduler'
 import { masterOn, offKindsOf, parseSwitches, type SyncGroup, type SyncSwitches } from './kinds'
 import { syncMismatches, syncSummary, type MismatchSummary, type SyncSummary } from './summary'
 import { delState, setState, SyncTables, type SqlStatement, type SyncSqlDb } from './tables'
+import type { SyncRemoteFactory } from './remote'
 import { checkServerUrl, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
 export const PAIRING_SHOW_MS = 60_000
@@ -49,6 +50,8 @@ export interface SyncControllerDeps {
   keyStore: SyncKeyStore
   transport: SyncTransport
   defaultServerUrl: string
+  /** 置き場。なければ同期サーバー(Drive の置き場を選ぶ画面はまだない) */
+  remote?: SyncRemoteFactory
   adapters: readonly SyncAdapter[]
   now: () => number
   allowLocalhost?: boolean
@@ -120,6 +123,7 @@ export class SyncController {
         keyStore: this.deps.keyStore,
         transport: this.deps.transport,
         serverUrl: url,
+        remote: this.deps.remote,
         adapters: this.deps.adapters,
         now: this.deps.now,
         leaseOwner: this.deps.leaseOwner,

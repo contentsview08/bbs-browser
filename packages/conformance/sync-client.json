@@ -887,6 +887,10 @@
  },
  {
   "name": "409: 同じレコードを 2 台が足すと、マージして揃う",
+  "stores": [
+   "server"
+  ],
+  "store_note": "Drive は書き手ごとのファイルで書き込みがぶつからず、409 がない",
   "devices": [
    "pc",
    "phone"
@@ -1002,6 +1006,10 @@
  },
  {
   "name": "409: 手元の方が古ければ送り直さず、サーバーの値へ揃う",
+  "stores": [
+   "server"
+  ],
+  "store_note": "Drive は書き手ごとのファイルで書き込みがぶつからず、409 がない",
   "devices": [
    "pc",
    "phone"
@@ -1655,6 +1663,10 @@
  },
  {
   "name": "枠 2 で 3 領域: 使っていない領域だけが押し出され、戻ると作り直して揃う",
+  "stores": [
+   "server"
+  ],
+  "store_note": "領域の枠と押し出しはサーバーだけ(Drive の置き場は利用者のもの)",
   "devices": [
    "a1",
    "a2",
@@ -2027,6 +2039,10 @@
  },
  {
   "name": "中断してやり直しても重ならない: 応答が消えたら同じ request_id で採番し直さない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "request_id による二重の採番の防ぎと /changes の応答の差し替えはサーバーだけ。Drive の応答の欠けは 105・39 で流す",
   "devices": [
    "pc",
    "phone"
@@ -3161,6 +3177,10 @@
  },
  {
   "name": "gc_floor の変更: リベースで消えたものが手元から消え、復活しない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "gc_floor はサーバーの tombstone の片づけ。Drive の片づけ(書き手のまとめ直しの g)はまだない",
   "devices": [
    "pc",
    "phone"
@@ -3328,6 +3348,10 @@
  },
  {
   "name": "gc_floor: サーバーが全件を空に見せると確認で止まり、手元を消さない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "/changes の応答(gc_floor)の差し替えはサーバーの形",
   "devices": [
    "pc",
    "phone"
@@ -3432,6 +3456,10 @@
  },
  {
   "name": "gc_floor の繰り返しの変更: 回数を超えると止まる",
+  "stores": [
+   "server"
+  ],
+  "store_note": "/changes の応答(gc_floor)の差し替えはサーバーの形",
   "devices": [
    "pc"
   ],
@@ -3575,6 +3603,10 @@
  },
  {
   "name": "gc_floor の変更: 全件の読み取りが途中で切れた分はリベースの回数に数えない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "/changes の応答(gc_floor)の差し替えはサーバーの形",
   "devices": [
    "pc"
   ],
@@ -3994,6 +4026,10 @@
  },
  {
   "name": "日の上限の送信の 429: 読むのと確認は続け、送信は 10 分おきに 1 回だけ試す",
+  "stores": [
+   "server"
+  ],
+  "store_note": "待ちの秒の指示(retry_after_sec)はサーバーだけ。Drive の 403 userRateLimitExceeded・429 は指示がなく、ふつうのバックオフで試す(1 章)",
   "devices": [
    "pc",
    "phone"
@@ -4101,6 +4137,10 @@
  },
  {
   "name": "日の上限の 429: サーバーが翌日と言っても 10 分で試す",
+  "stores": [
+   "server"
+  ],
+  "store_note": "待ちの秒の指示(retry_after_sec)はサーバーだけ。Drive の 403 userRateLimitExceeded・429 は指示がなく、ふつうのバックオフで試す(1 章)",
   "devices": [
    "pc"
   ],
@@ -4325,6 +4365,10 @@
  },
  {
   "name": "version が進まない応答はページングを止める",
+  "stores": [
+   "server"
+  ],
+  "store_note": "version によるページングはサーバーの形。Drive は token でページングする",
   "devices": [
    "pc",
    "phone"
@@ -4384,6 +4428,10 @@
  },
  {
   "name": "401 は止まり、自動で再開しない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "Drive の 401 はアクセストークンを 1 回取り直して送り直す(更新できないときだけ止まる。driveRemote.test.ts)",
   "devices": [
    "pc",
    "phone"
@@ -4456,6 +4504,10 @@
  },
  {
   "name": "creation_closed は止まり、手元が残る",
+  "stores": [
+   "server"
+  ],
+  "store_note": "領域の作成の停止はサーバーだけ",
   "devices": [
    "pc"
   ],
@@ -4492,6 +4544,10 @@
  },
  {
   "name": "413 は通知だけで送信待ちを残す",
+  "stores": [
+   "server"
+  ],
+  "store_note": "件数の上限はサーバーだけ。Drive の容量超過(storageQuotaExceeded)は 178 で流す",
   "devices": [
    "pc",
    "phone"
@@ -5391,6 +5447,10 @@
  },
  {
   "name": "別のレコードの暗号文をすり替えた 409 は混ぜない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "Drive は書き手ごとのファイルで書き込みがぶつからず、409 がない",
   "devices": [
    "pc"
   ],
@@ -5467,6 +5527,10 @@
  },
  {
   "name": "許可証がなければ作成を送らず止まり、手元が残る。通すと続く",
+  "stores": [
+   "server"
+  ],
+  "store_note": "許可証はサーバーだけ(Drive は目印を自分で作る)",
   "devices": [
    "pc"
   ],
@@ -5655,6 +5719,10 @@
  },
  {
   "name": "許可証の期限が切れると止まり、手元が残る。通し直すと作り直す",
+  "stores": [
+   "server"
+  ],
+  "store_note": "許可証はサーバーだけ(Drive は目印を自分で作る)",
   "devices": [
    "pc"
   ],
@@ -5751,6 +5819,10 @@
  },
  {
   "name": "サーバーが許可証を断ると、作り直しの待ちにせず止まる",
+  "stores": [
+   "server"
+  ],
+  "store_note": "許可証はサーバーだけ(Drive は目印を自分で作る)",
   "devices": [
    "pc"
   ],
@@ -15198,6 +15270,10 @@
  },
  {
   "name": "容量: 超えたら古い閲覧履歴から送らない。お気に入りとリセットは残り、手元は消えない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "件数の上限はサーバーだけ。Drive の容量超過(storageQuotaExceeded)は 178 で流す",
   "devices": [
    "pc",
    "phone"
@@ -15788,6 +15864,10 @@
  },
  {
   "name": "容量: 送ったものは trim の tombstone で外し、ほかの端末の手元を消さない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "件数の上限はサーバーだけ。Drive の容量超過(storageQuotaExceeded)は 178 で流す",
   "devices": [
    "pc",
    "phone"

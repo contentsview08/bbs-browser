@@ -1,7 +1,7 @@
 // 同期エンジン。周の順は必ず draining → pull → apply → push。通信・時計・鍵保管は外から渡すので、偽物で試せる
 import { randomBytes } from '@noble/ciphers/utils.js'
 import type { AdapterContext, ApplyPlan, DroppedThread, OpEffect, OpTarget, RecordRefs, SyncAdapter } from '../adapters/types'
-import { toBase64Url, toHex } from '../bytes'
+import { toBase64Url } from '../bytes'
 import {
   APPLY_BATCH,
   APPLY_SPLIT_AFTER,
@@ -45,7 +45,8 @@ import {
   type SyncSqlDb,
 } from './tables'
 import { kindsOfGroups, masterOn, offKindsOf, parseSwitches, SECRET_KIND, SYNC_GROUPS, type SyncGroup, type SyncSwitches } from './kinds'
-import { SyncApi, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
+import { serverRemote, type SyncRemote, type SyncRemoteFactory } from './remote'
+import { SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
 export interface SyncKeyMaterial {
   k: Uint8Array
@@ -97,6 +98,8 @@ export interface SyncEngineDeps {
   keyStore: SyncKeyStore
   transport: SyncTransport
   serverUrl: string
+  /** 置き場。なければ serverUrl の同期サーバー */
+  remote?: SyncRemoteFactory
   adapters: readonly SyncAdapter[]
   now: () => number
   newDeviceId?: () => string
@@ -151,6 +154,8 @@ interface FullRead {
   meta: Map<string, ServerMeta>
   head: number
   gcFloor: number
+  /** 読み終えたときに書く置き場の控え */
+  commit: SqlStatement[]
   /** 途中で打ち切ったときの原因。読めた分は使う */
   failure: unknown
 }
@@ -224,7 +229,7 @@ export class SyncEngine {
 
   // 周の間だけ持つ
   private keys!: SyncKeys
-  private api!: SyncApi
+  private api!: SyncRemote
   private spaceIdValue = ''
   private deviceId = ''
   private result!: CycleResult
@@ -244,6 +249,11 @@ export class SyncEngine {
 
   get state(): SyncEngineState {
     return this.current
+  }
+
+  private makeRemote(keys: SyncKeys, deviceId: string): SyncRemote {
+    const make = this.deps.remote ?? serverRemote(this.deps.serverUrl, this.deps.transport, this.deps.allowLocalhost)
+    return make({ db: this.db, keys, spaceId: spaceId(keys.auth_token), deviceId, now: this.deps.now })
   }
 
   /** サーバーの指示。覚えておくので、304 の間も効く */
@@ -324,9 +334,8 @@ export class SyncEngine {
     const material = await this.deps.keyStore.load()
     if (!material) return false
     if (!(await this.takeLease())) return false
-    const keys = deriveKeys(material.k)
-    const api = new SyncApi(this.deps.serverUrl, toHex(keys.auth_token), this.deps.transport, this.deps.allowLocalhost)
     try {
+      const api = this.makeRemote(deriveKeys(material.k), material.deviceId)
       const head = await api.head(await this.headEtag())
       if (api.pace) this.paceValue = api.pace
       if (head.version === null) {
@@ -499,7 +508,7 @@ export class SyncEngine {
       return finish(this.current === 'offline' ? 'offline' : 'backoff')
     }
     try {
-      this.api = new SyncApi(this.deps.serverUrl, toHex(this.keys.auth_token), this.deps.transport, this.deps.allowLocalhost)
+      this.api = this.makeRemote(this.keys, this.deviceId)
       this.enter('draining')
       await this.drain()
       await this.flow(manual, quick)
@@ -520,7 +529,7 @@ export class SyncEngine {
     let next: SyncEngineState = 'backoff'
     if (e instanceof SyncApiError) {
       if (e.kind === 'bad_url') return this.block('bad_url')
-      if (e.kind === 'http' && e.status === 401) return this.block('auth_failed')
+      if (e.kind === 'http' && e.status === 401) return this.block(e.code === 'google_auth_failed' ? e.code : 'auth_failed')
       code = e.kind === 'http' ? (e.code || `http_${e.status}`) : e.kind
       if (e.kind === 'network') next = 'offline'
       // 再送しない 4xx。次のきっかけでまた試す
@@ -711,6 +720,7 @@ export class SyncEngine {
     for (let i = 0; i < 4; i++) {
       try {
         await this.step(manual, quick)
+        await this.api.maintain?.()
         return
       } catch (e) {
         if (e instanceof SpaceGone) await this.onSpaceGone(e)
@@ -785,7 +795,8 @@ export class SyncEngine {
       if (page.more && next <= since) throw new SyncApiError('no_progress')
       this.enter('merging')
       if (this.halting) throw new CycleStop('idle')
-      await this.mergePage(page.records, next, page.gc_floor)
+      await this.mergePage(page.records, next, page.gc_floor, page.commit ?? [])
+      for (const reason of page.bad ?? []) await this.countBad(reason)
       since = next
       if (!page.more) return
     }
@@ -813,7 +824,7 @@ export class SyncEngine {
     return this.offKinds.has(SECRET_KIND) ? raw.filter((r) => r.kind_tag !== 's') : [...raw]
   }
 
-  private async mergePage(raw: Record<string, unknown>[], since: number, gcFloor: number): Promise<void> {
+  private async mergePage(raw: Record<string, unknown>[], since: number, gcFloor: number, commit: SqlStatement[]): Promise<void> {
     const now = this.deps.now()
     const readable = this.readable(raw)
     const opened = openRecords(this.keys, this.spaceIdValue, readable)
@@ -830,7 +841,7 @@ export class SyncEngine {
     }
     for (const f of opened.failed) await this.countBad(f.reason)
     // since はレコードと同じバッチで進むので、途中までは有効
-    stmts.push(setState('since', String(since)), setState('clock', clock), setState('gc_floor', String(gcFloor)), setState('last_pull_at', String(now)))
+    stmts.push(...commit, setState('since', String(since)), setState('clock', clock), setState('gc_floor', String(gcFloor)), setState('last_pull_at', String(now)))
     await this.db.batch(stmts)
     this.result.pulled += opened.records.length
   }
@@ -1209,7 +1220,7 @@ export class SyncEngine {
 
   /** 全件を読む。途中で切れたら読めた分を返し、呼び出す側が complete: false で扱う */
   private async readFull(): Promise<FullRead> {
-    const out: FullRead = { full: {}, meta: new Map(), head: 0, gcFloor: 0, failure: null }
+    const out: FullRead = { full: {}, meta: new Map(), head: 0, gcFloor: 0, commit: [], failure: null }
     let since = 0
     for (;;) {
       let page
@@ -1224,9 +1235,13 @@ export class SyncEngine {
       const readable = this.readable(page.records)
       const opened = openRecords(this.keys, this.spaceIdValue, readable)
       for (const f of opened.failed) await this.countBad(f.reason)
+      for (const reason of page.bad ?? []) await this.countBad(reason)
+      out.commit.push(...(page.commit ?? []))
       const metaOf = new Map(readable.map((r) => [r.record_id as string, r]))
       for (const r of opened.records) {
-        out.full[r.record_id] = { payload: r.payload, version: r.version }
+        // Drive は同じレコードを書き手ごとのファイルに持つので、1 回の読み取りに何度も来る。後のもので上書きせずに合わせる
+        const prev = Object.hasOwn(out.full, r.record_id) ? out.full[r.record_id] : undefined
+        out.full[r.record_id] = prev ? { payload: mergePayloads(prev.payload, r.payload), version: Math.max(prev.version, r.version) } : { payload: r.payload, version: r.version }
         const m = metaOf.get(r.record_id) as Record<string, unknown>
         out.meta.set(r.record_id, { kind_tag: m.kind_tag as KindTag, schema_version: m.schema_version as number })
       }
@@ -1260,7 +1275,7 @@ export class SyncEngine {
     let epoch = e.newEpoch
     if (epoch === undefined) {
       const ticket = (await this.deps.keyStore.load())?.ticket ?? null
-      if (ticket === null) throw new CycleStop(await this.block('ticket_required'))
+      if (ticket === null && this.api.needsTicket) throw new CycleStop(await this.block('ticket_required'))
       try {
         epoch = (await this.api.createSpace(ticket)).epoch
       } catch (err) {
@@ -1334,7 +1349,7 @@ export class SyncEngine {
       stmts.push(writeRecord(this.rowFromPlan(byId.get(id), id, settled, read.meta.get(id), pending, priority)))
     }
     for (const id of plan.expired) stmts.push(delRecord(id))
-    await this.writeChunks(stmts, [delState('recreate_pending'), setState('since', String(read.head)), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
+    await this.writeChunks(stmts, [...read.commit, delState('recreate_pending'), setState('since', String(read.head)), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
     this.result.pulled += Object.keys(read.full).length
   }
 
@@ -1391,7 +1406,7 @@ export class SyncEngine {
       if (stmts.length > 0) await this.writeChunks(stmts, [])
       throw read.failure
     }
-    await this.writeChunks(stmts, [counted, delState('rebase_accepted'), setState('since', String(Math.max(read.head, read.gcFloor))), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
+    await this.writeChunks(stmts, [...read.commit, counted, delState('rebase_accepted'), setState('since', String(Math.max(read.head, read.gcFloor))), setState('gc_floor', String(read.gcFloor)), setState('last_pull_at', String(now))])
     this.result.pulled += Object.keys(read.full).length
   }
 }

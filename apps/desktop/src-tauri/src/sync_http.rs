@@ -75,6 +75,8 @@ async fn send(req: SyncHttpRequest, dev: bool) -> Result<SyncHttpResponse, Strin
     let method = match req.method.as_str() {
         "GET" => reqwest::Method::GET,
         "POST" => reqwest::Method::POST,
+        // Drive の置き場の files.update
+        "PATCH" => reqwest::Method::PATCH,
         "DELETE" => reqwest::Method::DELETE,
         _ => return Err("bad_method".into()),
     };

@@ -98,6 +98,9 @@ fun postMinutes(date: String): Long? {
 
 private val AA = Regex("[ \t　]{5,}")
 
+/** 空白が続く本文は AA とみなす(スレ表示・のぞく窓で同じ判定) */
+fun looksLikeAa(body: String) = AA.containsMatchIn(body)
+
 /**
  * レスの中の押せるところ(番号・ID・アンカー)を押したときに呼ぶ先。組み立てた文字列は使い回すので、
  * 押したときの動きは、ここに入れた関数を差し替えて変える。tag は「a:番号,番号」「r:番号」「n:番号」「i:ID」「u:URL」「x:番号」
@@ -276,7 +279,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         }
         val body = buildBody(true)
         // 空白が続く本文は AA とみなす(AA 用の字で出す)
-        val rp = RenderedPost(header, body, AA.containsMatchIn(p.body), replyTo, info?.beIcon)
+        val rp = RenderedPost(header, body, looksLikeAa(p.body), replyTo, info?.beIcon)
         rp.watchoi = watchoiOf(p.name)
         if (o.urlShorten && info?.spans?.any { it is BodyToken.Url && toImageUrl(it.url) != null } == true) rp.bodyExpandedLazy = lazy { buildBody(false) }
         if (o.style == "line") {

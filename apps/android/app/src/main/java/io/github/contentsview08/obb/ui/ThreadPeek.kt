@@ -101,7 +101,10 @@ import io.github.contentsview08.obb.bbs.ThreadSummary
 import io.github.contentsview08.obb.bbs.TwoCh
 import io.github.contentsview08.obb.data.NgRule
 import io.github.contentsview08.obb.data.ThreadLog
+import io.github.contentsview08.obb.bbs.PostIndex
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 // ── 中身の選び方(画面から切り離してテストする) ──
@@ -375,7 +378,23 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                 ) {
                     PeekHeader(vm, t, Modifier.then(dragModifier).clickable { open(null) }, onClose = { close() })
                     HorizontalDivider(color = Palette.border)
-                    val pick = remember(log, readNo) { peekPick(log?.posts.orEmpty(), readNo) }
+                    val livePick = remember(log, readNo) { peekPick(log?.posts.orEmpty(), readNo) }
+                    // hono-bbs はスレ一覧の時点で 1 レス目を持っているので、届くまでそれを出す
+                    val preview = if (livePick.posts.isEmpty() && livePick.kind == PeekKind.FIRST && t.preview != null) Post(1, "", "", "", t.authorId, t.preview) else null
+                    // レスはスレ表示と同じ組み立て・同じ部品(PostItem)で描く。スキン・配色・字と余白の設定がそのまま効くように
+                    val style = vm.prefs.postStyle
+                    val src = preview?.let { listOf(it) } ?: livePick.posts
+                    val options = vm.threadRenderOptions(t.boardUrl, src)
+                    val tidy = vm.prefs.tidyBlankLines
+                    val fromWatchoi = vm.prefs.iconFromWatchoi
+                    val links = remember { PostLinks() }
+                    var own by remember(t.id) { mutableStateOf<Set<Int>>(emptySet()) }
+                    LaunchedEffect(t.id) { own = runCatching { vm.peekOwnPosts(t) }.getOrDefault(emptySet()) }
+                    var shown by remember(t.id) { mutableStateOf<PeekRendered?>(null) }
+                    LaunchedEffect(livePick, preview, options, tidy, fromWatchoi, Palette.scheme.key) {
+                        shown = withContext(Dispatchers.Default) { peekRender(livePick, preview, tidy, fromWatchoi, links, options) }
+                    }
+                    val pick = shown?.pick ?: PeekPick(livePick.kind, emptyList())
                     val list = rememberLazyListState()
                     // 開いたときの位置は、中身がそろったとき(取ってきて新着が見つかったときも)に 1 度だけ決める
                     var placedFor by remember { mutableStateOf<PeekKind?>(null) }
@@ -384,8 +403,11 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                         placedFor = pick.kind
                         list.scrollToItem(peekStartIndex(pick))
                     }
-                    // hono-bbs はスレ一覧の時点で 1 レス目を持っているので、届くまでそれを出す
-                    val preview = if (pick.posts.isEmpty() && pick.kind == PeekKind.FIRST && t.preview != null) Post(1, "", "", "", t.authorId, t.preview) else null
+                    // 本文の中のアンカー・URL などを押したときも、スレを開く(アンカーはその先へ)
+                    links.onTag = { tag ->
+                        val n = tag.substringAfter(':').substringBefore(',').toIntOrNull()
+                        open(if (n != null && tag[0] in "arxn") peekJumpNo(pick.kind, n) else null)
+                    }
                     // サムネイルの読み方はスレ表示と同じ設定に従う(通信の状態は窓ごとに 1 回だけ調べる)
                     val thumbContext = LocalContext.current
                     val thumbs = remember(vm.prefs.thumbMode, vm.prefs.blurGross, vm.prefs.grossWords) {
@@ -400,21 +422,33 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
                             grossWords = if (vm.prefs.blurGross) vm.prefs.grossWords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() } else emptyList(),
                         )
                     }
-                    LazyColumn(Modifier.weight(1f, fill = false).nestedScroll(pullDown), state = list, contentPadding = PaddingValues(bottom = 6.dp)) {
-                        val posts = pick.posts
-                        if (preview != null) item(key = "preview", contentType = "post") { PeekPost(preview, thumbs) { open(null) } }
+                    val onSky = Palette.onSky(style)
+                    val muted = if (onSky) Palette.skyMuted else Palette.textMuted
+                    LazyColumn(
+                        Modifier.weight(1f, fill = false).background(Palette.threadBg(style)).nestedScroll(pullDown),
+                        state = list, contentPadding = PaddingValues(bottom = 6.dp),
+                    ) {
+                        val r = shown
+                        val posts = r?.posts.orEmpty()
                         for (i in posts.indices) {
-                            if (i == pick.newFrom) item(key = "new", contentType = "caption") { PeekCaption("新着 ${pick.newCount} 件", Palette.unreadInk, false) }
+                            if (r != null && i == pick.newFrom) item(key = "new", contentType = "caption") { PeekCaption("新着 ${pick.newCount} 件", if (onSky) Palette.skyText else Palette.unreadInk, false) }
                             val p = posts[i]
-                            item(key = p.no, contentType = "post") { PeekPost(p, thumbs) { open(peekJumpNo(pick.kind, p.no)) } }
+                            // 新着の見出しの後ろは、前のレスと続けない(Discord 風・LINE 風のアイコンを省かない)
+                            val prev = if (i == pick.newFrom) null else posts.getOrNull(i - 1)
+                            item(key = if (r?.preview == true) "preview" else p.no, contentType = "post") {
+                                if (r != null) PeekPost(r, p, prev, style, own, thumbs) { open(if (r.preview) null else peekJumpNo(pick.kind, p.no)) }
+                            }
                         }
-                        if (pick.kind == PeekKind.LAST) item(key = "last", contentType = "caption") {
-                            PeekCaption(if (fetching) "新着を確かめています" else "新着はありません", Palette.textMuted, fetching)
+                        if (r != null && pick.kind == PeekKind.LAST) item(key = "last", contentType = "caption") {
+                            PeekCaption(if (fetching) "新着を確かめています" else "新着はありません", muted, fetching)
                         }
+                        val empty = r == null || (posts.isEmpty())
                         when {
-                            (!localDone || fetching) && pick.kind == PeekKind.FIRST -> item(key = "skeleton", contentType = "skeleton") { PeekSkeleton(maxOf(1, 3 - posts.size)) }
-                            posts.isEmpty() && preview == null && failed -> item(key = "note", contentType = "note") { PeekNote("読み込めませんでした") }
-                            posts.isEmpty() && preview == null && localDone && !fetching -> item(key = "note", contentType = "note") { PeekNote("レスがありません") }
+                            (!localDone || fetching) && livePick.kind == PeekKind.FIRST -> item(key = "skeleton", contentType = "skeleton") { PeekSkeleton(maxOf(1, 3 - posts.size)) }
+                            // 組み立てを待つ間(ほんの少し)
+                            r == null && livePick.posts.isNotEmpty() -> item(key = "skeleton", contentType = "skeleton") { PeekSkeleton(2) }
+                            empty && failed -> item(key = "note", contentType = "note") { PeekNote("読み込めませんでした", muted) }
+                            empty && localDone && !fetching && r != null -> item(key = "note", contentType = "note") { PeekNote("レスがありません", muted) }
                         }
                     }
                 }
@@ -511,26 +545,71 @@ private fun PeekCaption(text: String, color: Color, checking: Boolean) = Without
     }
 }
 
+/**
+ * のぞく窓に描く中身: 並べたもの(pick)を、スレ表示と同じ組み立て(renderPosts)にかけたもの。
+ * posts は描く順のレス(プレビューのときはそれ 1 件)。preview: hono-bbs のスレ一覧の 1 レス目を仮に出している
+ */
+private class PeekRendered(
+    val pick: PeekPick, val posts: List<Post>, val index: PostIndex, val rendered: Map<Int, RenderedPost>, val preview: Boolean,
+    /** アイコンの種(peekIconKey)ごとの書き込み数 */
+    val iconCounts: Map<String, Int>,
+)
+
+/** アイコンの種: 設定でワッチョイから作ることにしていて、名前にワッチョイがあればそれ。なければ ID(スレ表示と同じ) */
+private fun peekIconKey(p: Post, fromWatchoi: Boolean): String? = if (fromWatchoi) watchoiOf(p.name) ?: p.id else p.id
+
+/**
+ * のぞく窓のレスを組み立てる(画面とは別のスレッドで)。長すぎる本文は頭の数行で切る。
+ * AA は切ると崩れるので切らない(スレ表示と同じく AA 用の字で横幅に収める)
+ */
+private fun peekRender(pick: PeekPick, preview: Post?, tidy: Boolean, fromWatchoi: Boolean, links: PostLinks, o: RenderOptions): PeekRendered {
+    val src = preview?.let { listOf(it) } ?: pick.posts
+    val trimmed = src.map { if (looksLikeAa(it.body)) it else it.copy(body = peekBody(it.body)) }
+    val index = PostIndex.build(trimmed, tidy, emptyList())
+    val icons = trimmed.mapNotNull { peekIconKey(it, fromWatchoi) }.groupingBy { it }.eachCount()
+    return PeekRendered(pick, trimmed, index, renderPosts(index, links, o), preview != null, icons)
+}
+
+/**
+ * レス 1 件。スレ表示と同じ PostItem で、いまのスキン(カード・LINE 風など)・配色・字と余白の設定どおりに描く。
+ * アンカーのポップアップ・アイコンのメニューなどは出さず、押せばスレを開く
+ */
 @Composable
-private fun PeekPost(p: Post, thumbs: PeekThumbs?, onClick: () -> Unit) = WithoutBaseFont {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${p.no}", color = Palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            if (p.name.isNotBlank()) {
-                Spacer(Modifier.width(8.dp))
-                Text(p.name, Modifier.weight(1f, fill = false), color = Palette.posterName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            val tail = listOfNotNull(p.date.takeIf { it.isNotBlank() }, p.id?.let { "ID:$it" }).joinToString(" ")
-            if (tail.isNotEmpty()) {
-                Spacer(Modifier.width(8.dp))
-                Text(tail, Modifier.weight(1f), color = Palette.textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+private fun PeekPost(r: PeekRendered, p: Post, prev: Post?, style: String, own: Set<Int>, thumbs: PeekThumbs?, onClick: () -> Unit) {
+    val rp = r.rendered[p.no] ?: return
+    val prefs = LocalPrefs.current
+    val index = r.index
+    fun iconKey(x: Post): String? = peekIconKey(x, prefs.iconFromWatchoi)
+    val isOwn = p.no in own
+    val toOwn = !isOwn && own.isNotEmpty() && own.any { p.no in (index.replies[it] ?: emptyList()) }
+    val chat = isChatStyle(style)
+    // 続けて書いたレスはアイコンと頭を省く(スレ表示と同じ決まり)
+    val continued = chat && prev != null && p.id != null && prev.id == p.id && rp.replyTo == null &&
+        ((index.replyCount[p.no] ?: 0) == 0 || (style == "line" && isOwn))
+    val reply = rp.replyTo?.let { n ->
+        r.posts.firstOrNull { it.no == n }?.let { t ->
+            ReplyPreview(n, iconKey(t), io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+        } ?: ReplyPreview(n, null, ">>$n")
+    }
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        WithoutBaseFont {
+            PostItem(
+                rp, aa = rp.aa, own = isOwn, toOwn = toOwn, info = null, autoLoad = false,
+                style = style, id = p.id, iconCount = iconKey(p)?.let { r.iconCounts[it] } ?: 0, continued = continued, reply = reply, onReply = { onClick() },
+                heat = Palette.heat(index.replyCount[p.no] ?: 0),
+            )
         }
-        Text(
-            peekBody(p.body), Modifier.padding(top = 3.dp), color = Palette.textBody, fontSize = 14.sp, lineHeight = 20.sp,
-            maxLines = PEEK_BODY_LINES, overflow = TextOverflow.Ellipsis,
-        )
-        if (thumbs != null) PeekThumbRow(p, thumbs, onClick)
+        // 画像は小さく 2 行まで(PostItem のサムネイルは使わない)。字の始まりにそろえる
+        if (thumbs != null) {
+            val right = style == "line" && isOwn
+            val start = when {
+                style == "line" && !right -> 10.dp + AVATAR + 8.dp
+                style == "discord" -> 12.dp + AVATAR + 10.dp
+                style == "line" -> 10.dp
+                else -> 14.dp
+            }
+            PeekThumbRow(p, thumbs, onClick, Modifier.padding(start = start, end = if (chat) 10.dp else 14.dp, bottom = 8.dp), alignEnd = right)
+        }
     }
 }
 
@@ -545,17 +624,20 @@ private const val PEEK_THUMB = 68
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun PeekThumbRow(p: Post, thumbs: PeekThumbs, onClick: () -> Unit) {
+private fun PeekThumbRow(p: Post, thumbs: PeekThumbs, onClick: () -> Unit, modifier: Modifier = Modifier, alignEnd: Boolean = false) {
     val media = remember(p.no, p.body) { peekMedia(p.body) }
     // YouTube はスレ表示と同じく動画の絵に再生の印を重ねる
     val all = remember(media) { media.first.map { it to false } + media.second.map { (id, _) -> "https://i.ytimg.com/vi/$id/hqdefault.jpg" to true } }
     if (all.isEmpty()) return
     val blurred = remember(p.no, p.body, thumbs) { thumbs.grossWords.isNotEmpty() && normalizeForSearch(p.body).let { b -> thumbs.grossWords.any { b.contains(it) } } }
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
         val gap = 6.dp
         val perRow = ((maxWidth + gap) / (PEEK_THUMB.dp + gap)).toInt()
         val (n, more) = peekThumbFit(all.size, perRow)
-        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
+        androidx.compose.foundation.layout.FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap, if (alignEnd) Alignment.End else Alignment.Start), verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
             for ((url, play) in all.take(n)) Thumbnail(url, thumbs.autoLoad, { onClick() }, blurred, play = play, size = PEEK_THUMB)
             if (more > 0) {
                 val shape = RoundedCornerShape(5.dp)
@@ -594,8 +676,8 @@ private fun PeekSkeleton(count: Int) {
 }
 
 @Composable
-private fun PeekNote(text: String) {
-    Text(text, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp), color = Palette.textMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+private fun PeekNote(text: String, color: Color = Palette.textMuted) {
+    Text(text, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp), color = color, fontSize = 13.sp, textAlign = TextAlign.Center)
 }
 
 /** 操作の列。入りきらない分は右端の「その他」から、ふつうのメニューで出す */

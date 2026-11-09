@@ -1068,14 +1068,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val seq = (renderSeq[page]?.first ?: 0) + 1
         renderSeq[page] = seq to posts
         val rules = prefs.ngRules
-        // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま。
-        // 板ごとの設定で、省くかどうかと、ほかに名無しとみなす名前を変えられる
-        val meta = prefs.boardMeta[page.summary.boardUrl]
-        val omit = meta?.omitNoname ?: prefs.omitNoname
-        val noname = if (omit) TwoCh.cachedNoname(page.summary.boardUrl) else null
-        // そのスレで一番多い名前も名無しとみなす(板の既定の名前は、使っていない掲示板が多い。PC・Web と同じ)
-        val common = if (omit) mostCommonName(posts) else null
-        val o = renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() + listOfNotNull(common) else emptyList())
+        val o = threadRenderOptions(page.summary.boardUrl, posts)
         val collapse = prefs.tidyBlankLines
         val gross = if (prefs.blurGross) prefs.grossWords.lines().map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val oldIndex = page.index
@@ -1177,6 +1170,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.dropExpiredNg(io.github.contentsview08.obb.data.today())
         reapplyNg()
     }
+
+    /** スレのレスの組み立て方(スレ表示とのぞく窓で同じにする) */
+    fun threadRenderOptions(boardUrl: String, posts: List<Post>): RenderOptions {
+        // 板の既定の名前(名無し)は省いて出す。読み終えていなければ(待つと表示が遅れるので)そのまま。
+        // 板ごとの設定で、省くかどうかと、ほかに名無しとみなす名前を変えられる
+        val meta = prefs.boardMeta[boardUrl]
+        val omit = meta?.omitNoname ?: prefs.omitNoname
+        val noname = if (omit) TwoCh.cachedNoname(boardUrl) else null
+        // そのスレで一番多い名前も名無しとみなす(板の既定の名前は、使っていない掲示板が多い。PC・Web と同じ)
+        val common = if (omit) mostCommonName(posts) else null
+        return renderOptions(noname).copy(extraNonames = if (omit) meta?.nonames.orEmpty() + listOfNotNull(common) else emptyList())
+    }
+
+    /** のぞく: 自分の書き込みの番号(LINE 風の右の吹き出しなど、スレ表示と同じ見た目にするため) */
+    suspend fun peekOwnPosts(t: ThreadSummary): Set<Int> = db.ownPosts(t)
 
     /** 設定画面の見本のレス(ui/SettingParts.kt)を、スレ表示と同じ設定で組み立てる */
     fun sampleRenderOptions(noname: String?) = renderOptions(noname)

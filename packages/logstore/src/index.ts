@@ -294,7 +294,27 @@ function boardUrlVariantsSql(col: string): string {
 }
 
 export class LogStore {
+  /** 利用者の操作が送信待ちを積んだときの知らせ。同期が間隔を待たずに早めに送るために使う */
+  private readonly syncOpsListeners = new Set<() => void>()
+
   constructor(readonly db: SqlDb) {}
+
+  /** 送信待ちが積まれたら呼ぶ。戻り値で外す */
+  onSyncOps(f: () => void): () => void {
+    this.syncOpsListeners.add(f)
+    return () => void this.syncOpsListeners.delete(f)
+  }
+
+  /** UserOps が積んだ後に呼ぶ。知らせを受ける側の失敗で利用者の操作を失敗にしない */
+  notifySyncOps(): void {
+    for (const f of this.syncOpsListeners) {
+      try {
+        f()
+      } catch {
+        // 知らせは早めに送るためだけなので、捨てても周期の送信で送られる
+      }
+    }
+  }
 
   // ── サイトと板 ──
 

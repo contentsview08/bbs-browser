@@ -34,6 +34,11 @@ export const TRIM_ROUNDS = 5
 /** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/scheduler.ts) */
 export const HEAD_INTERVAL_MS = 60_000
 export const PUSH_INTERVAL_MS = 300_000
+/**
+ * 利用者の操作(ログの削除・お気に入り・設定など)を積んでから送るまでの待ち。続けての操作を 1 回の書き込みにまとめる。
+ * 選んだ間隔によらない(他の端末に出るまでを、送信の周の 5 分ではなく確認の間隔で決まるようにする)。読んだ位置は積むたびに送らず PUSH_INTERVAL_MS で送る
+ */
+export const PUSH_SOON_MS = 5_000
 /** 確認が「変化なし」のたびに間隔を 2 倍にし、ここで止める(Cloudflare の無料枠に 100 人分を収めるため) */
 export const HEAD_BACKOFF_MAX_MS = 300_000
 /** サーバーの指示する間隔の上限。タイマーの上限(2^31-1 ms)を超えてすぐ発火しないように */

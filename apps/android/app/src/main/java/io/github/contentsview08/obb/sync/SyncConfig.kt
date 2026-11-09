@@ -43,6 +43,11 @@ object SyncConfig {
     /** 自動の同期の既定値はここだけに置く。サーバーの応答の指示より短くしない(engine/SyncScheduler.kt) */
     const val HEAD_INTERVAL_MS = 60_000L
     const val PUSH_INTERVAL_MS = 300_000L
+    /**
+     * 利用者の操作(ログの削除・お気に入り・設定など)を積んでから送るまでの待ち。続けての操作を 1 回の書き込みにまとめる。
+     * 選んだ間隔によらない(他の端末に出るまでを、送信の周の 5 分ではなく確認の間隔で決まるようにする)。読んだ位置は積むたびに送らず PUSH_INTERVAL_MS で送る
+     */
+    const val PUSH_SOON_MS = 5_000L
     /** 確認が「変化なし」のたびに間隔を 2 倍にし、ここで止める(Cloudflare の無料枠に 100 人分を収めるため) */
     const val HEAD_BACKOFF_MAX_MS = 300_000L
     /** サーバーの指示する間隔の上限。足し算があふれず、確認が止まりっぱなしにならないように */

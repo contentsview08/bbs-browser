@@ -73,6 +73,12 @@ class MainActivity : ComponentActivity() {
         runCatching { getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(network) }
     }
 
+    /** 画面に触れるたび(指を置いたとき・キー)。読んでいる間は同期の確認を選んだ間隔のままにする */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        vm.syncActivity()
+    }
+
     override fun onStop() {
         super.onStop()
         vm.appVisible = false

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { LogStore } from '@bbs-browser/logstore'
 import { favoriteBoardAdapters, FavoriteThreadAdapter, historyAdapters, ImageAdapter, NgAdapter, OwnPostAdapter, PostAdapter, SecretAdapter, SettingAdapter, SiteAdapter, SyncController, SyncScheduler, type ConfirmChoice, type CycleResult, type DroppedThread, type SyncGroup, type SyncIntervalId } from '@bbs-browser/sync'
-import { broadcast } from '../host/crossWindow'
+import { broadcast, onBroadcast } from '../host/crossWindow'
 import { cancelGoogleLogin, googleDrive } from '../host/google'
 import { DEFAULT_SYNC_SERVER, openSyncStartWindow, resolveSyncBoard, resolveSyncSite, syncKeyHint, syncKeyStore, syncNgHost, syncSettingsHost, syncTransport } from '../host/sync'
 import { PRESET_URLS } from '../presets'
@@ -72,7 +72,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
   /** 間隔を選び直したときに時計を掛け直す */
   const schedulerRef = useRef<SyncScheduler | null>(null)
   useEffect(() => {
-    if (!ctl) return
+    if (!ctl || !store) return
     const scheduler = new SyncScheduler({
       now: Date.now,
       setTimer: (f, ms) => window.setTimeout(f, ms),
@@ -94,6 +94,18 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     const flush = () => quiet(scheduler.flush())
     const closing = () => quiet(scheduler.flush(true))
     const activity = () => scheduler.activity()
+    // マウスを動かしただけでも人がいると見なす(画面を見に来たときに伸ばした確認を戻す)。動かすたびに呼ばないよう間を空ける
+    let lastMove = 0
+    const move = () => {
+      const now = Date.now()
+      if (now - lastMove < 1_000) return
+      lastMove = now
+      scheduler.activity()
+    }
+    // 利用者の操作が送信待ちを積んだら、選んだ間隔を待たずに早めに送る。道具の窓(設定・お気に入り板など)の書き込みは知らせで受ける
+    const offOps = store.onSyncOps(() => scheduler.changed())
+    const changed = () => scheduler.changed()
+    const offs = ['favorites-changed', 'sites-changed', 'settings-changed'].map((e) => onBroadcast(e, changed))
     const network = () => scheduler.networkBack()
     if (isAppVisible()) quiet(scheduler.foreground())
     window.addEventListener('focus', focus)
@@ -104,6 +116,7 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
     window.addEventListener('keydown', activity)
     // ホイールだけで読み続けても放置と見なさない
     window.addEventListener('wheel', activity, { passive: true })
+    window.addEventListener('pointermove', move, { passive: true })
     document.addEventListener('visibilitychange', visibility)
     return () => {
       scheduler.dispose()
@@ -115,9 +128,12 @@ export function useSync(store: LogStore | undefined, reloaders: SyncReloaders) {
       window.removeEventListener('pointerdown', activity)
       window.removeEventListener('keydown', activity)
       window.removeEventListener('wheel', activity)
+      window.removeEventListener('pointermove', move)
+      offOps()
+      for (const off of offs) void off.then((f) => f()).catch(() => undefined)
       document.removeEventListener('visibilitychange', visibility)
     }
-  }, [ctl])
+  }, [ctl, store])
 
   const latest = useRef(ctl)
   latest.current = ctl

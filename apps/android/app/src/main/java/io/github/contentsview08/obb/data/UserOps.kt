@@ -34,6 +34,17 @@ class UserOps(
     private val isOn: (String) -> Boolean = { isSyncGroupOn(sql, it) },
     private val dispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
 ) {
+    /** 送信待ちを積んだときの知らせ。同期が間隔を待たずに早めに送るために使う。書いた列(裏)から呼ぶ */
+    @Volatile var onOps: (() -> Unit)? = null
+
+    /**
+     * 送信待ちを含む書き込み。積んだら同期へ知らせる。読んだ位置(markRead)と開いた時刻(threadView)は読むたびに積むので
+     * ここを通さず、周期・裏へ回る時に送る
+     */
+    private fun put(stmts: List<SqlStatement>) {
+        sql.batch(stmts)
+        if (stmts.any { it.sql.contains("sync_ops") }) runCatching { onOps?.invoke() }
+    }
 
     /** sync_ops には手元の識別だけを書く。スレタイなどはエンジンが処理するときに今のデータから読む */
     private fun opStatement(op: String, t: ThreadSummary, now: Long) = SqlStatement(
@@ -43,7 +54,7 @@ class UserOps(
 
     internal fun setFavoriteThreadNow(t: ThreadSummary, title: String, on: Boolean, now: Long) {
         val change = if (on) SqlStatement(FavoriteThreadSql.ADD, FavoriteThreadSql.addArgs(t, title, now)) else SqlStatement(FavoriteThreadSql.REMOVE, FavoriteThreadSql.removeArgs(t))
-        if (isOn("favorites")) sql.batch(listOf(change, opStatement(if (on) "favorite_thread_add" else "favorite_thread_remove", t, now)))
+        if (isOn("favorites")) put(listOf(change, opStatement(if (on) "favorite_thread_add" else "favorite_thread_remove", t, now)))
         else sql.exec(change.sql, change.args)
     }
 
@@ -56,9 +67,9 @@ class UserOps(
         listOf(op, target, canonicalJson(args), now),
     )
 
-    /** 更新と送信待ちを同じトランザクションで書く。使っていないときは更新だけ */
-    private fun write(group: String, changes: List<SqlStatement>, op: () -> List<SqlStatement>) {
-        if (isOn(group)) sql.batch(changes + op()) else sql.batch(changes)
+    /** 更新と送信待ちを同じトランザクションで書く。使っていないときは更新だけ。quiet は知らせない(読むたびに積む操作) */
+    private fun write(group: String, changes: List<SqlStatement>, quiet: Boolean = false, op: () -> List<SqlStatement>) {
+        if (!isOn(group)) sql.batch(changes) else if (quiet) sql.batch(changes + op()) else put(changes + op())
     }
 
     internal fun setFavoriteNow(board: Board, on: Boolean, now: Long) {
@@ -92,7 +103,7 @@ class UserOps(
             (if (secret && u.deleteUrl != null) listOf(plainOp("secret_put", u.url, mapOf("url" to u.url), now)) else emptyList())
 
     internal fun addUploadNow(u: UploadRecord, now: Long) =
-        sql.batch(listOf(SqlStatement(UploadSql.ADD, UploadSql.addArgs(u, now).toList())) + uploadOps(u, now, isOn("images"), isOn("secret")))
+        put(listOf(SqlStatement(UploadSql.ADD, UploadSql.addArgs(u, now).toList())) + uploadOps(u, now, isOn("images"), isOn("secret")))
 
     suspend fun addUpload(u: UploadRecord, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { addUploadNow(u, now) }
 
@@ -100,10 +111,10 @@ class UserOps(
     suspend fun importUploads(list: List<UploadRecord>, now: Long = System.currentTimeMillis()) = withContext(dispatcher) {
         val images = isOn("images")
         val secret = isOn("secret")
-        sql.batch(list.map { SqlStatement(UploadSql.IMPORT, UploadSql.importArgs(it).toList()) } + list.flatMap { uploadOps(it, now, images, secret) })
+        put(list.map { SqlStatement(UploadSql.IMPORT, UploadSql.importArgs(it).toList()) } + list.flatMap { uploadOps(it, now, images, secret) })
     }
 
-    internal fun removeUploadNow(url: String, now: Long) = sql.batch(
+    internal fun removeUploadNow(url: String, now: Long) = put(
         listOf(SqlStatement(UploadSql.REMOVE, listOf(url))) +
             (if (isOn("images")) listOf(plainOp("upload_remove", url, mapOf("url" to url), now)) else emptyList()) +
             (if (isOn("secret")) listOf(plainOp("secret_remove", url, mapOf("url" to url), now)) else emptyList()),
@@ -112,7 +123,7 @@ class UserOps(
     /** スクロールで何度も呼ばれるので、同じスレの読みは sync_ops の 1 行にまとめる。minSdk 26 の SQLite は 3.18 なので、更新と追加の 2 文に分ける */
     internal fun markReadNow(t: ThreadSummary, no: Long, now: Long) {
         val target = "${t.boardUrl}\t${t.key}"
-        write("history", listOf(SqlStatement(ThreadLogSql.MARK_READ, listOf(no, now, t.boardUrl, t.key)))) {
+        write("history", listOf(SqlStatement(ThreadLogSql.MARK_READ, listOf(no, now, t.boardUrl, t.key))), quiet = true) {
             listOf(
                 SqlStatement("UPDATE sync_ops SET num = MAX(num, ?), at_ms = ? WHERE op = 'read' AND target = ?", listOf(no, now, target)),
                 SqlStatement("INSERT OR IGNORE INTO sync_ops (op, target, num, args, at_ms) VALUES ('read', ?, ?, ?, ?)", listOf(target, no, canonicalJson(mapOf("board_url" to t.boardUrl, "key" to t.key)), now)),
@@ -124,7 +135,7 @@ class UserOps(
 
     /** スレを開いたときの最終閲覧時刻 */
     internal fun threadViewNow(t: ThreadSummary, now: Long) =
-        write("history", listOf(SqlStatement(ThreadLogSql.VIEW, listOf(now, t.boardUrl, t.key)))) { listOf(opStatement("view", t, now)) }
+        write("history", listOf(SqlStatement(ThreadLogSql.VIEW, listOf(now, t.boardUrl, t.key))), quiet = true) { listOf(opStatement("view", t, now)) }
 
     suspend fun threadView(t: ThreadSummary, now: Long = System.currentTimeMillis()) = withContext(dispatcher) { threadViewNow(t, now) }
 
@@ -143,7 +154,7 @@ class UserOps(
                 for (del in ThreadLogSql.DELETE_LOG) stmts += SqlStatement(del, listOf(t.boardUrl, t.key))
                 if (on && c * LOG_DELETE_CHUNK + j < LOG_RESET_MAX) stmts += opStatement("log_delete", t, now)
             }
-            sql.batch(stmts)
+            put(stmts)
         }
     }
 
@@ -187,13 +198,13 @@ class UserOps(
     internal fun settingsWriteNow(ops: List<SettingOp>, now: Long, changes: List<SqlStatement> = emptyList()) {
         val on = ops.isNotEmpty() && isOn("settings")
         val stmts = changes + if (on) ops.map { plainOp("setting", it.name, mapOf("name" to it.name, "value" to it.value), now) } else emptyList()
-        if (stmts.isNotEmpty()) sql.batch(stmts)
+        if (stmts.isNotEmpty()) put(stmts)
     }
 
     /** NG の差分を積む。積むのは upsert と remove だけで、drop は tombstone にならない。今の値は Prefs にあるので、書くのは呼ぶ側 */
     internal fun ngChangeNow(diff: NgDiff, now: Long) {
         if (diff.upsert.isEmpty() && diff.remove.isEmpty() || !isOn("ng")) return
-        sql.batch(
+        put(
             diff.upsert.map { plainOp("ng_diff", it.id, mapOf("id" to it.id, "rule" to ngRuleToBody(it)), now) } +
                 diff.remove.map { plainOp("ng_diff", it, mapOf("id" to it, "rule" to null), now) },
         )

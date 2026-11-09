@@ -61,6 +61,23 @@ class SyncMigrationTest {
         db.close()
     }
 
+    @Test fun 送信待ちを積んだときだけ知らせ_読んだ位置と開いた時刻は知らせない() = runBlocking {
+        val db = JdbcSyncSql.open()
+        val ops = UserOps(db)
+        var n = 0
+        ops.onOps = { n++ }
+        ops.setFavoriteThread(t, "題", true, 5)
+        assertEquals(0, n)
+        db.script("INSERT INTO sync_state (key, value) VALUES ('enabled', '1')")
+        ops.markRead(t, 3, 6)
+        ops.threadView(t, 7)
+        assertEquals(0, n)
+        ops.setFavoriteThread(t, "題", false, 8)
+        ops.deleteLogs(listOf(t), 9)
+        assertEquals(2, n)
+        db.close()
+    }
+
     @Test fun 有効なら更新と送信待ちが一緒に入る() = runBlocking {
         val db = JdbcSyncSql.open()
         db.script("INSERT INTO sync_state (key, value) VALUES ('enabled', '1')")

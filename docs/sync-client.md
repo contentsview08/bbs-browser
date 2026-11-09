@@ -1009,10 +1009,11 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | きっかけ | PC | スマホ |
 | --- | --- | --- |
 | 前面に戻る | `focus`・`visibilitychange`(`useSync`) | `MainActivity.onStart`(`vm.appVisible`) |
-| 放置後の操作 | `pointerdown`・`keydown` で最後の時刻を見る | 同じ考えを `Activity.onUserInteraction` で |
+| 放置後の操作 | `pointerdown`・`keydown`・`wheel`・`pointermove`(1 秒に 1 回まで)で最後の時刻を見る | 同じ考えを `Activity.onUserInteraction` で |
 | ネットワークの復帰 | `online` | `ConnectivityManager.NetworkCallback`(前面の間だけ登録) |
 | 確認(1 分〜5 分) | 前面のときだけ `GET /head`。`SyncScheduler` | 同じ |
 | 送信(5 分) | 変更があるときだけ | 同じ |
+| 早めの送信(5 秒) | 利用者の操作が送信待ちを積んだとき(`LogStore.onSyncOps`。道具の窓の書き込みは `favorites-changed`・`sites-changed`・`settings-changed` の知らせ) | `UserOps.onOps` |
 | 手動 | 同期ボタン | 同じ |
 
 - 既読は `readFlush` の呼び出し(タブの切り替え・閉じる)でも周を起こす
@@ -1023,6 +1024,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 | `HEAD_INTERVAL_MS` | 1 分(確認の基本の間隔) |
 | `HEAD_BACKOFF_MAX_MS` | 5 分(伸ばした確認の間隔の上限) |
 | `PUSH_INTERVAL_MS` | 5 分(変更があるときだけ) |
+| `PUSH_SOON_MS` | 5 秒(利用者の操作を積んでから送るまで。読んだ位置と開いた時刻は除く) |
 | `PULL_MIN_GAP_MS` | 10 秒 |
 | `PACE_MAX_MS` | 1 時間(サーバーの `pace` の上限。タイマーの上限を超えてすぐ発火しないように) |
 | `RETRY_WAIT_MAX_MS` | 10 分(429 の待ちの上限) |
@@ -1035,7 +1037,7 @@ idle ─きっかけ→ draining → pulling → merging → applying → pushin
 
 値は Cloudflare Workers の無料枠(Workers・Durable Objects とも 100,000 要求/日、SQLite の書き込み 100,000 行/日。`/records` は N 件で 2N + 2 行)に利用者 100 人(1 人 PC + スマホ)を収めるために決めた(設計書の「費用」)。要求を減らす仕掛けは 4 つ。
 
-**確認の間隔を伸ばす(`SyncScheduler`)。** `/head` が「変化なし」(304。通信の失敗も同じ扱い)を返すたびに次の確認までの間隔を 2 倍にし、`HEAD_BACKOFF_MAX_MS` で止める(1 → 2 → 4 → 5 分)。基本の間隔に戻すのは、前面に戻った(`foreground`)、利用者の操作(`activity`。放置で止めない端末でも戻すだけは行う)、確認が変化を返した、周を回した(`run`)の 4 つ。操作のときに確認が遅れていればすぐ確認する。サーバーの `pace` はこれまでどおり下限で、指示が上限より長ければ指示のまま(ただし `PACE_MAX_MS` の 1 時間で丸める)。送信の時計は確認とは別に `PUSH_INTERVAL_MS` ごとに起きて、送るものの有無を見る(確認を遠ざけている間も送信は 5 分で出る)。裏に回る瞬間(`visibilitychange`)と窓を閉じるとき(`pagehide`)の送信は、この間隔に関係なくすぐ行う。PC の窓の行き来(`focus` の pull と `blur` の送信)は、直前の周から `NUDGE_MIN_GAP_MS` 空くまで回さない(Alt+Tab を繰り返しても 1 分の要求の上限に当たらないように)。
+**確認の間隔を伸ばす(`SyncScheduler`)。** `/head` が「変化なし」(304。通信の失敗も同じ扱い)を返すたびに次の確認までの間隔を 2 倍にし、`HEAD_BACKOFF_MAX_MS` で止める(1 → 2 → 4 → 5 分)。基本の間隔に戻すのは、前面に戻った(`foreground`)、利用者の操作(`activity`。放置で止めない端末でも戻すだけは行う)、確認が変化を返した、周を回した(`run`)の 4 つ。操作のときに確認が遅れていればすぐ確認する。サーバーの `pace` はこれまでどおり下限で、指示が上限より長ければ指示のまま(ただし `PACE_MAX_MS` の 1 時間で丸める)。送信の時計は確認とは別に `PUSH_INTERVAL_MS` ごとに起きて、送るものの有無を見る(確認を遠ざけている間も送信は 5 分で出る)。利用者の操作(ログの削除・お気に入り・サイト・書き込み履歴・自分の印・画像・NG・設定)を積んだときは、選んだ間隔・手動のみによらず `PUSH_SOON_MS` 後に送る(`changed`。続けての操作は 1 回にまとめ、送るものがなければ通信しない)。他の端末に出るまでが送信の周の 5 分ではなく相手の確認の間隔で決まるようにするため。読んだ位置(`read`)と開いた時刻(`view`)は読むたびに積むので知らせず、送信の周・窓の行き来・裏へ回る瞬間に送る。裏に回る瞬間(`visibilitychange`)と窓を閉じるとき(`pagehide`)の送信は、この間隔に関係なくすぐ行う。PC の窓の行き来(`focus` の pull と `blur` の送信)は、直前の周から `NUDGE_MIN_GAP_MS` 空くまで回さない(Alt+Tab を繰り返しても 1 分の要求の上限に当たらないように)。
 
 **確認の ETag は覚えない(エンジン)。** `If-None-Match` は手元の `sync_state` の `epoch` と `since` から `"<epoch>:<since>"` を作って付ける。サーバーの応答を覚えておく形だと、変化を見た直後の周が通信の失敗で終わったときに次の確認が 304 になって取り残しが長引くので、手元が実際に読んだ所だけを根拠にする。
 

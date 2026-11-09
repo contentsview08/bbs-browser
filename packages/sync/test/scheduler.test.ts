@@ -1,6 +1,6 @@
 // 自動の同期を偽の時計で確かめる。エンジンと偽サーバーは本物と同じ流れ
 import { describe, expect, it } from 'vitest'
-import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, headWaitMs, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, NUDGE_MIN_GAP_MS, paceMs, PUSH_INTERVAL_MS, SyncScheduler, type SchedulerHost } from '../src/index'
+import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, headWaitMs, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, NUDGE_MIN_GAP_MS, paceMs, PUSH_INTERVAL_MS, PUSH_SOON_MS, SyncScheduler, type SchedulerHost } from '../src/index'
 
 class FakeClock {
   now = 1_800_000_000_000
@@ -323,6 +323,59 @@ describe('利用者の選ぶ同期の間隔', () => {
     s.intervalChanged()
     await c.advance(0)
     expect(heads(log)).toBe(1)
+  })
+
+  it('利用者の操作が積んだ変更は、送信の周を待たずに 5 秒で送る。続けての操作は 1 回にまとめる', async () => {
+    const { c, log, s, state } = setup()
+    await s.foreground()
+    await c.advance(20_000)
+    state.changes = true
+    s.changed()
+    await c.advance(2_000)
+    s.changed()
+    await c.advance(PUSH_SOON_MS - 2_000 - 1)
+    expect(log).toEqual(['foreground'])
+    await c.advance(1)
+    expect(log).toEqual(['foreground', 'tick'])
+    // 送った後は、次の変更までは送らない(確認は選んだ間隔のまま)
+    await c.advance(PUSH_INTERVAL_MS)
+    expect(log.filter((x) => x === 'tick')).toEqual(['tick'])
+  })
+
+  it('早めの送信は送るものがなければ通信しない。手動のみ・確認を伸ばしている間・放置で止めていた間も送る', async () => {
+    const empty = setup()
+    await empty.s.foreground()
+    empty.s.changed()
+    await empty.c.advance(PUSH_SOON_MS)
+    expect(empty.log).toEqual(['foreground'])
+
+    const manual = setup({ interval: null })
+    await manual.s.foreground()
+    manual.state.changes = true
+    manual.s.changed()
+    await manual.c.advance(PUSH_SOON_MS)
+    expect(manual.log).toEqual(['tick'])
+
+    const idle = setup({ idleStops: true })
+    await idle.s.foreground()
+    await idle.c.advance(IDLE_STOP_MS + HEAD_BACKOFF_MAX_MS)
+    expect(idle.s.isPaused).toBe(true)
+    idle.state.changes = true
+    idle.s.changed()
+    await idle.c.advance(PUSH_SOON_MS)
+    expect(idle.log.filter((x) => x === 'tick')).toEqual(['tick'])
+    expect(idle.s.isPaused).toBe(false)
+  })
+
+  it('裏では早めの送信を掛けない(裏へ回る瞬間に送る)', async () => {
+    const { c, log, s, state } = setup()
+    await s.foreground()
+    await s.background()
+    state.changes = true
+    s.changed()
+    await c.advance(PUSH_SOON_MS * 10)
+    expect(log).toEqual(['foreground'])
+    expect(c.pending).toBe(0)
   })
 
   it('サーバーの指示より短くしない', () => {

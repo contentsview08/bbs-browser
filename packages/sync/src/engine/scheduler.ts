@@ -1,5 +1,5 @@
 // 自動の同期のきっかけ。前面にいる間だけ動く。時計とタイマーは外から渡すので、偽の時計で試せる
-import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, NUDGE_MIN_GAP_MS, PACE_MAX_MS, PUSH_INTERVAL_MS } from '../config'
+import { HEAD_BACKOFF_MAX_MS, HEAD_INTERVAL_MS, IDLE_STOP_MS, NET_MIN_GAP_MS, NET_SETTLE_MS, NUDGE_MIN_GAP_MS, PACE_MAX_MS, PUSH_INTERVAL_MS, PUSH_SOON_MS } from '../config'
 
 /** サーバーが応答で指示する「最低これだけ空ける」。アプリはこれより短くしない */
 export interface SyncPace {
@@ -51,6 +51,8 @@ export class SyncScheduler {
   private lastSync = 0
   /** 確認が「変化なし」だった回数。間隔を伸ばす元。周を回す・操作・前面復帰で 0 に戻す */
   private misses = 0
+  /** 利用者の操作が積んだ送信待ちを送る時刻。送信の周(PUSH_INTERVAL_MS)を待たずに送る */
+  private soonAt: number | null = null
 
   constructor(private readonly host: SchedulerHost) {}
 
@@ -76,7 +78,7 @@ export class SyncScheduler {
     this.schedule()
   }
 
-  /** 次の確認と次の送信の早い方で起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
+  /** 次の確認・次の送信・早めの送信の最も早いときに起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
   private schedule(): void {
     if (this.timer !== null) this.host.clearTimer(this.timer)
     this.timer = null
@@ -85,7 +87,8 @@ export class SyncScheduler {
     const now = this.host.now()
     const untilCheck = head === null ? Infinity : Math.max(0, this.lastCheck + headWaitMs(head, this.misses) - now)
     const untilPush = Math.max(0, this.lastPush + push - now)
-    this.timer = this.host.setTimer(() => void this.tick().catch(() => undefined), Math.min(untilPush, untilCheck))
+    const untilSoon = this.soonAt === null ? Infinity : Math.max(0, this.soonAt - now)
+    this.timer = this.host.setTimer(() => void this.tick().catch(() => undefined), Math.min(untilPush, untilCheck, untilSoon))
   }
 
   /** 走っている間のきっかけは捨てる(走っているものが終わりに時計を掛け直す) */
@@ -105,6 +108,8 @@ export class SyncScheduler {
     this.lastCheck = this.lastSync
     this.lastPush = this.lastSync
     this.misses = 0
+    // 周が送信待ちを全部送る。周の間に積まれた分は changed がまた立てる
+    this.soonAt = null
     await this.host.cycle(reason)
   }
 
@@ -119,7 +124,9 @@ export class SyncScheduler {
     await this.guarded(async () => {
       const { head, push } = this.paces()
       const checkDue = head !== null && now - this.lastCheck >= headWaitMs(head, this.misses)
-      const pushDue = now - this.lastPush >= push
+      const soonDue = this.soonAt !== null && now >= this.soonAt
+      const pushDue = soonDue || now - this.lastPush >= push
+      if (soonDue) this.soonAt = null
       // 送るものがなくても・使っていなくても、次はここから数える(時計が空回りしないように)
       if (checkDue) this.lastCheck = now
       if (pushDue) this.lastPush = now
@@ -159,6 +166,7 @@ export class SyncScheduler {
   /** 裏に回る瞬間。送るものがあれば 1 回だけ試す。止められても送信待ちは DB に残る */
   background(): Promise<void> {
     this.front = false
+    this.soonAt = null
     this.stopTimers()
     return this.flush(true)
   }
@@ -184,6 +192,17 @@ export class SyncScheduler {
     } else if (stretched) this.schedule()
   }
 
+  /**
+   * 利用者の操作が送信待ちを積んだ(ログの削除・お気に入り・設定など)。PUSH_SOON_MS 待って送る(続けての操作は 1 回にまとめる)。
+   * 選んだ間隔・手動のみによらない。送るものがなければ通信しない。操作なので、放置で止めていた確認も戻す
+   */
+  changed(): void {
+    if (this.front) this.soonAt ??= this.host.now() + PUSH_SOON_MS
+    const wasPaused = this.paused
+    this.activity()
+    if (!wasPaused) this.schedule()
+  }
+
   /** ネットワークが戻った。すぐは不安定なので待ち、前回から空いていれば同期する */
   networkBack(): void {
     if (this.netTimer !== null) this.host.clearTimer(this.netTimer)
@@ -206,6 +225,7 @@ export class SyncScheduler {
   /** 画面が消えるとき */
   dispose(): void {
     this.front = false
+    this.soonAt = null
     this.stopTimers()
   }
 }

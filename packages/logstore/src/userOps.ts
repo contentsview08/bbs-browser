@@ -94,38 +94,47 @@ export class UserOps {
     private isOn: (group: SyncOpGroup) => Promise<boolean> = (group) => isSyncGroupOn(db, group),
   ) {}
 
+  /**
+   * 送信待ちを含む書き込み。積んだら同期へ知らせ、選んだ間隔を待たずに早めに送らせる。
+   * 読んだ位置(markRead)と開いた時刻(threadView)は読むたびに積むので知らせず、周期・窓の行き来・裏へ回る時に送る
+   */
+  private async put(statements: SqlStatement[]): Promise<void> {
+    await this.db.batch(statements)
+    if (statements.some((s) => s.sql.includes('sync_ops'))) this.store.notifySyncOps()
+  }
+
   async favoriteThreadAdd(thread: ThreadSummary, now = Date.now()): Promise<void> {
-    if (await this.isOn('favorites')) await this.db.batch([addFavoriteThreadStatement(thread, now), opStatement('favorite_thread_add', thread, now)])
+    if (await this.isOn('favorites')) await this.put([addFavoriteThreadStatement(thread, now), opStatement('favorite_thread_add', thread, now)])
     else await this.store.addFavoriteThread(thread, now)
   }
 
   async favoriteThreadRemove(thread: ThreadSummary, now = Date.now()): Promise<void> {
-    if (await this.isOn('favorites')) await this.db.batch([removeFavoriteThreadStatement(thread), opStatement('favorite_thread_remove', thread, now)])
+    if (await this.isOn('favorites')) await this.put([removeFavoriteThreadStatement(thread), opStatement('favorite_thread_remove', thread, now)])
     else await this.store.removeFavoriteThread(thread)
   }
 
   async favoriteBoardAdd(board: Board, now = Date.now()): Promise<void> {
-    if (await this.isOn('favorites')) await this.db.batch([addFavoriteBoardStatement(board), plainOp('favorite_board_add', board.url, { url: board.url }, now)])
+    if (await this.isOn('favorites')) await this.put([addFavoriteBoardStatement(board), plainOp('favorite_board_add', board.url, { url: board.url }, now)])
     else await this.store.addFavorite(board)
   }
 
   async favoriteBoardRemove(url: string, now = Date.now()): Promise<void> {
-    if (await this.isOn('favorites')) await this.db.batch([removeFavoriteBoardStatement(url), plainOp('favorite_board_remove', url, { url }, now)])
+    if (await this.isOn('favorites')) await this.put([removeFavoriteBoardStatement(url), plainOp('favorite_board_remove', url, { url }, now)])
     else await this.store.removeFavorite(url)
   }
 
   async favoriteBoardReorder(urls: string[], now = Date.now()): Promise<void> {
-    if (await this.isOn('favorites')) await this.db.batch([...reorderFavoriteStatements(urls), plainOp('favorite_board_order', 'order', { urls }, now)])
+    if (await this.isOn('favorites')) await this.put([...reorderFavoriteStatements(urls), plainOp('favorite_board_order', 'order', { urls }, now)])
     else await this.store.reorderFavorites(urls)
   }
 
   async siteAdd(site: SiteConfig, now = Date.now()): Promise<void> {
-    if (await this.isOn('sites')) await this.db.batch([addSiteStatement(site), plainOp('site_add', site.menuUrl, { menu_url: site.menuUrl }, now)])
+    if (await this.isOn('sites')) await this.put([addSiteStatement(site), plainOp('site_add', site.menuUrl, { menu_url: site.menuUrl }, now)])
     else await this.store.addSite(site)
   }
 
   async siteRemove(menuUrl: string, now = Date.now()): Promise<void> {
-    if (await this.isOn('sites')) await this.db.batch([...removeSiteStatements(menuUrl), plainOp('site_remove', menuUrl, { menu_url: menuUrl }, now)])
+    if (await this.isOn('sites')) await this.put([...removeSiteStatements(menuUrl), plainOp('site_remove', menuUrl, { menu_url: menuUrl }, now)])
     else await this.store.removeSite(menuUrl)
   }
 
@@ -135,7 +144,7 @@ export class UserOps {
       ...((await this.isOn('images')) ? [plainOp('upload_add', u.url, { url: u.url }, now)] : []),
       ...(u.deleteUrl && (await this.isOn('secret')) ? [plainOp('secret_put', u.url, { url: u.url }, now)] : []),
     ]
-    if (ops.length > 0) await this.db.batch([addUploadStatement(u, now), ...ops])
+    if (ops.length > 0) await this.put([addUploadStatement(u, now), ...ops])
     else await this.store.addUpload(u, now)
   }
 
@@ -144,7 +153,7 @@ export class UserOps {
       ...((await this.isOn('images')) ? [plainOp('upload_remove', url, { url }, now)] : []),
       ...((await this.isOn('secret')) ? [plainOp('secret_remove', url, { url }, now)] : []),
     ]
-    if (ops.length > 0) await this.db.batch([removeUploadStatement(url), ...ops])
+    if (ops.length > 0) await this.put([removeUploadStatement(url), ...ops])
     else await this.store.removeUpload(url)
   }
 
@@ -152,7 +161,7 @@ export class UserOps {
   async settingsWrite(writes: { key: string; value: unknown; ops: { name: string; value: unknown }[] }[], now = Date.now()): Promise<void> {
     const changes = writes.map((w) => setSettingStatement(w.key, w.value))
     const on = writes.some((w) => w.ops.length > 0) && (await this.isOn('settings'))
-    await this.db.batch([...changes, ...(on ? writes.flatMap((w) => w.ops.map((o) => plainOp('setting', o.name, { name: o.name, value: o.value }, now))) : [])])
+    await this.put([...changes, ...(on ? writes.flatMap((w) => w.ops.map((o) => plainOp('setting', o.name, { name: o.name, value: o.value }, now))) : [])])
   }
 
   /** スクロールで何度も呼ばれるので、同じスレの読みは sync_ops の 1 行にまとめる。古い SQLite で通るよう UPDATE と INSERT OR IGNORE の 2 文にする */
@@ -176,7 +185,7 @@ export class UserOps {
   /** 履歴から外す。ログと既読は残す。全端末の履歴から外れる */
   async historyRemove(thread: ThreadSummary, now = Date.now()): Promise<void> {
     const change = removeHistoryStatement(thread)
-    if (await this.isOn('history')) await this.db.batch([change, opStatement('view_remove', thread, now)])
+    if (await this.isOn('history')) await this.put([change, opStatement('view_remove', thread, now)])
     else await this.db.execute(change.sql, change.params)
   }
 
@@ -188,30 +197,30 @@ export class UserOps {
     }
     for (let i = 0; i < threads.length; i += LOG_DELETE_CHUNK) {
       const chunk = threads.slice(i, i + LOG_DELETE_CHUNK)
-      await this.db.batch(chunk.flatMap((t, j) => [...deleteThreadStatements(t), ...(i + j < LOG_RESET_MAX ? [opStatement('log_delete', t, now)] : [])]))
+      await this.put(chunk.flatMap((t, j) => [...deleteThreadStatements(t), ...(i + j < LOG_RESET_MAX ? [opStatement('log_delete', t, now)] : [])]))
     }
   }
 
   async postAdd(thread: ThreadSummary, post: { no?: number; name: string; mail: string; body: string }, now = Date.now()): Promise<void> {
     if (!(await this.isOn('posts'))) return this.store.addPostHistory(thread, post, now)
-    await this.db.batch([addPostHistoryStatement(thread, post, now), plainOp('post_add', `${thread.boardUrl}\t${thread.key}\t${now}`, { board_url: thread.boardUrl, key: thread.key, posted_at: now, body: post.body }, now)])
+    await this.put([addPostHistoryStatement(thread, post, now), plainOp('post_add', `${thread.boardUrl}\t${thread.key}\t${now}`, { board_url: thread.boardUrl, key: thread.key, posted_at: now, body: post.body }, now)])
   }
 
   /** 消した後は行がないので、ID を作るのに要る値を操作に書く */
   async postRemove(e: PostHistoryEntry, now = Date.now()): Promise<void> {
     if (!(await this.isOn('posts'))) return this.store.deletePostHistory(e.id)
-    await this.db.batch([deletePostHistoryStatement(e.id), plainOp('post_remove', `${e.thread.boardUrl}\t${e.thread.key}\t${e.postedAt}`, { board_url: e.thread.boardUrl, key: e.thread.key, posted_at: e.postedAt, body: e.body }, now)])
+    await this.put([deletePostHistoryStatement(e.id), plainOp('post_remove', `${e.thread.boardUrl}\t${e.thread.key}\t${e.postedAt}`, { board_url: e.thread.boardUrl, key: e.thread.key, posted_at: e.postedAt, body: e.body }, now)])
   }
 
   /** 自分のレスの印。書き込みで付いた印も手で付けた印も同じ経路。外すと全端末から外れる */
   async ownAdd(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
     if (!(await this.isOn('posts'))) return this.store.addOwnPost(thread, no, now)
-    await this.db.batch([addOwnPostStatement(thread, no, now), plainOp('own_add', `${thread.boardUrl}\t${thread.key}\t${no}`, { board_url: thread.boardUrl, key: thread.key, no }, now)])
+    await this.put([addOwnPostStatement(thread, no, now), plainOp('own_add', `${thread.boardUrl}\t${thread.key}\t${no}`, { board_url: thread.boardUrl, key: thread.key, no }, now)])
   }
 
   async ownRemove(thread: ThreadSummary, no: number, now = Date.now()): Promise<void> {
     if (!(await this.isOn('posts'))) return this.store.removeOwnPost(thread, no)
-    await this.db.batch([removeOwnPostStatement(thread, no), plainOp('own_remove', `${thread.boardUrl}\t${thread.key}\t${no}`, { board_url: thread.boardUrl, key: thread.key, no }, now)])
+    await this.put([removeOwnPostStatement(thread, no), plainOp('own_remove', `${thread.boardUrl}\t${thread.key}\t${no}`, { board_url: thread.boardUrl, key: thread.key, no }, now)])
   }
 
   /** 差分を今の DB の値に重ねて書く。積むのは upsert と remove だけで、drop は tombstone にならない。書いた結果を返す */
@@ -220,7 +229,7 @@ export class UserOps {
     if (isEmptyNgDiff(diff)) return next
     const write = setSettingStatement('ngRules', next)
     if (await this.isOn('ng')) {
-      await this.db.batch([
+      await this.put([
         write,
         ...diff.upsert.map((r) => plainOp('ng_diff', r.id, { id: r.id, rule: ngRuleToBody(r) }, now)),
         ...diff.remove.map((id) => plainOp('ng_diff', id, { id, rule: null }, now)),

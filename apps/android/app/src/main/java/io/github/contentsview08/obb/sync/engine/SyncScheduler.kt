@@ -61,6 +61,8 @@ class SyncScheduler(private val host: SchedulerHost) {
     private var lastSync = 0L
     /** 確認が「変化なし」だった回数。間隔を伸ばす元。周を回す・操作・前面復帰で 0 に戻す */
     private var misses = 0
+    /** 利用者の操作が積んだ送信待ちを送る時刻。送信の周(PUSH_INTERVAL_MS)を待たずに送る */
+    private var soonAt: Long? = null
 
     val isPaused get() = paused
 
@@ -94,7 +96,7 @@ class SyncScheduler(private val host: SchedulerHost) {
         schedule()
     }
 
-    /** 次の確認と次の送信の早い方で起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
+    /** 次の確認・次の送信・早めの送信の最も早いときに起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
     private fun schedule() {
         clear(timer)
         timer = null
@@ -103,7 +105,8 @@ class SyncScheduler(private val host: SchedulerHost) {
         val now = host.now()
         val untilCheck = if (head == null) Long.MAX_VALUE else maxOf(0L, lastCheck + headWaitMs(head, misses) - now)
         val untilPush = maxOf(0L, lastPush + push - now)
-        timer = host.setTimer({ launchQuiet { tick() } }, minOf(untilPush, untilCheck))
+        val untilSoon = soonAt?.let { maxOf(0L, it - now) } ?: Long.MAX_VALUE
+        timer = host.setTimer({ launchQuiet { tick() } }, minOf(untilPush, untilCheck, untilSoon))
     }
 
     /** 走っている間のきっかけは捨てる(走っているものが終わりに時計を掛け直す) */
@@ -123,6 +126,8 @@ class SyncScheduler(private val host: SchedulerHost) {
         lastCheck = lastSync
         lastPush = lastSync
         misses = 0
+        // 周が送信待ちを全部送る。周の間に積まれた分は changed がまた立てる
+        soonAt = null
         host.cycle(reason)
     }
 
@@ -137,7 +142,9 @@ class SyncScheduler(private val host: SchedulerHost) {
         guarded {
             val (head, push) = paces()
             val checkDue = head != null && now - lastCheck >= headWaitMs(head, misses)
-            val pushDue = now - lastPush >= push
+            val soonDue = soonAt?.let { now >= it } == true
+            val pushDue = soonDue || now - lastPush >= push
+            if (soonDue) soonAt = null
             // 送るものがなくても・使っていなくても、次はここから数える(時計が空回りしないように)
             if (checkDue) lastCheck = now
             if (pushDue) lastPush = now
@@ -168,6 +175,7 @@ class SyncScheduler(private val host: SchedulerHost) {
     /** 裏に回る瞬間。送るものがあれば 1 回だけ試す。止められても送信待ちは DB に残る */
     suspend fun background() {
         front = false
+        soonAt = null
         stopTimers()
         guarded {
             if (host.enabled() && host.hasChanges()) run("background")
@@ -185,6 +193,17 @@ class SyncScheduler(private val host: SchedulerHost) {
             lastCheck = 0
             launchQuiet { tick() }
         } else if (stretched) schedule()
+    }
+
+    /**
+     * 利用者の操作が送信待ちを積んだ(ログの削除・お気に入り・設定など)。PUSH_SOON_MS 待って送る(続けての操作は 1 回にまとめる)。
+     * 選んだ間隔・手動のみによらない。送るものがなければ通信しない。操作なので、放置で止めていた確認も戻す
+     */
+    fun changed() {
+        if (front && soonAt == null) soonAt = host.now() + SyncConfig.PUSH_SOON_MS
+        val wasPaused = paused
+        activity()
+        if (!wasPaused) schedule()
     }
 
     /** ネットワークが戻った。すぐは不安定なので待ち、前回から空いていれば同期する */
@@ -208,6 +227,7 @@ class SyncScheduler(private val host: SchedulerHost) {
     /** 画面が消えるとき */
     fun dispose() {
         front = false
+        soonAt = null
         stopTimers()
     }
 }

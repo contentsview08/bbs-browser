@@ -1025,7 +1025,7 @@ class SyncScenarioTest {
             "REBASE_LIMIT" to SyncConfig.REBASE_LIMIT.toLong(), "REBASE_WINDOW_MS" to SyncConfig.REBASE_WINDOW_MS, "RECREATE_RETRY_MS" to SyncConfig.RECREATE_RETRY_MS,
             "JOIN_CONFIRM_MIN" to SyncConfig.JOIN_CONFIRM_MIN.toLong(), "RESET_BATCH_MAX" to SyncConfig.RESET_BATCH_MAX.toLong(), "RESET_TOTAL_MAX" to SyncConfig.RESET_TOTAL_MAX.toLong(),
             "TRIM_BATCH" to SyncConfig.TRIM_BATCH.toLong(), "TRIM_ROUNDS" to SyncConfig.TRIM_ROUNDS.toLong(),
-            "HEAD_INTERVAL_MS" to SyncConfig.HEAD_INTERVAL_MS, "PUSH_INTERVAL_MS" to SyncConfig.PUSH_INTERVAL_MS, "HEAD_BACKOFF_MAX_MS" to SyncConfig.HEAD_BACKOFF_MAX_MS, "PACE_MAX_MS" to SyncConfig.PACE_MAX_MS, "NET_SETTLE_MS" to SyncConfig.NET_SETTLE_MS,
+            "HEAD_INTERVAL_MS" to SyncConfig.HEAD_INTERVAL_MS, "PUSH_INTERVAL_MS" to SyncConfig.PUSH_INTERVAL_MS, "PUSH_SOON_MS" to SyncConfig.PUSH_SOON_MS, "HEAD_BACKOFF_MAX_MS" to SyncConfig.HEAD_BACKOFF_MAX_MS, "PACE_MAX_MS" to SyncConfig.PACE_MAX_MS, "NET_SETTLE_MS" to SyncConfig.NET_SETTLE_MS,
             "NET_MIN_GAP_MS" to SyncConfig.NET_MIN_GAP_MS, "IDLE_STOP_MS" to SyncConfig.IDLE_STOP_MS,
         )
         assertEquals(c.toSortedMap(), actual.toSortedMap())

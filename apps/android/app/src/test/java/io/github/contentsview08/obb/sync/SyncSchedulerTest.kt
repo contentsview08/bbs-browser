@@ -6,6 +6,7 @@ import io.github.contentsview08.obb.sync.SyncConfig.IDLE_STOP_MS
 import io.github.contentsview08.obb.sync.SyncConfig.NET_MIN_GAP_MS
 import io.github.contentsview08.obb.sync.SyncConfig.NET_SETTLE_MS
 import io.github.contentsview08.obb.sync.SyncConfig.PUSH_INTERVAL_MS
+import io.github.contentsview08.obb.sync.SyncConfig.PUSH_SOON_MS
 import io.github.contentsview08.obb.sync.engine.SchedulerHost
 import io.github.contentsview08.obb.sync.engine.SyncPace
 import io.github.contentsview08.obb.sync.engine.SyncScheduler
@@ -322,5 +323,58 @@ class SyncSchedulerTest {
         x.s.foreground()
         assertEquals(listOf("tick", "background", "foreground"), x.log)
         assertEquals(0, x.heads)
+    }
+
+    @Test fun 利用者の操作が積んだ変更は送信の周を待たずに5秒で送り_続けての操作は1回にまとめる() = runBlocking {
+        val x = Setup()
+        x.s.foreground()
+        x.c.advance(20_000L)
+        x.changes = true
+        x.s.changed()
+        x.c.advance(2_000L)
+        x.s.changed()
+        x.c.advance(PUSH_SOON_MS - 2_000L - 1)
+        assertEquals(listOf("foreground"), x.log)
+        x.c.advance(1)
+        assertEquals(listOf("foreground", "tick"), x.log)
+        // 送った後は、次の変更までは送らない
+        x.c.advance(PUSH_INTERVAL_MS)
+        assertEquals(listOf("tick"), x.log.filter { it == "tick" })
+    }
+
+    @Test fun 早めの送信は送るものがなければ通信せず_手動のみ_放置で止めていた間も送る() = runBlocking {
+        val empty = Setup()
+        empty.s.foreground()
+        empty.s.changed()
+        empty.c.advance(PUSH_SOON_MS)
+        assertEquals(listOf("foreground"), empty.log)
+
+        val manual = Setup(intervalValue = null)
+        manual.s.foreground()
+        manual.changes = true
+        manual.s.changed()
+        manual.c.advance(PUSH_SOON_MS)
+        assertEquals(listOf("tick"), manual.log)
+
+        val idle = Setup(idle = true)
+        idle.s.foreground()
+        idle.c.advance(IDLE_STOP_MS + HEAD_BACKOFF_MAX_MS)
+        assertEquals(true, idle.s.isPaused)
+        idle.changes = true
+        idle.s.changed()
+        idle.c.advance(PUSH_SOON_MS)
+        assertEquals(listOf("tick"), idle.log.filter { it == "tick" })
+        assertEquals(false, idle.s.isPaused)
+    }
+
+    @Test fun 裏では早めの送信を掛けない() = runBlocking {
+        val x = Setup()
+        x.s.foreground()
+        x.s.background()
+        x.changes = true
+        x.s.changed()
+        x.c.advance(PUSH_SOON_MS * 10)
+        assertEquals(listOf("foreground"), x.log)
+        assertEquals(0, x.c.pending)
     }
 }

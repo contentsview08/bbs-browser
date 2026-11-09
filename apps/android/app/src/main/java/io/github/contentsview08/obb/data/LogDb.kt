@@ -317,15 +317,20 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
             )
             if (r.status == FetchStatus.NOT_MODIFIED) {
                 // 変わらなくても、dat 落ちと分かったら印を付け直し、続きの印も書く(したらばは新着のないまま過去ログ倉庫に入ったことを印で返す。
-                // 次から取りに行かないように)。前の印がある(レスを取ってある)スレだけ。
+                // 次から取りに行かないように)。レスを取ってあるスレだけ(前の印の有無で見ると、印だけ消えたスレが取り直されなくなる)。
                 // ふつうの変化なしの印は書かない(レスのない印を持つと、次から差分だけを取りに行く)
                 val cursor = if (r.archived && r.cursor != null) cursorToJson(r.cursor) else null
                 db.execSQL(
                     """UPDATE threads SET title = ?, fetched_at = ?, status = CASE WHEN ? = 1 THEN 'archived' ELSE status END,
-                         post_count = CASE WHEN ? IS NOT NULL AND cursor IS NOT NULL THEN ? ELSE post_count END,
-                         cursor = CASE WHEN ? IS NOT NULL AND cursor IS NOT NULL THEN ? ELSE cursor END
+                         post_count = CASE WHEN ? IS NOT NULL AND EXISTS (SELECT 1 FROM posts WHERE board_url = ? AND key = ?) THEN ? ELSE post_count END,
+                         cursor = CASE WHEN ? IS NOT NULL AND EXISTS (SELECT 1 FROM posts WHERE board_url = ? AND key = ?) THEN ? ELSE cursor END
                        WHERE board_url = ? AND key = ?""",
-                    arrayOf<Any?>(title, now, if (r.archived) 1 else 0, cursor, r.cursor?.postCount, cursor, cursor, t.boardUrl, t.key),
+                    arrayOf<Any?>(
+                        title, now, if (r.archived) 1 else 0,
+                        cursor, t.boardUrl, t.key, r.cursor?.postCount,
+                        cursor, t.boardUrl, t.key, cursor,
+                        t.boardUrl, t.key,
+                    ),
                 )
                 db.setTransactionSuccessful()
                 return@io

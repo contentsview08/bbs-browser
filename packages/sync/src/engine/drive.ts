@@ -6,7 +6,7 @@ import { toBase64Url, toHex } from '../bytes'
 import { HTTP_IDLE_TIMEOUT_MS, HTTP_TOTAL_TIMEOUT_MS, MAX_RESPONSE_BYTES } from '../config'
 import { openRecords, sealPayload } from '../crypto'
 import { SyncError } from '../errors'
-import { parseHlc } from '../hlc'
+import { compareHlc, parseHlc } from '../hlc'
 import { canonicalJson, parseStrictJson } from '../json'
 import { TOMB_MAX_AGE_MS } from '../rebase'
 import type { RemoteContext, SyncRemote, SyncRemoteFactory } from './remote'
@@ -28,9 +28,27 @@ export const DRIVE_COMPACT_BYTES = 2 * 1024 * 1024
 export const DRIVE_COMPACT_GAP_MS = 24 * 60 * 60 * 1000
 /** スナップショットの 1 部分。本文とメタデータを 1 回で送る multipart(5MB まで)に収める。見出しの分を残す */
 export const DRIVE_SNAP_PART_BYTES = 4 * 1024 * 1024 - 4096
+/**
+ * 自分の最古のファイル(開いているセグメントも)がこれより古くなったら、手元の値で書き直す(2.6)。
+ * tombstone を落とす 90 日より必ず前に、古いファイルに残った「生きている値」を消すため
+ */
+export const DRIVE_REWRITE_AGE_MS = 60 * 24 * 60 * 60 * 1000
+/**
+ * 他人のファイルの最終更新がこれより古ければ、止まった書き手のものと見る。書き直しの 60 日に、たまにしか開かない端末の分の余裕を足す。
+ * tombstone を落とす前に、そのファイルに古い生きた値が残っていないかを確かめる(2.6)
+ */
+export const DRIVE_STALE_MS = 75 * 24 * 60 * 60 * 1000
+/** 容量の超過のとき、送るのを待つ長さ。外しても空かない(ほかのファイルが占めている)ことが多いので、古い閲覧履歴は外さない */
+export const DRIVE_QUOTA_WAIT_MS = 60 * 60 * 1000
+/** 1 回の送信の上限。種まき・作り直し・参加の全件送信は、セグメントを何十回も上書きせずにスナップショットへまとめて書く */
+export const DRIVE_PUSH_RECORDS = 5000
+export const DRIVE_PUSH_BYTES = 8 * 1024 * 1024
 
-const FILE_FIELDS = 'id,name,appProperties,version,size,trashed,createdTime'
-const RATE_REASONS = new Set(['userRateLimitExceeded', 'rateLimitExceeded'])
+const FILE_FIELDS = 'id,name,appProperties,version,size,trashed,createdTime,modifiedTime'
+/** 待てば通る 403(429 と同じ扱い) */
+const RATE_REASONS = new Set(['userRateLimitExceeded', 'rateLimitExceeded', 'dailyLimitExceeded', 'sharingRateLimitExceeded'])
+/** 許可の範囲が足りない。待っても直らないので、ログインし直すまで止める */
+const AUTH_REASONS = new Set(['insufficientPermissions'])
 /** 同期の表を ID で引く 1 回の数。古い Android の SQLite は変数が 999 個まで */
 const ID_CHUNK = 500
 
@@ -40,6 +58,7 @@ export interface DriveFile {
   appProperties?: Record<string, string>
   version?: string
   createdTime?: string
+  modifiedTime?: string
   trashed?: boolean
 }
 
@@ -58,6 +77,8 @@ interface SegState {
   ids: string[]
   v?: number
   bytes?: number
+  /** 最後に書いた時刻。古くなったら書き直す(DRIVE_REWRITE_AGE_MS) */
+  at?: number
 }
 
 /** 閉じたセグメント。まとめ直しで消すまで、中のレコード ID と最後の版を控える */
@@ -67,11 +88,13 @@ interface ClosedSeg {
   v: number
   bytes: number
   ids: string[]
+  /** 最後に書いた時刻。控える前のものは 0(すぐ書き直す) */
+  at?: number
 }
 
 /** 自分のファイルの控え(drive_own)。中身を読み戻さずに、まとめ直しとリベースで使う */
 interface OwnFiles {
-  snap?: { u: number; g: number; files: string[]; ids: string[] }
+  snap?: { u: number; uv?: number; g: number; files: string[]; ids: string[]; at?: number }
   segs: ClosedSeg[]
 }
 
@@ -89,6 +112,8 @@ interface CompactJob {
   done: string[]
   /** 容量の超過で止めたとき、次に試してよい時刻 */
   wait?: number
+  /** 作り始めた時刻。新しいスナップショットの「最後に書いた時刻」にする */
+  at?: number
 }
 
 interface SnapInfo {
@@ -146,6 +171,12 @@ const ok = (res: SyncResponse) => res.status >= 200 && res.status < 300
 /** appProperties の数(10 進の文字列)。形が違えば null */
 const propNum = (s: string | undefined): number | null => (s !== undefined && /^\d{1,15}$/.test(s) ? Number(s) : null)
 const sortedUnique = (ids: Iterable<string>) => [...new Set(ids)].sort()
+const byRecordId = (a: Sealed, b: Sealed) => (a.record_id < b.record_id ? -1 : a.record_id > b.record_id ? 1 : 0)
+/** 最終更新の時刻(ms)。分からなければ null */
+const modified = (f: DriveFile): number | null => {
+  const t = f.modifiedTime === undefined ? NaN : Date.parse(f.modifiedTime)
+  return Number.isFinite(t) ? t : null
+}
 /** 最後の版が分からないセグメント(版を控える前の drive_seg)。読む側が「最後の版まで読んだ」と決めないよう、どの版より大きくする(appProperties の 15 桁に収める) */
 const UNKNOWN_VERSION = 999_999_999_999_999
 
@@ -166,6 +197,7 @@ function driveError(res: SyncResponse): SyncApiError {
   if (res.status === 429) return new SyncApiError('http', 429)
   if (res.status === 403 && RATE_REASONS.has(reason)) return new SyncApiError('http', 429, 'rate_limited')
   if (res.status === 403 && reason === 'storageQuotaExceeded') return new SyncApiError('http', 413, 'quota_exceeded')
+  if (res.status === 403 && AUTH_REASONS.has(reason)) return new SyncApiError('http', 401, 'google_auth_failed')
   if (res.status === 404) return bad()
   // 5xx の理由(backendError など)は画面の言葉にならないので、サーバーと同じく番号で出す
   return new SyncApiError('http', res.status, res.status >= 500 ? '' : reason.slice(0, 64))
@@ -240,6 +272,9 @@ export async function driveUsage(o: DriveRemoteOptions): Promise<number> {
 export class DriveRemote implements SyncRemote {
   readonly pace = null
   readonly needsTicket = false
+  readonly pushWithoutPull = true
+  readonly quotaWaitMs = DRIVE_QUOTA_WAIT_MS
+  readonly pushBatch = { records: DRIVE_PUSH_RECORDS, bytes: DRIVE_PUSH_BYTES }
   private readonly t: SyncTables
 
   constructor(private readonly c: RemoteContext, private readonly o: DriveRemoteOptions) {
@@ -353,6 +388,20 @@ export class DriveRemote implements SyncRemote {
 
   private own(): Promise<OwnFiles> {
     return this.stateJson<OwnFiles>('drive_own', { segs: [] })
+  }
+
+  /** 他人のファイルの最終更新(fileId → ms)。止まった書き手のファイルを見分ける(2.6) */
+  private mtimes(): Promise<Record<string, number>> {
+    return this.stateJson<Record<string, number>>('drive_mtime', {})
+  }
+
+  /** 読んだ・控えを進めたファイルの最終更新を控える */
+  private noteMtimes(mtime: Record<string, number>, files: readonly DriveFile[]): Record<string, number> {
+    for (const f of files) {
+      const m = modified(f)
+      if (m !== null) mtime[f.id] = m
+    }
+    return mtime
   }
 
   /** 同期の表を ID で引く。数が多くても SQL の変数の上限を超えないよう分ける */
@@ -564,7 +613,13 @@ export class DriveRemote implements SyncRemote {
     const c = this.classify(scan.changes, seen, await this.t.state('drive_space'))
     if (c.markerTouched || c.toRead.length > 0) return changed
     for (const id of c.removed) delete seen[id]
-    await this.c.db.batch([setState('drive_token', scan.next), setState('drive_seen', canonicalJson(seen))])
+    const stmts = [setState('drive_token', scan.next), setState('drive_seen', canonicalJson(seen))]
+    const mtime = await this.mtimes()
+    if (c.removed.some((id) => id in mtime)) {
+      for (const id of c.removed) delete mtime[id]
+      stmts.push(setState('drive_mtime', canonicalJson(mtime)))
+    }
+    await this.c.db.batch(stmts)
     return { version: null }
   }
 
@@ -612,9 +667,12 @@ export class DriveRemote implements SyncRemote {
     for (const id of c.removed) delete seen[id]
     for (const f of plan.mark) seen[f.id] = fileVersion(f)
     for (const [id, v] of read.seen) seen[id] = v
+    const mtime = await this.mtimes()
+    for (const id of c.removed) delete mtime[id]
     commit.push(
       setState('drive_token', scan.next),
       setState('drive_seen', canonicalJson(seen)),
+      setState('drive_mtime', canonicalJson(this.noteMtimes(mtime, [...plan.mark, ...plan.read]))),
       setState('drive_read_upto', canonicalJson(this.advance(upto, plan.read))),
       setState('drive_read_at', String(this.c.now())),
     )
@@ -640,6 +698,7 @@ export class DriveRemote implements SyncRemote {
     const commit = [
       setState('drive_token', start),
       setState('drive_seen', canonicalJson(seen)),
+      setState('drive_mtime', canonicalJson(this.noteMtimes({}, [...plan.mark, ...plan.read]))),
       setState('drive_read_upto', canonicalJson(this.advance({}, plan.read))),
       setState('drive_space', m.id),
       setState('drive_read_at', String(this.c.now())),
@@ -667,7 +726,8 @@ export class DriveRemote implements SyncRemote {
 
   /**
    * 開いているセグメントを、今までに入れたレコードの今の値 + 今回の分で上書きする(1 回の送信 = 1 回の書き込み)。
-   * 書き込みはぶつからないので 409 はない。version は since の続きを振り、エンジンが自分の送ったものを読み戻さないようにする
+   * 書き込みはぶつからないので 409 はない。version は since の続きを振り、エンジンが自分の送ったものを読み戻さないようにする。
+   * セグメントに収まらない量(種まき・作り直し・参加の全件)は、スナップショットへまとめて書く
    */
   async pushRecords(_requestId: string, records: Record<string, unknown>[]): Promise<PushResponse> {
     const now = this.c.now()
@@ -675,6 +735,10 @@ export class DriveRemote implements SyncRemote {
     const old = await this.stateJson<SegState>('drive_seg', { n: 0, day: '', file: null, ids: [] })
     let seg = old
     const fresh: Sealed[] = records.map((r) => ({ record_id: r.record_id as string, kind_tag: r.kind_tag, schema_version: r.schema_version, nonce: r.nonce, ciphertext: r.ciphertext }))
+    if (this.segContent(seg.n + 1, fresh).length > DRIVE_SEG_BYTES) {
+      await this.pushBulk(fresh.map((r) => r.record_id), now)
+      return this.pushed(records)
+    }
     const freshIds = new Set(fresh.map((r) => r.record_id))
     let prev: Sealed[] = []
     let close = !(seg.n > 0 && seg.day === day)
@@ -690,7 +754,7 @@ export class DriveRemote implements SyncRemote {
       body = fresh
     }
     // 閉じたセグメントは、まとめ直しで消すまで控える
-    const closed: ClosedSeg | null = seg !== old && old.file !== null ? { n: old.n, file: old.file, v: old.v ?? UNKNOWN_VERSION, bytes: old.bytes ?? 0, ids: old.ids } : null
+    const closed: ClosedSeg | null = seg !== old && old.file !== null ? { n: old.n, file: old.file, v: old.v ?? UNKNOWN_VERSION, bytes: old.bytes ?? 0, ids: old.ids, at: old.at ?? 0 } : null
     let file = seg.file
     let content = this.segContent(seg.n, body)
     let version: number | null = null
@@ -708,29 +772,54 @@ export class DriveRemote implements SyncRemote {
       file = made.id
       version = made.version
     }
-    const stmts = [setState('drive_seg', canonicalJson({ n: seg.n, day: seg.day, file, ids: body.map((r) => r.record_id), v: version as number, bytes: content.length }))]
+    const stmts = [setState('drive_seg', canonicalJson({ n: seg.n, day: seg.day, file, ids: body.map((r) => r.record_id), v: version as number, bytes: content.length, at: now }))]
     if (closed !== null) {
       const own = await this.own()
       stmts.push(setState('drive_own', canonicalJson({ ...own, segs: [...own.segs, closed] })))
     }
     await this.c.db.batch(stmts)
+    return this.pushed(records)
+  }
+
+  /** 全件 200。version は since の続き */
+  private async pushed(records: readonly Record<string, unknown>[]): Promise<PushResponse> {
     const since = Number((await this.t.state('since')) ?? 0)
     return { results: records.map((r, i) => ({ record_id: r.record_id as string, status: 200, version: since + 1 + i })), epoch: await this.knownEpoch(), gc_floor: 0 }
   }
 
-  /** 前に入れたレコードを同期の表の今の値で封をし直す。表にないもの・封ができないものは missing に返す */
-  private async reseal(ids: readonly string[], cut = -1): Promise<{ sealed: Sealed[]; missing: string[]; dropped: boolean }> {
+  /**
+   * 多くを一度に送る。自分のファイル(スナップショット・閉じたセグメント・開いているセグメント)と今回の分を、新しいスナップショットにまとめて書く。
+   * まとめ直しと同じ作り方(作り終えてから古いものを消す)。tombstone は落とさない(g を変えず、ほかの端末をリベースさせない)
+   */
+  private async pushBulk(ids: readonly string[], now: number): Promise<void> {
+    const pending = await this.stateJson<CompactJob | null>('drive_compact', null)
+    if (pending !== null) {
+      // 途中のまとめ直しを先に終える。容量の超過で待っている間は送れない
+      if (pending.wait !== undefined && now < pending.wait) throw new SyncApiError('http', 413, 'quota_exceeded')
+      await this.runJob(pending, null, now)
+      // 前の送信の途中で落ちたものなら、今回の分はもう入っている(値は作ったときの表の値で、送った値と同じか新しい)
+      const covered = new Set(pending.parts.flat())
+      if (ids.every((id) => covered.has(id))) return
+    }
+    const made = await this.newJob(now, { fold: true, extra: ids, cut: -1 })
+    await this.runJob(made.job, made.made, now)
+  }
+
+  /**
+   * 前に入れたレコードを同期の表の今の値で封をし直す。表にないもの・封ができないものは missing に返す。
+   * HLC の壁時計が cut より古い tombstone は封をせず expired に返す(落とすかは呼ぶ側が決める)
+   */
+  private async reseal(ids: readonly string[], cut = -1): Promise<{ sealed: Sealed[]; missing: string[]; expired: Map<string, string> }> {
     const rows = await this.rows(ids)
-    const out = { sealed: [] as Sealed[], missing: [] as string[], dropped: false }
+    const out = { sealed: [] as Sealed[], missing: [] as string[], expired: new Map<string, string>() }
     for (const id of ids) {
       const r = rows.get(id)
       if (!r) {
         out.missing.push(id)
         continue
       }
-      // 期限の切れた tombstone は落とす(2.6)
       if (isDeleted(r.payload) && parseHlc(r.payload.hlc).wall < cut) {
-        out.dropped = true
+        out.expired.set(id, r.payload.hlc)
         continue
       }
       try {
@@ -767,7 +856,7 @@ export class DriveRemote implements SyncRemote {
     try {
       await this.compact()
     } catch (e) {
-      // 容量の超過: 作るのに容量が要るので、1 日は試さない。送信の側の「古い閲覧履歴を外す」が先に効く
+      // 容量の超過: 作るのに容量が要るので、1 日は試さない
       if (e instanceof SyncApiError && e.kind === 'http' && e.status === 413) {
         const job = await this.stateJson<CompactJob | null>('drive_compact', null)
         const wait = this.c.now() + DRIVE_COMPACT_GAP_MS
@@ -780,29 +869,60 @@ export class DriveRemote implements SyncRemote {
     }
   }
 
+  /**
+   * まとめ直す条件(2.5・2.6): 閉じたセグメントが溜まった、または自分の最古のファイルが DRIVE_REWRITE_AGE_MS より古い。
+   * 古いときは開いているセグメントも閉じて入れ、古いファイルに残った値を手元の今の値で書き直す
+   */
   private async compact(): Promise<void> {
     const now = this.c.now()
-    let job = await this.stateJson<CompactJob | null>('drive_compact', null)
-    let made: Map<string, Sealed> | null = null
-    if (job === null) {
-      const own = await this.own()
-      const bytes = own.segs.reduce((n, s) => n + s.bytes, 0)
-      if (own.segs.length === 0 || (own.segs.length < DRIVE_COMPACT_SEGS && bytes < DRIVE_COMPACT_BYTES)) return
-      if (now - Number((await this.t.state('drive_compact_at')) ?? 0) < DRIVE_COMPACT_GAP_MS) return
-      const last = own.segs.reduce((a, s) => (s.n > a.n ? s : a))
-      const del = [...(own.snap?.files ?? []), ...own.segs.map((s) => s.file)]
-      const cut = now - TOMB_MAX_AGE_MS
-      const built = await this.snapRecords(sortedUnique([...(own.snap?.ids ?? []), ...own.segs.flatMap((s) => s.ids)]), del, cut)
-      job = { u: last.n, uv: last.v, g: built.dropped ? cut : (own.snap?.g ?? 0), cut, del, parts: splitParts(built.records).map((p) => p.map((r) => r.record_id)), done: [] }
-      // 部分の分け方を先に置く。途中で落ちても、作り終えた部分を作り直さずに続きから作れる
-      await this.c.db.batch([setState('drive_compact', canonicalJson(job))])
-      made = new Map(built.records.map((r) => [r.record_id, r]))
-    } else if (job.wait !== undefined && now < job.wait) {
+    const job = await this.stateJson<CompactJob | null>('drive_compact', null)
+    if (job !== null) {
+      if (job.wait === undefined || now >= job.wait) await this.runJob(job, null, now)
       return
     }
+    const own = await this.own()
+    const seg = await this.stateJson<SegState | null>('drive_seg', null)
+    const bytes = own.segs.reduce((n, s) => n + s.bytes, 0)
+    const byCount = own.segs.length > 0 && (own.segs.length >= DRIVE_COMPACT_SEGS || bytes >= DRIVE_COMPACT_BYTES)
+    const ages = [...(own.snap ? [own.snap.at ?? 0] : []), ...own.segs.map((s) => s.at ?? 0), ...(seg !== null && seg.file !== null ? [seg.at ?? 0] : [])]
+    const byAge = ages.length > 0 && Math.min(...ages) < now - DRIVE_REWRITE_AGE_MS
+    if (!byCount && !byAge) return
+    if (now - Number((await this.t.state('drive_compact_at')) ?? 0) < DRIVE_COMPACT_GAP_MS) return
+    const made = await this.newJob(now, { fold: byAge, cut: now - TOMB_MAX_AGE_MS })
+    await this.runJob(made.job, made.made, now)
+  }
+
+  /**
+   * まとめ直しの計画を作って置く。部分の分け方を先に置くので、途中で落ちても作り終えた部分を作り直さずに続きから作れる。
+   * fold は開いているセグメントも閉じて入れる(次の送信は新しい通番で作る)。extra は今回送る分
+   */
+  private async newJob(now: number, o: { fold: boolean; extra?: readonly string[]; cut: number }): Promise<{ job: CompactJob; made: Map<string, Sealed> }> {
+    const own = await this.own()
+    const seg = await this.stateJson<SegState | null>('drive_seg', null)
+    const segs = [...own.segs]
+    const stmts: SqlStatement[] = []
+    if (o.fold && seg !== null && seg.file !== null) segs.push({ n: seg.n, file: seg.file, v: seg.v ?? UNKNOWN_VERSION, bytes: seg.bytes ?? 0, ids: seg.ids, at: seg.at ?? 0 })
+    const last = segs.length > 0 ? segs.reduce((a, s) => (s.n > a.n ? s : a)) : null
+    // 入れるセグメントがない(スナップショットだけ)ときは、使っていない通番を 1 つ取って、読む側が前のスナップショットと混ぜないようにする
+    const u = last !== null ? last.n : Math.max(seg?.n ?? 0, own.snap?.u ?? 0) + 1
+    const uv = last !== null ? last.v : 0
+    if (o.fold) {
+      stmts.push(setState('drive_seg', canonicalJson({ n: Math.max(seg?.n ?? 0, u), day: '', file: null, ids: [] })), setState('drive_own', canonicalJson({ ...own, segs })))
+    }
+    const del = [...(own.snap?.files ?? []), ...segs.map((s) => s.file)]
+    const built = await this.snapRecords(sortedUnique([...(own.snap?.ids ?? []), ...segs.flatMap((s) => s.ids), ...(o.extra ?? [])]), del, o.cut)
+    const job: CompactJob = { u, uv, g: built.dropped ? o.cut : (own.snap?.g ?? 0), cut: o.cut, del, parts: splitParts(built.records).map((p) => p.map((r) => r.record_id)), done: [], at: now }
+    await this.c.db.batch([...stmts, setState('drive_compact', canonicalJson(job))])
+    return { job, made: new Map(built.records.map((r) => [r.record_id, r])) }
+  }
+
+  /** 部分を作り、作り終えてから古いものを消す(どこにもない瞬間を作らない)。made がなければ(続きから)同期の表の今の値で封をする */
+  private async runJob(start: CompactJob, made: Map<string, Sealed> | null, now: number): Promise<void> {
+    let job = start
     for (let i = job.done.length; i < job.parts.length; i++) {
       const ids = job.parts[i]
-      const records = made !== null ? ids.flatMap((id) => made.get(id) ?? []) : (await this.snapRecords(ids, job.del, job.cut)).records
+      // 続きから作るときは落とさない(残すと決めた tombstone も部分に入っている)
+      const records = made !== null ? ids.flatMap((id) => made.get(id) ?? []) : (await this.snapRecords(ids, job.del, -1)).records
       const p = `${i + 1}/${job.parts.length}`
       const f = await this.createFile(
         { name: `${this.prefix()}.${this.c.deviceId}.snap.${job.u}.${i + 1}of${job.parts.length}`, appProperties: { f: String(DRIVE_FORMAT), s: this.c.spaceId, t: 'snap', d: this.c.deviceId, u: String(job.u), uv: String(job.uv), g: String(job.g), p } },
@@ -812,52 +932,90 @@ export class DriveRemote implements SyncRemote {
       delete job.wait
       await this.c.db.batch([setState('drive_compact', canonicalJson(job))])
     }
-    // 作り終えてから古いものを消す。どこにもない瞬間を作らない
     for (const id of job.del) await this.deleteFile(id)
     const own = await this.own()
     const u = job.u
-    const next: OwnFiles = { snap: { u, g: job.g, files: job.done, ids: job.parts.flat() }, segs: own.segs.filter((s) => s.n > u) }
+    const next: OwnFiles = { snap: { u, uv: job.uv, g: job.g, files: job.done, ids: job.parts.flat(), at: job.at ?? now }, segs: own.segs.filter((s) => s.n > u) }
     await this.c.db.batch([setState('drive_own', canonicalJson(next)), delState('drive_compact'), setState('drive_compact_at', String(now))])
   }
 
   /**
    * スナップショットに入れるレコード。同期の表の今の値で封をし、期限の切れた tombstone を落とす。
-   * 表にないもの(権限系を切った・手元で期限が切れた)は、古い自分のファイルから暗号文のまま引き継ぐ(切った端末が Drive から消さないように)
+   * 表にないもの(権限系を切った・手元で期限が切れた)は、古い自分のファイルから暗号文のまま引き継ぐ(切った端末が Drive から消さないように)。
+   * 止まった書き手のファイルに古い生きた値が残っている tombstone は落とさない(staleLive)。dropped は本当に落としたときだけ立つ(g を進める)
    */
   private async snapRecords(ids: readonly string[], oldFiles: readonly string[], cut: number): Promise<{ records: Sealed[]; dropped: boolean }> {
     const r = await this.reseal(ids, cut)
-    let dropped = r.dropped
     const records = r.sealed
+    /** 落とす候補。表にない分は古いファイルの暗号文を持つ */
+    const expired = new Map<string, { hlc: string; sealed: Sealed | null }>([...r.expired].map(([id, hlc]) => [id, { hlc, sealed: null }]))
+    let added = false
     if (r.missing.length > 0) {
       const old = new Map<string, Sealed>()
       // 後のファイル(新しいセグメント)の値で上書きする
       for (const id of oldFiles) {
         const body = await this.download(id)
-        for (const x of (body === null ? null : this.parseOwn(body)) ?? []) old.set(x.record_id, x)
+        for (const x of body === null ? [] : this.parseOwn(body)) old.set(x.record_id, x)
       }
       for (const id of r.missing) {
         const x = old.get(id)
         const opened = x === undefined ? null : openRecords(this.c.keys, this.c.spaceId, [{ ...x, version: 0 }]).records[0]
-        if (x === undefined || opened === undefined || opened === null || (isDeleted(opened.payload) && parseHlc(opened.payload.hlc).wall < cut)) {
-          dropped = true
+        // どこにもない・開けないものは捨てるだけ(tombstone を落としたのではないので g は進めない)
+        if (x === undefined || opened === undefined || opened === null) continue
+        if (isDeleted(opened.payload) && parseHlc(opened.payload.hlc).wall < cut) {
+          expired.set(id, { hlc: opened.payload.hlc, sealed: x })
           continue
         }
         records.push(x)
+        added = true
       }
-      records.sort((a, b) => (a.record_id < b.record_id ? -1 : a.record_id > b.record_id ? 1 : 0))
     }
+    let dropped = false
+    if (expired.size > 0) {
+      const keep = await this.staleLive(new Map([...expired].map(([id, e]) => [id, e.hlc])))
+      const again = await this.reseal([...keep].filter((id) => expired.get(id)?.sealed === null).sort())
+      records.push(...again.sealed, ...[...keep].flatMap((id) => expired.get(id)?.sealed ?? []))
+      added ||= keep.size > 0
+      dropped = expired.size > keep.size
+    }
+    if (added) records.sort(byRecordId)
     return { records, dropped }
   }
 
-  /** 自分のファイルの中身。形が違えば null */
-  private parseOwn(body: string): Sealed[] | null {
+  /**
+   * 落とそうとしている tombstone(record_id → HLC)のうち、止まった書き手のファイル(最終更新が DRIVE_STALE_MS より前)に、
+   * それより古い生きた値が残っているもの。落とすと、そのファイルを読む新しい端末・リベースした端末で消したものが戻る(2.6)。
+   * 動いている書き手は DRIVE_REWRITE_AGE_MS ごとに手元の値で書き直すので確かめない。止まった書き手のファイルだけをダウンロードする
+   */
+  private async staleLive(drops: Map<string, string>): Promise<Set<string>> {
+    const keep = new Set<string>()
+    const limit = this.c.now() - DRIVE_STALE_MS
+    const stale = Object.entries(await this.mtimes()).filter(([, m]) => m < limit).map(([id]) => id).sort()
+    for (const id of stale) {
+      const body = await this.download(id)
+      const hits = (body === null ? [] : this.parseRecords(body, null)).filter((x) => drops.has(x.record_id) && !keep.has(x.record_id))
+      if (hits.length === 0) continue
+      for (const o of openRecords(this.c.keys, this.c.spaceId, hits.map((x) => ({ ...x, version: 0 }))).records) {
+        if (!isDeleted(o.payload) && compareHlc(o.payload.hlc, drops.get(o.record_id) as string) < 0) keep.add(o.record_id)
+      }
+    }
+    return keep
+  }
+
+  /** 自分のファイルの中身。形が違えば空 */
+  private parseOwn(body: string): Sealed[] {
+    return this.parseRecords(body, this.c.deviceId)
+  }
+
+  /** ファイルの中身のレコード。device が null なら書き手を問わない。形が違えば空 */
+  private parseRecords(body: string, device: string | null): Sealed[] {
     let v: unknown
     try {
       v = parseStrictJson(body)
     } catch {
-      return null
+      return []
     }
-    if (!isObject(v) || v.obbsync !== DRIVE_FORMAT || v.space !== this.c.spaceId || v.device !== this.c.deviceId || !Array.isArray(v.records)) return null
+    if (!isObject(v) || v.obbsync !== DRIVE_FORMAT || v.space !== this.c.spaceId || (device !== null && v.device !== device) || !Array.isArray(v.records)) return []
     return v.records.flatMap((r) => (isObject(r) && typeof r.record_id === 'string' ? [{ record_id: r.record_id, kind_tag: r.kind_tag, schema_version: r.schema_version, nonce: r.nonce, ciphertext: r.ciphertext }] : []))
   }
 

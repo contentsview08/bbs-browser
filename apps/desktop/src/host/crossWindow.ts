@@ -69,17 +69,19 @@ export function onBroadcast<T>(event: string, cb: (payload: T) => void): Promise
 // ── 道具のウィンドウ → メイン の頼みごと ──
 
 export interface MainRpcRequest {
-  id: number
+  id: string
   from: string
   kind: string
   payload: unknown
 }
-type MainRpcDone = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string }
-let rpcSeq = 0
+type MainRpcDone = { id: string; ok: true; result: unknown } | { id: string; ok: false; error: string }
 
-/** メインに頼んで、結果をもらう */
+/**
+ * メインに頼んで、結果をもらう。
+ * listen() はほかの窓宛ての返事も受けるので、id は窓ごとの連番にせず乱数にする(設定と NG の窓の頼みごとが同じ番号で入れ違わないように)
+ */
 export async function callMain<T>(kind: string, payload?: unknown): Promise<T> {
-  const id = ++rpcSeq
+  const id = crypto.randomUUID()
   let settle!: (done: MainRpcDone) => void
   const result = new Promise<T>((resolve, reject) => {
     settle = (d) => (d.ok ? resolve(d.result as T) : reject(new Error(d.error)))

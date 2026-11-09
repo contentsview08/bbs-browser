@@ -16,6 +16,8 @@ import type { SyncRemoteFactory } from './remote'
 import { checkServerUrl, SyncApiError, ticketSpaceId, type SyncTransport } from './transport'
 
 export const PAIRING_SHOW_MS = 60_000
+/** 参加の確認のためにトークンを置いた印(同期の表の外の控え)。答えずに終わったら次の起動で消す */
+const ADOPTED = 'google_adopted'
 /** 参加で手元を送る前の確認の種類 */
 export const JOIN_DATA_CONFIRM = 'join_data'
 
@@ -146,6 +148,8 @@ export class SyncController {
   private serverChecked = false
   /** 同期の間隔。時計(SyncScheduler)が同期で読むので手元に持つ */
   private intervalId: SyncIntervalId = DEFAULT_SYNC_INTERVAL
+  /** このビルドで Google ドライブを使えるか(クライアントが入っているか)。起動の間は変わらないので 1 回だけ聞く */
+  private driveOk: boolean | null = null
 
   constructor(private readonly deps: SyncControllerDeps) {
     this.t = new SyncTables(deps.db)
@@ -159,8 +163,21 @@ export class SyncController {
     return (await this.overrideUrl()) ?? this.deps.defaultServerUrl
   }
 
-  private store(): SyncStore {
-    return this.deps.drive ? 'drive' : 'server'
+  /** Drive を渡され、ビルドにクライアントが入っているか。入っていない版(CI のリリースに入れ忘れたなど)ではサーバーのまま動かす */
+  private async driveUsable(): Promise<boolean> {
+    if (!this.deps.drive) return false
+    this.driveOk ??= await this.deps.drive.unavailable().then((why) => why === null, () => false)
+    return this.driveOk
+  }
+
+  /**
+   * Drive を渡された端末は drive。ただしサーバーで使っている端末は、ビルドにクライアントがなければサーバーのまま動かす
+   * (Drive へ移すと始められない)。使っていない端末は drive(始めるのも参加も Drive。使えなければ理由を返す)
+   */
+  private async store(): Promise<SyncStore> {
+    if (!this.deps.drive) return 'server'
+    if ((await this.t.state('store')) === 'drive' || !(await this.isEnabled())) return 'drive'
+    return (await this.driveUsable()) ? 'drive' : 'server'
   }
 
   private async needDrive(): Promise<DriveAuth> {
@@ -187,7 +204,7 @@ export class SyncController {
   }
 
   private async ensureEngine(): Promise<SyncEngine> {
-    const store = this.store()
+    const store = await this.store()
     // Drive の置き場では URL を使わないが、置き場が替わったらエンジンを作り直す
     const url = store === 'drive' ? 'drive:' : await this.serverUrl()
     if (this.engineValue === null || this.engineUrl !== url) {
@@ -211,8 +228,16 @@ export class SyncController {
       this.serverChecked = true
       this.intervalId = parseInterval(await this.t.state('interval'))
       await this.retireServer(this.engineValue)
+      await this.forgetAdopted()
     }
     return this.engineValue
+  }
+
+  /** 参加の確認に答えずに終わったとき、確かめるために置いたトークンが残る。次の起動で消す */
+  private async forgetAdopted(): Promise<void> {
+    if ((await this.t.state(ADOPTED)) === null) return
+    if (!(await this.isEnabled())) await this.deps.drive?.forget().catch(() => undefined)
+    await this.deps.db.batch([delState(ADOPTED)])
   }
 
   /**
@@ -220,11 +245,13 @@ export class SyncController {
    * 手元のデータは消さない。スイッチはそのまま残し、Google で始め直す案内を最後のエラーに出す
    */
   private async retireServer(engine: SyncEngine): Promise<void> {
-    if (!this.deps.drive || !(await this.isEnabled()) || (await this.t.state('store')) === 'drive') return
+    if (!(await this.driveUsable()) || !(await this.isEnabled()) || (await this.t.state('store')) === 'drive') return
     const on = await this.isMasterOn()
+    // 種類ごとのスイッチは端末の好みなので、やめても残す(Google で始め直したときに既定へ戻らないように)
+    const kinds = await this.t.state('kinds')
     await engine.leave()
     this.spaceHead = null
-    await this.deps.db.batch([setState('master', on ? '1' : '0'), setState('last_error', 'server_sync_ended')])
+    await this.deps.db.batch([setState('master', on ? '1' : '0'), setState('last_error', 'server_sync_ended'), ...(kinds !== null ? [setState('kinds', kinds)] : [])])
   }
 
   private async isEnabled(): Promise<boolean> {
@@ -276,7 +303,7 @@ export class SyncController {
     const master = await this.isMasterOn()
     const rawConfirm = await this.t.state('pending_confirm')
     const lastError = await this.t.state('last_error')
-    const store = this.store()
+    const store = await this.store()
     // 切っている間は鍵保管を開かない
     if (enabled && master && this.spaceHead === null) {
       const m = await this.deps.keyStore.load().catch(() => null)
@@ -305,7 +332,7 @@ export class SyncController {
   /** 同期を始める。1 台目は K を作り、窓を閉じたら捨てる。止まっている領域は同じ K で確認を通し直す */
   async start(): Promise<CycleResult> {
     if (!(await this.isMasterOn())) throw new SyncHostError('sync_off')
-    if (this.store() === 'drive') return this.startDrive()
+    if ((await this.store()) === 'drive') return this.startDrive()
     const url = checkServerUrl(await this.serverUrl(), this.deps.allowLocalhost)
     const material = await this.loadKeys()
     const resuming = material !== null && (await this.isEnabled())
@@ -346,7 +373,8 @@ export class SyncController {
 
   /** Google ドライブで使っている量(バイト)。Drive で使っている間だけ。周とは別に 1 回 files.list を辿るので、画面を開いたときと同期の後だけ呼ぶ */
   async driveUsage(): Promise<number | null> {
-    if (this.store() !== 'drive' || !(await this.isEnabled()) || !(await this.isMasterOn())) return null
+    // 止まっている(ログインし直しを待つ)間は呼ばない。取り直しに失敗するだけなので
+    if ((await this.store()) !== 'drive' || !(await this.isEnabled()) || !(await this.isMasterOn()) || (await this.t.state('phase')) === 'blocked') return null
     return (await this.needDrive()).remote.usage()
   }
 
@@ -355,7 +383,7 @@ export class SyncController {
     if (!(await this.isEnabled())) throw new SyncHostError('already_on')
     const m = await this.loadKeys()
     if (m === null) throw new SyncHostError('key_store_unavailable')
-    if (this.store() === 'drive') {
+    if ((await this.store()) === 'drive') {
       const refreshToken = await (await this.needDrive()).pairingToken()
       return { code: encodeDrivePairingCode({ k: m.k, refreshToken }), showMs: PAIRING_SHOW_MS }
     }
@@ -369,7 +397,7 @@ export class SyncController {
    */
   async join(code: string): Promise<CycleResult> {
     if (!(await this.isMasterOn())) throw new SyncHostError('sync_off')
-    if (this.store() === 'drive') return this.joinDrive(code)
+    if ((await this.store()) === 'drive') return this.joinDrive(code)
     if (await this.isEnabled()) throw new SyncHostError('already_on')
     const c = parsePairingCode(code, this.deps.allowLocalhost)
     await this.loadKeys()
@@ -386,6 +414,7 @@ export class SyncController {
 
   /**
    * obb2 で参加する(docs/sync-drive.md 5.5)。先にトークンを Google に確かめ、アカウントを確認に出す。
+   * 手元が空でも確認を出す(どの Google アカウントの同期に入るかを、参加の前に見せる)。
    * 使っている最中でも、K が同じならトークンだけを置き直す(5.7 の配り直し。同期の表はそのまま)
    */
   private async joinDrive(code: string): Promise<CycleResult> {
@@ -401,18 +430,18 @@ export class SyncController {
     await this.loadKeys()
     this.pendingJoin = null
     const { account, email } = await d.adopt(c.refreshToken, null)
+    // 答えずに終わったら、次の起動で置いたトークンを消す(forgetAdopted)
+    await this.deps.db.batch([setState(ADOPTED, '1')])
     const ctx: AdapterContext = { keys: deriveKeys(c.k), deviceId: '', now: this.deps.now() }
-    if (await hasLocalData(this.deps.db, this.deps.adapters, ctx, this.deps.presetUrls ?? [])) {
-      const confirm: SyncConfirm = { type: JOIN_DATA_CONFIRM, lost: 0, host: null, account: email || null }
-      this.pendingJoin = { kind: 'drive', k: c.k, account, confirm }
-      return { state: 'confirm', pulled: 0, pushed: 0, conflicts: 0, applied: {}, dropped: [], confirm }
-    }
-    return this.finishDriveJoin(c.k, account)
+    const data = await hasLocalData(this.deps.db, this.deps.adapters, ctx, this.deps.presetUrls ?? [])
+    const confirm: SyncConfirm = { type: JOIN_DATA_CONFIRM, lost: 0, host: null, account: email || null, data }
+    this.pendingJoin = { kind: 'drive', k: c.k, account, confirm }
+    return { state: 'confirm', pulled: 0, pushed: 0, conflicts: 0, applied: {}, dropped: [], confirm }
   }
 
   private async finishDriveJoin(k: Uint8Array, account: string): Promise<CycleResult> {
     await this.pair(k, null)
-    await this.deps.db.batch([setState('store', 'drive'), setState('google_account', account)])
+    await this.deps.db.batch([setState('store', 'drive'), setState('google_account', account), delState(ADOPTED)])
     this.spaceHead = spaceId(deriveKeys(k).auth_token).slice(0, 12)
     return this.run(true)
   }
@@ -472,8 +501,9 @@ export class SyncController {
   async autoEnabled(): Promise<boolean> {
     if ((await this.t.state('master')) === '0') return false
     const on = (await this.isEnabled()) || this.deps.keyHint()
-    // 起動して最初のきっかけの前に、選んだ間隔を読み、サーバーで使っていた端末を戻す(時計が既定の間隔で 1 回動かないように)
-    if (on && !this.serverChecked) {
+    // 起動して最初のきっかけの前に、選んだ間隔を読み、サーバーで使っていた端末を戻す(時計が既定の間隔で 1 回動かないように)。
+    // 参加の確認に答えずに終わった端末も、置いたトークンを消すためにここで見る
+    if (!this.serverChecked && (on || (await this.t.state(ADOPTED)) !== null)) {
       await this.engine()
       return (await this.isEnabled()) || this.deps.keyHint()
     }
@@ -521,7 +551,10 @@ export class SyncController {
       this.pendingJoin = null
       if (choice === 'keep_local') {
         // 確かめるために置いたトークンを残さない
-        if (join.kind === 'drive') await this.deps.drive?.forget()
+        if (join.kind === 'drive') {
+          await this.deps.drive?.forget()
+          await this.deps.db.batch([delState(ADOPTED)])
+        }
         return { state: 'off', pulled: 0, pushed: 0, conflicts: 0, applied: {}, dropped: [] }
       }
       return join.kind === 'drive' ? this.finishDriveJoin(join.k, join.account) : this.finishJoin(join.code)

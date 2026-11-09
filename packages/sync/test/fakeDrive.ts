@@ -13,6 +13,8 @@ export interface FakeDriveFile {
   appProperties: Record<string, string>
   version: number
   createdTime: string
+  /** 最後に中身か appProperties を書いた時刻。止まった書き手のファイルを見分けるのに使う */
+  modifiedTime: string
   content: string
 }
 
@@ -61,7 +63,7 @@ export class FakeDrive {
   }
 
   private meta(f: FakeDriveFile): Record<string, unknown> {
-    return { kind: 'drive#file', id: f.id, name: f.name, appProperties: { ...f.appProperties }, version: String(f.version), size: String(utf8Bytes(f.content)), createdTime: f.createdTime, trashed: false }
+    return { kind: 'drive#file', id: f.id, name: f.name, appProperties: { ...f.appProperties }, version: String(f.version), size: String(utf8Bytes(f.content)), createdTime: f.createdTime, modifiedTime: f.modifiedTime, trashed: false }
   }
 
   private usedBytes(): number {
@@ -97,6 +99,7 @@ export class FakeDrive {
       if (f.appProperties.t !== 'space') continue
       f.appProperties = { ...f.appProperties, e: `bumped${this.seq}` }
       f.version++
+      f.modifiedTime = new Date(this.now()).toISOString()
       this.bump(f.id)
     }
   }
@@ -110,6 +113,7 @@ export class FakeDrive {
     if (f) {
       f.content = content
       f.version++
+      f.modifiedTime = new Date(this.now()).toISOString()
       this.bump(f.id)
     } else {
       this.create({ name: `obbsync1.${spaceId.slice(0, 16)}.${device}.seg.1`, parents: ['appDataFolder'], appProperties: { f: '1', s: spaceId, t: 'seg', d: device, n: '1' } }, content)
@@ -146,6 +150,7 @@ export class FakeDrive {
       appProperties: { ...(meta.appProperties as Record<string, string> | undefined) },
       version: 1,
       createdTime: new Date(this.now()).toISOString(),
+      modifiedTime: new Date(this.now()).toISOString(),
       content,
     }
     this.files.set(f.id, f)
@@ -278,6 +283,7 @@ export class FakeDrive {
     if (props !== undefined) f.appProperties = { ...f.appProperties, ...(props as Record<string, string>) }
     f.content = content
     f.version++
+    f.modifiedTime = new Date(this.now()).toISOString()
     this.bump(f.id)
     return json(200, this.meta(f))
   }

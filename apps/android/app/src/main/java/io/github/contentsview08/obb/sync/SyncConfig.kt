@@ -3,6 +3,11 @@ package io.github.contentsview08.obb.sync
 // 端末の同期の定数。PC 版の packages/sync/src/config.ts と packages/conformance/sync-config.json で揃える
 object SyncConfig {
     const val SCHEMA_VERSION = 1L
+    /**
+     * 同期サーバー(packages/sync/server-url.json の default と同じ)。Google のクライアントの入っていない版で、
+     * サーバーで使っていた端末をそのまま動かすときだけ使う
+     */
+    const val SERVER_URL = "https://sync.red-edge.net"
     const val PULL_MIN_GAP_MS = 10_000L
     /** 履歴の画面に出す件数 */
     const val HISTORY_SHOWN = 300

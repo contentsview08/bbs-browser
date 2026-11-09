@@ -90,7 +90,9 @@ class SyncQrReadTest {
         val second = Device(google) { clock }
         assertFalse(second.ctl.status().enabled)
         val read = readSyncQr(codeA, enabled = false, space = null) as SyncQrRead.Join
-        second.ctl.join(read.code)
+        // 手元が空でも Google アカウントを確かめる
+        assertEquals("confirm", second.ctl.join(read.code).state)
+        second.ctl.resolveConfirm("accept_removal")
         val st = second.ctl.status()
         assertTrue(st.enabled)
         assertEquals(first.ctl.status().space, st.space)
@@ -105,6 +107,7 @@ class SyncQrReadTest {
     @Test fun 別の領域へ移ると手元を残して新しい領域につながる() = runBlocking {
         val a = Device(google) { clock }
         a.ctl.join(codeA)
+        a.ctl.resolveConfirm("accept_removal")
         val b = Device(google) { clock }
         b.ops.setFavoriteThreadNow(thread("2"), "t2", true, clock)
         b.ctl.join(codeB)
@@ -117,6 +120,7 @@ class SyncQrReadTest {
         a.ctl.leave()
         a.ctl.setMaster(true)
         a.ctl.join(read.code)
+        a.ctl.resolveConfirm("accept_removal")
 
         val moved = a.ctl.status()
         assertTrue(moved.enabled)

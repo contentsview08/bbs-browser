@@ -26,7 +26,8 @@ object DriveUnits {
     const val DOWNLOAD = 200
 }
 
-class FakeDriveFile(val id: String, val name: String, val parents: List<String>, var appProperties: Map<String, String>, var version: Long, val createdTime: String, var content: String)
+/** modifiedTime は最後に中身か appProperties を書いた時刻。止まった書き手のファイルを見分けるのに使う */
+class FakeDriveFile(val id: String, val name: String, val parents: List<String>, var appProperties: Map<String, String>, var version: Long, val createdTime: String, var content: String, var modifiedTime: String = createdTime)
 
 private fun json(status: Int, v: Any?) = SyncResponse(status, canonicalJson(v), mapOf("Content-Type" to "application/json"))
 
@@ -62,7 +63,7 @@ class FakeDrive(private val now: () -> Long) {
 
     private fun meta(f: FakeDriveFile) = linkedMapOf(
         "kind" to "drive#file", "id" to f.id, "name" to f.name, "appProperties" to f.appProperties, "version" to f.version.toString(),
-        "size" to utf8Bytes(f.content).toString(), "createdTime" to f.createdTime, "trashed" to false,
+        "size" to utf8Bytes(f.content).toString(), "createdTime" to f.createdTime, "modifiedTime" to f.modifiedTime, "trashed" to false,
     )
 
     private fun usedBytes() = files.values.sumOf { utf8Bytes(it.content).toLong() }
@@ -90,6 +91,7 @@ class FakeDrive(private val now: () -> Long) {
             if (f.appProperties["t"] != "space") continue
             f.appProperties = f.appProperties + ("e" to "bumped$seq")
             f.version++
+            f.modifiedTime = ISO.format(Instant.ofEpochMilli(now()))
             bump(f.id)
         }
     }
@@ -104,6 +106,7 @@ class FakeDrive(private val now: () -> Long) {
         if (f != null) {
             f.content = content
             f.version++
+            f.modifiedTime = ISO.format(Instant.ofEpochMilli(now()))
             bump(f.id)
         } else {
             create(mapOf("name" to "obbsync1.${spaceId.take(16)}.$device.seg.1", "parents" to listOf("appDataFolder"), "appProperties" to mapOf("f" to "1", "s" to spaceId, "t" to "seg", "d" to device, "n" to "1")), content)
@@ -271,6 +274,7 @@ class FakeDrive(private val now: () -> Long) {
         if (props != null) f.appProperties = f.appProperties + (props as Map<String, String>)
         f.content = content
         f.version++
+        f.modifiedTime = ISO.format(Instant.ofEpochMilli(now()))
         bump(f.id)
         return json(200, meta(f))
     }

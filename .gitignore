@@ -13,3 +13,6 @@ apps/sync-server/.wrangler/
 apps/sync-server/.dev.vars
 # 管理 API の秘密鍵
 *.pem
+# Google の OAuth クライアント(OBB_GOOGLE_OAUTH_FILE が指すファイル・コンソールから落とした JSON)。リポジトリに入れない
+*.env
+client_secret_*.json

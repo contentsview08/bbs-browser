@@ -17,6 +17,18 @@ interface SyncRemote {
     /** 領域を作るのに許可証が要るか。要らない置き場では、許可証がなくても止まらずに作る */
     val needsTicket: Boolean
 
+    /**
+     * 送る前に読まなくてよいか。Drive は書き込みがぶつからない(409 がない)ので、送るだけの周で変更の一覧とダウンロードを省く。
+     * サーバーは 409 を減らすため、送る前に読む
+     */
+    val pushWithoutPull: Boolean get() = false
+
+    /** 容量を超えたとき、外さずに待つ長さ(ms)。null なら古い閲覧履歴から外す(サーバーの 10MB の枠) */
+    val quotaWaitMs: Long? get() = null
+
+    /** 1 回の送信に入れる上限。null なら SyncConfig.PUSH_BATCH_RECORDS・PUSH_BATCH_BYTES */
+    val pushBatch: PushBatch? get() = null
+
     /** 変化の確認。変化がなければ version が null(304 と同じ) */
     suspend fun head(etag: String?): HeadResult
 
@@ -31,6 +43,8 @@ interface SyncRemote {
     /** 周が通った最後に呼ぶ片づけ(Drive のまとめ直しなど)。失敗は周の失敗にする */
     suspend fun maintain() {}
 }
+
+class PushBatch(val records: Int, val bytes: Long)
 
 class RemoteContext(val db: SyncSql, val keys: SyncKeys, val spaceId: String, val deviceId: String, val now: () -> Long)
 

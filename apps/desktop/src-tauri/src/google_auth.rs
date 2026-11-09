@@ -164,14 +164,15 @@ async fn exchange(ep: &Endpoints, c: &Client, code: &str, verifier: &str, redire
     tokens_of(&r).ok_or_else(|| LOGIN_FAILED.to_string())
 }
 
-/// 更新用のトークンが使えない(期限切れ・取り消し・100 本を超えた)ときは google_auth_failed。ログインし直すしかない
+/// 更新用のトークンが使えない(期限切れ・取り消し・100 本を超えた)ときは google_auth_failed。ログインし直すしかない。
+/// 429 と 5xx だけを待てば通るもの(server)にする。ほかの 4xx(invalid_request・invalid_scope など)は送り直しても同じ答えなので、
+/// 叩き続けずに止める側(google_auth_failed)へ寄せる
 async fn refresh(ep: &Endpoints, c: &Client, refresh_token: &str) -> Result<Tokens, String> {
     let r = post_form(&ep.token, &[("refresh_token", refresh_token), ("client_id", c.id), ("client_secret", c.secret), ("grant_type", "refresh_token")]).await?;
     if let Some(t) = tokens_of(&r) {
         return Ok(t);
     }
-    let error = str_of(&r.body, "error").unwrap_or_default();
-    if matches!(r.status, 400 | 401) && matches!(error.as_str(), "invalid_grant" | "unauthorized_client" | "invalid_client") {
+    if (400..500).contains(&r.status) && r.status != 429 {
         return Err(AUTH_FAILED.into());
     }
     Err("server".into())
@@ -621,6 +622,8 @@ mod tests {
             fail("400 Bad Request", r#"{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"#),
             fail("503 Service Unavailable", "{}"),
             ok(r#"{"access_token":"at3","expires_in":3599,"refresh_token":"rt-new"}"#, ""),
+            fail("400 Bad Request", r#"{"error":"invalid_request"}"#),
+            fail("429 Too Many Requests", "{}"),
         ]);
         let e = ep(&base);
         let r = |rt: &'static str| tauri::async_runtime::block_on(refresh(&e, &C, rt));
@@ -629,6 +632,9 @@ mod tests {
         assert_eq!(r("rt1").unwrap_err(), "google_auth_failed");
         assert_eq!(r("rt1").unwrap_err(), "server");
         assert_eq!(r("rt1").unwrap().refresh_token.as_deref(), Some("rt-new"));
+        // invalid_grant 以外の 400 も、送り直して通るものではないので止める。429 は待つ
+        assert_eq!(r("rt1").unwrap_err(), "google_auth_failed");
+        assert_eq!(r("rt1").unwrap_err(), "server");
     }
 
     #[test]

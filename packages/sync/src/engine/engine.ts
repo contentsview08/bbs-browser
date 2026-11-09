@@ -93,6 +93,8 @@ export interface SyncConfirm {
   host?: string | null
   /** Google ドライブで参加するときの、コードのアカウントのメール */
   account?: string | null
+  /** 参加で相手へ送るものが手元にあるか。Drive の参加は空でも確認を出す(アカウントを見せる)ので、文を分ける */
+  data?: boolean
 }
 
 export interface SyncEngineDeps {
@@ -229,6 +231,8 @@ export class SyncEngine {
   private halting = false
   /** 直前の確認が「変化なし」(304 か同じ version)だった時刻。自動の周で pull を省く根拠 */
   private headFreshAt = 0
+  /** 直前の確認が「変化あり」だった。送る前に読まなくてよい置き場(Drive)では、これが立っている周だけ自動で読む */
+  private headChanged = false
   private paceValue: SyncPace | null = null
 
   // 周の間だけ持つ
@@ -349,11 +353,13 @@ export class SyncEngine {
       const since = Number((await this.t.state('since')) ?? 0)
       const changed = head.version > since || (head.gc_floor as number) > since || head.epoch !== (await this.t.state('epoch'))
       this.headFreshAt = changed ? 0 : this.deps.now()
+      if (changed) this.headChanged = true
       return changed
     } catch (e) {
       // 404・401 は周の流れ(作り直し・止める)で扱う
       if (e instanceof SyncApiError && e.kind === 'http' && (e.status === 404 || e.status === 401)) {
         this.headFreshAt = 0
+        this.headChanged = true
         return true
       }
       if (e instanceof SyncApiError && e.kind === 'http' && e.status === 429) this.waitFor(e)
@@ -770,7 +776,10 @@ export class SyncEngine {
     if (!seeded && (manual || !this.filled)) await this.fillMissing()
     this.filled = true
     const now = this.deps.now()
-    if (!pulled && (manual || (now - Number((await this.t.state('last_pull_at')) ?? 0) >= PULL_MIN_GAP_MS && !(quick && this.headIsFresh(now))))) await this.pull(false)
+    // 送るだけの周(確認の時計・裏へ回る瞬間)は、409 のない置き場では読まない。確認が変化を見つけた周だけ読む(手動のみの説明どおり)
+    const skipQuick = quick && (this.headIsFresh(now) || (this.api.pushWithoutPull === true && !this.headChanged))
+    if (!pulled && (manual || (now - Number((await this.t.state('last_pull_at')) ?? 0) >= PULL_MIN_GAP_MS && !skipQuick))) await this.pull(false)
+    if (pulled || !skipQuick) this.headChanged = false
     await this.applyAll()
     await this.pushAll(manual)
     // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
@@ -1131,6 +1140,12 @@ export class SyncEngine {
       try {
         res = await this.call(() => this.api.pushRecords(requestId, body))
       } catch (e) {
+        // 利用者の Drive の容量は外しても空かない(ほかのファイルが占めている)ことが多い。外さずに待ち、画面には容量の案内だけ出す
+        if (e instanceof SyncApiError && e.status === 413 && e.code === 'quota_exceeded' && this.api.quotaWaitMs !== undefined) {
+          this.pushRetryAt = this.deps.now() + this.api.quotaWaitMs
+          this.pushDeferred = 'drive_quota'
+          return
+        }
         if (e instanceof SyncApiError && e.status === 413 && e.code === 'quota_exceeded' && trims < TRIM_ROUNDS && (await this.trimForQuota())) {
           trims++
           continue
@@ -1164,14 +1179,15 @@ export class SyncEngine {
       if (rows.length > 0) return { requestId: inflight.request_id, rows, sent: new Map(inflight.records.map((x) => [x.record_id, x.hlc])) }
       await this.db.execute('DELETE FROM sync_state WHERE key = $1', ['push_inflight'])
     }
-    const candidates = await this.t.pendingRecords(PUSH_BATCH_RECORDS, [...this.offKinds])
+    const limit = this.api.pushBatch ?? { records: PUSH_BATCH_RECORDS, bytes: PUSH_BATCH_BYTES }
+    const candidates = await this.t.pendingRecords(limit.records, [...this.offKinds])
     if (candidates.length === 0) return null
     let bytes = 0
     const rows: StoredRecord[] = []
     for (const r of candidates) {
       // 暗号文は平文の 4/3 倍と少しになる
       bytes += Math.ceil((canonicalJson(r.payload).length + 256 + 16) * 4 / 3) + 256
-      if (rows.length > 0 && bytes > PUSH_BATCH_BYTES) break
+      if (rows.length > 0 && bytes > limit.bytes) break
       rows.push(r)
     }
     const requestId = this.newRequestId()

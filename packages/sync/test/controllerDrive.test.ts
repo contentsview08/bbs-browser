@@ -123,6 +123,14 @@ const state = async (d: Device, key: string) => (await d.db.select<{ value: stri
 const spaceOf = (d: Device) => S.spaceId(S.deriveKeys(d.c.material?.k as Uint8Array).auth_token)
 const favorites = async (d: Device) => (await d.store.listFavoriteThreads()).map((f) => f.thread.key).sort()
 
+/** コードで参加する。手元が空でも、参加の前に Google アカウントを出して確かめる(答えは「参加する」) */
+async function join(d: Device, code: string): Promise<S.CycleResult> {
+  const r = await d.ctl.join(code)
+  expect(r.state).toBe('confirm')
+  expect(r.confirm).toMatchObject({ type: S.JOIN_DATA_CONFIRM, account: 'a@example.test' })
+  return d.ctl.resolveConfirm('accept_removal')
+}
+
 /** 1 台目を始めて、2 台目をコードで参加させる */
 async function pair(w: World) {
   const pc = await on(device(w))
@@ -130,7 +138,7 @@ async function pair(w: World) {
   await pc.ops.favoriteThreadAdd(thread('1'))
   await pc.ctl.start()
   const { code } = await pc.ctl.pairingCode()
-  expect((await pc2.ctl.join(code)).state).toBe('idle')
+  expect((await join(pc2, code)).state).toBe('idle')
   return { pc, pc2 }
 }
 
@@ -187,7 +195,11 @@ describe('端末の追加(obb2)', () => {
     const parsed = S.parseDrivePairingCode(code)
     expect(parsed.k).toEqual(pc.c.material?.k)
     expect(parsed.refreshToken).toBe(pc.g.stored)
-    expect((await pc2.ctl.join(code)).state).toBe('idle')
+    // 手元が空でも確かめる。送るものはないので、その文は出さない
+    const asked = await pc2.ctl.join(code)
+    expect(asked.confirm).toMatchObject({ type: S.JOIN_DATA_CONFIRM, account: 'a@example.test', data: false })
+    expect(pc2.c.material).toBeNull()
+    expect((await pc2.ctl.resolveConfirm('accept_removal')).state).toBe('idle')
     expect(pc2.g.logins).toEqual([])
     expect(pc2.g.stored).toBe(pc.g.stored)
     expect(pc2.c.windows).toBe(0)
@@ -226,7 +238,7 @@ describe('端末の追加(obb2)', () => {
     const { code } = await pc.ctl.pairingCode()
     const r = await pc2.ctl.join(code)
     expect(r.state).toBe('confirm')
-    expect(r.confirm).toMatchObject({ type: S.JOIN_DATA_CONFIRM, host: null, account: 'a@example.test' })
+    expect(r.confirm).toMatchObject({ type: S.JOIN_DATA_CONFIRM, host: null, account: 'a@example.test', data: true })
     expect((await pc2.ctl.status()).state).toBe('confirm')
     expect(pc2.c.material).toBeNull()
     const sent = pc2.c.requests.length
@@ -383,6 +395,129 @@ describe('同期サーバーで使っていた端末', () => {
   })
 })
 
+describe('Google のクライアントの入っていない版', () => {
+  it('サーバーで使っていた端末を戻さず、サーバーのまま動かす', async () => {
+    const w = world()
+    const old = await on(device(w, { drive: false }))
+    await old.ops.favoriteThreadAdd(thread('1'))
+    await old.ctl.start()
+    const pc = device(w, { from: old, unavailable: 'google_unavailable' })
+    expect(await pc.ctl.status()).toMatchObject({ enabled: true, store: 'server', lastError: null })
+    expect(pc.c.material).not.toBeNull()
+    await pc.ops.favoriteThreadAdd(thread('2'))
+    expect((await pc.ctl.syncNow()).state).toBe('idle')
+    expect(w.drive.files.size).toBe(0)
+  })
+})
+
+describe('同期サーバーで使っていた端末(続き)', () => {
+  it('戻しても種類ごとのスイッチは残す', async () => {
+    const w = world()
+    const old = await on(device(w, { drive: false }))
+    await old.ctl.start()
+    await old.ctl.setKind('history', false)
+    const pc = device(w, { from: old })
+    const st = await pc.ctl.status()
+    expect(st).toMatchObject({ enabled: false, lastError: 'server_sync_ended' })
+    expect(st.kinds.history).toBe(false)
+    expect(st.kinds.favorites).toBe(true)
+  })
+})
+
+describe('参加の確認に答えずに終わったとき', () => {
+  it('確かめるために置いたトークンを、次の起動で消す。参加した端末のトークンは消さない', async () => {
+    const w = world()
+    const pc = await on(device(w))
+    await pc.ctl.start()
+    const pc2 = await on(device(w))
+    const r = await pc2.ctl.join((await pc.ctl.pairingCode()).code)
+    expect(r.state).toBe('confirm')
+    expect(pc2.g.stored).not.toBeNull()
+    // 答えずにアプリを閉じて、開き直す
+    const again = device(w, { from: pc2 })
+    again.g.stored = pc2.g.stored
+    expect(await again.ctl.autoEnabled()).toBe(false)
+    expect(again.g).toMatchObject({ stored: null, forgets: 1 })
+    expect(await state(again, 'google_adopted')).toBeNull()
+    expect(again.c.requests).toHaveLength(0)
+    // 参加した端末は開き直しても消さない
+    const { pc2: joined } = await pair(w)
+    const back = device(w, { from: joined })
+    back.g.stored = joined.g.stored
+    await back.ctl.autoEnabled()
+    expect(back.g.forgets).toBe(0)
+  })
+})
+
+describe('Drive の容量と送るだけの周', () => {
+  it('容量の超過では古い閲覧履歴を外さず、1 時間待って送る。画面には容量の案内だけ出す', async () => {
+    const w = world()
+    const pc = await on(device(w))
+    await pc.ctl.start()
+    w.drive.quotaBytes = [...w.drive.files.values()].reduce((n, f) => n + new TextEncoder().encode(f.content).length, 0)
+    await pc.ops.favoriteThreadAdd(thread('5'))
+    expect((await pc.ctl.syncNow()).state).toBe('idle')
+    const st = await pc.ctl.status()
+    expect(st.lastError).toBe('drive_quota')
+    expect(st.lastErrorText).toContain('容量')
+    expect(st.pending).toBe(1)
+    expect(await state(pc, 'bad_counts')).toBeNull()
+    // 待っている間は自動では送らない
+    const sent = pc.c.requests.length
+    expect(await pc.ctl.hasChanges()).toBe(false)
+    w.drive.quotaBytes = Infinity
+    w.now += S.DRIVE_QUOTA_WAIT_MS
+    expect(await pc.ctl.hasChanges()).toBe(true)
+    await pc.ctl.autoCycle('tick')
+    expect(pc.c.requests.length).toBeGreaterThan(sent)
+    expect((await pc.ctl.status()).pending).toBe(0)
+  })
+
+  it('送るだけの周(手動のみ・送信の時計)では、変更の一覧もダウンロードも呼ばない。今すぐ同期では読む', async () => {
+    const w = world()
+    const { pc, pc2 } = await pair(w)
+    await pc2.ctl.setSyncInterval('manual')
+    await pc.ops.favoriteThreadAdd(thread('7'))
+    await pc.ctl.syncNow()
+    w.now += 60_000
+    await pc2.ops.favoriteThreadAdd(thread('8'))
+    const calls = { ...w.drive.calls }
+    await pc2.ctl.autoCycle('tick')
+    expect(w.drive.calls['changes.list'] ?? 0).toBe(calls['changes.list'] ?? 0)
+    expect(w.drive.calls['files.get(media)'] ?? 0).toBe(calls['files.get(media)'] ?? 0)
+    expect((w.drive.calls['files.update'] ?? 0) + (w.drive.calls['files.create'] ?? 0)).toBeGreaterThan((calls['files.update'] ?? 0) + (calls['files.create'] ?? 0))
+    expect(await favorites(pc2)).toEqual(['1', '8'])
+    await pc2.ctl.syncNow()
+    expect(await favorites(pc2)).toEqual(['1', '7', '8'])
+  })
+
+  it('始めたときの全件の送信はスナップショットへまとめて書く(セグメントの上書きを連打しない)', async () => {
+    const w = world()
+    const pc = await on(device(w))
+    for (let i = 0; i < 3000; i++) await pc.store.addFavoriteThread(thread(`m${i}`), START)
+    await pc.ctl.start()
+    expect((await pc.ctl.status()).pending).toBe(0)
+    // 100 件ずつのセグメントなら 30 回の上書きになる。目印 1 + スナップショットの部分だけを作る
+    expect(w.drive.calls['files.update'] ?? 0).toBe(0)
+    expect(w.drive.calls['files.create']).toBeLessThanOrEqual(3)
+    expect(w.drive.filesOf(spaceOf(pc)).filter((f) => f.appProperties.t === 'snap').length).toBeGreaterThanOrEqual(1)
+    expect(w.drive.recordsOf(spaceOf(pc)).length).toBeGreaterThanOrEqual(3000)
+  })
+})
+
+describe('止まっている間の使っている量', () => {
+  it('ログインし直しを待つ間は files.list を呼ばない', async () => {
+    const w = world()
+    const pc = await on(device(w))
+    await pc.ctl.start()
+    w.google.valid.clear()
+    expect((await pc.ctl.syncNow()).state).toBe('blocked')
+    const before = w.drive.calls['files.list'] ?? 0
+    expect(await pc.ctl.driveUsage()).toBeNull()
+    expect(w.drive.calls['files.list'] ?? 0).toBe(before)
+  })
+})
+
 describe('やめ方', () => {
   it('やめると鍵と Google のトークンを手元から消す(取り消しは送らない)。全端末で切ると取り消しを送り、ほかの端末も止まる', async () => {
     const w = world()
@@ -393,7 +528,7 @@ describe('やめ方', () => {
     expect((await pc.ctl.syncNow()).state).toBe('idle')
 
     const pc3 = await on(device(w))
-    expect((await pc3.ctl.join((await pc.ctl.pairingCode()).code)).state).toBe('idle')
+    expect((await join(pc3, (await pc.ctl.pairingCode()).code)).state).toBe('idle')
     await pc.ctl.revokeGoogle()
     expect(pc.g.revokes).toBe(1)
     expect(pc.c.material).toBeNull()

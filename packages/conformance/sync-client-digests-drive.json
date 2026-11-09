@@ -289,7 +289,7 @@
  },
  "リベース: お気に入り板・サイト・画像・NG の片づいた削除を手元から消す": {
   "pc": "d484d34fdb12f5829f837b685dcb555f3b8289624871c43d659e72f63c7bd071",
-  "phone": "898d9806ed99b382aeaa4eefea468c2f1366a56db3497c73578da9c233f16bf0"
+  "phone": "47548fafa35dfe9265542637dfb83f15d86d1c01d629d7a60bb0225db400f7f0"
  },
  "領域が消えても、4 種類とも手元から作り直して揃う": {
   "pc": "521d11a020bf58a61f3b0cd4fb24c4202a2c62aff1eb0bf17fb968e0b72690a8",
@@ -626,10 +626,6 @@
   "pc": "6f1950e83172e85aa4c917c411987c7424f842df338d892bf044d99c288a58d5",
   "phone": "07f9f3ef3af0530949bcc7f0e523a630039843e8a2f2110e2b03adc1d4d7af78"
  },
- "履歴: 容量超過で外した自分の既読は、ログの削除の後でも他の端末の読みで下がらない": {
-  "pc": "353edfc66702fe55456c3301ab6ccb8967092022be5f5fff350c81aa39a18d7e",
-  "phone": "2bf698c57534968c34610503f68661af82750e1d9d19a6d1676288167e02929b"
- },
  "Drive: 120 日使っても、まとめ直しでファイルの数と大きさが一定の範囲に収まり、後から参加した端末も揃う": {
   "pc": "2ddc91f33fbeedfdf6a694b4a320ce9f4bb344c00c46d723ddff51385b43fb94",
   "phone": "2673cad49d1e5aed831e109184d1c54b749ec4b0f588385847bb2f0a275025e3",
@@ -647,6 +643,17 @@
  "Drive: 長く読まなかった間に相手が古い tombstone を落としていたら、全件で合わせ直して消えたものを戻さない": {
   "pc": "d194cffb3ea3eb637297879b37939e4e296ad0e8c959177b804f12841460b012",
   "phone": "a28904e1d7efbe960139de3bcf616cd0ca1603607e7e84b3805d5f237a7d576c"
+ },
+ "Drive: 3 台目が古いセグメントを持ったまま止まっても、91 日後に参加した端末・リベースした端末で消したものが戻らない": {
+  "pc": "d96b2a5e030094a4929378518bae40647a1597b7212c097af335c2f68e458058",
+  "phone": "dfc4a5e8495aefbc72ae44d1536aab0846f786faf46845c011fa355c68d22630",
+  "tablet": "aebd2ed18c202e9de2485f905902097fbf8ce2d7da9eb5065f600db4e8958c62",
+  "laptop": "0ef442d6154568cff5c14d6f675c135c9a0d64076b0ae6bea2cb671e3c447637"
+ },
+ "Drive: まとめ直しの条件を満たさない端末も、60 日で古いファイルを手元の値で書き直す": {
+  "pc": "f468bbbe6f4c101a45d4fceb801c9a9938c7943f6143c7bf467bbc047747b334",
+  "phone": "6c8bcc35eadb9ffebbbce82d70f4c08a18d5664029eaf02adb49f9f9ca1794c4",
+  "laptop": "8be823dfeaa1343eea79034ae1c8e485739831e5898e778ca71daf6e949b8bda"
  },
  "乱数 全部 1": {
   "pc": "33a9ddb8ed20d52b7d4ad471c38d914a1a27ba998b66feca846b1096fd469cb6",

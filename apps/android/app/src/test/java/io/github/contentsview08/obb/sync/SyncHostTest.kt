@@ -96,6 +96,8 @@ class SyncHostTest {
         init { db.exec("INSERT INTO sync_state (key, value) VALUES ('master', '1')", emptyList()) }
         val ops = io.github.contentsview08.obb.data.UserOps(db)
         fun favorites() = db.query("SELECT key FROM favorite_threads ORDER BY key").map { it["key"] as String }
+        /** QR で参加する。手元が空でも Google アカウントを出して確かめるので、「参加する」と答える */
+        suspend fun join(code: String) = ctl.join(code).let { if (it.state == "confirm") ctl.resolveConfirm("accept_removal") else it }
         fun state(key: String) = db.query("SELECT value FROM sync_state WHERE key = ?", listOf(key)).firstOrNull()?.get("value") as String?
     }
 
@@ -123,7 +125,7 @@ class SyncHostTest {
         assertEquals("sync_off", runCatching { d.ctl.join(code) }.exceptionOrNull().let { (it as SyncHostError).code })
         assertEquals(0, d.requests.size)
         d.ctl.setMaster(true)
-        d.ctl.join(code)
+        d.join(code)
         val on = d.ctl.status()
         assertTrue(on.enabled)
         assertEquals("acct-1@example.test", on.email)
@@ -162,7 +164,7 @@ class SyncHostTest {
     @Test fun オフの間は通信も積みも鍵保管も触らず鍵は残りオンで続きから動く() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         d.ctl.setMaster(false)
         d.requests.clear()
         val reads = d.keys.reads
@@ -188,7 +190,7 @@ class SyncHostTest {
     @Test fun 切っている種類の送信待ちは数えない() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
         assertTrue(d.ctl.hasChanges())
         d.ctl.syncNow()
@@ -223,7 +225,7 @@ class SyncHostTest {
     @Test fun 鍵とGoogleのトークンはDBに入らない() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         val m = d.keys.value!!
         assertEquals(rt, m.google)
         val dump = StringBuilder()
@@ -242,10 +244,10 @@ class SyncHostTest {
         val (g, code) = google()
         val a = Device(g, { clock })
         val b = Device(g, { clock })
-        a.ctl.join(code)
+        a.join(code)
         a.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
         a.ctl.syncNow()
-        b.ctl.join(code)
+        b.join(code)
         assertEquals(listOf("1"), b.favorites())
         b.ops.setFavoriteThreadNow(t("1"), "t1", false, clock)
         b.ctl.syncNow()
@@ -264,6 +266,7 @@ class SyncHostTest {
         val r = b.ctl.join(code)
         assertEquals("confirm", r.state)
         assertEquals("acct-1@example.test", r.confirm!!.account)
+        assertEquals(true, r.confirm!!.data)
         assertEquals("confirm", b.ctl.status().state)
         b.ctl.resolveConfirm("keep_local")
         assertNull(b.keys.value)
@@ -280,13 +283,19 @@ class SyncHostTest {
         val (g, code) = google()
         val b = Device(g, { clock })
         b.db.exec("INSERT INTO favorite_boards (url, connector_id, name, sort) VALUES (?, '2ch-compat', 'x', 1)", listOf(PRESET_URLS.last()))
-        assertEquals("idle", b.ctl.join(code).state)
+        // 手元が空でも Google アカウントは確かめる。送るものはないので、その文は出さない
+        val r = b.ctl.join(code)
+        assertEquals("confirm", r.state)
+        assertEquals(false, r.confirm!!.data)
+        assertEquals("acct-1@example.test", r.confirm!!.account)
+        assertNull(b.keys.value)
+        assertEquals("idle", b.ctl.resolveConfirm("accept_removal").state)
     }
 
     @Test fun 取り消されると止まりQRの読み直しでトークンだけを置き直して続く() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
         g.revoke(rt)
         assertEquals("blocked", d.ctl.syncNow().state)
@@ -313,7 +322,7 @@ class SyncHostTest {
     @Test fun アクセストークンはメモリに持ち期限の前と401で取り直す() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         val before = g.tokenBodies.size
         d.ctl.syncNow()
         assertEquals(before, g.tokenBodies.size)
@@ -358,10 +367,115 @@ class SyncHostTest {
         assertEquals("drive", d.state("store"))
     }
 
+    /** 前の版でサーバーの同期を使っていた状態(鍵は K と許可証、置き場の印がない) */
+    private suspend fun serverDevice(d: Device) {
+        d.keys.value = SyncKeyMaterial(k, "old_device_id_00000000", "v1.ticket")
+        d.db.batch(listOf(
+            io.github.contentsview08.obb.sync.engine.setState("enabled", "1"),
+            io.github.contentsview08.obb.sync.engine.setState("phase", "idle"),
+            io.github.contentsview08.obb.sync.engine.setState("device_id", "old_device_id_00000000"),
+            io.github.contentsview08.obb.sync.engine.setState("since", "42"),
+        ))
+    }
+
+    @Test fun クライアントのない版ではサーバーで使っていた端末を戻さない() = runBlocking {
+        val (g, _) = google()
+        val d = Device(g, { clock }, client = null)
+        serverDevice(d)
+        d.ctl.startup()
+        assertTrue(d.keys.value != null)
+        val st = d.ctl.status()
+        assertTrue(st.enabled)
+        assertNull(st.lastError)
+        assertEquals(0, g.drive.files.size)
+    }
+
+    @Test fun 戻しても種類ごとのスイッチは残す() = runBlocking {
+        val (g, _) = google()
+        val d = Device(g, { clock })
+        serverDevice(d)
+        d.db.batch(listOf(io.github.contentsview08.obb.sync.engine.setState("kinds", canonicalJson(mapOf("history" to false)))))
+        d.ctl.startup()
+        val st = d.ctl.status()
+        assertFalse(st.enabled)
+        assertEquals(SERVER_SYNC_ENDED, st.lastError)
+        assertEquals(false, st.kinds["history"])
+        assertEquals(true, st.kinds["favorites"])
+    }
+
+    @Test fun 容量の超過では外さずに1時間待ち容量の案内だけ出す() = runBlocking {
+        val (g, code) = google()
+        val d = Device(g, { clock })
+        d.join(code)
+        g.drive.quotaBytes = g.drive.files.values.sumOf { it.content.toByteArray().size.toLong() }
+        d.ops.setFavoriteThreadNow(t("5"), "t5", true, clock)
+        assertEquals("idle", d.ctl.syncNow().state)
+        val st = d.ctl.status()
+        assertEquals("drive_quota", st.lastError)
+        assertTrue(st.lastErrorText!!.contains("容量"))
+        assertEquals(1L, st.pending)
+        assertNull(d.state("bad_counts"))
+        assertFalse(d.ctl.hasChanges())
+        g.drive.quotaBytes = Long.MAX_VALUE
+        clock += io.github.contentsview08.obb.sync.engine.DRIVE_QUOTA_WAIT_MS
+        assertTrue(d.ctl.hasChanges())
+        d.ctl.autoCycle("tick")
+        assertEquals(0L, d.ctl.status().pending)
+    }
+
+    @Test fun 送るだけの周では変更の一覧もダウンロードも呼ばない() = runBlocking {
+        val (g, code) = google()
+        val a = Device(g, { clock })
+        val b = Device(g, { clock })
+        a.join(code)
+        b.join(code)
+        a.ops.setFavoriteThreadNow(t("7"), "t7", true, clock)
+        a.ctl.syncNow()
+        clock += 60_000
+        b.ops.setFavoriteThreadNow(t("8"), "t8", true, clock)
+        val lists = g.drive.calls["changes.list"] ?: 0
+        val downloads = g.drive.calls["files.get(media)"] ?: 0
+        b.ctl.autoCycle("tick")
+        assertEquals(lists, g.drive.calls["changes.list"] ?: 0)
+        assertEquals(downloads, g.drive.calls["files.get(media)"] ?: 0)
+        assertEquals(listOf("8"), b.favorites())
+        b.ctl.syncNow()
+        assertEquals(listOf("7", "8"), b.favorites())
+    }
+
+    @Test fun 参加の全件の送信はスナップショットへまとめて書く() = runBlocking {
+        val (g, code) = google()
+        val d = Device(g, { clock })
+        for (i in 0 until 3000) d.ops.setFavoriteThreadNow(t("m$i"), "tm$i", true, clock)
+        d.join(code)
+        assertEquals(0L, d.ctl.status().pending)
+        // 100 件ずつのセグメントなら 30 回の上書きになる。目印 1 + スナップショットの部分だけを作る
+        assertEquals(0, g.drive.calls["files.update"] ?: 0)
+        assertTrue((g.drive.calls["files.create"] ?: 0) <= 3)
+        assertTrue(g.drive.files.values.any { it.appProperties["t"] == "snap" })
+        assertTrue(g.drive.recordsOf(spaceId(deriveKeys(k).authToken)).size >= 3000)
+    }
+
+    @Test fun 止まっている間は使っている量を読まない() = runBlocking {
+        val (g, code) = google()
+        val d = Device(g, { clock })
+        d.join(code)
+        d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
+        g.revoke(rt)
+        assertEquals("blocked", d.ctl.syncNow().state)
+        val before = g.drive.calls["files.list"] ?: 0
+        assertNull(d.ctl.driveUsage())
+        assertEquals(before, g.drive.calls["files.list"] ?: 0)
+    }
+
+    @Test fun サーバーのURLはPCと同じ() {
+        assertEquals(JSONObject(File("../../../packages/sync/server-url.json").readText()).getString("default"), SyncConfig.SERVER_URL)
+    }
+
     @Test fun やめると鍵とトークンを手元から消し取り消しは送らない() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
         d.ctl.syncNow()
         d.requests.clear()
@@ -376,7 +490,7 @@ class SyncHostTest {
     @Test fun ドライブで使っている量を足して出す() = runBlocking {
         val (g, code) = google()
         val d = Device(g, { clock })
-        d.ctl.join(code)
+        d.join(code)
         d.ops.setFavoriteThreadNow(t("1"), "t1", true, clock)
         d.ctl.syncNow()
         val want = g.drive.files.values.sumOf { it.content.toByteArray().size.toLong() }

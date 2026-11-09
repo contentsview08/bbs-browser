@@ -14,6 +14,15 @@ export interface SyncRemote {
   readonly pace: SyncPace | null
   /** 領域を作るのに許可証が要るか。要らない置き場では、許可証がなくても止まらずに作る */
   readonly needsTicket: boolean
+  /**
+   * 送る前に読まなくてよいか。Drive は書き込みがぶつからない(409 がない)ので、送るだけの周で変更の一覧とダウンロードを省く。
+   * サーバーは 409 を減らすため、送る前に読む
+   */
+  readonly pushWithoutPull?: boolean
+  /** 容量を超えたとき、外さずに待つ長さ(ms)。なければ古い閲覧履歴から外す(サーバーの 10MB の枠) */
+  readonly quotaWaitMs?: number
+  /** 1 回の送信に入れる上限。なければ PUSH_BATCH_RECORDS・PUSH_BATCH_BYTES */
+  readonly pushBatch?: { records: number; bytes: number }
   /** 変化の確認。変化がなければ version: null(304 と同じ) */
   head(etag: string | null): Promise<HeadResult>
   /** since = 0 は全件 */

@@ -1,5 +1,6 @@
 package io.github.contentsview08.obb.sync.engine
 
+import io.github.contentsview08.obb.sync.SyncConfig
 import io.github.contentsview08.obb.sync.SyncText
 import io.github.contentsview08.obb.sync.adapters.AdapterContext
 import io.github.contentsview08.obb.sync.adapters.NG_KIND
@@ -101,8 +102,17 @@ class SyncController(
         return adapters.filter { it.kind !in off }
     }
 
+    /**
+     * Google のクライアントの入っていない版で、同期サーバーで使っている端末はサーバーのまま動かす(Drive へ移すと始められない)。
+     * それ以外は Drive(使っていない端末が始めるのも参加も Drive。使えなければ理由を返す)
+     */
+    private fun onServer() = google == null && isEnabled() && t.state("store") != "drive"
+
     private suspend fun engine(): SyncEngine {
-        val e = engineValue ?: SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = "", adapters = adapters, now = now, remote = remote).also { engineValue = it }
+        val e = engineValue ?: (
+            if (onServer()) SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = t.state("server_url") ?: SyncConfig.SERVER_URL, adapters = adapters, now = now)
+            else SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = "", adapters = adapters, now = now, remote = remote)
+        ).also { engineValue = it }
         if (!serverChecked) {
             serverChecked = true
             retireServer(e)
@@ -115,11 +125,13 @@ class SyncController(
      * 手元のデータは消さない。スイッチはそのまま残し、QR を読み直す案内を最後のエラーに出す
      */
     private suspend fun retireServer(e: SyncEngine) {
-        if (!isEnabled() || t.state("store") == "drive") return
+        if (google == null || !isEnabled() || t.state("store") == "drive") return
         val on = isMasterOn()
+        // 種類ごとのスイッチは端末の好みなので、やめても残す(QR を読み直したときに既定へ戻らないように)
+        val kinds = t.state("kinds")
         e.leave()
         spaceHead = null
-        db.batch(listOf(setState("master", if (on) "1" else "0"), setState("last_error", SERVER_SYNC_ENDED)))
+        db.batch(listOfNotNull(setState("master", if (on) "1" else "0"), setState("last_error", SERVER_SYNC_ENDED), kinds?.let { setState("kinds", it) }))
     }
 
     private suspend fun run(manual: Boolean, quick: Boolean = false): CycleResult = engine().runCycle(manual, quick).also(onCycle)
@@ -192,8 +204,9 @@ class SyncController(
     }
 
     /**
-     * QR・コード(obb2)で参加する。手元の全部が相手の鍵で読める形で送られるので、送るものがあれば先に確認を返す
-     * (state が confirm。答えは resolveConfirm)。使っている最中でも、K が同じならトークンだけを置き直す(5.7 の配り直し)
+     * QR・コード(obb2)で参加する。手元の全部が相手の鍵で読める形で送られるので、先に確認を返す(state が confirm。答えは resolveConfirm)。
+     * 手元が空でも確認を出す(どの Google アカウントの同期に入るかを、参加の前に見せる)。
+     * 使っている最中でも、K が同じならトークンだけを置き直す(5.7 の配り直し)
      */
     suspend fun join(code: String): CycleResult {
         engine()
@@ -214,12 +227,10 @@ class SyncController(
         pendingJoin = null
         val (token, account) = adopt(c.refreshToken, null)
         val ctx = AdapterContext(deriveKeys(c.k), "", now())
-        if (hasLocalData(db, adapters, ctx, presetUrls)) {
-            val confirm = SyncConfirm(JOIN_DATA_CONFIRM, 0L, account = account.email.ifEmpty { null })
-            pendingJoin = PendingJoin(c.k, token, account, confirm)
-            return CycleResult().also { it.state = "confirm"; it.confirm = confirm }
-        }
-        return finishJoin(c.k, token, account)
+        val data = hasLocalData(db, adapters, ctx, presetUrls)
+        val confirm = SyncConfirm(JOIN_DATA_CONFIRM, 0L, account = account.email.ifEmpty { null }, data = data)
+        pendingJoin = PendingJoin(c.k, token, account, confirm)
+        return CycleResult().also { it.state = "confirm"; it.confirm = confirm }
     }
 
     private suspend fun finishJoin(k: ByteArray, token: String, account: GoogleAccount): CycleResult {
@@ -287,7 +298,8 @@ class SyncController(
 
     /** Google ドライブで使っている量(バイト)。使っている間だけ。周とは別に files.list を辿るので、画面を開いたときと同期の後だけ呼ぶ */
     suspend fun driveUsage(): Long? {
-        if (!isEnabled() || !isMasterOn() || google == null) return null
+        // 止まっている(QR の読み直しを待つ)間は呼ばない。取り直しに失敗するだけなので
+        if (!isEnabled() || !isMasterOn() || google == null || t.state("phase") == "blocked") return null
         return driveUsage(transport) { fresh -> tokens.accessToken(fresh) }
     }
 

@@ -2,6 +2,7 @@ package io.github.contentsview08.obb.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.media.ImageReader
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.provider.Settings
@@ -43,6 +45,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -74,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -106,6 +110,15 @@ private const val JOIN_BY_QR = "QR を読んで参加"
 private fun clock(ms: Long?) = if (ms == null) "―" else DateFormat.getDateTimeInstance().format(Date(ms))
 private const val JOINED = "同期を始めました"
 
+/** 参加できたら、貼ったコードをクリップボードから消す。今の中身がそのコードのときだけ(その後に利用者がコピーしたものを消さない) */
+private fun clearClipIf(context: Context, code: String?) {
+    if (code == null) return
+    val cm = context.getSystemService(ClipboardManager::class.java) ?: return
+    val now = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString() }.getOrNull()
+    if (now?.trim() != code.trim()) return
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) cm.clearPrimaryClip() else cm.setPrimaryClip(ClipData.newPlainText("", ""))
+}
+
 @Composable
 private fun SyncButton(text: String, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -133,6 +146,8 @@ fun SyncPage(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") advanced: Boolean) 
     var mismatch by remember { mutableStateOf<MismatchSummary?>(null) }
     /** ドライブで使っている量。毎周は読まず、画面を開いたときと操作の後だけ読み直す */
     var usage by remember { mutableStateOf<String?>(null) }
+    /** 読んだコード。参加できたらクリップボードから消すために覚える */
+    var readCode by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(Unit) { summary = runCatching { vm.syncSummary() }.getOrNull() }
     LaunchedEffect(Unit) { usage = vm.syncDriveUsage() }
@@ -163,7 +178,10 @@ fun SyncPage(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") advanced: Boolean) 
         var r: CycleResult? = null
         act(after = {
             scanning = false
-            if (r != null && r?.confirm == null && st?.lastError == null) message = done
+            if (r != null && r?.confirm == null && st?.lastError == null) {
+                message = done
+                clearClipIf(context, readCode)
+            }
         }) { r = f() }
     }
     val s = st ?: return
@@ -188,10 +206,13 @@ fun SyncPage(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") advanced: Boolean) 
         s.confirm?.let { c ->
             Group {
                 if (c.type == JOIN_DATA_CONFIRM) {
-                    Text(label("join_ask"), Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
+                    // 手元に送るものがないときは、どのアカウントの同期に入るかだけを確かめる
+                    Text(if (c.data == false) drive("join_ask_drive") else label("join_ask"), Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
                     c.account?.let { Text(drive("join_ask_account").replace("{email}", it), Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), color = Palette.textStrong, fontSize = 14.sp) }
                     SyncButton(label("join_cancel"), !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
-                    SyncButton(label("join_ok"), !busy) { act(JOINED) { vm.syncCtl.resolveConfirm("accept_removal"); vm.reloadSyncedScreens() } }
+                    SyncButton(label("join_ok"), !busy) {
+                        act(JOINED, after = { if (st?.enabled == true) clearClipIf(context, readCode) }) { vm.syncCtl.resolveConfirm("accept_removal"); vm.reloadSyncedScreens() }
+                    }
                 } else {
                     Text("同期のデータで削除された ${c.lost} 件が、この端末からも消えます。", Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
                     SyncButton("消さない", !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
@@ -231,9 +252,16 @@ fun SyncPage(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") advanced: Boolean) 
         space = s.space,
         pending = s.pending,
         onDismiss = { scanning = false },
-        onJoin = { read -> join(JOINED) { vm.syncCtl.join(read) } },
-        onRenew = { read -> join("Google の接続を置き直しました") { vm.syncCtl.join(read).also { vm.reloadSyncedScreens() } } },
+        onJoin = { read ->
+            readCode = read
+            join(JOINED) { vm.syncCtl.join(read) }
+        },
+        onRenew = { read ->
+            readCode = read
+            join("Google の接続を置き直しました") { vm.syncCtl.join(read).also { vm.reloadSyncedScreens() } }
+        },
         onMove = { read ->
+            readCode = read
             join("同期を移りました") {
                 vm.syncCtl.leave()
                 // やめるとスイッチは既定へ戻るので、続けて入るためにオンにする
@@ -373,7 +401,11 @@ private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDism
                         Text(done, color = Palette.textMuted, fontSize = 14.sp)
                     }
                     pasting -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(pasted, { pasted = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(drive("join_placeholder")) })
+                        // コードは鍵そのもの。キーボードの予測・学習に残さない
+                        OutlinedTextField(
+                            pasted, { pasted = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(drive("join_placeholder")) },
+                            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+                        )
                         SyncButton(label("join"), pasted.isNotBlank()) { handle(pasted) }
                         hint?.let { Text(it, color = Palette.markDanger, fontSize = 14.sp) }
                     }

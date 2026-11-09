@@ -8,7 +8,8 @@ import ConfirmDialog from '../ConfirmDialog'
 import { Toggle } from '../SettingParts'
 import { Choice, SearchContext, Section } from './common'
 
-const errorText = (e: unknown) => syncMessage(e instanceof Error ? e.message.split(':').pop() || e.message : String(e))
+const errorCode = (e: unknown) => (e instanceof Error ? e.message.split(':').pop()?.trim() || e.message : String(e))
+const errorText = (e: unknown) => syncMessage(errorCode(e))
 const clock = (ms: number | null) => (ms === null ? '―' : new Date(ms).toLocaleString())
 const JOINED = '同期を始めました'
 
@@ -39,13 +40,15 @@ export function SyncTab() {
     const id = window.setInterval(refresh, 1000)
     return () => window.clearInterval(id)
   }, [searching])
-  const usable = !!st?.enabled && !!st.master
+  // 止まっている(ログインし直しを待つ)間は呼ばない。取り直しに失敗するだけなので
+  const usable = !!st?.enabled && !!st.master && st.state !== 'blocked'
   useEffect(() => {
     if (usable) refreshUsage()
     else setUsage(undefined)
   }, [usable, st?.lastPushAt])
 
-  const act = async (f: () => Promise<unknown>, done?: string) => {
+  /** quiet は出さない失敗(自分で押した「やめる」など) */
+  const act = async (f: () => Promise<unknown>, done?: string, quiet: readonly string[] = []) => {
     setBusy(true)
     setMessage(undefined)
     try {
@@ -53,7 +56,7 @@ export function SyncTab() {
       // 通っても同期できないことがある。その理由は状態の最後のエラーに出る
       if (done && !(await callMain<SyncStatus>('syncStatus')).lastError) setMessage(done)
     } catch (e) {
-      setMessage(errorText(e))
+      if (!quiet.includes(errorCode(e))) setMessage(errorText(e))
     } finally {
       setBusy(false)
       refresh()
@@ -64,10 +67,10 @@ export function SyncTab() {
       const r = await callMain<{ code: string }>('syncPairingCode')
       setPairing(r.code)
     })
-  /** Google のログインを含む操作。待っている間は「やめる」を出す */
+  /** Google のログインを含む操作。待っている間は「やめる」を出す。やめたことは押した本人が分かっているので出さない */
   const withLogin = (f: () => Promise<unknown>, done?: string) => {
     setLoggingIn(true)
-    return act(f, done).finally(() => setLoggingIn(false))
+    return act(f, done, ['cancelled']).finally(() => setLoggingIn(false))
   }
   const join = () =>
     void act(async () => {
@@ -117,7 +120,7 @@ export function SyncTab() {
           </dl>
           {st.confirm?.type === JOIN_DATA_CONFIRM && (
             <div className="mb-3 text-sm text-c-text-body">
-              <p className="mb-2">{L.join_ask}</p>
+              <p className="mb-2">{st.confirm.data === false ? D.join_ask_drive : L.join_ask}</p>
               {st.confirm.account && <p className="mb-2">{D.join_ask_account.replace('{email}', st.confirm.account)}</p>}
               <div className="flex gap-2">
                 <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void act(() => callMain('syncConfirm', 'keep_local'))}>
@@ -298,6 +301,18 @@ function SyncSummaryView({ summary, mismatch, busy, onCheck }: { summary: SyncSu
   )
 }
 
+/**
+ * コピーしたコードをクリップボードから消す。今の中身が自分のコードのときだけ(その後に利用者がコピーしたものを消さない)。
+ * 読めないときは消さない
+ */
+async function clearCopied(code: string): Promise<void> {
+  try {
+    if ((await navigator.clipboard.readText()) === code) await navigator.clipboard.writeText('')
+  } catch {
+    // 読めない・書けないときは諦める(コピーのボタンの近くに、履歴に残ることを書いてある)
+  }
+}
+
 function PairingCode({ code, onEnd }: { code: string; onEnd: () => void }) {
   const [left, setLeft] = useState(PAIRING_SHOW_MS / 1000)
   const copied = useRef(false)
@@ -310,12 +325,17 @@ function PairingCode({ code, onEnd }: { code: string; onEnd: () => void }) {
       setLeft(rest)
       if (rest <= 0) end.current()
     }, 250)
+    const clear = () => {
+      if (copied.current) void clearCopied(code)
+    }
+    // 60 秒を待たずに窓を閉じたときも消す
+    window.addEventListener('beforeunload', clear)
     return () => {
       window.clearInterval(id)
-      // コピーしたものをクリップボードに残さない
-      if (copied.current) void navigator.clipboard.writeText('').catch(() => undefined)
+      window.removeEventListener('beforeunload', clear)
+      clear()
     }
-  }, [])
+  }, [code])
   const qr = useMemo(() => encode(code, { ecc: 'L', border: 2 }), [code])
   const path = useMemo(() => {
     let d = ''
@@ -349,6 +369,7 @@ function PairingCode({ code, onEnd }: { code: string; onEnd: () => void }) {
           閉じる
         </button>
       </div>
+      <p className="text-xs text-c-text-muted mt-2">{D.copy_note}</p>
     </div>
   )
 }

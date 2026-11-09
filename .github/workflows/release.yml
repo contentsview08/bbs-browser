@@ -41,10 +41,13 @@ jobs:
       - run: npm ci
       # 自動更新の署名。鍵がなければここで失敗する(署名のない版を配らない)。鍵にパスワードは付けていない。
       # MSI は配らない(自動更新は NSIS の setup.exe を流すので、MSI で入れた人に 2 つ目が入る)
+      # Google の同期のクライアント(src-tauri/build.rs が読む)。なければ Google の同期のないビルドになり、同期サーバーのまま動く
       - run: npm run build -- --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+          OBB_GOOGLE_CLIENT_ID: ${{ secrets.OBB_GOOGLE_CLIENT_ID }}
+          OBB_GOOGLE_CLIENT_SECRET: ${{ secrets.OBB_GOOGLE_CLIENT_SECRET }}
       - run: npm run package:zip
       - uses: actions/upload-artifact@v4
         with:
@@ -76,6 +79,8 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+          OBB_GOOGLE_CLIENT_ID: ${{ secrets.OBB_GOOGLE_CLIENT_ID }}
+          OBB_GOOGLE_CLIENT_SECRET: ${{ secrets.OBB_GOOGLE_CLIENT_SECRET }}
       - uses: actions/upload-artifact@v4
         with:
           name: OBB-linux

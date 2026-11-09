@@ -36,39 +36,68 @@ const val DRIVE_COMPACT_BYTES = 2L * 1024 * 1024
 const val DRIVE_COMPACT_GAP_MS = 24L * 60 * 60 * 1000
 /** スナップショットの 1 部分。本文とメタデータを 1 回で送る multipart(5MB まで)に収める。見出しの分を残す */
 const val DRIVE_SNAP_PART_BYTES = 4 * 1024 * 1024 - 4096
+/**
+ * 自分の最古のファイル(開いているセグメントも)がこれより古くなったら、手元の値で書き直す(2.6)。
+ * tombstone を落とす 90 日より必ず前に、古いファイルに残った「生きている値」を消すため
+ */
+const val DRIVE_REWRITE_AGE_MS = 60L * 24 * 60 * 60 * 1000
+/**
+ * 他人のファイルの最終更新がこれより古ければ、止まった書き手のものと見る。書き直しの 60 日に、たまにしか開かない端末の分の余裕を足す。
+ * tombstone を落とす前に、そのファイルに古い生きた値が残っていないかを確かめる(2.6)
+ */
+const val DRIVE_STALE_MS = 75L * 24 * 60 * 60 * 1000
+/** 容量の超過のとき、送るのを待つ長さ。外しても空かない(ほかのファイルが占めている)ことが多いので、古い閲覧履歴は外さない */
+const val DRIVE_QUOTA_WAIT_MS = 60L * 60 * 1000
+/** 1 回の送信の上限。種まき・作り直し・参加の全件送信は、セグメントを何十回も上書きせずにスナップショットへまとめて書く */
+const val DRIVE_PUSH_RECORDS = 5000
+const val DRIVE_PUSH_BYTES = 8L * 1024 * 1024
 
-private const val FILE_FIELDS = "id,name,appProperties,version,size,trashed,createdTime"
-private val RATE_REASONS = setOf("userRateLimitExceeded", "rateLimitExceeded")
+private const val FILE_FIELDS = "id,name,appProperties,version,size,trashed,createdTime,modifiedTime"
+/** 待てば通る 403(429 と同じ扱い) */
+private val RATE_REASONS = setOf("userRateLimitExceeded", "rateLimitExceeded", "dailyLimitExceeded", "sharingRateLimitExceeded")
+/** 許可の範囲が足りない。待っても直らないので、ログインし直す(QR を読み直す)まで止める */
+private val AUTH_REASONS = setOf("insufficientPermissions")
 
-class DriveFile(val id: String, val appProperties: Map<String, String>?, val version: Long, val createdTime: String?, val trashed: Boolean)
+class DriveFile(val id: String, val appProperties: Map<String, String>?, val version: Long, val createdTime: String?, val trashed: Boolean, val modifiedTime: String? = null)
+
+/** 最終更新の時刻(ms)。分からなければ null */
+private fun modified(f: DriveFile): Long? = f.modifiedTime?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
 
 private class DriveChange(val fileId: String, val removed: Boolean, val file: DriveFile?)
 
 /** 最後の版が分からないセグメント(版を控える前の drive_seg)。読む側が「最後の版まで読んだ」と決めないよう、どの版より大きくする(appProperties の 15 桁に収める) */
 private const val UNKNOWN_VERSION = 999_999_999_999_999L
 
-/** 開いているセグメント。中身は送るたびに同期の表から作り直す(暗号文を手元に置かない)。v と bytes は最後に書いた版と大きさ */
-private class SegState(val n: Long, val day: String, val file: String?, val ids: List<String>, val v: Long = UNKNOWN_VERSION, val bytes: Long = 0)
+/**
+ * 開いているセグメント。中身は送るたびに同期の表から作り直す(暗号文を手元に置かない)。v と bytes は最後に書いた版と大きさ。
+ * at は最後に書いた時刻。古くなったら書き直す(DRIVE_REWRITE_AGE_MS)。控える前のものは 0(すぐ書き直す)
+ */
+private class SegState(val n: Long, val day: String, val file: String?, val ids: List<String>, val v: Long = UNKNOWN_VERSION, val bytes: Long = 0, val at: Long = 0)
 
-/** 閉じたセグメント。まとめ直しで消すまで、中のレコード ID と最後の版を控える */
-private class ClosedSeg(val n: Long, val file: String, val v: Long, val bytes: Long, val ids: List<String>) {
-    fun toJson() = mapOf("n" to n, "file" to file, "v" to v, "bytes" to bytes, "ids" to ids)
+/** 閉じたセグメント。まとめ直しで消すまで、中のレコード ID と最後の版・最後に書いた時刻を控える */
+private class ClosedSeg(val n: Long, val file: String, val v: Long, val bytes: Long, val ids: List<String>, val at: Long = 0) {
+    fun toJson() = mapOf("n" to n, "file" to file, "v" to v, "bytes" to bytes, "ids" to ids, "at" to at)
 }
 
-/** 自分のファイルの控え(drive_own)。中身を読み戻さずに、まとめ直しとリベースで使う */
-private class OwnSnap(val u: Long, val g: Long, val files: List<String>, val ids: List<String>)
+/** 自分のファイルの控え(drive_own)。中身を読み戻さずに、まとめ直しとリベースで使う。uv と at は控える前のものにはない */
+private class OwnSnap(val u: Long, val uv: Long?, val g: Long, val files: List<String>, val ids: List<String>, val at: Long?)
 
 private class OwnFiles(val snap: OwnSnap?, val segs: List<ClosedSeg>) {
     fun toJson(): Map<String, Any?> {
         val m = LinkedHashMap<String, Any?>()
-        if (snap != null) m["snap"] = mapOf("u" to snap.u, "g" to snap.g, "files" to snap.files, "ids" to snap.ids)
+        if (snap != null) {
+            val sm = linkedMapOf<String, Any?>("u" to snap.u, "g" to snap.g, "files" to snap.files, "ids" to snap.ids)
+            if (snap.uv != null) sm["uv"] = snap.uv
+            if (snap.at != null) sm["at"] = snap.at
+            m["snap"] = sm
+        }
         m["segs"] = segs.map { it.toJson() }
         return m
     }
 }
 
 /** 途中のまとめ直し(drive_compact)。部分ごとのレコード ID を先に決め、作り終えた部分の ID を足していく */
-private class CompactJob(
+private data class CompactJob(
     val u: Long,
     /** 含めた最後のセグメントの最後の版。読む側が「もう全部読んだか」を決めるのに使う */
     val uv: Long,
@@ -81,10 +110,13 @@ private class CompactJob(
     val done: List<String>,
     /** 容量の超過で止めたとき、次に試してよい時刻 */
     val wait: Long? = null,
+    /** 作り始めた時刻。新しいスナップショットの「最後に書いた時刻」にする */
+    val at: Long? = null,
 ) {
     fun toJson(): Map<String, Any?> {
         val m = linkedMapOf<String, Any?>("u" to u, "uv" to uv, "g" to g, "cut" to cut, "del" to del, "parts" to parts, "done" to done)
         if (wait != null) m["wait"] = wait
+        if (at != null) m["at"] = at
         return m
     }
 }
@@ -95,7 +127,8 @@ private class Best(val info: SnapInfo, val parts: List<DriveFile>)
 
 private class ReadPlan(val read: List<DriveFile>, val mark: List<DriveFile>, val g: Long)
 
-private class Resealed(val sealed: List<Map<String, Any?>>, val missing: List<String>, val dropped: Boolean)
+/** expired は HLC の壁時計が基準より古い tombstone(record_id → HLC)。落とすかは呼ぶ側が決める */
+private class Resealed(val sealed: List<Map<String, Any?>>, val missing: List<String>, val expired: Map<String, String>)
 
 /**
  * accessToken は Drive へ付けるアクセストークン。引数の true は 401 のあとの取り直し(1 回だけ)。
@@ -140,11 +173,11 @@ private fun sealedOf(m: Map<*, *>): Map<String, Any?> =
     linkedMapOf("record_id" to m["record_id"], "kind_tag" to m["kind_tag"], "schema_version" to m["schema_version"], "nonce" to m["nonce"], "ciphertext" to m["ciphertext"])
 
 @Suppress("UNCHECKED_CAST")
-private fun closedSegOf(m: Map<String, Any?>) = ClosedSeg(m["n"] as Long, m["file"] as String, m["v"] as Long, m["bytes"] as Long, m["ids"] as List<String>)
+private fun closedSegOf(m: Map<String, Any?>) = ClosedSeg(m["n"] as Long, m["file"] as String, m["v"] as Long, m["bytes"] as Long, m["ids"] as List<String>, m["at"] as Long? ?: 0L)
 
 @Suppress("UNCHECKED_CAST")
 private fun compactJobOf(m: Map<String, Any?>) = CompactJob(
-    m["u"] as Long, m["uv"] as Long, m["g"] as Long, m["cut"] as Long, m["del"] as List<String>, m["parts"] as List<List<String>>, m["done"] as List<String>, m["wait"] as Long?,
+    m["u"] as Long, m["uv"] as Long, m["g"] as Long, m["cut"] as Long, m["del"] as List<String>, m["parts"] as List<List<String>>, m["done"] as List<String>, m["wait"] as Long?, m["at"] as Long?,
 )
 
 /** 部分に分ける。1 部分は DRIVE_SNAP_PART_BYTES まで。レコードがなくても 1 部分は作る(u と g を伝えるため) */
@@ -177,6 +210,7 @@ private fun driveError(res: SyncResponse): SyncApiError {
     if (res.status == 429) return SyncApiError("http", 429)
     if (res.status == 403 && reason in RATE_REASONS) return SyncApiError("http", 429, "rate_limited")
     if (res.status == 403 && reason == "storageQuotaExceeded") return SyncApiError("http", 413, "quota_exceeded")
+    if (res.status == 403 && reason in AUTH_REASONS) return SyncApiError("http", 401, GOOGLE_AUTH_FAILED)
     if (res.status == 404) return bad()
     // 5xx の理由(backendError など)は画面の言葉にならないので、サーバーと同じく番号で出す
     return SyncApiError("http", res.status, if (res.status >= 500) "" else reason.take(64))
@@ -205,7 +239,7 @@ private fun checkFile(v: Any?): DriveFile {
         is Long -> x.coerceAtLeast(0)
         else -> 0L
     }
-    return DriveFile(id, p, version, o["createdTime"] as? String, o["trashed"] == true)
+    return DriveFile(id, p, version, o["createdTime"] as? String, o["trashed"] == true, o["modifiedTime"] as? String)
 }
 
 private class ReadOut(val records: List<Map<String, Any?>>, val seen: LinkedHashMap<String, Long>, val bad: List<String>, val missing: Boolean)
@@ -216,6 +250,9 @@ private class Classified(val markerTouched: Boolean, val toRead: List<DriveFile>
 class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOptions) : SyncRemote {
     override val pace: SyncPace? = null
     override val needsTicket = false
+    override val pushWithoutPull = true
+    override val quotaWaitMs: Long = DRIVE_QUOTA_WAIT_MS
+    override val pushBatch = PushBatch(DRIVE_PUSH_RECORDS, DRIVE_PUSH_BYTES)
     private val t = SyncTables(c.db)
 
     // ── 通信 ──
@@ -350,13 +387,22 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
     private fun upto(): Map<String, List<Long>> = stateMap("drive_read_upto") as Map<String, List<Long>>? ?: emptyMap()
 
     private fun segState(): SegState? = stateMap("drive_seg")?.let { m ->
-        SegState(m["n"] as Long, m["day"] as String, m["file"] as String?, m["ids"] as List<String>, m["v"] as Long? ?: UNKNOWN_VERSION, m["bytes"] as Long? ?: 0L)
+        SegState(m["n"] as Long, m["day"] as String, m["file"] as String?, m["ids"] as List<String>, m["v"] as Long? ?: UNKNOWN_VERSION, m["bytes"] as Long? ?: 0L, m["at"] as Long? ?: 0L)
     }
 
     private fun own(): OwnFiles {
         val m = stateMap("drive_own") ?: return OwnFiles(null, emptyList())
-        val snap = (m["snap"] as Map<String, Any?>?)?.let { OwnSnap(it["u"] as Long, it["g"] as Long, it["files"] as List<String>, it["ids"] as List<String>) }
+        val snap = (m["snap"] as Map<String, Any?>?)?.let { OwnSnap(it["u"] as Long, it["uv"] as Long?, it["g"] as Long, it["files"] as List<String>, it["ids"] as List<String>, it["at"] as Long? ?: 0L) }
         return OwnFiles(snap, (m["segs"] as List<Map<String, Any?>>).map(::closedSegOf))
+    }
+
+    /** 他人のファイルの最終更新(fileId → ms)。止まった書き手のファイルを見分ける(2.6) */
+    private fun mtimes(): LinkedHashMap<String, Long> = LinkedHashMap(stateMap("drive_mtime") as Map<String, Long>? ?: emptyMap())
+
+    /** 読んだ・控えを進めたファイルの最終更新を控える */
+    private fun noteMtimes(mtime: LinkedHashMap<String, Long>, files: List<DriveFile>): LinkedHashMap<String, Long> {
+        for (f in files) modified(f)?.let { mtime[f.id] = it }
+        return mtime
     }
 
     // ── 読み分け ──
@@ -555,7 +601,13 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
         val cl = classify(changes, seen, t.state("drive_space"))
         if (cl.markerTouched || cl.toRead.isNotEmpty()) return changed
         for (id in cl.removed) seen.remove(id)
-        c.db.batch(listOf(setState("drive_token", next), setState("drive_seen", canonicalJson(seen))))
+        val stmts = arrayListOf(setState("drive_token", next), setState("drive_seen", canonicalJson(seen)))
+        val mtime = mtimes()
+        if (cl.removed.any { it in mtime }) {
+            for (id in cl.removed) mtime.remove(id)
+            stmts += setState("drive_mtime", canonicalJson(mtime))
+        }
+        c.db.batch(stmts)
         return HeadResult(null)
     }
 
@@ -600,9 +652,12 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
         for (id in cl.removed) seen.remove(id)
         for (f in plan.mark) seen[f.id] = f.version
         seen.putAll(read.seen)
+        val mtime = mtimes()
+        for (id in cl.removed) mtime.remove(id)
         commit += listOf(
             setState("drive_token", next),
             setState("drive_seen", canonicalJson(seen)),
+            setState("drive_mtime", canonicalJson(noteMtimes(mtime, plan.mark + plan.read))),
             setState("drive_read_upto", canonicalJson(advance(upto, plan.read))),
             setState("drive_read_at", c.now().toString()),
         )
@@ -627,6 +682,7 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
         val commit = arrayListOf(
             setState("drive_token", start),
             setState("drive_seen", canonicalJson(seen)),
+            setState("drive_mtime", canonicalJson(noteMtimes(LinkedHashMap(), plan.mark + plan.read))),
             setState("drive_read_upto", canonicalJson(advance(emptyMap(), plan.read))),
             setState("drive_space", m.id),
             setState("drive_read_at", c.now().toString()),
@@ -654,13 +710,19 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
 
     /**
      * 開いているセグメントを、今までに入れたレコードの今の値 + 今回の分で上書きする(1 回の送信 = 1 回の書き込み)。
-     * 書き込みはぶつからないので 409 はない。version は since の続きを振り、エンジンが自分の送ったものを読み戻さないようにする
+     * 書き込みはぶつからないので 409 はない。version は since の続きを振り、エンジンが自分の送ったものを読み戻さないようにする。
+     * セグメントに収まらない量(種まき・作り直し・参加の全件)は、スナップショットへまとめて書く
      */
     override suspend fun pushRecords(requestId: String, records: List<Map<String, Any?>>): PushResponse {
-        val day = utcDay(c.now())
+        val now = c.now()
+        val day = utcDay(now)
         val old = segState() ?: SegState(0, "", null, emptyList())
         var seg = old
         val fresh = records.map(::sealedOf)
+        if (segContent(seg.n + 1, fresh).length > DRIVE_SEG_BYTES) {
+            pushBulk(fresh.map { it["record_id"] as String }, now)
+            return pushed(records)
+        }
         val freshIds = fresh.map { it["record_id"] as String }.toSet()
         var prev: List<Map<String, Any?>> = emptyList()
         var close = !(seg.n > 0 && seg.day == day)
@@ -676,7 +738,7 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
             body = fresh
         }
         // 閉じたセグメントは、まとめ直しで消すまで控える
-        val closed = if (seg !== old && old.file != null) ClosedSeg(old.n, old.file, old.v, old.bytes, old.ids) else null
+        val closed = if (seg !== old && old.file != null) ClosedSeg(old.n, old.file, old.v, old.bytes, old.ids, old.at) else null
         var file = seg.file
         var content = segContent(seg.n, body)
         var version: Long? = null
@@ -695,32 +757,57 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
             version = made.version
         }
         val stmts = arrayListOf(
-            setState("drive_seg", canonicalJson(mapOf("n" to seg.n, "day" to seg.day, "file" to file, "ids" to body.map { it["record_id"] }, "v" to version, "bytes" to content.length.toLong()))),
+            setState("drive_seg", canonicalJson(mapOf("n" to seg.n, "day" to seg.day, "file" to file, "ids" to body.map { it["record_id"] }, "v" to version, "bytes" to content.length.toLong(), "at" to now))),
         )
         if (closed != null) {
             val own = own()
             stmts += setState("drive_own", canonicalJson(OwnFiles(own.snap, own.segs + closed).toJson()))
         }
         c.db.batch(stmts)
+        return pushed(records)
+    }
+
+    /** 全件 200。version は since の続き */
+    private suspend fun pushed(records: List<Map<String, Any?>>): PushResponse {
         val since = t.state("since")?.toLong() ?: 0L
         return PushResponse(records.mapIndexed { i, r -> PushResult(r["record_id"] as String, 200L, since + 1 + i, null) }, knownEpoch(), 0L)
     }
 
-    /** 前に入れたレコードを同期の表の今の値で封をし直す。表にないもの・封ができないものは missing に返す */
+    /**
+     * 多くを一度に送る。自分のファイル(スナップショット・閉じたセグメント・開いているセグメント)と今回の分を、新しいスナップショットにまとめて書く。
+     * まとめ直しと同じ作り方(作り終えてから古いものを消す)。tombstone は落とさない(g を変えず、ほかの端末をリベースさせない)
+     */
+    private suspend fun pushBulk(ids: List<String>, now: Long) {
+        val pending = stateMap("drive_compact")?.let(::compactJobOf)
+        if (pending != null) {
+            // 途中のまとめ直しを先に終える。容量の超過で待っている間は送れない
+            if (pending.wait != null && now < pending.wait) throw SyncApiError("http", 413, "quota_exceeded")
+            runJob(pending, null, now)
+            // 前の送信の途中で落ちたものなら、今回の分はもう入っている(値は作ったときの表の値で、送った値と同じか新しい)
+            val covered = pending.parts.flatten().toSet()
+            if (ids.all { it in covered }) return
+        }
+        val (job, made) = newJob(now, fold = true, extra = ids, cut = -1)
+        runJob(job, made, now)
+    }
+
+    /**
+     * 前に入れたレコードを同期の表の今の値で封をし直す。表にないもの・封ができないものは missing に返す。
+     * HLC の壁時計が cut より古い tombstone は封をせず expired に返す(落とすかは呼ぶ側が決める)
+     */
     private fun reseal(ids: List<String>, cut: Long = -1): Resealed {
         val rows = t.records(ids)
         val out = ArrayList<Map<String, Any?>>()
         val missing = ArrayList<String>()
-        var dropped = false
+        val expired = LinkedHashMap<String, String>()
         for (id in ids) {
             val r = rows[id]
             if (r == null) {
                 missing += id
                 continue
             }
-            // 期限の切れた tombstone は落とす(2.6)
             if (isDeleted(r.payload) && Hlc.parse(r.payload["hlc"] as String).wall < cut) {
-                dropped = true
+                expired[id] = r.payload["hlc"] as String
                 continue
             }
             try {
@@ -730,7 +817,7 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
                 missing += id
             }
         }
-        return Resealed(out, missing, dropped)
+        return Resealed(out, missing, expired)
     }
 
     private fun prefix() = "obbsync$DRIVE_FORMAT.${c.spaceId.take(16)}"
@@ -749,11 +836,11 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
         try {
             compact()
         } catch (e: SyncApiError) {
-            // 容量の超過: 作るのに容量が要るので、1 日は試さない。送信の側の「古い閲覧履歴を外す」が先に効く
+            // 容量の超過: 作るのに容量が要るので、1 日は試さない
             if (e.kind == "http" && e.status == 413) {
                 val job = stateMap("drive_compact")?.let(::compactJobOf)
                 val wait = c.now() + DRIVE_COMPACT_GAP_MS
-                c.db.batch(listOf(if (job != null) setState("drive_compact", canonicalJson(CompactJob(job.u, job.uv, job.g, job.cut, job.del, job.parts, job.done, wait).toJson())) else setState("drive_compact_at", c.now().toString())))
+                c.db.batch(listOf(if (job != null) setState("drive_compact", canonicalJson(job.copy(wait = wait).toJson())) else setState("drive_compact_at", c.now().toString())))
                 return
             }
             // 回数の上限は次の周で続ける。同期そのものは止めない
@@ -762,31 +849,61 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
         }
     }
 
+    /**
+     * まとめ直す条件(2.5・2.6): 閉じたセグメントが溜まった、または自分の最古のファイルが DRIVE_REWRITE_AGE_MS より古い。
+     * 古いときは開いているセグメントも閉じて入れ、古いファイルに残った値を手元の今の値で書き直す
+     */
     private suspend fun compact() {
         val now = c.now()
         val stored = stateMap("drive_compact")?.let(::compactJobOf)
-        var made: Map<String, Map<String, Any?>>? = null
-        var job: CompactJob
-        if (stored == null) {
-            val own = own()
-            val bytes = own.segs.sumOf { it.bytes }
-            if (own.segs.isEmpty() || (own.segs.size < DRIVE_COMPACT_SEGS && bytes < DRIVE_COMPACT_BYTES)) return
-            if (now - (t.state("drive_compact_at")?.toLong() ?: 0L) < DRIVE_COMPACT_GAP_MS) return
-            val last = own.segs.maxBy { it.n }
-            val del = own.snap?.files.orEmpty() + own.segs.map { it.file }
-            val cut = now - TOMB_MAX_AGE_MS
-            val (records, dropped) = snapRecords((own.snap?.ids.orEmpty() + own.segs.flatMap { it.ids }).distinct().sorted(), del, cut)
-            job = CompactJob(last.n, last.v, if (dropped) cut else own.snap?.g ?: 0L, cut, del, splitParts(records).map { p -> p.map { it["record_id"] as String } }, emptyList())
-            // 部分の分け方を先に置く。途中で落ちても、作り終えた部分を作り直さずに続きから作れる
-            c.db.batch(listOf(setState("drive_compact", canonicalJson(job.toJson()))))
-            made = records.associateBy { it["record_id"] as String }
-        } else {
-            if (stored.wait != null && now < stored.wait) return
-            job = stored
+        if (stored != null) {
+            if (stored.wait == null || now >= stored.wait) runJob(stored, null, now)
+            return
         }
+        val own = own()
+        val seg = segState()
+        val bytes = own.segs.sumOf { it.bytes }
+        val byCount = own.segs.isNotEmpty() && (own.segs.size >= DRIVE_COMPACT_SEGS || bytes >= DRIVE_COMPACT_BYTES)
+        val ages = listOfNotNull(own.snap?.at) + own.segs.map { it.at } + listOfNotNull(seg?.takeIf { it.file != null }?.at)
+        val byAge = ages.isNotEmpty() && ages.min() < now - DRIVE_REWRITE_AGE_MS
+        if (!byCount && !byAge) return
+        if (now - (t.state("drive_compact_at")?.toLong() ?: 0L) < DRIVE_COMPACT_GAP_MS) return
+        val (job, made) = newJob(now, fold = byAge, extra = emptyList(), cut = now - TOMB_MAX_AGE_MS)
+        runJob(job, made, now)
+    }
+
+    /**
+     * まとめ直しの計画を作って置く。部分の分け方を先に置くので、途中で落ちても作り終えた部分を作り直さずに続きから作れる。
+     * fold は開いているセグメントも閉じて入れる(次の送信は新しい通番で作る)。extra は今回送る分
+     */
+    private suspend fun newJob(now: Long, fold: Boolean, extra: List<String>, cut: Long): Pair<CompactJob, Map<String, Map<String, Any?>>> {
+        val own = own()
+        val seg = segState()
+        val segs = ArrayList(own.segs)
+        val stmts = ArrayList<SqlStatement>()
+        if (fold && seg?.file != null) segs += ClosedSeg(seg.n, seg.file, seg.v, seg.bytes, seg.ids, seg.at)
+        val last = segs.maxByOrNull { it.n }
+        // 入れるセグメントがない(スナップショットだけ)ときは、使っていない通番を 1 つ取って、読む側が前のスナップショットと混ぜないようにする
+        val u = last?.n ?: (maxOf(seg?.n ?: 0L, own.snap?.u ?: 0L) + 1)
+        val uv = last?.v ?: 0L
+        if (fold) {
+            stmts += setState("drive_seg", canonicalJson(mapOf("n" to maxOf(seg?.n ?: 0L, u), "day" to "", "file" to null, "ids" to emptyList<String>())))
+            stmts += setState("drive_own", canonicalJson(OwnFiles(own.snap, segs).toJson()))
+        }
+        val del = own.snap?.files.orEmpty() + segs.map { it.file }
+        val (records, dropped) = snapRecords((own.snap?.ids.orEmpty() + segs.flatMap { it.ids } + extra).distinct().sorted(), del, cut)
+        val job = CompactJob(u, uv, if (dropped) cut else own.snap?.g ?: 0L, cut, del, splitParts(records).map { p -> p.map { it["record_id"] as String } }, emptyList(), null, now)
+        c.db.batch(stmts + setState("drive_compact", canonicalJson(job.toJson())))
+        return job to records.associateBy { it["record_id"] as String }
+    }
+
+    /** 部分を作り、作り終えてから古いものを消す(どこにもない瞬間を作らない)。made がなければ(続きから)同期の表の今の値で封をする */
+    private suspend fun runJob(start: CompactJob, made: Map<String, Map<String, Any?>>?, now: Long) {
+        var job = start
         for (i in job.done.size until job.parts.size) {
             val ids = job.parts[i]
-            val records = made?.let { m -> ids.mapNotNull { m[it] } } ?: snapRecords(ids, job.del, job.cut).first
+            // 続きから作るときは落とさない(残すと決めた tombstone も部分に入っている)
+            val records = made?.let { m -> ids.mapNotNull { m[it] } } ?: snapRecords(ids, job.del, -1).first
             val p = "${i + 1}/${job.parts.size}"
             val f = createFile(
                 mapOf(
@@ -795,54 +912,90 @@ class DriveRemote(private val c: RemoteContext, private val o: DriveRemoteOption
                 ),
                 canonicalJson(mapOf("obbsync" to DRIVE_FORMAT, "space" to c.spaceId, "device" to c.deviceId, "type" to "snap", "u" to job.u, "uv" to job.uv, "g" to job.g, "p" to p, "records" to records)),
             )
-            job = CompactJob(job.u, job.uv, job.g, job.cut, job.del, job.parts, job.done + f.id)
+            job = job.copy(done = job.done + f.id, wait = null)
             c.db.batch(listOf(setState("drive_compact", canonicalJson(job.toJson()))))
         }
-        // 作り終えてから古いものを消す。どこにもない瞬間を作らない
         for (id in job.del) deleteFile(id)
         val own = own()
         val u = job.u
-        val next = OwnFiles(OwnSnap(u, job.g, job.done, job.parts.flatten()), own.segs.filter { it.n > u })
+        val next = OwnFiles(OwnSnap(u, job.uv, job.g, job.done, job.parts.flatten(), job.at ?: now), own.segs.filter { it.n > u })
         c.db.batch(listOf(setState("drive_own", canonicalJson(next.toJson())), delState("drive_compact"), setState("drive_compact_at", now.toString())))
     }
 
     /**
      * スナップショットに入れるレコード。同期の表の今の値で封をし、期限の切れた tombstone を落とす。
-     * 表にないもの(権限系を切った・手元で期限が切れた)は、古い自分のファイルから暗号文のまま引き継ぐ(切った端末が Drive から消さないように)
+     * 表にないもの(権限系を切った・手元で期限が切れた)は、古い自分のファイルから暗号文のまま引き継ぐ(切った端末が Drive から消さないように)。
+     * 止まった書き手のファイルに古い生きた値が残っている tombstone は落とさない(staleLive)。dropped は本当に落としたときだけ立つ(g を進める)
      */
     private suspend fun snapRecords(ids: List<String>, oldFiles: List<String>, cut: Long): Pair<List<Map<String, Any?>>, Boolean> {
         val r = reseal(ids, cut)
-        var dropped = r.dropped
-        if (r.missing.isEmpty()) return r.sealed to dropped
         val records = ArrayList(r.sealed)
-        val old = LinkedHashMap<String, Map<String, Any?>>()
-        // 後のファイル(新しいセグメント)の値で上書きする
-        for (id in oldFiles) {
-            val body = download(id) ?: continue
-            for (x in parseOwn(body).orEmpty()) old[x["record_id"] as String] = x
-        }
-        for (id in r.missing) {
-            val x = old[id]
-            val opened = x?.let { openRecords(c.keys, c.spaceId, listOf(it + ("version" to 0L))).records.firstOrNull() }
-            if (x == null || opened == null || (isDeleted(opened.payload) && Hlc.parse(opened.payload["hlc"] as String).wall < cut)) {
-                dropped = true
-                continue
+        /** 落とす候補。表にない分は古いファイルの暗号文を持つ */
+        val expired = LinkedHashMap<String, Pair<String, Map<String, Any?>?>>()
+        for ((id, hlc) in r.expired) expired[id] = hlc to null
+        var added = false
+        if (r.missing.isNotEmpty()) {
+            val old = LinkedHashMap<String, Map<String, Any?>>()
+            // 後のファイル(新しいセグメント)の値で上書きする
+            for (id in oldFiles) {
+                val body = download(id) ?: continue
+                for (x in parseRecords(body, c.deviceId)) old[x["record_id"] as String] = x
             }
-            records += x
+            for (id in r.missing) {
+                val x = old[id]
+                val opened = x?.let { openRecords(c.keys, c.spaceId, listOf(it + ("version" to 0L))).records.firstOrNull() }
+                // どこにもない・開けないものは捨てるだけ(tombstone を落としたのではないので g は進めない)
+                if (x == null || opened == null) continue
+                if (isDeleted(opened.payload) && Hlc.parse(opened.payload["hlc"] as String).wall < cut) {
+                    expired[id] = (opened.payload["hlc"] as String) to x
+                    continue
+                }
+                records += x
+                added = true
+            }
         }
-        records.sortBy { it["record_id"] as String }
+        var dropped = false
+        if (expired.isNotEmpty()) {
+            val keep = staleLive(expired.mapValues { it.value.first })
+            val again = reseal(keep.filter { expired[it]?.second == null }.sorted())
+            records += again.sealed
+            records += keep.mapNotNull { expired[it]?.second }
+            if (keep.isNotEmpty()) added = true
+            dropped = expired.size > keep.size
+        }
+        if (added) records.sortBy { it["record_id"] as String }
         return records to dropped
     }
 
-    /** 自分のファイルの中身。形が違えば null */
-    private fun parseOwn(body: String): List<Map<String, Any?>>? {
+    /**
+     * 落とそうとしている tombstone(record_id → HLC)のうち、止まった書き手のファイル(最終更新が DRIVE_STALE_MS より前)に、
+     * それより古い生きた値が残っているもの。落とすと、そのファイルを読む新しい端末・リベースした端末で消したものが戻る(2.6)。
+     * 動いている書き手は DRIVE_REWRITE_AGE_MS ごとに手元の値で書き直すので確かめない。止まった書き手のファイルだけをダウンロードする
+     */
+    private suspend fun staleLive(drops: Map<String, String>): Set<String> {
+        val keep = LinkedHashSet<String>()
+        val limit = c.now() - DRIVE_STALE_MS
+        val stale = mtimes().filter { it.value < limit }.keys.sorted()
+        for (id in stale) {
+            val body = download(id) ?: continue
+            val hits = parseRecords(body, null).filter { (it["record_id"] as String) in drops && (it["record_id"] as String) !in keep }
+            if (hits.isEmpty()) continue
+            for (o in openRecords(c.keys, c.spaceId, hits.map { it + ("version" to 0L) }).records) {
+                if (!isDeleted(o.payload) && (o.payload["hlc"] as String) < drops.getValue(o.recordId)) keep += o.recordId
+            }
+        }
+        return keep
+    }
+
+    /** ファイルの中身のレコード。device が null なら書き手を問わない。形が違えば空 */
+    private fun parseRecords(body: String, device: String?): List<Map<String, Any?>> {
         val v = try {
             parseStrictJson(body)
         } catch (_: Exception) {
-            return null
-        } as? Map<*, *> ?: return null
+            return emptyList()
+        } as? Map<*, *> ?: return emptyList()
         val records = v["records"] as? List<*>
-        if (v["obbsync"] != DRIVE_FORMAT || v["space"] != c.spaceId || v["device"] != c.deviceId || records == null) return null
+        if (v["obbsync"] != DRIVE_FORMAT || v["space"] != c.spaceId || (device != null && v["device"] != device) || records == null) return emptyList()
         return records.mapNotNull { r -> (r as? Map<*, *>)?.takeIf { it["record_id"] is String }?.let(::sealedOf) }
     }
 

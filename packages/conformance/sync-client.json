@@ -19647,6 +19647,10 @@
  },
  {
   "name": "履歴: 容量超過で外した自分の既読は、ログの削除の後でも他の端末の読みで下がらない",
+  "stores": [
+   "server"
+  ],
+  "store_note": "Drive は容量の超過で古い閲覧履歴を外さず、送るのを待つ(docs/sync-drive.md 1 章)",
   "devices": [
    "pc",
    "phone"
@@ -20487,6 +20491,618 @@
    {
     "op": "converged",
     "ignore_tombstones": true
+   }
+  ]
+ },
+ {
+  "name": "Drive: 3 台目が古いセグメントを持ったまま止まっても、91 日後に参加した端末・リベースした端末で消したものが戻らない",
+  "stores": [
+   "drive"
+  ],
+  "store_note": "止まった書き手のファイルと tombstone の片づけ(docs/sync-drive.md 2.6)は Drive だけにある",
+  "devices": [
+   "pc",
+   "phone",
+   "tablet",
+   "laptop"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "keep1",
+    "title": "keep1"
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "gone1",
+    "title": "gone1"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "tablet",
+    "from": "pc"
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone",
+     "tablet"
+    ]
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "tablet",
+    "board": "https://a.5ch.io/x/",
+    "key": "stale1",
+    "title": "stale1"
+   },
+   {
+    "op": "sync",
+    "device": "tablet"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "gone1",
+       "keep1",
+       "stale1"
+      ]
+     }
+    }
+   },
+   {
+    "op": "favorite_thread_remove",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "stale1",
+    "title": "stale1"
+   },
+   {
+    "op": "favorite_thread_remove",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "gone1",
+    "title": "gone1"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "repeat",
+    "times": 95,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "w{i}",
+      "title": "w{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "w{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "phone": {
+      "favorite_threads": [
+       "keep1"
+      ],
+      "phase": "idle",
+      "state": "idle"
+     }
+    }
+   },
+   {
+    "op": "pair_join",
+    "device": "laptop",
+    "from": "pc"
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone",
+     "laptop"
+    ]
+   },
+   {
+    "op": "converged",
+    "devices": [
+     "pc",
+     "phone",
+     "laptop"
+    ],
+    "ignore_tombstones": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "laptop": {
+      "favorite_threads": [
+       "keep1"
+      ]
+     },
+     "phone": {
+      "favorite_threads": [
+       "keep1"
+      ]
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "Drive: まとめ直しの条件を満たさない端末も、60 日で古いファイルを手元の値で書き直す",
+  "stores": [
+   "drive"
+  ],
+  "store_note": "書き手ごとのファイルの書き直し(docs/sync-drive.md 2.5・2.6)は Drive だけにある",
+  "devices": [
+   "pc",
+   "phone",
+   "laptop"
+  ],
+  "steps": [
+   {
+    "op": "pair_first",
+    "device": "pc"
+   },
+   {
+    "op": "pair_join",
+    "device": "phone",
+    "from": "pc"
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone"
+    ]
+   },
+   {
+    "op": "favorite_thread_add",
+    "device": "phone",
+    "board": "https://a.5ch.io/x/",
+    "key": "qq9",
+    "title": "qq9"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "favorite_thread_remove",
+    "device": "pc",
+    "board": "https://a.5ch.io/x/",
+    "key": "qq9",
+    "title": "qq9"
+   },
+   {
+    "op": "sync",
+    "device": "pc"
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v1_{i}",
+      "title": "v1_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v1_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v2_{i}",
+      "title": "v2_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v2_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v3_{i}",
+      "title": "v3_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v3_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v4_{i}",
+      "title": "v4_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v4_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v5_{i}",
+      "title": "v5_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v5_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v6_{i}",
+      "title": "v6_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v6_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v7_{i}",
+      "title": "v7_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v7_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v8_{i}",
+      "title": "v8_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v8_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v9_{i}",
+      "title": "v9_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v9_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "repeat",
+    "times": 10,
+    "steps": [
+     {
+      "op": "advance_ms",
+      "ms": 86400000
+     },
+     {
+      "op": "open",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v10_{i}",
+      "title": "v10_{i}"
+     },
+     {
+      "op": "read",
+      "device": "pc",
+      "board": "https://a.5ch.io/x/",
+      "key": "v10_{i}",
+      "no": 3
+     },
+     {
+      "op": "sync",
+      "device": "pc"
+     }
+    ]
+   },
+   {
+    "op": "sync",
+    "device": "phone"
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "$server": {
+      "of": {
+       "pc": {
+        "h_lacks": [
+         "qq9"
+        ]
+       }
+      }
+     }
+    }
+   },
+   {
+    "op": "pair_join",
+    "device": "laptop",
+    "from": "pc"
+   },
+   {
+    "op": "settle",
+    "devices": [
+     "pc",
+     "phone",
+     "laptop"
+    ]
+   },
+   {
+    "op": "converged",
+    "devices": [
+     "pc",
+     "phone",
+     "laptop"
+    ],
+    "ignore_tombstones": true
+   },
+   {
+    "op": "expect",
+    "expect": {
+     "laptop": {
+      "favorite_threads": []
+     },
+     "phone": {
+      "favorite_threads": []
+     }
+    }
    }
   ]
  }

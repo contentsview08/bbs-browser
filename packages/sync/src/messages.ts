@@ -36,6 +36,7 @@ export const DRIVE_MESSAGES: Readonly<Record<string, string>> = {
   google_login_timeout: 'Google のログインが 5 分のうちに終わらなかったので、やめました。',
   google_login_failed: 'Google のログインに失敗しました。もう一度お試しください。',
   google_pairing_failed: 'このコードの Google の接続は使えなくなっています。同期している端末で「端末を追加」を出し直してください。',
+  drive_quota: 'Google ドライブの容量がいっぱいなので、送るのを待っています。ドライブに空きを作ると、1 時間ほどで続きを送ります。この端末のデータはそのまま使えます。',
   server_sync_ended: '同期サーバーでの同期は終わったので、この端末の同期をやめた状態に戻しました。Google でログインして同期を始め直してください。この端末のデータはそのまま使えます。',
 }
 
@@ -125,6 +126,9 @@ export const DRIVE_LABELS = {
   pairing_note: '同期する端末で「コードで参加」に貼るか、QR を読んでください。Google のログインは要りません。',
   join_placeholder: 'obb2.',
   join_ask_account: 'Google アカウント: {email}',
+  // 手元に送るものがないときの参加の確認。どのアカウントの同期に入るかだけを確かめる
+  join_ask_drive: 'この Google アカウントの同期に参加します。自分の端末の QR 以外は読まないでください。',
+  copy_note: 'コピーしたコードは、クリップボードの履歴(Windows の Win + V など)に残ることがあります。貼り終えたら履歴からも消してください。',
   usage: 'ドライブで使っている量',
   interval: '同期の間隔',
   interval_note: 'ほかの端末の変更を確かめる間隔です。この端末の変更は、アプリを離れるときなどに間隔によらず送ります。変化のない間や操作のない間は、確かめる間隔を自動で延ばします。この端末だけの設定です。',

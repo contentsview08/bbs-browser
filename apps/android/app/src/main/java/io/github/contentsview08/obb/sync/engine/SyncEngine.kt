@@ -67,7 +67,14 @@ interface SyncKeyStore {
  * 画面に出す確認。join・rebase は適用の前に止まる確認、join_data は参加で手元を送る前の確認
  * (host はふだんと違うサーバーのとき、account は参加する Google アカウントのメール)
  */
-class SyncConfirm(val type: String, val lost: Long, val host: String? = null, val account: String? = null)
+class SyncConfirm(
+    val type: String,
+    val lost: Long,
+    val host: String? = null,
+    val account: String? = null,
+    /** 参加で相手へ送るものが手元にあるか。Drive の参加は空でも確認を出す(アカウントを見せる)ので、文を分ける */
+    val data: Boolean? = null,
+)
 
 class CycleResult {
     var state = "off"
@@ -161,6 +168,8 @@ class SyncEngine(
     @Volatile private var halting = false
     /** 直前の確認が「変化なし」(304 か同じ version)だった時刻。自動の周で pull を省く根拠 */
     private var headFreshAt = 0L
+    /** 直前の確認が「変化あり」だった。送る前に読まなくてよい置き場(Drive)では、これが立っている周だけ自動で読む */
+    @Volatile private var headChanged = false
 
     @Volatile private var again = false
     @Volatile private var againManual = false
@@ -277,11 +286,13 @@ class SyncEngine(
                 val since = t.state("since")?.toLong() ?: 0L
                 val changed = version > since || (r.gcFloor ?: 0L) > since || r.epoch != t.state("epoch")
                 headFreshAt = if (changed) 0 else now()
+                if (changed) headChanged = true
                 changed
             } catch (e: SyncApiError) {
                 // 404・401 は周の流れ(作り直し・止める)で扱う
                 if (e.kind == "http" && (e.status == 404 || e.status == 401)) {
                     headFreshAt = 0
+                    headChanged = true
                     return@withContext true
                 }
                 if (e.kind == "http" && e.status == 429) waitFor(e) else retryAt = now() + SyncConfig.backoffDelayMs(attempts++, jitter())
@@ -671,7 +682,10 @@ class SyncEngine(
         if (!seeded && (manual || !filled)) fillMissing()
         filled = true
         val at = now()
-        if (!pulled && (manual || (at - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS && !(quick && headIsFresh(at))))) pull(false)
+        // 送るだけの周(確認の時計・裏へ回る瞬間)は、409 のない置き場では読まない。確認が変化を見つけた周だけ読む(手動のみの説明どおり)
+        val skipQuick = quick && (headIsFresh(at) || (api.pushWithoutPull && !headChanged))
+        if (!pulled && (manual || (at - (t.state("last_pull_at")?.toLong() ?: 0) >= SyncConfig.PULL_MIN_GAP_MS && !skipQuick))) pull(false)
+        if (pulled || !skipQuick) headChanged = false
         applyAll()
         pushAll(manual)
         // 409 のマージでサーバーの値が勝つと、手元へ写すものが増える
@@ -979,6 +993,13 @@ class SyncEngine(
             val res = try {
                 call { api.pushRecords(prepared.requestId, body) }
             } catch (e: SyncApiError) {
+                // 利用者の Drive の容量は外しても空かない(ほかのファイルが占めている)ことが多い。外さずに待ち、画面には容量の案内だけ出す
+                val quotaWait = api.quotaWaitMs
+                if (e.status == 413 && e.code == "quota_exceeded" && quotaWait != null) {
+                    pushRetryAt = now() + quotaWait
+                    pushDeferred = "drive_quota"
+                    return
+                }
                 if (e.status == 413 && e.code == "quota_exceeded" && trims < SyncConfig.TRIM_ROUNDS && trimForQuota()) {
                     trims++
                     continue
@@ -1041,14 +1062,15 @@ class SyncEngine(
             if (rows.isNotEmpty()) return Prepared(inflight["request_id"] as String, rows, entries.associate { (it["record_id"] as String) to (it["hlc"] as String) })
             db.exec("DELETE FROM sync_state WHERE key = ?", listOf("push_inflight"))
         }
-        val candidates = t.pendingRecords(SyncConfig.PUSH_BATCH_RECORDS, offKinds)
+        val limit = api.pushBatch ?: PushBatch(SyncConfig.PUSH_BATCH_RECORDS, SyncConfig.PUSH_BATCH_BYTES.toLong())
+        val candidates = t.pendingRecords(limit.records, offKinds)
         if (candidates.isEmpty()) return null
         var bytes = 0L
         val rows = ArrayList<StoredRecord>()
         for (r in candidates) {
             // 暗号文は平文の 4/3 倍と少しになる
             bytes += ceil((canonicalJson(r.payload).length + 256 + 16) * 4 / 3.0).toLong() + 256
-            if (rows.isNotEmpty() && bytes > SyncConfig.PUSH_BATCH_BYTES) break
+            if (rows.isNotEmpty() && bytes > limit.bytes) break
             rows += r
         }
         val requestId = newRequestId()

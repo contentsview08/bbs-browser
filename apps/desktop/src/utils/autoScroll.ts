@@ -57,12 +57,15 @@ export const LIVE_LEFT_END_PX = 24
 /**
  * ライブの段で、一番下へ寄せるか。毎コマと、レスを 1 件出した直後の両方で同じ決まりを使う
  * (出した直後だけ無条件に寄せると、レスが速く出るスレでは上へ動かしても引き戻され、ライブから外れられない)。
- * - leave: 利用者が動かした(自分で書いた位置から動き、一番下から離れている)。ライブの段から外れる
+ * 「利用者が動かした」は、利用者の入力(ホイール・指・スクロールバーのつまみ・キー)の最中か直後だけで見る。
+ * 位置のずれだけで見ると、隠していたレスが届いて下の飾りの高さが変わる・上のレスの高さを直す などで位置がずれただけで外れ、
+ * 一番下にくっつかなくなる。
+ * - leave: 触っている間に、自分で書いた位置より上へ動き、一番下から離れた。ライブの段から外れる
  * - wait: 触った直後・キーで動かしている最中。スクロールはイベントの少し後に動き、ここで位置を書くとその動きを打ち消すので、寄せずに待つ
- * - stick: 一番下へ寄せる
+ * - stick: 一番下へ寄せる(触っていなければ、位置がずれていても寄せる)
  */
-export function liveStickAction(s: { rest: number; moved: boolean; touching: boolean }): 'stick' | 'wait' | 'leave' {
-  if (s.moved && s.rest > LIVE_LEFT_END_PX) return 'leave'
-  if (s.touching) return 'wait'
-  return 'stick'
+export function liveStickAction(s: { rest: number; movedUp: boolean; touching: boolean }): 'stick' | 'wait' | 'leave' {
+  if (!s.touching) return 'stick'
+  if (s.movedUp && s.rest > LIVE_LEFT_END_PX) return 'leave'
+  return 'wait'
 }

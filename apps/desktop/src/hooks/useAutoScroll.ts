@@ -3,6 +3,7 @@
 // - 追いつくまで: 流す速さで一定に流す。毎コマ残りを測り直す(画像の読み込み・NG で高さが変わっても合う)
 // - 一番下に着いたら、ライブの段: 流すのをやめ、届いたレスを useLiveReveal が 1 件ずつ出し、一覧を一番下にくっつけておく
 // - 利用者が動かしたら(ホイール・指・スクロールバー・キーや飛ぶ操作)止め、ライブの段なら隠していたレスを全部出す。
+//   動かしたかは利用者の入力で見る(位置のずれだけでは見ない。中身の高さが変わっただけでも位置はずれる)。
 //   自分で一番下まで戻ったら、ライブの段に戻る
 // - 開いた直後の位置決めや、ほかの所の動き(useThreadScroll の runMove)の最中は動かさない
 
@@ -11,11 +12,14 @@ import type { Post } from '@bbs-browser/connectors'
 import { liveScrollPxPerSec, liveStickAction } from '../utils/autoScroll'
 import { liveQueueTimes, liveRevealSchedule, postTimeMs } from '../utils/liveReveal'
 import { isMoving } from './useThreadScroll'
+import { isTypingTarget } from '../utils/keymap'
 
 /** 一番下に着いたとみなす残り(px)。小数の端数で着かないことがないように */
 const AT_END_PX = 1
 /** 利用者が触ってから、くっつけるのを待つ時間(スクロールはイベントの少し後に動くので、その間に引き戻さない) */
 const TOUCH_GRACE_MS = 300
+/** 画面を動かすキー(フォーカスのある領域をブラウザが動かす。アプリのキー操作は isMoving で分かる) */
+const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '])
 /** 1 コマで進める時間の上限(裏から戻ったときなどに、大きく飛ばないように) */
 const MAX_STEP_S = 0.1
 /** 行の高さを測り直す間隔 */
@@ -121,6 +125,10 @@ export function useAutoScroll(o: Options) {
   const writtenRef = useRef(NaN)
   /** 利用者が最後に触った時刻(ホイール・指・スクロールバー・キーで動かし中) */
   const touchedAtRef = useRef(-Infinity)
+  /** スクロールバーのつまみを押さえているか(引いている間はイベントが来ないので、離すまで触っていることにする) */
+  const holdingRef = useRef(false)
+  /** 利用者が触っている最中か直後か */
+  const touchingRef = useRef((root: HTMLElement) => holdingRef.current || isMoving(root) || performance.now() - touchedAtRef.current < TOUCH_GRACE_MS)
   /** 利用者が動かしたので、ライブの段から外れて止める(レスを出した直後の寄せからも呼ぶ) */
   const leaveByUserRef = useRef<() => void>(() => {})
 
@@ -138,6 +146,7 @@ export function useAutoScroll(o: Options) {
     let measuredAt = -Infinity
     let readAt = last
     touchedAtRef.current = -Infinity
+    holdingRef.current = false
     let raf = 0
 
     const touch = () => {
@@ -184,7 +193,7 @@ export function useAutoScroll(o: Options) {
         return
       }
       const rest = max - root.scrollTop
-      const touching = now - touchedAtRef.current < TOUCH_GRACE_MS
+      const touching = touchingRef.current(root)
       if (paused.current) {
         // 自分で一番下まで戻ったら、ライブの段に戻る
         if (touching || rest > AT_END_PX || !latest.current.canGoLive()) return
@@ -192,12 +201,13 @@ export function useAutoScroll(o: Options) {
         enterLive()
       }
       if (liveRef.current) {
-        const action = liveStickAction({ rest, moved: Math.abs(root.scrollTop - written.current) >= 1, touching })
+        const action = liveStickAction({ rest, movedUp: written.current - root.scrollTop >= 1, touching })
         // 上へ動かした: ライブの段から外れ、隠していたレスを全部出して止める
         if (action === 'leave') return leaveByUserRef.current()
-        // 一番下にくっつけておく(出したレス・読み込んだ画像で伸びた分を追う)
-        if (action === 'stick' && rest > 0) {
-          root.scrollTop = max
+        // 一番下にくっつけておく(出したレス・読み込んだ画像で伸びた分を追う)。
+        // 一番下にいても位置を控え直す(中身が縮んで位置が詰められた分を、あとで利用者が上へ動かしたと見ないように)
+        if (action === 'stick') {
+          if (rest > 0) root.scrollTop = max
           written.current = root.scrollTop
         }
         return
@@ -230,18 +240,48 @@ export function useAutoScroll(o: Options) {
     }
     raf = requestAnimationFrame(step)
 
-    // ホイール・指・スクロールバーで動かしたら止める
+    // ホイール・指・スクロールバー・キーで動かしたら止める
     const onPressRoot = (e: PointerEvent) => {
-      if (e.target === root) touch()
+      if (e.target !== root) return
+      holdingRef.current = true
+      touch()
+    }
+    const onRelease = () => {
+      if (!holdingRef.current) return
+      holdingRef.current = false
+      touch()
+    }
+    // 窓の外で離して pointerup が来なかったときも、ボタンが上がっていれば離したことにする(押さえたままと思い続けて寄せなくならないように)
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.buttons === 0) onRelease()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(e.key) && !isTypingTarget(e.target)) touch()
+    }
+    // 触った直後に続く動き(指を離した後の惰性・なめらかなスクロール)の間は、触っていることにし続ける
+    const onScroll = () => {
+      if (performance.now() - touchedAtRef.current < TOUCH_GRACE_MS && Math.abs(root.scrollTop - written.current) >= 1) touch()
     }
     root.addEventListener('wheel', touch, { passive: true })
     root.addEventListener('touchmove', touch, { passive: true })
     root.addEventListener('pointerdown', onPressRoot)
+    root.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('pointerup', onRelease)
+    window.addEventListener('pointercancel', onRelease)
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('blur', onRelease)
+    window.addEventListener('keydown', onKey)
     return () => {
       cancelAnimationFrame(raf)
       root.removeEventListener('wheel', touch)
       root.removeEventListener('touchmove', touch)
       root.removeEventListener('pointerdown', onPressRoot)
+      root.removeEventListener('scroll', onScroll)
+      window.removeEventListener('pointerup', onRelease)
+      window.removeEventListener('pointercancel', onRelease)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('blur', onRelease)
+      window.removeEventListener('keydown', onKey)
       leaveLive()
       leaveByUserRef.current = () => {}
     }
@@ -254,11 +294,7 @@ export function useAutoScroll(o: Options) {
     const root = rootRef.current
     if (!live || count === undefined || !root || paused.current) return
     const max = root.scrollHeight - root.clientHeight
-    const action = liveStickAction({
-      rest: max - root.scrollTop,
-      moved: Math.abs(root.scrollTop - writtenRef.current) >= 1,
-      touching: isMoving(root) || performance.now() - touchedAtRef.current < TOUCH_GRACE_MS,
-    })
+    const action = liveStickAction({ rest: max - root.scrollTop, movedUp: writtenRef.current - root.scrollTop >= 1, touching: touchingRef.current(root) })
     if (action === 'leave') return leaveByUserRef.current()
     if (action === 'stick') {
       root.scrollTop = max

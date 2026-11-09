@@ -5,7 +5,8 @@ import io.github.contentsview08.obb.sync.canonicalJson
 import io.github.contentsview08.obb.sync.parseStrictJson
 import kotlinx.coroutines.CancellationException
 
-// サーバーとの通信の口。実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
+// 同期サーバーとの通信の口(置き場の 1 つ。ほかの置き場は SyncRemote.kt の SyncRemote で差し替える)。
+// 実物の HTTP は差し替えで渡す。https 以外とリダイレクトはここで断る(トークンが別の先へ渡らないように)
 
 /** timeoutMs は要求の全体の上限、idleTimeoutMs は無通信がこれだけ続いたら打ち切る時間 */
 class SyncRequest(val method: String, val url: String, val headers: Map<String, String>, val body: String?, val maxBytes: Int, val timeoutMs: Long, val idleTimeoutMs: Long = timeoutMs)
@@ -36,7 +37,19 @@ private val TICKET_FORM = Regex("v1\\.([0-9a-f]{64})\\.[0-9]{1,12}\\.[A-Za-z0-9_
 /** 許可証の結び付く領域。形が違えば null。署名と期限はサーバーだけが確かめる(端末の時計を信用しない) */
 fun ticketSpaceId(ticket: String): String? = TICKET_FORM.matchEntire(ticket)?.groupValues?.get(1)
 
-class ChangesPage(val records: List<Map<String, Any?>>, val head: Long, val more: Boolean, val epoch: String, val gcFloor: Long)
+/**
+ * commit は読んだ分と同じバッチで書く、置き場の続きの控え(Drive の token など)。書き終える前に落ちたら次も同じ所から読む。
+ * bad は開く前に捨てたもの(bad_counts の理由)
+ */
+class ChangesPage(
+    val records: List<Map<String, Any?>>,
+    val head: Long,
+    val more: Boolean,
+    val epoch: String,
+    val gcFloor: Long,
+    val commit: List<SqlStatement> = emptyList(),
+    val bad: List<String> = emptyList(),
+)
 
 class PushResult(val recordId: String, val status: Long, val version: Long?, val record: Map<String, Any?>?)
 
@@ -55,12 +68,13 @@ private fun checkEpoch(v: Any?): String {
 }
 
 @Suppress("UNCHECKED_CAST")
-class SyncApi(serverUrl: String, private val tokenHex: String, private val transport: SyncTransport, allowLocalhost: Boolean = false) {
+class SyncApi(serverUrl: String, private val tokenHex: String, private val transport: SyncTransport, allowLocalhost: Boolean = false) : SyncRemote {
     private val base = checkServerUrl(serverUrl, allowLocalhost)
+    override val needsTicket = true
 
     /** 応答に書いてあった「最低これだけ空ける」。古いサーバーは書かない */
-    var pace: SyncPace? = null
-        private set
+    private var paceValue: SyncPace? = null
+    override val pace: SyncPace? get() = paceValue
 
     private suspend fun call(method: String, path: String, body: Any? = null, etag: String? = null): Map<String, Any?> {
         val headers = LinkedHashMap<String, String>()
@@ -86,12 +100,12 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
         val detail = parsed as? Map<String, Any?>
         if (res.status !in 200..299) throw SyncApiError("http", res.status, (detail?.get("error") as? String)?.take(64).orEmpty(), detail)
         val ok = parsed as? Map<String, Any?> ?: throw bad()
-        (ok["pace"] as? Map<String, Any?>)?.let { pace = SyncPace((it["head_sec"] as? Number)?.toDouble(), (it["push_sec"] as? Number)?.toDouble()) }
+        (ok["pace"] as? Map<String, Any?>)?.let { paceValue = SyncPace((it["head_sec"] as? Number)?.toDouble(), (it["push_sec"] as? Number)?.toDouble()) }
         return ok
     }
 
     /** 同じ ETag なら 304。Cookie も本文もないので一番軽い確認になる */
-    suspend fun head(etag: String?): HeadResult {
+    override suspend fun head(etag: String?): HeadResult {
         try {
             val r = call("GET", "/head", null, etag)
             if (!isCount(r["version"]) || !isCount(r["gc_floor"])) throw bad()
@@ -102,7 +116,9 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
         }
     }
 
-    suspend fun createSpace(ticket: String): String {
+    override suspend fun createSpace(ticket: String?): String {
+        // エンジンは needsTicket を見て、許可証がなければ送る前に止まる
+        if (ticket == null) throw SyncApiError("http", 403, "ticket_required")
         val r = try {
             call("POST", "/spaces", mapOf("ticket" to ticket))
         } catch (e: SyncApiError) {
@@ -118,14 +134,14 @@ class SyncApi(serverUrl: String, private val tokenHex: String, private val trans
         return checkEpoch(r["epoch"])
     }
 
-    suspend fun changes(since: Long): ChangesPage {
+    override suspend fun changes(since: Long): ChangesPage {
         val r = call("GET", "/changes?since=$since")
         val records = r["records"] as? List<*> ?: throw bad()
         if (!records.all { it is Map<*, *> } || !isCount(r["head"]) || r["more"] !is Boolean || !isCount(r["gc_floor"])) throw bad()
         return ChangesPage(records as List<Map<String, Any?>>, r["head"] as Long, r["more"] as Boolean, checkEpoch(r["epoch"]), r["gc_floor"] as Long)
     }
 
-    suspend fun pushRecords(requestId: String, records: List<Map<String, Any?>>): PushResponse {
+    override suspend fun pushRecords(requestId: String, records: List<Map<String, Any?>>): PushResponse {
         val r = call("POST", "/records", mapOf("request_id" to requestId, "records" to records))
         val list = r["results"] as? List<*> ?: throw bad()
         if (!isCount(r["gc_floor"])) throw bad()

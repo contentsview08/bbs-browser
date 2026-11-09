@@ -38,7 +38,6 @@ import io.github.contentsview08.obb.sync.sealPayload
 import io.github.contentsview08.obb.sync.settleRecord
 import io.github.contentsview08.obb.sync.spaceId
 import io.github.contentsview08.obb.sync.toBase64Url
-import io.github.contentsview08.obb.sync.toHex
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -51,8 +50,11 @@ import kotlin.random.Random
 
 // 同期エンジン。PC 版の packages/sync/src/engine/engine.ts と同じ順番で動く。周の順は必ず draining → pull → apply → push
 
-/** ticket は領域の作成の許可証。k と一緒に動くので一緒に置く。これだけでは領域を作れない(トークンが要る) */
-class SyncKeyMaterial(val k: ByteArray, val deviceId: String, val ticket: String?)
+/**
+ * ticket は領域の作成の許可証(同期サーバーの置き場だけ)。google は Google ドライブの更新用のトークン(QR の obb2 で受け取る)。
+ * どちらも k と一緒に動くので一緒に置く
+ */
+class SyncKeyMaterial(val k: ByteArray, val deviceId: String, val ticket: String?, val google: String? = null)
 
 /** Android Keystore で包んで専用の Prefs に置く(data/SyncKeyVault.kt)。k を同期の表にも settings の Prefs にも置かない */
 interface SyncKeyStore {
@@ -61,8 +63,11 @@ interface SyncKeyStore {
     suspend fun clear()
 }
 
-/** 画面に出す確認。join・rebase は適用の前に止まる確認、join_data は参加で手元を送る前の確認(host はふだんと違うサーバーのとき) */
-class SyncConfirm(val type: String, val lost: Long, val host: String? = null)
+/**
+ * 画面に出す確認。join・rebase は適用の前に止まる確認、join_data は参加で手元を送る前の確認
+ * (host はふだんと違うサーバーのとき、account は参加する Google アカウントのメール)
+ */
+class SyncConfirm(val type: String, val lost: Long, val host: String? = null, val account: String? = null)
 
 class CycleResult {
     var state = "off"
@@ -95,6 +100,8 @@ private class FullRead {
     val meta = HashMap<String, ServerMeta>()
     var head = 0L
     var gcFloor = 0L
+    /** 読み終えたときに書く置き場の控え */
+    val commit = ArrayList<SqlStatement>()
     /** 途中で打ち切ったときの原因。読めた分は使う */
     var failure: Exception? = null
 }
@@ -114,6 +121,9 @@ private fun same(a: SyncPayload, b: SyncPayload) = canonicalJson(a) == canonical
 /** 権限系だけ k_secret で封をする */
 private fun tagOfKind(kind: String) = if (kind == SECRET_KIND) "s" else "h"
 
+/** Google のトークンを更新できない(取り消し・期限切れ)。止まって、QR の読み直しを待つ */
+const val GOOGLE_AUTH_FAILED = "google_auth_failed"
+
 /** 応答に待ち時間がないときの、権限系の読み直しの間隔 */
 private const val REFETCH_RETRY_MS = 3_600_000L
 
@@ -132,6 +142,8 @@ class SyncEngine(
     private val allowLocalhost: Boolean = false,
     private val onState: (String) -> Unit = {},
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** 置き場。なければ serverUrl の同期サーバー */
+    private val remote: SyncRemoteFactory? = null,
 ) {
     private val t = SyncTables(db)
     private val kinds = adapters.map { it.kind }.distinct()
@@ -167,13 +179,18 @@ class SyncEngine(
 
     // 周の間だけ持つ
     private lateinit var keys: SyncKeys
-    private lateinit var api: SyncApi
+    private lateinit var api: SyncRemote
     private var spaceIdValue = ""
     private var deviceId = ""
     private lateinit var result: CycleResult
 
     /** この周で切っている種類。周の途中で切り替えるときは halted で周を終わらせてから書く */
     private var offKinds: Set<String> = emptySet()
+
+    private fun makeRemote(keys: SyncKeys, deviceId: String): SyncRemote {
+        val make = remote ?: serverRemote(serverUrl, transport, allowLocalhost)
+        return make(RemoteContext(db, keys, spaceId(keys.authToken), deviceId, now))
+    }
 
     private fun enter(s: String) {
         state = s
@@ -248,8 +265,8 @@ class SyncEngine(
         try {
             if (t.state("enabled") != "1" || !isMasterOn() || t.state("phase") != "idle" || now() < retryAt) return@withContext false
             val material = keyStore.load() ?: return@withContext false
-            val head = SyncApi(serverUrl, deriveKeys(material.k).authToken.toHex(), transport, allowLocalhost)
             try {
+                val head = makeRemote(deriveKeys(material.k), material.deviceId)
                 val r = head.head(headEtag())
                 head.pace?.let { pace = it }
                 val version = r.version
@@ -341,17 +358,23 @@ class SyncEngine(
     suspend fun setTicket(ticket: String) = withContext(io) {
         val material = keyStore.load() ?: throw SyncApiError("bad_ticket")
         checkTicketFor(material.k, ticket)
-        keyStore.save(SyncKeyMaterial(material.k, material.deviceId, ticket))
+        keyStore.save(SyncKeyMaterial(material.k, material.deviceId, ticket, material.google))
+    }
+
+    /** QR の読み直し(配り直し)で受け取った Google の更新用のトークンへ置き換える。K と同期の表はそのまま */
+    suspend fun setGoogle(token: String) = withContext(io) {
+        val material = keyStore.load() ?: throw SyncApiError("bad_code")
+        keyStore.save(SyncKeyMaterial(material.k, material.deviceId, material.ticket, token))
     }
 
     /** 使い始め。鍵と端末 ID を保管してから enabled を立てる。ここから利用者の操作が積まれ始める */
-    suspend fun pair(k: ByteArray, ticket: String?) = withContext(io) {
+    suspend fun pair(k: ByteArray, ticket: String?, google: String? = null) = withContext(io) {
         if (ticket != null) checkTicketFor(k, ticket)
         halted {
             headFreshAt = 0
             pace = null
             val id = newDeviceId()
-            keyStore.save(SyncKeyMaterial(k, id, ticket))
+            keyStore.save(SyncKeyMaterial(k, id, ticket, google))
             db.batch(joinStatements(id))
             deviceChecked = true
             reconciled = false
@@ -437,7 +460,7 @@ class SyncEngine(
             return finish(if (state == "offline") "offline" else "backoff")
         }
         return try {
-            api = SyncApi(serverUrl, keys.authToken.toHex(), transport, allowLocalhost)
+            api = makeRemote(keys, deviceId)
             enter("draining")
             drain()
             flow(manual, quick)
@@ -460,7 +483,7 @@ class SyncEngine(
         var next = "backoff"
         if (e is SyncApiError) {
             if (e.kind == "bad_url") return block("bad_url")
-            if (e.kind == "http" && e.status == 401) return block("auth_failed")
+            if (e.kind == "http" && e.status == 401) return block(if (e.code == GOOGLE_AUTH_FAILED) e.code else "auth_failed")
             code = if (e.kind == "http") e.code.ifEmpty { "http_${e.status}" } else e.kind
             if (e.kind == "network") next = "offline"
             // 再送しない 4xx。次のきっかけでまた試す
@@ -501,7 +524,7 @@ class SyncEngine(
             }
             DeviceCheck.REJOIN -> {
                 val id = newDeviceId()
-                keyStore.save(SyncKeyMaterial(material!!.k, id, material.ticket))
+                keyStore.save(SyncKeyMaterial(material!!.k, id, material.ticket, material.google))
                 clearTables()
                 db.batch(joinStatements(id))
                 true
@@ -606,6 +629,7 @@ class SyncEngine(
         for (i in 0 until 4) {
             try {
                 step(manual, quick)
+                api.maintain()
                 return
             } catch (e: SpaceGone) {
                 onSpaceGone(e)
@@ -675,7 +699,8 @@ class SyncEngine(
             if (page.more && next <= since) throw SyncApiError("no_progress")
             enter("merging")
             keepRunning()
-            mergePage(page.records, next, page.gcFloor)
+            mergePage(page.records, next, page.gcFloor, page.commit)
+            for (reason in page.bad) countBad(reason)
             since = next
             if (!page.more) return
         }
@@ -699,7 +724,7 @@ class SyncEngine(
     /** 権限系を切っている端末は開かない。version は呼ぶ側が数えるので、読み飛ばしてもページングは進む */
     private fun readable(raw: List<Map<String, Any?>>) = if (SECRET_KIND in offKinds) raw.filter { it["kind_tag"] != "s" } else raw
 
-    private fun mergePage(raw: List<Map<String, Any?>>, since: Long, gcFloor: Long) {
+    private fun mergePage(raw: List<Map<String, Any?>>, since: Long, gcFloor: Long, commit: List<SqlStatement>) {
         val at = now()
         val page = readable(raw)
         val opened = openRecords(keys, spaceIdValue, page)
@@ -716,6 +741,7 @@ class SyncEngine(
         }
         for (f in opened.failed) countBad(f.reason)
         // since はレコードと同じバッチで進むので、途中までは有効
+        stmts += commit
         stmts += listOf(setState("since", since.toString()), setState("clock", clock), setState("gc_floor", gcFloor.toString()), setState("last_pull_at", at.toString()))
         db.batch(stmts)
         result.pulled += opened.records.size
@@ -1087,9 +1113,13 @@ class SyncEngine(
             val shown = readable(page.records)
             val opened = openRecords(keys, spaceIdValue, shown)
             for (f in opened.failed) countBad(f.reason)
+            for (reason in page.bad) countBad(reason)
+            out.commit += page.commit
             val metaOf = shown.associateBy { it["record_id"] as? String }
             for (r in opened.records) {
-                out.full[r.recordId] = LocalRecord(r.payload, r.version)
+                // Drive は同じレコードを書き手ごとのファイルに持つので、1 回の読み取りに何度も来る。後のもので上書きせずに合わせる
+                val prev = out.full[r.recordId]
+                out.full[r.recordId] = if (prev != null) LocalRecord(mergePayloads(prev.payload, r.payload), maxOf(prev.version, r.version)) else LocalRecord(r.payload, r.version)
                 val m = metaOf.getValue(r.recordId)
                 out.meta[r.recordId] = ServerMeta(m["kind_tag"] as String, m["schema_version"] as Long)
             }
@@ -1121,7 +1151,8 @@ class SyncEngine(
     private suspend fun onSpaceGone(e: SpaceGone) {
         val known = t.state("epoch")
         val epoch = e.newEpoch ?: try {
-            val ticket = keyStore.load()?.ticket ?: throw CycleStop(block("ticket_required"))
+            val ticket = keyStore.load()?.ticket
+            if (ticket == null && api.needsTicket) throw CycleStop(block("ticket_required"))
             api.createSpace(ticket)
         } catch (err: SyncApiError) {
             if (err.kind == "http" && err.status == 403) {
@@ -1190,7 +1221,7 @@ class SyncEngine(
             stmts += writeRecord(rowFromPlan(byId[id], id, settled, read.meta[id], pending, priority))
         }
         for (id in plan.expired) stmts += delRecord(id)
-        writeChunks(stmts, listOf(delState("recreate_pending"), setState("since", read.head.toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
+        writeChunks(stmts, read.commit + listOf(delState("recreate_pending"), setState("since", read.head.toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
         result.pulled += read.full.size
     }
 
@@ -1244,7 +1275,7 @@ class SyncEngine(
             if (stmts.isNotEmpty()) writeChunks(stmts, emptyList())
             throw read.failure!!
         }
-        writeChunks(stmts, listOf(counted, delState("rebase_accepted"), setState("since", maxOf(read.head, read.gcFloor).toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
+        writeChunks(stmts, read.commit + listOf(counted, delState("rebase_accepted"), setState("since", maxOf(read.head, read.gcFloor).toString()), setState("gc_floor", read.gcFloor.toString()), setState("last_pull_at", at.toString())))
         result.pulled += read.full.size
     }
 }

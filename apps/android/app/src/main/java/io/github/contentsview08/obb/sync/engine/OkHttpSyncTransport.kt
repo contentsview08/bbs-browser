@@ -17,8 +17,10 @@ private val JSON_TYPE = "application/json".toMediaType()
 
 class OkHttpSyncTransport(private val client: OkHttpClient = defaultClient()) : SyncTransport {
     override suspend fun send(req: SyncRequest): SyncResponse = withContext(Dispatchers.IO) {
-        // 文字列のままだと OkHttp が charset を足す。サーバーは application/json だけを受ける
-        val body = req.body?.toByteArray(Charsets.UTF_8)?.toRequestBody(JSON_TYPE)
+        // 文字列のままだと OkHttp が charset を足す。サーバーは application/json だけを受ける。
+        // 本文の型が Content-Type を上書きするので、Drive の multipart の境目は要求の値から作る
+        val type = req.headers["Content-Type"]?.toMediaType() ?: JSON_TYPE
+        val body = req.body?.toByteArray(Charsets.UTF_8)?.toRequestBody(type)
         val b = Request.Builder().url(req.url).method(req.method, body)
         for ((k, v) in req.headers) b.header(k, v)
         // 無通信の打ち切りと全体の打ち切りを分ける。全体を短くすると、遅い回線で 1MB のページが毎回同じところで切れて先へ進まない

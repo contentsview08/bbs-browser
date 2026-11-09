@@ -59,6 +59,45 @@ androidComponents {
     }
 }
 
+/** KEY=VALUE の行から値を探す。# の行と空の行は飛ばす。Windows で作ったファイル(CRLF・BOM)と、値の両端の引用符も受ける */
+fun oauthFileValue(text: String, key: String): String? {
+    for (raw in text.removePrefix("\uFEFF").lines()) {
+        val line = raw.trim().removePrefix("export ").trim()
+        if (line.isEmpty() || line.startsWith("#")) continue
+        val at = line.indexOf('=')
+        if (at < 0 || line.substring(0, at).trim() != key) continue
+        var v = line.substring(at + 1).trim()
+        for (q in listOf("\"", "'")) if (v.length >= 2 && v.startsWith(q) && v.endsWith(q)) v = v.substring(1, v.length - 1)
+        return v.ifEmpty { null }
+    }
+    return null
+}
+
+/** 環境変数の ID・シークレットを先に見る。どちらかが欠けたらファイルを見る。両方そろわなければ null(同期を使えないビルド) */
+fun googleOAuthClient(): Pair<String, String>? {
+    fun env(k: String) = providers.environmentVariable(k).orNull?.trim()?.takeIf { it.isNotEmpty() }
+    val id = env("OBB_GOOGLE_CLIENT_ID")
+    val secret = env("OBB_GOOGLE_CLIENT_SECRET")
+    if (id != null && secret != null) return id to secret
+    val path = env("OBB_GOOGLE_OAUTH_FILE") ?: return null
+    val f = file(path)
+    if (!f.isFile) {
+        logger.warn("OBB_GOOGLE_OAUTH_FILE のファイルがないため、Google の同期のないビルドになります")
+        return null
+    }
+    val text = f.readText(Charsets.UTF_8)
+    val fid = oauthFileValue(text, "OBB_GOOGLE_CLIENT_ID")
+    val fsecret = oauthFileValue(text, "OBB_GOOGLE_CLIENT_SECRET")
+    if (fid == null || fsecret == null) {
+        logger.warn("OBB_GOOGLE_OAUTH_FILE から Google のクライアントを読めませんでした。Google の同期のないビルドになります")
+        return null
+    }
+    return fid to fsecret
+}
+
+/** Java の文字列の書き方(BuildConfig に入れる) */
+fun javaString(v: String) = "\"" + v.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "io.github.contentsview08.obb"
     compileSdk = 37
@@ -71,10 +110,12 @@ android {
         versionName = "0.1.4"
         // ONNX Runtime(AI NG)はネイティブのライブラリを持つので、スマホ(arm64)とエミュレーター(x86_64)の分だけ入れる
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
-        // 同期サーバーの既定値。元は packages/sync/server-url.json。ビルドのときに環境変数 OBB_SYNC_SERVER_URL で差し替えられる
-        val syncDefault = (groovy.json.JsonSlurper().parse(file("../../../packages/sync/server-url.json")) as Map<*, *>)["default"] as String
-        val syncServer = providers.environmentVariable("OBB_SYNC_SERVER_URL").orNull ?: syncDefault
-        buildConfigField("String", "SYNC_SERVER_URL", "\"$syncServer\"")
+        // Google ドライブの同期のクライアント(PC と同じ「デスクトップ アプリ」)。値をリポジトリに置かないので、ビルドのときに
+        // 環境変数 OBB_GOOGLE_CLIENT_ID・OBB_GOOGLE_CLIENT_SECRET か、OBB_GOOGLE_OAUTH_FILE が指す KEY=VALUE のファイルから入れる。
+        // どちらもなければ空になり、アプリは同期を使えない旨を出す(PC の src-tauri/src/oauth_env.rs と同じ読み方)
+        val google = googleOAuthClient()
+        buildConfigField("String", "GOOGLE_CLIENT_ID", javaString(google?.first ?: ""))
+        buildConfigField("String", "GOOGLE_CLIENT_SECRET", javaString(google?.second ?: ""))
     }
     // 配布用の鍵は apps/android/keystore.properties(git には入れない。書き方は bbs-suite の docs/workflows.md)から読む。
     // ないときは手元の開発用の鍵で署名する(CI と手元の試しを止めないため。その APK は配らない)
@@ -93,10 +134,7 @@ android {
         }
     }
     buildTypes {
-        // http://localhost の同期サーバーは開発の版だけ。-PobbSyncAllowLocalhost で R8 を通した版でも試せる
-        getByName("debug") { buildConfigField("boolean", "SYNC_ALLOW_LOCALHOST", "true") }
         getByName("release") {
-            buildConfigField("boolean", "SYNC_ALLOW_LOCALHOST", if (providers.gradleProperty("obbSyncAllowLocalhost").isPresent) "true" else "false")
             // R8 で縮めて最適化する(Compose はデバッグ用のビルドだと何倍も遅い。速さは配布用のビルドで比べる)
             isMinifyEnabled = true
             isShrinkResources = true

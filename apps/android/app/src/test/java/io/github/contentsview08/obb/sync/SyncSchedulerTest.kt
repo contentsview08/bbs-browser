@@ -48,7 +48,7 @@ class SyncSchedulerTest {
         }
     }
 
-    private class Setup(idle: Boolean = false, var changes: Boolean = false, var changed: Boolean = false, var on: Boolean = true, var paceValue: SyncPace? = null) {
+    private class Setup(idle: Boolean = false, var changes: Boolean = false, var changed: Boolean = false, var on: Boolean = true, var paceValue: SyncPace? = null, var intervalValue: Long? = HEAD_INTERVAL_MS) {
         val c = FakeClock()
         val log = ArrayList<String>()
         val heads get() = log.count { it == "head" }
@@ -75,6 +75,7 @@ class SyncSchedulerTest {
 
             override suspend fun hasChanges() = changes
             override fun pace() = paceValue
+            override fun interval() = intervalValue
             override val idleStops = idle
         })
     }
@@ -280,5 +281,46 @@ class SyncSchedulerTest {
         x.c.advance(HEAD_INTERVAL_MS * 4)
         x.s.background()
         assertEquals(emptyList<String>(), x.log)
+    }
+
+    @Test fun 選んだ間隔で確かめ変化なしでは伸ばし選び直すと掛け直す() = runBlocking {
+        val x = Setup(intervalValue = 300_000L)
+        x.s.foreground()
+        x.c.advance(300_000L - 1)
+        assertEquals(0, x.heads)
+        x.c.advance(1)
+        assertEquals(1, x.heads)
+        // 変化なしの伸ばしは基本の間隔より短くしない(5 分で止める上限より長い間隔はそのまま)
+        x.intervalValue = 30_000L
+        x.s.intervalChanged()
+        x.c.advance(30_000L)
+        assertEquals(2, x.heads)
+        x.c.advance(60_000L)
+        assertEquals(3, x.heads)
+        assertEquals(listOf(30_000L, 60_000L, 300_000L, 900_000L, null), SyncConfig.SYNC_INTERVALS.map { it.second })
+        assertEquals(60_000L, SyncConfig.syncIntervalMs("知らない値"))
+        assertEquals(null, SyncConfig.syncIntervalMs("manual"))
+    }
+
+    @Test fun 手動のみは自動で確かめず変更だけを送り出す() = runBlocking {
+        val x = Setup(intervalValue = null)
+        x.s.foreground()
+        assertEquals(emptyList<String>(), x.log)
+        x.c.advance(3_600_000L)
+        assertEquals(0, x.heads)
+        assertEquals(emptyList<String>(), x.log)
+        // 変更を書いたら送り出しの間隔で送る
+        x.changes = true
+        x.c.advance(PUSH_INTERVAL_MS)
+        assertEquals(listOf("tick"), x.log)
+        // 裏に回る瞬間も送る
+        x.changes = true
+        x.s.background()
+        assertEquals(listOf("tick", "background"), x.log)
+        // 前面に戻ったとき、送るものがあれば送る
+        x.changes = true
+        x.s.foreground()
+        assertEquals(listOf("tick", "background", "foreground"), x.log)
+        assertEquals(0, x.heads)
     }
 }

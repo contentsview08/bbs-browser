@@ -15,7 +15,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-// K・許可証・device_id を Android Keystore の鍵で包んで置く。
+// K・許可証・device_id・Google の更新用のトークンを Android Keystore の鍵で包んで置く。
 // 設定の Prefs に置かない(設定の書き出しは sp.all から作るので、新しい項目が入ってしまう)
 
 /** 包む鍵。JVM のテストでは差し替える */
@@ -36,14 +36,14 @@ class WrappedSyncKeyStore(private val wrap: KeyWrap, private val blob: KeyBlob) 
         val raw = blob.read() ?: return null
         return try {
             val o = parseStrictJson(String(wrap.open(fromBase64Url(raw)), Charsets.UTF_8)) as Map<*, *>
-            SyncKeyMaterial(fromBase64Url(o["k"] as String), o["device_id"] as String, o["ticket"] as String?)
+            SyncKeyMaterial(fromBase64Url(o["k"] as String), o["device_id"] as String, o["ticket"] as String?, o["google"] as String?)
         } catch (_: Exception) {
             null
         }
     }
 
     override suspend fun save(v: SyncKeyMaterial) {
-        val json = canonicalJson(mapOf("k" to toBase64Url(v.k), "device_id" to v.deviceId, "ticket" to v.ticket))
+        val json = canonicalJson(mapOf("k" to toBase64Url(v.k), "device_id" to v.deviceId, "ticket" to v.ticket, "google" to v.google))
         blob.write(toBase64Url(wrap.seal(json.toByteArray(Charsets.UTF_8))))
     }
 

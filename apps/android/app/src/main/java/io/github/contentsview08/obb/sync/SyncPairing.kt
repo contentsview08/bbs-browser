@@ -35,6 +35,79 @@ fun parsePairingCode(code: String, allowLocalhost: Boolean = false): PairingCode
     return PairingCode(k, checkServerUrl(url, allowLocalhost), ticket)
 }
 
+// Google ドライブの置き場の端末を足すコード(docs/sync-drive.md 5.5)。obb2.<K の Base64URL>.<更新用のトークンの UTF-8 の Base64URL>。
+// PC の packages/sync/src/pairing.ts と同じ決まり。サーバーの URL・許可証・メールは入れない
+private const val DRIVE_PREFIX = "obb2"
+/** Google の更新用のトークンは 100 文字ほど。QR に収まる長さで切る */
+private const val REFRESH_TOKEN_MAX = 512
+private val REFRESH_TOKEN_FORM = Regex("[\\x21-\\x7e]+")
+
+class DrivePairingCode(val k: ByteArray, val refreshToken: String)
+
+private fun refreshTokenOk(t: String) = t.length in 1..REFRESH_TOKEN_MAX && REFRESH_TOKEN_FORM.matches(t)
+
+fun encodeDrivePairingCode(c: DrivePairingCode): String {
+    if (c.k.size != KEY_BYTES || !refreshTokenOk(c.refreshToken)) throw SyncApiError("bad_code")
+    return listOf(DRIVE_PREFIX, toBase64Url(c.k), toBase64Url(utf8(c.refreshToken))).joinToString(".")
+}
+
+/** 形だけを確かめる。トークンが使えるかは Google に聞くまで分からない */
+fun parseDrivePairingCode(code: String): DrivePairingCode {
+    val parts = code.trim().split('.')
+    if (parts.size != 3 || parts[0] != DRIVE_PREFIX) throw SyncApiError("bad_code")
+    return try {
+        val k = fromBase64Url(parts[1])
+        val token = fromUtf8(fromBase64Url(parts[2]))
+        if (k.size != KEY_BYTES || !refreshTokenOk(token)) throw SyncApiError("bad_code")
+        DrivePairingCode(k, token)
+    } catch (_: Exception) {
+        throw SyncApiError("bad_code")
+    }
+}
+
+/** 前の同期サーバーのコード(obb1)か。読んだら、サーバーの同期は終わった案内を出す */
+fun isServerPairingCode(code: String) = code.trim().startsWith("$PAIRING_PREFIX.")
+
+/**
+ * Google ドライブの置き場の文。PC の packages/sync/src/messages.ts の DRIVE_MESSAGES・DRIVE_LABELS と同じ文言。
+ * sync-ui.json へ移すまではここに置く。google_auth_failed と server_sync_ended は、スマホが Google のログインをしないので
+ * 「PC で QR を出して読み直す」案内にしている(docs/sync-drive.md 5.7 のスマホの文)
+ */
+object DriveText {
+    val MESSAGES = mapOf(
+        "google_auth_failed" to "Google との接続が切れました。PC で「端末を追加」の QR を出して、読み直してください。この端末のデータはそのまま使えます。",
+        "google_other_account" to "前と違う Google アカウントです。同期のデータは前のアカウントにあります。",
+        "google_unavailable" to "この版には Google の同期の設定が入っていないため、Google ドライブで同期できません。",
+        "google_pairing_failed" to "このコードの Google の接続は使えなくなっています。同期している端末で「端末を追加」を出し直してください。",
+        "server_sync_ended" to "同期サーバーでの同期は終わったので、この端末の同期をやめた状態に戻しました。PC で「端末を追加」の QR を出して、読み直してください。この端末のデータはそのまま使えます。",
+        "server_code" to "同期サーバーのコードです。同期は Google ドライブだけになりました。PC を新しい版にして、「端末を追加」の QR を読んでください。",
+    )
+
+    val LABELS = mapOf(
+        "store" to "同期の置き場",
+        "store_drive" to "Google ドライブ",
+        "store_note" to "Google ドライブでは、アプリ専用の見えないフォルダに暗号化したまま置きます。Google にも中身は読めません。",
+        "intro" to "履歴やお気に入りを暗号化して、自分の Google ドライブを通して別の端末と同期します。実験的な機能です。この端末のデータは消えません。",
+        "master_note" to "オフの間は通信も送信待ちも起きません。鍵と Google ドライブのデータは残るので、オンに戻すと続きから同期します。",
+        "kinds_note" to "切った種類は送らず、受け取っても手元へ写しません。Google ドライブのデータは消えません。オンに戻すと追いつきます。",
+        "secret_note" to "既定はオフです。オフの間は、この端末から送らず、届いても読みません。",
+        "leave_ask" to "この端末の鍵と同期の表、Google の接続を消します。この端末のお気に入りは消えません。Google ドライブのデータとほかの端末はそのままです。",
+        "join_placeholder" to "obb2.",
+        "join_ask_account" to "Google アカウント: {email}",
+        "usage" to "ドライブで使っている量",
+        "interval" to "同期の間隔",
+        "interval_note" to "ほかの端末の変更を確かめる間隔です。この端末の変更は、アプリを離れるときなどに間隔によらず送ります。変化のない間や操作のない間は、確かめる間隔を自動で延ばします。この端末だけの設定です。",
+        // スマホだけ。PC の DRIVE_LABELS にはない(スマホは Google のログインをせず、PC の QR で参加する)
+        "join_note" to "PC の OBB の同期の設定で「端末を追加」を押し、出た QR を読んでください。Google のログインは要りません。",
+        "rescan" to "QR を読み直す",
+    )
+
+    /** 同期の間隔の選択肢の見出し。PC の SYNC_INTERVAL_LABELS と同じ。並びと既定は SyncConfig.SYNC_INTERVALS */
+    val INTERVAL_LABELS = mapOf("30s" to "30 秒", "1m" to "1 分", "5m" to "5 分", "15m" to "15 分", "manual" to "手動のみ")
+
+    fun message(code: String): String? = MESSAGES[code]
+}
+
 /** 画面に出す文。PC 版の packages/sync/src/messages.ts と packages/conformance/sync-ui.json で揃える */
 object SyncText {
     private const val TICKET_AGAIN = "同期を続けるには、もう一度確認が必要です。この端末のデータはそのまま使えます。"
@@ -75,7 +148,7 @@ object SyncText {
         "sync_off" to "先に「同期を使う」をオンにしてください。",
     )
 
-    fun message(code: String): String = MESSAGES[code] ?: "同期できませんでした($code)"
+    fun message(code: String): String = MESSAGES[code] ?: DriveText.message(code) ?: "同期できませんでした($code)"
 
     val LABELS = mapOf(
         "section" to "同期(実験的)",

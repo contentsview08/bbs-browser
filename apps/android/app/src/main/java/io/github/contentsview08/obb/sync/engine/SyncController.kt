@@ -1,19 +1,18 @@
 package io.github.contentsview08.obb.sync.engine
 
-import io.github.contentsview08.obb.sync.PairingCode
 import io.github.contentsview08.obb.sync.SyncText
 import io.github.contentsview08.obb.sync.adapters.AdapterContext
 import io.github.contentsview08.obb.sync.adapters.NG_KIND
 import io.github.contentsview08.obb.sync.adapters.SyncAdapter
 import io.github.contentsview08.obb.sync.deriveKeys
-import io.github.contentsview08.obb.sync.encodePairingCode
-import io.github.contentsview08.obb.sync.generateMasterKey
-import io.github.contentsview08.obb.sync.parsePairingCode
+import io.github.contentsview08.obb.sync.isServerPairingCode
+import io.github.contentsview08.obb.sync.parseDrivePairingCode
 import io.github.contentsview08.obb.sync.parseStrictJson
 import io.github.contentsview08.obb.sync.spaceId
 import kotlinx.coroutines.CancellationException
 
-// 画面から使う同期の入口。PC 版の packages/sync/src/engine/controller.ts と同じ順番。使っていない間は鍵保管にも通信にも触らない
+// 画面から使う同期の入口。PC 版の packages/sync/src/engine/controller.ts と同じ順番。使っていない間は鍵保管にも通信にも触らない。
+// 置き場は Google ドライブだけ(本人の決定)。スマホは Google のログインをせず、PC の QR(obb2)で参加する
 
 const val PAIRING_SHOW_MS = 60_000L
 /** 参加で手元を送る前の確認の種類 */
@@ -56,37 +55,45 @@ class SyncStatus(
     val lastErrorText: String?,
     val lastPullAt: Long?,
     val lastPushAt: Long?,
-    val serverUrl: String,
-    /** 開発用の上書き。なければ既定値 */
-    val serverOverride: String?,
     val confirm: SyncConfirm?,
+    /** Google ドライブを使えない理由(ビルドにクライアントがない)。使えるなら null */
+    val driveUnavailable: String?,
+    /** 参加した Google アカウントのメール。使っている間だけ */
+    val email: String?,
 )
+
+/** 確認を待っている参加。答えが出るまで鍵も同期の表も書かない */
+private class PendingJoin(val k: ByteArray, val refreshToken: String, val account: GoogleAccount, val confirm: SyncConfirm)
 
 class SyncController(
     private val db: SyncSql,
     private val keyStore: SyncKeyStore,
     private val transport: SyncTransport,
-    private val defaultServerUrl: String,
+    /** ビルドのときに入れた Google のクライアント。なければ同期は使えない */
+    private val google: GoogleClient?,
     private val adapters: List<SyncAdapter>,
     private val now: () -> Long,
-    private val allowLocalhost: Boolean = false,
     /** 最初から入っている掲示板・板の URL。まっさらな端末にもあるので、参加の確認では手元のデータに数えない */
     private val presetUrls: List<String> = emptyList(),
     /** 鍵保管に値があるかもしれない。使ったことのない人の鍵保管を開かないための控え */
     private val keyHint: () -> Boolean,
-    /** /start の窓を開く。許可証か、閉じたら null */
-    private val openStartWindow: suspend (String) -> String?,
     private val onCycle: (CycleResult) -> Unit = {},
 ) {
     private val t = SyncTables(db)
     private var engineValue: SyncEngine? = null
-    private var engineUrl = ""
     private var spaceHead: String? = null
-    /** 確認を待っている参加。答えが出るまで鍵も URL も書かない */
-    private var pendingJoin: Pair<PairingCode, SyncConfirm>? = null
+    private var pendingJoin: PendingJoin? = null
+    /** 同期サーバーで使っていた端末を戻したか(起動して最初の 1 回だけ見る) */
+    private var serverChecked = false
 
-    private fun overrideUrl(): String? = t.state("server_url")
-    private fun serverUrl(): String = overrideUrl() ?: defaultServerUrl
+    private val tokens = GoogleTokens(
+        transport, google, now,
+        load = { keyStore.load()?.google },
+        // 更新で新しいトークンが返ったら置き換える(K と同期の表はそのまま)
+        save = { next -> keyStore.load()?.let { keyStore.save(SyncKeyMaterial(it.k, it.deviceId, it.ticket, next)) } },
+    )
+    private val remote = driveRemote(DriveRemoteOptions(transport, { fresh -> tokens.accessToken(fresh) }))
+
     private fun isEnabled() = t.state("enabled") == "1"
     private fun isMasterOn() = masterOn(t.state("master"), t.state("enabled"))
     private fun onAdapters(): List<SyncAdapter> {
@@ -95,13 +102,24 @@ class SyncController(
     }
 
     private suspend fun engine(): SyncEngine {
-        val url = serverUrl()
-        val cur = engineValue
-        if (cur != null && engineUrl == url) return cur
-        // 古い先へ走っている周を残さない
-        cur?.halt()
-        engineUrl = url
-        return SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = url, adapters = adapters, now = now, allowLocalhost = allowLocalhost).also { engineValue = it }
+        val e = engineValue ?: SyncEngine(db = db, keyStore = keyStore, transport = transport, serverUrl = "", adapters = adapters, now = now, remote = remote).also { engineValue = it }
+        if (!serverChecked) {
+            serverChecked = true
+            retireServer(e)
+        }
+        return e
+    }
+
+    /**
+     * 同期サーバーで使っていた端末を、同期をやめた状態に戻す(本人の決定: 同期は Google ドライブだけ。移す期間は設けない)。
+     * 手元のデータは消さない。スイッチはそのまま残し、QR を読み直す案内を最後のエラーに出す
+     */
+    private suspend fun retireServer(e: SyncEngine) {
+        if (!isEnabled() || t.state("store") == "drive") return
+        val on = isMasterOn()
+        e.leave()
+        spaceHead = null
+        db.batch(listOf(setState("master", if (on) "1" else "0"), setState("last_error", SERVER_SYNC_ENDED)))
     }
 
     private suspend fun run(manual: Boolean, quick: Boolean = false): CycleResult = engine().runCycle(manual, quick).also(onCycle)
@@ -114,21 +132,10 @@ class SyncController(
         throw SyncHostError("key_store_unavailable")
     }
 
-    private suspend fun pair(k: ByteArray, ticket: String) {
-        try {
-            engine().pair(k, ticket)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SyncApiError) {
-            throw e
-        } catch (_: Exception) {
-            throw SyncHostError("key_store_unavailable")
-        }
-    }
-
     private fun spaceOf(k: ByteArray) = spaceId(deriveKeys(k).authToken)
 
     suspend fun status(): SyncStatus {
+        engine()
         val enabled = isEnabled()
         val kinds = parseSwitches(t.state("kinds"))
         val pending = t.pendingCount(offKindsOf(kinds), adapters.flatMap { it.ops })
@@ -141,7 +148,7 @@ class SyncController(
         }
         val running = engineValue?.state
         @Suppress("UNCHECKED_CAST")
-        val confirm = pendingJoin?.second ?: t.state("pending_confirm")?.let { raw ->
+        val confirm = pendingJoin?.confirm ?: t.state("pending_confirm")?.let { raw ->
             val m = parseStrictJson(raw) as Map<String, Any?>
             SyncConfirm(m["type"] as? String ?: "", m["lost"] as? Long ?: 0L)
         }
@@ -156,62 +163,86 @@ class SyncController(
             lastErrorText = lastError?.let(SyncText::message),
             lastPullAt = t.state("last_pull_at")?.toLongOrNull(),
             lastPushAt = t.state("last_push_at")?.toLongOrNull(),
-            serverUrl = serverUrl(),
-            serverOverride = overrideUrl(),
             confirm = confirm,
+            driveUnavailable = if (google == null) GOOGLE_UNAVAILABLE else null,
+            email = if (enabled) t.state("google_email") else null,
         )
     }
 
-    /** 同期を始める。1 台目は K を作り、窓を閉じたら捨てる。止まっている領域は同じ K で確認を通し直す */
-    suspend fun start(): CycleResult {
-        if (!isMasterOn()) throw SyncHostError("sync_off")
-        val url = checkServerUrl(serverUrl(), allowLocalhost)
-        val material = loadKeys()
-        val resuming = material != null && isEnabled()
-        val k = if (resuming) material!!.k else generateMasterKey()
-        val id = spaceOf(k)
-        val ticket = openStartWindow("$url/start?space_id=$id&return=app") ?: throw SyncHostError("cancelled")
-        if (ticketSpaceId(ticket) != id) throw SyncHostError("bad_ticket")
-        if (resuming) engine().setTicket(ticket) else pair(k, ticket)
-        spaceHead = id.take(12)
-        return run(true)
-    }
-
-    /** QR とコピー用のコードの中身。表示は 60 秒で消す */
-    suspend fun pairingCode(): String {
-        if (!isEnabled()) throw SyncHostError("already_on")
-        val m = loadKeys() ?: throw SyncHostError("key_store_unavailable")
-        val ticket = m.ticket ?: throw SyncHostError("ticket_required")
-        return encodePairingCode(PairingCode(m.k, serverUrl(), ticket))
+    /**
+     * QR(Google の更新用のトークン)を Google に確かめ、アカウントを聞く。使えないトークンは google_pairing_failed。
+     * expect(前のアカウント)と違えば置かずに google_other_account
+     */
+    private suspend fun adopt(refreshToken: String, expect: String?): Pair<String, GoogleAccount> {
+        if (google == null) throw SyncHostError(GOOGLE_UNAVAILABLE)
+        val (access, _, next) = try {
+            refreshGoogleToken(transport, google, refreshToken)
+        } catch (e: SyncApiError) {
+            if (e.code == GOOGLE_AUTH_FAILED) throw SyncHostError(GOOGLE_PAIRING_FAILED)
+            throw e
+        }
+        val account = try {
+            googleAbout(transport, access)
+        } catch (e: SyncApiError) {
+            if (e.code == GOOGLE_AUTH_FAILED) throw SyncHostError(GOOGLE_PAIRING_FAILED)
+            throw e
+        }
+        if (expect != null && expect != account.permissionId) throw SyncHostError(GOOGLE_OTHER_ACCOUNT)
+        return (next ?: refreshToken) to account
     }
 
     /**
-     * QR・コードで参加する。手元の全部が相手の鍵で読める形で相手のサーバーへ行くので、送るものがあるか、
-     * ふだんと違うサーバーなら先に確認を返す(state が confirm。答えは resolveConfirm)。まっさらな端末で既定のサーバーならそのまま入る
+     * QR・コード(obb2)で参加する。手元の全部が相手の鍵で読める形で送られるので、送るものがあれば先に確認を返す
+     * (state が confirm。答えは resolveConfirm)。使っている最中でも、K が同じならトークンだけを置き直す(5.7 の配り直し)
      */
     suspend fun join(code: String): CycleResult {
+        engine()
         if (!isMasterOn()) throw SyncHostError("sync_off")
-        if (isEnabled()) throw SyncHostError("already_on")
-        val c = parsePairingCode(code, allowLocalhost)
+        if (isServerPairingCode(code)) throw SyncHostError("server_code")
+        val c = parseDrivePairingCode(code)
+        if (google == null) throw SyncHostError(GOOGLE_UNAVAILABLE)
+        if (isEnabled()) {
+            val m = loadKeys()
+            if (m == null || !m.k.contentEquals(c.k)) throw SyncHostError("already_on")
+            val (token, account) = adopt(c.refreshToken, t.state("google_account"))
+            engine().setGoogle(token)
+            tokens.forget()
+            db.batch(listOf(setState("google_account", account.permissionId), setState("google_email", account.email)))
+            return run(true)
+        }
         loadKeys()
         pendingJoin = null
-        val otherServer = c.serverUrl != defaultServerUrl
+        val (token, account) = adopt(c.refreshToken, null)
         val ctx = AdapterContext(deriveKeys(c.k), "", now())
-        if (otherServer || hasLocalData(db, adapters, ctx, presetUrls)) {
-            val confirm = SyncConfirm(JOIN_DATA_CONFIRM, 0L, if (otherServer) java.net.URI(c.serverUrl).host else null)
-            pendingJoin = c to confirm
+        if (hasLocalData(db, adapters, ctx, presetUrls)) {
+            val confirm = SyncConfirm(JOIN_DATA_CONFIRM, 0L, account = account.email.ifEmpty { null })
+            pendingJoin = PendingJoin(c.k, token, account, confirm)
             return CycleResult().also { it.state = "confirm"; it.confirm = confirm }
         }
-        return finishJoin(c)
+        return finishJoin(c.k, token, account)
     }
 
-    /** URL は pair が通ってから書く。失敗した参加の先を残さない */
-    private suspend fun finishJoin(c: PairingCode): CycleResult {
-        engineValue?.halt()
-        pair(c.k, c.ticket)
-        writeServerUrl(c.serverUrl)
-        spaceHead = spaceOf(c.k).take(12)
+    private suspend fun finishJoin(k: ByteArray, token: String, account: GoogleAccount): CycleResult {
+        val e = engine()
+        e.halt()
+        try {
+            e.pair(k, null, token)
+        } catch (x: CancellationException) {
+            throw x
+        } catch (x: SyncApiError) {
+            throw x
+        } catch (_: Exception) {
+            throw SyncHostError("key_store_unavailable")
+        }
+        tokens.forget()
+        db.batch(listOf(setState("store", "drive"), setState("google_account", account.permissionId), setState("google_email", account.email)))
+        spaceHead = spaceOf(k).take(12)
         return run(true)
+    }
+
+    /** 起動したとき。同期サーバーで使っていた端末を戻す(使っていない人の鍵保管は開かない) */
+    suspend fun startup() {
+        engine()
     }
 
     suspend fun syncNow(): CycleResult = run(true)
@@ -233,10 +264,11 @@ class SyncController(
         if (on && isEnabled() && isMasterOn()) run(true)
     }
 
-    /** 鍵と同期の表を消し、サーバーの URL も既定へ戻す。手元のデータは消さない */
+    /** 鍵(Google のトークンを含む)と同期の表を消す。手元のデータは消さない。Google へ取り消しは送らない(同じトークンを使うほかの端末を止めないため) */
     suspend fun leave() {
         pendingJoin = null
         engine().leave()
+        tokens.forget()
         spaceHead = null
     }
 
@@ -253,6 +285,12 @@ class SyncController(
 
     fun pace(): SyncPace? = engineValue?.pace
 
+    /** Google ドライブで使っている量(バイト)。使っている間だけ。周とは別に files.list を辿るので、画面を開いたときと同期の後だけ呼ぶ */
+    suspend fun driveUsage(): Long? {
+        if (!isEnabled() || !isMasterOn() || google == null) return null
+        return driveUsage(transport) { fresh -> tokens.accessToken(fresh) }
+    }
+
     private suspend fun adapterContext(): AdapterContext? {
         // 使っていない間は鍵保管を開かない
         if (!isEnabled() || !isMasterOn()) return null
@@ -267,28 +305,15 @@ class SyncController(
     suspend fun mismatches(): MismatchSummary? = adapterContext()?.let { syncMismatches(db, onAdapters(), it) }
 
     suspend fun resolveConfirm(choice: String): CycleResult {
-        pendingJoin?.let { (code, _) ->
+        pendingJoin?.let { j ->
             pendingJoin = null
-            return if (choice == "keep_local") CycleResult() else finishJoin(code)
+            // やめるなら、確かめただけのトークンは置かずに捨てる
+            return if (choice == "keep_local") CycleResult() else finishJoin(j.k, j.refreshToken, j.account)
         }
         engine().resolveConfirm(choice)
         return run(true)
     }
-
-    private fun writeServerUrl(url: String) {
-        db.batch(listOf(if (url == defaultServerUrl) delState("server_url") else setState("server_url", url)))
-    }
-
-    /**
-     * 空で既定値に戻す。使っている間に変えたら、新しい先に領域がないかもしれないので全件を合わせ直す。
-     * 手元のレコードを消さず、version は計画が決め直す
-     */
-    suspend fun setServerUrl(url: String) {
-        val next = if (url.isBlank()) defaultServerUrl else checkServerUrl(url.trim(), allowLocalhost)
-        if (next == serverUrl()) return
-        engineValue?.halt()
-        val stmts = arrayListOf(if (next == defaultServerUrl) delState("server_url") else setState("server_url", next))
-        if (isEnabled()) stmts += listOf(setState("since", "0"), setState("recreate_pending", "1"), delState("epoch"), delState("gc_floor"), delState("push_inflight"), delState("last_error"))
-        db.batch(stmts)
-    }
 }
+
+/** 同期サーバーで使っていた端末を戻したときの案内(最後のエラーに出す) */
+const val SERVER_SYNC_ENDED = "server_sync_ended"

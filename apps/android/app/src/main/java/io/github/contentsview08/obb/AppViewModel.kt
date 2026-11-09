@@ -454,17 +454,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val syncKeys = io.github.contentsview08.obb.data.androidSyncKeyStore(app)
     private val settingAllow by lazy { io.github.contentsview08.obb.sync.adapters.SettingAllowlist(app.assets.open("settings-allowlist.json").bufferedReader().use { it.readText() }) }
-    /** 同期を始める窓の URL。出している間だけ値がある */
-    var syncStartUrl by mutableStateOf<String?>(null)
-        private set
-    private var syncStartResult: kotlinx.coroutines.CompletableDeferred<String?>? = null
 
     val syncCtl by lazy {
         io.github.contentsview08.obb.sync.engine.SyncController(
             db = db.syncSql,
             keyStore = syncKeys.first,
             transport = io.github.contentsview08.obb.sync.engine.OkHttpSyncTransport(),
-            defaultServerUrl = BuildConfig.SYNC_SERVER_URL,
+            google = io.github.contentsview08.obb.sync.engine.GoogleClient.of(BuildConfig.GOOGLE_CLIENT_ID, BuildConfig.GOOGLE_CLIENT_SECRET),
             adapters = listOf(
                 io.github.contentsview08.obb.sync.adapters.FavoriteThreadAdapter(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) },
             ) + io.github.contentsview08.obb.sync.adapters.favoriteBoardAdapters(db.syncSql) { io.github.contentsview08.obb.data.resolveSyncBoard(it) } + listOf(
@@ -480,25 +476,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 io.github.contentsview08.obb.sync.adapters.HistoryHost({ io.github.contentsview08.obb.data.resolveSyncBoard(it) }, { prefs.logRetentionDays }, { io.github.contentsview08.obb.sync.generateDeviceId() }),
             ),
             now = System::currentTimeMillis,
-            allowLocalhost = BuildConfig.SYNC_ALLOW_LOCALHOST,
             presetUrls = presetUrls(),
             keyHint = syncKeys.second,
-            openStartWindow = { url ->
-                val d = kotlinx.coroutines.CompletableDeferred<String?>()
-                syncStartResult = d
-                try {
-                    withContext(Dispatchers.Main) { syncStartUrl = url }
-                    d.await()
-                } finally {
-                    // 途中で取り消されても窓の値を残さない(残ると、次に設定を開いたとき古い窓が出る)
-                    withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
-                        if (syncStartResult === d) {
-                            syncStartResult = null
-                            syncStartUrl = null
-                        }
-                    }
-                }
-            },
             onCycle = { r ->
                 if (r.favoriteThreads || io.github.contentsview08.obb.sync.adapters.AREA_FAVORITE_BOARDS in r.applied) reloadSide()
                 if (io.github.contentsview08.obb.sync.adapters.AREA_SITES in r.applied) viewModelScope.launch {
@@ -515,12 +494,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             },
         )
-    }
-
-    fun finishSyncStart(ticket: String?) {
-        syncStartUrl = null
-        syncStartResult?.complete(ticket)
-        syncStartResult = null
     }
 
     suspend fun syncStatus() = withContext(Dispatchers.IO) { syncCtl.status() }
@@ -543,6 +516,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun syncMismatches() = withContext(Dispatchers.IO) { syncCtl.mismatches() }
 
+    /** Google ドライブで使っている量の文。使っていない・読めないときは null。毎周は呼ばない(画面を開いたときと同期の後だけ) */
+    suspend fun syncDriveUsage(): String? = withContext(Dispatchers.IO) {
+        runCatching { syncCtl.driveUsage() }.getOrNull()?.let { io.github.contentsview08.obb.sync.engine.formatDriveUsage(it) }
+    }
+
     /** 自動の同期。前面の間だけ動く。バックグラウンドの処理は足さない */
     private val syncScheduler = io.github.contentsview08.obb.sync.engine.SyncScheduler(object : io.github.contentsview08.obb.sync.engine.SchedulerHost {
         override fun now() = System.currentTimeMillis()
@@ -559,11 +537,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         override suspend fun check() = withContext(Dispatchers.IO) { syncCtl.autoCheck() }
         override suspend fun hasChanges() = withContext(Dispatchers.IO) { syncCtl.hasChanges() }
         override fun pace() = syncCtl.pace()
+        override fun interval() = io.github.contentsview08.obb.sync.SyncConfig.syncIntervalMs(prefs.syncInterval)
         override val idleStops = false
     })
 
     fun syncForeground() {
-        viewModelScope.launch { runCatching { syncScheduler.foreground() } }
+        viewModelScope.launch {
+            // 同期サーバーで使っていた端末は、自動の同期より先に同期をやめた状態へ戻す
+            runCatching { withContext(Dispatchers.IO) { syncCtl.startup() } }
+            runCatching { syncScheduler.foreground() }
+        }
     }
 
     /** 裏に回る瞬間。待っている設定の変更も一緒に送る */
@@ -576,6 +559,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun syncNetworkBack() = syncScheduler.networkBack()
+
+    /** 同期の間隔を選び直した。次の確認から新しい間隔にする */
+    fun setSyncInterval(id: String) {
+        prefs.syncInterval = id
+        syncScheduler.intervalChanged()
+    }
 
     override fun onCleared() {
         syncScheduler.dispose()

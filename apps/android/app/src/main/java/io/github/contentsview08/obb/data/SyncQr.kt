@@ -11,11 +11,11 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.google.zxing.qrcode.encoder.Encoder
 import io.github.contentsview08.obb.sync.deriveKeys
 import io.github.contentsview08.obb.sync.engine.SyncApiError
-import io.github.contentsview08.obb.sync.parsePairingCode
+import io.github.contentsview08.obb.sync.isServerPairingCode
+import io.github.contentsview08.obb.sync.parseDrivePairingCode
 import io.github.contentsview08.obb.sync.spaceId
-import java.net.URI
 
-// QR の読み書きと、同期を始める窓の移動の決まり。画面に依存しないので JVM のテストで確かめる
+// QR の読み書きの決まり。画面に依存しないので JVM のテストで確かめる
 
 /** 点の並び。外の余白 2 マスを含む(PC と同じ) */
 fun qrMatrix(text: String, border: Int = 2): Array<BooleanArray> {
@@ -38,16 +38,18 @@ fun decodeQrLuma(luma: ByteArray, width: Int, height: Int, rowStride: Int): Stri
 /** 読み取ったコードの扱い。同じ領域の判定は K から出した領域の ID で行う */
 sealed class SyncQrRead {
     class Join(val code: String) : SyncQrRead()
-    class OtherSpace(val code: String, val serverUrl: String) : SyncQrRead()
-    data object SameSpace : SyncQrRead()
+    class OtherSpace(val code: String) : SyncQrRead()
+    /** 同じ同期の QR。Google の接続(トークン)だけを置き直す(取り消し・期限切れの後の配り直し) */
+    class SameSpace(val code: String) : SyncQrRead()
     /** reason は SyncText.message のコード */
     class Bad(val reason: String) : SyncQrRead()
 }
 
-/** [space] は状態の領域の先頭。鍵を読めない間は null で、別の領域として確認に回す */
-fun readSyncQr(text: String, enabled: Boolean, space: String?, allowLocalhost: Boolean = false): SyncQrRead {
+/** [space] は状態の領域の先頭。鍵を読めない間は null で、別の領域として確認に回す。同期サーバーのコード(obb1)は読まずに案内する */
+fun readSyncQr(text: String, enabled: Boolean, space: String?): SyncQrRead {
+    if (isServerPairingCode(text)) return SyncQrRead.Bad("server_code")
     val c = try {
-        parsePairingCode(text, allowLocalhost)
+        parseDrivePairingCode(text)
     } catch (e: SyncApiError) {
         return SyncQrRead.Bad(e.code.ifEmpty { e.kind })
     } catch (_: RuntimeException) {
@@ -56,33 +58,5 @@ fun readSyncQr(text: String, enabled: Boolean, space: String?, allowLocalhost: B
     }
     if (!enabled) return SyncQrRead.Join(text)
     val same = space != null && spaceId(deriveKeys(c.k).authToken).startsWith(space)
-    return if (same) SyncQrRead.SameSpace else SyncQrRead.OtherSpace(text, c.serverUrl)
-}
-
-sealed class SyncStartNav {
-    class Ticket(val value: String) : SyncStartNav()
-    data object Allow : SyncStartNav()
-    data object Block : SyncStartNav()
-}
-
-private const val TICKET_HOST = "obb-sync.invalid"
-private const val TURNSTILE_HOST = "challenges.cloudflare.com"
-
-private fun portOf(u: URI) = if (u.port >= 0) u.port else when (u.scheme) {
-    "https" -> 443
-    "http" -> 80
-    else -> -1
-}
-
-/** 窓の中で動ける先は、同期サーバーと確認の部品だけ。PC の sync_start.rs と同じ決まり */
-fun syncStartNav(target: String, startUrl: String): SyncStartNav {
-    if (target == "about:blank" || target == "about:srcdoc") return SyncStartNav.Allow
-    val u = runCatching { URI(target) }.getOrNull() ?: return SyncStartNav.Block
-    val server = runCatching { URI(startUrl) }.getOrNull() ?: return SyncStartNav.Block
-    if (u.scheme == "https" && u.host == TICKET_HOST && u.path == "/ticket") {
-        val ticket = u.rawQuery?.split('&')?.firstOrNull { it.startsWith("ticket=") }?.removePrefix("ticket=") ?: return SyncStartNav.Block
-        return SyncStartNav.Ticket(java.net.URLDecoder.decode(ticket, "UTF-8"))
-    }
-    val sameServer = u.scheme == server.scheme && u.host == server.host && portOf(u) == portOf(server)
-    return if (sameServer || (u.scheme == "https" && u.host == TURNSTILE_HOST)) SyncStartNav.Allow else SyncStartNav.Block
+    return if (same) SyncQrRead.SameSpace(text) else SyncQrRead.OtherSpace(text)
 }

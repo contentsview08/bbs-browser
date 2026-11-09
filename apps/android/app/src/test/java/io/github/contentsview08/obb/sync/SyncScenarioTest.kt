@@ -41,6 +41,9 @@ import io.github.contentsview08.obb.sync.engine.SyncKeyMaterial
 import io.github.contentsview08.obb.sync.engine.SyncKeyStore
 import io.github.contentsview08.obb.sync.engine.SyncRequest
 import io.github.contentsview08.obb.sync.engine.SyncResponse
+import io.github.contentsview08.obb.sync.engine.SyncTransport
+import io.github.contentsview08.obb.sync.engine.DriveRemoteOptions
+import io.github.contentsview08.obb.sync.engine.driveRemote
 import io.github.contentsview08.obb.sync.engine.CycleResult
 import io.github.contentsview08.obb.sync.engine.checkServerUrl
 import io.github.contentsview08.obb.sync.engine.hasLocalData
@@ -51,7 +54,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Test
 
-// packages/conformance/sync-client.json を流す枠。PC 版の scenarioRunner.ts と同じ手順で動かし、同期の表の digest まで比べる
+// packages/conformance/sync-client.json を流す枠。PC 版の scenarioRunner.ts と同じ手順で動かし、同期の表の digest まで比べる。
+// 同じシナリオを偽の Drive の置き場でも流す(docs/sync-drive.md 9.2)
 
 private const val START = 1_800_000_000_000L
 
@@ -68,13 +72,20 @@ private class MemoryKeyStore : SyncKeyStore {
 
 private class Fault(val kind: String, var times: Int, val path: String?, val status: Int? = null, val body: Any? = null, val location: String? = null, val other: String? = null, var skip: Int = 0)
 
-private class LogEntry(val device: String, val method: String, val path: String, val host: String, val requestId: String?, val secrets: Int = 0)
+/** secretIds は Drive で送ったセグメントの権限系のレコード ID(前に送った分も毎回入るので、ID で数える) */
+private class LogEntry(val device: String, val method: String, val path: String, val host: String, val requestId: String?, val secrets: Int = 0, val secretIds: List<String> = emptyList())
+
+/** server_inject で置く「他の端末」 */
+private const val INJECTED_DEVICE = "injected"
+
 
 private val URL_PARTS = Regex("https?://([^/?]+)([^?]*)(\\?.*)?")
 
 @Suppress("UNCHECKED_CAST")
-private class World(o: Map<String, Any?>) {
+private class World(o: Map<String, Any?>, val store: String = "server") {
     var now = START
+    /** drive のときの置き場。許可証(人の操作の代わり)は drive でも server が出す */
+    val drive: FakeDrive? = if (store == "drive") FakeDrive { now } else null
     val server = FakeSyncServer(
         now = { now },
         spaceLimit = (o["space_limit"] as Long?)?.toInt() ?: 100,
@@ -187,6 +198,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
             onSend = null
             hook()
         }
+        world.drive?.let { return driveSend(it, req) }
         val w = world
         val m = URL_PARTS.matchEntire(req.url)!!
         val pathOnly = m.groupValues[2]
@@ -226,12 +238,50 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         return SyncResponse(res.status, res.body, res.headers)
     }
 
+    /** Drive への要求。故障はサーバーの道(/changes・/records・/spaces・/head)を Drive の要求の種類に写して当てる */
+    private fun driveSend(drive: FakeDrive, req: SyncRequest): SyncResponse {
+        val w = world
+        val m = URL_PARTS.matchEntire(req.url)!!
+        val cls = driveClass(req)
+        val content = if (cls == "/records") uploadContent(req) else null
+        val secretIds = (content?.get("records") as List<Map<String, Any?>>?).orEmpty().filter { it["kind_tag"] == "s" }.map { it["record_id"] as String }
+        w.log += LogEntry(name, req.method, m.groupValues[2], m.groupValues[1], null, secretIds = secretIds)
+        req.body?.let { w.sent += it }
+        if (!online) throw IllegalStateException("offline")
+        val f = w.faults.firstOrNull { it.times > 0 && (it.path == null || it.path == cls) }
+        if (f != null && f.skip > 0) f.skip--
+        else if (f != null) {
+            f.times--
+            when (f.kind) {
+                "unreachable" -> throw IllegalStateException("unreachable")
+                "redirect" -> return SyncResponse(302, "", mapOf("Location" to f.location!!))
+                "drop" -> {
+                    drive.handle(req.method, req.url, req.headers, req.body)
+                    throw IllegalStateException("dropped")
+                }
+                "status" -> return driveStatus(f.status!!)
+                "response" -> {
+                    val body = f.body as Map<String, Any?>?
+                    val status = f.status ?: 200
+                    if (status == 413 && body?.get("error") == "quota_exceeded") return driveFail(403, "storageQuotaExceeded")
+                    // 日の上限は利用者の上限の 403 に写す。待ちの秒の指示は Drive にない
+                    if (status == 429) return if (body?.get("error") == "rate_limited") driveFail(403, "userRateLimitExceeded") else driveStatus(429)
+                }
+            }
+            throw IllegalStateException("Drive に写せない故障: ${f.kind} ${f.path ?: ""} ${f.status ?: ""}")
+        }
+        return drive.handle(req.method, req.url, req.headers, req.body)
+    }
+
     /** 同期を始めるページを通して許可証を受け取る。画面の手順の代わりなので通信の記録に入れない */
     fun startPage(k: ByteArray): String {
         world.tickets++
         val res = world.server.handle(FakeRequest("POST", "/tickets", emptyMap(), canonicalJson(mapOf("turnstile" to "test-pass", "space_id" to spaceId(deriveKeys(k).authToken)))))
         return (parseStrictJson(res.body) as Map<String, Any?>)["ticket"] as String
     }
+
+    // init で newEngine を呼ぶので、宣言の順に左右されない形にする
+    val transport: SyncTransport get() = SyncTransport { send(it) }
 
     fun newEngine() {
         adapters = listOf(FavoriteThreadAdapter(sql, resolver(name))) + favoriteBoardAdapters(sql, resolver(name)) + listOf(
@@ -246,7 +296,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         engine = SyncEngine(
             db = sql,
             keyStore = keys,
-            transport = { send(it) },
+            transport = transport,
             serverUrl = "https://sync.test",
             adapters = adapters,
             now = { now() },
@@ -258,6 +308,7 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
             jitter = { 0.5 },
             onState = { trace += it },
             io = Dispatchers.Unconfined,
+            remote = if (world.drive != null) driveRemote(DriveRemoteOptions(transport, { FAKE_DRIVE_TOKEN })) else null,
         )
     }
 
@@ -295,7 +346,55 @@ private class Device(val name: String, val world: World, val skew: Long, keepDef
         ).toHex()
     }
 
+    /** 今のデータ(画面が読むもの)だけ。同期の表の version は置き場で意味が違うので入れない */
+    fun dataDigest(): String {
+        val sel = { q: String -> sql.query(q) }
+        return sha256(
+            utf8(
+                canonicalJson(
+                    mapOf(
+                        "favorites" to sel("SELECT board_url, key, connector_id, title, created_at, sort, added_at FROM favorite_threads ORDER BY board_url, key"),
+                        "boards" to sel("SELECT url, connector_id, name, sort FROM favorite_boards ORDER BY url"),
+                        "sites" to sel("SELECT menu_url, connector_id, name, sort FROM sites ORDER BY menu_url"),
+                        "uploads" to sel("SELECT url, name, size, uploaded_at, with_account, hash, delete_url FROM uploads ORDER BY url"),
+                        "ng" to ng.map(::ngRuleToBody),
+                        "threads" to sel("SELECT board_url, key, connector_id, title, post_count, read_no, status, created_at, read_at FROM threads ORDER BY board_url, key"),
+                        "posts" to sel("SELECT connector_id, board_url, key, thread_title, no, name, mail, body, posted_at FROM post_history ORDER BY posted_at, board_url, key, body"),
+                        "own" to sel("SELECT board_url, key, no, posted_at FROM own_posts ORDER BY board_url, key, no"),
+                        "settings" to TableSettingsHost(sql, "pc").read().entries.sortedBy { it.key }.map { listOf(it.key, canonicalJson(it.value)) },
+                    ),
+                ),
+            ),
+        ).toHex()
+    }
+
     fun context(m: SyncKeyMaterial) = AdapterContext(deriveKeys(m.k), m.deviceId, now())
+}
+
+/** Drive の要求を、故障を当てるサーバーの道に分ける */
+private fun driveClass(req: SyncRequest): String {
+    val path = URL_PARTS.matchEntire(req.url)!!.groupValues[2]
+    if (path.endsWith("/changes/startPageToken")) return "/head"
+    if (req.method == "GET") return "/changes"
+    if (req.method == "DELETE") return "/spaces"
+    return if (uploadContent(req) == null) "/spaces" else "/records"
+}
+
+/** セグメントの上書き・作成の本文。目印(中身が空)は null */
+@Suppress("UNCHECKED_CAST")
+private fun uploadContent(req: SyncRequest): Map<String, Any?>? {
+    val b = Regex("boundary=([^;]+)").find(req.headers["Content-Type"].orEmpty())?.groupValues?.get(1) ?: return null
+    val body = req.body ?: return null
+    val part = body.split("--$b").getOrNull(2) ?: ""
+    val text = part.substring(part.indexOf("\r\n\r\n") + 4).removeSuffix("\r\n")
+    return if (text.isEmpty()) null else parseStrictJson(text) as Map<String, Any?>
+}
+
+private fun driveStatus(status: Int): SyncResponse = when {
+    status == 401 -> driveFail(401, "authError")
+    status == 429 -> driveFail(429, "rateLimitExceeded")
+    status >= 500 -> driveFail(status, "backendError")
+    else -> driveFail(status, "failed")
 }
 
 /** 端末の日付の代わり。時差で結果が変わらないよう UTC で決める */
@@ -524,7 +623,9 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
             // 別の端末が権限系を送った状態。corrupt は開けない暗号文
             val keys = deriveKeys(material().k)
             val id = recordId(keys.kId, "secret", null, "", s["url"] as String)
-            w.server.injectRecord(spaceId(keys.authToken), id, "s", 1, false, toBase64Url(ByteArray(24)), toBase64Url(ByteArray(272)))
+            // Drive では他の端末のセグメントとして置く
+            if (w.drive != null) w.drive.putRecord(spaceId(keys.authToken), INJECTED_DEVICE, mapOf("record_id" to id, "kind_tag" to "s", "schema_version" to 1L, "nonce" to toBase64Url(ByteArray(24)), "ciphertext" to toBase64Url(ByteArray(272))))
+            else w.server.injectRecord(spaceId(keys.authToken), id, "s", 1, false, toBase64Url(ByteArray(24)), toBase64Url(ByteArray(272)))
         }
         "confirm" -> d!!.engine.resolveConfirm(s["choice"] as String)
         "offline" -> d!!.online = false
@@ -535,18 +636,22 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
         "server_redirect" -> w.faults += Fault(s, "redirect")
         "server_response" -> w.faults += Fault(s, "response")
         "server_swap_conflict" -> {
+            if (w.drive != null) throw IllegalStateException("Drive には 409 がない")
             val keys = deriveKeys(material().k)
             val o = s["other"] as List<String>
             w.faults += Fault("swap", 1, "/records", other = recordId(keys.kId, o[0], o[1], o[2]))
         }
-        "server_delete_space" -> w.server.deleteSpace(spaceOfDevice())
-        "server_bump_epoch" -> w.server.bumpEpoch(spaceOfDevice())
+        "server_delete_space" -> w.drive?.deleteSpace(spaceOfDevice()) ?: w.server.deleteSpace(spaceOfDevice())
+        "server_bump_epoch" -> w.drive?.bumpEpoch(spaceOfDevice()) ?: w.server.bumpEpoch(spaceOfDevice())
         "server_inject" -> {
             val keys = deriveKeys(material().k)
             val rec = s["record"] as List<String?>
             val id = recordId(keys.kId, rec[0]!!, rec[1], rec.getOrNull(2), rec.getOrNull(3))
             val sid = spaceId(keys.authToken)
-            if (s["corrupt"] == true) {
+            if (w.drive != null) {
+                val (nonce, ciphertext) = if (s["corrupt"] == true) toBase64Url(ByteArray(24)) to toBase64Url(ByteArray(272)) else sealPayload(keys, RecordContext(sid, id, "h", 1), s["payload"] as SyncPayload)
+                w.drive.putRecord(sid, INJECTED_DEVICE, mapOf("record_id" to id, "kind_tag" to "h", "schema_version" to 1L, "nonce" to nonce, "ciphertext" to ciphertext))
+            } else if (s["corrupt"] == true) {
                 w.server.injectRecord(sid, id, "h", 1, false, toBase64Url(ByteArray(24)), toBase64Url(ByteArray(272)))
             } else {
                 val payload = s["payload"] as SyncPayload
@@ -567,6 +672,10 @@ private suspend fun runStep(w: World, s: Map<String, Any?>, label: String) {
 private fun check(w: World, want: Map<String, Any?>, label: String) {
     for ((name, ev) in want) {
         val e = ev as Map<String, Any?>
+        if (name == "\$server" && w.drive != null) {
+            checkDrive(w, w.drive, e, label)
+            continue
+        }
         if (name == "\$server") {
             e["spaces"]?.let { assertEquals("$label: サーバーの領域の数", (it as Long).toInt(), w.server.spaces.size) }
             e["tickets"]?.let { assertEquals("$label: 同期を始めるページを通した回数", (it as Long).toInt(), w.tickets) }
@@ -634,7 +743,8 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
             val rows = d.sql.query("SELECT target, args FROM sync_ops")
             for (text in texts as List<String>) assertEquals("$at の sync_ops に $text がない", false, rows.any { r -> "${r["target"]} ${r["args"]}".contains(text) })
         }
-        e["secrets_sent"]?.let { assertEquals("$at の送った権限系の数", (it as Long).toInt(), w.log.drop(w.mark).filter { l -> l.device == name }.sumOf { l -> l.secrets }) }
+        if (w.drive != null) e["secrets_sent"]?.let { assertEquals("$at の送った権限系の数", (it as Long).toInt(), w.log.drop(w.mark).filter { l -> l.device == name }.flatMap { l -> l.secretIds }.toSet().size) }
+        else e["secrets_sent"]?.let { assertEquals("$at の送った権限系の数", (it as Long).toInt(), w.log.drop(w.mark).filter { l -> l.device == name }.sumOf { l -> l.secrets }) }
         e["delete_urls"]?.let { checkEq("$at の削除ページ", it, d.sql.query("SELECT url, delete_url FROM uploads ORDER BY url").associate { r -> r["url"] as String to r["delete_url"] }) }
         e["kinds_lack"]?.let { kinds ->
             val rows = d.sql.query("SELECT DISTINCT kind FROM sync_records").map { r -> r["kind"] }
@@ -663,7 +773,8 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         e["needs_apply"]?.let { assertEquals("$at の needs_apply", (it as Long).toInt(), d.count("FROM sync_records WHERE needs_apply = 1")) }
         e["state_rows"]?.let { assertEquals("$at の sync_state", (it as Long).toInt(), d.count("FROM sync_state")) }
         if (e.containsKey("last_error")) assertEquals("$at の last_error", e["last_error"], d.state("last_error"))
-        e["since"]?.let { assertEquals("$at の since", it.toString(), d.state("since")) }
+        // Drive の since は端末の中だけの通番なので比べない
+        if (w.drive == null) e["since"]?.let { assertEquals("$at の since", it.toString(), d.state("since")) }
         if (e.containsKey("bad_counts")) assertEquals("$at の bad_counts", e["bad_counts"]?.let { canonicalJson(it) }, d.state("bad_counts"))
         e["inflight"]?.let { assertEquals("$at の push_inflight", it, d.state("push_inflight") != null) }
         e["device_id"]?.let { assertEquals("$at の device_id", it, d.state("device_id")) }
@@ -675,7 +786,10 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
         e["pushed"]?.let { assertEquals("$at の送信数", (it as Long).toInt(), d.last?.pushed) }
         e["conflicts"]?.let { assertEquals("$at の 409", (it as Long).toInt(), d.last?.conflicts) }
         if (e.containsKey("skipped")) assertEquals("$at の skipped", e["skipped"], d.last?.skipped)
-        e["requests"]?.let {
+        // 要求の数え方は置き場で違う。Drive では「通信しない」だけを比べる
+        if (w.drive != null) (e["requests"] as Map<String, Any?>?)?.let {
+            if (it.isEmpty()) checkEq("$at の通信", emptyList<String>(), w.log.drop(w.mark).filter { l -> l.device == name }.map { l -> "${l.method} ${l.path}" })
+        } else e["requests"]?.let {
             val seen = LinkedHashMap<String, Long>()
             for (l in w.log.drop(w.mark)) if (l.device == name) seen.merge("${l.method} ${l.path}", 1L, Long::plus)
             checkEq("$at の通信", it, seen)
@@ -683,9 +797,44 @@ private fun check(w: World, want: Map<String, Any?>, label: String) {
     }
 }
 
+/** \$server の期待を Drive に写す。head・gc_floor・request_id はサーバーだけの値なので比べない */
 @Suppress("UNCHECKED_CAST")
-private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> {
-    val w = World(c["server"] as Map<String, Any?>? ?: emptyMap())
+private fun checkDrive(w: World, drive: FakeDrive, e: Map<String, Any?>, label: String) {
+    e["spaces"]?.let { assertEquals("$label: Drive の領域の数", (it as Long).toInt(), drive.spaceCount()) }
+    e["spaces_at_most"]?.let { assertEquals("$label: Drive の領域の数の上限", true, drive.spaceCount() <= (it as Long).toInt()) }
+    e["tickets"]?.let { assertEquals("$label: 同期を始めるページを通した回数", (it as Long).toInt(), w.tickets) }
+    e["hosts"]?.let { hosts -> checkEq("$label: 通信先", (hosts as List<String>).map { h -> if (h == "sync.test") FAKE_DRIVE_HOST else h }, w.log.map { l -> l.host }.distinct()) }
+    e["sent_lacks"]?.let { texts ->
+        for (text in texts as List<String>) assertEquals("$label: 送った本文に $text がない", false, w.sent.any { b -> b.contains(text) })
+    }
+    for ((dev, vv) in (e["of"] as Map<String, Any?>?).orEmpty()) {
+        val v = vv as Map<String, Any?>
+        val m = w.devices.getValue(dev).keys.value
+        val sid = m?.let { spaceId(deriveKeys(it.k).authToken) } ?: ""
+        val files = if (m != null) drive.filesOf(sid) else emptyList()
+        val held = if (m != null) drive.recordsOf(sid) else emptyList()
+        fun ids(tag: String? = null) = held.filter { tag == null || it["kind_tag"] == tag }.map { it["record_id"] }.toSet().size.toLong()
+        v["exists"]?.let { assertEquals("$label: $dev の領域", it, files.any { f -> f.appProperties["t"] == "space" }) }
+        v["records"]?.let { assertEquals("$label: $dev の領域のレコード数", it, ids()) }
+        v["s_records"]?.let { assertEquals("$label: $dev の領域の権限系のレコード数", it, ids("s")) }
+        v["h_lacks"]?.let { texts ->
+            val k = deriveKeys(m!!.k)
+            val opened = openRecords(k, sid, held.filter { r -> r["kind_tag"] == "h" }.map { r -> r + ("version" to 0L) })
+            for (text in texts as List<String>) assertEquals("$label: $dev の履歴系に $text がない", false, opened.records.any { r -> canonicalJson(r.payload).contains(text) })
+        }
+    }
+}
+
+private class RunResult(val digests: Map<String, String>, val data: Map<String, String>)
+
+@Suppress("UNCHECKED_CAST")
+private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> = runScenarioOn("server", c).digests
+
+/** 置き場を選んで流す。data は今のデータだけの digest(置き場によらず同じになるはずのもの) */
+@Suppress("UNCHECKED_CAST")
+private suspend fun runScenarioOn(store: String, c: Map<String, Any?>): RunResult {
+    (c["stores"] as List<String>?)?.let { if (store !in it) throw IllegalStateException("${c["name"]} は $store では流さない: ${c["store_note"] ?: ""}") }
+    val w = World(c["server"] as Map<String, Any?>? ?: emptyMap(), store)
     w.retentionDays = (c["retention_days"] as Long?)?.toInt() ?: 0
     val skews = c["skew_ms"] as Map<String, Long>? ?: emptyMap()
     for (name in c["devices"] as List<String>) w.devices[name] = Device(name, w, skews[name] ?: 0, c["keep_defaults"] == true)
@@ -721,11 +870,13 @@ private suspend fun runScenario(c: Map<String, Any?>): Map<String, String> {
     for (s in c["steps"] as List<Map<String, Any?>>) runStep(w, s, label)
     (c["expected"] as Map<String, Any?>?)?.let { check(w, it, label) }
     val digests = LinkedHashMap<String, String>()
+    val data = LinkedHashMap<String, String>()
     for ((name, d) in w.devices) {
         digests[name] = d.digest()
+        data[name] = d.dataDigest()
         d.sql.close()
     }
-    return digests
+    return RunResult(digests, data)
 }
 
 @Suppress("UNCHECKED_CAST")
@@ -765,6 +916,27 @@ class SyncScenarioTest {
         }
         assertEquals(20, scenarios.size)
         if (fails.isNotEmpty()) fail("${scenarios.size} 件のうち ${fails.size} 件が違う\n" + fails.joinToString("\n"))
+    }
+
+    /** 同じシナリオを偽の Drive で流す。今のデータはサーバーと同じになり、同期の表まで PC の Drive の digest と同じになる */
+    @Test fun 共通シナリオがDriveでもPCと同じ結果になる() = runBlocking {
+        val scenarios = (load("sync-client.json") as List<Map<String, Any?>>) + (load("sync-client-random.json") as List<Map<String, Any?>>)
+        val digests = load("sync-client-digests-drive.json") as Map<String, Map<String, String>>
+        val onDrive = scenarios.filter { c -> (c["stores"] as List<String>?)?.contains("drive") != false }
+        val fails = ArrayList<String>()
+        for (c in onDrive) {
+            val name = c["name"] as String
+            try {
+                val drive = runScenarioOn("drive", c)
+                val server = runScenarioOn("server", c)
+                if (canonicalJson(drive.data) != canonicalJson(server.data)) fails += "$name: 今のデータがサーバーと違う"
+                else if (canonicalJson(drive.digests) != canonicalJson(digests[name])) fails += "$name: digest が PC と違う"
+            } catch (e: Throwable) {
+                fails += "$name: ${e.message ?: e}"
+            }
+        }
+        assertEquals(digests.size, onDrive.size)
+        if (fails.isNotEmpty()) fail("${onDrive.size} 件のうち ${fails.size} 件が違う\n" + fails.joinToString("\n"))
     }
 
     @Test fun 五千スレと五千件の書き込みを持つ二台が合流する() = runBlocking {

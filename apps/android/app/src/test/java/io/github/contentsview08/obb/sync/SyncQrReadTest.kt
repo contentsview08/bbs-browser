@@ -8,9 +8,7 @@ import io.github.contentsview08.obb.sync.engine.SyncController
 import io.github.contentsview08.obb.sync.engine.SyncKeyMaterial
 import io.github.contentsview08.obb.sync.engine.SyncKeyStore
 import io.github.contentsview08.obb.sync.engine.SyncRequest
-import io.github.contentsview08.obb.sync.engine.SyncResponse
 import kotlinx.coroutines.runBlocking
-import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -34,7 +32,7 @@ class SyncQrReadTest {
         override suspend fun clear() { value = null }
     }
 
-    private class Device(server: FakeSyncServer, now: () -> Long) {
+    private class Device(google: FakeGoogle, now: () -> Long) {
         val db = JdbcSyncSql.open()
         val requests = ArrayList<SyncRequest>()
         val keys = Keys()
@@ -43,15 +41,13 @@ class SyncQrReadTest {
             keyStore = keys,
             transport = { r ->
                 requests += r
-                val res = server.handle(FakeRequest(r.method, r.url.replace(Regex("^https://[^/]+"), ""), r.headers, r.body))
-                SyncResponse(res.status, res.body, res.headers)
+                google.handle(r)
             },
-            defaultServerUrl = "https://sync.test",
+            google = TEST_GOOGLE_CLIENT,
             adapters = listOf(FavoriteThreadAdapter(db) { ResolvedBoard(it, "2ch-compat") }),
             now = now,
             presetUrls = PRESET_URLS,
             keyHint = { keys.value != null },
-            openStartWindow = { url -> signTicket(Regex("space_id=([0-9a-f]{64})").find(url)!!.groupValues[1], 4_000_000_000L) },
         )
         // 画面で「同期を使う」をオンにしたあとの状態
         init { db.exec("INSERT INTO sync_state (key, value) VALUES ('master', '1')", emptyList()) }
@@ -59,73 +55,63 @@ class SyncQrReadTest {
         fun favorites() = db.query("SELECT key FROM favorite_threads ORDER BY key").map { it["key"] as String }
     }
 
-    private fun server() = FakeSyncServer(now = { clock }, ratePerMinute = null, fullPullPerHour = null)
     private fun thread(key: String) = io.github.contentsview08.obb.bbs.ThreadSummary("https://a.5ch.io/x/", key, "t$key", 0, 0, null)
-    private fun cases() = JSONArray(javaClass.classLoader!!.getResourceAsStream("sync-pairing.json")!!.bufferedReader(Charsets.UTF_8).use { it.readText() })
-
-    @Test fun 共通のコードの一覧と同じ判定になる() {
-        val list = cases()
-        for (i in 0 until list.length()) {
-            val c = list.getJSONObject(i)
-            val r = readSyncQr(c.getString("code"), enabled = false, space = null, allowLocalhost = c.optBoolean("allow_localhost"))
-            if (c.has("error")) assertEquals(c.getString("name"), c.getString("error"), (r as SyncQrRead.Bad).reason)
-            else assertEquals(c.getString("name"), c.getString("code"), (r as SyncQrRead.Join).code)
-        }
-    }
+    private val google = FakeGoogle { clock }.also { it.accounts["1//0e-a"] = "acct-1"; it.accounts["1//0e-b"] = "acct-1" }
+    private val codeA = encodeDrivePairingCode(DrivePairingCode(ByteArray(32) { 1 }, "1//0e-a"))
+    private val codeB = encodeDrivePairingCode(DrivePairingCode(ByteArray(32) { 2 }, "1//0e-b"))
 
     @Test fun 同期のコードでないものは参加しない() {
-        val valid = cases().getJSONObject(0).getString("code")
-        for (text in listOf("", "   ", "https://example.test/", "obb1", "obb1.", "obb1...", "obb1.!!!.!!!.!!!", "obb1.${"\u0000"}.a.b", "OBB1." + valid.removePrefix("obb1."), "x".repeat(4000))) {
+        for (text in listOf("", "   ", "https://example.test/", "obb2", "obb2.", "obb2..", "obb2.!!!.!!!", "obb2.${"\u0000"}.a", "OBB2." + codeA.removePrefix("obb2."), "x".repeat(4000))) {
             assertEquals(text, "bad_code", (readSyncQr(text, enabled = false, space = null) as SyncQrRead.Bad).reason)
             assertEquals(text, "bad_code", (readSyncQr(text, enabled = true, space = "abc") as SyncQrRead.Bad).reason)
         }
+        // 前の同期サーバーのコードは、終わった案内を出す
+        val server = javaClass.classLoader!!.getResourceAsStream("sync-pairing.json")!!.bufferedReader(Charsets.UTF_8).use { org.json.JSONArray(it.readText()) }.getJSONObject(0).getString("code")
+        assertEquals("server_code", (readSyncQr(server, enabled = false, space = null) as SyncQrRead.Bad).reason)
+        assertTrue(SyncText.message("server_code").contains("Google ドライブだけ"))
     }
 
     @Test fun 同期している端末は領域で分ける() {
-        val c = cases().getJSONObject(0)
-        val code = c.getString("code")
-        val head = c.getString("ticket").removePrefix("v1.").take(12)
-        assertEquals(SyncQrRead.SameSpace, readSyncQr(code, enabled = true, space = head))
-        val other = readSyncQr(code, enabled = true, space = "000000000000") as SyncQrRead.OtherSpace
-        assertEquals(code, other.code)
-        assertEquals(c.getString("server_url"), other.serverUrl)
+        val head = spaceId(deriveKeys(ByteArray(32) { 1 }).authToken).take(12)
+        assertEquals(codeA, (readSyncQr(codeA, enabled = false, space = null) as SyncQrRead.Join).code)
+        assertEquals(codeA, (readSyncQr(codeA, enabled = true, space = head) as SyncQrRead.SameSpace).code)
+        assertEquals(codeB, (readSyncQr(codeB, enabled = true, space = head) as SyncQrRead.OtherSpace).code)
         // 鍵を読めないときは同じと決めつけず、確認に回す
-        assertTrue(readSyncQr(code, enabled = true, space = null) is SyncQrRead.OtherSpace)
-        assertEquals("bad_url", (readSyncQr(cases().getJSONObject(2).getString("code"), enabled = true, space = head) as SyncQrRead.Bad).reason)
+        assertTrue(readSyncQr(codeA, enabled = true, space = null) is SyncQrRead.OtherSpace)
     }
 
-    @Test fun 読み取って参加すると同期が始まり同じ領域は何もしない() = runBlocking {
-        val server = server()
-        val first = Device(server) { clock }
+    @Test fun 読み取って参加すると同期が始まり同じ領域はトークンだけを置き直す() = runBlocking {
+        val first = Device(google) { clock }
         first.ops.setFavoriteThreadNow(thread("1"), "t1", true, clock)
-        first.ctl.start()
-        val code = first.ctl.pairingCode()
+        // 手元にデータがあるので参加の確認が出る。進める
+        assertEquals("confirm", first.ctl.join(codeA).state)
+        first.ctl.resolveConfirm("accept_removal")
 
-        val second = Device(server) { clock }
+        val second = Device(google) { clock }
         assertFalse(second.ctl.status().enabled)
-        val read = readSyncQr(code, enabled = false, space = null) as SyncQrRead.Join
+        val read = readSyncQr(codeA, enabled = false, space = null) as SyncQrRead.Join
         second.ctl.join(read.code)
         val st = second.ctl.status()
         assertTrue(st.enabled)
         assertEquals(first.ctl.status().space, st.space)
         assertEquals(listOf("1"), second.favorites())
 
-        val before = second.requests.size
-        assertEquals(SyncQrRead.SameSpace, readSyncQr(code, st.enabled, st.space))
-        assertEquals(before, second.requests.size)
+        val same = readSyncQr(codeA, st.enabled, st.space) as SyncQrRead.SameSpace
+        second.ctl.join(same.code)
+        assertEquals(st.space, second.ctl.status().space)
+        assertEquals(listOf("1"), second.favorites())
     }
 
     @Test fun 別の領域へ移ると手元を残して新しい領域につながる() = runBlocking {
-        val server = server()
-        val a = Device(server) { clock }
-        a.ctl.start()
-        val b = Device(server) { clock }
+        val a = Device(google) { clock }
+        a.ctl.join(codeA)
+        val b = Device(google) { clock }
         b.ops.setFavoriteThreadNow(thread("2"), "t2", true, clock)
-        b.ctl.start()
-        val other = b.ctl.pairingCode()
+        b.ctl.join(codeB)
+        b.ctl.resolveConfirm("accept_removal")
         val me = a.ctl.status()
 
-        val read = readSyncQr(other, me.enabled, me.space) as SyncQrRead.OtherSpace
+        val read = readSyncQr(codeB, me.enabled, me.space) as SyncQrRead.OtherSpace
         // 確認で閉じたら何も変わらない
         assertEquals(me.space, a.ctl.status().space)
         a.ctl.leave()
@@ -137,6 +123,6 @@ class SyncQrReadTest {
         assertNotEquals(me.space, moved.space)
         assertEquals(b.ctl.status().space, moved.space)
         assertEquals(listOf("2"), a.favorites())
-        assertEquals(SyncQrRead.SameSpace, readSyncQr(other, moved.enabled, moved.space))
+        assertTrue(readSyncQr(codeB, moved.enabled, moved.space) is SyncQrRead.SameSpace)
     }
 }

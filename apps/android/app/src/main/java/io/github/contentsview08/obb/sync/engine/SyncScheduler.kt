@@ -30,16 +30,19 @@ interface SchedulerHost {
     suspend fun hasChanges(): Boolean
     fun pace(): SyncPace?
 
+    /** 利用者の選んだ確認の間隔。null は手動のみ(自動では確かめず、この端末の変更を送るだけ) */
+    fun interval(): Long? = SyncConfig.HEAD_INTERVAL_MS
+
     /** PC は放置で確認を止める。スマホは前面なら操作がなくても見ている */
     val idleStops: Boolean
 }
 
 class PaceMs(val head: Long, val push: Long)
 
-/** 既定より短くせず、PACE_MAX_MS より長くしない(大きな値で時刻の足し算があふれないように、掛ける前に丸める) */
-fun paceMs(pace: SyncPace?): PaceMs {
+/** 既定(head は利用者の選んだ間隔)より短くせず、PACE_MAX_MS より長くしない(大きな値で時刻の足し算があふれないように、掛ける前に丸める) */
+fun paceMs(pace: SyncPace?, head: Long = SyncConfig.HEAD_INTERVAL_MS): PaceMs {
     fun ms(sec: Double?, base: Long) = if (sec != null && sec.isFinite() && sec > 0) minOf(SyncConfig.PACE_MAX_MS, maxOf(base, ceil(minOf(sec * 1000, SyncConfig.PACE_MAX_MS.toDouble())).toLong())) else base
-    return PaceMs(ms(pace?.headSec, SyncConfig.HEAD_INTERVAL_MS), ms(pace?.pushSec, SyncConfig.PUSH_INTERVAL_MS))
+    return PaceMs(ms(pace?.headSec, head), ms(pace?.pushSec, SyncConfig.PUSH_INTERVAL_MS))
 }
 
 /** 「変化なし」が続いた回数から確認の間隔を決める。基本の間隔より短くせず、上限で止める */
@@ -75,15 +78,31 @@ class SyncScheduler(private val host: SchedulerHost) {
         }
     }
 
+    /** 手動のみなら null */
+    private fun headBase(): Long? = host.interval()?.let { maxOf(1_000L, it) }
+
+    /** head が null なら自動では確かめない。送り出しの間隔は選んだ間隔によらない */
+    private fun paces(): Pair<Long?, Long> {
+        val base = headBase()
+        val p = paceMs(host.pace(), base ?: SyncConfig.HEAD_INTERVAL_MS)
+        return (if (base == null) null else p.head) to p.push
+    }
+
+    /** 間隔を選び直したとき。次の確認を新しい間隔で掛け直す */
+    fun intervalChanged() {
+        misses = 0
+        schedule()
+    }
+
     /** 次の確認と次の送信の早い方で起きる。確認を遠ざけている間も、送るものの有無は送信の間隔で見る */
     private fun schedule() {
         clear(timer)
         timer = null
         if (!front || paused) return
-        val p = paceMs(host.pace())
+        val (head, push) = paces()
         val now = host.now()
-        val untilCheck = maxOf(0L, lastCheck + headWaitMs(p.head, misses) - now)
-        val untilPush = maxOf(0L, lastPush + p.push - now)
+        val untilCheck = if (head == null) Long.MAX_VALUE else maxOf(0L, lastCheck + headWaitMs(head, misses) - now)
+        val untilPush = maxOf(0L, lastPush + push - now)
         timer = host.setTimer({ launchQuiet { tick() } }, minOf(untilPush, untilCheck))
     }
 
@@ -116,9 +135,9 @@ class SyncScheduler(private val host: SchedulerHost) {
             return
         }
         guarded {
-            val p = paceMs(host.pace())
-            val checkDue = now - lastCheck >= headWaitMs(p.head, misses)
-            val pushDue = now - lastPush >= p.push
+            val (head, push) = paces()
+            val checkDue = head != null && now - lastCheck >= headWaitMs(head, misses)
+            val pushDue = now - lastPush >= push
             // 送るものがなくても・使っていなくても、次はここから数える(時計が空回りしないように)
             if (checkDue) lastCheck = now
             if (pushDue) lastPush = now
@@ -141,7 +160,8 @@ class SyncScheduler(private val host: SchedulerHost) {
         lastPush = lastActivity
         misses = 0
         guarded {
-            if (host.enabled()) run("foreground")
+            // 手動のみでは、前面に戻っても確かめに行かない。送るものがあれば送る
+            if (host.enabled() && (headBase() != null || host.hasChanges())) run("foreground")
         }
     }
 
@@ -173,7 +193,7 @@ class SyncScheduler(private val host: SchedulerHost) {
         netTimer = host.setTimer({
             netTimer = null
             if (front && host.now() - lastSync >= SyncConfig.NET_MIN_GAP_MS) {
-                launchQuiet { guarded { if (host.enabled()) run("network") } }
+                launchQuiet { guarded { if (host.enabled() && (headBase() != null || host.hasChanges())) run("network") } }
             }
         }, SyncConfig.NET_SETTLE_MS)
     }

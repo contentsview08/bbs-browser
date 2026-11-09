@@ -2,8 +2,6 @@ package io.github.contentsview08.obb.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.ClipData
-import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -25,11 +23,6 @@ import android.provider.Settings
 import android.util.Size as CameraSize
 import android.view.Surface
 import android.view.TextureView
-import android.view.WindowManager
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -84,22 +77,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.contentsview08.obb.AppViewModel
-import io.github.contentsview08.obb.BuildConfig
 import io.github.contentsview08.obb.data.decodeQrLuma
-import io.github.contentsview08.obb.data.qrMatrix
 import io.github.contentsview08.obb.data.readSyncQr
 import io.github.contentsview08.obb.data.SyncQrRead
-import io.github.contentsview08.obb.data.syncStartNav
-import io.github.contentsview08.obb.data.SyncStartNav
+import io.github.contentsview08.obb.sync.DriveText
+import io.github.contentsview08.obb.sync.SyncConfig
 import io.github.contentsview08.obb.sync.SyncText
 import io.github.contentsview08.obb.sync.engine.CycleResult
 import io.github.contentsview08.obb.sync.engine.JOIN_DATA_CONFIRM
-import io.github.contentsview08.obb.sync.engine.PAIRING_SHOW_MS
 import io.github.contentsview08.obb.sync.engine.SYNC_GROUPS
 import io.github.contentsview08.obb.sync.engine.MismatchSummary
 import io.github.contentsview08.obb.sync.engine.SyncStatus
@@ -109,9 +98,11 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-// 同期の小画面。PC の設定の SyncTab.tsx と同じ言葉
+// 同期の小画面。PC の設定の SyncTab.tsx と同じ言葉。置き場は Google ドライブだけで、スマホは PC の QR を読んで参加する
 
 private fun label(key: String) = SyncText.LABELS.getValue(key)
+private fun drive(key: String) = DriveText.LABELS.getValue(key)
+private const val JOIN_BY_QR = "QR を読んで参加"
 private fun clock(ms: Long?) = if (ms == null) "―" else DateFormat.getDateTimeInstance().format(Date(ms))
 private const val JOINED = "同期を始めました"
 
@@ -131,19 +122,20 @@ private fun StatusRow(name: String, value: String, valueColor: Color = Palette.t
 }
 
 @Composable
-fun SyncPage(vm: AppViewModel, advanced: Boolean) {
+fun SyncPage(vm: AppViewModel, @Suppress("UNUSED_PARAMETER") advanced: Boolean) {
     val scope = rememberCoroutineScope()
     var st by remember { mutableStateOf<SyncStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var url by remember { mutableStateOf<String?>(null) }
-    var pairing by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var summary by remember { mutableStateOf<SyncSummary?>(null) }
     var mismatch by remember { mutableStateOf<MismatchSummary?>(null) }
+    /** ドライブで使っている量。毎周は読まず、画面を開いたときと操作の後だけ読み直す */
+    var usage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(Unit) { summary = runCatching { vm.syncSummary() }.getOrNull() }
+    LaunchedEffect(Unit) { usage = vm.syncDriveUsage() }
     LaunchedEffect(Unit) {
         while (true) {
             st = vm.syncStatus()
@@ -160,13 +152,13 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
             val now = vm.syncStatus()
             st = now
             summary = runCatching { vm.syncSummary() }.getOrNull()
-            // 窓を通っても領域を作れないことがある。その理由は状態の最後のエラーに出る
+            usage = vm.syncDriveUsage()
             message = failed ?: done?.takeIf { now.lastError == null }
             busy = false
             after()
         }
     }
-    /** 参加。手元に送るものがあるか、ふだんと違うサーバーなら確認で止まる(状態の欄に出る)ので、done は参加したときだけ */
+    /** 参加。手元に送るものがあれば確認で止まる(状態の欄に出る)ので、done は参加したときだけ */
     fun join(done: String, f: suspend () -> CycleResult) {
         var r: CycleResult? = null
         act(after = {
@@ -175,15 +167,18 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
         }) { r = f() }
     }
     val s = st ?: return
-    val needTicket = s.lastError?.startsWith("ticket_") == true
-    Group(note = label("intro")) {
-        SwitchRow(label("master"), s.master, desc = label("master_note")) { on -> if (!busy) act { vm.syncCtl.setMaster(on); if (on) vm.reloadSyncedScreens() } }
+    Group(note = drive("intro")) {
+        SwitchRow(label("master"), s.master, desc = drive("master_note")) { on -> if (!busy) act { vm.syncCtl.setMaster(on); if (on) vm.reloadSyncedScreens() } }
     }
     message?.let { Text(it, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), color = Palette.textStrong, fontSize = 14.sp) }
+    s.driveUnavailable?.let { Text(SyncText.message(it), Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), color = Palette.markDanger, fontSize = 14.sp) }
     if (s.master) {
         Group("状態") {
             StatusRow("状態", s.state)
+            StatusRow(drive("store"), drive("store_drive"))
+            if (s.enabled) StatusRow("Google アカウント", s.email?.ifEmpty { null } ?: "―")
             StatusRow(label("status_space"), s.space ?: "―")
+            if (s.enabled) StatusRow(drive("usage"), usage ?: "―")
             StatusRow(label("status_pending"), "${s.pending} 件")
             StatusRow("最後の同期", clock(listOfNotNull(s.lastPullAt, s.lastPushAt).maxOrNull()))
             StatusRow("最後の受信", clock(s.lastPullAt))
@@ -194,7 +189,7 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
             Group {
                 if (c.type == JOIN_DATA_CONFIRM) {
                     Text(label("join_ask"), Modifier.padding(16.dp), color = Palette.textStrong, fontSize = 14.sp)
-                    c.host?.let { Text(label("join_ask_server").replace("{host}", it), Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), color = Palette.textStrong, fontSize = 14.sp) }
+                    c.account?.let { Text(drive("join_ask_account").replace("{email}", it), Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), color = Palette.textStrong, fontSize = 14.sp) }
                     SyncButton(label("join_cancel"), !busy) { act { vm.syncCtl.resolveConfirm("keep_local") } }
                     SyncButton(label("join_ok"), !busy) { act(JOINED) { vm.syncCtl.resolveConfirm("accept_removal"); vm.reloadSyncedScreens() } }
                 } else {
@@ -204,20 +199,24 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
                 }
             }
         }
-        Group {
-            if (!s.enabled || needTicket) SyncButton(label("start"), !busy) { act(JOINED) { vm.syncCtl.start(); vm.reloadSide() } }
-            if (!s.enabled && s.confirm == null) SyncButton(label("add_device"), !busy) { scanning = true }
+        Group(note = if (s.enabled) null else drive("join_note")) {
+            // 最初の 1 台は PC。スマホは PC の「端末を追加」の QR(か、そのコード)で参加する
+            if (!s.enabled && s.confirm == null) SyncButton(JOIN_BY_QR, !busy && s.driveUnavailable == null) { scanning = true }
             if (s.enabled) {
                 SyncButton(label("sync_now"), !busy) { act { vm.syncCtl.syncNow(); vm.reloadSyncedScreens() } }
-                SyncButton(label("add_device"), !busy) { act { pairing = vm.syncCtl.pairingCode() } }
+                // Google との接続が切れたとき(取り消し・期限切れ)は、PC の QR を読み直してトークンだけを置き直す
+                SyncButton(drive("rescan"), !busy) { scanning = true }
                 SyncButton(label("leave"), !busy, danger = true) { ask = "leave" }
             }
         }
     }
-    Group(label("kinds"), note = label("kinds_note") + label("kinds_resume_note")) {
+    if (s.master) Group(note = drive("interval_note")) {
+        ChoiceRow(drive("interval"), vm.prefs.syncInterval, SyncConfig.SYNC_INTERVALS.map { it.first to DriveText.INTERVAL_LABELS.getValue(it.first) }) { vm.setSyncInterval(it) }
+    }
+    Group(label("kinds"), note = drive("kinds_note") + label("kinds_resume_note")) {
         for (g in SYNC_GROUPS) {
             val on = s.kinds[g.id] == true
-            SwitchRow(g.label, on, desc = if (g.id == "secret") label("secret_note") else null) { next ->
+            SwitchRow(g.label, on, desc = if (g.id == "secret") drive("secret_note") else null) { next ->
                 if (busy) return@SwitchRow
                 if (next && g.id == "secret") ask = "secret"
                 else act { vm.syncCtl.setKind(g.id, next); if (next) vm.reloadSyncedScreens() }
@@ -227,21 +226,13 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
     if (s.master && s.enabled) summary?.let { sum ->
         SyncSummaryView(sum, mismatch, !busy, onCopy = { copyText(context, sum.text); vm.toast = "コピーしました" }, onCheck = { act { mismatch = vm.syncMismatches() } })
     }
-    if (advanced) Group(label("advanced")) {
-        Text(label("server_url"), Modifier.padding(start = 16.dp, top = 12.dp), color = Palette.textMuted, fontSize = 13.sp)
-        OutlinedTextField(url ?: s.serverOverride.orEmpty(), { url = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, placeholder = { Text(s.serverUrl, fontSize = 12.sp) })
-        SyncButton("変える", !busy && url != null) { ask = "server" }
-    }
-    pairing?.let { code ->
-        PairingWindow(code, onScan = { pairing = null; scanning = true }, onEnd = { pairing = null })
-    }
-    vm.syncStartUrl?.let { SyncStartWindow(it, vm::finishSyncStart) }
     if (scanning) QrScanWindow(
         enabled = s.enabled,
         space = s.space,
         pending = s.pending,
         onDismiss = { scanning = false },
         onJoin = { read -> join(JOINED) { vm.syncCtl.join(read) } },
+        onRenew = { read -> join("Google の接続を置き直しました") { vm.syncCtl.join(read).also { vm.reloadSyncedScreens() } } },
         onMove = { read ->
             join("同期を移りました") {
                 vm.syncCtl.leave()
@@ -250,32 +241,18 @@ fun SyncPage(vm: AppViewModel, advanced: Boolean) {
                 vm.syncCtl.join(read)
             }
         },
-        onOwn = {
-            scanning = false
-            if (s.enabled) act { pairing = vm.syncCtl.pairingCode() }
-            else act(JOINED) {
-                vm.syncCtl.start()
-                vm.reloadSide()
-                // 領域を作れなかったときは、相手に渡しても使えない
-                if (vm.syncStatus().lastError == null) pairing = vm.syncCtl.pairingCode()
-            }
-        },
     )
     if (ask != null) {
         val which = ask
         AlertDialog(
             onDismissRequest = { ask = null },
-            title = { Text(when (which) { "leave" -> label("leave"); "secret" -> label("secret_ask_title"); else -> label("server_url") }) },
-            text = { Text(when (which) { "leave" -> label("leave_ask"); "secret" -> label("secret_ask_body"); else -> label("server_ask") }) },
+            title = { Text(if (which == "leave") label("leave") else label("secret_ask_title")) },
+            text = { Text(if (which == "leave") drive("leave_ask") else label("secret_ask_body")) },
             confirmButton = {
                 TextButton({
                     ask = null
-                    when (which) {
-                        "leave" -> act { vm.syncCtl.leave() }
-                        "secret" -> act { vm.syncCtl.setKind("secret", true) }
-                        else -> act { vm.syncCtl.setServerUrl(url.orEmpty()); url = null }
-                    }
-                }) { Text(when (which) { "leave" -> "同期をやめる"; "secret" -> label("secret_ask_ok"); else -> "変える" }) }
+                    if (which == "leave") act { vm.syncCtl.leave() } else act { vm.syncCtl.setKind("secret", true) }
+                }) { Text(if (which == "leave") "同期をやめる" else label("secret_ask_ok")) }
             },
             dismissButton = { TextButton({ ask = null }) { Text("閉じる") } },
         )
@@ -310,119 +287,12 @@ private fun SyncSummaryView(summary: SyncSummary, mismatch: MismatchSummary?, en
     }
 }
 
-/** 開いたページへアプリの命令を渡さない(addJavascriptInterface を使わない)。移動を止めて許可証を受け取る */
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-private fun SyncStartWindow(url: String, onDone: (String?) -> Unit) {
-    FullWindow(onDismiss = { onDone(null) }) {
-        Column(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().background(Palette.bar).heightIn(min = 52.dp).padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton({ onDone(null) }) { Icon(Icons.Filled.Close, "閉じる", tint = Palette.textStrong) }
-                Text(label("start"), color = Palette.textStrong, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            }
-            AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                        webViewClient = object : WebViewClient() {
-                            private var taken = false
-                            private fun route(view: WebView, target: String, mainFrame: Boolean): Boolean = when (val nav = syncStartNav(target, url)) {
-                                is SyncStartNav.Ticket -> {
-                                    if (mainFrame && !taken) {
-                                        taken = true
-                                        view.stopLoading()
-                                        onDone(nav.value)
-                                    }
-                                    true
-                                }
-                                SyncStartNav.Allow -> false
-                                SyncStartNav.Block -> true
-                            }
-                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = route(view, request.url.toString(), request.isForMainFrame)
-                            // スクリプトの移動で上を通らない版がある。.invalid は名前解決されないので、ここで止めても外へ出ない
-                            override fun onPageStarted(view: WebView, target: String?, favicon: android.graphics.Bitmap?) {
-                                if (target != null && syncStartNav(target, url) is SyncStartNav.Ticket) route(view, target, true)
-                            }
-                        }
-                        loadUrl(url)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                onRelease = {
-                    it.clearHistory()
-                    it.clearCache(true)
-                    it.destroy()
-                },
-            )
-        }
-    }
-}
-
-/** QR とコピー用のコード。60 秒で消す。表示の間は画面の撮影を止める */
-@Composable
-private fun PairingWindow(code: String, onScan: () -> Unit, onEnd: () -> Unit) {
-    val context = LocalContext.current
-    var left by remember { mutableLongStateOf(PAIRING_SHOW_MS / 1000) }
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(code) {
-        val started = System.currentTimeMillis()
-        while (true) {
-            left = (PAIRING_SHOW_MS - (System.currentTimeMillis() - started) + 999) / 1000
-            if (left <= 0) { onEnd(); break }
-            delay(250)
-        }
-    }
-    FullWindow(onDismiss = onEnd) {
-        val view = LocalView.current
-        DisposableEffect(view) {
-            val dialog = (view.parent as? DialogWindowProvider)?.window
-            val activity = (context as? android.app.Activity)?.window
-            dialog?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            activity?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            onDispose {
-                dialog?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                activity?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                if (copied) clearClipboard(context)
-            }
-        }
-        Column(Modifier.fillMaxSize().background(Palette.base).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(label("add_device"), color = Palette.textStrong, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text("${label("pairing_warning")}(あと ${left.coerceAtLeast(0)} 秒)", color = Palette.markDanger, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            val matrix = remember(code) { qrMatrix(code) }
-            // 背景と点の色は読み取りのために固定する
-            Canvas(Modifier.fillMaxWidth().aspectRatio(1f).background(Color.White)) {
-                val cell = size.width / matrix.size
-                for (y in matrix.indices) for (x in matrix.indices) if (matrix[y][x]) drawRect(Color.Black, Offset(x * cell, y * cell), Size(cell + 0.5f, cell + 0.5f))
-            }
-            Text(code, color = Palette.textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton({ copySecret(context, code); copied = true }) { Text(label("copy")) }
-                TextButton(onScan) { Text("カメラで読む") }
-                TextButton(onEnd) { Text("閉じる") }
-            }
-        }
-    }
-}
-
-private fun copySecret(context: Context, text: String) {
-    val clip = ClipData.newPlainText("OBB", text)
-    // 通知や履歴に中身を出さない印(Android 13 から)
-    clip.description.extras = android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-}
-
-private fun clearClipboard(context: Context) {
-    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("", ""))
-}
-
 /**
- * 端末を足す相手の QR を読む。開いたらすぐカメラを動かし、obb1 のコードなら確認なしで参加する。
- * 同期している端末では、別の領域のときだけ移るかを聞く
+ * PC の「端末を追加」の QR を読む。開いたらすぐカメラを動かし、obb2 のコードなら確認なしで参加する。
+ * 同期している端末では、同じ同期なら Google の接続を置き直し、別の領域のときだけ移るかを聞く
  */
 @Composable
-private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDismiss: () -> Unit, onJoin: (String) -> Unit, onMove: (String) -> Unit, onOwn: () -> Unit) {
+private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDismiss: () -> Unit, onJoin: (String) -> Unit, onRenew: (String) -> Unit, onMove: (String) -> Unit) {
     val context = LocalContext.current
     val view = LocalView.current
     fun hasCamera() = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -464,7 +334,7 @@ private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDism
             say("別の同期の QR です")
             return false
         }
-        return when (val r = readSyncQr(text, enabled, space, BuildConfig.SYNC_ALLOW_LOCALHOST)) {
+        return when (val r = readSyncQr(text, enabled, space)) {
             is SyncQrRead.Join -> {
                 Haptics.confirm(view)
                 taken = "同期を始めています"
@@ -476,9 +346,11 @@ private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDism
                 moving = r
                 false
             }
-            SyncQrRead.SameSpace -> {
-                say("この端末はすでにこの同期を使っています")
-                false
+            is SyncQrRead.SameSpace -> {
+                Haptics.confirm(view)
+                taken = "Google の接続を置き直しています"
+                onRenew(r.code)
+                true
             }
             is SyncQrRead.Bad -> {
                 say(SyncText.message(r.reason))
@@ -501,7 +373,7 @@ private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDism
                         Text(done, color = Palette.textMuted, fontSize = 14.sp)
                     }
                     pasting -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(pasted, { pasted = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("obb1.") })
+                        OutlinedTextField(pasted, { pasted = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(drive("join_placeholder")) })
                         SyncButton(label("join"), pasted.isNotBlank()) { handle(pasted) }
                         hint?.let { Text(it, color = Palette.markDanger, fontSize = 14.sp) }
                     }
@@ -536,10 +408,9 @@ private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDism
                 if (pasting) SyncButton("カメラで読む") { pasting = false }
                 else SyncButton("コードを貼る") {
                     val clip = context.getSystemService(ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
-                    if (pasted.isBlank() && clip?.trim()?.startsWith("obb1.") == true) pasted = clip
+                    if (pasted.isBlank() && clip?.trim()?.startsWith(drive("join_placeholder")) == true) pasted = clip
                     pasting = true
                 }
-                SyncButton(if (enabled) "自分の QR を出す" else "自分で始める(QR を出す)", onClick = onOwn)
             }
         }
         moving?.let { m ->
@@ -548,7 +419,7 @@ private fun QrScanWindow(enabled: Boolean, space: String?, pending: Long, onDism
                 title = { Text("今の同期から移りますか") },
                 text = {
                     val unsent = if (pending > 0) "まだ送っていない $pending 件は、今の同期に届きません。" else ""
-                    Text("この QR は別の同期のものです(${m.serverUrl})。今の同期をやめて、こちらに移ります。この端末のお気に入りは消えず、移った先へ送られます。今の同期のサーバーのデータはそのままです。$unsent")
+                    Text("この QR は別の同期のものです。今の同期をやめて、こちらに移ります。この端末のお気に入りは消えず、移った先へ送られます。今の同期の Google ドライブのデータはそのままです。$unsent")
                 },
                 confirmButton = {
                     TextButton({

@@ -109,6 +109,8 @@ class Prefs(context: Context) {
     // ── テーマと文字 ──
     /** 配色(Palette の SCHEMES のキー) */
     var scheme by pref("scheme", "indigo")
+    /** 同期の間隔(SyncConfig.SYNC_INTERVALS の id)。端末ごとの設定で、同期の許可の一覧に入れない */
+    var syncInterval by pref("syncInterval", io.github.contentsview08.obb.sync.SyncConfig.DEFAULT_SYNC_INTERVAL)
     /** スマホのダーク・ライトに合わせる(合わせるときは darkScheme / lightScheme を使う) */
     var followOsTheme by pref("followOsTheme", true)
     var darkScheme by pref("darkScheme", "soft-dark")

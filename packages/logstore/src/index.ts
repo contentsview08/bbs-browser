@@ -490,12 +490,14 @@ export class LogStore {
 
     if (result.status === 'notModified') {
       // 過去ログから取ったスレは、変わらなくても dat 落ちの印を付け直す(前に取ったときに付け損ねていても直るように)。
-      // そのときは続きの印も書く(したらばは新着のないまま過去ログ倉庫に入ったことを印で返す)。前の印がある(レスを取ってある)スレだけ。
+      // そのときは続きの印も書く(したらばは新着のないまま過去ログ倉庫に入ったことを印で返す)。レスを取ってあるスレだけ
+      // (applyFetch と同じ決まり。前の印があるかで決めると、レスのないまま印だけ残ったスレに過去ログの印が付き、もう取りに行かなくなる)。
       // ふつうの変化なしの印は書かない(レスのない印を持つと、次から差分だけを取りに行く)
       const cursor = result.archived && result.cursor ? JSON.stringify(result.cursor) : null
       await this.db.execute(
         `UPDATE threads SET fetched_at = $1, status = CASE WHEN $2 = 1 THEN 'archived' ELSE status END,
-           cursor = CASE WHEN $3 IS NOT NULL AND cursor IS NOT NULL THEN $3 ELSE cursor END WHERE board_url = $4 AND key = $5`,
+           cursor = CASE WHEN $3 IS NOT NULL AND EXISTS (SELECT 1 FROM posts WHERE board_url = $4 AND key = $5) THEN $3 ELSE cursor END
+         WHERE board_url = $4 AND key = $5`,
         [now, result.archived ? 1 : 0, cursor, ...where],
       )
       return

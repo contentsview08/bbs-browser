@@ -202,7 +202,10 @@ function PostDisplayItems({ settings: s, update }: { settings: AppSettings; upda
 export function StyleDialog(props: { settings: AppSettings; update: UpdateSetting; sliders: ReactNode; from: 'list' | 'thread'; onClose: () => void }) {
   const { settings, update } = props
   const boxRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(boxRef, props.onClose)
+  // スマホは後ろを覆うシートなので、ほかの窓と同じくフォーカスを中に留める(Android の戻るも data-modal を見て閉じる)。
+  // PC は後ろも触れる窓なので留めない(留めると data-modal でスレ表示のキー操作が止まり、↑↓・Tab も窓に取られる)。Esc で閉じるだけ
+  useFocusTrap(isMobile ? boxRef : NO_BOX, props.onClose)
+  useEscClose(!isMobile, props.onClose)
   // スライダーをつかんでいる間は、つかんでいる行だけを残して画面を見えなくする(後ろの変わり方を見られるように)
   const { active, scope } = useSliderDragScope()
   const thread = props.from === 'thread'
@@ -269,6 +272,30 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
     </SliderDragScope>,
     document.body,
   )
+}
+
+/** useFocusTrap に渡す、何も指さない箱(PC の窓では留めない) */
+const NO_BOX: RefObject<HTMLDivElement | null> = { current: null }
+
+/**
+ * Esc で閉じる(PC の表示スタイルの窓)。後ろのスレ表示も Esc を使う(ポップアップを閉じるなど)ので、先に受けて止める。
+ * 上にダイアログ・画像のビューアーが開いていれば、Esc はそちらのもの
+ */
+function useEscClose(enabled: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!enabled) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return
+      if (document.querySelector('[data-modal], [data-lightbox]')) return
+      // 後ろの文字を打つ欄(検索欄など)の Esc は、その欄のもの
+      if ((e.target as HTMLElement).matches?.('input[type="text"], input[type="search"], input:not([type]), textarea, [contenteditable="true"]')) return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [enabled, onClose])
 }
 
 /** PC: 題の帯をつかんで動かせる窓。後ろは暗くせず、後ろの画面もそのまま触れる */

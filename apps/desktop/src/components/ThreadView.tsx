@@ -555,6 +555,12 @@ export default function ThreadView(props: Props) {
   }, [liveOn, props.liveRefreshAt])
   // ライブの段で、まだ出していないレスは、ログから外しておく(作らない・既読にしない・新着の札も出さない)
   const reveal = useLiveReveal(props.log.posts, settings.liveRefreshSec)
+  /** 右上のつまみを動かしている間の流す速さ(離すまでは保存しないが、流す速さにはすぐ映す) */
+  const [liveSpeedPreview, setLiveSpeedPreview] = useState<number>()
+  // 動かしている途中で実況モードをやめたら、次に入れたときに残らないよう捨てる
+  useEffect(() => {
+    if (!liveOn) setLiveSpeedPreview(undefined)
+  }, [liveOn])
   const log = useMemo(
     () => (reveal.count === undefined || reveal.count >= props.log.posts.length ? props.log : { ...props.log, posts: props.log.posts.slice(0, reveal.count) }),
     [props.log, reveal.count],
@@ -1192,7 +1198,7 @@ export default function ThreadView(props: Props) {
     listRef,
     on: liveMode,
     active: props.active,
-    speed: settings.liveScrollSpeed,
+    speed: liveSpeedPreview ?? settings.liveScrollSpeed,
     ready: isPositioned,
     canGoLive: () => livePrimed.current,
     flushRead,
@@ -2360,6 +2366,7 @@ export default function ThreadView(props: Props) {
         <LiveSpeedOverlay
           value={settings.liveScrollSpeed}
           onChange={(v) => props.onUpdateSetting?.('liveScrollSpeed', v)}
+          onPreview={setLiveSpeedPreview}
           style={{ top: (headerInScroll ? headerHeight : 0) + 8, right: isMobile ? (settings.showMinimap ? 40 : 8) : settings.showMinimap ? 44 : 20 }}
         />
       )}

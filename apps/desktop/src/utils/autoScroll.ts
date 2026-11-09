@@ -50,3 +50,19 @@ export function liveScrollPxPerSec(linesPerSec: number, lineHeightPx: number): n
   if (!(lineHeightPx > 0)) return 0
   return clampLiveSpeed(linesPerSec) * lineHeightPx
 }
+
+/** ライブの段で、一番下から外れたとみなす残り(px)。くっつけている間の、画像の読み込みなどの小さなずれでは外さない */
+export const LIVE_LEFT_END_PX = 24
+
+/**
+ * ライブの段で、一番下へ寄せるか。毎コマと、レスを 1 件出した直後の両方で同じ決まりを使う
+ * (出した直後だけ無条件に寄せると、レスが速く出るスレでは上へ動かしても引き戻され、ライブから外れられない)。
+ * - leave: 利用者が動かした(自分で書いた位置から動き、一番下から離れている)。ライブの段から外れる
+ * - wait: 触った直後・キーで動かしている最中。スクロールはイベントの少し後に動き、ここで位置を書くとその動きを打ち消すので、寄せずに待つ
+ * - stick: 一番下へ寄せる
+ */
+export function liveStickAction(s: { rest: number; moved: boolean; touching: boolean }): 'stick' | 'wait' | 'leave' {
+  if (s.moved && s.rest > LIVE_LEFT_END_PX) return 'leave'
+  if (s.touching) return 'wait'
+  return 'stick'
+}

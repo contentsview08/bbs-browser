@@ -8,14 +8,12 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
-import { liveScrollPxPerSec } from '../utils/autoScroll'
+import { liveScrollPxPerSec, liveStickAction } from '../utils/autoScroll'
 import { liveQueueTimes, liveRevealSchedule, postTimeMs } from '../utils/liveReveal'
 import { isMoving } from './useThreadScroll'
 
 /** 一番下に着いたとみなす残り(px)。小数の端数で着かないことがないように */
 const AT_END_PX = 1
-/** 一番下から外れたとみなす残り(px)。くっつけている間の、画像の読み込みなどの小さなずれでは外さない */
-const LEFT_END_PX = 24
 /** 利用者が触ってから、くっつけるのを待つ時間(スクロールはイベントの少し後に動くので、その間に引き戻さない) */
 const TOUCH_GRACE_MS = 300
 /** 1 コマで進める時間の上限(裏から戻ったときなどに、大きく飛ばないように) */
@@ -121,6 +119,10 @@ export function useAutoScroll(o: Options) {
   liveRef.current = live
   /** 自分で書いた scrollTop。これと違えば、ほかの誰か(多くは利用者)が動かした */
   const writtenRef = useRef(NaN)
+  /** 利用者が最後に触った時刻(ホイール・指・スクロールバー・キーで動かし中) */
+  const touchedAtRef = useRef(-Infinity)
+  /** 利用者が動かしたので、ライブの段から外れて止める(レスを出した直後の寄せからも呼ぶ) */
+  const leaveByUserRef = useRef<() => void>(() => {})
 
   const { on, active, rootRef } = o
   useEffect(() => {
@@ -135,11 +137,11 @@ export function useAutoScroll(o: Options) {
     let lineHeight = 0
     let measuredAt = -Infinity
     let readAt = last
-    let touchedAt = -Infinity
+    touchedAtRef.current = -Infinity
     let raf = 0
 
     const touch = () => {
-      touchedAt = performance.now()
+      touchedAtRef.current = performance.now()
     }
     const enterLive = () => {
       if (liveRef.current) return
@@ -154,6 +156,11 @@ export function useAutoScroll(o: Options) {
       liveRef.current = false
       setLive(false)
       latest.current.reveal.stop()
+    }
+    leaveByUserRef.current = () => {
+      leaveLive()
+      paused.current = true
+      pos = NaN
     }
     /** 行の高さ(本文の文字 × 行間)。本文がまだなければ、レス一覧の字の大きさから見積もる */
     const measureLine = () => {
@@ -177,7 +184,7 @@ export function useAutoScroll(o: Options) {
         return
       }
       const rest = max - root.scrollTop
-      const touching = now - touchedAt < TOUCH_GRACE_MS
+      const touching = now - touchedAtRef.current < TOUCH_GRACE_MS
       if (paused.current) {
         // 自分で一番下まで戻ったら、ライブの段に戻る
         if (touching || rest > AT_END_PX || !latest.current.canGoLive()) return
@@ -185,16 +192,11 @@ export function useAutoScroll(o: Options) {
         enterLive()
       }
       if (liveRef.current) {
-        if (touching) return
+        const action = liveStickAction({ rest, moved: Math.abs(root.scrollTop - written.current) >= 1, touching })
         // 上へ動かした: ライブの段から外れ、隠していたレスを全部出して止める
-        if (rest > LEFT_END_PX && Math.abs(root.scrollTop - written.current) >= 1) {
-          leaveLive()
-          paused.current = true
-          pos = NaN
-          return
-        }
+        if (action === 'leave') return leaveByUserRef.current()
         // 一番下にくっつけておく(出したレス・読み込んだ画像で伸びた分を追う)
-        if (rest > 0) {
+        if (action === 'stick' && rest > 0) {
           root.scrollTop = max
           written.current = root.scrollTop
         }
@@ -241,16 +243,27 @@ export function useAutoScroll(o: Options) {
       root.removeEventListener('touchmove', touch)
       root.removeEventListener('pointerdown', onPressRoot)
       leaveLive()
+      leaveByUserRef.current = () => {}
     }
   }, [on, active, rootRef])
 
-  // ライブの段でレスを出したら、描いた直後に一番下へ寄せ、出した分を既読にする
+  // ライブの段でレスを出したら、描いた直後に一番下へ寄せ、出した分を既読にする。
+  // 寄せてよいかは毎コマと同じ決まり(触った直後・キーで動かし中は寄せず、上へ動かしていたら外れる)
   const { count } = o.reveal
   useLayoutEffect(() => {
     const root = rootRef.current
     if (!live || count === undefined || !root || paused.current) return
-    root.scrollTop = root.scrollHeight - root.clientHeight
-    writtenRef.current = root.scrollTop
+    const max = root.scrollHeight - root.clientHeight
+    const action = liveStickAction({
+      rest: max - root.scrollTop,
+      moved: Math.abs(root.scrollTop - writtenRef.current) >= 1,
+      touching: isMoving(root) || performance.now() - touchedAtRef.current < TOUCH_GRACE_MS,
+    })
+    if (action === 'leave') return leaveByUserRef.current()
+    if (action === 'stick') {
+      root.scrollTop = max
+      writtenRef.current = root.scrollTop
+    }
     const id = requestAnimationFrame(() => latest.current.flushRead())
     return () => cancelAnimationFrame(id)
   }, [live, count, rootRef])

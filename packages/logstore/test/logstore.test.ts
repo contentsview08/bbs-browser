@@ -138,6 +138,17 @@ describe('スレのログ', () => {
     expect(applyFetch(same, thread, { status: 'notModified', posts: [], cursor: { lastNo: 1 } })).toBe(same)
   })
 
+  it('新着がないときの続きの印は、レスを取ってあるスレにだけ付ける(DB と画面の控えで同じ)', async () => {
+    const r = { status: 'notModified' as const, posts: [], cursor: { lastNo: 0, kako: true }, archived: true }
+    // レスのないまま印だけあるスレ: 過去ログの印を付けない(付けると、もう取りに行かずレスが出ない)
+    await store.saveFetch(thread, { status: 'updated', posts: [], cursor: { lastNo: 0 } })
+    let mine = applyFetch(null, thread, { status: 'updated', posts: [], cursor: { lastNo: 0 } })
+    await store.saveFetch(thread, r)
+    mine = applyFetch(mine, thread, r)
+    expect(mine.cursor).toEqual({ lastNo: 0 })
+    expect(mine).toEqual(await store.loadThread(thread))
+  })
+
   it('同じ差分を二度保存しても(cursor 更新前に落ちた場合)重複しない', async () => {
     const r = { status: 'updated' as const, posts: [post(1), post(2)], cursor: { bytes: 100 } }
     await store.saveFetch(thread, r)

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NumberField, Toggle } from '../SettingParts'
 import { Choice, type SettingsProps, Section } from './common'
 import { formatLiveSpeed, LIVE_REFRESH_CHOICES } from '../../utils/autoScroll'
@@ -7,6 +8,8 @@ import LiveSpeedSlider from '../LiveSpeedSlider'
 const AUTO_REFRESH_CHOICES = [0, 5, 10, 20, 30, 60].map((n) => ({ key: n, name: n === 0 ? 'しない' : `${n} 秒ごと` }))
 
 export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  // 流す速さを動かしている間の値(離すまでは保存しない)
+  const [speedPreview, setSpeedPreview] = useState<number>()
   return (
     <>
       <Section title="開いているスレの自動更新" note="実況板など、流れの速いスレ向けです。差分だけを取りに行きます">
@@ -24,9 +27,9 @@ export function RefreshTab({ settings: s, update }: Pick<SettingsProps, 'setting
           </div>
           <div className="max-w-md">
             <p className="mb-1.5 text-sm text-c-text-body">
-              流す速さ <span className="ml-1 tabular-nums font-bold text-c-text-strong">{formatLiveSpeed(s.liveScrollSpeed)}</span>
+              流す速さ <span className="ml-1 tabular-nums font-bold text-c-text-strong">{formatLiveSpeed(speedPreview ?? s.liveScrollSpeed)}</span>
             </p>
-            <LiveSpeedSlider value={s.liveScrollSpeed} onChange={(v) => update('liveScrollSpeed', v)} />
+            <LiveSpeedSlider value={s.liveScrollSpeed} onChange={(v) => update('liveScrollSpeed', v)} onPreview={setSpeedPreview} />
           </div>
         </div>
       </Section>

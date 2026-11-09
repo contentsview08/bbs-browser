@@ -3,13 +3,35 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { isMobile } from '../utils/platform'
 import { formatLiveSpeed, LIVE_SPEED_STEPS, liveSpeedOfStep, liveStepOfSpeed } from '../utils/autoScroll'
 
-/** 速さのつまみだけ(設定の画面)。動かすたびに値を渡す */
-export default function LiveSpeedSlider(props: { value: number; onChange: (v: number) => void; className?: string; style?: CSSProperties; title?: string }) {
+/**
+ * 速さのつまみだけ(設定の画面)。動かしている間は onPreview で画面の値だけを渡し、離したとき(キーは離したとき)に onChange で保存する
+ * (FontSizeSlider と同じ。目盛りごとに保存すると、そのたびに設定が変わって画面全体を描き直し、ほかの窓にも送る)。
+ * 離したら onPreview(undefined) で、保存した値に戻す
+ */
+export default function LiveSpeedSlider(props: {
+  value: number
+  onChange: (v: number) => void
+  onPreview?: (v: number | undefined) => void
+  className?: string
+  style?: CSSProperties
+  title?: string
+}) {
   const [step, setStep] = useState(() => liveStepOfSpeed(props.value))
   // ほかの所で値が変わったら合わせる(丸めた値で戻ってきても、つまみは動かさない)
   useEffect(() => {
     setStep((s) => (liveSpeedOfStep(s) === props.value ? s : liveStepOfSpeed(props.value)))
   }, [props.value])
+  /** 動かしてから、まだ保存していないか(離したときの知らせは、指・マウス・フォーカスで重なって届く) */
+  const dirty = useRef(false)
+  const stepRef = useRef(step)
+  stepRef.current = step
+  const commit = () => {
+    if (!dirty.current) return
+    dirty.current = false
+    const v = liveSpeedOfStep(stepRef.current)
+    if (v !== props.value) props.onChange(v)
+    props.onPreview?.(undefined)
+  }
   return (
     <input
       type="range"
@@ -17,14 +39,20 @@ export default function LiveSpeedSlider(props: { value: number; onChange: (v: nu
       max={LIVE_SPEED_STEPS}
       step={1}
       value={step}
-      title={props.title ?? formatLiveSpeed(props.value)}
+      title={props.title ?? formatLiveSpeed(liveSpeedOfStep(step))}
       aria-label="流す速さ"
       onChange={(e) => {
         const s = Number(e.target.value)
         setStep(s)
-        const v = liveSpeedOfStep(s)
-        if (v !== props.value) props.onChange(v)
+        stepRef.current = s
+        dirty.current = true
+        props.onPreview?.(liveSpeedOfStep(s))
       }}
+      onPointerUp={commit}
+      onTouchEnd={commit}
+      onKeyUp={commit}
+      onBlur={commit}
+      onLostPointerCapture={commit}
       className={props.className ?? 'w-full h-8 accent-[var(--c-accent)]'}
       style={{ touchAction: 'pan-y', ...props.style }}
     />
@@ -38,8 +66,10 @@ const FADE_MS = isMobile ? 1500 : 600
  * スレ表示の右上に重ねる、半透明の小さな速さのつまみ(実況モードの間だけ)。
  * 本文の邪魔にならないよう、触っていない間は薄くしておき、乗せる・触ると濃くする
  */
-export function LiveSpeedOverlay(props: { value: number; onChange: (v: number) => void; style?: CSSProperties }) {
+export function LiveSpeedOverlay(props: { value: number; onChange: (v: number) => void; onPreview?: (v: number | undefined) => void; style?: CSSProperties }) {
   const [hot, setHot] = useState(false)
+  /** 動かしている間の値(離すまでは保存しない) */
+  const [preview, setPreview] = useState<number>()
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
   const warm = () => {
@@ -64,8 +94,16 @@ export function LiveSpeedOverlay(props: { value: number; onChange: (v: number) =
       title="流す速さ(実況モード)"
     >
       <span className="material-symbols-outlined text-[18px] text-c-text-muted">speed</span>
-      <LiveSpeedSlider value={props.value} onChange={props.onChange} className="w-24 h-6 accent-[var(--c-accent)]" />
-      <span className="min-w-[3.2em] text-right text-[11px] tabular-nums text-c-text-muted">{props.value} 行/秒</span>
+      <LiveSpeedSlider
+        value={props.value}
+        onChange={props.onChange}
+        onPreview={(v) => {
+          setPreview(v)
+          props.onPreview?.(v)
+        }}
+        className="w-24 h-6 accent-[var(--c-accent)]"
+      />
+      <span className="min-w-[3.2em] text-right text-[11px] tabular-nums text-c-text-muted">{preview ?? props.value} 行/秒</span>
     </div>
   )
 }

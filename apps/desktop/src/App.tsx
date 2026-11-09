@@ -1273,7 +1273,8 @@ export default function App() {
       if (existing) {
         // もう開いているスレは、そのタブに移って差分を取りに行く(スレ一覧で新着があるのを見て押したとき)
         selectTab(id, opts.record ?? true)
-        if (existing.log) await fetchThread(store, existing.thread)
+        // 実況モード中のタブは、実況モードの間隔で取りに行くので、ここでは取りに行かない
+        if (existing.log && !inLive(existing)) await fetchThread(store, existing.thread)
         return
       }
       // スマホはタブを使わない(閲覧履歴が代わり)。いつも今のスレを置き換える
@@ -1380,8 +1381,9 @@ export default function App() {
   const refreshThread = () =>
     run('posts', async () => {
       if (!store || !activeTab) return
-      // 実況モードの間は、実況モードの間隔で取りに行くので、手では取りに行かない(更新ボタンは残りの時間を出して押せなくしている)
-      if (activeTab.id === liveTabId) return
+      // 実況モードの間は、実況モードの間隔で取りに行くので、手では取りに行かない(更新ボタンは残りの時間を出して押せなくしている)。
+      // まだレスがない(最初の読み込みに失敗した)ときは、取り直しのボタンが効くように通す
+      if (inLive(activeTab)) return
       const now = Date.now()
       // 既読の記録が間に合っていないと、「ここから未読」を古い位置で引き直してしまうので、先に記録する
       readFlush.current?.()
@@ -1430,6 +1432,8 @@ export default function App() {
         for (const t of tabsRef.current) {
           // もう増えないスレは取りに行かない(自動更新と同じ)
           if (t.log && (t.log.status === 'archived' || isFull(t.thread, t.log.posts))) continue
+          // 実況モード中のタブは、実況モードの間隔で取りに行く
+          if (inLive(t)) continue
           try {
             if (t.log) await fetchThread(store, t.thread)
             else await loadTab(store, t.thread)
@@ -1463,6 +1467,8 @@ export default function App() {
   /** 実況モードを入れているタブ。開いているタブなら、ふだんの自動更新の代わりに実況モードの間隔で更新する */
   const [liveTabId, setLiveTabId] = useState<string>()
   const liveId = liveTabId !== undefined && liveTabId === activeId ? liveTabId : undefined
+  /** そのタブを実況モードで更新しているか(手での更新はしない)。まだレスがなければ、取り直せるように外す */
+  const inLive = (t: Tab) => t.id === liveId && !!t.log?.posts.length
   const refreshSec = liveId ? 0 : settings.autoRefreshSec
   useEffect(() => {
     if (!activeId || refreshSec <= 0) return

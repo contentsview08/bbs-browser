@@ -1959,6 +1959,19 @@ export default function ThreadView(props: Props) {
               withReplyRef.current((h) => h.insert(replyText(no)))
             }
           : undefined,
+        // 文字を選んで右クリックした「引用して返信」。Shift+E で選んだ所を引用するのと同じ文を入れる
+        onQuoteReply: canReply
+          ? (no, text) => {
+              setPopups([])
+              withReplyRef.current((h) => h.insert(replyText(no, text)))
+            }
+          : undefined,
+        onSearchText: (text) => {
+          setPopups([])
+          setQuery(text)
+          setSearchActive(true)
+        },
+        onOpenExternal: (url) => void openUrl(url),
         toNo: (n: number) => d().resolveAnchor(n),
         urls: { shorten: settings.urlShorten, omitImages: settings.urlShorten, collapseImageRuns: settings.urlShorten },
         // ID ごとの色は配色の明るさで変える。LINE ライトの LINE 風は空色の地なので、白っぽい字に合う淡い色(スマホのアプリと同じ)

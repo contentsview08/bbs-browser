@@ -35,6 +35,7 @@ import { videoSrc } from '../utils/httpsFirst'
 import { LazyVideoThumb, ThumbImage } from './MediaFailed'
 import { FloatingMenu, MenuButton, TOOL_BTN, menuPosAt, wantsNativeMenu, type MenuItem, type MenuPos } from './PostMenu'
 import { canPlayVideo } from '../utils/videoSupport'
+import { selectionMenuItems, selectionOn } from '../utils/selectionMenu'
 
 export interface PostHandlers extends BodyHandlers {
   /** 画像・動画のサムネイルをすぐ読みに行くか(false なら枠だけ出し、押したら読む。設定の thumbLoad) */
@@ -76,6 +77,12 @@ export interface PostHandlers extends BodyHandlers {
   onEditNg?: (rule: NgRule, values: Partial<Record<NgTarget, string>>) => void
   /** 書き込み欄に >>番号 を入れる。書き込めないときは undefined */
   onReply?: (no: number) => void
+  /** 書き込み欄に >>番号 と、選んだ文を「>」付きで入れる(引用して返信)。書き込めないときは undefined */
+  onQuoteReply?: (no: number, text: string) => void
+  /** このスレの中を、その言葉で検索する */
+  onSearchText?: (text: string) => void
+  /** OS の既定のブラウザで開く(選んだ文字の検索に使う) */
+  onOpenExternal?: (url: string) => void
   /** レスの共有の小項目 */
   shareOf?: (post: Post) => MenuItem[]
   /** 自分の書き込みを消す。消せない掲示板は undefined */
@@ -284,8 +291,12 @@ function PostArticle(props: Props) {
   const articleRef = useRef<HTMLElement>(null)
   const [ngOpen, setNgOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  /** 右クリックのメニューを開いている位置。ID・名前の上で開いたなら、その要素 */
-  const [ctxMenu, setCtxMenu] = useState<{ pos: MenuPos; head?: { kind: 'id' | 'name'; el: HTMLElement } }>()
+  /** 右クリックのメニューを開いている位置。ID・名前の上で開いたなら、その要素。文字を選んで開いたなら、その文 */
+  const [ctxMenu, setCtxMenu] = useState<{
+    pos: MenuPos
+    head?: { kind: 'id' | 'name'; el: HTMLElement }
+    sel?: { text: string; inside: boolean }
+  }>()
   const closeCtxMenu = useCallback(() => setCtxMenu(undefined), [])
   const menuOpen = ngOpen || moreOpen || ctxMenu !== undefined
   /** マウスが乗っているか(乗っている間だけ操作バーを作る) */
@@ -536,6 +547,20 @@ function PostArticle(props: Props) {
           { label: '名前をコピー', icon: 'content_copy', onClick: () => copy(name || post.name) },
           ...ngNameActions,
         ]
+
+  /** 文字を選んで右クリックしたときの項目。選んだ所がほかのレスにまたがるときは、どのレスへの引用か決まらないので引用して返信を出さない */
+  const selectionItems = (sel: { text: string; inside: boolean }): MenuItem[] =>
+    selectionMenuItems(sel.text, {
+      copy,
+      quoteReply: sel.inside && handlers.onQuoteReply ? (text) => handlers.onQuoteReply!(post.no, text) : undefined,
+      openUrl: handlers.onUrl,
+      searchThread: handlers.onSearchText,
+      openExternal: handlers.onOpenExternal,
+      ngDraft: handlers.onNgDraft
+        ? (text) => handlers.onNgDraft!('content', text, { content: post.body, posterName: post.name, posterId: post.id })
+        : undefined,
+      postItems: actions,
+    })
 
   const variant = props.variant ?? 'card'
 
@@ -1197,6 +1222,18 @@ function PostArticle(props: Props) {
       onContextMenu={
         !isMobile
           ? (e) => {
+              const target = e.target as Element
+              // 文字を選んでいれば、選んだ文字への操作。入力欄の中と、選んだ所の外の画像・リンクの上は OS の標準のメニュー(保存・リンクのコピー)
+              const sel = selectionOn(e.currentTarget)
+              if (
+                sel &&
+                !target.closest?.('input, textarea, [contenteditable]') &&
+                !(target.closest?.('a[href], img, video') && !window.getSelection()?.containsNode(target, true))
+              ) {
+                e.preventDefault()
+                setCtxMenu({ pos: menuPosAt(e.clientX, e.clientY), sel })
+                return
+              }
               if (wantsNativeMenu(e)) return
               e.preventDefault()
               const el = (e.target as Element).closest<HTMLElement>('[data-head-target]')
@@ -1271,7 +1308,7 @@ function PostArticle(props: Props) {
         </>
       )}
       {sheet && <ActionSheet title={`${post.ref ?? post.no} ${post.name}`} items={sheetItems} onClose={() => setSheet(false)} />}
-      {ctxMenu && <FloatingMenu pos={ctxMenu.pos} items={ctxMenu.head ? headMenuItems(ctxMenu.head) : actions} onClose={closeCtxMenu} />}
+      {ctxMenu && <FloatingMenu pos={ctxMenu.pos} items={ctxMenu.sel ? selectionItems(ctxMenu.sel) : ctxMenu.head ? headMenuItems(ctxMenu.head) : actions} onClose={closeCtxMenu} />}
     </article>
   )
 }

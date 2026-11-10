@@ -123,6 +123,9 @@ val POST_STYLES = listOf(
     "discord" to "Discord 風", "line" to "LINE 風",
 )
 
+/** 見た目の短い名前(括弧の中の説明を除く)。「〇〇の設定」の見出しに使う */
+fun postStyleName(style: String): String = (POST_STYLES.firstOrNull { it.first == style }?.second ?: style).substringBefore('(')
+
 /** ID の字の色: ID ごとの色(設定がオンで 2 回以上書いた ID)か、薄い字 */
 private fun idC(id: String, count: Int, o: RenderOptions) =
     if (o.idColor && count >= 2) Palette.idColor(id, sky = o.onSky) else mutedC(o)
@@ -153,6 +156,8 @@ data class RenderOptions(
     val watchoiShort: Boolean = false,
     /** 名前欄を日付・ID と同じ薄い色・大きさにする */
     val nameSubtle: Boolean = true,
+    /** Discord 風・LINE 風で、本文の頭のアンカーを返信先の引用として外に出す(見た目の設定「返信先の引用」が「出さない」なら、アンカーを本文に残す) */
+    val replyQuote: Boolean = true,
 )
 
 /** 前回の組み立て。colors は組み立てを始めたときの配色(配色が変わったら使い回さない) */
@@ -232,7 +237,7 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         // Discord 風・LINE 風: 頭のアンカーを返信として外に出し、本文からは省く(その分だけ押せるところの位置をずらす)
         var skip = 0
         var replyTo: Int? = null
-        if (isChatStyle(o.style)) LEADING_ANCHOR.find(full)?.let { m ->
+        if (isChatStyle(o.style) && o.replyQuote) LEADING_ANCHOR.find(full)?.let { m ->
             val n = m.groupValues[1].map { if (it in '０'..'９') '0' + (it - '０') else it }.joinToString("").toIntOrNull()
             if (n != null && n < p.no && n >= 1) {
                 replyTo = n

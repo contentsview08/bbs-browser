@@ -74,8 +74,16 @@ fun SamplePosts(vm: AppViewModel) {
         for ((n, post) in SAMPLE.withIndex()) {
             val r = rendered[post.no] ?: continue
             val prev = SAMPLE.getOrNull(n - 1)
-            val continued = (p.postStyle == "discord" || p.postStyle == "line") && prev != null && prev.id == post.id && r.replyTo == null
-            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, continued = continued, heat = Palette.heat(index.replyCount[post.no] ?: 0), autoLoad = false) }
+            val so = p.styleOptions(p.postStyle)
+            val continued = so.group && (p.postStyle == "discord" || p.postStyle == "line") && prev != null && prev.id == post.id && r.replyTo == null
+            // 返信先の引用も見た目の設定どおりに(1 行・全文)
+            val reply = r.replyTo?.takeIf { so.quote != "none" }?.let { to ->
+                SAMPLE.firstOrNull { it.no == to }?.let { t ->
+                    val text = index.info[to]?.display ?: t.body
+                    ReplyPreview(to, t.id, text.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "", if (so.quote == "full") text else null)
+                }
+            }
+            WithoutBaseFont { PostItem(r, style = p.postStyle, id = post.id, continued = continued, reply = reply, heat = Palette.heat(index.replyCount[post.no] ?: 0), autoLoad = false) }
         }
     }
 }

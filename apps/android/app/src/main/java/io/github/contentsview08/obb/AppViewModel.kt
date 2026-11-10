@@ -1231,6 +1231,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         noname = noname, highlightOp = prefs.highlightOp, idColor = prefs.idStyle == "color", urlShorten = prefs.urlShorten,
         style = prefs.postStyle, heatText = prefs.heatStyle == "text", onSky = Palette.onSky(prefs.postStyle),
         dateStyle = prefs.dateStyle, idShort = prefs.idShort, idPosition = prefs.idPosition, watchoiShort = prefs.watchoiShort, nameSubtle = prefs.nameSubtle,
+        replyQuote = prefs.styleOptions(prefs.postStyle).quote != "none",
     )
 
     /**
@@ -1238,7 +1239,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun renderKey() = listOf(
         prefs.omitNoname, prefs.tidyBlankLines, prefs.highlightOp, prefs.idStyle, prefs.dateStyle, prefs.idShort, prefs.idPosition, prefs.watchoiShort, prefs.nameSubtle, prefs.urlShorten,
-        prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta,
+        prefs.blurGross, prefs.grossWords, Palette.scheme.key, prefs.postStyle, prefs.heatStyle, prefs.boardMeta, prefs.styleOptions(prefs.postStyle).quote,
     )
 
     /** 組み立て直すスレ(開いているものと、「進む」で開き直すもの) */

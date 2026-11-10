@@ -51,11 +51,16 @@ fun Minimap(
     onJumped: (Int) -> Unit = {},
     /** 読んだところ(既読の番号)。そこまでを薄く塗る */
     readNo: Int = 0,
+    /** 印を付けない行の番目(ツリー表示の 2 回目以降の出現) */
+    skip: Set<Int> = emptySet(),
+    /** ツリー表示: この番号から後ろのレスに新着の印(「ここから未読」から下を塗る代わり。ツリーでは新着がまとまっていない) */
+    freshFrom: Int? = null,
 ) {
     val scope = rememberCoroutineScope()
     val n = posts.size
-    val marks = remember(posts, index, own, toOwn) {
+    val marks = remember(posts, index, own, toOwn, skip) {
         posts.mapIndexedNotNull { i, p ->
+            if (i in skip) return@mapIndexedNotNull null
             val heat = index.replyCount[p.no] ?: 0
             val info = index.info[p.no]
             if (heat < 3 && p.no !in own && p.no !in toOwn && info?.image != true && info?.video != true) null
@@ -75,6 +80,7 @@ fun Minimap(
             tick
         }
     }
+    val freshAt = remember(posts, freshFrom, skip) { if (freshFrom == null) emptyList() else posts.indices.filter { it !in skip && posts[it].no >= freshFrom } }
     val unreadAt = remember(posts, unreadFrom) { unreadFrom?.let { u -> posts.indexOfFirst { it.no >= u }.takeIf { it >= 0 } } }
     // つまみ: 画面に入っているレスの番目(上の帯に隠れた分は気にしない)
     val thumb by remember(n) {
@@ -135,6 +141,8 @@ fun Minimap(
             drawRect(Palette.unread.copy(alpha = 0.12f), Offset(0f, y), Size(w, h - y))
             drawRect(Palette.unread, Offset(0f, y - 1.dp.toPx()), Size(w, 2.dp.toPx()))
         }
+        // 新着の印(ツリー表示)。未読の色の細い横線
+        for (i in freshAt) drawRect(Palette.unread, Offset(0f, yOf(i) - 1.dp.toPx()), Size(w, 2.dp.toPx()))
         // つまみ(いま見ている範囲)。小さくなりすぎないよう 14dp より小さくしない
         thumb?.let { (a, b) ->
             val top = yOf(a.coerceAtMost(n - 1))

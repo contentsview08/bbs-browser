@@ -31,6 +31,42 @@ fun shownPastTabs(saved: String): List<String> {
     return saved.split(',').filter { it in known }.distinct().ifEmpty { known }
 }
 
+/**
+ * 見た目ごとの設定(bbs-suite の docs/style-tree.md)。既定は今までの動きと同じ。
+ * tree: ツリー表示(カード・専ブラ風・まとめ風)。treeDepth: 字下げの深さの上限。
+ * quote: 返信先の引用(line = 1 行 / full = 全文 / none = 出さない。Discord 風・LINE 風)。group: 続けて書いたレスをまとめる(Discord 風・LINE 風。保存の名前は PC と同じ groupRuns)
+ */
+data class StyleOptions(val tree: Boolean = false, val treeDepth: Int = TREE_DEPTH_DEFAULT, val quote: String = "line", val group: Boolean = true)
+
+/** 字下げの深さの上限の既定と幅(スマホ。PC は 6) */
+const val TREE_DEPTH_DEFAULT = 3
+val TREE_DEPTH_RANGE = 1..10
+
+/** 返信先の引用の出し方(キーと名前) */
+val QUOTE_MODES = listOf("line" to "1 行", "full" to "全文", "none" to "出さない")
+
+/** 覚えた JSON から、その見た目の設定。壊れた値・知らない値は既定に戻す */
+fun styleOptionsOf(json: String, style: String): StyleOptions {
+    val o = runCatching { JSONObject(json).optJSONObject(style) }.getOrNull() ?: return StyleOptions()
+    val d = StyleOptions()
+    return StyleOptions(
+        tree = o.optBoolean("tree", d.tree),
+        treeDepth = o.optInt("treeDepth", d.treeDepth).coerceIn(TREE_DEPTH_RANGE),
+        quote = o.optString("quote", d.quote).takeIf { q -> QUOTE_MODES.any { it.first == q } } ?: d.quote,
+        group = o.optBoolean("groupRuns", d.group),
+    )
+}
+
+/** その見た目の設定だけを書き換えた JSON(ほかの見た目の値は残す) */
+fun withStyleOptions(json: String, style: String, o: StyleOptions): String {
+    val all = runCatching { JSONObject(json) }.getOrDefault(JSONObject())
+    all.put(style, JSONObject().put("tree", o.tree).put("treeDepth", o.treeDepth).put("quote", o.quote).put("groupRuns", o.group))
+    return all.toString()
+}
+
+/** 表示スタイルのシートのタブ。前の look(スキン)は配色に読み替え、出せないタブなら最初のタブ */
+fun styleTabOf(saved: String, tabs: List<String>): String = (if (saved == "look") "color" else saved).takeIf { it in tabs } ?: tabs.first()
+
 /** 設定を Compose の状態にしつつ SharedPreferences に書く(変えたらすぐ画面に出て、閉じても残る) */
 private class Pref<T>(private val sp: SharedPreferences, private val key: String, def: T, private val changed: (String, Any?) -> Unit) : ReadWriteProperty<Any?, T> {
     @Suppress("UNCHECKED_CAST")
@@ -271,8 +307,12 @@ class Prefs(context: Context) {
     var showAdvanced by pref("showAdvanced", false)
     /** 過去のスレの画面で最後に見たタブ(unread / history / fav / posts) */
     var pastTab by pref("pastTab", "history")
-    /** 表示スタイルのシートで最後に見たタブ(look / size / post)。端末ごとの状態なので同期しない */
-    var styleTab by pref("styleTab", "look")
+    /** 表示スタイルのシートで最後に見たタブ(color / style / size / post)。端末ごとの状態なので同期しない。前の look(スキン)は配色に読み替える(styleTabOf) */
+    var styleTab by pref("styleTab", "color")
+    /** 見た目ごとの設定(見た目のキー → StyleOptions の JSON。名前と中身は PC の styleOptions と同じ)。見た目ごとに別々に覚える。表示の設定と同じく端末ごとで、同期の許可の一覧に入れない */
+    private var postStyleOptionsJson by pref("styleOptions", "{}")
+    fun styleOptions(style: String): StyleOptions = styleOptionsOf(postStyleOptionsJson, style)
+    fun setStyleOptions(style: String, o: StyleOptions) { postStyleOptionsJson = withStyleOptions(postStyleOptionsJson, style, o) }
     /** NG のレスの見せ方: aborn(あぼーん 1 行)/ hide(透明あぼーん)/ dim(薄く表示。スマホだけ) */
     var ngMode by pref("ngMode", "aborn")
     /** 2 つ以上続いたあぼーんを 1 行にまとめる(PC 版と同じ既定) */

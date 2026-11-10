@@ -184,6 +184,18 @@ class ConformanceTest {
         unreadFirstOrder(threads) { threadUnread(if (it.has("readNo")) it.getInt("readNo") else null, it.getInt("postCount")) > 0 }.map { it.getString("key") }
     }
 
+    /** ツリー表示の並べ方(bbs-suite の docs/style-tree.md)。本文からアンカーを読むところから同じにする */
+    @Test fun tree() = check("tree.json") { c ->
+        val i = c.getJSONObject("input")
+        val ps = i.getJSONArray("posts")
+        val posts = List(ps.length()) { k -> ps.getJSONArray(k).let { post(it.getInt(0), it.getString(1)) } }
+        val ab = i.getJSONArray("aborn")
+        val aborn = List(ab.length()) { ab.getInt(it) }.toSet()
+        threadTree(PostIndex.build(posts), aborn, i.getInt("maxDepth")).map { l ->
+            if (l.ghost) mapOf("no" to l.no, "depth" to l.depth, "ghost" to true) else mapOf("no" to l.no, "depth" to l.depth)
+        }
+    }
+
     @Test fun post_redirect() = check("post-redirect.json") { c ->
         val i = c.getJSONObject("input")
         val n = nextRequest(i.getInt("status"), i.getString("url").toHttpUrl(), if (i.has("location")) i.getString("location") else null)

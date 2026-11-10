@@ -239,10 +239,29 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         if (terms.isNotEmpty()) list = list.filter { io.github.contentsview08.obb.data.matchesTerms("${it.no} ${it.name} ${it.id ?: ""} ${it.body}", terms) }
         list
     }
-    // 続けて並んだあぼーんのまとまり。絞り込み・検索の間はまとめない。薄く表示の NG は読めるのでまとめない
+    // ツリー表示(見た目ごとの設定)。絞り込み・検索・実況モードの間は番号の順(設定はそのまま)
+    val styleOpts = vm.prefs.styleOptions(vm.prefs.postStyle)
+    val treeWanted = styleOpts.tree && vm.prefs.postStyle in io.github.contentsview08.obb.bbs.TREE_STYLES && filter == null && query.isBlank() && !page.scroll.liveOn
+    // アンカー先として、ないものとして扱うレス(NG・AI NG であぼーん)
+    val treeAborn = remember(page.ngNos, page.aiNg) { page.ngNos + page.aiNg.filterValues { it.rule.show != "mark" }.keys }
+    // 組み立ては画面とは別のスレッドで。組み終わるまでは前の並びを出しておく(新着で組み直しても、行のキーで読んでいる位置が残る)
+    var treeMemo by remember { mutableStateOf<Pair<List<Any>, List<io.github.contentsview08.obb.bbs.TreeLine>>?>(null) }
+    if (treeWanted) LaunchedEffect(index, treeAborn, styleOpts.treeDepth) {
+        val key = listOf(index, treeAborn, styleOpts.treeDepth)
+        if (treeMemo?.first == key) return@LaunchedEffect
+        val lines = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.github.contentsview08.obb.bbs.threadTree(index, treeAborn, styleOpts.treeDepth) }
+        treeMemo = key to lines
+    }
+    val treeLines = if (treeWanted) treeMemo?.second else null
+    val byNo = remember(index) { index.posts.associateBy { it.no } }
+    /** 並んでいる行のレス番号(2 回目以降の出現は 0)。スクロールの覚えとミニマップが使う */
+    val rowNos = remember(treeLines, shown) { treeLines?.map { if (it.ghost) 0 else it.no } ?: shown.map { it.no } }
+    val rowCount = rowNos.size
+    // 続けて並んだあぼーんのまとまり。絞り込み・検索の間はまとめない。薄く表示の NG は読めるのでまとめない。
+    // ツリー表示では番号の順に並ばないのでまとめない
     val ngStyleNow = vm.prefs.ngMode
-    val ngGroups = remember(index, page.ngNos, page.aiNg, ngStyleNow, vm.prefs.groupNg, filter, query, page.unreadFrom) {
-        if (!vm.prefs.groupNg || filter != null || query.isNotBlank()) io.github.contentsview08.obb.data.NgRuns.NONE
+    val ngGroups = remember(index, page.ngNos, page.aiNg, ngStyleNow, vm.prefs.groupNg, filter, query, page.unreadFrom, treeWanted) {
+        if (!vm.prefs.groupNg || filter != null || query.isNotBlank() || treeWanted) io.github.contentsview08.obb.data.NgRuns.NONE
         else io.github.contentsview08.obb.data.ngRuns(index.posts.map { it.no }, page.unreadFrom) { no ->
             val ai = page.aiNg[no]
             when {
@@ -264,9 +283,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val ctl = page.scroll
     var footerH by remember { mutableFloatStateOf(0f) }
     // 作ったときの並びを覚えたままだと、開いたときに位置が見つからず一番下へ飛ぶ
-    val shownNow = androidx.compose.runtime.rememberUpdatedState(shown)
+    val shownNow = androidx.compose.runtime.rememberUpdatedState(rowNos)
+    val treeNow = androidx.compose.runtime.rememberUpdatedState(treeLines != null)
     val scroller = remember(page, listState) {
-        ThreadScroller(ctl, listState, scope, { shownNow.value }, { footerH }, with(density) { 80.dp.toPx() })
+        ThreadScroller(ctl, listState, scope, { shownNow.value }, { footerH }, with(density) { 80.dp.toPx() }, { treeNow.value })
     }
     // 更新の前に既読を知らせる。「ここから未読」を古い位置で引き直さないように
     fun refresh(): kotlinx.coroutines.Job? {
@@ -398,9 +418,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     val iconCounts = remember(index, vm.prefs.iconFromWatchoi) { index.posts.mapNotNull { iconKey(it) }.groupingBy { it }.eachCount() }
     fun previewOf(no: Int): ReplyPreview? {
         val t = index.posts.getOrNull(no - 1)?.takeIf { it.no == no } ?: return null
-        return ReplyPreview(no, iconKey(t), io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "")
+        val body = io.github.contentsview08.obb.bbs.splitBeIcon(t.body).second
+        // 全文: 画面に出す本文(続いた空行を整えたもの)を全部。引用元があぼーんなら全文でも「あぼーん」の 1 行(PC と同じ)
+        if (styleOpts.quote == "full" && no in page.ngNos) return ReplyPreview(no, null, "あぼーん")
+        val full = if (styleOpts.quote == "full") index.info[no]?.display ?: body else null
+        return ReplyPreview(no, iconKey(t), body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith(">>") }?.trim() ?: "", full, full != null && (page.rendered[no]?.aa ?: false))
     }
-    fun replyOf(r: RenderedPost?): ReplyPreview? = r?.replyTo?.let { previewOf(it) }
+    fun replyOf(r: RenderedPost?): ReplyPreview? = if (styleOpts.quote == "none") null else r?.replyTo?.let { previewOf(it) }
     val postRow = @Composable { p: Post, prev: Post?, inMain: Boolean ->
         val hit = remember(p.no) { HeaderHit() }
         // 出る動きは、届いた時に画面に出ていたレスだけ。あとからスクロールして出てきたレスは、待たせずにすぐ描く
@@ -494,7 +518,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             } else Column {
                 if (ai != null && ai.rule.show == "mark") Text(ai.label, Modifier.padding(start = 14.dp, top = 4.dp), color = Palette.markPurple, fontSize = 11.sp)
                 androidx.compose.runtime.CompositionLocalProvider(LocalHeaderHit provides hit) { WithoutBaseFont { page.rendered[p.no]?.let {
-                val continued = ((index.replyCount[p.no] ?: 0) == 0 || (style == "line" && p.no in own)) && (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
+                val continued = styleOpts.group && ((index.replyCount[p.no] ?: 0) == 0 || (style == "line" && p.no in own)) && (style == "discord" || style == "line") && prev != null && p.id != null && prev.id == p.id && it.replyTo == null && prev.no !in page.ngNos
                 if (p.no in page.ngNos && p.no !in revealed) Box(Modifier.graphicsLayer { alpha = 0.3f }) { PostItem(
                     it, style = style, id = p.id, continued = false, reply = null, onReply = {}, heat = null, aa = it.aa, own = false, toOwn = false,
                     info = null, autoLoad = false, gross = false,
@@ -630,16 +654,30 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         ) {
             Box(Modifier.fillMaxSize()) {
                 when {
-                    !page.loaded -> Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
+                    // ツリー表示で開いたときは、組み上がるまで待つ(番号の順で開く位置を決めてから並びが変わらないように)
+                    !page.loaded || (treeWanted && treeLines == null && !ctl.positioned && index.posts.isNotEmpty()) -> Skeleton(with(density) { bars.topHeight.toDp() }, post = true)
                     page.error != null && index.posts.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }, onBack = { if (!localBack()) vm.back() }, externalUrl = TwoCh.webUrl(page.summary)) { refresh() }
                     else -> LazyColumn(
                         Modifier.fillMaxSize(), state = listState,
                         contentPadding = PaddingValues(
-                            top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && shown.size > 1) 20.dp else 0.dp,
+                            top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && rowCount > 1) 20.dp else 0.dp,
                             bottom = with(density) { footerH.toDp() },
                         ),
                     ) {
-                        itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
+                        val divider = when (style) {
+                            "matome" -> Palette.border.copy(alpha = 0.3f)
+                            "discord", "line" -> null
+                            else -> Palette.border
+                        }
+                        if (treeLines != null) itemsIndexed(
+                            treeLines, key = { _, l -> if (l.ghost) "g${l.parent}-${l.no}" else l.no }, contentType = { _, l -> if (l.ghost) 2 else if (l.no in page.ngNos) 1 else 0 },
+                        ) { _, l ->
+                            val p = byNo[l.no] ?: return@itemsIndexed
+                            // 新着(開いた時点の既読より後)には新着の印。「ここから未読」の線はツリーでは出さない
+                            val fresh = !l.ghost && page.unreadFrom > 1 && l.no >= page.unreadFrom
+                            TreeRowFrame(l, fresh, divider, onGhost = { scroller.toUnread(l.no, animate = true); ctl.jumpFlash = l.no to System.nanoTime() }) { postRow(p, null, !l.ghost) }
+                        }
+                        else itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
                             // まとめた分は高さのない行にする。行の並びはレス番号のまま(スクロールの覚えがレスの並びに頼っているため)
                             val runFirst = ngGroups.firstOf[p.no]
@@ -648,10 +686,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 NgRunRow(run, open = !runClosed) { openRuns = if (runClosed) openRuns + p.no else openRuns - p.no }
                             }
                             if (!runClosed) postRow(p, shown.getOrNull(i - 1), true)
-                            if (!runClosed || runFirst == p.no) {
-                                if (style == "matome") HorizontalDivider(color = Palette.border.copy(alpha = 0.3f))
-                                else if (style != "discord" && style != "line") HorizontalDivider(color = Palette.border)
-                            }
+                            if (!runClosed || runFirst == p.no) divider?.let { HorizontalDivider(color = it) }
                         }
                         item(key = "end") {
                             Row(
@@ -700,19 +735,22 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 }
             }
 
-            if (vm.prefs.showMinimap && shown.size > 1) {
+            if (vm.prefs.showMinimap && rowCount > 1) {
+                val mapPosts = remember(treeLines, shown, byNo) { treeLines?.mapNotNull { byNo[it.no] } ?: shown }
+                val mapSkip = remember(treeLines) { treeLines?.withIndex()?.filter { it.value.ghost }?.map { it.index }?.toSet() ?: emptySet() }
                 Minimap(
-                    shown, index, own, toOwn, if (filter == null && query.isBlank()) page.unreadFrom else null, listState,
+                    mapPosts, index, own, toOwn, if (filter == null && query.isBlank() && treeLines == null) page.unreadFrom else null, listState,
                     // フッターが隠れても伸ばさない。伸び縮みすると縮図が動いて見にくい
                     Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 4.dp.toPx() }, bottom = { footerH + 4.dp.toPx() }).padding(end = 2.dp),
                     onJumped = { no -> ctl.jumpFlash = no to System.nanoTime(); bars.show(); if (ctl.liveOn && ctl.livePhase == LivePhase.LIVE) ctl.leaveLive() },
-                    readNo = page.readNo,
+                    readNo = if (treeLines == null) page.readNo else 0,
+                    skip = mapSkip, freshFrom = if (treeLines != null && page.unreadFrom > 1) page.unreadFrom else null,
                 )
-            } else if (shown.size > 1) {
-                val progress by remember(shown) {
+            } else if (rowCount > 1) {
+                val progress by remember(rowCount) {
                     derivedStateOf {
                         val last = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.key is Int }?.index ?: 0
-                        (last + 1f) / shown.size
+                        (last + 1f) / rowCount
                     }
                 }
                 Box(
@@ -752,7 +790,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             if (ctl.liveOn) LiveSpeedSlider(
                 prefs.liveSpeed, { prefs.liveSpeed = it },
                 Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 8.dp.toPx() })
-                    .padding(end = if (vm.prefs.showMinimap && shown.size > 1) 26.dp else 10.dp),
+                    .padding(end = if (vm.prefs.showMinimap && rowCount > 1) 26.dp else 10.dp),
                 onTouch = { swipe.claimed = true },
             )
 
@@ -1008,6 +1046,31 @@ private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, wash: 
     Box(modifier.background(if (active && wash) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) { content() }
         if (active) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(Palette.accent))
+    }
+}
+
+/**
+ * ツリー表示の 1 行: 段の分だけ字下げし(1 段 8dp)、字下げの左に段ごとの細い縦線。新着は左端に未読の色の帯と淡い面。
+ * 2 回目以降の出現は薄く出し、押すと 1 回目(本来の位置)へ飛ぶ(中のリンクや長押しは受けない)
+ */
+@Composable
+private fun TreeRowFrame(line: io.github.contentsview08.obb.bbs.TreeLine, fresh: Boolean, divider: Color?, onGhost: () -> Unit, content: @Composable () -> Unit) {
+    val step = 8.dp
+    val rule = Palette.textMuted.copy(alpha = 0.35f)
+    val unread = Palette.unread
+    Box(
+        Modifier.fillMaxWidth().drawBehind {
+            if (fresh) drawRect(unread.copy(alpha = 0.07f))
+            val s = step.toPx()
+            for (k in 0 until line.depth) drawRect(rule, androidx.compose.ui.geometry.Offset(s * k + s / 2, 0f), androidx.compose.ui.geometry.Size(1.dp.toPx(), size.height))
+            if (fresh) drawRect(unread, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height))
+        }.padding(start = step * line.depth),
+    ) {
+        Column(Modifier.fillMaxWidth().then(if (line.ghost) Modifier.graphicsLayer { alpha = 0.5f } else Modifier)) {
+            content()
+            divider?.let { HorizontalDivider(color = it) }
+        }
+        if (line.ghost) Box(Modifier.matchParentSize().clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null, onClick = onGhost))
     }
 }
 

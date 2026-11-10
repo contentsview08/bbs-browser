@@ -260,24 +260,46 @@ private fun ThemePage(vm: AppViewModel, open: (String) -> Unit) {
         SwitchRow("スマホのダーク・ライトに合わせる", p.followOsTheme, desc = "オンにすると、スマホの設定で配色が切り替わります") { p.followOsTheme = it }
         if (LocalAdvanced.current) SwitchRow("動きを減らす", p.reduceMotion, desc = "画面の移り方・新着の光り方・数字の繰り上がりを省きます。スマホの「アニメーションを削除」がオンでも同じになります") { p.reduceMotion = it }
     }
-    Group("レスの見た目") {
-        ChoiceRow(
-            "見た目", p.postStyle,
-            POST_STYLES,
-        ) { p.postStyle = it }
-        SamplePosts(vm)
-    }
-    if (LocalAdvanced.current) Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
-        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), if (p.customScheme.isEmpty()) "自分の配色を作る" else "自分の配色を直す") { open("custom") }
-    }
-    Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
-        ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
-    }
+    // 表示スタイルのシートと同じ並び: 配色(カラーテーマ・差し色)→ 見た目(レスの見た目と、その見た目だけの設定)
     if (!p.followOsTheme) {
         Group("配色") { SchemeGrid(p.scheme) { p.scheme = it } }
     } else {
         Group("ダークのとき") { SchemeGrid(p.darkScheme, dark = true) { p.darkScheme = it } }
         Group("ライトのとき") { SchemeGrid(p.lightScheme, dark = false) { p.lightScheme = it } }
+    }
+    Group("差し色", note = "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります") {
+        ChoiceRow("差し色", p.accent, listOf("" to "テーマの色") + ACCENTS.map { it.key to it.name }) { p.accent = it }
+    }
+    if (LocalAdvanced.current) Group("自分の配色", note = "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます") {
+        NavRow(Icons.Filled.ColorLens, Color(0xFF8B5CF6), if (p.customScheme.isEmpty()) "自分の配色を作る" else "自分の配色を直す") { open("custom") }
+    }
+    Group("見た目") {
+        ChoiceRow(
+            "レスの見た目", p.postStyle,
+            POST_STYLES,
+        ) { p.postStyle = it }
+    }
+    StyleOptionsGroup(p)
+    Group("見本") { SamplePosts(vm) }
+}
+
+/** 選んでいる見た目だけの設定(見出しは「〇〇の設定」)。表示スタイルのシートの「見た目」と同じ言葉・同じ並び。値は見た目ごとに別々に覚える */
+@Composable
+private fun StyleOptionsGroup(p: io.github.contentsview08.obb.data.Prefs) {
+    val style = p.postStyle
+    val o = p.styleOptions(style)
+    fun set(n: io.github.contentsview08.obb.data.StyleOptions) = p.setStyleOptions(style, n)
+    Group("${postStyleName(style)}の設定", note = "見た目ごとに別々に覚えます") {
+        if (style in io.github.contentsview08.obb.bbs.TREE_STYLES) {
+            SwitchRow("ツリー表示", o.tree, desc = "アンカーの付いたレスを、最初のアンカー先のすぐ下に字下げして並べます。絞り込み・検索・実況モードの間は番号の順です") { set(o.copy(tree = it)) }
+            if (o.tree) {
+                val d = io.github.contentsview08.obb.data.TREE_DEPTH_RANGE
+                SliderRow("字下げの深さの上限", o.treeDepth.toFloat(), d.first.toFloat()..d.last.toFloat(), steps = d.last - d.first - 1, label = "${o.treeDepth} 段") { set(o.copy(treeDepth = snapInt(it).coerceIn(d))) }
+            }
+        } else {
+            ChoiceRow("返信先の引用", o.quote, io.github.contentsview08.obb.data.QUOTE_MODES) { set(o.copy(quote = it)) }
+            SwitchRow("続けて書いたレスをまとめる", o.group, desc = "同じ人が続けて書いたレスの名前・アイコンを省きます") { set(o.copy(group = it)) }
+        }
     }
 }
 
@@ -400,22 +422,25 @@ private fun ThreadPage(vm: AppViewModel) {
     Group("開いたとき") {
         ChoiceRow("開く位置", p.openPosition, listOf("unread" to "最初の未読", "top" to "先頭", "bottom" to "いちばん下")) { p.openPosition = it }
     }
-    Group("本文") {
+    // 表示スタイルのシートの「細かい表示」と同じ言葉・同じ並び。どの見た目にも効く
+    Group("細かい表示") {
         SwitchRow("名無しの名前を省く", p.omitNoname, desc = "そのスレで一番多い名前と、板の既定の名前(「名無しさん」など)を出しません") { p.omitNoname = it }
-        if (LocalAdvanced.current) SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行にまとめます") { p.tidyBlankLines = it }
-        SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
-        ChoiceRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
+        SwitchRow("名前欄を目立たなくする", p.nameSubtle, desc = "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます") { p.nameSubtle = it }
         SwitchRow("ID を短く出す", p.idShort, desc = "先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)") { p.idShort = it }
         SwitchRow("ID ごとに色を付ける", p.idStyle == "color", desc = "2 回以上書いた ID を、ID ごとの色で。同じ人の書き込みを目で追えます") { p.idStyle = if (it) "color" else "none" }
         ChoiceRow("ID の位置", p.idPosition, ID_POSITIONS) { p.idPosition = it }
-        SwitchRow("名前欄を目立たなくする", p.nameSubtle, desc = "名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます") { p.nameSubtle = it }
+        ChoiceRow("日時の出し方", p.dateStyle, DATE_STYLES) { p.dateStyle = it }
         SwitchRow("ワッチョイを短く出す", p.watchoiShort, desc = "「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)") { p.watchoiShort = it }
         SwitchRow("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi, desc = "Discord 風・LINE 風のアイコン。ID は日ごとに変わりますが、ワッチョイは週ごとなので同じ人が同じアイコンで続きます") { p.iconFromWatchoi = it }
+        SwitchRow("スレ主に「主」の印", p.highlightOp, desc = ">>1 と同じ ID のレス") { p.highlightOp = it }
         ChoiceRow("人気のレスの示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
+        if (LocalAdvanced.current) SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行にまとめます") { p.tidyBlankLines = it }
+        if (LocalAdvanced.current) SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます") { p.urlShorten = it }
+    }
+    Group("ミニマップ") {
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }
     }
     if (LocalAdvanced.current) Group("リンク") {
-        SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます") { p.urlShorten = it }
         SwitchRow("リンクのカードを出す", p.showLinkPreview, desc = "ページの題と画像を、本文の下に小さく") { p.showLinkPreview = it }
         SwitchRow("リンクをアプリの中で開く", p.openLinksInApp, desc = "オフにすると、ブラウザで開きます") { p.openLinksInApp = it }
     }

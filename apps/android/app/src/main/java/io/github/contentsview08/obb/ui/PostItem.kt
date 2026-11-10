@@ -73,8 +73,11 @@ class HeaderHit {
 /** いま描いている行の HeaderHit(スレ表示・ポップアップの行が渡す) */
 val LocalHeaderHit = androidx.compose.runtime.compositionLocalOf<HeaderHit?> { null }
 
-/** Discord 風・LINE 風で、頭の上に出す返信先(本文の頭のアンカー)。id はアイコンの種(設定でワッチョイがあればワッチョイ、なければ ID) */
-class ReplyPreview(val no: Int, val id: String?, val text: String)
+/**
+ * Discord 風・LINE 風で、頭の上に出す返信先(本文の頭のアンカー)。id はアイコンの種(設定でワッチョイがあればワッチョイ、なければ ID)。
+ * full: 見た目の設定「返信先の引用」が「全文」のときの、返信先の本文の全部(画像のサムネイルは出さない)。aa: その本文が AA か
+ */
+class ReplyPreview(val no: Int, val id: String?, val text: String, val full: String? = null, val aa: Boolean = false)
 
 /**
  * レス 1 件。組み立て済み(renderPosts)の頭の行と本文を置くだけ。
@@ -310,9 +313,28 @@ fun PostItem(
  */
 fun lineBubbleGap(pad: Int): Float = if (pad <= io.github.contentsview08.obb.data.POST_PAD_PX) 1f + pad * 2.5f else pad + 4f
 
-/** 返信先の 1 行(小さいアイコン・本文の頭)。押すと返信先をポップアップで出す */
+/** 返信先の 1 行(小さいアイコン・本文の頭)。押すと返信先をポップアップで出す。全文のときは本文を全部、枠の中で折り返す(AA は AA の字で) */
 @Composable
 private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, onDark: Boolean = false, onClick: () -> Unit) {
+    if (reply.full != null) {
+        val ink = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted
+        // 本文と見分けられるよう、淡い面に置く
+        val wash = if (onDark) Color.White.copy(alpha = 0.14f) else Palette.textMuted.copy(alpha = 0.09f)
+        Row(
+            Modifier.padding(start = indent, bottom = 4.dp).clip(RoundedCornerShape(6.dp)).background(wash).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text("↱ ", color = ink, fontSize = 12.sp)
+            Identicon(reply.id, 16.dp)
+            Spacer(Modifier.width(5.dp))
+            if (reply.aa) BasicText(
+                reply.full, Modifier.weight(1f, fill = false),
+                style = TextStyle(color = ink, fontFamily = AaFont, fontSize = 12.sp, lineHeight = 1.15.em, letterSpacing = 0.sp),
+                softWrap = false, autoSize = TextAutoSize.StepBased(minFontSize = 5.sp, maxFontSize = 12.sp, stepSize = 0.5.sp),
+            ) else Text(reply.full, color = ink, fontSize = 12.sp, lineHeight = 1.4.em)
+        }
+        return
+    }
     Row(Modifier.padding(start = indent, bottom = 4.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
         Text("↱ ", color = if (onDark) Color.White.copy(alpha = 0.8f) else Palette.textMuted, fontSize = 12.sp)
         Identicon(reply.id, 16.dp)

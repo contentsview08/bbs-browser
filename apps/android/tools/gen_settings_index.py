@@ -33,6 +33,14 @@ for m in re.finditer(r"private fun (\w+Page)\(", src):
         elif r.group(3) or r.group(4):
             rows.append((keys[fn], r.group(3) or titles[keys[fn]], r.group(4) or ""))
 
+# 見た目ごとの設定(StyleOptionsGroup)はページの外の関数で、見出しが見た目で変わるので、ここに書く
+rows += [
+    ("theme", "ツリー表示", "カード・専ブラ風・まとめ風の設定。アンカーの付いたレスを、最初のアンカー先のすぐ下に字下げして並べます"),
+    ("theme", "字下げの深さの上限", "ツリー表示の設定"),
+    ("theme", "返信先の引用", "Discord 風・LINE 風の設定(1 行・全文・出さない)"),
+    ("theme", "続けて書いたレスをまとめる", "Discord 風・LINE 風の設定。同じ人が続けて書いたレスの名前・アイコンを省きます"),
+]
+
 # 同期の小画面は別のファイル(ui/SyncPage.kt)で、文言は sync-ui.json にある
 rows += [
     ("sync", "同期を使う", "別の端末と履歴やお気に入りを同期(実験的)"),

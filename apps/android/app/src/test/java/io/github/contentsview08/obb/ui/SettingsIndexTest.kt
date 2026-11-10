@@ -29,4 +29,10 @@ class SettingsIndexTest {
     @Test fun テーマと色のページも索引に入る() {
         assertTrue(has("theme", "配色"))
     }
+
+    @Test fun 見た目ごとの設定も索引に入る() {
+        assertTrue(has("theme", "ツリー表示"))
+        assertTrue(has("theme", "返信先の引用"))
+        assertTrue(has("thread", "細かい表示"))
+    }
 }

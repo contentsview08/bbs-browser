@@ -60,6 +60,8 @@ class ThreadScrollCtl(val page: Page.Thread) {
     var firstGrowth = true
     /** 知らせた既読の番号 */
     var sent = page.readNo
+    /** ツリー表示で画面に出たレスの番号(スレを開いている間だけ。既読は 1 番から途切れずに出し終えた所まで進める) */
+    val treeSeen = HashSet<Int>()
     var atBottom = false
     /** 開いたときに未読の頭がまだ手元になかった。新着が届いたらそこへ移る */
     var pendingUnread = false
@@ -155,6 +157,28 @@ fun staggerDelays(nos: List<Int>): Map<Int, Int> {
     return nos.mapIndexed { i, n -> n to Math.round(i * d) }.toMap()
 }
 
+/**
+ * ツリー表示の既読: from(今の既読)の次から、画面に出たレス(seen)か手元にない番号(exists にない。飛んだ番号)が続く限り進めた番号。
+ * 1 番から途切れずに出し終えた所までを既読にする(top は手元の最後のレス)
+ */
+fun readHead(from: Int, top: Int, seen: Set<Int>, exists: Set<Int>): Int {
+    var n = maxOf(0, from)
+    while (n < top && (n + 1 in seen || n + 1 !in exists)) n++
+    return n
+}
+
+/** 並んでいる行(レス番号。0 は数えない行)のうち、そのレスの行。なければ、それより後ろでいちばん小さい番号の行(番号の順なら最初の no 以上の行) */
+fun rowIndexOf(nos: List<Int>, no: Int): Int {
+    var best = -1
+    var bestNo = Int.MAX_VALUE
+    for (i in nos.indices) {
+        val n = nos[i]
+        if (n == no) return i
+        if (n > no && n < bestNo) { best = i; bestNo = n }
+    }
+    return best
+}
+
 /** 開いたときの行き先(PC 版の OpenTarget の写し) */
 sealed class OpenTarget {
     data class Saved(val pos: ScrollPos) : OpenTarget()
@@ -191,16 +215,20 @@ fun openTarget(saved: ScrollPos?, savedFound: Boolean, openPosition: String, rea
     return OpenTarget.Top
 }
 
-/** shown は今並んでいるレス(絞り込み後)、footer は重なっている下の帯の高さ(px) */
+/**
+ * shown は今並んでいる行のレス番号(絞り込み後。ツリー表示の 2 回目以降の出現は 0)、footer は重なっている下の帯の高さ(px)。
+ * tree: ツリー表示で並べているか(並びが番号の順ではない)
+ */
 class ThreadScroller(
     private val ctl: ThreadScrollCtl,
     private val state: LazyListState,
     private val scope: CoroutineScope,
-    private val shown: () -> List<io.github.contentsview08.obb.bbs.Post>,
+    private val shown: () -> List<Int>,
     private val footer: () -> Float,
     private val bottomPx: Float,
+    private val tree: () -> Boolean = { false },
 ) {
-    private fun indexOf(no: Int) = shown().indexOfFirst { it.no >= no }
+    private fun indexOf(no: Int) = rowIndexOf(shown(), no)
 
     /** 見えている範囲の高さ(上の帯の下から、下の帯の上まで) */
     private fun visibleHeight(): Float {
@@ -230,13 +258,15 @@ class ThreadScroller(
         val page = ctl.page
         val posts = page.index.posts
         ctl.sent = maxOf(ctl.sent, page.readNo)
-        val savedIdx = saved?.let { s -> shown().indexOfFirst { it.no == s.no } } ?: -1
+        val savedIdx = saved?.let { s -> shown().indexOf(s.no).takeIf { s.no > 0 } } ?: -1
         val unreadFrom = page.unreadFrom
         when (val t = openTarget(saved, savedIdx >= 0, openPosition, ctl.sent, unreadFrom, posts.any { it.no == unreadFrom })) {
-            is OpenTarget.Bottom -> { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
+            // ツリー表示では、一番下が最後のレスとは限らないので、既読のレスの位置へ
+            is OpenTarget.Bottom -> if (tree() && t.pendingUnread) toUnreadNow(ctl.sent) else { toBottomNow(); ctl.pendingUnread = t.pendingUnread }
             // 覚えたずれは「上の帯の下からの位置」(上へはみ出していれば負)。scrollToItem は送る量なので符号を返す
             is OpenTarget.Saved -> state.scrollToItem(savedIdx, -t.pos.offset)
-            is OpenTarget.Unread -> toUnreadNow(t.no)
+            // ツリー表示では、未読の頭は離れた枝にあることがあるので、既読の番号のレスの位置へ
+            is OpenTarget.Unread -> toUnreadNow(if (tree()) maxOf(1, t.no - 1) else t.no)
             OpenTarget.Top -> state.scrollToItem(0)
         }
         // この時点で手元にあるレスは「新着」として扱わない
@@ -272,7 +302,7 @@ class ThreadScroller(
         val head = maxOf(prevLastNo, read) + 1
         if (fresh.isEmpty()) {
             // 一番下で未読を待っていた・開いた直後なら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける
-            if (!ctl.keepJump && (ctl.pendingUnread || (ctl.untouched && ctl.firstGrowth))) toUnread(head)
+            if (!ctl.keepJump && !tree() && (ctl.pendingUnread || (ctl.untouched && ctl.firstGrowth))) toUnread(head)
             return
         }
         ctl.flashAt = System.currentTimeMillis()
@@ -284,6 +314,8 @@ class ThreadScroller(
         val unreadFrom = page.unreadFrom
         when {
             ctl.keepJump -> {}
+            // ツリー表示では新着があちこちの枝に入るので、送らずに読んでいる位置を保つ(新着の印と札で知らせる)
+            tree() -> {}
             ctl.pendingUnread && posts.any { it.no == unreadFrom } -> toUnread(unreadFrom)
             opening -> if (read >= prevLastNo) toUnread(head)
             // 実況モードの間は、流す方が新着まで運ぶ(送る動きどうしがぶつからないように)
@@ -326,6 +358,17 @@ class ThreadScroller(
         val rest = if (lastItem != null) (lastItem.offset + lastItem.size - end).toFloat() else Float.MAX_VALUE
         ctl.atBottom = !state.canScrollForward || rest < bottomPx
         var last = items.last().key as Int
+        val page = ctl.page
+        if (tree()) {
+            // ツリー表示では並びが番号の順ではないので、出たレスを覚え、1 番から途切れずに出し終えた番号まで(一番下に着いても飛ばさない)
+            for (it in items) ctl.treeSeen += it.key as Int
+            val posts = page.index.posts
+            val top = posts.lastOrNull()?.no ?: 0
+            val exists = posts.mapTo(HashSet()) { it.no }
+            last = readHead(maxOf(ctl.sent, page.readNo), top, ctl.treeSeen, exists)
+            val first = items.firstOrNull { it.offset + it.size > 0 }
+            return last to first?.let { ScrollPos(it.key as Int, it.offset, ctl.atBottom) }
+        }
         // 絞り込みで中身が縮むと一番下に見えるが、読んだわけではない(全部既読になって戻せなくなる)
         val filtering = ctl.page.filter != null || (ctl.page.searching && ctl.page.query.isNotBlank())
         // 実況モードでまだ出していないレスは読んでいない

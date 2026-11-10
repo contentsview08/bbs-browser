@@ -70,8 +70,9 @@ import kotlin.math.roundToInt
 
 /**
  * 表示スタイルのシート(︙ の「表示スタイル」)。下から半分ほどの高さで出し、上に見えている画面で変えた結果を見ながら合わせられるよう、背景は暗くしない。
- * 上のタブで「見た目」(テーマ・差し色・レスの見た目)・「文字と余白」・「レスの表示」を切り替える。下へなぞるか、外を押すか、戻るで閉じる。
- * thread: スレ表示から開いたか(スレ一覧はレスに関係しないので、レスの見た目の行と「レスの表示」のタブを出さない)
+ * 上のタブで「配色」(テーマ・差し色)・「見た目」(レスの見た目と、選んでいる見た目だけの設定)・「文字と余白」・「細かい表示」を切り替える。
+ * 下へなぞるか、外を押すか、戻るで閉じる。
+ * thread: スレ表示から開いたか(スレ一覧はレスの細かい表示に関係しないので、「細かい表示」のタブを出さない)
  */
 @Composable
 fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
@@ -94,7 +95,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
     WithoutBaseFont { FullWindow(onDismiss = { close() }) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
-            // 「見た目」のタブ(テーマ・差し色・レスの見た目)が収まる高さで、上には画面が半分ほど見えるように
+            // 「配色」のタブ(テーマ・差し色)が収まる高さで、上には画面が半分ほど見えるように
             val sheetHeight = (maxHeight * 0.5f).coerceIn(minOf(380.dp, maxHeight - 80.dp), maxHeight - 80.dp)
             val sheetPx = with(density) { sheetHeight.toPx() }
             // 指を離したとき: 3 割より下へずらしていたら閉じる。足りなければ戻す
@@ -149,7 +150,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(width = 36.dp, height = 4.dp).background(Palette.textMuted.copy(alpha = 0.45f * bg), CircleShape)) }
                 val tabs = if (thread) STYLE_TABS else STYLE_TABS.filter { it.first != "post" }
-                val tab = p.styleTab.takeIf { k -> tabs.any { it.first == k } } ?: tabs.first().first
+                val tab = io.github.contentsview08.obb.data.styleTabOf(p.styleTab, tabs.map { it.first })
                 SheetTabs(tabs, tab, Modifier.graphicsLayer { alpha = bg }) { p.styleTab = it }
                 // 高さはシートで決めてあるので、タブを変えても変わらない。はみ出す分は中でスクロールする(タブごとに一番上から)
                 androidx.compose.runtime.key(tab) {
@@ -172,15 +173,16 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
                             } }
                             }
                             "post" -> PostDisplayTab(p)
+                            "style" -> {
+                                SheetLabel("レスの見た目")
+                                PostStyleRow(p)
+                                StyleOptionsSection(p)
+                            }
                             else -> {
                                 SheetLabel("カラーテーマ")
                                 SchemeRow(p)
                                 SheetLabel("差し色")
                                 AccentRow(p)
-                                if (thread) {
-                                    SheetLabel("レスの見た目")
-                                    PostStyleRow(p)
-                                }
                             }
                         }
                     }
@@ -191,7 +193,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
 }
 
 /** シートのタブ(保存の名前と見出し) */
-private val STYLE_TABS = listOf("look" to "スキン", "size" to "文字と余白", "post" to "レスの表示")
+private val STYLE_TABS = listOf("color" to "配色", "style" to "見た目", "size" to "文字と余白", "post" to "細かい表示")
 
 /** タブの帯。スレ表示の絞り込みのタブと同じく、選んでいるタブは差し色の字と下線と淡い面 */
 @Composable
@@ -214,26 +216,48 @@ private fun SheetTabs(tabs: List<Pair<String, String>>, current: String, modifie
 }
 
 /**
- * 「レスの表示」: 設定の「スレ表示」の本文・リンクにある、レスの出し方の項目(言葉も同じ)。
+ * 「細かい表示」: どの見た目にも効く、レスの出し方の項目。設定の「スレ表示」の「細かい表示」と同じ言葉・同じ並び。
  * 後ろの画面ですぐ確かめられるので、説明は省いて 1 行ずつに詰める
  */
 @Composable
 private fun PostDisplayTab(p: Prefs) {
     SheetSwitch("名無しの名前を省く", p.omitNoname) { p.omitNoname = it }
     SheetSwitch("名前欄を目立たなくする", p.nameSubtle) { p.nameSubtle = it }
-    SheetSwitch("スレ主に「主」の印", p.highlightOp) { p.highlightOp = it }
-    SheetLabel("日時の出し方")
-    ChipRow(DATE_STYLES, p.dateStyle) { p.dateStyle = it }
     SheetSwitch("ID を短く出す", p.idShort) { p.idShort = it }
     SheetSwitch("ID ごとに色を付ける", p.idStyle == "color") { p.idStyle = if (it) "color" else "none" }
     SheetLabel("ID の位置")
     ChipRow(ID_POSITIONS, p.idPosition) { p.idPosition = it }
+    SheetLabel("日時の出し方")
+    ChipRow(DATE_STYLES, p.dateStyle) { p.dateStyle = it }
     SheetSwitch("ワッチョイを短く出す", p.watchoiShort) { p.watchoiShort = it }
     SheetSwitch("ワッチョイがあるときは、アイコンをワッチョイから作る", p.iconFromWatchoi) { p.iconFromWatchoi = it }
+    SheetSwitch("スレ主に「主」の印", p.highlightOp) { p.highlightOp = it }
     SheetLabel("人気のレスの示し方")
     ChipRow(HEAT_STYLES, p.heatStyle) { p.heatStyle = it }
     SheetSwitch("空行を整える", p.tidyBlankLines) { p.tidyBlankLines = it }
     SheetSwitch("URL を短く見せる", p.urlShorten) { p.urlShorten = it }
+}
+
+/** 「見た目」の札の下: 選んでいる見た目だけの設定(見出しは「〇〇の設定」)。値は見た目ごとに別々に覚える */
+@Composable
+private fun StyleOptionsSection(p: Prefs) {
+    val style = p.postStyle
+    val o = p.styleOptions(style)
+    fun set(n: io.github.contentsview08.obb.data.StyleOptions) = p.setStyleOptions(style, n)
+    SheetLabel("${postStyleName(style)}の設定")
+    if (style in io.github.contentsview08.obb.bbs.TREE_STYLES) {
+        SheetSwitch("ツリー表示", o.tree) { set(o.copy(tree = it)) }
+        if (o.tree) Column(Modifier.padding(horizontal = 16.dp)) {
+            val d = io.github.contentsview08.obb.data.TREE_DEPTH_RANGE
+            SizeSlider("字下げの深さの上限", o.treeDepth.toFloat(), d.first.toFloat()..d.last.toFloat(), d.last - d.first - 1, "${o.treeDepth}", io.github.contentsview08.obb.data.TREE_DEPTH_DEFAULT.toFloat()) {
+                set(o.copy(treeDepth = it.roundToInt().coerceIn(d)))
+            }
+        }
+    } else {
+        SheetLabel("返信先の引用")
+        ChipRow(io.github.contentsview08.obb.data.QUOTE_MODES, o.quote) { set(o.copy(quote = it)) }
+        SheetSwitch("続けて書いたレスをまとめる", o.group) { set(o.copy(group = it)) }
+    }
 }
 
 @Composable

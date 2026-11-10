@@ -66,11 +66,14 @@ fun isWifi(context: Context): Boolean = runCatching {
 fun Thumbnails(
     urls: List<String>, autoLoad: Boolean, onOpen: (String) -> Unit, blur: Boolean = false,
     youtube: List<Pair<String, String>> = emptyList(), onUrl: (String) -> Unit = {}, size: Int = 96,
+    /** 動画のファイル(mp4 など)。最初のコマに再生の印を重ね、押すと onUrl(再生) */
+    videos: List<String> = emptyList(),
 ) {
     // グロ注意のレスは、押すまでぼかす
     var blurred by rememberSaveable(urls) { mutableStateOf(blur) }
     FlowRow(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (url in urls) Thumbnail(url, autoLoad, if (blurred) { _ -> blurred = false } else onOpen, blurred, size = size)
+        for (url in videos) VideoThumbnail(url, autoLoad, { if (blurred) blurred = false else onUrl(url) }, blurred, size = size)
         // YouTube は動画の絵(i.ytimg.com)に再生の印を重ねる。押すと YouTube で開く(ぼかしの間は、画像と同じくぼかしを解くだけ)
         for ((id, url) in youtube) Thumbnail("https://i.ytimg.com/vi/$id/hqdefault.jpg", autoLoad, { if (blurred) blurred = false else onUrl(url) }, blurred, play = true, size = size)
     }
@@ -155,6 +158,37 @@ internal fun Thumbnail(url: String, autoLoad: Boolean, onOpen: (String) -> Unit,
         StoredImage(url, Modifier.matchParentSize(), blurred = blurred)
         if (play && !blurred) Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
         if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
+    }
+}
+
+/**
+ * 動画のファイルのサムネイル(PC 版の LazyVideoThumb と同じ)。画面に出たときに最初のコマだけを取り(VideoThumbs)、再生の印を重ねる。
+ * 自動で読まない設定なら「動画」の札を出し、押したものだけ取る。コマを取れなければ黒地に印だけ(押せば再生できる)
+ */
+@Composable
+internal fun VideoThumbnail(url: String, autoLoad: Boolean, onOpen: () -> Unit, blurred: Boolean = false, size: Int = 96) {
+    var load by rememberSaveable(url) {
+        mutableStateOf(io.github.contentsview08.obb.data.VideoThumbs.cached(url) != null || (autoLoad && io.github.contentsview08.obb.data.isAutoLoadable(url)))
+    }
+    val shape = RoundedCornerShape(5.dp)
+    val box = Modifier.size(size.dp).clip(shape).border(1.dp, Palette.border, shape)
+    if (!load) {
+        Box(box.background(Palette.surface2).clickable { load = true }, contentAlignment = Alignment.Center) { Text("動画", color = Palette.textMuted, fontSize = 13.sp) }
+        return
+    }
+    LaunchedEffect(url) { io.github.contentsview08.obb.data.VideoThumbs.request(url) }
+    val st = io.github.contentsview08.obb.data.VideoThumbs.stateOf(url)
+    Box(box.background(Color.Black).clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
+        when (st) {
+            is io.github.contentsview08.obb.data.VideoThumbs.State.Done -> AsyncImage(
+                model = st.file, contentDescription = null, contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize().then(if (blurred) Modifier.blur(18.dp) else Modifier),
+            )
+            io.github.contentsview08.obb.data.VideoThumbs.State.Failed -> Text("動画", Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp), color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp)
+            else -> androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp).align(Alignment.TopEnd).padding(4.dp), color = Color.White.copy(alpha = 0.6f), strokeWidth = 2.dp)
+        }
+        if (blurred) Text("グロ注意", Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, fontSize = 11.sp)
+        else Icon(Icons.Filled.PlayCircle, "動画", tint = Color.White, modifier = Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
     }
 }
 

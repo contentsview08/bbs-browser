@@ -171,6 +171,8 @@ class Prefs(context: Context) {
     var unreadFirst by pref("unreadFirst", false)
     /** スレタイにこの言葉が入っているスレを、一覧の上にまとめる(改行区切り) */
     var keywords by wordsPref("keywords", emptyList(), "\n")
+    /** 立てた人のキーワード(ThreadSummary.authorId。改行区切り)。この人が立てたスレを、スレタイのキーワードの後の帯にまとめ、通知もする */
+    var keywordAuthors by wordsPref("keywordAuthors", emptyList(), "\n")
     /** スレ一覧の行の形: normal / compact(スレタイ 1 行と数だけ) */
     var listShape by pref("listShape", "normal")
     /** 最近開いた板(新しい順、30 まで)。クイックアクセスで使う */
@@ -514,7 +516,7 @@ class Prefs(context: Context) {
 
         /** 文字列に JSON を入れて持つ項目。バックアップでは PC と同じく JSON のまま書く */
         internal val JSON_KEYS = setOf(
-            "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "grossWords", "quickPhrases",
+            "ngRules", "aiNgRules", "aiNgOverrides", "boardMeta", "boardVisits", "keywords", "keywordAuthors", "grossWords", "quickPhrases",
             "listTabs", "pastTabs", "presetsApplied", "notifyKinds", "swipeGestures", "recentBoards", "newThreadDrafts",
         )
 

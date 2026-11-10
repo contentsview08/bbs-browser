@@ -39,6 +39,9 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.AlertDialog
@@ -85,6 +88,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
@@ -218,6 +222,8 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
     val context = LocalContext.current
     var fav by remember(t.id) { mutableStateOf(false) }
     var ngDraft by remember(t.id) { mutableStateOf<String?>(null) }
+    /** キーワードに登録する画面(選んだ種類: true なら立てた人で) */
+    var keywordDraft by remember(t.id) { mutableStateOf<Boolean?>(null) }
     var confirmDel by remember(t.id) { mutableStateOf(false) }
     LaunchedEffect(t.id) { fav = vm.isFavoriteThread(t) }
     if (confirmDel) { ConfirmDeleteDialog(vm.prefs, onDelete = { vm.deleteLogOf(t) }) { confirmDel = false; onDismiss() }; return }
@@ -230,6 +236,11 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
             confirmButton = { TextButton(onClick = { if (word.isNotBlank()) vm.addNg(NgRule("threadTitle", word.trim())); onDismiss() }) { Text("NG に足す") } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
         )
+        return
+    }
+
+    keywordDraft?.let { byAuthor ->
+        KeywordDraftDialog(vm, t.title, t.authorId, byAuthor, onDismiss)
         return
     }
 
@@ -282,6 +293,11 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
         t.authorId?.let { a -> MenuItem("立てた人を NG に追加($a)", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("posterId", a)); vm.toast = "立てた人を NG にしました"; close() } },
         MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
     )
+    // キーワードに登録: スレタイで(削って登録する)・立てた人で。どちらも確かめる画面を出してから登録する(PC の KeywordDialog と同じ)
+    val keywordItems = listOfNotNull(
+        MenuItem("スレタイで登録", Icons.Filled.Title) { keywordDraft = false },
+        t.authorId?.let { a -> MenuItem("立てた人で登録($a)", Icons.Filled.Person) { keywordDraft = true } },
+    )
     val actions = listOfNotNull(
         PeekAction("開く", "開く", Icons.AutoMirrored.Filled.OpenInNew) { open(null) },
         PeekAction(
@@ -290,6 +306,7 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
         ) { vm.toggleFavoriteThread(t); close() },
         PeekAction("コピー", "スレタイと URL をコピー", Icons.Filled.ContentCopy) { copyText(context, "${t.title}\n${TwoCh.webUrl(t)}"); vm.toast = "コピーしました"; close() },
         PeekAction("共有", "共有する", Icons.Filled.Share) { shareText(context, t.title, "${t.title}\n${TwoCh.webUrl(t)}"); close() },
+        PeekAction("キーワード", "キーワードに登録", Icons.Filled.Sell, children = keywordItems) { sheet = keywordItems },
         PeekAction("NG", "NG", Icons.Filled.Block, children = ngItems) { sheet = ngItems },
         if (hasLog) PeekAction("履歴から外す", "履歴から外す", Icons.Filled.History) { vm.removeFromHistory(t); close() } else null,
         if (hasLog) PeekAction("ログを削除", "ログを削除", Icons.Filled.Delete, tint = danger, danger = true) {
@@ -715,3 +732,70 @@ private fun PeekActionButton(label: String, full: String, icon: ImageVector, tin
 }
 
 private fun Modifier.clip10() = padding(horizontal = 2.dp).clip(RoundedCornerShape(10.dp))
+
+/**
+ * キーワードに登録する画面。スレタイは全体で登録することはまずなく、ある言葉まで削って登録するので、全体を選んだ状態で開く。
+ * 立てた人は ID のまま、見て確かめてから登録する(PC の components/KeywordDialog.tsx と同じ言葉)
+ */
+@Composable
+private fun KeywordDraftDialog(vm: AppViewModel, title: String, authorId: String?, byAuthorFirst: Boolean, onDismiss: () -> Unit) {
+    var byAuthor by remember { mutableStateOf(byAuthorFirst && authorId != null) }
+    fun initial(a: Boolean) = if (a) authorId.orEmpty() else title
+    var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(initial(byAuthor), androidx.compose.ui.text.TextRange(0, initial(byAuthor).length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(byAuthor) { runCatching { focus.requestFocus() } }
+    val w = field.text.trim()
+    val list = (if (byAuthor) vm.prefs.keywordAuthors else vm.prefs.keywords).lines().map { it.trim() }
+    val dup = w in list
+    val ok = w.isNotEmpty() && !dup
+    fun submit() {
+        if (!ok) return
+        if (byAuthor) vm.prefs.keywordAuthors = (vm.prefs.keywordAuthors.lines().filter { it.isNotBlank() } + w).joinToString("\n")
+        else vm.prefs.keywords = (vm.prefs.keywords.lines().filter { it.isNotBlank() } + w).joinToString("\n")
+        vm.toast = "キーワードに登録しました"
+        onDismiss()
+    }
+    fun pick(a: Boolean) {
+        byAuthor = a
+        val v = initial(a)
+        field = androidx.compose.ui.text.input.TextFieldValue(v, androidx.compose.ui.text.TextRange(0, v.length))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("キーワードに登録") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (authorId != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KeywordKindChip("スレタイで登録", !byAuthor) { pick(false) }
+                    KeywordKindChip("立てた人で登録", byAuthor) { pick(true) }
+                }
+                OutlinedTextField(
+                    field, { field = it },
+                    singleLine = true,
+                    label = { Text(if (byAuthor) "立てた人の ID" else "キーワード") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+                Text(
+                    when {
+                        dup -> "もう登録してあります"
+                        byAuthor -> "この人が立てたスレを、スレ一覧の上にまとめます(ID が同じときだけ)"
+                        else -> "この言葉をスレタイに含むスレを、スレ一覧の上にまとめます。要らない所を削って登録してください"
+                    },
+                    color = Palette.textMuted, fontSize = 12.sp,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { submit() }, enabled = ok) { Text("登録") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
+    )
+}
+
+@Composable
+private fun KeywordKindChip(label: String, on: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).border(1.dp, if (on) Palette.accent else Palette.border, RoundedCornerShape(50))
+            .background(if (on) Palette.accentWash else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+    ) { Text(label, color = if (on) Palette.accent else Palette.textBody, fontSize = 14.sp) }
+}

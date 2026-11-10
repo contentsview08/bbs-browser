@@ -25,4 +25,13 @@ class KeywordGroupsTest {
         val list = listOf(t("1", "告知 その1", announcement = true), t("2", "告知 まとめ"), t("3", "雑談"), t("4", "告知 その2"))
         assertEquals(listOf("告知" to listOf("2", "4"), null to listOf("3", "1")), shape(keywordGroups(list, listOf("告知"))))
     }
+
+    @Test fun 立てた人のキーワードはスレタイのキーワードの後に_IDが同じスレだけ() {
+        val list = listOf(
+            ThreadSummary("https://example.test/b/", "1", "猫", 1, 0, null, authorId = "abcd"),
+            ThreadSummary("https://example.test/b/", "2", "雑談", 1, 0, null, authorId = "abcd"),
+            ThreadSummary("https://example.test/b/", "3", "雑談", 1, 0, null, authorId = "abcde"),
+        )
+        assertEquals(listOf("猫" to listOf("1"), "立てた人 abcd" to listOf("2"), null to listOf("3")), shape(keywordGroups(list, listOf("猫"), listOf("abcd"))))
+    }
 }

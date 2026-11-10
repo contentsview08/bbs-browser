@@ -6,29 +6,14 @@ package io.github.contentsview08.obb.bbs
 /** JavaScript の \s と同じ文字 */
 internal const val WS = """\t\n\u000B\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"""
 
-private const val HOST = """[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+"""
-private const val WORD = "[A-Za-z0-9_]"
-
 /**
- * URL の頭。崩した書き方も拾う: h 抜き(ttps://・tps://)、コロンなし(//i.imgur.com/…)、http 抜き(i.imgur.com/a.jpg)。
- * コロンなしはホストに . があるものだけ。http 抜きはふつうの文と取り違えないよう、画像の拡張子で終わるものだけ
- */
-private const val URL_HEAD = "h?ttps?://" +
-    "|(?<!$WORD)tps?://" +
-    "|(?<![A-Za-z0-9_/:])//(?=$HOST)" +
-    """|(?<![A-Za-z0-9_./@:\-])(?=$HOST/[A-Za-z0-9_\-.~/%]*\.(?:jpe?g|png|gif|webp|avif|JPE?G|PNG|GIF|WEBP|AVIF)(?!$WORD))"""
-
-/** URL は空白・見えない文字・日本語の句読点と閉じかっこで切る */
-private const val URL_BODY = """[^$WS<>"、。「」）』】\u200B-\u200F\u2060-\u2064]+"""
-
-/**
- * 1 つ目の組がアンカーの番号の並び、2 つ目が URL、3 つ目が本文の ID。
+ * 1 つ目の組がアンカーの番号の並び、2 つ目が URL(決まりは UrlFind.kt)、3 つ目が本文の ID。
  * アンカーは >>1・>1・>>1-3・>>1,2,5・>>1-3,8・>No.12345、> のない No.1442072291(6 桁以上)。
  * > 1 つのものは「2>1」のような式を拾わないよう、前が英数字や記号のときは除く
  */
 private val TOKEN = Regex(
     """(?:(?:>>|＞＞|(?<![A-Za-z0-9_>＞=\-])[>＞])(?:[NnＮｎ][OoＯｏ][.．])?|(?<![A-Za-z0-9])No\.(?=[0-9]{6,10}(?![0-9])))([0-9]{1,10}(?:-[0-9]{1,10})?(?:[,，][0-9]{1,10}(?:-[0-9]{1,10})?)*)(?![0-9])""" +
-        "|((?:$URL_HEAD)$URL_BODY)" +
+        "|($URL_PATTERN)" +
         """|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)""",
 )
 
@@ -70,7 +55,8 @@ fun bodyTokens(text: String): List<BodyToken> {
         val id = m.groups[3]
         when {
             anchor != null -> expandList(anchor.value).takeIf { it.isNotEmpty() }?.let { out += BodyToken.Anchor(start, end, it) }
-            url != null -> out += BodyToken.Url(start, end, normalizeBodyUrl(url.value))
+            // 末尾の句読点・対応のない閉じかっこは URL に含めない(ただの文字)
+            url != null -> trimUrlEnd(url.value).takeIf { it.isNotEmpty() }?.let { out += BodyToken.Url(start, start + it.length, normalizeBodyUrl(it)) }
             id != null -> out += BodyToken.Id(start, end, id.value)
         }
     }
@@ -79,15 +65,6 @@ fun bodyTokens(text: String): List<BodyToken> {
 
 /** 本文のアンカーが指すレスの番号 */
 fun anchorTargets(text: String): List<Int> = bodyTokens(text).flatMap { (it as? BodyToken.Anchor)?.nos ?: emptyList() }
-
-private val URL_SCHEME = Regex("^(h?t?tps?:)?//")
-
-/** 崩した書き方の URL を、開ける形に直す。http 系の書き方は http のまま */
-fun normalizeBodyUrl(raw: String): String {
-    val m = URL_SCHEME.find(raw) ?: return "https://$raw"
-    val scheme = m.groupValues[1]
-    return (if (scheme.isNotEmpty() && !scheme.contains("s:")) "http://" else "https://") + raw.substring(m.range.last + 1)
-}
 
 private val IMAGE_URL = Regex("""\.(?:jpe?g|png|gif|webp|avif)(?:[?#][^$WS]*)?$""", RegexOption.IGNORE_CASE)
 private val IMGUR_PAGE = Regex("^https?://(?:i\\.|m\\.)?imgur\\.com/([A-Za-z0-9]{5,8})$")

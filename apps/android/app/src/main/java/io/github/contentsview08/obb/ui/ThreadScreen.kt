@@ -371,7 +371,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     toImageUrl(v)?.let { it in index.allImages } == true && vm.prefs.thumbMode == io.github.contentsview08.obb.data.ThumbMode.NEVER -> viewer = toImageUrl(v)
                     toImageUrl(v)?.let { it in index.allImages } == true -> openExternal(context, v, vm.prefs.openLinksInApp)
                     // 動画はアプリの中のブラウザの再生に任せる。10 秒送り・速さの切り替えなどがそのまま使える
-                    Regex("\\.(mp4|webm|mov|m4v)(\\?|#|$)", RegexOption.IGNORE_CASE).containsMatchIn(v) -> openExternal(context, v, true)
+                    io.github.contentsview08.obb.bbs.isVideoFileUrl(v) -> openExternal(context, v, true)
                     !vm.openUrl(v) -> openExternal(context, v, vm.prefs.openLinksInApp)
                 }
             }

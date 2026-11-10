@@ -358,6 +358,9 @@ private fun ListPage(vm: AppViewModel) {
     Group("キーワード", note = "スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します") {
         EditableWordList(p.keywords, "キーワード", "キーワードを足す", "まだありません", sortable = true) { p.keywords = it }
     }
+    Group("キーワード(立てた人)", note = "この人(ID・BE 番号など)が立てたスレを、キーワードの下にまとめて出します。スレを長押しして足すこともできます") {
+        EditableWordList(p.keywordAuthors, "立てた人", "立てた人を足す", "まだありません", sortable = true) { p.keywordAuthors = it }
+    }
     if (LocalAdvanced.current) Group("閲覧履歴(ログ)", note = "この日数より長く開いていないスレのログ(閲覧履歴とレス)を消します。0 なら消しません。お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します") {
         NumberRow("残す日数", p.logRetentionDays, unit = "日", range = 0..3650, zeroLabel = "消さない", presets = listOf(7, 30, 90, 365, 0)) { p.logRetentionDays = it }
         ActionRow("今すぐ消す") { vm.pruneLogsNow() }

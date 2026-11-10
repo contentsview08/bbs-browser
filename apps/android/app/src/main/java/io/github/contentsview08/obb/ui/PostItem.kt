@@ -102,6 +102,7 @@ fun PostItem(
     val showThumbs = prefs.thumbMode != io.github.contentsview08.obb.data.ThumbMode.NEVER
     val images = if (showThumbs) info?.images ?: emptyList() else emptyList()
     val youtube = if (showThumbs) info?.youtube ?: emptyList() else emptyList()
+    val videos = if (showThumbs) info?.videos ?: emptyList() else emptyList()
     // 倍率は設定の基準の大きさに掛ける(基準を変えても見た目と設定の数字がずれないように)
     val bodySize = (io.github.contentsview08.obb.data.POST_BODY_BASE_PX * prefs.bodyScale).sp
     val headSize = (io.github.contentsview08.obb.data.POST_HEAD_BASE_PX * prefs.postHeadScale).sp
@@ -111,7 +112,7 @@ fun PostItem(
         if (aa) AaBody(r) else Text(shownBody, mod, color = Palette.textBody, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
     }
     val media = @Composable {
-        if (images.isNotEmpty() || youtube.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.postThumbSize)
+        if (images.isNotEmpty() || youtube.isNotEmpty() || videos.isNotEmpty()) Thumbnails(images, autoLoad, onImage, blur = gross, youtube = youtube, onUrl = onUrl, size = prefs.postThumbSize, videos = videos)
         if (prefs.showLinkPreview && !info?.links.isNullOrEmpty()) LinkCards(info!!.links, autoLoad, onUrl)
     }
     // 頭の行の字の並びと位置を覚えておく(長押しした所が ID・名前の上か、スレ表示が調べる)
@@ -227,7 +228,7 @@ fun PostItem(
                         }
                     }
                     // サムネイル・リンクの札が吹き出しにくっつかないよう、少し離す
-                    if (images.isNotEmpty() || youtube.isNotEmpty() || (prefs.showLinkPreview && !info?.links.isNullOrEmpty())) Spacer(Modifier.height(5.dp))
+                    if (images.isNotEmpty() || youtube.isNotEmpty() || videos.isNotEmpty() || (prefs.showLinkPreview && !info?.links.isNullOrEmpty())) Spacer(Modifier.height(5.dp))
                     // 右の吹き出しのリンクの札と画像は、左の端を吹き出しの左にそろえる。吹き出しより広ければ右の端にそろえて、画面の中に収める
                     if (right) Box(
                         Modifier.fillMaxWidth().layout { m, c ->

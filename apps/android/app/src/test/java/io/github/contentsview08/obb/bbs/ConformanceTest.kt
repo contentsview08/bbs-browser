@@ -74,6 +74,22 @@ class ConformanceTest {
         )
     }
 
+    @Test fun link() = check("link.json") { c ->
+        val text = c.getString("input")
+        val tokens = bodyTokens(text)
+        val urls = tokens.filterIsInstance<BodyToken.Url>()
+        mapOf(
+            "spans" to urls.map { text.substring(it.start, it.end) },
+            "urls" to urls.map { it.url },
+            "anchors" to tokens.filterIsInstance<BodyToken.Anchor>().flatMap { it.nos },
+        )
+    }
+
+    @Test fun tld() {
+        val json = JSONObject(javaClass.classLoader!!.getResourceAsStream("tld.json")!!.readBytes().toString(Charsets.UTF_8)).getJSONArray("tlds")
+        assertEquals(List(json.length()) { json.getString(it) }, TLDS)
+    }
+
     @Test fun thread() = check("thread.json") { c ->
         val a = c.getJSONArray("input")
         val posts = List(a.length()) { a.getJSONObject(it).let { p -> post(p.getInt("no"), p.getString("body")) } }

@@ -1747,6 +1747,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // hono-bbs のアカウント(保存してあれば、書き込みのときにログインして使う)
         if (prefs.honoUser.isNotEmpty()) HonoBbs.account = HonoBbs.Account(prefs.honoUser, prefs.honoPassword)
         io.github.contentsview08.obb.data.ImageStore.init(app)
+        io.github.contentsview08.obb.data.VideoThumbs.init(app)
         io.github.contentsview08.obb.data.Favicons.db = db
         // 起動したら、前回の板のスレ一覧(初めてならエッヂ)
         val url = prefs.lastBoardUrl ?: "https://bbs.eddibb.cc/liveedge/"
@@ -1765,7 +1766,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // 閉じている間は、ここで止まって起きない
                 snapshotFlow { appVisible }.first { it }
                 // キーワードは知らせるだけのものなので、知らせないときはスレ一覧を取りに行かない
-                val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && prefs.keywords.isNotBlank()) prefs.keywordWatchMin else 0
+                val keywordMin = if (prefs.osNotify && prefs.notifyKeyword && (prefs.keywords.isNotBlank() || prefs.keywordAuthors.isNotBlank())) prefs.keywordWatchMin else 0
                 clock.due(System.currentTimeMillis(), prefs.historyCheckMin, prefs.favCheckMin, keywordMin)?.let { scope ->
                     // スレ一覧の読み取りが重いので、画面のスレッドでは動かさない(ANR になる)
                     runCatching { withContext(Dispatchers.Default) { io.github.contentsview08.obb.data.Crawler.run(app, db, prefs, scope) } }.onSuccess { remoteCounts = remoteCounts + it }

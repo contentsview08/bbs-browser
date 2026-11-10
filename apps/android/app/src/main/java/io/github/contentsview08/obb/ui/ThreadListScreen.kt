@@ -161,10 +161,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
     val ngMatcher = remember(ngRules) { io.github.contentsview08.obb.data.NgMatcher(ngRules) }
     val sort = vm.prefs.threadSort
     val keywords = vm.prefs.keywords.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val keywordAuthors = vm.prefs.keywordAuthors.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val hasKeywords = keywords.isNotEmpty() || keywordAuthors.isNotEmpty()
     val unreadFirst = vm.prefs.unreadFirst
     // 既読が進むたびに並べ直さないよう、中身で絞るタブのときだけ既読の変化をきっかけにする
     val statesKey = if (tab == ListTab.UNREAD || tab == ListTab.VISITED) page.states else null
-    val shown = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, page.reversed, page.only, unreadFirst) {
+    val shown = remember(page.threads, statesKey, tab, query, ngMatcher, sort, keywords, keywordAuthors, page.reversed, page.only, unreadFirst) {
         // スレタイの NG・立てた人の NG に当たるスレは出さない
         var list = if (ngMatcher.isEmpty) page.threads else page.threads.filter { t -> !ngMatcher.thread(t) }
         // 立てた人の ID も探す(PC 版と同じ)
@@ -190,12 +192,12 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             val top = page.unreadTop { page.threads.filter { unreadOf(it, page.states[it.key]) > 0 }.map { it.key }.toSet() }
             list = unreadFirstOrder(list) { it.key in top }
         }
-        if (keywords.isNotEmpty()) keywordGroups(list, keywords).flatMap { it.second }
+        if (hasKeywords) keywordGroups(list, keywords, keywordAuthors).flatMap { it.second }
         else list.filterNot { it.announcement } + list.filter { it.announcement }
     }
     // キーワードのまとまりの頭に出す帯(PC のスレ一覧と同じ: キーワードごとに差し色の帯、残りは「その他のスレ」)
-    val bandBefore = remember(shown, keywords) {
-        if (keywords.isEmpty()) emptyMap() else keywordGroups(shown, keywords).filter { it.second.isNotEmpty() }.let { groups ->
+    val bandBefore = remember(shown, keywords, keywordAuthors) {
+        if (!hasKeywords) emptyMap() else keywordGroups(shown, keywords, keywordAuthors).filter { it.second.isNotEmpty() }.let { groups ->
             if (groups.none { it.first != null }) emptyMap()
             else groups.associate { (k, ts) -> ts.first().key to ListBand(k ?: "その他のスレ", ts.size, accent = k != null) }
         }
@@ -334,7 +336,7 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
             when {
                 page.error != null && page.threads.isEmpty() -> LoadError(page.error, page.loading, with(density) { bars.topHeight.toDp() }, onBack = if (vm.stack.size > 1) ({ vm.back() }) else null, externalUrl = page.board.url) { vm.refreshBoard(page) }
                 page.threads.isEmpty() && page.loading -> Skeleton(with(density) { bars.topHeight.toDp() }, post = false)
-                else -> LazyColumn(
+                else -> { LazyColumn(
                     Modifier.fillMaxSize(), state = listState,
                     contentPadding = PaddingValues(
                         top = with(density) { bars.topHeight.toDp() },
@@ -350,6 +352,9 @@ fun ThreadListScreen(vm: AppViewModel, page: Page.Threads, modifier: Modifier = 
                         ) { vm.openThread(t) }
                         HorizontalDivider(color = Palette.border)
                     }
+                }
+                    // 今どの辺かを見せるだけの細いバー。上下の帯に隠れない所に出す
+                    ThinScrollbar(listState, top = { bars.topHeight * (1f - bars.hidden) }, bottom = { bars.bottomHeight * (1f - bars.footerHidden) })
                 }
             }
         }
@@ -650,6 +655,9 @@ fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, on
     }
 }
 
+/** 立てた人のキーワードの帯・通知に出す名前(PC の utils/watch.ts の authorKeywordLabel と同じ) */
+internal fun authorKeywordLabel(authorId: String) = "立てた人 $authorId"
+
 /** スレ一覧の帯(キーワードのまとまりの頭)。PC の Band と同じ見た目 */
 class ListBand(val label: String, val count: Int, val accent: Boolean)
 
@@ -657,9 +665,10 @@ class ListBand(val label: String, val count: Int, val accent: Boolean)
  * キーワードごとにスレをまとめる。先のキーワードに当たったスレは後のキーワードに数えない。
  * 当たりは検索と同じく全角半角・大文字小文字・カナとかなを同じに扱う(normalizeForSearch。PC と同じ)。
  * 戻りは (キーワード, スレ) の並びで、最後に (null, 残り)。並びは元の一覧の順。
- * 運営のお知らせはどのまとまりにも入れず、残りの最後に置く(一番下に回すので、キーワードの帯の下に並ばない)
+ * 運営のお知らせはどのまとまりにも入れず、残りの最後に置く(一番下に回すので、キーワードの帯の下に並ばない)。
+ * 立てた人のキーワード(authors)は、スレタイのキーワードの後に、authorId が同じスレを authorKeywordLabel の名前でまとめる(PC と同じ)
  */
-internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>): List<Pair<String?, List<ThreadSummary>>> {
+internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>, authors: List<String> = emptyList()): List<Pair<String?, List<ThreadSummary>>> {
     val (normal, notices) = list.partition { !it.announcement }
     val titles = normal.associate { it.key to normalizeForSearch(it.title) }
     val taken = HashSet<String>()
@@ -670,6 +679,12 @@ internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>): L
         val hits = normal.filter { it.key !in taken && titles.getValue(it.key).contains(nk) }
         hits.forEach { taken += it.key }
         if (hits.isNotEmpty()) groups += k to hits
+    }
+    for (a in authors) {
+        if (a.isEmpty()) continue
+        val hits = normal.filter { it.key !in taken && it.authorId == a }
+        hits.forEach { taken += it.key }
+        if (hits.isNotEmpty()) groups += authorKeywordLabel(a) to hits
     }
     groups += null to normal.filter { it.key !in taken } + notices
     return groups

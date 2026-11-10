@@ -19,6 +19,8 @@ class PostInfo(
     val youtube: List<Pair<String, String>> = emptyList(),
     /** BE のアイコン(本文の 1 行目の sssp://…。PC 版の splitBeIcon と同じ)。本文からは除いてある */
     val beIcon: String? = null,
+    /** 動画のファイル(mp4 など)の URL。サムネイルに最初のコマを出す。同じものは 1 つ(PC 版の mediaIn と同じ) */
+    val videos: List<String> = emptyList(),
 )
 
 private val BE_ICON = Regex("^[$WS]*sssp://(([^$WS/]+)/[^$WS]+\\.(?:gif|png|jpe?g|webp))[ \t\u3000]*(?:\n|$)", RegexOption.IGNORE_CASE)
@@ -145,6 +147,7 @@ class PostIndex(
             val images = ArrayList<String>()
             val links = ArrayList<String>()
             val youtube = ArrayList<Pair<String, String>>()
+            val videos = ArrayList<String>()
             val (beIcon, body0) = splitBeIcon(p.body)
             val text = if (collapse) displayBody(body0) else body0
             val spans = bodyTokens(text)
@@ -156,7 +159,10 @@ class PostIndex(
                         image = true
                         images += img
                     }
-                    isVideoFileUrl(url) -> video = true
+                    isVideoFileUrl(url) -> {
+                        video = true
+                        if (url !in videos) videos += url
+                    }
                     isYoutubeUrl(url) -> {
                         video = true
                         youtubeIdOf(url)?.let { id -> if (youtube.none { it.first == id }) youtube += id to url }
@@ -168,7 +174,7 @@ class PostIndex(
                     }
                 }
             }
-            return PostInfo(spans, image, video, link, images, text, links, youtube, beIcon)
+            return PostInfo(spans, image, video, link, images, text, links, youtube, beIcon, videos)
         }
 
         /**

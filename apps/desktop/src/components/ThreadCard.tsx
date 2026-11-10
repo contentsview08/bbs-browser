@@ -33,6 +33,8 @@ interface Props {
   /** 立てた人を NG に。today なら今日だけ(立てた人が分かるスレだけ出す) */
   onNgAuthor?: (t: ThreadSummary, today?: boolean) => void
   onCopy?: (t: ThreadSummary) => void
+  /** キーワードに登録する画面を開く(スレタイで・立てた人で) */
+  onKeyword?: (t: ThreadSummary, kind: 'title' | 'author') => void
   /** ログ(閲覧履歴)を消す。ログがあるスレだけ */
   onDeleteLog?: (t: ThreadSummary) => void
   onRemoveFromHistory?: (t: ThreadSummary) => void
@@ -78,6 +80,7 @@ function ThreadCard({
   onNg,
   onNgAuthor,
   onCopy,
+  onKeyword,
   onDeleteLog,
   onRemoveFromHistory,
   isFavorite,
@@ -306,6 +309,12 @@ function ThreadCard({
       : []),
     ...(onCopy ? [{ label: 'スレタイと URL をコピー', icon: 'content_copy', onClick: () => onCopy(thread) }] : []),
   ]
+  /** キーワードのメニュー: スレタイで・立てた人で(右クリックのメニューと長押しの一覧で共通)。立てた人が分からないスレはスレタイだけ */
+  const keywordChoices = (kw: NonNullable<typeof onKeyword>) => [
+    { label: 'スレタイで登録', icon: 'title', onClick: () => kw(thread, 'title') },
+    ...(thread.authorId ? [{ label: `立てた人で登録(${thread.authorId})`, icon: 'person', onClick: () => kw(thread, 'author') }] : []),
+  ]
+  const keywordItems = () => (onKeyword ? [{ label: 'キーワードに登録', icon: 'sell', children: keywordChoices(onKeyword) }] : [])
   /** NG のメニュー: スレタイで・立てた人で(右クリックのメニューと操作バーで共通) */
   const ngChoices = (ng: NonNullable<typeof onNg>, ngAuthor: NonNullable<typeof onNgAuthor>, authorId: string) => [
     { label: 'スレタイで NG', icon: 'title', onClick: () => ng(thread) },
@@ -542,6 +551,7 @@ function ThreadCard({
           items={[
             ...(newTabEnabled ? [{ label: '新しいタブで開く', icon: 'open_in_new', onClick: () => onOpen(thread, true) }] : []),
             ...favCopyItems(),
+            ...keywordItems(),
             ...(onNg && onNgAuthor && thread.authorId
               ? [
                   {
@@ -566,6 +576,7 @@ function ThreadCard({
           items={[
             { label: '開く', icon: 'open_in_new', onClick: () => onOpen(thread) },
             ...favCopyItems(),
+            ...keywordItems(),
             ...(onNg || (onNgAuthor && thread.authorId)
               ? [
                   {

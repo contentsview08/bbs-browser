@@ -80,6 +80,7 @@ const ARRAY_ITEM_CHECKS: Partial<Record<keyof AppSettings, (v: unknown) => boole
   listTabs: isString,
   pastTabs: isString,
   keywords: isString,
+  keywordAuthors: isString,
   grossWords: isString,
   quickPhrases: isString,
   postToolbar: isString,

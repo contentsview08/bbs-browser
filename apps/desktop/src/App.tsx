@@ -43,6 +43,7 @@ import AddressBar from './components/AddressBar'
 import Notifications from './components/Notifications'
 import { anchorTargets, isAppBoardUrl, isAppThreadUrl, makeAnchorResolver, toImageUrl } from './utils/postBody'
 import NgRuleDialog, { type NgDraft } from './components/NgRuleDialog'
+import KeywordDialog, { type KeywordDraft } from './components/KeywordDialog'
 import Sidebar from './components/Sidebar'
 import PastTabs, { type PastTab } from './components/PastTabs'
 import NotificationCenter, { NotificationList } from './components/NotificationCenter'
@@ -384,6 +385,7 @@ export default function App() {
   const [jump, setJump] = useState<{ tabId: string; no: number; seq: number; flash?: boolean }>()
   /** NG を登録する画面(元の文字を入れて開く) */
   const [ngDraft, setNgDraft] = useState<NgDraft>()
+  const [keywordDraft, setKeywordDraft] = useState<KeywordDraft>()
   /** キー操作の一覧(? キー) */
   const [keyHelpOpen, setKeyHelpOpen] = useState(false)
   /** コマンドパレット(Ctrl+K・:) */
@@ -2839,6 +2841,8 @@ export default function App() {
           onRemoveFromHistory={history ? removeFromHistory : undefined}
           threadUrl={(t) => connectorOf(t.connectorId).threadWebUrl(t)}
           keywords={history ? undefined : settings.keywords}
+          keywordAuthors={history ? undefined : settings.keywordAuthors}
+          onKeyword={(t, kind) => setKeywordDraft({ kind, title: t.title, authorId: t.authorId })}
           snapshotKey={history ? `${historyVersion}:${favVersion}` : undefined}
           filterRequest={history ? filterRequest : undefined}
           tabRequest={tabRequest}
@@ -3095,6 +3099,19 @@ export default function App() {
       )}
       {paletteOpen && <CommandPalette items={paletteItems()} onClose={() => setPaletteOpen(false)} />}
       {keyHelpOpen && <KeyHelp keymap={keymap} onClose={() => setKeyHelpOpen(false)} />}
+      {keywordDraft && (
+        <KeywordDialog
+          draft={keywordDraft}
+          keywords={settings.keywords}
+          keywordAuthors={settings.keywordAuthors}
+          onSubmit={(kind, word) =>
+            kind === 'author'
+              ? updateSetting('keywordAuthors', [...settings.keywordAuthors, word], settings.keywordAuthors)
+              : updateSetting('keywords', [...settings.keywords, word], settings.keywords)
+          }
+          onClose={() => setKeywordDraft(undefined)}
+        />
+      )}
       {ngDraft && (
         <NgRuleDialog
           draft={ngDraft}

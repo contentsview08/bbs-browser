@@ -1,4 +1,4 @@
-// キーワードの見張り。お気に入り板のスレ一覧を決めた間隔で見に行き、キーワードに合うスレが新しく立っていたら知らせる。
+// キーワードの見張り。お気に入り板のスレ一覧を決めた間隔で見に行き、キーワードに合うスレ(スレタイ・立てた人)が新しく立っていたら知らせる。
 // 板ごとに前回確かめた時刻を覚え、それより後に立ったスレだけを見る(初めての板は、境目を覚えるだけ)。
 // アプリが見えていないあいだは休む
 
@@ -8,6 +8,9 @@ import type { AppNotification } from '../components/Notifications'
 import type { AppSettings, UpdateSetting } from '../ui/settings'
 import { keywordHits } from '../utils/watch'
 import { isAppVisible } from '../utils/visibility'
+
+/** スレタイのキーワードか、立てた人のキーワードが 1 つでもある */
+const hasAnyKeyword = (s: AppSettings) => s.keywords.some((k) => k.trim()) || s.keywordAuthors.some((k) => k.trim())
 
 export function useKeywordWatch(o: {
   enabled: boolean
@@ -26,7 +29,8 @@ export function useKeywordWatch(o: {
   const check = async () => {
     const { settings, favorites, listForWatch, isNgThread, notify, updateSetting } = latest.current
     const keywords = settings.keywords
-    if (!keywords.some((k) => k.trim())) return
+    const authors = settings.keywordAuthors
+    if (!hasAnyKeyword(settings)) return
     const since = { ...settings.keywordWatchSince }
     for (const b of favorites ?? []) {
       let got: { at: number; list: ThreadSummary[] }
@@ -40,7 +44,7 @@ export function useKeywordWatch(o: {
       // 境目は一覧を取った時刻まで(使い回しの一覧を見たとき、取ったあとに立ったスレを次の確認で拾うため)。戻しはしない
       since[b.url] = Math.max(prev ?? 0, at)
       if (prev === undefined) continue
-      const hits = keywordHits(list, keywords, prev).filter((h) => !isNgThread(h.thread))
+      const hits = keywordHits(list, keywords, prev, authors).filter((h) => !isNgThread(h.thread))
       const boardName = settings.boardMeta[b.url]?.alias || b.name
       for (const h of hits.slice(0, 3))
         notify({
@@ -57,7 +61,7 @@ export function useKeywordWatch(o: {
   checkRef.current = check
 
   const minutes = o.settings.keywordWatchMin
-  const hasKeywords = o.settings.keywords.some((k) => k.trim())
+  const hasKeywords = hasAnyKeyword(o.settings)
   const hasBoards = (o.favorites?.length ?? 0) > 0
   useEffect(() => {
     if (!o.enabled || minutes <= 0 || !hasKeywords || !hasBoards) return

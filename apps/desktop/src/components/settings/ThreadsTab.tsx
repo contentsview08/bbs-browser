@@ -36,6 +36,12 @@ export function ThreadsTab({ settings: s, update, onPruneLogs }: Pick<SettingsPr
       >
         <ListEditor noun="キーワード" sortable items={s.keywords} onChange={(v) => update('keywords', v)} placeholder="例: 実況" />
       </Section>
+      <Section
+        title="キーワード(立てた人)"
+        note="この人(ID・BE 番号など)が立てたスレを、スレタイのキーワードの後に帯をつけてまとめます。スレを右クリック →「キーワードに登録」でも足せます"
+      >
+        <ListEditor noun="立てた人" sortable items={s.keywordAuthors} onChange={(v) => update('keywordAuthors', v)} placeholder="例: ID の文字" />
+      </Section>
       <Section title="板を開いたときの並び" note="スレ一覧のタブで、その場でも変えられます">
         <Choice
           value={s.threadSort}

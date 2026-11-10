@@ -22,6 +22,7 @@ import { useHideOnScroll } from '../hooks/useHideOnScroll'
 import { useTouchPull } from '../hooks/useTouchPull'
 import { LIST_FILTERS, isListTabActive, tabDefOf, type AppSettings, type ListFilter, type ListTabKey, type ThreadSort, type UpdateSetting } from '../ui/settings'
 import { normalizeForSearch } from '../utils/postBody'
+import { authorKeywordLabel } from '../utils/watch'
 import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, type Keymap } from '../utils/keymap'
 import { useEvent } from '../hooks/useEvent'
 import { animateScroll } from '../hooks/useThreadScroll'
@@ -142,6 +143,10 @@ interface Props {
   postedIds?: Set<string>
   /** 興味のあるキーワード。スレタイに含むスレを、キーワードの帯の下にまとめて上に出す */
   keywords?: string[]
+  /** 立てた人のキーワード(authorId)。この人が立てたスレを、スレタイのキーワードの後の帯にまとめる */
+  keywordAuthors?: string[]
+  /** キーワードに登録する画面を開く(スレの右クリック・長押しのメニューから) */
+  onKeyword?: (t: ThreadSummary, kind: 'title' | 'author') => void
   /** スレを NG にする画面を出す(スレタイと、分かれば立てた人の ID を入れて) */
   onNgThread?: (t: ThreadSummary) => void
   /** 立てた人を NG に追加 */
@@ -541,11 +546,13 @@ export default function ThreadListPanel(props: Props) {
   /**
    * キーワードごとのまとまり。当たるスレのないキーワードは出さない。
    * 複数のキーワードに当たるスレは、先に登録したキーワードの方に入れる。
-   * 運営のお知らせはキーワードに当たってもまとまりに入れず(数えず)、「その他のスレ」の最後に置く(スマホ版の keywordGroups と同じ)
+   * 運営のお知らせはキーワードに当たってもまとまりに入れず(数えず)、「その他のスレ」の最後に置く(スマホ版の keywordGroups と同じ)。
+   * 立てた人のキーワードは、スレタイのキーワードの後に、立てた人(authorId)が同じスレをまとめる
    */
   const keywordGroups = useMemo(() => {
     const keywords = (props.keywords ?? []).map((k) => k.trim()).filter(Boolean)
-    if (keywords.length === 0) return undefined
+    const authors = (props.keywordAuthors ?? []).map((k) => k.trim()).filter(Boolean)
+    if (keywords.length === 0 && authors.length === 0) return undefined
     const normal = visible.filter((t) => !isAnnouncement(t))
     const taken = new Set<string>()
     const groups: { keyword: string; threads: ThreadSummary[] }[] = []
@@ -555,9 +562,14 @@ export default function ThreadListPanel(props: Props) {
       hits.forEach((t) => taken.add(threadId(t)))
       if (hits.length > 0) groups.push({ keyword, threads: hits })
     }
+    for (const a of authors) {
+      const hits = normal.filter((t) => !taken.has(threadId(t)) && t.authorId === a)
+      hits.forEach((t) => taken.add(threadId(t)))
+      if (hits.length > 0) groups.push({ keyword: authorKeywordLabel(a), threads: hits })
+    }
     if (groups.length === 0) return undefined
     return { groups, rest: [...normal.filter((t) => !taken.has(threadId(t))), ...visible.filter(isAnnouncement)] }
-  }, [visible, props.keywords])
+  }, [visible, props.keywords, props.keywordAuthors])
 
   // ── キー操作で選んでいるスレ(J・K で動かし、Enter で開く) ──
   /** 画面に並んでいる順のスレ(キーワードのまとまりがあれば、その順) */
@@ -691,6 +703,7 @@ export default function ThreadListPanel(props: Props) {
     props.onOpen(t, newTab)
   })
   const onNgCard = useEvent((t: ThreadSummary) => props.onNgThread?.(t))
+  const onKeywordCard = useEvent((t: ThreadSummary, kind: 'title' | 'author') => props.onKeyword?.(t, kind))
   const onNgAuthorCard = useEvent((t: ThreadSummary, today?: boolean) => props.onNgAuthor?.(t, today))
   const onCopyCard = useEvent(
     (t: ThreadSummary) => void navigator.clipboard.writeText(props.threadUrl ? `${t.title}\n${props.threadUrl(t)}` : t.title),
@@ -852,6 +865,7 @@ export default function ThreadListPanel(props: Props) {
         onNg={props.onNgThread ? onNgCard : undefined}
         onNgAuthor={props.onNgAuthor ? onNgAuthorCard : undefined}
         onCopy={onCopyCard}
+        onKeyword={props.onKeyword ? onKeywordCard : undefined}
         onDeleteLog={props.onDeleteThreadLog ? onDeleteCard : undefined}
         onRemoveFromHistory={props.onRemoveFromHistory ? onRemoveCard : undefined}
         isFavorite={props.favoriteIds?.has(id) ?? false}

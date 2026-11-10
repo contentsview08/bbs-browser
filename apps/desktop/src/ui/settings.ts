@@ -256,6 +256,11 @@ export interface AppSettings {
   boardMeta: Record<string, BoardMeta>
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
   keywords: string[]
+  /**
+   * 立てた人のキーワード(ThreadSummary.authorId。エッヂ・hono-bbs の ID、BE:番号、スレタイの後ろの [名前])。
+   * この人が立てたスレを、スレタイのキーワードと同じく帯の下にまとめ、通知もする。帯はスレタイのキーワードの後
+   */
+  keywordAuthors: string[]
   /** 板ごとの、最後にスレ一覧を取った時刻(ms)。それより後に立ったスレに「新」の印を付ける */
   boardVisits: Record<string, number>
   /**
@@ -499,6 +504,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   listPageSize: 100,
   boardMeta: {},
   keywords: [],
+  keywordAuthors: [],
   paneMode: 'auto',
   boardVisits: {},
   tabsEnabled: true,

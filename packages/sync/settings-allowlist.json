@@ -1,6 +1,7 @@
 {
   "items": [
     { "name": "keywords", "type": "words", "default": [] },
+    { "name": "keywordAuthors", "type": "words", "default": [] },
     { "name": "grossWords", "type": "words", "default": ["グロ"] },
     { "name": "omitNoname", "type": "bool", "default": { "pc": true, "phone": false } },
     { "name": "tidyBlankLines", "type": "bool", "default": true },

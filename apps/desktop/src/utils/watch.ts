@@ -37,16 +37,29 @@ export function favIncreases(
   return out
 }
 
-/** since より後に立ったスレのうち、スレタイにキーワードを含むもの(最初に当たったキーワードを添える) */
-export function keywordHits(threads: ThreadSummary[], keywords: string[], since: number): { thread: ThreadSummary; keyword: string }[] {
+/** 立てた人のキーワードの帯・通知に出す名前(スマホ版の authorKeywordLabel と同じ) */
+export const authorKeywordLabel = (authorId: string) => `立てた人 ${authorId}`
+
+/**
+ * since より後に立ったスレのうち、スレタイにキーワードを含むもの・立てた人(authorId)が登録した人と同じもの。
+ * 当たった名前を添える(スレタイのキーワードが先、立てた人は authorKeywordLabel の形)
+ */
+export function keywordHits(
+  threads: ThreadSummary[],
+  keywords: string[],
+  since: number,
+  authors: string[] = [],
+): { thread: ThreadSummary; keyword: string }[] {
   const ks = keywords.map((k) => ({ raw: k.trim(), n: normalizeForSearch(k.trim()) })).filter((k) => k.n !== '')
-  if (ks.length === 0) return []
+  const as = authors.map((a) => a.trim()).filter(Boolean)
+  if (ks.length === 0 && as.length === 0) return []
   const out: { thread: ThreadSummary; keyword: string }[] = []
   for (const t of threads) {
     if ((t.createdAt?.getTime() ?? 0) <= since) continue
     const title = normalizeForSearch(t.title)
     const hit = ks.find((k) => title.includes(k.n))
     if (hit) out.push({ thread: t, keyword: hit.raw })
+    else if (t.authorId && as.includes(t.authorId)) out.push({ thread: t, keyword: authorKeywordLabel(t.authorId) })
   }
   return out
 }

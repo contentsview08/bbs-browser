@@ -44,4 +44,14 @@ describe('keywordHits: キーワードに合う新しいスレ', () => {
   it('キーワードがなければ何も返さない', () => {
     expect(keywordHits([t('200', 'Rust')], ['  '], 0)).toEqual([])
   })
+
+  it('立てた人のキーワード: authorId が同じスレ(完全一致)。スレタイのキーワードに当たればそちらを添える', () => {
+    const a = (key: string, title: string, authorId?: string) => ({ ...t(key, title), authorId })
+    const hits = keywordHits([a('200', '雑談', 'abcd'), a('300', '雑談', 'abcde'), a('400', 'Rust', 'abcd'), a('100', '古い', 'abcd')], ['rust'], 150_000, ['abcd'])
+    expect(hits.map((h) => [h.thread.key, h.keyword])).toEqual([
+      ['200', '立てた人 abcd'],
+      ['400', 'rust'],
+    ])
+    expect(keywordHits([a('200', '雑談', 'abcd')], [], 0, ['abcd'])).toHaveLength(1)
+  })
 })

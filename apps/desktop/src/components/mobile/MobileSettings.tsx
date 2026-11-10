@@ -286,6 +286,9 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
           <Group title="キーワード" note="スレタイにこの言葉が入っているスレを、一覧のいちばん上にまとめて出します">
             <WordList items={s.keywords} placeholder="キーワードを足す" empty="まだありません" onChange={(v) => update('keywords', v)} />
           </Group>
+          <Group title="キーワード(立てた人)" note="この人(ID・BE 番号など)が立てたスレを、キーワードの下にまとめて出します。スレを長押しして足すこともできます">
+            <WordList items={s.keywordAuthors} placeholder="立てた人を足す" empty="まだありません" onChange={(v) => update('keywordAuthors', v)} />
+          </Group>
           <Group title="ログ" note="お気に入りのスレ・自分が書き込んだスレは消しません。消したスレは、もう一度開けば取り直します">
             <ChoiceRow
               label="開いていないスレのログを消す"

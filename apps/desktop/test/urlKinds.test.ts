@@ -67,7 +67,8 @@ describe('toImageUrl: 画像として出す URL', () => {
   })
 
   it('本文の崩した書き方も開ける形に直す', () => {
-    expect(imageUrlsIn('ttp://a.test/x.jpg')).toEqual(['http://a.test/x.jpg'])
+    // http と書いていない ttp:// は https を補う(utils/urlFind.ts)
+    expect(imageUrlsIn('ttp://a.test/x.jpg')).toEqual(['https://a.test/x.jpg'])
     expect(imageUrlsIn('ttps://a.test/x.jpg')).toEqual(['https://a.test/x.jpg'])
     expect(imageUrlsIn('https://a.test/x.jpg と https://a.test/y.html')).toEqual(['https://a.test/x.jpg'])
   })

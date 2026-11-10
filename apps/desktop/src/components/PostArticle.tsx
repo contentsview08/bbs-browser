@@ -553,7 +553,6 @@ function PostArticle(props: Props) {
     selectionMenuItems(sel.text, {
       copy,
       quoteReply: sel.inside && handlers.onQuoteReply ? (text) => handlers.onQuoteReply!(post.no, text) : undefined,
-      openUrl: handlers.onUrl,
       searchThread: handlers.onSearchText,
       openExternal: handlers.onOpenExternal,
       ngDraft: handlers.onNgDraft

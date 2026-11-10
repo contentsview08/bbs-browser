@@ -12,9 +12,11 @@ import {
   idsIn,
   imageUrlsIn,
   normalizeForSearch,
+  urlSpansIn,
   urlsIn,
   youtubeLinksIn,
 } from '../src/utils/postBody'
+import { TLDS } from '../src/utils/urlFind'
 import { favIncrease } from '../src/utils/watch'
 import { threadUnread, unreadFirstOrder } from '../src/utils/unread'
 import { matchRanges, newRule, patternError, postMatcher, type NgTarget } from '../src/utils/ng'
@@ -52,6 +54,21 @@ describe('post-body.json', () => {
       cards: cardUrlsIn(text),
     }
     expect(pick(actual, expected)).toEqual(expected)
+  })
+})
+
+describe('link.json', () => {
+  it.each(load<string, Record<string, unknown>>('link.json'))('$name', (c) => {
+    const expected = expectedOf(c)
+    const actual = { spans: urlSpansIn(c.input), urls: urlsIn(c.input), anchors: anchorTargets(c.input) }
+    expect(pick(actual, expected)).toEqual(expected)
+  })
+})
+
+describe('tld.json', () => {
+  it('ドメインとみなす TLD の一覧が同じ', () => {
+    const json = JSON.parse(readFileSync(new URL('../../../packages/conformance/tld.json', import.meta.url), 'utf-8')) as { tlds: string[] }
+    expect(TLDS).toEqual(json.tlds)
   })
 })
 

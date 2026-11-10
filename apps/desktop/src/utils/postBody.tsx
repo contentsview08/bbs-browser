@@ -3,6 +3,7 @@
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { shortWatchoi } from './watchoi'
+import { normalizeUrl, trimUrlEnd, URL_PATTERN } from './urlFind'
 import { allConnectors, type Post } from '@bbs-browser/connectors'
 
 /**
@@ -28,25 +29,25 @@ function memoByText<T>(fn: (text: string) => T): (text: string) => T {
  *   ふたばの書き方の >No.12345 と、> のない No.1442072291(6 桁以上。「No.1」のようなふつうの文は拾わない)も拾う。
  *   番号は 10 桁まで拾う(4chan などは板全体の通し番号)。どのレスを指すかは AnchorResolver で決める(2ch は 5 桁まで)。
  *   > 1 つのものは、「2>1」のような式を拾わないよう、前が英数字や記号のときは除く。
- * - URL は崩した書き方も拾う(m[2]): h 抜き(ttps://・tps://)、コロンなし(//i.imgur.com/…)、http 抜き(i.imgur.com/a.jpg)。
- *   コロンなしはホストに . があるものだけ(「//」だけの区切りの文を拾わない)。http 抜きは画像の拡張子で終わるものだけ(ふつうの文と取り違えないため)。
- *   URL は空白・見えない文字(ゼロ幅スペース、U+2060 のワードジョイナーなど)・日本語の句読点と閉じかっこで切る。
+ * - URL は m[2]。決まりは utils/urlFind.ts(スキームが崩れたもの・ないものも拾い、https を補う)。
+ *   末尾の句読点・対応のない閉じかっこは bodyMatches で落とす。
  * - 本文の中の「ID:xxxx」(英数字や記号の並び)も拾い、押すとその ID のレスを出す(m[3])
  */
-const URL_HOST = String.raw`[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`
-const URL_HEAD = [
-  String.raw`h?ttps?:\/\/`,
-  String.raw`(?<![A-Za-z0-9_])tps?:\/\/`,
-  String.raw`(?<![A-Za-z0-9_/:])\/\/(?=${URL_HOST})`,
-  String.raw`(?<![A-Za-z0-9_./@:-])(?=${URL_HOST}\/[\w\-.~/%]*\.(?:jpe?g|png|gif|webp|avif|JPE?G|PNG|GIF|WEBP|AVIF)(?!\w))`,
-].join('|')
-const URL_BODY = String.raw`[^\s<>"、。「」）』】​-‏⁠-⁤﻿]+`
 const TOKEN = new RegExp(
   String.raw`(?:(?:>>|＞＞|(?<![\w>＞=-])[>＞])(?:[NnＮｎ][OoＯｏ][.．])?|(?<![A-Za-z0-9])No\.(?=\d{6,10}(?!\d)))(\d{1,10}(?:-\d{1,10})?(?:[,，]\d{1,10}(?:-\d{1,10})?)*)(?!\d)` +
-    `|((?:${URL_HEAD})${URL_BODY})` +
+    `|(${URL_PATTERN})` +
     String.raw`|(?<![A-Za-z0-9])ID[:：]([!#-;=?-~]+)`,
   'g',
 )
+
+/** 本文の TOKEN の当たり。URL は末尾の句読点・閉じかっこを落とした形にする(落とした文字はただの文字) */
+function* bodyMatches(text: string): Generator<RegExpExecArray> {
+  for (const m of text.matchAll(TOKEN)) {
+    const url = m[2] && trimUrlEnd(m[2])
+    if (!m[2] || url === m[2]) yield m
+    else if (url) yield Object.assign([url, undefined, url, undefined], { index: m.index, input: text }) as unknown as RegExpExecArray
+  }
+}
 
 /** 範囲アンカーは広げすぎない(>>1-1000 で全レスに数が付くのを防ぐ) */
 const MAX_RANGE = 10
@@ -71,7 +72,7 @@ function expandList(list: string): number[] {
 
 export const anchorsIn = memoByText(function anchorsIn(text: string): number[] {
   const nums: number[] = []
-  for (const m of text.matchAll(TOKEN)) {
+  for (const m of bodyMatches(text)) {
     if (m[1]) nums.push(...expandList(m[1]))
   }
   return nums
@@ -199,13 +200,6 @@ export function heatVar(count: number): string | null {
 /** 画像として扱う URL(拡張子で判定) */
 const IMAGE_URL = /\.(?:jpe?g|png|gif|webp|avif)(?:[?#][^\s]*)?$/i
 
-/** 崩した書き方の URL を、開ける形に直す。http 系の書き方は http のまま */
-function normalizeUrl(raw: string): string {
-  const m = /^(h?t?tps?:)?\/\//.exec(raw)
-  if (!m) return `https://${raw}`
-  return `${m[1] && !m[1].includes('s:') ? 'http' : 'https'}://${raw.slice(m[0].length)}`
-}
-
 /**
  * 拡張子がなくても画像だと分かる(または画像に読み替えられる)サイトの決まり。
  * 読み替えた先が画像でなかったときは、サムネイルの読み込みに失敗して出ないだけなので、試しに読んでよい
@@ -229,7 +223,7 @@ export function toImageUrl(url: string): string | undefined {
 
 /** 本文の URL を、開ける形に直して出てきた順に */
 function* urlTokens(text: string): Generator<string> {
-  for (const m of text.matchAll(TOKEN)) if (m[2]) yield normalizeUrl(m[2])
+  for (const m of bodyMatches(text)) if (m[2]) yield normalizeUrl(m[2])
 }
 
 export const imageUrlsIn = memoByText(function imageUrlsIn(text: string): string[] {
@@ -267,10 +261,15 @@ export function urlsIn(text: string): string[] {
   return [...urlTokens(text)]
 }
 
+/** 本文の中で URL として扱う文字の並び(見つけたままの形。共通のケースで、どこまでをリンクにするかを確かめる) */
+export function urlSpansIn(text: string): string[] {
+  return [...bodyMatches(text)].flatMap((m) => (m[2] ? [m[2]] : []))
+}
+
 /** 本文の中の「ID:xxxx」の ID */
 export function idsIn(text: string): string[] {
   const ids: string[] = []
-  for (const m of text.matchAll(TOKEN)) if (m[3]) ids.push(m[3])
+  for (const m of bodyMatches(text)) if (m[3]) ids.push(m[3])
   return ids
 }
 
@@ -518,7 +517,7 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
   const parts: ReactNode[] = []
   let last = 0
   const ud = handlers.urls
-  const matches = [...text.matchAll(TOKEN)]
+  const matches = [...bodyMatches(text)]
   for (let mi = 0; mi < matches.length; mi++) {
     const m = matches[mi]
     const start = m.index

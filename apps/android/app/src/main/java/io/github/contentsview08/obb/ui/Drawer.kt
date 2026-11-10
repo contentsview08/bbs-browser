@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,7 +62,10 @@ fun DrawerContent(vm: AppViewModel) {
     val current = vm.stack.lastOrNull()
     Column(Modifier.fillMaxHeight().width(300.dp).background(Palette.surface).safeDrawingPadding()) {
         Text("OBB", Modifier.padding(start = 24.dp, top = 20.dp, bottom = 12.dp), color = Palette.textStrong, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        // 履歴の一覧だけは決まった高さの枠の中でスクロールし、見出し・「すべて見る」・「URL を開く」はいつも見えるようにする。
+        // 枠の高さは、ほかの行を並べた残り(お気に入り板を広げていても押し出さない)。それでも入らないほど板が多いときは全体がスクロールする
+        BoxWithConstraints(Modifier.weight(1f)) {
+        FitColumn(maxHeight, minFlex = 120.dp, Modifier.verticalScroll(rememberScrollState())) {
             DrawerRow(Icons.Filled.Star, "お気に入り板", Palette.markFav, trailing = if (favOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore) { favOpen = !favOpen }
             if (favOpen) {
                 // 長押しして掴むと、上下に動かして並べ替えられる
@@ -78,15 +82,18 @@ fun DrawerContent(vm: AppViewModel) {
                 histOpen = !histOpen
             }
             if (histOpen) {
-                for (h in vm.history.take(8)) {
-                    Text(
-                        h.thread.title, Modifier.fillMaxWidth().clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                        color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
+                DrumColumn(Modifier.fitFlex()) {
+                    for (h in vm.history.take(10)) {
+                        Text(
+                            h.thread.title, Modifier.fillMaxWidth().drumItem(this).clickable { vm.openThread(h.thread) }.padding(start = 28.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                            color = Palette.textBody, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 DrawerRow(Icons.Filled.History, "すべて見る", Palette.textMuted, sub = true, muted = true) { vm.openPast("history") } // 前に見ていたタブではなく、いつも閲覧のタブで開く
             }
             DrawerRow(Icons.Filled.Link, "URL を開く", Palette.textMuted) { urlDialog = true }
+        }
         }
         HorizontalDivider(color = Palette.border)
         DrawerRow(Icons.Filled.Settings, "設定", Palette.textMuted, active = current is Page.Settings) { vm.openRoot(Page.Settings()) }

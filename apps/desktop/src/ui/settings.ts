@@ -363,6 +363,10 @@ export interface AppSettings {
   tidyBlankLines: boolean
   /** 本文の URL を短く見せる(https:// を外し、長いものは「…」で省く。画像の URL は「画像」の札にし、続いて並んだものは 1 つにまとめる) */
   urlShorten: boolean
+  /** スレが終わったとき(dat 落ち・上限到達)、一番下に次スレの候補を出す。オフでもヘッダー・︙ の「次スレを探す」では出す */
+  showNextCandidatesAtEnd: boolean
+  /** スレの一番下に「次の未読スレへ」を出す */
+  showNextUnreadAtEnd: boolean
   /** ID の見せ方(なし・色・模様) */
   idStyle: IdStyle
   /** >>1 と同じ ID のレスに「主」の印を付ける */
@@ -592,6 +596,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   omitNoname: !isMobile,
   tidyBlankLines: true,
   urlShorten: true,
+  showNextCandidatesAtEnd: true,
+  showNextUnreadAtEnd: true,
   idStyle: 'none',
   highlightOp: true,
   imageSaveDir: '',

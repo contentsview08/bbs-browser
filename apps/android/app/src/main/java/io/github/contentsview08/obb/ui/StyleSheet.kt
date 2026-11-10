@@ -236,6 +236,8 @@ private fun PostDisplayTab(p: Prefs) {
     ChipRow(HEAT_STYLES, p.heatStyle) { p.heatStyle = it }
     SheetSwitch("空行を整える", p.tidyBlankLines) { p.tidyBlankLines = it }
     SheetSwitch("URL を短く見せる", p.urlShorten) { p.urlShorten = it }
+    SheetSwitch("スレの最後に次スレの候補を出す", p.showNextCandidatesAtEnd) { p.showNextCandidatesAtEnd = it }
+    SheetSwitch("スレの最後に次の未読スレを出す", p.showNextUnreadAtEnd) { p.showNextUnreadAtEnd = it }
 }
 
 /** 「スタイル」の切り替えの下: 選んでいる見た目だけの設定(見出しは「〇〇の設定」)。値は見た目ごとに別々に覚える */

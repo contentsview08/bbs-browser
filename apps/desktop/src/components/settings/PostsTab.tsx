@@ -196,6 +196,18 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           label="ミニマップを出す"
           note="スレ表示の右端に、人気レス・自分のレス・画像の位置と、未読の始まりを示します"
         />
+        <Toggle
+          checked={s.showNextCandidatesAtEnd}
+          onChange={(v) => update('showNextCandidatesAtEnd', v)}
+          label="スレの最後に次スレの候補を出す"
+          note="スレが終わったら(dat 落ち・上限に達した)、-END- の下に次スレの候補を出します。オフでも「次スレを探す」で探せます"
+        />
+        <Toggle
+          checked={s.showNextUnreadAtEnd}
+          onChange={(v) => update('showNextUnreadAtEnd', v)}
+          label="スレの最後に次の未読スレを出す"
+          note="-END- の下に、いまのスレ一覧で次に未読のあるスレへのボタンを出します"
+        />
       </Section>
       <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
         <div className="flex items-center gap-2">

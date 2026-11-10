@@ -342,6 +342,20 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
             <ChoiceRow label="ID の見せ方" desc="色は 2 回以上書いた ID を ID ごとの色に。模様は ID から作るアイコンを番号の左と、スレ一覧の立てた人に" value={s.idStyle} options={ID_STYLES.map((x) => ({ key: x.key, name: x.name }))} onChange={(v) => update('idStyle', v)} />
             <SwitchRow label="ミニマップを出す" desc="右端に、人気レス・自分のレス・画像の位置を示します" checked={s.showMinimap} onChange={(v) => update('showMinimap', v)} />
           </Group>
+          <Group title="スレの最後">
+            <SwitchRow
+              label="スレの最後に次スレの候補を出す"
+              desc="スレが終わったら(dat 落ち・上限に達した)、-END- の下に出します。オフでも ︙ の「次スレを探す」で探せます"
+              checked={s.showNextCandidatesAtEnd}
+              onChange={(v) => update('showNextCandidatesAtEnd', v)}
+            />
+            <SwitchRow
+              label="スレの最後に次の未読スレを出す"
+              desc="-END- の下に、スレ一覧で次に未読のあるスレへのボタンを出します"
+              checked={s.showNextUnreadAtEnd}
+              onChange={(v) => update('showNextUnreadAtEnd', v)}
+            />
+          </Group>
           <Group title="リンク">
             <SwitchRow label="URL を短く見せる" desc="https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます" checked={s.urlShorten} onChange={(v) => update('urlShorten', v)} />
             <SwitchRow label="リンクのカードを出す" desc="ページの題と画像を、本文の下に小さく" checked={s.showLinkPreview} onChange={(v) => update('showLinkPreview', v)} />

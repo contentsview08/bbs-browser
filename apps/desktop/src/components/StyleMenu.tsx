@@ -243,6 +243,8 @@ function PostDisplayItems({ settings: s, update }: { settings: AppSettings; upda
         <Toggle checked={s.highlightOp} onChange={(v) => update('highlightOp', v)} label="スレ主に「主」の印" />
         <Toggle checked={s.tidyBlankLines} onChange={(v) => update('tidyBlankLines', v)} label="空行を整える" />
         <Toggle checked={s.urlShorten} onChange={(v) => update('urlShorten', v)} label="URL を短く見せる" />
+        <Toggle checked={s.showNextCandidatesAtEnd} onChange={(v) => update('showNextCandidatesAtEnd', v)} label="スレの最後に次スレの候補を出す" />
+        <Toggle checked={s.showNextUnreadAtEnd} onChange={(v) => update('showNextUnreadAtEnd', v)} label="スレの最後に次の未読スレを出す" />
       </div>
     </div>
   )

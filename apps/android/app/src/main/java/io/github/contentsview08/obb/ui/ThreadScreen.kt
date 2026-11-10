@@ -718,8 +718,9 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 Box(Modifier.weight(1f).height(3.dp).background(if (sky) Palette.skyMuted.copy(alpha = 0.5f) else Palette.border))
                             }
                         }
+                        // 出さない設定でも行は残す(一番下の判定が「最後の 2 行」を見ているので、行の数を変えない)
                         if (filter == null && query.isBlank()) item(key = "nextUnread") {
-                            val next = remember(index.posts.size, page.readNo) { vm.nextUnread(page) }
+                            val next = if (vm.prefs.showNextUnreadAtEnd) remember(index.posts.size, page.readNo) { vm.nextUnread(page) } else null
                             if (next == null) { Spacer(Modifier.height(16.dp)); return@item }
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 16.dp)
@@ -738,7 +739,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 Badge(badgeCount(next.third), Palette.unread, Palette.unreadText)
                             }
                         }
-                        if (ended && filter == null && query.isBlank()) item(key = "next") {
+                        if (ended && vm.prefs.showNextCandidatesAtEnd && filter == null && query.isBlank()) item(key = "next") {
                             LaunchedEffect(Unit) { if (page.nextCandidates == null) vm.findNext(page) }
                             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 24.dp).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))) {
                                 NextCandidates(page) { vm.openThread(it) }

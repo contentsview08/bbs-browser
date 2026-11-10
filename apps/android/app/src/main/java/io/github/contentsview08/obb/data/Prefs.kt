@@ -324,6 +324,10 @@ class Prefs(context: Context) {
     var heatStyle by pref("heatStyle", "left")
     /** URL を短く見せる(https:// を外し、長いものは省く。画像の URL は「画像」の札にし、続いたものはまとめる) */
     var urlShorten by pref("urlShorten", true)
+    /** スレが終わったとき(dat 落ち・上限到達)、一番下に次スレの候補を出す。︙ の「次スレを探す」はオフでも使える */
+    var showNextCandidatesAtEnd by pref("showNextCandidatesAtEnd", true)
+    /** スレの一番下に「次の未読スレへ」を出す */
+    var showNextUnreadAtEnd by pref("showNextUnreadAtEnd", true)
     var showLinkPreview by pref("showLinkPreview", true)
     var openLinksInApp by pref("openLinksInApp", true)
 

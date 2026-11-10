@@ -433,6 +433,8 @@ private fun ThreadPage(vm: AppViewModel) {
         SegmentRow("人気のレスの示し方", p.heatStyle, HEAT_STYLES) { p.heatStyle = it }
         if (LocalAdvanced.current) SwitchRow("空行を整える", p.tidyBlankLines, desc = "3 行以上続いた空行を 1 行にまとめます") { p.tidyBlankLines = it }
         if (LocalAdvanced.current) SwitchRow("URL を短く見せる", p.urlShorten, desc = "https:// を外し、長いものは後ろを省きます。画像の URL は「画像」の札にし、続いたものは「画像 ×3」のようにまとめます") { p.urlShorten = it }
+        SwitchRow("スレの最後に次スレの候補を出す", p.showNextCandidatesAtEnd, desc = "スレが終わったら(dat 落ち・上限に達した)、-END- の下に出します。オフでも ︙ の「次スレを探す」で探せます") { p.showNextCandidatesAtEnd = it }
+        SwitchRow("スレの最後に次の未読スレを出す", p.showNextUnreadAtEnd, desc = "-END- の下に、スレ一覧で次に未読のあるスレへのボタンを出します") { p.showNextUnreadAtEnd = it }
     }
     Group("ミニマップ") {
         SwitchRow("ミニマップを出す", p.showMinimap, desc = "右端に、人気レス・自分のレス・画像の位置を示します") { p.showMinimap = it }

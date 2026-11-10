@@ -180,12 +180,47 @@ private fun completeLines(b: ByteArray): ByteArray {
 /** 過去ログ(oyster)を持つサーバー */
 private val KAKO_HOST = Regex("(?:^|\\.)(?:5ch\\.io|5ch\\.net|bbspink\\.com)$")
 
-/** 5ch・bbspink の過去ログ(dat 落ちしたスレ)。板/oyster/キーの頭 4 桁/キー.dat */
-private fun kakoDatUrl(t: ThreadSummary): String? {
-    val host = java.net.URI(t.boardUrl).host ?: return null
-    if (!KAKO_HOST.containsMatchIn(host)) return null
-    return "${t.boardUrl}oyster/${t.key.take(4)}/${t.key}.dat"
+/**
+ * dat 落ちしたスレの過去ログの置き場の候補。先にあるものから試す(PC 版の kakoDatUrls と同じ。正は packages/conformance/kako-url.json)。
+ * - 5ch・bbspink: 板/oyster/キーの頭 4 桁/キー.dat を先に
+ * - 2ch 互換で一般的な過去ログ倉庫: 10 桁のキーは 板/kako/頭 4 桁/頭 5 桁/キー、9 桁は 板/kako/頭 3 桁/キー。
+ *   dat.gz か dat のどちらかがあるので、両方を試す(エッヂは .dat だけ。2026-11 に確かめた)
+ * それ以外の桁のキーは、置き場の決まりが分からないので kako を試さない
+ */
+internal fun kakoDatUrls(boardUrl: String, key: String): List<String> {
+    val base = if (boardUrl.endsWith("/")) boardUrl else "$boardUrl/"
+    val out = ArrayList<String>()
+    val host = runCatching { java.net.URI(base).host }.getOrNull()
+    if (host != null && KAKO_HOST.containsMatchIn(host)) out += "${base}oyster/${key.take(4)}/$key.dat"
+    val dir = when {
+        Regex("\\d{10}").matches(key) -> "${key.take(4)}/${key.take(5)}/"
+        Regex("\\d{9}").matches(key) -> "${key.take(3)}/"
+        else -> null
+    }
+    if (dir != null) out += listOf("${base}kako/$dir$key.dat.gz", "${base}kako/$dir$key.dat")
+    return out
 }
+
+/** gzip の頭(1f 8b)で始まるか。Content-Encoding で既に解かれて届いたものは、頭がふつうの文字になる */
+internal fun isGzip(b: ByteArray) = b.size >= 2 && b[0] == 0x1f.toByte() && b[1] == 0x8b.toByte()
+
+/** 解いた後の上限。dat は大きくても数 MB なので、これを超えるものは掲示板の中身ではない(解凍爆弾も止める) */
+internal const val GUNZIP_MAX_BYTES = 32 * 1024 * 1024
+
+/** gzip を解く。壊れている・上限を超えるときは null */
+internal fun gunzip(data: ByteArray, max: Int = GUNZIP_MAX_BYTES): ByteArray? = runCatching {
+    java.util.zip.GZIPInputStream(data.inputStream()).use { input ->
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            if (out.size() + n > max) return null
+            out.write(buf, 0, n)
+        }
+        out.toByteArray()
+    }
+}.getOrNull()
 
 /** 板名と書き込み先・スレの URL。板の前に道があれば(https://host/bbs/板/)、test はその下にある(PC 版の boardPathOf と同じ) */
 internal class BoardPath(val bbs: String, private val root: String) {
@@ -342,19 +377,19 @@ object TwoCh {
         if (cursor?.kako == true) return FetchResult(FetchStatus.NOT_MODIFIED, emptyList(), cursor, archived = true)
 
         suspend fun archived(): FetchResult {
-            val kako = kakoDatUrl(thread)
-            if (kako != null) {
+            for (kako in kakoDatUrls(thread.boardUrl, thread.key)) {
                 val res = Http.get(kako, followRedirects = false)
-                if (res.status == 200 && res.body.isNotEmpty()) {
-                    val body = completeLines(res.body)
-                    val text = textOf(res, body)
-                    val (posts, title) = if (looksLikeDat(text)) parseDat(text, 1) else emptyList<Post>() to null
-                    if (posts.isNotEmpty()) {
-                        return FetchResult(
-                            if (cursor != null) FetchStatus.RESET else FetchStatus.UPDATED,
-                            posts, DatCursor(body.size.toLong(), posts.size, null, kako = true), title, archived = true,
-                        )
-                    }
+                if (res.status != 200 || res.body.isEmpty()) continue
+                // dat.gz は gzip のまま届くことも、Content-Encoding で解かれて届くこともあるので、頭のバイトで見分ける
+                val raw = (if (isGzip(res.body)) gunzip(res.body) else res.body) ?: continue
+                val body = completeLines(raw)
+                val text = textOf(res, body)
+                val (posts, title) = if (looksLikeDat(text)) parseDat(text, 1) else emptyList<Post>() to null
+                if (posts.isNotEmpty()) {
+                    return FetchResult(
+                        if (cursor != null) FetchStatus.RESET else FetchStatus.UPDATED,
+                        posts, DatCursor(body.size.toLong(), posts.size, null, kako = true), title, archived = true,
+                    )
                 }
             }
             return FetchResult(FetchStatus.ARCHIVED, emptyList(), cursor)

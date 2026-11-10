@@ -234,9 +234,11 @@ describe('dat の差分取得の分かれ道', () => {
     await expect(twoChConnector.fetchPosts(thread, cursorOf(two), fake({ status: 416 }, { status: 502 }).ctx)).rejects.toThrow('HTTP 502')
   })
 
-  it.each([404, 302])('5ch でない板が %d なら dat 落ちで、Cursor はそのまま', async (status) => {
+  it.each([404, 302])('dat が %d で過去ログ倉庫(kako の dat.gz・dat)にもなければ dat 落ちで、Cursor はそのまま', async (status) => {
     const c = cursorOf(two)
-    expect(await twoChConnector.fetchPosts(thread, c, fake({ status }).ctx)).toEqual({ status: 'archived', posts: [], cursor: c })
+    const { ctx, sent } = fake({ status }, { status: 404 }, { status: 404 })
+    expect(await twoChConnector.fetchPosts(thread, c, ctx)).toEqual({ status: 'archived', posts: [], cursor: c })
+    expect(sent).toHaveLength(3)
   })
 
   it('改行だけ返れば、レスなしで Cursor は変わらない', async () => {

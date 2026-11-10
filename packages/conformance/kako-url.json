@@ -1,0 +1,34 @@
+[
+  {"name": "5ch は oyster を先に、次に kako の dat.gz・dat", "input": {"boardUrl": "https://mi.5ch.io/news4vip/", "key": "1792148654"}, "expected": [
+    "https://mi.5ch.io/news4vip/oyster/1792/1792148654.dat",
+    "https://mi.5ch.io/news4vip/kako/1792/17921/1792148654.dat.gz",
+    "https://mi.5ch.io/news4vip/kako/1792/17921/1792148654.dat"
+  ]},
+  {"name": "bbspink も oyster を先に", "input": {"boardUrl": "https://mercury.bbspink.com/avideo/", "key": "1788606033"}, "expected": [
+    "https://mercury.bbspink.com/avideo/oyster/1788/1788606033.dat",
+    "https://mercury.bbspink.com/avideo/kako/1788/17886/1788606033.dat.gz",
+    "https://mercury.bbspink.com/avideo/kako/1788/17886/1788606033.dat"
+  ]},
+  {"name": "5ch の 9 桁のキーは oyster と kako の頭 3 桁", "input": {"boardUrl": "https://mi.5ch.io/news4vip/", "key": "999999999"}, "expected": [
+    "https://mi.5ch.io/news4vip/oyster/9999/999999999.dat",
+    "https://mi.5ch.io/news4vip/kako/999/999999999.dat.gz",
+    "https://mi.5ch.io/news4vip/kako/999/999999999.dat"
+  ]},
+  {"name": "エッヂ(10 桁)は kako の dat.gz → dat", "input": {"boardUrl": "https://bbs.eddibb.cc/liveedge/", "key": "1791883114"}, "expected": [
+    "https://bbs.eddibb.cc/liveedge/kako/1791/17918/1791883114.dat.gz",
+    "https://bbs.eddibb.cc/liveedge/kako/1791/17918/1791883114.dat"
+  ]},
+  {"name": "9 桁のキーは頭 3 桁の下", "input": {"boardUrl": "https://bbs.example.test/board/", "key": "123456789"}, "expected": [
+    "https://bbs.example.test/board/kako/123/123456789.dat.gz",
+    "https://bbs.example.test/board/kako/123/123456789.dat"
+  ]},
+  {"name": "板の前に道がある板は、板の下の kako", "input": {"boardUrl": "https://example.test/bbs/board/", "key": "1700000000"}, "expected": [
+    "https://example.test/bbs/board/kako/1700/17000/1700000000.dat.gz",
+    "https://example.test/bbs/board/kako/1700/17000/1700000000.dat"
+  ]},
+  {"name": "8 桁のキーは置き場が分からないので試さない", "input": {"boardUrl": "https://bbs.example.test/board/", "key": "12345678"}, "expected": []},
+  {"name": "11 桁のキーも試さない", "input": {"boardUrl": "https://bbs.example.test/board/", "key": "17000000001"}, "expected": []},
+  {"name": "5ch の 8 桁のキーは oyster だけ", "input": {"boardUrl": "https://mi.5ch.io/news4vip/", "key": "12345678"}, "expected": [
+    "https://mi.5ch.io/news4vip/oyster/1234/12345678.dat"
+  ]}
+]

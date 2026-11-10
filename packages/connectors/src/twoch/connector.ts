@@ -17,6 +17,7 @@ import { POST_FAILED, parseBbsCgiResponse, parseConfirmForm, parseBbsMenuHtml, p
 import { createdAtOfKey, parseKeyValue } from '../common'
 import { encodeShiftJisForm, shiftJisByteLength } from '../sjis'
 import { detectEncoding, encodeUtf8Form, looksLikeUtf8 } from '../encoding'
+import { gunzip, isGzip } from '../gzip'
 
 /** dat 差分取得の続き */
 interface DatCursor {
@@ -42,13 +43,19 @@ export function to5chIo(url: string): string {
 }
 
 /**
- * dat 落ちしたスレの過去ログの dat。5ch(と bbspink)では、板/oyster/キーの頭 4 桁/キー.dat に置かれ、
- * 2026-10 時点ではログインなしで取れる。過去ログの置き場がない掲示板では undefined
+ * dat 落ちしたスレの過去ログの dat の置き場の候補。先にあるものから試す。
+ * - 5ch・bbspink: 板/oyster/キーの頭 4 桁/キー.dat(2026-10 時点でログインなしで取れる)を先に
+ * - 2ch 互換で一般的な過去ログ倉庫: 10 桁のキーは 板/kako/頭 4 桁/頭 5 桁/キー、9 桁は 板/kako/頭 3 桁/キー。
+ *   dat.gz か dat のどちらかがあるので、両方を試す(エッヂは .dat だけ。2026-11 に確かめた)
+ * それ以外の桁のキーは、置き場の決まりが分からないので kako を試さない
  */
-function kakoDatUrl(thread: ThreadSummary): string | undefined {
-  const host = new URL(thread.boardUrl).hostname
-  if (!/(?:^|\.)(?:5ch\.io|5ch\.net|bbspink\.com)$/.test(host)) return undefined
-  return `${to5chIo(thread.boardUrl)}oyster/${thread.key.slice(0, 4)}/${thread.key}.dat`
+export function kakoDatUrls(boardUrl: string, key: string): string[] {
+  const base = to5chIo(boardUrl).replace(/\/?$/, '/')
+  const out: string[] = []
+  if (/(?:^|\.)(?:5ch\.io|5ch\.net|bbspink\.com)$/.test(new URL(base).hostname)) out.push(`${base}oyster/${key.slice(0, 4)}/${key}.dat`)
+  const dir = /^\d{10}$/.test(key) ? `${key.slice(0, 4)}/${key.slice(0, 5)}/` : /^\d{9}$/.test(key) ? `${key.slice(0, 3)}/` : undefined
+  if (dir) out.push(`${base}kako/${dir}${key}.dat.gz`, `${base}kako/${dir}${key}.dat`)
+  return out
 }
 
 /** 読み取ったバイト列の文字コード。切り詰めた本文は body で渡す */
@@ -413,22 +420,23 @@ export const twoChConnector: Connector = {
 
     /** dat 落ちしたとき。過去ログがあればそこから全部取り、なければ dat 落ちとだけ返す */
     const archived = async (): Promise<FetchPostsResult> => {
-      const kako = kakoDatUrl(thread)
-      if (kako) {
+      for (const kako of kakoDatUrls(thread.boardUrl, thread.key)) {
         const res = await ctx.http.get(kako, { noRedirect: true })
-        if (res.status === 200 && res.body.length > 0) {
-          const body = completeLines(res.body)
-          const text = ctx.decode(body, encodingOf(res, body))
-          const { posts, title } = looksLikeDat(text) ? parseDat(text) : { posts: [], title: undefined }
-          if (posts.length > 0)
-            return {
-              status: cursor ? 'reset' : 'updated',
-              posts,
-              title,
-              archived: true,
-              cursor: { bytes: body.length, postCount: posts.length, kako: true } satisfies DatCursor,
-            }
-        }
+        if (res.status !== 200 || res.body.length === 0) continue
+        // dat.gz は gzip のまま届くことも、Content-Encoding で解かれて届くこともあるので、頭のバイトで見分ける
+        const raw = isGzip(res.body) ? await gunzip(res.body) : res.body
+        if (!raw) continue
+        const body = completeLines(raw)
+        const text = ctx.decode(body, encodingOf(res, body))
+        const { posts, title } = looksLikeDat(text) ? parseDat(text) : { posts: [], title: undefined }
+        if (posts.length > 0)
+          return {
+            status: cursor ? 'reset' : 'updated',
+            posts,
+            title,
+            archived: true,
+            cursor: { bytes: body.length, postCount: posts.length, kako: true } satisfies DatCursor,
+          }
       }
       return { status: 'archived', posts: [], cursor }
     }

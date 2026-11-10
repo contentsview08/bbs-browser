@@ -6,7 +6,7 @@ import { detectEncoding, encodeUtf8Form } from '../src/encoding'
 import { encodeEucJpForm } from '../src/eucjp'
 import { encodeShiftJisForm } from '../src/sjis'
 import type { Encoding } from '../src/types'
-import { boardPathOf, createdAtOf, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
+import { boardPathOf, createdAtOf, kakoDatUrls, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
 import { isAccountSite, shouldRelogin } from '../src/honobbs/connector'
 import { siteDomain } from '../src/siteDomain'
 
@@ -89,6 +89,12 @@ describe('hono-account-site.json', () => {
 describe('site-domain.json', () => {
   it.each(load<string, string>('site-domain.json'))('$name', (c) => {
     expect(siteDomain(c.input)).toBe(expectedOf(c))
+  })
+})
+
+describe('kako-url.json', () => {
+  it.each(load<{ boardUrl: string; key: string }, string[]>('kako-url.json'))('$name', (c) => {
+    expect(kakoDatUrls(c.input.boardUrl, c.input.key)).toEqual(expectedOf(c))
   })
 })
 

@@ -11,7 +11,7 @@ val SETTINGS_INDEX = listOf(
     Triple("theme", "ライトのとき", ""),
     Triple("theme", "差し色", "ボタン・選んだ印・タブの下線などの色。どのテーマの上でも読める濃さにしてあります"),
     Triple("theme", "自分の配色", "地・面・字・強調・未読・自分の 6 色を選んで、配色を作れます。見本とコントラストの判定を見ながら決められます"),
-    Triple("theme", "見た目", ""),
+    Triple("theme", "スタイル", ""),
     Triple("theme", "レスの見た目", ""),
     Triple("theme", "見本", ""),
     Triple("text", "字", "端末の標準以外は、選んだときに Google Fonts から 1 回だけ取り、取り終えてから切り替わります(Wi-Fi のときがおすすめ)"),

@@ -70,7 +70,7 @@ import kotlin.math.roundToInt
 
 /**
  * 表示スタイルのシート(︙ の「表示スタイル」)。下から半分ほどの高さで出し、上に見えている画面で変えた結果を見ながら合わせられるよう、背景は暗くしない。
- * 上のタブで「配色」(テーマ・差し色)・「見た目」(レスの見た目と、選んでいる見た目だけの設定)・「文字と余白」・「細かい表示」を切り替える。
+ * 上のタブで「配色」(テーマ・差し色)・「スタイル」(レスの見た目と、選んでいる見た目だけの設定)・「文字と余白」・「細かい表示」を切り替える。
  * 下へなぞるか、外を押すか、戻るで閉じる。
  * thread: スレ表示から開いたか(スレ一覧はレスの細かい表示に関係しないので、「細かい表示」のタブを出さない)
  */
@@ -193,7 +193,7 @@ fun StyleSheet(p: Prefs, thread: Boolean, onDismiss: () -> Unit) {
 }
 
 /** シートのタブ(保存の名前と見出し) */
-private val STYLE_TABS = listOf("color" to "配色", "style" to "見た目", "size" to "文字と余白", "post" to "細かい表示")
+private val STYLE_TABS = listOf("color" to "配色", "style" to "スタイル", "size" to "文字と余白", "post" to "細かい表示")
 
 /** タブの帯。スレ表示の絞り込みのタブと同じく、選んでいるタブは差し色の字と下線と淡い面 */
 @Composable
@@ -238,7 +238,7 @@ private fun PostDisplayTab(p: Prefs) {
     SheetSwitch("URL を短く見せる", p.urlShorten) { p.urlShorten = it }
 }
 
-/** 「見た目」の札の下: 選んでいる見た目だけの設定(見出しは「〇〇の設定」)。値は見た目ごとに別々に覚える */
+/** 「スタイル」の切り替えの下: 選んでいる見た目だけの設定(見出しは「〇〇の設定」)。値は見た目ごとに別々に覚える */
 @Composable
 private fun StyleOptionsSection(p: Prefs) {
     val style = p.postStyle
@@ -327,24 +327,10 @@ private fun AccentRow(p: Prefs) {
 @Composable
 private fun PostStyleRow(p: Prefs) = ChipRow(POST_STYLES, p.postStyle) { p.postStyle = it }
 
-/** 選ぶものを札で並べ、右端まで来たら次の行へ。名前の括弧の中の説明は、狭いので省く */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/** 排他の選択はどれもつながった切り替えボタンにそろえる(設定の画面と同じ部品) */
 @Composable
-private fun ChipRow(options: List<Pair<String, String>>, value: String, onPick: (String) -> Unit) {
-    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((k, name) in options) {
-            val on = value == k
-            val shape = RoundedCornerShape(16.dp)
-            Text(
-                name.substringBefore('('),
-                Modifier.clip(shape).background(if (on) Palette.accent else Palette.surface2, shape)
-                    .border(1.dp, if (on) Palette.accent else Palette.border, shape)
-                    .clickable { onPick(k) }.padding(horizontal = 11.dp, vertical = 7.dp),
-                color = if (on) Palette.accentText else Palette.textBody, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else null, maxLines = 1,
-            )
-        }
-    }
-}
+private fun ChipRow(options: List<Pair<String, String>>, value: String, onPick: (String) -> Unit) =
+    Segmented(options, value, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onPick)
 
 /**
  * 「文字と余白」の 1 行。名前・スライダー・いまの値を 1 行に詰める。既定と違うときだけ、値の右に元に戻すボタンを出す

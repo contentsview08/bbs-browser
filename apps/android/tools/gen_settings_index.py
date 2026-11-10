@@ -24,7 +24,7 @@ for m in re.finditer(r"private fun (\w+Page)\(", src):
     next_decl = NEXT_DECL.search(src, m.end())
     body = src[m.end():next_decl.start() if next_decl else len(src)]
     for r in re.finditer(
-        r'(?:SwitchRow|ChoiceRow|SliderRow|TextRow|ActionRow|NavRow|NumberRow)\(\s*(?:[^"()]*?,\s*)?"([^"$]+)"(?:[^\n]*?desc = "([^"$]+)")?'
+        r'(?:SwitchRow|ChoiceRow|SegmentRow|SliderRow|TextRow|ActionRow|NavRow|NumberRow)\(\s*(?:[^"()]*?,\s*)?"([^"$]+)"(?:[^\n]*?desc = "([^"$]+)")?'
         r'|\bGroup\(\s*(?:"([^"$]+)"\s*,?\s*)?(?:note = "([^"$]+)")?',
         body,
     ):

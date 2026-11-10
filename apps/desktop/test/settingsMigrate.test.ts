@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_UPLOAD_HOST } from '../src/host/uploader'
-import { DEFAULT_SETTINGS, migrateOld, migrateValues } from '../src/ui/settings'
+import { DEFAULT_SETTINGS, TREE_DEPTH_DEFAULT, TREE_DEPTH_MAX, migrateOld, migrateValues, styleOptionsOf, withStyleOption } from '../src/ui/settings'
 
 describe('migrateOld: 古い設定を写す', () => {
   it('サムネイルを出さない設定は、読み込みの設定を決めていなければ「読み込まない」に写す', () => {
@@ -91,5 +91,35 @@ describe('migrateValues: やめた値を今の値に読み替える', () => {
 
   it('既定の設定は読み替えても変わらない', () => {
     expect({ ...DEFAULT_SETTINGS, ...migrateValues(DEFAULT_SETTINGS) }).toEqual(DEFAULT_SETTINGS)
+  })
+})
+
+describe('見た目ごとの設定(styleOptions)', () => {
+  it('何も決めていなければ今までの動き(ツリーなし・引用 1 行・続けて書いたレスをまとめる)', () => {
+    for (const style of ['card', 'discord', 'classic', 'line', 'matome'] as const) {
+      const o = styleOptionsOf(DEFAULT_SETTINGS, style)
+      expect(o).toMatchObject({ tree: false, quote: 'line', groupRuns: true })
+      expect(o.treeDepth).toBe(TREE_DEPTH_DEFAULT)
+    }
+  })
+  it('見た目ごとに別々に覚える', () => {
+    const s = { styleOptions: withStyleOption({ styleOptions: {} }, 'line', 'quote', 'full') }
+    expect(styleOptionsOf(s, 'line').quote).toBe('full')
+    expect(styleOptionsOf(s, 'discord').quote).toBe('line')
+  })
+  it('ツリーはカード・専ブラ風・まとめ風だけ(Discord 風・LINE 風に入っていても使わない)', () => {
+    const s = { styleOptions: { line: { tree: true }, card: { tree: true } } }
+    expect(styleOptionsOf(s, 'line').tree).toBe(false)
+    expect(styleOptionsOf(s, 'card').tree).toBe(true)
+  })
+  it('読み込みで、知らない見た目・項目・壊れた値を捨て、深さは幅に収める', () => {
+    const out = migrateValues({
+      styleOptions: { card: { tree: true, treeDepth: 99, extra: 1 }, line: { quote: 'big', groupRuns: false }, timeline: { tree: true } } as never,
+    })
+    expect(out.styleOptions).toEqual({ card: { tree: true, treeDepth: TREE_DEPTH_MAX }, line: { groupRuns: false } })
+    expect(migrateValues({ styleOptions: 'x' as never }).styleOptions).toEqual({})
+  })
+  it('保存のない古い設定では styleOptions に触らない', () => {
+    expect(migrateValues({ postStyle: 'card' })).not.toHaveProperty('styleOptions')
   })
 })

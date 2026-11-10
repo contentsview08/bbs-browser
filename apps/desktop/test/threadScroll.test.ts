@@ -12,6 +12,7 @@ import {
   openTarget,
   postShape,
   readProgress,
+  contiguousRead,
   settleDone,
   staggerDelays,
   type PostRect,
@@ -177,6 +178,27 @@ describe('readProgress: どこまで読んだか', () => {
 
   it('一番下まで来ていれば、NG や絞り込みで隠れた後ろのレスも既読', () => {
     expect(readProgress({ rects: rects(3, [3]), ...view, atBottom: true, lastNo: 3 }).last).toBe(3)
+  })
+
+})
+
+describe('contiguousRead: ツリー表示の既読(1 番から途切れずに出し終えた所まで)', () => {
+  const nos = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  it('後ろの番号の返信が先に見えても、間を読むまでは飛ばさない', () => {
+    expect(contiguousRead(nos, 0, new Set([1, 9, 2]))).toBe(2)
+  })
+  it('間を出し終えたら、先に見えていた分までまとめて進む', () => {
+    expect(contiguousRead(nos, 0, new Set([1, 9, 2, 3, 4, 5, 6, 7, 8]))).toBe(9)
+  })
+  it('前の既読から続ける(既読までは出していなくてよい)', () => {
+    expect(contiguousRead(nos, 5, new Set([6, 8]))).toBe(6)
+    expect(contiguousRead(nos, 5, new Set([8]))).toBe(5)
+  })
+  it('取れていない番号(飛び)は数えない', () => {
+    expect(contiguousRead([1, 2, 5, 6], 0, new Set([1, 2, 5]))).toBe(5)
+  })
+  it('何も出していなければ既読のまま', () => {
+    expect(contiguousRead(nos, 3, new Set())).toBe(3)
   })
 })
 

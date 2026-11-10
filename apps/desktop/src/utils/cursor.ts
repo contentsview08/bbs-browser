@@ -50,10 +50,12 @@ export function firstAfter(count: number, posOf: (i: number) => number | undefin
   return found
 }
 
-/** 番号の順に並んだ枠の中で、その番号の枠の位置。なければ -1 */
+/** 枠の中で、その番号の枠の位置(番号の順なら半分ずつ探す)。なければ -1 */
 export function frameIndexOf(frames: readonly HTMLElement[], no: number): number {
   const i = firstAfter(frames.length, (k) => Number(frames[k].dataset.post), no - 0.5)
-  return i < frames.length && Number(frames[i].dataset.post) === no ? i : -1
+  if (i < frames.length && Number(frames[i].dataset.post) === no) return i
+  // ツリー表示は番号の順に並ばないので、半分ずつ探して外れたら端から探す
+  return frames.findIndex((f) => Number(f.dataset.post) === no)
 }
 
 /** 少しでも見えているか(端の 4px は見えていないとみなす) */

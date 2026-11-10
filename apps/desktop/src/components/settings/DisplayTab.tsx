@@ -1,6 +1,21 @@
 import { isCustomDark, parseCustom } from '../../ui/customScheme'
 import { useEffect, useState } from 'react'
-import { ACCENTS, COLOR_SCHEMES, POST_STYLES, effectivePostStyle, effectiveScheme, isDarkScheme, pickScheme, type AppSettings } from '../../ui/settings'
+import {
+  ACCENTS,
+  COLOR_SCHEMES,
+  POST_STYLES,
+  QUOTE_STYLES,
+  QUOTE_STYLE_POSTS,
+  TREE_STYLES,
+  effectivePostStyle,
+  effectiveScheme,
+  isDarkScheme,
+  pickScheme,
+  styleOptionsOf,
+  withStyleOption,
+  type AppSettings,
+} from '../../ui/settings'
+import { DepthSlider, postStyleName } from '../StyleMenu'
 import { loadSystemFonts, type SystemFont } from '../../host/systemFonts'
 import { BaseFontSlider } from '../FontSizeSlider'
 import { ManagerDialog, NumberField, OpenRow, Toggle } from '../SettingParts'
@@ -10,6 +25,39 @@ import { pickOpenPath } from '../../host/dialog'
 import { FONT_NOTE } from '../../host/fonts'
 import { FontRows } from './FontRows'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
+
+/**
+ * 選んでいる見た目だけの設定(表示スタイルの窓の「見た目」のタブと、同じ言葉・同じ並び)。値は見た目ごとに別々に覚える
+ */
+function StyleOptionSection({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
+  const style = effectivePostStyle(s)
+  const o = styleOptionsOf(s, style)
+  const set = <K extends keyof typeof o>(key: K, value: (typeof o)[K]) => update('styleOptions', withStyleOption(s, style, key, value))
+  return (
+    <Section title={`${postStyleName(style)}の設定`} note="見た目ごとに別々に覚えます(ほかの見た目に切り替えても、こちらは変わりません)">
+      {TREE_STYLES.has(style) && (
+        <>
+          <Toggle
+            checked={o.tree}
+            onChange={(v) => set('tree', v)}
+            label="ツリー表示"
+            note="返信を、最初のアンカー先のレスの下に字下げして並べます。実況モード・レス検索・絞り込みの間は番号の順です"
+          />
+          {o.tree && <DepthSlider value={o.treeDepth} onChange={(v) => set('treeDepth', v)} fixedSize />}
+        </>
+      )}
+      {QUOTE_STYLE_POSTS.has(style) && (
+        <>
+          <p className="text-xs text-c-text-muted mb-1.5">返信先の引用</p>
+          <Choice value={o.quote} options={QUOTE_STYLES} onChange={(v) => set('quote', v)} />
+          <div className="mt-3">
+            <Toggle checked={o.groupRuns} onChange={(v) => set('groupRuns', v)} label="続けて書いたレスをまとめる" note="同じ人が続けて書いたレスの、名前とアイコンを省きます" />
+          </div>
+        </>
+      )}
+    </Section>
+  )
+}
 
 /** OS に入っているフォントから選ぶ。各行をそのフォント自体で描くので、見た目を比べられる */
 function SystemFontPicker({ value, onPick }: { value: string; onPick: (family: string) => void }) {
@@ -131,7 +179,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
   return (
     <>
       <StickySample settings={s} />
-      <Section title="テーマ">
+      <Section title="カラーテーマ">
         <Toggle
           checked={s.followOsTheme}
           onChange={(v) => update('followOsTheme', v)}
@@ -240,6 +288,7 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
       >
         <Choice value={effectivePostStyle(s)} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
       </Section>
+      <StyleOptionSection settings={s} update={update} />
       <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">
         <Toggle checked={s.tabsEnabled} onChange={(v) => update('tabsEnabled', v)} label="タブを使う" note="オフにするとタブの帯を出さず、いつも今のスレを置き換えます(開いているスレ以外のタブは閉じます)" />
         {s.tabsEnabled && (

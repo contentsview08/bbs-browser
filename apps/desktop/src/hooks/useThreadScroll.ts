@@ -18,6 +18,7 @@ import {
   estimatePostHeight,
   heightKind,
   heightOffsets,
+  contiguousRead,
   movedByOthers,
   newPostsTarget,
   openTarget,
@@ -180,14 +181,18 @@ export function jumpScroll(root: HTMLElement, el: HTMLElement, viewOffset: () =>
 
 /**
  * レスを包む枠(.post-cv)。番号は枠に持たせてある(NG で中身を描かないレスも数えるため)。
- * 枠はレス一覧の直下に番号の順で並び、後ろに -END- などが続く。DOM 全体を検索すると、スクロールのたびに数千の要素をなめる
+ * 枠はレス一覧の直下に画面の並び(番号の順か、ツリーの順)で並び、後ろに -END- などが続く。DOM 全体を検索すると、スクロールのたびに数千の要素をなめる。
+ * ツリーで重ねて出した分(data-dup。data-post がない)は入れない(既読・キー操作・位置はレス 1 件につき 1 枠で数える)
  */
 export function framesIn(list: HTMLElement | null): HTMLElement[] {
   if (!list) return []
   const all = list.children
-  let n = all.length
-  while (n > 0 && (all[n - 1] as HTMLElement).dataset.post === undefined) n--
-  return Array.prototype.slice.call(all, 0, n) as HTMLElement[]
+  const out: HTMLElement[] = []
+  for (let i = 0; i < all.length; i++) {
+    const el = all[i] as HTMLElement
+    if (el.dataset.post !== undefined) out.push(el)
+  }
+  return out
 }
 
 interface Options {
@@ -220,6 +225,11 @@ interface Options {
   jumpTo?: { no: number; seq: number; flash?: boolean }
   /** 絞り込み・検索で一部のレスだけを出しているか */
   filtering?: boolean
+  /**
+   * ツリー表示か。枠が番号の順に並ばないので、未読へはそのレスそのものへ飛び、開いたときの「最初の未読」は既読の番号のレスへ置く。
+   * 新着が届いても動かさない(途中に入るので、読んでいる位置を保つ)
+   */
+  tree?: boolean
 }
 
 export function useThreadScroll(o: Options) {
@@ -464,8 +474,12 @@ export function useThreadScroll(o: Options) {
       const root = rootRef.current
       if (!root) return
       // 絞り込みで隠れているレスは位置が取れない(0 になって上へ飛んでしまう)ので、
-      // その後ろで見えている最初のレスへ送る。なければ一番下に留まる
-      const target = framesIn(listRef.current).find((w) => !w.hidden && Number(w.dataset.post) >= no)
+      // その後ろで見えている最初のレスへ送る。なければ一番下に留まる。
+      // ツリーは番号の順に並ばないので、まずそのレスそのものを探す
+      const frames = framesIn(listRef.current)
+      const target =
+        (latest.current.tree ? frames.find((w) => !w.hidden && Number(w.dataset.post) === no) : undefined) ??
+        frames.find((w) => !w.hidden && Number(w.dataset.post) >= no)
       const ms = behavior === 'animate' ? JUMP_MS : 0
       if (!target) return animateScroll(root, () => root.scrollHeight, ms)
       // 「ここから未読」の線はレスの直前(枠の中)にあるので、枠ごとの位置で合わせる
@@ -572,6 +586,25 @@ export function useThreadScroll(o: Options) {
 
   // ── 読んだところ ──
 
+  /**
+   * ツリー表示で画面に出したレスの番号(スレを開いている間だけ持つ)。既読は 1 番から途切れずに出し終えた所まで進める(contiguousRead)。
+   * 既読の判断は止まってから(READ_DELAY_MS)なので、流れていく途中のレスもここで拾う(スクロールのコマごと。見えている枠だけ測る)
+   */
+  const seenNos = useRef(new Set<number>())
+  const markSeen = useCallback(() => {
+    const root = rootRef.current
+    if (!root || !latest.current.tree) return
+    const box = root.getBoundingClientRect()
+    const viewTop = box.top + headerOffset()
+    const frames = framesIn(listRef.current)
+    for (let i = firstAfter(frames.length, (k) => (frames[k].hidden ? undefined : frames[k].getBoundingClientRect().bottom), viewTop); i < frames.length; i++) {
+      const el = frames[i]
+      if (el.hidden) continue
+      if (el.getBoundingClientRect().top >= box.bottom) break
+      seenNos.current.add(Number(el.dataset.post))
+    }
+  }, [rootRef, listRef, headerOffset])
+
   /** どこまで読んだかを測って知らせ、読んでいた位置を覚える */
   const reportRead = useCallback(() => {
     const root = rootRef.current
@@ -594,7 +627,7 @@ export function useThreadScroll(o: Options) {
       if (r.top >= box.bottom + box.height) break
     }
     atBottom.current = root.scrollHeight - root.scrollTop - root.clientHeight < BOTTOM_PX
-    const { last, position: pos } = readProgress({
+    const progress = readProgress({
       rects,
       viewTop,
       viewBottom: box.bottom,
@@ -602,6 +635,13 @@ export function useThreadScroll(o: Options) {
       atBottom: atBottom.current && !latest.current.filtering,
       lastNo: latest.current.log.posts.at(-1)?.no ?? 0,
     })
+    const pos = progress.position
+    let last = progress.last
+    // ツリー: 画面の並びは番号の順ではないので、1 番から途切れずに出し終えた所まで(一番下に来ても、出していないレスは飛ばさない)
+    if (latest.current.tree) {
+      markSeen()
+      last = contiguousRead(latest.current.log.posts.map((p) => p.no), sent.current, seenNos.current)
+    }
     // 描かれているのは画面とその上下半画面ほど(content-visibility の範囲)なので、そこだけ覚える
     rememberHeights(measured, rects, box.top - box.height / 2, box.bottom + box.height / 2)
     if (last > sent.current) {
@@ -610,7 +650,7 @@ export function useThreadScroll(o: Options) {
     }
     // 位置にはそのときの既読を添える(開き直すとき、同期で既読が先へ進んでいれば覚えた位置ではなく既読の次から)
     if (pos) position.current = { ...pos, readNo: sent.current }
-  }, [rootRef, listRef, headerOffset])
+  }, [rootRef, listRef, headerOffset, markSeen])
 
   // ── 開いたとき ──
 
@@ -637,7 +677,8 @@ export function useThreadScroll(o: Options) {
       animateScroll(root, () => root.scrollHeight, 0)
       pendingUnread.current = t.pendingUnread
     } else if (t.kind === 'unread') {
-      scrollToUnread(t.no)
+      // ツリーでは未読の頭が途中に散らばるので、既読の番号のレス(読んでいた所)へ
+      scrollToUnread(latest.current.tree ? Math.max(1, t.no - 1) : t.no)
     } else if (t.kind === 'saved') {
       pendingUnread.current = !!t.pendingUnread
       const el = savedEl(t.position.no)
@@ -760,6 +801,15 @@ export function useThreadScroll(o: Options) {
     // 既読より後のレスだけが新着。別の端末で読んだ分が同期で既読になっていれば、あとから届いても光らせない
     const read = Math.max(sent.current, log.readNo)
     const fresh = log.posts.filter((p) => p.no > prevLastNo && p.no > read).map((p) => p.no)
+    if (latest.current.tree) {
+      // ツリー: 新着は途中に入るので動かさない(読んでいるレスは位置の固定が同じ所に留める)。光らせるだけ
+      setFlashNos(staggerDelays(fresh, STAGGER_MS, STAGGER_TOTAL_MS))
+      clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlashNos(new Map()), FLASH_MS + STAGGER_TOTAL_MS)
+      firstGrowth.current = false
+      pendingUnread.current = false
+      return
+    }
     if (fresh.length === 0) {
       // 一番下で未読を待っていた・開いた直後なら、既読の末尾(新しい一番下)まで送る。未読の頭はまだないので、待ち続ける
       if (!heldJump.current && (pendingUnread.current || (untouched.current && firstGrowth.current))) scrollToUnread(read + 1)
@@ -833,6 +883,7 @@ export function useThreadScroll(o: Options) {
       const ours = Math.abs(root.scrollTop - (anchor.current?.written ?? NaN)) < 1
       fixAnchor()
       if (!ours) recordAnchor()
+      markSeen()
     }
     const onScroll = () => {
       if (!scrollRaf) scrollRaf = requestAnimationFrame(onScrollFrame)
@@ -893,7 +944,7 @@ export function useThreadScroll(o: Options) {
       root.removeEventListener('touchmove', moved)
       root.removeEventListener('pointerdown', onPressRoot)
     }
-  }, [rootRef, listRef, updateJump, reportRead, recordAnchor, fixAnchor, noteUserMove])
+  }, [rootRef, listRef, updateJump, reportRead, recordAnchor, fixAnchor, noteUserMove, markSeen])
 
   /** 開いたときの位置決めが済んだか */
   const isPositioned = useCallback(() => positioned.current, [])

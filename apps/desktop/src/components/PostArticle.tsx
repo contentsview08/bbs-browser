@@ -147,8 +147,11 @@ interface Props {
   variant?: PostVariant
   /** Discord 風・LINE 風: 直前のレスと同じ ID(続けて書いた)。アイコンと頭を省く */
   continued?: boolean
-  /** Discord 風・LINE 風: 本文の先頭のアンカーの引用元(番号と本文の頭) */
-  replyPreview?: { no: number; text: string; id?: string }
+  /**
+   * Discord 風・LINE 風: 本文の先頭のアンカーの引用元(番号と本文の頭)。
+   * full なら本文を全部(改行も残して枠の中で折り返す。aa なら AA の字で折り返さない)
+   */
+  replyPreview?: { no: number; text: string; id?: string; full?: boolean; aa?: boolean }
   /** アンカーツリーの中のレス。LINE 風は自分の書き込みも左にそろえ、どのスタイルでも左端の縦の印(自分・自分宛て)を出さない
    *  (ツリーの線と重なって見にくいため。つながりはツリーの線で分かる) */
   alignLeft?: boolean
@@ -181,6 +184,12 @@ const AVATAR_GAP = isMobile ? 8 : 12
  */
 const AVATAR_BOX = { width: AVATAR, height: AVATAR }
 const AVATAR_COL = { width: AVATAR }
+
+/** 返信先の引用の本文。1 行なら省いて 1 行に、全文なら枠の中で折り返す(AA は AA の字で、横にはみ出す分は枠の中で送る) */
+function QuoteText({ q }: { q: { text: string; full?: boolean; aa?: boolean } }) {
+  if (!q.full) return <span className="truncate">{q.text}</span>
+  return <span className={`min-w-0 max-w-full text-left ${q.aa ? 'aa-font whitespace-pre overflow-x-auto' : 'whitespace-pre-wrap break-words'}`}>{q.text}</span>
+}
 
 /** サムネイルを読み込んでいる間の印(サムネイルの真ん中で回る) */
 function ThumbSpinner() {
@@ -853,16 +862,16 @@ function PostArticle(props: Props) {
    */
   const replyLine = (variant === 'discord') && props.replyPreview && (
     // 本文の始まり(アイコンの幅 + 隙間)にそろえる。スマホはアイコンが小さく隙間も狭いので、決まった値ではなく大きさから出す
-    <div className={`relative h-5 ${isMobile ? 'mb-1' : 'mb-0.5'} flex items-center`} style={{ paddingLeft: AVATAR + AVATAR_GAP }}>
-      {/* 大きいアイコンの真ん中の上から立ち上がり、右へ曲がって小さいアイコンの手前まで */}
+    <div className={`relative ${props.replyPreview.full ? 'min-h-5' : 'h-5'} ${isMobile ? 'mb-1' : 'mb-0.5'} flex items-center`} style={{ paddingLeft: AVATAR + AVATAR_GAP }}>
+      {/* 大きいアイコンの真ん中の上から立ち上がり、右へ曲がって小さいアイコンの手前まで(全文のときは 1 行目の高さで曲がる) */}
       <span
         aria-hidden
-        className={`absolute top-1/2 ${isMobile ? '-bottom-1' : '-bottom-0.5'} border-l-2 border-t-2 rounded-tl-md pointer-events-none`}
+        className={`absolute ${props.replyPreview.full ? 'top-[10px]' : 'top-1/2'} ${isMobile ? '-bottom-1' : '-bottom-0.5'} border-l-2 border-t-2 rounded-tl-md pointer-events-none`}
         style={{ borderColor: 'var(--c-border-strong)', left: AVATAR / 2, width: AVATAR / 2 + AVATAR_GAP - 4 }}
       />
       <button
         type="button"
-        className={`flex items-center gap-[6px] min-w-0 max-w-full ${REPLY_TEXT} text-c-text-muted hover:text-c-text-body`}
+        className={`flex ${props.replyPreview.full ? 'items-start' : 'items-center'} gap-[6px] min-w-0 max-w-full ${REPLY_TEXT} text-c-text-muted hover:text-c-text-body`}
         onClick={(e) => {
           e.stopPropagation()
           handlers.onAnchor([props.replyPreview!.no], e.currentTarget, 'click')
@@ -878,7 +887,7 @@ function PostArticle(props: Props) {
             <span className="material-symbols-outlined fill text-[12px] leading-none">person</span>
           </span>
         )}
-        <span className="truncate">{props.replyPreview.text}</span>
+        <QuoteText q={props.replyPreview} />
       </button>
     </div>
   )
@@ -1135,7 +1144,7 @@ function PostArticle(props: Props) {
   const lineQuote = props.replyPreview && (
     <button
       type="button"
-      className={`flex items-center gap-[6px] min-w-0 max-w-full mb-[6px] pl-[8px] border-l-2 ${REPLY_TEXT} text-c-text-muted hover:text-c-text-body text-left`}
+      className={`flex ${props.replyPreview.full ? 'items-start' : 'items-center'} gap-[6px] min-w-0 max-w-full mb-[6px] pl-[8px] border-l-2 ${REPLY_TEXT} text-c-text-muted hover:text-c-text-body text-left`}
       style={{ borderColor: 'currentColor' }}
       onClick={(e) => {
         e.stopPropagation()
@@ -1148,7 +1157,7 @@ function PostArticle(props: Props) {
           <Identicon seed={props.replyPreview.id} size={16} />
         </span>
       )}
-      <span className="truncate">{props.replyPreview.text}</span>
+      <QuoteText q={props.replyPreview} />
     </button>
   )
   // LINE 風のときだけ組み立てる

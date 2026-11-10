@@ -47,6 +47,70 @@ export function effectivePostStyle(s: Pick<AppSettings, 'postStyle'>): PostStyle
 export function baseVariant(v: PostStyle): 'card' | 'discord' | 'classic' | 'line' {
   return v === 'matome' ? 'card' : v
 }
+/** 返信先の引用の出し方(Discord 風・LINE 風): 1 行・全文・出さない */
+export type QuoteStyle = 'line' | 'full' | 'none'
+export const QUOTE_STYLES: { key: QuoteStyle; name: string }[] = [
+  { key: 'line', name: '1 行' },
+  { key: 'full', name: '全文' },
+  { key: 'none', name: '出さない' },
+]
+/**
+ * 見た目ごとの設定(見た目ごとに別々に覚える。決めていない項目は既定 = 今までの動き)。
+ * ツリー表示はカード・専ブラ風・まとめ風、引用とまとめは Discord 風・LINE 風だけに効く(bbs-suite の docs/style-tree.md)
+ */
+export interface StyleOptions {
+  /** ツリー表示(返信を最初のアンカー先の下に字下げして並べる) */
+  tree?: boolean
+  /** 字下げの深さの上限(段) */
+  treeDepth?: number
+  /** 返信先の引用 */
+  quote?: QuoteStyle
+  /** 同じ人が続けて書いたレスの名前・アイコンを省く */
+  groupRuns?: boolean
+}
+/** ツリー表示のある見た目 */
+export const TREE_STYLES: ReadonlySet<PostStyle> = new Set(['card', 'classic', 'matome'])
+/** 返信先の引用・続けて書いたレスのまとめのある見た目 */
+export const QUOTE_STYLE_POSTS: ReadonlySet<PostStyle> = new Set(['discord', 'line'])
+/** 字下げの深さの上限の幅(段) */
+export const TREE_DEPTH_MIN = 1
+export const TREE_DEPTH_MAX = 10
+/** 字下げの深さの上限の既定(スマホは狭いので浅く) */
+export const TREE_DEPTH_DEFAULT = isMobile ? 3 : 6
+/** その見た目の設定(決めていない項目は既定で埋める) */
+export function styleOptionsOf(s: Pick<AppSettings, 'styleOptions'>, style: PostStyle): Required<StyleOptions> {
+  const o = s.styleOptions?.[style] ?? {}
+  return {
+    tree: TREE_STYLES.has(style) && o.tree === true,
+    treeDepth: clampTreeDepth(o.treeDepth),
+    quote: o.quote ?? 'line',
+    groupRuns: o.groupRuns ?? true,
+  }
+}
+function clampTreeDepth(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(TREE_DEPTH_MAX, Math.max(TREE_DEPTH_MIN, Math.round(v))) : TREE_DEPTH_DEFAULT
+}
+/** 見た目ごとの設定を 1 項目だけ変えた値(update('styleOptions', …) に渡す) */
+export function withStyleOption<K extends keyof StyleOptions>(s: Pick<AppSettings, 'styleOptions'>, style: PostStyle, key: K, value: StyleOptions[K]): AppSettings['styleOptions'] {
+  return { ...s.styleOptions, [style]: { ...s.styleOptions?.[style], [key]: value } }
+}
+/** 保存されていた見た目ごとの設定を、知っている見た目・項目・値だけにする(壊れた値・古い値で落ちないように) */
+function cleanStyleOptions(v: unknown): AppSettings['styleOptions'] {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const out: AppSettings['styleOptions'] = {}
+  for (const { key } of POST_STYLES) {
+    const o = (v as Record<string, unknown>)[key]
+    if (!o || typeof o !== 'object') continue
+    const src = o as Record<string, unknown>
+    const clean: StyleOptions = {}
+    if (typeof src.tree === 'boolean') clean.tree = src.tree
+    if (typeof src.treeDepth === 'number') clean.treeDepth = clampTreeDepth(src.treeDepth)
+    if (src.quote === 'line' || src.quote === 'full' || src.quote === 'none') clean.quote = src.quote
+    if (typeof src.groupRuns === 'boolean') clean.groupRuns = src.groupRuns
+    out[key] = clean
+  }
+  return out
+}
 /**
  * 実際に使う密度。PC もスマホも、レスの見た目で決める。
  * 吹き出し・アイコンで並べる Discord 風・LINE 風は一覧表示、カード・専ブラ風・まとめ風は高密度
@@ -186,6 +250,8 @@ export interface AppSettings {
   darkScheme: ColorScheme
   lightScheme: ColorScheme
   postStyle: PostStyle
+  /** 見た目ごとの設定(見た目 → ツリー表示・字下げの上限・引用・まとめ)。端末ごとの表示の設定なので同期しない */
+  styleOptions: Partial<Record<PostStyle, StyleOptions>>
   /** 文字の大きさ(px)。1px ずつ変えられる。スマホは mobileFontPx(画面が狭いので既定は小さい) */
   fontPx: number
   /** レスの本文・頭、スレ一覧の、決めていないときの大きさ(px)。基本の文字を変えても動かない */
@@ -463,6 +529,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   darkScheme: 'soft-dark',
   lightScheme: 'light-gray',
   postStyle: 'card',
+  styleOptions: {},
   fontPx: 16,
   contentBasePx: 16,
   mobileContentBasePx: 14,
@@ -816,6 +883,7 @@ export function migrateValues(s: Partial<AppSettings>): Partial<AppSettings> {
   if (s.mouseGestures !== undefined) out.mouseGestures = migrateMouseGestures(s.mouseGestures)
   if (s.liveRefreshSec !== undefined) out.liveRefreshSec = clampLiveRefresh(s.liveRefreshSec)
   if (s.liveScrollSpeed !== undefined) out.liveScrollSpeed = clampLiveSpeed(s.liveScrollSpeed)
+  if (s.styleOptions !== undefined) out.styleOptions = cleanStyleOptions(s.styleOptions)
   return out
 }
 

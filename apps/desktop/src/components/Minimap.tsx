@@ -30,6 +30,8 @@ interface Props {
   ownNos: Set<number>
   replyToOwn: Set<number>
   unreadFrom: number
+  /** ツリー表示: この番号から後ろのレスに新着の印を付ける(「ここから未読」の帯は出さないので unreadFrom は 0 で渡す) */
+  newFrom?: number
   /** ヘッダーの高さ。ミニマップはその下から始める */
   topOffset: number
   onJump: (no: number) => void
@@ -106,7 +108,8 @@ export default function Minimap(props: Props) {
       // 上下の端にはヘッダー・フッターが重なっているので、レスに当たるまで少しずつ内側へずらして探す
       const at = (from: number, dir: 1 | -1) => {
         for (let k = 0; k < 24; k++) {
-          const el = document.elementFromPoint(x, from + dir * k * 20)?.closest<HTMLElement>('.post-cv')
+          // ツリーで重ねて出した分(data-post がない)は飛ばす
+          const el = document.elementFromPoint(x, from + dir * k * 20)?.closest<HTMLElement>('.post-cv[data-post]')
           if (el && root.contains(el)) return indexOf.current.get(Number(el.dataset.post))
         }
         return undefined
@@ -165,8 +168,11 @@ export default function Minimap(props: Props) {
     const own: { no: number; at: number }[] = []
     const reply: { no: number; at: number }[] = []
     const media: { no: number; at: number; type: 'image' | 'video' }[] = []
+    const fresh: { no: number; at: number }[] = []
+    const newFrom = props.newFrom ?? 0
     posts.forEach((p, i) => {
       const at = pct(p.no, i)
+      if (newFrom > 1 && p.no >= newFrom) fresh.push({ no: p.no, at })
       const count = props.anchorCounts.get(p.no) ?? 0
       if (count >= 3) heat.push({ no: p.no, at, count })
       if (props.ownNos.has(p.no)) own.push({ no: p.no, at })
@@ -174,9 +180,9 @@ export default function Minimap(props: Props) {
       if (imageUrlsIn(p.body).length > 0) media.push({ no: p.no, at, type: 'image' })
       else if (hasVideo(p.body)) media.push({ no: p.no, at, type: 'video' })
     })
-    return { heat, own, reply, media }
+    return { heat, own, reply, media, fresh }
     // pct は pcts と posts から決まるので、依存はこれで足りる
-  }, [posts, pcts, props.anchorCounts, props.ownNos, props.replyToOwn])
+  }, [posts, pcts, props.anchorCounts, props.ownNos, props.replyToOwn, props.newFrom])
 
   const unreadIndex = props.unreadFrom > 1 ? posts.findIndex((p) => p.no === props.unreadFrom) : -1
   const unreadAt = unreadIndex >= 0 ? pct(props.unreadFrom, unreadIndex) : undefined
@@ -227,6 +233,17 @@ export default function Minimap(props: Props) {
     }
     return (
       <>
+        {/* ツリーの新着: 左右いっぱいの細い線(未読の色)。押すとそのレスへ */}
+        {markers.fresh.map((m) => (
+          <button
+            key={`new-${m.no}`}
+            type="button"
+            onClick={jump(m.no)}
+            className="absolute left-0 right-0 h-[2px] -translate-y-1/2 z-[9]"
+            style={{ top: `${m.at}%`, background: 'var(--c-unread)' }}
+            title={`新着: >>${m.no}`}
+          />
+        ))}
         {/* 真ん中: 人気レス(被アンカー 3 件以上)の帯。多いほど暖かい色 */}
         {markers.heat.map((m) => (
           <button

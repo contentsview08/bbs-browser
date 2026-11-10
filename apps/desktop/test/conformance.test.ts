@@ -20,6 +20,7 @@ import { TLDS } from '../src/utils/urlFind'
 import { favIncrease } from '../src/utils/watch'
 import { threadUnread, unreadFirstOrder } from '../src/utils/unread'
 import { matchRanges, newRule, patternError, postMatcher, type NgTarget } from '../src/utils/ng'
+import { buildPostTree } from '../src/utils/postTree'
 
 interface Case<I, E> {
   name: string
@@ -110,4 +111,19 @@ describe('fav-new.json', () => {
   it.each(load<{ now: number; before?: number; localCount: number; readNo: number }, number>('fav-new.json'))('$name', (c) => {
     expect(favIncrease(c.input.now, c.input.before, c.input.localCount, c.input.readNo)).toBe(expectedOf(c))
   })
+})
+
+describe('tree.json(ツリー表示の並べ方)', () => {
+  for (const c of load<{ posts: [number, string][]; aborn: number[]; maxDepth: number }, { no: number; depth: number; ghost?: boolean }[]>('tree.json')) {
+    it(c.name, () => {
+      const bodies = new Map(c.input.posts)
+      const aborn = new Set(c.input.aborn)
+      const t = buildPostTree(
+        c.input.posts.map(([no]) => no),
+        (no) => anchorTargets(bodies.get(no) ?? ''),
+        { maxDepth: c.input.maxDepth, isGone: (no) => aborn.has(no) },
+      )
+      expect(t.rows.map((r) => ({ no: r.no, depth: r.depth, ...(r.dup && { ghost: true }) }))).toEqual(expectedOf(c))
+    })
+  }
 })

@@ -105,7 +105,7 @@ export interface PostRect {
 
 /**
  * どこまで読んだかと、読んでいた位置を求める。
- * - 画面の下端より上に頭が出ているレスのうち、いちばん後ろの番号を既読にする
+ * - 画面の下端より上に頭が出ているレスのうち、いちばん大きい番号を既読にする(番号の順の表示。ツリーは contiguousRead で決める)
  * - 一番下まで来ていれば、絞り込みや NG で隠れているレスも含めて全部読んだことにする
  * - ヘッダーの下に少しでも見えている最初のレスを、読んでいた位置として覚える
  */
@@ -121,11 +121,25 @@ export function readProgress(input: {
   for (const r of input.rects) {
     if (r.hidden) continue
     if (r.top >= input.viewBottom) break
-    last = r.no
+    last = Math.max(last, r.no)
     if (!top && r.bottom > input.viewTop) top = { no: r.no, offset: r.top - input.viewTop }
   }
   if (input.atBottom) last = Math.max(last, input.lastNo)
   return { last, position: top && { ...top, bottom: input.atBottom } }
+}
+
+/**
+ * ツリー表示の既読。番号の順のレス(nos)を若い方から見て、既読(readNo まで)か画面に出したもの(seen)が途切れずに続く最後の番号。
+ * 後ろの番号の返信が先に見えても、その前のレスを出し終えるまでは既読を飛ばさない
+ */
+export function contiguousRead(nos: readonly number[], readNo: number, seen: ReadonlySet<number>): number {
+  let last = readNo
+  for (const no of nos) {
+    if (no <= readNo) continue
+    if (!seen.has(no)) break
+    last = no
+  }
+  return last
 }
 
 /**

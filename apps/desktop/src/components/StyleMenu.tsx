@@ -1,4 +1,5 @@
-// 表示スタイルの画面(︙ の「表示スタイル」): 見た目(テーマ・差し色・レスの見た目)・文字と余白・レスの表示を、上のタブで切り替える 1 つの画面にまとめる。
+// 表示スタイルの画面(︙ の「表示スタイル」): 配色(テーマ・差し色)・見た目(レスの見た目と、その見た目だけの設定)・文字と余白・細かい表示を、
+// 上のタブで切り替える 1 つの画面にまとめる(決まりは bbs-suite の docs/style-tree.md)。
 // 変えた結果を後ろのスレで見ながら合わせられるよう、後ろは暗くしない。
 // PC は題の帯をつかんで動かせる窓(置き場所は覚える。外を押しても閉じず、× と Esc で閉じる)。
 // スマホは下から半分ほどのシート(上にスレが見える。スマホ版の StyleSheet と同じ形・同じ順)
@@ -9,10 +10,32 @@ import { isMobile } from '../utils/platform'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useBackdropClose } from '../hooks/useDialogClose'
 import { useDialogRect } from '../hooks/useDialogRect'
-import { SliderDragScope, useSliderDragScope } from './FontSizeSlider'
+import FontSizeSlider, { SliderDragScope, useSliderDragScope } from './FontSizeSlider'
 import { DialogHeader } from './DialogParts'
 import { Toggle } from './SettingParts'
-import { COLOR_SCHEMES, ACCENTS, ID_POSITIONS, ID_STYLES, isDarkScheme, MOBILE_POST_STYLES, POST_STYLES, effectivePostStyle, effectiveScheme, pickSchemeNow, type AppSettings, type UpdateSetting } from '../ui/settings'
+import {
+  COLOR_SCHEMES,
+  ACCENTS,
+  ID_POSITIONS,
+  ID_STYLES,
+  isDarkScheme,
+  MOBILE_POST_STYLES,
+  POST_STYLES,
+  QUOTE_STYLES,
+  QUOTE_STYLE_POSTS,
+  TREE_DEPTH_DEFAULT,
+  TREE_DEPTH_MAX,
+  TREE_DEPTH_MIN,
+  TREE_STYLES,
+  effectivePostStyle,
+  effectiveScheme,
+  pickSchemeNow,
+  styleOptionsOf,
+  withStyleOption,
+  type AppSettings,
+  type PostStyle,
+  type UpdateSetting,
+} from '../ui/settings'
 
 const LABEL = isMobile ? 'px-[16px] pt-[10px] pb-[6px] text-[12px] font-bold text-c-text-muted' : 'px-4 pt-3 pb-1.5 text-[11px] font-bold text-c-text-muted tracking-wide'
 
@@ -114,26 +137,84 @@ function PostStyleChips({ settings, update }: { settings: AppSettings; update: U
   )
 }
 
-/** 画面の上のタブ。最後に開いたタブはこの端末に覚える(同期しない) */
-type StyleTab = 'look' | 'size' | 'post'
+/** 見た目の名前(スマホは括弧の中の説明を省く) */
+export function postStyleName(style: PostStyle): string {
+  const name = POST_STYLES.find((p) => p.key === style)?.name ?? ''
+  return isMobile ? name.replace(/[(（].*$/, '') : name
+}
+
+/** 字下げの深さの上限のスライダー(文字と余白と同じ部品。動かして離したら保存する) */
+export function DepthSlider(props: { value: number; onChange: (v: number) => void; fixedSize?: boolean }) {
+  return (
+    <FontSizeSlider
+      label="字下げの深さの上限"
+      value={props.value}
+      base={TREE_DEPTH_DEFAULT}
+      min={TREE_DEPTH_MIN}
+      max={TREE_DEPTH_MAX}
+      format={(v) => `${v}`}
+      icons={['format_indent_decrease', 'format_indent_increase']}
+      preview={() => {}}
+      onCommit={props.onChange}
+      fixedSize={props.fixedSize}
+    />
+  )
+}
+
+/**
+ * 選んでいる見た目だけの設定(見出し「〇〇の設定」)。値は見た目ごとに別々に覚える。
+ * カード・専ブラ風・まとめ風: ツリー表示・字下げの深さの上限。Discord 風・LINE 風: 返信先の引用・続けて書いたレスをまとめる
+ */
+function StyleOptionItems({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
+  const style = effectivePostStyle(settings)
+  const o = styleOptionsOf(settings, style)
+  const set = <K extends keyof typeof o>(key: K, value: (typeof o)[K]) => update('styleOptions', withStyleOption(settings, style, key, value))
+  const pad = isMobile ? 'px-[16px]' : 'px-4'
+  return (
+    <>
+      <p className={LABEL}>{postStyleName(style)}の設定</p>
+      {TREE_STYLES.has(style) && (
+        <>
+          <div className={pad}>
+            <Toggle checked={o.tree} onChange={(v) => set('tree', v)} label="ツリー表示" />
+          </div>
+          {/* 深さはツリーにしているときだけ */}
+          {o.tree && <DepthSlider value={o.treeDepth} onChange={(v) => set('treeDepth', v)} />}
+        </>
+      )}
+      {QUOTE_STYLE_POSTS.has(style) && (
+        <>
+          <ChoiceChips label="返信先の引用" value={o.quote} options={QUOTE_STYLES} onChange={(v) => set('quote', v)} />
+          <div className={pad}>
+            <Toggle checked={o.groupRuns} onChange={(v) => set('groupRuns', v)} label="続けて書いたレスをまとめる" />
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+/** 画面の上のタブ(配色・見た目・文字と余白・細かい表示)。最後に開いたタブはこの端末に覚える(同期しない) */
+type StyleTab = 'color' | 'style' | 'size' | 'post'
 const TAB_KEY = 'bbs:style-dialog-tab'
 function loadTab(): StyleTab {
   try {
     const v = localStorage.getItem(TAB_KEY)
-    return v === 'size' || v === 'post' ? v : 'look'
+    // 前の「スキン」(look)は配色にあたる
+    return v === 'style' || v === 'size' || v === 'post' ? v : 'color'
   } catch {
-    return 'look'
+    return 'color'
   }
 }
 function saveTab(t: StyleTab) {
   try {
     localStorage.setItem(TAB_KEY, t)
   } catch {
-    // 覚えられなくても困らない(次は「見た目」から開く)
+    // 覚えられなくても困らない(次は「配色」から開く)
   }
 }
 
-/** 選択肢を札で並べる(レスの表示のタブ) */
+/** 選択肢を札で並べる(見た目・細かい表示のタブ) */
 function ChoiceChips<T extends string>(props: { label: string; value: T; options: { key: T; name: string; note?: string }[]; onChange: (v: T) => void }) {
   return (
     <div className={isMobile ? 'px-[16px] py-[8px]' : 'px-4 py-1.5'}>
@@ -159,7 +240,7 @@ function ChoiceChips<T extends string>(props: { label: string; value: T; options
   )
 }
 
-/** レスの表示: 設定の「レス表示」の名前と ID・本文・日時の項目(言葉も設定の画面と同じ。設定の画面にも残してある) */
+/** 細かい表示: どの見た目にも効く、設定の「レス表示」の名前と ID・本文・日時の項目(言葉も設定の画面と同じ。設定の画面にも残してある) */
 function PostDisplayItems({ settings: s, update }: { settings: AppSettings; update: UpdateSetting }) {
   return (
     <div className={isMobile ? '' : 'py-1'}>
@@ -194,9 +275,9 @@ function PostDisplayItems({ settings: s, update }: { settings: AppSettings; upda
 }
 
 /**
- * 表示スタイルの画面。上のタブで 見た目(テーマ・差し色・レスの見た目)・文字と余白(sliders)・レスの表示 を切り替える。
+ * 表示スタイルの画面。上のタブで 配色(テーマ・差し色)・見た目(レスの見た目と、その見た目だけの設定)・文字と余白(sliders)・細かい表示 を切り替える。
  * sliders は「文字と余白」の中身(スレ表示ならレスの、スレ一覧なら一覧のスライダー)。
- * from: どこから開いたか。スレ一覧からは、レスに関わるもの(レスの見た目・レスの表示)を出さない。
+ * from: どこから開いたか。スレ一覧からは、スレ表示だけのタブ(細かい表示)を出さない。
  * PC の窓は、初めはその反対の側に出し、置き場所はそれぞれ覚える
  */
 export function StyleDialog(props: { settings: AppSettings; update: UpdateSetting; sliders: ReactNode; from: 'list' | 'thread'; onClose: () => void }) {
@@ -210,12 +291,13 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
   const { active, scope } = useSliderDragScope()
   const thread = props.from === 'thread'
   const tabs: { key: StyleTab; name: string }[] = [
-    { key: 'look', name: 'スキン' },
+    { key: 'color', name: '配色' },
+    { key: 'style', name: '見た目' },
     { key: 'size', name: '文字と余白' },
-    ...(thread ? [{ key: 'post' as const, name: 'レスの表示' }] : []),
+    ...(thread ? [{ key: 'post' as const, name: '細かい表示' }] : []),
   ]
   const [tab, setTab] = useState<StyleTab>(loadTab)
-  const shown = tabs.some((t) => t.key === tab) ? tab : 'look'
+  const shown = tabs.some((t) => t.key === tab) ? tab : 'color'
   const tabBar = (
     <div role="tablist" className="flex-shrink-0 flex border-b border-c-border">
       {tabs.map((t) => {
@@ -230,7 +312,7 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
               setTab(t.key)
               saveTab(t.key)
             }}
-            className={`flex-1 border-b-2 -mb-px ${isMobile ? 'py-[10px] text-[14px]' : 'py-2 text-sm'} ${on ? 'font-bold text-c-text-strong' : 'border-transparent text-c-text-muted hover:text-c-text-body'}`}
+            className={`flex-1 border-b-2 -mb-px whitespace-nowrap ${isMobile ? 'py-[10px] text-[14px]' : 'py-2 text-sm'} ${on ? 'font-bold text-c-text-strong' : 'border-transparent text-c-text-muted hover:text-c-text-body'}`}
             style={on ? { borderColor: 'var(--c-accent)' } : undefined}
           >
             {t.name}
@@ -240,18 +322,18 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
     </div>
   )
   const body =
-    shown === 'look' ? (
+    shown === 'color' ? (
       <>
         <p className={LABEL}>カラーテーマ</p>
         <SchemeTiles settings={settings} update={update} />
         <p className={LABEL}>差し色</p>
         <AccentDots settings={settings} update={update} />
-        {thread && (
-          <>
-            <p className={LABEL}>レスの見た目</p>
-            <PostStyleChips settings={settings} update={update} />
-          </>
-        )}
+      </>
+    ) : shown === 'style' ? (
+      <>
+        <p className={LABEL}>レスの見た目</p>
+        <PostStyleChips settings={settings} update={update} />
+        <StyleOptionItems settings={settings} update={update} />
       </>
     ) : shown === 'size' ? (
       <div className={isMobile ? 'pt-[4px]' : 'pt-1'}>{props.sliders}</div>
@@ -356,7 +438,7 @@ function MobileSheet(props: { boxRef: RefObject<HTMLDivElement | null>; hidden: 
         ref={props.boxRef}
         className="w-full flex flex-col bg-c-surface border-t border-c-border rounded-t-[16px] shadow-[0_-8px_24px_rgba(0,0,0,0.25)] sheet-rise"
         style={{
-          // よく使う上の 3 つ(テーマ・差し色・レスの見た目)が最初に収まる高さで、上には画面が半分ほど見えるように
+          // 配色のタブ(テーマ・差し色)と見た目のタブ(札と、その見た目の設定)が最初に収まる高さで、上には画面が半分ほど見えるように
           height: 'min(calc(100dvh - 80px), max(50dvh, 380px))',
           paddingBottom: 'env(safe-area-inset-bottom)',
           transform: drag ? `translateY(${drag}px)` : undefined,

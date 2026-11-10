@@ -67,10 +67,11 @@ import {
   imageUrlsIn,
   normalizeForSearch,
   videoFileUrlsIn,
-  youtubeLinksIn, mostCommonName } from '../utils/postBody'
+  youtubeLinksIn, mostCommonName, looksLikeAA } from '../utils/postBody'
+import { buildPostTree } from '../utils/postTree'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
-import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
+import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
 
 export type { ScrollPosition } from '../utils/threadScroll'
 
@@ -245,6 +246,10 @@ const NEW_TOAST_MS = 2500
 const HOVER_DELAY_MS = 150
 /** ホバーで開いたポップアップは、まだ中に入っていなければ、開いた位置からこれだけ離れたら(その 1 枚を)閉じる */
 const HOVER_ESCAPE_PX = 100
+/** ツリー表示の字下げ 1 段の幅(px) */
+const TREE_INDENT = isMobile ? 8 : 16
+/** ツリーの段の縦線の色(スマホ版と同じ、薄い字の色の 35%) */
+const TREE_RULE = 'color-mix(in srgb, var(--c-text-muted) 35%, transparent)'
 
 /**
  * 書き込み欄との境界。ドラッグ中は親に大きさを知らせ、離したときに保存してもらう。
@@ -390,6 +395,10 @@ interface FrameShared {
   variant: PostVariant
   replyPreviewOf: (p: Post) => ArticleProps['replyPreview']
   continuedFrom: (i: number) => boolean
+  /** 続けて書いたレスの名前・アイコンを省く(Discord 風・LINE 風の見た目ごとの設定) */
+  groupRuns: boolean
+  /** ツリーで重ねて出したレスを押したとき、1 回目の出現へ飛ぶ */
+  onJumpPrimary: (no: number) => void
   isNg: (p: Post) => boolean
   autoNg: Map<number, AutoNgReason>
   aiMarkOf: (no: number) => ArticleProps['aiMark']
@@ -442,8 +451,9 @@ function continuedHead(
   replyPreviewOf: (p: Post) => unknown,
   continuedFrom: (i: number) => boolean,
   firstUnread: boolean,
+  groupRuns: boolean,
 ): boolean {
-  return ((anchorCounts.get(p.no) ?? 0) === 0 || (variant === 'line' && !!ownNos?.has(p.no))) && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
+  return groupRuns && ((anchorCounts.get(p.no) ?? 0) === 0 || (variant === 'line' && !!ownNos?.has(p.no))) && (variant === 'line' || (variant === 'discord' && !replyPreviewOf(p))) && !firstUnread && continuedFrom(i)
 }
 
 /**
@@ -474,13 +484,20 @@ const PostFrame = memo(function PostFrame(props: {
   /** あぼーんのまとまりの先頭なら、そのまとまり */
   runHead?: { nos: number[]; auto: number; ai: number; rule: number }
   runOpen: boolean
+  /** ツリー表示の字下げの段(ツリーでなければ undefined) */
+  depth?: number
+  /** ツリーで 2 つ目・3 つ目のアンカー先の下に重ねて出した分(薄く出し、押すと 1 回目の出現へ飛ぶ)。既読・キー操作の枠には数えない */
+  dup?: boolean
+  /** ツリーの新着の印(前回の既読より後のレス) */
+  newMark?: boolean
 }) {
-  const { post: p, index: i, shared: s, rendered, height, firstUnread, enterDelay, runHead } = props
+  const { post: p, index: i, shared: s, rendered, height, firstUnread, enterDelay, runHead, depth, dup } = props
+  const indent = depth === undefined ? 0 : depth * TREE_INDENT
   return (
     <div
       className={`post-cv relative ${enterDelay !== undefined ? 'post-enter' : ''}`}
       // スマホには「選んでいるレス」がない(押したレスに印を付けない)
-      onPointerDown={isMobile ? undefined : () => s.onPress(p.no)}
+      onPointerDown={isMobile || dup ? undefined : () => s.onPress(p.no)}
       style={
         {
           // 画面の外で描くのを省いている間の仮の高さ(覚えておいた高さか、本文からの見積もり)
@@ -488,11 +505,44 @@ const PostFrame = memo(function PostFrame(props: {
           // まだ中身を作っていないレスは、仮の高さの箱にしておく(画面に入っても高さがつぶれないように)
           ...(!rendered && { minHeight: height }),
           ...(enterDelay !== undefined && { '--enter-delay': `${enterDelay}ms` }),
+          ...(indent > 0 && { paddingLeft: indent }),
+          ...(dup && { opacity: 0.5 }),
         } as CSSProperties
       }
-      data-post={p.no}
+      // 重ねて出した分は data-post を持たない(framesIn・[data-post=…] で探す所が 1 回目の出現だけを見るように)
+      data-post={dup ? undefined : p.no}
+      data-dup={dup ? p.no : undefined}
       data-placeholder={rendered ? undefined : ''}
       hidden={props.frameHidden}>
+      {/* ツリーの字下げの段ごとの細い縦線(段の真ん中。要素を増やさないよう、1 つの帯の背景で描く) */}
+      {depth !== undefined && depth > 0 && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-0 bottom-0 pointer-events-none"
+          style={{
+            width: depth * TREE_INDENT,
+            background: `repeating-linear-gradient(to right, transparent 0 ${TREE_INDENT / 2}px, ${TREE_RULE} ${TREE_INDENT / 2}px ${TREE_INDENT / 2 + 1}px, transparent ${TREE_INDENT / 2 + 1}px ${TREE_INDENT}px)`,
+          }}
+        />
+      )}
+      {/* ツリーの新着の印(「ここから未読」の線の代わり)。左端の未読の色の帯と、淡い面(スマホ版と同じ) */}
+      {props.newMark && (
+        <span
+          aria-hidden
+          className="absolute inset-0 pointer-events-none -z-[1]"
+          style={{ background: 'color-mix(in srgb, var(--c-unread) 7%, transparent)', borderLeft: '3px solid var(--c-unread)' }}
+        />
+      )}
+      {/* 重ねて出した分は、どこを押しても 1 回目の出現へ(中のボタンは押せない) */}
+      {dup && (
+        <button
+          type="button"
+          className="absolute inset-0 z-[3] cursor-pointer"
+          onClick={() => s.onJumpPrimary(p.no)}
+          title={`>>${p.ref ?? p.no} の本来の位置へ`}
+          aria-label={`>>${p.ref ?? p.no} の本来の位置へ`}
+        />
+      )}
       {props.unreadLine && <Divider label="ここから未読" self />}
       {/* 選んでいるレスと同じ ID のレスは、さらに薄く色を付ける(同じ人の流れを追いやすく) */}
       {props.sameIdTint && (
@@ -522,7 +572,7 @@ const PostFrame = memo(function PostFrame(props: {
         <PostArticle
           {...postArticleProps(p, s)}
           showTopDivider={i > 0 && !firstUnread && (s.variant === 'card' || s.variant === 'matome')}
-          continued={continuedHead(p, i, s.variant, s.anchorCounts, s.ownNos, s.replyPreviewOf, s.continuedFrom, firstUnread)}
+          continued={continuedHead(p, i, s.variant, s.anchorCounts, s.ownNos, s.replyPreviewOf, s.continuedFrom, firstUnread, s.groupRuns)}
           replyPreview={s.variant === 'discord' || s.variant === 'line' ? s.replyPreviewOf(p) : undefined}
           ngMode={s.ngMode}
           flash={enterDelay !== undefined}
@@ -949,46 +999,10 @@ export default function ThreadView(props: Props) {
     [props.nonameName, props.extraNonames, commonName, props.omitNoname, settings.omitNoname, settings.tidyBlankLines, settings.watchoiShort, props.splitPostIcon],
   )
   const opId = settings.highlightOp && log.posts[0]?.no === 1 ? log.posts[0].id : undefined
-  // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
-  /** 開く位置の前後 FIRST_RENDER 件の範囲。レスがまだない(読み込み中)なら、まだ何も作らない(hi 0) */
-  const firstWindow = () => {
-    const posts = log.posts
-    const n = posts.length
-    const at = (no: number) => posts.findIndex((p) => p.no >= no)
-    const found = (p?: ScrollPosition) => !!p && posts.some((x) => x.no === p.no)
-    const closed = closedPosition(props.threadKey)
-    // 開く位置(useThreadScroll が動かす先と同じ決まり)
-    const t = openTarget({
-      saved: props.initialPosition,
-      savedFound: found(props.initialPosition),
-      closed: found(closed) ? closed : undefined,
-      openPosition: settings.openPosition,
-      unreadFrom,
-      hasUnreadPost: posts.some((p) => p.no === unreadFrom),
-      readNo: log.readNo,
-    })
-    const anchor = t.kind === 'bottom' ? n - 1 : t.kind === 'saved' ? at(t.position.no) : t.kind === 'unread' ? at(t.no) : 0
-    if (n === 0) return { lo: 0, hi: 0 }
-    const a = anchor < 0 ? n - 1 : anchor
-    const lo = Math.max(0, a - FIRST_RENDER / 2)
-    const hi = Math.min(n, a + FIRST_RENDER / 2)
-    return { lo, hi: hi >= n ? Infinity : hi }
-  }
-  /** 中身を作るレスの範囲 [lo, hi)(log.posts の位置)。hi が Infinity なら末尾まで(新着もすぐ作る) */
-  const [renderWin, setRenderWin] = useState(firstWindow)
-  // 読み込み中(レス 0 件)に開いたスレは、レスが届いたところで開く位置の前後に決め直す
-  const windowPending = useRef(log.posts.length === 0)
-  useLayoutEffect(() => {
-    if (!windowPending.current || log.posts.length === 0) return
-    windowPending.current = false
-    setRenderWin(firstWindow())
-    // レスが初めて届いたときだけ
-  }, [log.posts.length])
-  // 見えている所の前後だけ中身を作り、スクロールに合わせて範囲を動かす(下の仮想スクロール)。PC もスマホも同じ
-  const isRendered = useCallback((i: number) => i >= renderWin.lo && i < renderWin.hi, [renderWin])
-
   /** レスの見た目のスタイル(設定) */
   const variant: PostVariant = effectivePostStyle(settings)
+  /** 選んでいる見た目だけの設定(ツリー表示・引用・続けて書いたレスのまとめ) */
+  const styleOpts = styleOptionsOf(settings, variant)
   /** 絞り込みと検索のあとに見えるレス。何も選んでいなければ undefined(全部見える) */
   const matchesFilter = useCallback(
     (p: Post, key: PostFilter) =>
@@ -1035,6 +1049,93 @@ export default function ThreadView(props: Props) {
     [log.posts, visibleNos],
   )
   const byNo = useMemo(() => new Map(log.posts.map((p) => [p.no, p])), [log.posts])
+  /**
+   * ツリー表示(カード・専ブラ風・まとめ風の見た目ごとの設定)。実況モード・検索・絞り込みの間は番号の順にする。
+   * 返信を最初のアンカー先の下に字下げして並べる(組み方は utils/postTree.ts)
+   */
+  const treeOn = styleOpts.tree && !liveMode && visibleNos === undefined
+  const tree = useMemo(
+    () =>
+      treeOn
+        ? buildPostTree(
+            log.posts.map((p) => p.no),
+            (no) => targetsOfPost(byNo.get(no)!, resolveAnchor, quoteLinks),
+            {
+              maxDepth: styleOpts.treeDepth,
+              // NG であぼーんのレスへのアンカーは、ないものとして扱う
+              isGone: (no) => {
+                const p = byNo.get(no)
+                return !!p && isNg(p)
+              },
+            },
+          )
+        : undefined,
+    [treeOn, log.posts, byNo, resolveAnchor, quoteLinks, styleOpts.treeDepth, isNg],
+  )
+  /** 画面に並ぶ順のレス(ツリーなら 1 回目の出現の順。番号の順なら log.posts)。中身を作る範囲・ミニマップはこの順で数える */
+  const orderedPosts = useMemo(() => (tree ? tree.order.map((no) => byNo.get(no)!) : log.posts), [tree, byNo, log.posts])
+  // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
+  /** 開く位置の前後 FIRST_RENDER 件の範囲。レスがまだない(読み込み中)なら、まだ何も作らない(hi 0) */
+  const firstWindow = () => {
+    const posts = orderedPosts
+    const n = posts.length
+    // ツリーは番号の順に並ばないので、そのレスそのものを探す
+    const at = (no: number) => (tree ? posts.findIndex((p) => p.no === no) : posts.findIndex((p) => p.no >= no))
+    const found = (p?: ScrollPosition) => !!p && posts.some((x) => x.no === p.no)
+    const closed = closedPosition(props.threadKey)
+    // 開く位置(useThreadScroll が動かす先と同じ決まり)
+    const t = openTarget({
+      saved: props.initialPosition,
+      savedFound: found(props.initialPosition),
+      closed: found(closed) ? closed : undefined,
+      openPosition: settings.openPosition,
+      unreadFrom,
+      hasUnreadPost: posts.some((p) => p.no === unreadFrom),
+      readNo: log.readNo,
+    })
+    // ツリーの「最初の未読」は、既読の番号のレスの位置(useThreadScroll と同じ)
+    const anchor = t.kind === 'bottom' ? n - 1 : t.kind === 'saved' ? at(t.position.no) : t.kind === 'unread' ? at(tree ? Math.max(1, t.no - 1) : t.no) : 0
+    if (n === 0) return { lo: 0, hi: 0 }
+    const a = anchor < 0 ? n - 1 : anchor
+    const lo = Math.max(0, a - FIRST_RENDER / 2)
+    const hi = Math.min(n, a + FIRST_RENDER / 2)
+    return { lo, hi: hi >= n ? Infinity : hi }
+  }
+  /** 中身を作るレスの範囲 [lo, hi)(orderedPosts の位置)。hi が Infinity なら末尾まで(新着もすぐ作る) */
+  const [renderWin, setRenderWin] = useState(firstWindow)
+  // 読み込み中(レス 0 件)に開いたスレは、レスが届いたところで開く位置の前後に決め直す
+  const windowPending = useRef(log.posts.length === 0)
+  useLayoutEffect(() => {
+    if (!windowPending.current || log.posts.length === 0) return
+    windowPending.current = false
+    setRenderWin(firstWindow())
+    // レスが初めて届いたときだけ
+  }, [log.posts.length])
+  // 見えている所の前後だけ中身を作り、スクロールに合わせて範囲を動かす(下の仮想スクロール)。PC もスマホも同じ
+  const isRendered = useCallback((i: number) => i >= renderWin.lo && i < renderWin.hi, [renderWin])
+  // ツリーを組み直した(新着・設定の切り替え)ら、範囲を同じレスの前後に置き直す(位置ではなくレスで引き継ぐ。描く前に)
+  const prevOrder = useRef({ posts: orderedPosts, tree: !!tree })
+  useLayoutEffect(() => {
+    const { posts: before, tree: wasTree } = prevOrder.current
+    prevOrder.current = { posts: orderedPosts, tree: !!tree }
+    // 番号の順のままなら、後ろに足されるだけなので置き直さない(末尾まで作る範囲もそのまま)
+    if ((!wasTree && !tree) || before === orderedPosts || before.length === 0 || orderedPosts.length === 0) return
+    const w = renderWin
+    const hi = Math.min(before.length, w.hi)
+    const center = before[Math.min(before.length - 1, Math.floor((w.lo + hi) / 2))]
+    if (!center) return
+    const k = orderedPosts.findIndex((p) => p.no === center.no)
+    if (k < 0) return
+    const half = Math.max(FIRST_RENDER / 2, Math.ceil((hi - w.lo) / 2))
+    const lo = Math.max(0, k - half)
+    const nextHi = k + half
+    // 末尾まで作っていたなら、そのまま末尾まで(新着をすぐ作る)
+    const next = { lo, hi: w.hi === Infinity || nextHi >= orderedPosts.length ? Infinity : nextHi }
+    if (next.lo === w.lo && next.hi === w.hi) return
+    rememberRendered()
+    setRenderWin(next)
+  }, [orderedPosts])
+
   /** 直前に見えているレスと同じ ID(続けて書いた)か */
   const continuedFrom = useCallback(
     (i: number) => {
@@ -1053,7 +1154,8 @@ export default function ThreadView(props: Props) {
   const ngRuns = useMemo(() => {
     const runs = new Map<number, { nos: number[]; auto: number; ai: number; rule: number }>()
     const firstOf = new Map<number, number>()
-    if (!settings.groupNg || visibleNos) return { runs, firstOf }
+    // ツリーでは番号の続きが画面の続きにならないので、まとめない
+    if (!settings.groupNg || visibleNos || tree) return { runs, firstOf }
     let cur: number[] = []
     const close = () => {
       // AI NG の「隠す」は数えない(何も出さないので)
@@ -1077,7 +1179,7 @@ export default function ThreadView(props: Props) {
     }
     close()
     return { runs, firstOf }
-  }, [settings.groupNg, settings.ngMode, visibleNos, log.posts, isNg, isNgRule, autoNg, byNo, unreadFrom])
+  }, [settings.groupNg, settings.ngMode, visibleNos, tree, log.posts, isNg, isNgRule, autoNg, byNo, unreadFrom])
   /** 広げたまとまり(先頭のレス番号) */
   const [openRuns, setOpenRuns] = useState<Set<number>>(new Set())
   const toggleRun = useCallback((first: number) =>
@@ -1089,11 +1191,13 @@ export default function ThreadView(props: Props) {
     }), [])
   /**
    * Discord・LINE 風: 本文がアンカーで始まるレスの、引用元の番号・本文の頭・ID。
+   * 見た目ごとの設定「返信先の引用」が全文なら本文を全部(改行も残す)、出さないなら作らない(本文の頭のアンカーもそのまま出る)。
    * レスごとに 1 回だけ作って使い回す(描くたびに作ると memo したレスが全部描き直しになり、J・K が重くなる)
    */
+  const quoteStyle = styleOpts.quote
   const replyPreviews = useMemo(() => {
-    const m = new Map<number, { no: number; text: string; id?: string }>()
-    if (variant !== 'discord' && variant !== 'line') return m
+    const m = new Map<number, NonNullable<ArticleProps['replyPreview']>>()
+    if ((variant !== 'discord' && variant !== 'line') || quoteStyle === 'none') return m
     for (const p of log.posts) {
       // 本文がアンカーで始まるか、文章で引用しているレス(ふたば)の、最初の引用元
       // id は引用の行のアイコンの種。レスのアイコンと同じ決め方(設定でワッチョイがあればワッチョイ、なければ ID)
@@ -1102,10 +1206,14 @@ export default function ThreadView(props: Props) {
       const src = no === p.no ? undefined : byNo.get(no)
       if (!src) continue
       const ng = isNg(src)
-      m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id: ng ? undefined : (settings.iconFromWatchoi ? watchoiOf(src.name) : undefined) ?? src.id })
+      const id = ng ? undefined : ((settings.iconFromWatchoi ? watchoiOf(src.name) : undefined) ?? src.id)
+      if (quoteStyle === 'full' && !ng) {
+        const text = src.body.replace(/\s+$/, '')
+        m.set(p.no, { no, text, id, full: true, aa: looksLikeAA(text) })
+      } else m.set(p.no, { no, text: ng ? 'あぼーん' : src.body.replace(/\s+/g, ' ').slice(0, 80), id })
     }
     return m
-  }, [variant, log.posts, byNo, isNg, resolveAnchor, quoteLinks, settings.iconFromWatchoi])
+  }, [variant, quoteStyle, log.posts, byNo, isNg, resolveAnchor, quoteLinks, settings.iconFromWatchoi])
   const replyPreviewOf = useCallback((p: Post) => replyPreviews.get(p.no), [replyPreviews])
   /** レス番号 → そのレスにアンカーを付けているレスの番号 */
   const replies = useMemo(() => {
@@ -1127,9 +1235,9 @@ export default function ThreadView(props: Props) {
   const isContinuedPost = useCallback(
     (p: Post) => {
       const i = indexOfNo.get(p.no)
-      return i !== undefined && continuedHead(p, i, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, p.no === unreadFrom && unreadFrom > 1)
+      return i !== undefined && continuedHead(p, i, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, p.no === unreadFrom && unreadFrom > 1, styleOpts.groupRuns)
     },
-    [indexOfNo, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, unreadFrom],
+    [indexOfNo, variant, anchorCounts, ownNos, replyPreviewOf, continuedFrom, unreadFrom, styleOpts.groupRuns],
   )
   /** レスの高さを変える設定。変わったら、覚えた高さと見積もりの補正を使わない */
   const layoutKey = useMemo(
@@ -1150,8 +1258,12 @@ export default function ThreadView(props: Props) {
         settings.showLinkPreview,
         settings.urlShorten,
         settings.tidyBlankLines,
+        // ツリーの字下げで本文の幅が変わる。引用の全文・まとめでもレスの高さが変わる
+        tree ? `tree${styleOpts.treeDepth}` : '',
+        quoteStyle,
+        styleOpts.groupRuns,
       ].join('|'),
-    [variant, settings.idPosition, settings.idStyle, settings.fontPx, settings.mobileFontPx, settings.contentBasePx, settings.postBodyPx, settings.postHeadPx, settings.postLineHeight, settings.postPadPx, settings.postThumbSize, settings.thumbLoad === 'never', settings.showLinkPreview, settings.urlShorten, settings.tidyBlankLines],
+    [tree !== undefined, styleOpts.treeDepth, quoteStyle, styleOpts.groupRuns, variant, settings.idPosition, settings.idStyle, settings.fontPx, settings.mobileFontPx, settings.contentBasePx, settings.postBodyPx, settings.postHeadPx, settings.postLineHeight, settings.postPadPx, settings.postThumbSize, settings.thumbLoad === 'never', settings.showLinkPreview, settings.urlShorten, settings.tidyBlankLines],
   )
 
   const {
@@ -1175,6 +1287,7 @@ export default function ThreadView(props: Props) {
     listRef,
     headerRef,
     filtering: visibleNos !== undefined,
+    tree: tree !== undefined,
     threadKey: props.threadKey,
     log,
     byNo,
@@ -1188,7 +1301,8 @@ export default function ThreadView(props: Props) {
     onRead,
     openPosition: settings.openPosition,
     // 実況モードの間は、新着へ送らずに流れ・積み上げで追いかける(送ると一気に飛んでしまう)
-    autoScrollOnNew: settings.autoScrollOnNew && !liveMode,
+    // ツリーでは新着が途中に入るので、新着へは送らない(読んでいる位置を保つ)
+    autoScrollOnNew: settings.autoScrollOnNew && !liveMode && !tree,
     showThumbnails: settings.thumbLoad !== 'never',
     showLinkPreview: settings.showLinkPreview,
     jumpTo: props.jumpTo,
@@ -2232,6 +2346,13 @@ export default function ThreadView(props: Props) {
     setCursorNo(no)
     setCursorHidden(false)
   }, [])
+  /** ツリーで重ねて出したレスを押したら、1 回目の出現へ飛んで選ぶ */
+  const scrollToPostRef = useRef(scrollToPost)
+  scrollToPostRef.current = scrollToPost
+  const jumpPrimary = useCallback((no: number) => {
+    scrollToPostRef.current(no)
+    if (!isMobile) pressPost(no)
+  }, [pressPost])
   const frameShared = useMemo<FrameShared>(
     () => ({
       handlers: mainHandlers,
@@ -2247,6 +2368,8 @@ export default function ThreadView(props: Props) {
       variant,
       replyPreviewOf,
       continuedFrom,
+      groupRuns: styleOpts.groupRuns,
+      onJumpPrimary: jumpPrimary,
       isNg,
       autoNg,
       aiMarkOf,
@@ -2262,7 +2385,7 @@ export default function ThreadView(props: Props) {
       replyToOwn,
       reactions: props.reactions,
     }),
-    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
+    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, jumpPrimary, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
   )
   const galleryItems = useMemo(() => (galleryOpen ? collectMedia(log.posts.filter((p) => !isNg(p))) : []), [galleryOpen, log.posts, isNg])
   /**
@@ -2270,20 +2393,22 @@ export default function ThreadView(props: Props) {
    * 変わるものだけを依存に並べる(見積もりの高さは intrinsicHeight の関数が変わる)。
    * 作り直しても、値の変わらない枠は PostFrame の memo で描き直さない
    */
-  const postFrames = useMemo(
-    () => log.posts.map((p, i) => {
-      const firstUnread = p.no === unreadFrom && unreadFrom > 1
+  const postFrames = useMemo(() => {
+    /** 1 回目の出現の枠。win は中身を作る範囲の位置(orderedPosts の何番目か) */
+    const frame = (p: Post, win: number, depth?: number) => {
+      // ツリーには「ここから未読」の線を出さず、新着の印を付ける
+      const firstUnread = !tree && p.no === unreadFrom && unreadFrom > 1
       // 続けて並んだあぼーん: まとめているあいだは、先頭に 1 行だけ出し、ほかは隠す
       const runFirst = ngRuns.firstOf.get(p.no)
       const run = runFirst === undefined ? undefined : ngRuns.runs.get(runFirst)
       const runClosed = run !== undefined && !openRuns.has(runFirst!)
       const filteredIn = visibleNos === undefined || visibleNos.has(p.no)
-      const rendered = isRendered(i)
+      const rendered = isRendered(win)
       return (
         <PostFrame
           key={p.no}
           post={p}
-          index={i}
+          index={indexOfNo.get(p.no) ?? win}
           shared={frameShared}
           rendered={rendered}
           height={intrinsicHeight(p)}
@@ -2297,11 +2422,39 @@ export default function ThreadView(props: Props) {
           showArticle={rendered && !runClosed && filteredIn}
           runHead={runFirst === p.no ? run : undefined}
           runOpen={!runClosed}
+          depth={depth}
+          newMark={tree !== undefined && unreadFrom > 1 && p.no >= unreadFrom}
         />
       )
-    }),
-    [log.posts, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared],
-  )
+    }
+    if (!tree) return log.posts.map((p, i) => frame(p, i))
+    let win = -1
+    return tree.rows.map((row) => {
+      const p = byNo.get(row.no)!
+      if (!row.dup) return frame(p, ++win, row.depth)
+      // 重ねて出した分は、直前の 1 回目の出現と同じ範囲で作る
+      const rendered = isRendered(Math.max(0, win))
+      return (
+        <PostFrame
+          key={`dup-${row.parent}-${row.no}`}
+          post={p}
+          index={indexOfNo.get(p.no) ?? 0}
+          shared={frameShared}
+          rendered={rendered}
+          height={intrinsicHeight(p)}
+          firstUnread={false}
+          unreadLine={false}
+          cursorMark={false}
+          sameIdTint={false}
+          frameHidden={false}
+          showArticle={rendered}
+          runOpen
+          depth={row.depth}
+          dup
+        />
+      )
+    })
+  }, [log.posts, tree, byNo, indexOfNo, unreadFrom, flashNos, ngRuns, openRuns, isRendered, intrinsicHeight, visibleNos, cursorId, cursorNo, cursorHidden, keysOn, frameShared])
 
   /** 書き込み欄の中身(スマホのフッターと PC の欄で共通)。書けない掲示板は undefined */
   const replyFormProps = props.onSubmitPost && {
@@ -2464,13 +2617,15 @@ export default function ThreadView(props: Props) {
           style={isMobile ? { top: headerInScroll ? headerHeight : 0, bottom: hasFooter ? 'var(--footer-height, 0px)' : 0 } : undefined}
         >
         <Minimap
-          posts={visiblePosts}
+          // ツリーは画面の並びの順に、「ここから未読」の代わりに新着の印を出す
+          posts={tree ? orderedPosts : visiblePosts}
+          newFrom={tree ? unreadFrom : undefined}
           scrollRef={ref}
           listRef={listRef}
           anchorCounts={anchorCounts}
           ownNos={ownNos}
           replyToOwn={replyToOwn}
-          unreadFrom={unreadFrom}
+          unreadFrom={tree ? 0 : unreadFrom}
           topOffset={headerInScroll && !isMobile ? headerHeight : 0}
           onJump={scrollToPost}
         />

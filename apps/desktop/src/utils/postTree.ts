@@ -83,3 +83,41 @@ export function buildPostTree(
   }
   return { rows, order }
 }
+
+/**
+ * アンカーツリー(レスのポップアップ)の 1 行。ツリー表示の行に、罫線を引くための印を足したもの(スマホ版の bbs/PostTree.kt の TreeRow と同じ)
+ */
+export interface AnchorTreeRow extends TreeRow {
+  /** 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか) */
+  rails: boolean[]
+  /** 同じ親の最後の子か(最後なら └、まだ兄弟がいれば ├) */
+  last: boolean
+}
+
+/**
+ * アンカーツリー: ツリー表示と同じ組み立て(buildPostTree の結果)から、start の 1 回目の出現を含む根の部分木を切り出す
+ * (並べ方・重ねて出す分・深さの上限はツリー表示と同じ。別の組み方を持たない)。start がなければ空
+ */
+export function anchorTreeOf(tree: PostTree, start: number): AnchorTreeRow[] {
+  const lines = tree.rows
+  const at = lines.findIndex((l) => !l.dup && l.no === start)
+  if (at < 0) return []
+  // 根(親のない 1 回目の出現)から、次の根の手前まで
+  const isRoot = (l: TreeRow) => !l.dup && l.parent === undefined
+  let from = at
+  while (!isRoot(lines[from])) from--
+  let to = from + 1
+  while (to < lines.length && !isRoot(lines[to])) to++
+  const part = lines.slice(from, to)
+  // 後ろから見て、段ごとに「この後に(より浅い行を挟まずに)同じ段の行がまだあるか」を持つ
+  const open = new Array<boolean>(Math.max(...part.map((l) => l.depth)) + 2).fill(false)
+  const out = new Array<AnchorTreeRow>(part.length)
+  for (let i = part.length - 1; i >= 0; i--) {
+    const l = part[i]
+    const d = l.depth
+    out[i] = { ...l, rails: d <= 1 ? [] : Array.from({ length: d - 1 }, (_, k) => open[k + 1]), last: !open[d] }
+    open[d] = true
+    open.fill(false, d + 1)
+  }
+  return out
+}

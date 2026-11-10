@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { dropLeadingAnchor, shortUrl, anchorTargets, anchorTree, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { dropLeadingAnchor, shortUrl, anchorTargets, postTreeOf, anchorsIn, countAnchors, hasVideo, makeAnchorResolver, quoteLinksOf, quotedText, imageUrlsIn, linkUrlsIn, videoFileUrlsIn, youtubeEmbedUrl } from '../src/utils/postBody'
+import { anchorTreeOf } from '../src/utils/postTree'
 
 describe('videoFileUrlsIn: 動画のファイル', () => {
   it('mp4・webm・mov を拾い、リンクのカードには回さない', () => {
@@ -53,7 +54,7 @@ describe('アンカーの読み替え(AnchorResolver)', () => {
     const resolve = makeAnchorResolver(posts, 'ref')
     expect(anchorTargets(posts[2].body, resolve)).toEqual([2])
     expect(countAnchors(posts, resolve).get(1)).toBe(1)
-    expect(anchorTree(1, posts, resolve)).toEqual([1, 2, 3])
+    expect(anchorTreeOf(postTreeOf(posts, resolve, undefined, { maxDepth: 6 }), 1).map((r) => r.no)).toEqual([1, 2, 3])
   })
   it('ref を使わない掲示板では、ref があっても番号のまま', () => {
     expect(makeAnchorResolver([post(1, '', 555)], 'no')(3)).toBe(3)
@@ -85,7 +86,7 @@ describe('文章の引用(ふたば)', () => {
     // 画像のファイル名の引用は、その画像を貼ったレス
     expect(links.get(6)?.get('>111.jpg')).toBe(1)
     expect(countAnchors(posts, undefined, links).get(2)).toBe(2)
-    expect(anchorTree(2, posts, undefined, links)).toEqual([2, 3, 4, 5])
+    expect(anchorTreeOf(postTreeOf(posts, undefined, links, { maxDepth: 6 }), 2).map((r) => r.no)).toEqual([2, 3, 4, 5])
   })
 })
 

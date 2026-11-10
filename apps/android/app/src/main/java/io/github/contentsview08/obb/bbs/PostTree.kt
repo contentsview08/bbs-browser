@@ -53,6 +53,43 @@ fun threadTree(nos: List<Int>, anchorsOf: (Int) -> List<Int>, aborn: Set<Int>, m
     return out
 }
 
+/**
+ * アンカーツリー(レスのポップアップ)の 1 行。ツリー表示の行(TreeLine)に、罫線を引くための印を足したもの。
+ * rails: 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか)。last: 同じ親の最後の子か(最後なら └、まだ兄弟がいれば ├)。
+ * PC 版の AnchorTreeRow と同じ
+ */
+class TreeRow(val no: Int, val depth: Int, val ghost: Boolean = false, val rails: List<Boolean> = emptyList(), val last: Boolean = true, val parent: Int = 0)
+
+/**
+ * アンカーツリー: ツリー表示と同じ組み立て(threadTree の結果 lines)から、start の 1 回目の出現を含む根の部分木を切り出す
+ * (並べ方・重ねて出す分・深さの上限はツリー表示と同じ。別の組み方を持たない)。start がなければ空
+ */
+fun anchorTreeOf(lines: List<TreeLine>, start: Int): List<TreeRow> {
+    val at = lines.indexOfFirst { !it.ghost && it.no == start }
+    if (at < 0) return emptyList()
+    // 根(親のない 1 回目の出現)から、次の根の手前まで
+    fun isRoot(l: TreeLine) = !l.ghost && l.parent == 0
+    var from = at
+    while (!isRoot(lines[from])) from--
+    var to = from + 1
+    while (to < lines.size && !isRoot(lines[to])) to++
+    val part = lines.subList(from, to)
+    // 後ろから見て、段ごとに「この後に(より浅い行を挟まずに)同じ段の行がまだあるか」を持つ
+    val open = BooleanArray((part.maxOf { it.depth }) + 2)
+    val out = arrayOfNulls<TreeRow>(part.size)
+    for (i in part.indices.reversed()) {
+        val l = part[i]
+        val d = l.depth
+        out[i] = TreeRow(l.no, d, l.ghost, if (d <= 1) emptyList() else List(d - 1) { k -> open[k + 1] }, !open[d], l.parent)
+        open[d] = true
+        for (k in d + 1 until open.size) open[k] = false
+    }
+    return out.map { it!! }
+}
+
+/** レス start のアンカーツリー(ツリー表示と同じ組み立て)。aborn・maxDepth はツリー表示と同じものを渡す */
+fun anchorTree(index: PostIndex, start: Int, aborn: Set<Int>, maxDepth: Int): List<TreeRow> = anchorTreeOf(threadTree(index, aborn, maxDepth), start)
+
 /** PostIndex から組む。アンカー先は本文に出てきた順(同じ先は 1 つに) */
 fun threadTree(index: PostIndex, aborn: Set<Int>, maxDepth: Int): List<TreeLine> =
     threadTree(index.posts.map { it.no }, { no -> anchorsInOrder(index.info[no]) }, aborn, maxDepth)

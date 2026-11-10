@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import type { Post } from '@bbs-browser/connectors'
 import {
   anchorTargets,
-  anchorTree,
   cardUrlsIn,
   countAnchors,
   hasLink,
@@ -20,7 +19,7 @@ import { TLDS } from '../src/utils/urlFind'
 import { favIncrease } from '../src/utils/watch'
 import { threadUnread, unreadFirstOrder } from '../src/utils/unread'
 import { matchRanges, newRule, patternError, postMatcher, type NgTarget } from '../src/utils/ng'
-import { buildPostTree } from '../src/utils/postTree'
+import { anchorTreeOf, buildPostTree } from '../src/utils/postTree'
 
 interface Case<I, E> {
   name: string
@@ -74,12 +73,11 @@ describe('tld.json', () => {
 })
 
 describe('thread.json', () => {
-  type Expected = { replyCount?: Record<string, number>; tree?: Record<string, number[]> }
+  type Expected = { replyCount?: Record<string, number> }
   it.each(load<{ no: number; body: string }[], Expected>('thread.json'))('$name', (c) => {
     const posts = c.input.map((p): Post => ({ no: p.no, name: '', mail: '', date: '', body: p.body }))
     const expected = expectedOf(c)
     if (expected.replyCount) expect(Object.fromEntries(countAnchors(posts))).toEqual(expected.replyCount)
-    for (const [start, nos] of Object.entries(expected.tree ?? {})) expect(anchorTree(Number(start), posts)).toEqual(nos)
   })
 })
 
@@ -114,7 +112,8 @@ describe('fav-new.json', () => {
 })
 
 describe('tree.json(ツリー表示の並べ方)', () => {
-  for (const c of load<{ posts: [number, string][]; aborn: number[]; maxDepth: number }, { no: number; depth: number; ghost?: boolean }[]>('tree.json')) {
+  type Row = { no: number; depth: number; ghost?: boolean; last?: boolean; rails?: boolean[] }
+  for (const c of load<{ posts: [number, string][]; aborn: number[]; maxDepth: number; start?: number }, Row[]>('tree.json')) {
     it(c.name, () => {
       const bodies = new Map(c.input.posts)
       const aborn = new Set(c.input.aborn)
@@ -123,7 +122,12 @@ describe('tree.json(ツリー表示の並べ方)', () => {
         (no) => anchorTargets(bodies.get(no) ?? ''),
         { maxDepth: c.input.maxDepth, isGone: (no) => aborn.has(no) },
       )
-      expect(t.rows.map((r) => ({ no: r.no, depth: r.depth, ...(r.dup && { ghost: true }) }))).toEqual(expectedOf(c))
+      // start があれば、そのレスのアンカーツリー(根の部分木)。last は false のときだけ、rails は空でないときだけ書いてある
+      if (c.input.start !== undefined)
+        expect(
+          anchorTreeOf(t, c.input.start).map((r) => ({ no: r.no, depth: r.depth, ...(r.dup && { ghost: true }), ...(!r.last && { last: false }), ...(r.rails.length > 0 && { rails: r.rails }) })),
+        ).toEqual(expectedOf(c))
+      else expect(t.rows.map((r) => ({ no: r.no, depth: r.depth, ...(r.dup && { ghost: true }) }))).toEqual(expectedOf(c))
     })
   }
 })

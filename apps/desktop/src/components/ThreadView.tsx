@@ -53,9 +53,8 @@ import { openTarget, type ScrollPosition } from '../utils/threadScroll'
 import { createKeyReader, isTypingTarget, modalOpen, isReloadKey, resolveKeymap, type KeyAction } from '../utils/keymap'
 import { PULL_HIDDEN_Y } from '../utils/pullRefresh'
 import {
-  anchorTree,
-  anchorTreeRows,
   anchorTargets,
+  postTreeOf,
   countAnchors,
   makeAnchorResolver,
   quoteLinksOf,
@@ -68,7 +67,7 @@ import {
   normalizeForSearch,
   videoFileUrlsIn,
   youtubeLinksIn, mostCommonName, looksLikeAA } from '../utils/postBody'
-import { buildPostTree } from '../utils/postTree'
+import { anchorTreeOf, type AnchorTreeRow } from '../utils/postTree'
 import type { NgRule, NgTarget } from '../utils/ng'
 import { ngHitsOf } from '../utils/ng'
 import { effectivePostStyle, effectiveScheme, isDarkScheme, baseVariant, styleOptionsOf, type AppSettings, type ReplyLayout, type UpdateSetting } from '../ui/settings'
@@ -1054,24 +1053,25 @@ export default function ThreadView(props: Props) {
    * 返信を最初のアンカー先の下に字下げして並べる(組み方は utils/postTree.ts)
    */
   const treeOn = styleOpts.tree && !liveMode && visibleNos === undefined
-  const tree = useMemo(
+  /** スレのツリーを組む(ツリー表示とアンカーツリーで同じ組み立て) */
+  const buildTree = useCallback(
     () =>
-      treeOn
-        ? buildPostTree(
-            log.posts.map((p) => p.no),
-            (no) => targetsOfPost(byNo.get(no)!, resolveAnchor, quoteLinks),
-            {
-              maxDepth: styleOpts.treeDepth,
-              // NG であぼーんのレスへのアンカーは、ないものとして扱う
-              isGone: (no) => {
-                const p = byNo.get(no)
-                return !!p && isNg(p)
-              },
-            },
-          )
-        : undefined,
-    [treeOn, log.posts, byNo, resolveAnchor, quoteLinks, styleOpts.treeDepth, isNg],
+      postTreeOf(log.posts, resolveAnchor, quoteLinks, {
+        maxDepth: styleOpts.treeDepth,
+        // NG であぼーんのレスへのアンカーは、ないものとして扱う
+        isGone: (no) => {
+          const p = byNo.get(no)
+          return !!p && isNg(p)
+        },
+      }),
+    [log.posts, byNo, resolveAnchor, quoteLinks, styleOpts.treeDepth, isNg],
   )
+  const tree = useMemo(() => (treeOn ? buildTree() : undefined), [treeOn, buildTree])
+  /**
+   * アンカーツリー(ポップアップ): ツリー表示と同じ組み立て(あぼーん・深さの上限も同じ)から、そのレスを含む根の部分木。
+   * ツリー表示中は組んであるものを使う
+   */
+  const anchorRowsOf = useCallback((no: number): AnchorTreeRow[] => anchorTreeOf(tree ?? buildTree(), no), [tree, buildTree])
   /** 画面に並ぶ順のレス(ツリーなら 1 回目の出現の順。番号の順なら log.posts)。中身を作る範囲・ミニマップはこの順で数える */
   const orderedPosts = useMemo(() => (tree ? tree.order.map((no) => byNo.get(no)!) : log.posts), [tree, byNo, log.posts])
   // ── 中身を作るレスの範囲(開く位置の前後から、少しずつ広げる) ──
@@ -1666,12 +1666,12 @@ export default function ThreadView(props: Props) {
         const media = [...imageUrlsIn(p.body), ...videoFileUrlsIn(p.body), ...youtubeLinksIn(p.body).map((v) => v.url)]
         if (media.length > 0) setLightbox({ urls: media, index: 0, post: p })
         else if ((replies.get(p.no)?.length ?? 0) > 0) h.onReplies?.(p.no, el)
-        else if (anchorTree(p.no, log.posts, resolveAnchor, quoteLinks).length > 1) h.onBody?.(p.no, el)
+        else if (anchorRowsOf(p.no).length > 1) h.onBody?.(p.no, el)
         else showQuick(false, `>>${refOf(p.no)} には画像も返信もアンカーもありません`)
         return true
       }
       case 'anchorTree':
-        if (anchorTree(p.no, log.posts, resolveAnchor, quoteLinks).length > 1) h.onBody?.(p.no, el)
+        if (anchorRowsOf(p.no).length > 1) h.onBody?.(p.no, el)
         else showQuick(false, `>>${refOf(p.no)} にはつながるレスがありません`)
         return true
       case 'copyPost':
@@ -1992,8 +1992,8 @@ export default function ThreadView(props: Props) {
   const renderRef = useRef({ renderPosts, renderTree })
   renderRef.current = { renderPosts, renderTree }
   // 操作の関数が読むレスのデータ(新着のたびに関数を作り直すと、全レスが描き直される。ref で最新を読む)
-  const dataRef = useRef({ byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts })
-  dataRef.current = { byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts }
+  const dataRef = useRef({ byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts, anchorRowsOf })
+  dataRef.current = { byNo, replies, posts: log.posts, resolveAnchor, quoteLinks, anchorCounts, idCounts, anchorRowsOf }
   const thumbAuto = settings.thumbLoad === 'always' || (settings.thumbLoad === 'wifi' && onWifi())
   const handlersFor = useCallback(
     (level: number): PostHandlers => {
@@ -2053,9 +2053,10 @@ export default function ThreadView(props: Props) {
           open(`${name} (${list.length})`, list, el, false)
         },
         onBody: (no, el) => {
-          const tree = anchorTree(no, d().posts, d().resolveAnchor, d().quoteLinks)
-          if (tree.length <= 1) return
-          openContent(`>>${refOf(no)} のアンカーツリー (${tree.length})`, renderRef.current.renderTree(no, level + 1), el, false, no)
+          const rows = d().anchorRowsOf(no)
+          if (rows.length <= 1) return
+          // 数はレスの数(重ねて出した分は数えない)
+          openContent(`>>${refOf(no)} のアンカーツリー (${rows.filter((r) => !r.dup).length})`, renderRef.current.renderTree(no, level + 1), el, false, no)
         },
         onUrl: props.onUrl,
         onImage: (urls, index, post) => setLightbox({ urls, index, post }),
@@ -2128,8 +2129,10 @@ export default function ThreadView(props: Props) {
     const handlers = handlersFor(level)
     return (
       <AnchorTree
-        rows={anchorTreeRows(start, log.posts, resolveAnchor, quoteLinks)}
+        rows={anchorRowsOf(start)}
         focus={start}
+        // 重ねて出した分の 1 回目の出現がこのツリーにないときは、そのレスのアンカーツリーを重ねて開く
+        onElsewhere={(no, el) => handlers.onBody(no, el)}
         variant={baseVariant(variant)}
         renderPost={(no) => {
           const p = byNo.get(no)!

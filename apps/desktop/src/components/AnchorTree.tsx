@@ -1,18 +1,15 @@
 // アンカーツリーの表示。どのレスがどのレスに付いているかを、ファイルのツリーのような線(├ └ │)でつなぐ。
 // 行の高さはレスごとに違うので、線は各行の高さいっぱいに伸ばし、分岐はレスの頭の高さで横に出す。
 
-import type { CSSProperties, ReactNode } from 'react'
-import type { TreeRow } from '../utils/postBody'
+import { useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import type { AnchorTreeRow } from '../utils/postTree'
 import { isMobile } from '../utils/platform'
 import { AVATAR } from './PostArticle'
 
-/** 1 段の幅 */
+type TreeRow = AnchorTreeRow
+
+/** 1 段の幅。段は組み立て(utils/postTree.ts)で深さの上限に止めてある */
 const STEP = 18
-/**
- * スマホ: これより深い段は、この段にそろえる(右へずれ続けて、本文の幅がなくなるのを防ぐ)。
- * 線のつながりは少し崩れるが、どのレスへの返信かは本文のアンカーで分かる
- */
-const MAX_DEPTH = 5
 /** スマホ: 1 段ごとに右へずらす幅(罫線を引かず、レスの左の縦線を階段のように並べる) */
 const MOBILE_STEP = 10
 /** スマホ: 字下げした所(縦線より左)の色。明るい配色では薄い灰色、暗い配色では少し明るい灰色になる */
@@ -32,6 +29,42 @@ const lineX = (depth: number) => `calc(${depth * STEP + NUMBER_X}px + var(--post
 /** Discord 風・LINE 風: アイコンの半分(アイコンの真ん中の位置) */
 const D_HALF = AVATAR / 2
 
+/** 1 行の中身: レスと、2 回目以降の出現(dup)なら薄くして、押すと 1 回目の出現へ飛ぶ覆い(中のボタンは押せない。ツリー表示と同じ) */
+function RowBody(props: { row: TreeRow; renderPost: (no: number) => ReactNode; onDup: (no: number, el: HTMLElement) => void }) {
+  const r = props.row
+  if (!r.dup) return <>{props.renderPost(r.no)}</>
+  return (
+    <div className="relative">
+      <div style={{ opacity: 0.5 }}>{props.renderPost(r.no)}</div>
+      <button
+        type="button"
+        className="absolute inset-0 z-[3] cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation()
+          props.onDup(r.no, e.currentTarget)
+        }}
+        title={`>>${r.no} の本来の位置へ`}
+        aria-label={`>>${r.no} の本来の位置へ`}
+      />
+    </div>
+  )
+}
+
+/** 2 回目以降の出現を押したとき: 1 回目の出現がこのツリーにあれば、そこへ送って少しのあいだ色を付ける。なければ onElsewhere */
+function useDupJump(box: RefObject<HTMLDivElement | null>, onElsewhere?: (no: number, el: HTMLElement) => void) {
+  const [flash, setFlash] = useState<number>()
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const onDup = (no: number, el: HTMLElement) => {
+    const target = box.current?.querySelector<HTMLElement>(`[data-tree-no="${no}"]`)
+    if (!target) return onElsewhere?.(no, el)
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    setFlash(no)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setFlash(undefined), 1500)
+  }
+  return { flash, onDup }
+}
+
 export default function AnchorTree(props: {
   rows: TreeRow[]
   /** 押したレス(色を付ける) */
@@ -39,17 +72,40 @@ export default function AnchorTree(props: {
   renderPost: (no: number) => ReactNode
   /** discord・line は、線でアイコン同士をつなぐ */
   variant?: 'card' | 'discord' | 'classic' | 'line'
+  /** 2 回目以降の出現を押して、1 回目の出現がこのツリーにないとき */
+  onElsewhere?: (no: number, el: HTMLElement) => void
 }) {
-  // スマホは画面の幅が狭く、罫線でつなぐと本文が窮屈になるので、レスの左に縦線を引いて段をずらすだけにする
-  if (isMobile) return <StepTree {...props} />
-  // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
-  if (props.variant === 'discord') return <IconTree {...props} step={AVATAR + 12} top="var(--post-pad, var(--post-padding-y))" />
-  // LINE 風のレスの上の余白は、吹き出しの間の余白(app.css の --line-gap)
-  if (props.variant === 'line') return <IconTree {...props} step={AVATAR + 8} top="var(--line-gap)" />
+  const box = useRef<HTMLDivElement>(null)
+  const { flash, onDup } = useDupJump(box, props.onElsewhere)
+  const inner = { ...props, flash, onDup }
+  return (
+    <div ref={box}>
+      {/* スマホは画面の幅が狭く、罫線でつなぐと本文が窮屈になるので、レスの左に縦線を引いて段をずらすだけにする */}
+      {isMobile ? (
+        <StepTree {...inner} />
+      ) : props.variant === 'discord' ? (
+        // Discord 風・LINE 風は、線でアイコン同士をつなぐ。1 段の幅はアイコンと隙間の分(Discord は隙間 12px、LINE は 8px)
+        <IconTree {...inner} step={AVATAR + 12} top="var(--post-pad, var(--post-padding-y))" />
+      ) : props.variant === 'line' ? (
+        // LINE 風のレスの上の余白は、吹き出しの間の余白(app.css の --line-gap)
+        <IconTree {...inner} step={AVATAR + 8} top="var(--line-gap)" />
+      ) : (
+        <LineTree {...inner} />
+      )}
+    </div>
+  )
+}
+
+type InnerProps = { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode; flash?: number; onDup: (no: number, el: HTMLElement) => void }
+/** 押したレス・飛んだ先は、選んでいるレスと同じ色を敷く */
+const focused = (p: InnerProps, r: TreeRow) => !r.dup && (r.no === p.focus || r.no === p.flash)
+
+/** カード・専ブラ風・まとめ風(PC): ファイルのツリーのような罫線でつなぐ */
+function LineTree(props: InnerProps) {
   return (
     <div className="flex flex-col">
       {props.rows.map((r, i) => (
-        <div key={r.no} className="relative flex">
+        <div key={`${i}:${r.no}`} data-tree-no={r.dup ? undefined : r.no} className="relative flex">
           {/* 子のレスがあれば、このレスの番号の真下から縦線を下ろす(番号から線が出ているように)。
               本文は右へずらしてある(app.css の .tree-post)ので、線は番号の下の、本文の左を通る */}
           {(props.rows[i + 1]?.depth ?? -1) > r.depth && (
@@ -77,12 +133,9 @@ export default function AnchorTree(props: {
           )}
           {/* 押したレスは、選んでいるレスと同じ色を敷く(強調色の面と縦線は、ツリーの線と重なって見にくい) */}
           <div
-            className={`tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus ? 'tree-focus' : ''}`}
+            className={`tree-post relative flex-1 min-w-0 rounded-[var(--card-radius)] ${focused(props, r) ? 'tree-focus' : ''}`}
           >
-            {props.renderPost(r.no)}
-            {r.alsoTo.length > 0 && (
-              <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>
-            )}
+            <RowBody row={r} renderPost={props.renderPost} onDup={props.onDup} />
           </div>
         </div>
       ))}
@@ -94,7 +147,7 @@ export default function AnchorTree(props: {
  * Discord 風・LINE 風のアンカーツリー。親のアイコンの下から縦線を下ろし、子のアイコンの真ん中の高さで右へ曲げて、子のアイコンにつなぐ。
  * 段の幅をアイコンと隙間の分にして、子のアイコンが親の本文の始まりにそろうようにする
  */
-function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: number) => ReactNode; step: number; top: string }) {
+function IconTree(props: InnerProps & { step: number; top: string }) {
   const D_STEP = props.step
   const line = (key: string, style: CSSProperties) => (
     <span key={key} aria-hidden className="absolute pointer-events-none" style={{ borderColor: LINE, borderStyle: 'solid', borderWidth: 0, ...style }} />
@@ -109,7 +162,7 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
       {props.rows.map((r, i) => {
         const hasChildren = (props.rows[i + 1]?.depth ?? -1) > r.depth
         return (
-          <div key={r.no} className="relative flex">
+          <div key={`${i}:${r.no}`} data-tree-no={r.dup ? undefined : r.no} className="relative flex">
             {/* 上の段から続く縦線(まだ下に兄弟がいる先祖の線) */}
             {r.rails.map((on, k) => (on ? line(`rail${k}`, { left: x(k), top: 0, bottom: 0, borderLeftWidth: 2 }) : null))}
             {r.depth > 0 &&
@@ -130,15 +183,9 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
             <div className="flex-shrink-0" style={{ width: r.depth * D_STEP }} />
             <div
               // 押したレスは、選んでいるレスと同じ色(強調色の面は字が読みにくい)
-              className={`relative flex-1 min-w-0 rounded-[var(--card-radius)] ${r.no === props.focus ? 'tree-focus' : ''}`}
+              className={`relative flex-1 min-w-0 rounded-[var(--card-radius)] ${focused(props, r) ? 'tree-focus' : ''}`}
             >
-              {props.renderPost(r.no)}
-              {/* 「>>n にも」は本文の始まり(アイコンの右)にそろえる(アイコンの列に置くと線と重なるため) */}
-              {r.alsoTo.length > 0 && (
-                <p className="pb-1 text-[10px] text-c-text-muted" style={{ paddingLeft: `calc(var(--post-padding-x) + ${D_STEP}px)` }}>
-                  {r.alsoTo.map((n) => `>>${n}`).join(' ')} にも
-                </p>
-              )}
+              <RowBody row={r} renderPost={props.renderPost} onDup={props.onDup} />
             </div>
           </div>
         )
@@ -151,14 +198,15 @@ function IconTree(props: { rows: TreeRow[]; focus: number; renderPost: (no: numb
  * スマホのアンカーツリー。罫線(├ └)を引かず、返信のレスの左に縦線を引いて、段ごとに少しずつ右へずらす。
  * 縦線が階段のように並ぶので、どのレスへの返信かが分かる(Reddit などのスマホのコメント欄と同じ)
  */
-function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNode }) {
-  const rows = props.rows.map((row) => (row.depth > MAX_DEPTH ? { ...row, depth: MAX_DEPTH } : row))
+function StepTree(props: InnerProps) {
+  const rows = props.rows
   return (
     <div className="flex flex-col">
       {rows.map((r, i) => (
         <div
-          key={r.no}
-          className="flex min-w-0"
+          key={`${i}:${r.no}`}
+          data-tree-no={r.dup ? undefined : r.no}
+          className={`flex min-w-0 ${r.no === props.flash && !r.dup ? 'tree-focus' : ''}`}
           // 段が変わる所にだけ、背景になじむ薄い線を引く(同じ段が続く所は引かない)
           style={i > 0 && rows[i - 1].depth !== r.depth ? { borderTop: '1.5px solid var(--c-border-strong, var(--c-border))' } : undefined}
         >
@@ -169,8 +217,7 @@ function StepTree(props: { rows: TreeRow[]; renderPost: (no: number) => ReactNod
             style={{ width: 4 + r.depth * MOBILE_STEP, background: GUTTER, borderRight: `2px solid ${LINE}` }}
           />
           <div className="tree-post-step flex-1 min-w-0 pl-0.5">
-            {props.renderPost(r.no)}
-            {r.alsoTo.length > 0 && <p className="px-2 pb-1 text-[10px] text-c-text-muted">{r.alsoTo.map((n) => `>>${n}`).join(' ')} にも</p>}
+            <RowBody row={r} renderPost={props.renderPost} onDup={props.onDup} />
           </div>
         </div>
       ))}

@@ -42,12 +42,6 @@ private val TRAILING_SPACE = Regex("[$WS]+$")
 /** 画面に出す本文(PC 版の displayBody と同じ): 3 つ以上続いた空行を 1 つの空行に、最後の空白を消す */
 fun displayBody(body: String): String = body.replace(BLANK_LINES, "\n\n").replace(TRAILING_SPACE, "")
 
-/**
- * アンカーツリーの 1 行。rails: 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか)。
- * last: 同じ親の最後の子か(最後なら └、まだ兄弟がいれば ├)。PC 版の TreeRow と同じ
- */
-class TreeRow(val no: Int, val depth: Int, val alsoTo: List<Int>, val rails: List<Boolean> = emptyList(), val last: Boolean = true)
-
 class PostIndex(
     val posts: List<Post>,
     val info: Map<Int, PostInfo>,
@@ -79,47 +73,6 @@ class PostIndex(
         val m = HashMap<Int, MutableList<Int>>()
         for ((to, froms) in replies) for (f in froms) m.getOrPut(f) { ArrayList() } += to
         m.mapValues { (_, v) -> v.sorted() }
-    }
-
-    /** アンカーでつながるレスを、上下どちらへもたどって全部(start を含む。番号順)。PC 版の anchorTree と同じ */
-    fun tree(start: Int): List<Int> {
-        // まだ書かれていないレスへのアンカーもあるので、スレにあるレスだけをたどる
-        val exists = posts.mapTo(HashSet()) { it.no }
-        val seen = linkedSetOf(start)
-        val queue = ArrayDeque(listOf(start))
-        while (queue.isNotEmpty()) {
-            val cur = queue.removeFirst()
-            for (n in (targets[cur] ?: emptyList()) + (replies[cur] ?: emptyList())) if (n in exists && seen.add(n)) queue += n
-        }
-        return seen.sorted()
-    }
-
-    /**
-     * ツリーの行に並べる(PC 版の anchorTreeRows と同じ)。親は、ツリーの中でアンカーを付けた先のうち一番小さい番号。
-     * alsoTo はほかにアンカーを付けた先(「>>3 にも」と出す)
-     */
-    fun treeRows(start: Int): List<TreeRow> {
-        val nos = tree(start)
-        val inTree = nos.toHashSet()
-        val parent = HashMap<Int, Int>()
-        val alsoTo = HashMap<Int, List<Int>>()
-        val children = HashMap<Int, MutableList<Int>>()
-        for (no in nos) {
-            val t = (targets[no] ?: emptyList()).filter { it in inTree && it < no }
-            if (t.isEmpty()) continue
-            parent[no] = t[0]
-            alsoTo[no] = t.drop(1)
-            children.getOrPut(t[0]) { ArrayList() } += no
-        }
-        val rows = ArrayList<TreeRow>()
-        fun walk(no: Int, depth: Int, rails: List<Boolean>, last: Boolean) {
-            rows += TreeRow(no, depth, alsoTo[no] ?: emptyList(), rails, last)
-            val kids = (children[no] ?: emptyList()).sorted()
-            kids.forEachIndexed { i, k -> walk(k, depth + 1, if (depth == 0) emptyList() else rails + !last, i == kids.lastIndex) }
-        }
-        val roots = nos.filter { it !in parent }
-        roots.forEachIndexed { i, r -> walk(r, 0, emptyList(), i == roots.lastIndex) }
-        return rows
     }
 
     /** グロ注意のレス(本文に「グロ」があるレスと、そのアンカー先)。サムネイルをぼかす。言葉の比べ方は検索と同じ(PC 版と同じ) */

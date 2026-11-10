@@ -455,16 +455,16 @@ article.post-discord {
 }
 /* LINE 風: スレ表示の背景を LINE のトークのような落ち着いた青灰色に寄せ、吹き出しを浮かせる。
    強調色に寄せると、黄色・橙の配色(アンバー×ティールなど)で画面全体がチカチカするので、配色に関係なく同じ青灰にする。
-   自分の吹き出しは LINE の緑 */
+   自分の吹き出しは LINE の緑。LINE と同じく暗い配色でも明るい緑の地に黒い字にする(暗い緑は地に沈んで読みにくい)。
+   暗い配色は眩しくないよう少し淡い緑。字・リンクはどちらの地でも 4.5:1 を超える(スマホ版の Palette.lineOwn* と同じ) */
 [data-post-style='line'] {
   --line-own-bg: #8de055;
   --line-own-text: #10200a;
   --line-own-link: #0b4f9e;
+  --line-own-youtube: #9b0f27;
 }
 :root.dark[data-post-style='line'] {
-  --line-own-bg: #3f7d2c;
-  --line-own-text: #eef7e8;
-  --line-own-link: #d3ebff;
+  --line-own-bg: #a6db8a;
 }
 /* 2ch クラシック × LINE 風: 2ch クラシックの茶色(--c-base)に青灰を混ぜるとくすんだ色になるので、ほぼ白の淡い茶色にする */
 :root[data-scheme='2ch-classic'][data-post-style='line'] {
@@ -493,12 +493,22 @@ article.post-discord {
   --c-link: var(--line-own-link);
   --c-link-image: var(--line-own-link);
   --c-mark-new: var(--line-own-link);
+  --c-text-strong: var(--line-own-text);
   --c-text-body: var(--line-own-text);
   --c-text-muted: color-mix(in srgb, var(--line-own-text) 75%, transparent);
+  /* 中の面(画像の札・リンクのカード・サムネイルの枠)も明るい緑に合わせる。暗い配色の面のままだと、黒い字が沈む */
+  --c-surface2: rgb(255 255 255 / 0.5);
+  --c-surface3: rgb(255 255 255 / 0.65);
+  --c-border: color-mix(in srgb, var(--line-own-text) 18%, transparent);
+  --c-border-strong: color-mix(in srgb, var(--line-own-text) 35%, transparent);
 }
 /* 自分の吹き出しの中の本文は、吹き出しの文字色で読む(本文の既定の色だと緑の上で薄い) */
 .line-bubble-own p {
   color: inherit !important;
+}
+/* YouTube のリンクの赤(postBody の text-[#ff3344])は、緑の上で読める濃い赤に */
+.line-bubble-own .text-\[\#ff3344\] {
+  color: var(--line-own-youtube);
 }
 /* LINE 風: 「レスの上下の余白」(--post-pad)は、吹き出しと吹き出しの間の余白にする。レスの間の gap はなくし、
    1 レスの上と下の余白 --line-gap(吹き出しの間はこの 2 倍)に含める。PostArticle が上下の padding(既定の余白まで)と margin(残り)に分けて使う。
@@ -1338,4 +1348,36 @@ html .card-thread[data-compact][data-variant] {
    ずらす・つまんで拡大するのは、そのまま使える */
 html[data-platform='mobile'] article[data-no] {
   touch-action: manipulation;
+}
+
+/* 切り替えボタン(components/Segmented.tsx)。枠は面 2 の地と境界の線、選んだ所に差し色のつまみ。つまみと字の色は 180ms・減速で移る
+   (「動きを減らす」のときは上の決まりで動かない)。寸法・動きはスマホ版の ui/Segmented.kt と同じ(bbs-suite の docs/style-tree.md) */
+.seg {
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border);
+}
+.seg-thumb {
+  background: var(--c-accent);
+  pointer-events: none;
+}
+.seg-thumb[data-slide] {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.seg-btn {
+  color: var(--c-text-body);
+  transition: color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.seg-btn:hover:not([data-on]) {
+  color: var(--c-text-strong);
+}
+/* 選んだ所だけ太字(幅は太字の見本で取ってあるので、太くしても並びは揺れない) */
+.seg-btn[data-on] {
+  color: var(--c-accent-text);
+  font-weight: 700;
+}
+.seg-btn:focus-visible {
+  outline: 2px solid var(--c-text-strong);
+  outline-offset: -2px;
 }

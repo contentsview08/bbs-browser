@@ -37,5 +37,20 @@
    "expected": [{"no": 1, "depth": 0}, {"no": 3, "depth": 0}, {"no": 4, "depth": 1}]},
   {"name": "空のスレは空",
    "input": {"posts": [], "aborn": [], "maxDepth": 6},
-   "expected": []}
+   "expected": []},
+  {"name": "アンカーツリー: レスを含む根の部分木(ツリー表示と同じ並び)。罫線の印 last は兄弟がまだあれば false、rails は上の段の縦線",
+   "input": {"posts": [[1, "a"], [2, ">>1"], [3, "b"], [4, ">>2"], [5, ">>1"], [6, ">>3"]], "aborn": [], "maxDepth": 6, "start": 4},
+   "expected": [{"no": 1, "depth": 0}, {"no": 2, "depth": 1, "last": false}, {"no": 4, "depth": 2, "rails": [true]}, {"no": 5, "depth": 1}]},
+  {"name": "アンカーツリー: 2 回目以降の出現も同じく薄く子なしで入る(1 回目は別の根の下)",
+   "input": {"posts": [[1, "a"], [2, ">>1"], [3, "b"], [4, ">>2 >>3"], [5, ">>1 >>2 >>3 >>4"]], "aborn": [], "maxDepth": 6, "start": 3},
+   "expected": [{"no": 3, "depth": 0}, {"no": 4, "depth": 1, "ghost": true}]},
+  {"name": "アンカーツリー: 4 つ以上にアンカーしたレスは最初の親の下だけ(ほかの根はつながない)",
+   "input": {"posts": [[1, "a"], [2, ">>1"], [3, "b"], [4, ">>2 >>3"], [5, ">>1 >>2 >>3 >>4"]], "aborn": [], "maxDepth": 6, "start": 5},
+   "expected": [{"no": 1, "depth": 0}, {"no": 2, "depth": 1, "last": false}, {"no": 4, "depth": 2, "rails": [true]}, {"no": 5, "depth": 1}]},
+  {"name": "アンカーツリー: 後ろ・あぼーんへのアンカーはないもの。深さの上限で止めた段のまま並べる",
+   "input": {"posts": [[1, "a"], [2, ">>1"], [3, ">>2"], [4, ">>3"], [5, ">>9 >>4"], [6, "荒らし"], [7, ">>6 >>2"], [8, ">>8 >>10"]], "aborn": [6], "maxDepth": 2, "start": 7},
+   "expected": [{"no": 1, "depth": 0}, {"no": 2, "depth": 1}, {"no": 3, "depth": 2, "last": false, "rails": [false]}, {"no": 4, "depth": 2, "last": false, "rails": [false]}, {"no": 5, "depth": 2, "last": false, "rails": [false]}, {"no": 7, "depth": 2, "rails": [false]}]},
+  {"name": "アンカーツリー: つながるレスがなければ自分だけ(ポップアップは出さない)",
+   "input": {"posts": [[1, "a"], [2, ">>3 未来"], [3, "c"]], "aborn": [], "maxDepth": 6, "start": 2},
+   "expected": [{"no": 2, "depth": 0}]}
 ]

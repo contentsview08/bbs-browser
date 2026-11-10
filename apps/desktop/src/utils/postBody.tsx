@@ -4,6 +4,7 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { shortWatchoi } from './watchoi'
 import { normalizeUrl, trimUrlEnd, URL_PATTERN } from './urlFind'
+import { buildPostTree, type PostTree } from './postTree'
 import { allConnectors, type Post } from '@bbs-browser/connectors'
 
 /**
@@ -156,6 +157,19 @@ export function targetsOfPost(p: Post, resolve: AnchorResolver = sameNo, quotes?
   const nums = anchorTargets(p.body, resolve)
   const q = quotes?.get(p.no)
   return q ? [...new Set([...nums, ...q.values()])] : nums
+}
+
+/**
+ * スレのツリー(ツリー表示とアンカーツリーで共通の組み立て。決まりは utils/postTree.ts の buildPostTree)。
+ * アンカー先は本文に出てきた順(文章の引用の元はその後ろ)
+ */
+export function postTreeOf(posts: Post[], resolve: AnchorResolver = sameNo, quotes: QuoteLinks | undefined, o: { maxDepth: number; isGone?: (no: number) => boolean }): PostTree {
+  const byNo = new Map(posts.map((p) => [p.no, p]))
+  return buildPostTree(
+    posts.map((p) => p.no),
+    (no) => targetsOfPost(byNo.get(no)!, resolve, quotes),
+    o,
+  )
 }
 
 /** レス番号 → そのレスへのアンカーの数(自分自身へのアンカーは数えない) */
@@ -616,33 +630,6 @@ function renderTokens(text: string, handlers: BodyHandlers, keyPrefix: string): 
   return parts
 }
 
-/**
- * アンカーツリー: start からアンカーを前後(付けた先・付けられた元)にたどって、つながるレスの番号を全部集める。
- * start だけなら長さ 1 になる
- */
-export function anchorTree(start: number, posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): number[] {
-  const exists = new Set(posts.map((p) => p.no))
-  const to = new Map<number, number[]>()
-  const from = new Map<number, number[]>()
-  for (const p of posts) {
-    const nums = targetsOfPost(p, resolve, quotes).filter((n) => exists.has(n) && n !== p.no)
-    to.set(p.no, nums)
-    for (const n of nums) from.set(n, [...(from.get(n) ?? []), p.no])
-  }
-  const seen = new Set([start])
-  const queue = [start]
-  while (queue.length > 0) {
-    const cur = queue.shift()!
-    for (const n of [...(to.get(cur) ?? []), ...(from.get(cur) ?? [])]) {
-      if (!seen.has(n)) {
-        seen.add(n)
-        queue.push(n)
-      }
-    }
-  }
-  return [...seen].sort((a, b) => a - b)
-}
-
 /** リンク(画像・動画以外の URL)があるか */
 export function hasLink(text: string): boolean {
   return linkUrlsIn(text).length > 0
@@ -654,50 +641,6 @@ export function normalizeForSearch(text: string): string {
     .normalize('NFKC')
     .toLowerCase()
     .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
-}
-
-/** ツリー表示の 1 行 */
-export interface TreeRow {
-  no: number
-  depth: number
-  /** 親より上の段ごとに、縦線を下まで続けるか(その段にまだ兄弟が残っているか) */
-  rails: boolean[]
-  /** 兄弟の中で最後か(最後なら └、そうでなければ ├) */
-  last: boolean
-  /** 親のほかにもアンカーを付けている先 */
-  alsoTo: number[]
-}
-
-/**
- * アンカーツリーを、線でつないで描くための行の並びにする。
- * 親は「自分がアンカーを付けた先のうち、いちばん前のレス」。どこにも付けていないレスが根になる。
- * 前にあるレスにしか親を取らないので、輪にはならない
- */
-export function anchorTreeRows(start: number, posts: Post[], resolve: AnchorResolver = sameNo, quotes?: QuoteLinks): TreeRow[] {
-  const nos = anchorTree(start, posts, resolve, quotes)
-  const inTree = new Set(nos)
-  const byNo = new Map(posts.map((p) => [p.no, p]))
-  const parent = new Map<number, number>()
-  const alsoTo = new Map<number, number[]>()
-  const children = new Map<number, number[]>()
-  for (const no of nos) {
-    const p = byNo.get(no)
-    const targets = (p ? targetsOfPost(p, resolve, quotes) : []).filter((n) => inTree.has(n) && n < no).sort((a, b) => a - b)
-    if (targets.length === 0) continue
-    parent.set(no, targets[0])
-    alsoTo.set(no, targets.slice(1))
-    children.set(targets[0], [...(children.get(targets[0]) ?? []), no])
-  }
-
-  const rows: TreeRow[] = []
-  const walk = (no: number, depth: number, rails: boolean[], last: boolean) => {
-    rows.push({ no, depth, rails, last, alsoTo: alsoTo.get(no) ?? [] })
-    const kids = (children.get(no) ?? []).sort((a, b) => a - b)
-    kids.forEach((k, i) => walk(k, depth + 1, depth === 0 ? [] : [...rails, !last], i === kids.length - 1))
-  }
-  const roots = nos.filter((n) => !parent.has(n))
-  roots.forEach((r, i) => walk(r, 0, [], i === roots.length - 1))
-  return rows
 }
 
 /**

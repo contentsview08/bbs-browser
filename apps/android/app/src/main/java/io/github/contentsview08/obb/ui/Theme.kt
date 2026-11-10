@@ -209,8 +209,12 @@ object Palette {
     val lineBg get() = if (scheme.dark) androidx.compose.ui.graphics.lerp(androidx.compose.ui.graphics.lerp(base, Color(0xFF6F8FB8), 0.06f), Color.Black, 0.35f)
         else androidx.compose.ui.graphics.lerp(base, Color(0xFF7F9CC0), 0.22f)
     val lineBubble get() = if (scheme.key == "gray") surface2 else if (scheme.dark) androidx.compose.ui.graphics.lerp(surface2, Color.White, 0.08f) else Color.White
-    val lineOwnBg get() = if (scheme.dark) Color(0xFF3F7D2C) else Color(0xFF8DE055)
-    val lineOwnText get() = if (scheme.dark) Color(0xFFEEF7E8) else Color(0xFF10200A)
+    // 自分の吹き出し: LINE と同じく、暗い配色でも明るい緑の地に黒い字(暗い緑は地に沈んで読みにくい)。
+    // 暗い配色は眩しくないよう、明るい配色の緑より少し淡くする。字・リンクはどちらの地でも 4.5:1 を超える(PC・Web の --line-own-* と同じ)
+    val lineOwnBg get() = if (scheme.dark) Color(0xFFA6DB8A) else Color(0xFF8DE055)
+    val lineOwnText get() = Color(0xFF10200A)
+    val lineOwnLink get() = Color(0xFF0B4F9E)
+    val lineOwnYoutube get() = Color(0xFF9B0F27)
 
     /**
      * ID ごとの色。ID の文字から色相を決め、彩度と明るさは配色の明るさで固定する(どの色相でも地との差が同じくらいになるように)。

@@ -41,6 +41,9 @@ class RenderedPost(val header: AnnotatedString, val body: AnnotatedString, val a
     /** 画像の札を押したあとの本文(札を URL に広げたもの)。札のないレスは null。押されたときに作る */
     var bodyExpandedLazy: Lazy<AnnotatedString>? = null
     val bodyExpanded: AnnotatedString? get() = bodyExpandedLazy?.value
+    /** LINE 風の自分の吹き出しの本文(リンクの色を緑の地で読める色にしたもの)。自分のレスにだけ要るので、要るときに作る */
+    var bodyOwnLazy: Lazy<AnnotatedString>? = null
+    var bodyOwnExpandedLazy: Lazy<AnnotatedString>? = null
 }
 
 /** ワッチョイ(名前の後ろの「(ワッチョイ 1a2b-3c4d)」。種類の言葉 + 4 桁-4 桁。後ろに [IP] が付くことも。PC 版の utils/watchoi.ts と同じ) */
@@ -186,6 +189,11 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
     val linkStyle = TextLinkStyles(SpanStyle(color = Palette.link))
     // YouTube のリンクは赤で見分ける(PC 版と同じ色)
     val youtubeLinkStyle = TextLinkStyles(SpanStyle(color = Color(0xFFFF3344)))
+    // LINE 風の自分の吹き出し(明るい緑の地)の中のリンク
+    val ownLinkStyle = TextLinkStyles(SpanStyle(color = Palette.lineOwnLink))
+    val ownYoutubeLinkStyle = TextLinkStyles(SpanStyle(color = Palette.lineOwnYoutube))
+    // 札の地は暗い配色の面だと緑の中で沈むので、白を半分重ねた淡い地にする(PC 版の .line-bubble-own の --c-surface2 と同じ)
+    val ownImageChip = SpanStyle(color = Palette.lineOwnLink, background = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
     val imageChip = SpanStyle(color = Palette.markImage, background = Palette.surface2, fontSize = 13.sp)
     // スレ主: >>1 と同じ ID
     val opId = index.posts.firstOrNull()?.id
@@ -246,7 +254,12 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
                 BLANK_AFTER.find(full.substring(skip))?.let { skip += it.value.length }
             }
         }
-        fun buildBody(chips: Boolean) = buildAnnotatedString {
+        // own: LINE 風の自分の吹き出しの中。リンクを吹き出しの地で読める色にし、人気の本文の色は付けない(吹き出しの字の色で読む。PC 版と同じ)
+        fun buildBody(chips: Boolean, own: Boolean = false) = buildAnnotatedString {
+            val linkStyle = if (own) ownLinkStyle else linkStyle
+            val youtubeLinkStyle = if (own) ownYoutubeLinkStyle else youtubeLinkStyle
+            val bodyStyle = if (own) null else bodyStyle
+            val imageChip = if (own) ownImageChip else imageChip
             if (bodyStyle != null) pushStyle(bodyStyle)
             val spans = info?.spans ?: emptyList()
             var at = skip
@@ -288,6 +301,8 @@ fun renderPosts(index: PostIndex, links: PostLinks, o: RenderOptions = RenderOpt
         rp.watchoi = watchoiOf(p.name)
         if (o.urlShorten && info?.spans?.any { it is BodyToken.Url && toImageUrl(it.url) != null } == true) rp.bodyExpandedLazy = lazy { buildBody(false) }
         if (o.style == "line") {
+            rp.bodyOwnLazy = lazy { buildBody(true, own = true) }
+            if (rp.bodyExpandedLazy != null) rp.bodyOwnExpandedLazy = lazy { buildBody(false, own = true) }
             rp.headerOwnLazy = lazy { compactHeader(p, name, replies, idCount, isOp, o, links, showName = false, showReplies = false) }
             if (replies > 0) rp.sideReplies = buildAnnotatedString { appendReplies(p, replies, o, links) }
             rp.sideTime = LINE_TIME.find(p.date)?.groupValues?.get(1) ?: p.date

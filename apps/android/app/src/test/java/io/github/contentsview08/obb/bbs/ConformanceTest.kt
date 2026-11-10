@@ -94,11 +94,7 @@ class ConformanceTest {
         val a = c.getJSONArray("input")
         val posts = List(a.length()) { a.getJSONObject(it).let { p -> post(p.getInt("no"), p.getString("body")) } }
         val index = PostIndex.build(posts)
-        val trees = c.getJSONObject("expected").optJSONObject("tree")
-        buildMap {
-            put("replyCount", index.replyCount.entries.associate { it.key.toString() to it.value })
-            if (trees != null) put("tree", trees.keys().asSequence().associateWith { index.tree(it.toInt()) })
-        }
+        mapOf("replyCount" to index.replyCount.entries.associate { it.key.toString() to it.value })
     }
 
     @Test fun url() = check("url.json") { c ->
@@ -191,7 +187,17 @@ class ConformanceTest {
         val posts = List(ps.length()) { k -> ps.getJSONArray(k).let { post(it.getInt(0), it.getString(1)) } }
         val ab = i.getJSONArray("aborn")
         val aborn = List(ab.length()) { ab.getInt(it) }.toSet()
-        threadTree(PostIndex.build(posts), aborn, i.getInt("maxDepth")).map { l ->
+        val lines = threadTree(PostIndex.build(posts), aborn, i.getInt("maxDepth"))
+        // start があれば、そのレスのアンカーツリー(根の部分木)。last は false のときだけ、rails は空でないときだけ書いてある
+        if (i.has("start")) anchorTreeOf(lines, i.getInt("start")).map { r ->
+            buildMap<String, Any> {
+                put("no", r.no); put("depth", r.depth)
+                if (r.ghost) put("ghost", true)
+                if (!r.last) put("last", false)
+                if (r.rails.isNotEmpty()) put("rails", r.rails)
+            }
+        }
+        else lines.map { l ->
             if (l.ghost) mapOf("no" to l.no, "depth" to l.depth, "ghost" to true) else mapOf("no" to l.no, "depth" to l.depth)
         }
     }

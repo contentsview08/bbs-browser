@@ -254,6 +254,13 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
     }
     val treeLines = if (treeWanted) treeMemo?.second else null
     val byNo = remember(index) { index.posts.associateBy { it.no } }
+    /** アンカーツリー: ツリー表示と同じ組み立て(あぼーん・深さの上限も同じ)から、そのレスを含む根の部分木 */
+    fun anchorTreeOf(no: Int) = io.github.contentsview08.obb.bbs.anchorTree(index, no, treeAborn, styleOpts.treeDepth)
+    /** アンカーツリーをポップアップで開く。つながるレスがなければ開かない */
+    fun openAnchorTree(no: Int) {
+        val rows = anchorTreeOf(no).takeIf { it.size > 1 } ?: return
+        openPopup(rows.mapNotNull { r -> byNo[r.no] }.distinctBy { it.no }, rows, no)
+    }
     /** 並んでいる行のレス番号(2 回目以降の出現は 0)。スクロールの覚えとミニマップが使う */
     val rowNos = remember(treeLines, shown) { treeLines?.map { if (it.ghost) 0 else it.no } ?: shown.map { it.no } }
     val rowCount = rowNos.size
@@ -493,7 +500,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                 }
                 .combinedClickable(
                     interactionSource = null, indication = null,
-                    onClick = { index.treeRows(p.no).takeIf { it.size > 1 }?.let { rows -> openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no) } },
+                    onClick = { openAnchorTree(p.no) },
                     onLongClick = {
                         // ID・名前の上の長押しは上で受けている
                         if (headMenu == null) { Haptics.longPress(view); postMenu = p }
@@ -826,6 +833,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         PopupLayer(
             popups, bg = Palette.threadBg(style), topInset = { bars.topHeight * (1f - bars.hidden) }, endInset = 0.dp,
             onCloseTop = { popups.removeAt(popups.lastIndex) },
+            onTreeElsewhere = { openAnchorTree(it) },
         ) { postRow(it, null, false) }
     }
 
@@ -901,10 +909,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                         MenuItem("「$ph」とすぐ書き込む", Icons.Filled.Bolt) { vm.quickPost(page, p.no, ph) }
                     } +
                     listOfNotNull(
-                        if (index.tree(p.no).size > 1) MenuItem("アンカーツリーを表示", Icons.Filled.AccountTree) {
-                            val rows = index.treeRows(p.no)
-                            openPopup(rows.mapNotNull { r -> index.posts.getOrNull(r.no - 1) }, rows, p.no)
-                        } else null,
+                        if (anchorTreeOf(p.no).size > 1) MenuItem("アンカーツリーを表示", Icons.Filled.AccountTree) { openAnchorTree(p.no) } else null,
                     ),
                 listOf(
                     MenuItem("ヘッダ含めてコピー", Icons.Filled.ContentCopy) {

@@ -189,6 +189,8 @@ fun PostItem(
             // 吹き出しで会話のように。自分の書き込みは右に緑の吹き出し、ほかは左にアイコンと吹き出し
             val bubble = if (own) Palette.lineOwnBg else Palette.lineBubble
             val textColor = if (own) Palette.lineOwnText else Palette.textBody
+            // 自分の吹き出しの本文は、リンクの色を緑の地で読める色にしたもの
+            val bubbleBody = if (!own) shownBody else (if (imagesExpanded) r.bodyOwnExpandedLazy?.value else null) ?: r.bodyOwnLazy?.value ?: shownBody
             // アイコンは頭の行(名前・ID)の横に置き、その下に吹き出しを続ける(頭の行の左が空いて見えないように)
             // 上下の余白(設定)は、吹き出しと吹き出しの間の余白にする
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = lineBubbleGap(prefs.postPad).dp), verticalAlignment = Alignment.Top) {
@@ -221,15 +223,16 @@ fun PostItem(
                         Column(
                             Modifier.weight(1f, fill = false).widthIn(max = 320.dp).onSizeChanged { bubbleWidth = it.width }.background(bubble, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
-                            if (reply != null) ReplyLine(reply, indent = 0.dp, onDark = own) { onReply(reply.no) }
-                            if (aa) AaBody(r) else Text(shownBody, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
-                            idLine()
+                            if (reply != null) ReplyLine(reply, indent = 0.dp, onOwn = own) { onReply(reply.no) }
+                            if (aa) AaBody(r, if (own) textColor else null) else Text(bubbleBody, color = textColor, fontSize = bodySize, lineHeight = prefs.lineHeight.em)
                         }
                         if (!right) {
                             Spacer(Modifier.width(6.dp)); side()
                             if (toOwn) { Spacer(Modifier.width(6.dp)); OwnChip("返信", Palette.onSky(style)) }
                         }
                     }
+                    // 右下の ID は吹き出しの外の下に置く(ID ごとの色は吹き出しの地ではなくスレの地に合わせてあるため。PC 版と同じ)
+                    idLine()
                     // サムネイル・リンクの札が吹き出しにくっつかないよう、少し離す
                     if (images.isNotEmpty() || youtube.isNotEmpty() || videos.isNotEmpty() || (prefs.showLinkPreview && !info?.links.isNullOrEmpty())) Spacer(Modifier.height(5.dp))
                     // 右の吹き出しのリンクの札と画像は、左の端を吹き出しの左にそろえる。吹き出しより広ければ右の端にそろえて、画面の中に収める
@@ -315,11 +318,12 @@ fun lineBubbleGap(pad: Int): Float = if (pad <= io.github.contentsview08.obb.dat
 
 /** 返信先の 1 行(小さいアイコン・本文の頭)。押すと返信先をポップアップで出す。全文のときは本文を全部、枠の中で折り返す(AA は AA の字で) */
 @Composable
-private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, onDark: Boolean = false, onClick: () -> Unit) {
+private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, onOwn: Boolean = false, onClick: () -> Unit) {
+    // LINE 風の自分の吹き出し(明るい緑の地)の中では、吹き出しの字の色を薄くして使う(PC 版の --c-text-muted の置き換えと同じ 75%)
+    val ink = if (onOwn) Palette.lineOwnText.copy(alpha = 0.75f) else Palette.textMuted
     if (reply.full != null) {
-        val ink = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted
         // 本文と見分けられるよう、淡い面に置く
-        val wash = if (onDark) Color.White.copy(alpha = 0.14f) else Palette.textMuted.copy(alpha = 0.09f)
+        val wash = ink.copy(alpha = 0.09f)
         Row(
             Modifier.padding(start = indent, bottom = 4.dp).clip(RoundedCornerShape(6.dp)).background(wash).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.Top,
@@ -336,11 +340,11 @@ private fun ReplyLine(reply: ReplyPreview, indent: androidx.compose.ui.unit.Dp, 
         return
     }
     Row(Modifier.padding(start = indent, bottom = 4.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        Text("↱ ", color = if (onDark) Color.White.copy(alpha = 0.8f) else Palette.textMuted, fontSize = 12.sp)
+        Text("↱ ", color = ink, fontSize = 12.sp)
         Identicon(reply.id, 16.dp)
         Spacer(Modifier.width(5.dp))
         Text(
-            reply.text, color = if (onDark) Color.White.copy(alpha = 0.85f) else Palette.textMuted, fontSize = 12.sp,
+            reply.text, color = ink, fontSize = 12.sp,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
@@ -383,10 +387,11 @@ val AaFont = FontFamily(Font(R.font.aahub_light))
  * AA の本文。AA 用の字で折り返さず、横幅に収まるまで字を小さくする(横にずらして読むと、スクロールの操作とぶつかる)
  */
 @Composable
-private fun AaBody(r: RenderedPost) {
+private fun AaBody(r: RenderedPost, ink: Color? = null) {
+    // ink: LINE 風の自分の吹き出しの中(字とリンクを吹き出しの地で読める色に)
     BasicText(
-        r.body, Modifier.fillMaxWidth().padding(top = 4.dp),
-        style = TextStyle(color = Palette.textBody, fontFamily = AaFont, fontSize = 15.sp, lineHeight = 1.15.em, letterSpacing = 0.sp),
+        if (ink != null) r.bodyOwnLazy?.value ?: r.body else r.body, Modifier.fillMaxWidth().padding(top = 4.dp),
+        style = TextStyle(color = ink ?: Palette.textBody, fontFamily = AaFont, fontSize = 15.sp, lineHeight = 1.15.em, letterSpacing = 0.sp),
         softWrap = false,
         autoSize = TextAutoSize.StepBased(minFontSize = 5.sp, maxFontSize = 15.sp, stepSize = 0.5.sp),
     )

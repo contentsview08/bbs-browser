@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { Segmented } from '../Segmented'
 
 export function Group(props: { title?: string; note?: ReactNode; children: ReactNode }) {
   return (
@@ -243,6 +244,19 @@ export function SliderRow(props: { label: string; desc?: ReactNode; value: numbe
         className="w-full h-10 accent-[var(--c-accent)]"
         style={{ touchAction: 'pan-y' }}
       />
+    </div>
+  )
+}
+
+/** 少ない選択肢から 1 つを選ぶ行。名前の下に切り替えボタン(表示スタイルのシートと同じ部品) */
+export function SegmentRow<T extends string | number>(props: { label: string; desc?: ReactNode; value: T; options: { key: T; name: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="px-4 py-2.5">
+      <span className="block text-[15px] text-c-text-strong">{props.label}</span>
+      {props.desc && <span className="block text-[12px] text-c-text-muted">{props.desc}</span>}
+      <div className="mt-2">
+        <Segmented label={props.label} value={props.value} options={props.options} onChange={props.onChange} />
+      </div>
     </div>
   )
 }

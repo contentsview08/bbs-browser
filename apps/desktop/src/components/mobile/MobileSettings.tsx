@@ -35,7 +35,8 @@ import { ListTabsEditor, SettingsEmbed, type SettingsProps } from '../settings/c
 import { NgTab } from '../settings/NgTab'
 import { ToolbarsTab } from '../settings/ToolbarsTab'
 import { UserhashInput } from '../settings/UploadTab'
-import { ActionRow, ChoiceRow, Group, NavRow, SliderRow, SwitchRow, TextRow, WordList } from './ui'
+import { ActionRow, ChoiceRow, Group, NavRow, SliderRow, SwitchRow, TextRow, WordList, SegmentRow } from './ui'
+import { postStyleName } from '../StyleMenu'
 import LicensesDialog from '../LicensesDialog'
 
 type PageId =
@@ -195,11 +196,12 @@ function renderPage(page: PageId, props: SettingsProps, s: AppSettings, update: 
               })}
             </div>
           </Group>
-          <Group title="レスの見た目">
-            <ChoiceRow
-              label="見た目"
+          {/* 表示スタイルのシートの「スタイル」のタブと同じ見出し・同じ部品(スマホ版の設定の「スタイル」と同じ) */}
+          <Group title="スタイル" note={MOBILE_POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note}>
+            <SegmentRow
+              label="レスの見た目"
               value={effectivePostStyle(s)}
-              options={MOBILE_POST_STYLES.map((p) => ({ key: p.key, name: p.name, desc: p.note }))}
+              options={MOBILE_POST_STYLES.map((p) => ({ key: p.key, name: postStyleName(p.key) }))}
               onChange={(v) => update('postStyle', v)}
             />
           </Group>

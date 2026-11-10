@@ -1,4 +1,4 @@
-// 表示スタイルの画面(︙ の「表示スタイル」): 配色(テーマ・差し色)・見た目(レスの見た目と、その見た目だけの設定)・文字と余白・細かい表示を、
+// 表示スタイルの画面(︙ の「表示スタイル」): 配色(テーマ・差し色)・スタイル(レスの見た目と、その見た目だけの設定)・文字と余白・細かい表示を、
 // 上のタブで切り替える 1 つの画面にまとめる(決まりは bbs-suite の docs/style-tree.md)。
 // 変えた結果を後ろのスレで見ながら合わせられるよう、後ろは暗くしない。
 // PC は題の帯をつかんで動かせる窓(置き場所は覚える。外を押しても閉じず、× と Esc で閉じる)。
@@ -12,6 +12,7 @@ import { useBackdropClose } from '../hooks/useDialogClose'
 import { useDialogRect } from '../hooks/useDialogRect'
 import FontSizeSlider, { SliderDragScope, useSliderDragScope } from './FontSizeSlider'
 import { DialogHeader } from './DialogParts'
+import { Segmented } from './Segmented'
 import { Toggle } from './SettingParts'
 import {
   COLOR_SCHEMES,
@@ -112,27 +113,16 @@ function AccentDots({ settings, update }: { settings: AppSettings; update: Updat
   )
 }
 
-/** レスの見た目: 名前の札を並べる(説明は札に乗せる) */
+/** レスの見た目: 切り替えボタン(説明は PC だけ、乗せたときに出す) */
 function PostStyleChips({ settings, update }: { settings: AppSettings; update: UpdateSetting }) {
-  const current = effectivePostStyle(settings)
   return (
-    <div className={isMobile ? 'flex gap-[6px] px-[16px] py-[4px] overflow-x-auto no-scrollbar' : 'flex flex-wrap gap-1.5 px-4 pb-1'}>
-      {(isMobile ? MOBILE_POST_STYLES : POST_STYLES).map((b) => {
-        const on = current === b.key
-        return (
-          <button
-            key={b.key}
-            type="button"
-            onClick={() => update('postStyle', b.key)}
-            title={b.note}
-            className={`flex-shrink-0 rounded-full border whitespace-nowrap ${isMobile ? 'px-[11px] py-[7px] text-[13px]' : 'px-3 py-1 text-xs'} ${on ? 'font-bold' : 'text-c-text-body hover:border-c-border-strong'}`}
-            style={on ? { background: 'var(--c-accent)', borderColor: 'var(--c-accent)', color: 'var(--c-accent-text)' } : { background: 'var(--c-surface2)', borderColor: 'var(--c-border)' }}
-          >
-            {/* スマホは狭いので、名前の括弧の中の説明は省く */}
-            {isMobile ? b.name.replace(/[(（].*$/, '') : b.name}
-          </button>
-        )
-      })}
+    <div className={isMobile ? 'px-[16px] py-[4px]' : 'px-4 pb-1'}>
+      <Segmented
+        label="レスの見た目"
+        value={effectivePostStyle(settings)}
+        options={(isMobile ? MOBILE_POST_STYLES : POST_STYLES).map((b) => ({ key: b.key, name: postStyleName(b.key), note: b.note }))}
+        onChange={(v) => update('postStyle', v)}
+      />
     </div>
   )
 }
@@ -194,7 +184,7 @@ function StyleOptionItems({ settings, update }: { settings: AppSettings; update:
   )
 }
 
-/** 画面の上のタブ(配色・見た目・文字と余白・細かい表示)。最後に開いたタブはこの端末に覚える(同期しない) */
+/** 画面の上のタブ(配色・スタイル・文字と余白・細かい表示)。最後に開いたタブはこの端末に覚える(同期しない) */
 type StyleTab = 'color' | 'style' | 'size' | 'post'
 const TAB_KEY = 'bbs:style-dialog-tab'
 function loadTab(): StyleTab {
@@ -214,28 +204,12 @@ function saveTab(t: StyleTab) {
   }
 }
 
-/** 選択肢を札で並べる(見た目・細かい表示のタブ) */
+/** 1 つを選ぶ項目(スタイル・細かい表示のタブ)。見出しの下に切り替えボタン */
 function ChoiceChips<T extends string>(props: { label: string; value: T; options: { key: T; name: string; note?: string }[]; onChange: (v: T) => void }) {
   return (
     <div className={isMobile ? 'px-[16px] py-[8px]' : 'px-4 py-1.5'}>
       <p className={isMobile ? 'text-[15px] text-c-text-strong mb-[6px]' : 'text-sm text-c-text-body mb-1'}>{props.label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {props.options.map((o) => {
-          const on = props.value === o.key
-          return (
-            <button
-              key={o.key}
-              type="button"
-              onClick={() => props.onChange(o.key)}
-              title={o.note}
-              className={`rounded-full border whitespace-nowrap ${isMobile ? 'px-[11px] py-[6px] text-[13px]' : 'px-3 py-1 text-xs'} ${on ? 'font-bold' : 'text-c-text-body hover:border-c-border-strong'}`}
-              style={on ? { background: 'var(--c-accent)', borderColor: 'var(--c-accent)', color: 'var(--c-accent-text)' } : { background: 'var(--c-surface2)', borderColor: 'var(--c-border)' }}
-            >
-              {o.name}
-            </button>
-          )
-        })}
-      </div>
+      <Segmented label={props.label} value={props.value} options={props.options} onChange={props.onChange} />
     </div>
   )
 }
@@ -275,7 +249,7 @@ function PostDisplayItems({ settings: s, update }: { settings: AppSettings; upda
 }
 
 /**
- * 表示スタイルの画面。上のタブで 配色(テーマ・差し色)・見た目(レスの見た目と、その見た目だけの設定)・文字と余白(sliders)・細かい表示 を切り替える。
+ * 表示スタイルの画面。上のタブで 配色(テーマ・差し色)・スタイル(レスの見た目と、その見た目だけの設定)・文字と余白(sliders)・細かい表示 を切り替える。
  * sliders は「文字と余白」の中身(スレ表示ならレスの、スレ一覧なら一覧のスライダー)。
  * from: どこから開いたか。スレ一覧からは、スレ表示だけのタブ(細かい表示)を出さない。
  * PC の窓は、初めはその反対の側に出し、置き場所はそれぞれ覚える
@@ -292,7 +266,7 @@ export function StyleDialog(props: { settings: AppSettings; update: UpdateSettin
   const thread = props.from === 'thread'
   const tabs: { key: StyleTab; name: string }[] = [
     { key: 'color', name: '配色' },
-    { key: 'style', name: '見た目' },
+    { key: 'style', name: 'スタイル' },
     { key: 'size', name: '文字と余白' },
     ...(thread ? [{ key: 'post' as const, name: '細かい表示' }] : []),
   ]
@@ -438,7 +412,7 @@ function MobileSheet(props: { boxRef: RefObject<HTMLDivElement | null>; hidden: 
         ref={props.boxRef}
         className="w-full flex flex-col bg-c-surface border-t border-c-border rounded-t-[16px] shadow-[0_-8px_24px_rgba(0,0,0,0.25)] sheet-rise"
         style={{
-          // 配色のタブ(テーマ・差し色)と見た目のタブ(札と、その見た目の設定)が最初に収まる高さで、上には画面が半分ほど見えるように
+          // 配色のタブ(テーマ・差し色)とスタイルのタブ(レスの見た目と、その見た目の設定)が最初に収まる高さで、上には画面が半分ほど見えるように
           height: 'min(calc(100dvh - 80px), max(50dvh, 380px))',
           paddingBottom: 'env(safe-area-inset-bottom)',
           transform: drag ? `translateY(${drag}px)` : undefined,

@@ -6,6 +6,7 @@ import FontSizeSlider, { PostFontSliders, setCssVar } from '../FontSizeSlider'
 import { ListEditor, ThumbSample, Toggle, TextSetting } from '../SettingParts'
 import { BTN_PRIMARY, ICON_BTN } from '../DialogParts'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
+import { Segmented } from '../Segmented'
 
 export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
@@ -52,10 +53,14 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           note="先頭の 6 文字だけにして「ID:」も省きます(数えるのと色は ID 全体で)"
         />
         <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の見せ方</p>
-        <Choice value={s.idStyle} options={ID_STYLES} onChange={(v) => update('idStyle', v)} />
+        <div className="max-w-md">
+          <Segmented label="ID の見せ方" value={s.idStyle} options={ID_STYLES} onChange={(v) => update('idStyle', v)} />
+        </div>
         <p className="text-[10px] text-c-text-muted mt-1">{ID_STYLES.find((x) => x.key === s.idStyle)?.note}</p>
         <p className="text-xs text-c-text-muted mt-3 mb-1.5">ID の位置</p>
-        <Choice value={s.idPosition} options={ID_POSITIONS} onChange={(v) => update('idPosition', v)} />
+        <div className="max-w-md">
+          <Segmented label="ID の位置" value={s.idPosition} options={ID_POSITIONS} onChange={(v) => update('idPosition', v)} />
+        </div>
         <div className="mt-3">
           <Toggle checked={s.nameSubtle} onChange={(v) => update('nameSubtle', v)} label="名前欄を目立たなくする" note="名前とワッチョイを、日付や ID と同じ薄い色・同じ大きさにします。オフにすると名前の色で目立たせます" />
           <Toggle checked={s.watchoiShort} onChange={(v) => update('watchoiShort', v)} label="ワッチョイを短く出す" note="「(ワッチョイ 1a2b-3c4d)」を「(1a2b-3c4d)」にします(種類の言葉と IP を省く)" />
@@ -97,15 +102,19 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
         />
       </Section>
       <Section title="日時の出し方" note="レスの頭の日時の形。元の形は、日時にマウスを乗せると出ます">
-        <Choice
-          value={s.dateStyle}
-          options={[
-            { key: 'md_w_hms' as const, name: '11/02(月) 19:01:15' },
-            { key: 'md_hm' as const, name: '11/02 19:01' },
-            { key: 'full' as const, name: '2026/11/02(月) 19:01:15.032' },
-          ]}
-          onChange={(v) => update('dateStyle', v)}
-        />
+        {/* 表示スタイルの窓の「細かい表示」と同じ切り替えボタン(狭いと縦に並ぶ) */}
+        <div className="max-w-md">
+          <Segmented
+            label="日時の出し方"
+            value={s.dateStyle}
+            options={[
+              { key: 'md_w_hms' as const, name: '11/02(月) 19:01:15' },
+              { key: 'md_hm' as const, name: '11/02 19:01' },
+              { key: 'full' as const, name: '2026/11/02(月) 19:01:15.032' },
+            ]}
+            onChange={(v) => update('dateStyle', v)}
+          />
+        </div>
       </Section>
       <Section desktopOnly title="レスをダブルクリックしたとき" note="1 回押したときは、今までどおりアンカーツリー(ダブルクリックに操作を割り当てると、1 回の押しは少し遅れます)">
         <Choice value={s.postDoubleClick} options={POST_DOUBLE_CLICKS} onChange={(v) => update('postDoubleClick', v)} />

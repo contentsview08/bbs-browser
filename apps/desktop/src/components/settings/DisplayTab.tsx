@@ -16,6 +16,7 @@ import {
   type AppSettings,
 } from '../../ui/settings'
 import { DepthSlider, postStyleName } from '../StyleMenu'
+import { Segmented } from '../Segmented'
 import { loadSystemFonts, type SystemFont } from '../../host/systemFonts'
 import { BaseFontSlider } from '../FontSizeSlider'
 import { ManagerDialog, NumberField, OpenRow, Toggle } from '../SettingParts'
@@ -27,7 +28,7 @@ import { FontRows } from './FontRows'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
 
 /**
- * 選んでいる見た目だけの設定(表示スタイルの窓の「見た目」のタブと、同じ言葉・同じ並び)。値は見た目ごとに別々に覚える
+ * 選んでいる見た目だけの設定(表示スタイルの窓の「スタイル」のタブと、同じ言葉・同じ並び)。値は見た目ごとに別々に覚える
  */
 function StyleOptionSection({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   const style = effectivePostStyle(s)
@@ -49,7 +50,9 @@ function StyleOptionSection({ settings: s, update }: Pick<SettingsProps, 'settin
       {QUOTE_STYLE_POSTS.has(style) && (
         <>
           <p className="text-xs text-c-text-muted mb-1.5">返信先の引用</p>
-          <Choice value={o.quote} options={QUOTE_STYLES} onChange={(v) => set('quote', v)} />
+          <div className="max-w-md">
+            <Segmented label="返信先の引用" value={o.quote} options={QUOTE_STYLES} onChange={(v) => set('quote', v)} />
+          </div>
           <div className="mt-3">
             <Toggle checked={o.groupRuns} onChange={(v) => set('groupRuns', v)} label="続けて書いたレスをまとめる" note="同じ人が続けて書いたレスの、名前とアイコンを省きます" />
           </div>
@@ -282,11 +285,15 @@ export function DisplayTab({ settings: s, update, onOpenCustomScheme }: Pick<Set
         {/* 1px ずつ。スレ一覧・レスの本文・頭は、それぞれの ︙ の「文字の大きさ」でさらに変えられる */}
         <BaseFontSlider settings={s} update={update} fixedSize />
       </Section>
+      {/* 表示スタイルの窓の「スタイル」のタブと同じ見出し・同じ部品 */}
       <Section
-        title="レスの見た目"
+        title="スタイル"
         note={`${POST_STYLES.find((p) => p.key === effectivePostStyle(s))?.note ?? ''}(Discord 風・LINE 風は一覧表示、ほかは高密度で並べます)`}
       >
-        <Choice value={effectivePostStyle(s)} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
+        <p className="text-xs text-c-text-muted mb-1.5">レスの見た目</p>
+        <div className="max-w-md">
+          <Segmented label="レスの見た目" value={effectivePostStyle(s)} options={POST_STYLES} onChange={(v) => update('postStyle', v)} />
+        </div>
       </Section>
       <StyleOptionSection settings={s} update={update} />
       <Section desktopOnly title="スレのタブ" note="Ctrl+W で閉じる、Ctrl+Tab で切り替え。開いていたタブは次の起動で戻ります">

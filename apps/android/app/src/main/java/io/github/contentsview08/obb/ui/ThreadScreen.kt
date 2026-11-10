@@ -261,6 +261,12 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         val rows = anchorTreeOf(no).takeIf { it.size > 1 } ?: return
         openPopup(rows.mapNotNull { r -> byNo[r.no] }.distinctBy { it.no }, rows, no)
     }
+    /** アンカー(>>n)を押したのと同じポップアップで、そのレスを出す(ツリーの重ねて出した分を押したとき) */
+    fun openAnchor(no: Int) {
+        val p = byNo[no] ?: return
+        traced = setOf(no)
+        openPopup(listOf(p))
+    }
     /** 並んでいる行のレス番号(2 回目以降の出現は 0)。スクロールの覚えとミニマップが使う */
     val rowNos = remember(treeLines, shown) { treeLines?.map { if (it.ghost) 0 else it.no } ?: shown.map { it.no } }
     val rowCount = rowNos.size
@@ -682,7 +688,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                             val p = byNo[l.no] ?: return@itemsIndexed
                             // 新着(開いた時点の既読より後)には新着の印。「ここから未読」の線はツリーでは出さない
                             val fresh = !l.ghost && page.unreadFrom > 1 && l.no >= page.unreadFrom
-                            TreeRowFrame(l, fresh, divider, onGhost = { scroller.toUnread(l.no, animate = true); ctl.jumpFlash = l.no to System.nanoTime() }) { postRow(p, null, !l.ghost) }
+                            TreeRowFrame(l, fresh, divider, onGhost = { openAnchor(l.no) }) { postRow(p, null, !l.ghost) }
                         }
                         else itemsIndexed(shown, key = { _, it -> it.no }, contentType = { _, it -> if (it.no in page.ngNos) 1 else 0 }) { i, p ->
                             if (filter == null && query.isBlank() && p.no == page.unreadFrom) UnreadDivider()
@@ -833,7 +839,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         PopupLayer(
             popups, bg = Palette.threadBg(style), topInset = { bars.topHeight * (1f - bars.hidden) }, endInset = 0.dp,
             onCloseTop = { popups.removeAt(popups.lastIndex) },
-            onTreeElsewhere = { openAnchorTree(it) },
+            onGhost = { openAnchor(it) },
         ) { postRow(it, null, false) }
     }
 
@@ -1056,7 +1062,7 @@ private fun Tab(modifier: Modifier, active: Boolean, onClick: () -> Unit, wash: 
 
 /**
  * ツリー表示の 1 行: 段の分だけ字下げし(1 段 8dp)、字下げの左に段ごとの細い縦線。新着は左端に未読の色の帯と淡い面。
- * 2 回目以降の出現は薄く出し、押すと 1 回目(本来の位置)へ飛ぶ(中のリンクや長押しは受けない)
+ * 2 回目以降の出現は薄く出し、押すとアンカー(>>n)と同じポップアップでそのレスを出す(中のリンクや長押しは受けない)
  */
 @Composable
 private fun TreeRowFrame(line: io.github.contentsview08.obb.bbs.TreeLine, fresh: Boolean, divider: Color?, onGhost: () -> Unit, content: @Composable () -> Unit) {

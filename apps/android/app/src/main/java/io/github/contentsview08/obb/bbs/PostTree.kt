@@ -5,7 +5,7 @@ package io.github.contentsview08.obb.bbs
 
 /**
  * ツリー表示の 1 行。depth は字下げの段(深さの上限で止めたもの)。parent はその行を置いた親(根は 0)。
- * ghost は 2 つ目・3 つ目のアンカー先の下に出す 2 回目以降の出現(薄く出し、子を付けず、押すと 1 回目へ飛ぶ)
+ * ghost は 2 つ目・3 つ目のアンカー先の下に出す 2 回目以降の出現(薄く出し、子を付けず、押すとアンカーと同じポップアップでそのレスを出す)
  */
 data class TreeLine(val no: Int, val depth: Int, val parent: Int = 0, val ghost: Boolean = false)
 

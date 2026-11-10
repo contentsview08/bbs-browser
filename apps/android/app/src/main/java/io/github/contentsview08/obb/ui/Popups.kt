@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -36,7 +37,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.TreeRow
 
@@ -63,8 +63,8 @@ fun PopupLayer(
     topInset: () -> Float,
     endInset: androidx.compose.ui.unit.Dp = 0.dp,
     onCloseTop: () -> Unit,
-    /** アンカーツリーの重ねて出した分(2 回目以降)を押したとき、1 回目の出現がそのツリーの中にないなら、そのレスのアンカーツリーを開く */
-    onTreeElsewhere: (Int) -> Unit = {},
+    /** アンカーツリーの重ねて出した分(2 回目以降)を押したとき。アンカー(>>n)と同じポップアップを出す */
+    onGhost: (Int) -> Unit = {},
     post: @Composable (Post) -> Unit,
 ) {
     if (popups.isEmpty()) return
@@ -76,13 +76,13 @@ fun PopupLayer(
             if (i == popups.lastIndex) {
                 Box(Modifier.fillMaxSize().clickable(interactionSource = noRipple, indication = null, onClick = onCloseTop))
             }
-            PopupWindow(e, topInset, areaH, endInset, bg, onTreeElsewhere, post)
+            PopupWindow(e, topInset, areaH, endInset, bg, onGhost, post)
         }
     }
 }
 
 @Composable
-private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, bg: Color, onTreeElsewhere: (Int) -> Unit, post: @Composable (Post) -> Unit) {
+private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endInset: androidx.compose.ui.unit.Dp, bg: Color, onGhost: (Int) -> Unit, post: @Composable (Post) -> Unit) {
     val density = LocalDensity.current
     val gap = with(density) { 4.dp.toPx() }
     val shape = RoundedCornerShape(6.dp)
@@ -102,7 +102,7 @@ private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endI
                     }.shadow(12.dp, shape).clip(shape).background(bg).border(2.dp, Palette.accent, shape)
                     // 中を押しても幕に届かない(閉じない)ように
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
-            ) { PopupContent(e, onTreeElsewhere, post) }
+            ) { PopupContent(e, onGhost, post) }
         },
     ) { measurables, constraints ->
         val minTop = topInset() + gap
@@ -117,7 +117,7 @@ private fun PopupWindow(e: PopupEntry, topInset: () -> Float, areaH: Float, endI
 }
 
 @Composable
-private fun PopupContent(e: PopupEntry, onTreeElsewhere: (Int) -> Unit, post: @Composable (Post) -> Unit) {
+private fun PopupContent(e: PopupEntry, onGhost: (Int) -> Unit, post: @Composable (Post) -> Unit) {
     val state = e.state
     val tree = e.tree
     // 見せたいレスまで中を送る(長いツリーで、起点のレスが下に隠れないように)
@@ -136,10 +136,6 @@ private fun PopupContent(e: PopupEntry, onTreeElsewhere: (Int) -> Unit, post: @C
         }
     } else {
         val byNo = remember(e.posts) { e.posts.associateBy { it.no } }
-        val scope = androidx.compose.runtime.rememberCoroutineScope()
-        // 重ねて出した分を押して飛んだ先(少しのあいだ色を付ける)
-        var flash by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-        LaunchedEffect(flash) { if (flash != 0) { kotlinx.coroutines.delay(1500); flash = 0 } }
         // 一番下のレスが枠の線に付かないように
         LazyColumn(state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)) {
             itemsIndexed(tree, key = { i, r -> "$i:${r.no}" }) { i, r ->
@@ -148,14 +144,10 @@ private fun PopupContent(e: PopupEntry, onTreeElsewhere: (Int) -> Unit, post: @C
                 // 子: 次の行がこの行の子(深さの上限で同じ段に並ぶこともある)
                 val child = tree.getOrNull(i + 1)?.takeIf { !r.ghost && it.parent == r.no }
                 androidx.compose.runtime.CompositionLocalProvider(LocalEdgeBar provides edge) { TreeStep(
-                    r, depthChanged = i > 0 && tree[i - 1].depth != r.depth, focus = !r.ghost && (r.no == e.focusNo || r.no == flash),
+                    r, focus = !r.ghost && r.no == e.focusNo, isLast = i == tree.lastIndex,
                     hasChild = child != null, childSameDepth = child != null && child.depth == r.depth,
-                    // 2 回目以降の出現を押すと 1 回目へ(ツリー表示と同じ)。このツリーになければ、そのレスのアンカーツリーを開く
-                    onGhost = {
-                        val at = tree.indexOfFirst { !it.ghost && it.no == r.no }
-                        if (at < 0) onTreeElsewhere(r.no)
-                        else scope.launch { state.animateScrollToItem(at, -200); flash = r.no }
-                    },
+                    // 2 回目以降の出現を押すと、アンカー(>>n)と同じポップアップを上に重ねて出す(ツリー表示と同じ)
+                    onGhost = { onGhost(r.no) },
                 ) {
                     androidx.compose.runtime.CompositionLocalProvider(LocalInTree provides true) { post(p) }
                 } }
@@ -175,12 +167,14 @@ class EdgeBar { val state = androidx.compose.runtime.mutableStateOf<Color?>(null
 val LocalEdgeBar = androidx.compose.runtime.compositionLocalOf<EdgeBar?> { null }
 
 /**
- * ツリーの 1 行: 段の分だけ左を薄い灰色で塗り、縦線を引く。段が変わる所に線。Discord 風・LINE 風は罫線でつなぐ。
+ * ツリーの 1 行: カード・専ブラ風・まとめ風はツリー表示と同じ字下げ(1 段 8dp)と段ごとの細い縦線。Discord 風・LINE 風は罫線でつなぐ。
  * 段は組み立て(anchorTree)で深さの上限に止めてある。ghost(2 回目以降の出現)は薄く出し、押すと onGhost(中のリンクや長押しは受けない)
  */
 @Composable
 private fun TreeStep(
-    r: TreeRow, depthChanged: Boolean, focus: Boolean, hasChild: Boolean = false,
+    r: TreeRow, focus: Boolean, hasChild: Boolean = false,
+    /** 最後の行(区切りの線を付けない) */
+    isLast: Boolean = false,
     /** 子が深さの上限で同じ段に並ぶ(子への線を、自分のつなぎの列に下ろす) */
     childSameDepth: Boolean = false,
     onGhost: () -> Unit = {},
@@ -242,18 +236,19 @@ private fun TreeStep(
         }
         return
     }
-    Column {
-        if (depthChanged) HorizontalDivider(thickness = 1.5.dp, color = Palette.borderStrong)
-        val shade = Palette.textMuted.copy(alpha = 0.14f)
-        val rule = Palette.textMuted.copy(alpha = 0.8f)
-        val gutter = (4 + depth * 10).dp
-        Row(Modifier.then(if (focus) Modifier.background(Palette.selectionWash(LocalPrefs.current.postStyle)) else Modifier).then(edgeMod).drawBehind {
-            // 段の分だけ左を塗り、縦線を引く(描くだけ。高さの見積もりはしない)
-            drawRect(shade, size = androidx.compose.ui.geometry.Size(gutter.toPx(), size.height))
-            drawRect(rule, topLeft = Offset(gutter.toPx(), 0f), size = androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height))
-        }) {
-            Spacer(Modifier.width(gutter + 2.dp))
-            Column(Modifier.weight(1f)) { body() }
+    // ツリー表示(ThreadScreen.kt の TreeRowFrame)と同じ字下げ・縦線・区切りの線
+    val step = 8.dp
+    val rule = Palette.textMuted.copy(alpha = 0.35f)
+    val divider = if (LocalPrefs.current.postStyle == "matome") Palette.border.copy(alpha = 0.3f) else Palette.border
+    Box(
+        Modifier.fillMaxWidth().then(if (focus) Modifier.background(Palette.selectionWash(LocalPrefs.current.postStyle)) else Modifier).then(edgeMod).drawBehind {
+            val s = step.toPx()
+            for (k in 0 until depth) drawRect(rule, Offset(s * k + s / 2, 0f), androidx.compose.ui.geometry.Size(1.dp.toPx(), size.height))
+        }.padding(start = step * depth),
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            body()
+            if (!isLast) HorizontalDivider(color = divider)
         }
     }
 }

@@ -671,16 +671,6 @@ html[data-platform='mobile'] .post-popup {
   padding-bottom: 8px;
 }
 
-/* アンカーツリー(カード・専ブラ風)のレスは、番号の行はそのままで、本文だけを右へ 1 段の幅(AnchorTree.tsx の STEP)ずらす。
-   番号の真下の、本文の左にできた所を、ツリーの線が通る */
-.tree-post > article [data-post-body] {
-  margin-left: 18px;
-}
-/* スマホのツリーは StepTree(.tree-post-step)なので、いまは当たらない */
-html[data-platform='mobile'] .tree-post > article [data-post-body] {
-  margin-left: 12px;
-}
-
 /* グロ注意の画像(サムネイル・画像一覧)。ぼかして、押すまで中身が分からないようにする */
 .gross-blur img,
 .gross-blur video {

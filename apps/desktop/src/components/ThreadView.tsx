@@ -396,8 +396,6 @@ interface FrameShared {
   continuedFrom: (i: number) => boolean
   /** 続けて書いたレスの名前・アイコンを省く(Discord 風・LINE 風の見た目ごとの設定) */
   groupRuns: boolean
-  /** ツリーで重ねて出したレスを押したとき、1 回目の出現へ飛ぶ */
-  onJumpPrimary: (no: number) => void
   isNg: (p: Post) => boolean
   autoNg: Map<number, AutoNgReason>
   aiMarkOf: (no: number) => ArticleProps['aiMark']
@@ -485,7 +483,7 @@ const PostFrame = memo(function PostFrame(props: {
   runOpen: boolean
   /** ツリー表示の字下げの段(ツリーでなければ undefined) */
   depth?: number
-  /** ツリーで 2 つ目・3 つ目のアンカー先の下に重ねて出した分(薄く出し、押すと 1 回目の出現へ飛ぶ)。既読・キー操作の枠には数えない */
+  /** ツリーで 2 つ目・3 つ目のアンカー先の下に重ねて出した分(薄く出し、押すとアンカーと同じポップアップを出す)。既読・キー操作の枠には数えない */
   dup?: boolean
   /** ツリーの新着の印(前回の既読より後のレス) */
   newMark?: boolean
@@ -532,14 +530,17 @@ const PostFrame = memo(function PostFrame(props: {
           style={{ background: 'color-mix(in srgb, var(--c-unread) 7%, transparent)', borderLeft: '3px solid var(--c-unread)' }}
         />
       )}
-      {/* 重ねて出した分は、どこを押しても 1 回目の出現へ(中のボタンは押せない) */}
+      {/* 重ねて出した分は、どこを押してもアンカー(>>n)と同じポップアップで元のレスを出す(中のボタンは押せない)。
+          マウスを乗せたときも、アンカーと同じ決まり(設定の「乗せて開く」)で開く */}
       {dup && (
         <button
           type="button"
           className="absolute inset-0 z-[3] cursor-pointer"
-          onClick={() => s.onJumpPrimary(p.no)}
-          title={`>>${p.ref ?? p.no} の本来の位置へ`}
-          aria-label={`>>${p.ref ?? p.no} の本来の位置へ`}
+          onClick={(e) => s.handlers.onAnchor([p.no], e.currentTarget, 'click')}
+          onMouseEnter={(e) => s.handlers.onAnchor([p.no], e.currentTarget, 'hover')}
+          onMouseLeave={s.handlers.onAnchorLeave}
+          title={`>>${p.ref ?? p.no} を出す`}
+          aria-label={`>>${p.ref ?? p.no} を出す`}
         />
       )}
       {props.unreadLine && <Divider label="ここから未読" self />}
@@ -2124,22 +2125,24 @@ export default function ThreadView(props: Props) {
     [settings.anchorPopup, settings.idStyle, settings.heatStyle, settings.doubleTapReply, settings.postDoubleClick, settings.dateStyle, settings.idShort, settings.idPosition, settings.iconFromWatchoi, settings.nameSubtle, settings.scheme, settings.darkScheme, settings.lightScheme, settings.followOsTheme, settings.postStyle, thumbAuto, settings.urlShorten, canReply, props.onUrl, props.onAddNg, props.onRemoveNg, props.onEditNg, props.onNgDraft, props.textQuotes, props.onMarkTroll, onMarkAi, aiRules, props.onReact, props.reactionDefs, props.onPostAction, props.postActions, props.onDeletePost, props.onMarkOwn],
   )
 
-  /** アンカーツリーを線でつないで描く(ポップアップの中身) */
+  /** アンカーツリーを描く(ポップアップの中身) */
   function renderTree(start: number, level: number) {
     const handlers = handlersFor(level)
     return (
       <AnchorTree
         rows={anchorRowsOf(start)}
         focus={start}
-        // 重ねて出した分の 1 回目の出現がこのツリーにないときは、そのレスのアンカーツリーを重ねて開く
-        onElsewhere={(no, el) => handlers.onBody(no, el)}
+        // 重ねて出した分は、アンカー(>>n)と同じポップアップを上に重ねて開く
+        onDup={(no, el, via) => handlers.onAnchor([no], el, via)}
+        onDupLeave={handlers.onAnchorLeave}
         variant={baseVariant(variant)}
-        renderPost={(no) => {
+        renderPost={(no, i) => {
           const p = byNo.get(no)!
           return (
             <PostArticle
               {...postArticleProps(p, frameShared)}
-              showTopDivider={false}
+              // カード・まとめ風は、ほかのポップアップ・ツリー表示と同じく 2 行目から区切りの線
+              showTopDivider={i > 0 && (variant === 'card' || variant === 'matome')}
               alignLeft
               ngMode="aborn"
               handlers={handlers}
@@ -2349,13 +2352,6 @@ export default function ThreadView(props: Props) {
     setCursorNo(no)
     setCursorHidden(false)
   }, [])
-  /** ツリーで重ねて出したレスを押したら、1 回目の出現へ飛んで選ぶ */
-  const scrollToPostRef = useRef(scrollToPost)
-  scrollToPostRef.current = scrollToPost
-  const jumpPrimary = useCallback((no: number) => {
-    scrollToPostRef.current(no)
-    if (!isMobile) pressPost(no)
-  }, [pressPost])
   const frameShared = useMemo<FrameShared>(
     () => ({
       handlers: mainHandlers,
@@ -2372,7 +2368,6 @@ export default function ThreadView(props: Props) {
       replyPreviewOf,
       continuedFrom,
       groupRuns: styleOpts.groupRuns,
-      onJumpPrimary: jumpPrimary,
       isNg,
       autoNg,
       aiMarkOf,
@@ -2388,7 +2383,7 @@ export default function ThreadView(props: Props) {
       replyToOwn,
       reactions: props.reactions,
     }),
-    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, jumpPrimary, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
+    [mainHandlers, pressPost, toggleRun, byNo, quotesOf, grossNos, anchorCounts, idCounts, iconCounts, settings.iconFromWatchoi, variant, replyPreviewOf, continuedFrom, styleOpts.groupRuns, isNg, autoNg, aiMarkOf, settings.ngMode, settings.thumbLoad, settings.idStyle, settings.showLinkPreview, settings.postToolbar, settings.quickPhrases, display, opId, ownNos, replyToOwn, props.reactions],
   )
   const galleryItems = useMemo(() => (galleryOpen ? collectMedia(log.posts.filter((p) => !isNg(p))) : []), [galleryOpen, log.posts, isNg])
   /**

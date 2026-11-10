@@ -261,7 +261,7 @@ describe('スレが立った日時', () => {
 describe('スレタイの後ろの角かっこ(立てた人)', () => {
   it('ID★・BE 番号・ほかの名前や ID を、立てた人として取り出す', () => {
     expect(splitAuthorId('【悲報】移民の話 [YN3MdpLR★]')).toEqual({ title: '【悲報】移民の話', authorId: 'YN3MdpLR' })
-    expect(splitAuthorId('ニュース [834922174]')).toEqual({ title: 'ニュース', authorId: 'BE:834922174' })
+    expect(splitAuthorId('ニュース [834922174]')).toEqual({ title: 'ニュース', authorId: '834922174' })
     expect(splitAuthorId('雑談スレ [ﾀﾋﾁｬﾝ]')).toEqual({ title: '雑談スレ', authorId: 'ﾀﾋﾁｬﾝ' })
     expect(splitAuthorId('雑談スレ ［ab12CD］')).toEqual({ title: '雑談スレ', authorId: 'ab12CD' })
     expect(splitAuthorId('雑談スレ [名無し さん]')).toEqual({ title: '雑談スレ', authorId: '名無し さん' })

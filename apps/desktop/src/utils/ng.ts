@@ -1,6 +1,7 @@
 // NG(あぼーん)。スマホ版(data/Prefs.kt の NgRule)と同じ形・同じ当て方:
 // 種類・文字・正規表現か・有効か・期限(この日まで)・効く板(なければすべての板)・メモ
 
+import { legacyAuthorId } from './authorId'
 import type { Post, ThreadSummary } from '@bbs-browser/connectors'
 
 export type NgTarget = 'content' | 'posterName' | 'posterId' | 'threadTitle'
@@ -219,7 +220,7 @@ function idMatcher(rules: NgRule[]): (id: string | undefined, boardUrl?: string)
   const today = todayDateString()
   const exact = rules.filter((r) => r.target === 'posterId' && !r.isRegex && r.pattern !== '' && isActive(r, today))
   const regex = compile(rules.filter((r) => r.isRegex), 'posterId')
-  return (id, b) => id !== undefined && (exact.some((r) => r.pattern === id && (!r.boardUrl || r.boardUrl === b)) || regex.some((m) => m(id, b)))
+  return (id, b) => id !== undefined && (exact.some((r) => legacyAuthorId(r.pattern) === id && (!r.boardUrl || r.boardUrl === b)) || regex.some((m) => m(id, b)))
 }
 
 /** レスの NG。boardUrl はそのレスのスレの板(「この板だけ」の NG を当てるため) */

@@ -5,6 +5,7 @@
   {"name": "文字: 当たらない", "input": {"pattern": "abc", "isRegex": false, "target": "content", "text": "xyz"}, "expected": {"valid": true, "match": false, "ranges": []}},
   {"name": "ID: 文字は完全一致", "input": {"pattern": "abc", "isRegex": false, "target": "posterId", "text": "abcd"}, "expected": {"valid": true, "match": false, "ranges": []}},
   {"name": "ID: 同じ", "input": {"pattern": "abc", "isRegex": false, "target": "posterId", "text": "abc"}, "expected": {"valid": true, "match": true, "ranges": [[0, 3]]}},
+  {"name": "ID: 前の形の BE:番号 の NG も、今の数字だけの ID に当たる", "input": {"pattern": "BE:834922174", "isRegex": false, "target": "posterId", "text": "834922174"}, "expected": {"valid": true, "match": true}},
   {"name": "ID: 正規表現は部分一致", "input": {"pattern": "^ab", "isRegex": true, "target": "posterId", "text": "abcd"}, "expected": {"valid": true, "match": true, "ranges": [[0, 2]]}},
   {"name": "正規表現: 大文字小文字を区別する", "input": {"pattern": "abc", "isRegex": true, "target": "content", "text": "ABC"}, "expected": {"valid": true, "match": false, "ranges": []}},
   {"name": "正規表現: 先頭の (?i) で区別しない", "input": {"pattern": "(?i)abc", "isRegex": true, "target": "content", "text": "xABC"}, "expected": {"valid": true, "match": true, "ranges": [[1, 4]]}},

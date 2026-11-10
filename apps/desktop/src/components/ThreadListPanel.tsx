@@ -1,5 +1,6 @@
 // スレ一覧パネル。板のスレ一覧と閲覧履歴の両方をこのパネルで出す。
 
+import { legacyAuthorId } from '../utils/authorId'
 import { useLayoutEffect, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
@@ -87,8 +88,6 @@ interface Props {
   onFooterHeight?: (height: number) => void
   /** カードの見た目(レスの見た目の設定に合わせる) */
   variant?: 'card' | 'discord' | 'classic' | 'line'
-  /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
-  authorIcon?: boolean
   /** 行の形がコンパクト(スレタイ 1 行と数だけ。設定 listShape) */
   compact?: boolean
   /** 表示スタイルの画面で変える設定 */
@@ -551,7 +550,7 @@ export default function ThreadListPanel(props: Props) {
    */
   const keywordGroups = useMemo(() => {
     const keywords = (props.keywords ?? []).map((k) => k.trim()).filter(Boolean)
-    const authors = (props.keywordAuthors ?? []).map((k) => k.trim()).filter(Boolean)
+    const authors = (props.keywordAuthors ?? []).map((k) => legacyAuthorId(k.trim())).filter(Boolean)
     if (keywords.length === 0 && authors.length === 0) return undefined
     const normal = visible.filter((t) => !isAnnouncement(t))
     const taken = new Set<string>()
@@ -873,7 +872,6 @@ export default function ThreadListPanel(props: Props) {
         onToggleFavorite={props.onToggleFavoriteThread ? onFavoriteCard : undefined}
         isCursor={!isMobile && props.active !== false && !cursorHidden && cursorId === id}
         variant={props.variant}
-        authorIcon={props.authorIcon}
         compact={props.compact}
         selected={selectable ? selected.has(id) : undefined}
         onSelect={selectable ? onSelectCard : undefined}

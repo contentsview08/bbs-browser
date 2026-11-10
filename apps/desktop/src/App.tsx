@@ -2769,7 +2769,6 @@ export default function App() {
           onHeaderHeight={(h) => updateSetting('listHeaderHeight', h)}
           onFooterHeight={(h) => updateSetting('listFooterHeight', h)}
           variant={baseVariant(effectivePostStyle(settings))}
-          authorIcon={settings.idStyle === 'icon'}
           compact={settings.listShape === 'compact'}
           title={listTitle ?? '板を選択'}
           onShownChange={onShownChange}

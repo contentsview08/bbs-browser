@@ -105,6 +105,7 @@ import androidx.compose.ui.unit.sp
 import io.github.contentsview08.obb.AppViewModel
 import io.github.contentsview08.obb.Page
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.bbs.legacyAuthorId
 import io.github.contentsview08.obb.data.normalizeForSearch
 import io.github.contentsview08.obb.data.ThreadState
 import io.github.contentsview08.obb.data.threadUnread
@@ -682,7 +683,7 @@ internal fun keywordGroups(list: List<ThreadSummary>, keywords: List<String>, au
     }
     for (a in authors) {
         if (a.isEmpty()) continue
-        val hits = normal.filter { it.key !in taken && it.authorId == a }
+        val hits = normal.filter { it.key !in taken && it.authorId == legacyAuthorId(a) }
         hits.forEach { taken += it.key }
         if (hits.isNotEmpty()) groups += authorKeywordLabel(a) to hits
     }

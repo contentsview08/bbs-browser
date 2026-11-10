@@ -173,12 +173,12 @@ export const tabDefOf = (key: ListTabKey) => LIST_TABS.find((t) => t.key === key
 export type OpenPosition = 'unread' | 'top' | 'bottom'
 /** 人気のレス(返信 3 件から)の示し方: 左の帯・右の帯・本文の色(スマホ版の heatStyle と同じ) */
 export type HeatStyle = 'left' | 'right' | 'text'
-/** ID の見せ方: なし / 色(2 回以上書いた ID を ID ごとの色に) / 模様(ID から作るアイコンを番号の左と、スレ一覧の立てた人に) */
+/** ID の見せ方: なし / 色(2 回以上書いた ID を ID ごとの色に) / 模様(ID から作るアイコンを番号の左に) */
 export type IdStyle = 'none' | 'color' | 'icon'
 export const ID_STYLES: { key: IdStyle; name: string; note: string }[] = [
   { key: 'none', name: 'なし', note: 'ID は文字だけ' },
   { key: 'color', name: '色', note: '2 回以上書いた ID を ID ごとの色で。同じ人の書き込みを目で追えます' },
-  { key: 'icon', name: '模様', note: 'ID から作る GitHub 風の模様を、レス番号の左と、スレ一覧の立てた人(ID の付く掲示板)に出します' },
+  { key: 'icon', name: '模様', note: 'ID から作る GitHub 風の模様を、レス番号の左に出します' },
 ]
 /** スレ一覧の行の形: ふつう・コンパクト(スレタイ 1 行と数だけ。スマホ版の listDensity と同じ) */
 export type ListShape = 'normal' | 'compact'
@@ -323,7 +323,7 @@ export interface AppSettings {
   /** 興味のあるキーワード。スレ一覧で、スレタイに含むスレを帯の下にまとめて上に出す */
   keywords: string[]
   /**
-   * 立てた人のキーワード(ThreadSummary.authorId。エッヂ・hono-bbs の ID、BE:番号、スレタイの後ろの [名前])。
+   * 立てた人のキーワード(ThreadSummary.authorId。エッヂ・hono-bbs の ID、subject.txt のスレタイの後ろの [ID]。前は数字に BE: を付けていた。照らし方は utils/authorId.ts)。
    * この人が立てたスレを、スレタイのキーワードと同じく帯の下にまとめ、通知もする。帯はスレタイのキーワードの後
    */
   keywordAuthors: string[]

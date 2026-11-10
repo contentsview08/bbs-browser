@@ -123,12 +123,11 @@ fun parseSubjectTxt(text: String, boardUrl: String): List<ThreadSummary> {
 
 private val TRAILING_BRACKET = Regex("\\s*[\\[［]([^\\[\\]［］]{1,32})[\\]］]\\s*$")
 private val ID_STAR = Regex("^(\\S{1,20})★$")
-private val BE_DIGITS = Regex("^[0-9]{6,12}$")
 
 /**
- * スレタイの後ろの角かっこ(「… [xxx]」「… ［xxx］」)を、立てた人として取り出す(PC 版の twoch/parse.ts の splitAuthorId と同じ決まり):
- * エッヂの「[ID★]」は ★ を外して ID、5ch の BE の板の 6〜12 桁の数字は「BE:番号」、それ以外(ほかの板の名前や ID)は中身をそのまま。
- * 「[転載禁止]」のような決まり文句・「©」で始まるもの・スレタイが角かっこだけのときは、スレタイのまま
+ * subject.txt の「スレタイ [立てた人の ID]」の最後の角かっこ 1 つを立てた人の ID として取り出す(PC 版の twoch/parse.ts の splitAuthorId と同じ決まり。
+ * 試験は packages/conformance/subject-author.json)。中身は数字でも何でもただの ID なのでそのまま持つ。エッヂの「★」は印なので外す(レスの ID と一致させるため)。
+ * 「[転載禁止]」のような決まり文句・「©」で始まるもの・スレタイが角かっこだけのときは 5ch の飾りなので、スレタイのまま
  */
 fun splitAuthorId(title: String): Pair<String, String?> {
     val m = TRAILING_BRACKET.find(title) ?: return title to null
@@ -136,9 +135,18 @@ fun splitAuthorId(title: String): Pair<String, String?> {
     if (inner.isEmpty() || inner.contains("転載") || inner.startsWith("©")) return title to null
     val rest = title.substring(0, m.range.first).trimEnd()
     if (rest.isEmpty()) return title to null
-    val id = ID_STAR.find(inner)?.groupValues?.get(1) ?: if (BE_DIGITS.matches(inner)) "BE:$inner" else inner
+    val id = ID_STAR.find(inner)?.groupValues?.get(1) ?: inner
     return rest to id
 }
+
+private val LEGACY_BE = Regex("^BE:([0-9]{6,12})$")
+
+/**
+ * 立てた人の ID の前の形を今の形に直す。前は subject.txt の「[123456789]」に「BE:」を付けて持っていたので、
+ * 保存済みの NG・立てた人のキーワード・同期で来た値の「BE:123456789」も、今の「123456789」に当たるようにする(PC 版の utils/authorId.ts と同じ)
+ */
+fun legacyAuthorId(id: String): String = LEGACY_BE.find(id)?.groupValues?.get(1) ?: id
+
 private val ID_IN_DATE = Regex("\\sID:(\\S+)")
 private val ID_BE = Regex("\\s(?:ID|BE):\\S+")
 

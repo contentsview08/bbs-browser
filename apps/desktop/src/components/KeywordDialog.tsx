@@ -1,6 +1,7 @@
 // キーワードに登録する画面。スレの右クリック・長押しのメニューから開く(スマホ版の ThreadPeek.kt の KeywordDraftDialog と同じ言葉)。
 // スレタイは全体で登録することはまずなく、ある言葉まで削って登録するので、全体を選んだ状態で開く。立てた人は ID のまま、見て確かめてから登録する
 
+import { legacyAuthorId } from '../utils/authorId'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -35,7 +36,7 @@ export default function KeywordDialog(props: {
     inputRef.current?.select()
   }, [kind])
   const w = word.trim()
-  const dup = kind === 'author' ? props.keywordAuthors.includes(w) : props.keywords.some((k) => k.trim() === w)
+  const dup = kind === 'author' ? props.keywordAuthors.some((a) => legacyAuthorId(a.trim()) === w) : props.keywords.some((k) => k.trim() === w)
   const ok = w !== '' && !dup
   const submit = () => {
     if (!ok) return

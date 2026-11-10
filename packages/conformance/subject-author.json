@@ -1,0 +1,14 @@
+[
+  { "name": "エッヂの ID(★ は印なので外す)", "input": "【悲報】移民の話 [YN3MdpLR★]", "expected": { "title": "【悲報】移民の話", "authorId": "YN3MdpLR" } },
+  { "name": "数字だけの ID(BE の板)もそのまま", "input": "ニュース [834922174]", "expected": { "title": "ニュース", "authorId": "834922174" } },
+  { "name": "半角カナの名前", "input": "雑談スレ [ﾀﾋﾁｬﾝ]", "expected": { "title": "雑談スレ", "authorId": "ﾀﾋﾁｬﾝ" } },
+  { "name": "全角の角かっこ", "input": "雑談スレ ［ab12CD］", "expected": { "title": "雑談スレ", "authorId": "ab12CD" } },
+  { "name": "空白を含む中身", "input": "雑談スレ [名無し さん]", "expected": { "title": "雑談スレ", "authorId": "名無し さん" } },
+  { "name": "角かっこが 2 つなら最後の 1 つだけ", "input": "スレタイ [123456] [ab12CD]", "expected": { "title": "スレタイ [123456]", "authorId": "ab12CD" } },
+  { "name": "途中の角かっこはスレタイのまま", "input": "[速報] 地震 [ab12CD]", "expected": { "title": "[速報] 地震", "authorId": "ab12CD" } },
+  { "name": "転載禁止は 5ch の飾り", "input": "ニュース [無断転載禁止]", "expected": { "title": "ニュース [無断転載禁止]", "authorId": null } },
+  { "name": "© で始まるものは 5ch の飾り", "input": "ニュース [©2ch.net]", "expected": { "title": "ニュース [©2ch.net]", "authorId": null } },
+  { "name": "スレタイが角かっこだけ", "input": "[速報]", "expected": { "title": "[速報]", "authorId": null } },
+  { "name": "途中にだけ角かっこ", "input": "[速報] 地震", "expected": { "title": "[速報] 地震", "authorId": null } },
+  { "name": "角かっこなし", "input": "ふつうのスレ", "expected": { "title": "ふつうのスレ", "authorId": null } }
+]

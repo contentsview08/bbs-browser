@@ -1,6 +1,7 @@
 // 通知の判定。お気に入りのスレの新着と、キーワードに合う新しいスレ。
 // 通信や画面には触らず、取ってきた値を比べるだけ(App が数分おきに呼ぶ)
 
+import { legacyAuthorId } from './authorId'
 import type { ThreadSummary } from '@bbs-browser/connectors'
 import { normalizeForSearch } from './postBody'
 
@@ -51,7 +52,7 @@ export function keywordHits(
   authors: string[] = [],
 ): { thread: ThreadSummary; keyword: string }[] {
   const ks = keywords.map((k) => ({ raw: k.trim(), n: normalizeForSearch(k.trim()) })).filter((k) => k.n !== '')
-  const as = authors.map((a) => a.trim()).filter(Boolean)
+  const as = authors.map((a) => legacyAuthorId(a.trim())).filter(Boolean)
   if (ks.length === 0 && as.length === 0) return []
   const out: { thread: ThreadSummary; keyword: string }[] = []
   for (const t of threads) {

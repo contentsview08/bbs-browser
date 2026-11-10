@@ -7,6 +7,7 @@ import { encodeEucJpForm } from '../src/eucjp'
 import { encodeShiftJisForm } from '../src/sjis'
 import type { Encoding } from '../src/types'
 import { boardPathOf, createdAtOf, kakoDatUrls, looksLikeSubject, routeTwoChUrl } from '../src/twoch/connector'
+import { splitAuthorId } from '../src/twoch/parse'
 import { isAccountSite, shouldRelogin } from '../src/honobbs/connector'
 import { siteDomain } from '../src/siteDomain'
 
@@ -60,6 +61,13 @@ describe('subject-shape.json', () => {
   })
 })
 
+describe('subject-author.json', () => {
+  it.each(load<string, { title: string; authorId: string | null }>('subject-author.json'))('$name', (c) => {
+    const r = splitAuthorId(c.input)
+    expect({ title: r.title, authorId: r.authorId ?? null }).toEqual(expectedOf(c))
+  })
+})
+
 describe('encode.json', () => {
   it.each(load<{ encoding: string; value: string }, string>('encode.json'))('$name', (c) => {
     const encode = c.input.encoding === 'euc-jp' ? encodeEucJpForm : c.input.encoding === 'utf-8' ? encodeUtf8Form : encodeShiftJisForm
@@ -75,7 +83,7 @@ describe('charset.json', () => {
 })
 
 it('残した差にはどれも理由がある', () => {
-  for (const file of ['url.json', 'subject-shape.json', 'encode.json']) {
+  for (const file of ['url.json', 'subject-shape.json', 'subject-author.json', 'encode.json']) {
     for (const c of load<unknown, unknown>(file)) if (c.knownDiff) expect(c.knownDiff.reason, c.name).toBeTruthy()
   }
 })

@@ -11,7 +11,6 @@ import type { ThreadSummary } from '@bbs-browser/connectors'
 import type { ThreadState } from '@bbs-browser/logstore'
 import { formatMomentum, relativeTime } from '../utils/thread'
 import { threadUnread } from '../utils/unread'
-import Identicon from './Identicon'
 import { isAutoLoadable } from '../utils/safeUrl'
 import BoardIcon from './BoardIcon'
 import { mediaSrc } from '../utils/httpsFirst'
@@ -56,8 +55,6 @@ interface Props {
   /** 見た目のスタイル(レスの見た目の設定に合わせる)。card: カード / discord: チャンネル一覧のような行 /
    *  classic: 専ブラのスレ一覧のような表 / line: トーク一覧のような行 */
   variant?: 'card' | 'discord' | 'classic' | 'line'
-  /** 立てた人の ID(エッジ)を模様で出す。切っていれば、右下に ID を小さく出す */
-  authorIcon?: boolean
   /** 行の形がコンパクト: スレタイ 1 行と、右端にレス数と未読だけ(スマホのアプリの listDensity = compact と同じ)。専ブラ風の表は元から 1 行なので変えない */
   compact?: boolean
   /** 閲覧履歴の行(板の名前・いつ見たか)。渡すと、見た目によらず履歴用の形で描く(スマホのアプリの過去のスレの行と同じ並び) */
@@ -92,12 +89,9 @@ function ThreadCard({
   onSelectStart,
   isCursor,
   variant = 'card',
-  authorIcon = false,
   compact = false,
   historyMeta,
 }: Props) {
-  /** 立てた人の ID を模様で出すか(出さないときは、右下に ID の文字を出す) */
-  const authorIconId = authorIcon ? thread.authorId : undefined
   // スマホ: 長押しで操作の一覧を出す(選べる一覧(閲覧履歴)では、選び始める)
   const [sheet, setSheet] = useState(false)
   /** 操作バーの NG のメニューを開いているか(開いている間はバーを出したままにする) */
@@ -171,31 +165,17 @@ function ThreadCard({
       />
     )
 
-  /** スレタイの後ろの、立てた人の BE 番号(「… [123456789]」の形の板だけ) */
-  const beNo = variant === 'line' ? /[[［](\d{6,12})[\]］]\s*$/.exec(thread.title)?.[1] : undefined
-
   /**
    * スマホ: カード・Discord 風・LINE 風を同じ形にそろえる。
    * 左に見た目ごとのアイコン、1 段目にスレタイ(3 行まで)、2 段目の左に 立った時間・立てた人の ID・dat 落ち、右に 勢い・レス数・未読
    */
   const unified = () => {
+    // 左のアイコンはスレの画像があるときだけ(立てた人は ID の文字で出す)
     const leading =
       variant === 'discord'
-        ? thumbImg(28, 'rounded') ||
-          (authorIconId ? (
-            <span className="block overflow-hidden rounded-full" title={`立てた人の ID:${authorIconId}`}>
-              <Identicon seed={authorIconId} size={22} />
-            </span>
-          ) : (
-            <span className="thread-row-hash text-c-text-muted select-none">#</span>
-          ))
+        ? thumbImg(28, 'rounded') || <span className="thread-row-hash text-c-text-muted select-none">#</span>
         : variant === 'line'
-          ? thumbImg(40, 'rounded-xl') ||
-            ((authorIconId || beNo) && (
-              <span className="block overflow-hidden rounded-full">
-                <Identicon seed={authorIconId ?? `be:${beNo}`} size={40} />
-              </span>
-            ))
+          ? thumbImg(40, 'rounded-xl')
           : thumbImg(48)
     /** 1 レス目の頭(URL とアンカーは除いて 1 行に) */
     const previewText = thread.preview?.[0]?.body
@@ -334,17 +314,7 @@ function ThreadCard({
       <div className="thread-row flex gap-2 min-w-0">
         {checkbox}
         {unreadCount > 0 && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 rounded-r-full bg-c-text-strong" />}
-        {/* 立てた人の ID が分かれば(エッジ)、# の代わりにその ID の模様を出す */}
-        {thumbImg(28, 'rounded') ||
-          (authorIconId ? (
-            <span className="thread-row-hash flex-shrink-0 flex justify-center" title={`立てた人の ID:${thread.authorId}`}>
-              <span className="block overflow-hidden rounded-full self-center">
-                <Identicon seed={authorIconId} size={18} />
-              </span>
-            </span>
-          ) : (
-            <span className="thread-row-hash flex-shrink-0 text-c-text-muted select-none">#</span>
-          ))}
+        {thumbImg(28, 'rounded') || <span className="thread-row-hash flex-shrink-0 text-c-text-muted select-none">#</span>}
         {/* 太字は新着のあるスレだけ(本家の未読のチャンネルと同じ)。開いたことのないスレは、太字にせず色の明るさで分ける */}
         <span className="thread-row-title flex-1 min-w-0" style={{ color: titleColor, fontWeight: unreadCount > 0 ? 600 : 400 }}>
           {newBadge}
@@ -354,7 +324,7 @@ function ThreadCard({
           {/* dat 落ち・立てた人の ID・レス数・勢い・未読は、スレタイの続きに並べる(右に列で置くと、長いスレタイが 3 行にもなる) */}
           <span className="inline-flex items-center gap-1.5 ml-1.5 align-[0.0625rem] whitespace-nowrap font-normal">
             {archived && <span className="text-[0.625rem] text-c-text-muted">dat 落ち</span>}
-            {thread.authorId && !authorIcon && (
+            {thread.authorId && (
               <span className="font-mono text-[0.625rem] text-c-text-muted" title="立てた人の ID">
                 {thread.authorId}
               </span>
@@ -386,21 +356,10 @@ function ThreadCard({
       </div>
     ) : variant === 'line' ? (
       // LINE 風: トーク一覧のような行。スレタイと「レス数・勢い」、右に時間と新着の数。
-      // subject.txt からは誰が立てたか分からないので、アイコンは立てた人の ID か、
-      // スレタイの後ろの BE 番号(嫌儲など。「… [123456789]」)が分かるスレだけ
+      // 左のアイコンはスレの画像があるときだけ(立てた人は ID の文字で出す)
       <div className="flex items-center gap-3 min-w-0">
         {checkbox}
-        {thumbImg(40, 'rounded-xl') ||
-          (authorIconId && (
-            <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の ID:${authorIconId}`}>
-              <Identicon seed={authorIconId} size={40} />
-            </span>
-          )) ||
-          (beNo && (
-          <span className="flex-shrink-0 block overflow-hidden rounded-full" title={`立てた人の BE:${beNo}`}>
-            <Identicon seed={`be:${beNo}`} size={40} />
-          </span>
-          ))}
+        {thumbImg(40, 'rounded-xl')}
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold break-words" style={{ color: titleColor }}>
             {newBadge}
@@ -413,7 +372,7 @@ function ThreadCard({
             <span>·</span>
             {momentumEl()}
             {archived && <span>· dat 落ち</span>}
-            {thread.authorId && !authorIcon && <span className="font-mono truncate" title="立てた人の ID">· {thread.authorId}</span>}
+            {thread.authorId && <span className="font-mono truncate" title="立てた人の ID">· {thread.authorId}</span>}
           </div>
         </div>
         <div className="flex-shrink-0 flex flex-col items-end gap-1">
@@ -434,15 +393,10 @@ function ThreadCard({
             {/* メタ行: 立った時間 →(右端)勢い・レス数 */}
             <div className="flex items-center gap-3 text-[0.625rem] text-c-text-muted">
               {thread.createdAt && <span className="select-none whitespace-nowrap">{relativeTime(thread.createdAt)}</span>}
-              {/* 立てた人の ID(エッジ)。模様は設定でオンのときだけ */}
+              {/* 立てた人の ID */}
               {thread.authorId && (
-                <span className="flex items-center gap-1 min-w-0 font-mono" title="立てた人の ID">
-                  {authorIconId && (
-                    <span className="flex-shrink-0 block overflow-hidden rounded-full">
-                      <Identicon seed={authorIconId} size={12} />
-                    </span>
-                  )}
-                  <span className="truncate">{thread.authorId}</span>
+                <span className="min-w-0 truncate font-mono" title="立てた人の ID">
+                  {thread.authorId}
                 </span>
               )}
               {archived && <span className="whitespace-nowrap">dat 落ち</span>}

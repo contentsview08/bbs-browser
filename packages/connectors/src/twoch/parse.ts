@@ -71,11 +71,10 @@ export function parseSubjectTxt(text: string): SubjectEntry[] {
 }
 
 /**
- * スレタイの後ろの角かっこ(「… [xxx]」「… ［xxx］」)を、立てた人として取り出す(subject.txt の板。スマホ版の TwoCh.kt と同じ決まり):
- * - エッヂの subject-metadent.txt の ID(「[YN3MdpLR★]」)は ★ を外して ID
- * - 5ch の BE の板(嫌儲など)の BE 番号(6〜12 桁の数字)は「BE:番号」
- * - それ以外の角かっこ(ほかの板の、立てた人の名前や ID)は中身をそのまま
- * 「[転載禁止]」のような決まり文句と、「©」で始まるものはスレタイの一部のまま。付いていなければ、スレタイはそのまま
+ * subject.txt の 1 行は「スレタイ [立てた人の ID] (レス数)」。最後の角かっこ 1 つ(「[xxx]」「［xxx］」)を立てた人の ID とし、残りをスレタイにする
+ * (スマホ版の TwoCh.kt と同じ決まり。試験は packages/conformance/subject-author.json)。
+ * 中身は数字(BE の板)でも何でもただの ID の文字列なので、そのまま持つ。エッヂの「★」は印で、外さないとレスの ID と一致しない。
+ * 「[転載禁止]」のような決まり文句・「©」で始まるもの・スレタイが角かっこだけのときは 5ch の飾りなので、スレタイのまま
  */
 export function splitAuthorId(title: string): { title: string; authorId?: string } {
   const m = /\s*[[［]([^[\]［］]{1,32})[\]］]\s*$/.exec(title)
@@ -85,7 +84,7 @@ export function splitAuthorId(title: string): { title: string; authorId?: string
   const rest = title.slice(0, m.index).trimEnd()
   // スレタイが角かっこだけのときは、取り出さない(スレタイが空になるので)
   if (!rest) return { title }
-  const id = /^(\S{1,20})★$/.exec(inner)?.[1] ?? (/^\d{6,12}$/.test(inner) ? `BE:${inner}` : inner)
+  const id = /^(\S{1,20})★$/.exec(inner)?.[1] ?? inner
   return { title: rest, authorId: id }
 }
 

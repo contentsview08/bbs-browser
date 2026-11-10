@@ -106,6 +106,7 @@ import io.github.contentsview08.obb.bbs.TwoCh
 import io.github.contentsview08.obb.data.NgRule
 import io.github.contentsview08.obb.data.ThreadLog
 import io.github.contentsview08.obb.bbs.PostIndex
+import io.github.contentsview08.obb.bbs.legacyAuthorId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -289,7 +290,7 @@ fun ThreadPeek(vm: AppViewModel, target: PeekTarget, hasLog: Boolean, onDismiss:
 
     val danger = Palette.markDanger
     val ngItems = listOfNotNull(
-        // authorId はエッヂ・hono-bbs の ID、BE 番号、スレタイの後ろの [名前]。ID の NG なので、立てたスレも書いたレスも隠れる
+        // authorId はエッヂ・hono-bbs の ID、subject.txt のスレタイの後ろの [ID]。ID の NG なので、立てたスレも書いたレスも隠れる
         t.authorId?.let { a -> MenuItem("立てた人を NG に追加($a)", Icons.Filled.Block, danger = true) { vm.addNg(NgRule("posterId", a)); vm.toast = "立てた人を NG にしました"; close() } },
         MenuItem("スレタイを NG に追加", Icons.Filled.Block, danger = true) { ngDraft = t.title },
     )
@@ -745,7 +746,7 @@ private fun KeywordDraftDialog(vm: AppViewModel, title: String, authorId: String
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(byAuthor) { runCatching { focus.requestFocus() } }
     val w = field.text.trim()
-    val list = (if (byAuthor) vm.prefs.keywordAuthors else vm.prefs.keywords).lines().map { it.trim() }
+    val list = if (byAuthor) vm.prefs.keywordAuthors.lines().map { legacyAuthorId(it.trim()) } else vm.prefs.keywords.lines().map { it.trim() }
     val dup = w in list
     val ok = w.isNotEmpty() && !dup
     fun submit() {

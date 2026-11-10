@@ -125,6 +125,12 @@ class ConformanceTest {
 
     @Test fun subject_shape() = check("subject-shape.json") { c -> looksLikeSubject(c.getString("input")) }
 
+    // 立てた人がないときは JSON の null(plain で "null")と比べる
+    @Test fun subject_author() = check("subject-author.json") { c ->
+        val (title, authorId) = splitAuthorId(c.getString("input"))
+        mapOf("title" to title, "authorId" to (authorId ?: "null"))
+    }
+
     @Test fun encode() = check("encode.json") { c ->
         val i = c.getJSONObject("input")
         val fields = mapOf("v" to i.getString("value"))

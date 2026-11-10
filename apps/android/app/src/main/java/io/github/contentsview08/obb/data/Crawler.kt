@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import io.github.contentsview08.obb.bbs.Board
 import io.github.contentsview08.obb.bbs.HonoBbs
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.bbs.legacyAuthorId
 import io.github.contentsview08.obb.bbs.anchorTargets
 import io.github.contentsview08.obb.bbs.TwoCh
 import kotlinx.coroutines.delay
@@ -126,7 +127,7 @@ object Crawler {
         }
         // キーワードに合うスレ(お気に入り板)
         val keywords = prefs.keywords.lines().map { normalizeForSearch(it.trim()) }.filter { it.isNotEmpty() }
-        val authors = prefs.keywordAuthors.lines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        val authors = prefs.keywordAuthors.lines().map { legacyAuthorId(it.trim()) }.filter { it.isNotEmpty() }.toSet()
         if (scope.keyword && prefs.notifyKeyword && (keywords.isNotEmpty() || authors.isNotEmpty())) {
             for (b in db.favorites()) {
                 val list = boardThreads(b.url) ?: continue

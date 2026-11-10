@@ -2,6 +2,7 @@ package io.github.contentsview08.obb.data
 
 import io.github.contentsview08.obb.bbs.Post
 import io.github.contentsview08.obb.bbs.ThreadSummary
+import io.github.contentsview08.obb.bbs.legacyAuthorId
 import org.json.JSONObject
 import java.time.LocalDate
 
@@ -212,7 +213,7 @@ class NgMatcher(rules: List<NgRule>) {
         (m.r.boardUrl == null || m.r.boardUrl == boardUrl) && when {
             m.re != null -> m.re.containsMatchIn(text)
             // ID は部分一致だと別の ID まで巻き込むので、完全一致
-            target == "posterId" -> text == m.r.pattern
+            target == "posterId" -> text == legacyAuthorId(m.r.pattern)
             else -> text.contains(m.r.pattern, ignoreCase = true)
         }
 

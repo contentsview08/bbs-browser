@@ -28,9 +28,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import io.github.contentsview08.obb.bbs.Post
@@ -38,9 +38,10 @@ import io.github.contentsview08.obb.bbs.PostIndex
 import kotlinx.coroutines.launch
 
 /**
- * ミニマップ。スレ全体を縦に縮めて、人気レス(真ん中の横棒)・
- * 自分のレス(左の塗ったひし形)・自分への返信(左の枠だけのひし形)・画像(右の四角)・動画(右の三角)と、
- * 「ここから未読」から下を示す。印の位置はレスの番目で決める(高さを測らない)。
+ * ミニマップ。スレ全体を縦に縮めて、左の列(中身)に人気レスの横棒・画像(四角)・動画(三角)・リンク(点)、
+ * 右の列(自分)に自分のレス(塗った丸)・自分への返信(輪)と、「ここから未読」の線を示す。
+ * 寸法と色は bbs-suite の docs/minimap.md(PC 版・Web の components/Minimap.tsx と同じ並び)。
+ * 印の位置はレスの番目で決める(高さを測らない)。
  * たたくとその割合の位置へ飛び、なぞるとそのまま送れる。いま見ている範囲はつまみで出す
  */
 @Composable
@@ -49,8 +50,8 @@ fun Minimap(
     listState: LazyListState, modifier: Modifier = Modifier,
     /** 印を押して飛んだ(そのレスを一瞬光らせる) */
     onJumped: (Int) -> Unit = {},
-    /** 読んだところ(既読の番号)。そこまでを薄く塗る */
-    readNo: Int = 0,
+    /** 読んだところ(既読の番号)。今は塗らない(つまみと見分けにくい)が、呼ぶ側との取り決めとして残す */
+    @Suppress("UNUSED_PARAMETER") readNo: Int = 0,
     /** 印を付けない行の番目(ツリー表示の 2 回目以降の出現) */
     skip: Set<Int> = emptySet(),
     /** ツリー表示: この番号から後ろのレスに新着の印(「ここから未読」から下を塗る代わり。ツリーでは新着がまとまっていない) */
@@ -63,12 +64,10 @@ fun Minimap(
             if (i in skip) return@mapIndexedNotNull null
             val heat = index.replyCount[p.no] ?: 0
             val info = index.info[p.no]
-            if (heat < 3 && p.no !in own && p.no !in toOwn && info?.image != true && info?.video != true) null
-            else Mark(i, heat, p.no in own, p.no in toOwn, info?.image == true, info?.video == true)
+            if (heat < 3 && p.no !in own && p.no !in toOwn && info?.image != true && info?.video != true && info?.link != true) null
+            else Mark(i, heat, p.no in own, p.no in toOwn, info?.image == true, info?.video == true, info?.link == true)
         }
     }
-    // 読んだ範囲(先頭から既読の番号まで)の終わりの番目
-    val readAt = remember(posts, readNo) { posts.indexOfLast { it.no <= readNo } }
     // 時刻の目盛り: 時(〜時台)が変わるレスの番目。3 時間ごとは長く
     val hourTicks = remember(posts) {
         var prev: Long? = null
@@ -95,7 +94,7 @@ fun Minimap(
         scope.launch { listState.scrollToItem(i) }
     }
     /**
-     * たたいた: 近くに印(人気・自分・自分への返信・画像・動画)があれば、そのレスへ優先して飛び、一瞬光らせる。
+     * たたいた: 近くに印(人気・自分・自分への返信・画像・動画・リンク)があれば、そのレスへ優先して飛び、一瞬光らせる。
      * 印がなければ、その割合の位置へ
      */
     fun tap(y: Float, h: Float, slop: Float) {
@@ -128,52 +127,65 @@ fun Minimap(
         val h = size.height
         val w = size.width
         fun yOf(i: Int) = if (n <= 1) 0f else i.toFloat() / (n - 1) * h
-        // 読んだ範囲(薄い灰色)
-        if (readAt >= 0) drawRect(Palette.textMuted.copy(alpha = 0.10f), Offset(0f, 0f), Size(w, yOf(readAt)))
+        // 列の寸法(docs/minimap.md)。左の列(中身)と右の列(自分)を 6:4
+        val pad = 1.5.dp.toPx()
+        val col = w - pad * 2
+        val leftW = col * 0.6f
+        val rightX = pad + leftW + (col - leftW) / 2
+        val dot = 5.dp.toPx()
+        val media = 4.dp.toPx()
+        val mediaX = pad + leftW - media / 2 - 0.5.dp.toPx()
+        val halo = Palette.surface2
         // 時刻の目盛り(左の端。1 時間ごと、3 時間ごとは長く)
         for ((i, long) in hourTicks) {
             val y = yOf(i)
             drawRect(Palette.textMuted.copy(alpha = if (long) 0.7f else 0.4f), Offset(0f, y), Size(if (long) 6.dp.toPx() else 3.dp.toPx(), 1.dp.toPx()))
         }
-        // 未読の範囲
-        unreadAt?.let { u ->
-            val y = yOf(u)
-            drawRect(Palette.unread.copy(alpha = 0.12f), Offset(0f, y), Size(w, h - y))
-            drawRect(Palette.unread, Offset(0f, y - 1.dp.toPx()), Size(w, 2.dp.toPx()))
-        }
+        // 「ここから未読」: 細い線 1 本(面は塗らない。つまみや印と紛れないように)
+        unreadAt?.let { u -> drawRect(Palette.unread, Offset(0f, yOf(u) - 0.75.dp.toPx()), Size(w, 1.5.dp.toPx())) }
         // 新着の印(ツリー表示)。未読の色の細い横線
         for (i in freshAt) drawRect(Palette.unread, Offset(0f, yOf(i) - 1.dp.toPx()), Size(w, 2.dp.toPx()))
-        // つまみ(いま見ている範囲)。小さくなりすぎないよう 14dp より小さくしない
+        // つまみ(いま見ている範囲)。小さくなりすぎないよう 14dp より小さくしない。
+        // 色はテーマの差し色の薄い面と縁(差し色が印と近いテーマは青灰色。MinimapThumb)
         thumb?.let { (a, b) ->
             val top = yOf(a.coerceAtMost(n - 1))
             val bottom = maxOf(yOf(b.coerceAtMost(n - 1)), top + 14.dp.toPx()).coerceAtMost(h)
-            // つまみは文字の色の薄い面(強調色にすると、印より目立ってしまう)
-            drawRoundRect(Palette.textMuted.copy(alpha = 0.22f), Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()))
-            drawRoundRect(Palette.textMuted.copy(alpha = 0.7f), Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()), style = Stroke(1.dp.toPx()))
+            val c = MinimapThumb.color()
+            val sw = 1.5.dp.toPx()
+            drawRoundRect(c.copy(alpha = 0.15f), Offset(0f, top), Size(w, bottom - top), CornerRadius(4.dp.toPx()))
+            drawRoundRect(c.copy(alpha = 0.5f), Offset(sw / 2, top + sw / 2), Size(w - sw, bottom - top - sw), CornerRadius(4.dp.toPx() - sw / 2), style = Stroke(sw))
         }
-        val d = 7.dp.toPx()
         for (m in marks) {
             val y = yOf(m.i)
-            // 真ん中: 人気レス
+            // 左の列: 人気レスの横棒。熱いほど暖かい色で長い(出し始めの 3 件で 40%、10 件で左の列いっぱい)
             if (m.heat >= 3) {
-                drawRoundRect(Palette.heat(m.heat) ?: Palette.markHot, Offset(5.dp.toPx(), y - 2.dp.toPx()), Size(w - 10.dp.toPx(), 4.dp.toPx()), CornerRadius(2.dp.toPx()))
+                val len = leftW * (0.4f + 0.6f * ((m.heat - 3) / 7f).coerceIn(0f, 1f))
+                drawRoundRect(Palette.heat(m.heat) ?: Palette.markHot, Offset(pad, y - 1.5.dp.toPx()), Size(len, 3.dp.toPx()), CornerRadius(1.5.dp.toPx()))
             }
-            // 左: 自分のレスと自分への返信(ひし形)
-            if (m.own || m.toOwn) {
-                val c = Offset(2.dp.toPx() + d / 2, y)
-                rotate(45f, c) {
-                    if (m.own) drawRect(Palette.own, Offset(c.x - d / 2, y - d / 2), Size(d, d))
-                    // 自分への返信は一回り大きく、枠を太く(見落とさないように)
-                    else { val e = d * 1.3f; drawRect(Palette.own, Offset(c.x - e / 2, y - e / 2), Size(e, e), style = Stroke(2.dp.toPx())) }
+            // 左の列の右の端: 動画(三角)>画像(四角)>リンク(点)。地の色で縁取って、人気の棒に重なっても形が分かるように
+            val ring = Stroke(1.2.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round)
+            val x0 = mediaX - media / 2
+            when {
+                m.video -> {
+                    val tri = Path().apply { moveTo(x0, y - media / 2); lineTo(x0 + media, y); lineTo(x0, y + media / 2); close() }
+                    drawPath(tri, halo, style = ring)
+                    drawPath(tri, Palette.markVideo)
+                }
+                m.image -> {
+                    val r = CornerRadius(0.6.dp.toPx())
+                    drawRoundRect(halo, Offset(x0, y - media / 2), Size(media, media), r, style = ring)
+                    drawRoundRect(Palette.markImage, Offset(x0, y - media / 2), Size(media, media), r)
+                }
+                m.link -> {
+                    drawCircle(halo, media / 2, Offset(mediaX, y), style = ring)
+                    drawCircle(Palette.markLink, media / 2, Offset(mediaX, y))
                 }
             }
-            // 右: 画像(四角)と動画(三角)
-            val x = w - 3.dp.toPx() - 5.dp.toPx()
-            if (m.video) {
-                val s = 5.dp.toPx()
-                drawPath(Path().apply { moveTo(x, y - s / 2); lineTo(x + s, y); lineTo(x, y + s / 2); close() }, Palette.markVideo)
-            } else if (m.image) {
-                drawRect(Palette.markImage, Offset(x, y - 2.5.dp.toPx()), Size(5.dp.toPx(), 5.dp.toPx()))
+            // 右の列: 自分のレス(塗った丸)と自分への返信(同じ大きさの輪)
+            if (m.own) drawCircle(Palette.own, dot / 2, Offset(rightX, y))
+            else if (m.toOwn) {
+                val sw = 1.5.dp.toPx()
+                drawCircle(Palette.own, dot / 2 - sw / 2, Offset(rightX, y), style = Stroke(sw))
             }
         }
     }
@@ -199,4 +211,55 @@ fun Minimap(
 private val LABEL_ANCHOR = Regex("(&gt;|>|＞){1,2}[0-9]+(-[0-9]+)?")
 private val LABEL_TAG = Regex("<[^>]+>")
 
-private class Mark(val i: Int, val heat: Int, val own: Boolean, val toOwn: Boolean, val image: Boolean, val video: Boolean)
+private class Mark(val i: Int, val heat: Int, val own: Boolean, val toOwn: Boolean, val image: Boolean, val video: Boolean, val link: Boolean)
+
+/**
+ * つまみの色。テーマの差し色を使うが、差し色が印の色と近いテーマでは落ち着いた青灰色にする。
+ * 近さの決め方と値は PC 版・Web の utils/minimapThumb.ts と同じ(bbs-suite の docs/minimap.md・tools/colors.py で突き合わせる)
+ */
+object MinimapThumb {
+    /** 色相の差(Oklch の度)がこれより小さいと、同じ系統の色に見える */
+    const val NEAR_HUE = 40f
+    /** 鮮やかさ(Oklch の C)の比(小さい方 ÷ 大きい方)がこれ以上だと、同じくらいの鮮やかさに見える */
+    const val NEAR_CHROMA_RATIO = 0.5f
+    /** 鮮やかさがこれより小さい色は灰色とみなす(色相に意味がない)。灰色どうしは近い */
+    const val GRAY_CHROMA = 0.02f
+    /** 差し色が印と近いときの、落ち着いた青灰色 */
+    val CALM_LIGHT = Color(0xFF5D6B80)
+    val CALM_DARK = Color(0xFF8E9AAC)
+
+    /** いまのテーマのつまみの色 */
+    fun color(): Color = color(
+        Palette.accent,
+        listOf(Palette.heatWarm, Palette.heatHot, Palette.heatVeryHot, Palette.markImage, Palette.markVideo, Palette.markLink, Palette.own, Palette.unread),
+        Palette.scheme.dark,
+    )
+
+    /** marks は印の色(人気の 3 段・画像・動画・リンク・自分・未読) */
+    fun color(accent: Color, marks: List<Color>, dark: Boolean): Color =
+        if (marks.any { near(accent, it) }) (if (dark) CALM_DARK else CALM_LIGHT) else accent
+
+    /** 2 つの色が、見分けにくいほど近いか(色相と鮮やかさで見る。明るさは見ない) */
+    fun near(a: Color, b: Color): Boolean {
+        val (ca, ha) = oklch(a)
+        val (cb, hb) = oklch(b)
+        val grayA = ca < GRAY_CHROMA
+        val grayB = cb < GRAY_CHROMA
+        if (grayA || grayB) return grayA && grayB
+        val dh = kotlin.math.abs(ha - hb) % 360f
+        return minOf(dh, 360f - dh) < NEAR_HUE && minOf(ca, cb) / maxOf(ca, cb) >= NEAR_CHROMA_RATIO
+    }
+
+    /** Oklch の鮮やかさ(C)と色相(度) */
+    private fun oklch(c: Color): Pair<Float, Float> {
+        fun lin(v: Float) = if (v <= 0.04045f) v / 12.92f else Math.pow((v + 0.055) / 1.055, 2.4).toFloat()
+        val r = lin(c.red); val g = lin(c.green); val b = lin(c.blue)
+        val l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        val m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        val s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        val aa = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
+        val bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+        val h = (Math.toDegrees(kotlin.math.atan2(bb, aa)) + 360.0) % 360.0
+        return kotlin.math.hypot(aa, bb).toFloat() to h.toFloat()
+    }
+}

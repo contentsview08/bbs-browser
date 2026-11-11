@@ -109,7 +109,7 @@ fun Minimap(
     val shape = RoundedCornerShape(4.dp)
     // なぞっている間の位置(指の高さと、そこにあるレス)。指の左に「#523 名無し: 本文の頭」の札を出す(どこへ飛ぶか分かるように)
     var drag by remember { androidx.compose.runtime.mutableStateOf<Pair<Float, Int>?>(null) }
-    Box(modifier.width(18.dp).fillMaxHeight()) {
+    Box(modifier.width(MINIMAP_WIDTH).fillMaxHeight()) {
     Canvas(
         Modifier.fillMaxSize().background(Palette.surface2.copy(alpha = 0.85f), shape).border(1.dp, Palette.border, shape)
             .pointerInput(n, marks) { detectTapGestures { tap(it.y, size.height.toFloat(), 14.dp.toPx()) } }
@@ -127,13 +127,14 @@ fun Minimap(
         val h = size.height
         val w = size.width
         fun yOf(i: Int) = if (n <= 1) 0f else i.toFloat() / (n - 1) * h
-        // 列の寸法(docs/minimap.md)。左の列(中身)と右の列(自分)を 6:4
+        // 列の寸法(docs/minimap.md)。左の列(中身)12dp と右の列(自分)8dp。
+        // 小さな印は目に入らないので、人気の棒の最短・自分の丸を作り直す前の印(8×4 の帯・7dp のひし形)ほどにしてある
         val pad = 1.5.dp.toPx()
         val col = w - pad * 2
-        val leftW = col * 0.6f
+        val leftW = 12.dp.toPx()
         val rightX = pad + leftW + (col - leftW) / 2
-        val dot = 5.dp.toPx()
-        val media = 4.dp.toPx()
+        val dot = 7.dp.toPx()
+        val media = 5.dp.toPx()
         val mediaX = pad + leftW - media / 2 - 0.5.dp.toPx()
         val halo = Palette.surface2
         // 時刻の目盛り(左の端。1 時間ごと、3 時間ごとは長く)
@@ -157,13 +158,13 @@ fun Minimap(
         }
         for (m in marks) {
             val y = yOf(m.i)
-            // 左の列: 人気レスの横棒。熱いほど暖かい色で長い(出し始めの 3 件で 40%、10 件で左の列いっぱい)
+            // 左の列: 人気レスの横棒。熱いほど暖かい色で長い(出し始めの 3 件で 2/3、10 件で左の列いっぱい)
             if (m.heat >= 3) {
-                val len = leftW * (0.4f + 0.6f * ((m.heat - 3) / 7f).coerceIn(0f, 1f))
-                drawRoundRect(Palette.heat(m.heat) ?: Palette.markHot, Offset(pad, y - 1.5.dp.toPx()), Size(len, 3.dp.toPx()), CornerRadius(1.5.dp.toPx()))
+                val len = leftW * (2f / 3f + 1f / 3f * ((m.heat - 3) / 7f).coerceIn(0f, 1f))
+                drawRoundRect(Palette.heat(m.heat) ?: Palette.markHot, Offset(pad, y - 2.dp.toPx()), Size(len, 4.dp.toPx()), CornerRadius(2.dp.toPx()))
             }
             // 左の列の右の端: 動画(三角)>画像(四角)>リンク(点)。地の色で縁取って、人気の棒に重なっても形が分かるように
-            val ring = Stroke(1.2.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round)
+            val ring = Stroke(1.5.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round)
             val x0 = mediaX - media / 2
             when {
                 m.video -> {
@@ -194,7 +195,7 @@ fun Minimap(
         if (p != null) {
             val density = androidx.compose.ui.platform.LocalDensity.current
             Box(
-                Modifier.align(Alignment.TopEnd).offset { androidx.compose.ui.unit.IntOffset(-with(density) { 129.dp.roundToPx() }, (y - with(density) { 18.dp.toPx() }).toInt()) }
+                Modifier.align(Alignment.TopEnd).offset { androidx.compose.ui.unit.IntOffset(-with(density) { (MINIMAP_WIDTH / 2 + 120.dp).roundToPx() }, (y - with(density) { 18.dp.toPx() }).toInt()) }
                     .requiredWidth(220.dp).wrapContentWidth(Alignment.End),
             ) {
                 androidx.compose.material3.Text(
@@ -207,6 +208,9 @@ fun Minimap(
     }
     }
 }
+
+/** ミニマップの幅(枠込み)。docs/minimap.md の寸法。本文の右の余白・「一番下へ」のボタンの位置もこれに合わせる(ThreadScreen.kt) */
+val MINIMAP_WIDTH = 23.dp
 
 private val LABEL_ANCHOR = Regex("(&gt;|>|＞){1,2}[0-9]+(-[0-9]+)?")
 private val LABEL_TAG = Regex("<[^>]+>")

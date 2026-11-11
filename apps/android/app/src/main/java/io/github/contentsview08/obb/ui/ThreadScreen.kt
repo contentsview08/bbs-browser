@@ -687,7 +687,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                     else -> LazyColumn(
                         Modifier.fillMaxSize(), state = listState,
                         contentPadding = PaddingValues(
-                            top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && rowCount > 1) 20.dp else 0.dp,
+                            top = with(density) { bars.topHeight.toDp() }, end = if (vm.prefs.showMinimap && rowCount > 1) MINIMAP_WIDTH + 2.dp else 0.dp,
                             bottom = with(density) { footerH.toDp() },
                         ),
                     ) {
@@ -806,7 +806,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
             if (!atBottom && index.posts.isNotEmpty()) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).barPadding(bottom = { 14.dp.toPx() + footerH * footerShown() }).padding(end = if (vm.prefs.showMinimap) 34.dp else 16.dp).size(48.dp)
+                    Modifier.align(Alignment.BottomEnd).barPadding(bottom = { 14.dp.toPx() + footerH * footerShown() }).padding(end = if (vm.prefs.showMinimap) MINIMAP_WIDTH + 16.dp else 16.dp).size(48.dp)
                         .background(Palette.surface2, RoundedCornerShape(6.dp)).border(1.dp, Palette.borderStrong, RoundedCornerShape(6.dp))
                         .clickable { scroller.toBottom(); bars.show() },
                     contentAlignment = Alignment.Center,
@@ -820,7 +820,7 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             if (ctl.liveOn) LiveSpeedSlider(
                 prefs.liveSpeed, { prefs.liveSpeed = it },
                 Modifier.align(Alignment.TopEnd).barPadding(top = { bars.topHeight * (1f - bars.hidden) + 8.dp.toPx() })
-                    .padding(end = if (vm.prefs.showMinimap && rowCount > 1) 26.dp else 10.dp),
+                    .padding(end = if (vm.prefs.showMinimap && rowCount > 1) MINIMAP_WIDTH + 8.dp else 10.dp),
                 onTouch = { swipe.claimed = true },
             )
 

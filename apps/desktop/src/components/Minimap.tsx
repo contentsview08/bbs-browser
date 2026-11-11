@@ -47,27 +47,27 @@ function heatColor(count: number): string {
   return 'var(--c-heat-warm)'
 }
 
-// 寸法(px)。スマホはスマホ版の 18dp と同じ並びにする(枠の内側から測る)。
-// PC は画面が大きく小さな印は目に入らないので、幅を広げて印も大きくする(人気の棒の最短が、作り直す前の帯と同じ 12×5)
-const WIDTH = isMobile ? 18 : 30
+// 寸法(px)。スマホはスマホ版の 23dp と同じ並びにする(枠の内側から測る)。
+// 小さな印は目に入らないので、幅を広げて印を大きくしてある(人気の棒の最短が、作り直す前の帯と同じ。スマホ 8×4・PC 12×5)
+const WIDTH = isMobile ? 23 : 30
 const PAD = isMobile ? 0.5 : 1.5
 const COL = WIDTH - 2 - PAD * 2
-/** 左の列(中身)の幅。右の列(自分)とおよそ 6:4(PC は右の列に 8px の丸が収まるよう 16:9) */
-const LEFT_W = isMobile ? COL * 0.6 : 16
+/** 左の列(中身)の幅。右の列(自分)とおよそ 6:4(右の列に丸が収まるよう、スマホ 12:8・PC 16:9) */
+const LEFT_W = isMobile ? 12 : 16
 /** 右の列の真ん中 */
 const RIGHT_X = PAD + LEFT_W + (COL - LEFT_W) / 2
 /** 自分のレス・返信の丸の直径。返信は線 1.5 の輪(PC で線を太くすると穴がつぶれて塗りと見分けにくい) */
-const DOT = isMobile ? 5 : 8
+const DOT = isMobile ? 7 : 8
 /** 画像・動画・リンクの印の大きさ。左の列の右の端に置く(人気の棒は左の端から) */
-const MEDIA = isMobile ? 4 : 6
+const MEDIA = isMobile ? 5 : 6
 const MEDIA_X = PAD + LEFT_W - MEDIA / 2 - 0.5
 /** 人気の棒の高さ */
-const HEAT_H = isMobile ? 3 : 5
+const HEAT_H = isMobile ? 4 : 5
 /** 押せる広さ(見た目より広く取る) */
-const HIT = isMobile ? 9 : 12
+const HIT = isMobile ? 11 : 12
 
-/** 人気の棒の長さ(左の列に対する割合)。出し始め(3 件)で最短、10 件でいっぱい。PC は最短でも目に入るよう 75%(12px) */
-const HEAT_MIN = isMobile ? 0.4 : 0.75
+/** 人気の棒の長さ(左の列に対する割合)。出し始め(3 件)で最短、10 件でいっぱい。最短でも目に入るよう、スマホ 2/3(8px)・PC 75%(12px) */
+const HEAT_MIN = isMobile ? 2 / 3 : 0.75
 function heatLength(count: number): number {
   return HEAT_MIN + (1 - HEAT_MIN) * Math.min(1, Math.max(0, (count - 3) / 7))
 }

@@ -2512,7 +2512,7 @@ export default function ThreadView(props: Props) {
         // スマホは右下の角に寄せる(ミニマップは本文に重ねてあるので、その左に)
         style={
           isMobile
-            ? { right: settings.showMinimap ? 40 : 8, bottom: 'calc(var(--footer-offset, 0px) + 8px)' }
+            ? { right: settings.showMinimap ? 45 : 8, bottom: 'calc(var(--footer-offset, 0px) + 8px)' }
             : { right: settings.showMinimap ? 44 : 20, bottom: 'calc(var(--footer-offset, 0px) + 20px)' }
         }
       >
@@ -2538,7 +2538,7 @@ export default function ThreadView(props: Props) {
           value={settings.liveScrollSpeed}
           onChange={(v) => props.onUpdateSetting?.('liveScrollSpeed', v)}
           onPreview={setLiveSpeedPreview}
-          style={{ top: (headerInScroll ? headerHeight : 0) + 8, right: isMobile ? (settings.showMinimap ? 40 : 8) : settings.showMinimap ? 44 : 20 }}
+          style={{ top: (headerInScroll ? headerHeight : 0) + 8, right: isMobile ? (settings.showMinimap ? 45 : 8) : settings.showMinimap ? 44 : 20 }}
         />
       )}
       <div
@@ -2590,7 +2590,7 @@ export default function ThreadView(props: Props) {
             gap: 'var(--list-gap-post)',
             ...(isMobile && hasFooter && { paddingBottom: `calc(var(--list-padding-post) + ${MOBILE_BAR_H + 8}px)` }),
             // スマホ: 右端に重ねたミニマップの分、本文を左へ寄せる
-            ...(isMobile && settings.showMinimap && { paddingRight: 'calc(var(--list-padding-post) + 24px)' }),
+            ...(isMobile && settings.showMinimap && { paddingRight: 'calc(var(--list-padding-post) + 29px)' }),
           }}
         >
           {log.posts.length === 0 ? (

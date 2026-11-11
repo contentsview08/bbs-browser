@@ -2598,11 +2598,14 @@ export default function ThreadView(props: Props) {
             <>
               {postFrames}
               <Divider label="-END-" />
-              {!isMobile && settings.showNextUnreadAtEnd && props.nextUnread && props.onOpenNextUnread && (
-                <NextUnreadButton {...props.nextUnread} onOpen={props.onOpenNextUnread} />
-              )}
               {/* 手で「次スレを探す」を押したとき(showNext)は、設定がオフでも出す */}
               {props.onFindNext && ((ended && settings.showNextCandidatesAtEnd) || showNext) && <NextThreadBox find={props.onFindNext} onOpen={props.onOpenThread} />}
+              {/* 候補の後ろに置き、レスが画面に満たないときは空きを挟んで見える範囲の一番下へ。続けて押すときに押す位置がスレごとに変わらないように */}
+              {!isMobile && settings.showNextUnreadAtEnd && props.nextUnread && props.onOpenNextUnread && (
+                <div className="mt-auto">
+                  <NextUnreadButton {...props.nextUnread} onOpen={props.onOpenNextUnread} />
+                </div>
+              )}
             </>
           )}
         </div>

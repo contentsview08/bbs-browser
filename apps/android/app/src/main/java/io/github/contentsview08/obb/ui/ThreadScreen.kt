@@ -546,6 +546,20 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
             }
         }
     }
+    // 「次の未読スレへ」の上に挟む空き。レスが画面に満たないとき、ボタンを見える範囲(フッターの上)の一番下に寄せ、
+    // 長いスレの一番下と同じ位置にする(続けて押すときに、押す位置がスレごとに変わらないように)。
+    // 空きはボタンの行の中に入れ、行の数は変えない(一番下の判定が最後の 2 行・-END- の行を見ているため)
+    var nextUnreadH by remember { mutableIntStateOf(0) }
+    val nextUnreadGap by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val items = info.visibleItemsInfo
+            val btn = items.lastOrNull()?.takeIf { it.key == "nextUnread" }
+            // 先頭から最後までが見えているとき(=画面に収まるとき)だけ。ボタンより上の行の高さは空きに左右されないので、測り直しても揺れない
+            if (btn == null || nextUnreadH == 0 || items.first().index != 0 || items.first().offset != 0) 0
+            else maxOf(0, info.viewportEndOffset - info.afterContentPadding - btn.offset - nextUnreadH)
+        }
+    }
     val atBottom by remember {
         derivedStateOf {
             val info = listState.layoutInfo
@@ -718,12 +732,20 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 Box(Modifier.weight(1f).height(3.dp).background(if (sky) Palette.skyMuted.copy(alpha = 0.5f) else Palette.border))
                             }
                         }
-                        // 出さない設定でも行は残す(一番下の判定が「最後の 2 行」を見ているので、行の数を変えない)
-                        if (filter == null && query.isBlank()) item(key = "nextUnread") {
+                        if (ended && vm.prefs.showNextCandidatesAtEnd && filter == null && query.isBlank()) item(key = "next") {
+                            LaunchedEffect(Unit) { if (page.nextCandidates == null) vm.findNext(page) }
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 24.dp).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))) {
+                                NextCandidates(page) { vm.openThread(it) }
+                            }
+                        }
+                        // 次スレの候補の後ろに置き、レスが少ないときは空きを挟んで一番下へ(nextUnreadGap)。
+                        // 絞り込み・検索で少ないときも出す(PC 版と同じ)。出さない設定でも行は残す(一番下の判定が「最後の 2 行」を見ているので、行の数を変えない)
+                        item(key = "nextUnread") {
                             val next = if (vm.prefs.showNextUnreadAtEnd) remember(index.posts.size, page.readNo) { vm.nextUnread(page) } else null
                             if (next == null) { Spacer(Modifier.height(16.dp)); return@item }
+                            Spacer(Modifier.height(with(density) { nextUnreadGap.toDp() }))
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 16.dp)
+                                Modifier.onSizeChanged { nextUnreadH = it.height }.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 16.dp)
                                     .border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))
                                     .clickable { vm.openNextUnread(page, next.second) }
                                     .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -737,12 +759,6 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
                                 }
                                 Spacer(Modifier.width(8.dp))
                                 Badge(badgeCount(next.third), Palette.unread, Palette.unreadText)
-                            }
-                        }
-                        if (ended && vm.prefs.showNextCandidatesAtEnd && filter == null && query.isBlank()) item(key = "next") {
-                            LaunchedEffect(Unit) { if (page.nextCandidates == null) vm.findNext(page) }
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 24.dp).border(1.dp, Palette.border, RoundedCornerShape(6.dp)).background(Palette.surface, RoundedCornerShape(6.dp))) {
-                                NextCandidates(page) { vm.openThread(it) }
                             }
                         }
                     }

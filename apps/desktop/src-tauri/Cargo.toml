@@ -1,6 +1,6 @@
 [package]
 name = "bbs-browser"
-version = "0.1.6"
+version = "0.1.7"
 description = "コネクタで掲示板を読む専用ブラウザ"
 edition = "2021"
 

@@ -80,6 +80,12 @@ describe('サイトと板', () => {
     await store.replaceBoards(menu, boards.slice(0, 2))
     expect(await store.getBoards(menu)).toHaveLength(2)
   })
+
+  it('板の URL から、載っている掲示板と板の名前を引く(画像の保存先)', async () => {
+    await store.replaceBoards('https://menu.5ch.io/bbsmenu.json', [{ connectorId: '2ch-compat', url: 'https://x.5ch.io/news/', name: 'ニュース' }])
+    expect(await store.boardPlace('https://x.5ch.io/news/')).toEqual({ site: '5ch', board: 'ニュース' })
+    expect(await store.boardPlace('https://x.5ch.io/other/')).toBeUndefined()
+  })
 })
 
 describe('スレのログ', () => {

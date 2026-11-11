@@ -91,9 +91,9 @@ private const val RUBBER = 0.35f
 
 private fun rubber(v: Float, lo: Float, hi: Float) = if (v > hi) hi + (v - hi) * RUBBER else if (v < lo) lo - (lo - v) * RUBBER else v
 
-/** 画像のビューアー(操作は PC 版の MobileImageViewer と同じ)。posts は urls と同じ並びの、その画像が載っていたレス */
+/** 画像のビューアー(操作は PC 版の MobileImageViewer と同じ)。posts は urls と同じ並びの、その画像が載っていたレス。place はそのスレ(保存先の書き方に使う) */
 @Composable
-fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: List<Post?> = emptyList()) {
+fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: List<Post?> = emptyList(), place: (suspend () -> io.github.contentsview08.obb.data.SavePlace)? = null) {
     val context = LocalContext.current
     val prefs = LocalPrefs.current
     val density = LocalDensity.current
@@ -112,7 +112,11 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
         saving = true
         notice = "保存しています…"
         scope.launch {
-            notice = runCatching { io.github.contentsview08.obb.data.ImageSaver.save(context, url) }.getOrElse { "保存できませんでした: ${it.message}" }
+            val no = posts.getOrNull(urls.indexOf(url))?.no
+            notice = runCatching {
+                val to = io.github.contentsview08.obb.data.SaveTarget(prefs.imageSaveBase, prefs.imageSaveName, place?.invoke())
+                io.github.contentsview08.obb.data.ImageSaver.save(context, url, to, no)
+            }.getOrElse { "保存できませんでした: ${it.message}" }
             saving = false
         }
     }

@@ -358,6 +358,10 @@ class Prefs(context: Context) {
     var uploadMaxDimension by pref("uploadMaxDimension", 4096)
     /** 画像の上げ先(data/Uploader.kt の HOSTS): imgur-web(既定)/ imgur / catbox / imgbb / imgbox-web / imgbb-web。hono-bbs の板は、いつもその掲示板の置き場 */
     var uploadHost by pref("uploadHost", Uploader.DEFAULT_HOST)
+    /** 画像の保存先の土台: pictures(ピクチャ)・download(ダウンロード) */
+    var imageSaveBase by pref("imageSaveBase", "pictures")
+    /** 土台の下のフォルダとファイル名の書き方(data/SaveName.kt の変数を使う。PC と同じ名前の設定) */
+    var imageSaveName by pref("imageSaveName", DEFAULT_IMAGE_SAVE_NAME)
     /** imgbb の API キー(https://api.imgbb.com/)。空なら imgbb は使わない */
     var imgbbApiKey by pref("imgbbApiKey", "")
     /** 最初から入れておく掲示板・板(assets の sites.json)のうち、もう足したものの id(カンマ区切りで渡す)。利用者が消したものを戻さないために覚える */
@@ -554,7 +558,12 @@ class Prefs(context: Context) {
         private val NOT_IN_BACKUP = setOf(
             "lastBoardUrl", "lastBoardName", "honoUser", "honoPassword", "imgbbApiKey", "imgurClientId",
             "boardVisits", "recentBoards", "newThreadDrafts",
+            // 画像の保存先は端末ごと(PC も imageSaveDir・imageSaveName を書き出さない)
+            "imageSaveBase", "imageSaveName",
         )
+
+        /** 画像の保存先の既定(前の版と同じ「ピクチャ/bbs/名前_時刻.jpg」) */
+        const val DEFAULT_IMAGE_SAVE_NAME = "bbs/{name}_{unix}"
 
         internal fun inBackup(key: String) = key !in NOT_IN_BACKUP
 

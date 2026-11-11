@@ -1,12 +1,15 @@
 // 設定の「レス表示」。
 
-import { POST_DOUBLE_CLICKS, ID_STYLES, ID_POSITIONS } from '../../ui/settings'
+import { Fragment, useEffect, useState } from 'react'
+import { POST_DOUBLE_CLICKS, ID_STYLES, ID_POSITIONS, DEFAULT_SETTINGS } from '../../ui/settings'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import FontSizeSlider, { PostFontSliders, setCssVar } from '../FontSizeSlider'
 import { ListEditor, ThumbSample, Toggle, TextSetting } from '../SettingParts'
 import { BTN_PRIMARY, ICON_BTN } from '../DialogParts'
 import { type SettingsProps, Section, StickySample, Choice } from './common'
 import { Segmented } from '../Segmented'
+import { previewSavePath, timeVars } from '../../host/saveImage'
+import { SAVE_NAME_EXAMPLES, SAVE_NAME_NOTE, SAVE_NAME_SAMPLE, SAVE_NAME_VARS } from '../../utils/saveName'
 
 export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings' | 'update'>) {
   return (
@@ -209,7 +212,7 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
           note="-END- の下に、いまのスレ一覧で次に未読のあるスレへのボタンを出します"
         />
       </Section>
-      <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、ここへ保存します。空のときはダウンロードフォルダです">
+      <Section advanced desktopOnly title="画像の保存先" note="画像ビューワーの保存ボタンで、このフォルダの下へ保存します。空のときはダウンロードフォルダです。フォルダとファイル名は、板・スレの名前や日付で分けられます">
         <div className="flex items-center gap-2">
           <TextSetting value={s.imageSaveDir} onChange={(v) => update('imageSaveDir', v)} placeholder="ダウンロードフォルダ" className="flex-1" />
           <button
@@ -228,7 +231,82 @@ export function PostsTab({ settings: s, update }: Pick<SettingsProps, 'settings'
             </button>
           )}
         </div>
+        <div className="mt-3 text-sm text-c-text-body">フォルダとファイル名</div>
+        <div className="mt-1 flex items-center gap-2">
+          <TextSetting value={s.imageSaveName} onChange={(v) => update('imageSaveName', v)} placeholder={DEFAULT_SETTINGS.imageSaveName} mono className="flex-1" />
+          {s.imageSaveName !== DEFAULT_SETTINGS.imageSaveName && (
+            <button type="button" className={ICON_BTN} title="元のファイル名に戻す" onClick={() => update('imageSaveName', DEFAULT_SETTINGS.imageSaveName)}>
+              <span className="material-symbols-outlined text-base">restart_alt</span>
+            </button>
+          )}
+        </div>
+        <SavePathPreview dir={s.imageSaveDir} pattern={s.imageSaveName} />
+        <SaveNameHelp onPick={(p) => update('imageSaveName', p)} />
       </Section>
     </>
+  )
+}
+
+/** 書き方から、見本の画像の保存先を作る(置き換えは Rust の save_name と同じもの) */
+function useSavePath(pattern: string): string[] | undefined {
+  const [parts, setParts] = useState<string[]>()
+  useEffect(() => {
+    let live = true
+    previewSavePath(pattern, SAVE_NAME_SAMPLE.url, SAVE_NAME_SAMPLE.ext, { ...SAVE_NAME_SAMPLE.vars, ...timeVars() }).then(
+      (p) => live && setParts(p),
+      () => live && setParts(undefined),
+    )
+    return () => {
+      live = false
+    }
+  }, [pattern])
+  return parts
+}
+
+/** 今の書き方で、見本の画像がどこへ保存されるか */
+function SavePathPreview(props: { dir: string; pattern: string }) {
+  const parts = useSavePath(props.pattern)
+  // Windows の区切りで見せる
+  const sep = props.dir.includes('\\') || navigator.userAgent.includes('Windows') ? '\\' : '/'
+  return (
+    <div className="mt-2 text-xs text-c-text-muted">
+      見本(エッヂの「なんでも実況E」の 12 番の abc123.jpg):
+      <div className="mt-0.5 font-mono text-c-text-body break-all">{parts ? [props.dir || 'ダウンロード', ...parts].join(sep) : '…'}</div>
+    </div>
+  )
+}
+
+/** 使える変数と例(例を押すとその書き方にする) */
+function SaveNameHelp(props: { onPick: (pattern: string) => void }) {
+  return (
+    <div className="mt-3 text-xs text-c-text-muted leading-relaxed">
+      <p>{SAVE_NAME_NOTE}</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+        {SAVE_NAME_VARS.map((v) => (
+          <Fragment key={v.name}>
+            <dt className="font-mono text-c-text-body">{v.name}</dt>
+            <dd>{v.label}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      <div className="mt-2">例(押すとその書き方にします)</div>
+      <ul className="mt-0.5">
+        {SAVE_NAME_EXAMPLES.map((p) => (
+          <SaveNameExample key={p} pattern={p} onPick={props.onPick} />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function SaveNameExample(props: { pattern: string; onPick: (pattern: string) => void }) {
+  const parts = useSavePath(props.pattern)
+  return (
+    <li>
+      <button type="button" className="font-mono text-c-text-body hover:underline" onClick={() => props.onPick(props.pattern)}>
+        {props.pattern}
+      </button>
+      {parts && <span> → {parts.join('/')}</span>}
+    </li>
   )
 }

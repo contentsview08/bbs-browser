@@ -243,6 +243,13 @@ class LogDb(private val context: Context) : SQLiteOpenHelper(context, "obb.db", 
         }
     }
 
+    /** 板が載っている掲示板(BBS メニュー)の名前と、そこでの板の名前(画像の保存先の {site}・{board})。PC の LogStore.boardPlace と同じ */
+    suspend fun boardPlace(boardUrl: String): Pair<String, String>? = io {
+        readableDatabase.rawQuery(
+            "SELECT s.name, b.name FROM boards b JOIN sites s ON s.menu_url = b.site_menu_url WHERE b.url = ? ORDER BY s.sort, s.name LIMIT 1", arrayOf(boardUrl),
+        ).use { c -> if (c.moveToNext()) c.getString(0) to c.getString(1) else null }
+    }
+
     suspend fun cachedBoards(menuUrl: String): List<Board> = io {
         readableDatabase.rawQuery("SELECT url, name, category FROM boards WHERE site_menu_url = ? ORDER BY sort", arrayOf(menuUrl)).use { c ->
             buildList { while (c.moveToNext()) add(Board(c.getString(0), c.getString(1), c.getString(2))) }

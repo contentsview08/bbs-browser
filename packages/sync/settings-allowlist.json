@@ -16,7 +16,7 @@
   "board_meta": { "prefix": "boardMeta/", "fields": ["alias", "omitNoname", "nonames"] },
   "never": [
     "postName", "postMail", "postDeleteKey", "catboxUserhash", "imgbbApiKey", "imgurClientId", "postAccounts", "honoUser", "honoPassword", "defaultName", "defaultMail",
-    "icon", "scheme", "fontFamily", "customFont", "backgroundImage", "imageSaveDir", "keymap", "mouseGestures", "swipeGestures", "barLayout", "openTabs", "activeTab", "lastBoardUrl", "boardVisits", "notificationLog",
+    "icon", "scheme", "fontFamily", "customFont", "backgroundImage", "imageSaveDir", "imageSaveName", "imageSaveBase", "keymap", "mouseGestures", "swipeGestures", "barLayout", "openTabs", "activeTab", "lastBoardUrl", "boardVisits", "notificationLog",
     "autoRefreshSec", "favCheckMin", "historyCheckMin", "keywordWatchMin", "aiNgRules", "aiNgOverrides", "ngRules", "logRetentionDays", "syncKinds", "syncMaster"
   ]
 }

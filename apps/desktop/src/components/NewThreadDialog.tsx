@@ -16,6 +16,7 @@ import { isMobile } from '../utils/platform'
 import MediaPreviewStrip, { dropProps, hasMediaPreview } from './MediaPreviewStrip'
 import { useDialogRect } from '../hooks/useDialogRect'
 import Lightbox from './Lightbox'
+import { DEFAULT_SAVE_TO, type SaveTo } from '../host/saveImage'
 
 interface Props {
   /** 書き込みにファイルを付けられる掲示板の決まり(ふたば)。あれば画像のボタンはアップロードではなく添付になる */
@@ -39,8 +40,8 @@ interface Props {
   onOpenAccountSettings: () => void
   /** 書きかけを覚えておく名前(板ごと)。閉じても・ページを離れても(Turnstile の確認)消えないように */
   draftKey?: string
-  /** 画像ビューアーの保存先(設定の imageSaveDir。空ならダウンロードフォルダ) */
-  imageSaveDir?: string
+  /** 画像ビューアーの保存先(設定の imageSaveDir・imageSaveName) */
+  imageSaveTo?: SaveTo
   /** 板の URL(上げる前の確かめで「画像にスレタイと URL を入れる」に使う。スレはまだないので板の URL) */
   boardUrl?: string
 }
@@ -317,7 +318,7 @@ export default function NewThreadDialog(props: Props) {
         <Lightbox
           urls={lightbox.urls}
           index={lightbox.index}
-          saveDir={props.imageSaveDir ?? ''}
+          saveTo={props.imageSaveTo ?? DEFAULT_SAVE_TO}
           onIndex={(index) => setLightbox((l) => l && { ...l, index })}
           onClose={() => setLightbox(undefined)}
           onOpenExternal={props.onOpenUrl}

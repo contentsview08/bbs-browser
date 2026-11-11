@@ -379,6 +379,8 @@ export interface AppSettings {
   hideBarsOnScroll: boolean
   /** 画像の保存先フォルダ。空ならダウンロードフォルダ */
   imageSaveDir: string
+  /** 保存先フォルダの下のフォルダとファイル名の書き方(例 {site}/{board}/{filename}。host/saveName.ts の変数を使う) */
+  imageSaveName: string
   // 自動更新
   /** 開いているスレを自動で更新する間隔(秒)。0 なら自動更新しない */
   autoRefreshSec: number
@@ -601,6 +603,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   idStyle: 'none',
   highlightOp: true,
   imageSaveDir: '',
+  imageSaveName: '{filename}',
   autoRefreshSec: 0,
   autoScrollOnNew: true,
   liveRefreshSec: LIVE_REFRESH_DEFAULT,

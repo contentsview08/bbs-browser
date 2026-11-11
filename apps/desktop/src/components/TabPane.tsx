@@ -193,6 +193,8 @@ function TabPane({
   // URL から開いたスレは一覧のスレタイが空なので、ログのスレタイを付けて足す
   const onToggleFavorite = useCallback(() => ev.toggleFavoriteThread({ ...thread, title }), [ev, thread, title])
   const meta = settings.boardMeta[thread.boardUrl]
+  // 画像の保存先の {board}・{thread} など
+  const saveThread = useMemo(() => ({ boardUrl: thread.boardUrl, key: thread.key, title }), [thread.boardUrl, thread.key, title])
 
   return (
     <ThreadView
@@ -231,6 +233,7 @@ function TabPane({
       onDeleteLog={onDeleteLog}
       nonameName={nonameName}
       boardUrl={thread.boardUrl}
+      saveThread={saveThread}
       omitNoname={meta?.omitNoname}
       extraNonames={meta?.nonames}
       jumpTo={jumpTo}

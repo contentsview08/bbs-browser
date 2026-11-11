@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
-import { saveImage } from '../host/saveImage'
+import { saveImage, type SaveTo } from '../host/saveImage'
 import { isVideoFileUrl, youtubeEmbedUrl } from '../utils/postBody'
 import { isAutoLoadable } from '../utils/safeUrl'
 import { isMobile } from '../utils/platform'
@@ -22,8 +22,8 @@ interface Props {
   post?: Post
   /** 画像ごとのレス(画像一覧から開いたとき、urls と同じ順)。あれば post より優先する */
   posts?: Post[]
-  /** 保存先フォルダ(空ならダウンロードフォルダ) */
-  saveDir: string
+  /** 保存先(土台のフォルダが空ならダウンロードフォルダ) */
+  saveTo: SaveTo
   onIndex: (i: number) => void
   onClose: () => void
   onOpenExternal: (url: string) => void
@@ -130,7 +130,7 @@ export default function Lightbox(props: Props) {
   return <DesktopLightbox {...props} />
 }
 
-function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex, onClose, onOpenExternal }: Props) {
+function DesktopLightbox({ urls, index, post: onlyPost, posts, saveTo, onIndex, onClose, onOpenExternal }: Props) {
   const url = urls[index]
   const post = posts?.[index] ?? onlyPost
   const video = isVideoFileUrl(url)
@@ -237,7 +237,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
   const doSave = async () => {
     setSave({ status: 'saving' })
     try {
-      setSave({ status: 'saved', path: (await saveImage(url, saveDir)).path })
+      setSave({ status: 'saved', path: (await saveImage(url, saveTo, post?.no)).path })
     } catch (e) {
       setSave({ status: 'error', message: e instanceof Error ? e.message : String(e) })
     }
@@ -387,7 +387,7 @@ function DesktopLightbox({ urls, index, post: onlyPost, posts, saveDir, onIndex,
         <button
           type="button"
           className={TOOL}
-          title={saveDir ? `保存 (${saveDir})` : '保存 (ダウンロードフォルダ)'}
+          title={saveTo.dir ? `保存 (${saveTo.dir})` : '保存 (ダウンロードフォルダ)'}
           onClick={() => void doSave()}
           disabled={save?.status === 'saving'}
         >

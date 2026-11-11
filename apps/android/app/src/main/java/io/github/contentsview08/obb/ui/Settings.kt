@@ -458,6 +458,81 @@ private fun MediaPage(vm: AppViewModel) {
         SwitchRow("グロ注意の画像をぼかす", p.blurGross) { p.blurGross = it }
         if (p.blurGross) EditableWordList(p.grossWords, "目印の言葉", "言葉を足す", "言葉がありません") { p.grossWords = it }
     }
+    if (LocalAdvanced.current) {
+        Group("画像の保存先", note = "画像ビューアーの保存で、ここへ保存します。フォルダとファイル名は、板・スレの名前や日付で分けられます") {
+            SegmentRow("保存先", p.imageSaveBase, listOf("pictures" to "ピクチャ", "download" to "ダウンロード")) { p.imageSaveBase = it }
+            SaveNameRow(p.imageSaveName) { p.imageSaveName = it }
+        }
+        SaveNamePreview(p.imageSaveBase, p.imageSaveName)
+        SaveNameHelp { p.imageSaveName = it }
+    }
+}
+
+/** 見本の画像の保存先(土台のフォルダの名前から) */
+private fun saveNamePreview(base: String, pattern: String): String =
+    (listOf(io.github.contentsview08.obb.data.saveBaseLabel(base)) + io.github.contentsview08.obb.data.savePath(pattern, io.github.contentsview08.obb.data.SAVE_NAME_SAMPLE_URL, "jpg", io.github.contentsview08.obb.data.saveNameSample())).joinToString("/")
+
+/** フォルダとファイル名の書き方。決める前の入力にも見本を出す */
+@Composable
+private fun SaveNameRow(value: String, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().clickable { open = true }.heightIn(min = 54.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("フォルダとファイル名", Modifier.weight(1f), color = Palette.textStrong, fontSize = 15.sp)
+        Text(value.ifEmpty { io.github.contentsview08.obb.data.Prefs.DEFAULT_IMAGE_SAVE_NAME }, color = Palette.accent, fontSize = 14.sp, maxLines = 1)
+    }
+    if (open) {
+        var text by remember { mutableStateOf(value) }
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text("フォルダとファイル名") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    OutlinedTextField(text, { text = it }, singleLine = true, placeholder = { Text(io.github.contentsview08.obb.data.Prefs.DEFAULT_IMAGE_SAVE_NAME) })
+                    Text("見本: " + saveNamePreview(LocalPrefs.current.imageSaveBase, text), Modifier.padding(top = 8.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
+                    Text("押すと書き方に足します", Modifier.padding(top = 10.dp, bottom = 2.dp), color = Palette.textMuted, fontSize = 12.sp)
+                    for ((name, label) in io.github.contentsview08.obb.data.SAVE_NAME_VARS) {
+                        Row(Modifier.fillMaxWidth().clickable { text += name.substringBefore(' ') }.padding(vertical = 3.dp)) {
+                            Text(name, Modifier.width(120.dp), color = Palette.accent, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            Text(label, color = Palette.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { onChange(text.trim().ifEmpty { io.github.contentsview08.obb.data.Prefs.DEFAULT_IMAGE_SAVE_NAME }); open = false }) { Text("決める") } },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("やめる") } },
+        )
+    }
+}
+
+@Composable
+private fun SaveNamePreview(base: String, pattern: String) {
+    Text(
+        "見本(エッヂの「なんでも実況E」の 12 番の abc123.jpg): " + saveNamePreview(base, pattern),
+        Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp), color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp,
+    )
+}
+
+/** 使える変数と例(例を押すとその書き方にする) */
+@Composable
+private fun SaveNameHelp(onPick: (String) -> Unit) {
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp)) {
+        Text(io.github.contentsview08.obb.data.SAVE_NAME_NOTE, color = Palette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
+        Spacer(Modifier.height(6.dp))
+        for ((name, label) in io.github.contentsview08.obb.data.SAVE_NAME_VARS) {
+            Row(Modifier.padding(vertical = 1.dp)) {
+                Text(name, Modifier.width(120.dp), color = Palette.textBody, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Text(label, color = Palette.textMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+        }
+        Text("例(押すとその書き方にします)", Modifier.padding(top = 8.dp, bottom = 2.dp), color = Palette.textMuted, fontSize = 12.sp)
+        val sample = io.github.contentsview08.obb.data.saveNameSample()
+        for (ex in io.github.contentsview08.obb.data.SAVE_NAME_EXAMPLES) {
+            Column(Modifier.fillMaxWidth().clickable { onPick(ex) }.padding(vertical = 4.dp)) {
+                Text(ex, color = Palette.accent, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Text("→ " + io.github.contentsview08.obb.data.savePath(ex, io.github.contentsview08.obb.data.SAVE_NAME_SAMPLE_URL, "jpg", sample).joinToString("/"), color = Palette.textMuted, fontSize = 12.sp)
+            }
+        }
+    }
 }
 
 @Composable

@@ -18,6 +18,7 @@ const NOT_EXPORTED: readonly (keyof AppSettings)[] = [
   'lastBoardUrl',
   'backgroundImage',
   'imageSaveDir',
+  'imageSaveName',
   'customFont',
   'postDeleteKey',
   'notificationLog',

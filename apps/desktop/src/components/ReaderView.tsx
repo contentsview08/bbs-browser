@@ -14,13 +14,14 @@ import LoadingCenter from './LoadingCenter'
 import { mediaSrc, videoSrc } from '../utils/httpsFirst'
 import { canPlayVideo } from '../utils/videoSupport'
 import { VideoPlaybackHelp } from './MediaFailed'
+import type { SaveTo } from '../host/saveImage'
 
 /** ページを取る(アプリの通信。CORS に縛られない) */
 export type FetchPage = (url: string) => Promise<{ status: number; headers: Record<string, string>; body: Uint8Array }>
 
 const BTN = 'p-2.5 rounded-xl text-c-text-muted hover:text-c-text-strong active:bg-c-surface2 transition-colors'
 
-export default function ReaderView(props: { url: string; fetchPage: FetchPage; saveDir: string; onClose: () => void; onOpenExternal: (url: string) => void }) {
+export default function ReaderView(props: { url: string; fetchPage: FetchPage; saveTo: SaveTo; onClose: () => void; onOpenExternal: (url: string) => void }) {
   const { url } = props
   const boxRef = useRef<HTMLDivElement>(null)
   useFocusTrap(boxRef, props.onClose)
@@ -181,7 +182,7 @@ export default function ReaderView(props: { url: string; fetchPage: FetchPage; s
         <Lightbox
           urls={lightbox.urls}
           index={lightbox.index}
-          saveDir={props.saveDir}
+          saveTo={props.saveTo}
           onIndex={(index) => setLightbox((l) => l && { ...l, index })}
           onClose={() => setLightbox(undefined)}
           onOpenExternal={props.onOpenExternal}

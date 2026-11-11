@@ -98,6 +98,7 @@ import { backgroundError } from './utils/backgroundError'
 import { applyPresets } from './presets'
 import { backupDatabase, restoreDatabase } from './host/backup'
 import { deleteFromCatbox, type UploadedFile } from './host/uploader'
+import { setSavePlaceLookup } from './host/saveImage'
 import { EMPTY_MARKS, bodyKey, type TrollMarks } from './utils/autoNg'
 import { useTrollModel } from './hooks/useTrollModel'
 import { aiModelStatus, deleteAiModelFiles, startAiModel, stopAiModel, testScore } from './hooks/useAiNg'
@@ -2498,6 +2499,18 @@ export default function App() {
   }
   // 中身の関数はどれも変わらないので、入れ物も一度だけ作る(TabPane の memo が効くように)
   const stableTabEvents = useRef(tabEvents).current
+  // 画像の保存先の {site}・{board}: 板の別名 → お気に入り板の名前 → BBS メニューの名前 → URL の最後
+  useEffect(() => {
+    setSavePlaceLookup(async (url) => {
+      const place = await store?.boardPlace(url).catch(() => undefined)
+      const named = settings.boardMeta[url]?.alias || favorites?.find((f) => f.url === url)?.name
+      return { site: place?.site, board: named || place?.board || boardNameOf(url) }
+    })
+    return () => setSavePlaceLookup(undefined)
+    // boardNameOf は settings.boardMeta と favorites だけで決まる
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, settings.boardMeta, favorites])
+  const imageSaveTo = useMemo(() => ({ dir: settings.imageSaveDir, pattern: settings.imageSaveName }), [settings.imageSaveDir, settings.imageSaveName])
   // 同じ画像をもう一度貼ったら上げない(アップロード履歴の hash で引く。utils/uploadIndex)
   useEffect(() => {
     setUploadLookup(store ? (h) => store.findUploadByHash(h) : undefined)
@@ -2987,7 +3000,7 @@ export default function App() {
       {uploads && (
         <UploadHistoryDialog
           uploads={uploads}
-          saveDir={settings.imageSaveDir}
+          saveTo={imageSaveTo}
           postedIn={postedIn}
           onOpen={(url) => void (isMobile ? openUrlInApp(url) : openUrl(url))}
           canDelete={settings.catboxUserhash.trim() !== ''}
@@ -3030,7 +3043,7 @@ export default function App() {
           url={readerUrl}
           // ウェブページはブラウザの名乗り(User-Agent)で取る(専ブラの名乗りだと、スマホ向けでない・断られるページがある)
           fetchPage={(url) => ctx.http.get(url, { headers: { 'User-Agent': BROWSER_UA } })}
-          saveDir={settings.imageSaveDir}
+          saveTo={imageSaveTo}
           onClose={() => setReaderUrl(undefined)}
           onOpenExternal={(url) => void openUrl(url)}
         />
@@ -3146,7 +3159,7 @@ export default function App() {
             imgurClientId: settings.imgurClientId.trim() || undefined,
           }}
           onUploaded={stableTabEvents.uploaded}
-          imageSaveDir={settings.imageSaveDir}
+          imageSaveTo={imageSaveTo}
           accounts={postAccountsOf(board.connectorId, board.url)}
           limits={boardInfos.get(board.url)?.limits}
           byteLength={findConnector(board.connectorId)?.postByteLength}

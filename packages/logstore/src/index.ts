@@ -342,6 +342,15 @@ export class LogStore {
     return rows.map((r) => ({ url: r.url, connectorId: r.connector_id, name: r.name, category: r.category ?? undefined }))
   }
 
+  /** 板が載っている掲示板(BBS メニュー)の名前と、そこでの板の名前(画像の保存先の {site}・{board})。どこにも載っていなければ undefined */
+  async boardPlace(boardUrl: string): Promise<{ site: string; board: string } | undefined> {
+    const rows = await this.db.select<{ site: string; board: string }>(
+      'SELECT s.name AS site, b.name AS board FROM boards b JOIN sites s ON s.menu_url = b.site_menu_url WHERE b.url = $1 ORDER BY s.sort, s.name LIMIT 1',
+      [boardUrl],
+    )
+    return rows[0]
+  }
+
   /** 板一覧はただのキャッシュなので、途中で落ちても次の取得で作り直せばよい */
   async replaceBoards(menuUrl: string, boards: Board[]): Promise<void> {
     await this.db.execute('DELETE FROM boards WHERE site_menu_url = $1', [menuUrl])

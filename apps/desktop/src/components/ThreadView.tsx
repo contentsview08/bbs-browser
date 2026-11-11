@@ -4,6 +4,7 @@
 // - 新着は若い番号から順に出して光らせる
 // - 書き込み欄は下か右に置き、境界をドラッグして大きさを変えられる
 
+import type { SaveThread } from '../host/saveImage'
 import { countIconKeys, iconKeyOf, watchoiOf } from '../utils/watchoi'
 import { isMobile } from '../utils/platform'
 import { useHideOnScroll } from '../hooks/useHideOnScroll'
@@ -197,6 +198,8 @@ interface Props {
   nonameName?: string
   /** スレの板(AI NG の「この板だけ」の条件に使う) */
   boardUrl?: string
+  /** 画像の保存先の書き方に入れるスレ */
+  saveThread?: SaveThread
   /** 板ごとの設定: 名無しを省くか(なければ全体の設定)と、名無しとみなす名前 */
   omitNoname?: boolean
   extraNonames?: string[]
@@ -661,6 +664,10 @@ export default function ThreadView(props: Props) {
   )
   const isNgRule = props.isNg
   // レスのメニューが読む NG の一覧(変わるたびに全部のレスを描き直さないよう、控えを読む)
+  const saveTo = useMemo(
+    () => ({ dir: settings.imageSaveDir, pattern: settings.imageSaveName, thread: props.saveThread }),
+    [settings.imageSaveDir, settings.imageSaveName, props.saveThread],
+  )
   const ngContext = useRef({ rules: settings.ngRules, boardUrl: props.boardUrl })
   ngContext.current = { rules: settings.ngRules, boardUrl: props.boardUrl }
   // NG の判定は、レスが変わったときに 1 回だけ全レスに当てて番号の Set にする(描くたびに NG 1 件ごとの toLowerCase を繰り返さない)
@@ -2779,7 +2786,7 @@ export default function ThreadView(props: Props) {
           // NG のレスは除く(見えていないレスの画像は出さない)
           items={galleryItems}
           blurNos={grossNos}
-          saveDir={settings.imageSaveDir}
+          saveTo={saveTo}
           onOpen={(items, index) => setLightbox({ urls: items.map((m) => m.url), index, posts: items.map((m) => m.post) })}
           onClose={() => setGalleryOpen(false)}
         />
@@ -2825,7 +2832,7 @@ export default function ThreadView(props: Props) {
           index={lightbox.index}
           post={lightbox.post}
           posts={lightbox.posts}
-          saveDir={settings.imageSaveDir}
+          saveTo={saveTo}
           onIndex={(index) => setLightbox((l) => l && { ...l, index })}
           onClose={() => setLightbox(undefined)}
           onOpenExternal={props.onUrl}

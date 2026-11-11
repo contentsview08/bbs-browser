@@ -15,6 +15,7 @@ import { dayLabel } from '../utils/thread'
 import ActionSheet from './ActionSheet'
 import Lightbox from './Lightbox'
 import { isVideoFileUrl, toImageUrl } from '../utils/postBody'
+import { DEFAULT_SAVE_TO, type SaveTo } from '../host/saveImage'
 
 const TOOL = 'p-1.5 rounded text-c-text-muted hover:text-c-text-strong hover:bg-c-surface3 transition-colors'
 
@@ -33,7 +34,7 @@ interface Props {
   postedIn?: (url: string) => { title: string; no?: number; open: () => void } | undefined
   onOpen: (url: string) => void
   /** ビューアーからの保存先 */
-  saveDir?: string
+  saveTo?: SaveTo
   onClose: () => void
 }
 
@@ -169,7 +170,7 @@ export function UploadGrid(props: Omit<Props, 'onClose'>) {
           <Lightbox
             urls={viewerUrls}
             index={Math.min(viewing, viewerUrls.length - 1)}
-            saveDir={props.saveDir ?? ''}
+            saveTo={props.saveTo ?? DEFAULT_SAVE_TO}
             onIndex={setViewing}
             onClose={() => setViewing(undefined)}
             onOpenExternal={props.onOpen}

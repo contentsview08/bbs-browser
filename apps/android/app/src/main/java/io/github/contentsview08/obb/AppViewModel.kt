@@ -870,11 +870,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { db.userOps.reorderFavorites(list.map { it.url }) }
     }
 
-    /** 画像をまとめて保存する(画像一覧を閉じても続ける) */
-    fun saveImages(urls: List<String>) {
+    /**
+     * 画像の保存先の {site}・{board} など。板の名前は 呼び名 → お気に入りの板 → 開いている一覧の板 → BBS メニューの名前 → URL の最後
+     * (PC の App の setSavePlaceLookup と同じ順)。掲示板の名前は BBS メニューの名前(なければ保存のときにホスト名)
+     */
+    suspend fun savePlaceOf(page: Page.Thread): io.github.contentsview08.obb.data.SavePlace {
+        val url = page.summary.boardUrl
+        val place = runCatching { db.boardPlace(url) }.getOrNull()
+        val board = prefs.boardMeta[url]?.alias?.takeIf { it.isNotBlank() }
+            ?: favorites.firstOrNull { it.url == url }?.name
+            ?: stack.filterIsInstance<Page.Threads>().firstOrNull { it.board.url == url }?.board?.name
+            ?: place?.second
+            ?: url.trimEnd('/').substringAfterLast('/')
+        return io.github.contentsview08.obb.data.SavePlace(url, place?.first, board, page.title.ifEmpty { page.summary.title }, page.summary.key)
+    }
+
+    /** 画像をまとめて保存する(画像一覧を閉じても続ける)。nos は画像の載っていたレスの番号 */
+    fun saveImages(urls: List<String>, page: Page.Thread? = null, nos: Map<String, Int> = emptyMap()) {
         toast = "${urls.size} 枚を保存しています…"
         viewModelScope.launch {
-            val ok = io.github.contentsview08.obb.data.saveEach(urls) { io.github.contentsview08.obb.data.ImageSaver.save(getApplication<Application>(), it) }
+            val to = io.github.contentsview08.obb.data.SaveTarget(prefs.imageSaveBase, prefs.imageSaveName, page?.let { savePlaceOf(it) })
+            val ok = io.github.contentsview08.obb.data.saveEach(urls) { io.github.contentsview08.obb.data.ImageSaver.save(getApplication<Application>(), it, to, nos[it]) }
             toast = "$ok 枚を保存しました" + if (ok < urls.size) "(${urls.size - ok} 枚は保存できませんでした)" else ""
         }
     }

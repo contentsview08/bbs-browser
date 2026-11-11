@@ -1004,7 +1004,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
         )
     }
 
-    if (gallery) GalleryPanel(index.allImages, onOpen = { viewerPost = null; viewer = it }, save = vm::saveImages) { gallery = false }
+    if (gallery) GalleryPanel(index.allImages, onOpen = { viewerPost = null; viewer = it }, save = { urls ->
+        val nos = index.allImages.zip(index.allImagePosts).associate { (u, p) -> u to p.no }
+        vm.saveImages(urls, page, nos)
+    }) { gallery = false }
 
     if (nextSheet) {
         CenterPanel(onDismiss = { nextSheet = false }) {
@@ -1018,9 +1021,10 @@ fun ThreadScreen(vm: AppViewModel, page: Page.Thread, modifier: Modifier = Modif
 
     viewer?.let { url ->
         val own = viewerPost?.let { post -> index.info[post.no]?.images?.takeIf { url in it }?.let { post to it } }
-        if (own != null) ImageViewer(own.second, url, onClose = { viewer = null }, posts = own.second.map { own.first })
-        else if (url in index.allImages) ImageViewer(index.allImages, url, onClose = { viewer = null }, posts = index.allImagePosts)
-        else ImageViewer(listOf(url), url, onClose = { viewer = null })
+        val place: suspend () -> io.github.contentsview08.obb.data.SavePlace = { vm.savePlaceOf(page) }
+        if (own != null) ImageViewer(own.second, url, onClose = { viewer = null }, posts = own.second.map { own.first }, place = place)
+        else if (url in index.allImages) ImageViewer(index.allImages, url, onClose = { viewer = null }, posts = index.allImagePosts, place = place)
+        else ImageViewer(listOf(url), url, onClose = { viewer = null }, place = place)
     }
 }
 

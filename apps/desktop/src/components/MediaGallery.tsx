@@ -9,7 +9,7 @@ import { useBackdropClose } from '../hooks/useDialogClose'
 import { createPortal } from 'react-dom'
 import type { Post } from '@bbs-browser/connectors'
 import { imageUrlsIn, videoFileUrlsIn, youtubeLinksIn } from '../utils/postBody'
-import { cachedImages, cancelImageFetch, saveImage } from '../host/saveImage'
+import { cachedImages, cancelImageFetch, saveImage, type SaveTo } from '../host/saveImage'
 import { COPY_LIMITS, hostKey, runLimited, SAVE_LIMITS } from '../utils/limitedRun'
 import { edgeScrollSpeed, rectFrom, selectByRect, selectRange, toggled, type Point, type Rect } from '../utils/rectSelect'
 import { isMobile } from '../utils/platform'
@@ -70,7 +70,7 @@ export default function MediaGallery(props: {
   items: MediaItem[]
   /** 画像をぼかすレス(グロ注意)の番号 */
   blurNos?: Set<number>
-  saveDir: string
+  saveTo: SaveTo
   /** 押したものをビューアーで開く(見せている順のまま渡す) */
   onOpen: (items: MediaItem[], index: number) => void
   onClose: () => void
@@ -103,6 +103,7 @@ export default function MediaGallery(props: {
   const saveFiles = async (files: MediaItem[], clearAfter: boolean) => {
     if (files.length === 0) return
     const urls = files.filter((m) => isAutoLoadable(m.url)).map((m) => m.url)
+    const noOf = new Map(files.map((m) => [m.url, m.post.no]))
     const progress: SaveProgress = { done: 0, total: urls.length, failed: 0, skipped: files.length - urls.length, fromCache: 0, finished: urls.length === 0 }
     setSaving({ ...progress })
     if (urls.length === 0) return
@@ -116,7 +117,7 @@ export default function MediaGallery(props: {
     const work = async (url: string) => {
       running.add(url)
       try {
-        const saved = await saveImage(url, props.saveDir)
+        const saved = await saveImage(url, props.saveTo, noOf.get(url))
         if (saved.fromCache) progress.fromCache++
       } catch {
         progress.failed++
@@ -288,7 +289,7 @@ export default function MediaGallery(props: {
                 type="button"
                 onClick={() => void (selectedFiles.length > 0 ? saveFiles(selectedFiles, true) : saveFiles(selectable, false))}
                 className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-[var(--btn-radius)] bg-c-accent text-[var(--c-accent-text)] hover:bg-c-accent-hover disabled:opacity-50"
-                title={`${selectedFiles.length > 0 ? '選んだもの' : '見せている画像'}を ${props.saveDir || 'ダウンロードフォルダ'} に保存します(YouTube と家の中のアドレスは除く)`}
+                title={`${selectedFiles.length > 0 ? '選んだもの' : '見せている画像'}を ${props.saveTo.dir || 'ダウンロードフォルダ'} に保存します(YouTube と家の中のアドレスは除く)`}
               >
                 <span className="material-symbols-outlined text-base">download</span>
                 {selectedFiles.length > 0 ? `選んだものを保存(${selectedFiles.length})` : 'まとめて保存'}

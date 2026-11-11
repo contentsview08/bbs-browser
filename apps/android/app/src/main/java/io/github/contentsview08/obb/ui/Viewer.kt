@@ -97,6 +97,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     val context = LocalContext.current
     val prefs = LocalPrefs.current
     val density = LocalDensity.current
+    val view = androidx.compose.ui.platform.LocalView.current
     val scope = rememberCoroutineScope()
     // 両端の外に空のページを置き、そこまでなぞったら閉じる
     val pager = rememberPagerState(initialPage = urls.indexOf(start).coerceAtLeast(0) + 1) { urls.size + 2 }
@@ -104,6 +105,17 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
     var chrome by remember { mutableStateOf(true) }
     var sheet by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
+    /** 保存中は次の保存を受け付けない(続けて長押ししても二重に保存しない) */
+    var saving by remember { mutableStateOf(false) }
+    fun save(url: String) {
+        if (saving) return
+        saving = true
+        notice = "保存しています…"
+        scope.launch {
+            notice = runCatching { io.github.contentsview08.obb.data.ImageSaver.save(context, url) }.getOrElse { "保存できませんでした: ${it.message}" }
+            saving = false
+        }
+    }
     /** 拡大中は左右のページ送りを止める */
     var zoomed by remember { mutableStateOf(false) }
     val dismiss = remember { Animatable(0f) }
@@ -140,7 +152,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                         url, active = page == pager.currentPage,
                         onZoomed = { if (page == pager.currentPage) zoomed = it },
                         onTap = { chrome = !chrome },
-                        onLongPress = { sheet = true },
+                        onLongPress = { Haptics.longPress(view); save(url) },
                         onDismissDrag = { dy -> scope.launch { dismiss.snapTo(dy) } },
                         onDismissEnd = { dy, v ->
                             scope.launch {
@@ -200,8 +212,7 @@ fun ImageViewer(urls: List<String>, start: String, onClose: () -> Unit, posts: L
                 Column(Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)).navigationBarsPadding().padding(vertical = 8.dp)) {
                     SheetRow(Icons.Filled.Download, "保存") {
                         sheet = false
-                        notice = "保存しています…"
-                        scope.launch { notice = runCatching { io.github.contentsview08.obb.data.ImageSaver.save(context, url) }.getOrElse { "保存できませんでした: ${it.message}" } }
+                        save(url)
                     }
                     SheetRow(Icons.Filled.Link, "URL をコピー") { sheet = false; copyText(context, url); notice = "URL をコピーしました" }
                     SheetRow(Icons.AutoMirrored.Filled.OpenInNew, "ブラウザで開く") { sheet = false; openExternal(context, url, prefs.openLinksInApp) }

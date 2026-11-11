@@ -5,7 +5,7 @@
 import { isMobile } from '../utils/platform'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Post } from '@bbs-browser/connectors'
-import { hasLink, hasVideo, imageUrlsIn } from '../utils/postBody'
+import { hasLink, hasVideo, imageUrlsIn, looksLikeAA, shortUrl } from '../utils/postBody'
 import { currentMinimapThumbColor } from '../utils/minimapThumb'
 import { framesIn } from '../hooks/useThreadScroll'
 
@@ -33,6 +33,8 @@ interface Props {
   unreadFrom: number
   /** ツリー表示: この番号から後ろのレスに新着の印を付ける(「ここから未読」の帯は出さないので unreadFrom は 0 で渡す) */
   newFrom?: number
+  /** NG(あぼーん)のレスか。乗せたときの吹き出しに本文を出さない */
+  isNg?: (p: Post) => boolean
   /** ヘッダーの高さ。ミニマップはその下から始める */
   topOffset: number
   onJump: (no: number) => void
@@ -45,25 +47,56 @@ function heatColor(count: number): string {
   return 'var(--c-heat-warm)'
 }
 
-// 寸法(px)。スマホはスマホ版の 18dp と同じ並びにする(枠の内側から測る)
-const WIDTH = isMobile ? 18 : 24
-const PAD = isMobile ? 0.5 : 2
+// 寸法(px)。スマホはスマホ版の 18dp と同じ並びにする(枠の内側から測る)。
+// PC は画面が大きく小さな印は目に入らないので、幅を広げて印も大きくする(人気の棒の最短が、作り直す前の帯と同じ 12×5)
+const WIDTH = isMobile ? 18 : 30
+const PAD = isMobile ? 0.5 : 1.5
 const COL = WIDTH - 2 - PAD * 2
-/** 左の列(中身)の幅。右の列(自分)と 6:4 */
-const LEFT_W = COL * 0.6
+/** 左の列(中身)の幅。右の列(自分)とおよそ 6:4(PC は右の列に 8px の丸が収まるよう 16:9) */
+const LEFT_W = isMobile ? COL * 0.6 : 16
 /** 右の列の真ん中 */
 const RIGHT_X = PAD + LEFT_W + (COL - LEFT_W) / 2
-/** 自分のレス・返信の丸の直径 */
-const DOT = 5
+/** 自分のレス・返信の丸の直径。返信は線 1.5 の輪(PC で線を太くすると穴がつぶれて塗りと見分けにくい) */
+const DOT = isMobile ? 5 : 8
 /** 画像・動画・リンクの印の大きさ。左の列の右の端に置く(人気の棒は左の端から) */
-const MEDIA = 4
+const MEDIA = isMobile ? 4 : 6
 const MEDIA_X = PAD + LEFT_W - MEDIA / 2 - 0.5
-/** 押せる広さ(印は小さいので、見た目より広く取る) */
-const HIT = 9
+/** 人気の棒の高さ */
+const HEAT_H = isMobile ? 3 : 5
+/** 押せる広さ(見た目より広く取る) */
+const HIT = isMobile ? 9 : 12
 
-/** 人気の棒の長さ(左の列に対する割合)。出し始め(3 件)で 40%、10 件でいっぱい */
+/** 人気の棒の長さ(左の列に対する割合)。出し始め(3 件)で最短、10 件でいっぱい。PC は最短でも目に入るよう 75%(12px) */
+const HEAT_MIN = isMobile ? 0.4 : 0.75
 function heatLength(count: number): number {
-  return 0.4 + 0.6 * Math.min(1, Math.max(0, (count - 3) / 7))
+  return HEAT_MIN + (1 - HEAT_MIN) * Math.min(1, Math.max(0, (count - 3) / 7))
+}
+
+// 乗せたときの吹き出しの本文の頭。アンカー・タグを除くのはスマホ版のドラッグ中の札(ui/Minimap.kt の LABEL_ANCHOR・LABEL_TAG)と同じ
+const DIGEST_ANCHOR = /(&gt;|>|＞){1,2}[0-9]+(-[0-9]+)?/g
+const DIGEST_TAG = /<[^>]+>/g
+const DIGEST_URL = /h?ttps?:\/\/[^\s<>"'）)」]+/gi
+/** 長い本文を全部整えない(吹き出しは 3 行で切るので、これだけあれば足りる) */
+const DIGEST_MAX = 140
+/** 整えた本文は本文ごとに覚える(カーソルを動かすたびに整え直さない) */
+const digestCache = new Map<string, string>()
+function digestOf(body: string): string {
+  let v = digestCache.get(body)
+  if (v === undefined) {
+    if (digestCache.size > 5_000) digestCache.clear()
+    if (looksLikeAA(body)) v = '(AA)'
+    else {
+      const flat = body
+        .replace(DIGEST_TAG, '')
+        .replace(DIGEST_ANCHOR, '')
+        .replace(DIGEST_URL, (u) => shortUrl(u, 24))
+        .replace(/\s+/g, ' ')
+        .trim()
+      v = flat.length > DIGEST_MAX ? `${flat.slice(0, DIGEST_MAX - 1)}…` : flat
+    }
+    digestCache.set(body, v)
+  }
+  return v
 }
 
 /** つまみの色。配色・差し色を変えたら(<html> の属性が変わる)決め直す */
@@ -306,8 +339,8 @@ export default function Minimap(props: Props) {
             key={`heat-${m.no}`}
             type="button"
             onClick={jump(m.no)}
-            className="absolute h-[3px] -translate-y-1/2 rounded-full hover:scale-y-150 transition-transform z-[10]"
-            style={{ top: `${m.at}%`, left: PAD, width: LEFT_W * heatLength(m.count), background: heatColor(m.count) }}
+            className="absolute -translate-y-1/2 rounded-full hover:scale-y-150 transition-transform z-[10]"
+            style={{ top: `${m.at}%`, left: PAD, width: LEFT_W * heatLength(m.count), height: HEAT_H, background: heatColor(m.count) }}
             title={`>>${m.no}: ${m.count} 件のアンカー`}
           />
         ))}
@@ -321,7 +354,8 @@ export default function Minimap(props: Props) {
             style={hit(MEDIA_X, m.at, 11)}
             title={`>>${m.no}: ${MEDIA_TITLE[m.type]}`}
           >
-            <svg width={MEDIA + 2} height={MEDIA + 2} viewBox="-1 -1 6 6" className="pointer-events-none overflow-visible">
+            {/* 形は 4 の升目で描き、MEDIA の大きさに伸ばす(縁も同じ割合で太る) */}
+            <svg width={(MEDIA * 6) / 4} height={(MEDIA * 6) / 4} viewBox="-1 -1 6 6" className="pointer-events-none overflow-visible">
               {m.type === 'image' ? (
                 <rect x="0" y="0" width="4" height="4" rx="0.6" style={shape(m.type)} />
               ) : m.type === 'video' ? (
@@ -363,19 +397,20 @@ export default function Minimap(props: Props) {
   }, [markers, onJump])
 
   // マウスを乗せた高さ(%)と、そのあたりのレス番号。押すとどこへ飛ぶか分かるように出す
-  const [hover, setHover] = useState<{ at: number; no?: number }>()
+  const [hover, setHover] = useState<{ at: number; no?: number; digest?: string }>()
   const onTrackMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const at = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
     // その高さより上にある最後のレス
-    let no: number | undefined
+    let post: Post | undefined
     for (let i = posts.length - 1; i >= 0; i--) {
       if (pct(posts[i].no, i) <= at) {
-        no = posts[i].no
+        post = posts[i]
         break
       }
     }
-    setHover({ at, no })
+    const digest = post && (props.isNg?.(post) ? 'あぼーん' : digestOf(post.body))
+    setHover({ at, no: post?.no, digest })
   }
 
   return (
@@ -385,8 +420,9 @@ export default function Minimap(props: Props) {
       {props.topOffset > 0 && (
         <div className="flex-shrink-0 frosted-glass bg-panel-thread-header border-b border-c-border" style={{ height: props.topOffset }} />
       )}
-    {/* スマホは画面の端にぴったり付ける(余白を削って、本文の幅を残す) */}
-    <div className={`flex-1 min-h-0 ${isMobile ? 'py-1 pr-0.5 pl-0' : 'py-2 pr-2 pl-1'}`}>
+    {/* スマホは画面の端にぴったり付ける(余白を削って、本文の幅を残す)。
+        PC は帯を広げた分だけ外の余白を詰め、全体の幅をあまり変えない(「いちばん下へ」のボタンが右から 44px に置いてある) */}
+    <div className={`flex-1 min-h-0 ${isMobile ? 'py-1 pr-0.5 pl-0' : 'py-2 pr-1.5 pl-0.5'}`}>
       <div
         className="relative h-full cursor-pointer"
         style={{
@@ -417,10 +453,16 @@ export default function Minimap(props: Props) {
             <div className="h-px" style={{ background: 'var(--c-text-body)', opacity: 0.6 }} />
             {hover.no !== undefined && (
               <span
-                className="absolute right-full mr-2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums whitespace-nowrap shadow"
-                style={{ background: 'var(--c-surface)', color: 'var(--c-text-strong)', border: '1px solid var(--c-border)' }}
+                className="absolute right-full mr-2 px-1.5 py-0.5 rounded text-[10px] shadow w-max max-w-[260px]"
+                // 上の端では下へ、下の端では上へ寄せる(ミニマップの端で吹き出しが画面の外へ出ないように)
+                style={{ transform: `translateY(-${hover.at}%)`, background: 'var(--c-surface)', color: 'var(--c-text-strong)', border: '1px solid var(--c-border)' }}
               >
-                &gt;&gt;{hover.no}
+                <span className="block font-bold tabular-nums whitespace-nowrap">&gt;&gt;{hover.no}</span>
+                {hover.digest && (
+                  <span className="block break-words line-clamp-3 leading-snug text-[11px]" style={{ color: 'var(--c-text-body)' }}>
+                    {hover.digest}
+                  </span>
+                )}
               </span>
             )}
           </div>

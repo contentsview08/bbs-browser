@@ -2634,6 +2634,7 @@ export default function ThreadView(props: Props) {
           anchorCounts={anchorCounts}
           ownNos={ownNos}
           replyToOwn={replyToOwn}
+          isNg={isNg}
           unreadFrom={tree ? 0 : unreadFrom}
           topOffset={headerInScroll && !isMobile ? headerHeight : 0}
           onJump={scrollToPost}
